@@ -16,8 +16,6 @@
 #include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
-//#include <WiFiClient.h>
-//#include <WebServer.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
@@ -49,7 +47,7 @@
 void StepperTicker( void * parameter) {
   for(;;) {
     //Это должно работать максимально быстро
-    stepper.tick();
+    StepperMoving = stepper.tick();
     //vTaskDelay(1);
   }
 }
@@ -178,19 +176,19 @@ void loop() {
     withdrawal();     //функция расчета отбора
   }
 
-  vTaskDelay(10);
+  vTaskDelay(50);
 }
 
 void getjson (void){
 
   DynamicJsonDocument jsondoc(1024);
-  JsonObject jsonobj = jsondoc.as<JsonObject>();
+//  JsonObject jsonobj = jsondoc.as<JsonObject>();
 
 
   String st = Crt;
   String stm = millis2time();
   crnt_time = Crt;
-  jsondoc["samovar_temp"] = samovar_temp;
+//  jsondoc["samovar_temp"] = samovar_temp;
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = bme_pressure;
   jsondoc["start_pressure"] = start_pressure;
@@ -198,9 +196,9 @@ void getjson (void){
   jsondoc["bme_altitude"] = bme_altitude;
   jsondoc["bme_gas"] = bme_gas;
   jsondoc["crnt_tm"] = st;
-  jsonobj["crnt_tm"] = st;
+//  jsonobj["crnt_tm"] = st;
   jsondoc["stm"] = stm;
-  jsonobj["stm"] = stm;
+//  jsonobj["stm"] = stm;
   jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp,2);
   jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp,2);
   jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,2);

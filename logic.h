@@ -79,7 +79,7 @@ void pump_calibrate(int stpspeed){
 
 void start_manual(){
   startval = 10;
-  if (!stepper.tick()){
+  if (!StepperMoving){
     create_data();                    //создаем файл с данными
     stepper.setCurrent(0);
     TargetStepps = ManualVolume * SamSetup.StepperStepMl;

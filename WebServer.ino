@@ -6,6 +6,7 @@ void WebServerInit(void){
 
   FS_init();                                        // Включаем работу с файловой системой
 
+  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm");
   server.serveStatic("/data.csv", SPIFFS, "/data.csv");
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);

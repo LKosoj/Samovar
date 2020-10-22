@@ -251,7 +251,7 @@ void menu_calibrate(){
   if (startval > 0) return;
   
   int stpspeed;
-  if (stepper.tick()){
+  if (StepperMoving){
     calibrate_text_ptr = (char*)"Stop";
     stpspeed = 0;
     }
@@ -281,6 +281,7 @@ void samovar_start(){
     stepper.disable();
     stepper.setCurrent(0);
     stepper.setTarget(0);
+    reset_focus();
   }
   else if (startval == 2) {
     startval = 3;
@@ -299,6 +300,7 @@ void samovar_start(){
     stepper.disable();
     stepper.setCurrent(0);
     stepper.setTarget(0);
+    reset_focus();
   }
   else {
     startval = 0;

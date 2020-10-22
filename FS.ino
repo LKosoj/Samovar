@@ -201,9 +201,7 @@ void create_data(){
 }
 
 void append_data(){
-//  SPIFFS.open("/data.csv", FILE_APPEND);
-  String file_str1 = Crt + "," + format_float(SteamSensor.avgTemp, 2) + "," + format_float(PipeSensor.avgTemp, 2) + "," + format_float(WaterSensor.avgTemp,2) + "," + format_float(TankSensor.avgTemp, 2) + "," + bme_pressure;
-  fileToAppend.println(file_str1);
+  fileToAppend.println(Crt + "," + format_float(SteamSensor.avgTemp, 2) + "," + format_float(PipeSensor.avgTemp, 2) + "," + format_float(WaterSensor.avgTemp, 2) + "," + format_float(TankSensor.avgTemp, 2) + "," + format_float(bme_pressure, 2));
 }
 
 String get_sys_info(){

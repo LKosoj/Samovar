@@ -191,8 +191,8 @@ char auth[] = SAMOVAR_AUTH;
 //**************************************************************************************************************
 
 //**************************************************************************************************************
-volatile bool bmefound = true;
-volatile float samovar_temp;                                    // Температура ESP32
+volatile bool bmefound = false;
+//volatile float samovar_temp;                                    // Температура ESP32
 volatile float bme_temp;                                        // Температура BME
 volatile float start_pressure;                                  // Давление BME стартовое
 volatile float bme_pressure;                                    // Давление BME
@@ -220,6 +220,7 @@ volatile unsigned int TargetStepps;                             // Количе�
 volatile unsigned int WthdrwlProgress;                          // Прогресс текущего отбора
 volatile bool PowerOn = false;                                  // Индикатор включенного питания
 volatile bool FullAuto = true;                                  // Индикатор полностью автоматического процесса (нужно для отладки)
+volatile bool StepperMoving = false;                            // Индикатор полностью автоматического процесса (нужно для отладки)
 unsigned long begintime;                                        // Время начала отбора
 unsigned long endtime;                                          // Время завершения отбора
 
