@@ -1,6 +1,7 @@
 #ifdef SAMOVAR_USE_BLYNK
 BLYNK_READ(V0){
 Blynk.virtualWrite(V0, SteamSensor.avgTemp);
+Blynk.virtualWrite(V4, PowerOn);
 int i;
 if (startval > 0) i = 1;
 else i = 0;
@@ -33,10 +34,6 @@ Blynk.virtualWrite(V8, get_liquid_volume());
 
 BLYNK_READ(V9){
 Blynk.virtualWrite(V9, ActualVolumePerHour);
-}
-
-BLYNK_READ(V4){
-Blynk.virtualWrite(V4, PowerOn);
 }
 
 BLYNK_WRITE(V3)
