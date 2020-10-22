@@ -35,9 +35,11 @@
 #include "font.h"
 #include "logic.h"
 
+#ifdef SAMOVAR_USE_BLYNK
 //#define BLYNK_PRINT Serial
 
 #include <BlynkSimpleEsp32.h>
+#endif
 
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
@@ -71,19 +73,16 @@ void setup() {
 
   stepper.disable();
 
+#ifdef SAMOVAR_USE_BLYNK
   Blynk.begin(auth, ssid, password);
- 
-#ifdef USE_VOLUME_METER
-  //Настраиваем пин для датчика объема
-  //pinMode(VOLUME_METER, INPUT_PULLUP);
-  //Устанавливаем прерывание для датчика объема жидкости
-  //attachInterrupt(VOLUME_METER, isr_vm_counter, FALLING);
 #endif
 
- EEPROM.begin(EEPROM_SIZE);
- EEPROM.get(0, SamSetup);
+  //Читаем сохраненную конфигурацию
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.get(0, SamSetup);
  
   encoder.tick();  // отработка нажатия
+  //Если при старте нажата кнопка энкодера - сохраненные параметры сбрасываются на параметры по умолчанию
   if (encoder.isHold()){
     SamSetup.flag = 255;
   }
@@ -103,11 +102,14 @@ void setup() {
    EEPROM.commit();
  }
 
+  //Настраиваем меню
   setupMenu();
   writeString("      Samovar ",1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   //delay(2000);
   writeString("Connecting to WI-FI", 3);
+
+  //Подключаемся к WI-FI
   connectWiFi();
   //delay(2000);
   writeString("Connected", 4);
@@ -116,13 +118,15 @@ void setup() {
 
   WebServerInit();
 
+  //вешаем прерывание на изменения по ногам энкодера
   attachInterrupt(ENC_CLK, isrENC_TICK, CHANGE);
   attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
   attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
 
+  
   xTaskCreatePinnedToCore(
       StepperTicker, /* Function to implement the task */
-      "EncoderTicker", /* Name of the task */
+      "StepperTicker", /* Name of the task */
       16000,  /* Stack size in words */
       NULL,  /* Task input parameter */
       0,  /* Priority of the task */
@@ -137,36 +141,11 @@ void setup() {
 
 }
 
-BLYNK_READ(V0){
-Blynk.virtualWrite(V0, SteamSensor.avgTemp);
-Blynk.virtualWrite(V1, PipeSensor.avgTemp);
-Blynk.virtualWrite(V2, WthdrwlProgress);
-Blynk.virtualWrite(V5, bme_pressure);
-Blynk.virtualWrite(V6, WaterSensor.avgTemp);
-Blynk.virtualWrite(V7, TankSensor.avgTemp);
-Blynk.virtualWrite(V8, get_liquid_volume());
-Blynk.virtualWrite(V9, ActualVolumePerHour);
-int i;
-if (startval > 0) i = 1;
-else i = 0;
-Blynk.virtualWrite(V3, i);
-Blynk.virtualWrite(V4, PowerOn);
-}
-
-BLYNK_WRITE(V3)
-{
-  int Value = param.asInt(); // assigning incoming value from pin V3 to a variable
-  if (Value == 1 && PowerOn) samovar_start();
-  else samovar_reset();
-}
-BLYNK_WRITE(V4)
-{
-  int Value = param.asInt(); // assigning incoming value from pin V4 to a variable
-  set_power(Value);
-}
-
 void loop() {
+#ifdef SAMOVAR_USE_BLYNK
   Blynk.run();
+#endif
+
   ws.cleanupClients();
 
   if (web_command_sync != SAMOVAR_NONE){

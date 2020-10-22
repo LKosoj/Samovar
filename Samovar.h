@@ -2,7 +2,7 @@
 #define SAMOVAR_VERSION "1.0"
 #define __SAMOVAR_DEBUG
 
-//#define INTERRUPT_ATTR IRAM_ATTR 
+#define SAMOVAR_USE_BLYNK                   //использовать Blynk в проекте
 
 #define SAMOVAR_LOG_PERIOD 3                // периодичность записи данных о температуре в файл
 #define TIMEZONE 3                          // таймзона того места, где будет применяться устройство
