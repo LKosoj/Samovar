@@ -79,13 +79,13 @@ void pump_calibrate(int stpspeed){
 
 void start_manual(){
   startval = 10;
+  stepper.setMaxSpeed(get_speed_from_rate(ManualLiquidRate));
   if (!StepperMoving){
     create_data();                    //создаем файл с данными
     stepper.setCurrent(0);
     TargetStepps = ManualVolume * SamSetup.StepperStepMl;
     stepper.setTarget(TargetStepps);
   }
-  stepper.setMaxSpeed(ManualStepperSpeed);
 }
 
 /*   

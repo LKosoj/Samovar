@@ -213,7 +213,7 @@ volatile int current_v_m_count = 0;                             // Счетчи�
 volatile unsigned long prev_time_ms;                            // Предыдущее время
 volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
 volatile int CurrrentStepperSpeed;                              // Скорость шагового двигателя
-volatile int ManualStepperSpeed;                                // Скорость шагового двигателя в ручном режиме
+volatile float ManualLiquidRate;                                // Скорость отбора в ручном режиме
 volatile int ManualVolume;                                      // Объем отбора в ручном режиме
 volatile unsigned int CurrrentStepps;                           // Количество пройденных степпером шагов
 volatile unsigned int TargetStepps;                             // Количество шагов до нужного объема

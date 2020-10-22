@@ -176,7 +176,7 @@ void loop() {
     withdrawal();     //функция расчета отбора
   }
 
-  vTaskDelay(50);
+  vTaskDelay(10);
 }
 
 void getjson (void){

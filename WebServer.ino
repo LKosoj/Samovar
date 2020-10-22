@@ -59,8 +59,7 @@ void WebServerInit(void){
 
 String setupKeyProcessor(const String& var)
 {
-  static char outstr[15];
-  if (var == "DeltaSteamTemp") return (String)dtostrf(SamSetup.DeltaSteamTemp,1, 2, outstr);
+  if (var == "DeltaSteamTemp") return (String)SamSetup.DeltaSteamTemp;
   else if (var == "DeltaPipeTemp") return (String)SamSetup.DeltaPipeTemp;
   else if (var == "DeltaWaterTemp") return (String)SamSetup.DeltaWaterTemp;
   else if (var == "DeltaTankTemp") return (String)SamSetup.DeltaTankTemp;
@@ -156,8 +155,8 @@ int params = request->params();
   }
    if (request->hasArg("manual")) {
      web_command_sync = SAMOVAR_MANUAL;
-     if (request->hasArg("StepperInitialSpeed")) {
-       ManualStepperSpeed = request->arg("StepperInitialSpeed").toInt();
+     if (request->hasArg("LiquidRate")) {
+       ManualLiquidRate = request->arg("LiquidRate").toFloat();
      }
      if (request->hasArg("Volume")) {
        ManualVolume = request->arg("Volume").toInt();

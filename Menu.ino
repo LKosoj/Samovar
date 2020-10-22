@@ -25,7 +25,7 @@ LiquidLine lql_reset(0, 2, ">Reset withdrawal:");
 LiquidScreen main_screen2(lql_start, lql_act_vlm_perh, lql_reset, lql_time);
 
 LiquidLine lql_volume(0, 0, ">Volume: ", ManualVolume);
-LiquidLine lql_manual_stp_spd(0, 1, ">Speed l/h: ", ManualStepperSpeed);
+LiquidLine lql_manual_stp_spd(0, 1, ">Speed ml/h: ", ManualLiquidRate);
 LiquidLine lql_start_manual(0, 2, ">Start manual:");
 LiquidScreen manual_screen(lql_volume, lql_manual_stp_spd, lql_start_manual, lql_time);
 
@@ -227,12 +227,12 @@ void menu_manual_volume_down(){
   ManualVolume -=1 * multiplier;
 }
 void menu_manual_stp_spd_up(){
-  ManualStepperSpeed +=1 * multiplier;
-  if (startval == 10) stepper.setMaxSpeed(ManualStepperSpeed);
+  ManualLiquidRate +=0.01 * multiplier;
+  if (startval == 10) stepper.setMaxSpeed(get_speed_from_rate(ManualLiquidRate));
 }
 void menu_manual_stp_spd_down(){
-  ManualStepperSpeed -=1 * multiplier;
-  if (startval == 10) stepper.setMaxSpeed(ManualStepperSpeed);
+  ManualLiquidRate -=0.01 * multiplier;
+  if (startval == 10) stepper.setMaxSpeed(get_speed_from_rate(ManualLiquidRate));
 }
 void menu_start_manual(){
   start_manual();
