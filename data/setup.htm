@@ -1,0 +1,36 @@
+<html>
+<head>
+<meta charset='utf-8'>
+<title>Самовар</title>
+</head>
+
+<style>#file-input,input{width:200;height:34px;border-radius:4px;margin:10 10 0 10;font-size:15px}
+input{background:#f1f1f1;border:0;padding:0 15px;}
+input[type='text']{background:#f1f1f1;border:0;padding:0 15px;width:80;margin:0}
+#file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}
+body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
+#bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
+form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
+h1{text-align:center}
+.btn{background:#3498db;color:#fff;cursor:pointer}
+.dvcs{padding: 10px;margin: 10px;}
+</style>
+
+<body>
+<form action='/save' method="post" name="setupform">
+<h1>Настройки</h1>
+<h2>Корректировка датчика пара перед дефлегматором : <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176C</h2>
+<h2>Корректировка датчика в царге на 2/3 колонны : <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176C</h2>
+<h2>Корректировка датчика флегмы или воды : <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176C</h2>
+<h2>Корректировка датчика в кубе : <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
+<h2>Количество шагов шагового двигателя : <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
+<h2>Объем для отбора голов : <input name='HeadVolume' type='text' value='%HeadVolume%'> мл.</h2>
+<h2>Скорость отбора голов : <input name='LiquidRateHead' type='text' value='%LiquidRateHead%'> л./час.</h2>
+<h2>Объем для отбора тела : <input name='BodyVolume' type='text' value='%BodyVolume%'> мл.</h2>
+<h2>Скорость отбора тела: <input name='LiquidRateBody' type='text' value='%LiquidRateBody%'> л./час.</h2>
+<input id='save' type='submit' name='save' value='Сохранить'>
+<input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
+<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
+</form>
+</body>
+</html>
