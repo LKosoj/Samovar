@@ -1,3 +1,8 @@
+#ifdef SAMOVAR_USE_BLYNK
+//#define BLYNK_PRINT Serial
+
+#include <BlynkSimpleEsp32.h>
+#endif
 //**************************************************************************************************************
 // Логика работы ректификационной колонны
 //**************************************************************************************************************
@@ -88,6 +93,46 @@ void start_manual(){
   }
 }
 
+void pause_withdrawal(bool Pause){
+  PauseOn = Pause;
+  if (Pause) {
+    RemainingDistance = stepper.getTarget() - stepper.getCurrent();
+    CurrrentStepperSpeed = stepper.getSpeed();
+    stepper.brake();
+    stepper.disable();
+  }
+  else {
+    stepper.setMaxSpeed(CurrrentStepperSpeed);
+    stepper.setCurrent(0);
+    stepper.setTarget(RemainingDistance);
+  }
+}
+
+String get_Samovar_Status(){
+  if (!PowerOn) {
+    SamovarStatus = "Выключено";
+    SamovarStatusInt = 0;
+  } else if (PowerOn && SteamSensor.avgTemp > 75 && (stepper.getSpeed() == 0 || startval == 2)) {
+    SamovarStatus = "Работа колонны на себя";
+    SamovarStatusInt = 2;
+  } else if (PowerOn && startval == 1) {
+    SamovarStatus = "Отбор голов в автоматическом режиме";
+    SamovarStatusInt = 3;
+  } else if (PowerOn && startval == 3) {
+    SamovarStatus = "Отбор тела в автоматическом режиме";
+    SamovarStatusInt = 4;
+  } else if (PowerOn && stepper.getSpeed() > 0 && startval == 0) {
+    SamovarStatus = "Отбор в ручном режиме";
+    SamovarStatusInt = 5;
+  } else if (PauseOn) {
+    SamovarStatus = "Пауза";
+    SamovarStatusInt = 6;
+  } else if (PowerOn && startval == 0) {
+    SamovarStatus = "Разгон колонны";
+    SamovarStatusInt = 1;
+  }  
+  return SamovarStatus;
+}
 /*   
 //***********************************************************************************************************************
 // Управляем клапаном отбора по температуре пара перед дефлегматором

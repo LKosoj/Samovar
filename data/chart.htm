@@ -117,6 +117,20 @@ input[type="radio"]:checked + label:after {
 <script>
 var chart;
 setInterval(loadDoc,2000);
+setInterval(loadHeap,19000);
+
+function loadHeap() {
+var xhttp = new XMLHttpRequest();
+xhttp.onreadystatechange = function() {
+if (this.readyState == 4 && this.status == 200) {
+var myObj = this.responseText;
+document.getElementById('Heap').innerHTML = myObj;
+}
+};
+xhttp.open("GET", "/heap", true);
+xhttp.send();
+};
+
 function loadDoc() {
 var xhttp = new XMLHttpRequest();
 xhttp.onreadystatechange = function() {
@@ -132,6 +146,9 @@ document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
 document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
 document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
 document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
+document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
+document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
+document.getElementById('Status').innerHTML = myObj.Status;
 }
 };
 xhttp.open("GET", "/ajax", true);
@@ -238,6 +255,15 @@ function refresh_chart(){
 <h2>Прогресс отбора: <span id='WthdrwlProgress'></span>%</h2>
 <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="/index.htm"'>
 <input id='getlog' type='button' name='getlog' value='Сохранить лог' onclick='javascript:window.open("/getlog")'>
+<div class='dvcs'>
+<span class='dvcs'>Статус работы: <span id='Status'></span></span>
+</div>
+<div class='dvcs'>
+<span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
+<span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
+<div>
+<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
+</div></div>
 </form>
 </body>
 </html>

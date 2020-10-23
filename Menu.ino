@@ -42,13 +42,19 @@ LiquidScreen main_screen4(lql_get_power, lql_setup, lql_time);
 
 LiquidMenu main_menu1(lcd);
 
-LiquidLine lql_setup_steam_temp(0, 0, ">^Steam temp: ", SamSetup.DeltaSteamTemp);
-LiquidLine lql_setup_pipe_temp(0, 1, ">^Pipe temp: ", SamSetup.DeltaPipeTemp);
-LiquidLine lql_setup_water_temp(0, 2, ">^Water temp: ", SamSetup.DeltaWaterTemp);
-LiquidLine lql_setup_tank_temp(0, 3, ">^Tank temp: ", SamSetup.DeltaTankTemp);
+LiquidLine lql_setup_steam_temp(0, 0, "^Steam temp: ", SamSetup.DeltaSteamTemp);
+LiquidLine lql_setup_pipe_temp(0, 1, "^Pipe temp: ", SamSetup.DeltaPipeTemp);
+LiquidLine lql_setup_water_temp(0, 2, "^Water temp: ", SamSetup.DeltaWaterTemp);
+LiquidLine lql_setup_tank_temp(0, 3, "^Tank temp: ", SamSetup.DeltaTankTemp);
 LiquidScreen setup_temp_screen(lql_setup_steam_temp, lql_setup_pipe_temp, lql_setup_water_temp, lql_setup_tank_temp);
 
-LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, ">Step/ml: ", SamSetup.StepperStepMl);
+LiquidLine lql_setup_set_steam_temp(0, 0, "^Set Steam t: ", SamSetup.SetSteamTemp);
+LiquidLine lql_setup_set_pipe_temp(0, 1, "^Set Pipe t: ", SamSetup.SetPipeTemp);
+LiquidLine lql_setup_set_water_temp(0, 2, "^Set Water t: ", SamSetup.SetWaterTemp);
+LiquidLine lql_setup_set_tank_temp(0, 3, "^Set Tank t: ", SamSetup.SetTankTemp);
+LiquidScreen setup_set_temp_screen(lql_setup_set_steam_temp, lql_setup_set_pipe_temp, lql_setup_set_water_temp, lql_setup_set_tank_temp);
+
+LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, "^Step/ml: ", SamSetup.StepperStepMl);
 LiquidLine lql_setup_stepper_calibrate(0, 1, ">Calibrate: ", calibrate_text_ptr);
 LiquidScreen setup_stepper_settings(lql_setup_stepper_stepper_step_ml, lql_setup_stepper_calibrate, lql_time);
 
@@ -70,6 +76,7 @@ void set_menu_screen(byte param){
   switch (param){
     case 1: //меню установок
       setup_temp_screen.hide(false);
+      setup_set_temp_screen.hide(false);
       setup_stepper_settings.hide(false);
       setup_back_screen.hide(false);
       main_screen.hide(true);
@@ -82,6 +89,7 @@ void set_menu_screen(byte param){
       main_menu1.change_screen(&main_screen3);
       break;
     case 2:  //основное меню после включения колонны
+      setup_set_temp_screen.hide(true);
       setup_temp_screen.hide(true);
       setup_stepper_settings.hide(true);
       setup_back_screen.hide(true);
@@ -95,6 +103,7 @@ void set_menu_screen(byte param){
       main_menu1.change_screen(&main_screen);
       break;
     case 3:  //основное меню до включения колонны
+      setup_set_temp_screen.hide(true);
       setup_temp_screen.hide(true);
       setup_stepper_settings.hide(true);
       setup_back_screen.hide(true);
@@ -103,6 +112,7 @@ void set_menu_screen(byte param){
       main_screen2.hide(true);
       main_screen3.hide(true);
       main_screen4.hide(false);
+      manual_screen.hide(true);
       //main_menu1.switch_focus();
       main_menu1.change_screen(&main_screen);
       break;
@@ -175,6 +185,32 @@ void set_delta_tank_temp_up(){
 void set_delta_tank_temp_down(){
   SamSetup.DeltaTankTemp-=0.01 * multiplier;
 }
+
+void set_delta_set_steam_temp_up(){
+  SamSetup.SetSteamTemp+=0.01 * multiplier;
+}
+void set_delta_set_steam_temp_down(){
+  SamSetup.SetSteamTemp-=0.01 * multiplier;
+}
+void set_delta_set_pipe_temp_up(){
+  SamSetup.SetPipeTemp+=0.01 * multiplier;
+}
+void set_delta_set_pipe_temp_down(){
+  SamSetup.SetPipeTemp-=0.01 * multiplier;
+}
+void set_delta_set_water_temp_up(){
+  SamSetup.SetWaterTemp+=0.01 * multiplier;
+}
+void set_delta_set_water_temp_down(){
+  SamSetup.SetWaterTemp-=0.01 * multiplier;
+}
+void set_delta_set_tank_temp_up(){
+  SamSetup.SetTankTemp+=0.01 * multiplier;
+}
+void set_delta_set_tank_temp_down(){
+  SamSetup.SetTankTemp-=0.01 * multiplier;
+}
+
 void stepper_init_head_speed_up(){
   if (SamSetup.LiquidRateHead < VOLUME_MAX_SPEED){
     SamSetup.LiquidRateHead+=0.01 * multiplier;
@@ -268,6 +304,8 @@ void samovar_start(){
     startval_text = (char*)"Head";
     stepper.setMaxSpeed(get_speed_from_rate(SamSetup.LiquidRateHead));
     TargetStepps = SamSetup.HeadVolume * SamSetup.StepperStepMl;
+    ManualVolume = SamSetup.HeadVolume;
+    ManualLiquidRate = SamSetup.LiquidRateHead;
     stepper.setCurrent(0);
     stepper.setTarget(TargetStepps);
     ActualVolumePerHour = SamSetup.LiquidRateHead;
@@ -288,6 +326,8 @@ void samovar_start(){
     startval_text = (char*)"Body";
     stepper.setMaxSpeed(get_speed_from_rate(SamSetup.LiquidRateBody));
     TargetStepps = SamSetup.BodyVolume * SamSetup.StepperStepMl;
+    ManualVolume = SamSetup.BodyVolume;
+    ManualLiquidRate = SamSetup.LiquidRateBody;
     stepper.setCurrent(0);
     stepper.setTarget(TargetStepps);
     ActualVolumePerHour = SamSetup.LiquidRateBody;
@@ -359,6 +399,15 @@ void setupMenu(){
   lql_setup_tank_temp.attach_function(1, set_delta_tank_temp_up);
   lql_setup_tank_temp.attach_function(2, set_delta_tank_temp_down);
 
+  lql_setup_set_steam_temp.attach_function(1, set_delta_set_steam_temp_up);
+  lql_setup_set_steam_temp.attach_function(2, set_delta_set_steam_temp_down);
+  lql_setup_set_pipe_temp.attach_function(1, set_delta_set_pipe_temp_up);
+  lql_setup_set_pipe_temp.attach_function(2, set_delta_set_pipe_temp_down);
+  lql_setup_set_water_temp.attach_function(1, set_delta_set_water_temp_up);
+  lql_setup_set_water_temp.attach_function(2, set_delta_set_water_temp_down);
+  lql_setup_set_tank_temp.attach_function(1, set_delta_set_tank_temp_up);
+  lql_setup_set_tank_temp.attach_function(2, set_delta_set_tank_temp_down);
+
   lql_head_volume.attach_function(1, set_head_volume_up);
   lql_head_volume.attach_function(2, set_head_volume_down);
   lql_body_volume.attach_function(1, set_body_volume_up);
@@ -392,13 +441,14 @@ void setupMenu(){
   main_menu1.add_screen(main_screen1);
   main_menu1.add_screen(main_screen2);
   main_menu1.add_screen(main_screen3);
-  main_menu1.add_screen(main_screen4);
   main_menu1.add_screen(manual_screen);
+  main_menu1.add_screen(main_screen4);
 
   //setup_menu.add_screen(setup_temp_screen);
   //setup_menu.add_screen(setup_stepper_settings);  
   //setup_menu.add_screen(setup_back_screen);
   main_menu1.add_screen(setup_temp_screen);
+  main_menu1.add_screen(setup_set_temp_screen);
   main_menu1.add_screen(setup_stepper_settings);  
   main_menu1.add_screen(setup_back_screen);
 

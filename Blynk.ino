@@ -40,6 +40,10 @@ BLYNK_READ(V9){
 Blynk.virtualWrite(V9, ActualVolumePerHour);
 }
 
+BLYNK_READ(V14){
+Blynk.virtualWrite(V14, get_Samovar_Status());
+}
+
 BLYNK_WRITE(V3)
 {
   int Value3 = param.asInt(); // assigning incoming value from pin V3 to a variable

@@ -20,9 +20,9 @@ h1{text-align:center}
 function sendbutton(command){
 if (command == 'manual=1'){
   Volume = document.getElementById('Volume').value;
-  StepperInitialSpeed = document.getElementById('StepperInitialSpeed').value;
-  command = command+'&Volume='+Volume+'&StepperInitialSpeed='+StepperInitialSpeed;
-  console.log(command);
+  LiquidRate = document.getElementById('LiquidRate').value;
+  command = command+'&Volume='+Volume+'&LiquidRate='+LiquidRate;
+  //console.log(command);
 }
 var server = '/command?' + command;
 request = new XMLHttpRequest();
@@ -70,6 +70,7 @@ document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
 document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
 document.getElementById('PowerOn').innerHTML = myObj.PowerOn;
 document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
+document.getElementById('Status').innerHTML = myObj.Status;
 };
 };
 xhttp.open("GET", "/ajax", true);
@@ -93,7 +94,7 @@ xhttp.send();
 <h2>Прогресс отбора: <span id='WthdrwlProgress'></span>%</h2>
 <h2>Питание включено: <span id='PowerOn'></span></h2>
 <h2>Объем для отбора : <input id="Volume" name='Volume' type='text' value='100'> мл.</h2>
-<h2>Скорость шагового двигателя : <input id="StepperInitialSpeed" name='StepperInitialSpeed' type='text' value='1000'> об./сек.</h2>
+<h2>Скорость шагового двигателя : <input id="LiquidRate" name='LiquidRate' type='text' value='0.5'> л/ч</h2>
 <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("manual=1");'>
 <input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'>
 <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
@@ -101,12 +102,12 @@ xhttp.send();
 <input id='edit' type='submit' name='edit' value='Редактор' onclick='javascript:location.href="/edit"'>
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
 <div class='dvcs'>
+<span class='dvcs'>Статус работы: <span id='Status'></span></span>
+</div>
+<div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
 <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
 <div>
 <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
-</div>
+</div></div>
 </form>
-
-
-

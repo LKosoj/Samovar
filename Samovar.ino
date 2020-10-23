@@ -91,6 +91,10 @@ void setup() {
    SamSetup.DeltaPipeTemp = 0;
    SamSetup.DeltaWaterTemp = 0;
    SamSetup.DeltaTankTemp = 0;
+   SamSetup.SetSteamTemp = 0;
+   SamSetup.SetPipeTemp = 0;
+   SamSetup.SetWaterTemp = 0;
+   SamSetup.SetTankTemp = 0;
    SamSetup.LiquidRateHead = HEAD_INITIAL_SPEED;
    SamSetup.LiquidRateBody = HEAD_INITIAL_SPEED * 10;
    SamSetup.StepperStepMl = STEPPER_STEP_ML;
@@ -146,8 +150,8 @@ void loop() {
 
   ws.cleanupClients();
 
-  if (web_command_sync != SAMOVAR_NONE){
-    switch (web_command_sync){
+  if (sam_command_sync != SAMOVAR_NONE){
+    switch (sam_command_sync){
         case SAMOVAR_START:
           samovar_start();
           break;
@@ -166,8 +170,14 @@ void loop() {
         case SAMOVAR_MANUAL:
           start_manual();
           break;
+        case SAMOVAR_PAUSE:
+          pause_withdrawal(true);
+          break;
+        case SAMOVAR_CONTINUE:
+          pause_withdrawal(false);
+          break;
     }
-    web_command_sync = SAMOVAR_NONE;
+    sam_command_sync = SAMOVAR_NONE;
   }
   
   encoder_getvalue();
@@ -225,6 +235,7 @@ void getjson (void){
   jsondoc["LiquidRateBody"] = SamSetup.LiquidRateBody;
   jsondoc["HeadVolume"] = SamSetup.HeadVolume;
   jsondoc["BodyVolume"] = SamSetup.BodyVolume;
+  jsondoc["Status"] = get_Samovar_Status();
 
   jsonstr = "";
   serializeJson(jsondoc, jsonstr);

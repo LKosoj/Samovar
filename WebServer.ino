@@ -63,6 +63,10 @@ String setupKeyProcessor(const String& var)
   else if (var == "DeltaPipeTemp") return (String)SamSetup.DeltaPipeTemp;
   else if (var == "DeltaWaterTemp") return (String)SamSetup.DeltaWaterTemp;
   else if (var == "DeltaTankTemp") return (String)SamSetup.DeltaTankTemp;
+  else if (var == "SetSteamTemp") return (String)SamSetup.SetSteamTemp;
+  else if (var == "SetPipeTemp") return (String)SamSetup.SetPipeTemp;
+  else if (var == "SetWaterTemp") return (String)SamSetup.SetWaterTemp;
+  else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
   else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
   else if (var == "LiquidRateHead") return (String)SamSetup.LiquidRateHead;
   else if (var == "LiquidRateBody") return (String)SamSetup.LiquidRateBody;
@@ -104,6 +108,18 @@ void  handleSave(AsyncWebServerRequest *request){
   if (request->hasArg("DeltaTankTemp")) {
     SamSetup.DeltaTankTemp = request->arg("DeltaTankTemp").toFloat();
   }
+  if (request->hasArg("SetSteamTemp")) {
+    SamSetup.SetSteamTemp = request->arg("SetSteamTemp").toFloat();
+  }
+  if (request->hasArg("SetPipeTemp")) {
+    SamSetup.SetPipeTemp = request->arg("SetPipeTemp").toFloat();
+  }
+  if (request->hasArg("SetWaterTemp")) {
+    SamSetup.SetWaterTemp = request->arg("SetWaterTemp").toFloat();
+  }
+  if (request->hasArg("SetTankTemp")) {
+    SamSetup.SetTankTemp = request->arg("SetTankTemp").toFloat();
+  }
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
@@ -144,17 +160,17 @@ int params = request->params();
 */
   if (request->params() == 1) {
    if (request->hasArg("start") && PowerOn) {
-    web_command_sync = SAMOVAR_START;
+    sam_command_sync = SAMOVAR_START;
    }
    if (request->hasArg("power")) {
-    web_command_sync = SAMOVAR_POWER;
+    sam_command_sync = SAMOVAR_POWER;
    }
    if (request->hasArg("reset")) {
-    web_command_sync = SAMOVAR_RESET;
+    sam_command_sync = SAMOVAR_RESET;
    }
   }
    if (request->hasArg("manual")) {
-     web_command_sync = SAMOVAR_MANUAL;
+     sam_command_sync = SAMOVAR_MANUAL;
      if (request->hasArg("LiquidRate")) {
        ManualLiquidRate = request->arg("LiquidRate").toFloat();
      }
@@ -171,14 +187,14 @@ void  calibrate_command(AsyncWebServerRequest *request){
     CurrrentStepperSpeed = request->arg("stpstep").toInt();
    }
    if (request->hasArg("start") && startval == 0) {
-    web_command_sync = CALIBRATE_START;
+    sam_command_sync = CALIBRATE_START;
    }
    if (request->hasArg("finish") && startval == 0) {
-    web_command_sync = CALIBRATE_STOP;
+    sam_command_sync = CALIBRATE_STOP;
    }
   }
   vTaskDelay(10);
-  if (web_command_sync != SAMOVAR_NONE){
+  if (sam_command_sync != SAMOVAR_NONE){
     int s = round((float)stepper.getCurrent() / 100) * 100;
     request->send(200, "text/plain", (String)s);
   } else request->send(200, "text/plain", "OK");

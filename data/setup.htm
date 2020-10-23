@@ -21,9 +21,13 @@ h1{text-align:center}
 <form action='/save' method="post" name="setupform">
 <h1>Настройки</h1>
 <h2>Корректировка датчика пара перед дефлегматором : <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176C</h2>
+<h2>Уставка датчика пара перед дефлегматором : <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176C</h2>
 <h2>Корректировка датчика в царге на 2/3 колонны : <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176C</h2>
+<h2>Уставка датчика в царге на 2/3 колонны : <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176C</h2>
 <h2>Корректировка датчика флегмы или воды : <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176C</h2>
+<h2>Уставка датчика флегмы или воды : <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176C</h2>
 <h2>Корректировка датчика в кубе : <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
+<h2>Уставка датчика в кубе : <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
 <h2>Количество шагов шагового двигателя : <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
 <h2>Объем для отбора голов : <input name='HeadVolume' type='text' value='%HeadVolume%'> мл.</h2>
 <h2>Скорость отбора голов : <input name='LiquidRateHead' type='text' value='%LiquidRateHead%'> л./час.</h2>
@@ -32,6 +36,7 @@ h1{text-align:center}
 <input id='save' type='submit' name='save' value='Сохранить'>
 <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
+<input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"'>
 </form>
 </body>
 </html>

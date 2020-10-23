@@ -236,6 +236,9 @@ void reset_sensor_counter(void){
   PipeSensor.Temp=-127;
   WaterSensor.Temp=-127;
   TankSensor.Temp=-127;
+  get_Samovar_Status();
+  PauseOn = false;
+
   
   for (int i=0;i++;i<4)
     for (int j=0;j++;j<80000)

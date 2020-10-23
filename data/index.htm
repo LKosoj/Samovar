@@ -61,10 +61,11 @@ document.getElementById('start_pressure').innerHTML = myObj.start_pressure;
 document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
 document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
 document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
-document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
-document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
 document.getElementById('PowerOn').innerHTML = myObj.PowerOn;
 document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
+document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
+document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
+document.getElementById('Status').innerHTML = myObj.Status;
 
 var powerstr;
 var powerstyle;
@@ -104,14 +105,16 @@ xhttp.send();
 <input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'>
 <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
 <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>
-<input id='edit' type='submit' name='edit' value='Редактор' onclick='javascript:location.href="/edit"'>
 <input id='manual' type='submit' name='manual' value='Ручной режим' onclick='javascript:location.href="/manual.htm"'>
+<div class='dvcs'>
+<span class='dvcs'>Статус работы: <span id='Status'></span></span>
+</div>
 <div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
 <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
 <div>
 <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
-</div>
+</div></div>
 </form>
 
 
