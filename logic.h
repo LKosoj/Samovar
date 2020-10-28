@@ -112,7 +112,7 @@ String get_Samovar_Status(){
   if (!PowerOn) {
     SamovarStatus = "Выключено";
     SamovarStatusInt = 0;
-  } else if (PowerOn && SteamSensor.avgTemp > 75 && (stepper.getSpeed() == 0 || startval == 2)) {
+  } else if (PowerOn && SteamSensor.avgTemp > 75 && (!stepper.getState() == 0 || startval == 2)) {
     SamovarStatus = "Работа колонны на себя";
     SamovarStatusInt = 2;
   } else if (PowerOn && startval == 1) {
@@ -121,7 +121,7 @@ String get_Samovar_Status(){
   } else if (PowerOn && startval == 3) {
     SamovarStatus = "Отбор тела в автоматическом режиме";
     SamovarStatusInt = 4;
-  } else if (PowerOn && stepper.getSpeed() > 0 && startval == 0) {
+  } else if (PowerOn && stepper.getState() && startval == 10) {
     SamovarStatus = "Отбор в ручном режиме";
     SamovarStatusInt = 5;
   } else if (PauseOn) {

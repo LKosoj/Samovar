@@ -12,7 +12,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BME680.h>
+#include "Adafruit_BME680.h"
 #include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
@@ -54,9 +54,11 @@ void StepperTicker( void * parameter) {
 
 void IRAM_ATTR isrENC_TICK() {
   encoder.tick();  // отработка в прерывании
+  TTT = TTT + 1;
 }
 
 void setup() {
+  TTT = 0;
   Serial.begin(115200);
 
   //Инициализируем ноги для реле
@@ -144,6 +146,8 @@ void setup() {
 }
 
 void loop() {
+unsigned long BMEendTime = bme.beginReading();
+
 #ifdef SAMOVAR_USE_BLYNK
   Blynk.run();
 #endif
@@ -186,13 +190,16 @@ void loop() {
     withdrawal();     //функция расчета отбора
   }
 
+
+  if (bme.endReading()) {
+    BME_getvalue();
+  }
   vTaskDelay(10);
 }
 
 void getjson (void){
 
   DynamicJsonDocument jsondoc(1024);
-//  JsonObject jsonobj = jsondoc.as<JsonObject>();
 
 
   String st = Crt;
@@ -206,17 +213,12 @@ void getjson (void){
   jsondoc["bme_altitude"] = bme_altitude;
   jsondoc["bme_gas"] = bme_gas;
   jsondoc["crnt_tm"] = st;
-//  jsonobj["crnt_tm"] = st;
   jsondoc["stm"] = stm;
-//  jsonobj["stm"] = stm;
   jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp,2);
   jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp,2);
   jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,2);
   jsondoc["TankTemp"] = format_float(TankSensor.avgTemp,2);
   jsondoc["version"] = SAMOVAR_VERSION;
-  //for (int i=0;i++;i<21){
-  //  jsondoc["Volume"][i+1] = LiquidVolume[i];
-  //}
   jsondoc["VolumeAll"] = get_liquid_volume();
   jsondoc["currentvolume"] = currentvolume;
   jsondoc["ActualVolumePerHour"] = ActualVolumePerHour;
@@ -225,11 +227,7 @@ void getjson (void){
   jsondoc["TargetStepps"] = stepper.getTarget();
   jsondoc["CurrrentStepps"] = stepper.getCurrent();
   jsondoc["WthdrwlStatus"] = startval;
-  jsondoc["CurrrentSpeed"] = stepper.getSpeed();
-  //jsondoc["DeltaSteamTemp"] = SamSetup.DeltaSteamTemp;
-  //jsondoc["DeltaPipeTemp"] = SamSetup.DeltaPipeTemp;
-  //jsondoc["DeltaWaterTemp"] = SamSetup.DeltaWaterTemp;
-  //jsondoc["DeltaTankTemp"] = SamSetup.DeltaTankTemp;
+  jsondoc["CurrrentSpeed"] = stepper.getSpeed() * (byte)stepper.getState();
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["LiquidRateHead"] = SamSetup.LiquidRateHead;
   jsondoc["LiquidRateBody"] = SamSetup.LiquidRateBody;

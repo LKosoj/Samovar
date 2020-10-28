@@ -45,7 +45,7 @@
 
 //**************************************************************************************************************
 // Пины для релейного модуля
-#define RELE_CHANNEL1 2 //13
+#define RELE_CHANNEL1 13
 #define RELE_CHANNEL2 12
 #define RELE_CHANNEL3 14
 #define RELE_CHANNEL4 3
@@ -142,11 +142,6 @@ GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPE
 
 File fileToAppend;
 byte countToAppend;
-//String sys_info_str;
-
-#ifdef USE_VOLUME_METER
-//GyverPID regulator(0.1, 0.05, 0.01, 20000);
-#endif
 
 struct SetupEEPROM{
   byte flag;                                                   //Флаг для записи в память
@@ -195,7 +190,7 @@ char auth[] = SAMOVAR_AUTH;
 //**************************************************************************************************************
 
 //**************************************************************************************************************
-volatile bool bmefound = false;
+volatile bool bmefound = true;
 //volatile float samovar_temp;                                    // Температура ESP32
 volatile float bme_temp;                                        // Температура BME
 volatile float start_pressure;                                  // Давление BME стартовое
@@ -206,6 +201,7 @@ volatile float bme_gas;                                         // Газы
 String crnt_time;                                               // Текущее время (строка)
 String SamovarStatus;                                           // Текущий статус работы Самовара
 volatile int SamovarStatusInt;                                  // Текущий статус работы Самовара
+volatile unsigned long TTT;
 
 volatile byte startval = 0;                                     // Признак идущего отбора
 volatile int Delay1 = 30;                                       // временная задержка включения клапана по температуре на 2/3 колонны (в секундах)

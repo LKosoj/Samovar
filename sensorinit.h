@@ -13,10 +13,10 @@ void reset_sensor_counter(void);
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
 void BME_getvalue(void){
-  if (!bmefound) {
-    bme_pressure = (float)random(76000,77000)/100;
-    return;
-  }
+  //if (!bmefound) {
+  //  bme_pressure = (float)random(76000,77000)/100;
+  //  return;
+  //}
   bme_temp = bme.temperature;
   bme_pressure = bme.pressure * 0.0075;
   bme_humidity = bme.humidity;
@@ -35,30 +35,34 @@ void DS_getvalue(void){
   ws = sensors.getTempC(WaterSensor.Sensor);                   // считываем температуру с датчика 2
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
 
-  ss = (float)random(7600,8000)/100;
-  ps = (float)random(7500,7800)/100;
-  ws = (float)random(5000,5500)/100;
-  ts = (float)random(8500,9000)/100;
+  //ss = (float)random(7600,8000)/100;
+  //ps = (float)random(7500,7800)/100;
+  //ws = (float)random(5000,5500)/100;
+  //ts = (float)random(8500,9000)/100;
   
   if (ss != -127) {
     SteamSensor.Temp = ss + SamSetup.DeltaSteamTemp;
-    SteamSensor.avgTempAccumulator += SteamSensor.Temp;
+    //SteamSensor.avgTemp = SteamSensor.Temp;
+/*    SteamSensor.avgTempAccumulator += SteamSensor.Temp;
     SteamSensor.avgTempReadings+=1;
     SteamSensor.avgTemp = SteamSensor.avgTempAccumulator / SteamSensor.avgTempReadings;
     if (SteamSensor.avgTempReadings >= TEMP_AVG_READING) {
         SteamSensor.avgTempAccumulator /= 2;
         SteamSensor.avgTempReadings /= 2;
       }
+*/
   }
   if (ps != -127) {
     PipeSensor.Temp = ps + SamSetup.DeltaPipeTemp;
-    PipeSensor.avgTempAccumulator += PipeSensor.Temp;
+    PipeSensor.avgTemp = PipeSensor.Temp;
+/*    PipeSensor.avgTempAccumulator += PipeSensor.Temp;
     PipeSensor.avgTempReadings+=1;
     PipeSensor.avgTemp = PipeSensor.avgTempAccumulator / PipeSensor.avgTempReadings;
     if (PipeSensor.avgTempReadings >= TEMP_AVG_READING) {
         PipeSensor.avgTempAccumulator /= 2;
         PipeSensor.avgTempReadings /= 2;
       }
+*/
   }
   if (ws != -127) {
     WaterSensor.Temp = ws + SamSetup.DeltaWaterTemp;
@@ -90,7 +94,9 @@ void DS_getvalue(void){
 }
 
 void triggerGetSensor(void){
-      BME_getvalue();
+      //unsigned long endTime = bme.beginReading();
+      //if (bme.endReading()) BME_getvalue();
+      //if (bme.performReading()) BME_getvalue();
       DS_getvalue();
       clok();
       vTaskDelay(10);
@@ -119,6 +125,14 @@ void sensor_init(void){
   }
   else {
     writeString("Successful       ", 4);
+    bmefound = true;
+    
+    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setHumidityOversampling(BME680_OS_2X);
+    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    bme.setGasHeater(320, 150); // 320*C for 150 ms
+    
     delay(1000);
   }
 
@@ -203,6 +217,9 @@ void printAddress(DeviceAddress deviceAddress)                          // фу�
 
 //Обнуляем все счетчики
 void reset_sensor_counter(void){
+  stepper.setSpeed(-1);
+  stepper.setMaxSpeed(-1);
+  stepper.brake();
   stepper.disable();
   stepper.setCurrent(0);
   stepper.setTarget(0);
@@ -214,7 +231,7 @@ void reset_sensor_counter(void){
     fileToAppend.close();
   }
   current_v_m_count = 0;
-  //ActualVolumePerHour = get_liguid_rate_by_step(CurrrentStepperSpeed);
+  ActualVolumePerHour = 0;
   for (int i=0;i++;i<21) LiquidVolume[i] = 0;
   LiquidVolumeAll = 0;
   startval = 0;
@@ -228,14 +245,6 @@ void reset_sensor_counter(void){
   PipeSensor.avgTempReadings=0;
   WaterSensor.avgTempReadings=0;
   TankSensor.avgTempReadings=0;
-  SteamSensor.avgTemp=-127;
-  PipeSensor.avgTemp=-127;
-  WaterSensor.avgTemp=-127;
-  TankSensor.avgTemp=-127;
-  SteamSensor.Temp=-127;
-  PipeSensor.Temp=-127;
-  WaterSensor.Temp=-127;
-  TankSensor.Temp=-127;
   get_Samovar_Status();
   PauseOn = false;
 
