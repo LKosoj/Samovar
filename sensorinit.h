@@ -13,15 +13,22 @@ void reset_sensor_counter(void);
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
 void BME_getvalue(void){
-  //if (!bmefound) {
-  //  bme_pressure = (float)random(76000,77000)/100;
-  //  return;
-  //}
-  bme_temp = bme.temperature;
-  bme_pressure = bme.pressure * 0.0075;
-  bme_humidity = bme.humidity;
-  bme_gas = bme.gas_resistance / 1000.0;
-  bme_altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+//  unsigned long endTime = bme.beginReading();
+//  if (endTime == 0) {
+//    //Serial.println(F("Failed to begin reading :("));
+//    return;
+//  }
+//  if (!bme.endReading()) {
+//    //Serial.println(F("Failed to complete reading :("));
+//    return;
+//  }
+//  bme_temp = bme.temperature;
+//  bme_pressure = bme.pressure * 0.0075;
+//  bme_humidity = bme.humidity;
+//  bme_gas = bme.gas_resistance / 1000.0;
+//  bme_altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+    bme_temp = bme.readTemperature();
+    bme_pressure = bme.readPressure() * 0.0075;
 }
 
 //***************************************************************************************************************
@@ -42,7 +49,7 @@ void DS_getvalue(void){
   
   if (ss != -127) {
     SteamSensor.Temp = ss + SamSetup.DeltaSteamTemp;
-    //SteamSensor.avgTemp = SteamSensor.Temp;
+    SteamSensor.avgTemp = SteamSensor.Temp;
 /*    SteamSensor.avgTempAccumulator += SteamSensor.Temp;
     SteamSensor.avgTempReadings+=1;
     SteamSensor.avgTemp = SteamSensor.avgTempAccumulator / SteamSensor.avgTempReadings;
@@ -94,9 +101,6 @@ void DS_getvalue(void){
 }
 
 void triggerGetSensor(void){
-      //unsigned long endTime = bme.beginReading();
-      //if (bme.endReading()) BME_getvalue();
-      //if (bme.performReading()) BME_getvalue();
       DS_getvalue();
       clok();
       vTaskDelay(10);
@@ -127,19 +131,18 @@ void sensor_init(void){
     writeString("Successful       ", 4);
     bmefound = true;
     
-    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setTemperatureOversampling(BME680_OS_4X);
     bme.setHumidityOversampling(BME680_OS_2X);
     bme.setPressureOversampling(BME680_OS_4X);
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    bme.setGasHeater(320, 150); // 320*C for 150 ms
+    //bme.setGasHeater(320, 150); // 320*C for 150 ms
     
     delay(1000);
   }
 
   writeString("DS1820 init...     ", 3);
-  delay(1000);
   sensors.begin();                                                        // стартуем датчики температуры
-  delay(1000);
+  delay(2000);
   writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
   delay(1000);
 
@@ -223,9 +226,9 @@ void reset_sensor_counter(void){
   stepper.disable();
   stepper.setCurrent(0);
   stepper.setTarget(0);
-  
-  BME_getvalue();
-  start_pressure = bme_pressure;
+
+  bme.performReading();
+  start_pressure = bme.pressure * 0.0075;;
 
   if (fileToAppend) {
     fileToAppend.close();

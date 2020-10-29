@@ -54,11 +54,9 @@ void StepperTicker( void * parameter) {
 
 void IRAM_ATTR isrENC_TICK() {
   encoder.tick();  // отработка в прерывании
-  TTT = TTT + 1;
 }
 
 void setup() {
-  TTT = 0;
   Serial.begin(115200);
 
   //Инициализируем ноги для реле
@@ -146,7 +144,7 @@ void setup() {
 }
 
 void loop() {
-unsigned long BMEendTime = bme.beginReading();
+//unsigned long BMEendTime = bme.beginReading();
 
 #ifdef SAMOVAR_USE_BLYNK
   Blynk.run();
@@ -190,10 +188,7 @@ unsigned long BMEendTime = bme.beginReading();
     withdrawal();     //функция расчета отбора
   }
 
-
-  if (bme.endReading()) {
-    BME_getvalue();
-  }
+  BME_getvalue();
   vTaskDelay(10);
 }
 
