@@ -167,6 +167,7 @@ void loop() {
           pump_calibrate(CurrrentStepperSpeed);
           break;
         case CALIBRATE_STOP:
+          Serial.println("CALIBRATE_STOP");
           pump_calibrate(0);
           break;
         case SAMOVAR_MANUAL:
@@ -218,6 +219,7 @@ void getjson (void){
   jsondoc["currentvolume"] = currentvolume;
   jsondoc["ActualVolumePerHour"] = ActualVolumePerHour;
   jsondoc["PowerOn"] = (byte)PowerOn;
+  jsondoc["PauseOn"] = (byte)PauseOn;
   jsondoc["WthdrwlProgress"] = WthdrwlProgress;
   jsondoc["TargetStepps"] = stepper.getTarget();
   jsondoc["CurrrentStepps"] = stepper.getCurrent();

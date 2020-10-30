@@ -1,5 +1,18 @@
 #include "Samovar_ini.h"
-#define SAMOVAR_VERSION "1.0"
+
+#ifdef __cplusplus
+  extern "C" {
+#endif
+ 
+  uint8_t temprature_sens_read();
+ 
+#ifdef __cplusplus
+}
+#endif
+ 
+uint8_t temprature_sens_read();
+
+#define SAMOVAR_VERSION "1.1"
 #define __SAMOVAR_DEBUG
 
 #define SAMOVAR_USE_BLYNK                   //использовать Blynk в проекте
@@ -131,11 +144,6 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 AsyncEventSource events("/events");
 
-
-//EspHtmlTemplateProcessor templateProcessor(&server);
-
-
-//Adafruit_BME680 bme(BME_CS, BME_MOSI, BME_MISO,  BME_SCK);
 Adafruit_BME680 bme; // I2C
 
 OneWire oneWire(ONE_WIRE_BUS);

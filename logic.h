@@ -66,8 +66,16 @@ void set_power(bool On){
 }
 
 void pump_calibrate(int stpspeed){
-  if (startval != 0) return;
+  Serial.println("startval=");
+  Serial.println(startval);
+  if (startval != 0 && startval != 100) {
+    return;
+  }
+  Serial.println("stpspeed=");
+  Serial.println(stpspeed);
+  
   if (stpspeed == 0){
+    startval = 0;
     //Сохраняем полученное значение калибровки
     SamSetup.StepperStepMl = round((float)stepper.getCurrent() / 100);
     stepper.brake();
@@ -75,8 +83,9 @@ void pump_calibrate(int stpspeed){
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
   } else {
+    startval = 100;
     //крутим двигатель, пока не остановят
-    stepper.setCurrent(0);
+    if (!stepper.getState()) stepper.setCurrent(0);
     stepper.setMaxSpeed(stpspeed);
     stepper.setTarget(999999999);
   }
@@ -94,17 +103,20 @@ void start_manual(){
 }
 
 void pause_withdrawal(bool Pause){
+  if (!stepper.getState() && !PauseOn) return;
   PauseOn = Pause;
   if (Pause) {
-    RemainingDistance = stepper.getTarget() - stepper.getCurrent();
+    //RemainingDistance = stepper.getTarget() - stepper.getCurrent();
+    TargetStepps = stepper.getTarget();
+    CurrrentStepps = stepper.getCurrent();
     CurrrentStepperSpeed = stepper.getSpeed();
     stepper.brake();
     stepper.disable();
   }
   else {
     stepper.setMaxSpeed(CurrrentStepperSpeed);
-    stepper.setCurrent(0);
-    stepper.setTarget(RemainingDistance);
+    stepper.setCurrent(CurrrentStepps);
+    stepper.setTarget(TargetStepps);
   }
 }
 
@@ -112,24 +124,27 @@ String get_Samovar_Status(){
   if (!PowerOn) {
     SamovarStatus = "Выключено";
     SamovarStatusInt = 0;
-  } else if (PowerOn && SteamSensor.avgTemp > 75 && (!stepper.getState() == 0 || startval == 2)) {
-    SamovarStatus = "Работа колонны на себя";
-    SamovarStatusInt = 2;
   } else if (PowerOn && startval == 1) {
     SamovarStatus = "Отбор голов в автоматическом режиме";
-    SamovarStatusInt = 3;
+    SamovarStatusInt = 1;
+  } else if (PowerOn && startval == 100) {
+    SamovarStatus = "Калибровка";
+    SamovarStatusInt = 7;
   } else if (PowerOn && startval == 3) {
     SamovarStatus = "Отбор тела в автоматическом режиме";
-    SamovarStatusInt = 4;
+    SamovarStatusInt = 2;
   } else if (PowerOn && stepper.getState() && startval == 10) {
     SamovarStatus = "Отбор в ручном режиме";
-    SamovarStatusInt = 5;
+    SamovarStatusInt = 3;
+  } else if (PowerOn && SteamSensor.avgTemp > 20 && (!stepper.getState() || startval == 2 || startval == 4)) {
+    SamovarStatus = "Работа колонны на себя";
+    SamovarStatusInt = 4;
   } else if (PauseOn) {
     SamovarStatus = "Пауза";
-    SamovarStatusInt = 6;
-  } else if (PowerOn && startval == 0) {
+    SamovarStatusInt = 5;
+  } else if (PowerOn && startval == 0 && stepper.getState()) {
     SamovarStatus = "Разгон колонны";
-    SamovarStatusInt = 1;
+    SamovarStatusInt = 6;
   }  
   return SamovarStatus;
 }

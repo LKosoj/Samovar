@@ -4,12 +4,16 @@ Blynk.virtualWrite(V0, SteamSensor.avgTemp);
 Blynk.virtualWrite(V4, PowerOn);
 int i;
 int j;
+int k;
 if (startval > 0 && startval < 5) i = 1;
 else i = 0;
 Blynk.virtualWrite(V3, i);
 if (startval == 10) j = 1;
 else j = 0;
 Blynk.virtualWrite(V12, j);
+if (PauseOn) k = 1;
+else k = 0;
+Blynk.virtualWrite(V13, k);
 }
 
 BLYNK_READ(V1){
@@ -42,6 +46,11 @@ Blynk.virtualWrite(V9, ActualVolumePerHour);
 
 BLYNK_READ(V14){
 Blynk.virtualWrite(V14, get_Samovar_Status());
+}
+
+BLYNK_WRITE(V13)
+{
+  pause_withdrawal(!PauseOn); 
 }
 
 BLYNK_WRITE(V3)

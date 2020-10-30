@@ -284,18 +284,34 @@ void menu_get_power(){
   }
 }
 void menu_calibrate(){
-  if (startval > 0) return;
+  if (startval > 0  && startval != 100) return;
   
-  int stpspeed;
+  int stpspeed = stepper.getSpeed();
+  if (startval == 100) {
+    stpspeed = stpspeed + stpspeed/10;
+    pump_calibrate(stpspeed);
+    return;
+  }
   if (StepperMoving){
     calibrate_text_ptr = (char*)"Stop";
     stpspeed = 0;
     }
   else {
+    startval = 100;
     calibrate_text_ptr = (char*)"Start";
     stpspeed = STEPPER_MAX_SPEED;
   }
   pump_calibrate(stpspeed);
+}
+
+void menu_calibrate_down(){
+  if (startval == 100) {
+    int stpspeed = stepper.getSpeed();
+    stpspeed = stpspeed - stpspeed/10;
+    if (stpspeed > 0) pump_calibrate(stpspeed);
+    return;
+  }
+  menu_calibrate();
 }
 
 void samovar_start(){
@@ -421,7 +437,7 @@ void setupMenu(){
   lql_setup_stepper_stepper_step_ml.attach_function(1, stepper_step_ml_up);
   lql_setup_stepper_stepper_step_ml.attach_function(2, stepper_step_ml_down);
   lql_setup_stepper_calibrate.attach_function(1, menu_calibrate);
-  lql_setup_stepper_calibrate.attach_function(2, menu_calibrate);
+  lql_setup_stepper_calibrate.attach_function(2, menu_calibrate_down);
 
   lql_back_line.attach_function(1, setup_go_back);
   lql_back_line.attach_function(2, setup_go_back);
@@ -474,20 +490,30 @@ void encoder_getvalue(){
 
   // Check all the buttons
   if (encoder.isRight()) {
+      multiplier = 1;
+      //Если калибровка - энкодером регулируем скорость шагового двигателя
+      if (startval == 100) {
+        menu_calibrate();
+        return;
+      }
     if (!main_menu1.is_callable(1)){
       main_menu1.next_screen();
     }
     else {
-      multiplier = 1;
       main_menu1.call_function(1);
     }
   }
   if (encoder.isLeft()) {
+      multiplier = 1;
+      //Если калибровка - энкодером регулируем скорость шагового двигателя
+      if (startval == 100) {
+        menu_calibrate_down();
+        return;
+      }
     if (!main_menu1.is_callable(2)){
       main_menu1.previous_screen();
     }
     else {
-      multiplier = 1;
       main_menu1.call_function(2);
     }
   }
@@ -500,6 +526,11 @@ void encoder_getvalue(){
     main_menu1.call_function(2);
   }
   if (encoder.isClick()) {
+      //Выход из режима калибровки - нажатие на кнопку.
+      if (startval == 100) {
+        startval = 0;
+        menu_calibrate();
+      }
       main_menu1.switch_focus();
   }
 }

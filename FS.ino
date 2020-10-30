@@ -206,5 +206,6 @@ void append_data(){
 
 String get_sys_info(){
 String result_st = "totalBytes = " + (String)SPIFFS.totalBytes() + "; usedBytes = " + (String)SPIFFS.usedBytes() + "; Free Heap = " + (String)ESP.getFreeHeap();
+result_st += "; ESP32 t = " + (String)((temprature_sens_read() - 32) / 1.8) + "; BME t = " + (String)bme_temp;
 return result_st;
 }

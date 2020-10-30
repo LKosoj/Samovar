@@ -135,6 +135,9 @@ void  handleSave(AsyncWebServerRequest *request){
   if (request->hasArg("LiquidRateBody")) {
     SamSetup.LiquidRateBody = request->arg("LiquidRateBody").toFloat();
   }
+  if (request->hasArg("stepperstepml")) {
+    SamSetup.StepperStepMl = request->arg("stepperstepml").toInt()/100;
+  }
   
   // Сохраняем изменения в память.
   EEPROM.put(0, SamSetup);
@@ -168,6 +171,13 @@ int params = request->params();
    if (request->hasArg("reset")) {
     sam_command_sync = SAMOVAR_RESET;
    }
+   if (request->hasArg("pause")) {
+    if (PauseOn) {
+      sam_command_sync = SAMOVAR_CONTINUE;
+    } else {
+      sam_command_sync = SAMOVAR_PAUSE;
+    }
+   }
   }
    if (request->hasArg("manual")) {
      sam_command_sync = SAMOVAR_MANUAL;
@@ -189,7 +199,7 @@ void  calibrate_command(AsyncWebServerRequest *request){
    if (request->hasArg("start") && startval == 0) {
     sam_command_sync = CALIBRATE_START;
    }
-   if (request->hasArg("finish") && startval == 0) {
+   if (request->hasArg("finish") && startval == 100) {
     sam_command_sync = CALIBRATE_STOP;
    }
   }
