@@ -71,6 +71,19 @@ document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
 document.getElementById('PowerOn').innerHTML = myObj.PowerOn;
 document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
 document.getElementById('Status').innerHTML = myObj.Status;
+
+var pausestr;
+var pausestyle;
+if (myObj.PauseOn == 1){
+  pausestr = 'Продолжить';
+  pausestyle='lightgreen';
+} else {
+  pausestr = 'Поставить на паузу';
+  pausestyle='#3498db';
+}
+document.getElementById('pause').value = pausestr;
+document.getElementById('pause').style.backgroundColor = pausestyle;
+
 };
 };
 xhttp.open("GET", "/ajax", true);
@@ -96,6 +109,7 @@ xhttp.send();
 <h2>Объем для отбора : <input id="Volume" name='Volume' type='text' value='100'> мл.</h2>
 <h2>Скорость шагового двигателя : <input id="LiquidRate" name='LiquidRate' type='text' value='0.5'> л/ч</h2>
 <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("manual=1");'>
+<input id='pause' type='submit' name='pause' value='Пауза' onclick='sendbutton("pause=1");'>
 <input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'>
 <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
 <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>

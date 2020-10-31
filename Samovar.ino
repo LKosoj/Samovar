@@ -1,7 +1,5 @@
 //TODO
 //1. Следить за свободной памятью, если кончается, и web сервер работает - автоматом скачивать файл, и затирать его в памяти
-//2. Сделать выбор температур в окне настроек, по которым вести лог
-
 
 //**************************************************************************************************************
 // Подключение библиотек
@@ -11,8 +9,9 @@
 #include <SPI.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-#include <Adafruit_Sensor.h>
-#include "Adafruit_BME680.h"
+//#include <Adafruit_Sensor.h>
+//#include "Adafruit_BME680.h"
+#include "ClosedCube_BME680.h"
 #include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
@@ -48,7 +47,6 @@ void StepperTicker( void * parameter) {
   for(;;) {
     //Это должно работать максимально быстро
     StepperMoving = stepper.tick();
-    //vTaskDelay(1);
   }
 }
 
@@ -58,6 +56,7 @@ void IRAM_ATTR isrENC_TICK() {
 
 void setup() {
   Serial.begin(115200);
+  Wire.begin();
 
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
@@ -113,9 +112,8 @@ void setup() {
 
   //Подключаемся к WI-FI
   connectWiFi();
-  //delay(2000);
   writeString("Connected", 4);
-  //delay(2000);
+
   sensor_init();
 
   WebServerInit();
@@ -129,22 +127,24 @@ void setup() {
   xTaskCreatePinnedToCore(
       StepperTicker, /* Function to implement the task */
       "StepperTicker", /* Name of the task */
-      16000,  /* Stack size in words */
+      1200,  /* Stack size in words */
       NULL,  /* Task input parameter */
       0,  /* Priority of the task */
       &StepperTickerTask1,  /* Task handle. */
       0); /* Core where the task should run */
 
+  // Start update of environment data every SAMOVAR_LOG_PERIOD second
+  SensorTicker.attach(SAMOVAR_LOG_PERIOD, triggerGetSensor);
   // Start update of environment data every 1 second
-  SensorTicker.attach(1, triggerGetSensor);
+  SensorTempTicker.attach(1, triggerGetTempSensor);
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);
-
+  BME_getvalue(true);
 }
 
 void loop() {
-//unsigned long BMEendTime = bme.beginReading();
+  BME_getvalue(false);
 
 #ifdef SAMOVAR_USE_BLYNK
   Blynk.run();
@@ -182,34 +182,30 @@ void loop() {
     }
     sam_command_sync = SAMOVAR_NONE;
   }
-  
-  encoder_getvalue();
-    
+      
   if (startval > 0){
     withdrawal();     //функция расчета отбора
   }
-
-  BME_getvalue();
-  vTaskDelay(10);
+  encoder_getvalue();
+  
+  vTaskDelay(5);
 }
 
 void getjson (void){
 
   DynamicJsonDocument jsondoc(1024);
 
-
   String st = Crt;
   String stm = millis2time();
-  crnt_time = Crt;
 //  jsondoc["samovar_temp"] = samovar_temp;
   jsondoc["bme_temp"] = bme_temp;
-  jsondoc["bme_pressure"] = bme_pressure;
+  jsondoc["bme_pressure"] = format_float(bme_pressure,3);
   jsondoc["start_pressure"] = start_pressure;
   jsondoc["bme_humidity"] = bme_humidity;
   jsondoc["bme_altitude"] = bme_altitude;
   jsondoc["bme_gas"] = bme_gas;
-  jsondoc["crnt_tm"] = st;
-  jsondoc["stm"] = stm;
+  jsondoc["crnt_tm"] = Crt;
+  jsondoc["stm"] = millis2time();
   jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp,2);
   jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp,2);
   jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,2);

@@ -1,4 +1,5 @@
 void clok();
+void clok1();
 void getjson (void);
 void append_data();
 
@@ -12,107 +13,67 @@ void reset_sensor_counter(void);
 //***************************************************************************************************************
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
-void BME_getvalue(void){
-//  unsigned long endTime = bme.beginReading();
-//  if (endTime == 0) {
-//    //Serial.println(F("Failed to begin reading :("));
-//    return;
-//  }
-//  if (!bme.endReading()) {
-//    //Serial.println(F("Failed to complete reading :("));
-//    return;
-//  }
-//  bme_temp = bme.temperature;
-//  bme_pressure = bme.pressure * 0.0075;
-//  bme_humidity = bme.humidity;
-//  bme_gas = bme.gas_resistance / 1000.0;
-//  bme_altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
-    bme_temp = bme.readTemperature();
-    bme_pressure = bme.readPressure() * 0.0075;
+void BME_getvalue(bool fl){
+  ClosedCube_BME680_Status status = bme680.readStatus();
+//  Serial.print("status: (");
+//  Serial.print(status.newDataFlag);
+//  Serial.print(",");
+//  Serial.print(status.measuringStatusFlag);
+//  Serial.print(",");
+//  Serial.print(status.gasMeasuringStatusFlag);
+//  Serial.print(",");
+//  Serial.print(status.gasMeasurementIndex);
+//  Serial.println(") (newDataFlag,StatusFlag,GasFlag,GasIndex)");
+
+  if (status.newDataFlag || fl) {
+    bme_temp = bme680.readTemperature();
+    bme_pressure = bme680.readPressure() * 0.75;
+    bme_humidity = bme680.readHumidity();
+    bme680.setForcedMode();
+  }  
 }
 
 //***************************************************************************************************************
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
 void DS_getvalue(void){
-  sensors.requestTemperatures();                               // запрашиваем температуру у всех датчиков
   float ss, ps, ws, ts;
   ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
+  vTaskDelay(100);
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
+  vTaskDelay(100);
   ws = sensors.getTempC(WaterSensor.Sensor);                   // считываем температуру с датчика 2
+  vTaskDelay(100);
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
+  vTaskDelay(100);
 
-  //ss = (float)random(7600,8000)/100;
-  //ps = (float)random(7500,7800)/100;
-  //ws = (float)random(5000,5500)/100;
-  //ts = (float)random(8500,9000)/100;
-  
+  //return;
+  sensors.requestTemperatures();
+
   if (ss != -127) {
-    SteamSensor.Temp = ss + SamSetup.DeltaSteamTemp;
-    SteamSensor.avgTemp = SteamSensor.Temp;
-/*    SteamSensor.avgTempAccumulator += SteamSensor.Temp;
-    SteamSensor.avgTempReadings+=1;
-    SteamSensor.avgTemp = SteamSensor.avgTempAccumulator / SteamSensor.avgTempReadings;
-    if (SteamSensor.avgTempReadings >= TEMP_AVG_READING) {
-        SteamSensor.avgTempAccumulator /= 2;
-        SteamSensor.avgTempReadings /= 2;
-      }
-*/
+    SteamSensor.avgTemp = ss + SamSetup.DeltaSteamTemp;
   }
   if (ps != -127) {
-    PipeSensor.Temp = ps + SamSetup.DeltaPipeTemp;
-    PipeSensor.avgTemp = PipeSensor.Temp;
-/*    PipeSensor.avgTempAccumulator += PipeSensor.Temp;
-    PipeSensor.avgTempReadings+=1;
-    PipeSensor.avgTemp = PipeSensor.avgTempAccumulator / PipeSensor.avgTempReadings;
-    if (PipeSensor.avgTempReadings >= TEMP_AVG_READING) {
-        PipeSensor.avgTempAccumulator /= 2;
-        PipeSensor.avgTempReadings /= 2;
-      }
-*/
+    PipeSensor.avgTemp = ps + SamSetup.DeltaPipeTemp;
   }
   if (ws != -127) {
-    WaterSensor.Temp = ws + SamSetup.DeltaWaterTemp;
-    WaterSensor.avgTemp = WaterSensor.Temp;
-/*    
-    WaterSensor.avgTempAccumulator += WaterSensor.Temp;
-    WaterSensor.avgTempReadings+=1;
-    WaterSensor.avgTemp = WaterSensor.avgTempAccumulator / WaterSensor.avgTempReadings;
-    if (WaterSensor.avgTempReadings >= TEMP_AVG_READING) {
-        WaterSensor.avgTempAccumulator /= 2;
-        WaterSensor.avgTempReadings /= 2;
-      }
-*/
+    WaterSensor.avgTemp = ws + SamSetup.DeltaWaterTemp;
   }
   if (ws != -127) {
-    TankSensor.Temp = ts + SamSetup.DeltaTankTemp;
-    TankSensor.avgTemp = TankSensor.Temp;
-/*    
-     
-    TankSensor.avgTempAccumulator += TankSensor.Temp;
-    TankSensor.avgTempReadings+=1;
-    TankSensor.avgTemp = TankSensor.avgTempAccumulator / TankSensor.avgTempReadings;
-    if (TankSensor.avgTempReadings >= TEMP_AVG_READING) {
-        TankSensor.avgTempAccumulator /= 2;
-        TankSensor.avgTempReadings /= 2;
-      }
-*/
+    TankSensor.avgTemp = ts + SamSetup.DeltaTankTemp;
   }
 }
 
-void triggerGetSensor(void){
-      DS_getvalue();
+void IRAM_ATTR triggerGetTempSensor(void){
       clok();
-      vTaskDelay(10);
+      DS_getvalue();
+}
 
+void IRAM_ATTR triggerGetSensor(void){
+      clok1();
       if (startval > 0) {
-        countToAppend++;
-        if (countToAppend > SAMOVAR_LOG_PERIOD){
           append_data();              //Записываем данные;
-          countToAppend = 0;
-        }
       }
-      vTaskDelay(10);
 }
 
 void sensor_init(void){
@@ -120,32 +81,19 @@ void sensor_init(void){
   writeString("Bme680 init...     ", 3);
   delay(1000);
 
-
-  if (!bme.begin()) {
-    Serial.println("Could not find a valid BME680 sensor, check wiring!");
-    writeString("Bme680 not found", 4);
-    delay(2000);
-    bmefound = false;
-  }
-  else {
-    writeString("Successful       ", 4);
-    bmefound = true;
-    
-    bme.setTemperatureOversampling(BME680_OS_4X);
-    bme.setHumidityOversampling(BME680_OS_2X);
-    bme.setPressureOversampling(BME680_OS_4X);
-    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    //bme.setGasHeater(320, 150); // 320*C for 150 ms
-    
-    delay(1000);
-  }
-
+  bme680.init(0x77); // I2C address: 0x76 or 0x77
+  bme680.reset();
+  bme680.setGasOff();
+  // oversampling: humidity = x1, temperature = x1, pressure = x2
+  bme680.setOversampling(BME680_OVERSAMPLING_X1, BME680_OVERSAMPLING_X1, BME680_OVERSAMPLING_X2);
+  bme680.setIIRFilter(BME680_FILTER_3);
+  bme680.setForcedMode();
+  
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
-  delay(2000);
+  delay(3000);
   writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
-  delay(1000);
-
+  //delay(1000);
                                                                           // определяем устройства на шине
   Serial.print("Locating DS18B20...");
   Serial.print("Found ");
@@ -162,7 +110,10 @@ void sensor_init(void){
    { Serial.println("Unable to find address for Device 2"); }             // если адрес датчика 2 не найден
   if (!sensors.getAddress(TankSensor.Sensor, 3))
    { Serial.println("Unable to find address for Device 3"); }             // если адрес датчика 3 не найден
- 
+
+  sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
+  sensors.requestTemperatures();
+
 #ifdef __SAMOVAR_DEBUG
   Serial.print("SteamSensor Address: ");                                  // пишем адрес датчика 0
   printAddress(SteamSensor.Sensor);
@@ -227,8 +178,9 @@ void reset_sensor_counter(void){
   stepper.setCurrent(0);
   stepper.setTarget(0);
 
-  bme.performReading();
-  start_pressure = bme.pressure * 0.0075;;
+  //bme.performReading();
+  //start_pressure = bme.pressure * 0.0075;
+  start_pressure = 0;
 
   if (fileToAppend) {
     fileToAppend.close();
@@ -239,7 +191,6 @@ void reset_sensor_counter(void){
   LiquidVolumeAll = 0;
   startval = 0;
   WthdrwlProgress = 0;
-  countToAppend = 0;
   SteamSensor.avgTempAccumulator=0;
   PipeSensor.avgTempAccumulator=0;
   WaterSensor.avgTempAccumulator=0;
@@ -257,7 +208,7 @@ void reset_sensor_counter(void){
       TempArray[i][j] = 0;
 }
 
-String format_float(float v, int d){
+String inline format_float(float v, int d){
   char outstr[15];
   return (String)dtostrf(v,1, d, outstr);
 }

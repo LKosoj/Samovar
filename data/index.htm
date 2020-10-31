@@ -61,7 +61,6 @@ document.getElementById('start_pressure').innerHTML = myObj.start_pressure;
 document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
 document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
 document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
-document.getElementById('PowerOn').innerHTML = myObj.PowerOn;
 document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
 document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
 document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
@@ -78,6 +77,19 @@ if (myObj.PowerOn == 1){
 }
 document.getElementById('power').value = powerstr;
 document.getElementById('power').style.backgroundColor = powerstyle;
+
+var pausestr;
+var pausestyle;
+if (myObj.PauseOn == 1){
+  pausestr = 'Продолжить';
+  pausestyle='lightgreen';
+} else {
+  pausestr = 'Поставить на паузу';
+  pausestyle='#3498db';
+}
+document.getElementById('pause').value = pausestr;
+document.getElementById('pause').style.backgroundColor = pausestyle;
+  
 }
 };
 xhttp.open("GET", "/ajax", true);
@@ -102,6 +114,7 @@ xhttp.send();
 <h2>Питание включено: <span id='PowerOn'></span></h2>
 <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
 <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'>
+<input id='pause' type='submit' name='pause' value='Пауза' onclick='sendbutton("pause=1");'>
 <input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'>
 <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
 <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>

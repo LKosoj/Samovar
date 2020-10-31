@@ -58,9 +58,9 @@ uint8_t temprature_sens_read();
 
 //**************************************************************************************************************
 // Пины для релейного модуля
-#define RELE_CHANNEL1 13//2
+#define RELE_CHANNEL1 14//2
 #define RELE_CHANNEL2 12//34
-#define RELE_CHANNEL3 14
+#define RELE_CHANNEL3 13//14
 #define RELE_CHANNEL4 3//13
 //**************************************************************************************************************
 
@@ -128,7 +128,9 @@ char* ipstr = (char*)ipst;
 char* startval_text;
 char* power_text_ptr = (char*)"ON";
 char* calibrate_text_ptr = (char*)"Start";
-String StrCrt, Crt, OldCrt;
+char* pause_text_ptr = (char*)"Pause";
+String StrCrt, Crt;
+byte CurMin, OldMin;
 
 //**************************************************************************************************************
 
@@ -136,6 +138,7 @@ String StrCrt, Crt, OldCrt;
 TaskHandle_t StepperTickerTask1 = NULL;
 
 Ticker SensorTicker;
+Ticker SensorTempTicker;
 
 float TempArray[3][80000];                        //массив для сохранения данных о температуре
 
@@ -144,7 +147,8 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 AsyncEventSource events("/events");
 
-Adafruit_BME680 bme; // I2C
+//Adafruit_BME680 bme; // I2C
+ClosedCube_BME680 bme680;
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -155,7 +159,6 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 File fileToAppend;
-byte countToAppend;
 
 struct SetupEEPROM{
   byte flag;                                                   //Флаг для записи в память
@@ -212,7 +215,6 @@ volatile float bme_pressure;                                    // Давлен�
 volatile float bme_humidity;                                    // Влажность
 volatile float bme_altitude;                                    // Высота
 volatile float bme_gas;                                         // Газы
-String crnt_time;                                               // Текущее время (строка)
 String SamovarStatus;                                           // Текущий статус работы Самовара
 volatile int SamovarStatusInt;                                  // Текущий статус работы Самовара
 

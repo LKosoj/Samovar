@@ -14,15 +14,15 @@ LiquidScreen main_screen(lql_steam_temp, lql_pipe_temp, lql_water_temp, lql_time
 
 LiquidLine lql_tank_temp(0, 0, "Tank temp: ", TankSensor.avgTemp);
 LiquidLine lql_atm(0, 1, "Atm: ", bme_pressure);
-//LiquidLine lql_ip(0, 2, "IP: ", ipstr);
 LiquidLine lql_w_progress(0, 2, "Progress: ", WthdrwlProgress);
 LiquidScreen main_screen1(lql_tank_temp, lql_atm, lql_w_progress, lql_time);
 
 LiquidLine lql_start(0, 0, ">Start: ", startval_text);
 //LiquidLine lql_stepper_speed(0, 1, ">Stepper spd: ", CurrrentStepperSpeed);
 LiquidLine lql_act_vlm_perh(0, 1, ">Speed l/h: ", ActualVolumePerHour);
-LiquidLine lql_reset(0, 2, ">Reset withdrawal:");
-LiquidScreen main_screen2(lql_start, lql_act_vlm_perh, lql_reset, lql_time);
+LiquidLine lql_pause(0, 2, ">Pause:", pause_text_ptr);
+LiquidLine lql_reset(0, 3, ">Reset withdrawal:");
+LiquidScreen main_screen2(lql_start, lql_act_vlm_perh, lql_pause, lql_reset);
 
 LiquidLine lql_volume(0, 0, ">Volume: ", ManualVolume);
 LiquidLine lql_manual_stp_spd(0, 1, ">Speed ml/h: ", ManualLiquidRate);
@@ -38,7 +38,8 @@ LiquidScreen main_screen3(lql_head_volume, lql_body_volume, lql_setup_liquid_rat
 
 LiquidLine lql_get_power(0, 0, ">Get power ", power_text_ptr);
 LiquidLine lql_setup(0, 1, "/Setup");
-LiquidScreen main_screen4(lql_get_power, lql_setup, lql_time);
+LiquidLine lql_ip(0, 2, "IP: ", ipstr);
+LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
 
 LiquidMenu main_menu1(lcd);
 
@@ -283,6 +284,11 @@ void menu_get_power(){
     set_menu_screen(3);
   }
 }
+void menu_pause(){
+  pause_withdrawal(!PauseOn);
+  if (PauseOn) pause_text_ptr = (char*)"Continue";
+  else pause_text_ptr = (char*)"Pause";
+}
 void menu_calibrate(){
   if (startval > 0  && startval != 100) return;
   
@@ -452,6 +458,9 @@ void setupMenu(){
   lql_start_manual.attach_function(1, menu_start_manual);
   lql_start_manual.attach_function(2, menu_start_manual);
 
+  lql_pause.attach_function(1, menu_pause);
+  lql_pause.attach_function(2, menu_pause);
+
   main_menu1.add_screen(welcome_screen);
   main_menu1.add_screen(main_screen);
   main_menu1.add_screen(main_screen1);
@@ -480,11 +489,13 @@ void setupMenu(){
 
 void encoder_getvalue(){
 
-  Crt = CurrentTime();
-  StrCrt = Crt.substring(6) + "   " + millis2time();
-  StrCrt.toCharArray(tst,20);
-  if (OldCrt != Crt){
-    OldCrt = Crt;
+  CurMin = (millis() / 60 ) % 60;
+    
+  if (OldMin != CurMin){
+    Crt = CurrentTime();
+    StrCrt = Crt.substring(6) + "   " + millis2time();
+    StrCrt.toCharArray(tst,20);
+    OldMin = CurMin;
     main_menu1.softUpdate();
   }
 
