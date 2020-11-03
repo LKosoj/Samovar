@@ -13,6 +13,7 @@ body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
 #bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
 form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
 h1{text-align:center}
+p{margin: 0px !important;}
 .btn{background:#3498db;color:#fff;cursor:pointer}
 .dvcs{padding: 10px;margin: 10px;}
 </style>
@@ -29,18 +30,14 @@ h1{text-align:center}
 <h2>Корректировка датчика в кубе : <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
 <h2>Уставка датчика в кубе : <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
 <h2>Количество шагов шагового двигателя : <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
-<h2>Объем для отбора голов : <input name='HeadVolume' type='text' value='%HeadVolume%'> мл.</h2>
-<h2>Скорость отбора голов : <input name='LiquidRateHead' type='text' value='%LiquidRateHead%'> л./час.</h2>
-<h2>Объем для отбора тела : <input name='BodyVolume' type='text' value='%BodyVolume%'> мл.</h2>
-<h2>Скорость отбора тела: <input name='LiquidRateBody' type='text' value='%LiquidRateBody%'> л./час.</h2>
 <div class='dvcs'>
-<p><span class='dvcs'>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора</span><p>
-<p><span class='dvcs'>Пример программы отбора (H - головы (Heads), B - тело (Body).</span><p>
-<p><span class='dvcs'>Температура отбора = 0 - автоматический режим. Температура отбора < 10&#176C - плюс к предыдущей температуре, иначе отбор при заданной температуре></span><p>
-<p><span class='dvcs'>H;100;0.1;1;0</span><p>
-<p><span class='dvcs'>B;100;0.1;1;0</span><p>
+<p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора</span></p>
+<p><span>Пример программы отбора (H - головы (Heads), B - тело (Body).</span></p>
+<p><span>Температура отбора = 0 - автоматический режим. Температура отбора < 10&#176C - плюс к предыдущей температуре, иначе отбор при заданной температуре></span></p>
+<p><span>H;100;0.1;1;0</span></p>
+<p><span>B;100;0.1;1;0</span></p>
 </div>
-<h2>Программа отбора: <textarea cols="40" rows="5" name='WProgram'>%WProgram%</textarea> л./час.</h2>
+<h2>Программа отбора: <textarea cols="40" rows="5" name='WProgram' style="font-size: 14;">%WProgram%</textarea> л./час.</h2>
 <input id='save' type='submit' name='save' value='Сохранить'>
 <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
