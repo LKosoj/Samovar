@@ -73,6 +73,9 @@ uint8_t temprature_sens_read();
 //**************************************************************************************************************
 // Пины для сервопривода
 #define SERVO_PIN 25
+// количество емкостей. (0 используется всегда). Для расчета позиции серво считаем угол поворота между емкостями
+// равным 180 / CAPACITY_NUM
+#define CAPACITY_NUM 10
 //**************************************************************************************************************
 
 //**************************************************************************************************************
@@ -125,7 +128,8 @@ char* welcomeStr4 = (char*)welcomeStrArr4;
 
 char* timestr = (char*)tst;
 char* ipstr = (char*)ipst;
-char* startval_text;
+char startval_text_val[20];
+char* startval_text = (char*)startval_text_val;
 char* power_text_ptr = (char*)"ON";
 char* calibrate_text_ptr = (char*)"Start";
 char* pause_text_ptr = (char*)"Pause";
@@ -159,6 +163,8 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 File fileToAppend;
+Servo servo;  // create servo object to control a servo
+
 
 struct SetupEEPROM{
   byte flag;                                                   //Флаг для записи в память
@@ -180,18 +186,27 @@ struct SetupEEPROM{
 struct DSSensor{
 DeviceAddress Sensor;                                          //адрес датчика температуры
 float Temp;                                                    //температура с датчика
-float avgTempAccumulator;                                      //аккумулятор температуры для расчета среднего
-byte avgTempReadings;                                          //счетчик для расчета среднего
 float avgTemp;                                                 //средняя температура
 float SetTemp;                                                 //уставка по температуре, при достижении которой требуется реакция
+float PrevTemp;
+};
+
+struct WProgram{
+String WType;                                                   //тип отбора - головы или тело
+int Volume;                                                     //объем отбора в мл
+float Speed;                                                      //скорость отбора в л/ч
+byte capacity_num;                                              //номер емкости для отбора
+float Temp;                                                     //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
 };
 
 SetupEEPROM SamSetup;
 
-DSSensor SteamSensor;                                           // сенсор температуры пара вверху колонны
-DSSensor PipeSensor;                                            // сенсор температуры в царге на 2/3 высоты
-DSSensor WaterSensor;                                           // сенсор температуры охлаждающей воды или флегмы
-DSSensor TankSensor;                                            // сенсор температуры в кубе
+DSSensor SteamSensor;                                           //сенсор температуры пара вверху колонны
+DSSensor PipeSensor;                                            //сенсор температуры в царге на 2/3 высоты
+DSSensor WaterSensor;                                           //сенсор температуры охлаждающей воды или флегмы
+DSSensor TankSensor;                                            //сенсор температуры в кубе
+
+WProgram program[CAPACITY_NUM];                                 //массив строк для записи программы отбора. Не больше чем CAPACITY_NUM
 
 enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_MANUAL, SAMOVAR_PAUSE, SAMOVAR_CONTINUE};
 volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
@@ -212,12 +227,16 @@ volatile bool bmefound = true;
 volatile float bme_temp;                                        // Температура BME
 volatile float start_pressure;                                  // Давление BME стартовое
 volatile float bme_pressure;                                    // Давление BME
+volatile float bme_prev_pressure;                               // Давление BME
 volatile float bme_humidity;                                    // Влажность
 volatile float bme_altitude;                                    // Высота
 volatile float bme_gas;                                         // Газы
 String SamovarStatus;                                           // Текущий статус работы Самовара
 volatile int SamovarStatusInt;                                  // Текущий статус работы Самовара
+volatile byte capacity_num;                                     // Текущая позиция емкости для отбора
 
+volatile byte ProgramNum;                                       // Текущая программа отбора
+volatile byte ProgramLen;                                       // Количество строк прогаммы отбора
 volatile byte startval = 0;                                     // Признак идущего отбора
 volatile int Delay1 = 30;                                       // временная задержка включения клапана по температуре на 2/3 колонны (в секундах)
 volatile int Delay2 = 30;                                       // временная задержка включения клапана по температуре вверху колонны (в секундах)
@@ -236,8 +255,7 @@ volatile unsigned int CurrrentStepps;                           // Количе�
 volatile unsigned int TargetStepps;                             // Количество шагов до нужного объема
 volatile unsigned int WthdrwlProgress;                          // Прогресс текущего отбора
 volatile bool PowerOn = false;                                  // Индикатор включенного питания
-volatile bool PauseOn = false;                                   // Индикатор постановки отбора на паузу
-volatile bool FullAuto = true;                                  // Индикатор полностью автоматического процесса (нужно для отладки)
+volatile bool PauseOn = false;                                  // Индикатор постановки отбора на паузу
 volatile bool StepperMoving = false;                            // Индикатор движущегося шагового двигателя
 volatile int RemainingDistance;                                 // Расстояние, оставшееся до цели (сколько еще надо сделать шагов, чтобы закончить отбор)
 unsigned long begintime;                                        // Время начала отбора

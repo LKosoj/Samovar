@@ -43,11 +43,8 @@ void withdrawal(void){
   } else {
     WthdrwlProgress = 0;
   }
-  if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 3 || startval == 10)){
+  if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 2 || startval == 10)){
     samovar_start();
-    if (FullAuto && startval != 0) {
-      samovar_start();
-    }
   }
 }
 
@@ -124,30 +121,107 @@ String get_Samovar_Status(){
   if (!PowerOn) {
     SamovarStatus = "Выключено";
     SamovarStatusInt = 0;
-  } else if (PowerOn && startval == 1) {
-    SamovarStatus = "Отбор голов в автоматическом режиме";
-    SamovarStatusInt = 1;
+  } else if (PowerOn && startval == 1 && !PauseOn) {
+    SamovarStatus = "Работает программа №" + String(ProgramNum + 1);
+    SamovarStatusInt = 10;
+  } else if (PowerOn && startval == 2) {
+    SamovarStatus = "Выполнение программ отбора закончено";
+    SamovarStatusInt = 10;
   } else if (PowerOn && startval == 100) {
     SamovarStatus = "Калибровка";
-    SamovarStatusInt = 7;
-  } else if (PowerOn && startval == 3) {
-    SamovarStatus = "Отбор тела в автоматическом режиме";
-    SamovarStatusInt = 2;
-  } else if (PowerOn && stepper.getState() && startval == 10) {
+    SamovarStatusInt = 20;
+  } else if (PowerOn && stepper.getState() && startval == 10 && !PauseOn) {
     SamovarStatus = "Отбор в ручном режиме";
-    SamovarStatusInt = 3;
-  } else if (PowerOn && SteamSensor.avgTemp > 20 && (!stepper.getState() || startval == 2 || startval == 4)) {
-    SamovarStatus = "Работа колонны на себя";
-    SamovarStatusInt = 4;
+    SamovarStatusInt = 30;
   } else if (PauseOn) {
     SamovarStatus = "Пауза";
-    SamovarStatusInt = 5;
-  } else if (PowerOn && startval == 0 && stepper.getState()) {
-    SamovarStatus = "Разгон колонны";
-    SamovarStatusInt = 6;
+    SamovarStatusInt = 40;
+  } else if (PowerOn && startval == 0 && !stepper.getState()) {
+    SamovarStatus = "Разгон колонны/работа на себя";
+    SamovarStatusInt = 50;
   }  
   return SamovarStatus;
 }
+
+void set_capacity(byte cap){
+  capacity_num = cap;
+  int p = ((int)cap*180)/(int)CAPACITY_NUM;
+  servo.write(p);
+}
+
+void next_capacity(void){
+  set_capacity(capacity_num+1);
+}
+
+void set_program(String WProgram){
+  char c[500];
+  WProgram.toCharArray(c,500);
+  char *pair = strtok(c, ";");
+  int i=0;
+  while(pair != NULL and i < CAPACITY_NUM){
+    program[i].WType = pair;
+    pair = strtok(NULL, ";");
+    program[i].Volume = atoi(pair);
+    pair = strtok(NULL, ";");
+    program[i].Speed = atof(pair);
+    pair = strtok(NULL, ";");
+    program[i].capacity_num = atoi(pair);
+    pair = strtok(NULL, "\n");
+    program[i].Temp = atof(pair);
+    i++;
+    ProgramLen = i;
+    pair = strtok(NULL, ";");
+    if (!pair and i < CAPACITY_NUM) {
+      program[i].WType = "";
+    }
+  }
+}
+
+String get_program(int s){
+  String Str = "";
+  int k = CAPACITY_NUM;
+  if (s == CAPACITY_NUM) {
+    s = 0;
+  } else {
+    k = s + 1;
+  }
+  for (int i = s; i < k; i++){
+    if (program[i].WType == "") {
+      i = CAPACITY_NUM + 1;
+    } else {
+      Str+= program[i].WType + ";";
+      Str+= (String)program[i].Volume + ";";
+      Str+= (String)program[i].Speed + ";";
+      Str+= (String)program[i].capacity_num + ";";
+      Str+= (String)program[i].Temp + "\n";
+    }
+  }
+  return Str;
+}
+
+void run_program(byte num){
+   if (num == CAPACITY_NUM){
+    ProgramNum = 0;
+    if (fileToAppend) {
+      fileToAppend.close();
+    }
+    stepper.brake();
+    stepper.disable();
+    stepper.setCurrent(0);
+    stepper.setTarget(0);
+    set_capacity(0);
+   } else {
+    set_capacity(program[num].capacity_num);
+    stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
+    TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
+    ManualVolume = program[num].Volume;
+    ManualLiquidRate = program[num].Speed;
+    stepper.setCurrent(0);
+    stepper.setTarget(TargetStepps);
+    ActualVolumePerHour = program[num].Speed;
+   }
+}
+
 /*   
 //***********************************************************************************************************************
 // Управляем клапаном отбора по температуре пара перед дефлегматором

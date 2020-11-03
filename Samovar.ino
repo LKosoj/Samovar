@@ -28,6 +28,8 @@
 #include "GyverEncoder.h"
 #include "GyverStepper.h"
 
+#include <ESP32Servo.h>
+
 #include "Samovar.h"
 #include "font.h"
 #include "logic.h"
@@ -70,6 +72,14 @@ void setup() {
 
   stepper.disable();
 
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
+  servo.setPeriodHertz(50);    // standard 50 hz servo
+  servo.attach(SERVO_PIN, 1000, 2000); // attaches the servo on pin 18 to the servo object
+
+
 #ifdef SAMOVAR_USE_BLYNK
   Blynk.begin(auth, ssid, password);
 #endif
@@ -104,6 +114,7 @@ void setup() {
  }
 
   //Настраиваем меню
+  Serial.println("Samovar started");
   setupMenu();
   writeString("      Samovar ",1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
@@ -140,7 +151,6 @@ void setup() {
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);
-  BME_getvalue(true);
 }
 
 void loop() {
@@ -167,7 +177,6 @@ void loop() {
           pump_calibrate(CurrrentStepperSpeed);
           break;
         case CALIBRATE_STOP:
-          Serial.println("CALIBRATE_STOP");
           pump_calibrate(0);
           break;
         case SAMOVAR_MANUAL:
@@ -187,8 +196,6 @@ void loop() {
     withdrawal();     //функция расчета отбора
   }
   encoder_getvalue();
-  
-  vTaskDelay(5);
 }
 
 void getjson (void){
@@ -211,6 +218,7 @@ void getjson (void){
   jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,2);
   jsondoc["TankTemp"] = format_float(TankSensor.avgTemp,2);
   jsondoc["version"] = SAMOVAR_VERSION;
+  vTaskDelay(2);
   jsondoc["VolumeAll"] = get_liquid_volume();
   jsondoc["currentvolume"] = currentvolume;
   jsondoc["ActualVolumePerHour"] = ActualVolumePerHour;

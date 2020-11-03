@@ -319,78 +319,48 @@ void menu_calibrate_down(){
   }
   menu_calibrate();
 }
-
+////////////////////////////////////////////////////////////
 void samovar_start(){
+  String Str;
+  
+  if (startval == 2) startval = 3;
+  else if (ProgramNum == ProgramLen - 1) startval = 2;
+  
   if (startval == 0) {
     startval = 1;
-    startval_text = (char*)"Head";
-    stepper.setMaxSpeed(get_speed_from_rate(SamSetup.LiquidRateHead));
-    TargetStepps = SamSetup.HeadVolume * SamSetup.StepperStepMl;
-    ManualVolume = SamSetup.HeadVolume;
-    ManualLiquidRate = SamSetup.LiquidRateHead;
-    stepper.setCurrent(0);
-    stepper.setTarget(TargetStepps);
-    ActualVolumePerHour = SamSetup.LiquidRateHead;
-    reset_focus();
+    Str = "Prg No 1";
+    run_program(0);
+    ProgramNum = 0;
     create_data();                    //создаем файл с данными
   }
   else if (startval == 1) {
-    startval = 2;
-    startval_text = (char*)"Head finish";
-    stepper.brake();
-    stepper.disable();
-    stepper.setCurrent(0);
-    stepper.setTarget(0);
-    reset_focus();
+    ProgramNum++;
+    Str = "Prg No " + (String)(ProgramNum+1);
+    run_program(ProgramNum);
   }
   else if (startval == 2) {
-    startval = 3;
-    startval_text = (char*)"Body";
-    stepper.setMaxSpeed(get_speed_from_rate(SamSetup.LiquidRateBody));
-    TargetStepps = SamSetup.BodyVolume * SamSetup.StepperStepMl;
-    ManualVolume = SamSetup.BodyVolume;
-    ManualLiquidRate = SamSetup.LiquidRateBody;
-    stepper.setCurrent(0);
-    stepper.setTarget(TargetStepps);
-    ActualVolumePerHour = SamSetup.LiquidRateBody;
-    reset_focus();
-  }
-  else if (startval == 3) {
-    startval = 4;
-    startval_text = (char*)"Body finish";
-    stepper.brake();
-    stepper.disable();
-    stepper.setCurrent(0);
-    stepper.setTarget(0);
-    reset_focus();
+    Str = "Prg finish";
+    run_program(CAPACITY_NUM);
   }
   else {
-    startval = 0;
-    startval_text = (char*)"Stoped";
-    stepper.brake();
-    stepper.disable();
-    stepper.setCurrent(0);
-    stepper.setTarget(0);
-    ActualVolumePerHour = 0;
-    reset_focus();
+    Str = "Stoped";
+    run_program(CAPACITY_NUM);
     reset_sensor_counter();
  }
+ Str.toCharArray(startval_text_val, 20);
+ reset_focus();
  main_menu1.update();
 }
 
 void samovar_reset(){
-  startval = 0;
-  startval_text = (char*)"Stoped";
+  String Str = "Stoped";
+  Str.toCharArray(startval_text_val, 20);
   reset_focus();
   reset_sensor_counter();
 }
 
 void setupMenu(){
-  startval_text = (char*)"Stoped";
-  startval = 0;
-
-  ActualVolumePerHour = 0;
-
+    
   lcd.init();
   lcd.begin(20, 4);
   lcd.backlight();
@@ -479,10 +449,11 @@ void setupMenu(){
 
   set_menu_screen(3);
   main_menu1.change_screen(&welcome_screen);
-  
+    
+
+  samovar_reset();
   main_menu1.update();
-  
-  //delay(2000);
+//delay(2000);
   welcome_screen.hide(true);
 
 }
@@ -491,12 +462,14 @@ void encoder_getvalue(){
 
   CurMin = (millis() / 60 ) % 60;
     
+  // раз в секунду обновляем время на дисплее
   if (OldMin != CurMin){
     Crt = CurrentTime();
     StrCrt = Crt.substring(6) + "   " + millis2time();
     StrCrt.toCharArray(tst,20);
     OldMin = CurMin;
     main_menu1.softUpdate();
+    vTaskDelay(2);
   }
 
   // Check all the buttons

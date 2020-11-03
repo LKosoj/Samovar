@@ -72,6 +72,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "LiquidRateBody") return (String)SamSetup.LiquidRateBody;
   else if (var == "HeadVolume") return (String)SamSetup.HeadVolume;
   else if (var == "BodyVolume") return (String)SamSetup.BodyVolume;
+  else if (var == "WProgram") return get_program(CAPACITY_NUM);
   
   return String();
 }
@@ -137,6 +138,9 @@ void  handleSave(AsyncWebServerRequest *request){
   }
   if (request->hasArg("stepperstepml")) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt()/100;
+  }
+  if (request->hasArg("WProgram")) {
+    set_program(request->arg("WProgram"));
   }
   
   // Сохраняем изменения в память.

@@ -1,6 +1,8 @@
 #ifdef SAMOVAR_USE_BLYNK
 BLYNK_READ(V0){
+vTaskDelay(2);
 Blynk.virtualWrite(V0, SteamSensor.avgTemp);
+vTaskDelay(2);
 Blynk.virtualWrite(V4, PowerOn);
 int i;
 int j;
@@ -10,6 +12,7 @@ else i = 0;
 Blynk.virtualWrite(V3, i);
 if (startval == 10) j = 1;
 else j = 0;
+vTaskDelay(2);
 Blynk.virtualWrite(V12, j);
 if (PauseOn) k = 1;
 else k = 0;

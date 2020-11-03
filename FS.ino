@@ -198,14 +198,56 @@ void create_data(){
   fileToWrite.println("Date,Steam,Pipe,Water,Tank,Pressure");
   fileToWrite.close();
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
+  SteamSensor.PrevTemp = 0;
+  PipeSensor.PrevTemp = 0;
+  WaterSensor.PrevTemp = 0;
+  TankSensor.PrevTemp = 0;
+  bme_prev_pressure = 0;
 }
 
-void append_data(){
-  fileToAppend.println(Crt + "," + format_float(SteamSensor.avgTemp, 2) + "," + format_float(PipeSensor.avgTemp, 2) + "," + format_float(WaterSensor.avgTemp, 2) + "," + format_float(TankSensor.avgTemp, 2) + "," + format_float(bme_pressure, 2));
+void IRAM_ATTR append_data(){
+  bool w = false;
+  String str = Crt + ",";
+  str += format_float(SteamSensor.avgTemp, 2);
+  str += ",";
+  str += format_float(PipeSensor.avgTemp, 2);
+  str += ",";
+  str += format_float(WaterSensor.avgTemp, 2);
+  str += ",";
+  str += format_float(TankSensor.avgTemp, 2);
+  str += ",";
+  str += format_float(bme_pressure, 2);
+  
+  if (SteamSensor.avgTemp != SteamSensor.PrevTemp) {
+    SteamSensor.PrevTemp = SteamSensor.avgTemp;
+    w = true;
+  }
+  if (PipeSensor.avgTemp != PipeSensor.PrevTemp) {
+    PipeSensor.PrevTemp = PipeSensor.avgTemp;
+    w = true;
+  }
+  if (WaterSensor.avgTemp != WaterSensor.PrevTemp) {
+    WaterSensor.PrevTemp = WaterSensor.avgTemp;
+    w = true;
+  }
+  if (TankSensor.avgTemp != TankSensor.PrevTemp) {
+    TankSensor.PrevTemp = TankSensor.avgTemp;
+    w = true;
+  }
+  if (bme_prev_pressure != bme_pressure) {
+    bme_prev_pressure = bme_pressure;
+    w = true;
+  }
+  if (w)
+  fileToAppend.println(str);
 }
 
 String get_sys_info(){
-String result_st = "totalBytes = " + (String)SPIFFS.totalBytes() + "; usedBytes = " + (String)SPIFFS.usedBytes() + "; Free Heap = " + (String)ESP.getFreeHeap();
-result_st += "; ESP32 t = " + (String)((temprature_sens_read() - 32) / 1.8) + "; BME t = " + (String)bme_temp;
-return result_st;
+  String result_st = "totalBytes = " + (String)SPIFFS.totalBytes() + "; usedBytes = ";
+  vTaskDelay(2);
+  result_st += (String)SPIFFS.usedBytes() + "; Free Heap = " + (String)ESP.getFreeHeap();
+  vTaskDelay(2);
+  result_st += "; ESP32 t = " + (String)((temprature_sens_read() - 32) / 1.8) + "; BME t = " + (String)bme_temp;
+  vTaskDelay(2);
+  return result_st;
 }

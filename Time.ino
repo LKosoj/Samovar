@@ -1,14 +1,15 @@
 #include <TimeLib.h>
 
 // Определяем переменные для процедур времени
-unsigned int  localPort = 2390;                                 // порт для прослушивания UDP пакетов
-unsigned long ntp_time = 0;
-long  t_correct        = 0;
-unsigned long cur_ms   = 0;
-unsigned long ms2      = 10000000UL;
-unsigned long t_cur    = 0;
+//unsigned int  localPort = 2390;                                 // порт для прослушивания UDP пакетов
+volatile unsigned long ntp_time = 0;
+volatile long  t_correct        = 0;
+volatile unsigned long cur_ms   = 0;
+volatile unsigned long ms2      = 10000000UL;
+volatile unsigned long t_cur    = 0;
 
-//tm* time_now;
+bool IRAM_ATTR GetNTP(void);
+unsigned long IRAM_ATTR sendNTPpacket(IPAddress& address);
 
 IPAddress timeServerIP;                                         // для работы NTP
 const char* ntpServerName = "time.nist.gov";
@@ -16,7 +17,7 @@ const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[ NTP_PACKET_SIZE]; 
 WiFiUDP udp;
 
-void clok1()                                                               // функция получения текущего времени с NTP сервера
+void IRAM_ATTR clok1()                                                               // функция получения текущего времени с NTP сервера
 { 
   cur_ms = millis();                                                      // текущее количество миллисекунд
   t_cur  = cur_ms / 1000;                                                 // текущее количество секунд
@@ -31,7 +32,7 @@ void clok1()                                                               // ф
    }
 }
 
-void clok()                                                               // функция получения текущего времени с NTP сервера
+void IRAM_ATTR clok()                                                               // функция получения текущего времени с NTP сервера
 { 
   cur_ms = millis();                                                      // текущее количество миллисекунд
   t_cur  = cur_ms / 1000;                                                 // текущее количество секунд
@@ -47,12 +48,13 @@ void clok()                                                               // ф�
   //Serial.println(m); 
 //}
 //*************************************************************************************************************************************
-bool GetNTP(void)                                                         // функция посылки запроса к NTP серверу и парсинг ответа
+bool IRAM_ATTR GetNTP(void)                                                         // функция посылки запроса к NTP серверу и парсинг ответа
 { 
   WiFi.hostByName(ntpServerName, timeServerIP);
   sendNTPpacket(timeServerIP);                                            // посылаем запрос на NTP сервер
-  delay(500);
+  vTaskDelay(650);
   int cb = udp.parsePacket();
+  vTaskDelay(2);
   if (!cb)
    { 
      //Serial.println("No packet yet");
@@ -72,10 +74,11 @@ bool GetNTP(void)                                                         // ф�
      //Serial.print("Unix time = ");
      //Serial.println(ntp_time); 
    }
+  vTaskDelay(2);
   return true;
 }
 //************************************************************************************************************************************
-unsigned long sendNTPpacket(IPAddress& address)                            // функция посылки запроса NTP серверу на заданный адрес
+unsigned long IRAM_ATTR sendNTPpacket(IPAddress& address)                            // функция посылки запроса NTP серверу на заданный адрес
 { 
   //Serial.println("sending NTP packet...");
   memset(packetBuffer, 0, NTP_PACKET_SIZE);                                // очистка буфера в 0
@@ -93,6 +96,7 @@ unsigned long sendNTPpacket(IPAddress& address)                            // ф
   udp.beginPacket(address, 123);
   udp.write(packetBuffer, NTP_PACKET_SIZE);
   udp.endPacket();
+  vTaskDelay(2);
 }
 //**********************************************************************************************************************************
 String millis2time()                                                       // функция формирования строки "время работы модуля"
@@ -117,12 +121,16 @@ String CurrentTime(void)                                                   // ф
    byte h = ( ntp_time / 3600 ) % 24;                                      // вычисляем количество часов
    int  d = ( ntp_time / 3600 ) / 24;                                      // вычисляем количество дней
    byte s = ntp_time - d * 3600 * 24 - h * 3600 - m * 60;                  // вычисляем количество секунд
+   byte dd = day(ntp_time);                                                // получаем день месяца
+   byte mnth = month(ntp_time);                                            // получаем месяц
+   if(mnth < 10) Time += "0";                                              // добавляем незначащий ноль к месяцу
+   Time+= (String)mnth + "-";                                              // добавляем месяц
+   if(dd < 10) Time += "0";                                                // добавляем незначащий ноль к дню
+   Time+= (String)dd + " ";                                                // добавляем день месяца
    if(h < 10) Time += "0";                                                 // добавляем незначащий ноль к часам
    Time+= (String)h + ":";                                                 // добавляем часы и двоеточие
    if(m < 10) Time += "0";                                                 // добавляем незначащий ноль к минутам
    Time+= (String)m + ":";                                                 // добавляем минуты и двоеточие
    if(s < 10) Time += "0";                                                 // добавляем незначащий ноль к секундам
    Time+= (String)s;                                                       // добавляем секунды
-
-   Time = /*(String)year(ntp_time) + "-" + */(String)month(ntp_time) + "-" + (String)day(ntp_time) + " " + Time;
    return Time; }                                                          // функция возвращает строку

@@ -13,7 +13,7 @@ void reset_sensor_counter(void);
 //***************************************************************************************************************
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
-void BME_getvalue(bool fl){
+void IRAM_ATTR BME_getvalue(bool fl){
   ClosedCube_BME680_Status status = bme680.readStatus();
 //  Serial.print("status: (");
 //  Serial.print(status.newDataFlag);
@@ -27,25 +27,29 @@ void BME_getvalue(bool fl){
 
   if (status.newDataFlag || fl) {
     bme_temp = bme680.readTemperature();
+    vTaskDelay(2);
     bme_pressure = bme680.readPressure() * 0.75;
+    vTaskDelay(2);
     bme_humidity = bme680.readHumidity();
+    vTaskDelay(2);
     bme680.setForcedMode();
+    vTaskDelay(2);
   }  
 }
 
 //***************************************************************************************************************
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
-void DS_getvalue(void){
+void IRAM_ATTR DS_getvalue(void){
   float ss, ps, ws, ts;
   ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
-  vTaskDelay(100);
+  vTaskDelay(80);
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
-  vTaskDelay(100);
+  vTaskDelay(80);
   ws = sensors.getTempC(WaterSensor.Sensor);                   // считываем температуру с датчика 2
-  vTaskDelay(100);
+  vTaskDelay(80);
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
-  vTaskDelay(100);
+  vTaskDelay(80);
 
   //return;
   sensors.requestTemperatures();
@@ -157,7 +161,9 @@ void sensor_init(void){
  stepper.autoPower(true);
  stepper.setAcceleration(0);
 
- reset_sensor_counter(); 
+ set_program("H;450;0.1;1;0\nB;5000;0.75;2;0");
+
+ reset_sensor_counter();
 }
 
 void printAddress(DeviceAddress deviceAddress)                          // функция печати адреса DS18B20
@@ -177,28 +183,17 @@ void reset_sensor_counter(void){
   stepper.disable();
   stepper.setCurrent(0);
   stepper.setTarget(0);
+  set_capacity(0);
 
-  //bme.performReading();
-  //start_pressure = bme.pressure * 0.0075;
-  start_pressure = 0;
-
-  if (fileToAppend) {
-    fileToAppend.close();
-  }
+  BME_getvalue(false);
+  start_pressure = bme_pressure;
+  ProgramNum = 0;
   current_v_m_count = 0;
   ActualVolumePerHour = 0;
   for (int i=0;i++;i<21) LiquidVolume[i] = 0;
   LiquidVolumeAll = 0;
   startval = 0;
   WthdrwlProgress = 0;
-  SteamSensor.avgTempAccumulator=0;
-  PipeSensor.avgTempAccumulator=0;
-  WaterSensor.avgTempAccumulator=0;
-  TankSensor.avgTempAccumulator=0;
-  SteamSensor.avgTempReadings=0;
-  PipeSensor.avgTempReadings=0;
-  WaterSensor.avgTempReadings=0;
-  TankSensor.avgTempReadings=0;
   get_Samovar_Status();
   PauseOn = false;
 
@@ -206,6 +201,10 @@ void reset_sensor_counter(void){
   for (int i=0;i++;i<4)
     for (int j=0;j++;j<80000)
       TempArray[i][j] = 0;
+
+  if (fileToAppend) {
+    fileToAppend.close();
+  }
 }
 
 String inline format_float(float v, int d){

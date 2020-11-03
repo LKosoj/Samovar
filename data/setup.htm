@@ -33,6 +33,14 @@ h1{text-align:center}
 <h2>Скорость отбора голов : <input name='LiquidRateHead' type='text' value='%LiquidRateHead%'> л./час.</h2>
 <h2>Объем для отбора тела : <input name='BodyVolume' type='text' value='%BodyVolume%'> мл.</h2>
 <h2>Скорость отбора тела: <input name='LiquidRateBody' type='text' value='%LiquidRateBody%'> л./час.</h2>
+<div class='dvcs'>
+<p><span class='dvcs'>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора</span><p>
+<p><span class='dvcs'>Пример программы отбора (H - головы (Heads), B - тело (Body).</span><p>
+<p><span class='dvcs'>Температура отбора = 0 - автоматический режим. Температура отбора < 10&#176C - плюс к предыдущей температуре, иначе отбор при заданной температуре></span><p>
+<p><span class='dvcs'>H;100;0.1;1;0</span><p>
+<p><span class='dvcs'>B;100;0.1;1;0</span><p>
+</div>
+<h2>Программа отбора: <textarea cols="40" rows="5" name='WProgram'>%WProgram%</textarea> л./час.</h2>
 <input id='save' type='submit' name='save' value='Сохранить'>
 <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
