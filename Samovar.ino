@@ -77,7 +77,7 @@ void setup() {
   ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
   servo.setPeriodHertz(50);    // standard 50 hz servo
-  servo.attach(SERVO_PIN, 1000, 2000); // attaches the servo on pin 18 to the servo object
+  servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
 
 
 #ifdef SAMOVAR_USE_BLYNK
@@ -104,11 +104,7 @@ void setup() {
    SamSetup.SetPipeTemp = 0;
    SamSetup.SetWaterTemp = 0;
    SamSetup.SetTankTemp = 0;
-   SamSetup.LiquidRateHead = HEAD_INITIAL_SPEED;
-   SamSetup.LiquidRateBody = HEAD_INITIAL_SPEED * 10;
    SamSetup.StepperStepMl = STEPPER_STEP_ML;
-   SamSetup.HeadVolume = 320;
-   SamSetup.BodyVolume = 3200;
    EEPROM.put(0, SamSetup);
    EEPROM.commit();
  }

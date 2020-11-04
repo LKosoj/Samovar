@@ -145,7 +145,7 @@ String get_Samovar_Status(){
 
 void set_capacity(byte cap){
   capacity_num = cap;
-  int p = ((int)cap*180)/(int)CAPACITY_NUM;
+  int p = ((int)cap*SERVO_ANGLE)/(int)CAPACITY_NUM + servoDelta[cap];
   servo.write(p);
 }
 
