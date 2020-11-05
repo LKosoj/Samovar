@@ -68,10 +68,6 @@ String setupKeyProcessor(const String& var)
   else if (var == "SetWaterTemp") return (String)SamSetup.SetWaterTemp;
   else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
   else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
-  else if (var == "LiquidRateHead") return (String)SamSetup.LiquidRateHead;
-  else if (var == "LiquidRateBody") return (String)SamSetup.LiquidRateBody;
-  else if (var == "HeadVolume") return (String)SamSetup.HeadVolume;
-  else if (var == "BodyVolume") return (String)SamSetup.BodyVolume;
   else if (var == "WProgram") return get_program(CAPACITY_NUM);
   
   return String();
@@ -124,18 +120,6 @@ void  handleSave(AsyncWebServerRequest *request){
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
-  if (request->hasArg("HeadVolume")) {
-    SamSetup.HeadVolume = request->arg("HeadVolume").toInt();
-  }
-  if (request->hasArg("LiquidRateHead")) {
-    SamSetup.LiquidRateHead = request->arg("LiquidRateHead").toFloat();
-  }
-  if (request->hasArg("BodyVolume")) {
-    SamSetup.BodyVolume = request->arg("BodyVolume").toInt();
-  }
-  if (request->hasArg("LiquidRateBody")) {
-    SamSetup.LiquidRateBody = request->arg("LiquidRateBody").toFloat();
-  }
   if (request->hasArg("stepperstepml")) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt()/100;
   }
@@ -183,15 +167,6 @@ int params = request->params();
     }
    }
   }
-   if (request->hasArg("manual")) {
-     sam_command_sync = SAMOVAR_MANUAL;
-     if (request->hasArg("LiquidRate")) {
-       ManualLiquidRate = request->arg("LiquidRate").toFloat();
-     }
-     if (request->hasArg("Volume")) {
-       ManualVolume = request->arg("Volume").toInt();
-     }
-   }
   request->send(200,"text/plain","OK");
 }
 

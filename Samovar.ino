@@ -161,7 +161,7 @@ void loop() {
   if (sam_command_sync != SAMOVAR_NONE){
     switch (sam_command_sync){
         case SAMOVAR_START:
-          samovar_start();
+          menu_samovar_start();
           break;
         case SAMOVAR_POWER:
           set_power(!PowerOn);
@@ -174,9 +174,6 @@ void loop() {
           break;
         case CALIBRATE_STOP:
           pump_calibrate(0);
-          break;
-        case SAMOVAR_MANUAL:
-          start_manual();
           break;
         case SAMOVAR_PAUSE:
           pause_withdrawal(true);
@@ -226,10 +223,6 @@ void getjson (void){
   jsondoc["WthdrwlStatus"] = startval;
   jsondoc["CurrrentSpeed"] = stepper.getSpeed() * (byte)stepper.getState();
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
-  jsondoc["LiquidRateHead"] = SamSetup.LiquidRateHead;
-  jsondoc["LiquidRateBody"] = SamSetup.LiquidRateBody;
-  jsondoc["HeadVolume"] = SamSetup.HeadVolume;
-  jsondoc["BodyVolume"] = SamSetup.BodyVolume;
   jsondoc["Status"] = get_Samovar_Status();
 
   jsonstr = "";

@@ -6,7 +6,7 @@
 //**************************************************************************************************************
 // Логика работы ректификационной колонны
 //**************************************************************************************************************
-void samovar_start();
+void menu_samovar_start();
 void set_menu_screen(byte param);
 void samovar_reset();
 void create_data();
@@ -44,7 +44,7 @@ void withdrawal(void){
     WthdrwlProgress = 0;
   }
   if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 2 || startval == 10)){
-    samovar_start();
+    menu_samovar_start();
   }
 }
 
@@ -85,17 +85,6 @@ void pump_calibrate(int stpspeed){
     if (!stepper.getState()) stepper.setCurrent(0);
     stepper.setMaxSpeed(stpspeed);
     stepper.setTarget(999999999);
-  }
-}
-
-void start_manual(){
-  startval = 10;
-  stepper.setMaxSpeed(get_speed_from_rate(ManualLiquidRate));
-  if (!StepperMoving){
-    create_data();                    //создаем файл с данными
-    stepper.setCurrent(0);
-    TargetStepps = ManualVolume * SamSetup.StepperStepMl;
-    stepper.setTarget(TargetStepps);
   }
 }
 
@@ -166,8 +155,10 @@ void set_program(String WProgram){
     program[i].Speed = atof(pair);
     pair = strtok(NULL, ";");
     program[i].capacity_num = atoi(pair);
-    pair = strtok(NULL, "\n");
+    pair = strtok(NULL, ";");
     program[i].Temp = atof(pair);
+    pair = strtok(NULL, "\n");
+    program[i].Power = atof(pair);
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
@@ -193,7 +184,8 @@ String get_program(int s){
       Str+= (String)program[i].Volume + ";";
       Str+= (String)program[i].Speed + ";";
       Str+= (String)program[i].capacity_num + ";";
-      Str+= (String)program[i].Temp + "\n";
+      Str+= (String)program[i].Temp + ";";
+      Str+= (String)program[i].Power + "\n";
     }
   }
   return Str;
@@ -214,8 +206,6 @@ void run_program(byte num){
     set_capacity(program[num].capacity_num);
     stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
     TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
-    ManualVolume = program[num].Volume;
-    ManualLiquidRate = program[num].Speed;
     stepper.setCurrent(0);
     stepper.setTarget(TargetStepps);
     ActualVolumePerHour = program[num].Speed;

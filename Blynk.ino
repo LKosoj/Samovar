@@ -5,15 +5,11 @@ Blynk.virtualWrite(V0, SteamSensor.avgTemp);
 vTaskDelay(2);
 Blynk.virtualWrite(V4, PowerOn);
 int i;
-int j;
 int k;
 if (startval > 0 && startval < 5) i = 1;
 else i = 0;
 Blynk.virtualWrite(V3, i);
-if (startval == 10) j = 1;
-else j = 0;
 vTaskDelay(2);
-Blynk.virtualWrite(V12, j);
 if (PauseOn) k = 1;
 else k = 0;
 Blynk.virtualWrite(V13, k);
@@ -59,7 +55,7 @@ BLYNK_WRITE(V13)
 BLYNK_WRITE(V3)
 {
   int Value3 = param.asInt(); // assigning incoming value from pin V3 to a variable
-  if (Value3 == 1 && PowerOn) samovar_start();
+  if (Value3 == 1 && PowerOn) menu_samovar_start();
   else samovar_reset();
 }
 BLYNK_WRITE(V4)
@@ -68,22 +64,4 @@ BLYNK_WRITE(V4)
   set_power(Value4);
 }
 
-BLYNK_WRITE(V10)
-{
-  int Value10 = param.asInt(); // assigning incoming value from pin V4 to a variable
-  ManualVolume = Value10;
-}
-
-BLYNK_WRITE(V11)
-{
-  int Value11 = param.asFloat(); // assigning incoming value from pin V4 to a variable
-  ManualLiquidRate = Value11;
-}
-
-BLYNK_WRITE(V12)
-{
-  int Value12 = param.asInt(); // assigning incoming value from pin V4 to a variable
-  if (Value12 == 1) start_manual();
-  else samovar_reset();
-}
 #endif

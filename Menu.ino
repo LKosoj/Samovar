@@ -24,18 +24,6 @@ LiquidLine lql_pause(0, 2, ">Pause:", pause_text_ptr);
 LiquidLine lql_reset(0, 3, ">Reset withdrawal:");
 LiquidScreen main_screen2(lql_start, lql_act_vlm_perh, lql_pause, lql_reset);
 
-LiquidLine lql_volume(0, 0, ">Volume: ", ManualVolume);
-LiquidLine lql_manual_stp_spd(0, 1, ">Speed ml/h: ", ManualLiquidRate);
-LiquidLine lql_start_manual(0, 2, ">Start manual:");
-LiquidScreen manual_screen(lql_volume, lql_manual_stp_spd, lql_start_manual, lql_time);
-
-
-LiquidLine lql_head_volume(0, 0, ">Head vol, l: ", SamSetup.HeadVolume);
-LiquidLine lql_body_volume(0, 1, ">Body vol, l: ", SamSetup.BodyVolume);
-LiquidLine lql_setup_liquid_rate_head(0, 2, ">Head vol,l/h:", SamSetup.LiquidRateHead);
-LiquidLine lql_setup_liquid_rate_body(0, 3, ">Body vol,l/h:", SamSetup.LiquidRateBody);
-LiquidScreen main_screen3(lql_head_volume, lql_body_volume, lql_setup_liquid_rate_head, lql_setup_liquid_rate_body);
-
 LiquidLine lql_get_power(0, 0, ">Get power ", power_text_ptr);
 LiquidLine lql_setup(0, 1, "/Setup");
 LiquidLine lql_ip(0, 2, "IP: ", ipstr);
@@ -57,8 +45,20 @@ LiquidScreen setup_set_temp_screen(lql_setup_set_steam_temp, lql_setup_set_pipe_
 
 LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, "^Step/ml: ", SamSetup.StepperStepMl);
 LiquidLine lql_setup_stepper_calibrate(0, 1, ">Calibrate: ", calibrate_text_ptr);
-LiquidScreen setup_stepper_settings(lql_setup_stepper_stepper_step_ml, lql_setup_stepper_calibrate, lql_time);
+LiquidLine lql_setup_stepper_program(0, 2, ">Program: >");
+LiquidScreen setup_stepper_settings(lql_setup_stepper_stepper_step_ml, lql_setup_stepper_calibrate, lql_setup_stepper_program, lql_time);
 
+LiquidLine lql_setup_program_WType(0, 0, "^Type: ", program[0].WType);
+LiquidLine lql_setup_program_Volume(0, 1, "^Volume: ", program[0].Volume);
+LiquidLine lql_setup_program_Speed(0, 2, "^Speed: ", program[0].Speed);
+LiquidLine lql_setup_program_capacity_num(0, 3, "^Capacity: ", program[0].capacity_num);
+LiquidLine lql_setup_program_Temp(0, 4, "^Temp: ", program[0].Temp);
+LiquidLine lql_setup_program_Power(0, 5, "^Power: ", program[0].Power);
+LiquidScreen setup_program_settings(lql_setup_program_WType,lql_setup_program_Volume,lql_setup_program_Speed,lql_setup_program_capacity_num);
+
+LiquidLine lql_setup_program_back_line(0, 0, "/Back");
+LiquidScreen setup_program_back(lql_setup_program_back_line, lql_time);
+  
 LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
 //LiquidMenu setup_menu(lcd);
@@ -83,23 +83,23 @@ void set_menu_screen(byte param){
       main_screen.hide(true);
       main_screen1.hide(true);
       main_screen2.hide(true);
-      main_screen3.hide(false);
       main_screen4.hide(true);
-      manual_screen.hide(true);
+      setup_program_settings.hide(true);
+      setup_program_back.hide(true);
       //main_menu1.switch_focus();
-      main_menu1.change_screen(&main_screen3);
+      main_menu1.change_screen(&setup_temp_screen);
       break;
     case 2:  //основное меню после включения колонны
       setup_set_temp_screen.hide(true);
       setup_temp_screen.hide(true);
       setup_stepper_settings.hide(true);
       setup_back_screen.hide(true);
+      setup_program_settings.hide(true);
+      setup_program_back.hide(true);
       main_screen.hide(false);
       main_screen1.hide(false);
       main_screen2.hide(false);
-      main_screen3.hide(false);
       main_screen4.hide(false);
-      manual_screen.hide(false);
       //main_menu1.switch_focus();
       main_menu1.change_screen(&main_screen);
       break;
@@ -108,14 +108,28 @@ void set_menu_screen(byte param){
       setup_temp_screen.hide(true);
       setup_stepper_settings.hide(true);
       setup_back_screen.hide(true);
+      setup_program_settings.hide(true);
+      setup_program_back.hide(true);
       main_screen.hide(false);
       main_screen1.hide(false);
       main_screen2.hide(true);
-      main_screen3.hide(true);
       main_screen4.hide(false);
-      manual_screen.hide(true);
       //main_menu1.switch_focus();
       main_menu1.change_screen(&main_screen);
+      break;
+    case 4:  //меню установки программ
+      setup_set_temp_screen.hide(true);
+      setup_temp_screen.hide(true);
+      setup_stepper_settings.hide(true);
+      setup_back_screen.hide(true);
+      main_screen.hide(true);
+      main_screen1.hide(true);
+      main_screen2.hide(true);
+      main_screen4.hide(true);
+      setup_program_settings.hide(false);
+      setup_program_back.hide(false);
+      //main_menu1.switch_focus();
+      main_menu1.change_screen(&setup_program_settings);
       break;
   }
 }
@@ -212,30 +226,6 @@ void set_delta_set_tank_temp_down(){
   SamSetup.SetTankTemp-=0.01 * multiplier;
 }
 
-void stepper_init_head_speed_up(){
-  if (SamSetup.LiquidRateHead < VOLUME_MAX_SPEED){
-    SamSetup.LiquidRateHead+=0.01 * multiplier;
-  }
-  else SamSetup.LiquidRateHead = VOLUME_MAX_SPEED;
-}
-void stepper_init_head_speed_down(){
-  if (SamSetup.LiquidRateHead > 0.01){
-    SamSetup.LiquidRateHead-=0.01 * multiplier;
-  }
-  else SamSetup.LiquidRateHead = 0.01;
-}
-void stepper_init_body_speed_up(){
-  if (SamSetup.LiquidRateBody < VOLUME_MAX_SPEED){
-    SamSetup.LiquidRateBody+=0.01 * multiplier;
-  }
-  else SamSetup.LiquidRateBody = VOLUME_MAX_SPEED;
-}
-void stepper_init_body_speed_down(){
-  if (SamSetup.LiquidRateBody > 0.01){
-    SamSetup.LiquidRateBody-=0.01 * multiplier;
-  }
-  else SamSetup.LiquidRateBody = 0.01;
-}
 void stepper_step_ml_up(){
   SamSetup.StepperStepMl+=1 * multiplier;
 }
@@ -245,34 +235,14 @@ void stepper_step_ml_down(){
   }
   else SamSetup.StepperStepMl = 0;
 }
-void set_head_volume_up(){
-  SamSetup.HeadVolume +=1 * multiplier;
+
+void menu_program(){
+  reset_focus();
+  set_menu_screen(4);
 }
-void set_head_volume_down(){
-  SamSetup.HeadVolume -=1 * multiplier;
-}
-void set_body_volume_up(){
-  SamSetup.BodyVolume +=10 * multiplier;
-}
-void set_body_volume_down(){
-  SamSetup.BodyVolume -=10 * multiplier;
-}
-void menu_manual_volume_up(){
-  ManualVolume +=1 * multiplier;
-}
-void menu_manual_volume_down(){
-  ManualVolume -=1 * multiplier;
-}
-void menu_manual_stp_spd_up(){
-  ManualLiquidRate +=0.01 * multiplier;
-  if (startval == 10) stepper.setMaxSpeed(get_speed_from_rate(ManualLiquidRate));
-}
-void menu_manual_stp_spd_down(){
-  ManualLiquidRate -=0.01 * multiplier;
-  if (startval == 10) stepper.setMaxSpeed(get_speed_from_rate(ManualLiquidRate));
-}
-void menu_start_manual(){
-  start_manual();
+void menu_program_back(){
+  reset_focus();
+  set_menu_screen(1);
 }
 void menu_get_power(){
   reset_focus();
@@ -320,9 +290,9 @@ void menu_calibrate_down(){
   menu_calibrate();
 }
 ////////////////////////////////////////////////////////////
-void samovar_start(){
+void menu_samovar_start(){
   String Str;
-  
+
   if (startval == 2) startval = 3;
   else if (ProgramNum == ProgramLen - 1) startval = 2;
   
@@ -346,7 +316,7 @@ void samovar_start(){
     Str = "Stoped";
     run_program(CAPACITY_NUM);
     reset_sensor_counter();
- }
+ }  
  Str.toCharArray(startval_text_val, 20);
  reset_focus();
  main_menu1.update();
@@ -366,6 +336,10 @@ void setupMenu(){
   lcd.backlight();
   lcd.clear();
 
+//  setup_program_settings.add_line(lql_setup_program_Temp);
+//  setup_program_settings.add_line(lql_setup_program_Power);
+//  setup_program_settings.set_displayLineCount(6);
+
   //setup_temp_screen.set_displayLineCount(4);
   lql_steam_temp.set_decimalPlaces(2);
   lql_setup_pipe_temp.set_decimalPlaces(2);
@@ -374,8 +348,8 @@ void setupMenu(){
   lql_act_vlm_perh.set_decimalPlaces(2);
 
   // Function to attach functions to LiquidLine objects.
-  lql_start.attach_function(1, samovar_start);
-  lql_start.attach_function(2, samovar_start);
+  lql_start.attach_function(1, menu_samovar_start);
+  lql_start.attach_function(2, menu_samovar_start);
   lql_reset.attach_function(1, samovar_reset);
   lql_reset.attach_function(2, samovar_reset);
   
@@ -400,43 +374,29 @@ void setupMenu(){
   lql_setup_set_tank_temp.attach_function(1, set_delta_set_tank_temp_up);
   lql_setup_set_tank_temp.attach_function(2, set_delta_set_tank_temp_down);
 
-  lql_head_volume.attach_function(1, set_head_volume_up);
-  lql_head_volume.attach_function(2, set_head_volume_down);
-  lql_body_volume.attach_function(1, set_body_volume_up);
-  lql_body_volume.attach_function(2, set_body_volume_down);
-
-  lql_setup_liquid_rate_head.attach_function(1, stepper_init_head_speed_up);
-  lql_setup_liquid_rate_head.attach_function(2, stepper_init_head_speed_down);
-  lql_setup_liquid_rate_body.attach_function(1, stepper_init_body_speed_up);
-  lql_setup_liquid_rate_body.attach_function(2, stepper_init_body_speed_down);
-
   lql_setup_stepper_stepper_step_ml.attach_function(1, stepper_step_ml_up);
   lql_setup_stepper_stepper_step_ml.attach_function(2, stepper_step_ml_down);
   lql_setup_stepper_calibrate.attach_function(1, menu_calibrate);
   lql_setup_stepper_calibrate.attach_function(2, menu_calibrate_down);
-
+  lql_setup_stepper_program.attach_function(1, menu_program);
+  lql_setup_stepper_program.attach_function(2, menu_program);
+  lql_setup_program_back_line.attach_function(1, menu_program_back);
+  lql_setup_program_back_line.attach_function(2, menu_program_back);
+  
   lql_back_line.attach_function(1, setup_go_back);
   lql_back_line.attach_function(2, setup_go_back);
 
   lql_get_power.attach_function(1, menu_get_power);
   lql_get_power.attach_function(2, menu_get_power);
 
-  lql_volume.attach_function(1, menu_manual_volume_up);
-  lql_volume.attach_function(2, menu_manual_volume_down);
-  lql_manual_stp_spd.attach_function(1, menu_manual_stp_spd_up);
-  lql_manual_stp_spd.attach_function(2, menu_manual_stp_spd_down);
-  lql_start_manual.attach_function(1, menu_start_manual);
-  lql_start_manual.attach_function(2, menu_start_manual);
-
   lql_pause.attach_function(1, menu_pause);
   lql_pause.attach_function(2, menu_pause);
+
 
   main_menu1.add_screen(welcome_screen);
   main_menu1.add_screen(main_screen);
   main_menu1.add_screen(main_screen1);
   main_menu1.add_screen(main_screen2);
-  main_menu1.add_screen(main_screen3);
-  main_menu1.add_screen(manual_screen);
   main_menu1.add_screen(main_screen4);
 
   //setup_menu.add_screen(setup_temp_screen);
@@ -446,7 +406,9 @@ void setupMenu(){
   main_menu1.add_screen(setup_set_temp_screen);
   main_menu1.add_screen(setup_stepper_settings);  
   main_menu1.add_screen(setup_back_screen);
-
+  main_menu1.add_screen(setup_program_settings);
+  main_menu1.add_screen(setup_program_back);
+  
   set_menu_screen(3);
   main_menu1.change_screen(&welcome_screen);
     
