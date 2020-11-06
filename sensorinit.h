@@ -63,7 +63,7 @@ void IRAM_ATTR DS_getvalue(void){
   if (ws != -127) {
     WaterSensor.avgTemp = ws + SamSetup.DeltaWaterTemp;
   }
-  if (ws != -127) {
+  if (ts != -127) {
     TankSensor.avgTemp = ts + SamSetup.DeltaTankTemp;
   }
 }
@@ -95,7 +95,7 @@ void sensor_init(void){
   
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
-  delay(3000);
+  delay(4000);
   writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
   //delay(1000);
                                                                           // определяем устройства на шине
@@ -161,7 +161,7 @@ void sensor_init(void){
  stepper.autoPower(true);
  stepper.setAcceleration(0);
 
- set_program("H;450;0.1;1;0\nB;5000;0.75;2;0;0\nB;5000;0.75;3;0;0\nB;5000;0.75;4;0;0\nB;5000;0.75;5;0;0\nB;5000;0.75;6;0;0\nB;5000;0.75;7;0;0\nB;5000;0.75;8;0;0\nB;5000;0.75;9;0;0\nB;5000;0.75;10;0;0\n");
+ set_program("H;450;0.1;1;0;0\nP;120;0;0;0;0;\nB;5000;0.75;2;0;0\nB;5000;0.75;3;0;0\nB;5000;0.75;4;0;0\nB;5000;0.75;5;0;0\nB;5000;0.75;6;0;0\nB;5000;0.75;7;0;0\nB;5000;0.75;8;0;0\nB;5000;0.75;9;0;0\nB;5000;0.75;10;0;0\n");
 
  reset_sensor_counter();
 }
@@ -188,6 +188,10 @@ void reset_sensor_counter(void){
   BME_getvalue(false);
   start_pressure = bme_pressure;
   ProgramNum = 0;
+  SteamSensor.BodyTemp = 0;
+  PipeSensor.BodyTemp = 0;
+  WaterSensor.BodyTemp = 0;
+  TankSensor.BodyTemp = 0;
   current_v_m_count = 0;
   ActualVolumePerHour = 0;
   for (int i=0;i++;i<21) LiquidVolume[i] = 0;

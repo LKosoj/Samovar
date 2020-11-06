@@ -10,6 +10,9 @@ void menu_samovar_start();
 void set_menu_screen(byte param);
 void samovar_reset();
 void create_data();
+void pause_withdrawal(bool Pause);
+void read_config();
+String inline format_float(float v, int d);
 
 //Получаем объем отбора
 float get_liguid_volume_by_step(int StepperSpeed){
@@ -37,14 +40,55 @@ int get_liquid_volume(){
 
 void withdrawal(void){
   //Определяем, что необходимо сменить режим работы
+  if (program_Pause){
+    if (millis() >= t_min) {
+      t_min = 0;
+      menu_samovar_start();
+    }
+    return;
+  }
   CurrrentStepps = stepper.getCurrent();
   if (TargetStepps > 0){
     WthdrwlProgress = CurrrentStepps * 100 / TargetStepps;
   } else {
     WthdrwlProgress = 0;
   }
-  if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 2 || startval == 10)){
+  if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 2)){
     menu_samovar_start();
+  }
+
+  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
+  if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= SteamSensor.BodyTemp + SteamSensor.SetTemp){
+    //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
+    if (!PauseOn && !program_Wait){
+      program_Wait = true;
+      pause_withdrawal(true);
+      t_min = millis() + SteamSensor.Delay * 1000;
+    }
+    // если время вышло, еще раз пытаемся дождаться
+    if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
+  } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0){
+    //продолжаем отбор
+    t_min = 0; 
+    program_Wait = false;
+    pause_withdrawal(false);
+  }
+
+  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы
+  if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp >= PipeSensor.BodyTemp + PipeSensor.SetTemp){
+    //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
+    if (!PauseOn && !program_Wait){
+      program_Wait = true;
+      pause_withdrawal(true);
+      t_min = millis() + PipeSensor.Delay * 1000;
+    }
+    // если время вышло, еще раз пытаемся дождаться
+    if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
+  } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0){
+    //продолжаем отбор
+    t_min = 0; 
+    program_Wait = false;
+    pause_withdrawal(false);
   }
 }
 
@@ -79,6 +123,7 @@ void pump_calibrate(int stpspeed){
     stepper.disable();
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
+    read_config;
   } else {
     startval = 100;
     //крутим двигатель, пока не остановят
@@ -110,17 +155,21 @@ String get_Samovar_Status(){
   if (!PowerOn) {
     SamovarStatus = "Выключено";
     SamovarStatusInt = 0;
-  } else if (PowerOn && startval == 1 && !PauseOn) {
+  } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
     SamovarStatus = "Работает программа №" + String(ProgramNum + 1);
     SamovarStatusInt = 10;
+  } else if (PowerOn && startval == 1 && program_Wait) {
+    int s = 0;
+    if (t_min > (millis() + 10)){
+      s = (t_min - millis())/1000;
+    }
+    SamovarStatus = "Программа №" + String(ProgramNum + 1) + " на паузе. Ожидается возврат колонны к заданным параметрам. Осталось " + (String)s + " сек.";
+    SamovarStatusInt = 11;
   } else if (PowerOn && startval == 2) {
     SamovarStatus = "Выполнение программ отбора закончено";
-    SamovarStatusInt = 10;
+    SamovarStatusInt = 20;
   } else if (PowerOn && startval == 100) {
     SamovarStatus = "Калибровка";
-    SamovarStatusInt = 20;
-  } else if (PowerOn && stepper.getState() && startval == 10 && !PauseOn) {
-    SamovarStatus = "Отбор в ручном режиме";
     SamovarStatusInt = 30;
   } else if (PauseOn) {
     SamovarStatus = "Пауза";
@@ -128,7 +177,9 @@ String get_Samovar_Status(){
   } else if (PowerOn && startval == 0 && !stepper.getState()) {
     SamovarStatus = "Разгон колонны/работа на себя";
     SamovarStatusInt = 50;
-  }  
+  }
+  if (SteamSensor.BodyTemp > 0) SamovarStatus+=" Температура отбора тела:" + format_float(SteamSensor.BodyTemp,2);
+  
   return SamovarStatus;
 }
 
@@ -147,7 +198,7 @@ void set_program(String WProgram){
   WProgram.toCharArray(c,500);
   char *pair = strtok(c, ";");
   int i=0;
-  while(pair != NULL and i < CAPACITY_NUM){
+  while(pair != NULL and i < CAPACITY_NUM * 2){
     program[i].WType = pair;
     pair = strtok(NULL, ";");
     program[i].Volume = atoi(pair);
@@ -170,15 +221,15 @@ void set_program(String WProgram){
 
 String get_program(int s){
   String Str = "";
-  int k = CAPACITY_NUM;
-  if (s == CAPACITY_NUM) {
+  int k = CAPACITY_NUM * 2;
+  if (s == CAPACITY_NUM * 2) {
     s = 0;
   } else {
     k = s + 1;
   }
   for (int i = s; i < k; i++){
     if (program[i].WType == "") {
-      i = CAPACITY_NUM + 1;
+      i = CAPACITY_NUM * 2 + 1;
     } else {
       Str+= program[i].WType + ";";
       Str+= (String)program[i].Volume + ";";
@@ -192,7 +243,9 @@ String get_program(int s){
 }
 
 void run_program(byte num){
-   if (num == CAPACITY_NUM){
+   program_Pause = false;
+   if (num == CAPACITY_NUM * 2){
+    //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
     if (fileToAppend) {
       fileToAppend.close();
@@ -203,69 +256,36 @@ void run_program(byte num){
     stepper.setTarget(0);
     set_capacity(0);
    } else {
-    set_capacity(program[num].capacity_num);
-    stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
-    TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
-    stepper.setCurrent(0);
-    stepper.setTarget(TargetStepps);
-    ActualVolumePerHour = program[num].Speed;
+    if (program[num].WType == "H" || program[num].WType == "B"){
+      //устанавливаем параметры для текущей программы отбора
+      set_capacity(program[num].capacity_num);
+      stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
+      TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
+      stepper.setCurrent(0);
+      stepper.setTarget(TargetStepps);
+      ActualVolumePerHour = program[num].Speed;
+      SteamSensor.BodyTemp = program[num].Temp;
+      //Происходит магия. Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
+      //Для этого колонна должна после отбора голов поработать несколько минут на паузе
+      //(для этого после программы отбора голов надо задать программу с типом P (латинская) и указать время стабилизации колонны в минутах в program[num].Volume)
+      //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
+      //Если она будет выходить за пределы больше заданных в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
+      if (program[num].WType == "B" && SteamSensor.BodyTemp == 0) {
+        SteamSensor.BodyTemp = SteamSensor.avgTemp;
+        PipeSensor.BodyTemp = PipeSensor.avgTemp;
+        WaterSensor.BodyTemp = WaterSensor.avgTemp;
+        TankSensor.BodyTemp = TankSensor.avgTemp;
+      }
+    } else if (program[num].WType == "P"){
+      //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
+      t_min = millis() + program[num].Volume * 1000;
+      program_Pause = true;
+      stepper.setSpeed(-1);
+      stepper.setMaxSpeed(-1);
+      stepper.brake();
+      stepper.disable();
+      stepper.setCurrent(0);
+      stepper.setTarget(0);
+    }
    }
 }
-
-/*   
-//***********************************************************************************************************************
-// Управляем клапаном отбора по температуре пара перед дефлегматором
-//***********************************************************************************************************************
-  if(SetTemp1 != 0)                                           // если не ручной режим управления клапаном
-  { 
-    if (digitalRead(valve) == true)                           // если клапан закрыт
-     { 
-       if(millis()- paus >= Delay1 * 1000)                   // если время задержки вышло (Delay1 задаётся в секундах),
-        { 
-          if (SteamTemp < SetTemp1)                           // если температура ниже уставки
-           { 
-             digitalWrite(valve, LOW);                        // включаем клапан (лог. 0)
-             Serial.println("Valve is OPENED automatically");
-           }
-          else paus = millis();                              // если температура всё ещё выше уставки, заводим таймер снова
-        }
-     }          
-    else                                                      // если клапан открыт
-       { 
-         if (SteamTemp >= SetTemp1)                           // если температура выше уставки,
-          { 
-            digitalWrite(valve, HIGH );                       // выключаем клапан отбора
-            Serial.println("Valve is CLOSED automatically");
-            paus = millis();                                 // заводим таймер
-          }
-       }
-  }
-
-//***************************************************************************************************************************
-// Управляем клапаном отбора по температуре пара в царге на 2/3 колонны
-//***************************************************************************************************************************
-  if(SetTemp2 != 0)                                           // если не ручной режим управления клапаном
-  { 
-    if (digitalRead(valve) == true)                           // если клапан закрыт
-     { 
-       if(millis()- paus >= Delay2 * 1000)                   // если время задержки вышло (Delay2 задаётся в секундах),
-        { 
-          if (PipeTemp < SetTemp2)                            // если температура ниже уставки
-           { 
-             digitalWrite(valve, LOW);                        // включаем клапан (лог. 0)
-             Serial.println("Valve is OPENED automatically");
-           }
-          else paus = millis();                              // если температура всё ещё выше уставки, заводим таймер снова
-        }
-     }          
-    else                                                      // если клапан открыт
-       { 
-         if (PipeTemp >= SetTemp2)                            // если температура выше уставки,
-          { 
-            digitalWrite(valve, HIGH );                       // выключаем клапан отбора
-            Serial.println("Valve is CLOSED automatically");
-            paus = millis();                                 // заводим таймер
-          }
-       }
-  }
-*/

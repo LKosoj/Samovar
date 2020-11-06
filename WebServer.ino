@@ -68,7 +68,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "SetWaterTemp") return (String)SamSetup.SetWaterTemp;
   else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
   else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
-  else if (var == "WProgram") return get_program(CAPACITY_NUM);
+  else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
   
   return String();
 }
@@ -130,6 +130,7 @@ void  handleSave(AsyncWebServerRequest *request){
   // Сохраняем изменения в память.
   EEPROM.put(0, SamSetup);
   EEPROM.commit();
+  read_config();
 
   AsyncWebServerResponse *response = request->beginResponse(301);
   response->addHeader("Location", "/");

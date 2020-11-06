@@ -1,5 +1,5 @@
 //TODO
-//1. Следить за свободной памятью, если кончается, и web сервер работает - автоматом скачивать файл, и затирать его в памяти
+//1. Следить за свободной памятью, если кончается, и web-клиент работает - автоматом скачивать файл, и затирать его в памяти
 
 //**************************************************************************************************************
 // Подключение библиотек
@@ -85,9 +85,8 @@ void setup() {
 #endif
 
   //Читаем сохраненную конфигурацию
-  EEPROM.begin(EEPROM_SIZE);
-  EEPROM.get(0, SamSetup);
- 
+  read_config();
+   
   encoder.tick();  // отработка нажатия
   //Если при старте нажата кнопка энкодера - сохраненные параметры сбрасываются на параметры по умолчанию
   if (encoder.isHold()){
@@ -107,6 +106,7 @@ void setup() {
    SamSetup.StepperStepMl = STEPPER_STEP_ML;
    EEPROM.put(0, SamSetup);
    EEPROM.commit();
+   read_config();
  }
 
   //Настраиваем меню
@@ -195,9 +195,6 @@ void getjson (void){
 
   DynamicJsonDocument jsondoc(1024);
 
-  String st = Crt;
-  String stm = millis2time();
-//  jsondoc["samovar_temp"] = samovar_temp;
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure,3);
   jsondoc["start_pressure"] = start_pressure;
@@ -224,6 +221,7 @@ void getjson (void){
   jsondoc["CurrrentSpeed"] = stepper.getSpeed() * (byte)stepper.getState();
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
+  jsondoc["BodyTemp"] = format_float(SteamSensor.BodyTemp,2);
 
   jsonstr = "";
   serializeJson(jsondoc, jsonstr);
@@ -258,4 +256,17 @@ void connectWiFi(){
     }
   }
   Serial.println("mDNS responder started");
+}
+
+void read_config(){
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.get(0, SamSetup);
+  SteamSensor.SetTemp = SamSetup.SetSteamTemp;
+  PipeSensor.SetTemp = SamSetup.SetPipeTemp;
+  WaterSensor.SetTemp = SamSetup.SetWaterTemp;
+  TankSensor.SetTemp = SamSetup.SetTankTemp;
+  SteamSensor.Delay = 20;
+  PipeSensor.Delay = 20;
+  WaterSensor.Delay = 20;
+  TankSensor.Delay = 20;
 }
