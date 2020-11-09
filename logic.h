@@ -243,6 +243,7 @@ String get_program(int s){
 }
 
 void run_program(byte num){
+   t_min = 0;
    program_Pause = false;
    if (num == CAPACITY_NUM * 2){
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор

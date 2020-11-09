@@ -50,9 +50,9 @@ uint8_t temprature_sens_read();
 #define STEPPER_EN 33
 #define STEPPER_STEPS 200 //количество шагов, 200 x 16
 #define HEAD_INITIAL_SPEED 0.350 //Cкорость, от которой дальше считается скорость отбора
-#define STEPPER_STEP_ML 10 //количество шагов на 1 мл жидкости
+#define STEPPER_STEP_ML 16063 //количество шагов на 1 мл жидкости
 #define VOLUME_MAX_SPEED 2.5
-#define STEPPER_MAX_SPEED 3000
+#define STEPPER_MAX_SPEED 10000
 #define USE_STEPPER
 //**************************************************************************************************************
 

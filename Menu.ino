@@ -296,6 +296,11 @@ void menu_samovar_start(){
 
   if (startval == 2) startval = 3;
   else if (ProgramNum == ProgramLen - 1) startval = 2;
+
+  Serial.print("ProgramNum =");
+  Serial.println(ProgramNum);
+  Serial.print("ProgramLen =");
+  Serial.println(ProgramLen);
   
   if (startval == 0) {
     startval = 1;
@@ -311,11 +316,11 @@ void menu_samovar_start(){
   }
   else if (startval == 2) {
     Str = "Prg finish";
-    run_program(CAPACITY_NUM);
+    run_program(CAPACITY_NUM * 2);
   }
   else {
     Str = "Stoped";
-    run_program(CAPACITY_NUM);
+    run_program(CAPACITY_NUM * 2);
     reset_sensor_counter();
  }  
  Str.toCharArray(startval_text_val, 20);

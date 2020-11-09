@@ -49,6 +49,7 @@ void StepperTicker( void * parameter) {
   for(;;) {
     //Это должно работать максимально быстро
     StepperMoving = stepper.tick();
+    //vTaskDelay(2);
   }
 }
 
@@ -72,9 +73,9 @@ void setup() {
 
   stepper.disable();
 
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
+//  ESP32PWM::allocateTimer(0);
+//  ESP32PWM::allocateTimer(1);
+//  ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
   servo.setPeriodHertz(50);    // standard 50 hz servo
   servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
