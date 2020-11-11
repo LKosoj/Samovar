@@ -33,3 +33,5 @@ Silicone tube https://aliexpress.ru/item/4000159962222.html?spm=a2g0s.9042311.0.
 BME680 (можно заменить на BME180, BME280, надо будет заменить библиотеки) https://aliexpress.ru/item/4000049700826.html
 
 LCD 2004 I2C https://aliexpress.ru/item/32652739134.html
+
+Stepper driver A4988 https://aliexpress.ru/item/32963690420.html
