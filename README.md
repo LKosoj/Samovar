@@ -8,6 +8,7 @@
 Как выглядит реализованное - можно посмотреть тут https://yadi.sk/d/PHXuocI2XKfTzQ
 
 В проекте использовались:
+
 ESP32 30 pin https://aliexpress.ru/item/4000152270368.html?spm=a2g0s.9042311.0.0.264d33edS8Ocll
 
 Servo SG90 https://aliexpress.ru/item/32898600185.html
