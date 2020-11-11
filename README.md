@@ -31,3 +31,5 @@ GX16-3 (3A+3B) x 4 https://aliexpress.ru/item/4001357537092.html?spm=a2g0s.90423
 Silicone tube https://aliexpress.ru/item/4000159962222.html?spm=a2g0s.9042311.0.0.493433edCwWIto
 
 BME680 (можно заменить на BME180, BME280, надо будет заменить библиотеки) https://aliexpress.ru/item/4000049700826.html
+
+LCD 2004 I2C https://aliexpress.ru/item/32652739134.html
