@@ -5,6 +5,8 @@
 
 Детали для 3D печати: https://www.thingiverse.com/thing:4649872
 
+Как выглядит реализованное - можно посмотреть тут https://yadi.sk/d/PHXuocI2XKfTzQ
+
 В проекте использовались:
 ESP32 30 pin https://aliexpress.ru/item/4000152270368.html?spm=a2g0s.9042311.0.0.264d33edS8Ocll
 
