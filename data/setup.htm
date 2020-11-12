@@ -17,6 +17,28 @@ p{margin: 0px !important;}
 .btn{background:#3498db;color:#fff;cursor:pointer}
 .dvcs{padding: 10px;margin: 10px;}
 </style>
+<script>
+function set_program(){
+var server = '/program';
+request = new XMLHttpRequest();
+request.onreadystatechange = function() {
+if (this.readyState == 4 && this.status == 200) {
+var myObj = this.responseText;
+if (myObj != "OK") {
+  document.getElementById('WProgram').value = myObj;
+  alert( "Ok" );
+}
+}
+};
+request.open('POST', server, false);
+let formData = new FormData(document.forms.setupform);
+request.send(formData);
+if(request.status != 200) {
+alert( request.status + ': ' + request.statusText );
+}
+return 0;
+};
+</script>
 
 <body>
 <form action='/save' method="post" name="setupform">
@@ -32,15 +54,17 @@ p{margin: 0px !important;}
 <h2>Количество шагов шагового двигателя : <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
 <div class='dvcs'>
 <p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора</span></p>
-<p><span>Пример программы отбора (H - головы (Heads), B - тело (Body).</span></p>
+<p><span>Пример программы отбора (H - головы (Heads), B - тело (Body), P - пауза (Pause), T - хвост (Tail).</span></p>
 <p><span>Температура отбора = 0 - автоматический режим. Температура отбора < 10&#176C - плюс к предыдущей температуре, иначе отбор при заданной температуре></span></p>
-<p><span>H;100;0.1;1;0</span></p>
-<p><span>B;100;0.1;1;0</span></p>
+<p><span>H;100;0.1;1;0.00;0</span></p>
+<p><span>P;120;0.00;0;0.00;0</span></p>
+<p><span>B;5000;0.75;2;0.00;0</span></p>
 </div>
-<h2>Программа отбора: <textarea cols="40" rows="5" name='WProgram' style="font-size: 14;">%WProgram%</textarea> л./час.</h2>
+<h2>Программа отбора: <textarea cols="40" rows="5" id='WProgram' name='WProgram' style="font-size: 14;">%WProgram%</textarea> л./час.</h2>
 <input id='save' type='submit' name='save' value='Сохранить'>
-<input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
+<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
+<input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
 <input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"'>
 </form>
 </body>

@@ -30,6 +30,9 @@ void WebServerInit(void){
   server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request){
     web_command(request);
   });
+  server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request){
+    web_program(request);
+  });
   server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request){
     calibrate_command(request);
   });
@@ -168,7 +171,15 @@ int params = request->params();
     }
    }
   }
-  request->send(200,"text/plain","OK");
+    request->send(200,"text/plain","OK");
+}
+void  web_program(AsyncWebServerRequest *request){
+
+int params = request->params();
+    if (request->hasArg("WProgram")) {
+      set_program(request->arg("WProgram"));
+      request->send(200,"text/plain",get_program(CAPACITY_NUM * 2));
+    }
 }
 
 void  calibrate_command(AsyncWebServerRequest *request){

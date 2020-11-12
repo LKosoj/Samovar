@@ -296,11 +296,6 @@ void menu_samovar_start(){
 
   if (startval == 2) startval = 3;
   else if (ProgramNum == ProgramLen - 1) startval = 2;
-
-  Serial.print("ProgramNum =");
-  Serial.println(ProgramNum);
-  Serial.print("ProgramLen =");
-  Serial.println(ProgramLen);
   
   if (startval == 0) {
     startval = 1;

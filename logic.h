@@ -13,6 +13,7 @@ void create_data();
 void pause_withdrawal(bool Pause);
 void read_config();
 String inline format_float(float v, int d);
+float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
 
 //Получаем объем отбора
 float get_liguid_volume_by_step(int StepperSpeed){
@@ -57,8 +58,11 @@ void withdrawal(void){
     menu_samovar_start();
   }
 
+  float c_temp; //стартовая температура отбора тела с учетом корректировки от давления или без
+  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
+  
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
-  if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= SteamSensor.BodyTemp + SteamSensor.SetTemp){
+  if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp){
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait){
       program_Wait = true;
@@ -164,7 +168,7 @@ String get_Samovar_Status(){
       s = (t_min - millis())/1000;
     }
     SamovarStatus = "Программа №" + String(ProgramNum + 1) + " на паузе. Ожидается возврат колонны к заданным параметрам. Осталось " + (String)s + " сек.";
-    SamovarStatusInt = 11;
+    SamovarStatusInt = 15;
   } else if (PowerOn && startval == 2) {
     SamovarStatus = "Выполнение программ отбора закончено";
     SamovarStatusInt = 20;
@@ -178,7 +182,7 @@ String get_Samovar_Status(){
     SamovarStatus = "Разгон колонны/работа на себя";
     SamovarStatusInt = 50;
   }
-  if (SteamSensor.BodyTemp > 0) SamovarStatus+=" Температура отбора тела:" + format_float(SteamSensor.BodyTemp,2);
+  if (SteamSensor.BodyTemp > 0) SamovarStatus+=" Температура отбора тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure),3);
   
   return SamovarStatus;
 }
@@ -276,6 +280,7 @@ void run_program(byte num){
         PipeSensor.BodyTemp = PipeSensor.avgTemp;
         WaterSensor.BodyTemp = WaterSensor.avgTemp;
         TankSensor.BodyTemp = TankSensor.avgTemp;
+        SteamSensor.Start_Pressure = bme_pressure;
       }
     } else if (program[num].WType == "P"){
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
@@ -289,4 +294,26 @@ void run_program(byte num){
       stepper.setTarget(0);
     }
    }
+}
+
+//функция корректировки температуры кипения спирта в зависимости от давления
+float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure){
+  //скорректированная температура кипения спирта при текущем давлении
+  float c_temp;
+
+#ifdef USE_PRESSURE_CORRECT
+  //идеальная температура кипения спирта при текущем давлении
+  float i_temp;
+  //температурная дельта
+  float d_temp;
+  
+  i_temp = current_pressure * 0.038 + 49.27;
+  d_temp = start_temp - start_pressure * 0.038 - 49.27; //учитываем поправку на погрешность измерения датчиков
+  c_temp = i_temp + d_temp; // получаем текущую температуру кипения при переданном давлении с учетом поправки 
+#else
+  //Используем сохраненную температуру отбора тела без корректировки
+  c_temp = start_temp;
+#endif
+
+  return c_temp;
 }

@@ -151,6 +151,9 @@ void setup() {
 }
 
 void loop() {
+  //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
+  if (WiFi.status() != WL_CONNECTED) connectWiFi();
+  
   BME_getvalue(false);
 
 #ifdef SAMOVAR_USE_BLYNK
@@ -190,6 +193,9 @@ void loop() {
     withdrawal();     //функция расчета отбора
   }
   encoder_getvalue();
+
+  //баг при инициализации датчика давления, ждем не нулевое давление и инициализируем
+  if (start_pressure == 0) start_pressure = bme_pressure;
 }
 
 void getjson (void){
@@ -198,16 +204,16 @@ void getjson (void){
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure,3);
-  jsondoc["start_pressure"] = start_pressure;
+  jsondoc["start_pressure"] = format_float(start_pressure,3);
   jsondoc["bme_humidity"] = bme_humidity;
   jsondoc["bme_altitude"] = bme_altitude;
   jsondoc["bme_gas"] = bme_gas;
   jsondoc["crnt_tm"] = Crt;
   jsondoc["stm"] = millis2time();
-  jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp,2);
-  jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp,2);
-  jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,2);
-  jsondoc["TankTemp"] = format_float(TankSensor.avgTemp,2);
+  jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp,3);
+  jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp,3);
+  jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,3);
+  jsondoc["TankTemp"] = format_float(TankSensor.avgTemp,3);
   jsondoc["version"] = SAMOVAR_VERSION;
   vTaskDelay(2);
   jsondoc["VolumeAll"] = get_liquid_volume();
@@ -222,7 +228,8 @@ void getjson (void){
   jsondoc["CurrrentSpeed"] = stepper.getSpeed() * (byte)stepper.getState();
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
-  jsondoc["BodyTemp"] = format_float(SteamSensor.BodyTemp,2);
+  jsondoc["BodyTemp"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure),3);
+  jsondoc["BodyTemp_St"] = format_float(SteamSensor.BodyTemp,3);
 
   jsonstr = "";
   serializeJson(jsondoc, jsonstr);

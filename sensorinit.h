@@ -184,9 +184,7 @@ void reset_sensor_counter(void){
   stepper.setCurrent(0);
   stepper.setTarget(0);
   set_capacity(0);
-
-  BME_getvalue(false);
-  start_pressure = bme_pressure;
+  
   ProgramNum = 0;
   SteamSensor.BodyTemp = 0;
   PipeSensor.BodyTemp = 0;
@@ -198,10 +196,9 @@ void reset_sensor_counter(void){
   LiquidVolumeAll = 0;
   startval = 0;
   WthdrwlProgress = 0;
-  get_Samovar_Status();
   PauseOn = false;
+  program_Wait = false;
 
-  
   for (int i=0;i++;i<4)
     for (int j=0;j++;j<80000)
       TempArray[i][j] = 0;
@@ -209,6 +206,10 @@ void reset_sensor_counter(void){
   if (fileToAppend) {
     fileToAppend.close();
   }
+
+  BME_getvalue(false);
+  start_pressure = bme_pressure;
+  get_Samovar_Status();
 }
 
 String inline format_float(float v, int d){
