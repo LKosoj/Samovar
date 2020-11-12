@@ -8,6 +8,7 @@
 Как выглядит реализованное - можно посмотреть тут https://yadi.sk/d/PHXuocI2XKfTzQ
 
 В проекте использовались:
+
 ESP32 30 pin https://aliexpress.ru/item/4000152270368.html?spm=a2g0s.9042311.0.0.264d33edS8Ocll
 
 Servo SG90 https://aliexpress.ru/item/32898600185.html
@@ -35,3 +36,6 @@ BME680 (можно заменить на BME180, BME280, надо будет з�
 LCD 2004 I2C https://aliexpress.ru/item/32652739134.html
 
 Stepper driver A4988 https://aliexpress.ru/item/32963690420.html
+
+DC-DC converter https://aliexpress.ru/item/32261885063.html?spm=a2g0s.9042311.0.0.264d33ed8ASDhI
+
