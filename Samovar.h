@@ -153,8 +153,8 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 AsyncEventSource events("/events");
 
-//Adafruit_BME680 bme; // I2C
-ClosedCube_BME680 bme680;
+Adafruit_BME680 bme; // I2C
+//ClosedCube_BME680 bme680;
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -166,6 +166,8 @@ GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPE
 
 File fileToAppend;
 Servo servo;  // create servo object to control a servo
+
+GButton btn(BTN_PIN);
 
 
 struct SetupEEPROM{

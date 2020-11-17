@@ -14,28 +14,25 @@ void reset_sensor_counter(void);
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
 void IRAM_ATTR BME_getvalue(bool fl){
-  ClosedCube_BME680_Status status = bme680.readStatus();
-//  Serial.print("status: (");
-//  Serial.print(status.newDataFlag);
-//  Serial.print(",");
-//  Serial.print(status.measuringStatusFlag);
-//  Serial.print(",");
-//  Serial.print(status.gasMeasuringStatusFlag);
-//  Serial.print(",");
-//  Serial.print(status.gasMeasurementIndex);
-//  Serial.println(") (newDataFlag,StatusFlag,GasFlag,GasIndex)");
 
-  if (status.newDataFlag || fl) {
-    bme_temp = bme680.readTemperature();
+  if (!bmefound) {
+    bme_temp = -1;
+    bme_pressure = -1;
+    return;
+  }
+  // Tell BME680 to begin measurement.
+  unsigned long bmeEndTime = bme.beginReading();
+
+  if (!bme.endReading()) {
+    return;
+  }
+
+    bme_temp = bme.temperature;
     vTaskDelay(2);
-    bme_pressure = bme680.readPressure() * 0.75;
+    bme_pressure = bme.pressure / 100.0 * 0.75;
     vTaskDelay(2);
-    bme_humidity = bme680.readHumidity();
-    vTaskDelay(2);
-    bme680.setForcedMode();
-    vTaskDelay(2);
-  }  
-    bme680.setForcedMode();
+    bme_humidity = bme.humidity;
+    vTaskDelay(2); 
 }
 
 //***************************************************************************************************************
@@ -86,14 +83,18 @@ void sensor_init(void){
   writeString("Bme680 init...     ", 3);
   delay(1000);
 
-  bme680.init(0x77); // I2C address: 0x76 or 0x77
-  bme680.reset();
-  bme680.setGasOff();
-  // oversampling: humidity = x1, temperature = x1, pressure = x2
-  bme680.setOversampling(BME680_OVERSAMPLING_X1, BME680_OVERSAMPLING_X1, BME680_OVERSAMPLING_X2);
-  bme680.setIIRFilter(BME680_FILTER_3);
-  bme680.setForcedMode();
-  
+  if (!bme.begin()) {
+    writeString("Bme680 not found     ", 3);
+    bmefound = false;
+    //Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
+  }
+
+  // Set up oversampling and filter initialization
+  bme.setTemperatureOversampling(BME680_OS_8X);
+  bme.setHumidityOversampling(BME680_OS_2X);
+  bme.setPressureOversampling(BME680_OS_4X);
+  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
   delay(4000);

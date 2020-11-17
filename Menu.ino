@@ -425,7 +425,7 @@ void encoder_getvalue(){
 
   CurMin = (millis() / 60 ) % 60;
     
-  // раз в секунду обновляем время на дисплее
+  // раз в секунду обновляем время на дисплее и запрашиваем давление
   if (OldMin != CurMin){
     Crt = CurrentTime();
     StrCrt = Crt.substring(6) + "   " + millis2time();
@@ -433,6 +433,7 @@ void encoder_getvalue(){
     OldMin = CurMin;
     main_menu1.softUpdate();
     vTaskDelay(2);
+    BME_getvalue(false);
   }
 
   // Check all the buttons

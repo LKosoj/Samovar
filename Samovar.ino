@@ -10,9 +10,8 @@
 #include <SPI.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-//#include <Adafruit_Sensor.h>
-//#include "Adafruit_BME680.h"
-#include "ClosedCube_BME680.h"
+#include <Adafruit_Sensor.h>
+#include "Adafruit_BME680.h"
 #include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
@@ -28,6 +27,7 @@
 
 #include "GyverEncoder.h"
 #include "GyverStepper.h"
+#include "GyverButton.h"
 
 #include <ESP32Servo.h>
 
@@ -150,7 +150,6 @@ void setup() {
   attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
   attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
 
-  
   xTaskCreatePinnedToCore(
       StepperTicker, /* Function to implement the task */
       "StepperTicker", /* Name of the task */
@@ -167,6 +166,11 @@ void setup() {
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);
+  
+  //сбрасываем нажатие на кнопку
+  btn.setType(LOW_PULL);
+  btn.setTimeout(800); 
+  btn.resetStates();
 }
 
 void loop() {
@@ -174,8 +178,6 @@ void loop() {
 //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   
-  BME_getvalue(false);
-
 #ifdef SAMOVAR_USE_BLYNK
   Blynk.run();
 #endif
@@ -214,8 +216,21 @@ void loop() {
   }
   encoder_getvalue();
 
-  //баг при инициализации датчика давления, ждем не нулевое давление и инициализируем
-  if (start_pressure == 0) start_pressure = bme_pressure;
+  btn.tick();
+  //обработка нажатий кнопки и разное поведение в зависимости от режима работы
+  if (btn.isPress()){
+    //если выключен - включаем
+    if (!PowerOn) {
+      set_power(true);
+    } else if (startval == 0) {
+      //если включен и программа отбора не работает - запускаем программу
+      menu_samovar_start();
+    } else if (startval != 0){
+      //если выполняется программа - ставим на паузу или снимаем с паузы
+      pause_withdrawal(!PauseOn);
+    }
+    btn.resetStates();
+  }
 }
 
 void getjson (void){
