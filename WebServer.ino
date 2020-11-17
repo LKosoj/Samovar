@@ -42,15 +42,24 @@ void WebServerInit(void){
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
   
-/*  
-  server.on("/setup.htm", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/setup.htm", String(), false, setupKeyProcessor);
-  });
-*/
-
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request){
      //Serial.println("SAVE");
         handleSave(request);
+  });
+
+  server.onFileUpload([](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final){
+    if(!index)
+      Serial.printf("UploadStart: %s\n", filename.c_str());
+    Serial.printf("%s", (const char*)data);
+    if(final)
+      Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index+len);
+  });
+  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+    if(!index)
+      Serial.printf("BodyStart: %u\n", total);
+    Serial.printf("%s", (const char*)data);
+    if(index + len == total)
+      Serial.printf("BodyEnd: %u\n", total);
   });
 
   

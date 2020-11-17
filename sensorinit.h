@@ -35,6 +35,7 @@ void IRAM_ATTR BME_getvalue(bool fl){
     bme680.setForcedMode();
     vTaskDelay(2);
   }  
+    bme680.setForcedMode();
 }
 
 //***************************************************************************************************************
@@ -198,10 +199,6 @@ void reset_sensor_counter(void){
   WthdrwlProgress = 0;
   PauseOn = false;
   program_Wait = false;
-
-  for (int i=0;i++;i<4)
-    for (int j=0;j++;j<80000)
-      TempArray[i][j] = 0;
 
   if (fileToAppend) {
     fileToAppend.close();

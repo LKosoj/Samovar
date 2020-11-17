@@ -12,7 +12,7 @@
  
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.1"
+#define SAMOVAR_VERSION "1.2"
 #define __SAMOVAR_DEBUG
 
 #define SAMOVAR_USE_BLYNK                   //использовать Blynk в проекте
@@ -59,10 +59,10 @@ uint8_t temprature_sens_read();
 
 //**************************************************************************************************************
 // Пины для релейного модуля
-#define RELE_CHANNEL1 14//2
-#define RELE_CHANNEL2 12//34
-#define RELE_CHANNEL3 13//14
-#define RELE_CHANNEL4 3//13
+#define RELE_CHANNEL1 2
+#define RELE_CHANNEL2 34
+#define RELE_CHANNEL3 14
+#define RELE_CHANNEL4 13
 //**************************************************************************************************************
 
 //**************************************************************************************************************
@@ -148,8 +148,6 @@ TaskHandle_t StepperTickerTask1 = NULL;
 Ticker SensorTicker;
 Ticker SensorTempTicker;
 
-float TempArray[3][80000];                        //массив для сохранения данных о температуре
-
 AsyncWebServer server(80);
 
 AsyncWebSocket ws("/ws");
@@ -210,7 +208,7 @@ DSSensor PipeSensor;                                            //сенсор �
 DSSensor WaterSensor;                                           //сенсор температуры охлаждающей воды или флегмы
 DSSensor TankSensor;                                            //сенсор температуры в кубе
 
-WProgram program[CAPACITY_NUM * 2];                                 //массив строк для записи программы отбора. Не больше чем CAPACITY_NUM * 2
+WProgram program[CAPACITY_NUM * 2];                             //массив строк для записи программы отбора. Не больше чем CAPACITY_NUM * 2
 
 enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE};
 volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
@@ -227,7 +225,7 @@ char auth[] = SAMOVAR_AUTH;
 
 //**************************************************************************************************************
 volatile bool bmefound = true;
-//volatile float samovar_temp;                                    // Температура ESP32
+//volatile float samovar_temp;                                  // Температура ESP32
 volatile float bme_temp;                                        // Температура BME
 volatile float start_pressure;                                  // Давление BME стартовое
 volatile float bme_pressure;                                    // Давление BME
@@ -263,7 +261,7 @@ volatile int RemainingDistance;                                 // Рассто�
 unsigned long begintime;                                        // Время начала отбора
 unsigned long endtime;                                          // Время завершения отбора
 unsigned long t_min;                                            // Время для паузы в минутах с момента старта ESP32. Это накладывает определенные ограничения на время отбора - оно не должно быть больше двух суток
-volatile bool program_Pause;                                             // Признак, что запущена программа паузы
-volatile bool program_Wait;                                              // Признак, что программа ожидает возврата колонны в заданные параметры
+volatile bool program_Pause;                                    // Признак, что запущена программа паузы
+volatile bool program_Wait;                                     // Признак, что программа ожидает возврата колонны в заданные параметры
 
 String jsonstr;                                                 // Строка, содержащая json ответ для страницы

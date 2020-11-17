@@ -5,6 +5,7 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
+#include <ArduinoOTA.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <OneWire.h>
@@ -122,6 +123,24 @@ void setup() {
   connectWiFi();
   writeString("Connected", 4);
 
+  //Send OTA events to the browser
+  ArduinoOTA.onStart([]() { events.send("Update Start", "ota"); });
+  ArduinoOTA.onEnd([]() { events.send("Update End", "ota"); });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    char p[32];
+    sprintf(p, "Progress: %u%%\n", (progress/(total/100)));
+    events.send(p, "ota");
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    if(error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
+    else if(error == OTA_BEGIN_ERROR) events.send("Begin Failed", "ota");
+    else if(error == OTA_CONNECT_ERROR) events.send("Connect Failed", "ota");
+    else if(error == OTA_RECEIVE_ERROR) events.send("Recieve Failed", "ota");
+    else if(error == OTA_END_ERROR) events.send("End Failed", "ota");
+  });
+  ArduinoOTA.setHostname(SAMOVAR_HOST);
+  ArduinoOTA.begin();
+  
   sensor_init();
 
   WebServerInit();
@@ -151,7 +170,8 @@ void setup() {
 }
 
 void loop() {
-  //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
+  ArduinoOTA.handle();
+//Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   
   BME_getvalue(false);

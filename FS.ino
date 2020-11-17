@@ -208,13 +208,13 @@ void create_data(){
 void IRAM_ATTR append_data(){
   bool w = false;
   String str = Crt + ",";
-  str += format_float(SteamSensor.avgTemp, 2);
+  str += format_float(SteamSensor.avgTemp, 3);
   str += ",";
-  str += format_float(PipeSensor.avgTemp, 2);
+  str += format_float(PipeSensor.avgTemp, 3);
   str += ",";
-  str += format_float(WaterSensor.avgTemp, 2);
+  str += format_float(WaterSensor.avgTemp, 3);
   str += ",";
-  str += format_float(TankSensor.avgTemp, 2);
+  str += format_float(TankSensor.avgTemp, 3);
   str += ",";
   str += format_float(bme_pressure, 2);
   
