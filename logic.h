@@ -14,11 +14,14 @@ void pause_withdrawal(bool Pause);
 void read_config();
 String inline format_float(float v, int d);
 float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
+unsigned int hexToDec(String hexString);
+void set_current_power(float Volt);
+void set_power_mode(String Mode);
 
 //Получаем объем отбора
-float get_liguid_volume_by_step(int StepperSpeed){
+float get_liguid_volume_by_step(int StepCount){
   float retval = 0;
-  if (SamSetup.StepperStepMl > 0) retval = (float)StepperSpeed / SamSetup.StepperStepMl;
+  if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
   return retval;
 }
 
@@ -50,7 +53,7 @@ void withdrawal(void){
   }
   CurrrentStepps = stepper.getCurrent();
   if (TargetStepps > 0){
-    WthdrwlProgress = CurrrentStepps * 100 / TargetStepps;
+    WthdrwlProgress = (float)CurrrentStepps / (float)TargetStepps * 100;
   } else {
     WthdrwlProgress = 0;
   }
@@ -102,6 +105,8 @@ void set_power(bool On){
       digitalWrite(RELE_CHANNEL1, LOW);
       set_menu_screen(2);
       power_text_ptr = (char*)"OFF";
+      delay(1000);
+      set_power_mode(POWER_SPEED_MODE);
   } else {
       samovar_reset();
       digitalWrite(RELE_CHANNEL1, HIGH);
@@ -111,13 +116,9 @@ void set_power(bool On){
 }
 
 void pump_calibrate(int stpspeed){
-  Serial.println("startval=");
-  Serial.println(startval);
   if (startval != 0 && startval != 100) {
     return;
   }
-  Serial.println("stpspeed=");
-  Serial.println(stpspeed);
   
   if (stpspeed == 0){
     startval = 0;
@@ -294,6 +295,7 @@ void run_program(byte num){
       stepper.setTarget(0);
     }
    }
+   TargetStepps = stepper.getTarget();
 }
 
 //функция корректировки температуры кипения спирта в зависимости от давления
@@ -316,4 +318,95 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 #endif
 
   return c_temp;
+}
+
+void check_alarm(){
+  //Проверяем, что температурные параметры не вышли за предельные значения
+  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn){
+    //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
+    set_power(false);
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF!");
+#endif
+  }
+  if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE){
+    //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alarm! {DEVICE_NAME} - working mode set!");
+#endif
+    set_power_mode(POWER_WORK_MODE);
+    set_current_power(PRESET_VOLTAGE);
+  }
+}
+
+String read_from_serial(){
+  boolean getData = false;
+  char a;
+  while(Serial2.available()) {
+    a = Serial2.read();
+    serial_str += a;
+    if (a=='\n'){
+      getData = true;
+      break;
+    }
+  }
+
+  if (getData && serial_str.substring(0, 1) == "T") {
+      serial_str = serial_str.substring(0, serial_str.length() - 2);
+      String result = serial_str;
+      serial_str = "";
+      return result;
+  } else if (getData && Serial2.available()){
+    return read_from_serial();
+  } else if (getData){
+    serial_str = "";
+    return "";
+  }
+  return "";  
+}
+
+//получаем текущие параметры работы регулятора напряжения
+String get_current_power(){
+  //Serial.flush();
+  String s = read_from_serial();
+  if (s != ""){
+    String Vl1 = (String)(hexToDec(s.substring(1, 4))/10.0F);
+    String Vl2 = (String)(hexToDec(s.substring(4, 7))/10.0F);
+    return "";
+    //Serial.println("s = " + s + ", Vl1 = " + Vl1 + ", Vl2 = " + Vl2 + ", R = " + s.substring(7));
+    //set_current_power(48);
+    //T3EA3E80
+  }
+  return "";
+}
+
+//устанавливаем напряжение для регулятора напряжения
+void set_current_power(float Volt){
+  String hexString = String((int)Volt*10, HEX);
+  Serial2.print("S" + hexString + "\r");
+}
+
+void set_power_mode(String Mode){
+  current_power_mode = Mode;
+  Serial2.print("M" + Mode + "\r");
+}
+
+unsigned int hexToDec(String hexString) {
+  unsigned int decValue = 0;
+  int nextInt;
+  
+  for (int i = 0; i < hexString.length(); i++) {
+    
+    nextInt = int(hexString.charAt(i));
+    if (nextInt >= 48 && nextInt <= 57) nextInt = map(nextInt, 48, 57, 0, 9);
+    if (nextInt >= 65 && nextInt <= 70) nextInt = map(nextInt, 65, 70, 10, 15);
+    if (nextInt >= 97 && nextInt <= 102) nextInt = map(nextInt, 97, 102, 10, 15);
+    nextInt = constrain(nextInt, 0, 15);
+    
+    decValue = (decValue * 16) + nextInt;
+  }
+  
+  return decValue;
 }

@@ -225,17 +225,22 @@ void loop() {
     } else if (startval == 0) {
       //если включен и программа отбора не работает - запускаем программу
       menu_samovar_start();
-    } else if (startval != 0){
-      //если выполняется программа - ставим на паузу или снимаем с паузы
+    } else if (startval != 0 && !program_Pause){
+      //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
       pause_withdrawal(!PauseOn);
+    } else if (startval != 0 && program_Pause){
+      //если выполняется программа, и программа - пауза, переходим к следующей программе
+      menu_samovar_start();
     }
-    btn.resetStates();
   }
+  //проверка на критичность параметров работы колонны и выключение, в случае необходимости
+  check_alarm();
+  get_current_power();
 }
 
 void getjson (void){
 
-  DynamicJsonDocument jsondoc(1024);
+  DynamicJsonDocument jsondoc(600);
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure,3);

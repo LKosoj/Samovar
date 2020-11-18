@@ -14,7 +14,6 @@ void reset_sensor_counter(void);
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
 void IRAM_ATTR BME_getvalue(bool fl){
-
   if (!bmefound) {
     bme_temp = -1;
     bme_pressure = -1;
@@ -166,6 +165,9 @@ void sensor_init(void){
  set_program("H;450;0.1;1;0;0\nP;120;0;0;0;0;\nB;5000;0.75;2;0;0\nB;5000;0.75;3;0;0\nB;5000;0.75;4;0;0\nB;5000;0.75;5;0;0\nB;5000;0.75;6;0;0\nB;5000;0.75;7;0;0\nB;5000;0.75;8;0;0\nB;5000;0.75;9;0;0\nB;5000;0.75;10;0;0\n");
 
  reset_sensor_counter();
+
+ Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
+ Serial2.setRxBufferSize(20);
 }
 
 void printAddress(DeviceAddress deviceAddress)                          // функция печати адреса DS18B20
