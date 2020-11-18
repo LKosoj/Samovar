@@ -105,8 +105,12 @@ void set_power(bool On){
       digitalWrite(RELE_CHANNEL1, LOW);
       set_menu_screen(2);
       power_text_ptr = (char*)"OFF";
+      
+#ifdef SAMOVAR_USE_POWER
       delay(1000);
       set_power_mode(POWER_SPEED_MODE);
+#endif
+
   } else {
       samovar_reset();
       digitalWrite(RELE_CHANNEL1, HIGH);
@@ -271,6 +275,11 @@ void run_program(byte num){
       stepper.setTarget(TargetStepps);
       ActualVolumePerHour = program[num].Speed;
       SteamSensor.BodyTemp = program[num].Temp;
+
+#ifdef SAMOVAR_USE_POWER
+      set_current_power(program[num].Power);
+#endif
+
       //Происходит магия. Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Для этого колонна должна после отбора голов поработать несколько минут на паузе
       //(для этого после программы отбора голов надо задать программу с типом P (латинская) и указать время стабилизации колонны в минутах в program[num].Volume)
@@ -330,6 +339,8 @@ void check_alarm(){
     Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF!");
 #endif
   }
+  
+#ifdef SAMOVAR_USE_POWER
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE){
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
 #ifdef SAMOVAR_USE_BLYNK
@@ -339,8 +350,13 @@ void check_alarm(){
     set_power_mode(POWER_WORK_MODE);
     set_current_power(PRESET_VOLTAGE);
   }
+#endif
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SAMOVAR_USE_POWER
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#ifdef SAMOVAR_USE_POWER
 String read_from_serial(){
   boolean getData = false;
   char a;
@@ -368,23 +384,22 @@ String read_from_serial(){
 }
 
 //получаем текущие параметры работы регулятора напряжения
-String get_current_power(){
+void get_current_power(){
   //Serial.flush();
   String s = read_from_serial();
   if (s != ""){
-    String Vl1 = (String)(hexToDec(s.substring(1, 4))/10.0F);
-    String Vl2 = (String)(hexToDec(s.substring(4, 7))/10.0F);
-    return "";
+    current_power_volt = hexToDec(s.substring(1, 4))/10.0F;
+    target_power_volt = hexToDec(s.substring(4, 7))/10.0F;
+    current_power_mode = s.substring(7);
     //Serial.println("s = " + s + ", Vl1 = " + Vl1 + ", Vl2 = " + Vl2 + ", R = " + s.substring(7));
     //set_current_power(48);
     //T3EA3E80
   }
-  return "";
 }
 
 //устанавливаем напряжение для регулятора напряжения
 void set_current_power(float Volt){
-  String hexString = String((int)Volt*10, HEX);
+  String hexString = String((int)(Volt*10), HEX);
   Serial2.print("S" + hexString + "\r");
 }
 
@@ -410,3 +425,4 @@ unsigned int hexToDec(String hexString) {
   
   return decValue;
 }
+#endif

@@ -166,8 +166,10 @@ void sensor_init(void){
 
  reset_sensor_counter();
 
+#ifdef SAMOVAR_USE_POWER
  Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
  Serial2.setRxBufferSize(20);
+#endif
 }
 
 void printAddress(DeviceAddress deviceAddress)                          // функция печати адреса DS18B20

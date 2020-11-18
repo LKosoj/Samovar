@@ -235,7 +235,10 @@ void loop() {
   }
   //проверка на критичность параметров работы колонны и выключение, в случае необходимости
   check_alarm();
+  
+#ifdef SAMOVAR_USE_POWER
   get_current_power();
+#endif
 }
 
 void getjson (void){
@@ -270,6 +273,12 @@ void getjson (void){
   jsondoc["Status"] = get_Samovar_Status();
   jsondoc["BodyTemp"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure),3);
   jsondoc["BodyTemp_St"] = format_float(SteamSensor.BodyTemp,3);
+  
+#ifdef SAMOVAR_USE_POWER
+  jsondoc["current_power_volt"] = format_float(current_power_volt,1);
+  jsondoc["target_power_volt"] = format_float(target_power_volt,1);
+  jsondoc["current_power_mode"] = current_power_mode;
+#endif;
 
   jsonstr = "";
   serializeJson(jsondoc, jsonstr);
