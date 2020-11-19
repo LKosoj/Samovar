@@ -196,10 +196,7 @@ void reset_sensor_counter(void){
   PipeSensor.BodyTemp = 0;
   WaterSensor.BodyTemp = 0;
   TankSensor.BodyTemp = 0;
-  current_v_m_count = 0;
   ActualVolumePerHour = 0;
-  for (int i=0;i++;i<21) LiquidVolume[i] = 0;
-  LiquidVolumeAll = 0;
   startval = 0;
   WthdrwlProgress = 0;
   PauseOn = false;

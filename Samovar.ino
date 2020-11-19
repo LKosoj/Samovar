@@ -74,11 +74,9 @@ void setup() {
 
   stepper.disable();
 
-//  ESP32PWM::allocateTimer(0);
-//  ESP32PWM::allocateTimer(1);
-//  ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
   servo.setPeriodHertz(50);    // standard 50 hz servo
+  // Частоты 500 и 2500 - подобраны для моего серво-привода. Возможно, для других частоты могут отличаться
   servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
 
 
@@ -278,7 +276,7 @@ void getjson (void){
   jsondoc["current_power_volt"] = format_float(current_power_volt,1);
   jsondoc["target_power_volt"] = format_float(target_power_volt,1);
   jsondoc["current_power_mode"] = current_power_mode;
-#endif;
+#endif
 
   jsonstr = "";
   serializeJson(jsondoc, jsonstr);

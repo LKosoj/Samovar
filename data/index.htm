@@ -65,6 +65,15 @@ document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
 document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
 document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
 document.getElementById('Status').innerHTML = myObj.Status;
+document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
+document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
+document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
+
+if (myObj.current_power_volt == 0){
+  document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
+} else {
+  document.getElementById('regulator').style = '';
+}
 
 var powerstr;
 var powerstyle;
@@ -121,6 +130,12 @@ xhttp.send();
 <div class='dvcs'>
 <span class='dvcs'>Статус работы: <span id='Status'></span></span>
 </div>
+<div class='dvcs' id='regulator' style='visibility: hidden;position: fixed;'>
+<span class='dvcs'>Текущее напряжение регулятора: <span id='current_power_volt'></span> V</span>
+<span class='dvcs'>Целевое напряжение регулятора: <span id='target_power_volt'></span> V</span>
+<span class='dvcs'>Режим работы регулятора: <span id='current_power_mode'></span></span>
+</div>
+<div>
 <div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
 <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>

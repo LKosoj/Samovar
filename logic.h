@@ -266,7 +266,7 @@ void run_program(byte num){
     stepper.setTarget(0);
     set_capacity(0);
    } else {
-    if (program[num].WType == "H" || program[num].WType == "B"){
+    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" ){
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
@@ -277,14 +277,17 @@ void run_program(byte num){
       SteamSensor.BodyTemp = program[num].Temp;
 
 #ifdef SAMOVAR_USE_POWER
-      set_current_power(program[num].Power);
+      if (program[num].Power > 40) {
+        set_power_mode(POWER_WORK_MODE);
+        set_current_power(program[num].Power);
+      }
 #endif
 
       //Происходит магия. Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Для этого колонна должна после отбора голов поработать несколько минут на паузе
       //(для этого после программы отбора голов надо задать программу с типом P (латинская) и указать время стабилизации колонны в минутах в program[num].Volume)
       //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
-      //Если она будет выходить за пределы больше заданных в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
+      //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
       if (program[num].WType == "B" && SteamSensor.BodyTemp == 0) {
         SteamSensor.BodyTemp = SteamSensor.avgTemp;
         PipeSensor.BodyTemp = PipeSensor.avgTemp;
@@ -330,6 +333,9 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 }
 
 void check_alarm(){
+  //сбросим паузу события безопасности
+  if (alarm_t_min >= millis()) alarm_t_min = 0;
+
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn){
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
@@ -341,11 +347,20 @@ void check_alarm(){
   }
   
 #ifdef SAMOVAR_USE_POWER
+
+  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP) && PowerOn && alarm_t_min == 0){
+    //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
+    //Если уже снижали - надо подождать 20 секунд, так как процесс инерционный
+    set_current_power(target_power_volt - 5);
+    alarm_t_min = millis() + 20000;
+  }
+
+  
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE){
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} - working mode set!");
+    Blynk.notify("Alert! {DEVICE_NAME} - working mode set!");
 #endif
     set_power_mode(POWER_WORK_MODE);
     set_current_power(PRESET_VOLTAGE);
