@@ -424,9 +424,21 @@ void setupMenu(){
 void encoder_getvalue(){
 
   CurMin = (millis() / 60 ) % 60;
+
+  TScr = CurMin / 60 % 2;
+  if (TScr != OldTScr){
+    lcd.init();
+    lcd.begin(20,4);
+    OldTScr = TScr;
+  }
     
-  // раз в секунду обновляем время на дисплее и запрашиваем давление
+  // раз в секунду обновляем время на дисплее и запрашиваем давление и напряжение
   if (OldMin != CurMin){
+
+#ifdef SAMOVAR_USE_POWER
+    get_current_power();
+#endif
+
     Crt = CurrentTime();
     StrCrt = Crt.substring(6) + "   " + millis2time();
     StrCrt.toCharArray(tst,20);

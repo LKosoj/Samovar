@@ -14,6 +14,10 @@ void reset_sensor_counter(void);
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
 void IRAM_ATTR BME_getvalue(bool fl){
+//bme_pressure = 767;
+//bme_temp = 25;
+//return;
+
   if (!bmefound) {
     bme_temp = -1;
     bme_pressure = -1;
@@ -21,6 +25,9 @@ void IRAM_ATTR BME_getvalue(bool fl){
   }
   // Tell BME680 to begin measurement.
   unsigned long bmeEndTime = bme.beginReading();
+  if (bmeEndTime == 0) {
+    return;
+  }
 
   if (!bme.endReading()) {
     return;
@@ -38,15 +45,16 @@ void IRAM_ATTR BME_getvalue(bool fl){
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void){
+  //return;
   float ss, ps, ws, ts;
   ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
-  vTaskDelay(80);
+  vTaskDelay(10);
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
-  vTaskDelay(80);
+  vTaskDelay(10);
   ws = sensors.getTempC(WaterSensor.Sensor);                   // считываем температуру с датчика 2
-  vTaskDelay(80);
+  vTaskDelay(10);
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
-  vTaskDelay(80);
+  vTaskDelay(10);
 
   //return;
   sensors.requestTemperatures();
@@ -162,7 +170,7 @@ void sensor_init(void){
  stepper.autoPower(true);
  stepper.setAcceleration(500);
 
- set_program("H;450;0.1;1;0;0\nP;120;0;0;0;0;\nB;5000;0.75;2;0;0\nB;5000;0.75;3;0;0\nB;5000;0.75;4;0;0\nB;5000;0.75;5;0;0\nB;5000;0.75;6;0;0\nB;5000;0.75;7;0;0\nB;5000;0.75;8;0;0\nB;5000;0.75;9;0;0\nB;5000;0.75;10;0;0\n");
+ set_program("H;450;0.1;1;0;80\nP;120;0;0;0;80;\nB;5000;0.75;2;0;0\nB;5000;0.75;3;0;0\nB;5000;0.75;4;0;0\nB;5000;0.75;5;0;0\nB;5000;0.75;6;0;0\nB;5000;0.75;7;0;0\nB;5000;0.75;8;0;0\nB;5000;0.75;9;0;0\nB;5000;0.75;10;0;0\n");
 
  reset_sensor_counter();
 
@@ -183,6 +191,10 @@ void printAddress(DeviceAddress deviceAddress)                          // фу�
 
 //Обнуляем все счетчики
 void reset_sensor_counter(void){
+  #ifdef SAMOVAR_USE_POWER
+      set_power_mode(POWER_SLEEP_MODE);
+#endif
+
   stepper.setSpeed(-1);
   stepper.setMaxSpeed(-1);
   stepper.brake();
@@ -201,6 +213,8 @@ void reset_sensor_counter(void){
   WthdrwlProgress = 0;
   PauseOn = false;
   program_Wait = false;
+  SteamSensor.Start_Pressure = 0;
+  SteamSensor.BodyTemp = 0;
 
   if (fileToAppend) {
     fileToAppend.close();

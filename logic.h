@@ -112,6 +112,9 @@ void set_power(bool On){
 #endif
 
   } else {
+#ifdef SAMOVAR_USE_POWER
+      set_power_mode(POWER_SLEEP_MODE);
+#endif
       samovar_reset();
       digitalWrite(RELE_CHANNEL1, HIGH);
       set_menu_screen(3);
@@ -277,23 +280,27 @@ void run_program(byte num){
       SteamSensor.BodyTemp = program[num].Temp;
 
 #ifdef SAMOVAR_USE_POWER
+      set_power_mode(POWER_WORK_MODE);
       if (program[num].Power > 40) {
-        set_power_mode(POWER_WORK_MODE);
         set_current_power(program[num].Power);
       }
 #endif
 
-      //Происходит магия. Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
-      //Для этого колонна должна после отбора голов поработать несколько минут на паузе
+      //Первая программа отбора тела - запоминаем текущие значения температуры и давления
+      if (program[num].WType == "B" && SteamSensor.Start_Pressure == 0) {
+        SteamSensor.Start_Pressure = bme_pressure;
+        PipeSensor.BodyTemp = PipeSensor.avgTemp;
+        WaterSensor.BodyTemp = WaterSensor.avgTemp;
+        TankSensor.BodyTemp = TankSensor.avgTemp;
+      }
+      
+      //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
+      //Для этого колонна должна после отбора голов поработать несколько минут на паузе для стабилизации
       //(для этого после программы отбора голов надо задать программу с типом P (латинская) и указать время стабилизации колонны в минутах в program[num].Volume)
       //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
       //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
       if (program[num].WType == "B" && SteamSensor.BodyTemp == 0) {
         SteamSensor.BodyTemp = SteamSensor.avgTemp;
-        PipeSensor.BodyTemp = PipeSensor.avgTemp;
-        WaterSensor.BodyTemp = WaterSensor.avgTemp;
-        TankSensor.BodyTemp = TankSensor.avgTemp;
-        SteamSensor.Start_Pressure = bme_pressure;
       }
     } else if (program[num].WType == "P"){
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
@@ -377,6 +384,7 @@ String read_from_serial(){
   char a;
   while(Serial2.available()) {
     a = Serial2.read();
+    //Serial.println(a);
     serial_str += a;
     if (a=='\n'){
       getData = true;
@@ -384,10 +392,14 @@ String read_from_serial(){
     }
   }
 
-  if (getData && serial_str.substring(0, 1) == "T") {
-      serial_str = serial_str.substring(0, serial_str.length() - 2);
+  int i = serial_str.indexOf("T");
+//  Serial.print("i = ");
+//  Serial.println(i);
+  if (getData && i >= 0) {
+      serial_str = serial_str.substring(i, serial_str.length() - 2);
       String result = serial_str;
       serial_str = "";
+      //Serial.println(result);
       return result;
   } else if (getData && Serial2.available()){
     return read_from_serial();
@@ -406,9 +418,10 @@ void get_current_power(){
     current_power_volt = hexToDec(s.substring(1, 4))/10.0F;
     target_power_volt = hexToDec(s.substring(4, 7))/10.0F;
     current_power_mode = s.substring(7);
-    //Serial.println("s = " + s + ", Vl1 = " + Vl1 + ", Vl2 = " + Vl2 + ", R = " + s.substring(7));
+    //Serial.println("s = " + s + ", Vl1 = " + current_power_volt + ", Vl2 = " + target_power_volt + ", R = " + current_power_mode);
     //set_current_power(48);
     //T3EA3E80
+    //S3E8
   }
 }
 
