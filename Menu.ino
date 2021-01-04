@@ -434,6 +434,13 @@ void encoder_getvalue(){
   // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
   if (OldMin != CurMin){
 
+    //Считаем прогресс отбора для текущей программы
+    if (TargetStepps > 0){
+      WthdrwlProgress = (float)CurrrentStepps / (float)TargetStepps * 100;
+    } else {
+      WthdrwlProgress = 0;
+    }
+
     //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
     check_alarm();
     vTaskDelay(10);
@@ -450,12 +457,12 @@ void encoder_getvalue(){
     WFtotalMilliLitres += WFflowMilliLitres;
     WFpulseCount = 0;
     oldTime = millis();
-    vTaskDelay(10);
+    vTaskDelay(15);
 #endif
 
 #ifdef SAMOVAR_USE_POWER
     get_current_power();
-    vTaskDelay(10);
+    vTaskDelay(15);
 #endif
 
     Crt = CurrentTime();
@@ -464,7 +471,7 @@ void encoder_getvalue(){
     main_menu1.softUpdate();
     vTaskDelay(10);
     BME_getvalue(false);
-    vTaskDelay(10);
+    vTaskDelay(15);
     OldMin = CurMin;
   }
 

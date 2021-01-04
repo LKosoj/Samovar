@@ -54,13 +54,6 @@ void withdrawal(void){
   
   CurrrentStepps = stepper.getCurrent();
 
-  //Считаем прогресс отбора для текущей программы
-  if (TargetStepps > 0){
-    WthdrwlProgress = (float)CurrrentStepps / (float)TargetStepps * 100;
-  } else {
-    WthdrwlProgress = 0;
-  }
-
   if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 2)){
     menu_samovar_start();
   }
@@ -390,6 +383,14 @@ void check_alarm(){
     set_current_power(PRESET_VOLTAGE);
   }
 #endif
+}
+
+void open_valve(bool Val){
+  if (Val){
+    digitalWrite(RELE_CHANNEL2, LOW);
+  } else {
+    digitalWrite(RELE_CHANNEL2, HIGH);
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
