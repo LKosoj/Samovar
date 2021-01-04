@@ -47,6 +47,18 @@ BLYNK_READ(V14){
 Blynk.virtualWrite(V14, get_Samovar_Status());
 }
 
+#ifdef SAMOVAR_USE_POWER
+BLYNK_READ(V16){
+Blynk.virtualWrite(V16, target_power_volt);
+}
+
+BLYNK_WRITE(V16)
+{
+  float Value16 = param.asFloat(); // assigning incoming value from pin V3 to a variable
+  set_current_power(Value16);
+}
+#endif
+
 BLYNK_WRITE(V13)
 {
   pause_withdrawal(!PauseOn); 

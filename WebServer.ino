@@ -172,6 +172,9 @@ int params = request->params();
    if (request->hasArg("reset")) {
     sam_command_sync = SAMOVAR_RESET;
    }
+   if (request->hasArg("voltage")) {
+     set_current_power(request->arg("voltage").toFloat());
+   }
    if (request->hasArg("pause")) {
     if (PauseOn) {
       sam_command_sync = SAMOVAR_CONTINUE;

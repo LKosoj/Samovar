@@ -170,6 +170,12 @@ void sensor_init(void){
  stepper.autoPower(true);
  stepper.setAcceleration(500);
 
+#ifdef USE_WATERSENSOR
+ //Настраиваем датчик потока
+ pinMode(WATERSENSOR_PIN, INPUT);
+ digitalWrite(WATERSENSOR_PIN, HIGH);
+#endif
+
  set_program("H;450;0.1;1;0;80\nP;120;0;0;0;80;\nB;5000;0.75;2;0;0\nB;5000;0.75;3;0;0\nB;5000;0.75;4;0;0\nB;5000;0.75;5;0;0\nB;5000;0.75;6;0;0\nB;5000;0.75;7;0;0\nB;5000;0.75;8;0;0\nB;5000;0.75;9;0;0\nB;5000;0.75;10;0;0\n");
 
  reset_sensor_counter();
@@ -223,6 +229,8 @@ void reset_sensor_counter(void){
   BME_getvalue(false);
   start_pressure = bme_pressure;
   get_Samovar_Status();
+
+  WFtotalMilliLitres = 0;
 }
 
 String inline format_float(float v, int d){

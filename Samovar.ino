@@ -2,7 +2,6 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
-#include <ArduinoOTA.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <OneWire.h>
@@ -32,6 +31,10 @@
 #include "font.h"
 #include "logic.h"
 
+#ifdef USE_UPDATE_OTA
+#include <ArduinoOTA.h>
+#endif
+
 #ifdef SAMOVAR_USE_BLYNK
 //#define BLYNK_PRINT Serial
 
@@ -50,6 +53,12 @@ void StepperTicker( void * parameter) {
     //vTaskDelay(2);
   }
 }
+
+#ifdef USE_WATERSENSOR
+void IRAM_ATTR WFpulseCounter(){
+    WFpulseCount++;
+}
+#endif
 
 void IRAM_ATTR isrENC_TICK() {
   encoder.tick();  // отработка в прерывании
@@ -118,6 +127,7 @@ void setup() {
   connectWiFi();
   writeString("Connected", 4);
 
+#ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
   ArduinoOTA.onStart([]() { events.send("Update Start", "ota"); });
   ArduinoOTA.onEnd([]() { events.send("Update End", "ota"); });
@@ -135,10 +145,16 @@ void setup() {
   });
   ArduinoOTA.setHostname(SAMOVAR_HOST);
   ArduinoOTA.begin();
+#endif
   
   sensor_init();
 
   WebServerInit();
+
+#ifdef USE_WATERSENSOR
+  //вешаем прерывание на изменения датчика потока воды
+  attachInterrupt(WATERSENSOR_PIN, WFpulseCounter, FALLING);
+#endif
 
   //вешаем прерывание на изменения по ногам энкодера
   attachInterrupt(ENC_CLK, isrENC_TICK, CHANGE);
@@ -169,7 +185,10 @@ void setup() {
 }
 
 void loop() {
+#ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
+#endif
+
 //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   
@@ -211,32 +230,28 @@ void loop() {
   }
   encoder_getvalue();
 
-//  btn.tick();
-//  //обработка нажатий кнопки и разное поведение в зависимости от режима работы
-//  if (btn.isPress()){
-//    //если выключен - включаем
-//    if (!PowerOn) {
-//      set_power(true);
-//    } else if (startval == 0) {
-//      //если включен и программа отбора не работает - запускаем программу
-//      menu_samovar_start();
-//    } else if (startval != 0 && !program_Pause){
-//      //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
-//      pause_withdrawal(!PauseOn);
-//    } else if (startval != 0 && program_Pause){
-//      //если выполняется программа, и программа - пауза, переходим к следующей программе
-//      menu_samovar_start();
-//    }
-//  }
-
-  //проверка на критичность параметров работы колонны и выключение, в случае необходимости
-  check_alarm();
-  
+  btn.tick();
+  //обработка нажатий кнопки и разное поведение в зависимости от режима работы
+  if (btn.isPress()){
+    //если выключен - включаем
+    if (!PowerOn) {
+      set_power(true);
+    } else if (startval == 0) {
+      //если включен и программа отбора не работает - запускаем программу
+      menu_samovar_start();
+    } else if (startval != 0 && !program_Pause){
+      //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
+      pause_withdrawal(!PauseOn);
+    } else if (startval != 0 && program_Pause){
+      //если выполняется программа, и программа - пауза, переходим к следующей программе
+      menu_samovar_start();
+    }
+  }
 }
 
 void getjson (void){
 
-  DynamicJsonDocument jsondoc(600);
+  DynamicJsonDocument jsondoc(1000);
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure,3);
@@ -272,6 +287,12 @@ void getjson (void){
   jsondoc["target_power_volt"] = format_float(target_power_volt,1);
   jsondoc["current_power_mode"] = current_power_mode;
 #endif
+
+#ifdef USE_WATERSENSOR
+  jsondoc["WFflowRate"] = format_float(WFflowRate,2);
+  jsondoc["WFtotalMl"] = WFtotalMilliLitres;
+#endif
+
 
   jsonstr = "";
   serializeJson(jsondoc, jsonstr);

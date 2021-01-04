@@ -2,13 +2,12 @@
 <meta charset='utf-8'>
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
 <title>Самовар</title>
-</head>
 
 <style>#file-input,input{width:200;height:34px;border-radius:4px;margin:10 10 0 10;font-size:15px}
 input{background:#f1f1f1;border:0;padding:0 15px;}
 input[type='text']{background:#f1f1f1;border:0;padding:0 15px;width:80;margin:0}
 #file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}
-body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
+body{background:#3498db;font-family:sans-serif;font-size:12px;color:#777}
 #bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
 form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
 h1{text-align:center}
@@ -25,6 +24,12 @@ request.send();
 if(request.status != 200) {
 alert( request.status + ': ' + request.statusText );
 }
+return 0;
+};
+
+function sendvoltage(){
+var command = 'voltage=' + document.getElementById('Voltage').value;
+sendbutton(command);
 return 0;
 };
 
@@ -68,11 +73,21 @@ document.getElementById('Status').innerHTML = myObj.Status;
 document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
 document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
 document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
+document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
+document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
 
-if (myObj.current_power_volt == 0){
+if (!myObj.current_power_volt){
   document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
+  document.getElementById('VoltH2').style = 'visibility: hidden;position: fixed;';
 } else {
   document.getElementById('regulator').style = '';
+  document.getElementById('VoltH2').style = '';
+}
+
+if (!myObj.WFflowRate){
+  document.getElementById('flowsensor').style = 'visibility: hidden;position: fixed;';
+} else {
+  document.getElementById('flowsensor').style = '';
 }
 
 var powerstr;
@@ -105,6 +120,7 @@ xhttp.open("GET", "/ajax", true);
 xhttp.send();
 };
 </script>
+</head>
 
 <form action='none' onsubmit='return false'>
 <h1>Samovar v. <span id='version'></span></h1>
@@ -121,6 +137,14 @@ xhttp.send();
 <h2>Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</h2>
 <h2>Прогресс отбора: <span id='WthdrwlProgress'></span>%</h2>
 <h2>Питание включено: <span id='PowerOn'></span></h2>
+<h2 id='VoltH2' style='visibility: hidden;position: fixed;'>Напряжение регулятора: <input name='Voltage' id='Voltage' type='text' value=''>
+<input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'>
+</h2>
+<div class='dvcs' id='regulator' style='visibility: hidden;position: fixed;'>
+<span class='dvcs'>Текущее напряжение регулятора: <span id='current_power_volt'></span> V</span>
+<span class='dvcs'>Целевое напряжение регулятора: <span id='target_power_volt'></span> V</span>
+<span class='dvcs'>Режим работы регулятора: <span id='current_power_mode'></span></span>
+</div>
 <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
 <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'>
 <input id='pause' type='submit' name='pause' value='Пауза' onclick='sendbutton("pause=1");'>
@@ -130,11 +154,6 @@ xhttp.send();
 <div class='dvcs'>
 <span class='dvcs'>Статус работы: <span id='Status'></span></span>
 </div>
-<div class='dvcs' id='regulator' style='visibility: hidden;position: fixed;'>
-<span class='dvcs'>Текущее напряжение регулятора: <span id='current_power_volt'></span> V</span>
-<span class='dvcs'>Целевое напряжение регулятора: <span id='target_power_volt'></span> V</span>
-<span class='dvcs'>Режим работы регулятора: <span id='current_power_mode'></span></span>
-</div>
 <div>
 <div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
@@ -142,4 +161,8 @@ xhttp.send();
 <div>
 <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div></div>
+<div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
+<span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
+<span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
+</div>
 </form>

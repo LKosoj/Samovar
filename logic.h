@@ -51,12 +51,16 @@ void withdrawal(void){
     }
     return;
   }
+  
   CurrrentStepps = stepper.getCurrent();
+
+  //Считаем прогресс отбора для текущей программы
   if (TargetStepps > 0){
     WthdrwlProgress = (float)CurrrentStepps / (float)TargetStepps * 100;
   } else {
     WthdrwlProgress = 0;
   }
+
   if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 2)){
     menu_samovar_start();
   }
@@ -349,9 +353,22 @@ void check_alarm(){
     set_power(false);
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF!");
+    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Temperature error");
 #endif
   }
+
+#ifdef USE_WATERSENSOR
+   //Проверим, что вода подается
+   if (WFAlarmCount > WF_ALARM_COUNT) {
+    //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
+    set_power(false);
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Water error");
+#endif
+   }
+#endif
+
   
 #ifdef SAMOVAR_USE_POWER
 
@@ -393,13 +410,10 @@ String read_from_serial(){
   }
 
   int i = serial_str.indexOf("T");
-//  Serial.print("i = ");
-//  Serial.println(i);
   if (getData && i >= 0) {
       serial_str = serial_str.substring(i, serial_str.length() - 2);
       String result = serial_str;
       serial_str = "";
-      //Serial.println(result);
       return result;
   } else if (getData && Serial2.available()){
     return read_from_serial();
@@ -412,16 +426,17 @@ String read_from_serial(){
 
 //получаем текущие параметры работы регулятора напряжения
 void get_current_power(){
-  //Serial.flush();
+  if (!PowerOn){
+    current_power_volt = 0;
+    target_power_volt = 0;
+    current_power_mode = "N";
+    return;
+  }
   String s = read_from_serial();
   if (s != ""){
     current_power_volt = hexToDec(s.substring(1, 4))/10.0F;
     target_power_volt = hexToDec(s.substring(4, 7))/10.0F;
     current_power_mode = s.substring(7);
-    //Serial.println("s = " + s + ", Vl1 = " + current_power_volt + ", Vl2 = " + target_power_volt + ", R = " + current_power_mode);
-    //set_current_power(48);
-    //T3EA3E80
-    //S3E8
   }
 }
 

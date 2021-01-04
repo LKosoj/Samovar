@@ -423,29 +423,49 @@ void setupMenu(){
 
 void encoder_getvalue(){
 
-  CurMin = (millis() / 60 ) % 60;
+  CurMin = (millis() / 1000 );
 
-  TScr = CurMin / 60 % 2;
-  if (TScr != OldTScr){
+  //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
+  if (CurMin == 120){
+//    lcd.begin(20,4);
     lcd.init();
-    lcd.begin(20,4);
-    OldTScr = TScr;
   }
     
-  // раз в секунду обновляем время на дисплее и запрашиваем давление и напряжение
+  // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
   if (OldMin != CurMin){
+
+    //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
+    check_alarm();
+    vTaskDelay(10);
+
+#ifdef USE_WATERSENSOR
+
+    if (WFpulseCount == 0 && SteamSensor.avgTemp > 70 && PowerOn){
+      WFAlarmCount ++;
+    } else {
+      WFAlarmCount = 0;
+    }
+    WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
+    WFflowMilliLitres = WFflowRate * 100 / 6;
+    WFtotalMilliLitres += WFflowMilliLitres;
+    WFpulseCount = 0;
+    oldTime = millis();
+    vTaskDelay(10);
+#endif
 
 #ifdef SAMOVAR_USE_POWER
     get_current_power();
+    vTaskDelay(10);
 #endif
 
     Crt = CurrentTime();
     StrCrt = Crt.substring(6) + "   " + millis2time();
     StrCrt.toCharArray(tst,20);
-    OldMin = CurMin;
     main_menu1.softUpdate();
-    vTaskDelay(2);
+    vTaskDelay(10);
     BME_getvalue(false);
+    vTaskDelay(10);
+    OldMin = CurMin;
   }
 
   // Check all the buttons
