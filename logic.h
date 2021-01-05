@@ -17,6 +17,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 unsigned int hexToDec(String hexString);
 void set_current_power(float Volt);
 void set_power_mode(String Mode);
+void open_valve(bool Val);
 
 //Получаем объем отбора
 float get_liguid_volume_by_step(int StepCount){
@@ -340,6 +341,10 @@ void check_alarm(){
   //сбросим паузу события безопасности
   if (alarm_t_min >= millis()) alarm_t_min = 0;
 
+  if (!valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
+    open_valve(true);
+  }
+
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn){
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
@@ -386,9 +391,18 @@ void check_alarm(){
 }
 
 void open_valve(bool Val){
+  valve_status = Val;
   if (Val){
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alert! {DEVICE_NAME} - Open cooling water!");
+#endif
     digitalWrite(RELE_CHANNEL2, LOW);
   } else {
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alert! {DEVICE_NAME} - Close cooling water!");
+#endif
     digitalWrite(RELE_CHANNEL2, HIGH);
   }
 }

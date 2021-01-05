@@ -189,6 +189,7 @@ void loop() {
   ArduinoOTA.handle();
 #endif
 
+  btn.tick();
 //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   

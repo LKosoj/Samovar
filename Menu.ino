@@ -457,7 +457,7 @@ void encoder_getvalue(){
     WFtotalMilliLitres += WFflowMilliLitres;
     WFpulseCount = 0;
     oldTime = millis();
-    vTaskDelay(15);
+    vTaskDelay(10);
 #endif
 
 #ifdef SAMOVAR_USE_POWER
@@ -469,9 +469,9 @@ void encoder_getvalue(){
     StrCrt = Crt.substring(6) + "   " + millis2time();
     StrCrt.toCharArray(tst,20);
     main_menu1.softUpdate();
-    vTaskDelay(10);
+    vTaskDelay(20);
     BME_getvalue(false);
-    vTaskDelay(15);
+    vTaskDelay(25);
     OldMin = CurMin;
   }
 
