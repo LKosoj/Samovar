@@ -48,3 +48,9 @@ Stepper driver A4988 https://aliexpress.ru/item/32963690420.html
 
 DC-DC converter https://aliexpress.ru/item/32261885063.html?spm=a2g0s.9042311.0.0.264d33ed8ASDhI
 
+Button https://aliexpress.ru/item/Black-Push-Button-Switch-4-Pin-12mm-Waterproof-illuminated-Led-Light-Metal-Flat-Momentary-Switches-with/33014419878.html?spm=a2g0s.9042311.0.0.264d33edM5K5ib
+
+Flow sensor https://aliexpress.ru/item/G1-4-0-3-3L-min-Water-Coffee-Flow-Hall-Sensor-Switch-Meter-Flowmeter-Counter/2052754204.html?spm=a2g0s.9042311.0.0.264d33ed0tHl0a&sku_id=51948482384
+
+Adum https://aliexpress.ru/item/Magnetic-Isolator-Board-Module-Replace-Optocouplers-CJMCU-1201-ADUM1201-Isolator-ADUM1201ARZ-SOIC-8-Isolator-SPI-Interface/32789240308.html?spm=a2g0s.9042311.0.0.264d33ed0hX3vj&sku_id=63584285301
+
