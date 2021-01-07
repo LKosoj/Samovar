@@ -140,6 +140,8 @@ chart.dataSource.parser.options.useColumnNames = true;
 // Create axes
 var dateAxis = chart.xAxes.push(new am4charts.CategoryAxis());
 dateAxis.dataFields.category = "Date";
+//dateAxis.renderer.minGridDistance = 60;
+
 // Create value axis
 var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 var valueAxis1 = chart.yAxes.push(new am4charts.ValueAxis());
@@ -150,6 +152,7 @@ series1.dataFields.categoryX = "Date";
 series1.name = "Температура пара";
 series1.strokeWidth = 3;
 series1.tensionX = 0.7;
+series1.tooltipText = "{valueY.value}";
 //series1.bullets.push(new am4charts.CircleBullet());
 
 var series2 = chart.series.push(new am4charts.LineSeries());
@@ -158,6 +161,7 @@ series2.dataFields.categoryX = "Date";
 series2.name = "Температура в царге";
 series2.strokeWidth = 3;
 series2.tensionX = 0.7;
+series2.tooltipText = "{valueY.value}";
 //series2.bullets.push(new am4charts.CircleBullet());
 
 var series3 = chart.series.push(new am4charts.LineSeries());
@@ -166,6 +170,7 @@ series3.dataFields.categoryX = "Date";
 series3.name = "Температура воды";
 series3.strokeWidth = 3;
 series3.tensionX = 0.7;
+series3.tooltipText = "{valueY.value}";
 //series3.bullets.push(new am4charts.CircleBullet());
 
 var series4 = chart.series.push(new am4charts.LineSeries());
@@ -174,6 +179,7 @@ series4.dataFields.categoryX = "Date";
 series4.name = "Температура в кубе";
 series4.strokeWidth = 3;
 series4.tensionX = 0.7;
+series4.tooltipText = "{valueY.value}";
 //series4.bullets.push(new am4charts.CircleBullet());
 
 var series5 = chart.series.push(new am4charts.LineSeries());
@@ -183,6 +189,7 @@ series5.dataFields.categoryX = "Date";
 series5.name = "Атмосферное давление";
 series5.strokeWidth = 3;
 series5.tensionX = 0.7;
+series5.tooltipText = "{valueY.value}";
 
 //chart.cursor = new am4charts.XYCursor();
 //chart.cursor.snapToSeries = series1;
@@ -190,9 +197,20 @@ series5.tensionX = 0.7;
 
 ////chart.scrollbarY = new am4core.Scrollbar();
 chart.scrollbarX = new am4core.Scrollbar();
+//var scrollbarX = new am4charts.XYChartScrollbar();
+//scrollbarX.series.push(dateAxis);
+//chart.scrollbarX = scrollbarX;
+
+chart.cursor = new am4charts.XYCursor();
+chart.cursor.xAxis = dateAxis;
+
 
 // Add legend
 chart.legend = new am4charts.Legend();
+//chart.legend = new am4charts.Legend();
+//chart.legend.parent = chart.plotContainer;
+//chart.legend.zIndex = 100;
+//chart.legend.valueLabels.template.text = "{valueY.value.formatNumber('$#.')}";
 });
 
 function refresh_chart(){
