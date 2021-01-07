@@ -425,13 +425,13 @@ void open_valve(bool Val){
   if (Val){
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alert! {DEVICE_NAME} - Open cooling water!");
+    Blynk.notify("Warning! {DEVICE_NAME} - Open cooling water!");
 #endif
     digitalWrite(RELE_CHANNEL2, LOW);
   } else {
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alert! {DEVICE_NAME} - Close cooling water!");
+    Blynk.notify("Warning! {DEVICE_NAME} - Close cooling water!");
 #endif
     digitalWrite(RELE_CHANNEL2, HIGH);
   }

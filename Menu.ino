@@ -446,9 +446,6 @@ void encoder_getvalue(){
       for (int i = ProgramNum + 1; i < ProgramLen; i++){
         WthdrwTimeAll += program[i].Time;
       }
-      Serial.print(WthdrwTime);
-      Serial.print("\t");
-      Serial.println(WthdrwTimeAll);
       WthdrwTimeS = (String)((unsigned int)WthdrwTime) + ":" + (String)((unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60));
       WthdrwTimeAllS = (String)((unsigned int)WthdrwTimeAll) + ":" + (String)((unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60));
       
