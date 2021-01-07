@@ -43,6 +43,14 @@ BLYNK_READ(V9){
 Blynk.virtualWrite(V9, ActualVolumePerHour);
 }
 
+BLYNK_READ(V10){
+Blynk.virtualWrite(V10, WthdrwTimeS + "; " + WthdrwTimeAllS);
+}
+
+BLYNK_READ(V11){
+Blynk.virtualWrite(V11, StrCrt);
+}
+
 BLYNK_READ(V14){
 Blynk.virtualWrite(V14, get_Samovar_Status());
 }
@@ -54,7 +62,7 @@ Blynk.virtualWrite(V16, target_power_volt);
 
 BLYNK_WRITE(V16)
 {
-  float Value16 = param.asFloat(); // assigning incoming value from pin V3 to a variable
+  float Value16 = param.asFloat(); // assigning incoming value from pin V16 to a variable
   set_current_power(Value16);
 }
 #endif

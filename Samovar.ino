@@ -247,12 +247,18 @@ void loop() {
       //если выполняется программа, и программа - пауза, переходим к следующей программе
       menu_samovar_start();
     }
+    //Выход из режима калибровки - нажатие на кнопку.
+    if (startval == 100) {
+      startval = 0;
+      menu_calibrate();
+      main_menu1.switch_focus();
+    }    
   }
 }
 
 void getjson (void){
 
-  DynamicJsonDocument jsondoc(1000);
+  DynamicJsonDocument jsondoc(1200);
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure,3);
@@ -267,7 +273,6 @@ void getjson (void){
   jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,3);
   jsondoc["TankTemp"] = format_float(TankSensor.avgTemp,3);
   jsondoc["version"] = SAMOVAR_VERSION;
-  vTaskDelay(2);
   jsondoc["VolumeAll"] = get_liquid_volume();
   jsondoc["currentvolume"] = currentvolume;
   jsondoc["ActualVolumePerHour"] = ActualVolumePerHour;
@@ -278,10 +283,13 @@ void getjson (void){
   jsondoc["CurrrentStepps"] = stepper.getCurrent();
   jsondoc["WthdrwlStatus"] = startval;
   jsondoc["CurrrentSpeed"] = stepper.getSpeed() * (byte)stepper.getState();
+  vTaskDelay(10);
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
   jsondoc["BodyTemp"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure),3);
   jsondoc["BodyTemp_St"] = format_float(SteamSensor.BodyTemp,3);
+//  jsondoc["WthdrwTime"] = WthdrwTimeS;
+//  jsondoc["WthdrwTimeAll"] = WthdrwTimeAllS;
   
 #ifdef SAMOVAR_USE_POWER
   jsondoc["current_power_volt"] = format_float(current_power_volt,1);
@@ -300,7 +308,7 @@ void getjson (void){
 }
 
 void connectWiFi(){
-
+  WiFi.setAutoReconnect(true);
   // Connect to WiFi network
   WiFi.begin(ssid, password);
   WiFi.setHostname(host);
@@ -323,11 +331,9 @@ void connectWiFi(){
   /*use mdns for host name resolution*/
   if (!MDNS.begin(host)) { //http://samovar.local
     Serial.println("Error setting up MDNS responder!");
-    while (1) {
-      delay(1000);
-    }
+  } else {
+    Serial.println("mDNS responder started");
   }
-  Serial.println("mDNS responder started");
 }
 
 void read_config(){

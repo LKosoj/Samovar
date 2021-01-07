@@ -29,8 +29,6 @@ LiquidLine lql_setup(0, 1, "/Setup");
 LiquidLine lql_ip(0, 2, "IP: ", ipstr);
 LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
 
-LiquidMenu main_menu1(lcd);
-
 LiquidLine lql_setup_steam_temp(0, 0, "^Steam temp: ", SamSetup.DeltaSteamTemp);
 LiquidLine lql_setup_pipe_temp(0, 1, "^Pipe temp: ", SamSetup.DeltaPipeTemp);
 LiquidLine lql_setup_water_temp(0, 2, "^Water temp: ", SamSetup.DeltaWaterTemp);
@@ -429,17 +427,37 @@ void encoder_getvalue(){
   if (CurMin == 120){
 //    lcd.begin(20,4);
     lcd.init();
+    vTaskDelay(10);
   }
     
   // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
   if (OldMin != CurMin){
 
-    //Считаем прогресс отбора для текущей программы
+    //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
     if (TargetStepps > 0){
-      WthdrwlProgress = (float)CurrrentStepps / (float)TargetStepps * 100;
+      //считаем прогресс
+      float wp = (float)CurrrentStepps / (float)TargetStepps;
+      
+      //считаем время для текущей строки программы
+      WthdrwTime = program[ProgramNum].Time * (1 - wp);
+      //суммируем время текущей строки программы и всех следующих за ней
+      WthdrwTimeAll = WthdrwTime;
+
+      for (int i = ProgramNum + 1; i < ProgramLen; i++){
+        WthdrwTimeAll += program[i].Time;
+      }
+      Serial.print(WthdrwTime);
+      Serial.print("\t");
+      Serial.println(WthdrwTimeAll);
+      WthdrwTimeS = (String)((unsigned int)WthdrwTime) + ":" + (String)((unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60));
+      WthdrwTimeAllS = (String)((unsigned int)WthdrwTimeAll) + ":" + (String)((unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60));
+      
+      //прогресс переводим в проценты
+      WthdrwlProgress = wp * 100;
     } else {
       WthdrwlProgress = 0;
     }
+    vTaskDelay(10);
 
     //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
     check_alarm();

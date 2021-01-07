@@ -105,13 +105,13 @@ void sensor_init(void){
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
   delay(4000);
-  writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
-  //delay(1000);
                                                                           // определяем устройства на шине
+#ifdef __SAMOVAR_DEBUG
   Serial.print("Locating DS18B20...");
   Serial.print("Found ");
   Serial.print(sensors.getDeviceCount(), DEC);
   Serial.println(" devices.");
+#endif
  
   // Инициализируем датчики температуры
   
@@ -123,6 +123,8 @@ void sensor_init(void){
    { Serial.println("Unable to find address for Device 2"); }             // если адрес датчика 2 не найден
   if (!sensors.getAddress(TankSensor.Sensor, 3))
    { Serial.println("Unable to find address for Device 3"); }             // если адрес датчика 3 не найден
+
+  writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
 
   sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
   sensors.requestTemperatures();
@@ -176,7 +178,7 @@ void sensor_init(void){
  digitalWrite(WATERSENSOR_PIN, HIGH);
 #endif
 
- set_program("H;450;0.1;1;0;80\nP;120;0;0;0;80;\nB;5000;0.75;2;0;0\nB;5000;0.75;3;0;0\nB;5000;0.75;4;0;0\nB;5000;0.75;5;0;0\nB;5000;0.75;6;0;0\nB;5000;0.75;7;0;0\nB;5000;0.75;8;0;0\nB;5000;0.75;9;0;0\nB;5000;0.75;10;0;0\n");
+ set_program("H;450;0.1;1;0;160\n");
 
  reset_sensor_counter();
 

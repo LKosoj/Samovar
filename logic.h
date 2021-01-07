@@ -188,6 +188,11 @@ String get_Samovar_Status(){
     SamovarStatus = "Разгон колонны/работа на себя";
     SamovarStatusInt = 50;
   }
+  
+  if (SamovarStatusInt == 10 || SamovarStatusInt == 15){
+    SamovarStatus += " До конца текущей строки программы: " + WthdrwTimeS;
+    SamovarStatus += " До конца текущей программы: " + WthdrwTimeAllS;
+  }
   if (SteamSensor.BodyTemp > 0) SamovarStatus+=" Температура отбора тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure),3);
   
   return SamovarStatus;
@@ -220,6 +225,7 @@ void set_program(String WProgram){
     program[i].Temp = atof(pair);
     pair = strtok(NULL, "\n");
     program[i].Power = atof(pair);
+    program[i].Time = program[i].Volume / program[i].Speed / 1000;
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
@@ -373,6 +379,10 @@ void check_alarm(){
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP) && PowerOn && alarm_t_min == 0){
     //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
     //Если уже снижали - надо подождать 20 секунд, так как процесс инерционный
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical.! Water error. Voltage down from " + (String)target_power_volt);
+#endif
     set_current_power(target_power_volt - 5);
     alarm_t_min = millis() + 20000;
   }
@@ -385,9 +395,29 @@ void check_alarm(){
     Blynk.notify("Alert! {DEVICE_NAME} - working mode set!");
 #endif
     set_power_mode(POWER_WORK_MODE);
-    set_current_power(PRESET_VOLTAGE);
+    //Устанавливаем напряжение, заданное в первой строке программы
+    set_current_power(program[0].Power);
   }
 #endif
+
+#ifdef SAMOVAR_USE_BLYNK
+  //Если используется Blynk - пишем оператору
+  //что разгон и стабилизация завершены - три минуты температура пара не меняется больше, чем на 0.1 градус
+  if (SamovarStatusInt == 50 && SteamSensor.avgTemp > 70){
+    float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
+    d = abs(d);
+    if (d < 0.1){
+      acceleration_temp += 1;
+      if (acceleration_temp == 60 * 3) {
+        Blynk.notify("{DEVICE_NAME} - Acceleration is complete.");
+      }
+    } else {
+      acceleration_temp = 0;
+      SteamSensor.PrevTemp = SteamSensor.avgTemp;
+    }
+  }
+#endif
+
 }
 
 void open_valve(bool Val){
