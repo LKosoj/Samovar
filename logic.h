@@ -481,7 +481,7 @@ void get_current_power(){
   if (s != ""){
     current_power_volt = hexToDec(s.substring(1, 4))/10.0F;
     target_power_volt = hexToDec(s.substring(4, 7))/10.0F;
-    current_power_mode = s.substring(7);
+    current_power_mode = s.substring(7, 8);
   }
 }
 
