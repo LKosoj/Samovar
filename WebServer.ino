@@ -2,7 +2,7 @@ void  web_command(AsyncWebServerRequest *request);
 void  handleSave(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request);
 
-void WebServerInit(void){
+void WebServerInit(void) {
 
   FS_init();                                        // Включаем работу с файловой системой
 
@@ -12,14 +12,14 @@ void WebServerInit(void){
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
 
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(SPIFFS, "/index.htm", String(), false);
   });
-  server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(SPIFFS, "/index.htm", String(), false);
   });
 
-  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
+  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
     //TempStr = temp;
     getjson();
     request->send(200, "text/html", jsonstr);
@@ -27,42 +27,42 @@ void WebServerInit(void){
     //Serial.println("  web jsonstr = " + jsonstr);
 #endif
   });
-  server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/command", HTTP_GET, [](AsyncWebServerRequest * request) {
     web_command(request);
   });
-  server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request){
+  server.on("/program", HTTP_POST, [](AsyncWebServerRequest * request) {
     web_program(request);
   });
-  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest * request) {
     calibrate_command(request);
   });
-  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest * request) {
     get_data_log(request);
   });
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
-  
-  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request){
-     //Serial.println("SAVE");
-        handleSave(request);
+
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest * request) {
+    //Serial.println("SAVE");
+    handleSave(request);
   });
 
-  server.onFileUpload([](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final){
-    if(!index)
+  server.onFileUpload([](AsyncWebServerRequest * request, const String & filename, size_t index, uint8_t *data, size_t len, bool final) {
+    if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
     Serial.printf("%s", (const char*)data);
-    if(final)
-      Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index+len);
+    if (final)
+      Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
-  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-    if(!index)
+  server.onRequestBody([](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total) {
+    if (!index)
       Serial.printf("BodyStart: %u\n", total);
     Serial.printf("%s", (const char*)data);
-    if(index + len == total)
+    if (index + len == total)
       Serial.printf("BodyEnd: %u\n", total);
   });
 
-  
+
   server.begin();
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");
@@ -81,7 +81,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
   else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
   else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
-  
+
   return String();
 }
 
@@ -90,21 +90,21 @@ String calibrateKeyProcessor(const String& var)
   static char outstr[15];
   if (var == "StepperStep") return (String)STEPPER_MAX_SPEED;
   else if (var == "StepperStepMl") return (String)(SamSetup.StepperStepMl * 100);
-  
+
   return String();
 }
 
-void  handleSave(AsyncWebServerRequest *request){
-/*
-  int params = request->params();
-  for(int i=0;i<params;i++){
-    AsyncWebParameter* p = request->getParam(i);
-    Serial.print(p->name().c_str());
-    Serial.print("=");
-    Serial.println(p->value().c_str());
-  }
-//return;
-*/
+void  handleSave(AsyncWebServerRequest *request) {
+  /*
+    int params = request->params();
+    for(int i=0;i<params;i++){
+      AsyncWebParameter* p = request->getParam(i);
+      Serial.print(p->name().c_str());
+      Serial.print("=");
+      Serial.println(p->value().c_str());
+    }
+    //return;
+  */
   if (request->hasArg("DeltaSteamTemp")) {
     SamSetup.DeltaSteamTemp = request->arg("DeltaSteamTemp").toFloat();
   }
@@ -133,12 +133,12 @@ void  handleSave(AsyncWebServerRequest *request){
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
   if (request->hasArg("stepperstepml")) {
-    SamSetup.StepperStepMl = request->arg("stepperstepml").toInt()/100;
+    SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
   }
   if (request->hasArg("WProgram")) {
     set_program(request->arg("WProgram"));
   }
-  
+
   // Сохраняем изменения в память.
   EEPROM.put(0, SamSetup);
   EEPROM.commit();
@@ -150,70 +150,70 @@ void  handleSave(AsyncWebServerRequest *request){
   request->send(response);
 }
 
-void  web_command(AsyncWebServerRequest *request){
+void  web_command(AsyncWebServerRequest *request) {
 
-int params = request->params();
-/*  
-  for(int i=0;i<params;i++){
-    AsyncWebParameter* p = request->getParam(i);
-    Serial.print(p->name().c_str());
-    Serial.print("=");
-    Serial.println(p->value().c_str());
-  }
-//return;
-*/
+  int params = request->params();
+  /*
+    for(int i=0;i<params;i++){
+      AsyncWebParameter* p = request->getParam(i);
+      Serial.print(p->name().c_str());
+      Serial.print("=");
+      Serial.println(p->value().c_str());
+    }
+    //return;
+  */
   if (request->params() == 1) {
-   if (request->hasArg("start") && PowerOn) {
-    sam_command_sync = SAMOVAR_START;
-   }
-   if (request->hasArg("power")) {
-    sam_command_sync = SAMOVAR_POWER;
-   }
-   if (request->hasArg("reset")) {
-    sam_command_sync = SAMOVAR_RESET;
-   }
-   if (request->hasArg("voltage")) {
-     set_current_power(request->arg("voltage").toFloat());
-   }
-   if (request->hasArg("pause")) {
-    if (PauseOn) {
-      sam_command_sync = SAMOVAR_CONTINUE;
-    } else {
-      sam_command_sync = SAMOVAR_PAUSE;
+    if (request->hasArg("start") && PowerOn) {
+      sam_command_sync = SAMOVAR_START;
     }
-   }
+    if (request->hasArg("power")) {
+      sam_command_sync = SAMOVAR_POWER;
+    }
+    if (request->hasArg("reset")) {
+      sam_command_sync = SAMOVAR_RESET;
+    }
+    if (request->hasArg("voltage")) {
+      set_current_power(request->arg("voltage").toFloat());
+    }
+    if (request->hasArg("pause")) {
+      if (PauseOn) {
+        sam_command_sync = SAMOVAR_CONTINUE;
+      } else {
+        sam_command_sync = SAMOVAR_PAUSE;
+      }
+    }
   }
-    request->send(200,"text/plain","OK");
+  request->send(200, "text/plain", "OK");
 }
-void  web_program(AsyncWebServerRequest *request){
+void  web_program(AsyncWebServerRequest *request) {
 
-int params = request->params();
-    if (request->hasArg("WProgram")) {
-      set_program(request->arg("WProgram"));
-      request->send(200,"text/plain",get_program(CAPACITY_NUM * 2));
-    }
+  int params = request->params();
+  if (request->hasArg("WProgram")) {
+    set_program(request->arg("WProgram"));
+    request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
+  }
 }
 
-void  calibrate_command(AsyncWebServerRequest *request){
+void  calibrate_command(AsyncWebServerRequest *request) {
   if (request->params() >= 1) {
-   if (request->hasArg("stpstep")) {
-    CurrrentStepperSpeed = request->arg("stpstep").toInt();
-   }
-   if (request->hasArg("start") && startval == 0) {
-    sam_command_sync = CALIBRATE_START;
-   }
-   if (request->hasArg("finish") && startval == 100) {
-    sam_command_sync = CALIBRATE_STOP;
-   }
+    if (request->hasArg("stpstep")) {
+      CurrrentStepperSpeed = request->arg("stpstep").toInt();
+    }
+    if (request->hasArg("start") && startval == 0) {
+      sam_command_sync = CALIBRATE_START;
+    }
+    if (request->hasArg("finish") && startval == 100) {
+      sam_command_sync = CALIBRATE_STOP;
+    }
   }
   vTaskDelay(10);
-  if (sam_command_sync != SAMOVAR_NONE){
+  if (sam_command_sync != SAMOVAR_NONE) {
     int s = round((float)stepper.getCurrent() / 100) * 100;
     request->send(200, "text/plain", (String)s);
   } else request->send(200, "text/plain", "OK");
 }
 
-void get_data_log(AsyncWebServerRequest *request){
+void get_data_log(AsyncWebServerRequest *request) {
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data.csv", String(), true);
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");

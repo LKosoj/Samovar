@@ -2,69 +2,69 @@ const char* http_username = "admin";
 const char* http_password = "admin";
 
 
-void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
-  if(type == WS_EVT_CONNECT){
+void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len) {
+  if (type == WS_EVT_CONNECT) {
     Serial.printf("ws[%s][%u] connect\n", server->url(), client->id());
     client->printf("Hello Client %u :)", client->id());
     client->ping();
-  } else if(type == WS_EVT_DISCONNECT){
+  } else if (type == WS_EVT_DISCONNECT) {
     Serial.printf("ws[%s][%u] disconnect\n", server->url(), client->id());
-  } else if(type == WS_EVT_ERROR){
+  } else if (type == WS_EVT_ERROR) {
     Serial.printf("ws[%s][%u] error(%u): %s\n", server->url(), client->id(), *((uint16_t*)arg), (char*)data);
-  } else if(type == WS_EVT_PONG){
-    Serial.printf("ws[%s][%u] pong[%u]: %s\n", server->url(), client->id(), len, (len)?(char*)data:"");
-  } else if(type == WS_EVT_DATA){
+  } else if (type == WS_EVT_PONG) {
+    Serial.printf("ws[%s][%u] pong[%u]: %s\n", server->url(), client->id(), len, (len) ? (char*)data : "");
+  } else if (type == WS_EVT_DATA) {
     AwsFrameInfo * info = (AwsFrameInfo*)arg;
     String msg = "";
-    if(info->final && info->index == 0 && info->len == len){
+    if (info->final && info->index == 0 && info->len == len) {
       //the whole message is in a single frame and we got all of it's data
-      Serial.printf("ws[%s][%u] %s-message[%llu]: ", server->url(), client->id(), (info->opcode == WS_TEXT)?"text":"binary", info->len);
+      Serial.printf("ws[%s][%u] %s-message[%llu]: ", server->url(), client->id(), (info->opcode == WS_TEXT) ? "text" : "binary", info->len);
 
-      if(info->opcode == WS_TEXT){
-        for(size_t i=0; i < info->len; i++) {
+      if (info->opcode == WS_TEXT) {
+        for (size_t i = 0; i < info->len; i++) {
           msg += (char) data[i];
         }
       } else {
         char buff[3];
-        for(size_t i=0; i < info->len; i++) {
+        for (size_t i = 0; i < info->len; i++) {
           sprintf(buff, "%02x ", (uint8_t) data[i]);
           msg += buff ;
         }
       }
-      Serial.printf("%s\n",msg.c_str());
+      Serial.printf("%s\n", msg.c_str());
 
-      if(info->opcode == WS_TEXT)
+      if (info->opcode == WS_TEXT)
         client->text("I got your text message");
       else
         client->binary("I got your binary message");
     } else {
       //message is comprised of multiple frames or the frame is split into multiple packets
-      if(info->index == 0){
-        if(info->num == 0)
-          Serial.printf("ws[%s][%u] %s-message start\n", server->url(), client->id(), (info->message_opcode == WS_TEXT)?"text":"binary");
+      if (info->index == 0) {
+        if (info->num == 0)
+          Serial.printf("ws[%s][%u] %s-message start\n", server->url(), client->id(), (info->message_opcode == WS_TEXT) ? "text" : "binary");
         Serial.printf("ws[%s][%u] frame[%u] start[%llu]\n", server->url(), client->id(), info->num, info->len);
       }
 
-      Serial.printf("ws[%s][%u] frame[%u] %s[%llu - %llu]: ", server->url(), client->id(), info->num, (info->message_opcode == WS_TEXT)?"text":"binary", info->index, info->index + len);
+      Serial.printf("ws[%s][%u] frame[%u] %s[%llu - %llu]: ", server->url(), client->id(), info->num, (info->message_opcode == WS_TEXT) ? "text" : "binary", info->index, info->index + len);
 
-      if(info->opcode == WS_TEXT){
-        for(size_t i=0; i < len; i++) {
+      if (info->opcode == WS_TEXT) {
+        for (size_t i = 0; i < len; i++) {
           msg += (char) data[i];
         }
       } else {
         char buff[3];
-        for(size_t i=0; i < len; i++) {
+        for (size_t i = 0; i < len; i++) {
           sprintf(buff, "%02x ", (uint8_t) data[i]);
           msg += buff ;
         }
       }
-      Serial.printf("%s\n",msg.c_str());
+      Serial.printf("%s\n", msg.c_str());
 
-      if((info->index + len) == info->len){
+      if ((info->index + len) == info->len) {
         Serial.printf("ws[%s][%u] frame[%u] end[%llu]\n", server->url(), client->id(), info->num, info->len);
-        if(info->final){
-          Serial.printf("ws[%s][%u] %s-message end\n", server->url(), client->id(), (info->message_opcode == WS_TEXT)?"text":"binary");
-          if(info->message_opcode == WS_TEXT)
+        if (info->final) {
+          Serial.printf("ws[%s][%u] %s-message end\n", server->url(), client->id(), (info->message_opcode == WS_TEXT) ? "text" : "binary");
+          if (info->message_opcode == WS_TEXT)
             client->text("I got your text message");
           else
             client->binary("I got your binary message");
@@ -91,71 +91,71 @@ String formatBytes(size_t bytes) {
 
 // Инициализация FFS
 void FS_init(void)
-{ 
+{
   SPIFFS.begin();
   {
     File dir = SPIFFS.open("/");
     while (dir.openNextFile())
-        { 
-          String fileName = dir.name();
-          size_t fileSize = dir.size(); 
-        }
+    {
+      String fileName = dir.name();
+      size_t fileSize = dir.size();
+    }
   }
 
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
 
-  events.onConnect([](AsyncEventSourceClient *client){
-    client->send("hello!",NULL,millis(),1000);
+  events.onConnect([](AsyncEventSourceClient * client) {
+    client->send("hello!", NULL, millis(), 1000);
   });
   server.addHandler(&events);
 
-  server.addHandler(new SPIFFSEditor(SPIFFS, http_username,http_password));
+  server.addHandler(new SPIFFSEditor(SPIFFS, http_username, http_password));
 
-  server.on("/heap", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/heap", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(200, "text/plain", get_sys_info());
   });
 
   //server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.htm");
 
-  server.onNotFound([](AsyncWebServerRequest *request){
+  server.onNotFound([](AsyncWebServerRequest * request) {
     Serial.printf("NOT_FOUND: ");
-    if(request->method() == HTTP_GET)
+    if (request->method() == HTTP_GET)
       Serial.printf("GET");
-    else if(request->method() == HTTP_POST)
+    else if (request->method() == HTTP_POST)
       Serial.printf("POST");
-    else if(request->method() == HTTP_DELETE)
+    else if (request->method() == HTTP_DELETE)
       Serial.printf("DELETE");
-    else if(request->method() == HTTP_PUT)
+    else if (request->method() == HTTP_PUT)
       Serial.printf("PUT");
-    else if(request->method() == HTTP_PATCH)
+    else if (request->method() == HTTP_PATCH)
       Serial.printf("PATCH");
-    else if(request->method() == HTTP_HEAD)
+    else if (request->method() == HTTP_HEAD)
       Serial.printf("HEAD");
-    else if(request->method() == HTTP_OPTIONS)
+    else if (request->method() == HTTP_OPTIONS)
       Serial.printf("OPTIONS");
     else
       Serial.printf("UNKNOWN");
     Serial.printf(" http://%s%s\n", request->host().c_str(), request->url().c_str());
 
-    if(request->contentLength()){
+    if (request->contentLength()) {
       Serial.printf("_CONTENT_TYPE: %s\n", request->contentType().c_str());
       Serial.printf("_CONTENT_LENGTH: %u\n", request->contentLength());
     }
 
     int headers = request->headers();
     int i;
-    for(i=0;i<headers;i++){
+    for (i = 0; i < headers; i++) {
       AsyncWebHeader* h = request->getHeader(i);
       Serial.printf("_HEADER[%s]: %s\n", h->name().c_str(), h->value().c_str());
     }
 
     int params = request->params();
-    for(i=0;i<params;i++){
+    for (i = 0; i < params; i++) {
       AsyncWebParameter* p = request->getParam(i);
-      if(p->isFile()){
+      if (p->isFile()) {
         Serial.printf("_FILE[%s]: %s, size: %u\n", p->name().c_str(), p->value().c_str(), p->size());
-      } else if(p->isPost()){
+      } else if (p->isPost()) {
         Serial.printf("_POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
       } else {
         Serial.printf("_GET[%s]: %s\n", p->name().c_str(), p->value().c_str());
@@ -164,34 +164,34 @@ void FS_init(void)
 
     request->send(404);
   });
-  server.onFileUpload([](AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final){
-    if(!index)
+  server.onFileUpload([](AsyncWebServerRequest * request, const String & filename, size_t index, uint8_t *data, size_t len, bool final) {
+    if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
     Serial.printf("%s", (const char*)data);
-    if(final)
-      Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index+len);
+    if (final)
+      Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
-  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-    if(!index)
+  server.onRequestBody([](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total) {
+    if (!index)
       Serial.printf("BodyStart: %u\n", total);
     Serial.printf("%s", (const char*)data);
-    if(index + len == total)
+    if (index + len == total)
       Serial.printf("BodyEnd: %u\n", total);
   });
 
 }
 
-bool exists(String path){
+bool exists(String path) {
   bool yes = false;
   File file = SPIFFS.open(path, "r");
-  if(!file.isDirectory()){
+  if (!file.isDirectory()) {
     yes = true;
   }
   file.close();
   return yes;
 }
 
-void create_data(){
+void create_data() {
   File fileToWrite = SPIFFS.open("/data.csv", FILE_WRITE);
   fileToWrite.println("Date,Steam,Pipe,Water,Tank,Pressure");
   fileToWrite.close();
@@ -203,7 +203,7 @@ void create_data(){
   bme_prev_pressure = 0;
 }
 
-void IRAM_ATTR append_data(){
+void IRAM_ATTR append_data() {
   bool w = false;
   String str = Crt + ",";
   str += format_float(SteamSensor.avgTemp, 3);
@@ -215,7 +215,7 @@ void IRAM_ATTR append_data(){
   str += format_float(TankSensor.avgTemp, 3);
   str += ",";
   str += format_float(bme_pressure, 2);
-  
+
   if (SteamSensor.avgTemp != SteamSensor.PrevTemp) {
     SteamSensor.PrevTemp = SteamSensor.avgTemp;
     w = true;
@@ -237,10 +237,10 @@ void IRAM_ATTR append_data(){
     w = true;
   }
   if (w)
-  fileToAppend.println(str);
+    fileToAppend.println(str);
 }
 
-String get_sys_info(){
+String get_sys_info() {
   String result_st = "totalBytes = " + (String)SPIFFS.totalBytes() + "; usedBytes = ";
   vTaskDelay(2);
   result_st += (String)SPIFFS.usedBytes() + "; Free Heap = " + (String)ESP.getFreeHeap();

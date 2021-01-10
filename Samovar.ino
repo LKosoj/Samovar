@@ -47,7 +47,7 @@
 #include "sensorinit.h"
 
 void StepperTicker( void * parameter) {
-  for(;;) {
+  for (;;) {
     //Это должно работать максимально быстро
     StepperMoving = stepper.tick();
     //vTaskDelay(2);
@@ -55,8 +55,8 @@ void StepperTicker( void * parameter) {
 }
 
 #ifdef USE_WATERSENSOR
-void IRAM_ATTR WFpulseCounter(){
-    WFpulseCount++;
+void IRAM_ATTR WFpulseCounter() {
+  WFpulseCount++;
 }
 #endif
 
@@ -92,33 +92,33 @@ void setup() {
 
   //Читаем сохраненную конфигурацию
   read_config();
-   
+
   encoder.tick();  // отработка нажатия
   //Если при старте нажата кнопка энкодера - сохраненные параметры сбрасываются на параметры по умолчанию
-  if (encoder.isHold()){
+  if (encoder.isHold()) {
     SamSetup.flag = 255;
   }
 
- if (SamSetup.flag > 250){
-   SamSetup.flag = 1;
-   SamSetup.DeltaSteamTemp = 0;
-   SamSetup.DeltaPipeTemp = 0;
-   SamSetup.DeltaWaterTemp = 0;
-   SamSetup.DeltaTankTemp = 0;
-   SamSetup.SetSteamTemp = 0;
-   SamSetup.SetPipeTemp = 0;
-   SamSetup.SetWaterTemp = 0;
-   SamSetup.SetTankTemp = 0;
-   SamSetup.StepperStepMl = STEPPER_STEP_ML;
-   EEPROM.put(0, SamSetup);
-   EEPROM.commit();
-   read_config();
- }
+  if (SamSetup.flag > 250) {
+    SamSetup.flag = 1;
+    SamSetup.DeltaSteamTemp = 0;
+    SamSetup.DeltaPipeTemp = 0;
+    SamSetup.DeltaWaterTemp = 0;
+    SamSetup.DeltaTankTemp = 0;
+    SamSetup.SetSteamTemp = 0;
+    SamSetup.SetPipeTemp = 0;
+    SamSetup.SetWaterTemp = 0;
+    SamSetup.SetTankTemp = 0;
+    SamSetup.StepperStepMl = STEPPER_STEP_ML;
+    EEPROM.put(0, SamSetup);
+    EEPROM.commit();
+    read_config();
+  }
 
   //Настраиваем меню
   Serial.println("Samovar started");
   setupMenu();
-  writeString("      Samovar ",1);
+  writeString("      Samovar ", 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   //delay(2000);
   writeString("Connecting to WI-FI", 3);
@@ -129,24 +129,28 @@ void setup() {
 
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
-  ArduinoOTA.onStart([]() { events.send("Update Start", "ota"); });
-  ArduinoOTA.onEnd([]() { events.send("Update End", "ota"); });
+  ArduinoOTA.onStart([]() {
+    events.send("Update Start", "ota");
+  });
+  ArduinoOTA.onEnd([]() {
+    events.send("Update End", "ota");
+  });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     char p[32];
-    sprintf(p, "Progress: %u%%\n", (progress/(total/100)));
+    sprintf(p, "Progress: %u%%\n", (progress / (total / 100)));
     events.send(p, "ota");
   });
   ArduinoOTA.onError([](ota_error_t error) {
-    if(error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
-    else if(error == OTA_BEGIN_ERROR) events.send("Begin Failed", "ota");
-    else if(error == OTA_CONNECT_ERROR) events.send("Connect Failed", "ota");
-    else if(error == OTA_RECEIVE_ERROR) events.send("Recieve Failed", "ota");
-    else if(error == OTA_END_ERROR) events.send("End Failed", "ota");
+    if (error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
+    else if (error == OTA_BEGIN_ERROR) events.send("Begin Failed", "ota");
+    else if (error == OTA_CONNECT_ERROR) events.send("Connect Failed", "ota");
+    else if (error == OTA_RECEIVE_ERROR) events.send("Recieve Failed", "ota");
+    else if (error == OTA_END_ERROR) events.send("End Failed", "ota");
   });
   ArduinoOTA.setHostname(SAMOVAR_HOST);
   ArduinoOTA.begin();
 #endif
-  
+
   sensor_init();
 
   WebServerInit();
@@ -162,13 +166,13 @@ void setup() {
   attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
 
   xTaskCreatePinnedToCore(
-      StepperTicker, /* Function to implement the task */
-      "StepperTicker", /* Name of the task */
-      1200,  /* Stack size in words */
-      NULL,  /* Task input parameter */
-      0,  /* Priority of the task */
-      &StepperTickerTask1,  /* Task handle. */
-      0); /* Core where the task should run */
+    StepperTicker, /* Function to implement the task */
+    "StepperTicker", /* Name of the task */
+    1200,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &StepperTickerTask1,  /* Task handle. */
+    0); /* Core where the task should run */
 
   // Start update of environment data every SAMOVAR_LOG_PERIOD second
   SensorTicker.attach(SAMOVAR_LOG_PERIOD, triggerGetSensor);
@@ -177,10 +181,10 @@ void setup() {
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);
-  
+
   //сбрасываем нажатие на кнопку
   btn.setType(LOW_PULL);
-  btn.setTimeout(800); 
+  btn.setTimeout(800);
   btn.resetStates();
 }
 
@@ -190,60 +194,60 @@ void loop() {
 #endif
 
   btn.tick();
-//Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
+  //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
-  
+
 #ifdef SAMOVAR_USE_BLYNK
   Blynk.run();
 #endif
 
   ws.cleanupClients();
 
-  if (sam_command_sync != SAMOVAR_NONE){
-    switch (sam_command_sync){
-        case SAMOVAR_START:
-          menu_samovar_start();
-          break;
-        case SAMOVAR_POWER:
-          set_power(!PowerOn);
-          break;
-        case SAMOVAR_RESET:
-          samovar_reset();
-          break;
-        case CALIBRATE_START:
-          pump_calibrate(CurrrentStepperSpeed);
-          break;
-        case CALIBRATE_STOP:
-          pump_calibrate(0);
-          break;
-        case SAMOVAR_PAUSE:
-          pause_withdrawal(true);
-          break;
-        case SAMOVAR_CONTINUE:
-          pause_withdrawal(false);
-          break;
+  if (sam_command_sync != SAMOVAR_NONE) {
+    switch (sam_command_sync) {
+      case SAMOVAR_START:
+        menu_samovar_start();
+        break;
+      case SAMOVAR_POWER:
+        set_power(!PowerOn);
+        break;
+      case SAMOVAR_RESET:
+        samovar_reset();
+        break;
+      case CALIBRATE_START:
+        pump_calibrate(CurrrentStepperSpeed);
+        break;
+      case CALIBRATE_STOP:
+        pump_calibrate(0);
+        break;
+      case SAMOVAR_PAUSE:
+        pause_withdrawal(true);
+        break;
+      case SAMOVAR_CONTINUE:
+        pause_withdrawal(false);
+        break;
     }
     sam_command_sync = SAMOVAR_NONE;
   }
-      
-  if (startval > 0){
+
+  if (startval > 0) {
     withdrawal();     //функция расчета отбора
   }
   encoder_getvalue();
 
   btn.tick();
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
-  if (btn.isPress()){
+  if (btn.isPress()) {
     //если выключен - включаем
     if (!PowerOn) {
       set_power(true);
     } else if (startval == 0) {
       //если включен и программа отбора не работает - запускаем программу
       menu_samovar_start();
-    } else if (startval != 0 && !program_Pause){
+    } else if (startval != 0 && !program_Pause) {
       //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
       pause_withdrawal(!PauseOn);
-    } else if (startval != 0 && program_Pause){
+    } else if (startval != 0 && program_Pause) {
       //если выполняется программа, и программа - пауза, переходим к следующей программе
       menu_samovar_start();
     }
@@ -252,26 +256,26 @@ void loop() {
       startval = 0;
       menu_calibrate();
       main_menu1.switch_focus();
-    }    
+    }
   }
 }
 
-void getjson (void){
+void getjson (void) {
 
   DynamicJsonDocument jsondoc(1200);
 
   jsondoc["bme_temp"] = bme_temp;
-  jsondoc["bme_pressure"] = format_float(bme_pressure,3);
-  jsondoc["start_pressure"] = format_float(start_pressure,3);
+  jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
+  jsondoc["start_pressure"] = format_float(start_pressure, 3);
   jsondoc["bme_humidity"] = bme_humidity;
   jsondoc["bme_altitude"] = bme_altitude;
   jsondoc["bme_gas"] = bme_gas;
   jsondoc["crnt_tm"] = Crt;
   jsondoc["stm"] = millis2time();
-  jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp,3);
-  jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp,3);
-  jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp,3);
-  jsondoc["TankTemp"] = format_float(TankSensor.avgTemp,3);
+  jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp, 3);
+  jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp, 3);
+  jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp, 3);
+  jsondoc["TankTemp"] = format_float(TankSensor.avgTemp, 3);
   jsondoc["version"] = SAMOVAR_VERSION;
   jsondoc["VolumeAll"] = get_liquid_volume();
   jsondoc["currentvolume"] = currentvolume;
@@ -286,19 +290,19 @@ void getjson (void){
   vTaskDelay(10);
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
-  jsondoc["BodyTemp"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure),3);
-  jsondoc["BodyTemp_St"] = format_float(SteamSensor.BodyTemp,3);
-//  jsondoc["WthdrwTime"] = WthdrwTimeS;
-//  jsondoc["WthdrwTimeAll"] = WthdrwTimeAllS;
-  
+  jsondoc["BodyTemp"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  jsondoc["BodyTemp_St"] = format_float(SteamSensor.BodyTemp, 3);
+  //  jsondoc["WthdrwTime"] = WthdrwTimeS;
+  //  jsondoc["WthdrwTimeAll"] = WthdrwTimeAllS;
+
 #ifdef SAMOVAR_USE_POWER
-  jsondoc["current_power_volt"] = format_float(current_power_volt,1);
-  jsondoc["target_power_volt"] = format_float(target_power_volt,1);
+  jsondoc["current_power_volt"] = format_float(current_power_volt, 1);
+  jsondoc["target_power_volt"] = format_float(target_power_volt, 1);
   jsondoc["current_power_mode"] = current_power_mode;
 #endif
 
 #ifdef USE_WATERSENSOR
-  jsondoc["WFflowRate"] = format_float(WFflowRate,2);
+  jsondoc["WFflowRate"] = format_float(WFflowRate, 2);
   jsondoc["WFtotalMl"] = WFtotalMilliLitres;
 #endif
 
@@ -307,7 +311,7 @@ void getjson (void){
   serializeJson(jsondoc, jsonstr);
 }
 
-void connectWiFi(){
+void connectWiFi() {
   WiFi.setAutoReconnect(true);
   // Connect to WiFi network
   WiFi.begin(ssid, password);
@@ -324,7 +328,7 @@ void connectWiFi(){
   Serial.println(ssid);
   Serial.print("IP address: ");
   String StIP = WiFi.localIP().toString();
-  StIP.toCharArray(ipst,16);
+  StIP.toCharArray(ipst, 16);
 
   Serial.println(StIP);
 
@@ -336,7 +340,7 @@ void connectWiFi(){
   }
 }
 
-void read_config(){
+void read_config() {
   EEPROM.begin(EEPROM_SIZE);
   EEPROM.get(0, SamSetup);
   SteamSensor.SetTemp = SamSetup.SetSteamTemp;

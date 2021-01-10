@@ -52,11 +52,11 @@ LiquidLine lql_setup_program_Speed(0, 2, "^Speed: ", program[0].Speed);
 LiquidLine lql_setup_program_capacity_num(0, 3, "^Capacity: ", program[0].capacity_num);
 LiquidLine lql_setup_program_Temp(0, 4, "^Temp: ", program[0].Temp);
 LiquidLine lql_setup_program_Power(0, 5, "^Power: ", program[0].Power);
-LiquidScreen setup_program_settings(lql_setup_program_WType,lql_setup_program_Volume,lql_setup_program_Speed,lql_setup_program_capacity_num);
+LiquidScreen setup_program_settings(lql_setup_program_WType, lql_setup_program_Volume, lql_setup_program_Speed, lql_setup_program_capacity_num);
 
 LiquidLine lql_setup_program_back_line(0, 0, "/Back");
 LiquidScreen setup_program_back(lql_setup_program_back_line, lql_time);
-  
+
 LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
 //LiquidMenu setup_menu(lcd);
@@ -64,15 +64,15 @@ LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
 //LiquidSystem menu(main_menu, setup_menu, 1);
 
-void reset_focus(){
+void reset_focus() {
   //return;
   do {
     main_menu1.switch_focus();
   } while (main_menu1.is_callable(1));
 }
 
-void set_menu_screen(byte param){
-  switch (param){
+void set_menu_screen(byte param) {
+  switch (param) {
     case 1: //меню установок
       setup_temp_screen.hide(false);
       setup_set_temp_screen.hide(false);
@@ -133,15 +133,15 @@ void set_menu_screen(byte param){
 }
 
 void menu_setup()
-{ 
+{
   reset_focus();
   set_menu_screen(1);
-  
+
   //menu.change_menu(setup_menu);
 }
 
 // Функция обратного вызова будет прикреплена к back_line.
-void setup_go_back() 
+void setup_go_back()
 {
   reset_focus();
   set_menu_screen(2);
@@ -154,98 +154,98 @@ void setup_go_back()
   //main_menu1.change_menu(main_menu);
 }
 
-void writeString(String Str, byte num){
-  switch (num){
-    case 1: 
-      Str.toCharArray(welcomeStrArr1,20);
+void writeString(String Str, byte num) {
+  switch (num) {
+    case 1:
+      Str.toCharArray(welcomeStrArr1, 20);
       break;
-    case 2: 
-      Str.toCharArray(welcomeStrArr2,20);
+    case 2:
+      Str.toCharArray(welcomeStrArr2, 20);
       break;
-    case 3: 
-      Str.toCharArray(welcomeStrArr3,20);
+    case 3:
+      Str.toCharArray(welcomeStrArr3, 20);
       break;
-    case 4: 
-      Str.toCharArray(welcomeStrArr4,20);
+    case 4:
+      Str.toCharArray(welcomeStrArr4, 20);
       break;
-    case 0: 
+    case 0:
       main_menu1.update();
       break;
   }
   main_menu1.softUpdate();
 }
 
-void set_delta_steam_temp_up(){
-  SamSetup.DeltaSteamTemp+=0.01 * multiplier;
+void set_delta_steam_temp_up() {
+  SamSetup.DeltaSteamTemp += 0.01 * multiplier;
 }
-void set_delta_steam_temp_down(){
-  SamSetup.DeltaSteamTemp-=0.01 * multiplier;
+void set_delta_steam_temp_down() {
+  SamSetup.DeltaSteamTemp -= 0.01 * multiplier;
 }
-void set_delta_pipe_temp_up(){
-  SamSetup.DeltaPipeTemp+=0.01 * multiplier;
+void set_delta_pipe_temp_up() {
+  SamSetup.DeltaPipeTemp += 0.01 * multiplier;
 }
-void set_delta_pipe_temp_down(){
-  SamSetup.DeltaPipeTemp-=0.01 * multiplier;
+void set_delta_pipe_temp_down() {
+  SamSetup.DeltaPipeTemp -= 0.01 * multiplier;
 }
-void set_delta_water_temp_up(){
-  SamSetup.DeltaWaterTemp+=0.01 * multiplier;
+void set_delta_water_temp_up() {
+  SamSetup.DeltaWaterTemp += 0.01 * multiplier;
 }
-void set_delta_water_temp_down(){
-  SamSetup.DeltaWaterTemp-=0.01 * multiplier;
+void set_delta_water_temp_down() {
+  SamSetup.DeltaWaterTemp -= 0.01 * multiplier;
 }
-void set_delta_tank_temp_up(){
-  SamSetup.DeltaTankTemp+=0.01 * multiplier;
+void set_delta_tank_temp_up() {
+  SamSetup.DeltaTankTemp += 0.01 * multiplier;
 }
-void set_delta_tank_temp_down(){
-  SamSetup.DeltaTankTemp-=0.01 * multiplier;
-}
-
-void set_delta_set_steam_temp_up(){
-  SamSetup.SetSteamTemp+=0.01 * multiplier;
-}
-void set_delta_set_steam_temp_down(){
-  SamSetup.SetSteamTemp-=0.01 * multiplier;
-}
-void set_delta_set_pipe_temp_up(){
-  SamSetup.SetPipeTemp+=0.01 * multiplier;
-}
-void set_delta_set_pipe_temp_down(){
-  SamSetup.SetPipeTemp-=0.01 * multiplier;
-}
-void set_delta_set_water_temp_up(){
-  SamSetup.SetWaterTemp+=0.01 * multiplier;
-}
-void set_delta_set_water_temp_down(){
-  SamSetup.SetWaterTemp-=0.01 * multiplier;
-}
-void set_delta_set_tank_temp_up(){
-  SamSetup.SetTankTemp+=0.01 * multiplier;
-}
-void set_delta_set_tank_temp_down(){
-  SamSetup.SetTankTemp-=0.01 * multiplier;
+void set_delta_tank_temp_down() {
+  SamSetup.DeltaTankTemp -= 0.01 * multiplier;
 }
 
-void stepper_step_ml_up(){
-  SamSetup.StepperStepMl+=1 * multiplier;
+void set_delta_set_steam_temp_up() {
+  SamSetup.SetSteamTemp += 0.01 * multiplier;
 }
-void stepper_step_ml_down(){
+void set_delta_set_steam_temp_down() {
+  SamSetup.SetSteamTemp -= 0.01 * multiplier;
+}
+void set_delta_set_pipe_temp_up() {
+  SamSetup.SetPipeTemp += 0.01 * multiplier;
+}
+void set_delta_set_pipe_temp_down() {
+  SamSetup.SetPipeTemp -= 0.01 * multiplier;
+}
+void set_delta_set_water_temp_up() {
+  SamSetup.SetWaterTemp += 0.01 * multiplier;
+}
+void set_delta_set_water_temp_down() {
+  SamSetup.SetWaterTemp -= 0.01 * multiplier;
+}
+void set_delta_set_tank_temp_up() {
+  SamSetup.SetTankTemp += 0.01 * multiplier;
+}
+void set_delta_set_tank_temp_down() {
+  SamSetup.SetTankTemp -= 0.01 * multiplier;
+}
+
+void stepper_step_ml_up() {
+  SamSetup.StepperStepMl += 1 * multiplier;
+}
+void stepper_step_ml_down() {
   if (SamSetup.StepperStepMl > 0) {
-    SamSetup.StepperStepMl-=1 * multiplier;
+    SamSetup.StepperStepMl -= 1 * multiplier;
   }
   else SamSetup.StepperStepMl = 0;
 }
 
-void menu_program(){
+void menu_program() {
   reset_focus();
   set_menu_screen(4);
 }
-void menu_program_back(){
+void menu_program_back() {
   reset_focus();
   set_menu_screen(1);
 }
-void menu_get_power(){
+void menu_get_power() {
   reset_focus();
-  if (!PowerOn){
+  if (!PowerOn) {
     set_power(true);
     set_menu_screen(2);
   } else {
@@ -253,24 +253,24 @@ void menu_get_power(){
     set_menu_screen(3);
   }
 }
-void menu_pause(){
+void menu_pause() {
   pause_withdrawal(!PauseOn);
   if (PauseOn) pause_text_ptr = (char*)"Continue";
   else pause_text_ptr = (char*)"Pause";
 }
-void menu_calibrate(){
+void menu_calibrate() {
   if (startval > 0  && startval != 100) return;
-  
+
   int stpspeed = stepper.getSpeed();
   if (startval == 100) {
-    stpspeed = stpspeed + stpspeed/10;
+    stpspeed = stpspeed + stpspeed / 10;
     pump_calibrate(stpspeed);
     return;
   }
-  if (StepperMoving){
+  if (StepperMoving) {
     calibrate_text_ptr = (char*)"Stop";
     stpspeed = 0;
-    }
+  }
   else {
     startval = 100;
     calibrate_text_ptr = (char*)"Start";
@@ -279,22 +279,22 @@ void menu_calibrate(){
   pump_calibrate(stpspeed);
 }
 
-void menu_calibrate_down(){
+void menu_calibrate_down() {
   if (startval == 100) {
     int stpspeed = stepper.getSpeed();
-    stpspeed = stpspeed - stpspeed/10;
+    stpspeed = stpspeed - stpspeed / 10;
     if (stpspeed > 0) pump_calibrate(stpspeed);
     return;
   }
   menu_calibrate();
 }
 ////////////////////////////////////////////////////////////
-void menu_samovar_start(){
+void menu_samovar_start() {
   String Str;
 
   if (startval == 2) startval = 3;
   else if (ProgramNum == ProgramLen - 1) startval = 2;
-  
+
   if (startval == 0) {
     startval = 1;
     Str = "Prg No 1";
@@ -304,7 +304,7 @@ void menu_samovar_start(){
   }
   else if (startval == 1) {
     ProgramNum++;
-    Str = "Prg No " + (String)(ProgramNum+1);
+    Str = "Prg No " + (String)(ProgramNum + 1);
     run_program(ProgramNum);
   }
   else if (startval == 2) {
@@ -315,29 +315,29 @@ void menu_samovar_start(){
     Str = "Stoped";
     run_program(CAPACITY_NUM * 2);
     reset_sensor_counter();
- }  
- Str.toCharArray(startval_text_val, 20);
- reset_focus();
- main_menu1.update();
+  }
+  Str.toCharArray(startval_text_val, 20);
+  reset_focus();
+  main_menu1.update();
 }
 
-void samovar_reset(){
+void samovar_reset() {
   String Str = "Stoped";
   Str.toCharArray(startval_text_val, 20);
   reset_focus();
   reset_sensor_counter();
 }
 
-void setupMenu(){
-    
+void setupMenu() {
+
   lcd.init();
   lcd.begin(20, 4);
   lcd.backlight();
   lcd.clear();
 
-//  setup_program_settings.add_line(lql_setup_program_Temp);
-//  setup_program_settings.add_line(lql_setup_program_Power);
-//  setup_program_settings.set_displayLineCount(6);
+  //  setup_program_settings.add_line(lql_setup_program_Temp);
+  //  setup_program_settings.add_line(lql_setup_program_Power);
+  //  setup_program_settings.set_displayLineCount(6);
 
   //setup_temp_screen.set_displayLineCount(4);
   lql_steam_temp.set_decimalPlaces(2);
@@ -351,10 +351,10 @@ void setupMenu(){
   lql_start.attach_function(2, menu_samovar_start);
   lql_reset.attach_function(1, samovar_reset);
   lql_reset.attach_function(2, samovar_reset);
-  
+
   lql_setup.attach_function(1, menu_setup);
   lql_setup.attach_function(2, menu_setup);
-  
+
   lql_setup_steam_temp.attach_function(1, set_delta_steam_temp_up);
   lql_setup_steam_temp.attach_function(2, set_delta_steam_temp_down);
   lql_setup_pipe_temp.attach_function(1, set_delta_pipe_temp_up);
@@ -381,7 +381,7 @@ void setupMenu(){
   lql_setup_stepper_program.attach_function(2, menu_program);
   lql_setup_program_back_line.attach_function(1, menu_program_back);
   lql_setup_program_back_line.attach_function(2, menu_program_back);
-  
+
   lql_back_line.attach_function(1, setup_go_back);
   lql_back_line.attach_function(2, setup_go_back);
 
@@ -399,56 +399,56 @@ void setupMenu(){
   main_menu1.add_screen(main_screen4);
 
   //setup_menu.add_screen(setup_temp_screen);
-  //setup_menu.add_screen(setup_stepper_settings);  
+  //setup_menu.add_screen(setup_stepper_settings);
   //setup_menu.add_screen(setup_back_screen);
   main_menu1.add_screen(setup_temp_screen);
   main_menu1.add_screen(setup_set_temp_screen);
-  main_menu1.add_screen(setup_stepper_settings);  
+  main_menu1.add_screen(setup_stepper_settings);
   main_menu1.add_screen(setup_back_screen);
   main_menu1.add_screen(setup_program_settings);
   main_menu1.add_screen(setup_program_back);
-  
+
   set_menu_screen(3);
   main_menu1.change_screen(&welcome_screen);
-    
+
 
   samovar_reset();
   main_menu1.update();
-//delay(2000);
+  //delay(2000);
   welcome_screen.hide(true);
 
 }
 
-void encoder_getvalue(){
+void encoder_getvalue() {
 
   CurMin = (millis() / 1000 );
 
   //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
-  if (CurMin == 120){
-//    lcd.begin(20,4);
+  if (CurMin == 120) {
+    //    lcd.begin(20,4);
     lcd.init();
     vTaskDelay(10);
   }
-    
+
   // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
-  if (OldMin != CurMin){
+  if (OldMin != CurMin) {
 
     //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
-    if (TargetStepps > 0){
+    if (TargetStepps > 0) {
       //считаем прогресс
       float wp = (float)CurrrentStepps / (float)TargetStepps;
-      
+
       //считаем время для текущей строки программы
       WthdrwTime = program[ProgramNum].Time * (1 - wp);
       //суммируем время текущей строки программы и всех следующих за ней
       WthdrwTimeAll = WthdrwTime;
 
-      for (int i = ProgramNum + 1; i < ProgramLen; i++){
+      for (int i = ProgramNum + 1; i < ProgramLen; i++) {
         WthdrwTimeAll += program[i].Time;
       }
       WthdrwTimeS = (String)((unsigned int)WthdrwTime) + ":" + (String)((unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60));
       WthdrwTimeAllS = (String)((unsigned int)WthdrwTimeAll) + ":" + (String)((unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60));
-      
+
       //прогресс переводим в проценты
       WthdrwlProgress = wp * 100;
     } else {
@@ -462,7 +462,7 @@ void encoder_getvalue(){
 
 #ifdef USE_WATERSENSOR
 
-    if (WFpulseCount == 0 && SteamSensor.avgTemp > 70 && PowerOn){
+    if (WFpulseCount == 0 && SteamSensor.avgTemp > 70 && PowerOn) {
       WFAlarmCount ++;
     } else {
       WFAlarmCount = 0;
@@ -482,7 +482,7 @@ void encoder_getvalue(){
 
     Crt = CurrentTime();
     StrCrt = Crt.substring(6) + "   " + millis2time();
-    StrCrt.toCharArray(tst,20);
+    StrCrt.toCharArray(tst, 20);
     main_menu1.softUpdate();
     vTaskDelay(20);
     BME_getvalue(false);
@@ -492,13 +492,13 @@ void encoder_getvalue(){
 
   // Check all the buttons
   if (encoder.isRight()) {
-      multiplier = 1;
-      //Если калибровка - энкодером регулируем скорость шагового двигателя
-      if (startval == 100) {
-        menu_calibrate();
-        return;
-      }
-    if (!main_menu1.is_callable(1)){
+    multiplier = 1;
+    //Если калибровка - энкодером регулируем скорость шагового двигателя
+    if (startval == 100) {
+      menu_calibrate();
+      return;
+    }
+    if (!main_menu1.is_callable(1)) {
       main_menu1.next_screen();
     }
     else {
@@ -506,13 +506,13 @@ void encoder_getvalue(){
     }
   }
   if (encoder.isLeft()) {
-      multiplier = 1;
-      //Если калибровка - энкодером регулируем скорость шагового двигателя
-      if (startval == 100) {
-        menu_calibrate_down();
-        return;
-      }
-    if (!main_menu1.is_callable(2)){
+    multiplier = 1;
+    //Если калибровка - энкодером регулируем скорость шагового двигателя
+    if (startval == 100) {
+      menu_calibrate_down();
+      return;
+    }
+    if (!main_menu1.is_callable(2)) {
       main_menu1.previous_screen();
     }
     else {
@@ -528,11 +528,11 @@ void encoder_getvalue(){
     main_menu1.call_function(2);
   }
   if (encoder.isClick()) {
-      //Выход из режима калибровки - нажатие на кнопку.
-      if (startval == 100) {
-        startval = 0;
-        menu_calibrate();
-      }
-      main_menu1.switch_focus();
+    //Выход из режима калибровки - нажатие на кнопку.
+    if (startval == 100) {
+      startval = 0;
+      menu_calibrate();
+    }
+    main_menu1.switch_focus();
   }
 }

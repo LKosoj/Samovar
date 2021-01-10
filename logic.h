@@ -20,18 +20,18 @@ void set_power_mode(String Mode);
 void open_valve(bool Val);
 
 //Получаем объем отбора
-float get_liguid_volume_by_step(int StepCount){
+float get_liguid_volume_by_step(int StepCount) {
   float retval = 0;
   if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
   return retval;
 }
 
 //Получаем скорость отбора
-float get_liguid_rate_by_step(int StepperSpeed){
+float get_liguid_rate_by_step(int StepperSpeed) {
   return get_liguid_volume_by_step(StepperSpeed) * 3.6;
 }
 
-float get_speed_from_rate(float volume_per_hour){
+float get_speed_from_rate(float volume_per_hour) {
   float v;
   ActualVolumePerHour = volume_per_hour;
   v = (float)SamSetup.StepperStepMl * (float)volume_per_hour / 3.6;
@@ -39,93 +39,93 @@ float get_speed_from_rate(float volume_per_hour){
   return v;
 }
 
-int get_liquid_volume(){
+int get_liquid_volume() {
   return get_liguid_volume_by_step(stepper.getCurrent());
 }
 
-void withdrawal(void){
+void withdrawal(void) {
   //Определяем, что необходимо сменить режим работы
-  if (program_Pause){
+  if (program_Pause) {
     if (millis() >= t_min) {
       t_min = 0;
       menu_samovar_start();
     }
     return;
   }
-  
+
   CurrrentStepps = stepper.getCurrent();
 
-  if (TargetStepps == CurrrentStepps && TargetStepps !=0 && (startval == 1 || startval == 2)){
+  if (TargetStepps == CurrrentStepps && TargetStepps != 0 && (startval == 1 || startval == 2)) {
     menu_samovar_start();
   }
 
   float c_temp; //стартовая температура отбора тела с учетом корректировки от давления или без
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
-  
+
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
-  if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp){
+  if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-    if (!PauseOn && !program_Wait){
+    if (!PauseOn && !program_Wait) {
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + SteamSensor.Delay * 1000;
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
-  } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0){
+  } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0) {
     //продолжаем отбор
-    t_min = 0; 
+    t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
   }
 
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы
-  if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp >= PipeSensor.BodyTemp + PipeSensor.SetTemp){
+  if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp >= PipeSensor.BodyTemp + PipeSensor.SetTemp) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-    if (!PauseOn && !program_Wait){
+    if (!PauseOn && !program_Wait) {
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + PipeSensor.Delay * 1000;
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
-  } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0){
+  } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0) {
     //продолжаем отбор
-    t_min = 0; 
+    t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
   }
 }
 
-void set_power(bool On){
+void set_power(bool On) {
   PowerOn = On;
   if (On) {
-      digitalWrite(RELE_CHANNEL1, LOW);
-      set_menu_screen(2);
-      power_text_ptr = (char*)"OFF";
-      
+    digitalWrite(RELE_CHANNEL1, LOW);
+    set_menu_screen(2);
+    power_text_ptr = (char*)"OFF";
+
 #ifdef SAMOVAR_USE_POWER
-      delay(1000);
-      set_power_mode(POWER_SPEED_MODE);
+    delay(1000);
+    set_power_mode(POWER_SPEED_MODE);
 #endif
 
   } else {
 #ifdef SAMOVAR_USE_POWER
-      set_power_mode(POWER_SLEEP_MODE);
+    set_power_mode(POWER_SLEEP_MODE);
 #endif
-      samovar_reset();
-      digitalWrite(RELE_CHANNEL1, HIGH);
-      set_menu_screen(3);
-      power_text_ptr = (char*)"ON";
+    samovar_reset();
+    digitalWrite(RELE_CHANNEL1, HIGH);
+    set_menu_screen(3);
+    power_text_ptr = (char*)"ON";
   }
 }
 
-void pump_calibrate(int stpspeed){
+void pump_calibrate(int stpspeed) {
   if (startval != 0 && startval != 100) {
     return;
   }
-  
-  if (stpspeed == 0){
+
+  if (stpspeed == 0) {
     startval = 0;
     //Сохраняем полученное значение калибровки
     SamSetup.StepperStepMl = round((float)stepper.getCurrent() / 100);
@@ -143,7 +143,7 @@ void pump_calibrate(int stpspeed){
   }
 }
 
-void pause_withdrawal(bool Pause){
+void pause_withdrawal(bool Pause) {
   if (!stepper.getState() && !PauseOn) return;
   PauseOn = Pause;
   if (Pause) {
@@ -161,7 +161,7 @@ void pause_withdrawal(bool Pause){
   }
 }
 
-String get_Samovar_Status(){
+String get_Samovar_Status() {
   if (!PowerOn) {
     SamovarStatus = "Выключено";
     SamovarStatusInt = 0;
@@ -170,8 +170,8 @@ String get_Samovar_Status(){
     SamovarStatusInt = 10;
   } else if (PowerOn && startval == 1 && program_Wait) {
     int s = 0;
-    if (t_min > (millis() + 10)){
-      s = (t_min - millis())/1000;
+    if (t_min > (millis() + 10)) {
+      s = (t_min - millis()) / 1000;
     }
     SamovarStatus = "Программа №" + String(ProgramNum + 1) + " на паузе. Ожидается возврат колонны к заданным параметрам. Осталось " + (String)s + " сек.";
     SamovarStatusInt = 15;
@@ -188,32 +188,32 @@ String get_Samovar_Status(){
     SamovarStatus = "Разгон колонны/работа на себя";
     SamovarStatusInt = 50;
   }
-  
-  if (SamovarStatusInt == 10 || SamovarStatusInt == 15){
+
+  if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
     SamovarStatus += " До конца текущей строки программы: " + WthdrwTimeS;
     SamovarStatus += " До конца текущей программы: " + WthdrwTimeAllS;
   }
-  if (SteamSensor.BodyTemp > 0) SamovarStatus+=" Температура отбора тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure),3);
-  
+  if (SteamSensor.BodyTemp > 0) SamovarStatus += " Температура отбора тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+
   return SamovarStatus;
 }
 
-void set_capacity(byte cap){
+void set_capacity(byte cap) {
   capacity_num = cap;
-  int p = ((int)cap*SERVO_ANGLE)/(int)CAPACITY_NUM + servoDelta[cap];
+  int p = ((int)cap * SERVO_ANGLE) / (int)CAPACITY_NUM + servoDelta[cap];
   servo.write(p);
 }
 
-void next_capacity(void){
-  set_capacity(capacity_num+1);
+void next_capacity(void) {
+  set_capacity(capacity_num + 1);
 }
 
-void set_program(String WProgram){
+void set_program(String WProgram) {
   char c[500];
-  WProgram.toCharArray(c,500);
+  WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
-  int i=0;
-  while(pair != NULL and i < CAPACITY_NUM * 2){
+  int i = 0;
+  while (pair != NULL and i < CAPACITY_NUM * 2) {
     program[i].WType = pair;
     pair = strtok(NULL, ";");
     program[i].Volume = atoi(pair);
@@ -235,7 +235,7 @@ void set_program(String WProgram){
   }
 }
 
-String get_program(int s){
+String get_program(int s) {
   String Str = "";
   int k = CAPACITY_NUM * 2;
   if (s == CAPACITY_NUM * 2) {
@@ -243,25 +243,25 @@ String get_program(int s){
   } else {
     k = s + 1;
   }
-  for (int i = s; i < k; i++){
+  for (int i = s; i < k; i++) {
     if (program[i].WType == "") {
       i = CAPACITY_NUM * 2 + 1;
     } else {
-      Str+= program[i].WType + ";";
-      Str+= (String)program[i].Volume + ";";
-      Str+= (String)program[i].Speed + ";";
-      Str+= (String)program[i].capacity_num + ";";
-      Str+= (String)program[i].Temp + ";";
-      Str+= (String)program[i].Power + "\n";
+      Str += program[i].WType + ";";
+      Str += (String)program[i].Volume + ";";
+      Str += (String)program[i].Speed + ";";
+      Str += (String)program[i].capacity_num + ";";
+      Str += (String)program[i].Temp + ";";
+      Str += (String)program[i].Power + "\n";
     }
   }
   return Str;
 }
 
-void run_program(byte num){
-   t_min = 0;
-   program_Pause = false;
-   if (num == CAPACITY_NUM * 2){
+void run_program(byte num) {
+  t_min = 0;
+  program_Pause = false;
+  if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
     if (fileToAppend) {
@@ -272,8 +272,8 @@ void run_program(byte num){
     stepper.setCurrent(0);
     stepper.setTarget(0);
     set_capacity(0);
-   } else {
-    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" ){
+  } else {
+    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" ) {
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
@@ -297,7 +297,7 @@ void run_program(byte num){
         WaterSensor.BodyTemp = WaterSensor.avgTemp;
         TankSensor.BodyTemp = TankSensor.avgTemp;
       }
-      
+
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Для этого колонна должна после отбора голов поработать несколько минут на паузе для стабилизации
       //(для этого после программы отбора голов надо задать программу с типом P (латинская) и указать время стабилизации колонны в минутах в program[num].Volume)
@@ -306,7 +306,7 @@ void run_program(byte num){
       if (program[num].WType == "B" && SteamSensor.BodyTemp == 0) {
         SteamSensor.BodyTemp = SteamSensor.avgTemp;
       }
-    } else if (program[num].WType == "P"){
+    } else if (program[num].WType == "P") {
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
       t_min = millis() + program[num].Volume * 1000;
       program_Pause = true;
@@ -317,12 +317,12 @@ void run_program(byte num){
       stepper.setCurrent(0);
       stepper.setTarget(0);
     }
-   }
-   TargetStepps = stepper.getTarget();
+  }
+  TargetStepps = stepper.getTarget();
 }
 
 //функция корректировки температуры кипения спирта в зависимости от давления
-float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure){
+float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
   //скорректированная температура кипения спирта при текущем давлении
   float c_temp;
 
@@ -331,10 +331,10 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
   float i_temp;
   //температурная дельта
   float d_temp;
-  
+
   i_temp = current_pressure * 0.038 + 49.27;
   d_temp = start_temp - start_pressure * 0.038 - 49.27; //учитываем поправку на погрешность измерения датчиков
-  c_temp = i_temp + d_temp; // получаем текущую температуру кипения при переданном давлении с учетом поправки 
+  c_temp = i_temp + d_temp; // получаем текущую температуру кипения при переданном давлении с учетом поправки
 #else
   //Используем сохраненную температуру отбора тела без корректировки
   c_temp = start_temp;
@@ -343,7 +343,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
   return c_temp;
 }
 
-void check_alarm(){
+void check_alarm() {
   //сбросим паузу события безопасности
   if (alarm_t_min >= millis()) alarm_t_min = 0;
 
@@ -352,7 +352,7 @@ void check_alarm(){
   }
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn){
+  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
 #ifdef SAMOVAR_USE_BLYNK
@@ -362,21 +362,21 @@ void check_alarm(){
   }
 
 #ifdef USE_WATERSENSOR
-   //Проверим, что вода подается
-   if (WFAlarmCount > WF_ALARM_COUNT) {
+  //Проверим, что вода подается
+  if (WFAlarmCount > WF_ALARM_COUNT) {
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Water error");
 #endif
-   }
+  }
 #endif
 
-  
+
 #ifdef SAMOVAR_USE_POWER
 
-  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP) && PowerOn && alarm_t_min == 0){
+  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP) && PowerOn && alarm_t_min == 0) {
     //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
     //Если уже снижали - надо подождать 20 секунд, так как процесс инерционный
 #ifdef SAMOVAR_USE_BLYNK
@@ -387,8 +387,8 @@ void check_alarm(){
     alarm_t_min = millis() + 20000;
   }
 
-  
-  if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE){
+
+  if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE) {
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
@@ -403,10 +403,10 @@ void check_alarm(){
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
   //что разгон и стабилизация завершены - три минуты температура пара не меняется больше, чем на 0.1 градус
-  if (SamovarStatusInt == 50 && SteamSensor.avgTemp > 70){
+  if (SamovarStatusInt == 50 && SteamSensor.avgTemp > 70) {
     float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
     d = abs(d);
-    if (d < 0.1){
+    if (d < 0.1) {
       acceleration_temp += 1;
       if (acceleration_temp == 60 * 3) {
         Blynk.notify("{DEVICE_NAME} - Acceleration is complete.");
@@ -420,20 +420,20 @@ void check_alarm(){
 
 }
 
-void open_valve(bool Val){
+void open_valve(bool Val) {
   valve_status = Val;
-  if (Val){
+  if (Val) {
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} - Open cooling water!");
 #endif
-    digitalWrite(RELE_CHANNEL2, LOW);
+    digitalWrite(RELE_CHANNEL3, LOW);
   } else {
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} - Close cooling water!");
 #endif
-    digitalWrite(RELE_CHANNEL2, HIGH);
+    digitalWrite(RELE_CHANNEL3, HIGH);
   }
 }
 
@@ -441,14 +441,14 @@ void open_valve(bool Val){
 // SAMOVAR_USE_POWER
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
-String read_from_serial(){
+String read_from_serial() {
   boolean getData = false;
   char a;
-  while(Serial2.available()) {
+  while (Serial2.available()) {
     a = Serial2.read();
     //Serial.println(a);
     serial_str += a;
-    if (a=='\n'){
+    if (a == '\n') {
       getData = true;
       break;
     }
@@ -456,42 +456,42 @@ String read_from_serial(){
 
   int i = serial_str.indexOf("T");
   if (getData && i >= 0) {
-      serial_str = serial_str.substring(i, serial_str.length() - 2);
-      String result = serial_str;
-      serial_str = "";
-      return result;
-  } else if (getData && Serial2.available()){
+    serial_str = serial_str.substring(i, serial_str.length() - 2);
+    String result = serial_str;
+    serial_str = "";
+    return result;
+  } else if (getData && Serial2.available()) {
     return read_from_serial();
-  } else if (getData){
+  } else if (getData) {
     serial_str = "";
     return "";
   }
-  return "";  
+  return "";
 }
 
 //получаем текущие параметры работы регулятора напряжения
-void get_current_power(){
-  if (!PowerOn){
+void get_current_power() {
+  if (!PowerOn) {
     current_power_volt = 0;
     target_power_volt = 0;
     current_power_mode = "N";
     return;
   }
   String s = read_from_serial();
-  if (s != ""){
-    current_power_volt = hexToDec(s.substring(1, 4))/10.0F;
-    target_power_volt = hexToDec(s.substring(4, 7))/10.0F;
+  if (s != "") {
+    current_power_volt = hexToDec(s.substring(1, 4)) / 10.0F;
+    target_power_volt = hexToDec(s.substring(4, 7)) / 10.0F;
     current_power_mode = s.substring(7, 8);
   }
 }
 
 //устанавливаем напряжение для регулятора напряжения
-void set_current_power(float Volt){
-  String hexString = String((int)(Volt*10), HEX);
+void set_current_power(float Volt) {
+  String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 }
 
-void set_power_mode(String Mode){
+void set_power_mode(String Mode) {
   current_power_mode = Mode;
   Serial2.print("M" + Mode + "\r");
 }
@@ -499,18 +499,18 @@ void set_power_mode(String Mode){
 unsigned int hexToDec(String hexString) {
   unsigned int decValue = 0;
   int nextInt;
-  
+
   for (int i = 0; i < hexString.length(); i++) {
-    
+
     nextInt = int(hexString.charAt(i));
     if (nextInt >= 48 && nextInt <= 57) nextInt = map(nextInt, 48, 57, 0, 9);
     if (nextInt >= 65 && nextInt <= 70) nextInt = map(nextInt, 65, 70, 10, 15);
     if (nextInt >= 97 && nextInt <= 102) nextInt = map(nextInt, 97, 102, 10, 15);
     nextInt = constrain(nextInt, 0, 15);
-    
+
     decValue = (decValue * 16) + nextInt;
   }
-  
+
   return decValue;
 }
 #endif

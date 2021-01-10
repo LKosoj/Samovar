@@ -1,15 +1,15 @@
 #include "Samovar_ini.h"
 
 #ifdef __cplusplus
-  extern "C" {
+extern "C" {
 #endif
- 
-  uint8_t temprature_sens_read();
- 
+
+uint8_t temprature_sens_read();
+
 #ifdef __cplusplus
 }
 #endif
- 
+
 uint8_t temprature_sens_read();
 
 #define SAMOVAR_VERSION "1.5"
@@ -80,7 +80,7 @@ uint8_t temprature_sens_read();
 // равным 180 / CAPACITY_NUM
 #define CAPACITY_NUM 10
 //Корректировка для угла поворота. Мой сервопривод встает не ровно.
-int8_t servoDelta[11] = {0,-2,-3,-4,-3,-2,0,0,0,0,-2};
+int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //**************************************************************************************************************
 
 //**************************************************************************************************************
@@ -143,16 +143,16 @@ void writeString(String Str, byte num);
 // Переменные для меню
 byte multiplier = 1;
 
-char tst[20]="00:00:00   00:00:00";
-char ipst[16]="000.000.000.000";
+char tst[20] = "00:00:00   00:00:00";
+char ipst[16] = "000.000.000.000";
 char welcomeStrArr1[20];
 char welcomeStrArr2[20];
 char welcomeStrArr3[20];
 char welcomeStrArr4[20];
-char* welcomeStr1 = (char*)welcomeStrArr1; 
-char* welcomeStr2 = (char*)welcomeStrArr2; 
-char* welcomeStr3 = (char*)welcomeStrArr3; 
-char* welcomeStr4 = (char*)welcomeStrArr4; 
+char* welcomeStr1 = (char*)welcomeStrArr1;
+char* welcomeStr2 = (char*)welcomeStrArr2;
+char* welcomeStr3 = (char*)welcomeStrArr3;
+char* welcomeStr4 = (char*)welcomeStrArr4;
 
 char* timestr = (char*)tst;
 char* ipstr = (char*)ipst;
@@ -183,7 +183,7 @@ Adafruit_BME680 bme; // I2C
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
-LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS); 
+LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
 Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
@@ -196,7 +196,7 @@ GButton btn(BTN_PIN);
 LiquidMenu main_menu1(lcd);
 
 
-struct SetupEEPROM{
+struct SetupEEPROM {
   byte flag;                                                   //Флаг для записи в память
   float DeltaSteamTemp;                                        //Корректировка температурного датчика
   float DeltaPipeTemp;                                         //Корректировка температурного датчика
@@ -209,25 +209,25 @@ struct SetupEEPROM{
   float SetTankTemp;                                           //Уставка температурного датчика
 };
 
-struct DSSensor{
-DeviceAddress Sensor;                                          //адрес датчика температуры
-float Temp;                                                    //температура с датчика
-float avgTemp;                                                 //средняя температура
-float SetTemp;                                                 //уставка по температуре, при достижении которой требуется реакция
-float BodyTemp;                                                //температура, с которой начался отбор тела
-uint16_t Delay;                                                //время задержки включения насоса в секундах
-float PrevTemp;                                                //Предыдущая температура
-float Start_Pressure;                                          //Стартовое давление при начале отбора
+struct DSSensor {
+  DeviceAddress Sensor;                                          //адрес датчика температуры
+  float Temp;                                                    //температура с датчика
+  float avgTemp;                                                 //средняя температура
+  float SetTemp;                                                 //уставка по температуре, при достижении которой требуется реакция
+  float BodyTemp;                                                //температура, с которой начался отбор тела
+  uint16_t Delay;                                                //время задержки включения насоса в секундах
+  float PrevTemp;                                                //Предыдущая температура
+  float Start_Pressure;                                          //Стартовое давление при начале отбора
 };
 
-struct WProgram{
-String WType;                                                   //тип отбора - головы или тело
-uint16_t Volume;                                                //объем отбора в мл
-float Speed;                                                    //скорость отбора в л/ч
-byte capacity_num;                                              //номер емкости для отбора
-float Temp;                                                     //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
-int Power;                                                      //напряжение, при которой отбирается эта часть погона.
-float Time;                                                     //время, необходимое для отбора программы
+struct WProgram {
+  String WType;                                                   //тип отбора - головы или тело
+  uint16_t Volume;                                                //объем отбора в мл
+  float Speed;                                                    //скорость отбора в л/ч
+  byte capacity_num;                                              //номер емкости для отбора
+  float Temp;                                                     //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
+  int Power;                                                      //напряжение, при которой отбирается эта часть погона.
+  float Time;                                                     //время, необходимое для отбора программы
 };
 
 SetupEEPROM SamSetup;

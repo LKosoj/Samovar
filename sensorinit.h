@@ -13,10 +13,10 @@ void reset_sensor_counter(void);
 //***************************************************************************************************************
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
-void IRAM_ATTR BME_getvalue(bool fl){
-//bme_pressure = 767;
-//bme_temp = 25;
-//return;
+void IRAM_ATTR BME_getvalue(bool fl) {
+  //bme_pressure = 767;
+  //bme_temp = 25;
+  //return;
 
   if (!bmefound) {
     bme_temp = -1;
@@ -33,18 +33,18 @@ void IRAM_ATTR BME_getvalue(bool fl){
     return;
   }
 
-    bme_temp = bme.temperature;
-    vTaskDelay(2);
-    bme_pressure = bme.pressure / 100.0 * 0.75;
-    vTaskDelay(2);
-    bme_humidity = bme.humidity;
-    vTaskDelay(2); 
+  bme_temp = bme.temperature;
+  vTaskDelay(2);
+  bme_pressure = bme.pressure / 100.0 * 0.75;
+  vTaskDelay(2);
+  bme_humidity = bme.humidity;
+  vTaskDelay(2);
 }
 
 //***************************************************************************************************************
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
-void IRAM_ATTR DS_getvalue(void){
+void IRAM_ATTR DS_getvalue(void) {
   //return;
   float ss, ps, ws, ts;
   ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
@@ -73,19 +73,19 @@ void IRAM_ATTR DS_getvalue(void){
   }
 }
 
-void IRAM_ATTR triggerGetTempSensor(void){
-      clok();
-      DS_getvalue();
+void IRAM_ATTR triggerGetTempSensor(void) {
+  clok();
+  DS_getvalue();
 }
 
-void IRAM_ATTR triggerGetSensor(void){
-      clok1();
-      if (startval > 0) {
-          append_data();              //Записываем данные;
-      }
+void IRAM_ATTR triggerGetSensor(void) {
+  clok1();
+  if (startval > 0) {
+    append_data();              //Записываем данные;
+  }
 }
 
-void sensor_init(void){
+void sensor_init(void) {
   Serial.println("Pressure sensor initialization");
   writeString("Bme680 init...     ", 3);
   delay(1000);
@@ -101,28 +101,36 @@ void sensor_init(void){
   bme.setHumidityOversampling(BME680_OS_2X);
   bme.setPressureOversampling(BME680_OS_4X);
   bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    
+
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
   delay(4000);
-                                                                          // определяем устройства на шине
+  // определяем устройства на шине
 #ifdef __SAMOVAR_DEBUG
   Serial.print("Locating DS18B20...");
   Serial.print("Found ");
   Serial.print(sensors.getDeviceCount(), DEC);
   Serial.println(" devices.");
 #endif
- 
+
   // Инициализируем датчики температуры
-  
+
   if (!sensors.getAddress(SteamSensor.Sensor, 0))
-   { Serial.println("Unable to find address for Device 0"); }             // если адрес датчика 0 не найден
+  {
+    Serial.println("Unable to find address for Device 0");  // если адрес датчика 0 не найден
+  }
   if (!sensors.getAddress(PipeSensor.Sensor, 1))
-   { Serial.println("Unable to find address for Device 1"); }             // если адрес датчика 1 не найден
+  {
+    Serial.println("Unable to find address for Device 1");  // если адрес датчика 1 не найден
+  }
   if (!sensors.getAddress(WaterSensor.Sensor, 2))
-   { Serial.println("Unable to find address for Device 2"); }             // если адрес датчика 2 не найден
+  {
+    Serial.println("Unable to find address for Device 2");  // если адрес датчика 2 не найден
+  }
   if (!sensors.getAddress(TankSensor.Sensor, 3))
-   { Serial.println("Unable to find address for Device 3"); }             // если адрес датчика 3 не найден
+  {
+    Serial.println("Unable to find address for Device 3");  // если адрес датчика 3 не найден
+  }
 
   writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
 
@@ -141,66 +149,66 @@ void sensor_init(void){
   Serial.println();
   Serial.print("TankSensor Address: ");                                  // пишем адрес датчика 3
   printAddress(TankSensor.Sensor);
-  Serial.println(); 
-#endif
- 
- sensors.setResolution(SteamSensor.Sensor, 12);                                 // устанавливаем разрешение для датчика 0
- sensors.setResolution(PipeSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 1
- sensors.setResolution(WaterSensor.Sensor, 12);                                 // устанавливаем разрешение для датчика 2
- sensors.setResolution(TankSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 3
- 
-#ifdef __SAMOVAR_DEBUG
- Serial.print("SteamSensor Resolution: ");                               // пишем разрешение для датчика 0
- Serial.print(sensors.getResolution(SteamSensor.Sensor), DEC); 
- Serial.println();
- Serial.print("PipeSensor Resolution: ");                                // пишем разрешение для датчика 1
- Serial.print(sensors.getResolution(PipeSensor.Sensor), DEC); 
- Serial.println();
- Serial.print("WaterSensor Resolution: ");                               // пишем разрешение для датчика 2
- Serial.print(sensors.getResolution(WaterSensor.Sensor), DEC); 
- Serial.println();
- Serial.print("TankSensor Resolution: ");                                // пишем разрешение для датчика 3
- Serial.print(sensors.getResolution(TankSensor.Sensor), DEC); 
- Serial.println();
+  Serial.println();
 #endif
 
- //Для шагового двигателя устанавливаем режим работы - следовать до позиции
- stepper.setRunMode(FOLLOW_POS);
- // установка макс. скорости в шагах/сек
- stepper.setMaxSpeed(0);
- //Драйвер выключится по достижении позиции
- stepper.autoPower(true);
- stepper.setAcceleration(500);
+  sensors.setResolution(SteamSensor.Sensor, 12);                                 // устанавливаем разрешение для датчика 0
+  sensors.setResolution(PipeSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 1
+  sensors.setResolution(WaterSensor.Sensor, 12);                                 // устанавливаем разрешение для датчика 2
+  sensors.setResolution(TankSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 3
+
+#ifdef __SAMOVAR_DEBUG
+  Serial.print("SteamSensor Resolution: ");                               // пишем разрешение для датчика 0
+  Serial.print(sensors.getResolution(SteamSensor.Sensor), DEC);
+  Serial.println();
+  Serial.print("PipeSensor Resolution: ");                                // пишем разрешение для датчика 1
+  Serial.print(sensors.getResolution(PipeSensor.Sensor), DEC);
+  Serial.println();
+  Serial.print("WaterSensor Resolution: ");                               // пишем разрешение для датчика 2
+  Serial.print(sensors.getResolution(WaterSensor.Sensor), DEC);
+  Serial.println();
+  Serial.print("TankSensor Resolution: ");                                // пишем разрешение для датчика 3
+  Serial.print(sensors.getResolution(TankSensor.Sensor), DEC);
+  Serial.println();
+#endif
+
+  //Для шагового двигателя устанавливаем режим работы - следовать до позиции
+  stepper.setRunMode(FOLLOW_POS);
+  // установка макс. скорости в шагах/сек
+  stepper.setMaxSpeed(0);
+  //Драйвер выключится по достижении позиции
+  stepper.autoPower(true);
+  stepper.setAcceleration(500);
 
 #ifdef USE_WATERSENSOR
- //Настраиваем датчик потока
- pinMode(WATERSENSOR_PIN, INPUT);
- digitalWrite(WATERSENSOR_PIN, HIGH);
+  //Настраиваем датчик потока
+  pinMode(WATERSENSOR_PIN, INPUT);
+  digitalWrite(WATERSENSOR_PIN, HIGH);
 #endif
 
- set_program("H;450;0.1;1;0;160\n");
+  set_program("H;450;0.1;1;0;160\n");
 
- reset_sensor_counter();
+  reset_sensor_counter();
 
 #ifdef SAMOVAR_USE_POWER
- Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
- Serial2.setRxBufferSize(20);
+  Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
+  Serial2.setRxBufferSize(20);
 #endif
 }
 
-void printAddress(DeviceAddress deviceAddress)                          // функция печати адреса DS18B20
-{ 
+void printAddress(DeviceAddress deviceAddress)                        // функция печати адреса DS18B20
+{
   for (uint8_t i = 0; i < 8; i++)
-    { 
-      if (deviceAddress[i] < 16) Serial.print("0");                     // вставляем незначащие нули
-      Serial.print(deviceAddress[i], HEX); 
-    }
+  {
+    if (deviceAddress[i] < 16) Serial.print("0");                     // вставляем незначащие нули
+    Serial.print(deviceAddress[i], HEX);
+  }
 }
 
 //Обнуляем все счетчики
-void reset_sensor_counter(void){
-  #ifdef SAMOVAR_USE_POWER
-      set_power_mode(POWER_SLEEP_MODE);
+void reset_sensor_counter(void) {
+#ifdef SAMOVAR_USE_POWER
+  set_power_mode(POWER_SLEEP_MODE);
 #endif
 
   stepper.setSpeed(-1);
@@ -210,7 +218,7 @@ void reset_sensor_counter(void){
   stepper.setCurrent(0);
   stepper.setTarget(0);
   set_capacity(0);
-  
+
   ProgramNum = 0;
   SteamSensor.BodyTemp = 0;
   PipeSensor.BodyTemp = 0;
@@ -235,7 +243,7 @@ void reset_sensor_counter(void){
   WFtotalMilliLitres = 0;
 }
 
-String inline format_float(float v, int d){
+String inline format_float(float v, int d) {
   char outstr[15];
-  return (String)dtostrf(v,1, d, outstr);
+  return (String)dtostrf(v, 1, d, outstr);
 }
