@@ -402,13 +402,14 @@ void check_alarm() {
 
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
-  //что разгон и стабилизация завершены - три минуты температура пара не меняется больше, чем на 0.1 градус
+  //что разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
+  //https://alcodistillers.ru/forum/viewtopic.php?id=137 - тут указано 3 замера раз в три минуты.
   if (SamovarStatusInt == 50 && SteamSensor.avgTemp > 70) {
     float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
     d = abs(d);
     if (d < 0.1) {
       acceleration_temp += 1;
-      if (acceleration_temp == 60 * 3) {
+      if (acceleration_temp == 60 * 6) {
         Blynk.notify("{DEVICE_NAME} - Acceleration is complete.");
       }
     } else {
