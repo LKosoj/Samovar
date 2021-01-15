@@ -381,7 +381,7 @@ void check_alarm() {
     //Если уже снижали - надо подождать 20 секунд, так как процесс инерционный
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical.! Water error. Voltage down from " + (String)target_power_volt);
+    Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical! Water error. Voltage down from " + (String)target_power_volt);
 #endif
     set_current_power(target_power_volt - 5);
     alarm_t_min = millis() + 20000;
