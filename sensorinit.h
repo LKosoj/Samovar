@@ -24,8 +24,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
     return;
   }
   // Tell BME680 to begin measurement.
-  unsigned long bmeEndTime = bme.beginReading();
-  if (bmeEndTime == 0) {
+  if (bme.beginReading() == 0) {
     return;
   }
 
@@ -34,11 +33,11 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   }
 
   bme_temp = bme.temperature;
-  vTaskDelay(2);
+  vTaskDelay(5);
   bme_pressure = bme.pressure / 100.0 * 0.75;
-  vTaskDelay(2);
+  vTaskDelay(5);
   bme_humidity = bme.humidity;
-  vTaskDelay(2);
+  vTaskDelay(5);
 }
 
 //***************************************************************************************************************
@@ -46,7 +45,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
   //return;
-  float ss, ps, ws, ts;
+  static float ss, ps, ws, ts;
   ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
   vTaskDelay(10);
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1

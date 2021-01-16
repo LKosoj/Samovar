@@ -87,7 +87,6 @@ String setupKeyProcessor(const String& var)
 
 String calibrateKeyProcessor(const String& var)
 {
-  static char outstr[15];
   if (var == "StepperStep") return (String)STEPPER_MAX_SPEED;
   else if (var == "StepperStepMl") return (String)(SamSetup.StepperStepMl * 100);
 
@@ -152,8 +151,8 @@ void  handleSave(AsyncWebServerRequest *request) {
 
 void  web_command(AsyncWebServerRequest *request) {
 
-  int params = request->params();
   /*
+    int params = request->params();
     for(int i=0;i<params;i++){
       AsyncWebParameter* p = request->getParam(i);
       Serial.print(p->name().c_str());
@@ -187,7 +186,7 @@ void  web_command(AsyncWebServerRequest *request) {
 }
 void  web_program(AsyncWebServerRequest *request) {
 
-  int params = request->params();
+  //int params = request->params();
   if (request->hasArg("WProgram")) {
     set_program(request->arg("WProgram"));
     request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));

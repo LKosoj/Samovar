@@ -290,7 +290,7 @@ void menu_calibrate_down() {
 }
 ////////////////////////////////////////////////////////////
 void menu_samovar_start() {
-  String Str;
+  static String Str;
 
   if (startval == 2) startval = 3;
   else if (ProgramNum == ProgramLen - 1) startval = 2;
@@ -322,8 +322,9 @@ void menu_samovar_start() {
 }
 
 void samovar_reset() {
-  String Str = "Stoped";
-  Str.toCharArray(startval_text_val, 20);
+  static char str[20] = "Stoped             ";
+  //Str.toCharArray(startval_text_val, 20);
+  memcpy(str, startval_text_val, 20);
   reset_focus();
   reset_sensor_counter();
 }

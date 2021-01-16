@@ -50,7 +50,6 @@ void StepperTicker( void * parameter) {
   for (;;) {
     //Это должно работать максимально быстро
     StepperMoving = stepper.tick();
-    //vTaskDelay(2);
   }
 }
 
@@ -94,8 +93,9 @@ void setup() {
   read_config();
 
   encoder.tick();  // отработка нажатия
-  //Если при старте нажата кнопка энкодера - сохраненные параметры сбрасываются на параметры по умолчанию
-  if (encoder.isHold()) {
+  btn.tick();  // отработка нажатия
+  //Если при старте нажата кнопка энкодера или кнопка - сохраненные параметры сбрасываются на параметры по умолчанию
+  if (encoder.isHold() || btn.isHold()) {
     SamSetup.flag = 255;
   }
 

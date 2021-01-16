@@ -182,10 +182,12 @@ void FS_init(void)
 }
 
 bool exists(String path) {
-  bool yes = false;
+  static bool yes;
   File file = SPIFFS.open(path, "r");
   if (!file.isDirectory()) {
     yes = true;
+  } else {
+    yes = false;
   }
   file.close();
   return yes;
@@ -208,7 +210,8 @@ void create_data() {
 }
 
 void IRAM_ATTR append_data() {
-  bool w = false;
+  static bool w;
+  w = false;
   String str = Crt + ",";
   str += format_float(SteamSensor.avgTemp, 3);
   str += ",";
@@ -220,6 +223,7 @@ void IRAM_ATTR append_data() {
   str += ",";
   str += format_float(bme_pressure, 2);
 
+  //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SteamSensor.PrevTemp) {
     SteamSensor.PrevTemp = SteamSensor.avgTemp;
     w = true;
@@ -245,24 +249,25 @@ void IRAM_ATTR append_data() {
 }
 
 String get_sys_info() {
+  //Получаем системные параметры - размер свободного места, etc
   uint32_t ub = SPIFFS.usedBytes();
   uint32_t tb = SPIFFS.totalBytes();
   String result_st = "totalBytes = " + (String)tb + "; usedBytes = ";
-  vTaskDelay(2);
+  vTaskDelay(5);
   result_st += (String)ub + "; Free Heap = " + (String)ESP.getFreeHeap();
-  if (tb - ub < 400){
-      //Кончилось место, удалим старый файл. Надо было сохранять раньше
-      SPIFFS.remove("/data_old.csv");
+  if (tb - ub < 400) {
+    //Кончилось место, удалим старый файл. Надо было сохранять раньше
+    SPIFFS.remove("/data_old.csv");
   }
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
-  if (tb - ub < 200){
-      //Кончилось место, пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} Memory is full!");
+  if (tb - ub < 200) {
+    //Кончилось место, пишем оператору
+    Blynk.notify("Alarm! {DEVICE_NAME} Memory is full!");
   }
 #endif
-  vTaskDelay(2);
+  vTaskDelay(5);
   result_st += "; ESP32 t = " + (String)((temprature_sens_read() - 32) / 1.8) + "; BME t = " + (String)bme_temp;
-  vTaskDelay(2);
+  vTaskDelay(5);
   return result_st;
 }
