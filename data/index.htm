@@ -141,9 +141,10 @@ xhttp.send();
 <input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'>
 </h2>
 <div class='dvcs' id='regulator' style='visibility: hidden;position: fixed;'>
-<span class='dvcs'>Текущее напряжение регулятора: <span id='current_power_volt'></span> V</span>
-<span class='dvcs'>Целевое напряжение регулятора: <span id='target_power_volt'></span> V</span>
-<span class='dvcs'>Режим работы регулятора: <span id='current_power_mode'></span></span>
+<span class='dvcs'>Текущее напряжение: <span id='current_power_volt'></span> V</span>
+<span class='dvcs'>Целевое напряжение: <span id='target_power_volt'></span> V</span>
+<span class='dvcs'>Режим регулятора: <span id='current_power_mode'></span></span>
+<span class='dvcs'>Мощность: <span id='current_power_p'></span></span>
 </div>
 <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
 <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'>

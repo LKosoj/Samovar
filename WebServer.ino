@@ -23,9 +23,6 @@ void WebServerInit(void) {
     //TempStr = temp;
     getjson();
     request->send(200, "text/html", jsonstr);
-#ifdef __SAMOVAR_DEBUG
-    //Serial.println("  web jsonstr = " + jsonstr);
-#endif
   });
   server.on("/command", HTTP_GET, [](AsyncWebServerRequest * request) {
     web_command(request);

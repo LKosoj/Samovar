@@ -64,6 +64,11 @@ void IRAM_ATTR isrENC_TICK() {
 }
 
 void setup() {
+
+#ifndef __SAMOVAR_DEBUG
+  disableCore0WDT();
+#endif
+  
   Serial.begin(115200);
   Wire.begin();
 

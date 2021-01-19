@@ -1,3 +1,7 @@
+#ifndef ESP32
+  #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
+#endif
+
 #include "Samovar_ini.h"
 
 #ifdef __cplusplus
@@ -122,9 +126,11 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //Максимальное значение температуры пара, при котором выключится питание
 #define MAX_STEAM_TEMP 99.8
 //Значение температуры датчика пара, при котором колонна перейдет из режима разгона в рабочий режим
-#define CHANGE_POWER_MODE_STEAM_TEMP 76.5
+#define CHANGE_POWER_MODE_STEAM_TEMP 76.1
 //Значение температуры датчика в кубе, при котором откроется клапан подачи воды
 #define OPEN_VALVE_TANK_TEMP 59.5
+//Сопротивление тэна для расчета мощности
+#define HEATER_RESISTANT 15.2
 //**************************************************************************************************************
 
 //**************************************************************************************************************
