@@ -16,7 +16,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.5"
+#define SAMOVAR_VERSION "1.6"
 #define __SAMOVAR_DEBUG
 
 #define SAMOVAR_USE_BLYNK                   //использовать Blynk в проекте
