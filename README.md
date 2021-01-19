@@ -7,6 +7,7 @@
 Больше деталей на форуме
 https://alcodistillers.ru/forum/viewtopic.php?id=1812
 
+Схема
 ![alt text](https://github.com/LKosoj/Samovar/blob/master/Fritzing%20scheme/Samovar_bb.png)
 
 Еще одна возможность: можно задавать программу отбора на весь погон. В программе отбора можно указать в какую емкость, какой объем, в каком температурном режиме отбирать текущую часть погона.
