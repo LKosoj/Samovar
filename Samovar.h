@@ -313,5 +313,6 @@ String jsonstr;                                                 // Строка,
 String current_power_mode;                                      // Режим работы регулятора напряжения
 float current_power_volt;                                       // Текущее напряжение регулятора
 float target_power_volt;                                        // Заданное напряжение регулятора
+uint16_t current_power_p;                                       // Расчитанная мощность на регуляторе напряжения
 String serial_str;                                              // Срока для чтения UART
 #endif

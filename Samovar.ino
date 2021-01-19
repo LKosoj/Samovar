@@ -304,6 +304,7 @@ void getjson (void) {
   jsondoc["current_power_volt"] = format_float(current_power_volt, 1);
   jsondoc["target_power_volt"] = format_float(target_power_volt, 1);
   jsondoc["current_power_mode"] = current_power_mode;
+  jsondoc["current_power_p"] = current_power_p;
 #endif
 
 #ifdef USE_WATERSENSOR

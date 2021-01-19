@@ -491,6 +491,8 @@ void get_current_power() {
 
 //устанавливаем напряжение для регулятора напряжения
 void set_current_power(float Volt) {
+  //Считаем мощность V*V*K/R, K = 0,98~1
+  current_power_p = Volt * Volt / HEATER_RESISTANT;
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 }
