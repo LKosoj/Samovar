@@ -63,7 +63,7 @@ Stepper driver A4988 https://aliexpress.ru/item/32963690420.html
 
 Stepper drive https://aliexpress.ru/item/4001014132747.html?spm=a2g0s.9042311.0.0.264d33edS8Ocll
 
-Perestaltic pomp https://aliexpress.ru/item/4000068635951.html?spm=a2g0s.9042311.0.0.264d33edvCWw1i
+Perestaltic pomp https://aliexpress.ru/item/4001241310450.html
 
 DC-DC converter https://aliexpress.ru/item/32261885063.html?spm=a2g0s.9042311.0.0.264d33ed8ASDhI
 
