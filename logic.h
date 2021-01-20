@@ -347,6 +347,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 void check_alarm() {
   //сбросим паузу события безопасности
   if (alarm_t_min >= millis()) alarm_t_min = 0;
+  if (alarm_h_min >= millis()) alarm_h_min = 0;
 
   if (!valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true);
@@ -373,21 +374,40 @@ void check_alarm() {
 #endif
   }
 #endif
-
-
-#ifdef SAMOVAR_USE_POWER
-
-  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP) && PowerOn && alarm_t_min == 0) {
-    //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
-    //Если уже снижали - надо подождать 20 секунд, так как процесс инерционный
+  
+  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
+    //Если уже реагировали - надо подождать 20 секунд, так как процесс инерционный
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical! Water error. Voltage down from " + (String)target_power_volt);
+      Blynk.notify("Warning! {DEVICE_NAME} water temp is critical!");
 #endif
-    set_current_power(target_power_volt - 5);
+
+#ifdef SAMOVAR_USE_POWER
+    if (WaterSensor.avgTemp >= ALARM_WATER_TEMP){
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+      Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical! Water error. Voltage down from " + (String)target_power_volt);
+#endif
+       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
+       set_current_power(target_power_volt - 5);
+    }
+#endif
     alarm_t_min = millis() + 20000;
   }
 
+#ifdef USE_HEAD_LEVEL_SENSOR
+  if (1 == 0 && alarm_h_min == 0) {
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alert! {DEVICE_NAME} - Head level alarm!");
+#endif
+#ifdef SAMOVAR_USE_POWER
+    set_current_power(target_power_volt - 3);
+#endif
+    //Если уже реагировали - надо подождать 10 секунд, так как процесс инерционный
+    alarm_h_min = millis() + 10000;
+  }
+#endif
 
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE) {
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
@@ -395,11 +415,12 @@ void check_alarm() {
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alert! {DEVICE_NAME} - working mode set!");
 #endif
+#ifdef SAMOVAR_USE_POWER
     set_power_mode(POWER_WORK_MODE);
     //Устанавливаем напряжение, заданное в первой строке программы
     set_current_power(program[0].Power);
-  }
 #endif
+  }
 
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору

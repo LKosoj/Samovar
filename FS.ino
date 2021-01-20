@@ -199,7 +199,11 @@ void create_data() {
   //Переименовываем файл с логом в архивный (на всякий случай)
   SPIFFS.rename("/data.csv", "/data_old.csv");
   File fileToWrite = SPIFFS.open("/data.csv", FILE_WRITE);
-  fileToWrite.println("Date,Steam,Pipe,Water,Tank,Pressure");
+  String str = "Date,Steam,Pipe,Water,Tank,Pressure";
+#ifdef WRITE_PROGNUM_IN_LOG
+  str += ",ProgNum";
+#endif
+  fileToWrite.println(str);
   fileToWrite.close();
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
   SteamSensor.PrevTemp = 0;
@@ -222,6 +226,11 @@ void IRAM_ATTR append_data() {
   str += format_float(TankSensor.avgTemp, 3);
   str += ",";
   str += format_float(bme_pressure, 2);
+
+#ifdef WRITE_PROGNUM_IN_LOG
+  str += ",";
+  str += ProgramNum;
+#endif
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SteamSensor.PrevTemp) {

@@ -272,9 +272,9 @@ void getjson (void) {
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
   jsondoc["start_pressure"] = format_float(start_pressure, 3);
-  jsondoc["bme_humidity"] = bme_humidity;
-  jsondoc["bme_altitude"] = bme_altitude;
-  jsondoc["bme_gas"] = bme_gas;
+  //jsondoc["bme_humidity"] = bme_humidity;
+  //jsondoc["bme_altitude"] = bme_altitude;
+  //jsondoc["bme_gas"] = bme_gas;
   jsondoc["crnt_tm"] = Crt;
   jsondoc["stm"] = millis2time();
   jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp, 3);
