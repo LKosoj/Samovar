@@ -274,7 +274,7 @@ void run_program(byte num) {
     stepper.setTarget(0);
     set_capacity(0);
   } else {
-    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" ) {
+    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
@@ -300,8 +300,7 @@ void run_program(byte num) {
       }
 
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
-      //Для этого колонна должна после отбора голов поработать несколько минут на паузе для стабилизации
-      //(для этого после программы отбора голов надо задать программу с типом P (латинская) и указать время стабилизации колонны в минутах в program[num].Volume)
+      //Считаем, что колонна стабильна
       //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
       //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
       if (program[num].WType == "B" && SteamSensor.BodyTemp == 0) {
@@ -374,22 +373,22 @@ void check_alarm() {
 #endif
   }
 #endif
-  
+
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     //Если уже реагировали - надо подождать 20 секунд, так как процесс инерционный
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-      Blynk.notify("Warning! {DEVICE_NAME} water temp is critical!");
+    Blynk.notify("Warning! {DEVICE_NAME} water temp is critical!");
 #endif
 
 #ifdef SAMOVAR_USE_POWER
-    if (WaterSensor.avgTemp >= ALARM_WATER_TEMP){
+    if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
 #ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
+      //Если используется Blynk - пишем оператору
       Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical! Water error. Voltage down from " + (String)target_power_volt);
 #endif
-       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
-       set_current_power(target_power_volt - 5);
+      //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
+      set_current_power(target_power_volt - 5);
     }
 #endif
     alarm_t_min = millis() + 20000;
