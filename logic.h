@@ -464,6 +464,7 @@ void open_valve(bool Val) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
 String read_from_serial() {
+  String serial_str = "";
   boolean getData;
   getData = false;
   char a;
@@ -503,16 +504,20 @@ void get_current_power() {
   }
   String s = read_from_serial();
   if (s != "") {
-    current_power_volt = hexToDec(s.substring(1, 4)) / 10.0F;
-    target_power_volt = hexToDec(s.substring(4, 7)) / 10.0F;
-    current_power_mode = s.substring(7, 8);
+    static int cpv = hexToDec(s.substring(1, 4));
+    //Если напряжение больше 300 - не корректно получено значение от регулятора, оставляем старое значение
+    if (cpv < 3000) {
+      current_power_volt = cpv / 10.0F;
+      target_power_volt = hexToDec(s.substring(4, 7)) / 10.0F;
+      current_power_mode = s.substring(7, 8);
+      //Считаем мощность V*V*K/R, K = 0,98~1
+      current_power_p = current_power_volt * current_power_volt / HEATER_RESISTANT;
+    }
   }
 }
 
 //устанавливаем напряжение для регулятора напряжения
 void set_current_power(float Volt) {
-  //Считаем мощность V*V*K/R, K = 0,98~1
-  current_power_p = Volt * Volt / HEATER_RESISTANT;
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 }
