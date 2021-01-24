@@ -168,9 +168,11 @@ void  web_command(AsyncWebServerRequest *request) {
     if (request->hasArg("reset")) {
       sam_command_sync = SAMOVAR_RESET;
     }
+#ifdef SAMOVAR_USE_POWER
     if (request->hasArg("voltage")) {
       set_current_power(request->arg("voltage").toFloat());
     }
+#endif
     if (request->hasArg("pause")) {
       if (PauseOn) {
         sam_command_sync = SAMOVAR_CONTINUE;
