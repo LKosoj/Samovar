@@ -1,3 +1,6 @@
+Загрузка страниц для web-сервера. Необходимо сделать до первого запуска. Для этого необходимо в каталоге с Arduino создать катлог tools, и распаковать в него содержимое архива ESP32FS-1.0.zip
+Подробнее - https://randomnerdtutorials.com/install-esp32-filesystem-uploader-arduino-ide/
+
 Загрузка файлов в файловую систему ESP32
 https://www.pvsm.ru/arduino/342664
 Утилита для WIN/MAC и скетч в архиве
