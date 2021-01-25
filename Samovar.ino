@@ -7,7 +7,6 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
-#include "Adafruit_BME680.h"
 #include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
@@ -28,6 +27,22 @@
 #include <ESP32Servo.h>
 
 #include "Samovar.h"
+
+#ifdef USE_BME680
+#include "Adafruit_BME680.h"
+#define BME_STRING "BME680"
+#endif
+
+#ifdef USE_BMP180
+#include "Adafruit_BMP085.h"
+#define BME_STRING "BMP180"
+#endif
+
+#ifdef USE_BMP280
+#include "Adafruit_BMP280.h"
+#define BME_STRING "BMP280"
+#endif
+
 #include "font.h"
 #include "logic.h"
 

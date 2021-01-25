@@ -61,8 +61,8 @@ uint8_t temprature_sens_read();
 //**************************************************************************************************************
 // Пины для релейного модуля
 #define RELE_CHANNEL1 2             //используется для пускателя, который включает нагреватель
-#define RELE_CHANNEL2 34            //используется для клапана, открывающего/закрывающего воду охлаждения
-#define RELE_CHANNEL3 14
+#define RELE_CHANNEL2 34            
+#define RELE_CHANNEL3 14            //используется для клапана, открывающего/закрывающего воду охлаждения
 #define RELE_CHANNEL4 13
 //**************************************************************************************************************
 
@@ -161,9 +161,6 @@ AsyncWebServer server(80);
 
 AsyncWebSocket ws("/ws");
 AsyncEventSource events("/events");
-
-Adafruit_BME680 bme; // I2C
-//ClosedCube_BME680 bme680;
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);

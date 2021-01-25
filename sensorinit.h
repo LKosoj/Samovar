@@ -1,3 +1,15 @@
+#ifdef USE_BME680
+  Adafruit_BME680 bme; // I2C
+#endif
+
+#ifdef USE_BMP180
+Adafruit_BMP085 bme; // I2C
+#endif
+
+#ifdef USE_BMP280
+Adafruit_BMP280 bme; // I2C
+#endif
+
 void clok();
 void clok1();
 void getjson (void);
@@ -23,6 +35,8 @@ void IRAM_ATTR BME_getvalue(bool fl) {
     bme_pressure = -1;
     return;
   }
+  
+#ifdef USE_BME680
   // Tell BME680 to begin measurement.
   if (bme.beginReading() == 0) {
     return;
@@ -36,8 +50,14 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   vTaskDelay(5);
   bme_pressure = bme.pressure / 100.0 * 0.75;
   vTaskDelay(5);
-  bme_humidity = bme.humidity;
-  vTaskDelay(5);
+  //bme_humidity = bme.humidity;
+  //vTaskDelay(5);
+#else 
+  bme_temp = bme.readTemperature();
+  bme_pressure = bme.readPressure() / 100.0 * 0.75;
+#endif
+
+
 }
 
 //***************************************************************************************************************
@@ -86,21 +106,23 @@ void IRAM_ATTR triggerGetSensor(void) {
 
 void sensor_init(void) {
   Serial.println("Pressure sensor initialization");
-  writeString("Bme680 init...     ", 3);
+  writeString((String)BME_STRING + " init...     ", 3);
   delay(1000);
 
   if (!bme.begin()) {
-    writeString("Bme680 not found     ", 3);
+    writeString((String)BME_STRING + " not found     ", 3);
     bmefound = false;
     //Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
-  }
-
+  } else {
+#ifdef USE_BME680
   // Set up oversampling and filter initialization
   bme.setTemperatureOversampling(BME680_OS_8X);
   bme.setHumidityOversampling(BME680_OS_2X);
   bme.setPressureOversampling(BME680_OS_4X);
   bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-
+#endif
+  }
+  
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
   delay(4000);
