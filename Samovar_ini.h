@@ -4,6 +4,7 @@
 #define SAMOVAR_HOST "samovar"
 #define SAMOVAR_SSID "ssid"
 #define SAMOVAR_PASSWORD "pwd"
+//параметры подключения к Blynk
 #define SAMOVAR_AUTH "auth-auth"
 //**************************************************************************************************************
 
