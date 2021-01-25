@@ -125,6 +125,7 @@ void sensor_init(void) {
 
   if (!bme.begin()) {
     writeString((String)BME_STRING + " not found     ", 3);
+    Serial.println((String)BME_STRING + " not found");
     bmefound = false;
     //Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
   } else {

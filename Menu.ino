@@ -412,12 +412,9 @@ void setupMenu() {
   set_menu_screen(3);
   main_menu1.change_screen(&welcome_screen);
 
-
-  samovar_reset();
   main_menu1.update();
   //delay(2000);
   welcome_screen.hide(true);
-
 }
 
 void encoder_getvalue() {

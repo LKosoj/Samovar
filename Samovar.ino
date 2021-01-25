@@ -178,6 +178,8 @@ void setup() {
 
   sensor_init();
 
+  samovar_reset();
+
   WebServerInit();
 
 #ifdef USE_WATERSENSOR
