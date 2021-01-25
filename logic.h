@@ -108,11 +108,15 @@ void set_power(bool On) {
 #ifdef SAMOVAR_USE_POWER
     delay(1000);
     set_power_mode(POWER_SPEED_MODE);
+#else
+    digitalWrite(RELE_CHANNEL4, LOW);
 #endif
 
   } else {
 #ifdef SAMOVAR_USE_POWER
     set_power_mode(POWER_SLEEP_MODE);
+#else
+    digitalWrite(RELE_CHANNEL4, HIGH);
 #endif
     samovar_reset();
     digitalWrite(RELE_CHANNEL1, HIGH);
@@ -418,6 +422,8 @@ void check_alarm() {
     set_power_mode(POWER_WORK_MODE);
     //Устанавливаем напряжение, заданное в первой строке программы
     set_current_power(program[0].Power);
+#else
+    digitalWrite(RELE_CHANNEL4, HIGH);
 #endif
   }
 

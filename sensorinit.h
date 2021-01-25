@@ -3,7 +3,7 @@
 #endif
 
 #ifdef USE_BMP180
-Adafruit_BMP085 bme; // I2C
+Adafruit_BMP085_Unified bme; // I2C
 #endif
 
 #ifdef USE_BMP280
@@ -48,15 +48,29 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 
   bme_temp = bme.temperature;
   vTaskDelay(5);
-  bme_pressure = bme.pressure / 100.0 * 0.75;
+  bme_pressure = bme.pressure;
   vTaskDelay(5);
   //bme_humidity = bme.humidity;
   //vTaskDelay(5);
-#else 
-  bme_temp = bme.readTemperature();
-  bme_pressure = bme.readPressure() / 100.0 * 0.75;
 #endif
 
+#ifdef USE_BMP180
+  sensors_event_t event;
+  bme.getEvent(&event);
+  if (event.pressure){
+    bme_pressure = event.pressure;
+    float temperature;
+    bme.getTemperature(&temperature);
+    bme_temp = temperature;
+  }
+#endif
+
+#ifdef USE_BMP280
+  bme_temp = bme.readTemperature();
+  bme_pressure = bme.readPressure();
+#endif
+
+  bme_pressure = bme_pressure / 100.0 * 0.75;
 
 }
 

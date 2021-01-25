@@ -34,7 +34,7 @@
 #endif
 
 #ifdef USE_BMP180
-#include "Adafruit_BMP085.h"
+#include "Adafruit_BMP085_U.h"
 #define BME_STRING "BMP180"
 #endif
 
@@ -104,11 +104,6 @@ void setup() {
   // Частоты 500 и 2500 - подобраны для моего серво-привода. Возможно, для других частоты могут отличаться
   servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
 
-
-#ifdef SAMOVAR_USE_BLYNK
-  Blynk.begin(auth, ssid, password);
-#endif
-
   //Читаем сохраненную конфигурацию
   read_config();
 
@@ -146,6 +141,16 @@ void setup() {
   //Подключаемся к WI-FI
   connectWiFi();
   writeString("Connected", 4);
+
+#ifdef SAMOVAR_USE_BLYNK
+  //Blynk.begin(auth, ssid, password);
+  writeString("Connecting to Blynk ", 3);
+  writeString("               ", 4);
+  Serial.println("Connecting to Blynk");
+  Blynk.config(auth);
+  Blynk.connect(888);
+#endif
+  
 
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
@@ -218,7 +223,9 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
 
 #ifdef SAMOVAR_USE_BLYNK
-  Blynk.run();
+  if(Blynk.connected()){
+    Blynk.run();
+  }
 #endif
 
   ws.cleanupClients();
