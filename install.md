@@ -41,7 +41,7 @@ https://alexgyver.ru/gyverstepper/
 
 //параметры подключения к Blynk
 
-#define SAMOVAR_AUTH "auth-auth" //если планируется использовать Blynk - указать код Blynk.
+#define SAMOVAR_AUTH "auth-auth" //если планируется использовать Blynk - указать код из приложения Blynk.
 
 
 
