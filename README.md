@@ -111,6 +111,8 @@ Button https://aliexpress.ru/item/Black-Push-Button-Switch-4-Pin-12mm-Waterproof
 
 :exclamation: **Если планируется использовать регулятор мощности, управляемый по ком-порту - необходимо добавить гальваническую развязку.**
 
+Стабилизатор мощности использовался такой: https://alcodistillers.ru/forum/viewtopic.php?id=1524, но можно взять любой регулятор, который позволяет управлять мощностью через ком-порт, или проект регулятора с исходным кодом, и доработать скетчи.
+
 Adum https://aliexpress.ru/item/Magnetic-Isolator-Board-Module-Replace-Optocouplers-CJMCU-1201-ADUM1201-Isolator-ADUM1201ARZ-SOIC-8-Isolator-SPI-Interface/32789240308.html?spm=a2g0s.9042311.0.0.264d33ed0hX3vj&sku_id=63584285301
 
     
