@@ -277,9 +277,18 @@ void run_program(byte num) {
     stepper.setCurrent(0);
     stepper.setTarget(0);
     set_capacity(0);
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alert! {DEVICE_NAME} - Program finished!");
+#endif
+    
   } else {
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
       //устанавливаем параметры для текущей программы отбора
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("{DEVICE_NAME} - Set prog line " + (String)(num + 1) + ", capacity " + (String)program[num].capacity_num);
+#endif
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
       TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
@@ -398,11 +407,12 @@ void check_alarm() {
     alarm_t_min = millis() + 20000;
   }
 
+  //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
-  if (1 == 0 && alarm_h_min == 0) {
+  if (whls.isHolded() && alarm_h_min == 0) {
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alert! {DEVICE_NAME} - Head level alarm!");
+    Blynk.notify("Alarm! {DEVICE_NAME} - Head level alarm!");
 #endif
 #ifdef SAMOVAR_USE_POWER
     set_current_power(target_power_volt - 3);

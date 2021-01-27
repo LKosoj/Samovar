@@ -74,6 +74,12 @@ void IRAM_ATTR WFpulseCounter() {
 }
 #endif
 
+#ifdef USE_HEAD_LEVEL_SENSOR
+void IRAM_ATTR isrWHLS_TICK(){
+  whls.tick();
+}
+#endif
+
 void IRAM_ATTR isrENC_TICK() {
   encoder.tick();  // отработка в прерывании
 }
@@ -187,6 +193,15 @@ void setup() {
   attachInterrupt(WATERSENSOR_PIN, WFpulseCounter, FALLING);
 #endif
 
+#ifdef USE_HEAD_LEVEL_SENSOR
+//Задаем параметры для сенсора уровня флегмы
+  whls.setType(LOW_PULL);
+  whls.setDebounce(50); //игнорируем дребезг
+  whls.setTimeout(WHLS_ALARM_TIME * 1000); //время, через которое сработает тревога по уровню флегмы
+  //вешаем прерывание на изменение датчика уровня флегмы
+  attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
+#endif
+
   //вешаем прерывание на изменения по ногам энкодера
   attachInterrupt(ENC_CLK, isrENC_TICK, CHANGE);
   attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
@@ -211,7 +226,7 @@ void setup() {
 
   //сбрасываем нажатие на кнопку
   btn.setType(LOW_PULL);
-  btn.setTimeout(800);
+  btn.setTimeout(500);
   btn.resetStates();
 }
 
