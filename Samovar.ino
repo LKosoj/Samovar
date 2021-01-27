@@ -80,6 +80,10 @@ void IRAM_ATTR isrWHLS_TICK(){
 }
 #endif
 
+void IRAM_ATTR isrBTN_TICK(){
+  btn.tick();
+}
+
 void IRAM_ATTR isrENC_TICK() {
   encoder.tick();  // отработка в прерывании
 }
@@ -197,6 +201,7 @@ void setup() {
 //Задаем параметры для сенсора уровня флегмы
   whls.setType(LOW_PULL);
   whls.setDebounce(50); //игнорируем дребезг
+  whls.setTickMode(MANUAL);
   whls.setTimeout(WHLS_ALARM_TIME * 1000); //время, через которое сработает тревога по уровню флегмы
   //вешаем прерывание на изменение датчика уровня флегмы
   attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
@@ -224,9 +229,10 @@ void setup() {
   writeString("                  ", 3);
   writeString("      Started     ", 4);
 
-  //сбрасываем нажатие на кнопку
+  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
   btn.setType(LOW_PULL);
   btn.setTimeout(500);
+  //сбрасываем нажатие на кнопку
   btn.resetStates();
 }
 
@@ -235,7 +241,6 @@ void loop() {
   ArduinoOTA.handle();
 #endif
 
-  btn.tick();
   //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
 

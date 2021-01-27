@@ -147,6 +147,11 @@ void GButton::resetStates() {
 	flags.counter_flag = false;
 	last_hold_counter = 0;
 	last_counter = 0;
+///////////////////////////////
+	btn_state = false;
+	btn_timer = 0;
+	btn_flag = false;
+	flags.hold_flag = false;
 }
 
 // ==================== TICK ====================

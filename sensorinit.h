@@ -254,6 +254,8 @@ void reset_sensor_counter(void) {
   stepper.setCurrent(0);
   stepper.setTarget(0);
   set_capacity(0);
+  alarm_h_min = 0;
+  alarm_t_min = 0;
 
   ProgramNum = 0;
   SteamSensor.BodyTemp = 0;

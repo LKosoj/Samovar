@@ -88,39 +88,39 @@ class GButton {
 														// MANUAL - нужно вызывать функцию tick() вручную														
 														// AUTO - tick() входит во все остальные функции и опрашивается сама
 	
-	void tick();										// опрос кнопки	
+	void IRAM_ATTR tick();										// опрос кнопки	
 	void tick(boolean state);							// опрос внешнего значения (0 нажато, 1 не нажато) (для матричных, резистивных клавиатур и джойстиков)
 	
-	boolean isPress();		// возвращает true при нажатии на кнопку. Сбрасывается после вызова
-	boolean isRelease();	// возвращает true при отпускании кнопки. Сбрасывается после вызова
-	boolean isClick();		// возвращает true при клике. Сбрасывается после вызова
-    boolean isHolded();		// возвращает true при удержании дольше timeout. Сбрасывается после вызова
-	boolean isHold();		// возвращает true при нажатой кнопке, не сбрасывается
-	boolean state();		// возвращает состояние кнопки
+	boolean IRAM_ATTR isPress();		// возвращает true при нажатии на кнопку. Сбрасывается после вызова
+	boolean IRAM_ATTR isRelease();	// возвращает true при отпускании кнопки. Сбрасывается после вызова
+	boolean IRAM_ATTR isClick();		// возвращает true при клике. Сбрасывается после вызова
+    boolean IRAM_ATTR isHolded();		// возвращает true при удержании дольше timeout. Сбрасывается после вызова
+	boolean IRAM_ATTR isHold();		// возвращает true при нажатой кнопке, не сбрасывается
+	boolean IRAM_ATTR state();		// возвращает состояние кнопки
 
-	boolean isSingle();		// возвращает true при одиночном клике. Сбрасывается после вызова
-	boolean isDouble();		// возвращает true при двойном клике. Сбрасывается после вызова
-	boolean isTriple();		// возвращает true при тройном клике. Сбрасывается после вызова
+	boolean IRAM_ATTR isSingle();		// возвращает true при одиночном клике. Сбрасывается после вызова
+	boolean IRAM_ATTR isDouble();		// возвращает true при двойном клике. Сбрасывается после вызова
+	boolean IRAM_ATTR isTriple();		// возвращает true при тройном клике. Сбрасывается после вызова
 	
-	boolean hasClicks();	// проверка на наличие кликов. Сбрасывается после вызова
-	uint8_t getClicks();	// вернуть количество кликов
-	uint8_t getHoldClicks();// вернуть количество кликов, предшествующее удерживанию
+	boolean IRAM_ATTR hasClicks();	// проверка на наличие кликов. Сбрасывается после вызова
+	uint8_t IRAM_ATTR getClicks();	// вернуть количество кликов
+	uint8_t IRAM_ATTR getHoldClicks();// вернуть количество кликов, предшествующее удерживанию
 	
-	boolean isStep(byte clicks = 0); // возвращает true по таймеру setStepTimeout, смотри пример
+	boolean IRAM_ATTR isStep(byte clicks = 0); // возвращает true по таймеру setStepTimeout, смотри пример
 	
-	void resetStates();		// сбрасывает все is-флаги и счётчики
+	void IRAM_ATTR resetStates();		// сбрасывает все is-флаги и счётчики
 	
   private:
-    GyverButtonFlags flags;
-    uint8_t _PIN = 0;
-	uint16_t _debounce = 60;
-	uint16_t _timeout = 500;
-	uint16_t _click_timeout = 500;
-	uint16_t _step_timeout = 400;
-	uint8_t btn_counter = 0, last_counter = 0, last_hold_counter = 0;
-	uint32_t btn_timer = 0;	
-	bool btn_state = false;
-	bool btn_flag = false;
+    volatile GyverButtonFlags flags;
+    volatile uint8_t _PIN = 0;
+	volatile uint16_t _debounce = 60;
+	volatile uint16_t _timeout = 500;
+	volatile uint16_t _click_timeout = 500;
+	volatile uint16_t _step_timeout = 400;
+	volatile uint8_t btn_counter = 0, last_counter = 0, last_hold_counter = 0;
+	volatile uint32_t btn_timer = 0;	
+	volatile bool btn_state = false;
+	volatile bool btn_flag = false;
 #if defined(__AVR__)
 	volatile uint8_t *_pin_reg;
 	volatile uint8_t _bit_mask;

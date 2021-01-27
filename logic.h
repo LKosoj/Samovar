@@ -358,8 +358,11 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 
 void check_alarm() {
   //сбросим паузу события безопасности
-  if (alarm_t_min >= millis()) alarm_t_min = 0;
-  if (alarm_h_min >= millis()) alarm_h_min = 0;
+  if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
+  if (alarm_h_min > 0 && alarm_h_min <= millis()) {
+    whls.resetStates();
+    alarm_h_min = 0;
+  }
 
   if (!valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true);
@@ -388,7 +391,7 @@ void check_alarm() {
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
-    //Если уже реагировали - надо подождать 20 секунд, так как процесс инерционный
+    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} water temp is critical!");
@@ -404,12 +407,14 @@ void check_alarm() {
       set_current_power(target_power_volt - 5);
     }
 #endif
-    alarm_t_min = millis() + 20000;
+    alarm_t_min = millis() + 30000;
   }
 
   //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
+  whls.tick();
   if (whls.isHolded() && alarm_h_min == 0) {
+    whls.resetStates();
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} - Head level alarm!");
@@ -417,8 +422,8 @@ void check_alarm() {
 #ifdef SAMOVAR_USE_POWER
     set_current_power(target_power_volt - 3);
 #endif
-    //Если уже реагировали - надо подождать 10 секунд, так как процесс инерционный
-    alarm_h_min = millis() + 10000;
+    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
+    alarm_h_min = millis() + 30000;
   }
 #endif
 
@@ -440,7 +445,7 @@ void check_alarm() {
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
   //что разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
-  //https://alcodistillers.ru/forum/viewtopic.php?id=137 - тут указано 3 замера раз в три минуты.
+  //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
   if (SamovarStatusInt == 50 && SteamSensor.avgTemp > 70) {
     float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
     d = abs(d);
