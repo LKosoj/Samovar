@@ -359,10 +359,13 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 void check_alarm() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
+
+#ifdef USE_HEAD_LEVEL_SENSOR
   if (alarm_h_min > 0 && alarm_h_min <= millis()) {
     whls.resetStates();
     alarm_h_min = 0;
   }
+#endif
 
   if (!valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true);
