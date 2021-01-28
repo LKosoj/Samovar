@@ -126,8 +126,8 @@ void setup() {
 
   if (SamSetup.flag > 250) {
     SamSetup.flag = 1;
-    SamSetup.DeltaSteamTemp = 0;
-    SamSetup.DeltaPipeTemp = 0;
+    SamSetup.DeltaSteamTemp = 0.5;
+    SamSetup.DeltaPipeTemp = 1;
     SamSetup.DeltaWaterTemp = 0;
     SamSetup.DeltaTankTemp = 0;
     SamSetup.SetSteamTemp = 0;
