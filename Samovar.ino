@@ -247,6 +247,8 @@ void loop() {
 #ifdef SAMOVAR_USE_BLYNK
   if(Blynk.connected()){
     Blynk.run();
+  } else {
+    Blynk.connect(888);
   }
 #endif
 
