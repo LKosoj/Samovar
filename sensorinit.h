@@ -117,8 +117,8 @@ void IRAM_ATTR triggerGetSensor(void) {
     append_data();              //Записываем данные;
   }
 #ifdef SAMOVAR_USE_BLYNK
-  if(!Blynk.connected()){
-    Blynk.connect(888);
+  if(!Blynk.connected() && WiFi.status() == WL_CONNECTED){
+    Blynk.connect(BLYNK_TIMEOUT_MS);
   }
 #endif
 
