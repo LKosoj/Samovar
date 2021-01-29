@@ -542,6 +542,7 @@ void get_current_power() {
 
 //устанавливаем напряжение для регулятора напряжения
 void set_current_power(float Volt) {
+  target_power_volt = Volt;
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 }
