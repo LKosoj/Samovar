@@ -116,6 +116,12 @@ void IRAM_ATTR triggerGetSensor(void) {
   if (startval > 0) {
     append_data();              //Записываем данные;
   }
+#ifdef SAMOVAR_USE_BLYNK
+  if(!Blynk.connected()){
+    Blynk.connect(888);
+  }
+#endif
+
 }
 
 void sensor_init(void) {
