@@ -63,7 +63,7 @@ uint8_t temprature_sens_read();
 #ifndef STEPPER_EN
 #define STEPPER_EN 33
 #endif
-#define STEPPER_STEPS 200 //количество шагов, 200 x 16
+#define STEPPER_STEPS 400 //количество шагов, 200 x MS
 #define STEPPER_STEP_ML 2050 //количество шагов на 1 мл жидкости для драйвера с шагами 1/2
 #define VOLUME_MAX_SPEED 2.0
 #define STEPPER_MAX_SPEED 12000 //  STEPPER_STEP_ML * 6
