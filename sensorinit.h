@@ -70,6 +70,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   bme_pressure = bme.readPressure();
 #endif
 
+  //filtered_val += (val - filtered_val) * 0.01;
   bme_pressure = bme_pressure / 100.0 * 0.75;
 
 }
@@ -91,6 +92,8 @@ void IRAM_ATTR DS_getvalue(void) {
 
   //return;
   sensors.requestTemperatures();
+
+  //filtered_val += (val - filtered_val) * 0.01;
 
   if (ss != -127) {
     SteamSensor.avgTemp = ss + SamSetup.DeltaSteamTemp;
