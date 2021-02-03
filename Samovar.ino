@@ -231,11 +231,10 @@ void setup() {
   writeString("                  ", 3);
   writeString("      Started     ", 4);
 
-  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
   btn.setType(LOW_PULL);
+  btn.setTickMode(MANUAL);
   btn.setTimeout(500);
-  //сбрасываем нажатие на кнопку
-  btn.resetStates();
+  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
 }
 
 void loop() {
@@ -285,7 +284,6 @@ void loop() {
     withdrawal();     //функция расчета отбора
   }
 
-  
   encoder_getvalue();
 
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
