@@ -29,7 +29,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   //bme_pressure = 767;
   //bme_temp = 25;
   //return;
-
+  
   if (!bmefound) {
     bme_temp = -1;
     bme_pressure = -1;
@@ -70,9 +70,8 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   bme_pressure = bme.readPressure();
 #endif
 
-  //filtered_val += (val - filtered_val) * 0.01;
   bme_pressure = bme_pressure / 100.0 * 0.75;
-
+  //filtered_val += (val - filtered_val) * 0.01;
 }
 
 //***************************************************************************************************************
@@ -92,8 +91,6 @@ void IRAM_ATTR DS_getvalue(void) {
 
   //return;
   sensors.requestTemperatures();
-
-  //filtered_val += (val - filtered_val) * 0.01;
 
   if (ss != -127) {
     SteamSensor.avgTemp = ss + SamSetup.DeltaSteamTemp;
@@ -283,6 +280,7 @@ void reset_sensor_counter(void) {
     fileToAppend.close();
   }
 
+  bme_pressure = 0;
   BME_getvalue(false);
   start_pressure = bme_pressure;
   get_Samovar_Status();
