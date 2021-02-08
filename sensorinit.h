@@ -48,17 +48,19 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 
   bme_temp = bme.temperature;
   vTaskDelay(5);
-  bme_pressure = bme.pressure;
+  bme_pressure = bme.pressure / 100 * 0.75;
   vTaskDelay(5);
   //bme_humidity = bme.humidity;
   //vTaskDelay(5);
+
+  //filtered_val += (val - filtered_val) * 0.01;
 #endif
 
 #ifdef USE_BMP180
   sensors_event_t event;
   bme.getEvent(&event);
   if (event.pressure){
-    bme_pressure = event.pressure;
+    bme_pressure = event.pressure * 0.75;
     float temperature;
     bme.getTemperature(&temperature);
     bme_temp = temperature;
@@ -67,11 +69,9 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 
 #ifdef USE_BMP280
   bme_temp = bme.readTemperature();
-  bme_pressure = bme.readPressure();
+  bme_pressure = bme.readPressure() / 100 * 0.75;
 #endif
 
-  bme_pressure = bme_pressure / 100.0 * 0.75;
-  //filtered_val += (val - filtered_val) * 0.01;
 }
 
 //***************************************************************************************************************
