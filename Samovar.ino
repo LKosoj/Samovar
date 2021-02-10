@@ -142,6 +142,8 @@ void setup() {
     SamSetup.PipeDelay = 20;
     SamSetup.WaterDelay = 20;
     SamSetup.TankDelay = 20;
+    SamSetup.HeaterResistant = 10;
+    SamSetup.LogPeriod = 3;
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config();
