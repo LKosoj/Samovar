@@ -145,6 +145,7 @@ dateAxis.dataFields.category = "Date";
 // Create value axis
 var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 var valueAxis1 = chart.yAxes.push(new am4charts.ValueAxis());
+var valueAxis2 = chart.yAxes.push(new am4charts.ValueAxis());
 // Create series
 var series1 = chart.series.push(new am4charts.LineSeries());
 series1.dataFields.valueY = "Steam";
@@ -190,6 +191,15 @@ series5.name = "Атмосферное давление";
 series5.strokeWidth = 3;
 series5.tensionX = 0.7;
 series5.tooltipText = "{valueY.value}";
+
+var series6 = chart.series.push(new am4charts.LineSeries());
+series6.yAxis = valueAxis2;
+series6.dataFields.valueY = "ProgNum";
+series6.dataFields.categoryX = "Date";
+series6.name = "Строка программы";
+series6.strokeWidth = 3;
+series6.tensionX = 0.7;
+series6.tooltipText = "{valueY.value}";
 
 //chart.cursor = new am4charts.XYCursor();
 //chart.cursor.snapToSeries = series1;

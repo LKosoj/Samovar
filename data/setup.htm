@@ -3,21 +3,25 @@
 <meta charset='utf-8'>
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
 <title>Самовар</title>
-</head>
 
-<style>#file-input,input{width:200;height:34px;border-radius:4px;margin:10 10 0 10;font-size:15px}
-input{background:#f1f1f1;border:0;padding:0 15px;}
-input[type='text']{background:#f1f1f1;border:0;padding:0 15px;width:80;margin:0}
-#file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}
-body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
-#bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
-form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
-h1{text-align:center}
-p{margin: 0px !important;}
-.btn{background:#3498db;color:#fff;cursor:pointer}
-.dvcs{padding: 10px;margin: 10px;}
-</style>
+<link rel="stylesheet" href="/style.css">
+
 <script>
+function openTab(evt, tabName) {
+    var i, tabcontent, tablinks;
+    tabcontent = document.getElementsByClassName("tabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+    }
+    tablinks = document.getElementsByClassName("tablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+    document.getElementById(tabName).style.display = "block";
+    evt.currentTarget.className += " active";
+  return 0;
+}
+
 function set_program(){
 var server = '/program';
 request = new XMLHttpRequest();
@@ -39,19 +43,23 @@ alert( request.status + ': ' + request.statusText );
 return 0;
 };
 </script>
+</head>
 
 <body>
 <form action='/save' method="post" name="setupform">
 <h1>Настройки</h1>
-<h2>Корректировка датчика пара перед дефлегматором : <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176C</h2>
-<h2>Уставка датчика пара перед дефлегматором : <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176C</h2>
-<h2>Корректировка датчика в царге на 2/3 колонны : <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176C</h2>
-<h2>Уставка датчика в царге на 2/3 колонны : <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176C</h2>
-<h2>Корректировка датчика флегмы или воды : <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176C</h2>
-<h2>Уставка датчика флегмы или воды : <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176C</h2>
-<h2>Корректировка датчика в кубе : <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
-<h2>Уставка датчика в кубе : <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
-<h2>Количество шагов шагового двигателя : <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
+<div class="tab">
+  <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Основные">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Temp');" value="Температура">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Pump');" value="Насос">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Прочие">
+</div>
+<div id="Main" class="tabcontent" style="display: block;">
+<h2>
+<input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
+<label for='usepressure'>Использовать корректировку давления</label>
+</h2>
+<h2>Программа отбора:</h2> <textarea cols="40" rows="15" id='WProgram' name='WProgram'>%WProgram%</textarea>
 <div class='dvcs'>
 <p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора</span></p>
 <p><span>Пример программы отбора (H - головы (Heads), B - тело (Body), P - пауза (Pause), T - хвост (Tail).</span></p>
@@ -60,12 +68,44 @@ return 0;
 <p><span>P;120;0.00;0;0.00;0</span></p>
 <p><span>B;5000;0.75;2;0.00;0</span></p>
 </div>
-<h2>Программа отбора: <textarea cols="40" rows="5" id='WProgram' name='WProgram' style="font-size: 14;">%WProgram%</textarea> л./час.</h2>
-<input id='save' type='submit' name='save' value='Сохранить'>
+<div style="margin: 0 auto; width: 200px;">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
-<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
+</div>
+</div>
+
+<div id="Temp" class="tabcontent">
+<h2>Корректировка датчика пара перед дефлегматором : <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176C</h2>
+<h2>Уставка датчика пара перед дефлегматором : <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т пара за уставку : <input name='SteamDelay' type='text' value='%SteamDelay%'> сек</h2>
+<h2>Корректировка датчика в царге на 2/3 колонны : <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176C</h2>
+<h2>Уставка датчика в царге на 2/3 колонны : <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т в царге за уставку : <input name='PipeDelay' type='text' value='%PipeDelay%'> сек</h2>
+<h2>Корректировка датчика воды : <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176C</h2>
+<h2>Уставка датчика воды : <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т воды за уставку : <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
+<h2>Корректировка датчика в кубе : <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
+<h2>Уставка датчика в кубе : <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т в кубе за уставку : <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
+</div>
+
+<div id="Pump" class="tabcontent">
+<h2>Количество шагов шагового двигателя : <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
+<div style="margin: 0 auto; width: 200px;">
 <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
+</div>
+</div>
+
+<div id="Other" class="tabcontent">
+<h2>Тайм-зона : <input name='TimeZone' type='text' value='%TimeZone%'></h2>
+<h2>Сопротивление тэна для расчета мощности : <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
+<h2>Периодичность записи данных в лог : <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+</div>
+
+<div style="margin: 0 auto; width: 668px;">
+<input id='save' type='submit' name='save' value='Сохранить'>
+<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
 <input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"'>
+</div>
 </form>
 </body>
 </html>

@@ -6,6 +6,7 @@ void WebServerInit(void) {
 
   FS_init();                                        // Включаем работу с файловой системой
 
+  server.serveStatic("/style.css", SPIFFS, "/style.css");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm");
   server.serveStatic("/data.csv", SPIFFS, "/data.csv");
@@ -78,7 +79,17 @@ String setupKeyProcessor(const String& var)
   else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
   else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
   else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
-
+  else if (var == "SteamDelay") return (String)SamSetup.SteamDelay;
+  else if (var == "PipeDelay") return (String)SamSetup.PipeDelay;
+  else if (var == "WaterDelay") return (String)SamSetup.WaterDelay;
+  else if (var == "TankDelay") return (String)SamSetup.TankDelay;
+  else if (var == "TimeZone") return (String)SamSetup.TimeZone;
+  else if (var == "LogPeriod") return (String)SamSetup.LogPeriod;
+  else if (var == "HeaterR") return (String)SamSetup.HeaterResistant;
+  else if (var == "Checked") {
+    if (SamSetup.UsePreccureCorrect) return "checked='true'";
+    else return "";
+  }
   return String();
 }
 
@@ -91,8 +102,8 @@ String calibrateKeyProcessor(const String& var)
 }
 
 void  handleSave(AsyncWebServerRequest *request) {
-  /*
-    int params = request->params();
+/*    
+   int params = request->params();
     for(int i=0;i<params;i++){
       AsyncWebParameter* p = request->getParam(i);
       Serial.print(p->name().c_str());
@@ -100,7 +111,23 @@ void  handleSave(AsyncWebServerRequest *request) {
       Serial.println(p->value().c_str());
     }
     //return;
-  */
+*/
+
+  SamSetup.UsePreccureCorrect = false;
+  
+  if (request->hasArg("SteamDelay")) {
+    SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
+  }
+  if (request->hasArg("PipeDelay")) {
+    SamSetup.PipeDelay = request->arg("PipeDelay").toInt();
+  }
+  if (request->hasArg("WaterDelay")) {
+    SamSetup.WaterDelay = request->arg("WaterDelay").toInt();
+  }
+  if (request->hasArg("TankDelay")) {
+    SamSetup.TankDelay = request->arg("TankDelay").toInt();
+  }
+
   if (request->hasArg("DeltaSteamTemp")) {
     SamSetup.DeltaSteamTemp = request->arg("DeltaSteamTemp").toFloat();
   }
@@ -133,6 +160,18 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("WProgram")) {
     set_program(request->arg("WProgram"));
+  }
+  if (request->hasArg("usepressure")) {
+    SamSetup.UsePreccureCorrect = true;
+  }
+  if (request->hasArg("TimeZone")) {
+    SamSetup.TimeZone = request->arg("TimeZone").toInt();
+  }
+  if (request->hasArg("LogPeriod")) {
+    SamSetup.LogPeriod = request->arg("LogPeriod").toInt();
+  }
+  if (request->hasArg("HeaterR")) {
+    SamSetup.HeaterResistant = request->arg("HeaterR").toFloat();
   }
 
   // Сохраняем изменения в память.

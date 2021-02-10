@@ -137,6 +137,11 @@ void setup() {
     SamSetup.SetWaterTemp = 0;
     SamSetup.SetTankTemp = 0;
     SamSetup.StepperStepMl = STEPPER_STEP_ML;
+    SamSetup.UsePreccureCorrect = true;
+    SamSetup.SteamDelay = 20;
+    SamSetup.PipeDelay = 20;
+    SamSetup.WaterDelay = 20;
+    SamSetup.TankDelay = 20;
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config();
@@ -224,7 +229,7 @@ void setup() {
     0); /* Core where the task should run */
 
   // Start update of environment data every SAMOVAR_LOG_PERIOD second
-  SensorTicker.attach(SAMOVAR_LOG_PERIOD, triggerGetSensor);
+  SensorTicker.attach(SamSetup.LogPeriod, triggerGetSensor);
   // Start update of environment data every 1 second
   SensorTempTicker.attach(1, triggerGetTempSensor);
 
@@ -398,8 +403,10 @@ void read_config() {
   PipeSensor.SetTemp = SamSetup.SetPipeTemp;
   WaterSensor.SetTemp = SamSetup.SetWaterTemp;
   TankSensor.SetTemp = SamSetup.SetTankTemp;
-  SteamSensor.Delay = 20;
-  PipeSensor.Delay = 20;
-  WaterSensor.Delay = 20;
-  TankSensor.Delay = 20;
+  SteamSensor.Delay = SamSetup.SteamDelay;
+  PipeSensor.Delay = SamSetup.PipeDelay;
+  WaterSensor.Delay = SamSetup.WaterDelay;
+  TankSensor.Delay = SamSetup.TankDelay;
+  if (SamSetup.HeaterResistant == 0) SamSetup.HeaterResistant = 10;
+  if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
 }

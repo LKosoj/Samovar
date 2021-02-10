@@ -339,19 +339,20 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
   //скорректированная температура кипения спирта при текущем давлении
   static float c_temp;
 
-#ifdef USE_PRESSURE_CORRECT
-  //идеальная температура кипения спирта при текущем давлении
-  static float i_temp;
-  //температурная дельта
-  static float d_temp;
+  if (SamSetup.UsePreccureCorrect){
+    //идеальная температура кипения спирта при текущем давлении
+    static float i_temp;
+    //температурная дельта
+    static float d_temp;
 
-  i_temp = current_pressure * 0.038 + 49.27;
-  d_temp = start_temp - start_pressure * 0.038 - 49.27; //учитываем поправку на погрешность измерения датчиков
-  c_temp = i_temp + d_temp; // получаем текущую температуру кипения при переданном давлении с учетом поправки
-#else
-  //Используем сохраненную температуру отбора тела без корректировки
-  c_temp = start_temp;
-#endif
+    i_temp = current_pressure * 0.038 + 49.27;
+    d_temp = start_temp - start_pressure * 0.038 - 49.27; //учитываем поправку на погрешность измерения датчиков
+    c_temp = i_temp + d_temp; // получаем текущую температуру кипения при переданном давлении с учетом поправки
+  }
+  else {
+    //Используем сохраненную температуру отбора тела без корректировки
+    c_temp = start_temp;
+  }
 
   return c_temp;
 }
@@ -535,7 +536,7 @@ void get_current_power() {
       target_power_volt = hexToDec(s.substring(4, 7)) / 10.0F;
       current_power_mode = s.substring(7, 8);
       //Считаем мощность V*V*K/R, K = 0,98~1
-      current_power_p = current_power_volt * current_power_volt / HEATER_RESISTANT;
+      current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
     }
   }
 }

@@ -70,7 +70,7 @@ bool IRAM_ATTR GetNTP(void)                                               // ф�
     unsigned long secsSince1900 = highWord << 16 | lowWord;                // конвертируем два слова в переменную long
     const unsigned long seventyYears = 2208988800UL;                       // конвертируем в UNIX-таймстамп (число секунд от 01.01.1970)
     unsigned long epoch = secsSince1900 - seventyYears;
-    ntp_time = epoch + TIMEZONE * 3600;                                    // делаем поправку на местную тайм-зону
+    ntp_time = epoch + SamSetup.TimeZone * 3600;                                    // делаем поправку на местную тайм-зону
     //Serial.print("Unix time = ");
     //Serial.println(ntp_time);
   }
