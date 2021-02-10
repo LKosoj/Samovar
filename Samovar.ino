@@ -128,7 +128,7 @@ void setup() {
 
   if (SamSetup.flag > 250) {
     SamSetup.flag = 1;
-    SamSetup.DeltaSteamTemp = 0.5;
+    SamSetup.DeltaSteamTemp = 0.1;
     SamSetup.DeltaPipeTemp = 1;
     SamSetup.DeltaWaterTemp = 0;
     SamSetup.DeltaTankTemp = 0;
@@ -142,8 +142,9 @@ void setup() {
     SamSetup.PipeDelay = 20;
     SamSetup.WaterDelay = 20;
     SamSetup.TankDelay = 20;
-    SamSetup.HeaterResistant = 10;
+    SamSetup.HeaterResistant = 15.2;
     SamSetup.LogPeriod = 3;
+    SamSetup.TimeZone = 3;
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config();
