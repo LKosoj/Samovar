@@ -452,6 +452,7 @@ void check_alarm() {
     //Устанавливаем напряжение, заданное в первой строке программы
     set_current_power(program[0].Power);
 #else
+    current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
   }
