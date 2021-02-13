@@ -42,11 +42,63 @@ alert( request.status + ': ' + request.statusText );
 }
 return 0;
 };
+
+HTMLElement.prototype.serialize = function(){
+    var obj = {};
+    var elements = this.querySelectorAll( "input, select, textarea" );
+    for( var i = 0; i < elements.length; ++i ) {
+        var element = elements[i];
+        var name = element.name;
+        var value = element.value;
+
+        if( name ) {
+            obj[ name ] = value;
+        }
+    }
+    return JSON.stringify( obj );
+}
+
+function loadFile(e) {
+	var file = e;
+	var reader = new FileReader();
+	reader.onload = function () {
+		var data = JSON.parse(reader.result);
+		mapJson(data);
+	};
+	reader.readAsText(file, "UTF-8");
+}
+
+function mapJson (data){
+var inputs = Array.prototype.slice.call(document.querySelectorAll('form input, form select'));
+
+Object.keys(data).map(function (dataItem) {
+  inputs.map(function (inputItem) {
+    return (inputItem.name === dataItem) ? (inputItem.value = data[dataItem]) : false;
+  });
+});}
+
+function SaveFormToFile(form) {
+  var filename, text;
+  filename = 'samovarbackup.txt';
+//  text = getJson(document.getElementById('setupform'));
+  text = document.querySelector("form").serialize();
+
+  var pom = document.createElement('a');
+  pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+  pom.setAttribute('download', filename);
+
+  pom.style.display = 'none';
+  document.body.appendChild(pom);
+
+  pom.click();
+
+  document.body.removeChild(pom);
+}
 </script>
 </head>
 
 <body>
-<form action='/save' method="post" name="setupform">
+<form action='/save' method="post" name="setupform" id="setupform">
 <h1>Настройки</h1>
 <div class="tab">
   <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Основные">
@@ -156,6 +208,10 @@ return 0;
 </select>
 </div>
 </h2>
+<div style="margin: 0 auto; width: 200px;">
+<input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);'>
+<input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
+</div>
 </div>
 <div style="margin: 0 auto; width: 668px;">
 <input id='save' type='submit' name='save' value='Сохранить'>
