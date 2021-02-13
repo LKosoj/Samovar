@@ -14,10 +14,10 @@ void WebServerInit(void) {
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(SPIFFS, "/index.htm", String(), false);
+    request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
   });
   server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(SPIFFS, "/index.htm", String(), false);
+    request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
   });
 
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -67,6 +67,14 @@ void WebServerInit(void) {
 #endif
 }
 
+String indexKeyProcessor(const String& var)
+{
+  if (var == "SteamColor") return (String)SamSetup.SteamColor;
+  else if (var == "PipeColor") return (String)SamSetup.PipeColor;
+  else if (var == "WaterColor") return (String)SamSetup.WaterColor;
+  else if (var == "TankColor") return (String)SamSetup.TankColor;
+}
+
 String setupKeyProcessor(const String& var)
 {
   if (var == "DeltaSteamTemp") return (String)SamSetup.DeltaSteamTemp;
@@ -90,6 +98,18 @@ String setupKeyProcessor(const String& var)
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else return "";
   }
+  else if (var == "SteamColor") return (String)SamSetup.SteamColor;
+  else if (var == "PipeColor") return (String)SamSetup.PipeColor;
+  else if (var == "WaterColor") return (String)SamSetup.WaterColor;
+  else if (var == "TankColor") return (String)SamSetup.TankColor;
+  else if (var == "RAL" && !SamSetup.rele1) return "selected";
+  else if (var == "RAH" && SamSetup.rele1) return "selected";
+  else if (var == "RBL" && !SamSetup.rele2) return "selected";
+  else if (var == "RBH" && SamSetup.rele2) return "selected";
+  else if (var == "RCL" && !SamSetup.rele3) return "selected";
+  else if (var == "RCH" && SamSetup.rele3) return "selected";
+  else if (var == "RDL" && !SamSetup.rele4) return "selected";
+  else if (var == "RDH" && SamSetup.rele4) return "selected";
   return String();
 }
 
@@ -102,7 +122,7 @@ String calibrateKeyProcessor(const String& var)
 }
 
 void  handleSave(AsyncWebServerRequest *request) {
-/*    
+/*
    int params = request->params();
     for(int i=0;i<params;i++){
       AsyncWebParameter* p = request->getParam(i);
@@ -172,6 +192,30 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("HeaterR")) {
     SamSetup.HeaterResistant = request->arg("HeaterR").toFloat();
+  }
+  if (request->hasArg("SteamColor")) {
+    request->arg("SteamColor").toCharArray(SamSetup.SteamColor, request->arg("SteamColor").length() + 1);
+  }
+  if (request->hasArg("PipeColor")) {
+    request->arg("PipeColor").toCharArray(SamSetup.PipeColor, request->arg("PipeColor").length() + 1);
+  }
+  if (request->hasArg("WaterColor")) {
+    request->arg("WaterColor").toCharArray(SamSetup.WaterColor, request->arg("WaterColor").length() + 1);
+  }
+  if (request->hasArg("TankColor")) {
+    request->arg("TankColor").toCharArray(SamSetup.TankColor, request->arg("TankColor").length() + 1);
+  }
+  if (request->hasArg("rele1")) {
+    SamSetup.rele1 = request->arg("rele1").toInt();
+  }
+  if (request->hasArg("rele2")) {
+    SamSetup.rele2 = request->arg("rele2").toInt();
+  }
+  if (request->hasArg("rele3")) {
+    SamSetup.rele3 = request->arg("rele3").toInt();
+  }
+  if (request->hasArg("rele4")) {
+    SamSetup.rele4 = request->arg("rele4").toInt();
   }
 
   // Сохраняем изменения в память.

@@ -101,13 +101,13 @@ void setup() {
 
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
-  digitalWrite(RELE_CHANNEL1, HIGH);
+  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
   pinMode(RELE_CHANNEL2, OUTPUT);
-  digitalWrite(RELE_CHANNEL2, HIGH);
+  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
   pinMode(RELE_CHANNEL3, OUTPUT);
-  digitalWrite(RELE_CHANNEL3, HIGH);
+  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   pinMode(RELE_CHANNEL4, OUTPUT);
-  digitalWrite(RELE_CHANNEL4, HIGH);
+  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 
   stepper.disable();
 
@@ -145,6 +145,14 @@ void setup() {
     SamSetup.HeaterResistant = 15.2;
     SamSetup.LogPeriod = 3;
     SamSetup.TimeZone = 3;
+    char str1[] = "blue\0";
+    memcpy(str1, SamSetup.SteamColor, sizeof(str1));
+    char str2[] = "darkmagenta\0";
+    memcpy(str2, SamSetup.PipeColor, sizeof(str2));
+    char str3[] = "cornflowerblue\0";
+    memcpy(str3, SamSetup.WaterColor, sizeof(str3));
+    char str4[] = "crimson\0";
+    memcpy(str4, SamSetup.TankColor, sizeof(str4));
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config();

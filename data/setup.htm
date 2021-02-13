@@ -74,18 +74,26 @@ return 0;
 </div>
 
 <div id="Temp" class="tabcontent">
+<div style="color: %SteamColor%;">
 <h2>Корректировка датчика пара перед дефлегматором : <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176C</h2>
 <h2>Уставка датчика пара перед дефлегматором : <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176C</h2>
 <h2>Задержка отбора при выходе Т пара за уставку : <input name='SteamDelay' type='text' value='%SteamDelay%'> сек</h2>
+</div>
+<div style="color: %PipeColor%;">
 <h2>Корректировка датчика в царге на 2/3 колонны : <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176C</h2>
 <h2>Уставка датчика в царге на 2/3 колонны : <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176C</h2>
 <h2>Задержка отбора при выходе Т в царге за уставку : <input name='PipeDelay' type='text' value='%PipeDelay%'> сек</h2>
+</div>
+<div style="color: %WaterColor%;">
 <h2>Корректировка датчика воды : <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176C</h2>
 <h2>Уставка датчика воды : <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176C</h2>
 <h2>Задержка отбора при выходе Т воды за уставку : <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
+</div>
+<div style="color: %TankColor%;">
 <h2>Корректировка датчика в кубе : <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
 <h2>Уставка датчика в кубе : <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
 <h2>Задержка отбора при выходе Т в кубе за уставку : <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
+</div>
 </div>
 
 <div id="Pump" class="tabcontent">
@@ -99,8 +107,56 @@ return 0;
 <h2>Тайм-зона : <input name='TimeZone' type='text' value='%TimeZone%'></h2>
 <h2>Сопротивление тэна для расчета мощности : <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
 <h2>Периодичность записи данных в лог : <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+<h2><p>Цвета для температур:</p>
+<div>
+    <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">
+    <label for="SteamColor">Температура пара</label>
 </div>
-
+<div>
+    <input type="color" id="PipeColor" name="PipeColor" value="%PipeColor%">
+    <label for="PipeColor">Температура датчика в царге</label>
+</div>
+<div>
+    <input type="color" id="WaterColor" name="WaterColor" value="%WaterColor%">
+    <label for="WaterColor">Температура воды</label>
+</div>
+<div>
+    <input type="color" id="TankColor" name="TankColor" value="%TankColor%">
+    <label for="TankColor">Температура датчика в кубе</label>
+</div>
+</h2>
+<p><a href="https://www.w3schools.com/colors/colors_picker.asp">цвета можно подобрать тут</a></p>
+<h2>Настройки уровней для реле
+<div>
+Реле 1
+<select name="rele1">
+  <option value="0" %RAL%>LOW</option>
+  <option value="1" %RAH%>HIGHT</option>
+</select>
+</div>
+<div>
+Реле 2
+<select name="rele2">
+  <option value="0" %RBL%>LOW</option>
+  <option value="1" %RBH%>HIGHT</option>
+</select>
+</div>
+<div>
+Реле 3
+<select name="rele3">
+  <option value="0" %RCL%>LOW</option>
+  <option value="1" %RCH%>HIGHT</option>
+</select>
+</div>
+<div>
+Реле 4
+<select name="rele4">
+  <option value="0" %RDL%>LOW</option>
+  <option value="1" %RDH%>HIGHT</option>
+</select>
+</div>
+</h2>
+</div>
 <div style="margin: 0 auto; width: 668px;">
 <input id='save' type='submit' name='save' value='Сохранить'>
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>

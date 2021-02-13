@@ -235,6 +235,14 @@ struct SetupEEPROM {
   byte TimeZone;                                               //Таймзона того места, где будет применяться устройство
   float HeaterResistant;                                       //Сопротивление тэна для расчета мощности
   byte LogPeriod;                                              //Периодичность записи данных о температуре в файл (раз в три секунды, оптимально с точки зрения объема файла). Если прогнозируемое время работы Самовара больше суток - лучше период установить раз в 5-10 секунд.
+  char SteamColor[20];                                         //Цвета температур в интерфейсе
+  char PipeColor[20];
+  char WaterColor[20];
+  char TankColor[20];
+  bool rele1;                                                  //Уровни для реле
+  bool rele2;
+  bool rele3;
+  bool rele4;
 };
 
 struct DSSensor {

@@ -101,7 +101,7 @@ void withdrawal(void) {
 void set_power(bool On) {
   PowerOn = On;
   if (On) {
-    digitalWrite(RELE_CHANNEL1, LOW);
+    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
     set_menu_screen(2);
     power_text_ptr = (char*)"OFF";
 
@@ -109,17 +109,19 @@ void set_power(bool On) {
     delay(1000);
     set_power_mode(POWER_SPEED_MODE);
 #else
-    digitalWrite(RELE_CHANNEL4, LOW);
+    current_power_mode = POWER_SPEED_MODE;
+    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
 
   } else {
 #ifdef SAMOVAR_USE_POWER
     set_power_mode(POWER_SLEEP_MODE);
 #else
-    digitalWrite(RELE_CHANNEL4, HIGH);
+    current_power_mode = POWER_SLEEP_MODE;
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
     samovar_reset();
-    digitalWrite(RELE_CHANNEL1, HIGH);
+    digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
     set_menu_screen(3);
     power_text_ptr = (char*)"ON";
   }
@@ -450,7 +452,7 @@ void check_alarm() {
     //Устанавливаем напряжение, заданное в первой строке программы
     set_current_power(program[0].Power);
 #else
-    digitalWrite(RELE_CHANNEL4, HIGH);
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
   }
 
@@ -483,14 +485,14 @@ void open_valve(bool Val) {
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} - Open cooling water!");
 #endif
-    digitalWrite(RELE_CHANNEL3, LOW);
+    digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
     Msg = "Close cooling water!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} - Close cooling water!");
 #endif
-    digitalWrite(RELE_CHANNEL3, HIGH);
+    digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
 }
 
