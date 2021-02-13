@@ -277,6 +277,7 @@ void run_program(byte num) {
     stepper.setCurrent(0);
     stepper.setTarget(0);
     set_capacity(0);
+    Msg = "Program finished!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alert! {DEVICE_NAME} - Program finished!");
@@ -284,6 +285,7 @@ void run_program(byte num) {
     
   } else {
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
+      Msg = "Set prog line " + (String)(num + 1) + ", capacity " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
@@ -376,6 +378,7 @@ void check_alarm() {
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
+    Msg = "Emergency power OFF! Temperature error";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Temperature error");
@@ -387,6 +390,7 @@ void check_alarm() {
   if (WFAlarmCount > WF_ALARM_COUNT) {
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
+    Msg = "Emergency power OFF! Water error";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Water error");
@@ -396,6 +400,7 @@ void check_alarm() {
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
+    Msg = "Water temp is critical!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} water temp is critical!");
@@ -403,6 +408,7 @@ void check_alarm() {
 
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
+      Msg = "Water temp is critical! Water error. Voltage down from " + (String)target_power_volt;
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
       Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical! Water error. Voltage down from " + (String)target_power_volt);
@@ -419,6 +425,7 @@ void check_alarm() {
   whls.tick();
   if (whls.isHolded() && alarm_h_min == 0) {
     whls.resetStates();
+    Msg = "Head level alarm!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} - Head level alarm!");
@@ -433,6 +440,7 @@ void check_alarm() {
 
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE) {
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
+    Msg = "Working mode set!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alert! {DEVICE_NAME} - working mode set!");
@@ -446,9 +454,7 @@ void check_alarm() {
 #endif
   }
 
-#ifdef SAMOVAR_USE_BLYNK
-  //Если используется Blynk - пишем оператору
-  //что разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
+  //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
   //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
   if (SamovarStatusInt == 50 && SteamSensor.avgTemp > 70) {
     float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
@@ -456,26 +462,30 @@ void check_alarm() {
     if (d < 0.1) {
       acceleration_temp += 1;
       if (acceleration_temp == 60 * 6) {
+        Msg = "Acceleration is complete.";
+#ifdef SAMOVAR_USE_BLYNK
+        //Если используется Blynk - пишем оператору
         Blynk.notify("{DEVICE_NAME} - Acceleration is complete.");
+#endif
       }
     } else {
       acceleration_temp = 0;
       SteamSensor.PrevTemp = SteamSensor.avgTemp;
     }
   }
-#endif
-
 }
 
 void open_valve(bool Val) {
   valve_status = Val;
   if (Val) {
+    Msg = "Open cooling water!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} - Open cooling water!");
 #endif
     digitalWrite(RELE_CHANNEL3, LOW);
   } else {
+    Msg = "Close cooling water!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} - Close cooling water!");

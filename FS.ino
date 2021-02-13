@@ -268,13 +268,14 @@ String get_sys_info() {
     //Кончилось место, удалим старый файл. Надо было сохранять раньше
     SPIFFS.remove("/data_old.csv");
   }
-#ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
   if (tb - ub < 200) {
+    Msg = "Memory is full!";
+#ifdef SAMOVAR_USE_BLYNK
     //Кончилось место, пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} Memory is full!");
-  }
 #endif
+  }
   vTaskDelay(5);
   result_st += "; ESP32 t = " + (String)((temprature_sens_read() - 32) / 1.8) + "; BME t = " + (String)bme_temp;
   vTaskDelay(5);

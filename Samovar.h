@@ -330,6 +330,7 @@ float WthdrwTime;                                               // Время о
 String WthdrwTimeAllS;                                          // Оставшееся время отбора строкой
 String WthdrwTimeS;                                             // Время отбора текущей строки программы строкой
 String jsonstr;                                                 // Строка, содержащая json ответ для страницы
+String Msg;                                                     // Строка для сообщений в web-интерфейсе
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER
