@@ -88,6 +88,7 @@ document.getElementById('current_power_mode').innerHTML = myObj.current_power_mo
 document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
 document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
 document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
+document.getElementById('DeltaTemp').innerHTML = myObj.PipeTemp - myObj.SteamTemp;
 if (myObj.Msg){
   if (myObj.Msg != "") {
     showMessage(myObj.Msg);
@@ -156,6 +157,7 @@ setTimeout(function(){
 <h2>Время работы Samovar: <span id='stm'></span></h2>
 <h2>Температура пара перед дефлегматором: <span id='SteamTemp'></span>&#176C</h2>
 <h2>Температура пара в царге на 2/3 колонны: <span id='PipeTemp'></span>&#176C</h2>
+<h2>Дельта температур: <span id='DeltaTemp'></span>&#176C</h2>
 <h2>Температура флегмы или воды: <span id='WaterTemp'></span>&#176C</h2>
 <h2>Температура в кубе: <span id='TankTemp'></span>&#176C</h2>
 <h2>Атмосферное давление в начале работы: <span id='start_pressure'></span> мм рт. ст.</h2>
