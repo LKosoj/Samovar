@@ -210,7 +210,9 @@ function SaveFormToFile(form) {
 </h2>
 <div style="margin: 0 auto; width: 200px;">
 <input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);'>
-<input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
+<div>
+Восстановить настройки <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
+</div>
 </div>
 </div>
 <div style="margin: 0 auto; width: 668px;">
