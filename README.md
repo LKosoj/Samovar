@@ -65,17 +65,17 @@ Contactor https://aliexpress.ru/item/32825390593.html?spm=a2g0s.9042311.0.0.264d
 
 Stepper driver A4988 https://aliexpress.ru/item/32963690420.html
 
-Stepper drive https://aliexpress.ru/item/4001014132747.html?spm=a2g0s.9042311.0.0.264d33edS8Ocll
+Stepper drive https://aliexpress.ru/item/1005001303445983.html
 
 Perestaltic pomp https://aliexpress.ru/item/4001241310450.html
 
-DC-DC converter https://aliexpress.ru/item/32261885063.html?spm=a2g0s.9042311.0.0.264d33ed8ASDhI
+DC-DC converter https://aliexpress.ru/item/32261885063.html
 
     
 
 **Тройной переключатель для установки деления шагов шагового двигателя. Не обязательно, можно реализовать перемычками.**
 
-Toggle switch https://aliexpress.ru/item/32956377097.html?spm=a2g0s.9042311.0.0.264d33edS8Ocll
+Toggle switch https://aliexpress.ru/item/32956377097.html
 
     
 
@@ -85,7 +85,7 @@ Servo SG90 https://aliexpress.ru/item/32898600185.html
 
 Трубочки понадобятся для распредления жидкости.
 
-Silicone tube https://aliexpress.ru/item/4000159962222.html?spm=a2g0s.9042311.0.0.493433edCwWIto
+Silicone tube https://aliexpress.ru/item/4000159962222.html
 
     
 
@@ -99,13 +99,13 @@ LCD 2004 I2C https://aliexpress.ru/item/32652739134.html
 
 :exclamation: **Датчик потока. Добавив его получим возможность контролировать расход воды охлаждения. Защита от отключения воды.**
 
-Flow sensor https://aliexpress.ru/item/G1-4-0-3-3L-min-Water-Coffee-Flow-Hall-Sensor-Switch-Meter-Flowmeter-Counter/2052754204.html?spm=a2g0s.9042311.0.0.264d33ed0tHl0a&sku_id=51948482384
+Flow sensor https://aliexpress.ru/item/G1-4-0-3-3L-min-Water-Coffee-Flow-Hall-Sensor-Switch-Meter-Flowmeter-Counter/2052754204.html
 
     
 
 **Красивая кнопочка. По желанию можно добавить на любом этапе**
 
-Button https://aliexpress.ru/item/Black-Push-Button-Switch-4-Pin-12mm-Waterproof-illuminated-Led-Light-Metal-Flat-Momentary-Switches-with/33014419878.html?spm=a2g0s.9042311.0.0.264d33edM5K5ib
+Button https://aliexpress.ru/item/Black-Push-Button-Switch-4-Pin-12mm-Waterproof-illuminated-Led-Light-Metal-Flat-Momentary-Switches-with/33014419878.html
 
     
 
@@ -113,10 +113,10 @@ Button https://aliexpress.ru/item/Black-Push-Button-Switch-4-Pin-12mm-Waterproof
 
 Стабилизатор мощности использовался такой: https://alcodistillers.ru/forum/viewtopic.php?id=1524, но можно взять любой регулятор, который позволяет управлять мощностью через ком-порт, или проект регулятора с исходным кодом, и доработать скетчи.
 
-Adum https://aliexpress.ru/item/Magnetic-Isolator-Board-Module-Replace-Optocouplers-CJMCU-1201-ADUM1201-Isolator-ADUM1201ARZ-SOIC-8-Isolator-SPI-Interface/32789240308.html?spm=a2g0s.9042311.0.0.264d33ed0hX3vj&sku_id=63584285301
+Adum https://aliexpress.ru/item/Magnetic-Isolator-Board-Module-Replace-Optocouplers-CJMCU-1201-ADUM1201-Isolator-ADUM1201ARZ-SOIC-8-Isolator-SPI-Interface/32789240308.html
 
     
 
 **Измеритель мощности. Информативно, но не обязательно.**
 
-Wattmeter https://aliexpress.ru/item/4000843144448.html?spm=a2g0s.9042311.0.0.264d33edjx26pD
+Wattmeter https://aliexpress.ru/item/4000843144448.html
