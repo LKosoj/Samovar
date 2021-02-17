@@ -103,7 +103,7 @@ Flow sensor https://aliexpress.ru/item/G1-4-0-3-3L-min-Water-Coffee-Flow-Hall-Se
 
 :exclamation: **Датчик уровня. Добавив его получим возможность контролировать захлеб колонны. Защита от выхлопа спирта через ТСА.**
 
-Water level sensor https://aliexpress.ru/item/32970747457.html
+Water level sensor https://aliexpress.ru/item/4001259499968.html
     
 
 **Красивая кнопочка. По желанию можно добавить на любом этапе**
