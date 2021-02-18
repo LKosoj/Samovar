@@ -101,6 +101,9 @@ LCD 2004 I2C https://aliexpress.ru/item/32652739134.html
 
 Flow sensor https://aliexpress.ru/item/G1-4-0-3-3L-min-Water-Coffee-Flow-Hall-Sensor-Switch-Meter-Flowmeter-Counter/2052754204.html
 
+:exclamation: **Датчик уровня. Добавив его получим возможность контролировать захлеб колонны. Защита от выхлопа спирта через ТСА.**
+
+Water level sensor https://aliexpress.ru/item/4001259499968.html выбирать XKC-Y25-PNP 5-12V
     
 
 **Красивая кнопочка. По желанию можно добавить на любом этапе**
