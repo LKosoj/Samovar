@@ -220,7 +220,7 @@ public:
 			// двигаем мотор
 			_current += _dir;
 				// ~4 us
-				setPin(1, (_dir > 0 ? _globDir : !_globDir) );
+				//setPin(1, (_dir > 0 ? _globDir : !_globDir) );
 				setPin(0, 1);	// HIGH
 #ifdef __AVR__
 				_delay_us(DRIVER_STEP_TIME);
@@ -264,7 +264,7 @@ public:
 			_current += _dir;
 			if (_DRV == STEPPER2WIRE) {
 				// ~4 us
-				setPin(1, (_dir > 0 ? _globDir : !_globDir) );
+				//setPin(1, (_dir > 0 ? _globDir : !_globDir) );
 				setPin(0, 1);	// HIGH
 #ifdef __AVR__
 				_delay_us(DRIVER_STEP_TIME);
@@ -283,7 +283,7 @@ public:
 	
 	
 	// инвертировать направление мотора
-	void reverse(bool dir) 			{_globDir = dir;}
+	void reverse(bool dir) 			{_globDir = dir;setPin(1, (_dir > 0 ? _globDir : !_globDir) );}
 
 	// инвертировать поведение EN пина
 	void invertEn(bool dir) 		{_enDir = dir;}
