@@ -16,7 +16,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.11"
+#define SAMOVAR_VERSION "1.12"
 #define __SAMOVAR_DEBUG
 
 //--------------------------------------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ uint8_t temprature_sens_read();
 #endif
 #define STEPPER_STEPS 400 //количество шагов, 200 x MS
 #define STEPPER_STEP_ML 1020 //количество шагов на 1 мл жидкости для драйвера с шагами 1/2
-#define STEPPER_MAX_SPEED 1000 //  STEPPER_MAX_SPEED = STEPPER_STEP_ML
+#define STEPPER_MAX_SPEED 4000 //  STEPPER_MAX_SPEED = STEPPER_STEP_ML
 //**************************************************************************************************************
 
 //**************************************************************************************************************
@@ -201,7 +201,9 @@ DallasTemperature sensors(&oneWire);
 LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
 Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
+
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
+//SamStepper stepper(STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 File fileToAppend;
 Servo servo;  // create servo object to control a servo

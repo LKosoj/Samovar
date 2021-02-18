@@ -150,6 +150,7 @@ void pump_calibrate(int stpspeed) {
     if (!stepper.getState()) stepper.setCurrent(0);
     startService();
     stepper.setMaxSpeed(stpspeed);
+    stepper.setSpeed(stpspeed);
     stepper.setTarget(999999999);
   }
 }
@@ -169,6 +170,7 @@ void pause_withdrawal(bool Pause) {
   else {
     startService();
     stepper.setMaxSpeed(CurrrentStepperSpeed);
+    stepper.setSpeed(CurrrentStepperSpeed);
     stepper.setCurrent(CurrrentStepps);
     stepper.setTarget(TargetStepps);
   }
@@ -303,6 +305,7 @@ void run_program(byte num) {
       set_capacity(program[num].capacity_num);
       startService();
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
+      stepper.setSpeed(get_speed_from_rate(program[num].Speed));
       TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
       stepper.setCurrent(0);
       stepper.setTarget(TargetStepps);
@@ -335,8 +338,8 @@ void run_program(byte num) {
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
       t_min = millis() + program[num].Volume * 1000;
       program_Pause = true;
-      stepper.setSpeed(-1);
       stepper.setMaxSpeed(-1);
+      stepper.setSpeed(-1);
       stepper.brake();
       stepper.disable();
       stopService();

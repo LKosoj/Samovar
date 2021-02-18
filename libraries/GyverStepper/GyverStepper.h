@@ -202,10 +202,36 @@ public:
 			}
 		}
 		// умолчания
-		setMaxSpeed(300);
-		setAcceleration(300);
+		//setMaxSpeed(300);
+		//setAcceleration(300);
 	}
 	
+	bool quicktick() {
+		// при плавном разгоне в KEEP_SPEED
+		//if (_smoothStart && _curMode) smoothSpeedPlanner();
+		
+		if (_workState && micros() - _prevTime >= stepTime) {
+			_prevTime = micros();			
+			// FOLLOW_POS
+			if (!_curMode && _target == _current) {
+				brake();
+				return false;					
+			}
+			// двигаем мотор
+			_current += _dir;
+				// ~4 us
+				setPin(1, (_dir > 0 ? _globDir : !_globDir) );
+				setPin(0, 1);	// HIGH
+#ifdef __AVR__
+				_delay_us(DRIVER_STEP_TIME);
+#else
+				delayMicroseconds(DRIVER_STEP_TIME);
+#endif
+				setPin(0, 0);	// LOW
+		}		
+		return _workState;
+    }
+    
 	// возвращает true, если мотор всё ещё движется к цели
 	bool tick() {
 #ifndef SMOOTH_ALGORITHM

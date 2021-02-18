@@ -219,10 +219,11 @@ void sensor_init(void) {
   //Для шагового двигателя устанавливаем режим работы - следовать до позиции
   stepper.setRunMode(FOLLOW_POS);
   // установка макс. скорости в шагах/сек
-  stepper.setMaxSpeed(0);
+  stepper.setMaxSpeed(STEPPER_MAX_SPEED);
+  stepper.setSpeed(0);
   //Драйвер выключится по достижении позиции
   stepper.autoPower(true);
-  stepper.setAcceleration(500);
+  //stepper.setAcceleration(500);
 
 #ifdef USE_WATERSENSOR
   //Настраиваем датчик потока
@@ -255,8 +256,8 @@ void reset_sensor_counter(void) {
   set_power_mode(POWER_SLEEP_MODE);
 #endif
 
-  stepper.setSpeed(-1);
   stepper.setMaxSpeed(-1);
+  stepper.setSpeed(-1);
   stepper.brake();  
   stepper.disable();
   stopService();

@@ -20,6 +20,8 @@
 #include <SPIFFS.h>
 #include <SPIFFSEditor.h>
 
+#define DRIVER_STEP_TIME 1
+
 #include "GyverEncoder.h"
 #include "GyverStepper.h"
 #include "GyverButton.h"
@@ -86,7 +88,7 @@ void startService(void)
 void StepperTicker( void * parameter) {
   for (;;) {
     //Это должно работать максимально быстро
-    StepperMoving = stepper.tick();
+    StepperMoving = stepper.quicktick();
   }
 }
 
@@ -251,6 +253,7 @@ void setup() {
   attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
 
   disableCore0WDT();
+  disableCore1WDT();
 
   StepperTickerTask1 = NULL;
 
