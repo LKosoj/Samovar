@@ -63,11 +63,30 @@
 //**************************************************************************************************************
 #include "sensorinit.h"
 
+void stopService(void)
+{
+  if (StepperTickerTask1 != NULL){
+    vTaskDelete(StepperTickerTask1);
+    StepperTickerTask1 = NULL;
+  }
+}
+
+void startService(void)
+{
+  xTaskCreatePinnedToCore(
+    StepperTicker, /* Function to implement the task */
+    "StepperTicker", /* Name of the task */
+    1200,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    1,  /* Priority of the task */
+    &StepperTickerTask1,  /* Task handle. */
+    0); /* Core where the task should run */
+}
+
 void StepperTicker( void * parameter) {
   for (;;) {
     //Это должно работать максимально быстро
     StepperMoving = stepper.tick();
-    //vTaskDelay(1);
   }
 }
 
@@ -231,14 +250,9 @@ void setup() {
   attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
   attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
 
-  xTaskCreatePinnedToCore(
-    StepperTicker, /* Function to implement the task */
-    "StepperTicker", /* Name of the task */
-    1200,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    0,  /* Priority of the task */
-    &StepperTickerTask1,  /* Task handle. */
-    0); /* Core where the task should run */
+  disableCore0WDT();
+
+  StepperTickerTask1 = NULL;
 
   // Start update of environment data every SAMOVAR_LOG_PERIOD second
   SensorTicker.attach(SamSetup.LogPeriod, triggerGetSensor);

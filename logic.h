@@ -18,6 +18,8 @@ unsigned int hexToDec(String hexString);
 void set_current_power(float Volt);
 void set_power_mode(String Mode);
 void open_valve(bool Val);
+void stopService(void);
+void startService(void);
 
 //Получаем объем отбора
 float get_liguid_volume_by_step(int StepCount) {
@@ -138,6 +140,7 @@ void pump_calibrate(int stpspeed) {
     SamSetup.StepperStepMl = round((float)stepper.getCurrent() / 100);
     stepper.brake();
     stepper.disable();
+    stopService();
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config;
@@ -145,6 +148,7 @@ void pump_calibrate(int stpspeed) {
     startval = 100;
     //крутим двигатель, пока не остановят
     if (!stepper.getState()) stepper.setCurrent(0);
+    startService();
     stepper.setMaxSpeed(stpspeed);
     stepper.setTarget(999999999);
   }
@@ -160,8 +164,10 @@ void pause_withdrawal(bool Pause) {
     CurrrentStepperSpeed = stepper.getSpeed();
     stepper.brake();
     stepper.disable();
+    stopService();
   }
   else {
+    startService();
     stepper.setMaxSpeed(CurrrentStepperSpeed);
     stepper.setCurrent(CurrrentStepps);
     stepper.setTarget(TargetStepps);
@@ -276,6 +282,7 @@ void run_program(byte num) {
     }
     stepper.brake();
     stepper.disable();
+    stopService();
     stepper.setCurrent(0);
     stepper.setTarget(0);
     set_capacity(0);
@@ -294,6 +301,7 @@ void run_program(byte num) {
       Blynk.notify("{DEVICE_NAME} - Set prog line " + (String)(num + 1) + ", capacity " + (String)program[num].capacity_num);
 #endif
       set_capacity(program[num].capacity_num);
+      startService();
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
       TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
       stepper.setCurrent(0);
@@ -331,6 +339,7 @@ void run_program(byte num) {
       stepper.setMaxSpeed(-1);
       stepper.brake();
       stepper.disable();
+      stopService();
       stepper.setCurrent(0);
       stepper.setTarget(0);
     }

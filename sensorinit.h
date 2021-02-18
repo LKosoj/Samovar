@@ -14,6 +14,8 @@ void clok();
 void clok1();
 void getjson (void);
 void append_data();
+void stopService(void);
+void startService(void);
 
 //**************************************************************************************************************
 // Функции для работы с сенсорами
@@ -228,7 +230,7 @@ void sensor_init(void) {
   digitalWrite(WATERSENSOR_PIN, HIGH);
 #endif
 
-  set_program("H;450;0.1;1;0;160\nB;450;0.1;1;0;160\nH;450;0.1;1;0;160\n");
+  set_program("H;450;0.1;1;0;160\nB;450;1;1;0;160\nH;450;0.1;1;0;160\n");
 
   reset_sensor_counter();
 
@@ -255,8 +257,9 @@ void reset_sensor_counter(void) {
 
   stepper.setSpeed(-1);
   stepper.setMaxSpeed(-1);
-  stepper.brake();
+  stepper.brake();  
   stepper.disable();
+  stopService();
   stepper.setCurrent(0);
   stepper.setTarget(0);
   set_capacity(0);
