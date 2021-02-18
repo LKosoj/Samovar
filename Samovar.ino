@@ -67,6 +67,7 @@ void StepperTicker( void * parameter) {
   for (;;) {
     //Это должно работать максимально быстро
     StepperMoving = stepper.tick();
+    //vTaskDelay(1);
   }
 }
 
