@@ -286,9 +286,7 @@ void run_program(byte num) {
     stepper.setTarget(0);
     set_capacity(0);
     if (fileToAppend) {
-    Serial.println("2");
       fileToAppend.close();
-    Serial.println("3");
     }
     Msg = "Program finished!";
 #ifdef SAMOVAR_USE_BLYNK
