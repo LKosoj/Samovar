@@ -252,8 +252,8 @@ void setup() {
   attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
   attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
 
-  disableCore0WDT();
-  disableCore1WDT();
+  //disableCore0WDT();
+  //disableCore1WDT();
 
   StepperTickerTask1 = NULL;
 
@@ -279,8 +279,8 @@ void loop() {
   //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
 #ifdef SAMOVAR_USE_BLYNK
-  if(!Blynk.connected()){
-    Blynk.connect(BLYNK_TIMEOUT_MS);
+  if(Blynk.connected()){
+    Blynk.run();
   }
 #endif
 
