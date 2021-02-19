@@ -279,12 +279,6 @@ void loop() {
   //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
 
-#ifdef SAMOVAR_USE_BLYNK
-  if(Blynk.connected()){
-    Blynk.run();
-  }
-#endif
-
   ws.cleanupClients();
 
   if (sam_command_sync != SAMOVAR_NONE) {
