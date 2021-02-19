@@ -122,7 +122,8 @@ void IRAM_ATTR triggerGetSensor(void) {
   if(!Blynk.connected() && WiFi.status() == WL_CONNECTED){
     Blynk.connect(BLYNK_TIMEOUT_MS);
   }
-#endif}
+#endif
+}
 
 void sensor_init(void) {
   Serial.println("Pressure sensor initialization");
