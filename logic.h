@@ -138,9 +138,9 @@ void pump_calibrate(int stpspeed) {
     startval = 0;
     //Сохраняем полученное значение калибровки
     SamSetup.StepperStepMl = round((float)stepper.getCurrent() / 100);
+    stopService();
     stepper.brake();
     stepper.disable();
-    stopService();
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config;
@@ -148,10 +148,10 @@ void pump_calibrate(int stpspeed) {
     startval = 100;
     //крутим двигатель, пока не остановят
     if (!stepper.getState()) stepper.setCurrent(0);
-    startService();
     stepper.setMaxSpeed(stpspeed);
     stepper.setSpeed(stpspeed);
     stepper.setTarget(999999999);
+    startService();
   }
 }
 
@@ -163,16 +163,16 @@ void pause_withdrawal(bool Pause) {
     TargetStepps = stepper.getTarget();
     CurrrentStepps = stepper.getCurrent();
     CurrrentStepperSpeed = stepper.getSpeed();
+    stopService();
     stepper.brake();
     stepper.disable();
-    stopService();
   }
   else {
-    startService();
     stepper.setMaxSpeed(CurrrentStepperSpeed);
     stepper.setSpeed(CurrrentStepperSpeed);
     stepper.setCurrent(CurrrentStepps);
     stepper.setTarget(TargetStepps);
+    startService();
   }
 }
 
@@ -279,15 +279,17 @@ void run_program(byte num) {
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
-    if (fileToAppend) {
-      fileToAppend.close();
-    }
+    stopService();
     stepper.brake();
     stepper.disable();
-    stopService();
     stepper.setCurrent(0);
     stepper.setTarget(0);
     set_capacity(0);
+    if (fileToAppend) {
+    Serial.println("2");
+      fileToAppend.close();
+    Serial.println("3");
+    }
     Msg = "Program finished!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
@@ -303,12 +305,12 @@ void run_program(byte num) {
       Blynk.notify("{DEVICE_NAME} - Set prog line " + (String)(num + 1) + ", capacity " + (String)program[num].capacity_num);
 #endif
       set_capacity(program[num].capacity_num);
-      startService();
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
       stepper.setSpeed(get_speed_from_rate(program[num].Speed));
       TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
       stepper.setCurrent(0);
       stepper.setTarget(TargetStepps);
+      startService();
       ActualVolumePerHour = program[num].Speed;
       SteamSensor.BodyTemp = program[num].Temp;
 
@@ -338,11 +340,11 @@ void run_program(byte num) {
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
       t_min = millis() + program[num].Volume * 1000;
       program_Pause = true;
+      stopService();
       stepper.setMaxSpeed(-1);
       stepper.setSpeed(-1);
       stepper.brake();
       stepper.disable();
-      stopService();
       stepper.setCurrent(0);
       stepper.setTarget(0);
     }

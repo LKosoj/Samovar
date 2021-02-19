@@ -207,12 +207,6 @@ public:
 	}
 	
 	bool quicktick() {
-		// при плавном разгоне в KEEP_SPEED
-		//if (_smoothStart && _curMode) smoothSpeedPlanner();
-		
-		if (_workState && micros() - _prevTime >= stepTime) {
-			_prevTime = micros();			
-			// FOLLOW_POS
 			if (!_curMode && _target == _current) {
 				brake();
 				return false;					
@@ -228,7 +222,6 @@ public:
 				delayMicroseconds(DRIVER_STEP_TIME);
 #endif
 				setPin(0, 0);	// LOW
-		}		
 		return _workState;
     }
     
@@ -591,15 +584,15 @@ private:
 	int8_t _enPin = -1;
 	uint32_t _prevTime = 0;			
 	float _accelSpeed = 0;
-	int32_t _current = 0;
+	volatile int32_t _current = 0;
 	int32_t _target = 0;
 
 	int8_t thisStep = 0;
-	int8_t _dir = 1;
+	volatile int8_t _dir = 1;
 	bool _globDir = false;
 	bool _enDir = false;
 	bool _powerState = false;
-	bool _workState = false;
+	volatile bool _workState = false;
 	bool _autoPower = false;
 	bool _smoothStart = false;
 

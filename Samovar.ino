@@ -65,31 +65,26 @@
 //**************************************************************************************************************
 #include "sensorinit.h"
 
+
+hw_timer_t * timer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
 void stopService(void)
 {
-  if (StepperTickerTask1 != NULL){
-    vTaskDelete(StepperTickerTask1);
-    StepperTickerTask1 = NULL;
-  }
+  timerAlarmDisable(timer);
 }
 
 void startService(void)
 {
-  xTaskCreatePinnedToCore(
-    StepperTicker, /* Function to implement the task */
-    "StepperTicker", /* Name of the task */
-    1200,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    1,  /* Priority of the task */
-    &StepperTickerTask1,  /* Task handle. */
-    0); /* Core where the task should run */
+  timerAlarmWrite(timer, stepper.stepTime, true);           
+  timerAlarmEnable(timer);
 }
 
-void StepperTicker( void * parameter) {
-  for (;;) {
-    //Это должно работать максимально быстро
-    StepperMoving = stepper.quicktick();
-  }
+
+void IRAM_ATTR StepperTicker(void) {
+   portENTER_CRITICAL_ISR(&timerMux);
+   StepperMoving = stepper.quicktick();
+   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
 #ifdef USE_WATERSENSOR
@@ -132,6 +127,11 @@ void setup() {
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 
   stepper.disable();
+
+  // Configure the Prescaler at 80 the quarter of the ESP32 is cadence at 80Mhz
+  // 80000000 / 80 = 1000000 tics / seconde
+  timer = timerBegin(2, 80, true);
+  timerAttachInterrupt(timer, &StepperTicker, true);
 
   ESP32PWM::allocateTimer(3);
   servo.setPeriodHertz(50);    // standard 50 hz servo

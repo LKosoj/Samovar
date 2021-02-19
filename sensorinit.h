@@ -231,6 +231,7 @@ void sensor_init(void) {
   digitalWrite(WATERSENSOR_PIN, HIGH);
 #endif
 
+//  set_program("H;3;1;1;0;160\nB;5;2;1;0;160\nH;6;3;1;0;160\n");
   set_program("H;450;0.1;1;0;160\nB;450;1;1;0;160\nH;450;0.1;1;0;160\n");
 
   reset_sensor_counter();
@@ -256,11 +257,11 @@ void reset_sensor_counter(void) {
   set_power_mode(POWER_SLEEP_MODE);
 #endif
 
+  stopService();
   stepper.setMaxSpeed(-1);
   stepper.setSpeed(-1);
   stepper.brake();  
   stepper.disable();
-  stopService();
   stepper.setCurrent(0);
   stepper.setTarget(0);
   set_capacity(0);
