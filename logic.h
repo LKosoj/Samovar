@@ -289,6 +289,7 @@ void run_program(byte num) {
       fileToAppend.close();
     }
     Msg = "Program finished!";
+    WthdrwlProgress = 0;
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alert! {DEVICE_NAME} - Program finished!");
