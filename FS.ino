@@ -236,21 +236,25 @@ void IRAM_ATTR append_data() {
   if (SteamSensor.avgTemp != SteamSensor.PrevTemp) {
     SteamSensor.PrevTemp = SteamSensor.avgTemp;
     w = true;
-  }
+  } else
   if (PipeSensor.avgTemp != PipeSensor.PrevTemp) {
     PipeSensor.PrevTemp = PipeSensor.avgTemp;
     w = true;
-  }
+  } else
   if (WaterSensor.avgTemp != WaterSensor.PrevTemp) {
     WaterSensor.PrevTemp = WaterSensor.avgTemp;
     w = true;
-  }
+  } else
   if (TankSensor.avgTemp != TankSensor.PrevTemp) {
     TankSensor.PrevTemp = TankSensor.avgTemp;
     w = true;
-  }
+  } else
   if (bme_prev_pressure != bme_pressure) {
     bme_prev_pressure = bme_pressure;
+    w = true;
+  } else
+  if (prev_ProgramNum != ProgramNum) {
+    prev_ProgramNum = ProgramNum;
     w = true;
   }
   if (w)
