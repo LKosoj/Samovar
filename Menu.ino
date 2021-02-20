@@ -323,7 +323,6 @@ void menu_samovar_start() {
 
 void samovar_reset() {
   static char str[20] = "Stoped             ";
-  //Str.toCharArray(startval_text_val, 20);
   memcpy(str, startval_text_val, 20);
   reset_focus();
   reset_sensor_counter();
