@@ -88,6 +88,7 @@ Servo SG90 https://aliexpress.ru/item/32898600185.html
 Silicone tube https://aliexpress.ru/item/4000159962222.html
 
 Можно купить маленькие воронки из нержавейки, чтобы не печать узел разбора на 3D принтере https://aliexpress.ru/item/33038325129.html
+Так же воронки можно сделать, обрезав шприцы.
 
     
 
