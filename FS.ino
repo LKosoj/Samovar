@@ -229,7 +229,7 @@ void IRAM_ATTR append_data() {
 
 #ifdef WRITE_PROGNUM_IN_LOG
   str += ",";
-  str += ProgramNum;
+  str += ProgramNum + 1;
 #endif
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
