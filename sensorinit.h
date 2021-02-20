@@ -147,7 +147,7 @@ void sensor_init(void) {
   
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
-  delay(4000);
+  delay(2000);
   // определяем устройства на шине
 #ifdef __SAMOVAR_DEBUG
   Serial.print("Locating DS18B20...");

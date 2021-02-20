@@ -65,9 +65,27 @@
 //**************************************************************************************************************
 #include "sensorinit.h"
 
-
 hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+void setupMenu();
+void connectWiFi();
+void WebServerInit(void);
+void encoder_getvalue();
+void menu_calibrate();
+String millis2time();
+
+
+#ifdef USE_WEB_SERIAL
+void recvMsg(uint8_t *data, size_t len){
+  WebSerial.println("Received Data...");
+  String d = "";
+  for(int i=0; i < len; i++){
+    d += char(data[i]);
+  }
+  WebSerial.println(d);
+}
+#endif
 
 void stopService(void)
 {
@@ -109,22 +127,8 @@ void IRAM_ATTR isrENC_TICK() {
 
 void setup() {
 
-#ifndef __SAMOVAR_DEBUG
-  disableCore0WDT();
-#endif
-  
   Serial.begin(115200);
   Wire.begin();
-
-  //Инициализируем ноги для реле
-  pinMode(RELE_CHANNEL1, OUTPUT);
-  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-  pinMode(RELE_CHANNEL2, OUTPUT);
-  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-  pinMode(RELE_CHANNEL3, OUTPUT);
-  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
-  pinMode(RELE_CHANNEL4, OUTPUT);
-  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 
   stepper.disable();
 
@@ -180,6 +184,16 @@ void setup() {
     read_config();
   }
 
+  //Инициализируем ноги для реле
+  pinMode(RELE_CHANNEL1, OUTPUT);
+  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+  pinMode(RELE_CHANNEL2, OUTPUT);
+  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+  pinMode(RELE_CHANNEL3, OUTPUT);
+  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
+  pinMode(RELE_CHANNEL4, OUTPUT);
+  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+
   //Настраиваем меню
   Serial.println("Samovar started");
   setupMenu();
@@ -231,6 +245,10 @@ void setup() {
   samovar_reset();
 
   WebServerInit();
+#ifdef USE_WEB_SERIAL
+  WebSerial.begin(&server);
+  WebSerial.msgCallback(recvMsg);
+#endif
 
 #ifdef USE_WATERSENSOR
   //вешаем прерывание на изменения датчика потока воды

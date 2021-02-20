@@ -1,6 +1,11 @@
 void  web_command(AsyncWebServerRequest *request);
 void  handleSave(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request);
+String calibrateKeyProcessor(const String& var);
+String indexKeyProcessor(const String& var);
+void  web_program(AsyncWebServerRequest *request);
+void  calibrate_command(AsyncWebServerRequest *request);
+String setupKeyProcessor(const String& var);
 
 void WebServerInit(void) {
 

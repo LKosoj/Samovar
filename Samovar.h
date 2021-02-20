@@ -4,6 +4,10 @@
 
 #include "Samovar_ini.h"
 
+#ifdef USE_WEB_SERIAL
+#include <WebSerial.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -101,8 +105,6 @@ uint8_t temprature_sens_read();
 // Количество емкостей. (0 используется всегда). Для расчета позиции серво считаем угол поворота между емкостями
 // равным 180 / CAPACITY_NUM
 #define CAPACITY_NUM 10
-//Корректировка для угла поворота. Мой сервопривод встает не ровно.
-int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //**************************************************************************************************************
 
 //**************************************************************************************************************
@@ -216,6 +218,9 @@ GButton whls(WHEAD_LEVEL_SENSOR_PIN);
 
 LiquidMenu main_menu1(lcd);
 
+#ifdef USE_WEB_SERIAL
+WebSerialClass WebSerial;
+#endif
 
 struct SetupEEPROM {
   byte flag;                                                   //Флаг для записи в память
