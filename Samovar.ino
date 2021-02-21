@@ -55,7 +55,7 @@
 #ifdef SAMOVAR_USE_BLYNK
 //#define BLYNK_PRINT Serial
 #define BLYNK_TIMEOUT_MS 888
-#define BLYNK_HEARTBEAT 17
+//#define BLYNK_HEARTBEAT 17
 
 #include <BlynkSimpleEsp32.h>
 #endif

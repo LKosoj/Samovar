@@ -230,8 +230,8 @@ void sensor_init(void) {
   digitalWrite(WATERSENSOR_PIN, HIGH);
 #endif
 
-//  set_program("H;3;1;1;0;160\nB;5;2;1;0;160\nH;6;3;1;0;160\n");
-  set_program("H;450;0.1;1;0;160\nB;450;1;1;0;160\nH;450;0.1;1;0;160\n");
+  set_program("H;3;1;1;0;160\nB;5;2;1;0;160\nH;6;3;1;0;160\n");
+//  set_program("H;450;0.1;1;0;160\nB;450;1;1;0;160\nH;450;0.1;1;0;160\n");
 
   reset_sensor_counter();
 
@@ -274,11 +274,13 @@ void reset_sensor_counter(void) {
   TankSensor.BodyTemp = 0;
   ActualVolumePerHour = 0;
   startval = 0;
-  WthdrwlProgress = 0;
   PauseOn = false;
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;
   SteamSensor.BodyTemp = 0;
+  WFtotalMilliLitres = 0;
+  WthdrwlProgress = 0;
+  TargetStepps = 0;
 
   if (fileToAppend) {
     fileToAppend.close();
@@ -288,8 +290,6 @@ void reset_sensor_counter(void) {
   BME_getvalue(false);
   start_pressure = bme_pressure;
   get_Samovar_Status();
-
-  WFtotalMilliLitres = 0;
 }
 
 String inline format_float(float v, int d) {

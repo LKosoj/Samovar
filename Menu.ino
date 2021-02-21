@@ -453,6 +453,8 @@ void encoder_getvalue() {
       WthdrwlProgress = wp * 100;
     } else {
       WthdrwlProgress = 0;
+      WthdrwTimeS = 0;
+      WthdrwTimeAllS = 0;
     }
     vTaskDelay(10);
 
