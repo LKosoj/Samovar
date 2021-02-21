@@ -245,8 +245,9 @@ void set_program(String WProgram) {
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
-    if (!pair and i < CAPACITY_NUM) {
+    if ((!pair || pair == NULL || pair[0] == 13) and i < CAPACITY_NUM * 2) {
       program[i].WType = "";
+      break;
     }
   }
 }
