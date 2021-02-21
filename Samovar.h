@@ -291,7 +291,10 @@ const char* ssid = SAMOVAR_SSID;
 const char* password = SAMOVAR_PASSWORD;
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
+
+#ifdef SAMOVAR_USE_BLYNK
 char auth[] = SAMOVAR_AUTH;
+#endif
 //**************************************************************************************************************
 
 //**************************************************************************************************************
