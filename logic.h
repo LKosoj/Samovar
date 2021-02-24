@@ -182,17 +182,17 @@ String get_Samovar_Status() {
     SamovarStatus = "Выключено";
     SamovarStatusInt = 0;
   } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
-    SamovarStatus = "Работает программа №" + String(ProgramNum + 1);
+    SamovarStatus = "Прг №" + String(ProgramNum + 1);
     SamovarStatusInt = 10;
   } else if (PowerOn && startval == 1 && program_Wait) {
     int s = 0;
     if (t_min > (millis() + 10)) {
       s = (t_min - millis()) / 1000;
     }
-    SamovarStatus = "Программа №" + String(ProgramNum + 1) + " на паузе. Ожидается возврат колонны к заданным параметрам. Осталось " + (String)s + " сек.";
+    SamovarStatus = "Прг №" + String(ProgramNum + 1) + " пауза. Продолжение через " + (String)s + " сек.";
     SamovarStatusInt = 15;
   } else if (PowerOn && startval == 2) {
-    SamovarStatus = "Выполнение программ отбора закончено";
+    SamovarStatus = "Выполнение программ закончено";
     SamovarStatusInt = 20;
   } else if (PowerOn && startval == 100) {
     SamovarStatus = "Калибровка";
@@ -206,10 +206,9 @@ String get_Samovar_Status() {
   }
 
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
-    SamovarStatus += " До конца текущей строки программы: " + WthdrwTimeS;
-    SamovarStatus += " До конца текущей программы: " + WthdrwTimeAllS;
+    SamovarStatus += " Осталось: " + WthdrwTimeS + ":" + WthdrwTimeAllS;
   }
-  if (SteamSensor.BodyTemp > 0) SamovarStatus += " Температура отбора тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  if (SteamSensor.BodyTemp > 0) SamovarStatus += " Т отбора тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
 
   return SamovarStatus;
 }
@@ -535,6 +534,8 @@ String read_from_serial() {
   i = serial_str.indexOf("T");
   if (getData && i >= 0) {
     serial_str = serial_str.substring(i, serial_str.length() - 2);
+    i = serial_str.indexOf("T",1);
+    if (i > 0) serial_str = serial_str.substring(0, i - 1);
     String result = serial_str;
     serial_str = "";
     return result;
@@ -557,7 +558,9 @@ void get_current_power() {
   }
   String s = read_from_serial();
   if (s != "") {
-    static int cpv = hexToDec(s.substring(1, 4));
+    if (s.substring(1, 2) == "T") s = s.substring(1, 9);
+    int cpv = hexToDec(s.substring(1, 4));
+
     //Если напряжение больше 300 - не корректно получено значение от регулятора, оставляем старое значение
     if (cpv < 3000) {
       current_power_volt = cpv / 10.0F;
