@@ -230,8 +230,8 @@ void sensor_init(void) {
   digitalWrite(WATERSENSOR_PIN, HIGH);
 #endif
 
-  set_program("H;3;1;1;0;160\nB;5;2;1;0;160\nH;6;3;1;0;160\n");
-//  set_program("H;450;0.1;1;0;160\nB;450;1;1;0;160\nH;450;0.1;1;0;160\n");
+//  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
+  set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
 
   reset_sensor_counter();
 
