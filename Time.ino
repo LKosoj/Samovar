@@ -102,8 +102,8 @@ unsigned long IRAM_ATTR sendNTPpacket(IPAddress& address)                       
 String millis2time()                                                       // функция формирования строки "время работы модуля"
 { static String Time;                                                      // начинаем с пустой строки
   Time = "";
-  static unsigned long ss;
-  static byte mm, hh;
+  unsigned long ss;
+  byte mm, hh;
   ss = millis() / 1000;                                                    // вычисляем количество секунд с начала работы модуля
   hh = ss / 3600;                                                          // вычисляем количество часов
   mm = (ss - hh * 3600) / 60;                                              // вычисляем количество минут

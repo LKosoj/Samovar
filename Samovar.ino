@@ -77,10 +77,10 @@ String millis2time();
 
 
 #ifdef USE_WEB_SERIAL
-void recvMsg(uint8_t *data, size_t len){
+void recvMsg(uint8_t *data, size_t len) {
   WebSerial.println("Received Data...");
   String d = "";
-  for(int i=0; i < len; i++){
+  for (int i = 0; i < len; i++) {
     d += char(data[i]);
   }
   WebSerial.println(d);
@@ -94,15 +94,15 @@ void stopService(void)
 
 void startService(void)
 {
-  timerAlarmWrite(timer, stepper.stepTime, true);           
+  timerAlarmWrite(timer, stepper.stepTime, true);
   timerAlarmEnable(timer);
 }
 
 
 void IRAM_ATTR StepperTicker(void) {
-   portENTER_CRITICAL_ISR(&timerMux);
-   StepperMoving = stepper.quicktick();
-   portEXIT_CRITICAL_ISR(&timerMux);
+  portENTER_CRITICAL_ISR(&timerMux);
+  StepperMoving = stepper.quicktick();
+  portEXIT_CRITICAL_ISR(&timerMux);
 }
 
 #ifdef USE_WATERSENSOR
@@ -112,12 +112,12 @@ void IRAM_ATTR WFpulseCounter() {
 #endif
 
 #ifdef USE_HEAD_LEVEL_SENSOR
-void IRAM_ATTR isrWHLS_TICK(){
+void IRAM_ATTR isrWHLS_TICK() {
   whls.tick();
 }
 #endif
 
-void IRAM_ATTR isrBTN_TICK(){
+void IRAM_ATTR isrBTN_TICK() {
   btn.tick();
 }
 
@@ -214,7 +214,7 @@ void setup() {
   Blynk.config(auth);
   Blynk.connect(BLYNK_TIMEOUT_MS);
 #endif
-  
+
 
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
@@ -256,7 +256,7 @@ void setup() {
 #endif
 
 #ifdef USE_HEAD_LEVEL_SENSOR
-//Задаем параметры для сенсора уровня флегмы
+  //Задаем параметры для сенсора уровня флегмы
   whls.setType(LOW_PULL);
   whls.setDebounce(50); //игнорируем дребезг
   whls.setTickMode(MANUAL);
@@ -297,7 +297,7 @@ void loop() {
   //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
 #ifdef SAMOVAR_USE_BLYNK
-  if(Blynk.connected()){
+  if (Blynk.connected()) {
     Blynk.run();
   }
 #endif

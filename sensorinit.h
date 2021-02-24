@@ -1,5 +1,5 @@
 #ifdef USE_BME680
-  Adafruit_BME680 bme; // I2C
+Adafruit_BME680 bme; // I2C
 #endif
 
 #ifdef USE_BMP180
@@ -31,13 +31,13 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   //bme_pressure = 767;
   //bme_temp = 25;
   //return;
-  
+
   if (!bmefound) {
     bme_temp = -1;
     bme_pressure = -1;
     return;
   }
-  
+
 #ifdef USE_BME680
   // Tell BME680 to begin measurement.
   if (bme.beginReading() == 0) {
@@ -61,7 +61,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 #ifdef USE_BMP180
   sensors_event_t event;
   bme.getEvent(&event);
-  if (event.pressure){
+  if (event.pressure) {
     bme_pressure = event.pressure * 0.75;
     float temperature;
     bme.getTemperature(&temperature);
@@ -81,7 +81,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
   //return;
-  static float ss, ps, ws, ts;
+  float ss, ps, ws, ts;
   ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
   vTaskDelay(10);
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
@@ -119,7 +119,7 @@ void IRAM_ATTR triggerGetSensor(void) {
     append_data();              //Записываем данные;
   }
 #ifdef SAMOVAR_USE_BLYNK
-  if(!Blynk.connected() && WiFi.status() == WL_CONNECTED){
+  if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
     Blynk.connect(BLYNK_TIMEOUT_MS);
   }
 #endif
@@ -137,14 +137,14 @@ void sensor_init(void) {
     //Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
   } else {
 #ifdef USE_BME680
-  // Set up oversampling and filter initialization
-  bme.setTemperatureOversampling(BME680_OS_8X);
-  bme.setHumidityOversampling(BME680_OS_2X);
-  bme.setPressureOversampling(BME680_OS_4X);
-  bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    // Set up oversampling and filter initialization
+    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setHumidityOversampling(BME680_OS_2X);
+    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
 #endif
   }
-  
+
   writeString("DS1820 init...     ", 3);
   sensors.begin();                                                        // стартуем датчики температуры
   delay(2000);
@@ -230,7 +230,7 @@ void sensor_init(void) {
   digitalWrite(WATERSENSOR_PIN, HIGH);
 #endif
 
-//  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
+  //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
   set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
 
   reset_sensor_counter();
@@ -259,7 +259,7 @@ void reset_sensor_counter(void) {
   stopService();
   stepper.setMaxSpeed(-1);
   stepper.setSpeed(-1);
-  stepper.brake();  
+  stepper.brake();
   stepper.disable();
   stepper.setCurrent(0);
   stepper.setTarget(0);

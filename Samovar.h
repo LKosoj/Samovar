@@ -1,5 +1,5 @@
 #ifndef ESP32
-  #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
+#error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
 #include "Samovar_ini.h"
@@ -20,7 +20,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.12"
+#define SAMOVAR_VERSION "1.12.1"
 #define __SAMOVAR_DEBUG
 
 //--------------------------------------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ uint8_t temprature_sens_read();
 #endif
 #define STEPPER_STEPS 400 //количество шагов, 200 x MS
 #define STEPPER_STEP_ML 1020 //количество шагов на 1 мл жидкости для драйвера с шагами 1/2
-#define STEPPER_MAX_SPEED 8000 
+#define STEPPER_MAX_SPEED 8000
 //**************************************************************************************************************
 
 //**************************************************************************************************************
@@ -78,7 +78,7 @@ uint8_t temprature_sens_read();
 #define RELE_CHANNEL1 2             //используется для пускателя, который включает нагреватель
 #endif
 #ifndef RELE_CHANNEL2
-#define RELE_CHANNEL2 34            
+#define RELE_CHANNEL2 34
 #endif
 #ifndef RELE_CHANNEL3
 #define RELE_CHANNEL3 14            //используется для клапана, открывающего/закрывающего воду охлаждения

@@ -63,7 +63,7 @@ void withdrawal(void) {
     menu_samovar_start();
   }
 
-  static float c_temp; //стартовая температура отбора тела с учетом корректировки от давления или без
+  float c_temp; //стартовая температура отбора тела с учетом корректировки от давления или без
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
 
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
@@ -224,7 +224,7 @@ void next_capacity(void) {
 }
 
 void set_program(String WProgram) {
-  static char c[500];
+  char c[500];
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
   int i = 0;
@@ -295,7 +295,7 @@ void run_program(byte num) {
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alert! {DEVICE_NAME} - Program finished!");
 #endif
-    
+
   } else {
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
       Msg = "Set prog line " + (String)(num + 1) + ", capacity " + (String)program[num].capacity_num;
@@ -357,11 +357,11 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
   //скорректированная температура кипения спирта при текущем давлении
   static float c_temp;
 
-  if (SamSetup.UsePreccureCorrect){
+  if (SamSetup.UsePreccureCorrect) {
     //идеальная температура кипения спирта при текущем давлении
-    static float i_temp;
+    float i_temp;
     //температурная дельта
-    static float d_temp;
+    float d_temp;
 
     i_temp = current_pressure * 0.038 + 49.27;
     d_temp = start_temp - start_pressure * 0.038 - 49.27; //учитываем поправку на погрешность измерения датчиков
@@ -534,7 +534,7 @@ String read_from_serial() {
   i = serial_str.indexOf("T");
   if (getData && i >= 0) {
     serial_str = serial_str.substring(i, serial_str.length() - 2);
-    i = serial_str.indexOf("T",1);
+    i = serial_str.indexOf("T", 1);
     if (i > 0) serial_str = serial_str.substring(0, i - 1);
     String result = serial_str;
     serial_str = "";
@@ -586,7 +586,7 @@ void set_power_mode(String Mode) {
 
 unsigned int hexToDec(String hexString) {
   unsigned int decValue = 0;
-  static int nextInt;
+  int nextInt;
 
   for (int i = 0; i < hexString.length(); i++) {
 
