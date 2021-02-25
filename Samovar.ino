@@ -16,7 +16,6 @@
 #include <Update.h>
 #include <LiquidMenu.h>
 #include <EEPROM.h>
-#include <Ticker.h>
 #include <SPIFFS.h>
 #include <SPIFFSEditor.h>
 
@@ -74,6 +73,7 @@ void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
 String millis2time();
+String CurrentTime(void);
 
 
 #ifdef USE_WEB_SERIAL
@@ -87,13 +87,11 @@ void recvMsg(uint8_t *data, size_t len) {
 }
 #endif
 
-void stopService(void)
-{
+void stopService(void) {
   timerAlarmDisable(timer);
 }
 
-void startService(void)
-{
+void startService(void) {
   timerAlarmWrite(timer, stepper.stepTime, true);
   timerAlarmEnable(timer);
 }
@@ -123,6 +121,87 @@ void IRAM_ATTR isrBTN_TICK() {
 
 void IRAM_ATTR isrENC_TICK() {
   encoder.tick();  // отработка в прерывании
+}
+
+void IRAM_ATTR triggerSysTicker(void * parameter) {
+  byte CurMin, OldMin;
+  byte tcnt = 0;
+  while (true) {
+    CurMin = (millis() / 1000 );
+
+    // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
+    if (OldMin != CurMin) {
+      tcnt ++;
+      //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
+      if (TargetStepps > 0) {
+        //считаем прогресс
+        float wp = (float)CurrrentStepps / (float)TargetStepps;
+
+        //считаем время для текущей строки программы
+        WthdrwTime = program[ProgramNum].Time * (1 - wp);
+        //суммируем время текущей строки программы и всех следующих за ней
+        WthdrwTimeAll = WthdrwTime;
+
+        for (int i = ProgramNum + 1; i < ProgramLen; i++) {
+          WthdrwTimeAll += program[i].Time;
+        }
+        WthdrwTimeS = (String)((unsigned int)WthdrwTime) + ":" + (String)((unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60));
+        WthdrwTimeAllS = (String)((unsigned int)WthdrwTimeAll) + ":" + (String)((unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60));
+
+        //прогресс переводим в проценты
+        WthdrwlProgress = wp * 100;
+      } else {
+        WthdrwlProgress = 0;
+        WthdrwTimeS = "";
+        WthdrwTimeAllS = "";
+      }
+      vTaskDelay(10);
+
+#ifdef USE_WATERSENSOR
+
+      if (WFpulseCount == 0 && SteamSensor.avgTemp > 70 && PowerOn) {
+        WFAlarmCount ++;
+      } else {
+        WFAlarmCount = 0;
+      }
+      WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
+      WFflowMilliLitres = WFflowRate * 100 / 6;
+      WFtotalMilliLitres += WFflowMilliLitres;
+      WFpulseCount = 0;
+      oldTime = millis();
+      vTaskDelay(10);
+#endif
+
+#ifdef SAMOVAR_USE_POWER
+      get_current_power();
+#endif
+
+      //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
+      check_alarm();
+      vTaskDelay(10);
+
+      Crt = CurrentTime();
+      StrCrt = Crt.substring(6) + "   " + millis2time();
+      StrCrt.toCharArray(tst, 20);
+      DS_getvalue();
+      vTaskDelay(20);
+      clok();
+      if (tcnt == SamSetup.LogPeriod) {
+        tcnt = 0;
+        clok1();
+        if (startval > 0) {
+          append_data();              //Записываем данные;
+        }
+#ifdef SAMOVAR_USE_BLYNK
+        if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
+          Blynk.connect(BLYNK_TIMEOUT_MS);
+        }
+#endif
+      }
+      OldMin = CurMin;
+    }
+    vTaskDelay(100 / portTICK_RATE_MS);
+  }
 }
 
 void setup() {
@@ -273,12 +352,15 @@ void setup() {
   //disableCore0WDT();
   //disableCore1WDT();
 
-  StepperTickerTask1 = NULL;
-
-  // Start update of environment data every SAMOVAR_LOG_PERIOD second
-  SensorTicker.attach(SamSetup.LogPeriod, triggerGetSensor);
-  // Start update of environment data every 1 second
-  SensorTempTicker.attach(1, triggerGetTempSensor);
+  //Запускаем таск для выполнения различных проверок и обновления экрана
+  xTaskCreatePinnedToCore(
+    triggerSysTicker, /* Function to implement the task */
+    "SysTicker", /* Name of the task */
+    4000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &SysTickerTask1,  /* Task handle. */
+    1); /* Core where the task should run */
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);

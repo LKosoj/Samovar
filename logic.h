@@ -23,7 +23,7 @@ void startService(void);
 void reset_sensor_counter(void);
 
 //Получаем объем отбора
-float get_liguid_volume_by_step(int StepCount) {
+float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
   static float retval;
   if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
   else retval = 0;
@@ -31,11 +31,11 @@ float get_liguid_volume_by_step(int StepCount) {
 }
 
 //Получаем скорость отбора
-float get_liguid_rate_by_step(int StepperSpeed) {
+float IRAM_ATTR get_liguid_rate_by_step(int StepperSpeed) {
   return get_liguid_volume_by_step(StepperSpeed) * 3.6;
 }
 
-float get_speed_from_rate(float volume_per_hour) {
+float IRAM_ATTR get_speed_from_rate(float volume_per_hour) {
   static float v;
   ActualVolumePerHour = volume_per_hour;
   v = (float)SamSetup.StepperStepMl * (float)volume_per_hour / 3.6;
@@ -43,11 +43,11 @@ float get_speed_from_rate(float volume_per_hour) {
   return v;
 }
 
-int get_liquid_volume() {
+int IRAM_ATTR get_liquid_volume() {
   return get_liguid_volume_by_step(stepper.getCurrent());
 }
 
-void withdrawal(void) {
+void IRAM_ATTR withdrawal(void) {
   //Определяем, что необходимо сменить режим работы
   if (program_Pause) {
     if (millis() >= t_min) {
@@ -101,7 +101,7 @@ void withdrawal(void) {
   }
 }
 
-void set_power(bool On) {
+void IRAM_ATTR set_power(bool On) {
   PowerOn = On;
   if (On) {
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
@@ -156,7 +156,7 @@ void pump_calibrate(int stpspeed) {
   }
 }
 
-void pause_withdrawal(bool Pause) {
+void IRAM_ATTR pause_withdrawal(bool Pause) {
   if (!stepper.getState() && !PauseOn) return;
   PauseOn = Pause;
   if (Pause) {
@@ -177,7 +177,7 @@ void pause_withdrawal(bool Pause) {
   }
 }
 
-String get_Samovar_Status() {
+String IRAM_ATTR get_Samovar_Status() {
   if (!PowerOn) {
     SamovarStatus = "Выключено";
     SamovarStatusInt = 0;
@@ -213,13 +213,13 @@ String get_Samovar_Status() {
   return SamovarStatus;
 }
 
-void set_capacity(byte cap) {
+void IRAM_ATTR set_capacity(byte cap) {
   capacity_num = cap;
   int p = ((int)cap * SERVO_ANGLE) / (int)CAPACITY_NUM + servoDelta[cap];
   servo.write(p);
 }
 
-void next_capacity(void) {
+void IRAM_ATTR next_capacity(void) {
   set_capacity(capacity_num + 1);
 }
 
@@ -274,7 +274,7 @@ String get_program(int s) {
   return Str;
 }
 
-void run_program(byte num) {
+void IRAM_ATTR run_program(byte num) {
   t_min = 0;
   program_Pause = false;
   if (num == CAPACITY_NUM * 2) {
@@ -353,7 +353,7 @@ void run_program(byte num) {
 }
 
 //функция корректировки температуры кипения спирта в зависимости от давления
-float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
+float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
   //скорректированная температура кипения спирта при текущем давлении
   static float c_temp;
 
@@ -375,7 +375,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
   return c_temp;
 }
 
-void check_alarm() {
+void IRAM_ATTR check_alarm() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
@@ -492,7 +492,7 @@ void check_alarm() {
   }
 }
 
-void open_valve(bool Val) {
+void IRAM_ATTR open_valve(bool Val) {
   valve_status = Val;
   if (Val) {
     Msg = "Open cooling water!";
@@ -515,7 +515,7 @@ void open_valve(bool Val) {
 // SAMOVAR_USE_POWER
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
-String read_from_serial() {
+String IRAM_ATTR read_from_serial() {
   String serial_str = "";
   boolean getData;
   getData = false;
@@ -549,7 +549,7 @@ String read_from_serial() {
 }
 
 //получаем текущие параметры работы регулятора напряжения
-void get_current_power() {
+void IRAM_ATTR get_current_power() {
   if (!PowerOn) {
     current_power_volt = 0;
     target_power_volt = 0;
@@ -573,18 +573,18 @@ void get_current_power() {
 }
 
 //устанавливаем напряжение для регулятора напряжения
-void set_current_power(float Volt) {
+void IRAM_ATTR set_current_power(float Volt) {
   target_power_volt = Volt;
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 }
 
-void set_power_mode(String Mode) {
+void IRAM_ATTR set_power_mode(String Mode) {
   current_power_mode = Mode;
   Serial2.print("M" + Mode + "\r");
 }
 
-unsigned int hexToDec(String hexString) {
+unsigned int IRAM_ATTR hexToDec(String hexString) {
   unsigned int decValue = 0;
   int nextInt;
 

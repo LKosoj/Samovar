@@ -28,10 +28,6 @@ void reset_sensor_counter(void);
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
 void IRAM_ATTR BME_getvalue(bool fl) {
-  //bme_pressure = 767;
-  //bme_temp = 25;
-  //return;
-
   if (!bmefound) {
     bme_temp = -1;
     bme_pressure = -1;
@@ -49,11 +45,8 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   }
 
   bme_temp = bme.temperature;
-  vTaskDelay(5);
   bme_pressure = bme.pressure / 100 * 0.75;
-  vTaskDelay(5);
   //bme_humidity = bme.humidity;
-  //vTaskDelay(5);
 
   //filtered_val += (val - filtered_val) * 0.01;
 #endif
@@ -83,13 +76,9 @@ void IRAM_ATTR DS_getvalue(void) {
   //return;
   float ss, ps, ws, ts;
   ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
-  vTaskDelay(10);
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
-  vTaskDelay(10);
   ws = sensors.getTempC(WaterSensor.Sensor);                   // считываем температуру с датчика 2
-  vTaskDelay(10);
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
-  vTaskDelay(10);
 
   //return;
   sensors.requestTemperatures();
@@ -106,23 +95,6 @@ void IRAM_ATTR DS_getvalue(void) {
   if (ts != -127) {
     TankSensor.avgTemp = ts + SamSetup.DeltaTankTemp;
   }
-}
-
-void IRAM_ATTR triggerGetTempSensor(void) {
-  clok();
-  DS_getvalue();
-}
-
-void IRAM_ATTR triggerGetSensor(void) {
-  clok1();
-  if (startval > 0) {
-    append_data();              //Записываем данные;
-  }
-#ifdef SAMOVAR_USE_BLYNK
-  if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
-    Blynk.connect(BLYNK_TIMEOUT_MS);
-  }
-#endif
 }
 
 void sensor_init(void) {
@@ -251,7 +223,7 @@ void printAddress(DeviceAddress deviceAddress)                        // фун�
 }
 
 //Обнуляем все счетчики
-void reset_sensor_counter(void) {
+void IRAM_ATTR reset_sensor_counter(void) {
 #ifdef SAMOVAR_USE_POWER
   set_power_mode(POWER_SLEEP_MODE);
 #endif

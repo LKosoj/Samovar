@@ -20,7 +20,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.12.1"
+#define SAMOVAR_VERSION "1.14"
 #define __SAMOVAR_DEBUG
 
 //--------------------------------------------------------------------------------------------------------------
@@ -181,16 +181,14 @@ char* startval_text = (char*)startval_text_val;
 char* power_text_ptr = (char*)"ON";
 char* calibrate_text_ptr = (char*)"Start";
 char* pause_text_ptr = (char*)"Pause";
-String StrCrt, Crt;
+String StrCrt;
+String Crt;
 byte CurMin, OldMin;
 
 //**************************************************************************************************************
 
 /** Task handle for the  value read task */
-TaskHandle_t StepperTickerTask1 = NULL;
-
-Ticker SensorTicker;
-Ticker SensorTempTicker;
+TaskHandle_t SysTickerTask1 = NULL;
 
 AsyncWebServer server(80);
 
@@ -298,16 +296,17 @@ char auth[] = SAMOVAR_AUTH;
 //**************************************************************************************************************
 
 //**************************************************************************************************************
-volatile bool bmefound = true;
+byte tcnt = 0;
+bool bmefound = true;
 //volatile float samovar_temp;                                  // Температура ESP32
 volatile float bme_temp;                                        // Температура BME
 volatile float start_pressure;                                  // Давление BME стартовое
 volatile float bme_pressure;                                    // Давление BME
 volatile float bme_prev_pressure;                               // Давление BME предыдущее значение
-volatile float bme_humidity;                                    // Влажность
-volatile float bme_altitude;                                    // Высота
-volatile float bme_gas;                                         // Газ
-String SamovarStatus;                                           // Текущий статус работы Самовара строкой
+float bme_humidity;                                             // Влажность
+float bme_altitude;                                             // Высота
+float bme_gas;                                                  // Газ
+String SamovarStatus;                                  // Текущий статус работы Самовара строкой
 volatile int8_t SamovarStatusInt;                               // Текущий статус работы Самовара числом
 volatile byte capacity_num;                                     // Текущая позиция емкости для отбора
 
@@ -336,15 +335,15 @@ unsigned long t_min;                                            // Время д
 unsigned long alarm_t_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32. Это накладывает определенные ограничения на время отбора - оно не должно быть больше двух суток
 unsigned long alarm_h_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32. Это накладывает определенные ограничения на время отбора - оно не должно быть больше двух суток
 volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
-uint16_t WFflowMilliLitres = 0;                                 // Переменная для учета расхода воды
-uint16_t WFtotalMilliLitres = 0;                                // Переменная для учета расхода воды
-float WFflowRate;                                               // Переменная для учета расхода воды
-int WFAlarmCount;                                               // Переменная, считающая, сколько секунд не было подачи воды
+volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
+volatile uint16_t WFtotalMilliLitres = 0;                       // Переменная для учета расхода воды
+volatile float WFflowRate;                                      // Переменная для учета расхода воды
+ int WFAlarmCount;                                              // Переменная, считающая, сколько секунд не было подачи воды
 unsigned long oldTime;                                          // Предыдущее время в милисекундах
 bool valve_status;                                              // Состояние клапана подачи воды
 uint16_t acceleration_temp;                                     // Счетчик для определения завершения разгона колонны
-float WthdrwTimeAll;                                            // Оставшееся время отбора
-float WthdrwTime;                                               // Время отбора текущей строки программы
+volatile float WthdrwTimeAll;                                   // Оставшееся время отбора
+volatile float WthdrwTime;                                      // Время отбора текущей строки программы
 String WthdrwTimeAllS;                                          // Оставшееся время отбора строкой
 String WthdrwTimeS;                                             // Время отбора текущей строки программы строкой
 String jsonstr;                                                 // Строка, содержащая json ответ для страницы
@@ -352,7 +351,7 @@ String Msg;                                                     // Строка 
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER
-float current_power_volt;                                       // Текущее напряжение регулятора
-float target_power_volt;                                        // Заданное напряжение регулятора
-uint16_t current_power_p;                                       // Расчитанная мощность на регуляторе напряжения
+volatile float current_power_volt;                                       // Текущее напряжение регулятора
+volatile float target_power_volt;                                        // Заданное напряжение регулятора
+volatile uint16_t current_power_p;                                       // Расчитанная мощность на регуляторе напряжения
 #endif

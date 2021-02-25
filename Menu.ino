@@ -415,82 +415,12 @@ void setupMenu() {
   main_menu1.change_screen(&welcome_screen);
 
   main_menu1.update();
-  //delay(2000);
   welcome_screen.hide(true);
 }
 
 void encoder_getvalue() {
 
-  CurMin = (millis() / 1000 );
-
-  //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
-  if (CurMin == 120) {
-    //    lcd.begin(20,4);
-    lcd.init();
-    vTaskDelay(10);
-  }
-
-  // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
-  if (OldMin != CurMin) {
-
-    //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
-    if (TargetStepps > 0) {
-      //считаем прогресс
-      float wp = (float)CurrrentStepps / (float)TargetStepps;
-
-      //считаем время для текущей строки программы
-      WthdrwTime = program[ProgramNum].Time * (1 - wp);
-      //суммируем время текущей строки программы и всех следующих за ней
-      WthdrwTimeAll = WthdrwTime;
-
-      for (int i = ProgramNum + 1; i < ProgramLen; i++) {
-        WthdrwTimeAll += program[i].Time;
-      }
-      WthdrwTimeS = (String)((unsigned int)WthdrwTime) + ":" + (String)((unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60));
-      WthdrwTimeAllS = (String)((unsigned int)WthdrwTimeAll) + ":" + (String)((unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60));
-
-      //прогресс переводим в проценты
-      WthdrwlProgress = wp * 100;
-    } else {
-      WthdrwlProgress = 0;
-      WthdrwTimeS = "";
-      WthdrwTimeAllS = "";
-    }
-    vTaskDelay(10);
-
-    //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
-    check_alarm();
-    vTaskDelay(10);
-
-#ifdef USE_WATERSENSOR
-
-    if (WFpulseCount == 0 && SteamSensor.avgTemp > 70 && PowerOn) {
-      WFAlarmCount ++;
-    } else {
-      WFAlarmCount = 0;
-    }
-    WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
-    WFflowMilliLitres = WFflowRate * 100 / 6;
-    WFtotalMilliLitres += WFflowMilliLitres;
-    WFpulseCount = 0;
-    oldTime = millis();
-    vTaskDelay(10);
-#endif
-
-#ifdef SAMOVAR_USE_POWER
-    get_current_power();
-    vTaskDelay(15);
-#endif
-
-    Crt = CurrentTime();
-    StrCrt = Crt.substring(6) + "   " + millis2time();
-    StrCrt.toCharArray(tst, 20);
-    main_menu1.softUpdate();
-    vTaskDelay(20);
-    BME_getvalue(false);
-    vTaskDelay(25);
-    OldMin = CurMin;
-  }
+  bool updscreen = true;
 
   // Check all the buttons
   if (encoder.isRight()) {
@@ -498,12 +428,15 @@ void encoder_getvalue() {
     //Если калибровка - энкодером регулируем скорость шагового двигателя
     if (startval == 100) {
       menu_calibrate();
+      updscreen = false;
       return;
     }
     if (!main_menu1.is_callable(1)) {
+      updscreen = false;
       main_menu1.next_screen();
     }
     else {
+      updscreen = false;
       main_menu1.call_function(1);
     }
   }
@@ -511,22 +444,27 @@ void encoder_getvalue() {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
     if (startval == 100) {
+      updscreen = false;
       menu_calibrate_down();
       return;
     }
     if (!main_menu1.is_callable(2)) {
+      updscreen = false;
       main_menu1.previous_screen();
     }
     else {
+      updscreen = false;
       main_menu1.call_function(2);
     }
   }
   if (encoder.isRightH()) {
     multiplier = 10;
+    updscreen = false;
     main_menu1.call_function(1);
   }
   if (encoder.isLeftH()) {
     multiplier = 10;
+    updscreen = false;
     main_menu1.call_function(2);
   }
   if (encoder.isClick()) {
@@ -535,6 +473,26 @@ void encoder_getvalue() {
       startval = 0;
       menu_calibrate();
     }
+    updscreen = false;
     main_menu1.switch_focus();
   }
+
+  CurMin = (millis() / 1000 );
+  if (OldMin != CurMin) {
+    //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
+    if (CurMin == 120) {
+      lcd.begin(20, 4);
+      lcd.init();
+    }
+
+    tcnt ++;
+    if (tcnt == 3) {
+      tcnt = 0;
+      BME_getvalue(false);
+    }
+    if (updscreen) main_menu1.softUpdate();
+
+    OldMin = CurMin;
+  }
+
 }
