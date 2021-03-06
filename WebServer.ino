@@ -229,15 +229,35 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("SteamAddr")) {
     if (request->arg("SteamAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("SteamAddr").toInt()], SamSetup.SteamAdress);
+    else {
+      SamSetup.SteamAdress[0] = 255;
+      SteamSensor.Sensor[0] = 255;
+      SteamSensor.avgTemp = 0;
+    }
   }
   if (request->hasArg("PipeAddr")) {
     if (request->arg("PipeAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("PipeAddr").toInt()], SamSetup.PipeAdress);
+    else {
+      SamSetup.PipeAdress[0] = 255;
+      PipeSensor.Sensor[0] = 255;
+      PipeSensor.avgTemp = 0;
+    }
   }
   if (request->hasArg("WaterAddr")) {
     if (request->arg("WaterAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("WaterAddr").toInt()], SamSetup.WaterAdress);
+    else {
+      SamSetup.WaterAdress[0] = 255;
+      WaterSensor.Sensor[0] = 255;
+      WaterSensor.avgTemp = 0;
+    }
   }
   if (request->hasArg("TankAddr")) {
     if (request->arg("TankAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("TankAddr").toInt()], SamSetup.TankAdress);
+    else {
+      SamSetup.TankAdress[0] = 255;
+      TankSensor.Sensor[0] = 255;
+      TankSensor.avgTemp = 0;
+    }
   }
 
   // Сохраняем изменения в память.
