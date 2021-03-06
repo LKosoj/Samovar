@@ -373,7 +373,7 @@ void setup() {
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);
-  Serial.println("Samovar started");
+  Serial.println("Samovar ready");
 }
 
 void loop() {
