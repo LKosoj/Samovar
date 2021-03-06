@@ -79,6 +79,7 @@ String indexKeyProcessor(const String& var)
   else if (var == "PipeColor") return (String)SamSetup.PipeColor;
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
   else if (var == "TankColor") return (String)SamSetup.TankColor;
+  else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
 }
 
 String setupKeyProcessor(const String& var)
@@ -309,8 +310,6 @@ void  web_command(AsyncWebServerRequest *request) {
   request->send(200, "text/plain", "OK");
 }
 void  web_program(AsyncWebServerRequest *request) {
-
-  //int params = request->params();
   if (request->hasArg("WProgram")) {
     set_program(request->arg("WProgram"));
     request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
