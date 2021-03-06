@@ -286,6 +286,11 @@ void setup() {
   connectWiFi();
   writeString("Connected", 4);
 
+  btn.setType(LOW_PULL);
+  btn.setTickMode(MANUAL);
+  btn.setTimeout(500);
+  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+
 #ifdef SAMOVAR_USE_BLYNK
   //Blynk.begin(auth, ssid, password);
   writeString("Connecting to Blynk ", 3);
@@ -295,6 +300,7 @@ void setup() {
 #endif
   Blynk.config(auth);
   Blynk.connect(BLYNK_TIMEOUT_MS);
+  Blynk.notify("{DEVICE_NAME} started");
 #endif
 
 
@@ -367,11 +373,7 @@ void setup() {
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);
-
-  btn.setType(LOW_PULL);
-  btn.setTickMode(MANUAL);
-  btn.setTimeout(500);
-  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+  Serial.println("Samovar started");
 }
 
 void loop() {
