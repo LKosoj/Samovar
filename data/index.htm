@@ -6,6 +6,42 @@
 <link rel="stylesheet" href="/style.css">
 
 <script>
+function openTab(evt, tabName) {
+    var i, tabcontent, tablinks;
+    tabcontent = document.getElementsByClassName("tabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+    }
+    tablinks = document.getElementsByClassName("tablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+    document.getElementById(tabName).style.display = "block";
+    evt.currentTarget.className += " active";
+  return 0;
+}
+
+function set_program(){
+var server = '/program';
+request = new XMLHttpRequest();
+request.onreadystatechange = function() {
+if (this.readyState == 4 && this.status == 200) {
+var myObj = this.responseText;
+if (myObj != "OK") {
+  document.getElementById('WProgram').value = myObj;
+  alert( "Ok" );
+}
+}
+};
+request.open('POST', server, false);
+let formData = new FormData(document.forms.mainform);
+request.send(formData);
+if(request.status != 200) {
+alert( request.status + ': ' + request.statusText );
+}
+return 0;
+};
+
 function sendbutton(command){
 var server = '/command?' + command;
 request = new XMLHttpRequest();
@@ -129,8 +165,14 @@ setTimeout(function(){
 </script>
 </head>
 
-<form action='none' onsubmit='return false'>
+<form action='none' onsubmit='return false' name="mainform" id="mainform">
 <h1>Samovar v. <span id='version'></span></h1>
+<div class="tab">
+  <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Отбор">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
+</div>
+<div id="Main" class="tabcontent" style="display: block;">
 <div class="message-box" style="display: none;" id="message"></div>
 <h2>Текущее время: <span id='crnt_tm'></span></h2>
 <h2>Время работы Samovar: <span id='stm'></span></h2>
@@ -139,20 +181,53 @@ setTimeout(function(){
 <h2 style="color: black;">Дельта температур: <span id='DeltaTemp'></span>&#176C</h2>
 <h2 style="color: %WaterColor%;">Температура флегмы или воды: <span id='WaterTemp'></span>&#176C</h2>
 <h2 style="color: %TankColor%;">Температура в кубе: <span id='TankTemp'></span>&#176C</h2>
-<h2>Атмосферное давление в начале работы: <span id='start_pressure'></span> мм рт. ст.</h2>
 <h2>Текущее атмосферное давление: <span id='bme_pressure'></span> мм рт. ст.</h2>
+<div>
 <h2>Отобранный объем: <span id='VolumeAll'></span> мл</h2>
 <h2>Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</h2>
-<h2>Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</h2>
-<h2>Прогресс отбора: <span id='WthdrwlProgress'></span>%</h2>
+</div>
+<h2>Прогресс отбора: <span id='WthdrwlProgress'></span>&#37;</h2>
 <h2 id='VoltH2' style='visibility: hidden;position: fixed;'>Напряжение регулятора: <input name='Voltage' id='Voltage' type='text' value=''>
 <input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'>
 </h2>
 <div class='dvcs' id='regulator' style='visibility: hidden;position: fixed;'>
-<span class='dvcs'>Текущее напряжение: <span id='current_power_volt'></span> V</span>
-<span class='dvcs'>Целевое напряжение: <span id='target_power_volt'></span> V</span>
+<span class='dvcs'>Текущее напр.: <span id='current_power_volt'></span> V</span>
+<span class='dvcs'>Целевое напр.: <span id='target_power_volt'></span> V</span>
 <span class='dvcs'>Режим регулятора: <span id='current_power_mode'></span></span>
 <span class='dvcs'>Мощность: <span id='current_power_p'></span></span>
+</div>
+<div class='dvcs'>
+<span class='dvcs'>Статус работы: <span id='Status'></span></span>
+</div>
+</div>
+<div id="Prog" class="tabcontent">
+<h2>Программа отбора:</h2> <textarea cols="40" rows="15" id='WProgram' name='WProgram'>%WProgram%</textarea>
+<div class='dvcs'>
+<p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора;Напряжение отбора</span></p>
+<p><span>Пример программы отбора (H - головы (Heads), B - тело (Body), P - пауза (Pause), T - хвост (Tail).</span></p>
+<p><span>Температура отбора = 0 - автоматический режим. Температура отбора < 10&#176C - плюс к предыдущей температуре, иначе отбор при заданной температуре</span></p>
+<p><span>H;100;0.1;1;0.00;120</span></p>
+<p><span>P;120;0.00;0;0.00;140</span></p>
+<p><span>B;5000;0.75;2;0.00;90</span></p>
+</div>
+<div style="margin: 0 auto; width: 200px;">
+<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
+</div>
+</div>
+<div id="Other" class="tabcontent">
+<h2>Атмосферное давление в начале работы: <span id='start_pressure'></span> мм рт. ст.</h2>
+<h2>Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</h2>
+<div class='dvcs'>
+<span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
+<span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
+<div>
+<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
+</div>
+</div>
+<div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
+<span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
+<span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
+</div>
 </div>
 <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
 <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'>
@@ -160,18 +235,4 @@ setTimeout(function(){
 <input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'>
 <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
 <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>
-<div class='dvcs'>
-<span class='dvcs'>Статус работы: <span id='Status'></span></span>
-</div>
-<div>
-<div class='dvcs'>
-<span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
-<span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
-<div>
-<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
-</div></div>
-<div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
-<span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
-<span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
-</div>
 </form>
