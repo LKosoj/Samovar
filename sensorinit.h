@@ -17,6 +17,7 @@ void append_data();
 void stopService(void);
 void startService(void);
 void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress);
+String getDSAddress(DeviceAddress deviceAddress);
 
 //**************************************************************************************************************
 // Функции для работы с сенсорами
@@ -99,13 +100,17 @@ void IRAM_ATTR DS_getvalue(void) {
 }
 
 void sensor_init(void) {
+#ifdef __SAMOVAR_DEBUG
   Serial.println("Pressure sensor initialization");
+#endif
   writeString((String)BME_STRING + " init...     ", 3);
   delay(1000);
 
   if (!bme.begin()) {
     writeString((String)BME_STRING + " not found     ", 3);
+#ifdef __SAMOVAR_DEBUG
     Serial.println((String)BME_STRING + " not found");
+#endif
     bmefound = false;
     //Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
   } else {
@@ -139,49 +144,49 @@ void sensor_init(void) {
   Serial.println(" devices.");
 #endif
 
-  // Инициализируем датчики температуры
-  CopyDSAddress(DSAddr[0], SteamSensor.Sensor);
-  CopyDSAddress(DSAddr[1], PipeSensor.Sensor);
-  CopyDSAddress(DSAddr[2], WaterSensor.Sensor);
-  CopyDSAddress(DSAddr[3], TankSensor.Sensor);
+  // // Инициализируем датчики температуры
+  // CopyDSAddress(DSAddr[0], SteamSensor.Sensor);
+  // CopyDSAddress(DSAddr[1], PipeSensor.Sensor);
+  // CopyDSAddress(DSAddr[2], WaterSensor.Sensor);
+  // CopyDSAddress(DSAddr[3], TankSensor.Sensor);
 
   writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
 
 #ifdef __SAMOVAR_DEBUG
-  Serial.print("SteamSensor Address: ");                                  // пишем адрес датчика 0
-  printAddress(SteamSensor.Sensor);
+  Serial.print("1 Sensor Address: ");                                  // пишем адрес датчика 0
+  printAddress(DSAddr[0]);
   Serial.println();
-  Serial.print("PipeSensor Address: ");                                   // пишем адрес датчика 1
-  printAddress(PipeSensor.Sensor);
+  Serial.print("2 Sensor Address: ");                                   // пишем адрес датчика 1
+  printAddress(DSAddr[1]);
   Serial.println();
-  Serial.print("WaterSensor Address: ");                                  // пишем адрес датчика 2
-  printAddress(WaterSensor.Sensor);
+  Serial.print("3 Sensor Address: ");                                  // пишем адрес датчика 2
+  printAddress(DSAddr[2]);
   Serial.println();
-  Serial.print("TankSensor Address: ");                                  // пишем адрес датчика 3
-  printAddress(TankSensor.Sensor);
+  Serial.print("4 Sensor Address: ");                                  // пишем адрес датчика 3
+  printAddress(DSAddr[3]);
   Serial.println();
 #endif
 
-  sensors.setResolution(SteamSensor.Sensor, 12);                                 // устанавливаем разрешение для датчика 0
-  sensors.setResolution(PipeSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 1
-  sensors.setResolution(WaterSensor.Sensor, 12);                                 // устанавливаем разрешение для датчика 2
-  sensors.setResolution(TankSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 3
+  sensors.setResolution(DSAddr[0], 12);                                 // устанавливаем разрешение для датчика 0
+  sensors.setResolution(DSAddr[1], 12);                                  // устанавливаем разрешение для датчика 1
+  sensors.setResolution(DSAddr[2], 12);                                 // устанавливаем разрешение для датчика 2
+  sensors.setResolution(DSAddr[3], 12);                                  // устанавливаем разрешение для датчика 3
 
   sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
   sensors.requestTemperatures();
 
 #ifdef __SAMOVAR_DEBUG
-  Serial.print("SteamSensor Resolution: ");                               // пишем разрешение для датчика 0
-  Serial.print(sensors.getResolution(SteamSensor.Sensor), DEC);
+  Serial.print("1 Sensor Resolution: ");                               // пишем разрешение для датчика 0
+  Serial.print(sensors.getResolution(DSAddr[0]), DEC);
   Serial.println();
-  Serial.print("PipeSensor Resolution: ");                                // пишем разрешение для датчика 1
-  Serial.print(sensors.getResolution(PipeSensor.Sensor), DEC);
+  Serial.print("2 Sensor Resolution: ");                                // пишем разрешение для датчика 1
+  Serial.print(sensors.getResolution(DSAddr[1]), DEC);
   Serial.println();
-  Serial.print("WaterSensor Resolution: ");                               // пишем разрешение для датчика 2
-  Serial.print(sensors.getResolution(WaterSensor.Sensor), DEC);
+  Serial.print("3 Sensor Resolution: ");                               // пишем разрешение для датчика 2
+  Serial.print(sensors.getResolution(DSAddr[2]), DEC);
   Serial.println();
-  Serial.print("TankSensor Resolution: ");                                // пишем разрешение для датчика 3
-  Serial.print(sensors.getResolution(TankSensor.Sensor), DEC);
+  Serial.print("4 Sensor Resolution: ");                                // пишем разрешение для датчика 3
+  Serial.print(sensors.getResolution(DSAddr[3]), DEC);
   Serial.println();
 #endif
 
@@ -208,15 +213,6 @@ void sensor_init(void) {
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
   Serial2.setRxBufferSize(20);
 #endif
-}
-
-void printAddress(DeviceAddress deviceAddress)                        // функция печати адреса DS18B20
-{
-  for (uint8_t i = 0; i < 8; i++)
-  {
-    if (deviceAddress[i] < 16) Serial.print("0");                     // вставляем незначащие нули
-    Serial.print(deviceAddress[i], HEX);
-  }
 }
 
 //Обнуляем все счетчики
@@ -267,9 +263,36 @@ String inline format_float(float v, int d) {
   return (String)dtostrf(v, 1, d, outstr);
 }
 
-void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress){
-  for (int dsj=0 ; dsj<8 ; dsj++ )
+void printAddress(DeviceAddress deviceAddress)                        // функция печати адреса DS18B20
 {
-   DevTAddress[dsj] = DevSAddress[dsj] ;
+  Serial.print(getDSAddress(deviceAddress));
 }
+
+String getDSAddress(DeviceAddress deviceAddress){
+  String dsaddr;
+    for (uint8_t j = 0; j < 8; j++)
+    {
+      if (deviceAddress[j] < 16) dsaddr += "0";
+      dsaddr += String(deviceAddress[j], HEX);
+    }
+  return dsaddr;  
+}
+
+String get_DSAddressList(String Address){
+  String s = "<option value='-1'>NONE</option>";
+  String dsaddr = "";
+  for (int i = 0;i!=sensors.getDeviceCount();i++){
+    dsaddr = getDSAddress(DSAddr[i]);
+    s += "<option value='" + String(i) + "'";
+    if (Address == dsaddr) s = s + " " + "selected";
+    s = s + ">" + dsaddr + "</option>";
+  }
+  return s;
+}
+
+void IRAM_ATTR CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress){
+  for (int dsj=0 ; dsj<8 ; dsj++ )
+  {
+   DevTAddress[dsj] = DevSAddress[dsj] ;
+  }
 }

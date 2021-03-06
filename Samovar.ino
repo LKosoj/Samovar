@@ -290,7 +290,9 @@ void setup() {
   //Blynk.begin(auth, ssid, password);
   writeString("Connecting to Blynk ", 3);
   writeString("               ", 4);
+#ifdef __SAMOVAR_DEBUG
   Serial.println("Connecting to Blynk");
+#endif
   Blynk.config(auth);
   Blynk.connect(BLYNK_TIMEOUT_MS);
 #endif
@@ -526,7 +528,9 @@ void connectWiFi() {
   if (!MDNS.begin(host)) { //http://samovar.local
     Serial.println("Error setting up MDNS responder!");
   } else {
+#ifdef __SAMOVAR_DEBUG
     Serial.println("mDNS responder started");
+#endif
   }
 }
 
@@ -543,4 +547,8 @@ void read_config() {
   TankSensor.Delay = SamSetup.TankDelay;
   if (SamSetup.HeaterResistant == 0) SamSetup.HeaterResistant = 10;
   if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
+  CopyDSAddress(SamSetup.SteamAdress, SteamSensor.Sensor);
+  CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);
+  CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
+  CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
 }

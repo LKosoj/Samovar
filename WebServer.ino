@@ -6,6 +6,7 @@ String indexKeyProcessor(const String& var);
 void  web_program(AsyncWebServerRequest *request);
 void  calibrate_command(AsyncWebServerRequest *request);
 String setupKeyProcessor(const String& var);
+String get_DSAddressList(String Address);
 
 void WebServerInit(void) {
 
@@ -115,6 +116,10 @@ String setupKeyProcessor(const String& var)
   else if (var == "RCH" && SamSetup.rele3) return "selected";
   else if (var == "RDL" && !SamSetup.rele4) return "selected";
   else if (var == "RDH" && SamSetup.rele4) return "selected";
+  else if (var == "SteamAddr") return get_DSAddressList(getDSAddress(SteamSensor.Sensor));
+  else if (var == "PipeAddr") return get_DSAddressList(getDSAddress(PipeSensor.Sensor));
+  else if (var == "WaterAddr") return get_DSAddressList(getDSAddress(WaterSensor.Sensor));
+  else if (var == "TankAddr") return get_DSAddressList(getDSAddress(TankSensor.Sensor));
   return String();
 }
 
@@ -221,6 +226,18 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("rele4")) {
     SamSetup.rele4 = request->arg("rele4").toInt();
+  }
+  if (request->hasArg("SteamAddr")) {
+    if (request->arg("SteamAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("SteamAddr").toInt()], SamSetup.SteamAdress);
+  }
+  if (request->hasArg("PipeAddr")) {
+    if (request->arg("PipeAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("PipeAddr").toInt()], SamSetup.PipeAdress);
+  }
+  if (request->hasArg("WaterAddr")) {
+    if (request->arg("WaterAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("WaterAddr").toInt()], SamSetup.WaterAdress);
+  }
+  if (request->hasArg("TankAddr")) {
+    if (request->arg("TankAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("TankAddr").toInt()], SamSetup.TankAdress);
   }
 
   // Сохраняем изменения в память.

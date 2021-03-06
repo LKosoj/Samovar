@@ -20,8 +20,8 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.14"
-#define __SAMOVAR_DEBUG
+#define SAMOVAR_VERSION "1.15"
+//#define __SAMOVAR_DEBUG
 
 //--------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------
