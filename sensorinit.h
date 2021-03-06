@@ -16,6 +16,7 @@ void getjson (void);
 void append_data();
 void stopService(void);
 void startService(void);
+void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress);
 
 //**************************************************************************************************************
 // Функции для работы с сенсорами
@@ -118,8 +119,18 @@ void sensor_init(void) {
   }
 
   writeString("DS1820 init...     ", 3);
-  sensors.begin();                                                        // стартуем датчики температуры
-  delay(2000);
+  sensors.begin();                          // стартуем датчики температуры
+  int dc =0;
+  while(sensors.getDeviceCount() == 0) {
+    delay(1000);
+    dc++;
+    if (dc > 5) break;
+  }
+
+  for(int i=0;i!=sensors.getDeviceCount();i++) {
+    sensors.getAddress(DSAddr[i], i);
+  }
+
   // определяем устройства на шине
 #ifdef __SAMOVAR_DEBUG
   Serial.print("Locating DS18B20...");
@@ -129,28 +140,12 @@ void sensor_init(void) {
 #endif
 
   // Инициализируем датчики температуры
-
-  if (!sensors.getAddress(SteamSensor.Sensor, 0))
-  {
-    Serial.println("Unable to find address for Device 0");  // если адрес датчика 0 не найден
-  }
-  if (!sensors.getAddress(PipeSensor.Sensor, 1))
-  {
-    Serial.println("Unable to find address for Device 1");  // если адрес датчика 1 не найден
-  }
-  if (!sensors.getAddress(WaterSensor.Sensor, 2))
-  {
-    Serial.println("Unable to find address for Device 2");  // если адрес датчика 2 не найден
-  }
-  if (!sensors.getAddress(TankSensor.Sensor, 3))
-  {
-    Serial.println("Unable to find address for Device 3");  // если адрес датчика 3 не найден
-  }
+  CopyDSAddress(DSAddr[0], SteamSensor.Sensor);
+  CopyDSAddress(DSAddr[1], PipeSensor.Sensor);
+  CopyDSAddress(DSAddr[2], WaterSensor.Sensor);
+  CopyDSAddress(DSAddr[3], TankSensor.Sensor);
 
   writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
-
-  sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
-  sensors.requestTemperatures();
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("SteamSensor Address: ");                                  // пишем адрес датчика 0
@@ -171,6 +166,9 @@ void sensor_init(void) {
   sensors.setResolution(PipeSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 1
   sensors.setResolution(WaterSensor.Sensor, 12);                                 // устанавливаем разрешение для датчика 2
   sensors.setResolution(TankSensor.Sensor, 12);                                  // устанавливаем разрешение для датчика 3
+
+  sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
+  sensors.requestTemperatures();
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("SteamSensor Resolution: ");                               // пишем разрешение для датчика 0
@@ -194,7 +192,6 @@ void sensor_init(void) {
   stepper.setSpeed(0);
   //Драйвер выключится по достижении позиции
   stepper.autoPower(true);
-  //stepper.setAcceleration(500);
 
 #ifdef USE_WATERSENSOR
   //Настраиваем датчик потока
@@ -253,6 +250,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   WFtotalMilliLitres = 0;
   WthdrwlProgress = 0;
   TargetStepps = 0;
+  Msg = "";  
 
   if (fileToAppend) {
     fileToAppend.close();
@@ -267,4 +265,11 @@ void IRAM_ATTR reset_sensor_counter(void) {
 String inline format_float(float v, int d) {
   char outstr[15];
   return (String)dtostrf(v, 1, d, outstr);
+}
+
+void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress){
+  for (int dsj=0 ; dsj<8 ; dsj++ )
+{
+   DevTAddress[dsj] = DevSAddress[dsj] ;
+}
 }

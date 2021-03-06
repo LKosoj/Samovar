@@ -201,8 +201,14 @@ String IRAM_ATTR get_Samovar_Status() {
     SamovarStatus = "Пауза";
     SamovarStatusInt = 40;
   } else if (PowerOn && startval == 0 && !stepper.getState()) {
-    SamovarStatus = "Разгон колонны/работа на себя";
-    SamovarStatusInt = 50;
+    if (SamovarStatusInt != 51 && SamovarStatusInt != 52) {
+      SamovarStatus = "Разгон колонны";
+      SamovarStatusInt = 50;
+    } else if (SamovarStatusInt == 51) {
+      SamovarStatus = "Разгон завершен. Стабилизация/Работа на себя";
+    } else if (SamovarStatusInt == 52) {
+      SamovarStatus = "Стабилизация завершена/Работа на себя";
+    }
   }
 
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
@@ -457,9 +463,10 @@ void IRAM_ATTR check_alarm() {
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE) {
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     Msg = "Working mode set!";
+    SamovarStatusInt = 51;
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alert! {DEVICE_NAME} - working mode set!");
+    Blynk.notify("Alert! {DEVICE_NAME} - " + Msg);
 #endif
 #ifdef SAMOVAR_USE_POWER
     set_power_mode(POWER_WORK_MODE);
@@ -473,7 +480,8 @@ void IRAM_ATTR check_alarm() {
 
   //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
   //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
-  if (SamovarStatusInt == 50 && SteamSensor.avgTemp > 70) {
+  if ((SamovarStatusInt == 51 || SamovarStatusInt == 52) && SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+    SamovarStatusInt = 52;
     float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
     d = abs(d);
     if (d < 0.1) {
@@ -482,7 +490,7 @@ void IRAM_ATTR check_alarm() {
         Msg = "Acceleration is complete.";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
-        Blynk.notify("{DEVICE_NAME} - Acceleration is complete.");
+        Blynk.notify("{DEVICE_NAME} - " + Msg);
 #endif
       }
     } else {

@@ -2,6 +2,7 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
+#include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <OneWire.h>
@@ -20,27 +21,27 @@
 #include <SPIFFSEditor.h>
 
 #define DRIVER_STEP_TIME 1
+#include <GyverEncoder.h>
 
-#include "GyverEncoder.h"
-#include "GyverStepper.h"
-#include "GyverButton.h"
+#include <GyverStepper.h>
+#include <GyverButton.h>
 
 #include <ESP32Servo.h>
 
 #include "Samovar.h"
 
 #ifdef USE_BME680
-#include "Adafruit_BME680.h"
+#include <Adafruit_BME680.h>
 #define BME_STRING "BME680"
 #endif
 
 #ifdef USE_BMP180
-#include "Adafruit_BMP085_U.h"
+#include <Adafruit_BMP085_U.h>
 #define BME_STRING "BMP180"
 #endif
 
 #ifdef USE_BMP280
-#include "Adafruit_BMP280.h"
+#include <Adafruit_BMP280.h>
 #define BME_STRING "BMP280"
 #endif
 

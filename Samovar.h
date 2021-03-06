@@ -197,6 +197,7 @@ AsyncEventSource events("/events");
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
+DeviceAddress DSAddr[5];
 
 LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
@@ -247,6 +248,10 @@ struct SetupEEPROM {
   bool rele2;
   bool rele3;
   bool rele4;
+  byte SteamAdress[8];
+  byte PipeAdress[8];
+  byte WaterAdress[8];
+  byte TankAdress[8];
 };
 
 struct DSSensor {
