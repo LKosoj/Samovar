@@ -14,7 +14,7 @@ void WebServerInit(void) {
 
   server.serveStatic("/style.css", SPIFFS, "/style.css");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
-  server.serveStatic("/chart.htm", SPIFFS, "/chart.htm");
+  server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/data.csv", SPIFFS, "/data.csv");
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
