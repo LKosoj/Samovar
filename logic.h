@@ -212,9 +212,9 @@ String IRAM_ATTR get_Samovar_Status() {
   }
 
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
-    SamovarStatus += " Осталось: " + WthdrwTimeS + " из " + WthdrwTimeAllS;
+    SamovarStatus += ";Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }
-  if (SteamSensor.BodyTemp > 0) SamovarStatus += " Т отбора тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  if (SteamSensor.BodyTemp > 0) SamovarStatus += ";Т отб тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
 
   return SamovarStatus;
 }
