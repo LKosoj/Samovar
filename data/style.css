@@ -20,6 +20,27 @@ p{margin: 0px !important;}
 .btn{background:#3498db;color:#fff;cursor:pointer}
 .dvcs{padding: 10px;margin: 10px;}
 
+.message-box{
+    font-size: 1.5em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: red;
+    color: seashell;
+}
+
+.column{
+  width:42%;
+}
+.text{
+    font-size: 1.5em;
+    font-weight: bold;
+    display:inline-block;
+    margin: 10 15 10 15;
+}
+
+.container{overflow:hidden;width:100%}
+
 /* Style the tab */
 .tab {
     overflow: hidden;
