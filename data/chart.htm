@@ -177,21 +177,35 @@ function refresh_chart(){
 <form action='none' onsubmit='return false'>
 <h1>Статус</h1>
 <h2><input id='refresh' type='checkbox' name='refresh' value='refresh' checked='checked' onclick='refresh_chart()'><label for='refresh'>Обновлять график</label></h2></h2>
-<h2>Текущее время: <span id='crnt_tm'></span></h2>
-<h2>Время работы Samovar: <span id='stm'></span></h2>
-<h2>Температура пара перед дефлегматором: <span id='SteamTemp'></span>&#176C</h2>
-<h2>Температура пара в царге на 2/3 колонны: <span id='PipeTemp'></span>&#176C</h2>
-<h2>Температура флегмы или воды: <span id='WaterTemp'></span>&#176C</h2>
-<h2>Температура в кубе: <span id='TankTemp'></span>&#176C</h2>
-<h2>Отобранный объем: <span id='VolumeAll'></span> мл</h2>
-<h2>Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</h2>
-<h2>Скорость шагового двигателя: <span id='CurrrentSpeed'></span> об/сек</h2>
-<h2>Прогресс отбора: <span id='WthdrwlProgress'></span>%</h2>
+<div class="message-box" style="display: none;" id="message"></div>
+<div class="container">
+<div class="text">Текущее время: <span id='crnt_tm'></span></div>
+<div class="text">Время работы: <span id='stm'></span></div>
+</div>
+<div class="container">
+<div class="text column" style="color: %SteamColor%;">Т пара: <span id='SteamTemp'></span>&#176C</div>
+<div class="text column" style="color: %PipeColor%;">Т в царге: <span id='PipeTemp'></span>&#176C</div>
+</div>
+<div class="text" style="color: black;">Дельта температур: <span id='DeltaTemp'></span>&#176C</div>
+<div class="container">
+<div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp'></span>&#176C</div>
+<div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp'></span>&#176C</div>
+</div>
+<div class="container">
+<div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>
+<div class="text column">Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</div>
+<div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
+</div>
+<div class="container">
+<div class="text">Прогресс отбора: <span id='WthdrwlProgress'></span>&#37;</div>
+</div>
+<div class="container">
+<div class='text'>
+<span>Статус: <span id='Status'></span></span>
+</div>
+</div>
 <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="/index.htm"'>
 <input id='getlog' type='button' name='getlog' value='Сохранить лог' onclick='javascript:window.open("/getlog")'>
-<div class='dvcs'>
-<span class='dvcs'>Статус работы: <span id='Status'></span></span>
-</div>
 <div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
 <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
