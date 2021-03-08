@@ -1,12 +1,22 @@
+#include <Arduino.h>
+#include <DallasTemperature.h>
+#include "Samovar.h"
+
 #ifdef USE_BME680
+#define BME_STRING "BME680"
+#include <Adafruit_BME680.h>
 Adafruit_BME680 bme; // I2C
 #endif
 
 #ifdef USE_BMP180
+#include <Adafruit_BMP085_U.h>
+#define BME_STRING "BMP180"
 Adafruit_BMP085_Unified bme; // I2C
 #endif
 
 #ifdef USE_BMP280
+#include <Adafruit_BMP280.h>
+#define BME_STRING "BMP280"
 Adafruit_BMP280 bme; // I2C
 #endif
 
