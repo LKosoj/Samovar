@@ -1,3 +1,6 @@
+#ifndef SAMOVAR_H
+#define SAMOVAR_H
+
 #ifndef ESP32
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
@@ -359,4 +362,5 @@ String current_power_mode;                                      // Режим р
 volatile float current_power_volt;                                       // Текущее напряжение регулятора
 volatile float target_power_volt;                                        // Заданное напряжение регулятора
 volatile uint16_t current_power_p;                                       // Расчитанная мощность на регуляторе напряжения
+#endif
 #endif
