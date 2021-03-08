@@ -32,17 +32,14 @@
 
 #ifdef USE_BME680
 #include <Adafruit_BME680.h>
-#define BME_STRING "BME680"
 #endif
 
 #ifdef USE_BMP180
 #include <Adafruit_BMP085_U.h>
-#define BME_STRING "BMP180"
 #endif
 
 #ifdef USE_BMP280
 #include <Adafruit_BMP280.h>
-#define BME_STRING "BMP280"
 #endif
 
 #include "font.h"
