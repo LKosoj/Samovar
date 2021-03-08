@@ -174,6 +174,7 @@ void sensor_init(void) {
 
   sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
   sensors.requestTemperatures();
+  delay(750);
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("1 Sensor Resolution: ");                               // пишем разрешение для датчика 0
