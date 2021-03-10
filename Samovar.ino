@@ -121,6 +121,18 @@ void IRAM_ATTR isrENC_TICK() {
   encoder.tick();  // отработка в прерывании
 }
 
+//Запускаем таск для получения точного времени из интернет и записи в лог
+void IRAM_ATTR triggerGetClock(void * parameter) {
+  while (true) {
+      if (WiFi.status() == WL_CONNECTED) clok1();
+      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
+        Blynk.connect(BLYNK_TIMEOUT_MS);
+      }
+    vTaskDelay(10000);
+  }
+}
+
+//Запускаем таск для получения температур и различных проверок
 void IRAM_ATTR triggerSysTicker(void * parameter) {
   byte CurMin, OldMin;
   byte tcnt = 0;
@@ -197,33 +209,19 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #ifdef __SAMOVAR_DEBUG
       Serial.print("5 ");
 #endif   
-      vTaskDelay(20);
+      vTaskDelay(10);
 #ifdef __SAMOVAR_DEBUG
       Serial.print("6 ");
 #endif   
       clok();
-#ifdef __SAMOVAR_DEBUG
-      Serial.print("7 ");
-#endif   
-      tcnt ++;
-      if (tcnt == SamSetup.LogPeriod) {
-        tcnt = 0;
-#ifdef __SAMOVAR_DEBUG
-      Serial.print("8 ");
-#endif   
-        clok1();
-#ifdef __SAMOVAR_DEBUG
-      Serial.print("9 ");
-#endif   
-        if (startval > 0) {
+      if (startval > 0) {
+        tcnt++;
+        if (tcnt == SamSetup.LogPeriod) {
+          tcnt = 0;
           append_data();              //Записываем данные;
         }
-#ifdef SAMOVAR_USE_BLYNK
-        if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
-          Blynk.connect(BLYNK_TIMEOUT_MS);
-        }
-#endif
       }
+
 #ifdef __SAMOVAR_DEBUG
       Serial.println("10");
 #endif   
@@ -389,7 +387,7 @@ void setup() {
   //disableCore0WDT();
   //disableCore1WDT();
 
-  //Запускаем таск для выполнения различных проверок и обновления экрана
+  //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker", /* Name of the task */
@@ -398,6 +396,16 @@ void setup() {
     0,  /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
     1); /* Core where the task should run */
+
+  //Запускаем таск для получения точного времени и записи в лог
+  xTaskCreatePinnedToCore(
+    triggerGetClock, /* Function to implement the task */
+    "GetClockTicker", /* Name of the task */
+    4000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &GetClockTask1,  /* Task handle. */
+    0); /* Core where the task should run */
 
   writeString("                  ", 3);
   writeString("      Started     ", 4);
