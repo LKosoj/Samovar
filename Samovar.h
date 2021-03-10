@@ -192,6 +192,7 @@ byte CurMin, OldMin;
 
 /** Task handle for the  value read task */
 TaskHandle_t SysTickerTask1 = NULL;
+TaskHandle_t GetClockTask1 = NULL;
 
 AsyncWebServer server(80);
 
