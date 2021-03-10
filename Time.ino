@@ -52,7 +52,7 @@ bool IRAM_ATTR GetNTP(void)                                               // ф�
 {
   WiFi.hostByName(ntpServerName, timeServerIP);
   sendNTPpacket(timeServerIP);                                            // посылаем запрос на NTP сервер
-  vTaskDelay(750);
+  vTaskDelay(800);
   int cb = udp.parsePacket();
   vTaskDelay(2);
   if (!cb)
