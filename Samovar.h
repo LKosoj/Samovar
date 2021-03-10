@@ -252,7 +252,7 @@ struct SetupEEPROM {
   bool rele2;
   bool rele3;
   bool rele4;
-  byte SteamAdress[8];
+  byte SteamAdress[8];                                          //адреса датчиков температуры
   byte PipeAdress[8];
   byte WaterAdress[8];
   byte TankAdress[8];
@@ -315,7 +315,7 @@ volatile float bme_prev_pressure;                               // Давлен�
 float bme_humidity;                                             // Влажность
 float bme_altitude;                                             // Высота
 float bme_gas;                                                  // Газ
-String SamovarStatus;                                  // Текущий статус работы Самовара строкой
+String SamovarStatus;                                           // Текущий статус работы Самовара строкой
 volatile int8_t SamovarStatusInt;                               // Текущий статус работы Самовара числом
 volatile byte capacity_num;                                     // Текущая позиция емкости для отбора
 
