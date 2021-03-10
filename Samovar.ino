@@ -130,6 +130,10 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMin != CurMin) {
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("1 ");
+#endif   
+
       if (TargetStepps > 0) {
         //считаем прогресс
         float wp = (float)CurrrentStepps / (float)TargetStepps;
@@ -173,20 +177,44 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       get_current_power();
 #endif
 
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("2 ");
+#endif   
       //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
       check_alarm();
       vTaskDelay(10);
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("3 ");
+#endif   
 
       Crt = CurrentTime();
       StrCrt = Crt.substring(6) + "   " + millis2time();
       StrCrt.toCharArray(tst, 20);
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("4 ");
+#endif   
       DS_getvalue();
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("5 ");
+#endif   
       vTaskDelay(20);
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("6 ");
+#endif   
       clok();
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("7 ");
+#endif   
       tcnt ++;
       if (tcnt == SamSetup.LogPeriod) {
         tcnt = 0;
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("8 ");
+#endif   
         clok1();
+#ifdef __SAMOVAR_DEBUG
+      Serial.print("9 ");
+#endif   
         if (startval > 0) {
           append_data();              //Записываем данные;
         }
@@ -196,9 +224,12 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         }
 #endif
       }
+#ifdef __SAMOVAR_DEBUG
+      Serial.println("10");
+#endif   
       OldMin = CurMin;
     }
-    vTaskDelay(100 / portTICK_RATE_MS);
+    vTaskDelay(50 / portTICK_RATE_MS);
   }
 }
 
