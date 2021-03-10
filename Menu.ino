@@ -485,6 +485,8 @@ void encoder_getvalue() {
       lcd.init();
     }
 
+    StrCrt.toCharArray(tst, 20);
+
     tcnt ++;
     if (tcnt == 3) {
       tcnt = 0;
