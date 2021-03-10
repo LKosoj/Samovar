@@ -481,12 +481,12 @@ void IRAM_ATTR check_alarm() {
   //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
   //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
   if ((SamovarStatusInt == 51 || SamovarStatusInt == 52) && SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
-    SamovarStatusInt = 52;
     float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
     d = abs(d);
     if (d < 0.1) {
       acceleration_temp += 1;
       if (acceleration_temp == 60 * 6) {
+        SamovarStatusInt = 52;
         Msg = "Acceleration is complete.";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
