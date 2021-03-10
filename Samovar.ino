@@ -129,7 +129,6 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMin != CurMin) {
-      tcnt ++;
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
       if (TargetStepps > 0) {
         //считаем прогресс
@@ -184,6 +183,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       DS_getvalue();
       vTaskDelay(20);
       clok();
+      tcnt ++;
       if (tcnt == SamSetup.LogPeriod) {
         tcnt = 0;
         clok1();
