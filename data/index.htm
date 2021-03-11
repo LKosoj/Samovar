@@ -192,7 +192,6 @@ setTimeout(function(){
 <div class="container">
 <div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>
 <div class="text column">Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</div>
-<div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
 </div>
 <div class="container">
 <div class="text">Прогресс отбора: <span id='WthdrwlProgress'></span>&#37;</div>
@@ -228,13 +227,14 @@ setTimeout(function(){
 <div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
 <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
-<div>
-<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div>
-</div>
+<div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
 <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
 <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
 <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
+</div>
+<div>
+<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div>
 </div>
 <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
