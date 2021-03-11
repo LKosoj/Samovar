@@ -66,21 +66,23 @@ void IRAM_ATTR withdrawal(void) {
   float c_temp; //стартовая температура отбора тела с учетом корректировки от давления или без
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
 
+  int v;
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
   if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
-      program_Wait = true;
-      pause_withdrawal(true);
-      t_min = millis() + SteamSensor.Delay * 1000;
       //Если в настройках задан параметр - снижать скорость отбора - снижаем
       if (SamSetup.useautospeed){
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
+        v = get_liguid_rate_by_step(CurrrentStepperSpeed) * 1000;
+        ActualVolumePerHour = (float)v / 1000;
         stopService();
         stepper.setMaxSpeed(CurrrentStepperSpeed);
         stepper.setSpeed(CurrrentStepperSpeed);
-        startService();
       }
+      program_Wait = true;
+      pause_withdrawal(true);
+      t_min = millis() + SteamSensor.Delay * 1000;
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
@@ -91,10 +93,20 @@ void IRAM_ATTR withdrawal(void) {
     pause_withdrawal(false);
   }
 
+  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы
-  if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp >= PipeSensor.BodyTemp + PipeSensor.SetTemp) {
+  if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
+      //Если в настройках задан параметр - снижать скорость отбора - снижаем
+      if (SamSetup.useautospeed){
+        CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
+        v = get_liguid_rate_by_step(CurrrentStepperSpeed) * 1000;
+        ActualVolumePerHour = (float)v / 1000;
+        stopService();
+        stepper.setMaxSpeed(CurrrentStepperSpeed);
+        stepper.setSpeed(CurrrentStepperSpeed);
+      }
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + PipeSensor.Delay * 1000;
