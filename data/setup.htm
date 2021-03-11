@@ -113,6 +113,13 @@ function SaveFormToFile(form) {
 <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
 <label for='usepressure'>Использовать корректировку давления</label>
 </h2>
+<div>
+<h2>
+<input id='useautospeed' type='checkbox' name='useautospeed' value='useautospeed' %UASChecked%>
+<label for='useautospeed' class="tooltip">Использовать корректировку скорости насоса<span class="tooltiptext">для снижения скорости отбора при повышении температуры по пару</span></label>
+</h2>
+<h2>Процент корректировки: <input name='autospeed' type='text' value='%autospeed%'>&#37;</h2>
+</div>
 <h2>Программа отбора:</h2> <textarea cols="40" rows="15" id='WProgram' name='WProgram'>%WProgram%</textarea>
 <div class='dvcs'>
 <p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора;Напряжение отбора</span></p>
@@ -137,9 +144,9 @@ function SaveFormToFile(form) {
 </select>
 </div>
 </h2>
-<h2>Корректировка датчика пара перед дефлегматором : <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176C</h2>
-<h2>Уставка датчика пара перед дефлегматором : <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176C</h2>
-<h2>Задержка отбора при выходе Т пара за уставку : <input name='SteamDelay' type='text' value='%SteamDelay%'> сек</h2>
+<h2>Корректировка датчика пара перед дефлегматором: <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176C</h2>
+<h2>Уставка датчика пара перед дефлегматором: <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т пара за уставку: <input name='SteamDelay' type='text' value='%SteamDelay%'> сек</h2>
 </div>
 <div style="color: %PipeColor%;">
 <h2>
@@ -150,9 +157,9 @@ function SaveFormToFile(form) {
 </select>
 </div>
 </h2>
-<h2>Корректировка датчика в царге на 2/3 колонны : <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176C</h2>
-<h2>Уставка датчика в царге на 2/3 колонны : <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176C</h2>
-<h2>Задержка отбора при выходе Т в царге за уставку : <input name='PipeDelay' type='text' value='%PipeDelay%'> сек</h2>
+<h2>Корректировка датчика в царге на 2/3 колонны: <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176C</h2>
+<h2>Уставка датчика в царге на 2/3 колонны: <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т в царге за уставку: <input name='PipeDelay' type='text' value='%PipeDelay%'> сек</h2>
 </div>
 <div style="color: %WaterColor%;">
 <h2>
@@ -163,9 +170,9 @@ function SaveFormToFile(form) {
 </select>
 </div>
 </h2>
-<h2>Корректировка датчика воды : <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176C</h2>
-<h2>Уставка датчика воды : <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176C</h2>
-<h2>Задержка отбора при выходе Т воды за уставку : <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
+<h2>Корректировка датчика воды: <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176C</h2>
+<h2>Уставка датчика воды: <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т воды за уставку: <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
 </div>
 <div style="color: %TankColor%;">
 <h2>
@@ -176,14 +183,14 @@ function SaveFormToFile(form) {
 </select>
 </div>
 </h2>
-<h2>Корректировка датчика в кубе : <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
-<h2>Уставка датчика в кубе : <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
-<h2>Задержка отбора при выходе Т в кубе за уставку : <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
+<h2>Корректировка датчика в кубе: <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176C</h2>
+<h2>Уставка датчика в кубе: <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т в кубе за уставку: <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
 </div>
 </div>
 
 <div id="Pump" class="tabcontent">
-<h2>Количество шагов шагового двигателя : <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
+<h2>Количество шагов шагового двигателя: <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
 <div style="margin: 0 auto; width: 200px;">
 <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
 </div>
@@ -191,8 +198,8 @@ function SaveFormToFile(form) {
 
 <div id="Other" class="tabcontent">
 <h2>Тайм-зона : <input name='TimeZone' type='text' value='%TimeZone%'></h2>
-<h2>Сопротивление тэна для расчета мощности : <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
-<h2>Периодичность записи данных в лог : <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+<h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
+<h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
 <h2><p>Цвета для температур:</p>
 <div>
     <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">

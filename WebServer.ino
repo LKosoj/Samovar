@@ -105,6 +105,11 @@ String setupKeyProcessor(const String& var)
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else return "";
   }
+  else if (var == "UASChecked") {
+    if (SamSetup.useautospeed) return "checked='true'";
+    else return "";
+  }
+  else if (var == "autospeed") return (String)SamSetup.autospeed;
   else if (var == "SteamColor") return (String)SamSetup.SteamColor;
   else if (var == "PipeColor") return (String)SamSetup.PipeColor;
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
@@ -194,6 +199,12 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("usepressure")) {
     SamSetup.UsePreccureCorrect = true;
+  }
+  if (request->hasArg("useautospeed")) {
+    SamSetup.useautospeed = true;
+  }
+  if (request->hasArg("autospeed")) {
+    SamSetup.autospeed = request->arg("autospeed").toInt();
   }
   if (request->hasArg("TimeZone")) {
     SamSetup.TimeZone = request->arg("TimeZone").toInt();

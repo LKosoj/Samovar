@@ -256,6 +256,8 @@ struct SetupEEPROM {
   byte PipeAdress[8];
   byte WaterAdress[8];
   byte TankAdress[8];
+  bool useautospeed;                                            //Настройка для использования автокорректировки скорости
+  byte autospeed;                                               //Процент изменения скорости
 };
 
 struct DSSensor {

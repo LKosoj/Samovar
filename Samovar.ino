@@ -561,6 +561,7 @@ void read_config() {
   TankSensor.Delay = SamSetup.TankDelay;
   if (SamSetup.HeaterResistant == 0) SamSetup.HeaterResistant = 10;
   if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
+  if (SamSetup.autospeed >= 100) SamSetup.autospeed = 0;
   CopyDSAddress(SamSetup.SteamAdress, SteamSensor.Sensor);
   CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);

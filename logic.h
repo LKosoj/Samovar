@@ -73,6 +73,14 @@ void IRAM_ATTR withdrawal(void) {
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + SteamSensor.Delay * 1000;
+      //Если в настройках задан параметр - снижать скорость отбора - снижаем
+      if (SamSetup.useautospeed){
+        CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
+        stopService();
+        stepper.setMaxSpeed(CurrrentStepperSpeed);
+        stepper.setSpeed(CurrrentStepperSpeed);
+        startService();
+      }
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
