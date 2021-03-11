@@ -138,7 +138,7 @@ String calibrateKeyProcessor(const String& var)
 }
 
 void  handleSave(AsyncWebServerRequest *request) {
-  /*
+/*  
      int params = request->params();
       for(int i=0;i<params;i++){
         AsyncWebParameter* p = request->getParam(i);
@@ -147,9 +147,7 @@ void  handleSave(AsyncWebServerRequest *request) {
         Serial.println(p->value().c_str());
       }
       //return;
-  */
-
-  SamSetup.UsePreccureCorrect = false;
+*/ 
 
   if (request->hasArg("SteamDelay")) {
     SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
@@ -197,12 +195,17 @@ void  handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("WProgram")) {
     set_program(request->arg("WProgram"));
   }
+
+  SamSetup.UsePreccureCorrect = false;
   if (request->hasArg("usepressure")) {
     SamSetup.UsePreccureCorrect = true;
   }
+
+  SamSetup.useautospeed = false;
   if (request->hasArg("useautospeed")) {
     SamSetup.useautospeed = true;
   }
+  
   if (request->hasArg("autospeed")) {
     SamSetup.autospeed = request->arg("autospeed").toInt();
   }
