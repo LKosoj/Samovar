@@ -485,10 +485,6 @@ void encoder_getvalue() {
       lcd.init();
     }
 
-    Crt = CurrentTime();
-    StrCrt = Crt.substring(6) + "   " + millis2time();
-    StrCrt.toCharArray(tst, 20);
-
     tcnt ++;
     if (tcnt == 3) {
       tcnt = 0;
