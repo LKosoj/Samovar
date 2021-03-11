@@ -214,6 +214,16 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
   Serial.print("6 ");
 #endif
 
+#ifdef __SAMOVAR_DEBUG
+  Serial.print("7 ");
+#endif
+    Crt = CurrentTime();
+    StrCrt = Crt.substring(6) + "   " + millis2time();
+    StrCrt.toCharArray(tst, 20);
+
+#ifdef __SAMOVAR_DEBUG
+  Serial.print("8 ");
+#endif
       if (startval > 0) {
         tcntST++;
         if (tcntST == SamSetup.LogPeriod) {
@@ -223,7 +233,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       }
       OldMinST = CurMinST;
 #ifdef __SAMOVAR_DEBUG
-  Serial.println("7");
+  Serial.println("9");
 #endif
     }
     vTaskDelay(10);
@@ -392,7 +402,7 @@ void setup() {
     "SysTicker", /* Name of the task */
     4000,  /* Stack size in words */
     NULL,  /* Task input parameter */
-    0,  /* Priority of the task */
+    1,  /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
     1); /* Core where the task should run */
 
