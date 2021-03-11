@@ -190,8 +190,6 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       vTaskDelay(10);
 
       clok();
-      Crt = CurrentTime();
-      StrCrt = Crt.substring(6) + "   " + millis2time();
 
       DS_getvalue();
       vTaskDelay(10);
