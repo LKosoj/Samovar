@@ -188,53 +188,27 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif
 
       //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("1 ");
-#endif
       check_alarm();
       vTaskDelay(10);
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("2 ");
-#endif
 
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("3 ");
-#endif
       clok();
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("4 ");
-#endif
 
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("5 ");
-#endif
       DS_getvalue();
       vTaskDelay(10);
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("6 ");
-#endif
 
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("7 ");
-#endif
-    Crt = CurrentTime();
-    StrCrt = Crt.substring(6) + "   " + millis2time();
-    StrCrt.toCharArray(tst, 20);
+      Crt = CurrentTime();
+      StrCrt = Crt.substring(6) + "   " + millis2time();
+      StrCrt.toCharArray(tst, 20);
 
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("8 ");
-#endif
       if (startval > 0) {
         tcntST++;
         if (tcntST == SamSetup.LogPeriod) {
+          BME_getvalue(false);
           tcntST = 0;
           append_data();              //Записываем данные;
         }
       }
       OldMinST = CurMinST;
-#ifdef __SAMOVAR_DEBUG
-  Serial.println("9");
-#endif
     }
     vTaskDelay(10);
   }
