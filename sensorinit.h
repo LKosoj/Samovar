@@ -135,12 +135,13 @@ void sensor_init(void) {
 
   writeString("DS1820 init...     ", 3);
   sensors.begin();                          // стартуем датчики температуры
-  delay(800);
+  delay(1200);
   int dc =0;
   while(sensors.getDeviceCount() == 0) {
     delay(800);
+    sensors.getAddress(DSAddr[0], 0);
     dc++;
-    if (dc > 10) break;
+    if (dc > 4) break;
   }
 
   for(int i=0;i!=sensors.getDeviceCount();i++) {
