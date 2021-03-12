@@ -140,6 +140,10 @@ void sensor_init(void) {
   while(sensors.getDeviceCount() == 0) {
     delay(800);
     sensors.getAddress(DSAddr[0], 0);
+    sensors.getAddress(DSAddr[1], 1);
+    sensors.getAddress(DSAddr[2], 2);
+    sensors.getAddress(DSAddr[3], 3);
+    sensors.getAddress(DSAddr[4], 4);
     dc++;
     if (dc > 4) break;
   }
