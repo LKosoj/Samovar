@@ -114,7 +114,7 @@ void sensor_init(void) {
   Serial.println("Pressure sensor initialization");
 #endif
   writeString((String)BME_STRING + " init...     ", 3);
-  delay(1000);
+  delay(800);
 
   if (!bme.begin()) {
     writeString((String)BME_STRING + " not found     ", 3);
@@ -135,38 +135,26 @@ void sensor_init(void) {
 
   writeString("DS1820 init...     ", 3);
   sensors.begin();                          // стартуем датчики температуры
-  delay(1200);
-  int dc =0;
-  while(sensors.getDeviceCount() == 0) {
-    delay(800);
-    sensors.getAddress(DSAddr[0], 0);
-    sensors.getAddress(DSAddr[1], 1);
-    sensors.getAddress(DSAddr[2], 2);
-    sensors.getAddress(DSAddr[3], 3);
-    sensors.getAddress(DSAddr[4], 4);
+
+  int dc = 0;
+  
+  while(sensors.getAddress(DSAddr[dc], dc)) {
+    sensors.setResolution(DSAddr[dc], 12);                                 // устанавливаем разрешение для датчика
     dc++;
     if (dc > 4) break;
   }
 
-  for(int i=0;i!=sensors.getDeviceCount();i++) {
-    sensors.getAddress(DSAddr[i], i);
-  }
+  DScnt = dc;
 
   // определяем устройства на шине
 #ifdef __SAMOVAR_DEBUG
   Serial.print("Locating DS18B20...");
   Serial.print("Found ");
-  Serial.print(sensors.getDeviceCount(), DEC);
+  Serial.print(DScnt, DEC);
   Serial.println(" devices.");
 #endif
 
-  // // Инициализируем датчики температуры
-  // CopyDSAddress(DSAddr[0], SteamSensor.Sensor);
-  // CopyDSAddress(DSAddr[1], PipeSensor.Sensor);
-  // CopyDSAddress(DSAddr[2], WaterSensor.Sensor);
-  // CopyDSAddress(DSAddr[3], TankSensor.Sensor);
-
-  writeString("Found " + (String)sensors.getDeviceCount() + "         ", 4);
+  writeString("Found " + (String)DScnt + "         ", 4);
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("1 Sensor Address: ");                                  // пишем адрес датчика 0
@@ -182,11 +170,6 @@ void sensor_init(void) {
   printAddress(DSAddr[3]);
   Serial.println();
 #endif
-
-  sensors.setResolution(DSAddr[0], 12);                                 // устанавливаем разрешение для датчика 0
-  sensors.setResolution(DSAddr[1], 12);                                  // устанавливаем разрешение для датчика 1
-  sensors.setResolution(DSAddr[2], 12);                                 // устанавливаем разрешение для датчика 2
-  sensors.setResolution(DSAddr[3], 12);                                  // устанавливаем разрешение для датчика 3
 
   sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
   sensors.requestTemperatures();
@@ -298,7 +281,7 @@ String getDSAddress(DeviceAddress deviceAddress){
 String get_DSAddressList(String Address){
   String s = "<option value='-1'>NONE</option>";
   String dsaddr = "";
-  for (int i = 0;i!=sensors.getDeviceCount();i++){
+  for (int i = 0;i!=DScnt;i++){
     dsaddr = getDSAddress(DSAddr[i]);
     s += "<option value='" + String(i) + "'";
     if (Address == dsaddr) s = s + " " + "selected";
