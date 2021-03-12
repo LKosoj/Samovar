@@ -484,7 +484,14 @@ void encoder_getvalue() {
       lcd.begin(20, 4);
       lcd.init();
     }
-
+    
+    
+    tcnt ++;
+    if (tcnt == 3) {
+      tcnt = 0;
+      BME_getvalue(false);
+    }
+    
     if (updscreen) main_menu1.softUpdate();
 
     OldMin = CurMin;
