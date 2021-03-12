@@ -203,7 +203,6 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       if (startval > 0) {
         tcntST++;
         if (tcntST == SamSetup.LogPeriod) {
-          BME_getvalue(false);
           tcntST = 0;
           append_data();              //Записываем данные;
         }
