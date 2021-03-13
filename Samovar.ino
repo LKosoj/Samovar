@@ -94,7 +94,6 @@ void startService(void) {
   timerAlarmEnable(timer);
 }
 
-
 void IRAM_ATTR StepperTicker(void) {
   portENTER_CRITICAL_ISR(&timerMux);
   StepperMoving = stepper.quicktick();
