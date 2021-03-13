@@ -79,6 +79,8 @@ void IRAM_ATTR withdrawal(void) {
         stopService();
         stepper.setMaxSpeed(CurrrentStepperSpeed);
         stepper.setSpeed(CurrrentStepperSpeed);
+        //Пересчитываем время отбора этой строки программы на текущую скорость
+        program[ProgramNum].Time = program[ProgramNum].Volume / CurrrentStepperSpeed / 1000;        
       }
       program_Wait = true;
       pause_withdrawal(true);
@@ -106,6 +108,8 @@ void IRAM_ATTR withdrawal(void) {
         stopService();
         stepper.setMaxSpeed(CurrrentStepperSpeed);
         stepper.setSpeed(CurrrentStepperSpeed);
+        //Пересчитываем время отбора этой строки программы на текущую скорость
+        program[ProgramNum].Time = program[ProgramNum].Volume / CurrrentStepperSpeed / 1000;        
       }
       program_Wait = true;
       pause_withdrawal(true);
