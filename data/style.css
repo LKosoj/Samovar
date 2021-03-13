@@ -16,7 +16,7 @@ body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
 #bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
 form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
 h1{text-align:center}
-p{margin: 0px !important;}
+p{margin: 0 !important;}
 .btn{background:#3498db;color:#fff;cursor:pointer}
 .dvcs{padding: 10px;margin: 10px;}
 
@@ -57,11 +57,10 @@ p{margin: 0px !important;}
  font-size: 18px;
  margin: 0px;
  padding: 15px;
-    outline: none;
-    cursor: pointer;
-    transition: 0.3s;
-    font-size: 17px;
-    width: 24.6%;
+ outline: none;
+ cursor: pointer;
+ transition: 0.3s;
+ width: 24.6%;
 }
 
 /* Change background color of buttons on hover */
