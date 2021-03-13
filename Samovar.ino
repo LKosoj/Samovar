@@ -20,8 +20,6 @@
 #include <SPIFFS.h>
 #include <SPIFFSEditor.h>
 
-#include "Samovar.h"
-
 #define DRIVER_STEP_TIME 1
 #include <GyverEncoder.h>
 
@@ -29,6 +27,8 @@
 #include <GyverButton.h>
 
 #include <ESP32Servo.h>
+
+#include "Samovar.h"
 
 #ifdef USE_BME680
 #include <Adafruit_BME680.h>
