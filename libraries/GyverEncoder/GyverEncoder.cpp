@@ -208,7 +208,7 @@ void Encoder::tick(bool clk, bool dt, bool sw) {
 	extTick = false;
 }
 
-void Encoder::tick() {
+void IRAM_ATTR Encoder::tick() {
 	uint32_t thisMls = millis();
 	uint32_t debounceDelta = thisMls - debounce_timer;	
 
