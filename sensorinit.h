@@ -20,6 +20,12 @@ Adafruit_BMP085_Unified bme; // I2C
 Adafruit_BMP280 bme; // I2C
 #endif
 
+#ifdef USE_BME280
+#include <Adafruit_BME280.h>
+#define BME_STRING "BME280"
+Adafruit_BME280 bme; // I2C
+#endif
+
 void clok();
 void clok1();
 void getjson (void);
@@ -75,6 +81,11 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 #endif
 
 #ifdef USE_BMP280
+  bme_temp = bme.readTemperature();
+  bme_pressure = bme.readPressure() / 100 * 0.75;
+#endif
+
+#ifdef USE_BME280
   bme_temp = bme.readTemperature();
   bme_pressure = bme.readPressure() / 100 * 0.75;
 #endif

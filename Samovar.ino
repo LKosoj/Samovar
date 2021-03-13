@@ -42,6 +42,10 @@
 #include <Adafruit_BMP280.h>
 #endif
 
+#ifdef USE_BME280
+#include <Adafruit_BME280.h>
+#endif
+
 #include "font.h"
 #include "logic.h"
 
