@@ -24,7 +24,7 @@
 Больше деталей на форуме
 https://alcodistillers.ru/forum/viewtopic.php?id=1812
 
-Как скомпилировать, загрузить, и настроить Самовар:
+Как скомпилировать, загрузить и настроить Самовар:
 https://github.com/LKosoj/Samovar/blob/master/install.md
 
 Схема
