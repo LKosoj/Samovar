@@ -291,7 +291,7 @@ void setup() {
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 
   //Настраиваем меню
-  Serial.println("Samovar started");
+  Serial.println(F("Samovar started"));
   setupMenu();
   writeString("      Samovar ", 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
@@ -310,9 +310,9 @@ void setup() {
 
   strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
 
-  Serial.print("Connected to ");
+  Serial.print(F("Connected to "));
   Serial.println(WiFi.SSID());
-  Serial.print("IP address: ");
+  Serial.print(F("IP address: "));
   String StIP = WiFi.localIP().toString();
   StIP.toCharArray(ipst, 16);
 
@@ -424,6 +424,8 @@ void setup() {
     &GetClockTask1,  /* Task handle. */
     0); /* Core where the task should run */
 
+  writeString("      Samovar     ", 1);
+  writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   writeString("                  ", 3);
   writeString("      Started     ", 4);
   Serial.println("Samovar ready");
@@ -560,11 +562,15 @@ void getjson (void) {
 }
 
 void configModeCallback (AsyncWiFiManager *myWiFiManager) {
-  Serial.println("Entered config mode");
-  Serial.print("SSID ");
+  Serial.println(F("Entered config WiFi"));
+  Serial.print(F("SSID "));
   Serial.println(myWiFiManager->getConfigPortalSSID());
-  Serial.print("IP: ");
+  Serial.print(F("IP: "));
   Serial.println(WiFi.softAPIP());
+  writeString("Entered config WiFi ", 1);
+  writeString("SSID: Samovar       ", 2);
+  writeString("IP:                 ", 3);
+  writeString(WiFi.softAPIP().toString(), 4);
 }
 
 void read_config() {
