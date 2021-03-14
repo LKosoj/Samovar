@@ -260,9 +260,7 @@ struct SetupEEPROM {
   byte TankAdress[8];
   bool useautospeed;                                            //Настройка для использования автокорректировки скорости
   byte autospeed;                                               //Процент изменения скорости
-#ifdef SAMOVAR_USE_BLYNK
   char blynkauth[33];
-#endif
 };
 
 struct DSSensor {
