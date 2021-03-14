@@ -274,6 +274,7 @@ void setup() {
     memcpy(str3, SamSetup.WaterColor, sizeof(str3));
     char str4[] = "crimson\0";
     memcpy(str4, SamSetup.TankColor, sizeof(str4));
+    SamSetup.blynkauth[0] = '\0';
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config();
