@@ -298,13 +298,14 @@ void setup() {
   writeString("Connecting to WI-FI", 3);
 
   //Подключаемся к WI-FI
-  AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33);
+  AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
   AsyncWiFiManager wifiManager(&server,&dns);
   wifiManager.setAPCallback(configModeCallback);
   wifiManager.setDebugOutput(false);
   wifiManager.addParameter(&custom_blynk_token);
-  //return;
   wifiManager.autoConnect("Samovar");
+
+  //wifiManager.resetSettings();
 
   strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
 
@@ -425,7 +426,6 @@ void setup() {
   writeString("                  ", 3);
   writeString("      Started     ", 4);
   Serial.println("Samovar ready");
-  //wifiManager.resetSettings();
 }
 
 void loop() {
