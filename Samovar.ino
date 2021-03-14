@@ -19,6 +19,8 @@
 #include <EEPROM.h>
 #include <SPIFFS.h>
 #include <SPIFFSEditor.h>
+#include <ESPAsyncWiFiManager.h> 
+
 
 #define DRIVER_STEP_TIME 1
 #include <GyverEncoder.h>
@@ -70,7 +72,6 @@ hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 void setupMenu();
-void connectWiFi();
 void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
@@ -217,6 +218,9 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 }
 
 void setup() {
+  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP  
+  WiFi.setHostname(host);
+  WiFi.setAutoReconnect(true);
 
   Serial.begin(115200);
   Wire.begin();
@@ -294,7 +298,33 @@ void setup() {
   writeString("Connecting to WI-FI", 3);
 
   //Подключаемся к WI-FI
-  connectWiFi();
+  AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33);
+  AsyncWiFiManager wifiManager(&server,&dns);
+  wifiManager.setAPCallback(configModeCallback);
+  wifiManager.setDebugOutput(false);
+  wifiManager.addParameter(&custom_blynk_token);
+  //return;
+  wifiManager.autoConnect("Samovar");
+
+  strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
+
+  Serial.print("Connected to ");
+  Serial.println(WiFi.SSID());
+  Serial.print("IP address: ");
+  String StIP = WiFi.localIP().toString();
+  StIP.toCharArray(ipst, 16);
+
+  Serial.println(StIP);
+  
+  if (!MDNS.begin(host)) { //http://samovar.local
+    Serial.println("Error setting up MDNS responder!");
+  } else {
+#ifdef __SAMOVAR_DEBUG
+    Serial.println("mDNS responder started");
+#endif
+  }
+  
+  //connectWiFi();
   writeString("Connected", 4);
 
   btn.setType(LOW_PULL);
@@ -309,7 +339,7 @@ void setup() {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Connecting to Blynk");
 #endif
-  Blynk.config(auth);
+  Blynk.config(SamSetup.blynkauth);
   Blynk.connect(BLYNK_TIMEOUT_MS);
   Blynk.notify("{DEVICE_NAME} started");
 #endif
@@ -395,15 +425,17 @@ void setup() {
   writeString("                  ", 3);
   writeString("      Started     ", 4);
   Serial.println("Samovar ready");
+  //wifiManager.resetSettings();
 }
 
 void loop() {
+
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
 #endif
 
   //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
-  if (WiFi.status() != WL_CONNECTED) connectWiFi();
+  //if (WiFi.status() != WL_CONNECTED) connectWiFi();
 #ifdef SAMOVAR_USE_BLYNK
   if (Blynk.connected()) {
     Blynk.run();
@@ -526,35 +558,12 @@ void getjson (void) {
   serializeJson(jsondoc, jsonstr);
 }
 
-void connectWiFi() {
-  WiFi.setAutoReconnect(true);
-  // Connect to WiFi network
-  WiFi.begin(ssid, password);
-  WiFi.setHostname(host);
-  Serial.println("");
-
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
-  String StIP = WiFi.localIP().toString();
-  StIP.toCharArray(ipst, 16);
-
-  Serial.println(StIP);
-
-  /*use mdns for host name resolution*/
-  if (!MDNS.begin(host)) { //http://samovar.local
-    Serial.println("Error setting up MDNS responder!");
-  } else {
-#ifdef __SAMOVAR_DEBUG
-    Serial.println("mDNS responder started");
-#endif
-  }
+void configModeCallback (AsyncWiFiManager *myWiFiManager) {
+  Serial.println("Entered config mode");
+  Serial.print("SSID ");
+  Serial.println(myWiFiManager->getConfigPortalSSID());
+  Serial.print("IP: ");
+  Serial.println(WiFi.softAPIP());
 }
 
 void read_config() {

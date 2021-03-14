@@ -225,6 +225,8 @@ LiquidMenu main_menu1(lcd);
 WebSerialClass WebSerial;
 #endif
 
+DNSServer dns;
+
 struct SetupEEPROM {
   byte flag;                                                   //Флаг для записи в память
   float DeltaSteamTemp;                                        //Корректировка температурного датчика
@@ -258,6 +260,9 @@ struct SetupEEPROM {
   byte TankAdress[8];
   bool useautospeed;                                            //Настройка для использования автокорректировки скорости
   byte autospeed;                                               //Процент изменения скорости
+#ifdef SAMOVAR_USE_BLYNK
+  char blynkauth[33];
+#endif
 };
 
 struct DSSensor {
@@ -294,16 +299,7 @@ enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET,
 volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
 
 //**************************************************************************************************************
-// Параметры подключения к WIFI
 const char* host = SAMOVAR_HOST;
-const char* ssid = SAMOVAR_SSID;
-const char* password = SAMOVAR_PASSWORD;
-// You should get Auth Token in the Blynk App.
-// Go to the Project Settings (nut icon).
-
-#ifdef SAMOVAR_USE_BLYNK
-char auth[] = SAMOVAR_AUTH;
-#endif
 //**************************************************************************************************************
 
 //**************************************************************************************************************

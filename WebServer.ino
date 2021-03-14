@@ -101,6 +101,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "TimeZone") return (String)SamSetup.TimeZone;
   else if (var == "LogPeriod") return (String)SamSetup.LogPeriod;
   else if (var == "HeaterR") return (String)SamSetup.HeaterResistant;
+  else if (var == "blynkauth") return (String)SamSetup.blynkauth;
   else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else return "";
@@ -217,6 +218,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("HeaterR")) {
     SamSetup.HeaterResistant = request->arg("HeaterR").toFloat();
+  }
+  if (request->hasArg("blynkauth")) {
+    request->arg("blynkauth").toCharArray(SamSetup.blynkauth, 33);
   }
   if (request->hasArg("SteamColor")) {
     request->arg("SteamColor").toCharArray(SamSetup.SteamColor, request->arg("SteamColor").length() + 1);
