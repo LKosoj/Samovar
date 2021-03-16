@@ -180,6 +180,7 @@ input[type="radio"]:checked + label:after {
 .tooltip .tooltiptext {
   visibility: hidden;
   width: auto;
+  min-width: 20em;
   background-color: #3498db;
   font-size: small;
   color: #f1f1f1;

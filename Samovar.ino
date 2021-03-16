@@ -75,6 +75,7 @@ void setupMenu();
 void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
+void set_body_temp();
 String millis2time();
 String CurrentTime(void);
 
@@ -470,6 +471,9 @@ void loop() {
       case SAMOVAR_CONTINUE:
         pause_withdrawal(false);
         break;
+      case SAMOVAR_SETBODYTEMP:
+        set_body_temp();
+        break;
     }
     sam_command_sync = SAMOVAR_NONE;
   }
@@ -511,9 +515,6 @@ void getjson (void) {
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
   jsondoc["start_pressure"] = format_float(start_pressure, 3);
-  //jsondoc["bme_humidity"] = bme_humidity;
-  //jsondoc["bme_altitude"] = bme_altitude;
-  //jsondoc["bme_gas"] = bme_gas;
   jsondoc["crnt_tm"] = Crt;
   jsondoc["stm"] = millis2time();
   jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp, 3);
@@ -534,16 +535,13 @@ void getjson (void) {
   vTaskDelay(10);
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
-  jsondoc["BodyTemp"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
-  jsondoc["BodyTemp_St"] = format_float(SteamSensor.BodyTemp, 3);
+  jsondoc["BodyTemp_Steam"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  jsondoc["BodyTemp_Pipe"] = format_float(get_temp_by_pressure(PipeSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
 
   if (Msg != "") {
     jsondoc["Msg"] = Msg;
     Msg = "";
   }
-  //  jsondoc["WthdrwTime"] = WthdrwTimeS;
-  //  jsondoc["WthdrwTimeAll"] = WthdrwTimeAllS;
-
 #ifdef SAMOVAR_USE_POWER
   jsondoc["current_power_volt"] = format_float(current_power_volt, 1);
   jsondoc["target_power_volt"] = format_float(target_power_volt, 1);
@@ -555,7 +553,6 @@ void getjson (void) {
   jsondoc["WFflowRate"] = format_float(WFflowRate, 2);
   jsondoc["WFtotalMl"] = WFtotalMilliLitres;
 #endif
-
 
   jsonstr = "";
   serializeJson(jsondoc, jsonstr);

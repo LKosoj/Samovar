@@ -56,6 +56,14 @@ return 0;
 function sendvoltage(){
 var command = 'voltage=' + document.getElementById('Voltage').value;
 sendbutton(command);
+alert( "Ok" );
+return 0;
+};
+
+function sendpumpspeed(){
+var command = 'pumpspeed=' + document.getElementById('pumpspeed').value;
+sendbutton(command);
+alert( "Ok" );
 return 0;
 };
 
@@ -187,8 +195,7 @@ setTimeout(function(){
 <div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176C</div>
 <div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176C</div>
 </div>
-<div class="text">Атмосферное давление в начале работы: <span id='start_pressure'></span> мм рт. ст.</div>
-<div class="text">Текущее атмосферное давление: <span id='bme_pressure'></span> мм рт. ст.</div>
+<div class="text">Атмосферное давление: <span id='bme_pressure'></span> мм рт. ст.</div>
 <div class="container">
 <div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>
 <div class="text column">Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</div>
@@ -208,6 +215,14 @@ setTimeout(function(){
 <div class='text'>
 <span>Статус: <span id='Status'></span></span>
 </div>
+<div>
+<input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
+<input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'>
+<input id='pause' type='submit' name='pause' value='Пауза' onclick='sendbutton("pause=1");'>
+<input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'>
+<input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
+<input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>
+</div>
 </div>
 <div id="Prog" class="tabcontent">
 <div class="text">Программа отбора:</div> <textarea cols="40" rows="15" id='WProgram' name='WProgram'>%WProgram%</textarea>
@@ -224,11 +239,21 @@ setTimeout(function(){
 </div>
 </div>
 <div id="Other" class="tabcontent">
+<div style="text-align: center;">
+<div class="text" id='pmpspd'>
+<span class="tooltip">Скорость отбора:<span class="tooltiptext">Скорость установить можно при выполняющейся программе отбора. Установка скорости влияет только на выполняющуюся строку программы.</span></span>
+<input name='pumpspeed' id='pumpspeed' type='text' value=''> л/ч
+<input id='Setpmpspd' type='submit' name='Setpmpspd' value='Установить' onclick='sendpumpspeed();'>
+</div>
+<div class="tooltip"><span class="tooltiptext">При отборе тела можно скорректировать температуру отбора тела, установив текущие значения температур</span>
+<input id='setbody' type='submit' name='setbody' value='Задать Т отбора тела' onclick='sendbutton("setbodytemp=1");'></div>
+</div>
+<div class="text">Атмосферное давление в начале работы: <span id='start_pressure'></span> мм рт. ст.</div>
+<div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
 <div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
 <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
 </div>
-<div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
 <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
 <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
 <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
@@ -237,10 +262,4 @@ setTimeout(function(){
 <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div>
 </div>
-<input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
-<input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'>
-<input id='pause' type='submit' name='pause' value='Пауза' onclick='sendbutton("pause=1");'>
-<input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'>
-<input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
-<input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>
 </form>

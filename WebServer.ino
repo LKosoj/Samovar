@@ -7,6 +7,7 @@ void  web_program(AsyncWebServerRequest *request);
 void  calibrate_command(AsyncWebServerRequest *request);
 String setupKeyProcessor(const String& var);
 String get_DSAddressList(String Address);
+void set_pump_speed(float pumpspeed, bool continue_process);
 
 void WebServerInit(void) {
 
@@ -309,6 +310,9 @@ void  web_command(AsyncWebServerRequest *request) {
     if (request->hasArg("power")) {
       sam_command_sync = SAMOVAR_POWER;
     }
+    if (request->hasArg("setbodytemp")) {
+      sam_command_sync = SAMOVAR_SETBODYTEMP;
+    }
     if (request->hasArg("reset")) {
       sam_command_sync = SAMOVAR_RESET;
     }
@@ -317,6 +321,9 @@ void  web_command(AsyncWebServerRequest *request) {
       set_current_power(request->arg("voltage").toFloat());
     }
 #endif
+    if (request->hasArg("pumpspeed")) {
+      set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
+    }
     if (request->hasArg("pause")) {
       if (PauseOn) {
         sam_command_sync = SAMOVAR_CONTINUE;

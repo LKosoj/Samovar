@@ -23,7 +23,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.17"
+#define SAMOVAR_VERSION "1.18"
 //#define __SAMOVAR_DEBUG
 
 //--------------------------------------------------------------------------------------------------------------
@@ -265,8 +265,8 @@ struct SetupEEPROM {
 
 struct DSSensor {
   DeviceAddress Sensor;                                          //адрес датчика температуры
-  float Temp;                                                    //температура с датчика
-  float avgTemp;                                                 //средняя температура
+//  float Temp;                                                    //температура с датчика
+  float avgTemp;                                                 //средняя температура с датчика
   float SetTemp;                                                 //уставка по температуре, при достижении которой требуется реакция
   float BodyTemp;                                                //температура, с которой начался отбор тела
   uint16_t Delay;                                                //Время задержки включения насоса в секундах при выходе температуры за значение уставки
@@ -293,7 +293,7 @@ DSSensor TankSensor;                                            //сенсор �
 
 WProgram program[CAPACITY_NUM * 2];                             //массив строк для записи программы отбора. Не больше чем CAPACITY_NUM * 2
 
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP};
 volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
 
 //**************************************************************************************************************

@@ -48,9 +48,6 @@ document.getElementById('TankTemp').innerHTML = myObj.TankTemp;
 document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
 document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
 document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
-document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
-document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
-document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
 document.getElementById('Status').innerHTML = myObj.Status;
 }
 };
@@ -194,7 +191,6 @@ function refresh_chart(){
 <div class="container">
 <div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>
 <div class="text column">Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</div>
-<div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
 </div>
 <div class="container">
 <div class="text">Прогресс отбора: <span id='WthdrwlProgress'></span>&#37;</div>
@@ -207,8 +203,6 @@ function refresh_chart(){
 <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="/index.htm"'>
 <input id='getlog' type='button' name='getlog' value='Сохранить лог' onclick='javascript:window.open("/getlog")'>
 <div class='dvcs'>
-<span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
-<span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
 <div>
 <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div></div>

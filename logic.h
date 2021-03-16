@@ -21,6 +21,7 @@ void open_valve(bool Val);
 void stopService(void);
 void startService(void);
 void reset_sensor_counter(void);
+void set_pump_speed(float pumpspeed, bool continue_process);
 
 //Получаем объем отбора
 float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
@@ -32,13 +33,13 @@ float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
 
 //Получаем скорость отбора
 float IRAM_ATTR get_liguid_rate_by_step(int StepperSpeed) {
-  return get_liguid_volume_by_step(StepperSpeed) * 3.6;
+  return round(get_liguid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000;
 }
 
 float IRAM_ATTR get_speed_from_rate(float volume_per_hour) {
   static float v;
   ActualVolumePerHour = volume_per_hour;
-  v = (float)SamSetup.StepperStepMl * (float)volume_per_hour / 3.6;
+  v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000;
   if (v < 1) v = 1;
   return v;
 }
@@ -66,7 +67,6 @@ void IRAM_ATTR withdrawal(void) {
   float c_temp; //стартовая температура отбора тела с учетом корректировки от давления или без
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
 
-  int v;
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
   if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
@@ -74,13 +74,7 @@ void IRAM_ATTR withdrawal(void) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем
       if (SamSetup.useautospeed){
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
-        v = get_liguid_rate_by_step(CurrrentStepperSpeed) * 1000;
-        ActualVolumePerHour = (float)v / 1000;
-        stopService();
-        stepper.setMaxSpeed(CurrrentStepperSpeed);
-        stepper.setSpeed(CurrrentStepperSpeed);
-        //Пересчитываем время отбора этой строки программы на текущую скорость
-        program[ProgramNum].Time = program[ProgramNum].Volume / CurrrentStepperSpeed / 1000;        
+        set_pump_speed(CurrrentStepperSpeed, false);
       }
       program_Wait = true;
       pause_withdrawal(true);
@@ -103,13 +97,7 @@ void IRAM_ATTR withdrawal(void) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем
       if (SamSetup.useautospeed){
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
-        v = get_liguid_rate_by_step(CurrrentStepperSpeed) * 1000;
-        ActualVolumePerHour = (float)v / 1000;
-        stopService();
-        stepper.setMaxSpeed(CurrrentStepperSpeed);
-        stepper.setSpeed(CurrrentStepperSpeed);
-        //Пересчитываем время отбора этой строки программы на текущую скорость
-        program[ProgramNum].Time = program[ProgramNum].Volume / CurrrentStepperSpeed / 1000;        
+        set_pump_speed(CurrrentStepperSpeed, false);
       }
       program_Wait = true;
       pause_withdrawal(true);
@@ -238,7 +226,7 @@ String IRAM_ATTR get_Samovar_Status() {
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
     SamovarStatus += ";Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }
-  if (SteamSensor.BodyTemp > 0) SamovarStatus += ";Т отб тела:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  if (SteamSensor.BodyTemp > 0) SamovarStatus += ";Т тела пар:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3) + ";Т тела царга:" + format_float(get_temp_by_pressure(PipeSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
 
   return SamovarStatus;
 }
@@ -384,6 +372,8 @@ void IRAM_ATTR run_program(byte num) {
 
 //функция корректировки температуры кипения спирта в зависимости от давления
 float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
+  if (start_temp == 0) return 0;
+  
   //скорректированная температура кипения спирта при текущем давлении
   static float c_temp;
 
@@ -403,6 +393,15 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
   }
 
   return c_temp;
+}
+
+void IRAM_ATTR set_body_temp(){
+  if (program[ProgramNum].WType == "B"){
+    SteamSensor.BodyTemp = SteamSensor.avgTemp;
+    PipeSensor.BodyTemp = PipeSensor.avgTemp;
+    WaterSensor.BodyTemp = WaterSensor.avgTemp;
+    TankSensor.BodyTemp = TankSensor.avgTemp;
+  }
 }
 
 void IRAM_ATTR check_alarm() {
@@ -522,6 +521,25 @@ void IRAM_ATTR check_alarm() {
       SteamSensor.PrevTemp = SteamSensor.avgTemp;
     }
   }
+}
+
+void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process){
+  if (pumpspeed < 1) return;
+  if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15)) return;
+  
+  bool cp = continue_process;
+  if (!stepper.getState()) cp = false;
+  
+  CurrrentStepperSpeed = pumpspeed;
+  ActualVolumePerHour = get_liguid_rate_by_step(CurrrentStepperSpeed);
+
+  stopService();
+  stepper.setMaxSpeed(CurrrentStepperSpeed);
+  stepper.setSpeed(CurrrentStepperSpeed);
+  //Пересчитываем время отбора этой строки программы на текущую скорость
+  program[ProgramNum].Time = program[ProgramNum].Volume / ActualVolumePerHour / 1000;
+  if (cp)
+    startService();
 }
 
 void IRAM_ATTR open_valve(bool Val) {
