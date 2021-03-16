@@ -296,7 +296,7 @@ void menu_samovar_start() {
   String Str;
 
   if (startval == 2) startval = 3;
-  else if (ProgramNum == ProgramLen - 1) startval = 2;
+  else if (ProgramNum >= ProgramLen - 1 && startval != 0) startval = 2;
 
   if (startval == 0) {
     startval = 1;

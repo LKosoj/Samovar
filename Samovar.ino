@@ -510,7 +510,7 @@ void loop() {
 
 void getjson (void) {
 
-  DynamicJsonDocument jsondoc(1200);
+  DynamicJsonDocument jsondoc(1500);
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
@@ -536,7 +536,7 @@ void getjson (void) {
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
   jsondoc["BodyTemp_Steam"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
-  jsondoc["BodyTemp_Pipe"] = format_float(get_temp_by_pressure(PipeSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
+  jsondoc["BodyTemp_Pipe"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
 
   if (Msg != "") {
     jsondoc["Msg"] = Msg;

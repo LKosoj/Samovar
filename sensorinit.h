@@ -150,7 +150,7 @@ void sensor_init(void) {
   int dc = 0;
   
   while(sensors.getAddress(DSAddr[dc], dc)) {
-    sensors.setResolution(DSAddr[dc], 12);                                 // устанавливаем разрешение для датчика
+    sensors.setResolution(DSAddr[dc], 8);                                 // устанавливаем разрешение для датчика
     dc++;
     if (dc > 4) break;
   }
@@ -248,10 +248,6 @@ void IRAM_ATTR reset_sensor_counter(void) {
   PipeSensor.BodyTemp = 0;
   WaterSensor.BodyTemp = 0;
   TankSensor.BodyTemp = 0;
-  SteamSensor.avgTemp = 0;
-  PipeSensor.avgTemp = 0;
-  WaterSensor.avgTemp = 0;
-  TankSensor.avgTemp = 0;
   ActualVolumePerHour = 0;
   startval = 0;
   PauseOn = false;

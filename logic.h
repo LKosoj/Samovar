@@ -172,7 +172,6 @@ void IRAM_ATTR pause_withdrawal(bool Pause) {
   if (!stepper.getState() && !PauseOn) return;
   PauseOn = Pause;
   if (Pause) {
-    //RemainingDistance = stepper.getTarget() - stepper.getCurrent();
     TargetStepps = stepper.getTarget();
     CurrrentStepps = stepper.getCurrent();
     CurrrentStepperSpeed = stepper.getSpeed();
@@ -187,6 +186,30 @@ void IRAM_ATTR pause_withdrawal(bool Pause) {
     stepper.setTarget(TargetStepps);
     startService();
   }
+  Serial.print("pause_withdrawal = ");
+  Serial.println(CurrrentStepperSpeed);  
+}
+
+void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process){
+  if (pumpspeed < 1) return;
+  if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
+  
+  bool cp = continue_process;
+  if (!stepper.getState()) cp = false;
+  
+  CurrrentStepperSpeed = pumpspeed;
+  Serial.print("set_pump_speed = ");
+  Serial.println(CurrrentStepperSpeed);
+  ActualVolumePerHour = get_liguid_rate_by_step(CurrrentStepperSpeed);
+
+  stopService();
+  stepper.setMaxSpeed(CurrrentStepperSpeed);
+  stepper.setSpeed(CurrrentStepperSpeed);
+  //Пересчитываем время отбора этой строки программы на текущую скорость
+  if (ActualVolumePerHour == 0) program[ProgramNum].Time = 65535;
+  else program[ProgramNum].Time = program[ProgramNum].Volume / ActualVolumePerHour / 1000;
+  if (cp)
+    startService();
 }
 
 String IRAM_ATTR get_Samovar_Status() {
@@ -226,7 +249,7 @@ String IRAM_ATTR get_Samovar_Status() {
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
     SamovarStatus += ";Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }
-  if (SteamSensor.BodyTemp > 0) SamovarStatus += ";Т тела пар:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3) + ";Т тела царга:" + format_float(get_temp_by_pressure(PipeSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
+  if (SteamSensor.BodyTemp > 0) SamovarStatus += ";Т тела пар:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3) + ";Т тела царга:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
 
   return SamovarStatus;
 }
@@ -242,6 +265,8 @@ void IRAM_ATTR next_capacity(void) {
 }
 
 void set_program(String WProgram) {
+//  WProgram.trim();
+//  if (WProgram = "") return;
   char c[500];
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
@@ -521,25 +546,6 @@ void IRAM_ATTR check_alarm() {
       SteamSensor.PrevTemp = SteamSensor.avgTemp;
     }
   }
-}
-
-void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process){
-  if (pumpspeed < 1) return;
-  if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15)) return;
-  
-  bool cp = continue_process;
-  if (!stepper.getState()) cp = false;
-  
-  CurrrentStepperSpeed = pumpspeed;
-  ActualVolumePerHour = get_liguid_rate_by_step(CurrrentStepperSpeed);
-
-  stopService();
-  stepper.setMaxSpeed(CurrrentStepperSpeed);
-  stepper.setSpeed(CurrrentStepperSpeed);
-  //Пересчитываем время отбора этой строки программы на текущую скорость
-  program[ProgramNum].Time = program[ProgramNum].Volume / ActualVolumePerHour / 1000;
-  if (cp)
-    startService();
 }
 
 void IRAM_ATTR open_valve(bool Val) {
