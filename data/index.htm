@@ -195,7 +195,10 @@ setTimeout(function(){
 <div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176C</div>
 <div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176C</div>
 </div>
-<div class="text">Атмосферное давление: <span id='bme_pressure'></span> мм рт. ст.</div>
+<div class="container">
+<div class="text column">Давление: <span id='bme_pressure'></span> мм рт. ст.</div>
+<div class="text column">В начале: <span id='start_pressure'></span> мм рт. ст.</div>
+</div>
 <div class="container">
 <div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>
 <div class="text column">Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</div>
@@ -248,7 +251,6 @@ setTimeout(function(){
 <div class="tooltip"><span class="tooltiptext">При отборе тела можно скорректировать температуру отбора тела, установив текущие значения температур</span>
 <input id='setbody' type='submit' name='setbody' value='Задать Т отбора тела' onclick='sendbutton("setbodytemp=1");'></div>
 </div>
-<div class="text">Атмосферное давление в начале работы: <span id='start_pressure'></span> мм рт. ст.</div>
 <div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
 <div class='dvcs'>
 <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
