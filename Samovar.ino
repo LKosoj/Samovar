@@ -57,7 +57,7 @@
 
 #ifdef SAMOVAR_USE_BLYNK
 //#define BLYNK_PRINT Serial
-#define BLYNK_TIMEOUT_MS 888
+//#define BLYNK_TIMEOUT_MS 888
 //#define BLYNK_HEARTBEAT 17
 
 #include <BlynkSimpleEsp32.h>
@@ -343,9 +343,16 @@ void setup() {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Connecting to Blynk");
 #endif
+#ifdef BLYNK_SAMOVAR_TOOL
+  Blynk.config(SamSetup.blynkauth, "samovar-tool.ru", 8080);
+#else
   Blynk.config(SamSetup.blynkauth);
+#endif
   Blynk.connect(BLYNK_TIMEOUT_MS);
   Blynk.notify("{DEVICE_NAME} started");
+#ifdef __SAMOVAR_DEBUG
+  Serial.println("Blynk started");
+#endif
 #endif
 
 
