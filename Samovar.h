@@ -261,6 +261,7 @@ struct SetupEEPROM {
   bool useautospeed;                                            //Настройка для использования автокорректировки скорости
   byte autospeed;                                               //Процент изменения скорости
   char blynkauth[33];
+  char videourl[120];                                            //URL для потокового видео с камеры
 };
 
 struct DSSensor {

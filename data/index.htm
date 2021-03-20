@@ -180,6 +180,7 @@ setTimeout(function(){
   <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Отбор">
   <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
   <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Video');" value="Видео" style="display: %showvideo%;">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
 <div class="message-box" style="display: none;" id="message"></div>
@@ -264,5 +265,8 @@ setTimeout(function(){
 <div>
 <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div>
+</div>
+<div id="Video" class="tabcontent">
+<img src="%videourl%">
 </div>
 </form>

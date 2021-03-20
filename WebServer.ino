@@ -81,6 +81,8 @@ String indexKeyProcessor(const String& var)
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
   else if (var == "TankColor") return (String)SamSetup.TankColor;
   else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
+  else if (var == "videourl") return (String)SamSetup.videourl;
+  else if (var == "showvideo") {if ((String)SamSetup.videourl != "") return "inline"; else return "none";};
 }
 
 String setupKeyProcessor(const String& var)
@@ -102,6 +104,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "TimeZone") return (String)SamSetup.TimeZone;
   else if (var == "LogPeriod") return (String)SamSetup.LogPeriod;
   else if (var == "HeaterR") return (String)SamSetup.HeaterResistant;
+  else if (var == "videourl") return (String)SamSetup.videourl;
   else if (var == "blynkauth") return (String)SamSetup.blynkauth;
   else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
@@ -219,6 +222,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("HeaterR")) {
     SamSetup.HeaterResistant = request->arg("HeaterR").toFloat();
+  }
+  if (request->hasArg("videourl")) {
+    request->arg("videourl").toCharArray(SamSetup.videourl, request->arg("videourl").length() + 1);
   }
   if (request->hasArg("blynkauth")) {
     request->arg("blynkauth").toCharArray(SamSetup.blynkauth, 33);

@@ -277,6 +277,7 @@ void setup() {
     char str4[] = "crimson\0";
     memcpy(str4, SamSetup.TankColor, sizeof(str4));
     SamSetup.blynkauth[0] = '\0';
+    SamSetup.videourl[0] = '\0';
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
     read_config();
@@ -596,4 +597,6 @@ void read_config() {
   CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
+  if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
+  if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
 }
