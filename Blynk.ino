@@ -67,6 +67,12 @@ BLYNK_WRITE(V16)
 }
 #endif
 
+BLYNK_WRITE(V17)
+{
+  float Value17 = param.asFloat(); // assigning incoming value from pin V17 to a variable
+  set_pump_speed(get_speed_from_rate(Value17), true);
+}
+
 BLYNK_WRITE(V13)
 {
   pause_withdrawal(!PauseOn);
