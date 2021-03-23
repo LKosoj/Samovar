@@ -175,7 +175,10 @@ setTimeout(function(){
 </head>
 
 <form action='none' onsubmit='return false' name="mainform" id="mainform">
-<h1>Samovar v. <span id='version'></span></h1>
+<h1>
+<div class="message-box" style="display: none;" id="message"></div>
+Samovar v. <span id='version'></span>
+</h1>
 <div class="tab">
   <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Отбор">
   <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
@@ -183,7 +186,6 @@ setTimeout(function(){
   <input type='button' class="tablinks" onclick="openTab(event, 'Video');" value="Видео" style="display: %showvideo%;">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
-<div class="message-box" style="display: none;" id="message"></div>
 <div class="container">
 <div class="text">Текущее время: <span id='crnt_tm'></span></div>
 <div class="text">Время работы: <span id='stm'></span></div>
