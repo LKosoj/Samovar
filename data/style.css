@@ -21,12 +21,16 @@ p{margin: 0 !important;}
 .dvcs{padding: 10px;margin: 10px;}
 
 .message-box{
-    font-size: 1.5em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     background: red;
     color: seashell;
+	z-index: 50000;
+    position: absolute;
+    width: 20em;
+    border-radius: 4px;
+    -webkit-transition: all 0.2s ease;
+    -moz-transition: all 0.2s ease;
+    -o-transition: all 0.2s ease;
+    transition: all 0.2s ease;
 }
 
 .column{
