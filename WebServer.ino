@@ -348,6 +348,7 @@ void  web_program(AsyncWebServerRequest *request) {
 }
 
 void  calibrate_command(AsyncWebServerRequest *request) {
+  bool cl = false;
   if (request->params() >= 1) {
     if (request->hasArg("stpstep")) {
       CurrrentStepperSpeed = request->arg("stpstep").toInt();
@@ -357,10 +358,11 @@ void  calibrate_command(AsyncWebServerRequest *request) {
     }
     if (request->hasArg("finish") && startval == 100) {
       sam_command_sync = CALIBRATE_STOP;
+      cl = true;
     }
   }
-  vTaskDelay(10);
-  if (sam_command_sync != SAMOVAR_NONE) {
+  vTaskDelay(100);
+  if (cl) {
     int s = round((float)stepper.getCurrent() / 100) * 100;
     request->send(200, "text/plain", (String)s);
   } else request->send(200, "text/plain", "OK");
