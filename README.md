@@ -16,8 +16,9 @@
 Как скомпилировать, загрузить и настроить Самовар:
 https://www.samovar-tool.ru/samovar-diy/
 
+Как выглядит реализованное, можно посмотреть тут https://www.samovar-tool.ru/2021/03/21/o-rabote-samovara/
+
 Обсуждение на форуме
 https://alcodistillers.ru/forum/viewtopic.php?id=1812
 
     
-Как выглядит реализованное, можно посмотреть тут https://www.samovar-tool.ru/2021/03/21/o-rabote-samovara/
