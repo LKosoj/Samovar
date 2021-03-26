@@ -10,14 +10,14 @@
 
 Обратите внимание!!! Не смотря на то, что теоретически все автоматизировано (или может быть автоматизировано), присутствие оператора рядом с колонной обязательно! Автоматика позволяет упростить отбор, но сама ничего не сделает. Без понимания процессов оператором это просто прикольная (на мой взгляд) штука.
 
-Больше деталей на форуме
-https://alcodistillers.ru/forum/viewtopic.php?id=1812
+Схема подключения
+![alt text](https://github.com/LKosoj/Samovar/blob/master/Fritzing%20scheme/Samovar_bb.png)
 
 Как скомпилировать, загрузить и настроить Самовар:
 https://www.samovar-tool.ru/samovar-diy/
 
-Схема
-![alt text](https://github.com/LKosoj/Samovar/blob/master/Fritzing%20scheme/Samovar_bb.png)
+Обсуждение на форуме
+https://alcodistillers.ru/forum/viewtopic.php?id=1812
 
     
 Как выглядит реализованное, можно посмотреть тут https://www.samovar-tool.ru/2021/03/21/o-rabote-samovara/
