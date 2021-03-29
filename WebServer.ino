@@ -76,10 +76,10 @@ void WebServerInit(void) {
 
 String indexKeyProcessor(const String& var)
 {
-  if (var == "SteamColor" || var == "SteamClr") return (String)SamSetup.SteamColor;
-  else if (var == "PipeColor" || var == "PipeClr") return (String)SamSetup.PipeColor;
-  else if (var == "WaterColor" || var == "WaterClr") return (String)SamSetup.WaterColor;
-  else if (var == "TankColor" || var == "TankClr") return (String)SamSetup.TankColor;
+  if (var == "SteamColor") return (String)SamSetup.SteamColor;
+  else if (var == "PipeColor") return (String)SamSetup.PipeColor;
+  else if (var == "WaterColor") return (String)SamSetup.WaterColor;
+  else if (var == "TankColor") return (String)SamSetup.TankColor;
   else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
   else if (var == "videourl") return (String)SamSetup.videourl;
   else if (var == "showvideo") {if ((String)SamSetup.videourl != "") return "inline"; else return "none";};
