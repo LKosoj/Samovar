@@ -224,6 +224,10 @@ void sensor_init(void) {
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
   Serial2.setRxBufferSize(20);
 #endif
+
+#ifdef USE_WATER_PUMP
+  init_pump_pwm(WATER_PUMP_PIN,PUMP_PWM_FREQ);
+#endif
 }
 
 //Обнуляем все счетчики

@@ -63,6 +63,10 @@
 #include <BlynkSimpleEsp32.h>
 #endif
 
+#ifdef USE_WATER_PUMP
+#include "pumppwm.h"
+#endif
+
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
 //**************************************************************************************************************
@@ -148,6 +152,17 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
+
+#ifdef USE_WATER_PUMP
+      //Устанавливаем ШИМ для насоса в зависимости от температуры воды
+      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP){
+        set_pump_speed_pid(WaterSensor.avgTemp);
+      } else {
+        if (pump_started) set_pump_pwm(0);
+      }
+#endif
+
+      
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
       if (TargetStepps > 0) {
         //считаем прогресс
@@ -233,6 +248,9 @@ void setup() {
   timer = timerBegin(2, 80, true);
   timerAttachInterrupt(timer, &StepperTicker, true);
 
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
   servo.setPeriodHertz(50);    // standard 50 hz servo
   // Частоты 500 и 2500 - подобраны для моего серво-привода. Возможно, для других частоты могут отличаться
