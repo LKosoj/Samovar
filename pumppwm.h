@@ -2,7 +2,7 @@
 #include <ESP32Servo.h>
 #include <GyverPID.h>
 
-#define PUMP_PWM_FREQ 1
+#define PUMP_PWM_FREQ 100
 
 ESP32PWM pump_pwm;
 GyverPID regulator(10, 2, 0.5, 1000);
