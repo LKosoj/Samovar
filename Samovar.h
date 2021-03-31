@@ -269,7 +269,8 @@ struct SetupEEPROM {
   bool useautospeed;                                            //Настройка для использования автокорректировки скорости
   byte autospeed;                                               //Процент изменения скорости
   char blynkauth[33];
-  char videourl[120];                                            //URL для потокового видео с камеры
+  char videourl[120];                                           //URL для потокового видео с камеры
+  float DistTemp;                                               //Температура, при которой завершится дистилляция
 };
 
 struct DSSensor {
@@ -302,8 +303,11 @@ DSSensor TankSensor;                                            //сенсор �
 
 WProgram program[CAPACITY_NUM * 2];                             //массив строк для записи программы отбора. Не больше чем CAPACITY_NUM * 2
 
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER};
 volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
+
+enum SAMOVAR_MODE {SAMOVAR_NO_MODE, SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE};
+volatile SAMOVAR_MODE Samovar_Mode;
 
 //**************************************************************************************************************
 const char* host = SAMOVAR_HOST;
@@ -322,7 +326,7 @@ float bme_humidity;                                             // Влажно�
 float bme_altitude;                                             // Высота
 float bme_gas;                                                  // Газ
 String SamovarStatus;                                           // Текущий статус работы Самовара строкой
-volatile int8_t SamovarStatusInt;                               // Текущий статус работы Самовара числом
+volatile int16_t SamovarStatusInt;                              // Текущий статус работы Самовара числом
 volatile byte capacity_num;                                     // Текущая позиция емкости для отбора
 
 volatile byte prev_ProgramNum;                                  // Пердыдущая программа отбора
