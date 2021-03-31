@@ -67,6 +67,9 @@
 #include "pumppwm.h"
 #endif
 
+#include "distiller.h"
+#include "beer.h"
+
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
 //**************************************************************************************************************
@@ -153,6 +156,17 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
 
+      //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
+      if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+        check_alarm();
+      } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+        check_alarm_distiller();
+      } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+        check_alarm_beer();
+      }
+
+      vTaskDelay(10);
+
 #ifdef USE_WATER_PUMP
       //Устанавливаем ШИМ для насоса в зависимости от температуры воды
       if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP){
@@ -206,10 +220,6 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #ifdef SAMOVAR_USE_POWER
       get_current_power();
 #endif
-
-      //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
-      check_alarm();
-      vTaskDelay(10);
 
       clok();
 
@@ -478,6 +488,7 @@ void loop() {
   if (sam_command_sync != SAMOVAR_NONE) {
     switch (sam_command_sync) {
       case SAMOVAR_START:
+        Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
         menu_samovar_start();
         break;
       case SAMOVAR_POWER:
@@ -501,12 +512,24 @@ void loop() {
       case SAMOVAR_SETBODYTEMP:
         set_body_temp();
         break;
+      case SAMOVAR_DISTILLATION:
+        Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
+        SamovarStatusInt = 1000;
+        break;
+      case SAMOVAR_BEER:
+        Samovar_Mode = SAMOVAR_BEER_MODE;
+        SamovarStatusInt = 2000;
+        break;
     }
     sam_command_sync = SAMOVAR_NONE;
   }
 
-  if (startval > 0) {
+  if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {
     withdrawal();     //функция расчета отбора
+  } else if (SamovarStatusInt == 1000) {
+    distiller_proc(); //функция для проведения дистилляции
+  } else if (SamovarStatusInt == 2000) {
+    beer_proc();      //функция для проведения затирания
   }
 
   encoder_getvalue();
