@@ -17,9 +17,9 @@ void init_pump_pwm(byte pin, int freq){
 }
 
 void set_pump_pwm(float duty){
-  if (!pump_started) {
+  if (!pump_started && duty > 0) {
     pump_pwm.write(255);
-    delay(100);
+    delay(500);
     pump_started = true;
   }
   if (duty == 0) pump_started = false;
