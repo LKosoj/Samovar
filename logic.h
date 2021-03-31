@@ -244,6 +244,10 @@ String IRAM_ATTR get_Samovar_Status() {
     } else if (SamovarStatusInt == 52) {
       SamovarStatus = "Стабилизация завершена/Работа на себя";
     }
+  } else if (SamovarStatusInt == 1000) {
+    SamovarStatus = "Режим дистилляции";
+  } else if (SamovarStatusInt == 2000) {
+    SamovarStatus = "Режим пивоварни";
   }
 
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
