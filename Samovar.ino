@@ -322,6 +322,11 @@ void setup() {
   digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   pinMode(RELE_CHANNEL4, OUTPUT);
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+#ifdef USE_WATER_VALVE
+  pinMode(WATER_PUMP_PIN, OUTPUT);
+  digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
+#endif
+
 
   //Настраиваем меню
   Serial.println(F("Samovar started"));
