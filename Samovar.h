@@ -11,6 +11,10 @@
 #include <WebSerial.h>
 #endif
 
+#ifdef USE_WATER_PUMP
+#undef USE_WATER_VALVE 
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
