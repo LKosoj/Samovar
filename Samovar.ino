@@ -137,9 +137,11 @@ void IRAM_ATTR isrENC_TICK() {
 void IRAM_ATTR triggerGetClock(void * parameter) {
   while (true) {
       if (WiFi.status() == WL_CONNECTED) clok1();
+#ifdef SAMOVAR_USE_BLYNK
       if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
         Blynk.connect(BLYNK_TIMEOUT_MS);
       }
+#endif
     vTaskDelay(10000);
   }
 }
@@ -639,5 +641,7 @@ void read_config() {
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
+#ifdef SAMOVAR_USE_BLYNK
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
+#endif
 }
