@@ -550,6 +550,13 @@ void IRAM_ATTR check_alarm() {
       SteamSensor.PrevTemp = SteamSensor.avgTemp;
     }
   }
+#ifdef USE_WATER_VALVE
+  if (WaterSensor.avgTemp >= WaterSensor.SetTemp){
+    digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
+  } else {
+    digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
+  }
+#endif
 }
 
 void IRAM_ATTR open_valve(bool Val) {
