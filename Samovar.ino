@@ -177,7 +177,6 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         if (pump_started) set_pump_pwm(0);
       }
 #endif
-
       
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
       if (TargetStepps > 0) {
