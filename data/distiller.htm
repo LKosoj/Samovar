@@ -1,0 +1,172 @@
+<head>
+<meta charset='utf-8'>
+<meta http-equiv="Cache-Control" content="no-cache">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
+<title>Самовар</title>
+
+<link rel="stylesheet" href="/style.css">
+
+<script>
+function openTab(evt, tabName) {
+    var i, tabcontent, tablinks;
+    tabcontent = document.getElementsByClassName("tabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+    }
+    tablinks = document.getElementsByClassName("tablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+    document.getElementById(tabName).style.display = "block";
+    evt.currentTarget.className += " active";
+  return 0;
+}
+
+function setDistCommand(){
+  var cmd = "distiller=";
+  if (document.getElementById('power').value == "Выключить питание"){
+    cmd = cmd + "0";
+  } else {
+    cmd = cmd + "1";
+  }
+  sendbutton(cmd);
+}
+
+function sendbutton(command){
+var server = '/command?' + command;
+request = new XMLHttpRequest();
+request.open('GET', server, false);
+request.send();
+if(request.status != 200) {
+alert( request.status + ': ' + request.statusText );
+}
+return 0;
+};
+
+function sendvoltage(){
+var command = 'voltage=' + document.getElementById('Voltage').value;
+sendbutton(command);
+alert( "Ok" );
+return 0;
+};
+
+setInterval(loadDoc,2000);
+
+function loadDoc() {
+var xhttp = new XMLHttpRequest();
+xhttp.onreadystatechange = function() {
+if (this.readyState == 4 && this.status == 200) {
+var myObj = JSON.parse(this.responseText);
+document.getElementById('version').innerHTML = myObj.version;
+document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
+document.getElementById('stm').innerHTML = myObj.stm;
+document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp;
+document.getElementById('TankTemp').innerHTML = myObj.TankTemp;
+document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure;
+document.getElementById('start_pressure').innerHTML = myObj.start_pressure;
+document.getElementById('Status').innerHTML = myObj.Status;
+document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
+document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
+document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
+document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
+document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
+document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
+if (myObj.Msg){
+  if (myObj.Msg != "") {
+    showMessage(myObj.Msg);
+  }
+}
+
+if (!myObj.current_power_volt){
+  document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
+  document.getElementById('VoltH2').style = 'visibility: hidden;position: fixed;';
+} else {
+  document.getElementById('regulator').style = '';
+  document.getElementById('VoltH2').style = '';
+}
+
+if (!myObj.WFflowRate){
+  document.getElementById('flowsensor').style = 'visibility: hidden;position: fixed;';
+} else {
+  document.getElementById('flowsensor').style = '';
+}
+
+var powerstr;
+var powerstyle;
+if (myObj.PowerOn == 1){
+  powerstr = 'Выключить питание';
+  powerstyle='red';
+} else {
+  powerstr = 'Включить питание';
+  powerstyle='lightgreen';
+}
+document.getElementById('power').value = powerstr;
+document.getElementById('power').style.backgroundColor = powerstyle;
+  
+}
+};
+xhttp.open("GET", "/ajax", true);
+xhttp.send();
+};
+
+function showMessage(Msg){
+    document.getElementById('message').innerHTML = Msg;
+    document.getElementById('message').style.display = 'flex';
+   
+setTimeout(function(){
+	document.getElementById('message').style.display = 'none';
+}, 20000);
+}
+</script>
+</head>
+
+<form action='none' onsubmit='return false' name="mainform" id="mainform">
+<h1>
+<div class="message-box" style="display: none;" id="message"></div>
+Samovar v. <span id='version'></span>
+</h1>
+<div class="tab">
+  <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Дистилляция">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Video');" value="Видео" style="display: %showvideo%;">
+</div>
+<div id="Main" class="tabcontent" style="display: block;">
+<div class="container">
+<div class="text">Текущее время: <span id='crnt_tm'></span></div>
+<div class="text">Время работы: <span id='stm'></span></div>
+</div>
+<div class="container">
+<div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176C</div>
+</div>
+<div class="container">
+<div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176C</div>
+</div>
+<div class="container">
+<div class="text column">Давление: <span id='bme_pressure'></span> мм рт. ст.</div>
+<div class="text column">В начале: <span id='start_pressure'></span> мм рт. ст.</div>
+</div>
+<div class="text" id='VoltH2' style='visibility: hidden;position: fixed;'>Напряжение регулятора: <input name='Voltage' id='Voltage' type='text' value=''>
+<input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'>
+</div>
+<div class='dvcs' id='regulator' style='visibility: hidden;position: fixed;'>
+<span class='dvcs'>Текущее напр.: <span id='current_power_volt'></span> V</span>
+<span class='dvcs'>Целевое напр.: <span id='target_power_volt'></span> V</span>
+<span class='dvcs'>Режим регулятора: <span id='current_power_mode'></span></span>
+<span class='dvcs'>Мощность: <span id='current_power_p'></span></span>
+</div>
+<div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
+<span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
+<span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
+</div>
+<div class='text'>
+<span>Статус: <span id='Status'></span></span>
+</div>
+<div>
+<input id='power' type='submit' name='power' value='Включить питание' onclick='setDistCommand();'>
+<input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
+<input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>
+</div>
+</div>
+<div id="Video" class="tabcontent">
+<img src="%videourl%">
+</div>
+</form>

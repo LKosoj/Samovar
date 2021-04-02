@@ -22,6 +22,8 @@ void stopService(void);
 void startService(void);
 void reset_sensor_counter(void);
 void set_pump_speed(float pumpspeed, bool continue_process);
+void set_pump_pwm(float duty);
+void set_pump_speed_pid(float temp);
 
 //Получаем объем отбора
 float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
@@ -186,8 +188,6 @@ void IRAM_ATTR pause_withdrawal(bool Pause) {
     stepper.setTarget(TargetStepps);
     startService();
   }
-  Serial.print("pause_withdrawal = ");
-  Serial.println(CurrrentStepperSpeed);  
 }
 
 void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process){
@@ -448,6 +448,15 @@ void IRAM_ATTR check_alarm() {
     open_valve(true);
   }
 
+#ifdef USE_WATER_PUMP
+      //Устанавливаем ШИМ для насоса в зависимости от температуры воды
+      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP){
+        set_pump_speed_pid(WaterSensor.avgTemp);
+      } else {
+        if (pump_started) set_pump_pwm(0);
+      }
+#endif
+      
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается

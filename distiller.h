@@ -1,19 +1,36 @@
+void distiller_finish();
+
 void distiller_proc(){
 
   if (!PowerOn){
     set_power(true);
+    set_power_mode(POWER_SPEED_MODE);
+    create_data();                    //создаем файл с данными
+    Msg = "Distillation started";
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("{DEVICE_NAME} Distillation started");
+#endif
   }
   
   float c_temp; //текущая температура в кубе с учетом корректировки давления или без
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.BodyTemp, bme_pressure);
   
   if (c_temp > SamSetup.DistTemp) {
-    //Выключаем нагрев куба
-    set_power(false);
-    reset_sensor_counter();
+    distiller_finish();
   }
 
 }
+
+void IRAM_ATTR distiller_finish(){
+    Msg = "Distillation finished";
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("{DEVICE_NAME} Distillation finished");
+#endif
+    reset_sensor_counter();
+}
+
 
 void IRAM_ATTR check_alarm_distiller() {
   //сбросим паузу события безопасности
@@ -23,6 +40,15 @@ void IRAM_ATTR check_alarm_distiller() {
     open_valve(true);
   }
 
+#ifdef USE_WATER_PUMP
+      //Устанавливаем ШИМ для насоса в зависимости от температуры воды
+      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP){
+        set_pump_speed_pid(WaterSensor.avgTemp);
+      } else {
+        if (pump_started) set_pump_pwm(0);
+      }
+#endif
+      
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается

@@ -254,6 +254,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   WaterSensor.BodyTemp = 0;
   TankSensor.BodyTemp = 0;
   ActualVolumePerHour = 0;
+  SamovarStatusInt = 0;
   startval = 0;
   PauseOn = false;
   program_Wait = false;
@@ -262,13 +263,12 @@ void IRAM_ATTR reset_sensor_counter(void) {
   WFtotalMilliLitres = 0;
   WthdrwlProgress = 0;
   TargetStepps = 0;
-  Msg = "";  
+  //Msg = "";  
 
   if (fileToAppend) {
     fileToAppend.close();
   }
 
-  bme_pressure = 0;
   BME_getvalue(false);
   start_pressure = bme_pressure;
   get_Samovar_Status();

@@ -6,7 +6,6 @@
 
 ESP32PWM pump_pwm;
 GyverPID regulator(10, 2, 0.5, 1000);
-bool pump_started;
 
 void init_pump_pwm(byte pin, int freq){
   pump_pwm.attachPin(pin, freq, 10);

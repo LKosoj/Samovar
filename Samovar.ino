@@ -85,7 +85,8 @@ void menu_calibrate();
 void set_body_temp();
 String millis2time();
 String CurrentTime(void);
-
+void distiller_finish();
+void beer_finish();
 
 #ifdef USE_WEB_SERIAL
 void recvMsg(uint8_t *data, size_t len) {
@@ -158,6 +159,27 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
 
+#ifdef SAMOVAR_USE_POWER
+      get_current_power();
+#endif
+
+      clok();
+
+      DS_getvalue();
+      vTaskDelay(10);
+
+      Crt = CurrentTime();
+      StrCrt = Crt.substring(6) + "   " + millis2time();
+      StrCrt.toCharArray(tst, 20);
+
+      if (startval > 0) {
+        tcntST++;
+        if (tcntST == SamSetup.LogPeriod) {
+          tcntST = 0;
+          append_data();              //Записываем данные;
+        }
+      }
+
       //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
       if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
         check_alarm();
@@ -165,19 +187,11 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         check_alarm_distiller();
       } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         check_alarm_beer();
+        WFpulseCount = 1;
       }
 
       vTaskDelay(10);
 
-#ifdef USE_WATER_PUMP
-      //Устанавливаем ШИМ для насоса в зависимости от температуры воды
-      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP){
-        set_pump_speed_pid(WaterSensor.avgTemp);
-      } else {
-        if (pump_started) set_pump_pwm(0);
-      }
-#endif
-      
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
       if (TargetStepps > 0) {
         //считаем прогресс
@@ -218,26 +232,6 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       vTaskDelay(10);
 #endif
 
-#ifdef SAMOVAR_USE_POWER
-      get_current_power();
-#endif
-
-      clok();
-
-      DS_getvalue();
-      vTaskDelay(10);
-
-      Crt = CurrentTime();
-      StrCrt = Crt.substring(6) + "   " + millis2time();
-      StrCrt.toCharArray(tst, 20);
-
-      if (startval > 0) {
-        tcntST++;
-        if (tcntST == SamSetup.LogPeriod) {
-          tcntST = 0;
-          append_data();              //Записываем данные;
-        }
-      }
       OldMinST = CurMinST;
     }
     vTaskDelay(10);
@@ -498,6 +492,8 @@ void loop() {
         menu_samovar_start();
         break;
       case SAMOVAR_POWER:
+        if (SamovarStatusInt == 1000) distiller_finish();
+        if (SamovarStatusInt == 2000) beer_finish();
         set_power(!PowerOn);
         break;
       case SAMOVAR_RESET:
@@ -521,10 +517,12 @@ void loop() {
       case SAMOVAR_DISTILLATION:
         Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
         SamovarStatusInt = 1000;
+        startval = 1000;
         break;
       case SAMOVAR_BEER:
         Samovar_Mode = SAMOVAR_BEER_MODE;
         SamovarStatusInt = 2000;
+        startval = 2000;
         break;
     }
     sam_command_sync = SAMOVAR_NONE;
@@ -545,13 +543,13 @@ void loop() {
     //если выключен - включаем
     if (!PowerOn) {
       set_power(true);
-    } else if (startval == 0) {
+    } else if (startval == 0 && SamovarStatusInt < 1000) {
       //если включен и программа отбора не работает - запускаем программу
       menu_samovar_start();
-    } else if (startval != 0 && !program_Pause) {
+    } else if (startval != 0 && !program_Pause  && SamovarStatusInt < 1000) {
       //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
       pause_withdrawal(!PauseOn);
-    } else if (startval != 0 && program_Pause) {
+    } else if (startval != 0 && program_Pause && SamovarStatusInt < 1000) {
       //если выполняется программа, и программа - пауза, переходим к следующей программе
       menu_samovar_start();
     }

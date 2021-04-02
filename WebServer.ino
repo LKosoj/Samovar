@@ -19,6 +19,7 @@ void WebServerInit(void) {
   server.serveStatic("/data.csv", SPIFFS, "/data.csv");
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
+  server.serveStatic("/distiller.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor);
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
@@ -115,6 +116,7 @@ String setupKeyProcessor(const String& var)
     else return "";
   }
   else if (var == "autospeed") return (String)SamSetup.autospeed;
+  else if (var == "DistTemp") return (String)SamSetup.DistTemp;
   else if (var == "SteamColor") return (String)SamSetup.SteamColor;
   else if (var == "PipeColor") return (String)SamSetup.PipeColor;
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
@@ -213,6 +215,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   
   if (request->hasArg("autospeed")) {
     SamSetup.autospeed = request->arg("autospeed").toInt();
+  }
+  if (request->hasArg("DistTemp")) {
+    SamSetup.DistTemp = request->arg("DistTemp").toFloat();
   }
   if (request->hasArg("TimeZone")) {
     SamSetup.TimeZone = request->arg("TimeZone").toInt();
@@ -321,6 +326,13 @@ void  web_command(AsyncWebServerRequest *request) {
     }
     if (request->hasArg("reset")) {
       sam_command_sync = SAMOVAR_RESET;
+    }
+    if (request->hasArg("distiller")) {
+      if (request->arg("distiller").toInt() == 1) {
+        sam_command_sync = SAMOVAR_DISTILLATION;
+      } else {
+        sam_command_sync = SAMOVAR_POWER;
+      }
     }
 #ifdef SAMOVAR_USE_POWER
     if (request->hasArg("voltage")) {
