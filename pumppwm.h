@@ -11,15 +11,13 @@ bool pump_started;
 void init_pump_pwm(byte pin, int freq){
   pump_pwm.attachPin(pin, freq, 10);
   regulator.setDirection(REVERSE);        // направление регулирования (NORMAL/REVERSE). ПО УМОЛЧАНИЮ СТОИТ NORMAL
-  regulator.setLimits(10, 255);           // пределы (ставим для 8 битного ШИМ). ПО УМОЛЧАНИЮ СТОЯТ 0 И 255
+  regulator.setLimits(330, 1020);           // пределы (ставим для 8 битного ШИМ). ПО УМОЛЧАНИЮ СТОЯТ 0 И 255
   regulator.setpoint = TARGET_WATER_TEMP; // сообщаем регулятору температуру, которую он должен поддерживать
   pump_started = false;
 }
 
 void set_pump_pwm(float duty){
   if (!pump_started && duty > 0) {
-    pump_pwm.write(255);
-    delay(500);
     pump_started = true;
   }
   if (duty == 0) pump_started = false;
