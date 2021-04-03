@@ -87,6 +87,7 @@ String millis2time();
 String CurrentTime(void);
 void distiller_finish();
 void beer_finish();
+void change_samovar_mode();
 
 #ifdef USE_WEB_SERIAL
 void recvMsg(uint8_t *data, size_t len) {
@@ -643,7 +644,9 @@ void read_config() {
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
+  if (SamSetup.Mode == 255) SamSetup.Mode = 0;
 #ifdef SAMOVAR_USE_BLYNK
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
 #endif
+  change_samovar_mode();
 }
