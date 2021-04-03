@@ -15,6 +15,12 @@
 #undef USE_WATER_VALVE 
 #endif
 
+#ifdef BLYNK_SAMOVAR_TOOL
+#ifndef SAMOVAR_USE_BLYNK
+#define SAMOVAR_USE_BLYNK
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -275,6 +281,7 @@ struct SetupEEPROM {
   char blynkauth[33];
   char videourl[120];                                           //URL для потокового видео с камеры
   float DistTemp;                                               //Температура, при которой завершится дистилляция
+  byte Mode;                                                    //Режим работы Самовара
 };
 
 struct DSSensor {
