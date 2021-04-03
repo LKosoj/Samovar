@@ -6,6 +6,7 @@ void distiller_proc(){
     set_power(true);
     set_power_mode(POWER_SPEED_MODE);
     create_data();                    //создаем файл с данными
+    SteamSensor.Start_Pressure = bme_pressure;
     Msg = "Distillation started";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
@@ -14,20 +15,23 @@ void distiller_proc(){
   }
   
   float c_temp; //текущая температура в кубе с учетом корректировки давления или без
-  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.BodyTemp, bme_pressure);
+  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
   
   if (c_temp > SamSetup.DistTemp) {
     distiller_finish();
   }
-
 }
 
 void IRAM_ATTR distiller_finish(){
+    if (fileToAppend) {
+      fileToAppend.close();
+    }
     Msg = "Distillation finished";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("{DEVICE_NAME} Distillation finished");
 #endif
+    set_power(false);
     reset_sensor_counter();
 }
 
