@@ -15,10 +15,7 @@ void distiller_proc(){
 #endif
   }
   
-  float c_temp; //текущая температура в кубе с учетом корректировки давления или без
-  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
-  
-  if (c_temp > SamSetup.DistTemp) {
+  if (TankSensor.avgTemp >= SamSetup.DistTemp) {
     distiller_finish();
   }
 }
