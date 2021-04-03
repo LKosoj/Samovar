@@ -650,7 +650,12 @@ void IRAM_ATTR get_current_power() {
 
 //устанавливаем напряжение для регулятора напряжения
 void IRAM_ATTR set_current_power(float Volt) {
+  if (!PowerOn) return;
   target_power_volt = Volt;
+  if (Volt < 20){
+    set_power_mode(POWER_SLEEP_MODE);
+    return;
+  } else set_power_mode(POWER_WORK_MODE);
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 }
