@@ -110,6 +110,15 @@ function SaveFormToFile(form) {
   <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Прочие">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
+<h2>Настройки уровней для реле
+<div>
+Режим работы
+<select name="mode">
+  <option value="0" %RECT%>Ректификация</option>
+  <option value="1" %DIST%>Дистилляция</option>
+</select>
+</div>
+</h2>
 <h2>
 <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
 <label for='usepressure'>Использовать корректировку давления</label>
