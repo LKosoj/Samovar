@@ -1,4 +1,5 @@
 void distiller_finish();
+void set_power_mode(String Mode);
 
 void distiller_proc(){
 
