@@ -9,6 +9,25 @@ String setupKeyProcessor(const String& var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 
+void change_samovar_mode(){
+  if (SamSetup.Mode == 1) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
+    });
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
+    });
+  } else {
+    SamSetup.Mode = 0;
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
+    });
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
+    });
+  } 
+}
+
 void WebServerInit(void) {
 
   FS_init();                                        // Включаем работу с файловой системой
@@ -21,12 +40,7 @@ void WebServerInit(void) {
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
   server.serveStatic("/distiller.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor);
 
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
-  });
-  server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
-  });
+  change_samovar_mode();
 
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
     //TempStr = temp;
@@ -121,6 +135,8 @@ String setupKeyProcessor(const String& var)
   else if (var == "PipeColor") return (String)SamSetup.PipeColor;
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
   else if (var == "TankColor") return (String)SamSetup.TankColor;
+  else if (var == "RECT" && SamSetup.Mode == 0) return "selected";
+  else if (var == "DIST" && SamSetup.Mode == 1) return "selected";
   else if (var == "RAL" && !SamSetup.rele1) return "selected";
   else if (var == "RAH" && SamSetup.rele1) return "selected";
   else if (var == "RBL" && !SamSetup.rele2) return "selected";
@@ -245,6 +261,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("TankColor")) {
     request->arg("TankColor").toCharArray(SamSetup.TankColor, request->arg("TankColor").length() + 1);
+  }
+  if (request->hasArg("mode")) {
+    SamSetup.Mode = request->arg("mode").toInt();
   }
   if (request->hasArg("rele1")) {
     SamSetup.rele1 = request->arg("rele1").toInt();
