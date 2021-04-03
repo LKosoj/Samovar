@@ -7,7 +7,7 @@
 ESP32PWM pump_pwm;
 GyverPID regulator(0.1, 0.05, 0.01, 1000);
 
-void init_pump_pwm(byte pin, int freq){
+void init_pump_pwm(byte pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);
   regulator.setDirection(REVERSE);        // направление регулирования (NORMAL/REVERSE). ПО УМОЛЧАНИЮ СТОИТ NORMAL
   regulator.setLimits(280, 1020);           // пределы (ставим для 8 битного ШИМ). ПО УМОЛЧАНИЮ СТОЯТ 0 И 255
@@ -15,7 +15,7 @@ void init_pump_pwm(byte pin, int freq){
   pump_started = false;
 }
 
-void set_pump_pwm(float duty){
+void set_pump_pwm(float duty) {
   if (!pump_started && duty > 0) {
     pump_started = true;
   }
@@ -23,7 +23,7 @@ void set_pump_pwm(float duty){
   pump_pwm.write(duty);
 }
 
-void set_pump_speed_pid(float temp){
+void set_pump_speed_pid(float temp) {
   regulator.input = temp;
   set_pump_pwm(regulator.getResultNow());
 }

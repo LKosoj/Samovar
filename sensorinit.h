@@ -148,8 +148,8 @@ void sensor_init(void) {
   sensors.begin();                          // стартуем датчики температуры
 
   int dc = 0;
-  
-  while(sensors.getAddress(DSAddr[dc], dc)) {
+
+  while (sensors.getAddress(DSAddr[dc], dc)) {
     sensors.setResolution(DSAddr[dc], 12);                                 // устанавливаем разрешение для датчика
     dc++;
     if (dc > 4) break;
@@ -226,7 +226,7 @@ void sensor_init(void) {
 #endif
 
 #ifdef USE_WATER_PUMP
-  init_pump_pwm(WATER_PUMP_PIN,PUMP_PWM_FREQ);
+  init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
 #endif
 }
 
@@ -263,7 +263,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   WFtotalMilliLitres = 0;
   WthdrwlProgress = 0;
   TargetStepps = 0;
-  //Msg = "";  
+  //Msg = "";
 
   if (fileToAppend) {
     fileToAppend.close();
@@ -284,20 +284,20 @@ void printAddress(DeviceAddress deviceAddress)                        // фун�
   Serial.print(getDSAddress(deviceAddress));
 }
 
-String getDSAddress(DeviceAddress deviceAddress){
+String getDSAddress(DeviceAddress deviceAddress) {
   String dsaddr;
-    for (uint8_t j = 0; j < 8; j++)
-    {
-      if (deviceAddress[j] < 16) dsaddr += "0";
-      dsaddr += String(deviceAddress[j], HEX);
-    }
-  return dsaddr;  
+  for (uint8_t j = 0; j < 8; j++)
+  {
+    if (deviceAddress[j] < 16) dsaddr += "0";
+    dsaddr += String(deviceAddress[j], HEX);
+  }
+  return dsaddr;
 }
 
-String get_DSAddressList(String Address){
+String get_DSAddressList(String Address) {
   String s = "<option value='-1'>NONE</option>";
   String dsaddr = "";
-  for (int i = 0;i!=DScnt;i++){
+  for (int i = 0; i != DScnt; i++) {
     dsaddr = getDSAddress(DSAddr[i]);
     s += "<option value='" + String(i) + "'";
     if (Address == dsaddr) s = s + " " + "selected";
@@ -306,9 +306,9 @@ String get_DSAddressList(String Address){
   return s;
 }
 
-void IRAM_ATTR CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress){
-  for (int dsj=0 ; dsj<8 ; dsj++ )
+void IRAM_ATTR CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress) {
+  for (int dsj = 0 ; dsj < 8 ; dsj++ )
   {
-   DevTAddress[dsj] = DevSAddress[dsj] ;
+    DevTAddress[dsj] = DevSAddress[dsj] ;
   }
 }

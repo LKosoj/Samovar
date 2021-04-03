@@ -12,7 +12,7 @@
 #endif
 
 #ifdef USE_WATER_PUMP
-#undef USE_WATER_VALVE 
+#undef USE_WATER_VALVE
 #endif
 
 #ifdef BLYNK_SAMOVAR_TOOL
@@ -286,7 +286,7 @@ struct SetupEEPROM {
 
 struct DSSensor {
   DeviceAddress Sensor;                                          //адрес датчика температуры
-//  float Temp;                                                    //температура с датчика
+  //  float Temp;                                                    //температура с датчика
   float avgTemp;                                                 //средняя температура с датчика
   float SetTemp;                                                 //уставка по температуре, при достижении которой требуется реакция
   float BodyTemp;                                                //температура, с которой начался отбор тела
@@ -325,7 +325,7 @@ const char* host = SAMOVAR_HOST;
 //**************************************************************************************************************
 
 //**************************************************************************************************************
-byte DScnt =0;
+byte DScnt = 0;
 byte tcnt = 0;
 bool bmefound = true;
 //volatile float samovar_temp;                                  // Температура ESP32

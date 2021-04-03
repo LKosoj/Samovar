@@ -9,7 +9,7 @@ String setupKeyProcessor(const String& var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 
-void change_samovar_mode(){
+void change_samovar_mode() {
   if (SamSetup.Mode == 1) {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
@@ -25,7 +25,7 @@ void change_samovar_mode(){
     server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
-  } 
+  }
 }
 
 void WebServerInit(void) {
@@ -97,7 +97,10 @@ String indexKeyProcessor(const String& var)
   else if (var == "TankColor") return (String)SamSetup.TankColor;
   else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
   else if (var == "videourl") return (String)SamSetup.videourl;
-  else if (var == "showvideo") {if ((String)SamSetup.videourl != "") return "inline"; else return "none";};
+  else if (var == "showvideo") {
+    if ((String)SamSetup.videourl != "") return "inline";
+    else return "none";
+  };
 }
 
 String setupKeyProcessor(const String& var)
@@ -161,16 +164,16 @@ String calibrateKeyProcessor(const String& var)
 }
 
 void  handleSave(AsyncWebServerRequest *request) {
-/*  
-     int params = request->params();
-      for(int i=0;i<params;i++){
-        AsyncWebParameter* p = request->getParam(i);
-        Serial.print(p->name().c_str());
-        Serial.print("=");
-        Serial.println(p->value().c_str());
-      }
-      //return;
-*/ 
+  /*
+       int params = request->params();
+        for(int i=0;i<params;i++){
+          AsyncWebParameter* p = request->getParam(i);
+          Serial.print(p->name().c_str());
+          Serial.print("=");
+          Serial.println(p->value().c_str());
+        }
+        //return;
+  */
 
   if (request->hasArg("SteamDelay")) {
     SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
@@ -228,7 +231,7 @@ void  handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("useautospeed")) {
     SamSetup.useautospeed = true;
   }
-  
+
   if (request->hasArg("autospeed")) {
     SamSetup.autospeed = request->arg("autospeed").toInt();
   }

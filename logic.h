@@ -74,7 +74,7 @@ void IRAM_ATTR withdrawal(void) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем
-      if (SamSetup.useautospeed){
+      if (SamSetup.useautospeed) {
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
       }
@@ -97,7 +97,7 @@ void IRAM_ATTR withdrawal(void) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем
-      if (SamSetup.useautospeed){
+      if (SamSetup.useautospeed) {
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
       }
@@ -190,13 +190,13 @@ void IRAM_ATTR pause_withdrawal(bool Pause) {
   }
 }
 
-void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process){
+void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process) {
   if (pumpspeed < 1) return;
   if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
-  
+
   bool cp = continue_process;
   if (!stepper.getState()) cp = false;
-  
+
   CurrrentStepperSpeed = pumpspeed;
   Serial.print("set_pump_speed = ");
   Serial.println(CurrrentStepperSpeed);
@@ -269,8 +269,8 @@ void IRAM_ATTR next_capacity(void) {
 }
 
 void set_program(String WProgram) {
-//  WProgram.trim();
-//  if (WProgram = "") return;
+  //  WProgram.trim();
+  //  if (WProgram = "") return;
   char c[500];
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
@@ -402,7 +402,7 @@ void IRAM_ATTR run_program(byte num) {
 //функция корректировки температуры кипения спирта в зависимости от давления
 float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
   if (start_temp == 0) return 0;
-  
+
   //скорректированная температура кипения спирта при текущем давлении
   static float c_temp;
 
@@ -424,8 +424,8 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
   return c_temp;
 }
 
-void IRAM_ATTR set_body_temp(){
-  if (program[ProgramNum].WType == "B"){
+void IRAM_ATTR set_body_temp() {
+  if (program[ProgramNum].WType == "B") {
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
@@ -449,14 +449,14 @@ void IRAM_ATTR check_alarm() {
   }
 
 #ifdef USE_WATER_PUMP
-      //Устанавливаем ШИМ для насоса в зависимости от температуры воды
-      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP){
-        set_pump_speed_pid(WaterSensor.avgTemp);
-      } else {
-        if (pump_started) set_pump_pwm(0);
-      }
+  //Устанавливаем ШИМ для насоса в зависимости от температуры воды
+  if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP) {
+    set_pump_speed_pid(WaterSensor.avgTemp);
+  } else {
+    if (pump_started) set_pump_pwm(0);
+  }
 #endif
-      
+
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
@@ -560,7 +560,7 @@ void IRAM_ATTR check_alarm() {
     }
   }
 #ifdef USE_WATER_VALVE
-  if (WaterSensor.avgTemp >= WaterSensor.SetTemp){
+  if (WaterSensor.avgTemp >= WaterSensor.SetTemp) {
     digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
   } else {
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
@@ -652,7 +652,7 @@ void IRAM_ATTR get_current_power() {
 void IRAM_ATTR set_current_power(float Volt) {
   if (!PowerOn) return;
   target_power_volt = Volt;
-  if (Volt < 20){
+  if (Volt < 20) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
   } else set_power_mode(POWER_WORK_MODE);

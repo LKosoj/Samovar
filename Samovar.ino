@@ -19,7 +19,7 @@
 #include <EEPROM.h>
 #include <SPIFFS.h>
 #include <SPIFFSEditor.h>
-#include <ESPAsyncWiFiManager.h> 
+#include <ESPAsyncWiFiManager.h>
 
 
 #define DRIVER_STEP_TIME 1
@@ -138,11 +138,11 @@ void IRAM_ATTR isrENC_TICK() {
 //Запускаем таск для получения точного времени из интернет и записи в лог
 void IRAM_ATTR triggerGetClock(void * parameter) {
   while (true) {
-      if (WiFi.status() == WL_CONNECTED) clok1();
+    if (WiFi.status() == WL_CONNECTED) clok1();
 #ifdef SAMOVAR_USE_BLYNK
-      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
-        Blynk.connect(BLYNK_TIMEOUT_MS);
-      }
+    if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
+      Blynk.connect(BLYNK_TIMEOUT_MS);
+    }
 #endif
     vTaskDelay(10000);
   }
@@ -153,7 +153,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
   byte CurMinST, OldMinST;
   byte tcntST = 0;
   unsigned long oldTime;                                          // Предыдущее время в милисекундах
-  
+
   while (true) {
     CurMinST = (millis() / 1000 );
 
@@ -240,7 +240,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 }
 
 void setup() {
-  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP  
+  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
 
@@ -332,7 +332,7 @@ void setup() {
 
   //Подключаемся к WI-FI
   AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
-  AsyncWiFiManager wifiManager(&server,&dns);
+  AsyncWiFiManager wifiManager(&server, &dns);
   wifiManager.setAPCallback(configModeCallback);
   wifiManager.setDebugOutput(false);
   wifiManager.addParameter(&custom_blynk_token);
@@ -349,7 +349,7 @@ void setup() {
   StIP.toCharArray(ipst, 16);
 
   Serial.println(StIP);
-  
+
   if (!MDNS.begin(host)) { //http://samovar.local
     Serial.println("Error setting up MDNS responder!");
   } else {
@@ -357,7 +357,7 @@ void setup() {
     Serial.println("mDNS responder started");
 #endif
   }
-  
+
   //connectWiFi();
   writeString("Connected", 4);
 
@@ -468,6 +468,8 @@ void setup() {
   writeString("                  ", 3);
   writeString("      Started     ", 4);
   Serial.println("Samovar ready");
+  //Serial.print("Size = ");
+  //Serial.println(sizeof(SamSetup));
 }
 
 void loop() {
