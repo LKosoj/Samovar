@@ -495,9 +495,9 @@ void loop() {
         menu_samovar_start();
         break;
       case SAMOVAR_POWER:
+        set_power(!PowerOn);
         if (SamovarStatusInt == 1000) distiller_finish();
         if (SamovarStatusInt == 2000) beer_finish();
-        set_power(!PowerOn);
         break;
       case SAMOVAR_RESET:
         samovar_reset();
