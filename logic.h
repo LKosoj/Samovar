@@ -521,7 +521,7 @@ void IRAM_ATTR check_alarm() {
   }
 #endif
 
-  if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && current_power_mode == POWER_SPEED_MODE) {
+  if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && SamovarStatusInt == 50) {
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     Msg = "Working mode set!";
     SamovarStatusInt = 51;
