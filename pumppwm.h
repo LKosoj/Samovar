@@ -5,7 +5,7 @@
 #define PUMP_PWM_FREQ 100
 
 ESP32PWM pump_pwm;
-GyverPID regulator(5, 0.05, 0.01, 1000);
+GyverPID regulator(10, 0.05, 0.01, 1000);
 
 void init_pump_pwm(byte pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);
@@ -23,6 +23,7 @@ void set_pump_pwm(float duty) {
   }
   if (duty == 0) pump_started = false;
   pump_pwm.write(duty);
+  Msg = duty;
 }
 
 void set_pump_speed_pid(float temp) {
