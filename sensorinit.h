@@ -211,8 +211,7 @@ void sensor_init(void) {
 
 #ifdef USE_WATERSENSOR
   //Настраиваем датчик потока
-  pinMode(WATERSENSOR_PIN, INPUT);
-  //digitalWrite(WATERSENSOR_PIN, HIGH);
+  pinMode(WATERSENSOR_PIN, INPUT_PULLUP);
 #endif
 
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
