@@ -470,9 +470,9 @@ void IRAM_ATTR check_alarm() {
 
 #ifdef USE_WATERSENSOR
   //Проверим, что вода подается
-  if (WFAlarmCount > WF_ALARM_COUNT) {
+  if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
-    set_power(false);
+    sam_command_sync = SAMOVAR_POWER;
     Msg = "Emergency power OFF! Water error";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
