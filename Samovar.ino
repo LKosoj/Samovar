@@ -220,14 +220,16 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
 #ifdef USE_WATERSENSOR
 
-      if (WFpulseCount == 0 && SteamSensor.avgTemp > 70 && PowerOn) {
+      WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
+      WFflowMilliLitres = WFflowRate * 100 / 6;
+      WFtotalMilliLitres += WFflowMilliLitres;
+      
+      if (WFflowRate <= 0.11  && TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP && PowerOn) {
         WFAlarmCount ++;
       } else {
         WFAlarmCount = 0;
       }
-      WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
-      WFflowMilliLitres = WFflowRate * 100 / 6;
-      WFtotalMilliLitres += WFflowMilliLitres;
+
       WFpulseCount = 0;
       oldTime = millis();
       vTaskDelay(10);
