@@ -236,6 +236,36 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       vTaskDelay(10);
 #endif
 
+      //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
+      if (SteamSensor.ErrCount > 10){
+        Msg = "Alarm! Steam sensor error!";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Alarm! {DEVICE_NAME} Steam sensor error!");
+#endif        
+      }
+      if (PipeSensor.ErrCount > 10){
+        Msg = "Alarm! Pipe sensor error!";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Alarm! {DEVICE_NAME} Pipe sensor error!");
+#endif        
+      }
+      if (WaterSensor.ErrCount > 10){
+        Msg = "Alarm! Water sensor error!";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Alarm! {DEVICE_NAME} Water sensor error!");
+#endif        
+      }
+      if (TankSensor.ErrCount > 10){
+        Msg = "Alarm! Tank sensor error!";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Alarm! {DEVICE_NAME} Tank sensor error!");
+#endif        
+      }
+
       OldMinST = CurMinST;
     }
     vTaskDelay(10);
