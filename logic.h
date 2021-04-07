@@ -448,12 +448,17 @@ void IRAM_ATTR check_alarm() {
     open_valve(true);
   }
 
+  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 10) {
+    open_valve(false);
+#ifdef USE_WATER_PUMP
+    if (pump_started) set_pump_pwm(0);
+#endif
+  }
+
 #ifdef USE_WATER_PUMP
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
-  if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP) {
+  if (valve_status) {
     set_pump_speed_pid(WaterSensor.avgTemp);
-  } else {
-    if (pump_started) set_pump_pwm(0);
   }
 #endif
 
