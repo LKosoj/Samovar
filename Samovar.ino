@@ -238,6 +238,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
       if (SteamSensor.ErrCount > 10){
+        SteamSensor.ErrCount = - 110;
         Msg = "Alarm! Steam sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
@@ -245,6 +246,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif        
       }
       if (PipeSensor.ErrCount > 10){
+        PipeSensor.ErrCount = - 110;
         Msg = "Alarm! Pipe sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
@@ -252,6 +254,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif        
       }
       if (WaterSensor.ErrCount > 10){
+        WaterSensor.ErrCount = - 110;
         Msg = "Alarm! Water sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
@@ -259,6 +262,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif        
       }
       if (TankSensor.ErrCount > 10){
+        TankSensor.ErrCount = - 110;
         Msg = "Alarm! Tank sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
