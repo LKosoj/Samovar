@@ -250,7 +250,7 @@ DNSServer dns;
 enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER};
 volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
 
-enum SAMOVAR_MODE {SAMOVAR_NO_MODE, SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_SUVID};
+enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_SUVID};
 volatile SAMOVAR_MODE Samovar_Mode;
 
 struct SetupEEPROM {
@@ -289,7 +289,7 @@ struct SetupEEPROM {
   char blynkauth[33];
   char videourl[120];                                           //URL для потокового видео с камеры
   float DistTemp;                                               //Температура, при которой завершится дистилляция
-  byte Mode;                                                    //Режим работы Самовара
+  int Mode;                                                    //Режим работы Самовара
 };
 
 struct DSSensor {
