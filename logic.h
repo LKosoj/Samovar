@@ -458,7 +458,7 @@ void IRAM_ATTR check_alarm() {
 #endif
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
+  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= MAX_TANK_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
     Msg = "Emergency power OFF! Temperature error";
