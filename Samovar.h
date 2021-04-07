@@ -33,7 +33,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.19"
+#define SAMOVAR_VERSION "1.20"
 //#define __SAMOVAR_DEBUG
 
 //--------------------------------------------------------------------------------------------------------------
@@ -132,7 +132,9 @@ uint8_t temprature_sens_read();
 #ifndef WATERSENSOR_PIN
 #define WATERSENSOR_PIN 36
 #endif
+#ifndef WF_CALIBRATION
 #define WF_CALIBRATION 98 //Значение на датчике F=98*Q(L/min)
+#endif
 #define WF_ALARM_COUNT 20 //Секунд до отключения нагрева, если в течении этого времени не будет подана вода охлаждения
 //**************************************************************************************************************
 
@@ -245,6 +247,12 @@ WebSerialClass WebSerial;
 
 DNSServer dns;
 
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER};
+volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
+
+enum SAMOVAR_MODE {SAMOVAR_NO_MODE, SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_SUVID};
+volatile SAMOVAR_MODE Samovar_Mode;
+
 struct SetupEEPROM {
   byte flag;                                                   //Флаг для записи в память
   float DeltaSteamTemp;                                        //Корректировка температурного датчика
@@ -313,12 +321,6 @@ DSSensor WaterSensor;                                           //сенсор �
 DSSensor TankSensor;                                            //сенсор температуры в кубе
 
 WProgram program[CAPACITY_NUM * 2];                             //массив строк для записи программы отбора. Не больше чем CAPACITY_NUM * 2
-
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER};
-volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
-
-enum SAMOVAR_MODE {SAMOVAR_NO_MODE, SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE};
-volatile SAMOVAR_MODE Samovar_Mode;
 
 //**************************************************************************************************************
 const char* host = SAMOVAR_HOST;
