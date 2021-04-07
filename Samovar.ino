@@ -424,7 +424,7 @@ void setup() {
 
 #ifdef USE_WATERSENSOR
   //вешаем прерывание на изменения датчика потока воды
-  attachInterrupt(WATERSENSOR_PIN, WFpulseCounter, FALLING);
+  attachInterrupt(WATERSENSOR_PIN, WFpulseCounter, RISING);
 #endif
 
 #ifdef USE_HEAD_LEVEL_SENSOR
@@ -648,9 +648,25 @@ void read_config() {
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
-  if (SamSetup.Mode == 255) SamSetup.Mode = 0;
+  if (SamSetup.Mode > 3) SamSetup.Mode = 0;
 #ifdef SAMOVAR_USE_BLYNK
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
 #endif
-  change_samovar_mode();
+  
+//  change_samovar_mode();
+
+  switch (SamSetup.Mode) {
+  case 0:
+    Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+    break;
+  case 1:
+    Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
+    break;
+  case 2:
+    Samovar_Mode = SAMOVAR_BEER_MODE;
+    break;
+  case 3:
+    Samovar_Mode = SAMOVAR_SUVID;
+    break;    
+  }
 }
