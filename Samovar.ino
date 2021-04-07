@@ -188,7 +188,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         check_alarm_distiller();
       } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         check_alarm_beer();
-        WFpulseCount = 1;
+        WFpulseCount = 100;
       }
 
       vTaskDelay(10);
@@ -221,10 +221,11 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #ifdef USE_WATERSENSOR
 
       WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
+      if (WFflowRate < 0.11) WFflowRate = 0;
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
       
-      if (WFflowRate <= 0.11  && TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP && PowerOn) {
+      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP && PowerOn) {
         WFAlarmCount ++;
       } else {
         WFAlarmCount = 0;
@@ -424,7 +425,7 @@ void setup() {
 
 #ifdef USE_WATERSENSOR
   //вешаем прерывание на изменения датчика потока воды
-  attachInterrupt(WATERSENSOR_PIN, WFpulseCounter, RISING);
+  attachInterrupt(WATERSENSOR_PIN, WFpulseCounter, FALLING);
 #endif
 
 #ifdef USE_HEAD_LEVEL_SENSOR
@@ -647,26 +648,12 @@ void read_config() {
   CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
-  if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
+
   if (SamSetup.Mode > 3) SamSetup.Mode = 0;
+  Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
+
+  if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
 #ifdef SAMOVAR_USE_BLYNK
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
 #endif
-  
-//  change_samovar_mode();
-
-  switch (SamSetup.Mode) {
-  case 0:
-    Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-    break;
-  case 1:
-    Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
-    break;
-  case 2:
-    Samovar_Mode = SAMOVAR_BEER_MODE;
-    break;
-  case 3:
-    Samovar_Mode = SAMOVAR_SUVID;
-    break;    
-  }
 }
