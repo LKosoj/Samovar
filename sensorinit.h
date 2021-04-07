@@ -108,15 +108,31 @@ void IRAM_ATTR DS_getvalue(void) {
 
   if (ss != -127) {
     SteamSensor.avgTemp = ss + SamSetup.DeltaSteamTemp;
+    SteamSensor.PrevTemp = SteamSensor.avgTemp;
+    SteamSensor.ErrCount = 0;
+  } else {
+    if (SteamSensor.PrevTemp > 0) SteamSensor.ErrCount++;
   }
   if (ps != -127) {
     PipeSensor.avgTemp = ps + SamSetup.DeltaPipeTemp;
+    PipeSensor.PrevTemp = PipeSensor.avgTemp;
+    PipeSensor.ErrCount = 0;
+  } else {
+    if (PipeSensor.PrevTemp > 0) PipeSensor.ErrCount++;
   }
   if (ws != -127) {
     WaterSensor.avgTemp = ws + SamSetup.DeltaWaterTemp;
+    WaterSensor.PrevTemp = WaterSensor.avgTemp;
+    WaterSensor.ErrCount = 0;
+  } else {
+    if (WaterSensor.PrevTemp > 0) WaterSensor.ErrCount++;
   }
   if (ts != -127) {
     TankSensor.avgTemp = ts + SamSetup.DeltaTankTemp;
+    TankSensor.PrevTemp = TankSensor.avgTemp;
+    TankSensor.ErrCount = 0;
+  } else {
+    if (TankSensor.PrevTemp > 0) TankSensor.ErrCount++;
   }
 }
 
