@@ -10,7 +10,7 @@ String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 
 void change_samovar_mode() {
-  if (SamSetup.Mode == 1) {
+  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
@@ -18,7 +18,7 @@ void change_samovar_mode() {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
   } else {
-    SamSetup.Mode = 0;
+    Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
     server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
@@ -140,6 +140,8 @@ String setupKeyProcessor(const String& var)
   else if (var == "TankColor") return (String)SamSetup.TankColor;
   else if (var == "RECT" && SamSetup.Mode == 0) return "selected";
   else if (var == "DIST" && SamSetup.Mode == 1) return "selected";
+  else if (var == "BEER" && SamSetup.Mode == 2) return "selected";
+  else if (var == "SUVID" && SamSetup.Mode == 3) return "selected";
   else if (var == "RAL" && !SamSetup.rele1) return "selected";
   else if (var == "RAH" && SamSetup.rele1) return "selected";
   else if (var == "RBL" && !SamSetup.rele2) return "selected";
