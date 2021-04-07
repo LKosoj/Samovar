@@ -235,7 +235,6 @@ void IRAM_ATTR reset_sensor_counter(void) {
   set_power_mode(POWER_SLEEP_MODE);
 #endif
 
-  Samovar_Mode = SAMOVAR_NO_MODE;
   stopService();
   stepper.setMaxSpeed(-1);
   stepper.setSpeed(-1);
