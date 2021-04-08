@@ -95,6 +95,7 @@ String indexKeyProcessor(const String& var)
   else if (var == "PipeColor") return (String)SamSetup.PipeColor;
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
   else if (var == "TankColor") return (String)SamSetup.TankColor;
+  else if (var == "ACPColor") return (String)SamSetup.ACPColor;
   else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
   else if (var == "videourl") return (String)SamSetup.videourl;
   else if (var == "showvideo") {
@@ -113,12 +114,14 @@ String setupKeyProcessor(const String& var)
   else if (var == "SetPipeTemp") return (String)SamSetup.SetPipeTemp;
   else if (var == "SetWaterTemp") return (String)SamSetup.SetWaterTemp;
   else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
+  else if (var == "SetACPTemp") return (String)SamSetup.SetACPTemp;
   else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
   else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
   else if (var == "SteamDelay") return (String)SamSetup.SteamDelay;
   else if (var == "PipeDelay") return (String)SamSetup.PipeDelay;
   else if (var == "WaterDelay") return (String)SamSetup.WaterDelay;
   else if (var == "TankDelay") return (String)SamSetup.TankDelay;
+  else if (var == "ACPDelay") return (String)SamSetup.ACPDelay;
   else if (var == "TimeZone") return (String)SamSetup.TimeZone;
   else if (var == "LogPeriod") return (String)SamSetup.LogPeriod;
   else if (var == "HeaterR") return (String)SamSetup.HeaterResistant;
@@ -138,6 +141,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "PipeColor") return (String)SamSetup.PipeColor;
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
   else if (var == "TankColor") return (String)SamSetup.TankColor;
+  else if (var == "ACPColor") return (String)SamSetup.ACPColor;
   else if (var == "RECT" && SamSetup.Mode == 0) return "selected";
   else if (var == "DIST" && SamSetup.Mode == 1) return "selected";
   else if (var == "BEER" && SamSetup.Mode == 2) return "selected";
@@ -154,6 +158,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "PipeAddr") return get_DSAddressList(getDSAddress(PipeSensor.Sensor));
   else if (var == "WaterAddr") return get_DSAddressList(getDSAddress(WaterSensor.Sensor));
   else if (var == "TankAddr") return get_DSAddressList(getDSAddress(TankSensor.Sensor));
+  else if (var == "ACPAddr") return get_DSAddressList(getDSAddress(ACPSensor.Sensor));
   return String();
 }
 
@@ -189,6 +194,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("TankDelay")) {
     SamSetup.TankDelay = request->arg("TankDelay").toInt();
   }
+  if (request->hasArg("ACPDelay")) {
+    SamSetup.ACPDelay = request->arg("ACPDelay").toInt();
+  }
 
   if (request->hasArg("DeltaSteamTemp")) {
     SamSetup.DeltaSteamTemp = request->arg("DeltaSteamTemp").toFloat();
@@ -202,6 +210,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("DeltaTankTemp")) {
     SamSetup.DeltaTankTemp = request->arg("DeltaTankTemp").toFloat();
   }
+  if (request->hasArg("DeltaACPTemp")) {
+    SamSetup.DeltaACPTemp = request->arg("DeltaACPTemp").toFloat();
+  }
   if (request->hasArg("SetSteamTemp")) {
     SamSetup.SetSteamTemp = request->arg("SetSteamTemp").toFloat();
   }
@@ -213,6 +224,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("SetTankTemp")) {
     SamSetup.SetTankTemp = request->arg("SetTankTemp").toFloat();
+  }
+  if (request->hasArg("SetACPTemp")) {
+    SamSetup.SetACPTemp = request->arg("SetACPTemp").toFloat();
   }
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
@@ -267,6 +281,9 @@ void  handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("TankColor")) {
     request->arg("TankColor").toCharArray(SamSetup.TankColor, request->arg("TankColor").length() + 1);
   }
+  if (request->hasArg("ACPColor")) {
+    request->arg("ACPColor").toCharArray(SamSetup.ACPColor, request->arg("ACPColor").length() + 1);
+  }
   if (request->hasArg("mode")) {
     SamSetup.Mode = request->arg("mode").toInt();
   }
@@ -312,6 +329,14 @@ void  handleSave(AsyncWebServerRequest *request) {
       SamSetup.TankAdress[0] = 255;
       TankSensor.Sensor[0] = 255;
       TankSensor.avgTemp = 0;
+    }
+  }
+  if (request->hasArg("ACPAddr")) {
+    if (request->arg("ACPAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("ACPAddr").toInt()], SamSetup.ACPAdress);
+    else {
+      SamSetup.ACPAdress[0] = 255;
+      ACPSensor.Sensor[0] = 255;
+      ACPSensor.avgTemp = 0;
     }
   }
 

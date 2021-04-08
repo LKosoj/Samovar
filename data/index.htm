@@ -96,6 +96,7 @@ document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp;
 document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp;
 document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp;
 document.getElementById('TankTemp').innerHTML = myObj.TankTemp;
+document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp;
 document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure;
 document.getElementById('start_pressure').innerHTML = myObj.start_pressure;
 document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
@@ -198,7 +199,10 @@ Samovar v. <span id='version'></span>
 <div class="text column" style="color: %PipeColor%;">Т в царге: <span id='PipeTemp' style="font-size: xx-large;"></span>&#176C</div>
 <div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176C</div>
 </div>
-<div class="text" style="color: black;">Дельта температур: <span id='DeltaTemp' style="font-size: xx-large;"></span>&#176C</div>
+<div class="container">
+<div class="text column" style="color: black;">Дельта температур: <span id='DeltaTemp' style="font-size: xx-large;"></span>&#176C</div>
+<div class="text column" style="color: %ACPColor%;">Т в ТСА: <span id='ACPTemp' style="font-size: xx-large;"></span>&#176C</div>
+</div>
 <div class="container">
 <div class="text column">Давление: <span id='bme_pressure'></span> мм рт. ст.</div>
 <div class="text column">В начале: <span id='start_pressure'></span> мм рт. ст.</div>

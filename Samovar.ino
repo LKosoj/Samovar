@@ -269,6 +269,14 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       Blynk.notify("Alarm! {DEVICE_NAME} Tank sensor error!");
 #endif        
       }
+      if (ACPSensor.ErrCount > 10){
+        ACPSensor.ErrCount = - 110;
+        Msg = "Alarm! ACP sensor error!";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Alarm! {DEVICE_NAME} ACP sensor error!");
+#endif        
+      }
 
       OldMinST = CurMinST;
     }
@@ -320,12 +328,14 @@ void setup() {
     SamSetup.SetPipeTemp = 0;
     SamSetup.SetWaterTemp = 0;
     SamSetup.SetTankTemp = 0;
+    SamSetup.SetACPTemp = 0;
     SamSetup.StepperStepMl = STEPPER_STEP_ML;
     SamSetup.UsePreccureCorrect = true;
     SamSetup.SteamDelay = 20;
     SamSetup.PipeDelay = 20;
     SamSetup.WaterDelay = 20;
     SamSetup.TankDelay = 20;
+    SamSetup.ACPDelay = 20;
     SamSetup.HeaterResistant = 15.2;
     SamSetup.LogPeriod = 3;
     SamSetup.TimeZone = 3;
@@ -337,6 +347,8 @@ void setup() {
     memcpy(str3, SamSetup.WaterColor, sizeof(str3));
     char str4[] = "crimson\0";
     memcpy(str4, SamSetup.TankColor, sizeof(str4));
+    char str5[] = "grey\0";
+    memcpy(str5, SamSetup.ACPColor, sizeof(str5));
     SamSetup.blynkauth[0] = '\0';
     SamSetup.videourl[0] = '\0';
     EEPROM.put(0, SamSetup);
@@ -615,6 +627,7 @@ void getjson (void) {
   jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp, 3);
   jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp, 3);
   jsondoc["TankTemp"] = format_float(TankSensor.avgTemp, 3);
+  jsondoc["ACPTemp"] = format_float(ACPSensor.avgTemp, 3);
   jsondoc["version"] = SAMOVAR_VERSION;
   jsondoc["VolumeAll"] = get_liquid_volume();
   jsondoc["currentvolume"] = currentvolume;
@@ -671,10 +684,12 @@ void read_config() {
   PipeSensor.SetTemp = SamSetup.SetPipeTemp;
   WaterSensor.SetTemp = SamSetup.SetWaterTemp;
   TankSensor.SetTemp = SamSetup.SetTankTemp;
+  ACPSensor.SetTemp = SamSetup.SetACPTemp;
   SteamSensor.Delay = SamSetup.SteamDelay;
   PipeSensor.Delay = SamSetup.PipeDelay;
   WaterSensor.Delay = SamSetup.WaterDelay;
   TankSensor.Delay = SamSetup.TankDelay;
+  ACPSensor.Delay = SamSetup.ACPDelay;
   if (SamSetup.HeaterResistant == 0) SamSetup.HeaterResistant = 10;
   if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
   if (SamSetup.autospeed >= 100) SamSetup.autospeed = 0;
@@ -682,6 +697,7 @@ void read_config() {
   CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
+  CopyDSAddress(SamSetup.ACPAdress, ACPSensor.Sensor);
 
   if (SamSetup.Mode > 3) SamSetup.Mode = 0;
   Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;

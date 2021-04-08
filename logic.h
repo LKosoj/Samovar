@@ -463,13 +463,18 @@ void IRAM_ATTR check_alarm() {
 #endif
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= MAX_TANK_TEMP) && PowerOn) {
+  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= MAX_TANK_TEMP || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
-    Msg = "Emergency power OFF! Temperature error";
+    String s;
+    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = " Steam";
+    if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = " Water";
+    if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = " Tank";
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = " ACP";
+    Msg = "Emergency power OFF! Temperature error" + s;
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Temperature error");
+    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Temperature error" + s);
 #endif
   }
 

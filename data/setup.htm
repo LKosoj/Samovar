@@ -199,6 +199,19 @@ function SaveFormToFile(form) {
 <h2>Уставка датчика в кубе: <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176C</h2>
 <h2>Задержка отбора при выходе Т в кубе за уставку: <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
 </div>
+<div style="color: %ACPColor%;">
+<h2>
+<div>
+Адрес датчика в ТСА
+<select name="ACPAddr">
+%ACPAddr%
+</select>
+</div>
+</h2>
+<h2>Корректировка датчика в ТСА <input name='DeltaACPTemp' type='text' value='%DeltaACPTemp%'>&#176C</h2>
+<h2>Уставка датчика в ТСА: <input name='SetACPTemp' type='text' value='%SetACPTemp%'>&#176C</h2>
+<h2>Задержка отбора при выходе Т в ТСА за уставку: <input name='ACPDelay' type='text' value='%ACPDelay%'> сек</h2>
+</div>
 </div>
 
 <div id="Pump" class="tabcontent">
@@ -230,6 +243,10 @@ function SaveFormToFile(form) {
 <div>
     <input type="color" id="TankColor" name="TankColor" value="%TankColor%">
     <label for="TankColor">Температура датчика в кубе</label>
+</div>
+<div>
+    <input type="color" id="ACPColor" name="ACPColor" value="%ACPColor%">
+    <label for="ACPColor">Температура датчика в ТСА</label>
 </div>
 </h2>
 <p><a href="https://www.w3schools.com/colors/colors_picker.asp" target="blank">цвета можно подобрать тут</a></p>

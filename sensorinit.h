@@ -97,11 +97,12 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
   //return;
-  float ss, ps, ws, ts;
-  ss = sensors.getTempC(SteamSensor.Sensor);                   // считываем температуру с датчика 0
+  float ss, ps, ws, ts, acp;
+  ss = sensors.getTempC(SteamSensor.Sensor);                    // считываем температуру с датчика 0
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
-  ws = sensors.getTempC(WaterSensor.Sensor);                   // считываем температуру с датчика 2
+  ws = sensors.getTempC(WaterSensor.Sensor);                    // считываем температуру с датчика 2
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
+  acp = sensors.getTempC(ACPSensor.Sensor);                     // считываем температуру с датчика 4
 
   //return;
   sensors.requestTemperatures();
@@ -133,6 +134,13 @@ void IRAM_ATTR DS_getvalue(void) {
     TankSensor.ErrCount = 0;
   } else {
     if (TankSensor.PrevTemp > 0) TankSensor.ErrCount++;
+  }
+  if (acp != -127) {
+    ACPSensor.avgTemp = acp + SamSetup.DeltaACPTemp;
+    ACPSensor.PrevTemp = ACPSensor.avgTemp;
+    ACPSensor.ErrCount = 0;
+  } else {
+    if (ACPSensor.PrevTemp > 0) ACPSensor.ErrCount++;
   }
 }
 
@@ -196,6 +204,9 @@ void sensor_init(void) {
   Serial.print("4 Sensor Address: ");                                  // пишем адрес датчика 3
   printAddress(DSAddr[3]);
   Serial.println();
+  Serial.print("5 Sensor Address: ");                                  // пишем адрес датчика 4
+  printAddress(DSAddr[4]);
+  Serial.println();
 #endif
 
   sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
@@ -214,6 +225,9 @@ void sensor_init(void) {
   Serial.println();
   Serial.print("4 Sensor Resolution: ");                                // пишем разрешение для датчика 3
   Serial.print(sensors.getResolution(DSAddr[3]), DEC);
+  Serial.println();
+  Serial.print("5 Sensor Resolution: ");                                // пишем разрешение для датчика 3
+  Serial.print(sensors.getResolution(DSAddr[4]), DEC);
   Serial.println();
 #endif
 
