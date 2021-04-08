@@ -206,8 +206,23 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         for (int i = ProgramNum + 1; i < ProgramLen; i++) {
           WthdrwTimeAll += program[i].Time;
         }
-        WthdrwTimeS = (String)((unsigned int)WthdrwTime) + ":" + (String)((unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60));
-        WthdrwTimeAllS = (String)((unsigned int)WthdrwTimeAll) + ":" + (String)((unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60));
+
+        String h, m;
+        unsigned int mi;
+        if (WthdrwTime < 10) h = "0"; else h = "";
+        h += (String)((unsigned int)WthdrwTime);
+        mi = (unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60);
+        if (mi < 10) m = "0"; else m = "";
+        m += (String)mi;
+        
+        WthdrwTimeS = h + ":" + m;
+        
+        if (WthdrwTime < 10) h = "0"; else h = "";
+        h += (String)((unsigned int)WthdrwTimeAll);
+        mi = (unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60);
+        if (mi < 10) m = "0"; else m = "";
+        m += (String)mi;
+        WthdrwTimeAllS = h + ":" + m;
 
         //прогресс переводим в проценты
         WthdrwlProgress = wp * 100;
@@ -321,9 +336,10 @@ void setup() {
   if (SamSetup.flag > 250) {
     SamSetup.flag = 1;
     SamSetup.DeltaSteamTemp = 0.1;
-    SamSetup.DeltaPipeTemp = 1;
+    SamSetup.DeltaPipeTemp = 0.2;
     SamSetup.DeltaWaterTemp = 0;
     SamSetup.DeltaTankTemp = 0;
+    SamSetup.DeltaACPTemp = 0;
     SamSetup.SetSteamTemp = 0;
     SamSetup.SetPipeTemp = 0;
     SamSetup.SetWaterTemp = 0;
