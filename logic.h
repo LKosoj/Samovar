@@ -565,9 +565,9 @@ void IRAM_ATTR check_alarm() {
     }
   }
 #ifdef USE_WATER_VALVE
-  if (WaterSensor.avgTemp >= WaterSensor.SetTemp) {
+  if (WaterSensor.avgTemp >= TARGET_WATER_TEMP + 1) {
     digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
-  } else {
+  } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1){
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
