@@ -110,6 +110,7 @@ String setupKeyProcessor(const String& var)
   else if (var == "DeltaPipeTemp") return (String)SamSetup.DeltaPipeTemp;
   else if (var == "DeltaWaterTemp") return (String)SamSetup.DeltaWaterTemp;
   else if (var == "DeltaTankTemp") return (String)SamSetup.DeltaTankTemp;
+  else if (var == "DeltaACPTemp") return (String)SamSetup.DeltaACPTemp;
   else if (var == "SetSteamTemp") return (String)SamSetup.SetSteamTemp;
   else if (var == "SetPipeTemp") return (String)SamSetup.SetPipeTemp;
   else if (var == "SetWaterTemp") return (String)SamSetup.SetWaterTemp;
