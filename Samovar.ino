@@ -225,7 +225,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
       
-      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP && PowerOn) {
+      if (TankSensor.avgTemp > OPEN_VALVE_TANK_TEMP && PowerOn && WFpulseCount == 0) {
         WFAlarmCount ++;
       } else {
         WFAlarmCount = 0;
