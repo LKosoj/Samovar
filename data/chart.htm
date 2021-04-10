@@ -50,6 +50,8 @@ document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
 document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
 document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
 document.getElementById('Status').innerHTML = myObj.Status;
+var dt = myObj.PipeTemp - myObj.SteamTemp;
+document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
 }
 };
 xhttp.open("GET", "/ajax", true);
@@ -175,20 +177,20 @@ function refresh_chart(){
 <div id="chartdiv"></div>
 <form action='none' onsubmit='return false'>
 <h1>Статус</h1>
-<h2><input id='refresh' type='checkbox' name='refresh' value='refresh' checked='checked' onclick='refresh_chart()'><label for='refresh'>Обновлять график</label></h2></h2>
+<h2><input id='refresh' type='checkbox' name='refresh' value='refresh' checked='checked' onclick='refresh_chart()'><label for='refresh'>Обновлять график</label></h2>
 <div class="message-box" style="display: none;" id="message"></div>
 <div class="container">
 <div class="text">Текущее время: <span id='crnt_tm'></span></div>
 <div class="text">Время работы: <span id='stm'></span></div>
 </div>
 <div class="container">
-<div class="text column" style="color: %SteamColor%;">Т пара: <span id='SteamTemp' style="font-size: xx-large;"></span>&#176C</div>
-<div class="text column" style="color: %PipeColor%;">Т в царге: <span id='PipeTemp' style="font-size: xx-large;"></span>&#176C</div>
+<div class="text column" style="color: %SteamColor%;">Т пара: <span id='SteamTemp' style="font-size: xx-large;"></span>&#176;C</div>
+<div class="text column" style="color: %PipeColor%;">Т в царге: <span id='PipeTemp' style="font-size: xx-large;"></span>&#176;C</div>
 </div>
-<div class="text" style="color: black;">Дельта температур: <span id='DeltaTemp' style="font-size: xx-large;"></span>&#176C</div>
+<div class="text" style="color: black;">&#916; температур: <span id='DeltaTemp' style="font-size: xx-large;"></span>&#176;C</div>
 <div class="container">
-<div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176C</div>
-<div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176C</div>
+<div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176;C</div>
+<div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176;C</div>
 </div>
 <div class="container">
 <div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>

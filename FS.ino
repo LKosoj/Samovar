@@ -235,16 +235,16 @@ void IRAM_ATTR append_data() {
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SteamSensor.PrevTemp) {
-    SteamSensor.PrevTemp = SteamSensor.avgTemp;
+    SSPrevTemp = SteamSensor.avgTemp;
     w = true;
   } else if (PipeSensor.avgTemp != PipeSensor.PrevTemp) {
-    PipeSensor.PrevTemp = PipeSensor.avgTemp;
+    PSPrevTemp = PipeSensor.avgTemp;
     w = true;
   } else if (WaterSensor.avgTemp != WaterSensor.PrevTemp) {
-    WaterSensor.PrevTemp = WaterSensor.avgTemp;
+    WSPrevTemp = WaterSensor.avgTemp;
     w = true;
   } else if (TankSensor.avgTemp != TankSensor.PrevTemp) {
-    TankSensor.PrevTemp = TankSensor.avgTemp;
+    TSPrevTemp = TankSensor.avgTemp;
     w = true;
   } else if (bme_prev_pressure != bme_pressure) {
     bme_prev_pressure = bme_pressure;

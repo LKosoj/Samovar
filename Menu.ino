@@ -293,6 +293,7 @@ void menu_calibrate_down() {
 }
 ////////////////////////////////////////////////////////////
 void menu_samovar_start() {
+  if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
   String Str;
 
   if (startval == 2) startval = 3;

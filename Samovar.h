@@ -344,6 +344,11 @@ const char* host = SAMOVAR_HOST;
 byte DScnt = 0;
 byte tcnt = 0;
 bool bmefound = true;
+float SSPrevTemp;
+float PSPrevTemp;
+float WSPrevTemp;
+float TSPrevTemp;
+
 //volatile float samovar_temp;                                  // Температура ESP32
 volatile float bme_temp;                                        // Температура BME
 volatile float start_pressure;                                  // Давление BME стартовое
