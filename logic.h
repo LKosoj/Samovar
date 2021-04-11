@@ -77,13 +77,14 @@ void IRAM_ATTR withdrawal(void) {
       if (SamSetup.useautospeed) {
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
+        vTaskDelay(50);
       }
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + SteamSensor.Delay * 1000;
     }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
+    if (millis() >= t_min && program_Wait) t_min = millis() + SteamSensor.Delay * 1000;
   } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0) {
     //продолжаем отбор
     t_min = 0;
@@ -100,13 +101,14 @@ void IRAM_ATTR withdrawal(void) {
       if (SamSetup.useautospeed) {
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
+        vTaskDelay(50);
       }
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + PipeSensor.Delay * 1000;
     }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
+    if (millis() >= t_min && program_Wait) t_min = millis() + PipeSensor.Delay * 1000;
   } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0) {
     //продолжаем отбор
     t_min = 0;
