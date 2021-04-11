@@ -96,7 +96,9 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
-  //return;
+//  SteamSensor.avgTemp = 50;
+//  PipeSensor.avgTemp = 50;
+//  return;
   float ss, ps, ws, ts, acp;
   ss = sensors.getTempC(SteamSensor.Sensor);                    // считываем температуру с датчика 0
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
