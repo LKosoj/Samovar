@@ -55,14 +55,24 @@ return 0;
 };
 
 function sendvoltage(){
-var command = 'voltage=' + document.getElementById('Voltage').value;
+var num = document.getElementById('Voltage').value;
+if(!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)){
+alert( "Введите напряжение!" );
+return 0;
+}
+var command = 'voltage=' + num;
 sendbutton(command);
 alert( "Ok" );
 return 0;
 };
 
 function sendpumpspeed(){
-var command = 'pumpspeed=' + document.getElementById('pumpspeed').value;
+var num = document.getElementById('pumpspeed').value;
+if(!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)){
+alert( "Введите скорость!" );
+return 0;
+}
+var command = 'pumpspeed=' + num;
 sendbutton(command);
 alert( "Ok" );
 return 0;
@@ -118,6 +128,12 @@ if (myObj.Msg){
   if (myObj.Msg != "") {
     showMessage(myObj.Msg);
   }
+}
+
+if (myObj.TargetStepps > 0){
+  document.getElementById('start').value = "Следующая программа"
+} else {
+  document.getElementById('start').value = "Начать отбор"
 }
 
 if (!myObj.current_power_volt){
@@ -240,7 +256,7 @@ Samovar v. <span id='version'></span>
 <div class='dvcs'>
 <p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора;Напряжение отбора</span></p>
 <p><span>Пример программы отбора (H - головы (Heads), B - тело (Body), P - пауза (Pause), T - хвост (Tail).</span></p>
-<p><span>Температура отбора = 0 - автоматический режим. Температура отбора < 10&#176C - плюс к предыдущей температуре, иначе отбор при заданной температуре</span></p>
+<p><span>Температура отбора = 0 - автоматический режим. Температура отбора < 10&#176;C - плюс к предыдущей температуре, иначе отбор при заданной температуре * в текущей версии не используется</span></p>
 <p><span>H;100;0.1;1;0.00;120</span></p>
 <p><span>P;120;0.00;0;0.00;140</span></p>
 <p><span>B;5000;0.75;2;0.00;90</span></p>
@@ -256,7 +272,7 @@ Samovar v. <span id='version'></span>
 <input name='pumpspeed' id='pumpspeed' type='text' value=''> л/ч
 <input id='Setpmpspd' type='submit' name='Setpmpspd' value='Установить' onclick='sendpumpspeed();'>
 </div>
-<div class="tooltip"><span class="tooltiptext">При отборе тела можно скорректировать температуру отбора тела, установив текущие значения температур</span>
+<div class="tooltip"><span class="tooltiptext">Текущие значения температур Царги и Пара установятся как основные</span>
 <input id='setbody' type='submit' name='setbody' value='Задать Т отбора тела' onclick='sendbutton("setbodytemp=1");'></div>
 </div>
 <div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
