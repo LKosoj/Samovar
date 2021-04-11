@@ -293,7 +293,11 @@ void set_program(String WProgram) {
     program[i].Temp = atof(pair);
     pair = strtok(NULL, "\n");
     program[i].Power = atof(pair);
-    program[i].Time = program[i].Volume / program[i].Speed / 1000;
+    if (program[i].WType == "P") {
+      program[i].Time = program[i].Volume / 60 / (float)60;
+    } else {
+      program[i].Time = program[i].Volume / program[i].Speed / 1000;
+    }
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
@@ -350,13 +354,16 @@ void IRAM_ATTR run_program(byte num) {
 #endif
 
   } else {
-    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
-      Msg = "Set prog line " + (String)(num + 1) + ", capacity " + (String)program[num].capacity_num;
-      //устанавливаем параметры для текущей программы отбора
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("{DEVICE_NAME} - Set prog line " + (String)(num + 1) + ", capacity " + (String)program[num].capacity_num);
+#ifdef SAMOVAR_USE_POWER
+      set_power_mode(POWER_WORK_MODE);
+      if (program[num].Power > 40) {
+        set_current_power(program[num].Power);
+      }
 #endif
+      Msg = "Set prog line " + (String)(num + 1);
+    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
+      Msg +=  ", capacity " + (String)program[num].capacity_num;
+      //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
       stepper.setSpeed(get_speed_from_rate(program[num].Speed));
@@ -366,13 +373,6 @@ void IRAM_ATTR run_program(byte num) {
       startService();
       ActualVolumePerHour = program[num].Speed;
       SteamSensor.BodyTemp = program[num].Temp;
-
-#ifdef SAMOVAR_USE_POWER
-      set_power_mode(POWER_WORK_MODE);
-      if (program[num].Power > 40) {
-        set_current_power(program[num].Power);
-      }
-#endif
 
       //Первая программа отбора тела - запоминаем текущие значения температуры и давления
       if (program[num].WType == "B" && SteamSensor.Start_Pressure == 0) {
@@ -391,6 +391,7 @@ void IRAM_ATTR run_program(byte num) {
       }
     } else if (program[num].WType == "P") {
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
+      Msg += ", pause " + (String)program[num].Volume + " sec.";
       t_min = millis() + program[num].Volume * 1000;
       program_Pause = true;
       stopService();
@@ -401,6 +402,11 @@ void IRAM_ATTR run_program(byte num) {
       stepper.setCurrent(0);
       stepper.setTarget(0);
     }
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("{DEVICE_NAME} - " + Msg);
+#endif
+
   }
   TargetStepps = stepper.getTarget();
 }
