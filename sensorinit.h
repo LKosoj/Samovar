@@ -281,13 +281,20 @@ void IRAM_ATTR reset_sensor_counter(void) {
   PipeSensor.BodyTemp = 0;
   WaterSensor.BodyTemp = 0;
   TankSensor.BodyTemp = 0;
+  ACPSensor.BodyTemp = 0;
+  SteamSensor.PrevTemp = 0;
+  PipeSensor.PrevTemp = 0;
+  WaterSensor.PrevTemp = 0;
+  TankSensor.PrevTemp = 0;
+  ACPSensor.PrevTemp = 0;
+
+  
   ActualVolumePerHour = 0;
   SamovarStatusInt = 0;
   startval = 0;
   PauseOn = false;
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;
-  SteamSensor.BodyTemp = 0;
   WFtotalMilliLitres = 0;
   WthdrwlProgress = 0;
   TargetStepps = 0;
