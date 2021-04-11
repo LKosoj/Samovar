@@ -194,12 +194,20 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       vTaskDelay(10);
 
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
-      if (TargetStepps > 0) {
+      if (TargetStepps > 0 || program[ProgramNum].WType == "P") {
         //считаем прогресс
-        float wp = (float)CurrrentStepps / (float)TargetStepps;
+        float wp;
 
         //считаем время для текущей строки программы
-        WthdrwTime = program[ProgramNum].Time * (1 - wp);
+        if (program[ProgramNum].WType == "P"){
+          WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
+          if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
+          wp = 1 - (WthdrwTime / program[ProgramNum].Time);
+        } else {
+          wp = (float)CurrrentStepps / (float)TargetStepps;
+          WthdrwTime = program[ProgramNum].Time * (1 - wp);
+        }
+        
         //суммируем время текущей строки программы и всех следующих за ней
         WthdrwTimeAll = WthdrwTime;
 
