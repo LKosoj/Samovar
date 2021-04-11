@@ -70,11 +70,13 @@ void IRAM_ATTR withdrawal(void) {
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
 
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
-  if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
+  if (program[ProgramNum].WType == "B" && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
+      program_Wait_Type = "(пар)";
       //Если в настройках задан параметр - снижать скорость отбора - снижаем
-      if (SamSetup.useautospeed) {
+      if (SamSetup.useautospeed && setautospeed) {
+        setautospeed = false;
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
         vTaskDelay(50);
@@ -84,9 +86,10 @@ void IRAM_ATTR withdrawal(void) {
       t_min = millis() + SteamSensor.Delay * 1000;
     }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min && program_Wait) t_min = millis() + SteamSensor.Delay * 1000;
+    if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
   } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0) {
     //продолжаем отбор
+    setautospeed = true;
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
@@ -94,11 +97,13 @@ void IRAM_ATTR withdrawal(void) {
 
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы
-  if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) {
+  if (program[ProgramNum].WType == "B" && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
+      program_Wait_Type = "(царга)";
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем
-      if (SamSetup.useautospeed) {
+      if (SamSetup.useautospeed && setautospeed) {
+        setautospeed = false;
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
         vTaskDelay(50);
@@ -108,9 +113,10 @@ void IRAM_ATTR withdrawal(void) {
       t_min = millis() + PipeSensor.Delay * 1000;
     }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min && program_Wait) t_min = millis() + PipeSensor.Delay * 1000;
+    if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
   } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0) {
     //продолжаем отбор
+    setautospeed = true;
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
@@ -200,8 +206,6 @@ void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process) {
   if (!stepper.getState()) cp = false;
 
   CurrrentStepperSpeed = pumpspeed;
-  Serial.print("set_pump_speed = ");
-  Serial.println(CurrrentStepperSpeed);
   ActualVolumePerHour = get_liguid_rate_by_step(CurrrentStepperSpeed);
 
   stopService();
@@ -226,7 +230,7 @@ String IRAM_ATTR get_Samovar_Status() {
     if (t_min > (millis() + 10)) {
       s = (t_min - millis()) / 1000;
     }
-    SamovarStatus = "Прг №" + String(ProgramNum + 1) + " пауза. Продолжение через " + (String)s + " сек.";
+    SamovarStatus = "Прг №" + String(ProgramNum + 1) + " пауза " + program_Wait_Type + ". Продолжение через " + (String)s + " сек.";
     SamovarStatusInt = 15;
   } else if (PowerOn && startval == 2) {
     SamovarStatus = "Выполнение программ закончено";
@@ -427,7 +431,7 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
 }
 
 void IRAM_ATTR set_body_temp() {
-  if (program[ProgramNum].WType == "B") {
+  if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "P") {
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
