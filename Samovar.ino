@@ -217,7 +217,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         
         WthdrwTimeS = h + ":" + m;
         
-        if (WthdrwTime < 10) h = "0"; else h = "";
+        if (WthdrwTimeAll < 10) h = "0"; else h = "";
         h += (String)((unsigned int)WthdrwTimeAll);
         mi = (unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60);
         if (mi < 10) m = "0"; else m = "";
