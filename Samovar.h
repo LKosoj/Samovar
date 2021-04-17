@@ -404,8 +404,8 @@ bool setautospeed;                                              // Призна�
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER
-volatile float current_power_volt;                                       // Текущее напряжение регулятора
-volatile float target_power_volt;                                        // Заданное напряжение регулятора
-volatile uint16_t current_power_p;                                       // Расчитанная мощность на регуляторе напряжения
+volatile float current_power_volt;                              // Текущее напряжение регулятора
+volatile float target_power_volt;                               // Заданное напряжение регулятора
+volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
 #endif
 #endif
