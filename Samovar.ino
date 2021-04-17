@@ -139,6 +139,10 @@ void IRAM_ATTR isrENC_TICK() {
 void IRAM_ATTR triggerGetClock(void * parameter) {
   while (true) {
     if (WiFi.status() == WL_CONNECTED) clok1();
+    else {
+      WiFi.disconnect();
+      WiFi.reconnect();
+    }
 #ifdef SAMOVAR_USE_BLYNK
     if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
