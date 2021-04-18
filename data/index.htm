@@ -126,7 +126,7 @@ var dt = myObj.PipeTemp - myObj.SteamTemp;
 document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
 if (myObj.Msg){
   if (myObj.Msg != "") {
-    showMessage(myObj.Msg);
+    showMessage(myObj.Msg, myObj.crnt_tm);
   }
 }
 
@@ -180,8 +180,9 @@ xhttp.open("GET", "/ajax", true);
 xhttp.send();
 };
 
-function showMessage(Msg){
+function showMessage(Msg, CrtTime){
     document.getElementById('message').innerHTML = Msg;
+    console.log(CrtTime + "; " + Msg);
     document.getElementById('message').style.display = 'flex';
    
 setTimeout(function(){
