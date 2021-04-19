@@ -678,6 +678,10 @@ void getjson (void) {
     jsondoc["Msg"] = Msg;
     Msg = "";
   }
+  if (LogMsg != "") {
+    jsondoc["LogMsg"] = LogMsg;
+    LogMsg = "";
+  }
 #ifdef SAMOVAR_USE_POWER
   jsondoc["current_power_volt"] = format_float(current_power_volt, 1);
   jsondoc["target_power_volt"] = format_float(target_power_volt, 1);
@@ -735,4 +739,8 @@ void read_config() {
 #ifdef SAMOVAR_USE_BLYNK
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
 #endif
+}
+
+void WriteConsoleLog(String StringLogMsg){
+  LogMsg = StringLogMsg;
 }
