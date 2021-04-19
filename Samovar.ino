@@ -742,5 +742,5 @@ void read_config() {
 }
 
 void WriteConsoleLog(String StringLogMsg){
-  LogMsg = StringLogMsg;
+  LogMsg = LogMsg + "\n" + StringLogMsg;
 }
