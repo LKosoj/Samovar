@@ -196,9 +196,13 @@ bool exists(String path) {
 
 void create_data() {
   //Удаляем старый файл с архивным логом
-  SPIFFS.remove("/data_old.csv");
+  if (SPIFFS.exists("/data_old.csv")) {
+    SPIFFS.remove("/data_old.csv");
+  }
   //Переименовываем файл с логом в архивный (на всякий случай)
-  SPIFFS.rename("/data.csv", "/data_old.csv");
+  if (SPIFFS.exists("/data.csv")) {
+    SPIFFS.rename("/data.csv", "/data_old.csv");
+  }
   File fileToWrite = SPIFFS.open("/data.csv", FILE_WRITE);
   String str = "Date,Steam,Pipe,Water,Tank,Pressure";
 #ifdef WRITE_PROGNUM_IN_LOG
@@ -266,7 +270,9 @@ String get_sys_info() {
   result_st += (String)ub + "; Free Heap = " + (String)ESP.getFreeHeap();
   if (tb - ub < 400) {
     //Кончилось место, удалим старый файл. Надо было сохранять раньше
-    SPIFFS.remove("/data_old.csv");
+    if (SPIFFS.exists("/data_old.csv")) {
+      SPIFFS.remove("/data_old.csv");
+    }
   }
   //Если используется Blynk - пишем оператору
   if (tb - ub < 200) {
