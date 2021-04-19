@@ -313,6 +313,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
 void setup() {
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
+  WiFi.setSleep(false);
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
 
