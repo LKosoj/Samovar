@@ -566,6 +566,75 @@ void loop() {
 
   ws.cleanupClients();
 
+  //обработка нажатий кнопки и разное поведение в зависимости от режима работы
+  if (btn.isPress()) {
+    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
+      //если выключен - включаем
+      if (!PowerOn) {
+        set_power(true);
+      } else if (startval == 0 && SamovarStatusInt < 1000) {
+        //если включен и программа отбора не работает - запускаем программу
+        menu_samovar_start();
+      } else if (startval != 0 && !program_Pause  && SamovarStatusInt < 1000) {
+        //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
+        pause_withdrawal(!PauseOn);
+      } else if (startval != 0 && program_Pause && SamovarStatusInt < 1000) {
+        //если выполняется программа, и программа - пауза, переходим к следующей программе
+        menu_samovar_start();
+      }
+      //Выход из режима калибровки - нажатие на кнопку.
+      if (startval == 100) {
+        startval = 0;
+        menu_calibrate();
+        main_menu1.switch_focus();
+      }
+    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      //если дистилляция включаем или выключаем
+      if (!PowerOn) {
+        sam_command_sync = SAMOVAR_DISTILLATION;
+      } else set_power(false);
+    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      //если пиво включаем или выключаем
+      if (!PowerOn) {
+        sam_command_sync = SAMOVAR_BEER;
+      } else set_power(false);
+    }
+  }
+  //обработка нажатий кнопки и разное поведение в зависимости от режима работы
+  if (btn.isPress()) {
+    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
+      //если выключен - включаем
+      if (!PowerOn) {
+        set_power(true);
+      } else if (startval == 0 && SamovarStatusInt < 1000) {
+        //если включен и программа отбора не работает - запускаем программу
+        menu_samovar_start();
+      } else if (startval != 0 && !program_Pause  && SamovarStatusInt < 1000) {
+        //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
+        pause_withdrawal(!PauseOn);
+      } else if (startval != 0 && program_Pause && SamovarStatusInt < 1000) {
+        //если выполняется программа, и программа - пауза, переходим к следующей программе
+        menu_samovar_start();
+      }
+      //Выход из режима калибровки - нажатие на кнопку.
+      if (startval == 100) {
+        startval = 0;
+        menu_calibrate();
+        main_menu1.switch_focus();
+      }
+    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      //если дистилляция включаем или выключаем
+      if (!PowerOn) {
+        sam_command_sync = SAMOVAR_DISTILLATION;
+      } else distiller_finish();
+    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      //если пиво включаем или выключаем
+      if (!PowerOn) {
+        sam_command_sync = SAMOVAR_BEER;
+      } else beer_finish();
+    }
+  }
+
   if (sam_command_sync != SAMOVAR_NONE) {
     switch (sam_command_sync) {
       case SAMOVAR_START:
@@ -618,41 +687,6 @@ void loop() {
   }
 
   encoder_getvalue();
-
-  //обработка нажатий кнопки и разное поведение в зависимости от режима работы
-  if (btn.isPress()) {
-    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
-      //если выключен - включаем
-      if (!PowerOn) {
-        set_power(true);
-      } else if (startval == 0 && SamovarStatusInt < 1000) {
-        //если включен и программа отбора не работает - запускаем программу
-        menu_samovar_start();
-      } else if (startval != 0 && !program_Pause  && SamovarStatusInt < 1000) {
-        //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
-        pause_withdrawal(!PauseOn);
-      } else if (startval != 0 && program_Pause && SamovarStatusInt < 1000) {
-        //если выполняется программа, и программа - пауза, переходим к следующей программе
-        menu_samovar_start();
-      }
-      //Выход из режима калибровки - нажатие на кнопку.
-      if (startval == 100) {
-        startval = 0;
-        menu_calibrate();
-        main_menu1.switch_focus();
-      }
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      //если дистилляция включаем или выключаем
-      if (!PowerOn) {
-        sam_command_sync = SAMOVAR_DISTILLATION;
-      } else set_power(false);
-    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      //если пиво включаем или выключаем
-      if (!PowerOn) {
-        sam_command_sync = SAMOVAR_BEER;
-      } else set_power(false);
-    }
-  }
 }
 
 void getjson (void) {
