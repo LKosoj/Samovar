@@ -456,7 +456,7 @@ void IRAM_ATTR check_alarm() {
   }
 #endif
 
-  if (!valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
+  if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true);
   }
 
