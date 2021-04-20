@@ -479,14 +479,14 @@ void IRAM_ATTR check_alarm() {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
     String s;
-    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = " Steam";
-    if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = " Water";
-    if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = " Tank";
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = " ACP";
-    Msg = "Emergency power OFF! Temperature error" + s;
+    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = "Steam";
+    if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = "Water";
+    if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = "Tank";
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = "ACP";
+    Msg = "Emergency power OFF! Temperature error " + s;
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Temperature error" + s);
+    Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
 #endif
   }
 
@@ -498,7 +498,7 @@ void IRAM_ATTR check_alarm() {
     Msg = "Emergency power OFF! Water error";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Water error");
+    Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
 #endif
   }
 #endif
@@ -516,7 +516,7 @@ void IRAM_ATTR check_alarm() {
       Msg = "Water temp is critical! Water error. Voltage down from " + (String)target_power_volt;
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical! Water error. Voltage down from " + (String)target_power_volt);
+      Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
 #endif
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
@@ -596,14 +596,14 @@ void IRAM_ATTR open_valve(bool Val) {
     Msg = "Open cooling water!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Warning! {DEVICE_NAME} - Open cooling water!");
+    Blynk.notify("Warning! {DEVICE_NAME} " + Msg);
 #endif
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
     Msg = "Close cooling water!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Warning! {DEVICE_NAME} - Close cooling water!");
+    Blynk.notify("Warning! {DEVICE_NAME} " + Msg);
 #endif
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
