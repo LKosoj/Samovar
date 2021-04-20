@@ -409,4 +409,8 @@ volatile float current_power_volt;                              // Текуще�
 volatile float target_power_volt;                               // Заданное напряжение регулятора
 volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
 #endif
+
+#ifdef USE_WATER_PUMP
+byte wp_count;
+#endif
 #endif
