@@ -44,7 +44,7 @@ void IRAM_ATTR check_alarm_distiller() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
-  if (!valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
+  if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true);
   }
 
