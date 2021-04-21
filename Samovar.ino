@@ -567,7 +567,7 @@ void loop() {
   ws.cleanupClients();
 
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
-  if (btn.isPress()) {
+  if (btn.isClick()) {
     if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
       //если выключен - включаем
       if (!PowerOn) {
