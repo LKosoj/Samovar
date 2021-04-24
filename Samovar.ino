@@ -440,8 +440,8 @@ void setup() {
   writeString("Connected", 4);
 
   btn.setType(LOW_PULL);
-  btn.setTickMode(MANUAL);
-  btn.setTimeout(500);
+  //btn.setTickMode(MANUAL);
+  //btn.setTimeout(500);
   attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
 
 #ifdef SAMOVAR_USE_BLYNK
