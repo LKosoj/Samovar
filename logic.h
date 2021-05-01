@@ -91,11 +91,14 @@ void IRAM_ATTR withdrawal(void) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
       program_Wait_Type = "(пар)";
-      //Если в настройках задан параметр - снижать скорость отбора - снижаем
+      //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
       if (SamSetup.useautospeed && setautospeed) {
         setautospeed = false;
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
+#ifdef SAMOVAR_USE_POWER
+        set_current_power(target_power_volt - 5);
+#endif
         vTaskDelay(50);
       }
       program_Wait = true;
@@ -118,11 +121,14 @@ void IRAM_ATTR withdrawal(void) {
       program_Wait_Type = "(царга)";
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
-      //Если в настройках задан параметр - снижать скорость отбора - снижаем
+      //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
       if (SamSetup.useautospeed && setautospeed) {
         setautospeed = false;
         CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
         set_pump_speed(CurrrentStepperSpeed, false);
+#ifdef SAMOVAR_USE_POWER
+        set_current_power(target_power_volt - 5);
+#endif
         vTaskDelay(50);
       }
       program_Wait = true;
@@ -157,6 +163,7 @@ void IRAM_ATTR set_power(bool On) {
 
   } else {
 #ifdef SAMOVAR_USE_POWER
+    delay(1000);
     set_power_mode(POWER_SLEEP_MODE);
 #else
     current_power_mode = POWER_SLEEP_MODE;
@@ -351,6 +358,7 @@ String get_program(int s) {
 void IRAM_ATTR run_program(byte num) {
   t_min = 0;
   program_Pause = false;
+  program_Wait = false;
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
@@ -494,12 +502,13 @@ void IRAM_ATTR check_alarm() {
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= MAX_TANK_TEMP || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
+    delay(1000);
     set_power(false);
     String s;
     if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = "Steam";
-    if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = "Water";
-    if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = "Tank";
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = "ACP";
+    else if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = "Water";
+    else if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = "Tank";
+    else if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = "ACP";
     Msg = "Emergency power OFF! Temperature error " + s;
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
@@ -569,8 +578,10 @@ void IRAM_ATTR check_alarm() {
     Blynk.notify("Alert! {DEVICE_NAME} - " + Msg);
 #endif
 #ifdef SAMOVAR_USE_POWER
+    delay(200);
     set_power_mode(POWER_WORK_MODE);
     //Устанавливаем напряжение, заданное в первой строке программы
+    delay(800);
     set_current_power(program[0].Power);
 #else
     current_power_mode = POWER_WORK_MODE;
