@@ -247,7 +247,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
 #ifdef USE_WATERSENSOR
 
-      if (WFpulseCount < 11) WFpulseCount = 0;
+      if (WFpulseCount < 8) WFpulseCount = 0;
       WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
