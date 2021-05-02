@@ -107,7 +107,7 @@ void IRAM_ATTR withdrawal(void) {
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
-  } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0) {
+  } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     setautospeed = true;
     t_min = 0;
@@ -137,7 +137,7 @@ void IRAM_ATTR withdrawal(void) {
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
-  } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0) {
+  } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     setautospeed = true;
     t_min = 0;
