@@ -2,6 +2,9 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
+#include "soc/rtc_wdt.h"
+#include <esp_task_wdt.h>
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -27,6 +30,8 @@
 
 #include <GyverStepper.h>
 #include <GyverButton.h>
+
+#include "GyverRelay.h"
 
 #include <ESP32Servo.h>
 
@@ -312,6 +317,15 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 }
 
 void setup() {
+#ifdef __SAMOVAR_NOT_USE_WDT  
+  esp_task_wdt_init(1,false);
+  esp_task_wdt_init(2,false);
+  rtc_wdt_protect_off();
+  rtc_wdt_disable();
+  disableCore0WDT();
+  disableCore1WDT();
+#endif
+  
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
   WiFi.setHostname(host);

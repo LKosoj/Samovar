@@ -33,6 +33,8 @@ void append_data();
 void stopService(void);
 void startService(void);
 void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress);
+void set_beer_program(String WProgram);
+void set_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
 
 //**************************************************************************************************************
@@ -247,7 +249,11 @@ void sensor_init(void) {
 #endif
 
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
-  set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
+  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID){
+    set_beer_program("P;45;10\nP;50;10\nP;60;10\n");
+  } else {
+    set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
+  }
 
   reset_sensor_counter();
 
@@ -259,6 +265,9 @@ void sensor_init(void) {
 #ifdef USE_WATER_PUMP
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
 #endif
+
+  regulator.hysteresis = 5;
+  regulator.k = 0.5;
 }
 
 //Обнуляем все счетчики

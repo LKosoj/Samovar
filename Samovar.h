@@ -36,6 +36,8 @@ uint8_t temprature_sens_read();
 #define SAMOVAR_VERSION "1.23"
 //#define __SAMOVAR_DEBUG
 
+#define __SAMOVAR_NOT_USE_WDT
+
 //--------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------
@@ -235,12 +237,12 @@ LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
-//SamStepper stepper(STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 File fileToAppend;
 Servo servo;  // create servo object to control a servo
 
 GButton btn(BTN_PIN);
+GyverRelay regulator(REVERSE);
 
 #ifdef USE_HEAD_LEVEL_SENSOR
 GButton whls(WHEAD_LEVEL_SENSOR_PIN);
