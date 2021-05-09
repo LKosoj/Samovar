@@ -202,8 +202,42 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
       vTaskDelay(10);
 
-      //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора
-      if (TargetStepps > 0 || program[ProgramNum].WType == "P") {
+      //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
+      if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+        float wp;
+        if (program[ProgramNum].Time > 0 && begintime > 0) {
+          wp = float(millis() - begintime) / 1000 / 60 / program[ProgramNum].Time;
+        } else wp = 0;
+        //прогресс переводим в проценты
+        WthdrwlProgress = wp * 100;
+        WthdrwTime = program[ProgramNum].Time * (1 - wp);
+        
+        WthdrwTimeAll = WthdrwTime;
+        for (int i = ProgramNum + 1; i < ProgramLen; i++) {
+          WthdrwTimeAll += program[i].Time;
+        }
+        
+        String h, m;
+        int hi, mi;
+        hi = WthdrwTime / 60;
+        mi = WthdrwTime - hi * 60;
+        if (hi < 10) h = "0"; else h = "";
+        h += (String)hi;
+        if (mi < 10) m = "0"; else m = "";
+        m += (String)mi;
+        WthdrwTimeS = h + ":" + m;
+
+        hi = WthdrwTimeAll / 60;
+        mi = WthdrwTimeAll - hi * 60;
+        if (hi < 10) h = "0"; else h = "";
+        h += (String)hi;
+        if (mi < 10) m = "0"; else m = "";
+        m += (String)mi;
+        WthdrwTimeAllS = h + ":" + m;
+        
+      }
+      //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
+      else if (TargetStepps > 0 || program[ProgramNum].WType == "P") {
         //считаем прогресс
         float wp;
 
@@ -248,6 +282,8 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         WthdrwTimeS = "";
         WthdrwTimeAllS = "";
       }
+
+      
       vTaskDelay(10);
 
 #ifdef USE_WATERSENSOR
@@ -413,6 +449,9 @@ void setup() {
   digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
 #endif
 
+  //Инициализируем ногу для пищалки
+  pinMode(BZZ_PIN, OUTPUT);
+  digitalWrite(BZZ_PIN, LOW);
 
   //Настраиваем меню
   Serial.println(F("Samovar started"));
@@ -670,6 +709,11 @@ void loop() {
   }
 
   encoder_getvalue();
+
+  if (BuzzerTask != NULL && !BuzzerTaskFl) {
+    vTaskDelete(BuzzerTask);
+    BuzzerTask = NULL;
+  }
 }
 
 void getjson (void) {

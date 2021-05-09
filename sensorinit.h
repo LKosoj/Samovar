@@ -110,7 +110,7 @@ void IRAM_ATTR DS_getvalue(void) {
   acp = sensors.getTempC(ACPSensor.Sensor);                     // считываем температуру с датчика 4
 
 
-//  if (TankSensor.avgTemp < 20) TankSensor.avgTemp = 20;
+//  if (TankSensor.avgTemp < 29) TankSensor.avgTemp = 29;
 //  static float coef = 0;
 //  coef += heater_state ? 0.1 : -0.2;
 //  if (coef > 0.5) coef = 0.5;
@@ -274,8 +274,8 @@ void sensor_init(void) {
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
 #endif
 
-  regulator.hysteresis = 5;
-  regulator.k = 0.3;
+  regulator.hysteresis = 0.4;
+  regulator.k = 0.7;
 }
 
 //Обнуляем все счетчики

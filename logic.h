@@ -301,8 +301,8 @@ String IRAM_ATTR get_Samovar_Status() {
     }
   }
 
-  if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {
-    SamovarStatus += ";Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
+  if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
+    SamovarStatus += "; Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }
   if (SteamSensor.BodyTemp > 0) SamovarStatus += ";Т тела пар:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3) + ";Т тела царга:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
 
@@ -655,6 +655,36 @@ void IRAM_ATTR open_valve(bool Val) {
     Blynk.notify("Warning! {DEVICE_NAME} " + Msg);
 #endif
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
+  }
+}
+
+void IRAM_ATTR triggerBuzzerTask(void * parameter) {
+  TickType_t beep = 200 / portTICK_RATE_MS;
+  TickType_t silent = 800 / portTICK_RATE_MS;
+  int i = 0;
+
+  while(true){
+    digitalWrite(BZZ_PIN, HIGH);
+    vTaskDelay(beep);
+    digitalWrite(BZZ_PIN, LOW);
+    vTaskDelay(silent);
+    i++;
+    if (i > 10) BuzzerTaskFl = false;
+  }
+}
+
+void set_buzzer(){
+  if (BuzzerTask == NULL) {
+    BuzzerTaskFl = true;
+    //Запускаем таск для пищалки
+    xTaskCreatePinnedToCore(
+      triggerBuzzerTask, /* Function to implement the task */
+      "BuzzerTask", /* Name of the task */
+      1000,  /* Stack size in words */
+      NULL,  /* Task input parameter */
+      0,  /* Priority of the task */
+      &BuzzerTask,  /* Task handle. */
+      1); /* Core where the task should run */
   }
 }
 

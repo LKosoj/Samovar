@@ -36,7 +36,7 @@ void IRAM_ATTR run_beer_program(byte num) {
 void IRAM_ATTR beer_finish() {
   PowerOn = false;
   heater_state = false;
-  startval = 2000;
+  startval = 0;
   if (fileToAppend) {
     fileToAppend.close();
   }
@@ -61,6 +61,7 @@ void IRAM_ATTR check_alarm_beer() {
   if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp){
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001){
+      set_buzzer();      
       Msg = "Malt application temperature reached!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
@@ -81,7 +82,7 @@ void IRAM_ATTR check_alarm_beer() {
 #endif
     }
     //Проверяем, что еще нужно держать паузу
-    if ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Speed){
+    if ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time){
       //Запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }
@@ -101,14 +102,17 @@ void IRAM_ATTR check_alarm_beer() {
 
   //Если программа - кипячение
   if (program[ProgramNum].WType == "B"){
-    //Если температура в кубе достигла температуры кипения, засекаем время
-    if (abs(TankSensor.avgTemp - BOILING_TEMP) <= 0.5){
-      begintime = millis();
-      Msg = "Boiling started!";
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("{DEVICE_NAME} " + Msg);
-#endif
+    if (begintime == 0) {
+      //Если температура в кубе достигла температуры кипения, засекаем время
+      if (abs(TankSensor.avgTemp - BOILING_TEMP) <= 0.5){
+        msgfl = true;
+        begintime = millis();
+        Msg = "Boiling started!";
+  #ifdef SAMOVAR_USE_BLYNK
+        //Если используется Blynk - пишем оператору
+        Blynk.notify("{DEVICE_NAME} " + Msg);
+  #endif
+    }
     }
 
     //Греем до температуры кипения, исходя из того, что датчик в кубе врет не сильно
@@ -119,13 +123,19 @@ void IRAM_ATTR check_alarm_beer() {
       set_heater_state(BOILING_TEMP + 0.6, TankSensor.avgTemp);
     }
 
-    //Проверяем, что еще нужно держать паузу
-    if (begintime > 0 && (millis() - begintime) / 1000 / 60 >= program[ProgramNum].Speed){
+    //Проверяем, что еще нужно держать паузу. За 30 секунд до окончания шлем сообщение
+    if (begintime > 0 && msgfl && ((float(millis()) - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)){
+      set_buzzer();      
+      msgfl = false;
       Msg = "Bring in the hops!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
       Blynk.notify("{DEVICE_NAME} " + Msg);
 #endif
+    }
+
+    //Проверяем, что еще нужно держать паузу
+    if (begintime > 0 && ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time)){
       //Запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }
@@ -191,7 +201,7 @@ String get_beer_program() {
     } else {
       Str += program[i].WType + ";";
       Str += (String)program[i].Temp + ";";
-      Str += (String)(int)program[i].Speed + "\n";
+      Str += (String)(int)program[i].Time + "\n";
     }
   }
   return Str;
@@ -208,7 +218,7 @@ void set_beer_program(String WProgram){
     pair = strtok(NULL, ";");
     program[i].Temp = atof(pair);
     pair = strtok(NULL, "\n");
-    program[i].Speed = atof(pair); //Time
+    program[i].Time = atof(pair);
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
