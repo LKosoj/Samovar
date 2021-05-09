@@ -169,10 +169,8 @@ void IRAM_ATTR set_power(bool On) {
     current_power_mode = POWER_SLEEP_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
-    samovar_reset();
+    sam_command_sync = SAMOVAR_RESET;
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-    set_menu_screen(3);
-    power_text_ptr = (char*)"ON";
   }
 }
 
@@ -277,7 +275,30 @@ String IRAM_ATTR get_Samovar_Status() {
   } else if (SamovarStatusInt == 1000) {
     SamovarStatus = "Режим дистилляции";
   } else if (SamovarStatusInt == 2000) {
-    SamovarStatus = "Режим пивоварни";
+    SamovarStatus = "Прг №" + String(ProgramNum + 1);
+    if (startval == 2001 && program[ProgramNum].WType == "M") {
+      SamovarStatus = SamovarStatus + "; Разогрев до температуры засыпи солода";
+    }
+    if (startval == 2002 && program[ProgramNum].WType == "M") {
+      SamovarStatus = SamovarStatus + "; Ожидание засыпи солода";
+    }
+    if (program[ProgramNum].WType == "P"){
+      if (begintime == 0){
+        SamovarStatus = SamovarStatus + "; Нагрев до " + String(program[ProgramNum].Temp);
+      } else {
+        SamovarStatus = SamovarStatus + "; Пауза " + String(program[ProgramNum].Speed - (millis() - begintime) / 1000 / 60) + " мин";
+      }
+    }
+    if (program[ProgramNum].WType == "C"){
+        SamovarStatus = SamovarStatus + "; Охлаждение до " + String(program[ProgramNum].Temp);
+    }
+    if (program[ProgramNum].WType == "B"){
+      if (begintime == 0){
+        SamovarStatus = SamovarStatus + "; Кипячение - нагрев";
+      } else {
+        SamovarStatus = SamovarStatus + "; Кипячение " + String(program[ProgramNum].Speed - (millis() - begintime) / 1000 / 60) + " мин";
+      }
+    }
   }
 
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15) {

@@ -102,28 +102,13 @@ var myObj = JSON.parse(this.responseText);
 document.getElementById('version').innerHTML = myObj.version;
 document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
 document.getElementById('stm').innerHTML = myObj.stm;
-document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp;
-document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp;
-document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp;
 document.getElementById('TankTemp').innerHTML = myObj.TankTemp;
-document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp;
-document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure;
-document.getElementById('start_pressure').innerHTML = myObj.start_pressure;
-document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
-document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
 document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
-document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
-document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
-document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
 document.getElementById('Status').innerHTML = myObj.Status;
 document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
 document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
 document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
 document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
-document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
-document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
-var dt = myObj.PipeTemp - myObj.SteamTemp;
-document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
 if (myObj.Msg){
   if (myObj.Msg != "") {
     showMessage(myObj.Msg, myObj.crnt_tm);
@@ -136,24 +121,12 @@ if (myObj.LogMsg){
   }
 }
 
-if (myObj.WthdrwlStatus > 0){
-  document.getElementById('start').value = "Следующая программа"
-} else {
-  document.getElementById('start').value = "Начать отбор"
-}
-
 if (!myObj.current_power_volt){
   document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
   document.getElementById('VoltH2').style = 'visibility: hidden;position: fixed;';
 } else {
   document.getElementById('regulator').style = '';
   document.getElementById('VoltH2').style = '';
-}
-
-if (!myObj.WFflowRate){
-  document.getElementById('flowsensor').style = 'visibility: hidden;position: fixed;';
-} else {
-  document.getElementById('flowsensor').style = '';
 }
 
 var powerstr;
@@ -168,17 +141,6 @@ if (myObj.PowerOn == 1){
 document.getElementById('power').value = powerstr;
 document.getElementById('power').style.backgroundColor = powerstyle;
 
-var pausestr;
-var pausestyle;
-if (myObj.PauseOn == 1){
-  pausestr = 'Продолжить';
-  pausestyle='lightgreen';
-} else {
-  pausestr = 'Поставить на паузу';
-  pausestyle='#3498db';
-}
-document.getElementById('pause').value = pausestr;
-document.getElementById('pause').style.backgroundColor = pausestyle;
   
 }
 };
@@ -204,10 +166,8 @@ setTimeout(function(){
 Samovar v. <span id='version'></span>
 </h1>
 <div class="tab">
-  <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Ректификация">
+  <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Затирание">
   <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
-  <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
-  <input type='button' class="tablinks" onclick="openTab(event, 'Video');" value="Видео" style="display: %showvideo%;">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
 <div class="container">
@@ -215,27 +175,10 @@ Samovar v. <span id='version'></span>
 <div class="text">Время работы: <span id='stm'></span></div>
 </div>
 <div class="container">
-<div class="text column" style="color: %SteamColor%;">Т пара: <span id='SteamTemp' style="font-size: xx-large;"></span>&#176;C</div>
-<div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176;C</div>
-</div>
-<div class="container">
-<div class="text column" style="color: %PipeColor%;">Т в царге: <span id='PipeTemp' style="font-size: xx-large;"></span>&#176;C</div>
 <div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176;C</div>
 </div>
 <div class="container">
-<div class="text column" style="color: black;">&#916; температур: <span id='DeltaTemp' style="font-size: xx-large;"></span>&#176;C</div>
-<div class="text column" style="color: %ACPColor%;">Т в ТСА: <span id='ACPTemp' style="font-size: xx-large;"></span>&#176;C</div>
-</div>
-<div class="container">
-<div class="text column">Давление: <span id='bme_pressure'></span> мм рт. ст.</div>
-<div class="text column">В начале: <span id='start_pressure'></span> мм рт. ст.</div>
-</div>
-<div class="container">
-<div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>
-<div class="text column">Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</div>
-</div>
-<div class="container">
-<div class="text">Прогресс отбора: <span id='WthdrwlProgress'></span>&#37;</div>
+<div class="text">Прогресс: <span id='WthdrwlProgress'></span>&#37;</div>
 </div>
 <div class="text" id='VoltH2' style='visibility: hidden;position: fixed;'>Напряжение регулятора: <input name='Voltage' id='Voltage' type='text' value=''>
 <input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'>
@@ -250,8 +193,11 @@ Samovar v. <span id='version'></span>
 <span>Статус: <span id='Status'></span></span>
 </div>
 <div>
+<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
+</div>
+<div>
 <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'>
-<input id='start' type='submit' name='start' value='Начать' onclick='sendbutton("start=1");'>
+<input id='start' type='submit' name='start' value='Следующая программа' onclick='sendbutton("start=1");'>
 <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'>
 <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"'>
 </div>
@@ -259,41 +205,16 @@ Samovar v. <span id='version'></span>
 <div id="Prog" class="tabcontent">
 <div class="text">Программа затирки:</div> <textarea cols="40" rows="15" id='WProgram' name='WProgram'>%WProgram%</textarea>
 <div class='dvcs'>
-<p><span>Параметры программы затирки: Тип программы;Время;Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора;Напряжение отбора</span></p>
-<p><span>Пример программы отбора (H - головы (Heads), B - тело (Body), P - пауза (Pause), T - хвост (Tail).</span></p>
-<p><span>Температура отбора = 0 - автоматический режим. Температура отбора &lt; 10&#176;C - плюс к предыдущей температуре, иначе отбор при заданной температуре * в текущей версии не используется</span></p>
-<p><span>H;100;0.1;1;0.00;120</span></p>
-<p><span>P;120;0.00;0;0.00;140</span></p>
-<p><span>B;5000;0.75;2;0.00;90</span></p>
+<p><span>Параметры программы затирания: Тип программы;Температура;Время</span></p>
+<p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре), B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры).</span></p>
+<p><span>Пример программы отбора</span></p>
+<p><span>M;45.00;0</span></p>
+<p><span>P;60.00;1</span></p>
+<p><span>B;0.00;1</span></p>
+<p><span>C;30.00;0</span></p>
 </div>
 <div style="margin: 0 auto; width: 200px;">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
 </div>
-</div>
-<div id="Other" class="tabcontent">
-<div style="text-align: center;">
-<div class="text" id='pmpspd'>
-<span class="tooltip">Скорость отбора:<span class="tooltiptext">Скорость установить можно при выполняющейся программе отбора. Установка скорости влияет только на выполняющуюся строку программы.</span></span>
-<input name='pumpspeed' id='pumpspeed' type='text' value=''> л/ч
-<input id='Setpmpspd' type='submit' name='Setpmpspd' value='Установить' onclick='sendpumpspeed();'>
-</div>
-<div class="tooltip"><span class="tooltiptext">Текущие значения температур Царги и Пара установятся как основные</span>
-<input id='setbody' type='submit' name='setbody' value='Задать Т отбора тела' onclick='sendbutton("setbodytemp=1");'></div>
-</div>
-<div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
-<div class='dvcs'>
-<span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
-<span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
-</div>
-<div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
-<span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
-<span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
-</div>
-<div>
-<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
-</div>
-</div>
-<div id="Video" class="tabcontent">
-<img src="%videourl%">
 </div>
 </form>

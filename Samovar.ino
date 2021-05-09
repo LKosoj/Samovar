@@ -608,10 +608,10 @@ void loop() {
         sam_command_sync = SAMOVAR_DISTILLATION;
       } else distiller_finish();
     } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      //если пиво включаем или выключаем
+      //если пиво включаем или двигаем программу
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_BEER;
-      } else beer_finish();
+      } else run_beer_program(ProgramNum + 1);
     }
   }
 
@@ -654,6 +654,9 @@ void loop() {
         SamovarStatusInt = 2000;
         startval = 2000;
         break;
+      case SAMOVAR_BEER_NEXT:
+        run_beer_program(ProgramNum + 1);
+        break;
     }
     sam_command_sync = SAMOVAR_NONE;
   }
@@ -662,7 +665,7 @@ void loop() {
     withdrawal();     //функция расчета отбора
   } else if (SamovarStatusInt == 1000) {
     distiller_proc(); //функция для проведения дистилляции
-  } else if (SamovarStatusInt == 2000) {
+  } else if (SamovarStatusInt == 2000 && startval == 2000) {
     beer_proc();      //функция для проведения затирания
   }
 

@@ -33,7 +33,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "1.23"
+#define SAMOVAR_VERSION "2.00"
 //#define __SAMOVAR_DEBUG
 
 #define __SAMOVAR_NOT_USE_WDT
@@ -256,7 +256,7 @@ WebSerialClass WebSerial;
 
 DNSServer dns;
 
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT};
 volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_SUVID};
@@ -404,6 +404,7 @@ String Msg;                                                     // Строка 
 String LogMsg;                                                  // Строка для вывода лога в javascript console
 bool pump_started;                                              // Признак стартовавшего насоса
 bool setautospeed;                                              // Признак для однократного снижения скорости насоса при паузе
+volatile bool heater_state;                                     // Статус нагрева при затирке
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER

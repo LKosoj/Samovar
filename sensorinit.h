@@ -98,6 +98,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
+
 //  SteamSensor.avgTemp = 50;
 //  PipeSensor.avgTemp = 50;
 //  return;
@@ -107,6 +108,14 @@ void IRAM_ATTR DS_getvalue(void) {
   ws = sensors.getTempC(WaterSensor.Sensor);                    // считываем температуру с датчика 2
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
   acp = sensors.getTempC(ACPSensor.Sensor);                     // считываем температуру с датчика 4
+
+
+  if (TankSensor.avgTemp < 20) TankSensor.avgTemp = 20;
+  static float coef = 0;
+  coef += heater_state ? 0.1 : -0.2;
+  if (coef > 0.5) coef = 0.5;
+  if (coef < -0.5) coef = -0.5;
+  ts = TankSensor.avgTemp + coef;
 
   //return;
   sensors.requestTemperatures();
@@ -250,7 +259,7 @@ void sensor_init(void) {
 
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID){
-    set_beer_program("P;45;10\nP;50;10\nP;60;10\n");
+    set_beer_program("M;45;0;P;45;1\nP;60;1\nB;0;1\nC;30;0\n");
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }
@@ -267,7 +276,7 @@ void sensor_init(void) {
 #endif
 
   regulator.hysteresis = 5;
-  regulator.k = 0.5;
+  regulator.k = 0.3;
 }
 
 //Обнуляем все счетчики

@@ -10,7 +10,14 @@ String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 
 void change_samovar_mode() {
-  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
+    });
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
+    });
+  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
@@ -38,8 +45,7 @@ void WebServerInit(void) {
   server.serveStatic("/data.csv", SPIFFS, "/data.csv");
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
-  server.serveStatic("/distiller.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor);
-
+  
   change_samovar_mode();
 
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -96,7 +102,10 @@ String indexKeyProcessor(const String& var)
   else if (var == "WaterColor") return (String)SamSetup.WaterColor;
   else if (var == "TankColor") return (String)SamSetup.TankColor;
   else if (var == "ACPColor") return (String)SamSetup.ACPColor;
-  else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
+  else if (var == "WProgram") {
+    if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
+    else return get_program(CAPACITY_NUM * 2);
+  }
   else if (var == "videourl") return (String)SamSetup.videourl;
   else if (var == "showvideo") {
     if ((String)SamSetup.videourl != "") return "inline";
@@ -366,10 +375,15 @@ void  web_command(AsyncWebServerRequest *request) {
   */
   if (request->params() == 1) {
     if (request->hasArg("start") && PowerOn) {
-      sam_command_sync = SAMOVAR_START;
+      if (Samovar_Mode == SAMOVAR_BEER_MODE) sam_command_sync = SAMOVAR_BEER_NEXT;
+      else sam_command_sync = SAMOVAR_START;
     }
     if (request->hasArg("power")) {
-      sam_command_sync = SAMOVAR_POWER;
+      if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+        if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
+        else sam_command_sync = SAMOVAR_POWER;
+      }
+      else sam_command_sync = SAMOVAR_POWER;
     }
     if (request->hasArg("setbodytemp")) {
       sam_command_sync = SAMOVAR_SETBODYTEMP;
