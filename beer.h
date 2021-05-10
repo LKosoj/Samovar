@@ -137,15 +137,16 @@ void IRAM_ATTR check_alarm_beer() {
       //Иначе поддерживаем температуру
 #ifdef SAMOVAR_USE_POWER
       if (current_power_mode != POWER_WORK_MODE) {
-        delay(200);
+        vTaskDelay(200);
         set_power_mode(POWER_WORK_MODE);
-        delay(800);
+        vTaskDelay(800);
       }
       //Устанавливаем заданное напряжение
       set_current_power(HEATPOWER);
 #else
       current_power_mode = POWER_WORK_MODE;
       digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+      vTaskDelay(200);
       digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
     }
@@ -179,6 +180,7 @@ void set_heater_state(float setpoint, float temp) {
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+    vTaskDelay(200);
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   } else {
@@ -202,6 +204,7 @@ void set_heater(bool state) {
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+    vTaskDelay(200);
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
   } else {
@@ -216,6 +219,7 @@ void set_heater(bool state) {
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
+    vTaskDelay(200);
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   }
