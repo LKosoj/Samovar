@@ -195,7 +195,7 @@ void set_heater(bool state){
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
-    digitalWrite(RELE_CHANNEL4,SamSetup.rele4);
+    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   }
 }
