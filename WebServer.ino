@@ -45,7 +45,7 @@ void WebServerInit(void) {
   server.serveStatic("/data.csv", SPIFFS, "/data.csv");
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
-  
+
   change_samovar_mode();
 
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {

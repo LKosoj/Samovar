@@ -22,7 +22,7 @@ void set_pump_pwm(float duty) {
     pump_started = true;
     return;
   }
-  if (duty > 0 && wp_count < 10){
+  if (duty > 0 && wp_count < 10) {
     pump_pwm.write(500);
     wp_count++;
     return;

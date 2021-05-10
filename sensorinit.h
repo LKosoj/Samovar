@@ -99,9 +99,9 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
 
-//  SteamSensor.avgTemp = 50;
-//  PipeSensor.avgTemp = 50;
-//  return;
+  //  SteamSensor.avgTemp = 50;
+  //  PipeSensor.avgTemp = 50;
+  //  return;
   float ss, ps, ws, ts, acp;
   ss = sensors.getTempC(SteamSensor.Sensor);                    // считываем температуру с датчика 0
   ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
@@ -257,7 +257,7 @@ void sensor_init(void) {
 #endif
 
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
-  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID){
+  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID) {
     set_beer_program("M;45;0;P;45;1\nP;60;1\nW;0;0\nB;0;1\nC;30;0\n");
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
@@ -274,8 +274,8 @@ void sensor_init(void) {
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
 #endif
 
-  regulator.hysteresis = 0.4;
-  regulator.k = 0.7;
+  regulator.hysteresis = 0.3;
+  regulator.k = 0.9;
 }
 
 //Обнуляем все счетчики
@@ -307,7 +307,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   TankSensor.PrevTemp = 0;
   ACPSensor.PrevTemp = 0;
 
-  
+
   ActualVolumePerHour = 0;
   SamovarStatusInt = 0;
   startval = 0;

@@ -28,18 +28,18 @@ void set_pump_speed_pid(float temp);
 //Получить подстроку через разделитель
 String getValue(String data, char separator, int index)
 {
-    int found = 0;
-    int strIndex[] = { 0, -1 };
-    int maxIndex = data.length() - 1;
+  int found = 0;
+  int strIndex[] = { 0, -1 };
+  int maxIndex = data.length() - 1;
 
-    for (int i = 0; i <= maxIndex && found <= index; i++) {
-        if (data.charAt(i) == separator || i == maxIndex) {
-            found++;
-            strIndex[0] = strIndex[1] + 1;
-            strIndex[1] = (i == maxIndex) ? i+1 : i;
-        }
+  for (int i = 0; i <= maxIndex && found <= index; i++) {
+    if (data.charAt(i) == separator || i == maxIndex) {
+      found++;
+      strIndex[0] = strIndex[1] + 1;
+      strIndex[1] = (i == maxIndex) ? i + 1 : i;
     }
-    return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+  }
+  return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
 //Получаем объем отбора
@@ -118,7 +118,7 @@ void IRAM_ATTR withdrawal(void) {
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы
   if (program[ProgramNum].WType == "B" && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
-      program_Wait_Type = "(царга)";
+    program_Wait_Type = "(царга)";
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
@@ -278,28 +278,23 @@ String IRAM_ATTR get_Samovar_Status() {
     SamovarStatus = "Прг №" + String(ProgramNum + 1);
     if (startval == 2001 && program[ProgramNum].WType == "M") {
       SamovarStatus = SamovarStatus + "; Разогрев до температуры засыпи солода";
-    } else
-    if (startval == 2002 && program[ProgramNum].WType == "M") {
+    } else if (startval == 2002 && program[ProgramNum].WType == "M") {
       SamovarStatus = SamovarStatus + "; Ожидание засыпи солода";
-    } else
-    if (program[ProgramNum].WType == "P"){
-      if (begintime == 0){
+    } else if (program[ProgramNum].WType == "P") {
+      if (begintime == 0) {
         SamovarStatus = SamovarStatus + "; Нагрев до " + String(program[ProgramNum].Temp);
       } else {
-        SamovarStatus = SamovarStatus + "; Пауза " + String(program[ProgramNum].Speed - (millis() - begintime) / 1000 / 60) + " мин";
+        SamovarStatus = SamovarStatus + "; Пауза " + String(program[ProgramNum].Time - (millis() - begintime) / 1000 / 60) + " мин";
       }
-    } else
-    if (program[ProgramNum].WType == "C"){
-        SamovarStatus = SamovarStatus + "; Охлаждение до " + String(program[ProgramNum].Temp);
-    } else
-    if (program[ProgramNum].WType == "W"){
-        SamovarStatus = SamovarStatus + "; Ожидание. Нажмите \"Следующая программа\"";
-    } else
-    if (program[ProgramNum].WType == "B"){
-      if (begintime == 0){
+    } else if (program[ProgramNum].WType == "C") {
+      SamovarStatus = SamovarStatus + "; Охлаждение до " + String(program[ProgramNum].Temp);
+    } else if (program[ProgramNum].WType == "W") {
+      SamovarStatus = SamovarStatus + "; Ожидание. Нажмите \"Следующая программа\"";
+    } else if (program[ProgramNum].WType == "B") {
+      if (begintime == 0) {
         SamovarStatus = SamovarStatus + "; Кипячение - нагрев";
       } else {
-        SamovarStatus = SamovarStatus + "; Кипячение " + String(program[ProgramNum].Speed - (millis() - begintime) / 1000 / 60) + " мин";
+        SamovarStatus = SamovarStatus + "; Кипячение " + String(program[ProgramNum].Time - (millis() - begintime) / 1000 / 60) + " мин";
       }
     }
   }
@@ -404,12 +399,12 @@ void IRAM_ATTR run_program(byte num) {
 
   } else {
 #ifdef SAMOVAR_USE_POWER
-      set_power_mode(POWER_WORK_MODE);
-      if (program[num].Power > 40) {
-        set_current_power(program[num].Power);
-      }
+    set_power_mode(POWER_WORK_MODE);
+    if (program[num].Power > 40) {
+      set_current_power(program[num].Power);
+    }
 #endif
-      Msg = "Set prog line " + (String)(num + 1);
+    Msg = "Set prog line " + (String)(num + 1);
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
       Msg +=  ", capacity " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора
@@ -636,7 +631,7 @@ void IRAM_ATTR check_alarm() {
 #ifdef USE_WATER_VALVE
   if (WaterSensor.avgTemp >= TARGET_WATER_TEMP + 1) {
     digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
-  } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1){
+  } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1) {
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
@@ -666,7 +661,7 @@ void IRAM_ATTR triggerBuzzerTask(void * parameter) {
   TickType_t silent = 800 / portTICK_RATE_MS;
   int i = 0;
 
-  while(true){
+  while (true) {
     digitalWrite(BZZ_PIN, HIGH);
     vTaskDelay(beep);
     digitalWrite(BZZ_PIN, LOW);
@@ -676,7 +671,7 @@ void IRAM_ATTR triggerBuzzerTask(void * parameter) {
   }
 }
 
-void set_buzzer(){
+void set_buzzer() {
   if (BuzzerTask == NULL) {
     BuzzerTaskFl = true;
     //Запускаем таск для пищалки

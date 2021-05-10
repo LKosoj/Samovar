@@ -211,12 +211,12 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         //прогресс переводим в проценты
         WthdrwlProgress = wp * 100;
         WthdrwTime = program[ProgramNum].Time * (1 - wp);
-        
+
         WthdrwTimeAll = WthdrwTime;
         for (int i = ProgramNum + 1; i < ProgramLen; i++) {
           WthdrwTimeAll += program[i].Time;
         }
-        
+
         String h, m;
         int hi, mi;
         hi = WthdrwTime / 60;
@@ -234,7 +234,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         if (mi < 10) m = "0"; else m = "";
         m += (String)mi;
         WthdrwTimeAllS = h + ":" + m;
-        
+
       }
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
       else if (TargetStepps > 0 || program[ProgramNum].WType == "P") {
@@ -242,7 +242,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         float wp;
 
         //считаем время для текущей строки программы
-        if (program[ProgramNum].WType == "P"){
+        if (program[ProgramNum].WType == "P") {
           WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
           if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
           wp = 1 - (WthdrwTime / program[ProgramNum].Time);
@@ -250,7 +250,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
           wp = (float)CurrrentStepps / (float)TargetStepps;
           WthdrwTime = program[ProgramNum].Time * (1 - wp);
         }
-        
+
         //суммируем время текущей строки программы и всех следующих за ней
         WthdrwTimeAll = WthdrwTime;
 
@@ -265,9 +265,9 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         mi = (unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60);
         if (mi < 10) m = "0"; else m = "";
         m += (String)mi;
-        
+
         WthdrwTimeS = h + ":" + m;
-        
+
         if (WthdrwTimeAll < 10) h = "0"; else h = "";
         h += (String)((unsigned int)WthdrwTimeAll);
         mi = (unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60);
@@ -283,7 +283,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         WthdrwTimeAllS = "";
       }
 
-      
+
       vTaskDelay(10);
 
 #ifdef USE_WATERSENSOR
@@ -292,7 +292,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
-      
+
       if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && WFpulseCount == 0) {
         WFAlarmCount ++;
       } else {
@@ -305,45 +305,45 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif
 
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
-      if (SteamSensor.ErrCount > 10){
+      if (SteamSensor.ErrCount > 10) {
         SteamSensor.ErrCount = - 110;
         Msg = "Alarm! Steam sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} Steam sensor error!");
-#endif        
+        //Если используется Blynk - пишем оператору
+        Blynk.notify("Alarm! {DEVICE_NAME} Steam sensor error!");
+#endif
       }
-      if (PipeSensor.ErrCount > 10){
+      if (PipeSensor.ErrCount > 10) {
         PipeSensor.ErrCount = - 110;
         Msg = "Alarm! Pipe sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} Pipe sensor error!");
-#endif        
+        //Если используется Blynk - пишем оператору
+        Blynk.notify("Alarm! {DEVICE_NAME} Pipe sensor error!");
+#endif
       }
-      if (WaterSensor.ErrCount > 10){
+      if (WaterSensor.ErrCount > 10) {
         WaterSensor.ErrCount = - 110;
         Msg = "Alarm! Water sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} Water sensor error!");
-#endif        
+        //Если используется Blynk - пишем оператору
+        Blynk.notify("Alarm! {DEVICE_NAME} Water sensor error!");
+#endif
       }
-      if (TankSensor.ErrCount > 10){
+      if (TankSensor.ErrCount > 10) {
         TankSensor.ErrCount = - 110;
         Msg = "Alarm! Tank sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} Tank sensor error!");
-#endif        
+        //Если используется Blynk - пишем оператору
+        Blynk.notify("Alarm! {DEVICE_NAME} Tank sensor error!");
+#endif
       }
-      if (ACPSensor.ErrCount > 10){
+      if (ACPSensor.ErrCount > 10) {
         ACPSensor.ErrCount = - 110;
         Msg = "Alarm! ACP sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} ACP sensor error!");
-#endif        
+        //Если используется Blynk - пишем оператору
+        Blynk.notify("Alarm! {DEVICE_NAME} ACP sensor error!");
+#endif
       }
 
       OldMinST = CurMinST;
@@ -353,15 +353,15 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 }
 
 void setup() {
-#ifdef __SAMOVAR_NOT_USE_WDT  
-  esp_task_wdt_init(1,false);
-  esp_task_wdt_init(2,false);
+#ifdef __SAMOVAR_NOT_USE_WDT
+  esp_task_wdt_init(1, false);
+  esp_task_wdt_init(2, false);
   rtc_wdt_protect_off();
   rtc_wdt_disable();
   disableCore0WDT();
   disableCore1WDT();
 #endif
-  
+
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
   WiFi.setHostname(host);
@@ -621,7 +621,7 @@ void loop() {
 
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
   if (btn.isClick()) {
-    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
+    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
       //если выключен - включаем
       if (!PowerOn) {
         set_power(true);
@@ -814,6 +814,6 @@ void read_config() {
 #endif
 }
 
-void WriteConsoleLog(String StringLogMsg){
+void WriteConsoleLog(String StringLogMsg) {
   LogMsg = LogMsg + "\n" + StringLogMsg;
 }
