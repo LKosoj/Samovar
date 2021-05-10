@@ -145,9 +145,8 @@ void IRAM_ATTR check_alarm_beer() {
       set_current_power(HEATPOWER);
 #else
       current_power_mode = POWER_WORK_MODE;
-      digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-      vTaskDelay(200);
       digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+      digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
 #endif
     }
 
@@ -179,8 +178,7 @@ void set_heater_state(float setpoint, float temp) {
     set_power_mode(POWER_SPEED_MODE);
 #else
     current_power_mode = POWER_WORK_MODE;
-    digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-    vTaskDelay(200);
+    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   } else {
@@ -203,9 +201,9 @@ void set_heater(bool state) {
     set_current_power(HEATPOWER);
 #else
     current_power_mode = POWER_WORK_MODE;
-    digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-    vTaskDelay(200);
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
+    vTaskDelay(200);
 #endif
   } else {
 #ifdef SAMOVAR_USE_POWER
@@ -218,9 +216,8 @@ void set_heater(bool state) {
     set_current_power(0);
 #else
     current_power_mode = POWER_WORK_MODE;
-    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
-    vTaskDelay(200);
-    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+    digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
   }
 }
