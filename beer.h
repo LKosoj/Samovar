@@ -53,6 +53,12 @@ void IRAM_ATTR check_alarm_beer() {
   if (startval <= 2000) return;
 
   //Обрабатываем программу
+
+  //Если программа - ожидание - ждем, ничего не делаем
+  if (program[ProgramNum].WType == "W"){
+    return;
+  }
+  
   //Если режим Засыпь солода или Пауза
   if (program[ProgramNum].WType == "M" || program[ProgramNum].WType == "P"){
     set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
@@ -140,6 +146,7 @@ void IRAM_ATTR check_alarm_beer() {
       run_beer_program(ProgramNum + 1);
     }
   }
+  
 }
 
 void set_heater_state(float setpoint, float temp){

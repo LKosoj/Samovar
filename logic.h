@@ -278,20 +278,23 @@ String IRAM_ATTR get_Samovar_Status() {
     SamovarStatus = "Прг №" + String(ProgramNum + 1);
     if (startval == 2001 && program[ProgramNum].WType == "M") {
       SamovarStatus = SamovarStatus + "; Разогрев до температуры засыпи солода";
-    }
+    } else
     if (startval == 2002 && program[ProgramNum].WType == "M") {
       SamovarStatus = SamovarStatus + "; Ожидание засыпи солода";
-    }
+    } else
     if (program[ProgramNum].WType == "P"){
       if (begintime == 0){
         SamovarStatus = SamovarStatus + "; Нагрев до " + String(program[ProgramNum].Temp);
       } else {
         SamovarStatus = SamovarStatus + "; Пауза " + String(program[ProgramNum].Speed - (millis() - begintime) / 1000 / 60) + " мин";
       }
-    }
+    } else
     if (program[ProgramNum].WType == "C"){
         SamovarStatus = SamovarStatus + "; Охлаждение до " + String(program[ProgramNum].Temp);
-    }
+    } else
+    if (program[ProgramNum].WType == "W"){
+        SamovarStatus = SamovarStatus + "; Ожидание. Нажмите \"Следующая программа\"";
+    } else
     if (program[ProgramNum].WType == "B"){
       if (begintime == 0){
         SamovarStatus = SamovarStatus + "; Кипячение - нагрев";

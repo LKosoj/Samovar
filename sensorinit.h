@@ -258,7 +258,7 @@ void sensor_init(void) {
 
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID){
-    set_beer_program("M;45;0;P;45;1\nP;60;1\nB;0;1\nC;30;0\n");
+    set_beer_program("M;45;0;P;45;1\nP;60;1\nW;0;0\nB;0;1\nC;30;0\n");
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }

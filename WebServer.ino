@@ -126,7 +126,10 @@ String setupKeyProcessor(const String& var)
   else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
   else if (var == "SetACPTemp") return (String)SamSetup.SetACPTemp;
   else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
-  else if (var == "WProgram") return get_program(CAPACITY_NUM * 2);
+  else if (var == "WProgram") {
+    if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
+    else return get_program(CAPACITY_NUM * 2);
+  }
   else if (var == "SteamDelay") return (String)SamSetup.SteamDelay;
   else if (var == "PipeDelay") return (String)SamSetup.PipeDelay;
   else if (var == "WaterDelay") return (String)SamSetup.WaterDelay;
@@ -245,7 +248,8 @@ void  handleSave(AsyncWebServerRequest *request) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
   }
   if (request->hasArg("WProgram")) {
-    set_program(request->arg("WProgram"));
+    if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
+    else set_program(request->arg("WProgram"));
   }
 
   SamSetup.UsePreccureCorrect = false;
@@ -418,8 +422,13 @@ void  web_command(AsyncWebServerRequest *request) {
 }
 void  web_program(AsyncWebServerRequest *request) {
   if (request->hasArg("WProgram")) {
-    set_program(request->arg("WProgram"));
-    request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
+    if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      set_beer_program(request->arg("WProgram"));
+      request->send(200, "text/plain", get_beer_program());
+    } else {
+      set_program(request->arg("WProgram"));
+      request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
+    }
   }
 }
 
