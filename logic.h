@@ -163,7 +163,7 @@ void IRAM_ATTR set_power(bool On) {
 
   } else {
 #ifdef SAMOVAR_USE_POWER
-    delay(1000);
+    vTaskDelay(1000);
     set_power_mode(POWER_SLEEP_MODE);
 #else
     current_power_mode = POWER_SLEEP_MODE;
