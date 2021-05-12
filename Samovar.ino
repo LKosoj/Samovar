@@ -827,6 +827,7 @@ void read_config() {
   {
     SamSetup.Kd = 0.1;
   }
+  heaterPID.SetTunings(SamSetup.Kp,SamSetup.Ki,SamSetup.Kd);  
 }
 
 void WriteConsoleLog(String StringLogMsg) {
