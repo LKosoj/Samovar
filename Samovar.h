@@ -257,12 +257,12 @@ double Kp, Ki, Kd;
 
 //Relay relay(RELAY_PIN, RELAY_PERIOD);
 PID heaterPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
-int periodInSeconds = 5;
+int periodInSeconds = 6;
 
 byte ATuneModeRemember=2;
-double aTuneStep=500;
+double aTuneStep=50;
 double aTuneNoise=1;
-unsigned int aTuneLookBack=20;
+unsigned int aTuneLookBack=1;
 boolean tuning = false;
 
 PID_ATune aTune(&Input, &Output);
