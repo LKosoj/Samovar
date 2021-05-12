@@ -109,10 +109,11 @@ void IRAM_ATTR DS_getvalue(void) {
   ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
   acp = sensors.getTempC(ACPSensor.Sensor);                     // считываем температуру с датчика 4
 
-
+//  float randNumber;
+//  randNumber = random(100) / float(500);
 //  if (TankSensor.avgTemp < 29) TankSensor.avgTemp = 29;
 //  static float coef = 0;
-//  coef = heater_state ? 0.1 : -0.1;
+//  coef = heater_state ? 0.1 + randNumber: -0.1 - randNumber;
 //  //if (coef > 0.5) coef = 0.5;
 //  //if (coef < -0.5) coef = -0.5;
 //  ts = TankSensor.avgTemp + coef;
