@@ -107,6 +107,7 @@ function SaveFormToFile(form) {
   <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Основные">
   <input type='button' class="tablinks" onclick="openTab(event, 'Temp');" value="Температура">
   <input type='button' class="tablinks" onclick="openTab(event, 'Pump');" value="Насос">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Beer');" value="Пиво">
   <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Прочие">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
@@ -215,6 +216,13 @@ function SaveFormToFile(form) {
 <div style="margin: 0 auto; width: 200px;">
 <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
 </div>
+</div>
+
+<div id="Beer" class="tabcontent">
+<h2>Коэффициенты для PID регулятора нагрева:</h2>
+<h2>Kp: <input name='Kp' type='text' value='%Kp%'></h2>
+<h2>Ki: <input name='Ki' type='text' value='%Ki%'></h2>
+<h2>Kd: <input name='Kd' type='text' value='%Kd%'></h2>
 </div>
 
 <div id="Other" class="tabcontent">
