@@ -5,6 +5,7 @@ void set_heater_state(float setpoint, float temp);
 void set_heater(double dutyCycle);
 void setHeaterPosition(bool state);
 void run_beer_program(byte num);
+void StartAutoTune();
 void FinishAutoTune();
 
 void beer_proc() {
@@ -22,7 +23,7 @@ void IRAM_ATTR run_beer_program(byte num) {
   ProgramNum = num;
   begintime = 0;
   if (program[ProgramNum].WType == "A") {
-    tuning = true;
+    StartAutoTune();
   }
 
   if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
@@ -64,7 +65,7 @@ void IRAM_ATTR check_alarm_beer() {
   if (program[ProgramNum].WType == "W") {
     if (begintime == 0) {
       begintime = millis();
-      set_heater_state(5, TankSensor.avgTemp);
+      setHeaterPosition(false);
     }
     return;
   }
@@ -117,7 +118,7 @@ void IRAM_ATTR check_alarm_beer() {
   if (program[ProgramNum].WType == "C") {
     if (begintime == 0) {
       begintime = millis();
-      set_heater_state(5, TankSensor.avgTemp);
+      setHeaterPosition(false);
       //Открываем клапан воды
       open_valve(true);
     }
@@ -217,17 +218,7 @@ void set_heater_state(float setpoint, float temp) {
     {
       heaterPID.Compute();
     }
-    set_heater(Output/100);
-    Serial.print("Setpoint = ");
-    Serial.print(Setpoint);
-    Serial.print("\t Input = ");
-    Serial.print(Input);
-    Serial.print("\t Output = ");
-    Serial.print(Output);
-    Serial.print("\t heater_state = ");
-    Serial.print(heater_state);
-    Serial.print("\t tuning = ");
-    Serial.println(tuning);
+    set_heater(Output / 100);
   }
 }
 
@@ -236,12 +227,7 @@ void set_heater(double dutyCycle) {
   static uint32_t periodTime = 0;
 
   uint32_t newTime = millis();
-  uint32_t offTime = periodInSeconds * 1000 * ( 1 - dutyCycle);
-
-    Serial.print("newTime = ");
-    Serial.print(newTime);
-    Serial.print("\t oldTime = ");
-    Serial.print(oldTime);
+  uint32_t offTime = periodInSeconds * 1000 * (dutyCycle);
 
   if (newTime < oldTime) {
     periodTime += (UINT32_MAX - oldTime + newTime);
@@ -251,21 +237,13 @@ void set_heater(double dutyCycle) {
   oldTime = newTime;
 
   if (periodTime < offTime) {
-    if (dutyCycle > 0.0) setHeaterPosition(false);
+    if (dutyCycle > 0.0) setHeaterPosition(true);
   } else if (periodTime >= periodInSeconds * 1000) {
     periodTime = 0;
-    if (dutyCycle > 0.0) setHeaterPosition(false);
+    if (dutyCycle > 0.0) setHeaterPosition(true);
   } else {
-    setHeaterPosition(true);
+    setHeaterPosition(false);
   }
-
-    Serial.print("\t dutyCycle = ");
-    Serial.print(dutyCycle);
-    Serial.print("\t periodTime = ");
-    Serial.print(periodTime);
-    Serial.print("\t offTime = ");
-    Serial.println(offTime);
-  
 }
 
 void setHeaterPosition(bool state) {
@@ -343,6 +321,10 @@ void StartAutoTune()
 {
   // REmember the mode we were in
   ATuneModeRemember = heaterPID.GetMode();
+
+  Output = 50;
+
+  aTune.SetControlType(1);
 
   // set up the auto-tune parameters
   aTune.SetNoiseBand(aTuneNoise);
