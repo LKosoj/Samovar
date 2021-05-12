@@ -73,6 +73,16 @@ BLYNK_WRITE(V17)
   set_pump_speed(get_speed_from_rate(Value17), true);
 }
 
+BLYNK_WRITE(V12)
+{
+  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+    sam_command_sync = SAMOVAR_BEER_NEXT;
+  }
+  else {
+    menu_samovar_start();
+  }
+}
+
 BLYNK_WRITE(V13)
 {
   pause_withdrawal(!PauseOn);

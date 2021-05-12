@@ -24,14 +24,16 @@
 #include <SPIFFSEditor.h>
 #include <ESPAsyncWiFiManager.h>
 
-
 #define DRIVER_STEP_TIME 1
 #include <GyverEncoder.h>
 
 #include <GyverStepper.h>
 #include <GyverButton.h>
 
-#include "GyverRelay.h"
+#include <GyverPID.h>
+
+#include <PID_v1.h>
+#include <PID_AutoTune_v0.h>
 
 #include <ESP32Servo.h>
 
@@ -397,7 +399,7 @@ void setup() {
   }
 
   if (SamSetup.flag > 250) {
-    SamSetup.flag = 1;
+    SamSetup.flag = 2;
     SamSetup.DeltaSteamTemp = 0.1;
     SamSetup.DeltaPipeTemp = 0.2;
     SamSetup.DeltaWaterTemp = 0;
@@ -812,6 +814,22 @@ void read_config() {
 #ifdef SAMOVAR_USE_BLYNK
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
 #endif
+
+  if (isnan(SamSetup.Kp))
+  {
+    SamSetup.Kp = 6;
+  }
+  if (isnan(SamSetup.Ki))
+  {
+    SamSetup.Ki = 0.5;
+  }
+  if (isnan(SamSetup.Kd))
+  {
+    SamSetup.Kd = 0.1;
+  }
+  SamSetup.Kp = 85;
+  SamSetup.Ki = 0.5;
+  SamSetup.Kd = 0.1;
 }
 
 void WriteConsoleLog(String StringLogMsg) {

@@ -112,9 +112,9 @@ void IRAM_ATTR DS_getvalue(void) {
 
 //  if (TankSensor.avgTemp < 29) TankSensor.avgTemp = 29;
 //  static float coef = 0;
-//  coef += heater_state ? 0.1 : -0.2;
-//  if (coef > 0.5) coef = 0.5;
-//  if (coef < -0.5) coef = -0.5;
+//  coef = heater_state ? 0.1 : -0.1;
+//  //if (coef > 0.5) coef = 0.5;
+//  //if (coef < -0.5) coef = -0.5;
 //  ts = TankSensor.avgTemp + coef;
 
   sensors.requestTemperatures();
@@ -274,8 +274,14 @@ void sensor_init(void) {
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
 #endif
 
-  regulator.hysteresis = 0.3;
-  regulator.k = 0.9;
+  //  regulator.hysteresis = 0.3;
+  //  regulator.k = 0.3;
+  //  regulator.dT = 4000;    //система инерционная, считаем скорость раз в четыре секунды
+  //  regulator.setLimits(0, WindowSize);
+  //  regulator.setDirection(REVERSE);
+  heaterPID.SetSampleTime(1000);
+  heaterPID.SetOutputLimits(0, 100);
+  heaterPID.SetTunings(SamSetup.Kp,SamSetup.Ki,SamSetup.Kd);
 }
 
 //Обнуляем все счетчики

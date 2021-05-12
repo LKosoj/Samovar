@@ -250,7 +250,23 @@ File fileToAppend;
 Servo servo;  // create servo object to control a servo
 
 GButton btn(BTN_PIN);
-GyverRelay regulator(REVERSE);
+//GyverRelay regulator(REVERSE);
+
+double Input, Output, Setpoint;
+double Kp, Ki, Kd;
+
+//Relay relay(RELAY_PIN, RELAY_PERIOD);
+PID heaterPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
+int periodInSeconds = 5;
+
+byte ATuneModeRemember=2;
+double aTuneStep=500;
+double aTuneNoise=1;
+unsigned int aTuneLookBack=20;
+boolean tuning = false;
+
+PID_ATune aTune(&Input, &Output);
+
 
 #ifdef USE_HEAD_LEVEL_SENSOR
 GButton whls(WHEAD_LEVEL_SENSOR_PIN);
@@ -312,6 +328,9 @@ struct SetupEEPROM {
   float DeltaACPTemp;                                           //Корректировка температурного датчика
   float SetACPTemp;                                             //Уставка температурного датчика
   uint16_t ACPDelay;                                            //Время задержки включения насоса в секундах при выходе температуры за значение уставки
+  float Kp;                                                     //Коэффициенты для PID-регулятора нагрева
+  float Ki;
+  float Kd;
 };
 
 struct DSSensor {

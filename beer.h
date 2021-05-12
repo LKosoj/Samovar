@@ -2,8 +2,10 @@
 
 void beer_finish();
 void set_heater_state(float setpoint, float temp);
-void set_heater(bool state);
+void set_heater(double dutyCycle);
+void setHeaterPosition(bool state);
 void run_beer_program(byte num);
+void FinishAutoTune();
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
@@ -19,6 +21,10 @@ void IRAM_ATTR run_beer_program(byte num) {
   if (startval == 2000) startval = 2001;
   ProgramNum = num;
   begintime = 0;
+  if (program[ProgramNum].WType == "A") {
+    tuning = true;
+  }
+
   if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
 
   if (num == CAPACITY_NUM * 2) {
@@ -61,6 +67,15 @@ void IRAM_ATTR check_alarm_beer() {
       set_heater_state(5, TankSensor.avgTemp);
     }
     return;
+  }
+
+  //Если режим Автотюнинг
+  if (program[ProgramNum].WType == "A") {
+    if (tuning) {
+      set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
+    } else {
+      beer_finish();
+    }
   }
 
   //Если режим Засыпь солода или Пауза
@@ -117,6 +132,9 @@ void IRAM_ATTR check_alarm_beer() {
 
   //Если программа - кипячение
   if (program[ProgramNum].WType == "B") {
+    //Если предыдущая программа была программой кипячения - просто продолжаем кипятить.
+    if (begintime == 0 && ProgramNum > 0 && program[ProgramNum - 1].WType == "B") begintime = millis();
+
     if (begintime == 0) {
       //Если температура в кубе достигла температуры кипения, засекаем время
       if (abs(TankSensor.avgTemp - BOILING_TEMP) <= 0.5) {
@@ -135,6 +153,7 @@ void IRAM_ATTR check_alarm_beer() {
       set_heater_state(BOILING_TEMP, TankSensor.avgTemp);
     } else {
       //Иначе поддерживаем температуру
+      heater_state = true;
 #ifdef SAMOVAR_USE_POWER
       if (current_power_mode != POWER_WORK_MODE) {
         vTaskDelay(200);
@@ -171,7 +190,7 @@ void IRAM_ATTR check_alarm_beer() {
 }
 
 void set_heater_state(float setpoint, float temp) {
-  if (setpoint - temp > HEAT_DELTA) {
+  if (setpoint - temp > HEAT_DELTA && !tuning) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
     delay(200);
@@ -182,13 +201,74 @@ void set_heater_state(float setpoint, float temp) {
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   } else {
-    regulator.setpoint = setpoint;
-    regulator.input = temp;
-    set_heater(regulator.getResult());
+    heaterPID.SetMode(AUTOMATIC);
+    static unsigned long prev_time = millis();
+    Setpoint = setpoint;
+    Input = temp;
+
+    if (tuning) // run the auto-tuner
+    {
+      if (aTune.Runtime()) // returns 'true' when done
+      {
+        FinishAutoTune();
+      }
+    }
+    else // Execute control algorithm
+    {
+      heaterPID.Compute();
+    }
+    set_heater(Output/100);
+    Serial.print("Setpoint = ");
+    Serial.print(Setpoint);
+    Serial.print("\t Input = ");
+    Serial.print(Input);
+    Serial.print("\t Output = ");
+    Serial.print(Output);
+    Serial.print("\t heater_state = ");
+    Serial.print(heater_state);
+    Serial.print("\t tuning = ");
+    Serial.println(tuning);
   }
 }
 
-void set_heater(bool state) {
+void set_heater(double dutyCycle) {
+  static uint32_t oldTime = 0;
+  static uint32_t periodTime = 0;
+
+  uint32_t newTime = millis();
+  uint32_t offTime = periodInSeconds * 1000 * ( 1 - dutyCycle);
+
+    Serial.print("newTime = ");
+    Serial.print(newTime);
+    Serial.print("\t oldTime = ");
+    Serial.print(oldTime);
+
+  if (newTime < oldTime) {
+    periodTime += (UINT32_MAX - oldTime + newTime);
+  } else {
+    periodTime += (newTime - oldTime);
+  }
+  oldTime = newTime;
+
+  if (periodTime < offTime) {
+    if (dutyCycle > 0.0) setHeaterPosition(false);
+  } else if (periodTime >= periodInSeconds * 1000) {
+    periodTime = 0;
+    if (dutyCycle > 0.0) setHeaterPosition(false);
+  } else {
+    setHeaterPosition(true);
+  }
+
+    Serial.print("\t dutyCycle = ");
+    Serial.print(dutyCycle);
+    Serial.print("\t periodTime = ");
+    Serial.print(periodTime);
+    Serial.print("\t offTime = ");
+    Serial.println(offTime);
+  
+}
+
+void setHeaterPosition(bool state) {
   heater_state = state;
   if (state) {
 #ifdef SAMOVAR_USE_POWER
@@ -257,4 +337,44 @@ void set_beer_program(String WProgram) {
       break;
     }
   }
+}
+
+void StartAutoTune()
+{
+  // REmember the mode we were in
+  ATuneModeRemember = heaterPID.GetMode();
+
+  // set up the auto-tune parameters
+  aTune.SetNoiseBand(aTuneNoise);
+  aTune.SetOutputStep(aTuneStep);
+  aTune.SetLookbackSec((int)aTuneLookBack);
+  tuning = true;
+}
+
+void FinishAutoTune()
+{
+  aTune.Cancel();
+  tuning = false;
+
+  // Extract the auto-tune calculated parameters
+  SamSetup.Kp = aTune.GetKp();
+  SamSetup.Ki = aTune.GetKi();
+  SamSetup.Kd = aTune.GetKd();
+
+  Serial.print("Kp = ");
+  Serial.print(Kp);
+  Serial.print("\tKi = ");
+  Serial.print(Ki);
+  Serial.print("\tKd = ");
+  Serial.println(Kd);
+
+  // Re-tune the PID and revert to normal control mode
+  heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
+  heaterPID.SetMode(ATuneModeRemember);
+
+  EEPROM.put(0, SamSetup);
+  EEPROM.commit();
+  read_config();
+
+  set_heater_state(0, 50);
 }
