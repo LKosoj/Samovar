@@ -130,6 +130,9 @@ String setupKeyProcessor(const String& var)
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else return get_program(CAPACITY_NUM * 2);
   }
+  else if (var == "Kp") return (String)SamSetup.Kp;
+  else if (var == "Ki") return (String)SamSetup.Ki;
+  else if (var == "Kd") return (String)SamSetup.Kd;
   else if (var == "SteamDelay") return (String)SamSetup.SteamDelay;
   else if (var == "PipeDelay") return (String)SamSetup.PipeDelay;
   else if (var == "WaterDelay") return (String)SamSetup.WaterDelay;
@@ -240,6 +243,15 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("SetACPTemp")) {
     SamSetup.SetACPTemp = request->arg("SetACPTemp").toFloat();
+  }
+  if (request->hasArg("Kp")) {
+    SamSetup.Kp = request->arg("Kp").toFloat();
+  }
+  if (request->hasArg("Ki")) {
+    SamSetup.Ki = request->arg("Ki").toFloat();
+  }
+  if (request->hasArg("Kd")) {
+    SamSetup.Kd = request->arg("Kd").toFloat();
   }
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
