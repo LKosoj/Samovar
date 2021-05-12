@@ -817,7 +817,7 @@ void read_config() {
 
   if (isnan(SamSetup.Kp))
   {
-    SamSetup.Kp = 6;
+    SamSetup.Kp = 85;
   }
   if (isnan(SamSetup.Ki))
   {
@@ -827,9 +827,6 @@ void read_config() {
   {
     SamSetup.Kd = 0.1;
   }
-  SamSetup.Kp = 85;
-  SamSetup.Ki = 0.5;
-  SamSetup.Kd = 0.1;
 }
 
 void WriteConsoleLog(String StringLogMsg) {
