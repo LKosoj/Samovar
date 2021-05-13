@@ -290,6 +290,8 @@ String IRAM_ATTR get_Samovar_Status() {
       SamovarStatus = SamovarStatus + "; Охлаждение до " + String(program[ProgramNum].Temp);
     } else if (program[ProgramNum].WType == "W") {
       SamovarStatus = SamovarStatus + "; Ожидание. Нажмите \"Следующая программа\"";
+    } else if (program[ProgramNum].WType == "A") {
+      SamovarStatus = SamovarStatus + "; Автокалибровка. После завершения питание будет выключено";
     } else if (program[ProgramNum].WType == "B") {
       if (begintime == 0) {
         SamovarStatus = SamovarStatus + "; Кипячение - нагрев";
