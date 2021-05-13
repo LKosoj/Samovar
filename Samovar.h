@@ -331,6 +331,7 @@ struct SetupEEPROM {
   float Kp;                                                     //Коэффициенты для PID-регулятора нагрева
   float Ki;
   float Kd;
+  float StbVoltage;                                             //Напряжение регулятора в режиме поддержания температуры
 };
 
 struct DSSensor {
