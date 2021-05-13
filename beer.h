@@ -162,7 +162,7 @@ void IRAM_ATTR check_alarm_beer() {
         vTaskDelay(800);
       }
       //Устанавливаем заданное напряжение
-      set_current_power(HEATPOWER);
+      set_current_power(SamSetup.StbVoltage);
 #else
       current_power_mode = POWER_WORK_MODE;
       digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
@@ -256,7 +256,7 @@ void setHeaterPosition(bool state) {
       delay(800);
     }
     //Устанавливаем заданное напряжение
-    set_current_power(HEATPOWER);
+    set_current_power(SamSetup.StbVoltage);
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
