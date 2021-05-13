@@ -75,6 +75,7 @@ BLYNK_WRITE(V17)
 
 BLYNK_WRITE(V12)
 {
+  if (!PowerOn) return;
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     sam_command_sync = SAMOVAR_BEER_NEXT;
   }
