@@ -828,6 +828,10 @@ void read_config() {
     SamSetup.Kd = 0.1;
   }
   heaterPID.SetTunings(SamSetup.Kp,SamSetup.Ki,SamSetup.Kd);  
+  if (isnan(SamSetup.StbVoltage))
+  {
+    SamSetup.StbVoltage = 100;
+  }
 }
 
 void WriteConsoleLog(String StringLogMsg) {
