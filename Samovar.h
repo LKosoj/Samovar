@@ -259,10 +259,10 @@ double Kp, Ki, Kd;
 PID heaterPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 int periodInSeconds = 6;
 
-byte ATuneModeRemember=2;
-double aTuneStep=50;
-double aTuneNoise=1;
-unsigned int aTuneLookBack=2;
+byte ATuneModeRemember = 2;
+double aTuneStep = 50;
+double aTuneNoise = 1;
+unsigned int aTuneLookBack = 2;
 boolean tuning = false;
 
 PID_ATune aTune(&Input, &Output);
