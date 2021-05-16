@@ -495,8 +495,8 @@ void setup() {
   //connectWiFi();
   writeString("Connected", 4);
 
-  btn.setType(LOW_PULL);
-  //btn.setTickMode(MANUAL);
+  //btn.setType(LOW_PULL);
+  btn.setTickMode(MANUAL);
   //btn.setTimeout(500);
   attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
 
