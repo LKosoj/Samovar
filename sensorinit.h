@@ -113,7 +113,7 @@ void IRAM_ATTR DS_getvalue(void) {
 //  randNumber = random(100) / float(500);
 //  if (TankSensor.avgTemp < 29) TankSensor.avgTemp = 29;
 //  static float coef = 0;
-//  coef = heater_state ? 0.1 + randNumber: -0.1 - randNumber;
+//  coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
 //  //if (coef > 0.5) coef = 0.5;
 //  //if (coef < -0.5) coef = -0.5;
 //  ts = TankSensor.avgTemp + coef;
@@ -282,7 +282,7 @@ void sensor_init(void) {
   //  regulator.setDirection(REVERSE);
   heaterPID.SetSampleTime(1000);
   heaterPID.SetOutputLimits(0, 100);
-  heaterPID.SetTunings(SamSetup.Kp,SamSetup.Ki,SamSetup.Kd);
+  heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
 }
 
 //Обнуляем все счетчики
