@@ -29,6 +29,8 @@ LiquidLine lql_setup(0, 1, "/Setup");
 LiquidLine lql_ip(0, 2, "IP: ", ipstr);
 LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
 
+LiquidScreen main_screen5(lql_tank_temp, lql_atm, lql_water_temp, lql_time);
+
 LiquidLine lql_setup_steam_temp(0, 0, "^Steam temp: ", SamSetup.DeltaSteamTemp);
 LiquidLine lql_setup_pipe_temp(0, 1, "^Pipe temp: ", SamSetup.DeltaPipeTemp);
 LiquidLine lql_setup_water_temp(0, 2, "^Water temp: ", SamSetup.DeltaWaterTemp);
@@ -54,8 +56,9 @@ LiquidLine lql_setup_program_Temp(0, 4, "^Temp: ", program[0].Temp);
 LiquidLine lql_setup_program_Power(0, 5, "^Power: ", program[0].Power);
 LiquidScreen setup_program_settings(lql_setup_program_WType, lql_setup_program_Volume, lql_setup_program_Speed, lql_setup_program_capacity_num);
 
-LiquidLine lql_setup_program_back_line(0, 0, "/Back");
-LiquidScreen setup_program_back(lql_setup_program_back_line, lql_time);
+LiquidLine lql_setup_program_reset_wifi(0, 0, ">Reset WiFi");
+LiquidLine lql_setup_program_back_line(0, 1, "/Back");
+LiquidScreen setup_program_back(lql_setup_program_reset_wifi, lql_setup_program_back_line, lql_time);
 
 LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
@@ -85,6 +88,7 @@ void set_menu_screen(byte param) {
       main_screen1.hide(true);
       main_screen2.hide(true);
       main_screen4.hide(true);
+      main_screen5.hide(true);
       setup_program_settings.hide(true);
       setup_program_back.hide(true);
       //main_menu1.switch_focus();
@@ -101,6 +105,7 @@ void set_menu_screen(byte param) {
       main_screen1.hide(false);
       main_screen2.hide(false);
       main_screen4.hide(false);
+      main_screen5.hide(true);
       //main_menu1.switch_focus();
       main_menu1.change_screen(&main_screen);
       break;
@@ -115,6 +120,7 @@ void set_menu_screen(byte param) {
       main_screen1.hide(false);
       main_screen2.hide(true);
       main_screen4.hide(false);
+      main_screen5.hide(true);
       //main_menu1.switch_focus();
       main_menu1.change_screen(&main_screen);
       break;
@@ -127,11 +133,18 @@ void set_menu_screen(byte param) {
       main_screen1.hide(true);
       main_screen2.hide(true);
       main_screen4.hide(true);
+      main_screen5.hide(true);
       setup_program_settings.hide(false);
       setup_program_back.hide(false);
       //main_menu1.switch_focus();
       main_menu1.change_screen(&setup_program_settings);
       break;
+  }
+  if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    main_screen.hide(true);
+    main_screen1.hide(true);
+    main_screen2.hide(true);
+    main_screen5.hide(false);
   }
 }
 
@@ -246,6 +259,13 @@ void menu_program_back() {
   reset_focus();
   set_menu_screen(1);
 }
+
+void menu_reset_wifi() {
+  AsyncWiFiManager wifiManager(&server, &dns);
+  wifiManager.resetSettings();
+  ESP.restart();
+}
+
 void menu_get_power() {
   reset_focus();
   if (!PowerOn) {
@@ -387,6 +407,8 @@ void setupMenu() {
   lql_setup_stepper_program.attach_function(2, menu_program);
   lql_setup_program_back_line.attach_function(1, menu_program_back);
   lql_setup_program_back_line.attach_function(2, menu_program_back);
+  lql_setup_program_reset_wifi.attach_function(1, menu_reset_wifi);
+  lql_setup_program_reset_wifi.attach_function(2, menu_reset_wifi);
 
   lql_back_line.attach_function(1, setup_go_back);
   lql_back_line.attach_function(2, setup_go_back);
