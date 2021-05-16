@@ -466,6 +466,7 @@ void setup() {
   //Подключаемся к WI-FI
   AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
   AsyncWiFiManager wifiManager(&server, &dns);
+  wifiManager.setConfigPortalTimeout(120);
   wifiManager.setAPCallback(configModeCallback);
   wifiManager.setDebugOutput(false);
   wifiManager.addParameter(&custom_blynk_token);
@@ -827,7 +828,7 @@ void read_config() {
   {
     SamSetup.Kd = 0.1;
   }
-  heaterPID.SetTunings(SamSetup.Kp,SamSetup.Ki,SamSetup.Kd);  
+  heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
   if (isnan(SamSetup.StbVoltage))
   {
     SamSetup.StbVoltage = 100;
