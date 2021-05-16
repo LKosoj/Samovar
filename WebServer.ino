@@ -411,6 +411,9 @@ void  web_command(AsyncWebServerRequest *request) {
     if (request->hasArg("reset")) {
       sam_command_sync = SAMOVAR_RESET;
     }
+    if (request->hasArg("resetwifi")) {
+      menu_reset_wifi();
+    }
     if (request->hasArg("distiller")) {
       if (request->arg("distiller").toInt() == 1) {
         sam_command_sync = SAMOVAR_DISTILLATION;

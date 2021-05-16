@@ -261,6 +261,7 @@ void menu_program_back() {
 }
 
 void menu_reset_wifi() {
+  //Сбрасываем сохраненные настройки WiFi и перегружаем Самовар
   AsyncWiFiManager wifiManager(&server, &dns);
   wifiManager.resetSettings();
   ESP.restart();

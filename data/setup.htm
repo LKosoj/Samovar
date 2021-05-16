@@ -23,6 +23,17 @@ function openTab(evt, tabName) {
   return 0;
 }
 
+function sendbutton(command){
+var server = '/command?' + command;
+request = new XMLHttpRequest();
+request.open('GET', server, false);
+request.send();
+if(request.status != 200) {
+alert( request.status + ': ' + request.statusText );
+}
+return 0;
+};
+
 function set_program(){
 var server = '/program';
 request = new XMLHttpRequest();
@@ -234,6 +245,7 @@ function SaveFormToFile(form) {
 <h2>Тайм-зона: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
 <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
 <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+<input id='resetwifi' type='submit' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");'>
 <h2><p>Цвета для температур:</p>
 <div>
     <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">
