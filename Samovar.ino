@@ -85,6 +85,9 @@
 hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
+//flag for saving data
+bool shouldSaveWiFiConfig = false;
+
 void setupMenu();
 void WebServerInit(void);
 void encoder_getvalue();
@@ -467,6 +470,7 @@ void setup() {
   AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
   AsyncWiFiManager wifiManager(&server, &dns);
   wifiManager.setConfigPortalTimeout(120);
+  wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.setAPCallback(configModeCallback);
   wifiManager.setDebugOutput(false);
   wifiManager.addParameter(&custom_blynk_token);
@@ -474,7 +478,13 @@ void setup() {
 
   //wifiManager.resetSettings();
 
-  strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
+  if (shouldSaveWiFiConfig){
+    if (strlen(custom_blynk_token.getValue()) == 33) {
+      strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
+      EEPROM.put(0, SamSetup);
+      EEPROM.commit();
+    }
+  }
 
   Serial.print(F("Connected to "));
   Serial.println(WiFi.SSID());
@@ -784,6 +794,10 @@ void configModeCallback (AsyncWiFiManager *myWiFiManager) {
   writeString("SSID: Samovar       ", 2);
   writeString("IP:                 ", 3);
   writeString(WiFi.softAPIP().toString(), 4);
+}
+
+void saveConfigCallback () {
+  shouldSaveWiFiConfig = true;
 }
 
 void read_config() {
