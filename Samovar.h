@@ -265,8 +265,8 @@ int periodInSeconds = 6;
 
 byte ATuneModeRemember = 2;
 double aTuneStep = 50;
-double aTuneNoise = 1;
-unsigned int aTuneLookBack = 2;
+double aTuneNoise = 2;
+unsigned int aTuneLookBack = 10;
 boolean tuning = false;
 
 PID_ATune aTune(&Input, &Output);
