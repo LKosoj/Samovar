@@ -275,7 +275,11 @@ String IRAM_ATTR get_Samovar_Status() {
   } else if (SamovarStatusInt == 1000) {
     SamovarStatus = "Режим дистилляции";
   } else if (SamovarStatusInt == 2000) {
+#ifdef SAM_BEER_PRG    
     SamovarStatus = "Прг №" + String(ProgramNum + 1);
+#else
+    SamovarStatus = "";
+#endif
     if (startval == 2001 && program[ProgramNum].WType == "M") {
       SamovarStatus = SamovarStatus + "; Разогрев до температуры засыпи солода";
     } else if (startval == 2002 && program[ProgramNum].WType == "M") {
