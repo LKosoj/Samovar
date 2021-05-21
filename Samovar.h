@@ -5,9 +5,11 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAM_BEER_PRG
-
 #include "Samovar_ini.h"
+
+#ifndef SAM_NO_BEER_PRG
+#define SAM_BEER_PRG
+#endif
 
 #ifdef USE_WEB_SERIAL
 #include <WebSerial.h>
