@@ -830,6 +830,9 @@ void read_config() {
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
 #endif
 
+  Blynk.virtualWrite(V15, ipst);
+
+
   if (isnan(SamSetup.Kp))
   {
     SamSetup.Kp = 85;
