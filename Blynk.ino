@@ -55,9 +55,9 @@ BLYNK_READ(V14) {
   Blynk.virtualWrite(V14, get_Samovar_Status());
 }
 
-//BLYNK_READ(V15) {
-//  Blynk.virtualWrite(V15, ipst);
-//}
+BLYNK_READ(V15) {
+  Blynk.virtualWrite(V15, ipst);
+}
 
 #ifdef SAMOVAR_USE_POWER
 BLYNK_READ(V16) {
