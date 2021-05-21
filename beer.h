@@ -11,10 +11,11 @@ void FinishAutoTune();
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
 
-  if (startval == 2000) {
-    PowerOn = true;
-    run_beer_program(0);
+  if (startval == 2000 && !PowerOn) {
     create_data();                    //создаем файл с данными
+    PowerOn = true;
+    set_power(true);
+    run_beer_program(0);
   }
 }
 
