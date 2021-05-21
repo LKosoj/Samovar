@@ -276,26 +276,26 @@ String IRAM_ATTR get_Samovar_Status() {
     SamovarStatus = "Режим дистилляции";
   } else if (SamovarStatusInt == 2000) {
 #ifdef SAM_BEER_PRG    
-    SamovarStatus = "Прг №" + String(ProgramNum + 1);
+    SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
 #else
     SamovarStatus = "";
 #endif
     if (startval == 2001 && program[ProgramNum].WType == "M") {
-      SamovarStatus = SamovarStatus + "; Разогрев до температуры засыпи солода";
+      SamovarStatus = SamovarStatus + "Разогрев до температуры засыпи солода";
     } else if (startval == 2002 && program[ProgramNum].WType == "M") {
-      SamovarStatus = SamovarStatus + "; Ожидание засыпи солода";
+      SamovarStatus = SamovarStatus + "Ожидание засыпи солода";
     } else if (program[ProgramNum].WType == "P") {
       if (begintime == 0) {
-        SamovarStatus = SamovarStatus + "; Нагрев до " + String(program[ProgramNum].Temp);
+        SamovarStatus = SamovarStatus + "Нагрев до " + String(program[ProgramNum].Temp);
       } else {
-        SamovarStatus = SamovarStatus + "; Пауза " + String(program[ProgramNum].Time - (millis() - begintime) / 1000 / 60) + " мин";
+        SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Time - (millis() - begintime) / 1000 / 60) + " мин";
       }
     } else if (program[ProgramNum].WType == "C") {
-      SamovarStatus = SamovarStatus + "; Охлаждение до " + String(program[ProgramNum].Temp);
+      SamovarStatus = SamovarStatus + "Охлаждение до " + String(program[ProgramNum].Temp);
     } else if (program[ProgramNum].WType == "W") {
-      SamovarStatus = SamovarStatus + "; Ожидание. Нажмите \"Следующая программа\"";
+      SamovarStatus = SamovarStatus + "Ожидание. Нажмите \"Следующая программа\"";
     } else if (program[ProgramNum].WType == "A") {
-      SamovarStatus = SamovarStatus + "; Автокалибровка. После завершения питание будет выключено";
+      SamovarStatus = SamovarStatus + "Автокалибровка. После завершения питание будет выключено";
     } else if (program[ProgramNum].WType == "B") {
       if (begintime == 0) {
         SamovarStatus = SamovarStatus + "; Кипячение - нагрев";
