@@ -145,6 +145,7 @@ void set_menu_screen(byte param) {
     main_screen1.hide(true);
     main_screen2.hide(true);
     main_screen5.hide(false);
+    main_menu1.change_screen(&main_screen5);
   }
 }
 
@@ -426,6 +427,7 @@ void setupMenu() {
   main_menu1.add_screen(main_screen1);
   main_menu1.add_screen(main_screen2);
   main_menu1.add_screen(main_screen4);
+  main_menu1.add_screen(main_screen5);
 
   //setup_menu.add_screen(setup_temp_screen);
   //setup_menu.add_screen(setup_stepper_settings);
