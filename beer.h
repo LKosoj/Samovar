@@ -42,12 +42,12 @@ void IRAM_ATTR run_beer_program(byte num) {
 }
 
 void IRAM_ATTR beer_finish() {
+  if (valve_status){
+    open_valve(false);
+  }
   PowerOn = false;
   heater_state = false;
   startval = 0;
-  if (fileToAppend) {
-    fileToAppend.close();
-  }
   Msg = "Beer finished";
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
@@ -85,7 +85,7 @@ void IRAM_ATTR check_alarm_beer() {
     set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
   }
 
-  if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp) {
+  if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp - 0.1) {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer();
@@ -98,7 +98,7 @@ void IRAM_ATTR check_alarm_beer() {
     startval = 2002;
   }
 
-  if (program[ProgramNum].WType == "P" && TankSensor.avgTemp >= program[ProgramNum].Temp) {
+  if (program[ProgramNum].WType == "P" && TankSensor.avgTemp >= program[ProgramNum].Temp - 0.1) {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
@@ -152,7 +152,7 @@ void IRAM_ATTR check_alarm_beer() {
 
     //Греем до температуры кипения, исходя из того, что датчик в кубе врет не сильно
     if (begintime == 0) {
-      set_heater_state(BOILING_TEMP, TankSensor.avgTemp);
+      set_heater_state(BOILING_TEMP + 5, TankSensor.avgTemp);
     } else {
       //Иначе поддерживаем температуру
       heater_state = true;
@@ -230,6 +230,10 @@ void set_heater(double dutyCycle) {
   uint32_t newTime = millis();
   uint32_t offTime = periodInSeconds * 1000 * (dutyCycle);
 
+#ifdef __SAMOVAR_DEBUG
+  WriteConsoleLog("dutyCycle = " + String(dutyCycle));
+#endif
+
   if (newTime < oldTime) {
     periodTime += (UINT32_MAX - oldTime + newTime);
   } else {
@@ -249,6 +253,11 @@ void set_heater(double dutyCycle) {
 
 void setHeaterPosition(bool state) {
   heater_state = state;
+
+#ifdef __SAMOVAR_DEBUG
+  WriteConsoleLog("heater_state = " + String(heater_state));
+#endif
+
   if (state) {
 #ifdef SAMOVAR_USE_POWER
     if (current_power_mode != POWER_WORK_MODE) {
@@ -266,13 +275,13 @@ void setHeaterPosition(bool state) {
 #endif
   } else {
 #ifdef SAMOVAR_USE_POWER
-    if (current_power_mode != POWER_WORK_MODE) {
+    if (current_power_mode != POWER_SLEEP_MODE) {
       delay(200);
-      set_power_mode(POWER_WORK_MODE);
+      set_power_mode(POWER_SLEEP_MODE);
       delay(800);
     }
     //Устанавливаем заданное напряжение
-    set_current_power(0);
+    //set_current_power(0);
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
