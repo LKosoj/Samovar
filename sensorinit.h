@@ -330,7 +330,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
     fileToAppend.close();
   }
 
-  BME_getvalue(false);
+  if (bme_pressure < 100) BME_getvalue(false);
   start_pressure = bme_pressure;
   get_Samovar_Status();
 }
