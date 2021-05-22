@@ -391,6 +391,17 @@ void setup() {
   // 544 и 2400 - стандартные частоты
   servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
 
+
+  btn.setType(LOW_PULL);
+  btn.setTickMode(MANUAL);
+  //btn.setTimeout(500);
+  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+
+  //вешаем прерывание на изменения по ногам энкодера
+  attachInterrupt(ENC_CLK, isrENC_TICK, CHANGE);
+  attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
+  attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
+
   //Читаем сохраненную конфигурацию
   read_config();
 
@@ -478,7 +489,7 @@ void setup() {
 
   //wifiManager.resetSettings();
 
-  if (shouldSaveWiFiConfig){
+  if (shouldSaveWiFiConfig) {
     if (strlen(custom_blynk_token.getValue()) == 33) {
       strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
       EEPROM.put(0, SamSetup);
@@ -504,11 +515,6 @@ void setup() {
 
   //connectWiFi();
   writeString("Connected", 4);
-
-  //btn.setType(LOW_PULL);
-  btn.setTickMode(MANUAL);
-  //btn.setTimeout(500);
-  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
 
 #ifdef SAMOVAR_USE_BLYNK
   //Blynk.begin(auth, ssid, password);
@@ -579,11 +585,6 @@ void setup() {
   attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
 #endif
 
-  //вешаем прерывание на изменения по ногам энкодера
-  attachInterrupt(ENC_CLK, isrENC_TICK, CHANGE);
-  attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
-  attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
-
   //disableCore0WDT();
   //disableCore1WDT();
 
@@ -614,6 +615,12 @@ void setup() {
   Serial.println("Samovar ready");
   //Serial.print("Size = ");
   //Serial.println(sizeof(SamSetup));
+
+
+#ifdef SAMOVAR_USE_POWER
+  //На всякий случай пошлем команду выключения питания на UART
+  set_power_mode(POWER_SLEEP_MODE);
+#endif
 }
 
 void loop() {
@@ -674,9 +681,9 @@ void loop() {
         menu_samovar_start();
         break;
       case SAMOVAR_POWER:
-        set_power(!PowerOn);
         if (SamovarStatusInt == 1000) distiller_finish();
-        if (SamovarStatusInt == 2000) beer_finish();
+        else if (SamovarStatusInt == 2000) beer_finish();
+        else set_power(!PowerOn);
         break;
       case SAMOVAR_RESET:
         samovar_reset();
