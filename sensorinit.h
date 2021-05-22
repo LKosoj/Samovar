@@ -287,6 +287,7 @@ void sensor_init(void) {
 
 //Обнуляем все счетчики
 void IRAM_ATTR reset_sensor_counter(void) {
+  sam_command_sync = SAMOVAR_NONE;
   stopService();
   stepper.setMaxSpeed(-1);
   stepper.setSpeed(-1);
