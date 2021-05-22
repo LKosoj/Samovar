@@ -111,7 +111,7 @@ void IRAM_ATTR DS_getvalue(void) {
 
 //  float randNumber;
 //  randNumber = random(100) / float(500);
-//  if (TankSensor.avgTemp < 29) TankSensor.avgTemp = 29;
+//  if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
 //  static float coef = 0;
 //  coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
 //  //if (coef > 0.5) coef = 0.5;
@@ -287,10 +287,6 @@ void sensor_init(void) {
 
 //Обнуляем все счетчики
 void IRAM_ATTR reset_sensor_counter(void) {
-#ifdef SAMOVAR_USE_POWER
-  set_power_mode(POWER_SLEEP_MODE);
-#endif
-
   stopService();
   stepper.setMaxSpeed(-1);
   stepper.setSpeed(-1);
@@ -325,6 +321,9 @@ void IRAM_ATTR reset_sensor_counter(void) {
   WthdrwlProgress = 0;
   TargetStepps = 0;
   //Msg = "";
+  
+  begintime = 0;
+
 
   if (fileToAppend) {
     fileToAppend.close();
