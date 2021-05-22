@@ -154,7 +154,7 @@ void IRAM_ATTR set_power(bool On) {
     power_text_ptr = (char*)"OFF";
 
 #ifdef SAMOVAR_USE_POWER
-    delay(1000);
+    vTaskDelay(500);
     set_power_mode(POWER_SPEED_MODE);
 #else
     current_power_mode = POWER_SPEED_MODE;
@@ -492,6 +492,11 @@ void IRAM_ATTR set_body_temp() {
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
     TankSensor.BodyTemp = TankSensor.avgTemp;
+    Msg = "Body Steam T=" + String(SteamSensor.BodyTemp) + " Pipe=" + String(PipeSensor.BodyTemp);
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Warning! {DEVICE_NAME} " + Msg);
+#endif
   }
 }
 
@@ -506,11 +511,11 @@ void IRAM_ATTR check_alarm() {
   }
 #endif
 
-  if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
+  if (!valve_status && (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP || ACPSensor.avgTemp >= MAX_ACP_TEMP)) {
     open_valve(true);
   }
 
-  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
+  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 5) {
     open_valve(false);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
@@ -529,12 +534,12 @@ void IRAM_ATTR check_alarm() {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     delay(1000);
     set_power(false);
-    String s;
-    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = "Steam";
-    else if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = "Water";
-    else if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = "Tank";
-    else if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = "ACP";
-    Msg = "Emergency power OFF! Temperature error " + s;
+    String s = "";
+    if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Steam";
+    else if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = s + " Water";
+    else if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = s+ " Tank";
+    else if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = s + " ACP";
+    Msg = "Emergency power OFF! Temperature error" + s;
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
@@ -603,10 +608,10 @@ void IRAM_ATTR check_alarm() {
     Blynk.notify("Alert! {DEVICE_NAME} - " + Msg);
 #endif
 #ifdef SAMOVAR_USE_POWER
-    delay(200);
+    vTaskDelay(200);
     set_power_mode(POWER_WORK_MODE);
     //Устанавливаем напряжение, заданное в первой строке программы
-    delay(800);
+    vTaskDelay(800);
     set_current_power(program[0].Power);
 #else
     current_power_mode = POWER_WORK_MODE;
