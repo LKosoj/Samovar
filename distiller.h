@@ -27,9 +27,6 @@ void distiller_proc() {
 }
 
 void IRAM_ATTR distiller_finish() {
-  if (fileToAppend) {
-    fileToAppend.close();
-  }
   Msg = "Distillation finished";
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
