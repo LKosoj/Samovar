@@ -196,6 +196,7 @@ uint8_t temprature_sens_read();
 //**************************************************************************************************************
 
 void writeString(String Str, byte num);
+void WriteConsoleLog(String StringLogMsg);
 
 //**************************************************************************************************************
 // Описание переменных
@@ -266,7 +267,7 @@ int periodInSeconds = 6;
 byte ATuneModeRemember = 2;
 double aTuneStep = 50;
 double aTuneNoise = 2;
-unsigned int aTuneLookBack = 10;
+unsigned int aTuneLookBack = 9;
 boolean tuning = false;
 
 PID_ATune aTune(&Input, &Output);
