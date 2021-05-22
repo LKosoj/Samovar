@@ -32,6 +32,15 @@ function setDistCommand(){
   sendbutton(cmd);
 }
 
+function sleep(milliseconds) {
+  var start = new Date().getTime();
+  for (var i = 0; i < 1e7; i++) {
+    if ((new Date().getTime() - start) > milliseconds){
+      break;
+    }
+  }
+}
+
 function sendbutton(command){
 var server = '/command?' + command;
 request = new XMLHttpRequest();
@@ -40,6 +49,7 @@ request.send();
 if(request.status != 200) {
 alert( request.status + ': ' + request.statusText );
 }
+sleep(1000);
 return 0;
 };
 
