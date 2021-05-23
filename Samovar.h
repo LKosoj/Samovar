@@ -37,7 +37,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "2.02"
+#define SAMOVAR_VERSION "2.03"
 //#define __SAMOVAR_DEBUG
 
 #define __SAMOVAR_NOT_USE_WDT
@@ -266,7 +266,7 @@ int periodInSeconds = 6;
 
 byte ATuneModeRemember = 2;
 double aTuneStep = 50;
-double aTuneNoise = 2;
+double aTuneNoise = 1;
 unsigned int aTuneLookBack = 9;
 boolean tuning = false;
 
