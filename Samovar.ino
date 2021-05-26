@@ -4,6 +4,8 @@
 
 #include "soc/rtc_wdt.h"
 #include <esp_task_wdt.h>
+#include <driver/dac.h>
+#include <soc/touch_channel.h>
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -50,7 +52,6 @@
 #ifdef USE_BMP280
 #include <Adafruit_BMP280.h>
 #endif
-
 #ifdef USE_BME280
 #include <Adafruit_BME280.h>
 #endif
@@ -367,6 +368,11 @@ void setup() {
   disableCore1WDT();
 #endif
 
+  dac_output_disable(DAC_CHANNEL_1);
+  dac_output_disable(DAC_CHANNEL_2);
+  touch_pad_deinit();
+  touch_pad_intr_disable();
+  
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
   WiFi.setHostname(host);
