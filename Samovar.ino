@@ -83,6 +83,9 @@
 //**************************************************************************************************************
 #include "sensorinit.h"
 
+void taskButton( void *pvParameters );
+SemaphoreHandle_t btnSemaphore;
+
 hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -139,11 +142,45 @@ void IRAM_ATTR isrWHLS_TICK() {
 #endif
 
 void IRAM_ATTR isrBTN_TICK() {
-  btn.tick();
+  //  portBASE_TYPE xTaskWoken;
+  // Прерывание по кнопке, отпускаем семафор
+  //  xSemaphoreGiveFromISR( btnSemaphore, &xTaskWoken );
+  xSemaphoreGiveFromISR( btnSemaphore, NULL );
+  //  if ( xTaskWoken == pdTRUE) {
+  //    taskYIELD();
+  //  }
 }
 
-void IRAM_ATTR isrENC_TICK() {
-  encoder.tick();  // отработка в прерывании
+void taskButton( void *pvParameters ) {
+  // Создаем семафор
+  btnSemaphore = xSemaphoreCreateBinary();
+  // Сразу "берем" семафор чтобы не было первого ложного срабатывания кнопки
+  xSemaphoreTake( btnSemaphore, 100 );
+  btn.setType(LOW_PULL);
+  btn.setTickMode(MANUAL);
+  btn.setDebounce(30);
+  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+
+  //  //вешаем прерывание на изменения по ногам энкодера
+  attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
+  attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
+  attachInterrupt(ENC_SW, isrBTN_TICK, CHANGE);
+
+  while (true) {
+    xSemaphoreTake( btnSemaphore, portMAX_DELAY );
+    // Отключаем прерывание для устранения повторного срабатывания прерывания во время обработки
+    detachInterrupt(BTN_PIN);
+    detachInterrupt(ENC_CLK);
+    detachInterrupt(ENC_DT);
+    detachInterrupt(ENC_SW);
+    btn.tick();
+    encoder.tick();
+    attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+    attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
+    attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
+    attachInterrupt(ENC_SW, isrBTN_TICK, CHANGE);
+    //vTaskDelay(100);
+  }
 }
 
 //Запускаем таск для получения точного времени из интернет и записи в лог
@@ -294,7 +331,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
 #ifdef USE_WATERSENSOR
 
-      if (WFpulseCount < 8) WFpulseCount = 0;
+      if (WFpulseCount < 3) WFpulseCount = 0;
       WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
@@ -368,11 +405,11 @@ void setup() {
   disableCore1WDT();
 #endif
 
-  dac_output_disable(DAC_CHANNEL_1);
-  dac_output_disable(DAC_CHANNEL_2);
-  touch_pad_deinit();
+  //dac_output_disable(DAC_CHANNEL_1);
+  //dac_output_disable(DAC_CHANNEL_2);
+  //touch_pad_deinit();
   touch_pad_intr_disable();
-  
+
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
   WiFi.setHostname(host);
@@ -382,6 +419,9 @@ void setup() {
   Wire.begin();
 
   stepper.disable();
+
+  WFtotalMilliLitres = 0;
+
 
   // Configure the Prescaler at 80 the quarter of the ESP32 is cadence at 80Mhz
   // 80000000 / 80 = 1000000 tics / seconde
@@ -397,19 +437,19 @@ void setup() {
   // 544 и 2400 - стандартные частоты
   servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
 
-
-  btn.setType(LOW_PULL);
-  btn.setTickMode(MANUAL);
-  //btn.setTimeout(500);
-  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
-
-  //вешаем прерывание на изменения по ногам энкодера
-  attachInterrupt(ENC_CLK, isrENC_TICK, CHANGE);
-  attachInterrupt(ENC_DT, isrENC_TICK, CHANGE);
-  attachInterrupt(ENC_SW, isrENC_TICK, CHANGE);
-
   //Читаем сохраненную конфигурацию
   read_config();
+
+  //Запускаем таск для обработки нажатия кнопки и энкодера
+  xTaskCreatePinnedToCore(
+    taskButton, /* Function to implement the task */
+    "taskButton", /* Name of the task */
+    4000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    1,  /* Priority of the task */
+    &SysTickerTask1,  /* Task handle. */
+    1); /* Core where the task should run */
+
 
   encoder.tick();  // отработка нажатия
   btn.tick();  // отработка нажатия
@@ -646,7 +686,8 @@ void loop() {
   ws.cleanupClients();
 
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
-  if (btn.isClick()) {
+  btn.tick();
+  if (btn.isPress()) {
     if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
       //если выключен - включаем
       if (!PowerOn) {
