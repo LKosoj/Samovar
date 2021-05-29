@@ -318,7 +318,6 @@ void IRAM_ATTR reset_sensor_counter(void) {
   PauseOn = false;
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;
-  WFtotalMilliLitres = 0;
   WthdrwlProgress = 0;
   TargetStepps = 0;
   //Msg = "";
