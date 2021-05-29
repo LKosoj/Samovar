@@ -450,6 +450,7 @@ void encoder_getvalue() {
 
   bool updscreen = true;
 
+  encoder.tick();
   // Check all the buttons
   if (encoder.isRight()) {
     multiplier = 1;
@@ -467,7 +468,7 @@ void encoder_getvalue() {
       updscreen = false;
       main_menu1.call_function(1);
     }
-  }
+  } else
   if (encoder.isLeft()) {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
@@ -484,17 +485,17 @@ void encoder_getvalue() {
       updscreen = false;
       main_menu1.call_function(2);
     }
-  }
+  } else 
   if (encoder.isRightH()) {
     multiplier = 10;
     updscreen = false;
     main_menu1.call_function(1);
-  }
+  } else 
   if (encoder.isLeftH()) {
     multiplier = 10;
     updscreen = false;
     main_menu1.call_function(2);
-  }
+  } else
   if (encoder.isClick()) {
     //Выход из режима калибровки - нажатие на кнопку.
     if (startval == 100) {
