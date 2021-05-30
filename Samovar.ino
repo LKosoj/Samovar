@@ -800,14 +800,14 @@ void getjson (void) {
   jsondoc["version"] = SAMOVAR_VERSION;
   jsondoc["VolumeAll"] = get_liquid_volume();
   jsondoc["currentvolume"] = currentvolume;
-  jsondoc["ActualVolumePerHour"] = ActualVolumePerHour;
+  jsondoc["ActualVolumePerHour"] = format_float(ActualVolumePerHour, 3);
   jsondoc["PowerOn"] = (byte)PowerOn;
   jsondoc["PauseOn"] = (byte)PauseOn;
   jsondoc["WthdrwlProgress"] = WthdrwlProgress;
   jsondoc["TargetStepps"] = stepper.getTarget();
   jsondoc["CurrrentStepps"] = stepper.getCurrent();
   jsondoc["WthdrwlStatus"] = startval;
-  jsondoc["CurrrentSpeed"] = stepper.getSpeed() * (byte)stepper.getState();
+  jsondoc["CurrrentSpeed"] = round(stepper.getSpeed() * (byte)stepper.getState());
   vTaskDelay(10);
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
@@ -907,5 +907,6 @@ void read_config() {
 }
 
 void WriteConsoleLog(String StringLogMsg) {
+  Serial.println(StringLogMsg);
   LogMsg = LogMsg + "\n" + StringLogMsg;
 }
