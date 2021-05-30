@@ -275,7 +275,7 @@ String IRAM_ATTR get_Samovar_Status() {
   } else if (SamovarStatusInt == 1000) {
     SamovarStatus = "Режим дистилляции";
   } else if (SamovarStatusInt == 2000) {
-#ifdef SAM_BEER_PRG    
+#ifdef SAM_BEER_PRG
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
 #else
     SamovarStatus = "";
@@ -537,7 +537,7 @@ void IRAM_ATTR check_alarm() {
     String s = "";
     if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Steam";
     else if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = s + " Water";
-    else if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = s+ " Tank";
+    else if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = s + " Tank";
     else if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = s + " ACP";
     Msg = "Emergency power OFF! Temperature error" + s;
 #ifdef SAMOVAR_USE_BLYNK
@@ -742,6 +742,25 @@ void IRAM_ATTR get_current_power() {
     current_power_mode = "N";
     return;
   }
+#ifdef SAMOVAR_USE_RMVK
+  Serial2.print("АТ+VO?\r");
+  String resp;
+  vTaskDelay(100);
+  if (Serial.available()) {
+    resp = Serial.readStringUntil('\n');
+  }
+  current_power_volt = resp.toInt();
+  Serial2.print("АТ+VS?\r");
+  resp = "";
+  vTaskDelay(100);
+  if (Serial.available()) {
+    resp = Serial.readStringUntil('\n');
+  }
+  target_power_volt = resp.toInt();
+  //Считаем мощность V*V*K/R, K = 0,98~1
+  current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
+
+#else
   String s = read_from_serial();
   if (s != "") {
     if (s.substring(1, 2) == "T") s = s.substring(1, 9);
@@ -756,23 +775,44 @@ void IRAM_ATTR get_current_power() {
       current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
     }
   }
+#endif
 }
 
 //устанавливаем напряжение для регулятора напряжения
 void IRAM_ATTR set_current_power(float Volt) {
   if (!PowerOn) return;
   target_power_volt = Volt;
-  if (Volt < 20) {
+  if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
   } else set_power_mode(POWER_WORK_MODE);
+#ifdef SAMOVAR_USE_RMVK
+  String Cmd;
+  int V = Volt;
+  if (V < 100) Cmd = "0";
+  else Cmd = "";
+  Cmd = Cmd + (String)V;
+  Serial2.print("АТ+VS=" + Cmd + "\r");
+#else
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
+#endif
 }
 
 void IRAM_ATTR set_power_mode(String Mode) {
   current_power_mode = Mode;
+#ifdef SAMOVAR_USE_RMVK
+  if (Mode == POWER_SLEEP_MODE) {
+    Serial2.print("АТ+ON=0\r");
+    set_current_power(0);
+  }
+  else if (Mode == POWER_SPEED_MODE) {
+    Serial2.print("АТ+ON=1\r");
+    set_current_power(250);
+  }
+#else
   Serial2.print("M" + Mode + "\r");
+#endif
 }
 
 unsigned int IRAM_ATTR hexToDec(String hexString) {

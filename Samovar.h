@@ -25,6 +25,12 @@
 #endif
 #endif
 
+#ifdef SAMOVAR_USE_RMVK
+#ifndef SAMOVAR_USE_POWER
+#define SAMOVAR_USE_POWER
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

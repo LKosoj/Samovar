@@ -267,7 +267,11 @@ void sensor_init(void) {
   reset_sensor_counter();
 
 #ifdef SAMOVAR_USE_POWER
+#ifdef SAMOVAR_USE_RMVK
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+#else
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
+#endif
   Serial2.setRxBufferSize(20);
 #endif
 

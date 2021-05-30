@@ -882,10 +882,8 @@ void read_config() {
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
 #ifdef SAMOVAR_USE_BLYNK
   if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
-#endif
-
   Blynk.virtualWrite(V15, ipst);
-
+#endif
 
   if (isnan(SamSetup.Kp))
   {
