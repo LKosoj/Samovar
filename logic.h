@@ -52,13 +52,13 @@ float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
 
 //Получаем скорость отбора
 float IRAM_ATTR get_liguid_rate_by_step(int StepperSpeed) {
-  return round(get_liguid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000;
+  return round(get_liguid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000.00;
 }
 
 float IRAM_ATTR get_speed_from_rate(float volume_per_hour) {
   static float v;
   ActualVolumePerHour = volume_per_hour;
-  v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000;
+  v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.00;
   if (v < 1) v = 1;
   return v;
 }
@@ -94,7 +94,7 @@ void IRAM_ATTR withdrawal(void) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
       if (SamSetup.useautospeed && setautospeed) {
         setautospeed = false;
-        CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
+        CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
         set_current_power(target_power_volt - 5);
@@ -124,7 +124,7 @@ void IRAM_ATTR withdrawal(void) {
       //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
       if (SamSetup.useautospeed && setautospeed) {
         setautospeed = false;
-        CurrrentStepperSpeed = stepper.getSpeed() - stepper.getSpeed() / 100 * SamSetup.autospeed;
+        CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
         set_current_power(target_power_volt - 5);
