@@ -99,7 +99,7 @@ void FS_init(void)
     while (dir.openNextFile())
     {
       String fileName = dir.name();
-      size_t fileSize = dir.size();
+      //size_t fileSize = dir.size();
     }
   }
 
