@@ -204,7 +204,6 @@ void set_heater_state(float setpoint, float temp) {
 #endif
   } else {
     heaterPID.SetMode(AUTOMATIC);
-    static unsigned long prev_time = millis();
     Setpoint = setpoint;
     Input = temp;
 
