@@ -202,9 +202,10 @@ void IRAM_ATTR triggerGetClock(void * parameter) {
 
 //Запускаем таск для получения температур и различных проверок
 void IRAM_ATTR triggerSysTicker(void * parameter) {
-  byte CurMinST, OldMinST;
+  byte CurMinST = 0;
+  byte OldMinST = 0;
   byte tcntST = 0;
-  unsigned long oldTime;                                          // Предыдущее время в милисекундах
+  unsigned long oldTime = 0;                                          // Предыдущее время в милисекундах
 
   while (true) {
     CurMinST = (millis() / 1000 );
@@ -762,6 +763,8 @@ void loop() {
         break;
       case SAMOVAR_BEER_NEXT:
         run_beer_program(ProgramNum + 1);
+        break;
+      case SAMOVAR_NONE:
         break;
     }
     sam_command_sync = SAMOVAR_NONE;
