@@ -111,6 +111,7 @@ String indexKeyProcessor(const String& var)
     if ((String)SamSetup.videourl != "") return "inline";
     else return "none";
   };
+  return "";
 }
 
 String setupKeyProcessor(const String& var)
