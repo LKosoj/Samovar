@@ -188,7 +188,7 @@ void pump_calibrate(int stpspeed) {
     stepper.disable();
     EEPROM.put(0, SamSetup);
     EEPROM.commit();
-    read_config;
+    read_config();
   } else {
     startval = 100;
     //крутим двигатель, пока не остановят
