@@ -9,7 +9,7 @@ volatile unsigned long ms2      = 10000000UL;
 volatile unsigned long t_cur    = 0;
 
 bool IRAM_ATTR GetNTP(void);
-unsigned long IRAM_ATTR sendNTPpacket(IPAddress& address);
+void IRAM_ATTR sendNTPpacket(IPAddress& address);
 
 IPAddress timeServerIP;                                                  // для работы NTP
 const char* ntpServerName = "time.nist.gov";
@@ -78,7 +78,7 @@ bool IRAM_ATTR GetNTP(void)                                               // ф�
   return true;
 }
 //************************************************************************************************************************************
-unsigned long IRAM_ATTR sendNTPpacket(IPAddress& address)                            // функция посылки запроса NTP серверу на заданный адрес
+void IRAM_ATTR sendNTPpacket(IPAddress& address)                            // функция посылки запроса NTP серверу на заданный адрес
 {
   //Serial.println("sending NTP packet...");
   memset(packetBuffer, 0, NTP_PACKET_SIZE);                                // очистка буфера в 0
