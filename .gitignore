@@ -4,3 +4,6 @@ tools/data.csv
 tools/~$Расчет АС-3.xlsx
 tools/ngrok
 .DS_Store
+.vscode/arduino.json
+.vscode/c_cpp_properties.json
+.vscode/launch.json
