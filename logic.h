@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #ifdef SAMOVAR_USE_BLYNK
 //#define BLYNK_PRINT Serial
 
