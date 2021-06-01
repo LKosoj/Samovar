@@ -1,3 +1,6 @@
+#include "Samovar.h"
+#include <LiquidCrystal_I2C.h>
+
 LiquidLine lql_back_line(0, 0, "/Back");
 LiquidLine lql_time(0, 3, timestr);
 
