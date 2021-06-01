@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #ifdef USE_WATER_PUMP
 //#define PID_OPTIMIZED_I
 #include <GyverPID.h>
