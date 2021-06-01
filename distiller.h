@@ -1,5 +1,13 @@
+#include <Arduino.h>
+#include "Samovar.h"
+
 void distiller_finish();
 void set_power_mode(String Mode);
+void set_power(bool On);
+void create_data();
+void open_valve(bool Val);
+void set_pump_pwm(float duty);
+void set_pump_speed_pid(float temp);
 
 void distiller_proc() {
 
