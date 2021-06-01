@@ -1,3 +1,5 @@
+#ifndef SAMOVAR_S_I_H
+#define SAMOVAR_S_I_H
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
@@ -376,3 +378,4 @@ void IRAM_ATTR CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress) {
     DevTAddress[dsj] = DevSAddress[dsj] ;
   }
 }
+#endif
