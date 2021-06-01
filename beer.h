@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "Samovar.h"
 
 void beer_finish();
@@ -7,6 +8,9 @@ void setHeaterPosition(bool state);
 void run_beer_program(byte num);
 void StartAutoTune();
 void FinishAutoTune();
+void set_power(bool On);
+void create_data();
+void open_valve(bool Val);
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
