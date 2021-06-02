@@ -58,6 +58,7 @@
 
 #include "font.h"
 #include "logic.h"
+#include "openlog.h"
 
 #ifdef USE_UPDATE_OTA
 #include <ArduinoOTA.h>
@@ -98,7 +99,7 @@ void encoder_getvalue();
 void menu_calibrate();
 void set_body_temp();
 String millis2time();
-String CurrentTime(void);
+String CurrentTime(bool Year);
 void distiller_finish();
 void beer_finish();
 void change_samovar_mode();
@@ -222,7 +223,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       DS_getvalue();
       vTaskDelay(10);
 
-      Crt = CurrentTime();
+      Crt = CurrentTime(false);
       StrCrt = Crt.substring(6) + "   " + millis2time();
       StrCrt.toCharArray(tst, 20);
 
@@ -230,7 +231,16 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         tcntST++;
         if (tcntST == SamSetup.LogPeriod) {
           tcntST = 0;
-          append_data();              //Записываем данные;
+          String s = append_data();              //Записываем данные в память ESP32;
+#ifdef USE_OPENLOG
+#ifdef SAMOVAR_USE_POWER
+          s += ",";
+          s += (String)target_power_volt;
+          s += ",";
+          s += (String)current_power_p;
+#endif
+          appendOLFile(s);
+#endif
         }
       }
 
@@ -668,6 +678,19 @@ void setup() {
   //На всякий случай пошлем команду выключения питания на UART
   set_power_mode(POWER_SLEEP_MODE);
 #endif
+
+#ifdef SAMOVAR_USE_RMVK
+  //Если используется регулятор РМВ К с управлением по UART, запускаем таск считывания параметров напряжения
+  xTaskCreatePinnedToCore(
+    triggerRMVKStatus, /* Function to implement the task */
+    "RMVKStatusTask", /* Name of the task */
+    1000,  /* Stack size in words */
+    NULL,  /* Task input parameter */
+    0,  /* Priority of the task */
+    &RMVKStatusTask,  /* Task handle. */
+    1); /* Core where the task should run */
+
+#endif
 }
 
 void loop() {
@@ -890,15 +913,15 @@ void read_config() {
 
   if (isnan(SamSetup.Kp))
   {
-    SamSetup.Kp = 85;
+    SamSetup.Kp = 150;
   }
   if (isnan(SamSetup.Ki))
   {
-    SamSetup.Ki = 0.5;
+    SamSetup.Ki = 1.4;
   }
   if (isnan(SamSetup.Kd))
   {
-    SamSetup.Kd = 0.1;
+    SamSetup.Kd = 1.4;
   }
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
   if (isnan(SamSetup.StbVoltage))
