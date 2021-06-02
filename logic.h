@@ -736,6 +736,29 @@ String IRAM_ATTR read_from_serial() {
   return "";
 }
 
+#ifdef SAMOVAR_USE_RMVK
+void IRAM_ATTR triggerRMVKStatus(void * parameter) {
+  String resp;
+  while (true) {
+    resp = "";
+    Serial2.print("АТ+VO?\r");
+    vTaskDelay(200);
+    if (Serial.available()) {
+      resp = Serial.readStringUntil('\r');
+    }
+    current_power_volt = resp.toInt();
+    Serial2.print("АТ+VS?\r");
+    vTaskDelay(200);
+    resp = "";
+    if (Serial.available()) {
+      resp = Serial.readStringUntil('\r');
+    }
+    target_power_volt = resp.toInt();
+    vTaskDelay(300);
+  }
+}
+#endif
+
 //получаем текущие параметры работы регулятора напряжения
 void IRAM_ATTR get_current_power() {
   if (!PowerOn) {
@@ -745,23 +768,8 @@ void IRAM_ATTR get_current_power() {
     return;
   }
 #ifdef SAMOVAR_USE_RMVK
-  Serial2.print("АТ+VO?\r");
-  String resp;
-  vTaskDelay(100);
-  if (Serial.available()) {
-    resp = Serial.readStringUntil('\n');
-  }
-  current_power_volt = resp.toInt();
-  Serial2.print("АТ+VS?\r");
-  resp = "";
-  vTaskDelay(100);
-  if (Serial.available()) {
-    resp = Serial.readStringUntil('\n');
-  }
-  target_power_volt = resp.toInt();
   //Считаем мощность V*V*K/R, K = 0,98~1
   current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
-
 #else
   String s = read_from_serial();
   if (s != "") {
