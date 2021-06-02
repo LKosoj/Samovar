@@ -218,7 +218,7 @@ void create_data() {
   bme_prev_pressure = 0;
 }
 
-void IRAM_ATTR append_data() {
+String IRAM_ATTR append_data() {
   static bool w;
   w = false;
   String str = Crt + ",";
@@ -259,6 +259,7 @@ void IRAM_ATTR append_data() {
   }
   if (w)
     fileToAppend.println(str);
+  return str;
 }
 
 String get_sys_info() {
