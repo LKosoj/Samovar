@@ -242,6 +242,10 @@ TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t BuzzerTask = NULL;
 volatile bool BuzzerTaskFl;
 
+#ifdef SAMOVAR_USE_RMVK
+TaskHandle_t RMVKStatusTask = NULL;
+#endif
+
 AsyncWebServer server(80);
 
 AsyncWebSocket ws("/ws");
@@ -445,6 +449,7 @@ bool pump_started;                                              // Призна�
 bool setautospeed;                                              // Признак для однократного снижения скорости насоса при паузе
 volatile bool heater_state;                                     // Статус нагрева при затирке
 bool msgfl;                                                     // Флаг для одноразовых сообщений
+String ofl;                                                     // Openlog filename
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER
