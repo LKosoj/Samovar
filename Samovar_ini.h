@@ -66,4 +66,5 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //#define USE_WEB_SERIAL                      //использовать библиотеку WebSerial для отладки
 
 #define WRITE_PROGNUM_IN_LOG                // писать в лог номер текущей строки программы
+//#define USE_OPENLOG                         // использовать Openlog для сохранения расширенного лога на карту
 #endif
