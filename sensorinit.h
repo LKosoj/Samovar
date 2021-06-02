@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
+#include "openlog.h"
 
 #ifdef USE_BME680
 #define BME_STRING "BME680"
@@ -31,13 +32,16 @@ Adafruit_BME280 bme; // I2C
 void clok();
 void clok1();
 void getjson (void);
-void append_data();
+String append_data();
 void stopService(void);
 void startService(void);
 void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress);
 void set_beer_program(String WProgram);
 void set_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
+String CurrentTime(bool Year) ;
+void setupOpenLog(void);
+void createFile(char *fileName);
 
 //**************************************************************************************************************
 // Функции для работы с сенсорами
@@ -338,6 +342,17 @@ void IRAM_ATTR reset_sensor_counter(void) {
   if (bme_pressure < 100) BME_getvalue(false);
   start_pressure = bme_pressure;
   get_Samovar_Status();
+
+#ifdef USE_OPENLOG
+  if (ofl == ""){
+    ofl = CurrentTime(true) + ".csv";
+    char charVar[25];
+    ofl.toCharArray(charVar, ofl.length());
+    setupOpenLog();
+    gotoOLCommandMode();
+    createOLFile(charVar);
+  }
+#endif
 }
 
 String inline format_float(float v, int d) {
