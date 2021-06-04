@@ -402,6 +402,9 @@ void  web_command(AsyncWebServerRequest *request) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
         else sam_command_sync = SAMOVAR_POWER;
+      } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+        if (!PowerOn) sam_command_sync = SAMOVAR_DISTILLATION;
+        else sam_command_sync = SAMOVAR_POWER;
       }
       else sam_command_sync = SAMOVAR_POWER;
     }
