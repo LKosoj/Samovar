@@ -379,3 +379,12 @@ void FinishAutoTune()
 
   set_heater_state(0, 50);
 }
+
+void IRAM_ATTR set_mixer(bool On) {
+  mixer_status = On;
+  if (On) {
+    digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
+  } else {
+    digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+  }
+}

@@ -839,6 +839,7 @@ void getjson (void) {
   jsondoc["Status"] = get_Samovar_Status();
   jsondoc["BodyTemp_Steam"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
   jsondoc["BodyTemp_Pipe"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
+  jsondoc["mixer"] = mixer_status;
 
   if (Msg != "") {
     jsondoc["Msg"] = Msg;
