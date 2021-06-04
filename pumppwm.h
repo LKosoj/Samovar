@@ -7,7 +7,7 @@
 #define PUMP_PWM_FREQ 15
 
 ESP32PWM pump_pwm;
-GyverPID pump_regulator(10, 0.9, 0.9, 1000);
+GyverPID pump_regulator(10, 1.4, 1.4, 1000);
 
 void init_pump_pwm(byte pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);
