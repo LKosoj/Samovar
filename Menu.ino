@@ -279,14 +279,35 @@ void menu_reset_wifi() {
 
 void menu_get_power() {
   reset_focus();
-  if (!PowerOn) {
-    set_power(true);
-    set_menu_screen(2);
-  } else {
-    set_power(false);
-    set_menu_screen(3);
+  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+    if (!PowerOn) {
+      set_menu_screen(2);
+      sam_command_sync = SAMOVAR_BEER;
+    }
+    else {
+      sam_command_sync = SAMOVAR_POWER;
+      set_menu_screen(3);
+    }
+  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    if (!PowerOn) {
+      set_menu_screen(2);
+      sam_command_sync = SAMOVAR_DISTILLATION;
+    }
+    else {
+      set_menu_screen(3);
+      sam_command_sync = SAMOVAR_POWER;
+    }
+  }
+  else {
+    if (!PowerOn) {
+      set_menu_screen(2);
+    } else {
+      set_menu_screen(3);
+    }
+    sam_command_sync = SAMOVAR_POWER;
   }
 }
+
 void menu_pause() {
   pause_withdrawal(!PauseOn);
   if (PauseOn) pause_text_ptr = (char*)"Continue";
@@ -477,8 +498,7 @@ void encoder_getvalue() {
       updscreen = false;
       main_menu1.call_function(1);
     }
-  } else
-  if (encoder.isLeft()) {
+  } else if (encoder.isLeft()) {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
     if (startval == 100) {
@@ -494,18 +514,15 @@ void encoder_getvalue() {
       updscreen = false;
       main_menu1.call_function(2);
     }
-  } else 
-  if (encoder.isRightH()) {
+  } else if (encoder.isRightH()) {
     multiplier = 10;
     updscreen = false;
     main_menu1.call_function(1);
-  } else 
-  if (encoder.isLeftH()) {
+  } else if (encoder.isLeftH()) {
     multiplier = 10;
     updscreen = false;
     main_menu1.call_function(2);
-  } else
-  if (encoder.isClick()) {
+  } else if (encoder.isClick()) {
     //Выход из режима калибровки - нажатие на кнопку.
     if (startval == 100) {
       startval = 0;
