@@ -46,9 +46,12 @@ void IRAM_ATTR run_beer_program(byte num) {
 }
 
 void IRAM_ATTR beer_finish() {
-  if (valve_status){
+  if (valve_status) {
     open_valve(false);
   }
+#ifdef USE_WATER_PUMP
+  if (pump_started) set_pump_pwm(0);
+#endif
   PowerOn = false;
   heater_state = false;
   startval = 0;
@@ -126,6 +129,9 @@ void IRAM_ATTR check_alarm_beer() {
       setHeaterPosition(false);
       //Открываем клапан воды
       open_valve(true);
+#ifdef USE_WATER_PUMP
+      if (pump_started) set_pump_pwm(1023);
+#endif
     }
     if (TankSensor.avgTemp <= program[ProgramNum].Temp) {
       //Если температура упала
