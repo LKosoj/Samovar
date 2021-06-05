@@ -184,7 +184,7 @@ void taskButton( void *pvParameters ) {
   }
 }
 
-//Запускаем таск для получения точного времени из интернет и записи в лог
+//Запускаем таск для получения точного времени из интернет
 void IRAM_ATTR triggerGetClock(void * parameter) {
   while (true) {
     if (WiFi.status() == WL_CONNECTED) clok1();
