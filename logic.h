@@ -594,7 +594,7 @@ void IRAM_ATTR check_alarm() {
     Blynk.notify("Alarm! {DEVICE_NAME} - Head level alarm!");
 #endif
 #ifdef SAMOVAR_USE_POWER
-    set_current_power(target_power_volt - 3);
+    set_current_power(target_power_volt - 2);
 #endif
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
     alarm_h_min = millis() + 30000;
