@@ -43,7 +43,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define SAMOVAR_VERSION "2.04"
+#define SAMOVAR_VERSION "2.05"
 //#define __SAMOVAR_DEBUG
 
 #define __SAMOVAR_NOT_USE_WDT
@@ -162,7 +162,7 @@ uint8_t temprature_sens_read();
 #ifndef WHEAD_LEVEL_SENSOR_PIN
 #define WHEAD_LEVEL_SENSOR_PIN 27
 #endif
-#define WHLS_ALARM_TIME 2 //Секунд, через сколько сработает тревога по уровню флегмы
+#define WHLS_ALARM_TIME 3 //Секунд, через сколько сработает тревога по уровню флегмы
 //**************************************************************************************************************
 
 //**************************************************************************************************************
