@@ -513,8 +513,11 @@ void IRAM_ATTR check_alarm() {
   }
 #endif
 
-  if (!valve_status && (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP || ACPSensor.avgTemp >= MAX_ACP_TEMP)) {
-    open_valve(true);
+  if (!valve_status) {
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP) open_valve(true);
+    else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
+      open_valve(true);
+    }
   }
 
   if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 5) {
