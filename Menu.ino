@@ -381,9 +381,9 @@ void menu_samovar_start() {
 void samovar_reset() {
   char str[20] = "Stoped             ";
   memcpy(str, startval_text_val, 20);
+  power_text_ptr = (char*)"ON";
   reset_focus();
   set_menu_screen(3);
-  power_text_ptr = (char*)"ON";
   reset_sensor_counter();
 }
 
