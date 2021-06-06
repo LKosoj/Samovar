@@ -171,6 +171,7 @@ void IRAM_ATTR set_power(bool On) {
     current_power_mode = POWER_SLEEP_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
+    power_text_ptr = (char*)"ON";
     sam_command_sync = SAMOVAR_RESET;
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
   }
@@ -398,8 +399,8 @@ void IRAM_ATTR run_program(byte num) {
     if (fileToAppend) {
       fileToAppend.close();
     }
+    set_power(false);
     Msg = "Program finished!";
-    reset_sensor_counter();
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alert! {DEVICE_NAME} - Program finished!");
