@@ -929,6 +929,9 @@ void read_config() {
   {
     SamSetup.StbVoltage = 100;
   }
+//  pump_regulator.Kp = SamSetup.Kp;
+//  pump_regulator.Ki = SamSetup.Ki;
+//  pump_regulator.Kd = SamSetup.Kd;
 }
 
 void WriteConsoleLog(String StringLogMsg) {
