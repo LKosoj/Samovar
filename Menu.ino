@@ -303,6 +303,7 @@ void menu_get_power() {
       set_menu_screen(2);
     } else {
       set_menu_screen(3);
+      samovar_reset();
     }
     sam_command_sync = SAMOVAR_POWER;
   }
