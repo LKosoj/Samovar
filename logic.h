@@ -536,16 +536,20 @@ void IRAM_ATTR check_alarm() {
 #endif
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= MAX_TANK_TEMP || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
+  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     delay(1000);
     set_power(false);
     String s = "";
     if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Steam";
     else if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = s + " Water";
-    else if (TankSensor.avgTemp >= MAX_TANK_TEMP) s = s + " Tank";
     else if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = s + " ACP";
-    Msg = "Emergency power OFF! Temperature error" + s;
+
+    if (TankSensor.avgTemp >= SamSetup.DistTemp) {
+      //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
+      Msg = "Tank temp limit. Program finish.";
+    } else  Msg = "Emergency power OFF! Temperature error" + s;
+
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
@@ -606,6 +610,8 @@ void IRAM_ATTR check_alarm() {
 #endif
 
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && SamovarStatusInt == 50) {
+    //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
+    wp_count = 0;
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     Msg = "Working mode set!";
     SamovarStatusInt = 51;
