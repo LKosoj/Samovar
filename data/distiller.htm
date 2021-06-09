@@ -61,6 +61,20 @@ return 0;
 };
 
 setInterval(loadDoc,2000);
+setInterval(loadHeap,19000);
+
+function loadHeap() {
+var xhttp = new XMLHttpRequest();
+xhttp.onreadystatechange = function() {
+if (this.readyState == 4 && this.status == 200) {
+var myObj = this.responseText;
+document.getElementById('Heap').innerHTML = myObj;
+}
+};
+xhttp.open("GET", "/heap", true);
+xhttp.send();
+};
+
 
 function loadDoc() {
 var xhttp = new XMLHttpRequest();
@@ -169,6 +183,9 @@ Samovar v. <span id='version'></span>
 </div>
 <div class='text'>
 <span>Статус: <span id='Status'></span></span>
+</div>
+<div>
+<span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div>
 <div>
 <input id='power' type='submit' name='power' value='Включить питание' onclick='setDistCommand();'>
