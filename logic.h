@@ -27,6 +27,20 @@ void set_pump_speed(float pumpspeed, bool continue_process);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 
+//Получить количество разделителей
+byte getDelimCount(String data, char separator)
+{
+  int cnt = 0;
+  int maxIndex = data.length() - 1;
+
+  for (int i = 0; i <= maxIndex; i++) {
+    if (data.charAt(i) == separator) {
+      cnt++;
+    }
+  }
+  return cnt;
+}
+
 //Получить подстроку через разделитель
 String getValue(String data, char separator, int index)
 {
