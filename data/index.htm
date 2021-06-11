@@ -22,7 +22,28 @@ function openTab(evt, tabName) {
   return 0;
 }
 
+function check_program(str){
+  var arrayOfStrings = str.split("\n");
+  var prevcnt = 0;
+  var ret = true;
+  var cnt;
+  for (i = 0; i < arrayOfStrings.length; i++){
+  	var arrayOfDelim = arrayOfStrings[i].split(";");
+  	cnt = arrayOfDelim.length;
+  	if (cnt == 1 && arrayOfDelim[0] != "" && arrayOfStrings.length == i - 1) ret = false;
+  	else if (prevcnt > 0 && cnt > 1) {
+  		if (prevcnt != cnt) ret = false;
+  	}
+  	prevcnt = cnt;
+  }
+  return ret;
+}
+
 function set_program(){
+if (!check_program(document.getElementById('WProgram').value)){
+  alert( "Program error!" );
+  return;
+}
 var server = '/program';
 request = new XMLHttpRequest();
 request.onreadystatechange = function() {
