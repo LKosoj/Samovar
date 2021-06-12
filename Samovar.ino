@@ -103,15 +103,40 @@ String CurrentTime(bool Year);
 void distiller_finish();
 void beer_finish();
 void change_samovar_mode();
+void saveConfigCallback ();
+void configModeCallback (AsyncWiFiManager *myWiFiManager);
 
 #ifdef USE_WEB_SERIAL
 void recvMsg(uint8_t *data, size_t len) {
   WebSerial.println("Received Data...");
   String d = "";
+  d = "";
   for (int i = 0; i < len; i++) {
     d += char(data[i]);
   }
-  WebSerial.println(d);
+  String Var, Val;
+  Var = "";
+  Val = "";
+  Var = getValue(d, '=', 0);
+  Val = getValue(d, '=', 1);
+  Var.trim();
+  Val.trim();
+  if (Val != "") {
+    WebSerial.print(Var);
+    WebSerial.print(" = ");
+    if (Var == "wp_count") {
+      wp_count = (byte)Val.toInt();
+      WebSerial.println(wp_count);
+    } else if (Var == "pump_started") {
+      pump_started = Val.toInt();
+      WebSerial.println(pump_started);
+    } else if (Var == "") {
+
+    }
+  } else if (d == "print"){
+      WebSerial.print("wp_count = ");WebSerial.println(wp_count);
+      WebSerial.print("pump_started = ");WebSerial.println(pump_started);
+  } else WebSerial.println(d);
 }
 #endif
 
@@ -929,12 +954,15 @@ void read_config() {
   {
     SamSetup.StbVoltage = 100;
   }
-//  pump_regulator.Kp = SamSetup.Kp;
-//  pump_regulator.Ki = SamSetup.Ki;
-//  pump_regulator.Kd = SamSetup.Kd;
+  //  pump_regulator.Kp = SamSetup.Kp;
+  //  pump_regulator.Ki = SamSetup.Ki;
+  //  pump_regulator.Kd = SamSetup.Kd;
 }
 
 void WriteConsoleLog(String StringLogMsg) {
   Serial.println(StringLogMsg);
   LogMsg = LogMsg + "\n" + StringLogMsg;
+#ifdef USE_WEB_SERIAL
+  WebSerial.println(StringLogMsg);
+#endif
 }
