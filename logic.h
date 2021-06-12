@@ -514,6 +514,12 @@ void IRAM_ATTR set_body_temp() {
     //Если используется Blynk - пишем оператору
     Blynk.notify("Warning! {DEVICE_NAME} " + Msg);
 #endif
+  } else {
+    Msg = "Can't set body temp.";
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Warning! {DEVICE_NAME} " + Msg);
+#endif
   }
 }
 
