@@ -290,7 +290,7 @@ GButton whls(WHEAD_LEVEL_SENSOR_PIN);
 LiquidMenu main_menu1(lcd);
 
 #ifdef USE_WEB_SERIAL
-WebSerialClass WebSerial;
+//WebSerialClass WebSerial;
 #endif
 
 DNSServer dns;
