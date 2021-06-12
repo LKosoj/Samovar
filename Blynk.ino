@@ -77,6 +77,10 @@ BLYNK_WRITE(V17)
   set_pump_speed(get_speed_from_rate(Value17), true);
 }
 
+BLYNK_WRITE(V18) {
+  set_body_temp();
+}
+
 BLYNK_WRITE(V12)
 {
   if (!PowerOn) return;
