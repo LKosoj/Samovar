@@ -130,12 +130,18 @@ void recvMsg(uint8_t *data, size_t len) {
     } else if (Var == "pump_started") {
       pump_started = Val.toInt();
       WebSerial.println(pump_started);
+    } else if (Var == "valve_status") {
+      valve_status = Val.toInt();
+      WebSerial.println(valve_status);
     } else if (Var == "") {
 
     }
   } else if (d == "print"){
+      WebSerial.println("_______________________________________________");
       WebSerial.print("wp_count = ");WebSerial.println(wp_count);
       WebSerial.print("pump_started = ");WebSerial.println(pump_started);
+      WebSerial.print("valve_status = ");WebSerial.println(valve_status);
+      WebSerial.println("_______________________________________________");
   } else WebSerial.println(d);
 }
 #endif
