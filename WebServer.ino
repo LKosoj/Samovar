@@ -65,6 +65,9 @@ void WebServerInit(void) {
   server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest * request) {
     get_data_log(request);
   });
+  server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+    get_old_data_log(request);
+  });
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
@@ -487,6 +490,16 @@ void get_data_log(AsyncWebServerRequest *request) {
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
   //response->addHeader("Content-Disposition", "attachment; filename='data.csv'");
+  response->addHeader("Pragma", "public");
+  response->addHeader("Cache-Control", "no-cache");
+  request->send(response);
+}
+
+void get_old_data_log(AsyncWebServerRequest *request) {
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data_old.csv", String(), true);
+  response->addHeader("Content-Type", "application/octet-stream");
+  response->addHeader("Content-Description", "File Transfer");
+  //response->addHeader("Content-Disposition", "attachment; filename='data_old.csv'");
   response->addHeader("Pragma", "public");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);

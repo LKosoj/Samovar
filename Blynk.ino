@@ -59,6 +59,16 @@ BLYNK_READ(V15) {
   Blynk.virtualWrite(V15, ipst);
 }
 
+BLYNK_READ(V19) {
+  Blynk.virtualWrite(V19, SAMOVAR_VERSION);
+}
+
+#ifdef SAMOVAR_USE_POWER
+BLYNK_READ(V21) {
+  Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String) + target_power_volt);
+}
+#endif
+
 #ifdef SAMOVAR_USE_POWER
 BLYNK_READ(V16) {
   Blynk.virtualWrite(V16, target_power_volt);

@@ -821,7 +821,7 @@ void loop() {
       case SAMOVAR_NONE:
         break;
     }
-    sam_command_sync = SAMOVAR_NONE;
+    if (sam_command_sync != SAMOVAR_RESET) sam_command_sync = SAMOVAR_NONE;
   }
 
   if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {

@@ -5,7 +5,16 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
+#define SAMOVAR_VERSION "2.06"
+//#define __SAMOVAR_DEBUG
+
 #include "Samovar_ini.h"
+
+#ifdef __SAMOVAR_DEBUG
+#ifndef USE_WEB_SERIAL
+#define USE_WEB_SERIAL                      //использовать библиотеку WebSerial для отладки
+#endif
+#endif
 
 #ifndef SAM_NO_BEER_PRG
 #define SAM_BEER_PRG
@@ -42,9 +51,6 @@ uint8_t temprature_sens_read();
 #endif
 
 uint8_t temprature_sens_read();
-
-#define SAMOVAR_VERSION "2.06"
-//#define __SAMOVAR_DEBUG
 
 #define __SAMOVAR_NOT_USE_WDT
 

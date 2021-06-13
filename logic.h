@@ -457,6 +457,12 @@ void IRAM_ATTR run_program(byte num) {
         SteamSensor.BodyTemp = SteamSensor.avgTemp;
       }
     } else if (program[num].WType == "P") {
+      //Сбрасываем Т тела, так как при увеличнии напряжения на регуляторе увеличивается Т в царге.
+      SteamSensor.BodyTemp = 0;
+      PipeSensor.BodyTemp = 0;
+      WaterSensor.BodyTemp = 0;
+      TankSensor.BodyTemp = 0;
+      
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
       Msg += ", pause " + (String)program[num].Volume + " sec.";
       t_min = millis() + program[num].Volume * 1000;
@@ -541,7 +547,7 @@ void IRAM_ATTR check_alarm() {
     }
   }
 
-  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 5) {
+  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 15 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 5) {
     open_valve(false);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
@@ -617,15 +623,16 @@ void IRAM_ATTR check_alarm() {
   if (whls.isHolded() && alarm_h_min == 0) {
     whls.resetStates();
     Msg = "Head level alarm!";
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} - Head level alarm!");
-#endif
 #ifdef SAMOVAR_USE_POWER
+    Msg = Msg + " Voltage down from " + (String)target_power_volt;
     set_current_power(target_power_volt - 2);
 #endif
-    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    alarm_h_min = millis() + 30000;
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
+#endif
+    //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
+    alarm_h_min = millis() + 40000;
   }
 #endif
 
@@ -756,6 +763,9 @@ String IRAM_ATTR read_from_serial() {
     if (i > 0) serial_str = serial_str.substring(0, i - 1);
     String result = serial_str;
     serial_str = "";
+#ifdef __SAMOVAR_DEBUG
+    WriteConsoleLog("serial_str = " + result);
+#endif
     return result;
   } else if (getData && Serial2.available()) {
     return read_from_serial();

@@ -378,7 +378,7 @@ void menu_samovar_start() {
   main_menu1.update();
 }
 
-void samovar_reset() {
+void IRAM_ATTR samovar_reset() {
   char str[20] = "Stoped             ";
   memcpy(str, startval_text_val, 20);
   power_text_ptr = (char*)"ON";
