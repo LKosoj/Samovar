@@ -82,7 +82,9 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   bme.getEvent(&event);
   if (event.pressure) {
     bme_pressure = event.pressure * 0.75;
-    bme.getTemperature(&bme_temp);
+    float temp;
+    bme.getTemperature(&temp);
+    bme_temp = temp;
   }
 #endif
 
