@@ -207,6 +207,8 @@ uint8_t temprature_sens_read();
 #define POWER_SLEEP_MODE "2"
 //**************************************************************************************************************
 
+#include "user_config_override.h"
+
 void writeString(String Str, byte num);
 void WriteConsoleLog(String StringLogMsg);
 
