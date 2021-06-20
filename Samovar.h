@@ -248,6 +248,12 @@ TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t BuzzerTask = NULL;
 volatile bool BuzzerTaskFl;
 
+#ifdef SAMOVAR_USE_POWER
+#ifndef SAMOVAR_USE_RMVK
+TaskHandle_t PowerStatusTask = NULL;
+#endif
+#endif
+
 #ifdef SAMOVAR_USE_RMVK
 TaskHandle_t RMVKStatusTask = NULL;
 #endif
@@ -462,6 +468,7 @@ String current_power_mode;                                      // Режим р
 #ifdef SAMOVAR_USE_POWER
 volatile float current_power_volt;                              // Текущее напряжение регулятора
 volatile float target_power_volt;                               // Заданное напряжение регулятора
+volatile float prev_target_power_volt;                          // Предыдущее заданное напряжение регулятора
 volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
 #endif
 
