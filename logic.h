@@ -422,13 +422,14 @@ void IRAM_ATTR run_program(byte num) {
 
   } else {
 #ifdef SAMOVAR_USE_POWER
-    set_power_mode(POWER_WORK_MODE);
     if (program[num].Power > 40) {
       set_current_power(program[num].Power);
+    } else if (program[num].Power != 0){
+      set_current_power(target_power_volt + program[num].Power);
     }
 #endif
     Msg = "Set prog line " + (String)(num + 1);
-    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T") {
+    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
       Msg +=  ", capacity " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
@@ -442,7 +443,7 @@ void IRAM_ATTR run_program(byte num) {
       SteamSensor.BodyTemp = program[num].Temp;
 
       //Первая программа отбора тела - запоминаем текущие значения температуры и давления
-      if (program[num].WType == "B" && SteamSensor.Start_Pressure == 0) {
+      if ((program[num].WType == "B" || program[num].WType == "C") && SteamSensor.Start_Pressure == 0) {
         SteamSensor.Start_Pressure = bme_pressure;
         PipeSensor.BodyTemp = PipeSensor.avgTemp;
         WaterSensor.BodyTemp = WaterSensor.avgTemp;
@@ -453,7 +454,7 @@ void IRAM_ATTR run_program(byte num) {
       //Считаем, что колонна стабильна
       //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
       //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
-      if (program[num].WType == "B" && SteamSensor.BodyTemp == 0) {
+      if ((program[num].WType == "B" || program[num].WType == "C") && SteamSensor.BodyTemp == 0) {
         SteamSensor.BodyTemp = SteamSensor.avgTemp;
       }
     } else if (program[num].WType == "P") {
@@ -462,7 +463,7 @@ void IRAM_ATTR run_program(byte num) {
       PipeSensor.BodyTemp = 0;
       WaterSensor.BodyTemp = 0;
       TankSensor.BodyTemp = 0;
-      
+
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
       Msg += ", pause " + (String)program[num].Volume + " sec.";
       t_min = millis() + program[num].Volume * 1000;
@@ -537,6 +538,12 @@ void IRAM_ATTR check_alarm() {
   if (alarm_h_min > 0 && alarm_h_min <= millis()) {
     whls.resetStates();
     alarm_h_min = 0;
+#ifdef SAMOVAR_USE_POWER
+    //Если программа - предзахлеб, то возвращаем напряжение к последнему сохраненному - 0.5
+    if (program[ProgramNum].WType == "C") {
+      set_current_power(prev_target_power_volt - 0.5);
+    }
+#endif
   }
 #endif
 
@@ -547,7 +554,7 @@ void IRAM_ATTR check_alarm() {
     }
   }
 
-  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 15 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 5) {
+  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 15 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
     open_valve(false);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
@@ -557,7 +564,8 @@ void IRAM_ATTR check_alarm() {
 #ifdef USE_WATER_PUMP
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
-    set_pump_speed_pid(WaterSensor.avgTemp);
+    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(WaterSensor.avgTemp);
+    else set_pump_speed_pid(WaterSensor.avgTemp);
   }
 #endif
 
@@ -622,8 +630,11 @@ void IRAM_ATTR check_alarm() {
   whls.tick();
   if (whls.isHolded() && alarm_h_min == 0) {
     whls.resetStates();
-    Msg = "Head level alarm!";
+    if (program[ProgramNum].WType != "C") {
+      Msg = "Head level alarm!";
+    }
 #ifdef SAMOVAR_USE_POWER
+    prev_target_power_volt = target_power_volt;
     Msg = Msg + " Voltage down from " + (String)target_power_volt;
     set_current_power(target_power_volt - 2);
 #endif
@@ -647,10 +658,6 @@ void IRAM_ATTR check_alarm() {
     Blynk.notify("Alert! {DEVICE_NAME} - " + Msg);
 #endif
 #ifdef SAMOVAR_USE_POWER
-    vTaskDelay(200);
-    set_power_mode(POWER_WORK_MODE);
-    //Устанавливаем напряжение, заданное в первой строке программы
-    vTaskDelay(800);
     set_current_power(program[0].Power);
 #else
     current_power_mode = POWER_WORK_MODE;
@@ -776,24 +783,56 @@ String IRAM_ATTR read_from_serial() {
   return "";
 }
 
+void IRAM_ATTR triggerPowerStatus(void * parameter)  {
+  int i;
+  String resp;
+  while (true) {
+    if (PowerOn) {
+      if (Serial.available()) {
+        resp = Serial.readStringUntil('\r');
+        i = resp.indexOf("T");
+        if (i < 0) resp = Serial.readStringUntil('\r');
+        vTaskDelay(200);
+        resp = resp.substring(i, resp.length() - 2);
+#ifdef __SAMOVAR_DEBUG
+        WriteConsoleLog("resp = " + resp);
+        vTaskDelay(100);
+#endif
+        if (resp.substring(1, 2) == "T") resp = resp.substring(1, 9);
+        int cpv = hexToDec(resp.substring(1, 4));
+        //Если напряжение больше 300 - не корректно получено значение от регулятора, оставляем старое значение
+        if (cpv < 3000) {
+          current_power_volt = cpv / 10.0F;
+          target_power_volt = hexToDec(resp.substring(4, 7)) / 10.0F;
+          current_power_mode = resp.substring(7, 8);
+        }
+      }
+    }
+    vTaskDelay(600);
+  }
+}
+
 #ifdef SAMOVAR_USE_RMVK
 void IRAM_ATTR triggerRMVKStatus(void * parameter) {
   String resp;
   while (true) {
-    resp = "";
-    Serial2.print("АТ+VO?\r");
-    vTaskDelay(200);
-    if (Serial.available()) {
-      resp = Serial.readStringUntil('\r');
+    if (PowerOn) {
+      resp = "";
+      Serial2.print("АТ+VO?\r");
+      vTaskDelay(200);
+      if (Serial.available()) {
+        resp = Serial.readStringUntil('\r');
+      }
+      current_power_volt = resp.toInt();
+      Serial2.print("АТ+VS?\r");
+      vTaskDelay(200);
+      resp = "";
+      if (Serial.available()) {
+        resp = Serial.readStringUntil('\r');
+      }
+      target_power_volt = resp.toInt();
+
     }
-    current_power_volt = resp.toInt();
-    Serial2.print("АТ+VS?\r");
-    vTaskDelay(200);
-    resp = "";
-    if (Serial.available()) {
-      resp = Serial.readStringUntil('\r');
-    }
-    target_power_volt = resp.toInt();
     vTaskDelay(300);
   }
 }
@@ -807,25 +846,8 @@ void IRAM_ATTR get_current_power() {
     current_power_mode = "N";
     return;
   }
-#ifdef SAMOVAR_USE_RMVK
   //Считаем мощность V*V*K/R, K = 0,98~1
   current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
-#else
-  String s = read_from_serial();
-  if (s != "") {
-    if (s.substring(1, 2) == "T") s = s.substring(1, 9);
-    int cpv = hexToDec(s.substring(1, 4));
-
-    //Если напряжение больше 300 - не корректно получено значение от регулятора, оставляем старое значение
-    if (cpv < 3000) {
-      current_power_volt = cpv / 10.0F;
-      target_power_volt = hexToDec(s.substring(4, 7)) / 10.0F;
-      current_power_mode = s.substring(7, 8);
-      //Считаем мощность V*V*K/R, K = 0,98~1
-      current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
-    }
-  }
-#endif
 }
 
 //устанавливаем напряжение для регулятора напряжения
@@ -835,7 +857,10 @@ void IRAM_ATTR set_current_power(float Volt) {
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
-  } else set_power_mode(POWER_WORK_MODE);
+  } else if (current_power_mode != POWER_WORK_MODE) {
+    set_power_mode(POWER_WORK_MODE);
+    vTaskDelay(400);
+  }
 #ifdef SAMOVAR_USE_RMVK
   String Cmd;
   int V = Volt;
@@ -854,11 +879,11 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
     Serial2.print("АТ+ON=0\r");
-    set_current_power(0);
+    //set_current_power(0);
   }
   else if (Mode == POWER_SPEED_MODE) {
     Serial2.print("АТ+ON=1\r");
-    set_current_power(250);
+    //set_current_power(5000);
   }
 #else
   Serial2.print("M" + Mode + "\r");
