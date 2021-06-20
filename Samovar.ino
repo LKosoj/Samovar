@@ -612,7 +612,7 @@ void setup() {
   Serial.println("Connecting to Blynk");
 #endif
 #ifdef BLYNK_SAMOVAR_TOOL
-  Blynk.config(SamSetup.blynkauth, "samovar-tool.ru", 8080);
+  Blynk.config(SamSetup.blynkauth, BLYNK_SAMOVAR_TOOL, 8080);
 #else
   Blynk.config(SamSetup.blynkauth);
 #endif
