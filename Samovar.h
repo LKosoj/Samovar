@@ -270,7 +270,10 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 File fileToAppend;
+
+#ifdef SERVO_PIN
 Servo servo;  // create servo object to control a servo
+#endif
 
 GButton btn(BTN_PIN);
 //GyverRelay regulator(REVERSE);

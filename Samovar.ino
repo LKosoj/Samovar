@@ -474,10 +474,13 @@ void setup() {
   ESP32PWM::allocateTimer(1);
   ESP32PWM::allocateTimer(2);
   ESP32PWM::allocateTimer(3);
+
+#ifdef SERVO_PIN
   servo.setPeriodHertz(50);    // standard 50 hz servo
   // Частоты 500 и 2500 - подобраны для моего серво-привода. Возможно, для других частоты могут отличаться
   // 544 и 2400 - стандартные частоты
   servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
+#endif
 
   //Читаем сохраненную конфигурацию
   read_config();
