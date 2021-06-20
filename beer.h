@@ -167,11 +167,6 @@ void IRAM_ATTR check_alarm_beer() {
       //Иначе поддерживаем температуру
       heater_state = true;
 #ifdef SAMOVAR_USE_POWER
-      if (current_power_mode != POWER_WORK_MODE) {
-        vTaskDelay(200);
-        set_power_mode(POWER_WORK_MODE);
-        vTaskDelay(800);
-      }
       //Устанавливаем заданное напряжение
       set_current_power(SamSetup.StbVoltage);
 #else
@@ -269,11 +264,6 @@ void setHeaterPosition(bool state) {
 
   if (state) {
 #ifdef SAMOVAR_USE_POWER
-    if (current_power_mode != POWER_WORK_MODE) {
-      delay(200);
-      set_power_mode(POWER_WORK_MODE);
-      delay(800);
-    }
     //Устанавливаем заданное напряжение
     set_current_power(SamSetup.StbVoltage);
 #else
@@ -287,7 +277,6 @@ void setHeaterPosition(bool state) {
     if (current_power_mode != POWER_SLEEP_MODE) {
       delay(200);
       set_power_mode(POWER_SLEEP_MODE);
-      delay(800);
     }
     //Устанавливаем заданное напряжение
     //set_current_power(0);

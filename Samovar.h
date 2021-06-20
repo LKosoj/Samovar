@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "2.06"
+#define SAMOVAR_VERSION "2.07"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -250,6 +250,12 @@ TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t BuzzerTask = NULL;
 volatile bool BuzzerTaskFl;
 
+#ifdef SAMOVAR_USE_POWER
+#ifndef SAMOVAR_USE_RMVK
+TaskHandle_t PowerStatusTask = NULL;
+#endif
+#endif
+
 #ifdef SAMOVAR_USE_RMVK
 TaskHandle_t RMVKStatusTask = NULL;
 #endif
@@ -467,6 +473,7 @@ String current_power_mode;                                      // Режим р
 #ifdef SAMOVAR_USE_POWER
 volatile float current_power_volt;                              // Текущее напряжение регулятора
 volatile float target_power_volt;                               // Заданное напряжение регулятора
+volatile float prev_target_power_volt;                          // Предыдущее заданное напряжение регулятора
 volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
 #endif
 
