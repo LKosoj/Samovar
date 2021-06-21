@@ -167,6 +167,7 @@ void sensor_init(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Pressure sensor initialization");
 #endif
+#ifdef BME_STRING
   writeString((String)BME_STRING + " init...     ", 3);
   delay(800);
 
@@ -186,6 +187,9 @@ void sensor_init(void) {
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
 #endif
   }
+#else
+    bmefound = false;
+#endif
 
   writeString("DS1820 init...     ", 3);
   sensors.begin();                          // стартуем датчики температуры
@@ -333,7 +337,6 @@ void IRAM_ATTR reset_sensor_counter(void) {
   //Msg = "";
   
   begintime = 0;
-
 
   if (fileToAppend) {
     fileToAppend.close();
