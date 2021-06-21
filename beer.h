@@ -234,10 +234,6 @@ void set_heater(double dutyCycle) {
   uint32_t newTime = millis();
   uint32_t offTime = periodInSeconds * 1000 * (dutyCycle);
 
-#ifdef __SAMOVAR_DEBUG
-  WriteConsoleLog("dutyCycle = " + String(dutyCycle));
-#endif
-
   if (newTime < oldTime) {
     periodTime += (UINT32_MAX - oldTime + newTime);
   } else {
@@ -257,10 +253,6 @@ void set_heater(double dutyCycle) {
 
 void setHeaterPosition(bool state) {
   heater_state = state;
-
-#ifdef __SAMOVAR_DEBUG
-  WriteConsoleLog("heater_state = " + String(heater_state));
-#endif
 
   if (state) {
 #ifdef SAMOVAR_USE_POWER
@@ -351,12 +343,9 @@ void FinishAutoTune()
   SamSetup.Ki = aTune.GetKi();
   SamSetup.Kd = aTune.GetKd();
 
-  Serial.print("Kp = ");
-  Serial.print(Kp);
-  Serial.print("\tKi = ");
-  Serial.print(Ki);
-  Serial.print("\tKd = ");
-  Serial.println(Kd);
+  WriteConsoleLog("Kp = " + (String)Kp);
+  WriteConsoleLog("Ki = " + (String)Ki);
+  WriteConsoleLog("Kd = " + (String)Kd);
 
   // Re-tune the PID and revert to normal control mode
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
