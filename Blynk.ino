@@ -111,7 +111,7 @@ BLYNK_WRITE(V3)
 {
   int Value3 = param.asInt(); // assigning incoming value from pin V3 to a variable
   if (Value3 == 1 && PowerOn) menu_samovar_start();
-  else samovar_reset();
+  else sam_command_sync = SAMOVAR_RESET;
 }
 BLYNK_WRITE(V4)
 {
