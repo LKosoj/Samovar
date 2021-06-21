@@ -26,6 +26,7 @@ void reset_sensor_counter(void);
 void set_pump_speed(float pumpspeed, bool continue_process);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
+void set_power(bool On);
 
 //Получить количество разделителей
 byte getDelimCount(String data, char separator)
@@ -159,35 +160,6 @@ void IRAM_ATTR withdrawal(void) {
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
-  }
-}
-
-void IRAM_ATTR set_power(bool On) {
-  PowerOn = On;
-  if (On) {
-    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
-    set_menu_screen(2);
-    power_text_ptr = (char*)"OFF";
-
-#ifdef SAMOVAR_USE_POWER
-    vTaskDelay(500);
-    set_power_mode(POWER_SPEED_MODE);
-#else
-    current_power_mode = POWER_SPEED_MODE;
-    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
-#endif
-
-  } else {
-#ifdef SAMOVAR_USE_POWER
-    vTaskDelay(1000);
-    set_power_mode(POWER_SLEEP_MODE);
-#else
-    current_power_mode = POWER_SLEEP_MODE;
-    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
-#endif
-    power_text_ptr = (char*)"ON";
-    sam_command_sync = SAMOVAR_RESET;
-    digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
   }
 }
 
@@ -751,61 +723,52 @@ void set_buzzer() {
   }
 }
 
+void IRAM_ATTR set_power(bool On) {
+  PowerOn = On;
+  if (On) {
+    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
+    set_menu_screen(2);
+    power_text_ptr = (char*)"OFF";
+
+#ifdef SAMOVAR_USE_POWER
+    vTaskDelay(600);
+    set_power_mode(POWER_SPEED_MODE);
+#else
+    current_power_mode = POWER_SPEED_MODE;
+    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+#endif
+  } else {
+#ifdef SAMOVAR_USE_POWER
+    vTaskDelay(1000);
+    set_power_mode(POWER_SLEEP_MODE);
+#else
+    current_power_mode = POWER_SLEEP_MODE;
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+#endif
+    power_text_ptr = (char*)"ON";
+    sam_command_sync = SAMOVAR_RESET;
+    digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+  }
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SAMOVAR_USE_POWER
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
-String IRAM_ATTR read_from_serial() {
-  String serial_str = "";
-  boolean getData;
-  getData = false;
-  char a;
-  while (Serial2.available()) {
-    a = Serial2.read();
-    //Serial.println(a);
-    serial_str += a;
-    if (a == '\n') {
-      getData = true;
-      break;
-    }
-  }
-
-  int i;
-  i = serial_str.indexOf("T");
-  if (getData && i >= 0) {
-    serial_str = serial_str.substring(i, serial_str.length() - 2);
-    i = serial_str.indexOf("T", 1);
-    if (i > 0) serial_str = serial_str.substring(0, i - 1);
-    String result = serial_str;
-    serial_str = "";
-#ifdef __SAMOVAR_DEBUG
-    WriteConsoleLog("serial_str = " + result);
-#endif
-    return result;
-  } else if (getData && Serial2.available()) {
-    return read_from_serial();
-  } else if (getData) {
-    serial_str = "";
-    return "";
-  }
-  return "";
-}
-
+#ifndef SAMOVAR_USE_RMVK
 void IRAM_ATTR triggerPowerStatus(void * parameter)  {
   int i;
   String resp;
   while (true) {
     if (PowerOn) {
-      if (Serial.available()) {
-        resp = Serial.readStringUntil('\r');
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
-        if (i < 0) resp = Serial.readStringUntil('\r');
+        if (i < 0) {
+          resp = Serial2.readStringUntil('\r');
+        }
         vTaskDelay(200);
-        resp = resp.substring(i, resp.length() - 2);
-#ifdef __SAMOVAR_DEBUG
-        WriteConsoleLog("resp = " + resp);
-        vTaskDelay(100);
-#endif
+        resp = resp.substring(i, resp.length());
         if (resp.substring(1, 2) == "T") resp = resp.substring(1, 9);
         int cpv = hexToDec(resp.substring(1, 4));
         //Если напряжение больше 300 - не корректно получено значение от регулятора, оставляем старое значение
@@ -819,28 +782,27 @@ void IRAM_ATTR triggerPowerStatus(void * parameter)  {
     vTaskDelay(600);
   }
 }
-
-#ifdef SAMOVAR_USE_RMVK
-void IRAM_ATTR triggerRMVKStatus(void * parameter) {
+#else
+void IRAM_ATTR triggerPowerStatus(void * parameter) {
   String resp;
   while (true) {
     if (PowerOn) {
       resp = "";
       Serial2.print("АТ+VO?\r");
-      vTaskDelay(200);
-      if (Serial.available()) {
-        resp = Serial.readStringUntil('\r');
+      vTaskDelay(350);
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\r');
       }
       current_power_volt = resp.toInt();
       Serial2.print("АТ+VS?\r");
-      vTaskDelay(200);
+      vTaskDelay(350);
       resp = "";
-      if (Serial.available()) {
-        resp = Serial.readStringUntil('\r');
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\r');
       }
       target_power_volt = resp.toInt();
     }
-    vTaskDelay(300);
+    vTaskDelay(100);
   }
 }
 #endif
@@ -860,14 +822,16 @@ void IRAM_ATTR get_current_power() {
 //устанавливаем напряжение для регулятора напряжения
 void IRAM_ATTR set_current_power(float Volt) {
   if (!PowerOn) return;
+  vTaskDelay(100);
   target_power_volt = Volt;
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
-  } else if (current_power_mode != POWER_WORK_MODE) {
+  } else {
     set_power_mode(POWER_WORK_MODE);
-    vTaskDelay(400);
+    vTaskDelay(800);
   }
+  vTaskSuspend(PowerStatusTask);
 #ifdef SAMOVAR_USE_RMVK
   String Cmd;
   int V = Volt;
@@ -879,9 +843,12 @@ void IRAM_ATTR set_current_power(float Volt) {
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 #endif
+  vTaskResume(PowerStatusTask);
 }
 
 void IRAM_ATTR set_power_mode(String Mode) {
+  vTaskSuspend(PowerStatusTask);
+  vTaskDelay(50);
   current_power_mode = Mode;
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
@@ -895,6 +862,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #else
   Serial2.print("M" + Mode + "\r");
 #endif
+  vTaskResume(PowerStatusTask);
 }
 
 unsigned int IRAM_ATTR hexToDec(String hexString) {
