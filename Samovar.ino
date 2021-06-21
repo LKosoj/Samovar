@@ -711,30 +711,15 @@ void setup() {
 #ifdef SAMOVAR_USE_POWER
   //На всякий случай пошлем команду выключения питания на UART
   set_power_mode(POWER_SLEEP_MODE);
-#ifndef SAMOVAR_USE_RMVK
   //Запускаем таск считывания параметров регулятора
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask", /* Name of the task */
-    1000,  /* Stack size in words */
+    4000,  /* Stack size in words */
     NULL,  /* Task input parameter */
     0,  /* Priority of the task */
     &PowerStatusTask,  /* Task handle. */
     1); /* Core where the task should run */
-#endif
-#endif
-
-#ifdef SAMOVAR_USE_RMVK
-  //Если используется регулятор РМВ К с управлением по UART, запускаем таск считывания параметров регулятора
-  xTaskCreatePinnedToCore(
-    triggerRMVKStatus, /* Function to implement the task */
-    "RMVKStatusTask", /* Name of the task */
-    1000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    0,  /* Priority of the task */
-    &RMVKStatusTask,  /* Task handle. */
-    1); /* Core where the task should run */
-
 #endif
 }
 
