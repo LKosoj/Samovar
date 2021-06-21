@@ -124,9 +124,9 @@ void recvMsg(uint8_t *data, size_t len) {
   if (Val != "") {
     WebSerial.print(Var);
     WebSerial.print(" = ");
-    if (Var == "wp_count") {
-      wp_count = (byte)Val.toInt();
-      WebSerial.println(wp_count);
+    if (Var == "WFpulseCount") {
+      WFpulseCount = (byte)Val.toInt();
+      WebSerial.println(WFpulseCount);
     } else if (Var == "pump_started") {
       pump_started = Val.toInt();
       WebSerial.println(pump_started);
@@ -136,12 +136,12 @@ void recvMsg(uint8_t *data, size_t len) {
     } else if (Var == "") {
 
     }
-  } else if (d == "print"){
-      WebSerial.println("_______________________________________________");
-      WebSerial.print("wp_count = ");WebSerial.println(wp_count);
-      WebSerial.print("pump_started = ");WebSerial.println(pump_started);
-      WebSerial.print("valve_status = ");WebSerial.println(valve_status);
-      WebSerial.println("_______________________________________________");
+  } else if (d == "print") {
+    WebSerial.println("_______________________________________________");
+    WebSerial.print("WFpulseCount = "); WebSerial.println(WFpulseCount);
+    WebSerial.print("pump_started = "); WebSerial.println(pump_started);
+    WebSerial.print("valve_status = "); WebSerial.println(valve_status);
+    WebSerial.println("_______________________________________________");
   } else WebSerial.println(d);
 }
 #endif
@@ -676,9 +676,6 @@ void setup() {
   attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
 #endif
 
-  //disableCore0WDT();
-  //disableCore1WDT();
-
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
@@ -709,17 +706,17 @@ void setup() {
 
 
 #ifdef SAMOVAR_USE_POWER
-  //На всякий случай пошлем команду выключения питания на UART
-  set_power_mode(POWER_SLEEP_MODE);
   //Запускаем таск считывания параметров регулятора
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask", /* Name of the task */
-    4000,  /* Stack size in words */
+    3000,  /* Stack size in words */
     NULL,  /* Task input parameter */
     0,  /* Priority of the task */
     &PowerStatusTask,  /* Task handle. */
     1); /* Core where the task should run */
+  //На всякий случай пошлем команду выключения питания на UART
+  set_power_mode(POWER_SLEEP_MODE);
 #endif
 }
 
@@ -820,7 +817,9 @@ void loop() {
       case SAMOVAR_NONE:
         break;
     }
-    if (sam_command_sync != SAMOVAR_RESET) sam_command_sync = SAMOVAR_NONE;
+    if (sam_command_sync != SAMOVAR_RESET) {
+      sam_command_sync = SAMOVAR_NONE;
+    }
   }
 
   if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {
