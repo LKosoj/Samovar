@@ -251,13 +251,7 @@ TaskHandle_t BuzzerTask = NULL;
 volatile bool BuzzerTaskFl;
 
 #ifdef SAMOVAR_USE_POWER
-#ifndef SAMOVAR_USE_RMVK
 TaskHandle_t PowerStatusTask = NULL;
-#endif
-#endif
-
-#ifdef SAMOVAR_USE_RMVK
-TaskHandle_t RMVKStatusTask = NULL;
 #endif
 
 AsyncWebServer server(80);
