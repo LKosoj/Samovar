@@ -282,7 +282,7 @@ void sensor_init(void) {
 #else
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
 #endif
-  Serial2.setRxBufferSize(20);
+  Serial2.setRxBufferSize(10);
 #endif
 
 #ifdef USE_WATER_PUMP
