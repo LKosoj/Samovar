@@ -640,6 +640,7 @@ void IRAM_ATTR check_alarm() {
       Msg = "Head level alarm!";
     }
 #ifdef SAMOVAR_USE_POWER
+    prev_target_power_volt = target_power_volt;
     Msg = Msg + " Voltage down from " + (String)target_power_volt;
     set_current_power(target_power_volt - 2);
 #endif
