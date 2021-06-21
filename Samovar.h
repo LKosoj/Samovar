@@ -207,6 +207,8 @@ uint8_t temprature_sens_read();
 #define POWER_SLEEP_MODE "2"
 //**************************************************************************************************************
 
+#include "user_config_override.h"
+
 void writeString(String Str, byte num);
 void WriteConsoleLog(String StringLogMsg);
 
@@ -274,7 +276,10 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 File fileToAppend;
+
+#ifdef SERVO_PIN
 Servo servo;  // create servo object to control a servo
+#endif
 
 GButton btn(BTN_PIN);
 //GyverRelay regulator(REVERSE);

@@ -332,8 +332,14 @@ String IRAM_ATTR get_Samovar_Status() {
 
 void IRAM_ATTR set_capacity(byte cap) {
   capacity_num = cap;
+
+#ifdef SERVO_PIN
   int p = ((int)cap * SERVO_ANGLE) / (int)CAPACITY_NUM + servoDelta[cap];
   servo.write(p);
+#elif USER_SERVO
+  user_set_capacity(cap); 
+#endif
+
 }
 
 void IRAM_ATTR next_capacity(void) {
@@ -648,8 +654,10 @@ void IRAM_ATTR check_alarm() {
 #endif
 
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && SamovarStatusInt == 50) {
+#ifdef USE_WATER_PUMP    
     //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
     wp_count = 0;
+#endif    
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     Msg = "Working mode set!";
     SamovarStatusInt = 51;
@@ -831,7 +839,6 @@ void IRAM_ATTR triggerRMVKStatus(void * parameter) {
         resp = Serial.readStringUntil('\r');
       }
       target_power_volt = resp.toInt();
-
     }
     vTaskDelay(300);
   }
