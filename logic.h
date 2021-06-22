@@ -309,7 +309,7 @@ void IRAM_ATTR set_capacity(byte cap) {
   int p = ((int)cap * SERVO_ANGLE) / (int)CAPACITY_NUM + servoDelta[cap];
   servo.write(p);
 #elif USER_SERVO
-  user_set_capacity(cap); 
+  user_set_capacity(cap);
 #endif
 
 }
@@ -402,7 +402,7 @@ void IRAM_ATTR run_program(byte num) {
 #ifdef SAMOVAR_USE_POWER
     if (program[num].Power > 40) {
       set_current_power(program[num].Power);
-    } else if (program[num].Power != 0){
+    } else if (program[num].Power != 0) {
       set_current_power(target_power_volt + program[num].Power);
     }
 #endif
@@ -516,13 +516,17 @@ void IRAM_ATTR check_alarm() {
   if (alarm_h_min > 0 && alarm_h_min <= millis()) {
     whls.resetStates();
     alarm_h_min = 0;
+  }
 #ifdef SAMOVAR_USE_POWER
-    //Если программа - предзахлеб, то возвращаем напряжение к последнему сохраненному - 0.5
+  //Если программа - предзахлеб, и сброс напряжения был больше 8 минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
+  if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
       set_current_power(prev_target_power_volt - 0.5);
+    } else {
+      alarm_c_min = 0;
     }
-#endif
   }
+#endif
 #endif
 
   if (!valve_status) {
@@ -600,7 +604,7 @@ void IRAM_ATTR check_alarm() {
       set_current_power(target_power_volt - 5);
     }
 #endif
-    alarm_t_min = millis() + 30000;
+    alarm_t_min = millis() + 1000 * 30;
   }
 
   //Если используется датчик уровня флегмы в голове
@@ -610,9 +614,13 @@ void IRAM_ATTR check_alarm() {
     whls.resetStates();
     if (program[ProgramNum].WType != "C") {
       Msg = "Head level alarm!";
+    } else {
+#ifdef SAMOVAR_USE_POWER
+      //запускаем счетчик - 7 минут, нужен для возврата заданного напряжения
+      alarm_c_min = millis() + 1000 * 60 * 7;
+#endif
     }
 #ifdef SAMOVAR_USE_POWER
-    prev_target_power_volt = target_power_volt;
     Msg = Msg + " Voltage down from " + (String)target_power_volt;
     set_current_power(target_power_volt - 2);
 #endif
@@ -621,15 +629,15 @@ void IRAM_ATTR check_alarm() {
     Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
 #endif
     //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
-    alarm_h_min = millis() + 40000;
+    alarm_h_min = millis() + 1000 * 40;
   }
 #endif
 
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && SamovarStatusInt == 50) {
-#ifdef USE_WATER_PUMP    
+#ifdef USE_WATER_PUMP
     //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
     wp_count = 0;
-#endif    
+#endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     Msg = "Working mode set!";
     SamovarStatusInt = 51;
@@ -823,6 +831,7 @@ void IRAM_ATTR get_current_power() {
 void IRAM_ATTR set_current_power(float Volt) {
   if (!PowerOn) return;
   vTaskDelay(100);
+  prev_target_power_volt = target_power_volt;
   target_power_volt = Volt;
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
