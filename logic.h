@@ -796,12 +796,14 @@ void IRAM_ATTR triggerPowerStatus(void * parameter) {
   while (true) {
     if (PowerOn) {
       resp = "";
+      Serial2.flush();
       Serial2.print("АТ+VO?\r");
       vTaskDelay(350);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
       }
       current_power_volt = resp.toInt();
+      Serial2.flush();
       Serial2.print("АТ+VS?\r");
       vTaskDelay(350);
       resp = "";
