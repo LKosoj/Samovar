@@ -17,7 +17,7 @@ void beer_proc() {
   if (SamovarStatusInt != 2000) return;
 
   if (startval == 2000 && !PowerOn) {
-    create_data();                    //создаем файл с данными
+    create_data();  //создаем файл с данными
     PowerOn = true;
     set_power(true);
     run_beer_program(0);
@@ -194,7 +194,6 @@ void IRAM_ATTR check_alarm_beer() {
       run_beer_program(ProgramNum + 1);
     }
   }
-
 }
 
 void set_heater_state(float setpoint, float temp) {
@@ -213,14 +212,13 @@ void set_heater_state(float setpoint, float temp) {
     Setpoint = setpoint;
     Input = temp;
 
-    if (tuning) // run the auto-tuner
+    if (tuning)  // run the auto-tuner
     {
-      if (aTune.Runtime()) // returns 'true' when done
+      if (aTune.Runtime())  // returns 'true' when done
       {
         FinishAutoTune();
       }
-    }
-    else // Execute control algorithm
+    } else  // Execute control algorithm
     {
       heaterPID.Compute();
     }
@@ -318,8 +316,7 @@ void set_beer_program(String WProgram) {
   }
 }
 
-void StartAutoTune()
-{
+void StartAutoTune() {
   // REmember the mode we were in
   ATuneModeRemember = heaterPID.GetMode();
 
@@ -334,8 +331,7 @@ void StartAutoTune()
   tuning = true;
 }
 
-void FinishAutoTune()
-{
+void FinishAutoTune() {
   aTune.Cancel();
   tuning = false;
 
