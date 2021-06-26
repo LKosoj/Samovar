@@ -84,10 +84,10 @@
 //**************************************************************************************************************
 #include "sensorinit.h"
 
-void taskButton( void *pvParameters );
+void taskButton(void *pvParameters);
 SemaphoreHandle_t btnSemaphore;
 
-hw_timer_t * timer = NULL;
+hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 //flag for saving data
@@ -103,8 +103,8 @@ String CurrentTime(bool Year);
 void distiller_finish();
 void beer_finish();
 void change_samovar_mode();
-void saveConfigCallback ();
-void configModeCallback (AsyncWiFiManager *myWiFiManager);
+void saveConfigCallback();
+void configModeCallback(AsyncWiFiManager *myWiFiManager);
 
 #ifdef USE_WEB_SERIAL
 void recvMsg(uint8_t *data, size_t len) {
@@ -134,15 +134,18 @@ void recvMsg(uint8_t *data, size_t len) {
       valve_status = Val.toInt();
       WebSerial.println(valve_status);
     } else if (Var == "") {
-
     }
   } else if (d == "print") {
     WebSerial.println("_______________________________________________");
-    WebSerial.print("WFpulseCount = "); WebSerial.println(WFpulseCount);
-    WebSerial.print("pump_started = "); WebSerial.println(pump_started);
-    WebSerial.print("valve_status = "); WebSerial.println(valve_status);
+    WebSerial.print("WFpulseCount = ");
+    WebSerial.println(WFpulseCount);
+    WebSerial.print("pump_started = ");
+    WebSerial.println(pump_started);
+    WebSerial.print("valve_status = ");
+    WebSerial.println(valve_status);
     WebSerial.println("_______________________________________________");
-  } else WebSerial.println(d);
+  } else
+    WebSerial.println(d);
 }
 #endif
 
@@ -177,17 +180,17 @@ void IRAM_ATTR isrBTN_TICK() {
   //  portBASE_TYPE xTaskWoken;
   // Прерывание по кнопке, отпускаем семафор
   //  xSemaphoreGiveFromISR( btnSemaphore, &xTaskWoken );
-  xSemaphoreGiveFromISR( btnSemaphore, NULL );
+  xSemaphoreGiveFromISR(btnSemaphore, NULL);
   //  if ( xTaskWoken == pdTRUE) {
   //    taskYIELD();
   //  }
 }
 
-void taskButton( void *pvParameters ) {
+void taskButton(void *pvParameters) {
   // Создаем семафор
   btnSemaphore = xSemaphoreCreateBinary();
   // Сразу "берем" семафор чтобы не было первого ложного срабатывания кнопки
-  xSemaphoreTake( btnSemaphore, 100 );
+  xSemaphoreTake(btnSemaphore, 100);
   btn.setType(LOW_PULL);
   btn.setTickMode(MANUAL);
   btn.setDebounce(30);
@@ -199,7 +202,7 @@ void taskButton( void *pvParameters ) {
   attachInterrupt(ENC_SW, isrBTN_TICK, CHANGE);
 
   while (true) {
-    xSemaphoreTake( btnSemaphore, portMAX_DELAY );
+    xSemaphoreTake(btnSemaphore, portMAX_DELAY);
     // Отключаем прерывание для устранения повторного срабатывания прерывания во время обработки
     detachInterrupt(BTN_PIN);
     detachInterrupt(ENC_CLK);
@@ -216,7 +219,7 @@ void taskButton( void *pvParameters ) {
 }
 
 //Запускаем таск для получения точного времени из интернет
-void IRAM_ATTR triggerGetClock(void * parameter) {
+void IRAM_ATTR triggerGetClock(void *parameter) {
   while (true) {
     if (WiFi.status() == WL_CONNECTED) clok1();
     else {
@@ -233,14 +236,14 @@ void IRAM_ATTR triggerGetClock(void * parameter) {
 }
 
 //Запускаем таск для получения температур и различных проверок
-void IRAM_ATTR triggerSysTicker(void * parameter) {
+void IRAM_ATTR triggerSysTicker(void *parameter) {
   byte CurMinST = 0;
   byte OldMinST = 0;
   byte tcntST = 0;
-  unsigned long oldTime = 0;                                          // Предыдущее время в милисекундах
+  unsigned long oldTime = 0;  // Предыдущее время в милисекундах
 
   while (true) {
-    CurMinST = (millis() / 1000 );
+    CurMinST = (millis() / 1000);
 
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
@@ -262,7 +265,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         tcntST++;
         if (tcntST == SamSetup.LogPeriod) {
           tcntST = 0;
-          String s = append_data();              //Записываем данные в память ESP32;
+          String s = append_data();  //Записываем данные в память ESP32;
 #ifdef USE_OPENLOG
 #ifdef SAMOVAR_USE_POWER
           s += ",";
@@ -292,7 +295,8 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         float wp;
         if (program[ProgramNum].Time > 0 && begintime > 0) {
           wp = float(millis() - begintime) / 1000 / 60 / program[ProgramNum].Time;
-        } else wp = 0;
+        } else
+          wp = 0;
         //прогресс переводим в проценты
         WthdrwlProgress = wp * 100;
         WthdrwTime = program[ProgramNum].Time * (1 - wp);
@@ -306,17 +310,25 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
         int hi, mi;
         hi = WthdrwTime / 60;
         mi = WthdrwTime - hi * 60;
-        if (hi < 10) h = "0"; else h = "";
+        if (hi < 10) h = "0";
+        else
+          h = "";
         h += (String)hi;
-        if (mi < 10) m = "0"; else m = "";
+        if (mi < 10) m = "0";
+        else
+          m = "";
         m += (String)mi;
         WthdrwTimeS = h + ":" + m;
 
         hi = WthdrwTimeAll / 60;
         mi = WthdrwTimeAll - hi * 60;
-        if (hi < 10) h = "0"; else h = "";
+        if (hi < 10) h = "0";
+        else
+          h = "";
         h += (String)hi;
-        if (mi < 10) m = "0"; else m = "";
+        if (mi < 10) m = "0";
+        else
+          m = "";
         m += (String)mi;
         WthdrwTimeAllS = h + ":" + m;
 
@@ -345,18 +357,26 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
         String h, m;
         unsigned int mi;
-        if (WthdrwTime < 10) h = "0"; else h = "";
+        if (WthdrwTime < 10) h = "0";
+        else
+          h = "";
         h += (String)((unsigned int)WthdrwTime);
         mi = (unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60);
-        if (mi < 10) m = "0"; else m = "";
+        if (mi < 10) m = "0";
+        else
+          m = "";
         m += (String)mi;
 
         WthdrwTimeS = h + ":" + m;
 
-        if (WthdrwTimeAll < 10) h = "0"; else h = "";
+        if (WthdrwTimeAll < 10) h = "0";
+        else
+          h = "";
         h += (String)((unsigned int)WthdrwTimeAll);
         mi = (unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60);
-        if (mi < 10) m = "0"; else m = "";
+        if (mi < 10) m = "0";
+        else
+          m = "";
         m += (String)mi;
         WthdrwTimeAllS = h + ":" + m;
 
@@ -379,7 +399,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
       WFtotalMilliLitres += WFflowMilliLitres;
 
       if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && WFpulseCount == 0) {
-        WFAlarmCount ++;
+        WFAlarmCount++;
       } else {
         WFAlarmCount = 0;
       }
@@ -391,7 +411,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
       if (SteamSensor.ErrCount > 10) {
-        SteamSensor.ErrCount = - 110;
+        SteamSensor.ErrCount = -110;
         Msg = "Alarm! Steam sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
@@ -399,7 +419,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif
       }
       if (PipeSensor.ErrCount > 10) {
-        PipeSensor.ErrCount = - 110;
+        PipeSensor.ErrCount = -110;
         Msg = "Alarm! Pipe sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
@@ -407,7 +427,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif
       }
       if (WaterSensor.ErrCount > 10) {
-        WaterSensor.ErrCount = - 110;
+        WaterSensor.ErrCount = -110;
         Msg = "Alarm! Water sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
@@ -415,7 +435,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif
       }
       if (TankSensor.ErrCount > 10) {
-        TankSensor.ErrCount = - 110;
+        TankSensor.ErrCount = -110;
         Msg = "Alarm! Tank sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
@@ -423,7 +443,7 @@ void IRAM_ATTR triggerSysTicker(void * parameter) {
 #endif
       }
       if (ACPSensor.ErrCount > 10) {
-        ACPSensor.ErrCount = - 110;
+        ACPSensor.ErrCount = -110;
         Msg = "Alarm! ACP sensor error!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
@@ -452,7 +472,7 @@ void setup() {
   //touch_pad_deinit();
   touch_pad_intr_disable();
 
-  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
+  WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
@@ -476,10 +496,10 @@ void setup() {
   ESP32PWM::allocateTimer(3);
 
 #ifdef SERVO_PIN
-  servo.setPeriodHertz(50);    // standard 50 hz servo
+  servo.setPeriodHertz(50);  // standard 50 hz servo
   // Частоты 500 и 2500 - подобраны для моего серво-привода. Возможно, для других частоты могут отличаться
   // 544 и 2400 - стандартные частоты
-  servo.attach(SERVO_PIN, 500, 2500); // attaches the servo
+  servo.attach(SERVO_PIN, 500, 2500);  // attaches the servo
 #endif
 
   //Читаем сохраненную конфигурацию
@@ -487,19 +507,19 @@ void setup() {
 
   //Запускаем таск для обработки нажатия кнопки и энкодера
   xTaskCreatePinnedToCore(
-    taskButton, /* Function to implement the task */
-    "taskButton", /* Name of the task */
-    4000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    1,  /* Priority of the task */
-    &SysTickerTask1,  /* Task handle. */
-    1); /* Core where the task should run */
+    taskButton,      /* Function to implement the task */
+    "taskButton",    /* Name of the task */
+    4000,            /* Stack size in words */
+    NULL,            /* Task input parameter */
+    1,               /* Priority of the task */
+    &SysTickerTask1, /* Task handle. */
+    1);              /* Core where the task should run */
 
 
   encoder.tick();  // отработка нажатия
-  btn.tick();  // отработка нажатия
+  btn.tick();      // отработка нажатия
   //Если при старте нажата кнопка энкодера или кнопка - сохраненные параметры сбрасываются на параметры по умолчанию
-  if (encoder.isHold() || btn.isHold()) {
+  if (encoder.isPress() || btn.isPress()) {
     SamSetup.flag = 255;
   }
 
@@ -585,7 +605,7 @@ void setup() {
 
   Serial.println(StIP);
 
-  if (!MDNS.begin(host)) { //http://samovar.local
+  if (!MDNS.begin(host)) {  //http://samovar.local
     Serial.println("Error setting up MDNS responder!");
   } else {
 #ifdef __SAMOVAR_DEBUG
@@ -631,10 +651,14 @@ void setup() {
   });
   ArduinoOTA.onError([](ota_error_t error) {
     if (error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
-    else if (error == OTA_BEGIN_ERROR) events.send("Begin Failed", "ota");
-    else if (error == OTA_CONNECT_ERROR) events.send("Connect Failed", "ota");
-    else if (error == OTA_RECEIVE_ERROR) events.send("Recieve Failed", "ota");
-    else if (error == OTA_END_ERROR) events.send("End Failed", "ota");
+    else if (error == OTA_BEGIN_ERROR)
+      events.send("Begin Failed", "ota");
+    else if (error == OTA_CONNECT_ERROR)
+      events.send("Connect Failed", "ota");
+    else if (error == OTA_RECEIVE_ERROR)
+      events.send("Recieve Failed", "ota");
+    else if (error == OTA_END_ERROR)
+      events.send("End Failed", "ota");
   });
   ArduinoOTA.setHostname(SAMOVAR_HOST);
   ArduinoOTA.begin();
@@ -659,9 +683,9 @@ void setup() {
 #ifdef USE_HEAD_LEVEL_SENSOR
   //Задаем параметры для сенсора уровня флегмы
   whls.setType(LOW_PULL);
-  whls.setDebounce(50); //игнорируем дребезг
+  whls.setDebounce(50);  //игнорируем дребезг
   whls.setTickMode(MANUAL);
-  whls.setTimeout(WHLS_ALARM_TIME * 1000); //время, через которое сработает тревога по уровню флегмы
+  whls.setTimeout(WHLS_ALARM_TIME * 1000);  //время, через которое сработает тревога по уровню флегмы
   //вешаем прерывание на изменение датчика уровня флегмы
   attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
 #endif
@@ -669,22 +693,22 @@ void setup() {
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
-    "SysTicker", /* Name of the task */
-    4000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    1,  /* Priority of the task */
+    "SysTicker",      /* Name of the task */
+    4000,             /* Stack size in words */
+    NULL,             /* Task input parameter */
+    1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
-    1); /* Core where the task should run */
+    1);               /* Core where the task should run */
 
   //Запускаем таск для получения точного времени и записи в лог
   xTaskCreatePinnedToCore(
-    triggerGetClock, /* Function to implement the task */
+    triggerGetClock,  /* Function to implement the task */
     "GetClockTicker", /* Name of the task */
-    4000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    0,  /* Priority of the task */
-    &GetClockTask1,  /* Task handle. */
-    0); /* Core where the task should run */
+    4000,             /* Stack size in words */
+    NULL,             /* Task input parameter */
+    0,                /* Priority of the task */
+    &GetClockTask1,   /* Task handle. */
+    0);               /* Core where the task should run */
 
   writeString("      Samovar     ", 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
@@ -699,12 +723,12 @@ void setup() {
   //Запускаем таск считывания параметров регулятора
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
-    "PowerStatusTask", /* Name of the task */
-    3000,  /* Stack size in words */
-    NULL,  /* Task input parameter */
-    0,  /* Priority of the task */
-    &PowerStatusTask,  /* Task handle. */
-    1); /* Core where the task should run */
+    "PowerStatusTask",  /* Name of the task */
+    3000,               /* Stack size in words */
+    NULL,               /* Task input parameter */
+    0,                  /* Priority of the task */
+    &PowerStatusTask,   /* Task handle. */
+    1);                 /* Core where the task should run */
   //На всякий случай пошлем команду выключения питания на UART
   set_power_mode(POWER_SLEEP_MODE);
 #endif
@@ -736,7 +760,7 @@ void loop() {
       } else if (startval == 0 && SamovarStatusInt < 1000) {
         //если включен и программа отбора не работает - запускаем программу
         menu_samovar_start();
-      } else if (startval != 0 && !program_Pause  && SamovarStatusInt < 1000) {
+      } else if (startval != 0 && !program_Pause && SamovarStatusInt < 1000) {
         //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
         pause_withdrawal(!PauseOn);
       } else if (startval != 0 && program_Pause && SamovarStatusInt < 1000) {
@@ -753,12 +777,14 @@ void loop() {
       //если дистилляция включаем или выключаем
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_DISTILLATION;
-      } else distiller_finish();
+      } else
+        distiller_finish();
     } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       //если пиво включаем или двигаем программу
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_BEER;
-      } else run_beer_program(ProgramNum + 1);
+      } else
+        run_beer_program(ProgramNum + 1);
     }
   }
 
@@ -770,8 +796,10 @@ void loop() {
         break;
       case SAMOVAR_POWER:
         if (SamovarStatusInt == 1000) distiller_finish();
-        else if (SamovarStatusInt == 2000) beer_finish();
-        else set_power(!PowerOn);
+        else if (SamovarStatusInt == 2000)
+          beer_finish();
+        else
+          set_power(!PowerOn);
         break;
       case SAMOVAR_RESET:
         samovar_reset();
@@ -813,11 +841,11 @@ void loop() {
   }
 
   if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {
-    withdrawal();     //функция расчета отбора
+    withdrawal();  //функция расчета отбора
   } else if (SamovarStatusInt == 1000) {
-    distiller_proc(); //функция для проведения дистилляции
+    distiller_proc();  //функция для проведения дистилляции
   } else if (SamovarStatusInt == 2000 && startval == 2000) {
-    beer_proc();      //функция для проведения затирания
+    beer_proc();  //функция для проведения затирания
   }
 
   encoder_getvalue();
@@ -828,7 +856,7 @@ void loop() {
   }
 }
 
-void getjson (void) {
+void getjson(void) {
 
   DynamicJsonDocument jsondoc(1500);
 
@@ -884,7 +912,7 @@ void getjson (void) {
   serializeJson(jsondoc, jsonstr);
 }
 
-void configModeCallback (AsyncWiFiManager *myWiFiManager) {
+void configModeCallback(AsyncWiFiManager *myWiFiManager) {
   Serial.println(F("Entered config WiFi"));
   Serial.print(F("SSID "));
   Serial.println(myWiFiManager->getConfigPortalSSID());
@@ -896,7 +924,7 @@ void configModeCallback (AsyncWiFiManager *myWiFiManager) {
   writeString(WiFi.softAPIP().toString(), 4);
 }
 
-void saveConfigCallback () {
+void saveConfigCallback() {
   shouldSaveWiFiConfig = true;
 }
 
@@ -931,21 +959,17 @@ void read_config() {
   Blynk.virtualWrite(V15, ipst);
 #endif
 
-  if (isnan(SamSetup.Kp))
-  {
+  if (isnan(SamSetup.Kp)) {
     SamSetup.Kp = 150;
   }
-  if (isnan(SamSetup.Ki))
-  {
+  if (isnan(SamSetup.Ki)) {
     SamSetup.Ki = 1.4;
   }
-  if (isnan(SamSetup.Kd))
-  {
+  if (isnan(SamSetup.Kd)) {
     SamSetup.Kd = 1.4;
   }
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
-  if (isnan(SamSetup.StbVoltage))
-  {
+  if (isnan(SamSetup.StbVoltage)) {
     SamSetup.StbVoltage = 100;
   }
 
