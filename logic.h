@@ -8,6 +8,7 @@
 //**************************************************************************************************************
 // Логика работы ректификационной колонны
 //**************************************************************************************************************
+void save_profile();
 void menu_samovar_start();
 void set_menu_screen(byte param);
 void samovar_reset();
@@ -175,8 +176,7 @@ void pump_calibrate(int stpspeed) {
     stopService();
     stepper.brake();
     stepper.disable();
-    EEPROM.put(0, SamSetup);
-    EEPROM.commit();
+    save_profile();
     read_config();
   } else {
     startval = 100;

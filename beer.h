@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Samovar.h"
 
+void save_profile();
 void beer_finish();
 void set_heater_state(float setpoint, float temp);
 void set_heater(double dutyCycle);
@@ -351,8 +352,7 @@ void FinishAutoTune()
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
   heaterPID.SetMode(ATuneModeRemember);
 
-  EEPROM.put(0, SamSetup);
-  EEPROM.commit();
+  save_profile();
   read_config();
 
   set_heater_state(0, 50);

@@ -311,6 +311,7 @@ volatile SamovarCommands sam_command_sync;                      // переме�
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_SUVID};
 volatile SAMOVAR_MODE Samovar_Mode;
+volatile SAMOVAR_MODE Samovar_CR_Mode;
 
 struct SetupEEPROM {
   byte flag;                                                   //Флаг для записи в память
@@ -462,6 +463,7 @@ volatile bool heater_state;                                     // Статус 
 bool msgfl;                                                     // Флаг для одноразовых сообщений
 String ofl;                                                     // Openlog filename
 bool mixer_status;                                              // Статус работы мешалки
+
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER

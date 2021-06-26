@@ -537,20 +537,10 @@ void setup() {
     memcpy(str5, SamSetup.ACPColor, sizeof(str5));
     SamSetup.blynkauth[0] = '\0';
     SamSetup.videourl[0] = '\0';
-    EEPROM.put(0, SamSetup);
-    EEPROM.commit();
+    save_profile();
     read_config();
   }
 
-  //Инициализируем ноги для реле
-  pinMode(RELE_CHANNEL1, OUTPUT);
-  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-  pinMode(RELE_CHANNEL2, OUTPUT);
-  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-  pinMode(RELE_CHANNEL3, OUTPUT);
-  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
-  pinMode(RELE_CHANNEL4, OUTPUT);
-  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #ifdef USE_WATER_VALVE
   pinMode(WATER_PUMP_PIN, OUTPUT);
   digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
@@ -583,8 +573,7 @@ void setup() {
   if (shouldSaveWiFiConfig) {
     if (strlen(custom_blynk_token.getValue()) == 33) {
       strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
-      EEPROM.put(0, SamSetup);
-      EEPROM.commit();
+      save_profile();
     }
   }
 
@@ -656,6 +645,7 @@ void setup() {
   samovar_reset();
 
   WebServerInit();
+
 #ifdef USE_WEB_SERIAL
   WebSerial.begin(&server);
   WebSerial.msgCallback(recvMsg);
@@ -958,6 +948,17 @@ void read_config() {
   {
     SamSetup.StbVoltage = 100;
   }
+
+  //Инициализируем ноги для реле
+  pinMode(RELE_CHANNEL1, OUTPUT);
+  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+  pinMode(RELE_CHANNEL2, OUTPUT);
+  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+  pinMode(RELE_CHANNEL3, OUTPUT);
+  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
+  pinMode(RELE_CHANNEL4, OUTPUT);
+  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+
   //  pump_regulator.Kp = SamSetup.Kp;
   //  pump_regulator.Ki = SamSetup.Ki;
   //  pump_regulator.Kd = SamSetup.Kd;

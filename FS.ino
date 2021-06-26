@@ -288,3 +288,39 @@ String get_sys_info() {
   vTaskDelay(5);
   return result_st;
 }
+
+void save_profile() {
+  File file = SPIFFS.open(get_prf_name(), FILE_WRITE);
+  file.write((byte*) &SamSetup, sizeof(SamSetup));
+  file.close();
+  EEPROM.put(0, SamSetup);
+  EEPROM.commit();
+}
+
+void load_profile() {
+  String f;
+  f = get_prf_name();
+  if (SPIFFS.exists(f)) {
+    File file = SPIFFS.open(f, FILE_READ);
+    file.setTimeout(0);
+    file.read((byte*) &SamSetup, sizeof(SamSetup));
+    file.close();
+  } else
+    save_profile();
+  EEPROM.put(0, SamSetup);
+  EEPROM.commit();
+  read_config();
+
+}
+
+String get_prf_name() {
+  String fl;
+  if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
+    fl = "beer.prf";
+  } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
+    fl = "dist.prf";
+  } else {
+    fl = "rectificat.prf";
+  }
+  return fl;
+}

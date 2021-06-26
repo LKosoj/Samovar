@@ -173,8 +173,7 @@ void setup_go_back()
   set_menu_screen(2);
 
   // Сохраняем изменения в память.
-  EEPROM.put(0, SamSetup);
-  EEPROM.commit();
+  save_profile();
   read_config();
   // Данная функция ссылается на необходимое меню.
   //main_menu1.change_menu(main_menu);

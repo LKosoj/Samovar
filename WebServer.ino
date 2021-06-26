@@ -34,6 +34,7 @@ void change_samovar_mode() {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
   }
+  Samovar_CR_Mode = Samovar_Mode;
 }
 
 void WebServerInit(void) {
@@ -48,6 +49,8 @@ void WebServerInit(void) {
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
 
   change_samovar_mode();
+
+  load_profile();
 
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
     //TempStr = temp;
@@ -376,8 +379,7 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
 
   // Сохраняем изменения в память.
-  EEPROM.put(0, SamSetup);
-  EEPROM.commit();
+  save_profile();
   read_config();
 
   AsyncWebServerResponse *response = request->beginResponse(301);
@@ -401,8 +403,7 @@ void  web_command(AsyncWebServerRequest *request) {
     if (request->hasArg("start") && PowerOn) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) sam_command_sync = SAMOVAR_BEER_NEXT;
       else sam_command_sync = SAMOVAR_START;
-    } else 
-    if (request->hasArg("power")) {
+    } else if (request->hasArg("power")) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
         else sam_command_sync = SAMOVAR_POWER;
@@ -411,24 +412,19 @@ void  web_command(AsyncWebServerRequest *request) {
         else sam_command_sync = SAMOVAR_POWER;
       }
       else sam_command_sync = SAMOVAR_POWER;
-    } else
-    if (request->hasArg("setbodytemp")) {
+    } else if (request->hasArg("setbodytemp")) {
       sam_command_sync = SAMOVAR_SETBODYTEMP;
-    } else
-    if (request->hasArg("reset")) {
+    } else if (request->hasArg("reset")) {
       sam_command_sync = SAMOVAR_RESET;
-    } else
-    if (request->hasArg("resetwifi")) {
+    } else if (request->hasArg("resetwifi")) {
       menu_reset_wifi();
-    } else
-    if (request->hasArg("mixer")) {
+    } else if (request->hasArg("mixer")) {
       if (request->arg("mixer").toInt() == 1) {
         set_mixer(true);
       } else {
         set_mixer(false);
       }
-    } else
-    if (request->hasArg("distiller")) {
+    } else if (request->hasArg("distiller")) {
       if (request->arg("distiller").toInt() == 1) {
         sam_command_sync = SAMOVAR_DISTILLATION;
       } else {
@@ -436,20 +432,19 @@ void  web_command(AsyncWebServerRequest *request) {
       }
     } else
 #ifdef SAMOVAR_USE_POWER
-    if (request->hasArg("voltage")) {
-      set_current_power(request->arg("voltage").toFloat());
-    } else
+      if (request->hasArg("voltage")) {
+        set_current_power(request->arg("voltage").toFloat());
+      } else
 #endif
-    if (request->hasArg("pumpspeed")) {
-      set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
-    } else
-    if (request->hasArg("pause")) {
-      if (PauseOn) {
-        sam_command_sync = SAMOVAR_CONTINUE;
-      } else {
-        sam_command_sync = SAMOVAR_PAUSE;
-      }
-    }
+        if (request->hasArg("pumpspeed")) {
+          set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
+        } else if (request->hasArg("pause")) {
+          if (PauseOn) {
+            sam_command_sync = SAMOVAR_CONTINUE;
+          } else {
+            sam_command_sync = SAMOVAR_PAUSE;
+          }
+        }
   }
   request->send(200, "text/plain", "OK");
 }
