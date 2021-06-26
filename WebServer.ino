@@ -1,36 +1,36 @@
-void  web_command(AsyncWebServerRequest *request);
-void  handleSave(AsyncWebServerRequest *request);
+void web_command(AsyncWebServerRequest *request);
+void handleSave(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request);
 void get_old_data_log(AsyncWebServerRequest *request);
-String calibrateKeyProcessor(const String& var);
-String indexKeyProcessor(const String& var);
-void  web_program(AsyncWebServerRequest *request);
-void  calibrate_command(AsyncWebServerRequest *request);
-String setupKeyProcessor(const String& var);
+String calibrateKeyProcessor(const String &var);
+String indexKeyProcessor(const String &var);
+void web_program(AsyncWebServerRequest *request);
+void calibrate_command(AsyncWebServerRequest *request);
+String setupKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 
 void change_samovar_mode() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
     });
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
   } else {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
   }
@@ -39,7 +39,7 @@ void change_samovar_mode() {
 
 void WebServerInit(void) {
 
-  FS_init();                                        // Включаем работу с файловой системой
+  FS_init();  // Включаем работу с файловой системой
 
   server.serveStatic("/style.css", SPIFFS, "/style.css");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
@@ -52,45 +52,45 @@ void WebServerInit(void) {
 
   load_profile();
 
-  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
     //TempStr = temp;
     getjson();
     request->send(200, "text/html", jsonstr);
   });
-  server.on("/command", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request) {
     web_command(request);
   });
-  server.on("/program", HTTP_POST, [](AsyncWebServerRequest * request) {
+  server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request) {
     web_program(request);
   });
-  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request) {
     calibrate_command(request);
   });
-  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_data_log(request);
   });
-  server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_old_data_log(request);
   });
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
-  server.on("/save", HTTP_POST, [](AsyncWebServerRequest * request) {
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
     //Serial.println("SAVE");
     handleSave(request);
   });
 
-  server.onFileUpload([](AsyncWebServerRequest * request, const String & filename, size_t index, uint8_t *data, size_t len, bool final) {
+  server.onFileUpload([](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
     if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
-    Serial.printf("%s", (const char*)data);
+    Serial.printf("%s", (const char *)data);
     if (final)
       Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
-  server.onRequestBody([](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total) {
+  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!index)
       Serial.printf("BodyStart: %u\n", total);
-    Serial.printf("%s", (const char*)data);
+    Serial.printf("%s", (const char *)data);
     if (index + len == total)
       Serial.printf("BodyEnd: %u\n", total);
   });
@@ -102,100 +102,152 @@ void WebServerInit(void) {
 #endif
 }
 
-String indexKeyProcessor(const String& var)
-{
+String indexKeyProcessor(const String &var) {
   if (var == "SteamColor") return (String)SamSetup.SteamColor;
-  else if (var == "PipeColor") return (String)SamSetup.PipeColor;
-  else if (var == "WaterColor") return (String)SamSetup.WaterColor;
-  else if (var == "TankColor") return (String)SamSetup.TankColor;
-  else if (var == "ACPColor") return (String)SamSetup.ACPColor;
+  else if (var == "PipeColor")
+    return (String)SamSetup.PipeColor;
+  else if (var == "WaterColor")
+    return (String)SamSetup.WaterColor;
+  else if (var == "TankColor")
+    return (String)SamSetup.TankColor;
+  else if (var == "ACPColor")
+    return (String)SamSetup.ACPColor;
   else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
-    else return get_program(CAPACITY_NUM * 2);
-  }
-  else if (var == "videourl") return (String)SamSetup.videourl;
+    else
+      return get_program(CAPACITY_NUM * 2);
+  } else if (var == "videourl")
+    return (String)SamSetup.videourl;
   else if (var == "showvideo") {
     if ((String)SamSetup.videourl != "") return "inline";
-    else return "none";
+    else
+      return "none";
   };
   return "";
 }
 
-String setupKeyProcessor(const String& var)
-{
+String setupKeyProcessor(const String &var) {
   if (var == "DeltaSteamTemp") return (String)SamSetup.DeltaSteamTemp;
-  else if (var == "DeltaPipeTemp") return (String)SamSetup.DeltaPipeTemp;
-  else if (var == "DeltaWaterTemp") return (String)SamSetup.DeltaWaterTemp;
-  else if (var == "DeltaTankTemp") return (String)SamSetup.DeltaTankTemp;
-  else if (var == "DeltaACPTemp") return (String)SamSetup.DeltaACPTemp;
-  else if (var == "SetSteamTemp") return (String)SamSetup.SetSteamTemp;
-  else if (var == "SetPipeTemp") return (String)SamSetup.SetPipeTemp;
-  else if (var == "SetWaterTemp") return (String)SamSetup.SetWaterTemp;
-  else if (var == "SetTankTemp") return (String)SamSetup.SetTankTemp;
-  else if (var == "SetACPTemp") return (String)SamSetup.SetACPTemp;
-  else if (var == "StepperStepMl") return (String)SamSetup.StepperStepMl;
+  else if (var == "DeltaPipeTemp")
+    return (String)SamSetup.DeltaPipeTemp;
+  else if (var == "DeltaWaterTemp")
+    return (String)SamSetup.DeltaWaterTemp;
+  else if (var == "DeltaTankTemp")
+    return (String)SamSetup.DeltaTankTemp;
+  else if (var == "DeltaACPTemp")
+    return (String)SamSetup.DeltaACPTemp;
+  else if (var == "SetSteamTemp")
+    return (String)SamSetup.SetSteamTemp;
+  else if (var == "SetPipeTemp")
+    return (String)SamSetup.SetPipeTemp;
+  else if (var == "SetWaterTemp")
+    return (String)SamSetup.SetWaterTemp;
+  else if (var == "SetTankTemp")
+    return (String)SamSetup.SetTankTemp;
+  else if (var == "SetACPTemp")
+    return (String)SamSetup.SetACPTemp;
+  else if (var == "StepperStepMl")
+    return (String)SamSetup.StepperStepMl;
   else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
-    else return get_program(CAPACITY_NUM * 2);
-  }
-  else if (var == "Kp") return (String)SamSetup.Kp;
-  else if (var == "Ki") return (String)SamSetup.Ki;
-  else if (var == "Kd") return (String)SamSetup.Kd;
-  else if (var == "StbVoltage") return (String)SamSetup.StbVoltage;
-  else if (var == "SteamDelay") return (String)SamSetup.SteamDelay;
-  else if (var == "PipeDelay") return (String)SamSetup.PipeDelay;
-  else if (var == "WaterDelay") return (String)SamSetup.WaterDelay;
-  else if (var == "TankDelay") return (String)SamSetup.TankDelay;
-  else if (var == "ACPDelay") return (String)SamSetup.ACPDelay;
-  else if (var == "TimeZone") return (String)SamSetup.TimeZone;
-  else if (var == "LogPeriod") return (String)SamSetup.LogPeriod;
-  else if (var == "HeaterR") return (String)SamSetup.HeaterResistant;
-  else if (var == "videourl") return (String)SamSetup.videourl;
-  else if (var == "blynkauth") return (String)SamSetup.blynkauth;
+    else
+      return get_program(CAPACITY_NUM * 2);
+  } else if (var == "Kp")
+    return (String)SamSetup.Kp;
+  else if (var == "Ki")
+    return (String)SamSetup.Ki;
+  else if (var == "Kd")
+    return (String)SamSetup.Kd;
+  else if (var == "StbVoltage")
+    return (String)SamSetup.StbVoltage;
+  else if (var == "SteamDelay")
+    return (String)SamSetup.SteamDelay;
+  else if (var == "PipeDelay")
+    return (String)SamSetup.PipeDelay;
+  else if (var == "WaterDelay")
+    return (String)SamSetup.WaterDelay;
+  else if (var == "TankDelay")
+    return (String)SamSetup.TankDelay;
+  else if (var == "ACPDelay")
+    return (String)SamSetup.ACPDelay;
+  else if (var == "TimeZone")
+    return (String)SamSetup.TimeZone;
+  else if (var == "LogPeriod")
+    return (String)SamSetup.LogPeriod;
+  else if (var == "HeaterR")
+    return (String)SamSetup.HeaterResistant;
+  else if (var == "videourl")
+    return (String)SamSetup.videourl;
+  else if (var == "blynkauth")
+    return (String)SamSetup.blynkauth;
   else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
-    else return "";
-  }
-  else if (var == "UASChecked") {
+    else
+      return "";
+  } else if (var == "UASChecked") {
     if (SamSetup.useautospeed) return "checked='true'";
-    else return "";
-  }
-  else if (var == "autospeed") return (String)SamSetup.autospeed;
-  else if (var == "DistTemp") return (String)SamSetup.DistTemp;
-  else if (var == "SteamColor") return (String)SamSetup.SteamColor;
-  else if (var == "PipeColor") return (String)SamSetup.PipeColor;
-  else if (var == "WaterColor") return (String)SamSetup.WaterColor;
-  else if (var == "TankColor") return (String)SamSetup.TankColor;
-  else if (var == "ACPColor") return (String)SamSetup.ACPColor;
-  else if (var == "RECT" && SamSetup.Mode == 0) return "selected";
-  else if (var == "DIST" && SamSetup.Mode == 1) return "selected";
-  else if (var == "BEER" && SamSetup.Mode == 2) return "selected";
-  else if (var == "SUVID" && SamSetup.Mode == 3) return "selected";
-  else if (var == "RAL" && !SamSetup.rele1) return "selected";
-  else if (var == "RAH" && SamSetup.rele1) return "selected";
-  else if (var == "RBL" && !SamSetup.rele2) return "selected";
-  else if (var == "RBH" && SamSetup.rele2) return "selected";
-  else if (var == "RCL" && !SamSetup.rele3) return "selected";
-  else if (var == "RCH" && SamSetup.rele3) return "selected";
-  else if (var == "RDL" && !SamSetup.rele4) return "selected";
-  else if (var == "RDH" && SamSetup.rele4) return "selected";
-  else if (var == "SteamAddr") return get_DSAddressList(getDSAddress(SteamSensor.Sensor));
-  else if (var == "PipeAddr") return get_DSAddressList(getDSAddress(PipeSensor.Sensor));
-  else if (var == "WaterAddr") return get_DSAddressList(getDSAddress(WaterSensor.Sensor));
-  else if (var == "TankAddr") return get_DSAddressList(getDSAddress(TankSensor.Sensor));
-  else if (var == "ACPAddr") return get_DSAddressList(getDSAddress(ACPSensor.Sensor));
+    else
+      return "";
+  } else if (var == "autospeed")
+    return (String)SamSetup.autospeed;
+  else if (var == "DistTemp")
+    return (String)SamSetup.DistTemp;
+  else if (var == "SteamColor")
+    return (String)SamSetup.SteamColor;
+  else if (var == "PipeColor")
+    return (String)SamSetup.PipeColor;
+  else if (var == "WaterColor")
+    return (String)SamSetup.WaterColor;
+  else if (var == "TankColor")
+    return (String)SamSetup.TankColor;
+  else if (var == "ACPColor")
+    return (String)SamSetup.ACPColor;
+  else if (var == "RECT" && SamSetup.Mode == 0)
+    return "selected";
+  else if (var == "DIST" && SamSetup.Mode == 1)
+    return "selected";
+  else if (var == "BEER" && SamSetup.Mode == 2)
+    return "selected";
+  else if (var == "SUVID" && SamSetup.Mode == 3)
+    return "selected";
+  else if (var == "RAL" && !SamSetup.rele1)
+    return "selected";
+  else if (var == "RAH" && SamSetup.rele1)
+    return "selected";
+  else if (var == "RBL" && !SamSetup.rele2)
+    return "selected";
+  else if (var == "RBH" && SamSetup.rele2)
+    return "selected";
+  else if (var == "RCL" && !SamSetup.rele3)
+    return "selected";
+  else if (var == "RCH" && SamSetup.rele3)
+    return "selected";
+  else if (var == "RDL" && !SamSetup.rele4)
+    return "selected";
+  else if (var == "RDH" && SamSetup.rele4)
+    return "selected";
+  else if (var == "SteamAddr")
+    return get_DSAddressList(getDSAddress(SteamSensor.Sensor));
+  else if (var == "PipeAddr")
+    return get_DSAddressList(getDSAddress(PipeSensor.Sensor));
+  else if (var == "WaterAddr")
+    return get_DSAddressList(getDSAddress(WaterSensor.Sensor));
+  else if (var == "TankAddr")
+    return get_DSAddressList(getDSAddress(TankSensor.Sensor));
+  else if (var == "ACPAddr")
+    return get_DSAddressList(getDSAddress(ACPSensor.Sensor));
   return String();
 }
 
-String calibrateKeyProcessor(const String& var)
-{
+String calibrateKeyProcessor(const String &var) {
   if (var == "StepperStep") return (String)STEPPER_MAX_SPEED;
-  else if (var == "StepperStepMl") return (String)(SamSetup.StepperStepMl * 100);
+  else if (var == "StepperStepMl")
+    return (String)(SamSetup.StepperStepMl * 100);
 
   return String();
 }
 
-void  handleSave(AsyncWebServerRequest *request) {
+void handleSave(AsyncWebServerRequest *request) {
   /*
        int params = request->params();
         for(int i=0;i<params;i++){
@@ -273,7 +325,8 @@ void  handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("WProgram")) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
-    else set_program(request->arg("WProgram"));
+    else
+      set_program(request->arg("WProgram"));
   }
 
   SamSetup.UsePreccureCorrect = false;
@@ -388,7 +441,7 @@ void  handleSave(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
-void  web_command(AsyncWebServerRequest *request) {
+void web_command(AsyncWebServerRequest *request) {
   /*
     int params = request->params();
     for(int i=0;i<params;i++){
@@ -402,16 +455,19 @@ void  web_command(AsyncWebServerRequest *request) {
   if (request->params() == 1) {
     if (request->hasArg("start") && PowerOn) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) sam_command_sync = SAMOVAR_BEER_NEXT;
-      else sam_command_sync = SAMOVAR_START;
+      else
+        sam_command_sync = SAMOVAR_START;
     } else if (request->hasArg("power")) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
-        else sam_command_sync = SAMOVAR_POWER;
+        else
+          sam_command_sync = SAMOVAR_POWER;
       } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
         if (!PowerOn) sam_command_sync = SAMOVAR_DISTILLATION;
-        else sam_command_sync = SAMOVAR_POWER;
-      }
-      else sam_command_sync = SAMOVAR_POWER;
+        else
+          sam_command_sync = SAMOVAR_POWER;
+      } else
+        sam_command_sync = SAMOVAR_POWER;
     } else if (request->hasArg("setbodytemp")) {
       sam_command_sync = SAMOVAR_SETBODYTEMP;
     } else if (request->hasArg("reset")) {
@@ -433,22 +489,22 @@ void  web_command(AsyncWebServerRequest *request) {
     } else
 #ifdef SAMOVAR_USE_POWER
       if (request->hasArg("voltage")) {
-        set_current_power(request->arg("voltage").toFloat());
-      } else
+      set_current_power(request->arg("voltage").toFloat());
+    } else
 #endif
-        if (request->hasArg("pumpspeed")) {
-          set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
-        } else if (request->hasArg("pause")) {
-          if (PauseOn) {
-            sam_command_sync = SAMOVAR_CONTINUE;
-          } else {
-            sam_command_sync = SAMOVAR_PAUSE;
-          }
-        }
+      if (request->hasArg("pumpspeed")) {
+      set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
+    } else if (request->hasArg("pause")) {
+      if (PauseOn) {
+        sam_command_sync = SAMOVAR_CONTINUE;
+      } else {
+        sam_command_sync = SAMOVAR_PAUSE;
+      }
+    }
   }
   request->send(200, "text/plain", "OK");
 }
-void  web_program(AsyncWebServerRequest *request) {
+void web_program(AsyncWebServerRequest *request) {
   if (request->hasArg("WProgram")) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       set_beer_program(request->arg("WProgram"));
@@ -460,7 +516,7 @@ void  web_program(AsyncWebServerRequest *request) {
   }
 }
 
-void  calibrate_command(AsyncWebServerRequest *request) {
+void calibrate_command(AsyncWebServerRequest *request) {
   bool cl = false;
   if (request->params() >= 1) {
     if (request->hasArg("stpstep")) {
@@ -478,7 +534,8 @@ void  calibrate_command(AsyncWebServerRequest *request) {
   if (cl) {
     int s = round((float)stepper.getCurrent() / 100) * 100;
     request->send(200, "text/plain", (String)s);
-  } else request->send(200, "text/plain", "OK");
+  } else
+    request->send(200, "text/plain", "OK");
 }
 
 void get_data_log(AsyncWebServerRequest *request) {
