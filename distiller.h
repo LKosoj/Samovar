@@ -20,7 +20,7 @@ void distiller_proc() {
     current_power_mode = POWER_SPEED_MODE;
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
-    create_data();                    //создаем файл с данными
+    create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
     Msg = "Distillation started";
 #ifdef SAMOVAR_USE_BLYNK
