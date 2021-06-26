@@ -30,8 +30,7 @@ void set_pump_speed_pid(float temp);
 void set_power(bool On);
 
 //Получить количество разделителей
-byte getDelimCount(String data, char separator)
-{
+byte getDelimCount(String data, char separator) {
   int cnt = 0;
   int maxIndex = data.length() - 1;
 
@@ -44,8 +43,7 @@ byte getDelimCount(String data, char separator)
 }
 
 //Получить подстроку через разделитель
-String getValue(String data, char separator, int index)
-{
+String getValue(String data, char separator, int index) {
   int found = 0;
   int strIndex[] = { 0, -1 };
   int maxIndex = data.length() - 1;
@@ -64,7 +62,8 @@ String getValue(String data, char separator, int index)
 float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
   static float retval;
   if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
-  else retval = 0;
+  else
+    retval = 0;
   return retval;
 }
 
@@ -101,7 +100,7 @@ void IRAM_ATTR withdrawal(void) {
     menu_samovar_start();
   }
 
-  float c_temp; //стартовая температура отбора тела с учетом корректировки от давления или без
+  float c_temp;  //стартовая температура отбора тела с учетом корректировки от давления или без
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
 
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
@@ -199,8 +198,7 @@ void IRAM_ATTR pause_withdrawal(bool Pause) {
     stopService();
     stepper.brake();
     stepper.disable();
-  }
-  else {
+  } else {
     stepper.setMaxSpeed(CurrrentStepperSpeed);
     stepper.setSpeed(CurrrentStepperSpeed);
     stepper.setCurrent(CurrrentStepps);
@@ -224,7 +222,8 @@ void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process) {
   stepper.setSpeed(CurrrentStepperSpeed);
   //Пересчитываем время отбора этой строки программы на текущую скорость
   if (ActualVolumePerHour == 0) program[ProgramNum].Time = 65535;
-  else program[ProgramNum].Time = program[ProgramNum].Volume / ActualVolumePerHour / 1000;
+  else
+    program[ProgramNum].Time = program[ProgramNum].Volume / ActualVolumePerHour / 1000;
   if (cp)
     startService();
 }
@@ -311,7 +310,6 @@ void IRAM_ATTR set_capacity(byte cap) {
 #elif USER_SERVO
   user_set_capacity(cap);
 #endif
-
 }
 
 void IRAM_ATTR next_capacity(void) {
@@ -408,7 +406,7 @@ void IRAM_ATTR run_program(byte num) {
 #endif
     Msg = "Set prog line " + (String)(num + 1);
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
-      Msg +=  ", capacity " + (String)program[num].capacity_num;
+      Msg += ", capacity " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
@@ -458,7 +456,6 @@ void IRAM_ATTR run_program(byte num) {
     //Если используется Blynk - пишем оператору
     Blynk.notify("{DEVICE_NAME} - " + Msg);
 #endif
-
   }
   TargetStepps = stepper.getTarget();
 }
@@ -477,10 +474,9 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
     float d_temp;
 
     i_temp = current_pressure * 0.038 + 49.27;
-    d_temp = start_temp - start_pressure * 0.038 - 49.27; //учитываем поправку на погрешность измерения датчиков
-    c_temp = i_temp + d_temp; // получаем текущую температуру кипения при переданном давлении с учетом поправки
-  }
-  else {
+    d_temp = start_temp - start_pressure * 0.038 - 49.27;  //учитываем поправку на погрешность измерения датчиков
+    c_temp = i_temp + d_temp;                              // получаем текущую температуру кипения при переданном давлении с учетом поправки
+  } else {
     //Используем сохраненную температуру отбора тела без корректировки
     c_temp = start_temp;
   }
@@ -518,13 +514,21 @@ void IRAM_ATTR check_alarm() {
     alarm_h_min = 0;
   }
 #ifdef SAMOVAR_USE_POWER
-  //Если программа - предзахлеб, и сброс напряжения был больше 8 минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
+  //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
   if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
       set_current_power(prev_target_power_volt - 0.5);
-    } else {
-      alarm_c_min = 0;
     }
+    alarm_c_min = 0;
+    //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
+    alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+  }
+  //Если программа предзахлеб и давно не было повышения срабатывания датчика - повышаем напряжение
+  if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
+    if (program[ProgramNum].WType == "C") {
+      set_current_power(prev_target_power_volt + 0.5);
+    }
+    alarm_c_low_min = 0;
   }
 #endif
 #endif
@@ -547,7 +551,8 @@ void IRAM_ATTR check_alarm() {
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
     if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(WaterSensor.avgTemp);
-    else set_pump_speed_pid(WaterSensor.avgTemp);
+    else
+      set_pump_speed_pid(WaterSensor.avgTemp);
   }
 #endif
 
@@ -558,13 +563,16 @@ void IRAM_ATTR check_alarm() {
     set_power(false);
     String s = "";
     if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Steam";
-    else if (WaterSensor.avgTemp >= MAX_WATER_TEMP) s = s + " Water";
-    else if (ACPSensor.avgTemp >= MAX_ACP_TEMP) s = s + " ACP";
+    else if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
+      s = s + " Water";
+    else if (ACPSensor.avgTemp >= MAX_ACP_TEMP)
+      s = s + " ACP";
 
     if (TankSensor.avgTemp >= SamSetup.DistTemp) {
       //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
       Msg = "Tank temp limit. Program finish.";
-    } else  Msg = "Emergency power OFF! Temperature error" + s;
+    } else
+      Msg = "Emergency power OFF! Temperature error" + s;
 
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
@@ -616,8 +624,10 @@ void IRAM_ATTR check_alarm() {
       Msg = "Head level alarm!";
     } else {
 #ifdef SAMOVAR_USE_POWER
-      //запускаем счетчик - 7 минут, нужен для возврата заданного напряжения
-      alarm_c_min = millis() + 1000 * 60 * 7;
+      //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
+      alarm_c_min = millis() + 1000 * 60 * TIME_C;
+      //счетчик для повышения напряжения сбрасываем
+      alarm_c_low_min = 0;
 #endif
     }
 #ifdef SAMOVAR_USE_POWER
@@ -701,7 +711,7 @@ void IRAM_ATTR open_valve(bool Val) {
   }
 }
 
-void IRAM_ATTR triggerBuzzerTask(void * parameter) {
+void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   TickType_t beep = 200 / portTICK_RATE_MS;
   TickType_t silent = 800 / portTICK_RATE_MS;
   int i = 0;
@@ -722,12 +732,12 @@ void set_buzzer() {
     //Запускаем таск для пищалки
     xTaskCreatePinnedToCore(
       triggerBuzzerTask, /* Function to implement the task */
-      "BuzzerTask", /* Name of the task */
-      1000,  /* Stack size in words */
-      NULL,  /* Task input parameter */
-      0,  /* Priority of the task */
-      &BuzzerTask,  /* Task handle. */
-      1); /* Core where the task should run */
+      "BuzzerTask",      /* Name of the task */
+      1000,              /* Stack size in words */
+      NULL,              /* Task input parameter */
+      0,                 /* Priority of the task */
+      &BuzzerTask,       /* Task handle. */
+      1);                /* Core where the task should run */
   }
 }
 
@@ -736,7 +746,7 @@ void IRAM_ATTR set_power(bool On) {
   if (On) {
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
     set_menu_screen(2);
-    power_text_ptr = (char*)"OFF";
+    power_text_ptr = (char *)"OFF";
 
 #ifdef SAMOVAR_USE_POWER
     vTaskDelay(600);
@@ -753,7 +763,7 @@ void IRAM_ATTR set_power(bool On) {
     current_power_mode = POWER_SLEEP_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
-    power_text_ptr = (char*)"ON";
+    power_text_ptr = (char *)"ON";
     sam_command_sync = SAMOVAR_RESET;
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
   }
@@ -764,7 +774,7 @@ void IRAM_ATTR set_power(bool On) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
 #ifndef SAMOVAR_USE_RMVK
-void IRAM_ATTR triggerPowerStatus(void * parameter)  {
+void IRAM_ATTR triggerPowerStatus(void *parameter) {
   int i;
   String resp;
   while (true) {
@@ -791,7 +801,7 @@ void IRAM_ATTR triggerPowerStatus(void * parameter)  {
   }
 }
 #else
-void IRAM_ATTR triggerPowerStatus(void * parameter) {
+void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
   while (true) {
     if (PowerOn) {
@@ -847,7 +857,8 @@ void IRAM_ATTR set_current_power(float Volt) {
   String Cmd;
   int V = Volt;
   if (V < 100) Cmd = "0";
-  else Cmd = "";
+  else
+    Cmd = "";
   Cmd = Cmd + (String)V;
   Serial2.print("АТ+VS=" + Cmd + "\r");
 #else
@@ -865,8 +876,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
   if (Mode == POWER_SLEEP_MODE) {
     Serial2.print("АТ+ON=0\r");
     //set_current_power(0);
-  }
-  else if (Mode == POWER_SPEED_MODE) {
+  } else if (Mode == POWER_SPEED_MODE) {
     Serial2.print("АТ+ON=1\r");
     //set_current_power(5000);
   }
