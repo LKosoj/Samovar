@@ -8,30 +8,30 @@
 #ifdef USE_BME680
 #define BME_STRING "BME680"
 #include <Adafruit_BME680.h>
-Adafruit_BME680 bme; // I2C
+Adafruit_BME680 bme;  // I2C
 #endif
 
 #ifdef USE_BMP180
 #include <Adafruit_BMP085_U.h>
 #define BME_STRING "BMP180"
-Adafruit_BMP085_Unified bme; // I2C
+Adafruit_BMP085_Unified bme;  // I2C
 #endif
 
 #ifdef USE_BMP280
 #include <Adafruit_BMP280.h>
 #define BME_STRING "BMP280"
-Adafruit_BMP280 bme; // I2C
+Adafruit_BMP280 bme;  // I2C
 #endif
 
 #ifdef USE_BME280
 #include <Adafruit_BME280.h>
 #define BME_STRING "BME280"
-Adafruit_BME280 bme; // I2C
+Adafruit_BME280 bme;  // I2C
 #endif
 
 void clok();
 void clok1();
-void getjson (void);
+void getjson(void);
 String append_data();
 void stopService(void);
 void startService(void);
@@ -39,9 +39,9 @@ void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress);
 void set_beer_program(String WProgram);
 void set_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
-String CurrentTime(bool Year) ;
+String CurrentTime(bool Year);
 void setupOpenLog(void);
-void createFile(char *fileName);
+void createFile(char* fileName);
 
 //**************************************************************************************************************
 // Функции для работы с сенсорами
@@ -97,7 +97,6 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   bme_temp = bme.readTemperature();
   bme_pressure = bme.readPressure() / 100 * 0.75;
 #endif
-
 }
 
 //***************************************************************************************************************
@@ -109,20 +108,20 @@ void IRAM_ATTR DS_getvalue(void) {
   //  PipeSensor.avgTemp = 50;
   //  return;
   float ss, ps, ws, ts, acp;
-  ss = sensors.getTempC(SteamSensor.Sensor);                    // считываем температуру с датчика 0
-  ps = sensors.getTempC(PipeSensor.Sensor);                     // считываем температуру с датчика 1
-  ws = sensors.getTempC(WaterSensor.Sensor);                    // считываем температуру с датчика 2
-  ts = sensors.getTempC(TankSensor.Sensor);                     // считываем температуру с датчика 3
-  acp = sensors.getTempC(ACPSensor.Sensor);                     // считываем температуру с датчика 4
+  ss = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
+  ps = sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
+  ws = sensors.getTempC(WaterSensor.Sensor);  // считываем температуру с датчика 2
+  ts = sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
+  acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
 
-//  float randNumber;
-//  randNumber = random(100) / float(500);
-//  if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
-//  static float coef = 0;
-//  coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
-//  //if (coef > 0.5) coef = 0.5;
-//  //if (coef < -0.5) coef = -0.5;
-//  ts = TankSensor.avgTemp + coef;
+  //  float randNumber;
+  //  randNumber = random(100) / float(500);
+  //  if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
+  //  static float coef = 0;
+  //  coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
+  //  //if (coef > 0.5) coef = 0.5;
+  //  //if (coef < -0.5) coef = -0.5;
+  //  ts = TankSensor.avgTemp + coef;
 
   sensors.requestTemperatures();
 
@@ -188,16 +187,16 @@ void sensor_init(void) {
 #endif
   }
 #else
-    bmefound = false;
+  bmefound = false;
 #endif
 
   writeString("DS1820 init...     ", 3);
-  sensors.begin();                          // стартуем датчики температуры
+  sensors.begin();  // стартуем датчики температуры
 
   int dc = 0;
 
   while (sensors.getAddress(DSAddr[dc], dc)) {
-    sensors.setResolution(DSAddr[dc], 12);                                 // устанавливаем разрешение для датчика
+    sensors.setResolution(DSAddr[dc], 12);  // устанавливаем разрешение для датчика
     dc++;
     if (dc > 4) break;
   }
@@ -215,41 +214,41 @@ void sensor_init(void) {
   writeString("Found " + (String)DScnt + "         ", 4);
 
 #ifdef __SAMOVAR_DEBUG
-  Serial.print("1 Sensor Address: ");                                  // пишем адрес датчика 0
+  Serial.print("1 Sensor Address: ");  // пишем адрес датчика 0
   printAddress(DSAddr[0]);
   Serial.println();
-  Serial.print("2 Sensor Address: ");                                   // пишем адрес датчика 1
+  Serial.print("2 Sensor Address: ");  // пишем адрес датчика 1
   printAddress(DSAddr[1]);
   Serial.println();
-  Serial.print("3 Sensor Address: ");                                  // пишем адрес датчика 2
+  Serial.print("3 Sensor Address: ");  // пишем адрес датчика 2
   printAddress(DSAddr[2]);
   Serial.println();
-  Serial.print("4 Sensor Address: ");                                  // пишем адрес датчика 3
+  Serial.print("4 Sensor Address: ");  // пишем адрес датчика 3
   printAddress(DSAddr[3]);
   Serial.println();
-  Serial.print("5 Sensor Address: ");                                  // пишем адрес датчика 4
+  Serial.print("5 Sensor Address: ");  // пишем адрес датчика 4
   printAddress(DSAddr[4]);
   Serial.println();
 #endif
 
-  sensors.setWaitForConversion(false);                                    // работаем в асинхронном режиме
+  sensors.setWaitForConversion(false);  // работаем в асинхронном режиме
   sensors.requestTemperatures();
   delay(750);
 
 #ifdef __SAMOVAR_DEBUG
-  Serial.print("1 Sensor Resolution: ");                               // пишем разрешение для датчика 0
+  Serial.print("1 Sensor Resolution: ");  // пишем разрешение для датчика 0
   Serial.print(sensors.getResolution(DSAddr[0]), DEC);
   Serial.println();
-  Serial.print("2 Sensor Resolution: ");                                // пишем разрешение для датчика 1
+  Serial.print("2 Sensor Resolution: ");  // пишем разрешение для датчика 1
   Serial.print(sensors.getResolution(DSAddr[1]), DEC);
   Serial.println();
-  Serial.print("3 Sensor Resolution: ");                               // пишем разрешение для датчика 2
+  Serial.print("3 Sensor Resolution: ");  // пишем разрешение для датчика 2
   Serial.print(sensors.getResolution(DSAddr[2]), DEC);
   Serial.println();
-  Serial.print("4 Sensor Resolution: ");                                // пишем разрешение для датчика 3
+  Serial.print("4 Sensor Resolution: ");  // пишем разрешение для датчика 3
   Serial.print(sensors.getResolution(DSAddr[3]), DEC);
   Serial.println();
-  Serial.print("5 Sensor Resolution: ");                                // пишем разрешение для датчика 3
+  Serial.print("5 Sensor Resolution: ");  // пишем разрешение для датчика 3
   Serial.print(sensors.getResolution(DSAddr[4]), DEC);
   Serial.println();
 #endif
@@ -335,7 +334,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   WthdrwlProgress = 0;
   TargetStepps = 0;
   //Msg = "";
-  
+
   begintime = 0;
 
   if (fileToAppend) {
@@ -347,7 +346,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   get_Samovar_Status();
 
 #ifdef USE_OPENLOG
-  if (ofl == ""){
+  if (ofl == "") {
     ofl = CurrentTime(true) + ".csv";
     char charVar[25];
     ofl.toCharArray(charVar, ofl.length());
@@ -363,15 +362,14 @@ String inline format_float(float v, int d) {
   return (String)dtostrf(v, 1, d, outstr);
 }
 
-void printAddress(DeviceAddress deviceAddress)                        // функция печати адреса DS18B20
+void printAddress(DeviceAddress deviceAddress)  // функция печати адреса DS18B20
 {
   Serial.print(getDSAddress(deviceAddress));
 }
 
 String getDSAddress(DeviceAddress deviceAddress) {
   String dsaddr;
-  for (uint8_t j = 0; j < 8; j++)
-  {
+  for (uint8_t j = 0; j < 8; j++) {
     if (deviceAddress[j] < 16) dsaddr += "0";
     dsaddr += String(deviceAddress[j], HEX);
   }
@@ -391,9 +389,8 @@ String get_DSAddressList(String Address) {
 }
 
 void IRAM_ATTR CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress) {
-  for (int dsj = 0 ; dsj < 8 ; dsj++ )
-  {
-    DevTAddress[dsj] = DevSAddress[dsj] ;
+  for (int dsj = 0; dsj < 8; dsj++) {
+    DevTAddress[dsj] = DevSAddress[dsj];
   }
 }
 #endif
