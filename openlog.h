@@ -24,7 +24,7 @@ void createOLFile(char *fileName) {
   //Old way
   OpenLog.print("new ");
   OpenLog.print(fileName);
-  OpenLog.write(13); //This is \r
+  OpenLog.write(13);  //This is \r
 
   //New way
   //OpenLog.print("new ");
@@ -38,7 +38,7 @@ void createOLFile(char *fileName) {
 
   OpenLog.print("append ");
   OpenLog.print(fileName);
-  OpenLog.write(13); //This is \r
+  OpenLog.write(13);  //This is \r
 
   //Wait for OpenLog to indicate file is open and ready for writing
   while (1) {
@@ -60,7 +60,7 @@ void readOLFile(char *fileName) {
   //Old way
   OpenLog.print("read ");
   OpenLog.print(fileName);
-  OpenLog.write(13); //This is \r
+  OpenLog.write(13);  //This is \r
 
   //New way
   //OpenLog.print("read ");
@@ -77,7 +77,7 @@ void readOLFile(char *fileName) {
   //This relies heavily on the SoftSerial buffer not overrunning. This will probably not work
   //above 38400bps.
   //This loop will stop listening after 1 second of no characters received
-  for (int timeOut = 0 ; timeOut < 1000 ; timeOut++) {
+  for (int timeOut = 0; timeOut < 1000; timeOut++) {
     while (OpenLog.available()) {
       char tempString[100];
 
@@ -87,7 +87,7 @@ void readOLFile(char *fileName) {
         if (spot > 98) break;
       }
       tempString[spot] = '\0';
-      Serial.write(tempString); //Take the string from OpenLog and push it to the Arduino terminal
+      Serial.write(tempString);  //Take the string from OpenLog and push it to the Arduino terminal
       timeOut = 0;
     }
 
@@ -107,7 +107,7 @@ void readOLDisk() {
 
   //Old way
   OpenLog.print("disk");
-  OpenLog.write(13); //This is \r
+  OpenLog.write(13);  //This is \r
 
   //New way
   //OpenLog.print("read ");
@@ -124,7 +124,7 @@ void readOLDisk() {
   //This relies heavily on the SoftSerial buffer not overrunning. This will probably not work
   //above 38400bps.
   //This loop will stop listening after 1 second of no characters received
-  for (int timeOut = 0 ; timeOut < 1000 ; timeOut++) {
+  for (int timeOut = 0; timeOut < 1000; timeOut++) {
     while (OpenLog.available()) {
       char tempString[100];
 
@@ -134,7 +134,7 @@ void readOLDisk() {
         if (spot > 98) break;
       }
       tempString[spot] = '\0';
-      Serial.write(tempString); //Take the string from OpenLog and push it to the Arduino terminal
+      Serial.write(tempString);  //Take the string from OpenLog and push it to the Arduino terminal
       timeOut = 0;
     }
 
