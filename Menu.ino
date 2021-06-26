@@ -88,7 +88,7 @@ void reset_focus() {
 
 void set_menu_screen(byte param) {
   switch (param) {
-    case 1: //меню установок
+    case 1:  //меню установок
       setup_temp_screen.hide(false);
       setup_set_temp_screen.hide(false);
       setup_stepper_settings.hide(false);
@@ -158,8 +158,7 @@ void set_menu_screen(byte param) {
   }
 }
 
-void menu_setup()
-{
+void menu_setup() {
   reset_focus();
   set_menu_screen(1);
 
@@ -167,8 +166,7 @@ void menu_setup()
 }
 
 // Функция обратного вызова будет прикреплена к back_line.
-void setup_go_back()
-{
+void setup_go_back() {
   reset_focus();
   set_menu_screen(2);
 
@@ -256,8 +254,8 @@ void stepper_step_ml_up() {
 void stepper_step_ml_down() {
   if (SamSetup.StepperStepMl > 0) {
     SamSetup.StepperStepMl -= 1 * multiplier;
-  }
-  else SamSetup.StepperStepMl = 0;
+  } else
+    SamSetup.StepperStepMl = 0;
 }
 
 void menu_program() {
@@ -282,8 +280,7 @@ void menu_get_power() {
     if (!PowerOn) {
       set_menu_screen(2);
       sam_command_sync = SAMOVAR_BEER;
-    }
-    else {
+    } else {
       sam_command_sync = SAMOVAR_POWER;
       set_menu_screen(3);
     }
@@ -291,13 +288,11 @@ void menu_get_power() {
     if (!PowerOn) {
       set_menu_screen(2);
       sam_command_sync = SAMOVAR_DISTILLATION;
-    }
-    else {
+    } else {
       set_menu_screen(3);
       sam_command_sync = SAMOVAR_POWER;
     }
-  }
-  else {
+  } else {
     if (!PowerOn) {
       set_menu_screen(2);
     } else {
@@ -310,11 +305,12 @@ void menu_get_power() {
 
 void menu_pause() {
   pause_withdrawal(!PauseOn);
-  if (PauseOn) pause_text_ptr = (char*)"Continue";
-  else pause_text_ptr = (char*)"Pause";
+  if (PauseOn) pause_text_ptr = (char *)"Continue";
+  else
+    pause_text_ptr = (char *)"Pause";
 }
 void menu_calibrate() {
-  if (startval > 0  && startval != 100) return;
+  if (startval > 0 && startval != 100) return;
 
   int stpspeed = stepper.getSpeed();
   if (startval == 100) {
@@ -323,12 +319,11 @@ void menu_calibrate() {
     return;
   }
   if (StepperMoving) {
-    calibrate_text_ptr = (char*)"Stop";
+    calibrate_text_ptr = (char *)"Stop";
     stpspeed = 0;
-  }
-  else {
+  } else {
     startval = 100;
-    calibrate_text_ptr = (char*)"Start";
+    calibrate_text_ptr = (char *)"Start";
     stpspeed = STEPPER_MAX_SPEED;
   }
   pump_calibrate(stpspeed);
@@ -349,25 +344,23 @@ void menu_samovar_start() {
   String Str;
 
   if (startval == 2) startval = 3;
-  else if (ProgramNum >= ProgramLen - 1 && startval != 0) startval = 2;
+  else if (ProgramNum >= ProgramLen - 1 && startval != 0)
+    startval = 2;
 
   if (startval == 0) {
     startval = 1;
     Str = "Prg No 1";
     run_program(0);
     ProgramNum = 0;
-    create_data();                    //создаем файл с данными
-  }
-  else if (startval == 1) {
+    create_data();  //создаем файл с данными
+  } else if (startval == 1) {
     ProgramNum++;
     Str = "Prg No " + (String)(ProgramNum + 1);
     run_program(ProgramNum);
-  }
-  else if (startval == 2) {
+  } else if (startval == 2) {
     Str = "Prg finish";
     run_program(CAPACITY_NUM * 2);
-  }
-  else {
+  } else {
     Str = "Stoped";
     run_program(CAPACITY_NUM * 2);
     reset_sensor_counter();
@@ -380,7 +373,7 @@ void menu_samovar_start() {
 void IRAM_ATTR samovar_reset() {
   char str[20] = "Stoped             ";
   memcpy(str, startval_text_val, 20);
-  power_text_ptr = (char*)"ON";
+  power_text_ptr = (char *)"ON";
   reset_focus();
   set_menu_screen(3);
   reset_sensor_counter();
@@ -493,8 +486,7 @@ void encoder_getvalue() {
     if (!main_menu1.is_callable(1)) {
       updscreen = false;
       main_menu1.next_screen();
-    }
-    else {
+    } else {
       updscreen = false;
       main_menu1.call_function(1);
     }
@@ -509,8 +501,7 @@ void encoder_getvalue() {
     if (!main_menu1.is_callable(2)) {
       updscreen = false;
       main_menu1.previous_screen();
-    }
-    else {
+    } else {
       updscreen = false;
       main_menu1.call_function(2);
     }
@@ -532,7 +523,7 @@ void encoder_getvalue() {
     main_menu1.switch_focus();
   }
 
-  CurMin = (millis() / 1000 );
+  CurMin = (millis() / 1000);
   if (OldMin != CurMin) {
     //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
     if (CurMin == 120) {
@@ -541,7 +532,7 @@ void encoder_getvalue() {
     }
 
 
-    tcnt ++;
+    tcnt++;
     if (tcnt == 3) {
       tcnt = 0;
       BME_getvalue(false);
@@ -551,5 +542,4 @@ void encoder_getvalue() {
 
     OldMin = CurMin;
   }
-
 }
