@@ -6,12 +6,16 @@ BLYNK_READ(V0) {
   Blynk.virtualWrite(V4, PowerOn);
   int i;
   int k;
-  if (startval > 0 && startval < 5) i = 1;
-  else i = 0;
+  if (startval > 0 && startval < 5)
+    i = 1;
+  else
+    i = 0;
   Blynk.virtualWrite(V3, i);
   vTaskDelay(2);
-  if (PauseOn) k = 1;
-  else k = 0;
+  if (PauseOn)
+    k = 1;
+  else
+    k = 0;
   Blynk.virtualWrite(V13, k);
 }
 
@@ -74,16 +78,14 @@ BLYNK_READ(V16) {
   Blynk.virtualWrite(V16, target_power_volt);
 }
 
-BLYNK_WRITE(V16)
-{
-  float Value16 = param.asFloat(); // assigning incoming value from pin V16 to a variable
+BLYNK_WRITE(V16) {
+  float Value16 = param.asFloat();  // assigning incoming value from pin V16 to a variable
   set_current_power(Value16);
 }
 #endif
 
-BLYNK_WRITE(V17)
-{
-  float Value17 = param.asFloat(); // assigning incoming value from pin V17 to a variable
+BLYNK_WRITE(V17) {
+  float Value17 = param.asFloat();  // assigning incoming value from pin V17 to a variable
   set_pump_speed(get_speed_from_rate(Value17), true);
 }
 
@@ -91,36 +93,33 @@ BLYNK_WRITE(V18) {
   set_body_temp();
 }
 
-BLYNK_WRITE(V12)
-{
+BLYNK_WRITE(V12) {
   if (!PowerOn) return;
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     sam_command_sync = SAMOVAR_BEER_NEXT;
-  }
-  else {
+  } else {
     menu_samovar_start();
   }
 }
 
-BLYNK_WRITE(V13)
-{
+BLYNK_WRITE(V13) {
   pause_withdrawal(!PauseOn);
 }
 
-BLYNK_WRITE(V3)
-{
-  int Value3 = param.asInt(); // assigning incoming value from pin V3 to a variable
+BLYNK_WRITE(V3) {
+  int Value3 = param.asInt();  // assigning incoming value from pin V3 to a variable
   if (Value3 == 1 && PowerOn) menu_samovar_start();
-  else sam_command_sync = SAMOVAR_RESET;
+  else
+    sam_command_sync = SAMOVAR_RESET;
 }
-BLYNK_WRITE(V4)
-{
-  int Value4 = param.asInt(); // assigning incoming value from pin V4 to a variable
+BLYNK_WRITE(V4) {
+  int Value4 = param.asInt();  // assigning incoming value from pin V4 to a variable
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
-    else sam_command_sync = SAMOVAR_POWER;
-  }
-  else sam_command_sync = SAMOVAR_POWER;
+    else
+      sam_command_sync = SAMOVAR_POWER;
+  } else
+    sam_command_sync = SAMOVAR_POWER;
   //set_power(Value4);
 }
 
