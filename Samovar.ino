@@ -267,13 +267,15 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
           tcntST = 0;
           String s = append_data();  //Записываем данные в память ESP32;
 #ifdef USE_OPENLOG
+          if (s != "") {
 #ifdef SAMOVAR_USE_POWER
-          s += ",";
-          s += (String)target_power_volt;
-          s += ",";
-          s += (String)current_power_p;
+            s += ",";
+            s += (String)target_power_volt;
+            s += ",";
+            s += (String)current_power_p;
 #endif
-          appendOLFile(s);
+            appendOLFile(s);
+          }
 #endif
         }
       }
