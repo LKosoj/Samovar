@@ -104,20 +104,20 @@ void FS_init(void) {
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
 
-  events.onConnect([](AsyncEventSourceClient *client) {
+  events.onConnect([](AsyncEventSourceClient * client) {
     client->send("hello!", NULL, millis(), 1000);
   });
   server.addHandler(&events);
 
   server.addHandler(new SPIFFSEditor(SPIFFS, http_username, http_password));
 
-  server.on("/heap", HTTP_GET, [](AsyncWebServerRequest *request) {
+  server.on("/heap", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(200, "text/plain", get_sys_info());
   });
 
   //server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.htm");
 
-  server.onNotFound([](AsyncWebServerRequest *request) {
+  server.onNotFound([](AsyncWebServerRequest * request) {
     Serial.printf("NOT_FOUND: ");
     if (request->method() == HTTP_GET)
       Serial.printf("GET");
@@ -163,14 +163,14 @@ void FS_init(void) {
 
     request->send(404);
   });
-  server.onFileUpload([](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
+  server.onFileUpload([](AsyncWebServerRequest * request, const String & filename, size_t index, uint8_t *data, size_t len, bool final) {
     if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
     Serial.printf("%s", (const char *)data);
     if (final)
       Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
-  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+  server.onRequestBody([](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!index)
       Serial.printf("BodyStart: %u\n", total);
     Serial.printf("%s", (const char *)data);
@@ -216,23 +216,8 @@ void create_data() {
 }
 
 String IRAM_ATTR append_data() {
-  static bool w;
+  bool w;
   w = false;
-  String str = Crt + ",";
-  str += format_float(SteamSensor.avgTemp, 3);
-  str += ",";
-  str += format_float(PipeSensor.avgTemp, 3);
-  str += ",";
-  str += format_float(WaterSensor.avgTemp, 3);
-  str += ",";
-  str += format_float(TankSensor.avgTemp, 3);
-  str += ",";
-  str += format_float(bme_pressure, 2);
-
-#ifdef WRITE_PROGNUM_IN_LOG
-  str += ",";
-  str += ProgramNum + 1;
-#endif
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SSPrevTemp) {
@@ -254,9 +239,28 @@ String IRAM_ATTR append_data() {
     prev_ProgramNum = ProgramNum;
     w = true;
   }
-  if (w)
+
+  if (w) {
+    String str;
+    str = Crt + ",";
+    str += format_float(SteamSensor.avgTemp, 3);
+    str += ",";
+    str += format_float(PipeSensor.avgTemp, 3);
+    str += ",";
+    str += format_float(WaterSensor.avgTemp, 3);
+    str += ",";
+    str += format_float(TankSensor.avgTemp, 3);
+    str += ",";
+    str += format_float(bme_pressure, 2);
+
+#ifdef WRITE_PROGNUM_IN_LOG
+    str += ",";
+    str += ProgramNum + 1;
+#endif
     fileToAppend.println(str);
-  return str;
+    return str;
+  }
+  return "";
 }
 
 String get_sys_info() {
