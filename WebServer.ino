@@ -112,6 +112,30 @@ String indexKeyProcessor(const String &var) {
     return (String)SamSetup.TankColor;
   else if (var == "ACPColor")
     return (String)SamSetup.ACPColor;
+  else if (var == "SteamHide") {
+    if (SteamSensor.avgTemp > 0) return "false";
+    else return "true";
+  }
+  else if (var == "PipeHide") {
+    if (PipeSensor.avgTemp > 0) return "false";
+    else return "true";
+  }
+  else if (var == "WaterHide") {
+    if (WaterSensor.avgTemp > 0) return "false";
+    else return "true";
+  }
+  else if (var == "TankHide") {
+    if (TankSensor.avgTemp > 0) return "false";
+    else return "true";
+  }
+  else if (var == "PressureHide") {
+    if (bme_pressure > 0) return "false";
+    else return "true";
+  }
+  else if (var == "ProgNumHide") {
+    if (ProgramNum > 0) return "false";
+    else return "true";
+  }
   else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else
