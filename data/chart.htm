@@ -70,8 +70,10 @@ chart.dataSource.disableCache = true;
 //chart.numberFormatter.numberFormat = "#,###";
 chart.dataSource.parser = new am4core.CSVParser();
 chart.dataSource.parser.options.useColumnNames = true;
+chart.dataSource.parser.options.emptyAs = "empty";
 //chart.dataSource.updateCurrentData = true;
 chart.dataSource.reloadFrequency = 15000;
+
 // Create axes
 var dateAxis = chart.xAxes.push(new am4charts.CategoryAxis());
 dateAxis.dataFields.category = "Date";

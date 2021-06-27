@@ -137,6 +137,7 @@ chart.dataSource.url = "/data.csv";
 chart.dataSource.disableCache = true;
 chart.dataSource.parser = new am4core.CSVParser();
 chart.dataSource.parser.options.useColumnNames = true;
+chart.dataSource.parser.options.emptyAs = "empty";
 //chart.dataSource.updateCurrentData = true;
 //chart.dataSource.reloadFrequency = 15000;
 // Create axes
