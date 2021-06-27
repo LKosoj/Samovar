@@ -92,9 +92,9 @@ String formatBytes(size_t bytes) {
 
 // Инициализация FFS
 void FS_init(void) {
-  LITTLEFS.begin();
+  SPIFFS.begin();
   {
-    File dir = LITTLEFS.open("/");
+    File dir = SPIFFS.open("/");
     while (dir.openNextFile()) {
       String fileName = dir.name();
       //size_t fileSize = dir.size();
@@ -109,13 +109,13 @@ void FS_init(void) {
   });
   server.addHandler(&events);
 
-  server.addHandler(new SPIFFSEditor(LITTLEFS, http_username, http_password));
+  server.addHandler(new SPIFFSEditor(SPIFFS, http_username, http_password));
 
   server.on("/heap", HTTP_GET, [](AsyncWebServerRequest * request) {
     request->send(200, "text/plain", get_sys_info());
   });
 
-  //server.serveStatic("/", LITTLEFS, "/").setDefaultFile("index.htm");
+  //server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.htm");
 
   server.onNotFound([](AsyncWebServerRequest * request) {
     Serial.printf("NOT_FOUND: ");
@@ -181,7 +181,7 @@ void FS_init(void) {
 
 bool exists(String path) {
   static bool yes;
-  File file = LITTLEFS.open(path, "r");
+  File file = SPIFFS.open(path, "r");
   if (!file.isDirectory()) {
     yes = true;
   } else {
@@ -193,21 +193,21 @@ bool exists(String path) {
 
 void create_data() {
   //Удаляем старый файл с архивным логом
-  if (LITTLEFS.exists("/data_old.csv")) {
-    LITTLEFS.remove("/data_old.csv");
+  if (SPIFFS.exists("/data_old.csv")) {
+    SPIFFS.remove("/data_old.csv");
   }
   //Переименовываем файл с логом в архивный (на всякий случай)
-  if (LITTLEFS.exists("/data.csv")) {
-    LITTLEFS.rename("/data.csv", "/data_old.csv");
+  if (SPIFFS.exists("/data.csv")) {
+    SPIFFS.rename("/data.csv", "/data_old.csv");
   }
-  File fileToWrite = LITTLEFS.open("/data.csv", FILE_WRITE);
+  File fileToWrite = SPIFFS.open("/data.csv", FILE_WRITE);
   String str = "Date,Steam,Pipe,Water,Tank,Pressure";
 #ifdef WRITE_PROGNUM_IN_LOG
   str += ",ProgNum";
 #endif
   fileToWrite.println(str);
   fileToWrite.close();
-  fileToAppend = LITTLEFS.open("/data.csv", FILE_APPEND);
+  fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
   SteamSensor.PrevTemp = 0;
   PipeSensor.PrevTemp = 0;
   WaterSensor.PrevTemp = 0;
@@ -265,15 +265,15 @@ String IRAM_ATTR append_data() {
 
 String get_sys_info() {
   //Получаем системные параметры - размер свободного места, etc
-  uint32_t ub = LITTLEFS.usedBytes();
-  uint32_t tb = LITTLEFS.totalBytes();
+  uint32_t ub = SPIFFS.usedBytes();
+  uint32_t tb = SPIFFS.totalBytes();
   String result_st = "totalBytes = " + (String)tb + "; usedBytes = ";
   vTaskDelay(5);
   result_st += (String)ub + "; Free Heap = " + (String)ESP.getFreeHeap();
   if (tb - ub < 400) {
     //Кончилось место, удалим старый файл. Надо было сохранять раньше
-    if (LITTLEFS.exists("/data_old.csv")) {
-      LITTLEFS.remove("/data_old.csv");
+    if (SPIFFS.exists("/data_old.csv")) {
+      SPIFFS.remove("/data_old.csv");
     }
   }
   //Если используется Blynk - пишем оператору
@@ -291,7 +291,7 @@ String get_sys_info() {
 }
 
 void save_profile() {
-  File file = LITTLEFS.open(get_prf_name(), FILE_WRITE);
+  File file = SPIFFS.open(get_prf_name(), FILE_WRITE);
   file.write((byte *)&SamSetup, sizeof(SamSetup));
   file.close();
   EEPROM.put(0, SamSetup);
@@ -301,8 +301,8 @@ void save_profile() {
 void load_profile() {
   String f;
   f = get_prf_name();
-  if (LITTLEFS.exists(f)) {
-    File file = LITTLEFS.open(f, FILE_READ);
+  if (SPIFFS.exists(f)) {
+    File file = SPIFFS.open(f, FILE_READ);
     file.setTimeout(0);
     file.read((byte *)&SamSetup, sizeof(SamSetup));
     file.close();

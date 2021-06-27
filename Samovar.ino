@@ -22,8 +22,7 @@
 #include <Update.h>
 #include <LiquidMenu.h>
 #include <EEPROM.h>
-#include <FS.h>
-#include <LITTLEFS.h>
+#include <SPIFFS.h>
 #include <SPIFFSEditor.h>
 #include <ESPAsyncWiFiManager.h>
 

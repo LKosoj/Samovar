@@ -12,26 +12,26 @@ void set_pump_speed(float pumpspeed, bool continue_process);
 
 void change_samovar_mode() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
-      request->send(LITTLEFS, "/beer.htm", String(), false, indexKeyProcessor);
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
-      request->send(LITTLEFS, "/beer.htm", String(), false, indexKeyProcessor);
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
     });
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
-      request->send(LITTLEFS, "/distiller.htm", String(), false, indexKeyProcessor);
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
-      request->send(LITTLEFS, "/distiller.htm", String(), false, indexKeyProcessor);
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
   } else {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
-      request->send(LITTLEFS, "/index.htm", String(), false, indexKeyProcessor);
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
-      request->send(LITTLEFS, "/index.htm", String(), false, indexKeyProcessor);
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
   }
   Samovar_CR_Mode = Samovar_Mode;
@@ -41,57 +41,53 @@ void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
 
-  server.serveStatic("/style.css", LITTLEFS, "/style.css");
-  server.serveStatic("/favicon.ico", LITTLEFS, "/favicon.ico");
-  server.serveStatic("/chart.htm", LITTLEFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
-  //server.serveStatic("/data.csv", LITTLEFS, "/data.csv");
-  server.serveStatic("/calibrate.htm", LITTLEFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
-  server.serveStatic("/manual.htm", LITTLEFS, "/manual.htm");
+  server.serveStatic("/style.css", SPIFFS, "/style.css");
+  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
+  server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
+  server.serveStatic("/data.csv", SPIFFS, "/data.csv");
+  server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
+  server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
 
   change_samovar_mode();
 
   load_profile();
 
-  server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest * request) {
-    fileToAppend.flush();
-    request->send(LITTLEFS, "/data.csv", String());
-  });
-  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
     //TempStr = temp;
     getjson();
     request->send(200, "text/html", jsonstr);
   });
-  server.on("/command", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request) {
     web_command(request);
   });
-  server.on("/program", HTTP_POST, [](AsyncWebServerRequest * request) {
+  server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request) {
     web_program(request);
   });
-  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request) {
     calibrate_command(request);
   });
-  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_data_log(request);
   });
-  server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_old_data_log(request);
   });
 
-  server.serveStatic("/setup.htm", LITTLEFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
+  server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
-  server.on("/save", HTTP_POST, [](AsyncWebServerRequest * request) {
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
     //Serial.println("SAVE");
     handleSave(request);
   });
 
-  server.onFileUpload([](AsyncWebServerRequest * request, const String & filename, size_t index, uint8_t *data, size_t len, bool final) {
+  server.onFileUpload([](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
     if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
     Serial.printf("%s", (const char *)data);
     if (final)
       Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
-  server.onRequestBody([](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total) {
+  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!index)
       Serial.printf("BodyStart: %u\n", total);
     Serial.printf("%s", (const char *)data);
@@ -517,18 +513,18 @@ void web_command(AsyncWebServerRequest *request) {
     } else
 #ifdef SAMOVAR_USE_POWER
       if (request->hasArg("voltage")) {
-        set_current_power(request->arg("voltage").toFloat());
-      } else
+      set_current_power(request->arg("voltage").toFloat());
+    } else
 #endif
-        if (request->hasArg("pumpspeed")) {
-          set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
-        } else if (request->hasArg("pause")) {
-          if (PauseOn) {
-            sam_command_sync = SAMOVAR_CONTINUE;
-          } else {
-            sam_command_sync = SAMOVAR_PAUSE;
-          }
-        }
+      if (request->hasArg("pumpspeed")) {
+      set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
+    } else if (request->hasArg("pause")) {
+      if (PauseOn) {
+        sam_command_sync = SAMOVAR_CONTINUE;
+      } else {
+        sam_command_sync = SAMOVAR_PAUSE;
+      }
+    }
   }
   request->send(200, "text/plain", "OK");
 }
@@ -567,8 +563,7 @@ void calibrate_command(AsyncWebServerRequest *request) {
 }
 
 void get_data_log(AsyncWebServerRequest *request) {
-  fileToAppend.flush();
-  AsyncWebServerResponse *response = request->beginResponse(LITTLEFS, "/data.csv", String(), true);
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data.csv", String(), true);
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
   //response->addHeader("Content-Disposition", "attachment; filename='data.csv'");
@@ -578,8 +573,7 @@ void get_data_log(AsyncWebServerRequest *request) {
 }
 
 void get_old_data_log(AsyncWebServerRequest *request) {
-  fileToAppend.flush();
-  AsyncWebServerResponse *response = request->beginResponse(LITTLEFS, "/data_old.csv", String(), true);
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data_old.csv", String(), true);
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
   //response->addHeader("Content-Disposition", "attachment; filename='data_old.csv'");
