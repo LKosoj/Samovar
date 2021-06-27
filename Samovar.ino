@@ -268,11 +268,17 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
           String s = append_data();  //Записываем данные в память ESP32;
 #ifdef USE_OPENLOG
           if (s != "") {
+            s += ",";
+            s += format_float(ActualVolumePerHour, 3);
 #ifdef SAMOVAR_USE_POWER
             s += ",";
             s += (String)target_power_volt;
             s += ",";
             s += (String)current_power_p;
+#endif
+#ifdef USE_WATERSENSOR
+            s += ",";
+            s += format_float(WFflowRate, 2);
 #endif
             appendOLFile(s);
           }
