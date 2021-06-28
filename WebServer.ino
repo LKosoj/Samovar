@@ -579,8 +579,6 @@ void get_data_log(AsyncWebServerRequest *request) {
 }
 
 void get_old_data_log(AsyncWebServerRequest *request) {
-    if (fileToAppend)
-      fileToAppend.flush();
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data_old.csv", String(), true);
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
