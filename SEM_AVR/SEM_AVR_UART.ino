@@ -52,19 +52,21 @@ void uart_event(void) {
       PDMust = p;
       //показывает расчитанную мощность
       Pust = Pnom << 1; Pust *= PDMust; Pust /= CICLE;  Pust++; Pust = Pust >> 1; // Считаем Pust с округлением
-      fl.DisplayOut = 1; //Обновление информации на дисплее
+      fl.DisplayOut = 1;  //Обновление информации на дисплее
     } else if (inputString == "АТ+ON=0") {
       PDMust = 0;
       fl.razg_on = 0;     //выключим режим разгона
       pdm = 0;            //выключим твердотельное реле
       fl.TRelay = 0;      //выключим контактное реле
-      fl.DisplayOut = 1; //Обновление информации на дисплее
+      fl.DisplayOut = 1;  //Обновление информации на дисплее
+      Pust = 0;
     } else if (inputString == "АТ+ON=1") {
       PDMust = CICLE;
       fl.razg_on = 1;
       fl.razg    = 1;
       fl.TRelay  = 1;
-      fl.DisplayOut = 1; //Обновление информации на дисплее
+      fl.DisplayOut = 1;  //Обновление информации на дисплее
+      Pust = Pnom;
     }
     inputString = "";
   }

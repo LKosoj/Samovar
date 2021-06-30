@@ -34,6 +34,13 @@
 #endif
 #endif
 
+#ifdef SAMOVAR_USE_SEM_AVR
+#ifndef SAMOVAR_USE_RMVK
+#define SAMOVAR_USE_RMVK
+#endif
+#endif
+
+
 #ifdef SAMOVAR_USE_RMVK
 #ifndef SAMOVAR_USE_POWER
 #define SAMOVAR_USE_POWER

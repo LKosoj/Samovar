@@ -874,11 +874,15 @@ void IRAM_ATTR set_power_mode(String Mode) {
   current_power_mode = Mode;
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
+#ifdef SAMOVAR_USE_SEM_AVR    
+    set_current_power(0);
+#endif
     Serial2.print("АТ+ON=0\r");
-    //set_current_power(0);
   } else if (Mode == POWER_SPEED_MODE) {
     Serial2.print("АТ+ON=1\r");
-    //set_current_power(5000);
+#ifdef SAMOVAR_USE_SEM_AVR    
+    set_current_power(240);
+#endif
   }
 #else
   Serial2.print("M" + Mode + "\r");
