@@ -29,7 +29,7 @@ void uart_event(void) {
       Serial.print(Pust);
       Serial.print('\r');
     } else if (inputString == "АТ+SS?") {
-      if (fl.razg_on){
+      if (fl.razg_on) {
         Serial.print(1);
       } else if (fl.Ulow || fl.Udown || fl.NotZero) {
         Serial.print(3);
@@ -42,10 +42,10 @@ void uart_event(void) {
     } else if (inputString.substring(0, 8) == "АТ+VS=") {
       uint32_t p;
       //выключаем разгон, на всякий случай
-      fl.razg_on = 0;
-      fl.razg    = 0;
-      fl.TRelay  = 0;      //выключим контактное реле
+      fl.razg_on = 0;     //выключим режим разгона
+      fl.TRelay  = 0;     //выключим контактное реле
       p = inputString.substring(8).toInt();
+      if (p > Pnom) p = Pnom;
       //показывает заданную мощность
       //Pust = p;
       p = p * CICLE / Pnom;
@@ -56,17 +56,16 @@ void uart_event(void) {
     } else if (inputString == "АТ+ON=0") {
       PDMust = 0;
       fl.razg_on = 0;     //выключим режим разгона
-      pdm = 0;            //выключим твердотельное реле
-      fl.TRelay = 0;      //выключим контактное реле
-      fl.DisplayOut = 1;  //Обновление информации на дисплее
+      fl.TRelay  = 0;     //выключим контактное реле
       Pust = 0;
-    } else if (inputString == "АТ+ON=1") {
-      PDMust = CICLE;
-      fl.razg_on = 1;
-      fl.razg    = 1;
-      fl.TRelay  = 1;
       fl.DisplayOut = 1;  //Обновление информации на дисплее
+    } else if (inputString == "АТ+ON=1") {
+      if ((!fl.NotZero) & (!fl.Udown)) {
+        fl.razg_on = 1;
+        fl.razg = 1;
+      }
       Pust = Pnom;
+      fl.DisplayOut = 1;  //Обновление информации на дисплее
     }
     inputString = "";
   }
