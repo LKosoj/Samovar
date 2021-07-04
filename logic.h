@@ -517,7 +517,9 @@ void IRAM_ATTR check_alarm() {
   //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
   if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
+      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt + 2;
       set_current_power(prev_target_power_volt - 0.5);
+      prev_target_power_volt = 0;
     }
     alarm_c_min = 0;
     //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
@@ -526,7 +528,7 @@ void IRAM_ATTR check_alarm() {
   //Если программа предзахлеб и давно не было повышения срабатывания датчика - повышаем напряжение
   if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
-      set_current_power(prev_target_power_volt + 0.5);
+      set_current_power(target_power_volt + 0.5);
     }
     alarm_c_low_min = 0;
   }
@@ -628,6 +630,7 @@ void IRAM_ATTR check_alarm() {
       alarm_c_min = millis() + 1000 * 60 * TIME_C;
       //счетчик для повышения напряжения сбрасываем
       alarm_c_low_min = 0;
+      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
 #endif
     }
 #ifdef SAMOVAR_USE_POWER
@@ -843,7 +846,6 @@ void IRAM_ATTR get_current_power() {
 void IRAM_ATTR set_current_power(float Volt) {
   if (!PowerOn) return;
   vTaskDelay(100);
-  prev_target_power_volt = target_power_volt;
   target_power_volt = Volt;
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
