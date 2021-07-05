@@ -533,8 +533,9 @@ void IRAM_ATTR check_alarm() {
   if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
       set_current_power(target_power_volt + 0.5);
+      alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
     }
-    alarm_c_low_min = 0;
+    else alarm_c_low_min = 0;
   }
 #endif
 #endif
