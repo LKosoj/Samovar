@@ -524,17 +524,17 @@ void IRAM_ATTR check_alarm() {
       if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt + 2;
       set_current_power(prev_target_power_volt - 0.5);
       prev_target_power_volt = 0;
+      //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
+      alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
     }
     alarm_c_min = 0;
-    //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
-    alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
   }
   //Если программа предзахлеб и давно не было повышения срабатывания датчика - повышаем напряжение
   if (program[ProgramNum].WType == "C") {
     if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
       set_current_power(target_power_volt + 0.5);
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
-    } else if (alarm_c_low_min == 0) {
+    } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
     }
   }
