@@ -104,7 +104,7 @@ void IRAM_ATTR withdrawal(void) {
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
 
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
-  if (program[ProgramNum].WType == "B" && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
+  if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
       program_Wait_Type = "(пар)";
@@ -114,7 +114,9 @@ void IRAM_ATTR withdrawal(void) {
         CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
-        set_current_power(target_power_volt - 5);
+        if (program[ProgramNum].WType == "B") {
+          set_current_power(target_power_volt - 5);
+        }
 #endif
         vTaskDelay(50);
       }
@@ -124,7 +126,7 @@ void IRAM_ATTR withdrawal(void) {
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
-  } else if (program[ProgramNum].WType == "B" && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     setautospeed = true;
     t_min = 0;
@@ -134,7 +136,7 @@ void IRAM_ATTR withdrawal(void) {
 
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы
-  if (program[ProgramNum].WType == "B" && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
+  if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
     program_Wait_Type = "(царга)";
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
     if (!PauseOn && !program_Wait) {
@@ -144,7 +146,9 @@ void IRAM_ATTR withdrawal(void) {
         CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
-        set_current_power(target_power_volt - 5);
+        if (program[ProgramNum].WType == "B") {
+          set_current_power(target_power_volt - 5);
+        }
 #endif
         vTaskDelay(50);
       }
@@ -154,7 +158,7 @@ void IRAM_ATTR withdrawal(void) {
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
-  } else if (program[ProgramNum].WType == "B" && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     setautospeed = true;
     t_min = 0;
@@ -485,7 +489,7 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
 }
 
 void IRAM_ATTR set_body_temp() {
-  if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "P") {
+  if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "B" || program[ProgramNum].WType == "P") {
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
@@ -876,13 +880,13 @@ void IRAM_ATTR set_power_mode(String Mode) {
   current_power_mode = Mode;
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
-#ifdef SAMOVAR_USE_SEM_AVR    
+#ifdef SAMOVAR_USE_SEM_AVR
     set_current_power(0);
 #endif
     Serial2.print("АТ+ON=0\r");
   } else if (Mode == POWER_SPEED_MODE) {
     Serial2.print("АТ+ON=1\r");
-#ifdef SAMOVAR_USE_SEM_AVR    
+#ifdef SAMOVAR_USE_SEM_AVR
     set_current_power(240);
 #endif
   }
