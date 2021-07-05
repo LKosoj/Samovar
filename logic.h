@@ -436,7 +436,7 @@ void IRAM_ATTR run_program(byte num) {
         set_body_temp();
       }
     } else if (program[num].WType == "P") {
-      //Сбрасываем Т тела, так как при увеличнии напряжения на регуляторе увеличивается Т в царге.
+      //Сбрасываем Т тела, так как при изменении напряжения на регуляторе изменяется Т в царге.
       SteamSensor.BodyTemp = 0;
       PipeSensor.BodyTemp = 0;
       WaterSensor.BodyTemp = 0;
@@ -541,7 +541,7 @@ void IRAM_ATTR check_alarm() {
 #endif
 
   if (!valve_status) {
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP) open_valve(true);
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true);
     else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
       open_valve(true);
     }
@@ -557,7 +557,7 @@ void IRAM_ATTR check_alarm() {
 #ifdef USE_WATER_PUMP
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
-    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(WaterSensor.avgTemp);
+    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(ACPSensor.avgTemp);
     else
       set_pump_speed_pid(WaterSensor.avgTemp);
   }
@@ -566,7 +566,7 @@ void IRAM_ATTR check_alarm() {
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
-    delay(1000);
+    delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
     set_power(false);
     String s = "";
     if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Steam";
