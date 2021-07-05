@@ -28,6 +28,7 @@ void set_pump_speed(float pumpspeed, bool continue_process);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void set_power(bool On);
+void set_body_temp();
 
 //Получить количество разделителей
 byte getDelimCount(String data, char separator) {
@@ -422,12 +423,9 @@ void IRAM_ATTR run_program(byte num) {
       ActualVolumePerHour = program[num].Speed;
       SteamSensor.BodyTemp = program[num].Temp;
 
-      //Первая программа отбора тела - запоминаем текущие значения температуры и давления
+      //Первая программа отбора тела - запоминаем текущее значение давления
       if ((program[num].WType == "B" || program[num].WType == "C") && SteamSensor.Start_Pressure == 0) {
         SteamSensor.Start_Pressure = bme_pressure;
-        PipeSensor.BodyTemp = PipeSensor.avgTemp;
-        WaterSensor.BodyTemp = WaterSensor.avgTemp;
-        TankSensor.BodyTemp = TankSensor.avgTemp;
       }
 
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
@@ -435,7 +433,7 @@ void IRAM_ATTR run_program(byte num) {
       //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
       //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
       if ((program[num].WType == "B" || program[num].WType == "C") && SteamSensor.BodyTemp == 0) {
-        SteamSensor.BodyTemp = SteamSensor.avgTemp;
+        set_body_temp();
       }
     } else if (program[num].WType == "P") {
       //Сбрасываем Т тела, так как при увеличнии напряжения на регуляторе увеличивается Т в царге.
@@ -489,7 +487,7 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
 }
 
 void IRAM_ATTR set_body_temp() {
-  if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "B" || program[ProgramNum].WType == "P") {
+  if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C" || program[ProgramNum].WType == "P") {
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
