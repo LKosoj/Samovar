@@ -520,7 +520,7 @@ void IRAM_ATTR check_alarm() {
   if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
       if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt + 2;
-      set_current_power(prev_target_power_volt - 0.5);
+      set_current_power(prev_target_power_volt - 1);
       prev_target_power_volt = 0;
       //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
@@ -632,7 +632,7 @@ void IRAM_ATTR check_alarm() {
     } else {
 #ifdef SAMOVAR_USE_POWER
       //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
-      alarm_c_min = millis() + 1000 * 60 * TIME_C;
+      alarm_c_min = millis() + 1000 * 60 * TIME_C / 5;
       //счетчик для повышения напряжения сбрасываем
       alarm_c_low_min = 0;
       if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
@@ -640,7 +640,7 @@ void IRAM_ATTR check_alarm() {
     }
 #ifdef SAMOVAR_USE_POWER
     Msg = Msg + " Voltage down from " + (String)target_power_volt;
-    set_current_power(target_power_volt - 2);
+    set_current_power(target_power_volt - 1);
 #endif
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
