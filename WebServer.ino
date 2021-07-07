@@ -500,6 +500,8 @@ void web_command(AsyncWebServerRequest *request) {
       sam_command_sync = SAMOVAR_SETBODYTEMP;
     } else if (request->hasArg("reset")) {
       sam_command_sync = SAMOVAR_RESET;
+    } else if (request->hasArg("reboot")) {
+      ESP.restart();
     } else if (request->hasArg("resetwifi")) {
       menu_reset_wifi();
     } else if (request->hasArg("mixer")) {
