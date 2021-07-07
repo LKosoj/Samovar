@@ -285,7 +285,7 @@ String get_sys_info() {
 #endif
   }
   vTaskDelay(5);
-  result_st += "; ESP32 t = " + (String)((temprature_sens_read() - 32) / 1.8) + "; BME t = " + (String)bme_temp;
+  result_st += "; ESP32 t = " + (String)((temprature_sens_read() - 32) / 1.8) + "; BME t = " + (String)bme_temp + "; RSSI = " +  (String)WiFi.RSSI();;
   vTaskDelay(5);
   return result_st;
 }
