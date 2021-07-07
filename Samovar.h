@@ -214,6 +214,16 @@ uint8_t temprature_sens_read();
 #define POWER_SLEEP_MODE "2"
 //**************************************************************************************************************
 
+#ifndef SAMOVAR_USE_SEM_AVR
+#define PWR_FACTOR 20
+#define PWR_MSG "Power"
+#define PWR_TYPE "P"
+#else
+#define PWR_FACTOR 1
+#define PWR_MSG "Voltage"
+#define PWR_TYPE "V"
+#endif
+
 #include "user_config_override.h"
 
 void writeString(String Str, byte num);
