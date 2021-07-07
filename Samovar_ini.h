@@ -46,7 +46,7 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #define SAMOVAR_USE_BLYNK                    //использовать Blynk в проекте
 #define BLYNK_SAMOVAR_TOOL "samovar-tool.ru" //использовать бесплатный сервер Blynk samovar-tool.ru  вместо облачного Blynk
 
-#define SAMOVAR_USE_POWER                    //использовать регулятор напряжения в проекте
+#define SAMOVAR_USE_POWER                    //использовать регулятор напряжения в проекте https://alcodistillers.ru/forum/viewtopic.php?id=1524
 //#define SAMOVAR_USE_RMVK                     //использовать в проекте регулятор напряжения РМВК с управлением по UART
 //#define SAMOVAR_USE_SEM_AVR                  //использовать в проекте регулятор мощности https://alcodistillers.ru/forum/viewtopic.php?id=1549 с управлением по UART
 
