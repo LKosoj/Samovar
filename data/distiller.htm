@@ -101,6 +101,12 @@ if (myObj.Msg){
   }
 }
 
+if (myObj.LogMsg){
+  if (myObj.LogMsg != "") {
+    console.log(myObj.crnt_tm + "; " + myObj.LogMsg);
+  }
+}
+
 if (!myObj.current_power_volt){
   document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
   document.getElementById('VoltH2').style = 'visibility: hidden;position: fixed;';
