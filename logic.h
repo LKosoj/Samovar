@@ -519,8 +519,8 @@ void IRAM_ATTR check_alarm() {
   //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
   if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
-      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt + 2;
-      set_current_power(prev_target_power_volt - 1);
+      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
+      set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
       prev_target_power_volt = 0;
       //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
@@ -530,7 +530,7 @@ void IRAM_ATTR check_alarm() {
   //Если программа предзахлеб и давно не было повышения срабатывания датчика - повышаем напряжение
   if (program[ProgramNum].WType == "C") {
     if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
-      set_current_power(target_power_volt + 0.5);
+      set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
     } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
@@ -610,7 +610,7 @@ void IRAM_ATTR check_alarm() {
 
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
-      Msg = "Water temp is critical! Water error. Voltage down from " + (String)target_power_volt;
+      Msg = "Water temp is critical! Water error. " + (String)PWR_MSG + " down from " + (String)target_power_volt;
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
       Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
@@ -639,8 +639,8 @@ void IRAM_ATTR check_alarm() {
 #endif
     }
 #ifdef SAMOVAR_USE_POWER
-    Msg = Msg + " Voltage down from " + (String)target_power_volt;
-    set_current_power(target_power_volt - 1);
+    Msg = Msg + " " + (String)PWR_MSG + " down from " + (String)target_power_volt;
+    set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
