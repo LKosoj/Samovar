@@ -316,11 +316,11 @@ void load_profile() {
 String get_prf_name() {
   String fl;
   if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
-    fl = "beer.prf";
+    fl = "/beer.prf";
   } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
-    fl = "dist.prf";
+    fl = "/dist.prf";
   } else {
-    fl = "rectificat.prf";
+    fl = "/rectificat.prf";
   }
   return fl;
 }
