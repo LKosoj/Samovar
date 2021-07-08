@@ -191,10 +191,12 @@ void taskButton(void *pvParameters) {
   btnSemaphore = xSemaphoreCreateBinary();
   // Сразу "берем" семафор чтобы не было первого ложного срабатывания кнопки
   xSemaphoreTake(btnSemaphore, 100);
+#ifdef BTN_PIN
   btn.setType(LOW_PULL);
   btn.setTickMode(MANUAL);
   btn.setDebounce(30);
   attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+#endif
 
   //  //вешаем прерывание на изменения по ногам энкодера
   attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
@@ -204,13 +206,17 @@ void taskButton(void *pvParameters) {
   while (true) {
     xSemaphoreTake(btnSemaphore, portMAX_DELAY);
     // Отключаем прерывание для устранения повторного срабатывания прерывания во время обработки
+#ifdef BTN_PIN
     detachInterrupt(BTN_PIN);
+#endif
     detachInterrupt(ENC_CLK);
     detachInterrupt(ENC_DT);
     detachInterrupt(ENC_SW);
-    btn.tick();
     encoder.tick();
+#ifdef BTN_PIN
+    btn.tick();
     attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+#endif
     attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
     attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
     attachInterrupt(ENC_SW, isrBTN_TICK, CHANGE);
@@ -525,9 +531,15 @@ void setup() {
 
 
   encoder.tick();  // отработка нажатия
+#ifdef BTN_PIN
   btn.tick();      // отработка нажатия
+#endif
   //Если при старте нажата кнопка энкодера или кнопка - сохраненные параметры сбрасываются на параметры по умолчанию
-  if (encoder.isPress() || btn.isPress()) {
+  if (encoder.isPress()
+#ifdef BTN_PIN
+      || btn.isPress()
+#endif
+     ) {
     SamSetup.flag = 255;
   }
 
@@ -758,6 +770,7 @@ void loop() {
 
   ws.cleanupClients();
 
+#ifdef BTN_PIN
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
   btn.tick();
   if (btn.isPress()) {
@@ -795,6 +808,7 @@ void loop() {
         run_beer_program(ProgramNum + 1);
     }
   }
+#endif
 
   if (sam_command_sync != SAMOVAR_NONE) {
     switch (sam_command_sync) {
