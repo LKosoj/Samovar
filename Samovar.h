@@ -59,7 +59,7 @@ uint8_t temprature_sens_read();
 
 uint8_t temprature_sens_read();
 
-#define __SAMOVAR_NOT_USE_WDT
+//#define __SAMOVAR_NOT_USE_WDT
 
 //--------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------
@@ -150,6 +150,7 @@ uint8_t temprature_sens_read();
 #ifndef BTN_PIN
 #define BTN_PIN 39
 #endif
+//#undef BTN_PIN
 //**************************************************************************************************************
 
 //**************************************************************************************************************
@@ -292,8 +293,9 @@ File fileToAppend;
 Servo servo;  // create servo object to control a servo
 #endif
 
+#ifdef BTN_PIN
 GButton btn(BTN_PIN);
-//GyverRelay regulator(REVERSE);
+#endif
 
 double Input, Output, Setpoint;
 double Kp, Ki, Kd;
