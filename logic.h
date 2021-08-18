@@ -116,7 +116,7 @@ void IRAM_ATTR withdrawal(void) {
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
         if (program[ProgramNum].WType == "B") {
-          set_current_power(target_power_volt - 5);
+          set_current_power(target_power_volt - 5 * PWR_FACTOR);
         }
 #endif
         vTaskDelay(50);
@@ -148,7 +148,7 @@ void IRAM_ATTR withdrawal(void) {
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
         if (program[ProgramNum].WType == "B") {
-          set_current_power(target_power_volt - 5);
+          set_current_power(target_power_volt - 5 * PWR_FACTOR);
         }
 #endif
         vTaskDelay(50);
@@ -616,7 +616,7 @@ void IRAM_ATTR check_alarm() {
       Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
 #endif
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
-      set_current_power(target_power_volt - 5);
+      set_current_power(target_power_volt - 5 * PWR_FACTOR);
     }
 #endif
     alarm_t_min = millis() + 1000 * 30;
@@ -887,7 +887,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
     Serial2.print("АТ+ON=0\r");
   } else if (Mode == POWER_SPEED_MODE) {
     Serial2.print("АТ+ON=1\r");
-#ifdef SAMOVAR_USE_SEM_AVR
+#ifndef SAMOVAR_USE_SEM_AVR
     set_current_power(240);
 #endif
   }

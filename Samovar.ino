@@ -601,7 +601,7 @@ void setup() {
   //Подключаемся к WI-FI
   AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
   AsyncWiFiManager wifiManager(&server, &dns);
-  wifiManager.setConfigPortalTimeout(120);
+  wifiManager.setConfigPortalTimeout(180);
   wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.setAPCallback(configModeCallback);
   wifiManager.setDebugOutput(false);

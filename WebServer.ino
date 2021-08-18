@@ -42,7 +42,10 @@ void WebServerInit(void) {
   FS_init();  // Включаем работу с файловой системой
 
   server.serveStatic("/style.css", SPIFFS, "/style.css");
+  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
+  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
+  server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
@@ -108,6 +111,8 @@ void WebServerInit(void) {
 
 String indexKeyProcessor(const String &var) {
   if (var == "SteamColor") return (String)SamSetup.SteamColor;
+  else if (var == "v") 
+    return SAMOVAR_VERSION;
   else if (var == "PipeColor")
     return (String)SamSetup.PipeColor;
   else if (var == "WaterColor")

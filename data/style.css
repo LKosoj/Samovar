@@ -210,3 +210,57 @@ input[type="radio"]:checked + label:after {
 .tooltip:hover .tooltiptext {
   visibility: visible;
 }
+
+.prgline select{
+font-size: 18px !important;
+padding: 4 !important;
+}
+
+.prgline input{
+font-size: 18px !important;
+padding: 4 !important;
+}
+
+.prgline input, img, select{
+margin-left: 20px !important;
+border-radius: 0px;
+}
+
+.prgline input:enabled, img, select{
+cursor: pointer;
+}
+
+.prgline select{
+-webkit-appearance: none;
+-webkit-border-radius: 0px;
+background-image: url("data:image/svg+xml;utf8,<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='24' height='24' viewBox='0 0 24 24'><path fill='%23444' d='M7.406 7.828l4.594 4.594 4.594-4.594 1.406 1.406-6 6-6-6z'></path></svg>");
+background-position: 100% 50%;
+background-repeat: no-repeat;
+min-width:80px;
+}
+
+.prgline input {
+border-style: solid !important;
+border-width: 1px !important;
+}
+
+.prgline{
+font-size: 18px !important;
+margin-bottom: 4px !important;
+}
+
+.prgline label {
+margin-left: 15px !important;
+font-size: 18px;
+}
+
+.prglabel {
+width:90px !important;
+}
+
+.pointer {
+cursor: pointer;
+margin-left: auto;
+margin-right: auto;
+width: 400;
+}

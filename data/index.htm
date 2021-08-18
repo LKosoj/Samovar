@@ -7,6 +7,9 @@
 <link rel="stylesheet" href="/style.css">
 
 <script>
+
+var _lnIdx = 0;
+
 function openTab(evt, tabName) {
     var i, tabcontent, tablinks;
     tabcontent = document.getElementsByClassName("tabcontent");
@@ -39,11 +42,27 @@ function check_program(str){
   return ret;
 }
 
-function set_program(){
-if (!check_program(document.getElementById('WProgram').value)){
-  alert( "Program error!" );
-  return;
+function calc_program(){
+  if (!check_program(document.getElementById('WProgram').value)){
+    alert( "Program error!" );
+    return;
+  }
+  var t = document.getElementsByClassName("prgline");
+  var k, s;
+  s = "";
+  for (i=1;i<t.length;i++){
+    k = t[i].childNodes;
+    for (j=0;j<6;j++){
+      s = s + k[j].value + ";";
+    }
+    s = s.slice(0, -1);
+    s = s + "\n";
+  }
+  document.getElementById('WProgram').value = s;
 }
+
+function set_program(){
+calc_program();
 var server = '/program';
 request = new XMLHttpRequest();
 request.onreadystatechange = function() {
@@ -111,6 +130,8 @@ return 0;
 
 setInterval(loadDoc,2000);
 setInterval(loadHeap,19000);
+
+//setInterval(addLine,2000);
 
 function loadHeap() {
 var xhttp = new XMLHttpRequest();
@@ -226,6 +247,129 @@ setTimeout(function(){
 	document.getElementById('message').style.display = 'none';
 }, 20000);
 }
+
+function removeLine(ln){
+  var prgline = document.getElementById(ln);
+  prgline.remove();
+  calc_program();
+}
+
+function addLine(obj, s){
+  //var s = "B;100;0.1;5;0.00;120";
+  var arr = s.split(";");
+  
+  var dl = document.createElement("div");
+  dl.className = "prgline";
+  dl.id = "prgln" + _lnIdx;
+  
+  dl.insertAdjacentHTML("afterbegin", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
+  
+//  var ptype = dl.getElementsByName("ptype");
+//  ptype[0].value = arr[0];
+  
+  var pvolume = document.createElement("input");
+  pvolume.type = "text";
+  pvolume.name = "pvolume" + _lnIdx;
+  pvolume.value = arr[1];
+  dl.appendChild(pvolume);
+  
+  var pspeed = document.createElement("input");
+  pspeed.type = "text";
+  pspeed.name = "pspeed" + _lnIdx;
+  pspeed.value = arr[2];
+  dl.appendChild(pspeed);
+  
+  pspeed.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
+  
+  var ptemp = document.createElement("input");
+  ptemp.type = "text";
+  ptemp.name = "ptemp" + _lnIdx;
+  ptemp.value = arr[4];
+  dl.appendChild(ptemp);
+
+  var pvolt = document.createElement("input");
+  pvolt.type = "text";
+  pvolt.name = "pvolt" + _lnIdx;
+  pvolt.value = arr[5];
+  dl.appendChild(pvolt);
+  
+  var plus = document.createElement("img");
+  plus.src = '/plus.png';
+  plus.setAttribute("width", "20");
+  plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','H;0;0;0;0;0')");
+  dl.appendChild(plus);
+  
+  var minus = document.createElement("img");
+  minus.src = '/minus.png';
+  minus.setAttribute("width", "20");
+  minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
+  dl.appendChild(minus);
+
+  if (!obj){
+    var prg = document.getElementById("prg");
+    prg.appendChild(dl);
+  } else {
+    prg = document.getElementById(obj);
+    prg.after(dl);
+  }
+
+  var p = "ptype" + _lnIdx;
+  var ptype = document.getElementById(p);
+  ptype.value = arr[0];
+
+  var pnum = document.getElementById("pnum" + _lnIdx);
+  pnum.value = arr[3];
+  
+  set_bgcolor(_lnIdx);
+  
+  _lnIdx++;
+  calc_program();
+}
+
+function getProgram(){
+  if (!check_program(document.getElementById('WProgram').value)){
+    alert( "Program error!" );
+    return;
+  }  
+  var e = document.getElementById("prg");
+  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Объем<span class="tooltiptext">Объем в мл</span></label><label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label><label class="tooltip">Емкость<span class="tooltiptext">Номер емкости (нумерация начинается от 0)</span></label>&nbsp;&nbsp;<label class="tooltip">Темп</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Напр</label></div>');
+  var p = document.getElementById("WProgram");
+  var varr = p.value.split("\n");
+  for (z=0;z<varr.length;z++){
+    if (varr[z] != "") addLine(false, varr[z]);
+  }
+}
+
+function set_bgcolor(obj){
+  var l = document.getElementById("prgln" + obj);
+  var t = document.getElementById("ptype" + obj).value;
+  if (t == "H"){color = "background-color: #90bfff;";}
+  else if (t == "B"){color = "background-color: #E6FFFE;";}
+  else if (t == "C"){color = "background-color: #80FFFA;";}
+  else if (t == "P"){color = "background-color: #FF7100;";}
+  else if (t == "T"){color = "background-color: #FFD480;";}
+  l.setAttribute("style",color);
+  var e = l.childNodes;
+  for(q=0;q<e.length;q++){
+    e[q].setAttribute("style",color);
+  }
+}
+
+window.onload = function() {
+  getProgram();
+  document.getElementById("WProgram").addEventListener("change", function(event) {
+    if (!check_program(document.getElementById('WProgram').value)){
+      alert( "Program error!" );
+      return;
+    }  
+    var element = document.getElementById("prg");
+    while (element.firstChild) {
+      element.removeChild(element.firstChild);
+    }
+    getProgram();
+  });
+};
+
 </script>
 </head>
 
@@ -290,7 +434,9 @@ Samovar v. <span id='version'></span>
 </div>
 </div>
 <div id="Prog" class="tabcontent">
-<div class="text">Программа отбора:</div> <textarea cols="40" rows="15" id='WProgram' name='WProgram'>%WProgram%</textarea>
+<div class="text">Программа отбора:</div>
+<div class="prg" id="prg"></div>
+<textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
 <div class='dvcs'>
 <p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для отбора;Температура отбора;Напряжение отбора</span></p>
 <p><span>Пример программы отбора (H - головы (Heads), B - тело (Body), P - пауза (Pause), T - хвост (Tail).</span></p>
@@ -301,6 +447,7 @@ Samovar v. <span id='version'></span>
 </div>
 <div style="margin: 0 auto; width: 200px;">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
+<input id='return' type='button' name='program' value='Расчитать программу' onclick='javascript:location.href="/program.htm"'>
 </div>
 </div>
 <div id="Other" class="tabcontent">
