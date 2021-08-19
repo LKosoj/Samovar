@@ -249,6 +249,8 @@ setTimeout(function(){
 }
 
 function removeLine(ln){
+  var prg = document.getElementById("prg").childNodes.length;
+  if (prg < 3) return;
   var prgline = document.getElementById(ln);
   prgline.remove();
   calc_program();
@@ -271,26 +273,30 @@ function addLine(obj, s){
   pvolume.type = "text";
   pvolume.name = "pvolume" + _lnIdx;
   pvolume.value = arr[1];
+  pvolume.setAttribute("onchange", "calc_program();");
   dl.appendChild(pvolume);
   
   var pspeed = document.createElement("input");
   pspeed.type = "text";
   pspeed.name = "pspeed" + _lnIdx;
   pspeed.value = arr[2];
+  pspeed.setAttribute("onchange", "calc_program();");
   dl.appendChild(pspeed);
   
-  pspeed.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
+  pspeed.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
   
   var ptemp = document.createElement("input");
   ptemp.type = "text";
   ptemp.name = "ptemp" + _lnIdx;
   ptemp.value = arr[4];
+  ptemp.setAttribute("onchange", "calc_program();");
   dl.appendChild(ptemp);
 
   var pvolt = document.createElement("input");
   pvolt.type = "text";
   pvolt.name = "pvolt" + _lnIdx;
   pvolt.value = arr[5];
+  pvolt.setAttribute("onchange", "calc_program();");
   dl.appendChild(pvolt);
   
   var plus = document.createElement("img");
