@@ -65,7 +65,7 @@ p{margin: 0 !important;}
  border-radius: 0;
  background: #f1f1f1;
  font-size: 18px;
- margin: 0px;
+ margin: 0;
  padding: 15px;
  outline: none;
  cursor: pointer;
@@ -95,7 +95,7 @@ p{margin: 0 !important;}
 .tabcontent input[type='button']{
     margin-bottom: 10px;
     margin-left: 0;
-    margin-top: 0px;
+    margin-top: 0;
 }
 
 input[type="checkbox"]:checked, 
@@ -123,8 +123,8 @@ input[type="radio"]:checked + label:before,
 input[type="radio"]:not(:checked) + label:before {
     content: "";
     position: absolute;
-    left: 0px;
-    top: 0px;
+    left: 0;
+    top: 0;
     width: 18px;
     height: 18px;
     border: 1px solid #dddddd;
@@ -223,7 +223,7 @@ padding: 4 !important;
 
 .prgline input, img, select{
 margin-left: 20px !important;
-border-radius: 0px;
+border-radius: 0;
 }
 
 .prgline input:enabled, img, select{
@@ -232,7 +232,7 @@ cursor: pointer;
 
 .prgline select{
 -webkit-appearance: none;
--webkit-border-radius: 0px;
+-webkit-border-radius: 0;
 background-image: url("data:image/svg+xml;utf8,<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='24' height='24' viewBox='0 0 24 24'><path fill='%23444' d='M7.406 7.828l4.594 4.594 4.594-4.594 1.406 1.406-6 6-6-6z'></path></svg>");
 background-position: 100% 50%;
 background-repeat: no-repeat;
