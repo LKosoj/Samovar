@@ -7,6 +7,38 @@
 <link rel="stylesheet" href="/style.css">
 
 <script>
+
+var _lnIdx = 0;
+
+function loadFile(e) {
+	var file = e;
+	var reader = new FileReader();
+	reader.onload = function () {
+		document.getElementById('WProgram1').value = reader.result;
+		glcalcnum = false;
+		calc_program();
+	};
+	reader.readAsText(file, "UTF-8");
+}
+
+function SaveProgramToFile() {
+  var filename, text;
+  filename = 'programbackup.txt';
+//  text = getJson(document.getElementById('setupform'));
+  text = document.getElementById('WProgram').value;
+
+  var pom = document.createElement('a');
+  pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+  pom.setAttribute('download', filename);
+
+  pom.style.display = 'none';
+  document.body.appendChild(pom);
+
+  pom.click();
+
+  document.body.removeChild(pom);
+}
+
 function openTab(evt, tabName) {
     var i, tabcontent, tablinks;
     tabcontent = document.getElementsByClassName("tabcontent");
@@ -188,6 +220,136 @@ setTimeout(function(){
 	document.getElementById('message').style.display = 'none';
 }, 20000);
 }
+
+function calc_program(){
+  if (!check_program(document.getElementById('WProgram').value)){
+    alert( "Program error!" );
+    return;
+  }
+  var t = document.getElementsByClassName("prgline");
+  var k, s;
+  s = "";
+  for (i=1;i<t.length;i++){
+    k = t[i].childNodes;
+    for (j=0;j<3;j++){
+      s = s + k[j].value + ";";
+    }
+    s = s.slice(0, -1);
+    s = s + "\n";
+  }
+  document.getElementById('WProgram').value = s;
+}
+
+function removeLine(ln){
+  var prg = document.getElementById("prg").childNodes.length;
+  if (prg < 3) return;
+  var prgline = document.getElementById(ln);
+  prgline.remove();
+  calc_program();
+}
+
+function addLine(obj, s){
+  //var s = "B;100;0.1;5;0.00;120";
+  var arr = s.split(";");
+  
+  var dl = document.createElement("div");
+  dl.className = "prgline";
+  dl.id = "prgln" + _lnIdx;
+  
+  dl.insertAdjacentHTML("afterbegin", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option></select>');
+  
+//  var ptype = dl.getElementsByName("ptype");
+//  ptype[0].value = arr[0];
+  
+  var ptemp = document.createElement("input");
+  ptemp.type = "text";
+  ptemp.name = "ptemp" + _lnIdx;
+  ptemp.value = arr[1];
+  ptemp.setAttribute("onchange", "calc_program();");
+  dl.appendChild(ptemp);
+
+  var ptime = document.createElement("input");
+  ptime.type = "text";
+  ptime.name = "ptime" + _lnIdx;
+  ptime.value = arr[2];
+  ptime.setAttribute("onchange", "calc_program();");
+  dl.appendChild(ptime);
+  
+  var plus = document.createElement("img");
+  plus.src = '/plus.png';
+  plus.setAttribute("width", "20");
+  plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','W;0;0')");
+  dl.appendChild(plus);
+  
+  var minus = document.createElement("img");
+  minus.src = '/minus.png';
+  minus.setAttribute("width", "20");
+  minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
+  dl.appendChild(minus);
+
+  if (!obj){
+    var prg = document.getElementById("prg");
+    prg.appendChild(dl);
+  } else {
+    prg = document.getElementById(obj);
+    prg.after(dl);
+  }
+
+  var p = "ptype" + _lnIdx;
+  var ptype = document.getElementById(p);
+  ptype.value = arr[0];
+
+  set_bgcolor(_lnIdx);
+  
+  _lnIdx++;
+  calc_program();
+}
+
+function getProgram(){
+  if (!check_program(document.getElementById('WProgram').value)){
+    alert( "Program error!" );
+    return;
+  }  
+  var e = document.getElementById("prg");
+  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label></div>');
+  var p = document.getElementById("WProgram");
+  var varr = p.value.split("\n");
+  for (z=0;z<varr.length;z++){
+    if (varr[z] != "") addLine(false, varr[z]);
+  }
+}
+
+function set_bgcolor(obj){
+  var l = document.getElementById("prgln" + obj);
+  var t = document.getElementById("ptype" + obj).value;
+  if (t == "M"){color = "background-color: #FFFF00;";}
+  else if (t == "B"){color = "background-color: #FF6347;";}
+  else if (t == "C"){color = "background-color: #00BFFF;";}
+  else if (t == "P"){color = "background-color: #FFA500;";}
+  else if (t == "W"){color = "background-color: #98FB98;";}
+  l.setAttribute("style",color);
+  var e = l.childNodes;
+  for(q=0;q<e.length;q++){
+    e[q].setAttribute("style",color);
+  }
+  calc_program();
+}
+
+window.onload = function() {
+  getProgram();
+  document.getElementById("WProgram").addEventListener("change", function(event) {
+    if (!check_program(document.getElementById('WProgram').value)){
+      alert( "Program error!" );
+      return;
+    }  
+    var element = document.getElementById("prg");
+    while (element.firstChild) {
+      element.removeChild(element.firstChild);
+    }
+    getProgram();
+  });
+};
+
 </script>
 </head>
 
@@ -234,7 +396,9 @@ Samovar v. <span id='version'></span>
 </div>
 </div>
 <div id="Prog" class="tabcontent">
-<div class="text">Программа затирки:</div> <textarea cols="40" rows="15" id='WProgram' name='WProgram'>%WProgram%</textarea>
+<div class="text">Программа затирки:</div>
+<div class="prg" id="prg"></div>
+<textarea cols="40" rows="7" id='WProgram' name='WProgram' style="visibility: hidden;position: fixed;">%WProgram%</textarea>
 <div class='dvcs'>
 <p><span>Параметры программы затирания: Тип программы;Температура;Время</span></p>
 <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре), B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры), W - wait (режим ожидания, ничего не делает до смены строки программы).</span></p>
@@ -246,6 +410,12 @@ Samovar v. <span id='version'></span>
 <p><span>C;30.00;0</span></p>
 </div>
 <div style="margin: 0 auto; width: 200px;">
+<input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();'>
+</div>
+<div style="margin: 0 auto; width: 200px;">
+Загрузить программу <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
+</div>
+<div style="margin: 0 auto; margin-top: 20px !important; width: 200px;">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
 </div>
 </div>
