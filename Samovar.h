@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "3.00"
+#define SAMOVAR_VERSION "3.01"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -215,7 +215,7 @@ uint8_t temprature_sens_read();
 #define POWER_SLEEP_MODE "2"
 //**************************************************************************************************************
 
-#ifndef SAMOVAR_USE_SEM_AVR
+#ifdef SAMOVAR_USE_SEM_AVR
 #define PWR_FACTOR 20
 #define PWR_MSG "Power"
 #define PWR_TYPE "P"

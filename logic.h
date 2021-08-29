@@ -148,7 +148,7 @@ void IRAM_ATTR withdrawal(void) {
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
         if (program[ProgramNum].WType == "B") {
-          set_current_power(target_power_volt - 5 * PWR_FACTOR);
+          set_current_power(target_power_volt - 3 * PWR_FACTOR);
         }
 #endif
         vTaskDelay(50);
@@ -382,6 +382,8 @@ void IRAM_ATTR run_program(byte num) {
   t_min = 0;
   program_Pause = false;
   program_Wait = false;
+  PauseOn = false;
+  pause_withdrawal(false);
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
@@ -422,11 +424,6 @@ void IRAM_ATTR run_program(byte num) {
       startService();
       ActualVolumePerHour = program[num].Speed;
       SteamSensor.BodyTemp = program[num].Temp;
-
-      //Первая программа отбора тела - запоминаем текущее значение давления
-      if ((program[num].WType == "B" || program[num].WType == "C") && SteamSensor.Start_Pressure == 0) {
-        SteamSensor.Start_Pressure = bme_pressure;
-      }
 
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Считаем, что колонна стабильна
@@ -488,6 +485,7 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
 
 void IRAM_ATTR set_body_temp() {
   if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C" || program[ProgramNum].WType == "P") {
+    SteamSensor.Start_Pressure = bme_pressure;
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;

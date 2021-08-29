@@ -154,6 +154,7 @@ void stopService(void) {
 }
 
 void startService(void) {
+//  timerAlarmDisable(timer);
   timerAlarmWrite(timer, stepper.stepTime, true);
   timerAlarmEnable(timer);
 }
