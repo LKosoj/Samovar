@@ -16,15 +16,31 @@ body {
 
 #file-input,input[type='button'],input[type='submit']{width:200;height:34px;border-radius:4px;margin:10 10 0 10;font-size:15px}
 input{background:#f1f1f1;border:0;padding:0 15px;}
+
 input[type='text']{background:#f1f1f1;border:0;padding:10px;width:66;margin:0;font-size: medium;}
+
 #file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}
+
 body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
+
 #bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
-form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
+
+form {
+  background: #fff;
+  max-width: 800px;
+  margin: 25px auto;
+  padding: 30px;
+  border-radius: 5px;
+  text-align: left
+}
+
 h1{text-align:center}
+
 p{margin: 0 !important;}
+
 .btn{background:#3498db;color:#fff;cursor:pointer}
-.dvcs{padding: 10px;margin: 10px;}
+
+.dvcs{padding: 10;margin: 10;}
 
 .message-box{
     background: red;
@@ -42,6 +58,7 @@ p{margin: 0 !important;}
 .column{
   width:42%;
 }
+
 .text{
     font-size: 1.5em;
     font-weight: bold;
@@ -49,40 +66,158 @@ p{margin: 0 !important;}
     margin: 10 15 10 15;
 }
 
-.container{overflow:hidden;width:100%}
+.container{
+  display:flex;
+  /* overflow:hidden; */
+  width:100%
+}
+
+.container_row{
+  display:flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  /* overflow:hidden; */
+  width:100%;
+}
+
+.container_column{
+  display:flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  /* overflow:hidden; */
+  width:100%;
+}
 
 /* Style the tab */
 .tab {
-    overflow: hidden;
-    border: 1px solid #ccc;
-    background-color: #f1f1f1;
+  width: 100%;
+  height: 4em;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: flex-end;
+  background-color: #f1f1f1;
+  padding-bottom: 0em;
+  /* overflow: hidden; */
+  border: 1px solid #ccc;
 }
 
+
 /* Style the buttons inside the tab */
+
 .tab input {
- border: #f1f1f1;
- border-width: 0 10px;
- border-radius: 0;
- background: #f1f1f1;
- font-size: 18px;
- margin: 0;
- padding: 15px;
- outline: none;
- cursor: pointer;
- transition: 0.3s;
- width: 24.6%;
- height: 45px;
+  display: inline-flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  top: 1px;
+  border: 1px solid #a7a7a7;
+  border-radius: 0;
+  background-color: #DDDDDD;
+  font-size: 1.5em;
+  min-height: 2em;
+  font-weight: bold;
+  padding: 0.3em;
+  padding-left: 0.8em;
+  padding-right: 0.8em;
+  margin-left: 0.7em;
+  margin-right: 0.7em;
+  
+  /* box-shadow: 5px 5px 8px 0 rgba(0, 0, 0, 0.2), 5px 5px 15px 0 rgba(0, 0, 0, 0.19); */
 }
+
 
 /* Change background color of buttons on hover */
 .tab input:hover {
-    background-color: #ddd;
+  position: relative;
+  top: 1px;
+  cursor: pointer;
+  background-color: #ffffff;
+  box-shadow: 4px 4px 6px 0 rgba(0, 0, 0, 0.2),
+  4px 4px 13px 0 rgba(0, 0, 0, 0.19);
+  top: 1px;
 }
+
+
 
 /* Create an active/current tablink class */
 .tab input.active {
-    background-color: #ccc;
+  position: relative;
+  top: 1px;
+  background-color: #fff;
+  border-bottom: 0;
 }
+
+.button {
+  display: inline-flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  background-color: #3498DB;
+  font-size: 1em;
+  color: #fff;
+  min-height: 1.6em;
+  font-weight: normal;
+  padding: 0.5em;
+  padding-left: 0.8em;
+  padding-right: 0.8em;
+  margin-left: 0.7em;
+  margin-right: 0.7em;
+  border-radius: 0.4em;
+  border: 0.1em solid #e1e1e1;
+  box-shadow: 5px 5px 8px 0 rgba(0, 0, 0, 0.2), 5px 5px 15px 0 rgba(0, 0, 0, 0.19);
+  /*box-shadow: 0.4em 0.4em 5px 0 rgba(0, 0, 0, 0.2);*/
+}
+
+.button_mob {
+  display: inline-flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  background-color: #3498DB;
+  min-height: 1em;
+  font-size: 1em;
+  font-weight: normal;
+  padding: 0.3em;
+  /* padding: 0em; */
+  padding-left: 0.4em;
+  padding-right: 0.4em;
+  margin-left: 0.5em;
+  margin-right: 0.5em;
+  border-radius: 0.3em;
+  border: 1px solid #a7a7a7;
+  box-shadow: 5px 5px 8px 0 rgba(0, 0, 0, 0.2), 5px 5px 15px 0 rgba(0, 0, 0, 0.19);
+  /*box-shadow: 0.4em 0.4em 5px 0 rgba(0, 0, 0, 0.2);*/
+}
+
+
+.button:hover {
+  position: relative;
+  cursor: pointer;
+  background-color: #3498DB97;
+  color: #000;
+  box-shadow: 4px 4px 6px 0 rgba(0, 0, 0, 0.2), 4px 4px 13px 0 rgba(0, 0, 0, 0.19);
+  top: 1px;
+}
+
+.button:active {
+  position: relative;
+  cursor: progress;
+  color: #000;
+  top: 0.3em;
+  box-shadow: 2px 2px 5px 0 rgba(0, 0, 0, 0.2), 2px 2px 11px 0 rgba(0, 0, 0, 0.19);
+}
+
+.button_img {
+  /*position: relative;*/
+  float: left;
+  align-self: center;
+  margin-right: 0.5em;
+}
+
 
 /* Style the tab content */
 .tabcontent {
@@ -263,4 +398,12 @@ cursor: pointer;
 margin-left: auto;
 margin-right: auto;
 width: 400;
+}
+
+
+@media only screen and (max-width: 520px) {
+  #tab {
+    flex-direction: column;
+    border: 1px solid red;
+  }
 }

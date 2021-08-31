@@ -439,14 +439,14 @@ Samovar v. <span id='version'>%v%</span>
 <textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20;">%WProgram%</textarea>
 </div>
 <div style="margin: 0 auto; width: 200px;">
-<input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();'>
+<input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();' class="button">
 </div>
 <div style="margin: 0 auto; width: 200px;">
-Загрузить программу <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
+Загрузить программу <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button"/>
 </div>
 <div style="margin: 0 auto; width: 450px;">
-<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
-<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
+<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
+<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"' class="button">
 </div>
 </form>
 </body>

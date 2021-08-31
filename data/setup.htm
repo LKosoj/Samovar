@@ -217,7 +217,7 @@ function SaveFormToFile(form) {
 <div id="Pump" class="tabcontent">
 <h2>Количество шагов шагового двигателя: <input name='StepperStepMl' type='text' value='%StepperStepMl%'> /мл.</h2>
 <div style="margin: 0 auto; width: 200px;">
-<input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"'>
+<input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"' class="button">
 </div>
 </div>
 
@@ -237,7 +237,7 @@ function SaveFormToFile(form) {
 <h2>Часовой пояс: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
 <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
 <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
-<input id='resetwifi' type='submit' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");'>
+<input id='resetwifi' type='submit' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");' class="button">
 <h2><p>Цвета для температур:</p>
 <div>
     <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">
@@ -292,22 +292,22 @@ function SaveFormToFile(form) {
 </div>
 </h2>
 <div style="margin: 0 auto; width: 200px;">
-<input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);'>
+<input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);' class="button">
 <div>
-Восстановить настройки <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
+Восстановить настройки <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button"/>
 </div>
 </div>
 <div>
 <hr>
 </div>
 <div style="margin: 0 auto; width: 200px;">
-<input id='reboot' type='button' name='reboot' value='Перегрузить Самовар' onclick='sendbutton("reboot");'>
+<input id='reboot' type='button' name='reboot' value='Перегрузить Самовар' onclick='sendbutton("reboot");' class="button">
 </div>
 </div>
 <div style="margin: 0 auto; width: 668px;">
-<input id='save' type='submit' name='save' value='Сохранить'>
-<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"'>
-<input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"'>
+<input id='save' type='submit' name='save' value='Сохранить' class="button">
+<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"' class="button">
+<input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"' class="button">
 </div>
 </form>
 </body>

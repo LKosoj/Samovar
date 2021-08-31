@@ -145,6 +145,7 @@ void recvMsg(uint8_t *data, size_t len) {
     WebSerial.println(valve_status);
     WebSerial.println("_______________________________________________");
   } else
+    WebSerial.print("echo ");
     WebSerial.println(d);
 }
 #endif
