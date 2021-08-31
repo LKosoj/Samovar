@@ -292,9 +292,11 @@ function SaveFormToFile(form) {
 </div>
 </h2>
 <div style="margin: 0 auto; width: 200px;">
-<input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);' class="button">
 <div>
-<label for="fileToLoad" class="button custom-file-upload">
+<input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);' class="button">
+</div>
+<div>
+<label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
     <i class="fa fa-cloud-upload"></i> Восстановить настройки 
 </label>
 <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button"/>
