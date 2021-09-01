@@ -269,7 +269,7 @@ function addLine(obj, s){
   dl.className = "prgline";
   dl.id = "prgln" + _lnIdx;
   
-  dl.insertAdjacentHTML("afterbegin", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
+  dl.insertAdjacentHTML("afterbegin", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
   
 //  var ptype = dl.getElementsByName("ptype");
 //  ptype[0].value = arr[0];
@@ -354,11 +354,11 @@ function getProgram(){
 function set_bgcolor(obj){
   var l = document.getElementById("prgln" + obj);
   var t = document.getElementById("ptype" + obj).value;
-  if (t == "H"){color = "background-color: #90bfff;";}
-  else if (t == "B"){color = "background-color: #E6FFFE;";}
-  else if (t == "C"){color = "background-color: #80FFFA;";}
-  else if (t == "P"){color = "background-color: #FF7100;";}
-  else if (t == "T"){color = "background-color: #FFD480;";}
+  if (t == "H"){color = "background-color: #80FFFA;";}
+  else if (t == "B"){color = "background-color: #32CD3229;";}
+  else if (t == "C"){color = "background-color: #FFFF0039;";}
+  else if (t == "P"){color = "background-color: #C4C4C4;";}
+  else if (t == "T"){color = "background-color: #8B451334;";}
   l.setAttribute("style",color);
   var e = l.childNodes;
   for(q=0;q<e.length;q++){
@@ -566,24 +566,83 @@ window.onload = function() {
 
 
 <div id="Prog" class="tabcontent">
-  <div class="text">Программа отбора:</div>
+  <div class="text"style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div>
+  
   <div class="prg" id="prg"></div>
+  
   <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
-  <div class='dvcs'>
-    <p><span>Параметры программы отбора: Тип отбора;Объем отбора (мл);Скорость отбора (л/ч);Номер емкости для
-        отбора;Температура отбора;Напряжение отбора</span></p>
-    <p><span>Пример программы отбора (H - головы (Heads), B - тело (Body), P - пауза (Pause), T - хвост (Tail).</span>
-    </p>
-    <p><span>Температура отбора = 0 - автоматический режим. Температура отбора &lt; 10&#176;C - плюс к предыдущей
-        температуре, иначе отбор при заданной температуре * в текущей версии не используется</span></p>
-    <p><span>H;100;0.1;1;0.00;120</span></p>
-    <p><span>P;120;0.00;0;0.00;140</span></p>
-    <p><span>B;5000;0.75;2;0.00;90</span></p>
+  
+  <div>
+    
+    <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; 
+      background-color: #F7F7F7"
+    >
+      <div style="font-size: 1.2em; font-weight: bold;">
+        Параметры программы отбора:
+      </div>
+      <ul>
+        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
+          Тип отбора
+          <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 0.7em;">
+            <div>
+              <span style="font-weight: bold;"> H </span> - головы (Heads)
+            </div>
+            <div>
+              <span style="font-weight: bold;"> B </span> - тело (Body)
+            </div>
+            <div>
+              <span style="font-weight: bold;"> P </span> - пауза (Pause)
+            </div>
+            <div>
+              <span style="font-weight: bold;"> T </span> - хвост (Tail)
+            </div>
+          </div>
+        </li>
+        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+          Объем отбора (мл)
+        </li>
+        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+          Скорость отбора (л/ч)
+        </li>
+        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+          Номер емкости для отбора
+        </li>
+        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+          Температура отбора
+          <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em;">
+            Температура отбора = 0 - автоматический режим. Температура отбора &lt; 10&#176;C - плюс к предыдущей
+            температуре, иначе отбор при заданной температуре * в текущей версии не используется
+          </div>
+        </li>
+        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+          Напряжение отбора
+        </li>
+      </ul>
+      
+      
+      
+    </div>
+    
+    <div 
+      style="border: 1px dashed #bbb; padding: 1em; 
+      margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
+      font-size: 1.2em; font-weight: bold; background-color: #f2f2f2"
+      >
+      Пример программы отбора:
+      <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
+        <div>H;100;0.1;1;0.00;120</div>
+        <div>P;120;0.00;0;0.00;140</div>
+        <div>B;5000;0.75;2;0.00;90</div>
+      </div>
+    </div>
+    
   </div>
-  <div style="margin: 0 auto; width: 200px;">
-    <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
+  
+  <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 2em; margin-bottom: 1em">
     <input id='return' type='button' name='program' value='Расчитать программу'
       onclick='javascript:location.href="/program.htm"' class="button">
+      <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'
+        class="button">
   </div>
 </div>
 
