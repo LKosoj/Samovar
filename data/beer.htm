@@ -238,7 +238,20 @@ function calc_program(){
     s = s + "\n";
   }
   document.getElementById('WProgram').value = s;
+  set_num();
 }
+
+function set_num(){
+    var e = document.getElementById("prg").childNodes;
+    var a;
+    for (i=1;i<e.length;i++){
+      a = e[i].childNodes[0];
+      a.innerText = "";
+      if (i < 10) a.innerText = "0";
+      a.innerText = a.innerText + i;
+    }
+}
+
 
 function removeLine(ln){
   var prg = document.getElementById("prg").childNodes.length;
@@ -256,7 +269,11 @@ function addLine(obj, s){
   dl.className = "prgline";
   dl.id = "prgln" + _lnIdx;
   
-  dl.insertAdjacentHTML("afterbegin", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option></select>');
+  var num = document.createElement("label");
+  num.className = "prglabel";
+  dl.appendChild(num);
+
+  num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option></select>');
   
 //  var ptype = dl.getElementsByName("ptype");
 //  ptype[0].value = arr[0];
@@ -311,7 +328,7 @@ function getProgram(){
     return;
   }  
   var e = document.getElementById("prg");
-  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label></div>');
+  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение" и "Темп. закладки солода"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label></div>');
   var p = document.getElementById("WProgram");
   var varr = p.value.split("\n");
   for (z=0;z<varr.length;z++){
@@ -363,25 +380,41 @@ Samovar v. <span id='version'></span>
   <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
-<div class="container">
-<div class="text">Текущее время: <span id='crnt_tm'></span></div>
-<div class="text">Время работы: <span id='stm'></span></div>
-</div>
+
+  <div class="container_row" style="justify-content: space-between; font-size: 0.7em;">
+    <div class="text">Текущее время: <span id='crnt_tm'></span></div>
+    <div class="text">Время работы: <span id='stm'></span></div>
+  </div>
+
+<div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div class="container">
 <div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176;C</div>
 </div>
+</div>
+  <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div class="container">
 <div class="text">Прогресс: <span id='WthdrwlProgress'></span>&#37;</div>
 </div>
-<div class="text" id='VoltH2' style='visibility: hidden;position: fixed;'>Напряжение регулятора: <input name='Voltage' id='Voltage' type='text' value=''>
-<input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'>
 </div>
-<div class='dvcs' id='regulator' style='visibility: hidden;position: fixed;'>
-<span class='dvcs'>Текущее напр.: <span id='current_power_volt'></span> V</span>
-<span class='dvcs'>Целевое напр.: <span id='target_power_volt'></span> V</span>
-<span class='dvcs'>Режим регулятора: <span id='current_power_mode'></span></span>
-<span class='dvcs'>Мощность: <span id='current_power_p'></span></span>
-</div>
+  <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+    <div class="text" id='VoltH2'>
+      <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
+        <div>
+          Напряжение регулятора:
+          <input name='Voltage' id='Voltage' type='text' value=''>
+        </div>
+        <input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'
+          class="button">
+      </div>
+    </div>
+    <div class='dvcs' id='regulator' style="padding-left: 0 !important;padding-right: 0 !important;">
+      <span class='dvcs'>Текущее напр.: <span id='current_power_volt'></span> V</span>
+      <span class='dvcs'>Целевое напр.: <span id='target_power_volt'></span> V</span>
+      <span class='dvcs'>Режим регулятора: <span id='current_power_mode'></span></span>
+      <span class='dvcs'>Мощность: <span id='current_power_p'></span></span>
+    </div>
+  </div>
+
 <div class='text'>
 <span>Статус: <span id='Status'></span></span>
 </div>
@@ -399,24 +432,21 @@ Samovar v. <span id='version'></span>
 <div class="text">Программа затирки:</div>
 <div class="prg" id="prg"></div>
 <textarea cols="40" rows="7" id='WProgram' name='WProgram' style="visibility: hidden;position: fixed;">%WProgram%</textarea>
-<div class='dvcs'>
-<p><span>Параметры программы затирания: Тип программы;Температура;Время</span></p>
-<p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре), B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры), W - wait (режим ожидания, ничего не делает до смены строки программы).</span></p>
-<p><span>Пример программы отбора</span></p>
-<p><span>M;45.00;0</span></p>
-<p><span>P;60.00;1</span></p>
-<p><span>W;0.00;1</span></p>
-<p><span>B;0.00;1</span></p>
-<p><span>C;30.00;0</span></p>
-</div>
+<hr style="margin-bottom: 20px !important; margin-top: 20px !important;">
 <div style="margin: 0 auto; width: 200px;">
-<input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();'>
+<input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();'  class="button">
 </div>
+
 <div style="margin: 0 auto; width: 200px;">
-Загрузить программу <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
+<label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
+    <i class="fa fa-cloud-upload"></i> Загрузить программу 
+</label>
+<input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button"/>
 </div>
+
+
 <div style="margin: 0 auto; margin-top: 20px !important; width: 200px;">
-<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'>
+<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'  class="button">
 </div>
 </div>
 </form>

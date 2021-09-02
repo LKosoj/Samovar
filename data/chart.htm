@@ -180,26 +180,75 @@ function refresh_chart(){
 <h1>Статус</h1>
 <h2><input id='refresh' type='checkbox' name='refresh' value='refresh' checked='checked' onclick='refresh_chart()'><label for='refresh'>Обновлять график</label></h2>
 <div class="message-box" style="display: none;" id="message"></div>
-<div class="container">
-<div class="text">Текущее время: <span id='crnt_tm'></span></div>
-<div class="text">Время работы: <span id='stm'></span></div>
-</div>
-<div class="container">
-<div class="text column" style="color: %SteamColor%;">Т пара: <span id='SteamTemp' style="font-size: xx-large;"></span>&#176;C</div>
-<div class="text column" style="color: %PipeColor%;">Т в царге: <span id='PipeTemp' style="font-size: xx-large;"></span>&#176;C</div>
-</div>
-<div class="text" style="color: black;">&#916; температур: <span id='DeltaTemp' style="font-size: xx-large;"></span>&#176;C</div>
-<div class="container">
-<div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176;C</div>
-<div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176;C</div>
-</div>
-<div class="container">
-<div class="text column">Отобранный объем: <span id='VolumeAll'></span> мл</div>
-<div class="text column">Скорость отбора: <span id='ActualVolumePerHour'></span> л/ч</div>
-</div>
-<div class="container">
-<div class="text">Прогресс отбора: <span id='WthdrwlProgress'></span>&#37;</div>
-</div>
+
+  <div class="container_row" style="justify-content: space-between; font-size: 0.7em;">
+    <div class="text">Текущее время: <span id='crnt_tm'></span></div>
+    <div class="text">Время работы: <span id='stm'></span></div>
+  </div>
+  <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+    
+    <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+      <div class="text" style="color: %PipeColor%;">
+        Т в царге: &nbsp;&nbsp;
+        <span id='PipeTemp' style="font-size: xx-large;"></span>
+        &#176;C
+      </div>
+      <div class="text" style="color: %SteamColor%;">
+        Т пара: &nbsp;&nbsp;
+        <span id='SteamTemp' style="font-size: xx-large;"></span>
+        &#176;C
+      </div>
+      <div class="text" style="color: black;">
+        &#916; температур:&nbsp;&nbsp;
+        <span id='DeltaTemp' style="font-size: xx-large;"></span>
+        &#176;C
+      </div>
+    </div>
+    
+    <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
+      <div class="text" style="color: %WaterColor%;">
+        Т воды: &nbsp;&nbsp;
+        <span id='WaterTemp' style="font-size: xx-large;"></span>
+        &#176;C
+      </div>
+      <div class="text" style="color: %TankColor%;">
+        Т в кубе: &nbsp;&nbsp;
+        <span id='TankTemp' style="font-size: xx-large;"></span>
+        &#176;C
+      </div>
+      <div class="text" style="color: %ACPColor%;">
+        Т в ТСА: &nbsp;&nbsp;
+        <span id='ACPTemp' style="font-size: xx-large;"></span>
+        &#176;C
+      </div>
+    </div>
+    
+  </div>
+
+  <div class="container_row" 
+    style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"
+  >
+    <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+      <div class="text">
+        Скорость отбора: &nbsp;
+        <span id='ActualVolumePerHour'></span>
+        л/ч
+      </div>
+      <div class="text">
+        Отобранный объем: &nbsp;
+        <span id='VolumeAll'></span>
+        мл
+      </div>
+    </div>
+    <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
+      <div class="text">
+        Прогресс отбора: &nbsp;
+        <span id='WthdrwlProgress'></span>
+        &#37;
+      </div>
+    </div>
+  </div>
+
 <div class="container">
 <div class='text'>
 <span>Статус: <span id='Status'></span></span>

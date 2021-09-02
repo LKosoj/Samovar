@@ -237,7 +237,6 @@ function SaveFormToFile(form) {
 <h2>Часовой пояс: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
 <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
 <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
-<input id='resetwifi' type='submit' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");' class="button">
 <h2><p>Цвета для температур:</p>
 <div>
     <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">
@@ -291,6 +290,12 @@ function SaveFormToFile(form) {
 </select>
 </div>
 </h2>
+<div style="margin: 0 auto; width: 200px;">
+<div>
+<input id='resetwifi' type='button' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");' class="button">
+</div>
+</div>
+<hr>
 <div style="margin: 0 auto; width: 200px;">
 <div>
 <input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);' class="button">

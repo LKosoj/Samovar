@@ -52,13 +52,14 @@ function calc_program(){
   s = "";
   for (i=1;i<t.length;i++){
     k = t[i].childNodes;
-    for (j=0;j<6;j++){
+    for (j=1;j<7;j++){
       s = s + k[j].value + ";";
     }
     s = s.slice(0, -1);
     s = s + "\n";
   }
   document.getElementById('WProgram').value = s;
+  set_num();
 }
 
 function set_program(){
@@ -131,7 +132,7 @@ return 0;
 
 
 setInterval(loadDoc,2000);
-// setInterval(loadHeap,19000);
+setInterval(loadHeap,19000);
 
 //setInterval(addLine,2000);
 
@@ -253,6 +254,17 @@ setTimeout(function(){
 }, 20000);
 }
 
+function set_num(){
+    var e = document.getElementById("prg").childNodes;
+    var a;
+    for (i=1;i<e.length;i++){
+      a = e[i].childNodes[0];
+      a.innerText = "";
+      if (i < 10) a.innerText = "0";
+      a.innerText = a.innerText + i;
+    }
+}
+
 function removeLine(ln){
   var prg = document.getElementById("prg").childNodes.length;
   if (prg < 3) return;
@@ -269,7 +281,11 @@ function addLine(obj, s){
   dl.className = "prgline";
   dl.id = "prgln" + _lnIdx;
   
-  dl.insertAdjacentHTML("afterbegin", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
+  var num = document.createElement("label");
+  num.className = "prglabel";
+  dl.appendChild(num);
+
+  num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
   
 //  var ptype = dl.getElementsByName("ptype");
 //  ptype[0].value = arr[0];
@@ -343,7 +359,7 @@ function getProgram(){
     return;
   }  
   var e = document.getElementById("prg");
-  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Объем<span class="tooltiptext">Объем в мл</span></label><label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label><label class="tooltip">Емкость<span class="tooltiptext">Номер емкости (нумерация начинается от 0)</span></label>&nbsp;&nbsp;<label class="tooltip">Темп</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Напр</label></div>');
+  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Объем<span class="tooltiptext">Объем в мл</span></label><label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label><label class="tooltip">Емкость<span class="tooltiptext">Номер емкости (нумерация начинается от 0)</span></label><label class="tooltip">Темп</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Напр</label></div>');
   var p = document.getElementById("WProgram");
   var varr = p.value.split("\n");
   for (z=0;z<varr.length;z++){
@@ -566,7 +582,7 @@ window.onload = function() {
 
 
 <div id="Prog" class="tabcontent">
-  <div class="text"style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div>
+  <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div>
   
   <div class="prg" id="prg"></div>
   

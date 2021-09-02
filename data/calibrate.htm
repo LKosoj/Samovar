@@ -3,18 +3,8 @@
 <meta charset='utf-8'>
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
 <title>Самовар</title>
+<link rel="stylesheet" href="/style.css">
 
-<style>#file-input,input{width:200;height:34px;border-radius:4px;margin:10 10 0 10;font-size:15px}
-input{background:#f1f1f1;border:0;padding:0 15px;}
-input[type='text']{background:#f1f1f1;border:0;padding:0 15px;width:80;margin:0}
-#file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}
-body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
-#bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
-form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
-h1{text-align:center}
-.btn{background:#3498db;color:#fff;cursor:pointer}
-.dvcs{padding: 10px;margin: 10px;}
-</style>
 <script>
 function calibrate(){
 if (document.getElementById('calibrateid').value == 'Начать калибровку'){
@@ -45,11 +35,13 @@ return 0;
 <body>
 <form action='/save' method="post" name="setupform">
 <h1>Калибровка шагового двигателя</h1>
+<div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
 <h2>Объем жидкости : <span id='start_pressure'>100</span> мл.</h2>
 <h2>Скорость шагового двигателя : <input id='kstepperspd' name='kstepperspd' type='text' value='%StepperStep%'> шагов/сек.</h2>
 <h2>Шагов на 100 мл: <input id='stepperstepml' name='stepperstepml' type='text' value='%StepperStepMl%'></h2>
 <input id='calibrateid' type='button' name='calibratenm' value='Начать калибровку' onclick='calibrate();' class="button">
 <input id='return' type='button' name='return' value='К настройкам' onclick='javascript:location.href="/setup.htm"' class="button">
+</div>
 </form>
 </body>
 </html>

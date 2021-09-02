@@ -37,7 +37,7 @@ input[type="file"] {
 #file-input,input[type='button'],input[type='submit']{width:200;height:34px;border-radius:4px;margin:10 10 0 10;font-size:15px}
 input{background:#f1f1f1;border:0;padding:0 15px;}
 
-input[type='text']{background:#f1f1f1;border:0;padding:10px;width:66;margin:0;font-size: medium;}
+input[type='text']{background:#fafafa;padding:10px;width:66;margin:0;font-size: medium;border: 1px solid #a9a9a9;}
 
 #file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}
 
@@ -386,9 +386,11 @@ select{
 background-image: url("data:image/svg+xml;utf8,<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='24' height='24' viewBox='0 0 24 24'><path fill='%23444' d='M7.406 7.828l4.594 4.594 4.594-4.594 1.406 1.406-6 6-6-6z'></path></svg>");
 background-position: 100% 50%;
 background-repeat: no-repeat;
+background-color:#fafafa;
 font-size: 18px !important;
 padding: 4 !important;
 padding-right: 22px !important;
+border: 1px solid #a9a9a9;
 }
 
 .prgline input {

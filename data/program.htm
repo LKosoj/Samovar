@@ -190,7 +190,7 @@ function calc_program(){
       e.removeChild(e.firstChild);
     }
 
-    e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;<label class="tooltip">Емкость<span class="tooltiptext">Номер емкости (нумерация начинается от 0)</span></label><label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час. Для строки с типом "Пауза" - время паузы в секундах</span></label><label class="tooltip">Процент<span class="tooltiptext">Процент от объема фракции данного типа</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Тип программы. Для режима Пауза время паузы в секундах задается в поле "Скорость"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Напр<span class="tooltiptext">Напряжение или мощность на регуляторе (зависит от типа используемого регулятора)</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Выход<span class="tooltiptext">Объем отбираемой фракции в данной строке программы</span></label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Время, необходимое на отбор фракции в данной строке программы</span></label></div>');
+    e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;<label class="tooltip">Емкость<span class="tooltiptext">Номер емкости (нумерация начинается от 0)</span></label><label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час. Для строки с типом "Пауза" - время паузы в секундах</span></label><label class="tooltip">Процент<span class="tooltiptext">Процент от объема фракции данного типа</span></label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Тип программы. Для режима Пауза время паузы в секундах задается в поле "Скорость"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Напр<span class="tooltiptext">Напряжение или мощность на регуляторе (зависит от типа используемого регулятора)</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Выход<span class="tooltiptext">Объем отбираемой фракции в данной строке программы</span></label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Время, необходимое на отбор фракции в данной строке программы</span></label></div>');
     var p = document.getElementById("WProgram1");
     var arr = p.value.split("\n");
     for (z=0;z<arr.length;z++){
@@ -341,11 +341,11 @@ function addLine(obj, s){
 function set_bgcolor(obj){
   var l = document.getElementById("prgln" + obj);
   var t = document.getElementById("ptype" + obj).value;
-  if (t == "H"){color = "background-color: #80FFFA;";}
-  else if (t == "B"){color = "background-color: #32CD3229;";}
-  else if (t == "C"){color = "background-color: #FFFF0039;";}
-  else if (t == "P"){color = "background-color: #C4C4C4;";}
-  else if (t == "T"){color = "background-color: #8B451334;";}
+  if (t == "H"){color = "background-color: #90bfff;";}
+  else if (t == "B"){color = "background-color: #E6FFFE;";}
+  else if (t == "C"){color = "background-color: #80FFFA;";}
+  else if (t == "P"){color = "background-color: #FF7100;";}
+  else if (t == "T"){color = "background-color: #FFD480;";}
   l.setAttribute("style",color);
   var e = l.childNodes;
   for(q=0;q<e.length;q++){
@@ -379,17 +379,19 @@ window.onload = function() {
 <div class="message-box" style="display: none;" id="message"></div>
 Samovar v. <span id='version'>%v%</span>
 </h1>
+<div class="text">Расчет программы отбора</div>
+<div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div id="Prog">
-<div class="text">Программа отбора:</div>
 <div style="margin-bottom: 10px !important;">
-<label class="tooltip prgline">Объем спирта-сырца</label><input id='vless' type='text' value='12.25' onchange="set_num();">л
-<label class="tooltip prgline">Содержание АС в с-с<span class="tooltiptext">Содержание абсолютного спирта в спирте-сырце в &#37;</span></label><input id='vlssp' type='text' value='34' onchange="set_num();">&#37;
-<label class="tooltip prgline">Выход спирта<span class="tooltiptext">Прогнозируемый выход спирта в &#37;</span></label><input id='vlp' type='text' value='94' onchange="set_num();">&#37;
+<label class="tooltip prgline">Объем спирта-сырца</label><input id='vless' type='text' value='12.25' onchange="set_num();"><label class="tooltip prgline">л</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Содержание АС в с-с<span class="tooltiptext">Содержание абсолютного спирта в спирте-сырце в &#37;</span></label><input id='vlssp' type='text' value='34' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Выход спирта<span class="tooltiptext">Прогнозируемый выход спирта в &#37;</span></label><input id='vlp' type='text' value='94' onchange="set_num();"><label class="tooltip prgline">&#37;</label>
 </div>
 <div style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">
-<label class="tooltip prgline">Объем голов<span class="tooltiptext">Прогнозируемый выход голов в &#37;</span></label><input id='vlhp' type='text' value='8' onchange="set_num();">&#37;
-<label class="tooltip prgline">Объем хвостов<span class="tooltiptext">Прогнозируемый выход хвостов в &#37;</span></label><input id='vltp' type='text' value='5' onchange="set_num();">&#37;
-<label class="tooltip prgline">Кубовый остаток<span class="tooltiptext">Прогнозируемый кубовый остаток после завершения перегонки в литрах</span></label><input id='trest' type='text' value='8' disabled>л
+<label class="tooltip prgline">Объем голов<span class="tooltiptext">Прогнозируемый выход голов в &#37;</span></label><input id='vlhp' type='text' value='8' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Объем хвостов<span class="tooltiptext">Прогнозируемый выход хвостов в &#37;</span></label><input id='vltp' type='text' value='5' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Кубовый остаток<span class="tooltiptext">Прогнозируемый кубовый остаток после завершения перегонки в литрах</span></label><input id='trest' type='text' value='8' disabled><label class="tooltip prgline">л</label>
 </div>
 <label class="tooltip prgline" style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">Информация о параметрах программы отбора
 <span class="tooltiptext">
@@ -416,11 +418,18 @@ Samovar v. <span id='version'>%v%</span>
 <li>Выход спирта - 94&#37;</li>
 </ul>
 </span></label>
+</div>
+</div>
+
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div class="prg" id="prg"></div>
+</div>
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div>
 <label class="tooltip prgline">Итоговое время отбора<span class="tooltiptext">Время, необходимое для ректификации спирта-сырца с заданными параметрами</span></label><input id='sum' type='text' value='' disabled>
 </div>
 </div>
+
 <div>
 <textarea cols="40" rows="15" id='WProgram1' name='WProgram1' style="visibility: hidden;position: absolute;width: 20;">
 0;0.07;25;H;135
@@ -438,6 +447,8 @@ Samovar v. <span id='version'>%v%</span>
 9;0.1;10;T;0</textarea>
 <textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20;">%WProgram%</textarea>
 </div>
+
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div style="margin: 0 auto; width: 200px;">
 <input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();' class="button">
 </div>
@@ -447,9 +458,11 @@ Samovar v. <span id='version'>%v%</span>
 </label>
 <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button"/>
 </div>
+</div>
 <div style="margin: 0 auto; width: 450px;">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
 <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"' class="button">
+</div>
 </div>
 </form>
 </body>
