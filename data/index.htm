@@ -600,8 +600,6 @@ headers.forEach(function (item) {
   
   <div class="prg" id="prg"></div>
   
-  <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
-  
   <div>
     
     <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; 
@@ -610,10 +608,11 @@ headers.forEach(function (item) {
       
  <div class="list-group">
    <div class="list-group-item list-header" data-name="spoiler-title">
-     <span class="spoiler-sign">[+]</span>Параметры программы отбора:
+     <span class="spoiler-sign">[+]</span>Описание программы отбора:
    </div>
    <div class="list-group-item list-content spoiler-body">
-      <ul>
+    <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
+    <ul>
         <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
           Тип отбора
           <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 0.7em;">
