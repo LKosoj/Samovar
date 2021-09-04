@@ -420,9 +420,36 @@ width: 400;
 }
 
 
+.list-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.list-group-item {
+  position: relative;
+  display: block;
+  padding: 0.75rem 1.25rem;
+  margin-bottom: -1px;
+  background-color: rgb(225, 226, 226);
+  border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.list-header {
+  font-weight: 700;
+}
+
+.list-content {
+}
+
+.spoiler-body {
+  display: none;
+}
+
 @media only screen and (max-width: 520px) {
   #tab {
     flex-direction: column;
     border: 1px solid red;
   }
 }
+
+

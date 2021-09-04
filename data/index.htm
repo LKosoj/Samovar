@@ -10,6 +10,15 @@
 
 var _lnIdx = 0;
 
+var headers = document.querySelectorAll("[data-name='spoiler-title']");
+
+function headerClick() {
+  this.nextElementSibling.classList.toggle("spoiler-body");
+  var s = this.parentNode.getElementsByClassName("spoiler-sign");
+  if (s[0].innerHTML == "[+]") s[0].innerHTML = "[-]";
+  else s[0].innerHTML = "[+]";
+}
+
 function openTab(evt, tabName) {
     var i, tabcontent, tablinks;
     tabcontent = document.getElementsByClassName("tabcontent");
@@ -383,6 +392,11 @@ function set_bgcolor(obj){
 }
 
 window.onload = function() {
+ headers = document.querySelectorAll("[data-name='spoiler-title']");
+headers.forEach(function (item) {
+  item.addEventListener("click", headerClick);
+});
+
   getProgram();
   document.getElementById("WProgram").addEventListener("change", function(event) {
     if (!check_program(document.getElementById('WProgram').value)){
@@ -593,9 +607,12 @@ window.onload = function() {
     <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; 
       background-color: #F7F7F7"
     >
-      <div style="font-size: 1.2em; font-weight: bold;">
-        Параметры программы отбора:
-      </div>
+      
+ <div class="list-group">
+   <div class="list-group-item list-header" data-name="spoiler-title">
+     <span class="spoiler-sign">[+]</span>Параметры программы отбора:
+   </div>
+   <div class="list-group-item list-content spoiler-body">
       <ul>
         <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
           Тип отбора
@@ -637,7 +654,6 @@ window.onload = function() {
       
       
       
-    </div>
     
     <div 
       style="border: 1px dashed #bbb; padding: 1em; 
@@ -651,7 +667,9 @@ window.onload = function() {
         <div>B;5000;0.75;2;0.00;90</div>
       </div>
     </div>
-    
+   </div>
+ </div>
+
   </div>
   
   <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 2em; margin-bottom: 1em">
