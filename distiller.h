@@ -100,6 +100,23 @@ void IRAM_ATTR check_alarm_distiller() {
 #endif
 
 #ifdef SAMOVAR_USE_POWER
+
+#ifndef __SAMOVAR_DEBUG
+  //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
+  if (current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
+    power_err_cnt++;
+    set_current_power(target_power_volt);
+    if (power_err_cnt > 10) {
+      delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+      set_power(false);
+      Msg = "Emergency power OFF! Power error";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
+#endif
+    }
+  } else power_err_cnt = 0;
+#endif
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       Msg = "Water temp is critical! Water error. Voltage down from " + (String)target_power_volt;
 #ifdef SAMOVAR_USE_BLYNK

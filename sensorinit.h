@@ -347,6 +347,10 @@ void IRAM_ATTR reset_sensor_counter(void) {
   start_pressure = bme_pressure;
   get_Samovar_Status();
 
+#ifdef SAMOVAR_USE_POWER
+  power_err_cnt = 0;
+#endif
+
 #ifdef USE_OPENLOG
   if (ofl == "") {
     ofl = CurrentTime(true) + ".csv";

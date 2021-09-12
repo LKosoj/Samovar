@@ -2,6 +2,7 @@ const char *http_username = "admin";
 const char *http_password = "admin";
 
 String get_sys_info();
+String get_prf_name();
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
