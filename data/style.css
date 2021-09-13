@@ -156,9 +156,9 @@ p{margin: 0 !important;}
   top: 1px;
   cursor: pointer;
   background-color: #ffffff;
-  -webkit-box-shadow: 2px -5px 14px 0 rgba(34, 60, 80, 0.16); 
-  -moz-box-shadow: 2px -5px 14px 0 rgba(34, 60, 80, 0.16); 
-  box-shadow: 2px -5px 14px 0 rgba(34, 60, 80, 0.16);
+  -webkit-box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16); 
+  -moz-box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16); 
+  box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16);
   top: 1px;
 }
 
