@@ -133,7 +133,7 @@ void recvMsg(uint8_t *data, size_t len) {
     } else if (Var == "valve_status") {
       valve_status = Val.toInt();
       WebSerial.println(valve_status);
-    } else if (Var == "") {
+    } else if (Var != "") {
     }
   } else if (d == "print") {
     WebSerial.println("_______________________________________________");

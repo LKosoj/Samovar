@@ -436,6 +436,7 @@ width: 400;
 
 .list-header {
   font-weight: 700;
+  cursor: pointer;
 }
 
 .list-content {
