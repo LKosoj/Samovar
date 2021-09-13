@@ -119,7 +119,7 @@ p{margin: 0 !important;}
   justify-content: space-around;
   align-items: flex-end;
   background-color: #f1f1f1;
-  padding-bottom: 0em;
+  padding-bottom: 0;
   /* overflow: hidden; */
   border: 1px solid #ccc;
 }
@@ -156,8 +156,9 @@ p{margin: 0 !important;}
   top: 1px;
   cursor: pointer;
   background-color: #ffffff;
-  box-shadow: 4px 4px 6px 0 rgba(0, 0, 0, 0.2),
-  4px 4px 13px 0 rgba(0, 0, 0, 0.19);
+  -webkit-box-shadow: 2px -5px 14px 0 rgba(34, 60, 80, 0.16); 
+  -moz-box-shadow: 2px -5px 14px 0 rgba(34, 60, 80, 0.16); 
+  box-shadow: 2px -5px 14px 0 rgba(34, 60, 80, 0.16);
   top: 1px;
 }
 
