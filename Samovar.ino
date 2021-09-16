@@ -6,6 +6,7 @@
 #include <esp_task_wdt.h>
 #include <driver/dac.h>
 #include <soc/touch_channel.h>
+//#include <driver/touch_sensor.h>
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -485,8 +486,8 @@ void setup() {
 
   //dac_output_disable(DAC_CHANNEL_1);
   //dac_output_disable(DAC_CHANNEL_2);
-  //touch_pad_deinit();
   touch_pad_intr_disable();
+  touch_pad_deinit();
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
