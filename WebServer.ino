@@ -102,7 +102,7 @@ void WebServerInit(void) {
       Serial.printf("BodyEnd: %u\n", total);
   });
 
-
+  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*"); // CORS
   server.begin();
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");
