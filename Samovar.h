@@ -6,7 +6,7 @@
 #endif
 
 #define SAMOVAR_VERSION "3.03"
-//#define __SAMOVAR_DEBUG
+#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
 
