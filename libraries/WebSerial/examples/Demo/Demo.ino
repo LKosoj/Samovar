@@ -1,6 +1,20 @@
+/*
+  WebSerial Demo
+  ------
+  This example code works for both ESP8266 & ESP32 Microcontrollers
+  WebSerial is accessible at your ESP's <IPAddress>/webserial URL.
+
+  Author: Ayush Sharma
+  Checkout WebSerial Pro: https://webserial.pro
+*/
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
+#if defined(ESP8266)
+  #include <ESP8266WiFi.h>
+  #include <ESPAsyncTCP.h>
+#elif defined(ESP32)
+  #include <WiFi.h>
+  #include <AsyncTCP.h>
+#endif
 #include <ESPAsyncWebServer.h>
 #include <WebSerial.h>
 
@@ -10,6 +24,7 @@ const char* ssid = ""; // Your WiFi SSID
 const char* password = ""; // Your WiFi Password
 
 
+/* Message callback of WebSerial */
 void recvMsg(uint8_t *data, size_t len){
   WebSerial.println("Received Data...");
   String d = "";
@@ -31,10 +46,10 @@ void setup() {
     Serial.println(WiFi.localIP());
     // WebSerial is accessible at "<IP Address>/webserial" in browser
     WebSerial.begin(&server);
+    /* Attach Message Callback */
     WebSerial.msgCallback(recvMsg);
     server.begin();
 }
 
 void loop() {
-
 }

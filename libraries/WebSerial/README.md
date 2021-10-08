@@ -20,10 +20,29 @@
 
 <br/>
 
-<h2>Preview</h2>
+<h2 align="center">Preview</h2>
 <p align="center"><img src="https://raw.githubusercontent.com/ayushsharma82/WebSerial/master/docs/webserial.PNG" width="850"></p>
 
 <br/>
+<br/>
+<br/>
+
+<h2 align="center">Upgrade to Pro</h2>
+
+<p align="center">
+Checkout the Pro version of the WebSerial library which comes with enhanced & snappy UI, along with 'clear' & 'lock scroll' buttons on the monitor interface. Best of all, it's only 10KB in size compared to 50KB of regular WebSerial. <br><br> <b>Available Here: </b>
+<ol align="center">
+  <li>https://www.buymeacoffee.com/6QGVpSj/e/25091</li>
+  <li>https://webserial.pro</li>
+</ol>
+</p>
+
+<p align="center">
+  <a href="https://www.buymeacoffee.com/6QGVpSj/e/25091" target="_blank">
+  <img src="/docs/promo.png" alt="WebSerialPro">
+  </a>
+</p>
+
 <br/>
 <br/>
 
@@ -61,7 +80,7 @@
 
 <h2>How to Install</h2>
 
-###### Directly Through Arduino IDE ( Currently Submitted for Approval. Use Mannual Install till it gets Approved.)
+###### Directly Through Arduino IDE 
 Go to Sketch > Include Library > Library Manager > Search for "WebSerial" > Install
 
 ###### Manual Install
