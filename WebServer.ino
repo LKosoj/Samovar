@@ -217,6 +217,10 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else
       return "";
+  } else if (var == "UAPChecked") {
+    if (SamSetup.useautopowerdown) return "checked='true'";
+    else
+      return "";
   } else if (var == "UASChecked") {
     if (SamSetup.useautospeed) return "checked='true'";
     else
@@ -365,6 +369,11 @@ void handleSave(AsyncWebServerRequest *request) {
   SamSetup.UsePreccureCorrect = false;
   if (request->hasArg("usepressure")) {
     SamSetup.UsePreccureCorrect = true;
+  }
+
+  SamSetup.useautopowerdown = false;
+  if (request->hasArg("useautopowerdown")) {
+    SamSetup.useautopowerdown = true;
   }
 
   SamSetup.useautospeed = false;

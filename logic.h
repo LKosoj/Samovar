@@ -115,8 +115,8 @@ void IRAM_ATTR withdrawal(void) {
         CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
-        if (program[ProgramNum].WType == "B") {
-          set_current_power(target_power_volt - 5 * PWR_FACTOR);
+        if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
+          set_current_power(target_power_volt - 3 * PWR_FACTOR);
         }
 #endif
         vTaskDelay(50);
