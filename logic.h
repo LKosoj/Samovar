@@ -423,7 +423,9 @@ void IRAM_ATTR run_program(byte num) {
       stepper.setTarget(TargetStepps);
       startService();
       ActualVolumePerHour = program[num].Speed;
-      SteamSensor.BodyTemp = program[num].Temp;
+      if ((program[num].WType == "B" || program[num].WType == "C") && program[num].Temp > 0) {
+        SteamSensor.BodyTemp = program[num].Temp;
+      }
 
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Считаем, что колонна стабильна
@@ -865,6 +867,9 @@ void IRAM_ATTR get_current_power() {
 //устанавливаем напряжение для регулятора напряжения
 void IRAM_ATTR set_current_power(float Volt) {
   if (!PowerOn) return;
+#ifdef __SAMOVAR_DEBUG
+  WriteConsoleLog("Set current power =" + (String)Volt);
+#endif
   vTaskDelay(100);
   target_power_volt = Volt;
   if (Volt < 40) {
