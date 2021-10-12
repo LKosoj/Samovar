@@ -1014,8 +1014,10 @@ void read_config() {
 }
 
 void WriteConsoleLog(String StringLogMsg) {
-  Serial.println(StringLogMsg);
   LogMsg = LogMsg + "\n" + StringLogMsg;
+#ifdef __SAMOVAR_DEBUG
+  Serial.println(StringLogMsg);
+#endif
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
 #endif
