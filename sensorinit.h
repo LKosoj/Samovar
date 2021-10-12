@@ -172,7 +172,11 @@ void sensor_init(void) {
   writeString((String)BME_STRING + " init...     ", 3);
   delay(800);
 
+#ifdef USE_BMP280_ALT
+  if (!bme.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
+#else
   if (!bme.begin()) {
+#endif
     writeString((String)BME_STRING + " not found     ", 3);
 #ifdef __SAMOVAR_DEBUG
     Serial.println((String)BME_STRING + " not found");

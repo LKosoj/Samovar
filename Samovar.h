@@ -41,6 +41,16 @@
 #endif
 
 
+#ifdef USE_BMP280_ALT
+#undef USE_BMP180
+#undef USE_BME280
+#undef USE_BME680
+#ifndef USE_BMP280
+#define USE_BMP280
+#endif
+#endif
+
+
 #ifdef SAMOVAR_USE_RMVK
 #ifndef SAMOVAR_USE_POWER
 #define SAMOVAR_USE_POWER
