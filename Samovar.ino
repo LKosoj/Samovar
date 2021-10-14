@@ -270,7 +270,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       StrCrt = Crt.substring(6) + "   " + millis2time();
       StrCrt.toCharArray(tst, 20);
 
-      if (startval > 0) {
+      if (startval != 0) {
         tcntST++;
         if (tcntST == SamSetup.LogPeriod) {
           tcntST = 0;
