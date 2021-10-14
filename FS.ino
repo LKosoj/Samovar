@@ -207,13 +207,16 @@ void create_data() {
   str += ",ProgNum";
 #endif
   fileToWrite.println(str);
-  fileToWrite.close();
-  fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
+
   SteamSensor.PrevTemp = 0;
   PipeSensor.PrevTemp = 0;
   WaterSensor.PrevTemp = 0;
   TankSensor.PrevTemp = 0;
   bme_prev_pressure = 0;
+
+  append_data();
+  fileToWrite.close();
+  fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
 }
 
 String IRAM_ATTR append_data() {
@@ -236,9 +239,11 @@ String IRAM_ATTR append_data() {
   } else if (bme_prev_pressure != bme_pressure) {
     bme_prev_pressure = bme_pressure;
     w = true;
+#ifdef WRITE_PROGNUM_IN_LOG
   } else if (prev_ProgramNum != ProgramNum) {
     prev_ProgramNum = ProgramNum;
     w = true;
+#endif
   }
 
   if (w) {
@@ -259,6 +264,7 @@ String IRAM_ATTR append_data() {
     str += ProgramNum + 1;
 #endif
     fileToAppend.println(str);
+    //fileToAppend.flush();
     return str;
   }
   return "";
