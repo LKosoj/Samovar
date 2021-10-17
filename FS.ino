@@ -326,6 +326,8 @@ String get_prf_name() {
     fl = "/beer.prf";
   } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
     fl = "/dist.prf";
+  } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
+    fl = "/bk.prf";
   } else {
     fl = "/rectificat.prf";
   }
