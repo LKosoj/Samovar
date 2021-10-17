@@ -292,6 +292,14 @@ void menu_get_power() {
       set_menu_screen(3);
       sam_command_sync = SAMOVAR_POWER;
     }
+  } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+    if (!PowerOn) {
+      set_menu_screen(2);
+      sam_command_sync = SAMOVAR_BK;
+    } else {
+      set_menu_screen(3);
+      sam_command_sync = SAMOVAR_POWER;
+    }
   } else {
     if (!PowerOn) {
       set_menu_screen(2);
