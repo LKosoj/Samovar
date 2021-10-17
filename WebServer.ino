@@ -25,6 +25,13 @@ void change_samovar_mode() {
     server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
+  } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/bk.htm", String(), false, indexKeyProcessor);
+    });
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/bk.htm", String(), false, indexKeyProcessor);
+    });
   } else {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
     server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -506,6 +513,10 @@ void web_command(AsyncWebServerRequest *request) {
           sam_command_sync = SAMOVAR_POWER;
       } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
         if (!PowerOn) sam_command_sync = SAMOVAR_DISTILLATION;
+        else
+          sam_command_sync = SAMOVAR_POWER;
+      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+        if (!PowerOn) sam_command_sync = SAMOVAR_BK;
         else
           sam_command_sync = SAMOVAR_POWER;
       } else
