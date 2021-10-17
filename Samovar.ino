@@ -79,6 +79,7 @@
 
 #include "distiller.h"
 #include "beer.h"
+#include "BK.h"
 
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
@@ -300,6 +301,8 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         check_alarm();
       } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
         check_alarm_distiller();
+      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+        check_alarm_bk();
       } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         check_alarm_beer();
         WFpulseCount = 100;
@@ -349,6 +352,8 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         m += (String)mi;
         WthdrwTimeAllS = h + ":" + m;
 
+      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+        
       }
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
       else if (TargetStepps > 0 || program[ProgramNum].WType == "P") {
@@ -803,6 +808,12 @@ void loop() {
         sam_command_sync = SAMOVAR_DISTILLATION;
       } else
         distiller_finish();
+    } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+      //если дистилляция включаем или выключаем
+      if (!PowerOn) {
+        sam_command_sync = SAMOVAR_BK;
+      } else
+        bk_finish();
     } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       //если пиво включаем или двигаем программу
       if (!PowerOn) {
@@ -857,6 +868,11 @@ void loop() {
       case SAMOVAR_BEER_NEXT:
         run_beer_program(ProgramNum + 1);
         break;
+      case SAMOVAR_BK:
+        Samovar_Mode = SAMOVAR_BK_MODE;
+        SamovarStatusInt = 3000;
+        startval = 3000;
+        break;
       case SAMOVAR_NONE:
         break;
     }
@@ -869,6 +885,8 @@ void loop() {
     withdrawal();  //функция расчета отбора
   } else if (SamovarStatusInt == 1000) {
     distiller_proc();  //функция для проведения дистилляции
+  } else if (SamovarStatusInt == 3000) {
+    bk_proc();  //функция для работы с БК
   } else if (SamovarStatusInt == 2000 && startval == 2000) {
     beer_proc();  //функция для проведения затирания
   }
