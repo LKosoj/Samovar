@@ -204,7 +204,6 @@ if (myObj.PowerOn == 1){
 document.getElementById('power').value = powerstr;
 document.getElementById('power').style.backgroundColor = powerstyle;
 
-  
 }
 };
 xhttp.open("GET", "/ajax", true);
@@ -231,7 +230,7 @@ function calc_program(){
   s = "";
   for (i=1;i<t.length;i++){
     k = t[i].childNodes;
-    for (j=1;j<3;j++){
+    for (j=1;j<4;j++){
       s = s + k[j].value + ";";
     }
     s = s.slice(0, -1);
@@ -251,7 +250,6 @@ function set_num(){
       a.innerText = a.innerText + i;
     }
 }
-
 
 function removeLine(ln){
   var prg = document.getElementById("prg").childNodes.length;

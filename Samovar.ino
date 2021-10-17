@@ -489,17 +489,17 @@ void setup() {
   disableCore1WDT();
 #endif
 
+  Serial.begin(115200);
   //dac_output_disable(DAC_CHANNEL_1);
   //dac_output_disable(DAC_CHANNEL_2);
+  //touch_pad_deinit();
   touch_pad_intr_disable();
-  touch_pad_deinit();
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
 
-  Serial.begin(115200);
   Wire.begin();
 
   stepper.disable();
@@ -834,6 +834,8 @@ void loop() {
         if (SamovarStatusInt == 1000) distiller_finish();
         else if (SamovarStatusInt == 2000)
           beer_finish();
+        else if (SamovarStatusInt == 3000)
+          bk_finish();
         else
           set_power(!PowerOn);
         break;

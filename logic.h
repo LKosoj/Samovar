@@ -267,6 +267,8 @@ String IRAM_ATTR get_Samovar_Status() {
     }
   } else if (SamovarStatusInt == 1000) {
     SamovarStatus = "Режим дистилляции";
+  } else if (SamovarStatusInt == 3000) {
+    SamovarStatus = "Режим бражной колонны";
   } else if (SamovarStatusInt == 2000) {
 #ifdef SAM_BEER_PRG
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";

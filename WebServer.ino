@@ -252,7 +252,9 @@ String setupKeyProcessor(const String &var) {
     return "selected";
   else if (var == "BEER" && SamSetup.Mode == 2)
     return "selected";
-  else if (var == "SUVID" && SamSetup.Mode == 3)
+  else if (var == "BK" && SamSetup.Mode == 3)
+    return "selected";
+  else if (var == "SUVID" && SamSetup.Mode == 4)
     return "selected";
   else if (var == "RAL" && !SamSetup.rele1)
     return "selected";
@@ -541,7 +543,9 @@ void web_command(AsyncWebServerRequest *request) {
       } else {
         sam_command_sync = SAMOVAR_POWER;
       }
-    } else
+    } else if (request->hasArg("watert")) {
+        set_water_temp(request->arg("watert").toFloat());
+      } else
 #ifdef SAMOVAR_USE_POWER
       if (request->hasArg("voltage")) {
         set_current_power(request->arg("voltage").toFloat());

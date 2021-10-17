@@ -114,6 +114,18 @@ sleep(1000);
 return 0;
 };
 
+function sendwatert(){
+var num = document.getElementById('WaterT').value;
+if(!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)){
+alert( "Введите температуру воды!" );
+return 0;
+}
+var command = 'watert=' + num;
+sendbutton(command);
+alert( "Ok" );
+return 0;
+};
+
 function sendvoltage(){
 var num = document.getElementById('Voltage').value;
 if(!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)){
@@ -174,9 +186,6 @@ document.getElementById('TankTemp').innerHTML = myObj.TankTemp;
 document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp;
 document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure;
 document.getElementById('start_pressure').innerHTML = myObj.start_pressure;
-document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
-document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
-document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
 document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
 document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
 document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
@@ -422,9 +431,7 @@ headers.forEach(function (item) {
   </h1>
 
 <div class="tab">
-  <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Ректификация">
-  <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
-  <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
+  <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Режим БК">
 </div>
 
 <div id="Main" class="tabcontent" style="display: block;">
@@ -493,25 +500,17 @@ headers.forEach(function (item) {
   <div class="container_row" 
     style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"
   >
-    <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-      <div class="text">
-        Скорость отбора: &nbsp;
-        <span id='ActualVolumePerHour'></span>
-        л/ч
-      </div>
-      <div class="text">
-        Отобранный объем: &nbsp;
-        <span id='VolumeAll'></span>
-        мл
+    <div class="text" id='VoltH2'>
+      <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
+        <div>
+          Температура воды охлаждения:
+          <input name='WaterT' id='WaterT' type='text' value=''>
+        </div>
+        <input id='SetWaterT' type='submit' name='SetWaterT' value='Установить темп воды' onclick='sendwatert();'
+          class="button">
       </div>
     </div>
-    <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
-      <div class="text">
-        Прогресс отбора: &nbsp;
-        <span id='WthdrwlProgress'></span>
-        &#37;
-      </div>
-    </div>
+
   </div>
   
   <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
