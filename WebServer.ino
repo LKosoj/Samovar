@@ -543,6 +543,12 @@ void web_command(AsyncWebServerRequest *request) {
       } else {
         sam_command_sync = SAMOVAR_POWER;
       }
+    } else if (request->hasArg("startbk")) {
+      if (request->arg("startbk").toInt() == 1) {
+        sam_command_sync = SAMOVAR_BK;
+      } else {
+        sam_command_sync = SAMOVAR_POWER;
+      }
     } else if (request->hasArg("watert")) {
         set_water_temp(request->arg("watert").toFloat());
       } else
