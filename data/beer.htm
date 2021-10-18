@@ -14,9 +14,9 @@ function loadFile(e) {
 	var file = e;
 	var reader = new FileReader();
 	reader.onload = function () {
-		document.getElementById('WProgram1').value = reader.result;
+		document.getElementById('WProgram').value = reader.result;
 		glcalcnum = false;
-		calc_program();
+		getProgram();
 	};
 	reader.readAsText(file, "UTF-8");
 }
