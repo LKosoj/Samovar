@@ -102,6 +102,16 @@ function sleep(milliseconds) {
   }
 }
 
+function setBKCommand(){
+  var cmd = "startbk=";
+  if (document.getElementById('power').value == "Выключить питание"){
+    cmd = cmd + "0";
+  } else {
+    cmd = cmd + "1";
+  }
+  sendbutton(cmd);
+}
+
 function sendbutton(command){
 var server = '/command?' + command;
 request = new XMLHttpRequest();
@@ -210,11 +220,6 @@ console.log(myObj.crnt_tm + "; " + myObj.LogMsg);
 }
 }
 
-if (myObj.WthdrwlStatus > 0){
-document.getElementById('start').value = "Следующая программа"
-} else {
-document.getElementById('start').value = "Начать отбор"
-}
 
 if (!myObj.current_power_volt){
 document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
@@ -241,18 +246,6 @@ powerstyle='lightgreen';
 }
 document.getElementById('power').value = powerstr;
 document.getElementById('power').style.backgroundColor = powerstyle;
-
-var pausestr;
-var pausestyle;
-if (myObj.PauseOn == 1){
-pausestr = 'Продолжить';
-pausestyle='lightgreen';
-} else {
-pausestr = 'Поставить на паузу';
-pausestyle='#3498db';
-}
-document.getElementById('pause').value = pausestr;
-document.getElementById('pause').style.backgroundColor = pausestyle;
 
 }
 };
@@ -500,7 +493,7 @@ headers.forEach(function (item) {
   <div class="container_row" 
     style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"
   >
-    <div class="text" id='VoltH2'>
+    <div class="text" id='WaterH2'>
       <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
         <div>
           Температура воды охлаждения:
@@ -538,14 +531,7 @@ headers.forEach(function (item) {
   
   <div class="container_column" style="margin-bottom: 1em;">
     <div class="container_row" style="justify-content: space-around; align-items: center;">
-      <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'
-        class="button">
-        <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'
-          class="button">
-        <input id='pause' type='submit' name='pause' value='Пауза' onclick='sendbutton("pause=1");' class="button">
-    </div>
-    <div class="container_row" style="justify-content: space-around; align-items: center;">
-      <input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");'
+      <input id='power' type='submit' name='power' value='Включить питание' onclick='setBKCommand();'
         class="button">
       <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'
         class="button">
