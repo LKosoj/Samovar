@@ -312,6 +312,7 @@ void load_profile() {
     File file = SPIFFS.open(f, FILE_READ);
     file.setTimeout(0);
     file.read((byte *)&SamSetup, sizeof(SamSetup));
+    SamSetup.Mode = Samovar_CR_Mode;
     file.close();
   } else
     save_profile();
