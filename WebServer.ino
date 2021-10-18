@@ -86,6 +86,12 @@ void WebServerInit(void) {
   server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
     get_old_data_log(request);
   });
+  server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send(SPIFFS, "/Green.png", String());
+  });
+  server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send(SPIFFS, "/Red_light.gif", String());
+  });
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 

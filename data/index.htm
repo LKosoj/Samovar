@@ -160,8 +160,10 @@ xhttp.send();
 
 function loadDoc() {
 var xhttp = new XMLHttpRequest();
+xhttp.timeout = 4000;
 xhttp.onreadystatechange = function() {
 if (this.readyState == 4 && this.status == 200) {
+ConnectError(false);
 var myObj = JSON.parse(this.responseText);
 
 document.getElementById('version').innerHTML = myObj.version;
@@ -247,11 +249,25 @@ document.getElementById('pause').style.backgroundColor = pausestyle;
 
 }
 };
+xhttp.onerror = function() {
+  ConnectError(true);
+};
+xhttp.ontimeout = function() {
+  ConnectError(true);
+};
 xhttp.open("GET", "/ajax", true);
 xhttp.send();
 };
 
-
+function ConnectError(Type){
+  if (Type) {
+    document.getElementById('GreenT').style="visibility: hidden;position: fixed;";
+    document.getElementById('RedT').style="";
+  } else {
+    document.getElementById('GreenT').style="";
+    document.getElementById('RedT').style="visibility: hidden;position: fixed;";
+  }
+}
 
 function showMessage(Msg, CrtTime){
     document.getElementById('message').innerHTML = Msg;
@@ -431,6 +447,8 @@ headers.forEach(function (item) {
   
   <div class="container_row" style="justify-content: space-between; font-size: 0.7em;">
     <div class="text">Текущее время: <span id='crnt_tm'></span></div>
+    <div class="text" id="GreenT"><img src="Green.png" width="20"></div>
+    <div class="text" id="RedT" style="visibility: hidden;position: fixed;"><img src="Red_light.gif" width="20"></div>
     <div class="text">Время работы: <span id='stm'></span></div>
   </div>
   
