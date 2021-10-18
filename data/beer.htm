@@ -16,6 +16,10 @@ function loadFile(e) {
 	reader.onload = function () {
 		document.getElementById('WProgram').value = reader.result;
 		glcalcnum = false;
+        var element = document.getElementById("prg");
+        while (element.firstChild) {
+          element.removeChild(element.firstChild);
+        }
 		getProgram();
 	};
 	reader.readAsText(file, "UTF-8");
