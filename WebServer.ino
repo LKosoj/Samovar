@@ -56,6 +56,8 @@ void WebServerInit(void) {
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
+  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
+  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
 
   change_samovar_mode();
 
@@ -85,12 +87,6 @@ void WebServerInit(void) {
   });
   server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
     get_old_data_log(request);
-  });
-  server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(SPIFFS, "/Green.png", String());
-  });
-  server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(SPIFFS, "/Red_light.gif", String());
   });
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
@@ -252,15 +248,15 @@ String setupKeyProcessor(const String &var) {
     return (String)SamSetup.TankColor;
   else if (var == "ACPColor")
     return (String)SamSetup.ACPColor;
-  else if (var == "RECT" && SamSetup.Mode == 0)
+  else if (var == "RECT" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE)
     return "selected";
-  else if (var == "DIST" && SamSetup.Mode == 1)
+  else if (var == "DIST" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_DISTILLATION_MODE)
     return "selected";
-  else if (var == "BEER" && SamSetup.Mode == 2)
+  else if (var == "BEER" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BEER_MODE)
     return "selected";
-  else if (var == "BK" && SamSetup.Mode == 3)
+  else if (var == "BK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BK_MODE)
     return "selected";
-  else if (var == "SUVID" && SamSetup.Mode == 4)
+  else if (var == "SUVID" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_SUVID_MODE)
     return "selected";
   else if (var == "RAL" && !SamSetup.rele1)
     return "selected";
