@@ -135,6 +135,15 @@ void recvMsg(uint8_t *data, size_t len) {
     } else if (Var == "valve_status") {
       valve_status = Val.toInt();
       WebSerial.println(valve_status);
+    } else if (Var == "SamSetup.Mode") {
+      SamSetup.Mode = Val.toInt();
+      WebSerial.println(SamSetup.Mode);
+    } else if (Var == "Samovar_Mode") {
+      Samovar_Mode = (SAMOVAR_MODE)Val.toInt();
+      WebSerial.println(Samovar_Mode);
+    } else if (Var == "Samovar_CR_Mode") {
+      Samovar_CR_Mode = (SAMOVAR_MODE)Val.toInt();
+      WebSerial.println(Samovar_CR_Mode);
     } else if (Var != "") {
     }
   } else if (d == "print") {
@@ -145,6 +154,12 @@ void recvMsg(uint8_t *data, size_t len) {
     WebSerial.println(pump_started);
     WebSerial.print("valve_status = ");
     WebSerial.println(valve_status);
+    WebSerial.print("SamSetup.Mode = ");
+    WebSerial.println(SamSetup.Mode);
+    WebSerial.print("Samovar_Mode = ");
+    WebSerial.println(Samovar_Mode);
+    WebSerial.print("Samovar_CR_Mode = ");
+    WebSerial.println(Samovar_CR_Mode);
     WebSerial.println("_______________________________________________");
   } else
     WebSerial.print("echo ");
@@ -995,7 +1010,7 @@ void read_config() {
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
   CopyDSAddress(SamSetup.ACPAdress, ACPSensor.Sensor);
 
-  if (SamSetup.Mode > 3) SamSetup.Mode = 0;
+  if (SamSetup.Mode > 4) SamSetup.Mode = 0;
   Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
 
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
