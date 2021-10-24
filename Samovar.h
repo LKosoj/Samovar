@@ -389,6 +389,7 @@ struct SetupEEPROM {
   float Kd;
   float StbVoltage;                                             //Напряжение регулятора в режиме поддержания температуры
   bool useautopowerdown;                                        //Настройка для использования автокорректировки подводимой мощности
+  bool ChangeProgramBuzzer;                                     //Настройка для использования пищалки при смене программы
 };
 
 struct DSSensor {
