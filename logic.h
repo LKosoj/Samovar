@@ -29,6 +29,7 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void set_power(bool On);
 void set_body_temp();
+void set_buzzer(bool fl);
 
 //Получить количество разделителей
 byte getDelimCount(String data, char separator) {
@@ -386,6 +387,9 @@ void IRAM_ATTR run_program(byte num) {
   program_Wait = false;
   PauseOn = false;
   pause_withdrawal(false);
+  if (SamSetup.ChangeProgramBuzzer){
+    set_buzzer(true);
+  }
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
@@ -547,6 +551,7 @@ void IRAM_ATTR check_alarm() {
     set_current_power(target_power_volt);
     if (power_err_cnt > 10) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+      set_buzzer(true);
       set_power(false);
       Msg = "Emergency power OFF! Power error";
 #ifdef SAMOVAR_USE_BLYNK
@@ -586,6 +591,7 @@ void IRAM_ATTR check_alarm() {
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+    set_buzzer(true);
     set_power(false);
     String s = "";
     if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s = s + " Steam";
@@ -609,6 +615,7 @@ void IRAM_ATTR check_alarm() {
 #ifdef USE_WATERSENSOR
   //Проверим, что вода подается
   if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
+    set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
     Msg = "Emergency power OFF! Water error";
@@ -620,6 +627,7 @@ void IRAM_ATTR check_alarm() {
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
+    set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
     Msg = "Water temp is critical!";
 #ifdef SAMOVAR_USE_BLYNK
@@ -629,6 +637,7 @@ void IRAM_ATTR check_alarm() {
 
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
+      set_buzzer(true);
       Msg = "Water temp is critical! Water error. " + (String)PWR_MSG + " down from " + (String)target_power_volt;
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
@@ -647,6 +656,7 @@ void IRAM_ATTR check_alarm() {
   if (whls.isHolded() && alarm_h_min == 0) {
     whls.resetStates();
     if (program[ProgramNum].WType != "C") {
+      set_buzzer(true);
       Msg = "Head level alarm!";
     } else {
 #ifdef SAMOVAR_USE_POWER
@@ -739,8 +749,8 @@ void IRAM_ATTR open_valve(bool Val) {
 }
 
 void IRAM_ATTR triggerBuzzerTask(void *parameter) {
-  TickType_t beep = 200 / portTICK_RATE_MS;
-  TickType_t silent = 800 / portTICK_RATE_MS;
+  TickType_t beep = 400 / portTICK_RATE_MS;
+  TickType_t silent = 600 / portTICK_RATE_MS;
   int i = 0;
 
   while (true) {
@@ -753,18 +763,25 @@ void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   }
 }
 
-void set_buzzer() {
-  if (BuzzerTask == NULL) {
-    BuzzerTaskFl = true;
-    //Запускаем таск для пищалки
-    xTaskCreatePinnedToCore(
-      triggerBuzzerTask, /* Function to implement the task */
-      "BuzzerTask",      /* Name of the task */
-      1000,              /* Stack size in words */
-      NULL,              /* Task input parameter */
-      0,                 /* Priority of the task */
-      &BuzzerTask,       /* Task handle. */
-      1);                /* Core where the task should run */
+void set_buzzer(bool fl) {
+  if (fl){
+    if (BuzzerTask == NULL) {
+      BuzzerTaskFl = true;
+      //Запускаем таск для пищалки
+      xTaskCreatePinnedToCore(
+        triggerBuzzerTask, /* Function to implement the task */
+        "BuzzerTask",      /* Name of the task */
+        1000,              /* Stack size in words */
+        NULL,              /* Task input parameter */
+        0,                 /* Priority of the task */
+        &BuzzerTask,       /* Task handle. */
+        1);                /* Core where the task should run */
+    }
+  } else {
+    if (BuzzerTask != NULL && !BuzzerTaskFl) {
+      vTaskDelete(BuzzerTask);
+      BuzzerTask = NULL;
+    }
   }
 }
 
