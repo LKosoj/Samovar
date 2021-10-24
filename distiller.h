@@ -70,6 +70,7 @@ void IRAM_ATTR check_alarm_distiller() {
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
+    set_buzzer(true);
     set_power(false);
     Msg = "Emergency power OFF! Temperature error";
 #ifdef SAMOVAR_USE_BLYNK
@@ -81,6 +82,7 @@ void IRAM_ATTR check_alarm_distiller() {
 #ifdef USE_WATERSENSOR
   //Проверим, что вода подается
   if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
+    set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
     Msg = "Emergency power OFF! Water error";
@@ -92,6 +94,7 @@ void IRAM_ATTR check_alarm_distiller() {
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
+    set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
     Msg = "Water temp is critical!";
 #ifdef SAMOVAR_USE_BLYNK
@@ -108,6 +111,7 @@ void IRAM_ATTR check_alarm_distiller() {
     set_current_power(target_power_volt);
     if (power_err_cnt > 10) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+      set_buzzer(true);
       set_power(false);
       Msg = "Emergency power OFF! Power error";
 #ifdef SAMOVAR_USE_BLYNK
@@ -118,6 +122,7 @@ void IRAM_ATTR check_alarm_distiller() {
   } else power_err_cnt = 0;
 #endif
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
+      set_buzzer(true);
       Msg = "Water temp is critical! Water error. Voltage down from " + (String)target_power_volt;
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
