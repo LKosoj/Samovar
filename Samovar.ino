@@ -909,11 +909,7 @@ void loop() {
   }
 
   encoder_getvalue();
-
-  if (BuzzerTask != NULL && !BuzzerTaskFl) {
-    vTaskDelete(BuzzerTask);
-    BuzzerTask = NULL;
-  }
+  set_buzzer(false);
 }
 
 void getjson(void) {
