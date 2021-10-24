@@ -34,6 +34,10 @@ void IRAM_ATTR run_beer_program(byte num) {
 
   if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
 
+  if (SamSetup.ChangeProgramBuzzer){
+    set_buzzer(true);
+  }
+
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
     beer_finish();
@@ -96,7 +100,7 @@ void IRAM_ATTR check_alarm_beer() {
   if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp - 0.1) {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
-      set_buzzer();
+      set_buzzer(true);
       Msg = "Malt application temperature reached!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
@@ -179,7 +183,7 @@ void IRAM_ATTR check_alarm_beer() {
 
     //Проверяем, что еще нужно держать паузу. За 30 секунд до окончания шлем сообщение
     if (begintime > 0 && msgfl && ((float(millis()) - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {
-      set_buzzer();
+      set_buzzer(true);
       msgfl = false;
       Msg = "Bring in the hops!";
 #ifdef SAMOVAR_USE_BLYNK
