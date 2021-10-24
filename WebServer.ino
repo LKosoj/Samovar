@@ -234,6 +234,10 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.useautospeed) return "checked='true'";
     else
       return "";
+  } else if (var == "CPBuzz") {
+    if (SamSetup.ChangeProgramBuzzer) return "checked='true'";
+    else
+      return "";
   } else if (var == "autospeed")
     return (String)SamSetup.autospeed;
   else if (var == "DistTemp")
@@ -390,6 +394,11 @@ void handleSave(AsyncWebServerRequest *request) {
   SamSetup.useautospeed = false;
   if (request->hasArg("useautospeed")) {
     SamSetup.useautospeed = true;
+  }
+
+  SamSetup.ChangeProgramBuzzer = false;
+  if (request->hasArg("ChangeProgramBuzzer")) {
+    SamSetup.ChangeProgramBuzzer = true;
   }
 
   if (request->hasArg("autospeed")) {
