@@ -847,26 +847,34 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
 #else
 void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
+  Serial2.setTimeout(70);
   while (true) {
     if (PowerOn) {
       resp = "";
-      Serial2.flush();
+      //Serial2.flush();
       Serial2.print("АТ+VO?\r");
-      vTaskDelay(350);
+      vTaskDelay(250);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
+#ifdef __SAMOVAR_DEBUG
+        WriteConsoleLog("VO = " + resp);
+#endif
       }
       current_power_volt = resp.toInt();
-      Serial2.flush();
+      vTaskDelay(200);
+      //Serial2.flush();
       Serial2.print("АТ+VS?\r");
-      vTaskDelay(350);
+      vTaskDelay(250);
       resp = "";
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
+#ifdef __SAMOVAR_DEBUG
+        WriteConsoleLog("VS = " + resp);
+#endif
       }
       target_power_volt = resp.toInt();
     }
-    vTaskDelay(100);
+    vTaskDelay(200);
   }
 }
 #endif
