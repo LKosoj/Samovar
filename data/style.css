@@ -54,7 +54,11 @@ form {
   text-align: left
 }
 
-h1{text-align:center}
+h1{
+text-align:center;
+margin-top: 0 !important;
+margin-bottom: 20px !important;
+}
 
 p{margin: 0 !important;}
 
@@ -159,10 +163,7 @@ p{margin: 0 !important;}
   -webkit-box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16); 
   -moz-box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16); 
   box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16);
-  top: 1px;
 }
-
-
 
 /* Create an active/current tablink class */
 .tab input.active {
