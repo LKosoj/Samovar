@@ -10,7 +10,9 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 
 void set_water_temp(float watertemp){
+#ifdef USE_WATER_PUMP
   pump_regulator.setpoint = watertemp;      // сообщаем регулятору температуру, которую он должен поддерживать
+#endif
 }
 
 void bk_proc() {
