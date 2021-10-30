@@ -134,4 +134,12 @@ void IRAM_ATTR check_alarm_distiller() {
 #endif
     alarm_t_min = millis() + 30000;
   }
+
+ #ifdef USE_WATER_VALVE
+  if (WaterSensor.avgTemp >= TARGET_WATER_TEMP + 1) {
+    digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
+  } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1) {
+    digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
+  }
+#endif
 }
