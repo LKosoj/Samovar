@@ -722,8 +722,14 @@ void IRAM_ATTR check_alarm() {
   }
 #ifdef USE_WATER_VALVE
   if (WaterSensor.avgTemp >= TARGET_WATER_TEMP + 1) {
+#ifdef __SAMOVAR_DEBUG
+    WriteConsoleLog("Open valve2");
+#endif
     digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
   } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1) {
+#ifdef __SAMOVAR_DEBUG
+    WriteConsoleLog("Close valve2");
+#endif
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
@@ -847,31 +853,31 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
 #else
 void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
-  Serial2.setTimeout(70);
+  Serial2.setTimeout(300);
   while (true) {
     if (PowerOn) {
       resp = "";
       //Serial2.flush();
       Serial2.print("АТ+VO?\r");
       vTaskDelay(250);
-      if (Serial2.available()) {
+      //if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
         WriteConsoleLog("VO = " + resp);
 #endif
-      }
+      //}
       current_power_volt = resp.toInt();
       vTaskDelay(200);
       //Serial2.flush();
       Serial2.print("АТ+VS?\r");
       vTaskDelay(250);
       resp = "";
-      if (Serial2.available()) {
+      //if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
         WriteConsoleLog("VS = " + resp);
 #endif
-      }
+      //}
       target_power_volt = resp.toInt();
     }
     vTaskDelay(200);
