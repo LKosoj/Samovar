@@ -853,12 +853,16 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
 #else
 void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
+<<<<<<< HEAD
   Serial2.setTimeout(300);
+=======
+>>>>>>> parent of 0aea48d (Update logic.h)
   while (true) {
     if (PowerOn) {
       resp = "";
-      //Serial2.flush();
+      Serial2.flush();
       Serial2.print("АТ+VO?\r");
+<<<<<<< HEAD
       vTaskDelay(250);
       //if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
@@ -866,21 +870,30 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         WriteConsoleLog("VO = " + resp);
 #endif
       //}
+=======
+      vTaskDelay(350);
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\r');
+      }
+>>>>>>> parent of 0aea48d (Update logic.h)
       current_power_volt = resp.toInt();
-      vTaskDelay(200);
-      //Serial2.flush();
+      Serial2.flush();
       Serial2.print("АТ+VS?\r");
-      vTaskDelay(250);
+      vTaskDelay(350);
       resp = "";
       //if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
+<<<<<<< HEAD
 #ifdef __SAMOVAR_DEBUG
         WriteConsoleLog("VS = " + resp);
 #endif
       //}
+=======
+      }
+>>>>>>> parent of 0aea48d (Update logic.h)
       target_power_volt = resp.toInt();
     }
-    vTaskDelay(200);
+    vTaskDelay(100);
   }
 }
 #endif
