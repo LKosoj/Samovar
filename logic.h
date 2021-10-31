@@ -853,7 +853,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
 #else
 void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
-  Serial2.setTimeout(70);
+  Serial2.setTimeout(300);
   while (true) {
     if (PowerOn) {
       resp = "";
