@@ -494,6 +494,7 @@ volatile bool heater_state;                                     // Статус 
 bool msgfl;                                                     // Флаг для одноразовых сообщений
 String ofl;                                                     // Openlog filename
 bool mixer_status;                                              // Статус работы мешалки
+int bk_pwm;                                                     // Значение PWM насоса при работе с БК
 
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
