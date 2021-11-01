@@ -160,6 +160,10 @@ String indexKeyProcessor(const String &var) {
       return get_program(CAPACITY_NUM * 2);
   } else if (var == "videourl")
     return (String)SamSetup.videourl;
+  else if (var == "PWM_LV")
+    return (String)(PWM_LOW_VALUE * 10);
+  else if (var == "PWM_V")
+    return (String)bk_pwm;
   else if (var == "showvideo") {
     if ((String)SamSetup.videourl != "") return "inline";
     else
