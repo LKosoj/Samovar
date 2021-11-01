@@ -9,9 +9,12 @@ void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 
-void set_water_temp(float watertemp){
+void set_water_temp(float duty){
 #ifdef USE_WATER_PUMP
-  pump_regulator.setpoint = watertemp;      // сообщаем регулятору температуру, которую он должен поддерживать
+  bk_pwm = duty;
+  if (pump_started){
+    pump_pwm.write(bk_pwm);
+  }
 #endif
 }
 
@@ -57,6 +60,7 @@ void IRAM_ATTR check_alarm_bk() {
 
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true);
+    set_pump_pwm(bk_pwm);
   }
 
   if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
@@ -65,13 +69,6 @@ void IRAM_ATTR check_alarm_bk() {
     if (pump_started) set_pump_pwm(0);
 #endif
   }
-
-#ifdef USE_WATER_PUMP
-  //Устанавливаем ШИМ для насоса в зависимости от температуры воды
-  if (valve_status) {
-    set_pump_speed_pid(WaterSensor.avgTemp);
-  }
-#endif
 
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
