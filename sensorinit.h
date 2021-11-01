@@ -351,6 +351,8 @@ void IRAM_ATTR reset_sensor_counter(void) {
   start_pressure = bme_pressure;
   get_Samovar_Status();
 
+  bk_pwm = PWM_LOW_VALUE * 40;
+
 #ifdef SAMOVAR_USE_POWER
   power_err_cnt = 0;
 #endif
