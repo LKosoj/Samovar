@@ -124,15 +124,11 @@ sleep(1000);
 return 0;
 };
 
-function sendwatert(){
-var num = document.getElementById('WaterT').value;
-if(!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)){
-alert( "Введите температуру воды!" );
-return 0;
-}
+function sendwaterpwm(){
+var num = document.getElementById('PWM').value;
 var command = 'watert=' + num;
 sendbutton(command);
-alert( "Ok" );
+//alert( "Ok! Pump speed set " + num);
 return 0;
 };
 
@@ -147,20 +143,6 @@ sendbutton(command);
 alert( "Ok" );
 return 0;
 };
-
-function sendpumpspeed(){
-var num = document.getElementById('pumpspeed').value;
-if(!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)){
-alert( "Введите скорость!" );
-return 0;
-}
-var command = 'pumpspeed=' + num;
-sendbutton(command);
-alert( "Ok" );
-return 0;
-};
-
-
 
 setInterval(loadDoc,2000);
 setInterval(loadHeap,19000);
@@ -411,10 +393,29 @@ function set_bgcolor(obj){
   }
 }
 
+function sliderChange(){
+ document.getElementById('PWMt').value = document.getElementById('PWM').value;
+ sendwaterpwm();
+}
+
+function changetxtpwm(){
+num = document.getElementById('PWMt').value;
+if(!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)){
+alert( "Введите значение PWM!" );
+return 0;
+}
+document.getElementById('PWM').value = num;
+  sliderChange();
+}
+
 window.onload = function() {
  headers = document.querySelectorAll("[data-name='spoiler-title']");
 headers.forEach(function (item) {
   item.addEventListener("click", headerClick);
+slider = document.getElementById('PWM');
+  slider.addEventListener("change", sliderChange);
+ txt = document.getElementById('PWMt');
+ txt.value = document.getElementById('PWM').value;
 });
 
   getProgram();
@@ -508,19 +509,23 @@ headers.forEach(function (item) {
       мм рт.ст.
     </div>
   </div>
-  
-  
-  <div class="container_row" 
-    style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"
-  >
+
+  <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
     <div class="text" id='WaterH2'>
       <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
         <div>
-          Температура воды охлаждения:
-          <input name='WaterT' id='WaterT' type='text' value=''>
+          Скорость насоса:
+          <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="600" value='%PWM_V%' list="tickmarks">
+		  <datalist id="tickmarks">
+		    <option value="%PWM_LV%">
+		    <option value="200">
+		    <option value="300">
+		    <option value="400">
+		    <option value="500">
+		    <option value="600">
+		  </datalist>
         </div>
-        <input id='SetWaterT' type='submit' name='SetWaterT' value='Установить темп воды' onclick='sendwatert();'
-          class="button">
+        <input id='PWMt' type='text' name='PWMt' value='' onchange='changetxtpwm();'>
       </div>
     </div>
 
