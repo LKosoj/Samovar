@@ -14,6 +14,13 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }
 
+input[type="range"] {
+-webkit-appearance: slider-horizontal;
+-moz-appearance: slider-horizontal;
+appearance: slider-horizontal;
+width: 350px;
+}
+
 input {
 -webkit-appearance: none;
 -moz-appearance: none;
