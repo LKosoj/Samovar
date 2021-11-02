@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "3.06"
+#define SAMOVAR_VERSION "3.07"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -498,7 +498,7 @@ bool msgfl;                                                     // Флаг дл
 String ofl;                                                     // Openlog filename
 bool mixer_status;                                              // Статус работы мешалки
 int bk_pwm;                                                     // Значение PWM насоса при работе с БК
-
+//int tick_buzz;
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER
