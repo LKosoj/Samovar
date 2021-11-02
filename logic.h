@@ -761,12 +761,14 @@ void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   tick_buzz = 0;
 
   while (true) {
-    digitalWrite(BZZ_PIN, HIGH);
-    vTaskDelay(beep);
-    digitalWrite(BZZ_PIN, LOW);
+    if (BuzzerTaskFl){
+      digitalWrite(BZZ_PIN, HIGH);
+      vTaskDelay(beep);
+      digitalWrite(BZZ_PIN, LOW);
+      tick_buzz++;
+      if (tick_buzz > 5) BuzzerTaskFl = false;
+    }
     vTaskDelay(silent);
-    tick_buzz++;
-    if (tick_buzz > 5) BuzzerTaskFl = false;
   }
 }
 
@@ -788,6 +790,7 @@ void set_buzzer(bool fl) {
     if (BuzzerTask != NULL && !BuzzerTaskFl) {
       vTaskDelete(BuzzerTask);
       BuzzerTask = NULL;
+      digitalWrite(BZZ_PIN, LOW);
     }
   }
 }
