@@ -497,7 +497,6 @@ bool msgfl;                                                     // Флаг дл
 String ofl;                                                     // Openlog filename
 bool mixer_status;                                              // Статус работы мешалки
 int bk_pwm;                                                     // Значение PWM насоса при работе с БК
-//int tick_buzz;
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER
