@@ -911,11 +911,6 @@ void loop() {
 
   encoder_getvalue();
   
-//  if (tick_buzz < 6){
-//    if (BuzzerTask != NULL) Serial.print("Buzz ON ");
-//    else Serial.print("Buzz OFF");
-//    Serial.println((String)tick_buzz);
-//  }
   set_buzzer(false);
 }
 
