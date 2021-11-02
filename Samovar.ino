@@ -910,6 +910,12 @@ void loop() {
   }
 
   encoder_getvalue();
+  
+//  if (tick_buzz < 6){
+//    if (BuzzerTask != NULL) Serial.print("Buzz ON ");
+//    else Serial.print("Buzz OFF");
+//    Serial.println((String)tick_buzz);
+//  }
   set_buzzer(false);
 }
 
@@ -1048,7 +1054,7 @@ void read_config() {
 void WriteConsoleLog(String StringLogMsg) {
   LogMsg = LogMsg + "\n" + StringLogMsg;
 #ifdef __SAMOVAR_DEBUG
-  Serial.println(StringLogMsg);
+  //Serial.println(StringLogMsg);
 #endif
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
