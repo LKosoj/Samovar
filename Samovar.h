@@ -299,8 +299,7 @@ GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPE
 
 File fileToAppend;
 
-//WiFiClient espClient;
-//PubSubClient client(espClient);
+//AsyncMqttClient mqttClient;
 
 #ifdef SERVO_PIN
 Servo servo;  // create servo object to control a servo
