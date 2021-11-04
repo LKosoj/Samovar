@@ -60,7 +60,9 @@ void IRAM_ATTR check_alarm_bk() {
 
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true);
+#ifdef USE_WATER_PUMP
     set_pump_pwm(bk_pwm);
+#endif
   }
 
   if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
