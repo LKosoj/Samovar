@@ -148,7 +148,7 @@ void IRAM_ATTR withdrawal(void) {
         CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
         set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
-        if (program[ProgramNum].WType == "B") {
+        if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
           set_current_power(target_power_volt - 3 * PWR_FACTOR);
         }
 #endif
@@ -890,8 +890,12 @@ void IRAM_ATTR get_current_power() {
     current_power_mode = "N";
     return;
   }
+#ifndef SAMOVAR_USE_SEM_AVR
   //Считаем мощность V*V*K/R, K = 0,98~1
   current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
+#else
+  current_power_p = current_power_volt;
+#endif
 }
 
 //устанавливаем напряжение для регулятора напряжения
