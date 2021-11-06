@@ -450,42 +450,42 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
       if (SteamSensor.ErrCount > 10) {
         SteamSensor.ErrCount = -110;
-        Msg = "Alarm! Steam sensor error!";
+        Msg = "Ошибка датчика температуры пара!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
-        Blynk.notify("Alarm! {DEVICE_NAME} Steam sensor error!");
+        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
       }
       if (PipeSensor.ErrCount > 10) {
         PipeSensor.ErrCount = -110;
-        Msg = "Alarm! Pipe sensor error!";
+        Msg = "Ошибка датчика температуры царги!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
-        Blynk.notify("Alarm! {DEVICE_NAME} Pipe sensor error!");
+        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
       }
       if (WaterSensor.ErrCount > 10) {
         WaterSensor.ErrCount = -110;
-        Msg = "Alarm! Water sensor error!";
+        Msg = "Ошибка датчика температуры воды!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
-        Blynk.notify("Alarm! {DEVICE_NAME} Water sensor error!");
+        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
       }
       if (TankSensor.ErrCount > 10) {
         TankSensor.ErrCount = -110;
-        Msg = "Alarm! Tank sensor error!";
+        Msg = "Ошибка датчика температуры куба!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
-        Blynk.notify("Alarm! {DEVICE_NAME} Tank sensor error!");
+        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
       }
       if (ACPSensor.ErrCount > 10) {
         ACPSensor.ErrCount = -110;
-        Msg = "Alarm! ACP sensor error!";
+        Msg = "Ошибка датчика температуры в ТСА!";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
-        Blynk.notify("Alarm! {DEVICE_NAME} ACP sensor error!");
+        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
       }
 
