@@ -22,10 +22,10 @@ void distiller_proc() {
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
-    Msg = "Distillation started";
+    Msg = "Включен нагрев дистиллятора";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("{DEVICE_NAME} Distillation started");
+    Blynk.notify("{DEVICE_NAME} - " + Msg);
 #endif
   }
 
@@ -35,10 +35,10 @@ void distiller_proc() {
 }
 
 void IRAM_ATTR distiller_finish() {
-  Msg = "Distillation finished";
+  Msg = "Дистилляция завершена";
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
-  Blynk.notify("{DEVICE_NAME} Distillation finished");
+  Blynk.notify("{DEVICE_NAME} - " + Msg);
 #endif
   set_power(false);
   reset_sensor_counter();
@@ -72,10 +72,10 @@ void IRAM_ATTR check_alarm_distiller() {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_buzzer(true);
     set_power(false);
-    Msg = "Emergency power OFF! Temperature error";
+    Msg = "Аварийное отключение! Превышена максимальная температура воды охлаждения!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Temperature error");
+    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
   }
 
@@ -85,10 +85,10 @@ void IRAM_ATTR check_alarm_distiller() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    Msg = "Emergency power OFF! Water error";
+    Msg = "Аварийное отключение! Прекращена подача воды.";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} emergency power OFF! Water error");
+    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
   }
 #endif
@@ -96,10 +96,10 @@ void IRAM_ATTR check_alarm_distiller() {
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    Msg = "Water temp is critical!";
+    Msg = "Критическая температура воды!";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
-    Blynk.notify("Warning! {DEVICE_NAME} water temp is critical!");
+    Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
 #endif
 
 #ifdef SAMOVAR_USE_POWER
@@ -113,20 +113,20 @@ void IRAM_ATTR check_alarm_distiller() {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
-      Msg = "Emergency power OFF! Power error";
+      Msg = "Аварийное отключение! Ошибка управления нагревателем.";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
+    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
     }
   } else power_err_cnt = 0;
 #endif
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      Msg = "Water temp is critical! Water error. Voltage down from " + (String)target_power_volt;
+      Msg = "Критическая температура воды! Напряжение снижено с " + (String)target_power_volt;
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} water temp is critical! Water error. Voltage down from " + (String)target_power_volt);
+    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
