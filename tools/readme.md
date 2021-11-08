@@ -17,3 +17,5 @@ chartlocal.htm - страничка для анализа логов. Для р�
 Samovar_default_settings.txt - файл с начальными настройками Самовара. Описание доступно тут https://www.samovar-tool.ru/2021/03/24/nastrojka-parametrov-samovara/
 
 program_shugar.txt, program_grain.txt, program_fruit.txt - файлы с шаблонами расчета программ отбора для сахара, зерна и фруктов. Описание доступно тут https://www.samovar-tool.ru/2021/03/27/kak-sostavit-programmu-otbora-dlja-samovara/
+
+Pump3D.zip - 3D-модель для печати головы насоса. Описание доступно тут https://alcodistillers.ru/forum/viewtopic.php?pid=185555#p185555
