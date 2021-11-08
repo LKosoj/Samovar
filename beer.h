@@ -42,7 +42,7 @@ void IRAM_ATTR run_beer_program(byte num) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
     beer_finish();
   } else {
-    Msg = "Set prog line " + (String)(num + 1);
+    Msg = "Переход к строке программы №" + (String)(num + 1);
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("{DEVICE_NAME} " + Msg);
@@ -60,7 +60,7 @@ void IRAM_ATTR beer_finish() {
   PowerOn = false;
   heater_state = false;
   startval = 0;
-  Msg = "Beer finished";
+  Msg = "Включен нагрев в режиме затирания";
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
   Blynk.notify("{DEVICE_NAME} " + Msg);
@@ -101,10 +101,10 @@ void IRAM_ATTR check_alarm_beer() {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer(true);
-      Msg = "Malt application temperature reached!";
+      Msg = "Достигнута температура засыпи солода!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
-      Blynk.notify("{DEVICE_NAME} " + Msg);
+      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
 #endif
     }
     startval = 2002;
@@ -114,10 +114,10 @@ void IRAM_ATTR check_alarm_beer() {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
-      Msg = "Pause temperature reached! Start waiting";
+      Msg = "Достигнута температурная пауза. Ждем завершения.";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
-      Blynk.notify("{DEVICE_NAME} " + Msg);
+      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
 #endif
     }
     //Проверяем, что еще нужно держать паузу
@@ -157,10 +157,10 @@ void IRAM_ATTR check_alarm_beer() {
       if (abs(TankSensor.avgTemp - BOILING_TEMP) <= 0.5) {
         msgfl = true;
         begintime = millis();
-        Msg = "Boiling started!";
+        Msg = "Начался режим кипячения";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
-        Blynk.notify("{DEVICE_NAME} " + Msg);
+      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
 #endif
       }
     }
@@ -185,10 +185,10 @@ void IRAM_ATTR check_alarm_beer() {
     if (begintime > 0 && msgfl && ((float(millis()) - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {
       set_buzzer(true);
       msgfl = false;
-      Msg = "Bring in the hops!";
+      Msg = "Засыпьте хмель!";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
-      Blynk.notify("{DEVICE_NAME} " + Msg);
+      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
 #endif
     }
 
@@ -270,10 +270,10 @@ void setHeaterPosition(bool state) {
     if (power_err_cnt > 10) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_power(false);
-      Msg = "Emergency power OFF! Power error";
+      Msg = "Аварийное отключение! Ошибка управления нагревателем.";
 #ifdef SAMOVAR_USE_BLYNK
       //Если используется Blynk - пишем оператору
-      Blynk.notify("Alarm! {DEVICE_NAME} " + Msg);
+    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
     }
   } else power_err_cnt = 0;
