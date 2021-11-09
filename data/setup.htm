@@ -121,6 +121,7 @@ function SaveFormToFile(form) {
   <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Прочие">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
+<div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
 <h2>
 <div>
 Режим работы
@@ -137,6 +138,7 @@ function SaveFormToFile(form) {
 <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
 <label for='usepressure'>Использовать корректировку давления</label>
 </h2>
+</div>
 <div>
 <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
 <h2>При выходе за уставки температур пара и царги при отборе тела</h2>
@@ -243,11 +245,9 @@ function SaveFormToFile(form) {
 </div>
 
 <div id="Pump" class="tabcontent">
-<div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
 <h2>Количество шагов шагового двигателя: <input name='StepperStepMl' type='text' value='%StepperStepMl%' style="width: 6em;"> /мл.</h2>
 <div style="margin: 0 auto; width: 200px;">
 <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"' class="button">
-</div>
 </div>
 </div>
 
@@ -262,11 +262,13 @@ function SaveFormToFile(form) {
 </div>
 
 <div id="Other" class="tabcontent">
+<div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
 <h2>Токен Blynk: <input name='blynkauth' type='text' size="32" style="width: 22em;" value='%blynkauth%'></h2>
-<h2>URL для видео с камеры: <input name='videourl' type='text' size="32" style="width: 22em;" value='%videourl%'></h2>
+<h2>URL видео камеры: <input name='videourl' type='text' size="32" style="width: 30em;" value='%videourl%'></h2>
 <h2>Часовой пояс: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
 <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
 <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+</div>
 <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
 <h2><p>Цвета для температур:</p>
 <div>
@@ -324,6 +326,7 @@ function SaveFormToFile(form) {
 </div>
 </h2>
 </div>
+<div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em 2em 1em 2em; justify-content: space-between;">
 <div style="margin: 0 auto; width: 200px;">
 <div>
 <input id='resetwifi' type='button' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");' class="button">
@@ -346,6 +349,7 @@ function SaveFormToFile(form) {
 </div>
 <div style="margin: 0 auto; width: 200px;">
 <input id='reboot' type='button' name='reboot' value='Перегрузить Самовар' onclick='sendbutton("reboot");' class="button">
+</div>
 </div>
 </div>
 <div style="margin: 0 auto; width: 668px;">
