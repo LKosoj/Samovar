@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "3.07"
+#define SAMOVAR_VERSION "3.08"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -392,6 +392,7 @@ struct SetupEEPROM {
   float StbVoltage;                                             //Напряжение регулятора в режиме поддержания температуры
   bool useautopowerdown;                                        //Настройка для использования автокорректировки подводимой мощности
   bool ChangeProgramBuzzer;                                     //Настройка для использования пищалки при смене программы
+  bool UseBuzzer;                                               //Настройка для использования пищалки при смене программы
 };
 
 struct DSSensor {
