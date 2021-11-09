@@ -409,7 +409,7 @@ void handleSave(AsyncWebServerRequest *request) {
     SamSetup.ChangeProgramBuzzer = true;
   }
 
-  SamSetup.ChangeProgramBuzzer = false;
+  SamSetup.UseBuzzer = false;
   if (request->hasArg("UseBuzzer")) {
     SamSetup.UseBuzzer = true;
   }
