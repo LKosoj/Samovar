@@ -148,8 +148,12 @@ function SaveFormToFile(form) {
 <label for='useautopowerdown' class="tooltip">Использовать корректировку подаваемой мощности<span class="tooltiptext">при при повышении температуры по пару (работает вместе с корректировкой скорости)</span></label>
 </h2>
 <h2>
+<input id='UseBuzzer' type='checkbox' name='UseBuzzer' value='UseBuzzer' %CUBuzz%>
+<label for='UseBuzzer' class="tooltip">Использовать зуммер для нотификации<span class="tooltiptext">при выключенном параметре зуммер отключается полностью</span></label>
+</h2>
+<h2>
 <input id='ChangeProgramBuzzer' type='checkbox' name='ChangeProgramBuzzer' value='ChangeProgramBuzzer' %CPBuzz%>
-<label for='ChangeProgramBuzzer' class="tooltip">Включать зумер при смене программы<span class="tooltiptext">для нотификации </span></label>
+<label for='ChangeProgramBuzzer' class="tooltip">Включать зуммер при смене программы<span class="tooltiptext">для нотификации </span></label>
 </h2>
 <h2>Ректификация и дистилляция до температуры в кубе: <input name='DistTemp' type='text' value='%DistTemp%'>&#176;C</h2>
 </div>
