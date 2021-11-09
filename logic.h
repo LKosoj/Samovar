@@ -125,6 +125,12 @@ void IRAM_ATTR withdrawal(void) {
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + SteamSensor.Delay * 1000;
+      set_buzzer(true);
+      Msg = "Пауза по Т пара";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
+#endif
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
@@ -157,6 +163,12 @@ void IRAM_ATTR withdrawal(void) {
       program_Wait = true;
       pause_withdrawal(true);
       t_min = millis() + PipeSensor.Delay * 1000;
+      set_buzzer(true);
+      Msg = "Пауза по Т царги";
+#ifdef SAMOVAR_USE_BLYNK
+      //Если используется Blynk - пишем оператору
+      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
+#endif
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
@@ -567,12 +579,14 @@ void IRAM_ATTR check_alarm() {
   if (!valve_status) {
     if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true);
     else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
+      set_buzzer(true);
       open_valve(true);
     }
   }
 
   if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 15 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
     open_valve(false);
+    set_buzzer(true);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
 #endif
@@ -686,6 +700,7 @@ void IRAM_ATTR check_alarm() {
     wp_count = 0;
 #endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
+    set_buzzer(true);
     Msg = "Разгон завершён. Стабилизация/работа на себя";
     SamovarStatusInt = 51;
 #ifdef SAMOVAR_USE_BLYNK
@@ -709,6 +724,7 @@ void IRAM_ATTR check_alarm() {
       acceleration_temp += 1;
       if (acceleration_temp == 60 * 6) {
         SamovarStatusInt = 52;
+        set_buzzer(true);
         Msg = "Стабилизация завершена, колонна работает стабильно.";
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
@@ -722,14 +738,8 @@ void IRAM_ATTR check_alarm() {
   }
 #ifdef USE_WATER_VALVE
   if (WaterSensor.avgTemp >= TARGET_WATER_TEMP + 1) {
-#ifdef __SAMOVAR_DEBUG
-    WriteConsoleLog("Open valve2");
-#endif
     digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
   } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1) {
-#ifdef __SAMOVAR_DEBUG
-    WriteConsoleLog("Close valve2");
-#endif
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
@@ -773,7 +783,7 @@ void IRAM_ATTR triggerBuzzerTask(void *parameter) {
 }
 
 void set_buzzer(bool fl) {
-  if (fl){
+  if (fl && SamSetup.UseBuzzer){
     if (BuzzerTask == NULL) {
       BuzzerTaskFl = true;
       //Запускаем таск для пищалки
