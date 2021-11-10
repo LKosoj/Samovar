@@ -237,6 +237,16 @@ uint8_t temprature_sens_read();
 
 #include "user_config_override.h"
 
+#include <FS.h>
+#ifdef USE_LittleFS
+#pragma message ("USE LITTLEFS")
+  #define SPIFFS LITTLEFS
+  #include <LITTLEFS.h> 
+#else
+#pragma message ("USE SPIFFS")
+  #include <SPIFFS.h>
+#endif 
+
 void writeString(String Str, byte num);
 void WriteConsoleLog(String StringLogMsg);
 
