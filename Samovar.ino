@@ -23,8 +23,6 @@
 #include <Update.h>
 #include <LiquidMenu.h>
 #include <EEPROM.h>
-#include <SPIFFS.h>
-#include <SPIFFSEditor.h>
 #include <ESPAsyncWiFiManager.h>
 //#include <AsyncMqttClient.h>
 
@@ -42,6 +40,8 @@
 #include <ESP32Servo.h>
 
 #include "Samovar.h"
+
+#include <SPIFFSEditor.h>
 
 #ifdef USE_BME680
 #include <Adafruit_BME680.h>
