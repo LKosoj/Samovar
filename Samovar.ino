@@ -58,6 +58,7 @@
 #include <Adafruit_BME280.h>
 #endif
 
+#include "mod_rmvk.h"
 #include "font.h"
 #include "logic.h"
 #include "openlog.h"

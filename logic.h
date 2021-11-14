@@ -867,9 +867,11 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
 #else
 void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
-  Serial2.setTimeout(300);
+  uint16_t v;
+  //Serial2.setTimeout(300);
   while (true) {
     if (PowerOn) {
+#ifdef SAMOVAR_USE_SEM_AVR
       resp = "";
       Serial2.flush();
       Serial2.print("АТ+VO?\r");
@@ -885,7 +887,19 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
       }
-      target_power_volt = resp.toInt();
+      v = resp.toInt();
+      if ( v!= 0) {
+        target_power_volt = v;
+      }
+#else
+      //current_power_volt = RMVK_get_in_voltge();
+      //vTaskDelay(250);
+      v = RMVK_get_out_voltge();
+      if ( v!= 0) {
+        current_power_volt = v;
+      }
+      vTaskDelay(250);
+#endif
     }
     vTaskDelay(100);
   }
@@ -904,7 +918,7 @@ void IRAM_ATTR get_current_power() {
   //Считаем мощность V*V*K/R, K = 0,98~1
   current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
 #else
-  current_power_p = current_power_volt;
+  current_power_p = target_power_volt;
 #endif
 }
 
@@ -925,6 +939,9 @@ void IRAM_ATTR set_current_power(float Volt) {
   }
   vTaskSuspend(PowerStatusTask);
 #ifdef SAMOVAR_USE_RMVK
+#ifndef SAMOVAR_USE_SEM_AVR
+  RMVK_set_out_voltge(Volt);
+#else
   String Cmd;
   int V = Volt;
   if (V < 100) Cmd = "0";
@@ -932,6 +949,7 @@ void IRAM_ATTR set_current_power(float Volt) {
     Cmd = "";
   Cmd = Cmd + (String)V;
   Serial2.print("АТ+VS=" + Cmd + "\r");
+#endif
 #else
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
@@ -948,11 +966,11 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_SEM_AVR
     set_current_power(0);
 #endif
-    Serial2.print("АТ+ON=0\r");
+    RMVK_set_on(0);
   } else if (Mode == POWER_SPEED_MODE) {
-    Serial2.print("АТ+ON=1\r");
+    RMVK_set_on(1);
 #ifndef SAMOVAR_USE_SEM_AVR
-    set_current_power(240);
+    set_current_power(MAX_VOLTAGE);
 #endif
   }
 #else
