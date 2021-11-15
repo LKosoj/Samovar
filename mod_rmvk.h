@@ -45,6 +45,7 @@ uint16_t RMVK_select_mem(uint16_t sm);
 
 uint16_t RMVK_get_in_voltge();
 uint16_t RMVK_get_out_voltge();
+uint16_t RMVK_get_store_out_voltge();
 bool RMVK_get_state();
 bool RMVK_get_conn();
 
