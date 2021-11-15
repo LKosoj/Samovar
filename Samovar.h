@@ -245,7 +245,7 @@ uint8_t temprature_sens_read();
 #else
 #pragma message ("USE SPIFFS")
   #include <SPIFFS.h>
-#endif 
+#endif
 
 void writeString(String Str, byte num);
 void WriteConsoleLog(String StringLogMsg);
