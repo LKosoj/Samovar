@@ -378,8 +378,11 @@ void IRAM_ATTR reset_sensor_counter(void) {
     char charVar[25];
     ofl.toCharArray(charVar, ofl.length());
     setupOpenLog();
+    //Serial.println("FinishSetup");
     gotoOLCommandMode();
+    //Serial.println("SetCMM");
     createOLFile(charVar);
+    //Serial.println("FileCreated");
   }
 #endif
 }
