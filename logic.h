@@ -868,21 +868,20 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
 void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
   uint16_t v;
-  //Serial2.setTimeout(300);
   while (true) {
     if (PowerOn) {
 #ifdef SAMOVAR_USE_SEM_AVR
       resp = "";
       Serial2.flush();
       Serial2.print("АТ+VO?\r");
-      vTaskDelay(350);
+      vTaskDelay(250);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
       }
       current_power_volt = resp.toInt();
       Serial2.flush();
       Serial2.print("АТ+VS?\r");
-      vTaskDelay(350);
+      vTaskDelay(250);
       resp = "";
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
@@ -892,16 +891,15 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         target_power_volt = v;
       }
 #else
-      //current_power_volt = RMVK_get_in_voltge();
-      //vTaskDelay(250);
-      v = RMVK_get_out_voltge();
-      if ( v!= 0) {
-        current_power_volt = v;
-      }
+      current_power_volt = RMVK_get_out_voltge();
       vTaskDelay(250);
+      v = RMVK_get_store_out_voltge();
+      if ( v!= 0) {
+        target_power_volt = v;
+      }
 #endif
     }
-    vTaskDelay(100);
+    vTaskDelay(250);
   }
 }
 #endif
