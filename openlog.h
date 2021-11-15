@@ -4,17 +4,13 @@
 #include "Samovar.h"
 
 #define OpenLog Serial
+void gotoOLCommandMode(void);
 
 //Setups up the software serial, resets OpenLog so we know what state it's in, and waits
 //for OpenLog to come online and report '<' that it is ready to receive characters to record
 void setupOpenLog(void) {
   OpenLog.begin(115200);
-
-  //Wait for OpenLog to respond with '<' to indicate it is alive and recording to a file
-  while (1) {
-    if (OpenLog.available())
-      if (OpenLog.read() == '<') break;
-  }
+  gotoOLCommandMode();
 }
 
 //This function creates a given file and then opens it in append mode (ready to record characters to the file)
