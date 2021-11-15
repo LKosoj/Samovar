@@ -242,6 +242,8 @@ uint8_t temprature_sens_read();
 #pragma message ("USE LITTLEFS")
   #define SPIFFS LITTLEFS
   #include <LITTLEFS.h> 
+  //#define SPIFFS LittleFS
+  //#include <LittleFS.h> 
 #else
 #pragma message ("USE SPIFFS")
   #include <SPIFFS.h>
