@@ -871,35 +871,41 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
 #ifdef SAMOVAR_USE_SEM_AVR
-      resp = "";
+      Serial2.flush();
+      Serial2.print("АТ+SS?\r");
+      vTaskDelay(350);
+      if (Serial2.available()) {
+        current_power_mode = Serial2.readStringUntil('\r');
+      }
+
       Serial2.flush();
       Serial2.print("АТ+VO?\r");
-      vTaskDelay(250);
+      vTaskDelay(350);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
+        current_power_volt = resp.toInt();
       }
-      current_power_volt = resp.toInt();
+
       Serial2.flush();
       Serial2.print("АТ+VS?\r");
-      vTaskDelay(250);
-      resp = "";
+      vTaskDelay(350);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
-      }
-      v = resp.toInt();
-      if ( v!= 0) {
-        target_power_volt = v;
+        v = resp.toInt();
+        if ( v!= 0) {
+          target_power_volt = v;
+        }
       }
 #else
       current_power_volt = RMVK_get_out_voltge();
-      vTaskDelay(250);
+      vTaskDelay(350);
       v = RMVK_get_store_out_voltge();
       if ( v!= 0) {
         target_power_volt = v;
       }
+      vTaskDelay(350);
 #endif
     }
-    vTaskDelay(250);
   }
 }
 #endif
@@ -910,6 +916,7 @@ void IRAM_ATTR get_current_power() {
     current_power_volt = 0;
     target_power_volt = 0;
     current_power_mode = "N";
+    current_power_p = 0;
     return;
   }
 #ifndef SAMOVAR_USE_SEM_AVR
