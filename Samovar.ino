@@ -5,8 +5,7 @@
 #include "soc/rtc_wdt.h"
 #include <esp_task_wdt.h>
 #include <driver/dac.h>
-#include <soc/touch_channel.h>
-//#include <driver/touch_sensor.h>
+#include <driver/touch_sensor.h>
 
 #include <Arduino.h>
 #include <Wire.h>
