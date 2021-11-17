@@ -22,4 +22,6 @@ https://www.samovar-tool.ru/samovar-diy/
 Обсуждение на форуме
 https://alcodistillers.ru/forum/viewtopic.php?id=1812
 
+Обратите внимание! Скетч с версии 4.0 работает с SDK версией не ниже 2.0.1. Как установить SDK - смотрите тут: https://www.samovar-tool.ru/2021/03/30/ustanovka-i-nastrojka-platy-esp32-v-arduino-ide/
+
     
