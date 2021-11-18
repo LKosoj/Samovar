@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <Wire.h>
 
 #ifndef Adafruit_I2CDevice_h
