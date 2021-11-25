@@ -4,7 +4,7 @@
 //#define PID_OPTIMIZED_I
 #include <GyverPID.h>
 
-#define PUMP_PWM_FREQ 100
+#define PUMP_PWM_FREQ 15
 
 ESP32PWM pump_pwm;
 GyverPID pump_regulator(6.5, 0.3, 0.6, 1023);
