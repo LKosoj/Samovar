@@ -671,7 +671,7 @@ void IRAM_ATTR check_alarm() {
     whls.resetStates();
     if (program[ProgramNum].WType != "C") {
       set_buzzer(true);
-      Msg = "Тревога от датчика захлёба!";
+      Msg = "Тревога от датчика захлёба! ";
     } else {
 #ifdef SAMOVAR_USE_POWER
       //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
@@ -682,7 +682,7 @@ void IRAM_ATTR check_alarm() {
 #endif
     }
 #ifdef SAMOVAR_USE_POWER
-    Msg = Msg + " " + (String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt;
+    Msg = Msg + (String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt;
     set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
 #ifdef SAMOVAR_USE_BLYNK
