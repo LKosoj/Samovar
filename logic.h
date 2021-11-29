@@ -943,8 +943,15 @@ void IRAM_ATTR set_current_power(float Volt) {
     vTaskDelay(800);
   }
   vTaskSuspend(PowerStatusTask);
+  delay(100);
 #ifdef SAMOVAR_USE_RMVK
 #ifndef SAMOVAR_USE_SEM_AVR
+  RMVK_set_out_voltge(Volt);
+  delay(100);
+  RMVK_set_out_voltge(Volt);
+  delay(200);
+  RMVK_set_out_voltge(Volt);
+  delay(300);
   RMVK_set_out_voltge(Volt);
 #else
   String Cmd;
@@ -977,7 +984,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_SEM_AVR
   Serial2.print("АТ+ON=1\r");
 #else
-    RMVK_set_on(1);
+    RMVK_set_out_voltge(MAX_VOLTAGE);
 #endif
   }
 #else
