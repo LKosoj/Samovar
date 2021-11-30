@@ -24,11 +24,11 @@ typedef enum {
 } rmvk_res_t;
 
 typedef struct  {
-    uint8_t conn;
-    uint8_t on;
-    uint8_t VI;
-    uint8_t VO;
-    uint8_t VS;
+    volatile uint8_t conn;
+    volatile uint8_t on;
+    volatile uint8_t VI;
+    volatile uint8_t VO;
+    volatile uint8_t VS;
 } rmvk_t;
 
 extern rmvk_t rmvk;
