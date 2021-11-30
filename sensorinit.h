@@ -283,9 +283,9 @@ void sensor_init(void) {
 
 #ifdef SAMOVAR_USE_SEM_AVR
 //Если SEM_AVR иницииурем порт
-  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
   Serial2.setTimeout(300);
-  Serial2.setRxBufferSize(10);
+  //Serial2.setRxBufferSize(10);
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 #define USE_SERIAL
 #endif
 
@@ -299,8 +299,8 @@ void sensor_init(void) {
 
 #ifdef SAMOVAR_USE_POWER
 #ifndef USE_SERIAL
+  //Serial2.setRxBufferSize(10);
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
-  Serial2.setRxBufferSize(10);
 #define USE_SERIAL
 #endif
 #endif
