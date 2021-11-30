@@ -38,6 +38,13 @@
 #endif
 #endif
 
+#ifdef SAMOVAR_USE_RMVK
+#ifndef SAMOVAR_USE_SEM_AVR
+SemaphoreHandle_t xSemaphore = NULL;
+#endif
+#endif
+
+
 #ifdef SAMOVAR_USE_SEM_AVR
 #ifndef SAMOVAR_USE_RMVK
 #define SAMOVAR_USE_RMVK
