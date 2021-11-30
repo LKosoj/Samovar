@@ -560,7 +560,7 @@ void IRAM_ATTR check_alarm() {
   //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
   if (current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
     power_err_cnt++;
-    set_current_power(target_power_volt);
+    if (power_err_cnt > 8) set_current_power(target_power_volt);
     if (power_err_cnt > 10) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
@@ -934,24 +934,18 @@ void IRAM_ATTR set_current_power(float Volt) {
   WriteConsoleLog("Set current power =" + (String)Volt);
 #endif
   vTaskDelay(100);
-  target_power_volt = Volt;
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
   } else {
     set_power_mode(POWER_WORK_MODE);
-    vTaskDelay(800);
+    vTaskDelay(100);
   }
   vTaskSuspend(PowerStatusTask);
-  delay(100);
+  target_power_volt = Volt;
 #ifdef SAMOVAR_USE_RMVK
 #ifndef SAMOVAR_USE_SEM_AVR
-  RMVK_set_out_voltge(Volt);
-  delay(100);
-  RMVK_set_out_voltge(Volt);
-  delay(200);
-  RMVK_set_out_voltge(Volt);
-  delay(300);
+  xSemaphoreGive( xSemaphore );
   RMVK_set_out_voltge(Volt);
 #else
   String Cmd;
@@ -966,24 +960,27 @@ void IRAM_ATTR set_current_power(float Volt) {
   String hexString = String((int)(Volt * 10), HEX);
   Serial2.print("S" + hexString + "\r");
 #endif
+  target_power_volt = Volt;
   vTaskResume(PowerStatusTask);
 }
 
 void IRAM_ATTR set_power_mode(String Mode) {
   vTaskSuspend(PowerStatusTask);
-  vTaskDelay(50);
   current_power_mode = Mode;
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
   Serial2.print("АТ+ON=0\r");
 #else
+    xSemaphoreGive( xSemaphore );
     RMVK_set_on(0);
 #endif
   } else if (Mode == POWER_SPEED_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
   Serial2.print("АТ+ON=1\r");
 #else
+    xSemaphoreGive( xSemaphore );
+    RMVK_set_on(1);
     RMVK_set_out_voltge(MAX_VOLTAGE);
 #endif
   }
