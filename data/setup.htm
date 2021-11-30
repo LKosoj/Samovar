@@ -266,6 +266,10 @@ function SaveFormToFile(form) {
 <h2>Токен Blynk: <input name='blynkauth' type='text' size="32" style="width: 22em;" value='%blynkauth%'></h2>
 <h2>URL видео камеры: <input name='videourl' type='text' size="32" style="width: 30em;" value='%videourl%'></h2>
 <h2>Часовой пояс: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
+<h2>
+<input id='CheckPower' type='checkbox' name='CheckPower' value='CheckPower' %ChckPwr%>
+<label for='CheckPower' class="tooltip">Использовать проверку подключения регулятора<span class="tooltiptext">Если используется регулятор, при отсутствии связи с ним Самовар выключит питание</span></label>
+</h2>
 <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
 <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
 </div>
