@@ -10,25 +10,31 @@
 #define BUF_SIZE (1024)
 #define RD_BUF_SIZE (BUF_SIZE)
 
+StaticSemaphore_t xSemaphoreBuffer;
 rmvk_t rmvk;
-SemaphoreHandle_t xSemaphore = NULL;
-
 
 uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
     size_t cmd_len;
     int len;
+    int len_bf = 0;
     cmd_len=strlen(cmd);
     char cmd_buf[cmd_len+2];
     const char * pc=cmd_buf;
     uint8_t buf[10];
+    String s;
    if( xSemaphore != NULL )
    {
-       if( xSemaphoreTake( xSemaphore, ( TickType_t ) 10 ) == pdTRUE )
+       //if( xSemaphoreTake( xSemaphore, ( TickType_t ) RMVK_READ_DELAY) == pdTRUE)
+       if (1 == 1)
        {
             sprintf(cmd_buf,"%s\r",cmd);
-            uart_flush(RMVK_UART);
+            ESP_ERROR_CHECK(uart_get_buffered_data_len(RMVK_UART, (size_t*)&len_bf));
+            vTaskDelay(50);
+            if (len_bf > 0) uart_flush(RMVK_UART);
             cmd_len=uart_write_bytes(RMVK_UART,pc ,strlen(pc));
+            vTaskDelay(50);
             len = uart_read_bytes(RMVK_UART, buf, sizeof(buf),RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
+            buf[len] = '\0';
             xSemaphoreGive( xSemaphore );
             if(len>0){
                 rmvk.conn= 1;
@@ -60,6 +66,7 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
        else
        {
            rmvk.conn=0;
+           Serial.print("buf = NONE");
        }
    }  
    return rmvk.conn;  
@@ -74,6 +81,7 @@ uint16_t RMVK_get_in_voltge(){
 
 uint16_t RMVK_get_out_voltge(){
     char cmd[]="AT+VO?";
+//    char cmd[]="AT+VI?";
     rmvk.VO=RMVK_cmd(cmd,RMVK_INT);
     return rmvk.VO;
 }
@@ -140,7 +148,6 @@ void rmvkFn(void* arg){
 }
 
 void RMVK_init(void){
-
 	uart_config_t uart_config = {
 		.baud_rate = RMVK_BAUD_RATE,
 		.data_bits = UART_DATA_8_BITS,
@@ -153,7 +160,8 @@ void RMVK_init(void){
 	uart_set_pin(RMVK_UART, RMVK_TXD, RMVK_RXD, -1, -1);
     uart_driver_install(RMVK_UART,BUF_SIZE * 2, BUF_SIZE * 2,  0, NULL, 0);
 
-    vSemaphoreCreateBinary( xSemaphore );
+    xSemaphore = xSemaphoreCreateBinaryStatic( &xSemaphoreBuffer );
+    xSemaphoreGive( xSemaphore );
     rmvk_read();
     RMVK_set_on(0);
 }
