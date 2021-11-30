@@ -506,9 +506,11 @@ void setup() {
 #endif
 
   Serial.begin(115200);
+  delay(2000);
   //dac_output_disable(DAC_CHANNEL_1);
   //dac_output_disable(DAC_CHANNEL_2);
-  //touch_pad_deinit();
+  //touch_pad_isr_deregister();
+  touch_pad_deinit();
   touch_pad_intr_disable();
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
