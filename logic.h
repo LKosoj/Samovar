@@ -967,6 +967,7 @@ void IRAM_ATTR set_current_power(float Volt) {
 void IRAM_ATTR set_power_mode(String Mode) {
   vTaskSuspend(PowerStatusTask);
   current_power_mode = Mode;
+  vTaskDelay(100);
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
