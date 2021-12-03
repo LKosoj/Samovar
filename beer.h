@@ -65,6 +65,7 @@ void IRAM_ATTR beer_finish() {
   //Если используется Blynk - пишем оператору
   Blynk.notify("{DEVICE_NAME} " + Msg);
 #endif
+  delay(200);
   set_power(false);
   reset_sensor_counter();
 }
