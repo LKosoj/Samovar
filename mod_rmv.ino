@@ -24,8 +24,8 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
     String s;
    if( xSemaphore != NULL )
    {
-       Serial.print("cmd = ");
-       Serial.println(cmd);
+       //Serial.print("cmd = ");
+       //Serial.println(cmd);
        if( xSemaphoreTake( xSemaphore, ( TickType_t ) RMVK_READ_DELAY * 2) == pdTRUE)
        //if (1 == 1)
        {
@@ -38,8 +38,8 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
             vTaskDelay(50);
             len = uart_read_bytes(RMVK_UART, buf, sizeof(buf),RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
             buf[len] = '\0';
-            Serial.print("buf = ");
-            Serial.println((const char *)&buf);
+            //Serial.print("buf = ");
+            //Serial.println((const char *)&buf);
             xSemaphoreGive( xSemaphore );
             if(len>0){
                 rmvk.conn= 1;
