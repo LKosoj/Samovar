@@ -24,8 +24,8 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
     String s;
    if( xSemaphore != NULL )
    {
-       if( xSemaphoreTake( xSemaphore, ( TickType_t ) RMVK_READ_DELAY) == pdTRUE)
-       //if (1 == 1)
+       //if( xSemaphoreTake( xSemaphore, ( TickType_t ) RMVK_READ_DELAY) == pdTRUE)
+       if (1 == 1)
        {
             sprintf(cmd_buf,"%s\r",cmd);
             ESP_ERROR_CHECK(uart_get_buffered_data_len(RMVK_UART, (size_t*)&len_bf));
