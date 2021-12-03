@@ -206,7 +206,7 @@ void set_heater_state(float setpoint, float temp) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
     delay(200);
-    set_power_mode(POWER_SPEED_MODE);
+    if (current_power_mode != POWER_SPEED_MODE) set_power_mode(POWER_SPEED_MODE);
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
