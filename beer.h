@@ -60,7 +60,7 @@ void IRAM_ATTR beer_finish() {
   PowerOn = false;
   heater_state = false;
   startval = 0;
-  Msg = "Включен нагрев в режиме затирания";
+  Msg = "Программа затирания завершена";
 #ifdef SAMOVAR_USE_BLYNK
   //Если используется Blynk - пишем оператору
   Blynk.notify("{DEVICE_NAME} " + Msg);
@@ -264,9 +264,9 @@ void setHeaterPosition(bool state) {
 
 #ifndef __SAMOVAR_DEBUG
   //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-  if (current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
+  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
     power_err_cnt++;
-    set_current_power(target_power_volt);
+    //if (power_err_cnt > 8) set_current_power(target_power_volt);
     if (power_err_cnt > 10) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_power(false);
