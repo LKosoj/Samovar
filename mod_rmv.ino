@@ -24,17 +24,22 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
     String s;
    if( xSemaphore != NULL )
    {
-       //if( xSemaphoreTake( xSemaphore, ( TickType_t ) RMVK_READ_DELAY) == pdTRUE)
-       if (1 == 1)
+       Serial.print("cmd = ");
+       Serial.println(cmd);
+       if( xSemaphoreTake( xSemaphore, ( TickType_t ) RMVK_READ_DELAY * 2) == pdTRUE)
+       //if (1 == 1)
        {
             sprintf(cmd_buf,"%s\r",cmd);
-            ESP_ERROR_CHECK(uart_get_buffered_data_len(RMVK_UART, (size_t*)&len_bf));
+            //ESP_ERROR_CHECK(uart_get_buffered_data_len(RMVK_UART, (size_t*)&len_bf));
             vTaskDelay(50);
-            if (len_bf > 0) uart_flush(RMVK_UART);
+            //if (len_bf > 0) 
+            uart_flush(RMVK_UART);
             cmd_len=uart_write_bytes(RMVK_UART,pc ,strlen(pc));
             vTaskDelay(50);
             len = uart_read_bytes(RMVK_UART, buf, sizeof(buf),RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
             buf[len] = '\0';
+            Serial.print("buf = ");
+            Serial.println((const char *)&buf);
             xSemaphoreGive( xSemaphore );
             if(len>0){
                 rmvk.conn= 1;
