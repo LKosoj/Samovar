@@ -9,7 +9,7 @@
 #error This code must use ESP32 SDK version >= 2.0.1. Please use in settings this link: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json, not https://dl.espressif.com/dl/package_esp32_index.json, get more details: https://www.samovar-tool.ru/2021/03/30/ustanovka-i-nastrojka-platy-esp32-v-arduino-ide/
 #endif
 
-#define SAMOVAR_VERSION "4.01"
+#define SAMOVAR_VERSION "4.02"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -344,6 +344,9 @@ PID_ATune aTune(&Input, &Output);
 
 #ifdef USE_HEAD_LEVEL_SENSOR
 GButton whls(WHEAD_LEVEL_SENSOR_PIN);
+#ifdef WHLS_LOW_PULL
+whls.setType(LOW_PULL);
+#endif
 #endif
 
 LiquidMenu main_menu1(lcd);
