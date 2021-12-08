@@ -205,8 +205,8 @@ void set_heater_state(float setpoint, float temp) {
   if (setpoint - temp > HEAT_DELTA && !tuning) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
-    delay(200);
-    if (current_power_mode != POWER_SPEED_MODE) set_power_mode(POWER_SPEED_MODE);
+    delay(50);
+    set_power_mode(POWER_SPEED_MODE);
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
