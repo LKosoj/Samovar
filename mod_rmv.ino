@@ -28,9 +28,9 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
        //Serial.println(cmd);
        if( xSemaphoreTake( xSemaphore, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT*2) / portTICK_RATE_MS)) == pdTRUE)
        {
-            sprintf(cmd_buf,"%s\r",cmd);
+            sprintf(cmd_buf,"%s\r", cmd);
             uart_flush(RMVK_UART);
-            cmd_len=uart_write_bytes(RMVK_UART,pc ,strlen(pc));
+            cmd_len=uart_write_bytes(RMVK_UART, pc, strlen(pc));
             len = uart_read_bytes(RMVK_UART, buf, sizeof(buf),RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
             buf[len] = '\0';
             //Serial.print("buf = ");
