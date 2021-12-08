@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "driver/uart.h"
 
-#define RMVK_DEFAULT_READ_TIMEOUT 70
+#define RMVK_DEFAULT_READ_TIMEOUT 130
 #define RMVK_BAUD_RATE 9600
 #define RMVK_TASK_DELAY 5000
 #define RMVK_READ_DELAY 200
