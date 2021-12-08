@@ -26,7 +26,7 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
    {
        //Serial.print("cmd = ");
        //Serial.println(cmd);
-       if( xSemaphoreTake( xSemaphore, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT*2) / portTICK_RATE_MS)) == pdTRUE)
+       if( xSemaphoreTake( xSemaphore, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 2) / portTICK_RATE_MS)) == pdTRUE)
        {
             sprintf(cmd_buf,"%s\r", cmd);
             uart_flush(RMVK_UART);
