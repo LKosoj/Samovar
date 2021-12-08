@@ -20,22 +20,17 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
     cmd_len=strlen(cmd);
     char cmd_buf[cmd_len+2];
     const char * pc=cmd_buf;
-    uint8_t buf[10];
+    uint8_t buf[10];//10*8=80 бит, при плохом раскладе  получим за 80*1000/9600 ~ 8,5 ms
     String s;
    if( xSemaphore != NULL )
    {
        //Serial.print("cmd = ");
        //Serial.println(cmd);
-       if( xSemaphoreTake( xSemaphore, ( TickType_t ) RMVK_READ_DELAY * 2) == pdTRUE)
-       //if (1 == 1)
+       if( xSemaphoreTake( xSemaphore, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT*2) / portTICK_RATE_MS)) == pdTRUE)
        {
             sprintf(cmd_buf,"%s\r",cmd);
-            //ESP_ERROR_CHECK(uart_get_buffered_data_len(RMVK_UART, (size_t*)&len_bf));
-            vTaskDelay(50);
-            //if (len_bf > 0) 
             uart_flush(RMVK_UART);
             cmd_len=uart_write_bytes(RMVK_UART,pc ,strlen(pc));
-            vTaskDelay(50);
             len = uart_read_bytes(RMVK_UART, buf, sizeof(buf),RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
             buf[len] = '\0';
             //Serial.print("buf = ");
@@ -70,12 +65,11 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
        }
        else
        {
-           rmvk.conn=0;
-           Serial.print("buf = NONE");
+           rmvk.conn=-1;
+           Serial.print("UART RMVK  = BUSY");//увидим что не получили семафор
        }
    }  
    return rmvk.conn;  
-
 }
 
 uint16_t RMVK_get_in_voltge(){
