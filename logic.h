@@ -974,13 +974,12 @@ void IRAM_ATTR set_power_mode(String Mode) {
   Serial2.print("АТ+ON=0\r");
   vTaskResume(PowerStatusTask);
 #else
-    xSemaphoreGive( xSemaphore );
     RMVK_set_on(0);
 #endif
   } else if (Mode == POWER_SPEED_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
   vTaskSuspend(PowerStatusTask);
-  Serial2.print("АТ+ON=0\r");
+  Serial2.print("АТ+ON=1\r");
   vTaskResume(PowerStatusTask);
 #else
     RMVK_set_out_voltge(MAX_VOLTAGE);
