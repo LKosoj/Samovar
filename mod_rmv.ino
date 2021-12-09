@@ -65,7 +65,7 @@ uint8_t RMVK_cmd(const char* cmd,rmvk_res_t res){
        }
        else
        {
-           rmvk.conn=-1;
+           rmvk.conn=0;
            Serial.print("UART RMVK  = BUSY");//увидим что не получили семафор
        }
    }  
