@@ -344,9 +344,6 @@ PID_ATune aTune(&Input, &Output);
 
 #ifdef USE_HEAD_LEVEL_SENSOR
 GButton whls(WHEAD_LEVEL_SENSOR_PIN);
-#ifdef WHLS_LOW_PULL
-whls.setType(LOW_PULL);
-#endif
 #endif
 
 LiquidMenu main_menu1(lcd);
