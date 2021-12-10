@@ -728,7 +728,12 @@ void setup() {
 
 #ifdef USE_HEAD_LEVEL_SENSOR
   //Задаем параметры для сенсора уровня флегмы
+#ifdef WHLS_HIGH_PULL
+  whls.setType(HIGH_PULL);
+#else
   whls.setType(LOW_PULL);
+#endif
+  
   whls.setDebounce(50);  //игнорируем дребезг
   whls.setTickMode(MANUAL);
   whls.setTimeout(WHLS_ALARM_TIME * 1000);  //время, через которое сработает тревога по уровню флегмы
