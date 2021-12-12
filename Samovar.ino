@@ -981,6 +981,13 @@ void getjson(void) {
   jsondoc["BodyTemp_Pipe"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
   jsondoc["mixer"] = mixer_status;
 
+  if (esp32_temp > 79) {
+    Msg = Msg = "Высокая температура ESP32";
+#ifdef SAMOVAR_USE_BLYNK
+    //Если используется Blynk - пишем оператору
+    Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
+#endif
+  }
   if (Msg != "") {
     jsondoc["Msg"] = Msg;
     Msg = "";
