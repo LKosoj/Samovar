@@ -757,7 +757,7 @@ void setup() {
     "GetClockTicker", /* Name of the task */
     4000,             /* Stack size in words */
     NULL,             /* Task input parameter */
-    0,                /* Priority of the task */
+    1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
     0);               /* Core where the task should run */
 
@@ -777,7 +777,7 @@ void setup() {
     "PowerStatusTask",  /* Name of the task */
     3000,               /* Stack size in words */
     NULL,               /* Task input parameter */
-    0,                  /* Priority of the task */
+    1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
     1);                 /* Core where the task should run */
   //На всякий случай пошлем команду выключения питания на UART
