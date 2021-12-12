@@ -52,6 +52,9 @@ void WebServerInit(void) {
   server.serveStatic("/minus.png", SPIFFS, "/minus.png");
   server.serveStatic("/plus.png", SPIFFS, "/plus.png");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
+  server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
+  server.serveStatic("/data.csv", SPIFFS, "/data.csv");
+  server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
@@ -63,6 +66,9 @@ void WebServerInit(void) {
 
   load_profile();
 
+  server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send(SPIFFS, "/resetreason.css", String());
+  });
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest * request) {
     if (fileToAppend)
       fileToAppend.flush();
