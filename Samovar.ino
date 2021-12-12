@@ -178,7 +178,7 @@ void startService(void) {
   timerAlarmEnable(timer);
 }
 
-void IRAM_ATTR StepperTicker(void) {
+void ICACHE_RAM_ATTR StepperTicker(void) {
   portENTER_CRITICAL_ISR(&timerMux);
   StepperMoving = stepper.quicktick();
   portEXIT_CRITICAL_ISR(&timerMux);
@@ -206,7 +206,7 @@ void IRAM_ATTR isrBTN_TICK() {
   //  }
 }
 
-void taskButton(void *pvParameters) {
+void IRAM_ATTR taskButton(void *pvParameters) {
   // Создаем семафор
   btnSemaphore = xSemaphoreCreateBinary();
   // Сразу "берем" семафор чтобы не было первого ложного срабатывания кнопки
@@ -372,7 +372,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         
       }
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
-      else if (TargetStepps > 0 || program[ProgramNum].WType == "P") {
+      else if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE && (TargetStepps > 0 || program[ProgramNum].WType == "P")) {
         //считаем прогресс
         float wp;
 
