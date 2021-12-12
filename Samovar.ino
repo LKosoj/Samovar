@@ -982,7 +982,7 @@ void getjson(void) {
   jsondoc["mixer"] = mixer_status;
 
   if (esp32_temp > 79) {
-    Msg = Msg = "Высокая температура ESP32";
+    Msg = Msg + "Высокая температура ESP32";
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
