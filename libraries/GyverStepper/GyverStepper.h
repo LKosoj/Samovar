@@ -206,7 +206,7 @@ public:
 		//setAcceleration(300);
 	}
 	
-	bool quicktick() {
+	bool IRAM_ATTR quicktick() {
 			if (!_curMode && _target == _current) {
 				brake();
 				return false;					
@@ -226,7 +226,7 @@ public:
     }
     
 	// возвращает true, если мотор всё ещё движется к цели
-	bool tick() {
+	bool IRAM_ATTR tick() {
 #ifndef SMOOTH_ALGORITHM
 		// в активном режиме движения к цели с ненулевым ускорением
 		// планировщик скорости быстрый			
