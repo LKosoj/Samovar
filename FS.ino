@@ -270,7 +270,7 @@ String IRAM_ATTR append_data() {
   return "";
 }
 
-String get_sys_info() {
+String IRAM_ATTR get_sys_info() {
   //Получаем системные параметры - размер свободного места, etc
   uint32_t ub = SPIFFS.usedBytes();
   uint32_t tb = SPIFFS.totalBytes();
