@@ -32,7 +32,7 @@ void set_body_temp();
 void set_buzzer(bool fl);
 
 //Получить количество разделителей
-byte getDelimCount(String data, char separator) {
+byte IRAM_ATTR getDelimCount(String data, char separator) {
   int cnt = 0;
   int maxIndex = data.length() - 1;
 
@@ -45,7 +45,7 @@ byte getDelimCount(String data, char separator) {
 }
 
 //Получить подстроку через разделитель
-String getValue(String data, char separator, int index) {
+String IRAM_ATTR getValue(String data, char separator, int index) {
   int found = 0;
   int strIndex[] = { 0, -1 };
   int maxIndex = data.length() - 1;
