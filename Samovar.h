@@ -341,6 +341,11 @@ boolean tuning = false;
 
 PID_ATune aTune(&Input, &Output);
 
+#ifdef WHLS_HIGH_PULL
+#ifndef USE_HEAD_LEVEL_SENSOR
+#define USE_HEAD_LEVEL_SENSOR
+#endif
+#endif
 
 #ifdef USE_HEAD_LEVEL_SENSOR
 GButton whls(WHEAD_LEVEL_SENSOR_PIN);
