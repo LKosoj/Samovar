@@ -782,7 +782,7 @@ void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   }
 }
 
-void set_buzzer(bool fl) {
+void IRAM_ATTR set_buzzer(bool fl) {
   if (fl && SamSetup.UseBuzzer){
     if (BuzzerTask == NULL) {
       BuzzerTaskFl = true;
