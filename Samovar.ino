@@ -2,6 +2,7 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
+#include "esp32/rom/rtc.h"
 #include "soc/rtc_wdt.h"
 #include <esp_task_wdt.h>
 #include <driver/dac.h>
@@ -108,6 +109,7 @@ void beer_finish();
 void change_samovar_mode();
 void saveConfigCallback();
 void configModeCallback(AsyncWiFiManager *myWiFiManager);
+String verbose_print_reset_reason(RESET_REASON reason);
 
 #ifdef USE_WEB_SERIAL
 void recvMsg(uint8_t *data, size_t len) {
@@ -506,6 +508,11 @@ void setup() {
 #endif
 
   Serial.begin(115200);
+  delay(1000);
+  String vr;
+  vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
+  vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
+  
   //delay(2000);
   //dac_output_disable(DAC_CHANNEL_1);
   //dac_output_disable(DAC_CHANNEL_2);
@@ -623,6 +630,10 @@ void setup() {
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   //delay(2000);
   writeString("Connecting to WI-FI", 3);
+
+  Serial.print("Reset reason: ");
+  Serial.println(vr);
+
 
   //Подключаемся к WI-FI
   AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
@@ -783,6 +794,15 @@ void setup() {
   //На всякий случай пошлем команду выключения питания на UART
   set_power_mode(POWER_SLEEP_MODE);
 #endif
+
+  //write reset reason
+  if (!SPIFFS.exists("/resetreason.css")) {
+    File f = SPIFFS.open("/resetreason.css", FILE_WRITE);
+    f.close();
+  }
+  File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
+  f1.println(vr);
+  f1.close();
 }
 
 void loop() {
@@ -1061,4 +1081,29 @@ void WriteConsoleLog(String StringLogMsg) {
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
 #endif
+}
+
+String verbose_print_reset_reason(RESET_REASON reason)
+{
+  String s;
+  switch ( reason)
+  {
+    case 1  : s = "Vbat power on reset";break;
+    case 3  : s = "Software reset digital core";break;
+    case 4  : s = "Legacy watch dog reset digital core";break;
+    case 5  : s = "Deep Sleep reset digital core";break;
+    case 6  : s = "Reset by SLC module, reset digital core";break;
+    case 7  : s = "Timer Group0 Watch dog reset digital core";break;
+    case 8  : s = "Timer Group1 Watch dog reset digital core";break;
+    case 9  : s = "RTC Watch dog Reset digital core";break;
+    case 10 : s = "Instrusion tested to reset CPU";break;
+    case 11 : s = "Time Group reset CPU";break;
+    case 12 : s = "Software reset CPU";break;
+    case 13 : s = "RTC Watch dog Reset CPU";break;
+    case 14 : s = "for APP CPU, reseted by PRO CPU";break;
+    case 15 : s = "Reset when the vdd voltage is not stable";break;
+    case 16 : s = "RTC Watch dog reset digital core and rtc module";break;
+    default : s = "NO_MEAN";
+  }
+  return s;
 }
