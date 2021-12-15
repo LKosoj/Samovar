@@ -2,13 +2,20 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
+#include <Arduino.h>
+
+#ifdef ESP_ARDUINO_VERSION
 #include "esp32/rom/rtc.h"
+#include <driver/touch_sensor.h>
+#else
+#include <soc/touch_channel.h>
+#include "rom/rtc.h"
+#endif
+
 #include "soc/rtc_wdt.h"
 #include <esp_task_wdt.h>
 #include <driver/dac.h>
-#include <driver/touch_sensor.h>
 
-#include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <OneWire.h>
@@ -24,7 +31,6 @@
 #include <LiquidMenu.h>
 #include <EEPROM.h>
 #include <ESPAsyncWiFiManager.h>
-//#include <AsyncMqttClient.h>
 
 #define DRIVER_STEP_TIME 1
 #include <GyverEncoder.h>
@@ -40,6 +46,10 @@
 #include <ESP32Servo.h>
 
 #include "Samovar.h"
+
+#ifdef USE_MQTT
+#include "SamovarMqtt.h"
+#endif
 
 #include <SPIFFSEditor.h>
 
@@ -294,7 +304,6 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         if (tcntST == SamSetup.LogPeriod) {
           tcntST = 0;
           String s = append_data();  //Записываем данные в память ESP32;
-#ifdef USE_OPENLOG
           if (s != "") {
             s += ",";
             s += format_float(ActualVolumePerHour, 3);
@@ -308,9 +317,13 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
             s += ",";
             s += format_float(WFflowRate, 2);
 #endif
-            appendOLFile(s);
           }
+#ifdef USE_OPENLOG 
+          appendOLFile(s);
 #endif
+#ifdef USE_MQTT
+  MqttSendMsg(s, "log");
+#endif  
         }
       }
 
@@ -811,6 +824,12 @@ void setup() {
   File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
   f1.println(vr);
   f1.close();
+  
+#ifdef USE_MQTT
+  initMqtt();
+  while (!mqttClient.connected()) delay(50);
+  MqttSendMsg((String)chipId + "," + vr + ", description", "st");
+#endif  
 }
 
 void loop() {
@@ -990,6 +1009,9 @@ void getjson(void) {
 #endif
   }
   if (Msg != "") {
+#ifdef USE_MQTT
+     MqttSendMsg(Msg, "msg");
+#endif  
     jsondoc["Msg"] = Msg;
     Msg = "";
   }
