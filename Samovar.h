@@ -5,11 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#if ESP_ARDUINO_VERSION < ESP_ARDUINO_VERSION_VAL(2, 0, 0)
-#error This code must use ESP32 SDK version >= 2.0.1. Please use in settings this link: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json, not https://dl.espressif.com/dl/package_esp32_index.json, get more details: https://www.samovar-tool.ru/2021/03/30/ustanovka-i-nastrojka-platy-esp32-v-arduino-ide/
-#endif
-
-#define SAMOVAR_VERSION "4.03"
+#define SAMOVAR_VERSION "4.04"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -245,10 +241,13 @@ uint8_t temprature_sens_read();
 #include <FS.h>
 #ifdef USE_LittleFS
 #pragma message ("USE LITTLEFS")
-  //#define SPIFFS LITTLEFS
-  //#include <LITTLEFS.h> 
-  #define SPIFFS LittleFS
+#ifdef ESP_ARDUINO_VERSION
   #include <LittleFS.h> 
+  #define SPIFFS LittleFS
+#else
+  #include <LITTLEFS.h> 
+  #define SPIFFS LITTLEFS
+#endif
 #else
 #pragma message ("USE SPIFFS")
   #include <SPIFFS.h>
