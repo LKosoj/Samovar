@@ -444,6 +444,7 @@ void IRAM_ATTR run_program(byte num) {
       if ((program[num].WType == "B" || program[num].WType == "C") && program[num].Temp > 0) {
         SteamSensor.BodyTemp = program[num].Temp;
       }
+      if (program[num].WType == "C") alarm_c_low_min = millis();
 
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Считаем, что колонна стабильна
@@ -556,6 +557,10 @@ void IRAM_ATTR check_alarm() {
   }
   else alarm_c_low_min = 0;
 
+#endif
+#endif
+
+#ifdef SAMOVAR_USE_POWER
 #ifndef __SAMOVAR_DEBUG
   //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
   if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
@@ -572,7 +577,6 @@ void IRAM_ATTR check_alarm() {
 #endif
     }
   } else power_err_cnt = 0;
-#endif
 #endif
 #endif
 
