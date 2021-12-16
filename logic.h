@@ -428,6 +428,7 @@ void IRAM_ATTR run_program(byte num) {
     } else if (program[num].Power != 0) {
       set_current_power(target_power_volt + program[num].Power);
     }
+    if (program[num].WType == "C") alarm_c_low_min = millis();
 #endif
     Msg = "Прорамма: старт строки  №" + (String)(num + 1);
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
@@ -444,7 +445,6 @@ void IRAM_ATTR run_program(byte num) {
       if ((program[num].WType == "B" || program[num].WType == "C") && program[num].Temp > 0) {
         SteamSensor.BodyTemp = program[num].Temp;
       }
-      if (program[num].WType == "C") alarm_c_low_min = millis();
 
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Считаем, что колонна стабильна
