@@ -317,13 +317,13 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
             s += ",";
             s += format_float(WFflowRate, 2);
 #endif
-          }
 #ifdef USE_OPENLOG 
-          appendOLFile(s);
+            appendOLFile(s);
 #endif
 #ifdef USE_MQTT
-  MqttSendMsg(s, "log");
+            MqttSendMsg(s, "log");
 #endif  
+          }
         }
       }
 
@@ -522,7 +522,6 @@ void setup() {
 
   Serial.begin(115200);
   delay(1000);
-  String vr;
   vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
   vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
   
@@ -828,7 +827,6 @@ void setup() {
 #ifdef USE_MQTT
   initMqtt();
   while (!mqttClient.connected()) delay(50);
-  MqttSendMsg((String)chipId + "," + vr + ", description", "st");
 #endif  
 }
 

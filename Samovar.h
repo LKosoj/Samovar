@@ -522,6 +522,7 @@ bool mixer_status;                                              // Статус 
 int bk_pwm;                                                     // Значение PWM насоса при работе с БК
 uint32_t chipId = 0;                                            // Идентификатор ESP32
 float esp32_temp;                                               // Температура ESP32
+String vr;                                                      // Причина перезагрузки ESP32
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 #ifdef SAMOVAR_USE_POWER
