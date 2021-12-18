@@ -430,7 +430,7 @@ void IRAM_ATTR run_program(byte num) {
     }
     if (program[num].WType == "C") alarm_c_low_min = millis();
 #endif
-    Msg = "Прорамма: старт строки  №" + (String)(num + 1);
+    Msg = "Программа: старт строки  №" + (String)(num + 1);
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
       Msg += ", отбор в ёмкость " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора

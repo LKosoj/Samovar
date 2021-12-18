@@ -2,11 +2,12 @@
 #define SAMOVAR_MQTT_H
 
 #include <AsyncMqttClient.h>
+#define PAYLOADSIZE 2000
 
 AsyncMqttClient mqttClient;
 char mqttstr[100] = "SMV/\0";
 char mqttstr1[100];
-char payload[255];
+char payload[PAYLOADSIZE];
 
 static const char mqttUser[] = "samovar";
 static const char mqttPassword[] = "samovar-tool.ru";
@@ -22,9 +23,9 @@ void initMqtt(){
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
   mqttClient.onPublish(onMqttPublish);
-//  mqttClient.setClientId(buf);
-  mqttClient.setClientId("1234");
-  mqttClient.setMaxTopicLength(256);
+  mqttClient.setClientId(buf);
+  //mqttClient.setClientId("1234");
+  mqttClient.setMaxTopicLength(PAYLOADSIZE);
   mqttClient.setCredentials(mqttUser,mqttPassword);
   mqttClient.setServer("ora1.samovar-tool.ru", 1883);
   strcat(mqttstr,SamSetup.blynkauth);
@@ -63,7 +64,7 @@ void MqttSendMsg(String Str, const char *chart ){
   strcpy(mqttstr1, mqttstr);
   strcat(mqttstr1,chart);
   strcat(mqttstr1,"/1");
-  Str.toCharArray(payload, 255);
+  Str.toCharArray(payload, PAYLOADSIZE);
   uint16_t packetIdPub1 = mqttClient.publish(mqttstr1, 2, true, payload);
 }
 
