@@ -461,7 +461,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
       if (SteamSensor.ErrCount > 10) {
         SteamSensor.ErrCount = -110;
-        Msg = "Ошибка датчика температуры пара!";
+        PrepareMsg("Ошибка датчика температуры пара!");
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
         Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
@@ -469,7 +469,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       }
       if (PipeSensor.ErrCount > 10) {
         PipeSensor.ErrCount = -110;
-        Msg = "Ошибка датчика температуры царги!";
+        PrepareMsg("Ошибка датчика температуры царги!");
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
         Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
@@ -477,7 +477,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       }
       if (WaterSensor.ErrCount > 10) {
         WaterSensor.ErrCount = -110;
-        Msg = "Ошибка датчика температуры воды!";
+        PrepareMsg("Ошибка датчика температуры воды!");
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
         Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
@@ -485,7 +485,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       }
       if (TankSensor.ErrCount > 10) {
         TankSensor.ErrCount = -110;
-        Msg = "Ошибка датчика температуры куба!";
+        PrepareMsg("Ошибка датчика температуры куба!");
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
         Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
@@ -493,7 +493,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       }
       if (ACPSensor.ErrCount > 10) {
         ACPSensor.ErrCount = -110;
-        Msg = "Ошибка датчика температуры в ТСА!";
+        PrepareMsg("Ошибка датчика температуры в ТСА!");
 #ifdef SAMOVAR_USE_BLYNK
         //Если используется Blynk - пишем оператору
         Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
@@ -995,8 +995,7 @@ void getjson(void) {
   jsondoc["mixer"] = mixer_status;
 
   if (esp32_temp > 79) {
-    if (Msg != "") Msg = Msg + "; ";
-    Msg = Msg + "Высокая температура ESP32";
+    PrepareMsg("Высокая температура ESP32");
 #ifdef SAMOVAR_USE_BLYNK
     //Если используется Blynk - пишем оператору
     Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
@@ -1004,7 +1003,10 @@ void getjson(void) {
   }
   if (Msg != "") {
 #ifdef USE_MQTT
-     MqttSendMsg(Msg, "msg");
+     String MsgPl;
+     MsgPl = Msg;
+     MsgPl.replace(",",";");
+     MqttSendMsg(MsgPl + ",0", "msg");
 #endif  
     jsondoc["Msg"] = Msg;
     Msg = "";
@@ -1103,6 +1105,13 @@ void read_config() {
   //  pump_regulator.Kp = SamSetup.Kp;
   //  pump_regulator.Ki = SamSetup.Ki;
   //  pump_regulator.Kd = SamSetup.Kd;
+}
+
+void PrepareMsg(String m){
+  if (Msg!=""){
+    Msg += "; ";
+  }
+  Msg += m;
 }
 
 void WriteConsoleLog(String StringLogMsg) {
