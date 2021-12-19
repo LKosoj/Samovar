@@ -12,6 +12,7 @@ void FinishAutoTune();
 void set_power(bool On);
 void create_data();
 void open_valve(bool Val);
+void PrepareMsg(String m);
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
