@@ -8,6 +8,7 @@ void create_data();
 void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
+void PrepareMsg(String m);
 
 void set_water_temp(float duty){
 #ifdef USE_WATER_PUMP
