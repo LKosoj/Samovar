@@ -285,7 +285,7 @@ String IRAM_ATTR get_sys_info() {
   }
   //Если используется Blynk - пишем оператору
   if (tb - ub < 200) {
-    Msg = "Memory is full!";
+    PrepareMsg("Memory is full!");
 #ifdef SAMOVAR_USE_BLYNK
     //Кончилось место, пишем оператору
     Blynk.notify("Alarm! {DEVICE_NAME} Memory is full!");
