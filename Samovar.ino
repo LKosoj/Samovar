@@ -1003,12 +1003,6 @@ void getjson(void) {
 #endif
   }
   if (Msg != "") {
-#ifdef USE_MQTT
-     String MsgPl;
-     MsgPl = Msg;
-     MsgPl.replace(",",";");
-     MqttSendMsg(MsgPl + ",0", "msg");
-#endif  
     jsondoc["Msg"] = Msg;
     Msg = "";
   }
@@ -1109,6 +1103,13 @@ void read_config() {
 }
 
 void PrepareMsg(String m){
+#ifdef USE_MQTT
+     String MsgPl;
+     MsgPl = m;
+     MsgPl.replace(",",";");
+     MqttSendMsg(MsgPl + ",0", "msg");
+#endif  
+
   if (Msg!=""){
     Msg += "; ";
   }
