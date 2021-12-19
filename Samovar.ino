@@ -819,6 +819,7 @@ void setup() {
   File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
   f1.println(vr);
   f1.close();
+  vr.replace(",",";");
   
 #ifdef USE_MQTT
   initMqtt();
@@ -1111,6 +1112,7 @@ void PrepareMsg(String m){
   if (Msg!=""){
     Msg += "; ";
   }
+  if (Msg.length() > 250) Msg = "";
   Msg += m;
 }
 
