@@ -95,10 +95,13 @@ BLYNK_WRITE(V18) {
 
 BLYNK_WRITE(V12) {
   if (!PowerOn) return;
-  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    sam_command_sync = SAMOVAR_BEER_NEXT;
-  } else {
-    sam_command_sync = SAMOVAR_START;
+  int State = param.asInt();
+  if (State == 1){
+    if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      sam_command_sync = SAMOVAR_BEER_NEXT;
+    } else {
+      sam_command_sync = SAMOVAR_START;
+    }
   }
 }
 
