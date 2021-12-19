@@ -59,6 +59,7 @@ void onMqttPublish(uint16_t packetId) {
 }
 
 void MqttSendMsg(String Str, const char *chart ){
+  if (strlen(SamSetup.blynkauth) <30 ) return;
 //  Serial.println("mqttClient.StartSession");
 //  uint16_t packetIdPub1 = mqttClient.publish(MqttStr + "/st", 2, true, "test 1");
   strcpy(mqttstr1, mqttstr);
