@@ -30,6 +30,7 @@ void set_pump_speed_pid(float temp);
 void set_power(bool On);
 void set_body_temp();
 void set_buzzer(bool fl);
+void PrepareMsg(String m);
 
 //Получить количество разделителей
 byte IRAM_ATTR getDelimCount(String data, char separator) {
