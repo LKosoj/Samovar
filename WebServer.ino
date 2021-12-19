@@ -164,6 +164,9 @@ String indexKeyProcessor(const String &var) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else
       return get_program(CAPACITY_NUM * 2);
+  }
+  else if (var == "Descr") {
+      return SessionDescription;
   } else if (var == "videourl")
     return (String)SamSetup.videourl;
   else if (var == "PWM_LV")
@@ -617,6 +620,9 @@ void web_program(AsyncWebServerRequest *request) {
       set_program(request->arg("WProgram"));
       request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
     }
+  }
+  if (request->hasArg("Descr")) {
+    SessionDescription = request->arg("Descr");
   }
 }
 
