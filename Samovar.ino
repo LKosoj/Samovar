@@ -271,6 +271,12 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
     }
 #endif
+#ifdef USE_MQTT
+    if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
+      connectToMqtt();
+    }
+#endif  
+
     vTaskDelay(10000);
   }
 }
@@ -825,7 +831,7 @@ void setup() {
   
 #ifdef USE_MQTT
   initMqtt();
-  while (!mqttClient.connected()) delay(50);
+  //while (!mqttClient.connected()) delay(50);
 #endif  
 }
 
