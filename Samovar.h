@@ -51,8 +51,11 @@ volatile SemaphoreHandle_t xSemaphore = NULL;
 #endif
 #endif
 
+#define PWR_FACTOR 1
 
 #ifdef SAMOVAR_USE_RMVK
+#undef PWR_FACTOR
+#define PWR_FACTOR 2
 #ifndef SAMOVAR_USE_POWER
 #define SAMOVAR_USE_POWER
 #endif
@@ -227,11 +230,11 @@ uint8_t temprature_sens_read();
 //**************************************************************************************************************
 
 #ifdef SAMOVAR_USE_SEM_AVR
+#undef PWR_FACTOR
 #define PWR_FACTOR 20
 #define PWR_MSG "Power"
 #define PWR_TYPE "P"
 #else
-#define PWR_FACTOR 1
 #define PWR_MSG "Voltage"
 #define PWR_TYPE "V"
 #endif
