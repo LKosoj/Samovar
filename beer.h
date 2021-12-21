@@ -13,11 +13,16 @@ void set_power(bool On);
 void create_data();
 void open_valve(bool Val);
 void PrepareMsg(String m);
+String get_beer_program();
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
 
   if (startval == 2000 && !PowerOn) {
+#ifdef USE_MQTT
+    SessionDescription.replace(",", ";");
+    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + vr + "," + get_beer_program() + "," + SessionDescription, "st");
+#endif  
     create_data();  //создаем файл с данными
     PowerOn = true;
     set_power(true);

@@ -264,7 +264,9 @@ String IRAM_ATTR append_data() {
     str += ProgramNum + 1;
 #endif
     fileToAppend.println(str);
-    //fileToAppend.flush();
+#ifdef USE_LittleFS
+    fileToAppend.flush();
+#endif
     return str;
   }
   return "";

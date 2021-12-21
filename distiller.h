@@ -13,6 +13,10 @@ void PrepareMsg(String m);
 void distiller_proc() {
 
   if (!PowerOn) {
+#ifdef USE_MQTT
+    SessionDescription.replace(",", ";");
+    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + vr + ",Distiller," + SessionDescription, "st");
+#endif  
     set_power(true);
 #ifdef SAMOVAR_USE_POWER
     delay(1000);

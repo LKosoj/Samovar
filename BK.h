@@ -22,6 +22,10 @@ void set_water_temp(float duty){
 void bk_proc() {
 
   if (!PowerOn) {
+#ifdef USE_MQTT
+    SessionDescription.replace(",", ";");
+    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + vr + ",BK," + SessionDescription, "st");
+#endif  
     set_power(true);
 #ifdef SAMOVAR_USE_POWER
     delay(1000);
