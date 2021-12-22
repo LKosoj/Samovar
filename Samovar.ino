@@ -123,6 +123,11 @@ void saveConfigCallback();
 void configModeCallback(AsyncWiFiManager *myWiFiManager);
 String verbose_print_reset_reason(RESET_REASON reason);
 
+#ifdef __SAMOVAR_DEBUG
+//LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+//CORE_DEBUG_LEVEL ARDUHAL_LOG_LEVEL_VERBOSE
+#endif
+
 #ifdef USE_WEB_SERIAL
 void recvMsg(uint8_t *data, size_t len) {
   WebSerial.println("Received Data...");
@@ -276,7 +281,13 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
       connectToMqtt();
     }
 #endif  
-
+    if (server_heart_beat <= (millis() - 10000)) {
+#ifdef __SAMOVAR_DEBUG
+      Serial.println("Reset server");
+#endif
+      server.end();
+      server.begin();
+    }
     vTaskDelay(10000);
   }
 }
@@ -525,7 +536,11 @@ void setup() {
 #endif
 
   Serial.begin(115200);
-  delay(1000);
+#ifdef __SAMOVAR_DEBUG
+  esp_log_level_set("*", ESP_LOG_VERBOSE);
+#endif
+
+  delay(500);
   vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
   vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
   
