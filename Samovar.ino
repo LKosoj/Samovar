@@ -281,13 +281,15 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
       connectToMqtt();
     }
 #endif  
-    if (server_heart_beat <= (millis() - 10000)) {
-#ifdef __SAMOVAR_DEBUG
-      Serial.println("Reset server");
-#endif
-      server.end();
-      server.begin();
-    }
+
+//    if (server_heart_beat <= (millis() - 10000)) {
+//#ifdef __SAMOVAR_DEBUG
+//      Serial.println("Reset server");
+//#endif
+//      server.end();
+//      server.begin();
+//    }
+
     vTaskDelay(10000);
   }
 }
