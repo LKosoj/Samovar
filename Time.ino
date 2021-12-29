@@ -11,8 +11,6 @@ volatile unsigned long t_cur    = 0;
 bool IRAM_ATTR GetNTP(void);
 void IRAM_ATTR sendNTPpacket(IPAddress& address);
 
-IPAddress timeServerIP;                                                  // для работы NTP
-const char* ntpServerName = "time.nist.gov";
 const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[ NTP_PACKET_SIZE];
 WiFiUDP udp;
@@ -21,7 +19,7 @@ void IRAM_ATTR clok1()                                                   // фу
 {
   cur_ms = millis();                                                     // текущее количество миллисекунд
   t_cur  = cur_ms / 1000;                                                // текущее количество секунд
-  if ( cur_ms < ms2 || (cur_ms - ms2) > 240000 )                         // Каждые 60 секунд считываем время в интернете
+  if ( cur_ms < ms2 || (cur_ms - ms2) > 240000 )                         // Каждые 240 секунд считываем время в интернете
   {
     // делаем три попытки синхронизации с интернетом
     if ( GetNTP() )                                                      // если попытка увенчалась успехом
@@ -50,7 +48,6 @@ void IRAM_ATTR clok()                                                    // фу
 //*************************************************************************************************************************************
 bool IRAM_ATTR GetNTP(void)                                               // функция посылки запроса к NTP серверу и парсинг ответа
 {
-  WiFi.hostByName(ntpServerName, timeServerIP);
   sendNTPpacket(timeServerIP);                                            // посылаем запрос на NTP сервер
   vTaskDelay(800);
   int cb = udp.parsePacket();
