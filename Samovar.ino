@@ -266,7 +266,9 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 //Запускаем таск для получения точного времени из интернет
 void IRAM_ATTR triggerGetClock(void *parameter) {
   while (true) {
-    if (WiFi.status() == WL_CONNECTED) clok1();
+    if (WiFi.status() == WL_CONNECTED) {
+      clok1();
+    }
     else {
       WiFi.disconnect();
       WiFi.reconnect();
@@ -792,6 +794,8 @@ void setup() {
   //вешаем прерывание на изменение датчика уровня флегмы
   attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
 #endif
+
+  WiFi.hostByName(ntpServerName, timeServerIP);
 
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
