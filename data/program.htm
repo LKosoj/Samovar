@@ -144,10 +144,11 @@ function set_num(){
     }
     document.getElementById("sum").value = get_time(sum);
     var err = ""
+    programerr = false;
     if (sumh != 100) err = "Ошибка в программе - объем головных фракций не равен 100 (" + sumh + ")";
     if (sumb != 100) err = "Ошибка в программе - объем фракции тела не равен 100 (" + sumb + ")";
     if (err !=""){
-      alert(err);
+      //alert(err);
       programerr = true;
     }
 //    if (!programerr) {
@@ -156,6 +157,7 @@ function set_num(){
       document.getElementById("WProgram1").value = prgo;
       document.getElementById("WProgram").value = prgc;
 //    }
+    return programerr;
 }
 
 function prep_calc(){
