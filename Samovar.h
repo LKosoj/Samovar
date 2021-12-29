@@ -6,7 +6,7 @@
 #endif
 
 #define SAMOVAR_VERSION "4.05"
-//#define __SAMOVAR_DEBUG
+#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
 
@@ -455,6 +455,8 @@ WProgram program[CAPACITY_NUM * 2];                             //массив �
 //**************************************************************************************************************
 const char* host = SAMOVAR_HOST;
 //**************************************************************************************************************
+IPAddress timeServerIP;                                                  // для работы NTP
+const char* ntpServerName = "time.nist.gov";
 
 //**************************************************************************************************************
 byte DScnt = 0;
