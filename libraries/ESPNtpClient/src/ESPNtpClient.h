@@ -26,7 +26,12 @@ extern "C" {
 #include "lwip/dns.h"
 #include "sys/time.h"
 #ifdef ESP32
-#include "include/time.h"
+  #ifdef ESP_ARDUINO_VERSION
+    #include "time.h"
+    #include "lwip/pbuf.h"
+  #else
+    #include "include/time.h"
+  #endif
 #else
 #include "time.h"
 #endif
@@ -771,6 +776,30 @@ public:
     uint getnumAveRounds () {
         return numAveRounds;
     }
+
+    void setTimeZoneOffset(long offset, int daylight)
+	{
+    	char cst[17] = {0};
+	    char cdt[17] = "DST";
+   		char tz[33] = {0};
+
+    	if(offset % 3600){
+        	sprintf(cst, "UTC%ld:%02u:%02u", offset / 3600, abs((offset % 3600) / 60), abs(offset % 60));
+	    } else {
+    	    sprintf(cst, "UTC%ld", offset / 3600);
+    	}
+	    if(daylight != 3600){
+    	    long tz_dst = offset - daylight;
+        	if(tz_dst % 3600){
+	            sprintf(cdt, "DST%ld:%02u:%02u", tz_dst / 3600, abs((tz_dst % 3600) / 60), abs(tz_dst % 60));
+    	    } else {
+        	    sprintf(cdt, "DST%ld", tz_dst / 3600);
+        	}
+    	}
+	    sprintf(tz, "%s%s", cst, cdt);
+    	setenv("TZ", tz, 1);
+	    tzset();
+	}
     
 };
 
