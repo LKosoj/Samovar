@@ -40,7 +40,14 @@ void initMqtt(){
 
 void connectToMqtt() {
 //  Serial.println("Connecting to MQTT...");
+//  byte i;
+//  i = 0;
   mqttClient.connect();
+//  while (!mqttClient.connected()){
+//    delay(50);
+//    i++;
+//    if (i > 25) break;
+//  }
 }
 
 void onMqttConnect(bool sessionPresent) {
