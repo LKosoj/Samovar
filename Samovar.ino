@@ -852,7 +852,6 @@ void setup() {
   
 #ifdef USE_MQTT
   initMqtt();
-  //while (!mqttClient.connected()) delay(50);
 #endif  
 }
 
