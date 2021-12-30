@@ -39,7 +39,6 @@ void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress);
 void set_beer_program(String WProgram);
 void set_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
-String CurrentTime(bool Year);
 void setupOpenLog(void);
 void createFile(char* fileName);
 
@@ -373,7 +372,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
 
 #ifdef USE_OPENLOG
   if (ofl == "") {
-    ofl = CurrentTime(true) + ".csv";
+    ofl = NTP.getTimeDateString(true) + ".csv";    
     char charVar[25];
     ofl.toCharArray(charVar, ofl.length());
     setupOpenLog();
