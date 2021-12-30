@@ -49,6 +49,8 @@
 
 #include "Samovar.h"
 
+#include <ESPNtpClient.h>
+
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
 #endif
@@ -114,8 +116,6 @@ void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
 void set_body_temp();
-String millis2time();
-String CurrentTime(bool Year);
 void distiller_finish();
 void beer_finish();
 void change_samovar_mode();
@@ -267,7 +267,6 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 void IRAM_ATTR triggerGetClock(void *parameter) {
   while (true) {
     if (WiFi.status() == WL_CONNECTED) {
-      clok1();
     }
     else {
       WiFi.disconnect();
@@ -313,13 +312,11 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       get_current_power();
 #endif
 
-      clok();
-
       DS_getvalue();
       vTaskDelay(10);
 
-      Crt = CurrentTime(false);
-      StrCrt = Crt.substring(6) + "   " + millis2time();
+      Crt = NTP.getTimeDateString(false);
+      StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
       StrCrt.toCharArray(tst, 20);
 
       if (startval != 0) {
@@ -795,7 +792,12 @@ void setup() {
   attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
 #endif
 
-  WiFi.hostByName(ntpServerName, timeServerIP);
+#ifdef USE_MQTT
+  initMqtt();
+  delay(500);
+#endif  
+
+  //WiFi.hostByName(ntpServerName, timeServerIP);
 
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
@@ -816,15 +818,6 @@ void setup() {
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
     0);               /* Core where the task should run */
-
-  writeString("      Samovar     ", 1);
-  writeString("     Version " + (String)SAMOVAR_VERSION, 2);
-  writeString("                  ", 3);
-  writeString("      Started     ", 4);
-  Serial.println("Samovar ready");
-  //Serial.print("Size = ");
-  //Serial.println(sizeof(SamSetup));
-
 
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора
@@ -849,10 +842,16 @@ void setup() {
   f1.println(vr);
   f1.close();
   vr.replace(",",";");
-  
-#ifdef USE_MQTT
-  initMqtt();
-#endif  
+
+  NTP.begin ();
+
+  writeString("      Samovar     ", 1);
+  writeString("     Version " + (String)SAMOVAR_VERSION, 2);
+  writeString("                  ", 3);
+  writeString("      Started     ", 4);
+  Serial.println("Samovar ready");
+  //Serial.print("Size = ");
+  //Serial.println(sizeof(SamSetup));
 }
 
 void loop() {
@@ -869,7 +868,7 @@ void loop() {
   }
 #endif
 
-  ws.cleanupClients();
+  ::ws.cleanupClients();
 
 #ifdef BTN_PIN
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
@@ -999,7 +998,7 @@ void getjson(void) {
   jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
   jsondoc["start_pressure"] = format_float(start_pressure, 3);
   jsondoc["crnt_tm"] = Crt;
-  jsondoc["stm"] = millis2time();
+  jsondoc["stm"] = NTP.getUptimeString();
   jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp, 3);
   jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp, 3);
   jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp, 3);

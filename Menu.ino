@@ -76,9 +76,6 @@ LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
 //LiquidSystem menu(main_menu, setup_menu, 1);
 
-String millis2time();
-String CurrentTime(bool Year);
-
 void reset_focus() {
   //return;
   do {

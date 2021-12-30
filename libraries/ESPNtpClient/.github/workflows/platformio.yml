@@ -1,0 +1,46 @@
+name: PlatformIO
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        python-version: [3.7]
+    steps:
+      - uses: actions/checkout@v1
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U platformio
+          platformio update
+      - name: Build test
+        run: |
+          mv examples/advancedExample/advancedExample.ino examples/advancedExample/advancedExample.cpp
+          mv examples/basicExample/basicExample.ino examples/basicExample/basicExample.cpp
+          mv examples/ledFlasher/ledFlasher.ino examples/ledFlasher/ledFlasher.cpp
+          # cd examples/platformio/
+          pio run
+          # pio run -e advanced_esp32 
+          # pio run -e advanced_esp8266
+          # pio run -e esp32_basic_example
+          # pio run -e esp8266_basic_example 
+          # pio run -e esp32_led_flasher 
+          # pio run -e esp8266_led_flasher
+          # mv examples/advancedExample/advancedExample.cpp examples/advancedExample/advancedExample.ino
+          # mv examples/basicExample/basicExample.cpp examples/basicExample/basicExample.ino
+          # mv examples/ledFlasher/ledFlasher.cpp examples/ledFlasher/ledFlasher.ino
+      
