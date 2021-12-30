@@ -843,6 +843,7 @@ void setup() {
   f1.close();
   vr.replace(",",";");
 
+  NTP.setTimeZoneOffset(-SamSetup.TimeZone * 3600,0);
   NTP.begin ();
 
   writeString("      Samovar     ", 1);
