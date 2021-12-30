@@ -468,12 +468,12 @@ void NTPClient::s_receiverTask (void* arg){
         if (self->responsePacketValid) {
             self->processPacket (self->lastNtpResponsePacket);
             if (self->lastNtpResponsePacket->ref > 0) {
-#ifdef ESP32
-                DEBUGLOGV ("pbuff type: %d", self->lastNtpResponsePacket->type);
-                DEBUGLOGV ("pbuff ref: %d", self->lastNtpResponsePacket->ref);
-                DEBUGLOGV ("pbuff next: %p", self->lastNtpResponsePacket->next);
-                if (self->lastNtpResponsePacket->type <= PBUF_POOL)
-#endif
+// #ifdef ESP32
+//                 DEBUGLOGV ("pbuff type: %d", self->lastNtpResponsePacket->type);
+//                 DEBUGLOGV ("pbuff ref: %d", self->lastNtpResponsePacket->ref);
+//                 DEBUGLOGV ("pbuff next: %p", self->lastNtpResponsePacket->next);
+//                 if (self->lastNtpResponsePacket->type <= PBUF_POOL)
+// #endif
                     pbuf_free (self->lastNtpResponsePacket);
             }
             self->responsePacketValid = false;
@@ -499,8 +499,8 @@ char* NTPClient::getUptimeString () {
     uptime -= seconds;
     minutes = (uptime % SECS_PER_HOUR) / SECS_PER_MIN;
     uptime -= minutes * SECS_PER_MIN;
-//     hours = (uptime % SECS_PER_DAY) / SECS_PER_HOUR;
-    hours = (uptime / SECS_PER_DAY) / SECS_PER_HOUR;
+//    hours = (uptime % SECS_PER_DAY) / SECS_PER_HOUR;
+    hours = uptime / SECS_PER_HOUR;
 //     uptime -= hours * SECS_PER_HOUR;
 //     days = uptime / SECS_PER_DAY;
 
@@ -739,12 +739,12 @@ boolean NTPClient::sendNTPpacket () {
     memcpy (buffer->payload, &packet, sizeof (NTPUndecodedPacket_t));
     result = udp_send (udp, buffer);
     if (buffer->ref > 0) {
-#ifdef ESP32
-        DEBUGLOGV ("pbuff type: %d", buffer->type);
-        DEBUGLOGV ("pbuff ref: %d", buffer->ref);
-        DEBUGLOGV ("pbuff next: %p", buffer->next);
-        if (buffer->type <= PBUF_POOL)
-#endif
+// #ifdef ESP32
+//         DEBUGLOGV ("pbuff type: %d", buffer->type);
+//         DEBUGLOGV ("pbuff ref: %d", buffer->ref);
+//         DEBUGLOGV ("pbuff next: %p", buffer->next);
+//         if (buffer->type <= PBUF_POOL)
+// #endif
             pbuf_free (buffer);
     }
     if (result == ERR_OK) {
