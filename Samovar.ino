@@ -646,6 +646,16 @@ void setup() {
     read_config();
   }
 
+  //Инициализируем ноги для реле
+  pinMode(RELE_CHANNEL1, OUTPUT);
+  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+  pinMode(RELE_CHANNEL2, OUTPUT);
+  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+  pinMode(RELE_CHANNEL3, OUTPUT);
+  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
+  pinMode(RELE_CHANNEL4, OUTPUT);
+  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+
 #ifdef USE_WATER_VALVE
   pinMode(WATER_PUMP_PIN, OUTPUT);
   digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
@@ -1114,16 +1124,6 @@ void read_config() {
   if (isnan(SamSetup.StbVoltage)) {
     SamSetup.StbVoltage = 100;
   }
-
-  //Инициализируем ноги для реле
-  pinMode(RELE_CHANNEL1, OUTPUT);
-  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-  pinMode(RELE_CHANNEL2, OUTPUT);
-  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-  pinMode(RELE_CHANNEL3, OUTPUT);
-  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
-  pinMode(RELE_CHANNEL4, OUTPUT);
-  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 
   //  pump_regulator.Kp = SamSetup.Kp;
   //  pump_regulator.Ki = SamSetup.Ki;
