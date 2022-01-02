@@ -848,6 +848,8 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   String resp;
   while (true) {
     if (PowerOn) {
+      Serial2.flush();
+      vTaskDelay(200);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
@@ -867,7 +869,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         }
       }
     }
-    vTaskDelay(600);
+    vTaskDelay(400);
   }
 }
 #else
