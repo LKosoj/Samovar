@@ -298,7 +298,7 @@ void sensor_init(void) {
 
 #ifdef SAMOVAR_USE_POWER
 #ifndef USE_SERIAL
-  //Serial2.setRxBufferSize(10);
+  Serial2.setRxBufferSize(10);
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
 #define USE_SERIAL
 #endif
