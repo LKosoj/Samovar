@@ -19,8 +19,7 @@ https://www.samovar-tool.ru/samovar-diy/
 
 Как выглядит реализованное, можно посмотреть тут https://www.samovar-tool.ru/2021/03/21/o-rabote-samovara/
 
-Обсуждение на форуме
-https://alcodistillers.ru/forum/viewtopic.php?id=1812
+Обсуждение на форуме https://alcodistillers.ru закрыто владельцем. Меня обвинили в том, что Самовар коммерческий продукт. Тему удалили, меня на форуме забанили. Это не так. Продукт не коммерческий. И коммерческим никогда не будет. Обсуждение переносится на форум https://forum.homedistiller.ru/index.php?topic=367128.0
 
 Обратите внимание! Скетч с версии 4.0 работает с SDK версией не ниже 2.0.1. Как установить SDK - смотрите тут: https://www.samovar-tool.ru/2021/03/30/ustanovka-i-nastrojka-platy-esp32-v-arduino-ide/
 
