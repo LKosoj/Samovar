@@ -259,7 +259,7 @@ void IRAM_ATTR taskButton(void *pvParameters) {
     attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
     attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
     attachInterrupt(ENC_SW, isrBTN_TICK, CHANGE);
-    //vTaskDelay(100);
+    //vTaskDelay(100/portTICK_PERIOD_MS);
   }
 }
 
@@ -291,7 +291,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 //      server.begin();
 //    }
 
-    vTaskDelay(10000);
+    vTaskDelay(10000/portTICK_PERIOD_MS);
   }
 }
 
@@ -313,7 +313,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 #endif
 
       DS_getvalue();
-      vTaskDelay(10);
+      vTaskDelay(10/portTICK_PERIOD_MS);
 
       Crt = NTP.getTimeDateString(false);
       StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
@@ -355,7 +355,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         WFpulseCount = 100;
       }
 
-      vTaskDelay(10);
+      vTaskDelay(10/portTICK_PERIOD_MS);
 
       //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
@@ -458,7 +458,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       }
 
 
-      vTaskDelay(10);
+      vTaskDelay(10/portTICK_PERIOD_MS);
 
 #ifdef USE_WATERSENSOR
 
@@ -475,7 +475,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 
       WFpulseCount = 0;
       oldTime = millis();
-      vTaskDelay(10);
+      vTaskDelay(10/portTICK_PERIOD_MS);
 #endif
 
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
@@ -522,7 +522,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 
       OldMinST = CurMinST;
     }
-    vTaskDelay(10);
+    vTaskDelay(10/portTICK_PERIOD_MS);
   }
 }
 
@@ -1026,7 +1026,7 @@ void getjson(void) {
   jsondoc["CurrrentStepps"] = stepper.getCurrent();
   jsondoc["WthdrwlStatus"] = startval;
   jsondoc["CurrrentSpeed"] = round(stepper.getSpeed() * (byte)stepper.getState());
-  vTaskDelay(10);
+  vTaskDelay(10/portTICK_PERIOD_MS);
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
   jsondoc["BodyTemp_Steam"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
