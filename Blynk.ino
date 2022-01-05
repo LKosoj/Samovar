@@ -1,8 +1,8 @@
 #ifdef SAMOVAR_USE_BLYNK
 BLYNK_READ(V0) {
-  vTaskDelay(2);
+  vTaskDelay(2/portTICK_PERIOD_MS);
   Blynk.virtualWrite(V0, SteamSensor.avgTemp);
-  vTaskDelay(2);
+  vTaskDelay(2/portTICK_PERIOD_MS);
   Blynk.virtualWrite(V4, PowerOn);
   int i;
   int k;
@@ -11,7 +11,7 @@ BLYNK_READ(V0) {
   else
     i = 0;
   Blynk.virtualWrite(V3, i);
-  vTaskDelay(2);
+  vTaskDelay(2/portTICK_PERIOD_MS);
   if (PauseOn)
     k = 1;
   else
