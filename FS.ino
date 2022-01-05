@@ -277,7 +277,7 @@ String IRAM_ATTR get_sys_info() {
   uint32_t ub = SPIFFS.usedBytes();
   uint32_t tb = SPIFFS.totalBytes();
   String result_st = "totalBytes = " + (String)tb + "; usedBytes = ";
-  vTaskDelay(5);
+  vTaskDelay(5/portTICK_PERIOD_MS);
   result_st += (String)ub + "; Free Heap = " + (String)ESP.getFreeHeap();
   if (tb - ub < 400) {
     //Кончилось место, удалим старый файл. Надо было сохранять раньше
@@ -293,10 +293,10 @@ String IRAM_ATTR get_sys_info() {
     Blynk.notify("Alarm! {DEVICE_NAME} Memory is full!");
 #endif
   }
-  vTaskDelay(5);
+  vTaskDelay(5/portTICK_PERIOD_MS);
   esp32_temp = (temprature_sens_read() - 32) / 1.8;
   result_st += "; ESP32 t = " + (String)esp32_temp + "; BME t = " + (String)bme_temp + "; RSSI = " +  (String)WiFi.RSSI();
-  vTaskDelay(5);
+  vTaskDelay(5/portTICK_PERIOD_MS);
   return result_st;
 }
 
