@@ -121,7 +121,7 @@ void IRAM_ATTR withdrawal(void) {
           set_current_power(target_power_volt - 3 * PWR_FACTOR);
         }
 #endif
-        vTaskDelay(50);
+        vTaskDelay(50/portTICK_PERIOD_MS);
       }
       program_Wait = true;
       pause_withdrawal(true);
@@ -159,7 +159,7 @@ void IRAM_ATTR withdrawal(void) {
           set_current_power(target_power_volt - 3 * PWR_FACTOR);
         }
 #endif
-        vTaskDelay(50);
+        vTaskDelay(50/portTICK_PERIOD_MS);
       }
       program_Wait = true;
       pause_withdrawal(true);
@@ -778,12 +778,12 @@ void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   while (true) {
     if (BuzzerTaskFl){
       digitalWrite(BZZ_PIN, HIGH);
-      vTaskDelay(beep);
+      vTaskDelay(beep/portTICK_PERIOD_MS);
       digitalWrite(BZZ_PIN, LOW);
       tick_buzz++;
       if (tick_buzz > 5) BuzzerTaskFl = false;
     }
-    vTaskDelay(silent);
+    vTaskDelay(silent/portTICK_PERIOD_MS);
   }
 }
 
@@ -818,7 +818,7 @@ void IRAM_ATTR set_power(bool On) {
     power_text_ptr = (char *)"OFF";
 
 #ifdef SAMOVAR_USE_POWER
-    vTaskDelay(600);
+    vTaskDelay(600/portTICK_PERIOD_MS);
     set_power_mode(POWER_SPEED_MODE);
 #else
     current_power_mode = POWER_SPEED_MODE;
@@ -826,7 +826,7 @@ void IRAM_ATTR set_power(bool On) {
 #endif
   } else {
 #ifdef SAMOVAR_USE_POWER
-    vTaskDelay(1000);
+    vTaskDelay(1000/portTICK_PERIOD_MS);
     set_power_mode(POWER_SLEEP_MODE);
 #else
     current_power_mode = POWER_SLEEP_MODE;
@@ -849,15 +849,13 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
       Serial2.flush();
-      vTaskDelay(200);
+      vTaskDelay(200/portTICK_PERIOD_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
         if (i < 0) {
           resp = Serial2.readStringUntil('\r');
         }
-        Serial2.flush();
-        vTaskDelay(200);
         resp = resp.substring(i, resp.length());
         if (resp.substring(1, 2) == "T") resp = resp.substring(1, 9);
         int cpv = hexToDec(resp.substring(1, 4));
@@ -869,7 +867,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         }
       }
     }
-    vTaskDelay(400);
+    vTaskDelay(400/portTICK_PERIOD_MS);
   }
 }
 #else
@@ -941,13 +939,13 @@ void IRAM_ATTR set_current_power(float Volt) {
 #ifdef __SAMOVAR_DEBUG
   WriteConsoleLog("Set current power =" + (String)Volt);
 #endif
-  vTaskDelay(20);
+  vTaskDelay(20/portTICK_PERIOD_MS);
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
   } else {
     set_power_mode(POWER_WORK_MODE);
-    //vTaskDelay(100);
+    //vTaskDelay(100/portTICK_PERIOD_MS);
   }
   target_power_volt = Volt;
 #ifdef SAMOVAR_USE_RMVK
@@ -973,7 +971,7 @@ void IRAM_ATTR set_current_power(float Volt) {
 
 void IRAM_ATTR set_power_mode(String Mode) {
   current_power_mode = Mode;
-  vTaskDelay(20);
+  vTaskDelay(20/portTICK_PERIOD_MS);
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
