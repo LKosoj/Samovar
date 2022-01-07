@@ -1141,8 +1141,10 @@ void PrepareMsg(String m){
   if (Msg!=""){
     Msg += "; ";
   }
-  if (Msg.length() > 250) Msg = "";
   Msg += m;
+  if (Msg.length() > 250) {
+    Msg = m;
+  }
 }
 
 void WriteConsoleLog(String StringLogMsg) {
