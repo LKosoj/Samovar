@@ -355,7 +355,7 @@ void menu_samovar_start() {
   if (startval == 0) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
-    SessionDescription.replace("%", "&#37;");
+    SessionDescription.replace("%", "prc");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + vr + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
 #endif  
     startval = 1;
