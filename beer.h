@@ -21,7 +21,6 @@ void beer_proc() {
   if (startval == 2000 && !PowerOn) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
-    SessionDescription.replace("%", "prc");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + vr + "," + get_beer_program() + "," + SessionDescription, "st");
 #endif  
     create_data();  //создаем файл с данными
