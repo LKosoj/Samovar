@@ -15,7 +15,6 @@ void distiller_proc() {
   if (!PowerOn) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
-    SessionDescription.replace("%", "prc");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + vr + ",Distiller," + SessionDescription, "st");
 #endif  
     set_power(true);
