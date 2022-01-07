@@ -631,6 +631,7 @@ void web_program(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("Descr")) {
     SessionDescription = request->arg("Descr");
+    SessionDescription.replace("%", "&#37;");
   }
 }
 
