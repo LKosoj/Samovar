@@ -273,7 +273,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
       WiFi.reconnect();
     }
 #ifdef SAMOVAR_USE_BLYNK
-    if (!Blynk.connected() && WiFi.status() == WL_CONNECTED) {
+    if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
     }
 #endif
@@ -1033,13 +1033,6 @@ void getjson(void) {
   jsondoc["BodyTemp_Pipe"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
   jsondoc["mixer"] = mixer_status;
 
-  if (esp32_temp > 85) {
-    PrepareMsg("Высокая температура ESP32");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
-#endif
-  }
   if (Msg != "") {
     jsondoc["Msg"] = Msg;
     Msg = "";
