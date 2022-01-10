@@ -724,22 +724,24 @@ void setup() {
   writeString("Connected", 4);
 
 #ifdef SAMOVAR_USE_BLYNK
-  //Blynk.begin(auth, ssid, password);
-  writeString("Connecting to Blynk ", 3);
-  writeString("               ", 4);
+  if (SamSetup.blynkauth[0] != 0) {
+    //Blynk.begin(auth, ssid, password);
+    writeString("Connecting to Blynk ", 3);
+    writeString("               ", 4);
 #ifdef __SAMOVAR_DEBUG
-  Serial.println("Connecting to Blynk");
+    Serial.println("Connecting to Blynk");
 #endif
 #ifdef BLYNK_SAMOVAR_TOOL
-  Blynk.config(SamSetup.blynkauth, BLYNK_SAMOVAR_TOOL, 8080);
+    Blynk.config(SamSetup.blynkauth, BLYNK_SAMOVAR_TOOL, 8080);
 #else
-  Blynk.config(SamSetup.blynkauth);
+    Blynk.config(SamSetup.blynkauth);
 #endif
-  Blynk.connect(BLYNK_TIMEOUT_MS);
-  Blynk.notify("{DEVICE_NAME} started");
+    Blynk.connect(BLYNK_TIMEOUT_MS);
+    Blynk.notify("{DEVICE_NAME} started");
 #ifdef __SAMOVAR_DEBUG
-  Serial.println("Blynk started");
+    Serial.println("Blynk started");
 #endif
+  }
 #endif
 
 
