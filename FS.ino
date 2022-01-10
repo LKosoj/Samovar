@@ -294,8 +294,7 @@ String IRAM_ATTR get_sys_info() {
 #endif
   }
   vTaskDelay(5/portTICK_PERIOD_MS);
-  esp32_temp = (temprature_sens_read() - 32) / 1.8;
-  result_st += "; ESP32 t = " + (String)esp32_temp + "; BME t = " + (String)bme_temp + "; RSSI = " +  (String)WiFi.RSSI();
+  result_st += "; BME t = " + (String)bme_temp + "; RSSI = " +  (String)WiFi.RSSI();
   vTaskDelay(5/portTICK_PERIOD_MS);
   return result_st;
 }
