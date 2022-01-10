@@ -4,16 +4,21 @@ set -eu
 
 cd "$(dirname "$0")/../.."
 
+if ! git diff --quiet --exit-code; then
+	echo "Repository contains uncommitted changes"
+	exit
+fi
+
 VERSION="$1"
 DATE=$(date +%F)
 TAG="v$VERSION"
-VERSION_REGEX="[0-9a-z\\.\\-]+"
+VERSION_REGEX='[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?'
 
 update_version_in_source () {
 	IFS=".-" read MAJOR MINOR REVISION EXTRA < <(echo "$VERSION")
 	UNDERLINE=$(printf -- '-%.0s' $(seq 1 ${#TAG}))
 
-	sed -i~ -bE "s/version=$VERSION_REGEX/version=$VERSION/; s|ardu-badge.com/ArduinoJson/$VERSION_REGEX|ardu-badge.com/ArduinoJson/$VERSION|; " README.md
+	sed -i~ -bE "1,20{s/$VERSION_REGEX/$VERSION/g}" README.md
 	rm README.md~
 
 	sed -i~ -bE "4s/HEAD/$TAG ($DATE)/; 5s/-+/$UNDERLINE/" CHANGELOG.md

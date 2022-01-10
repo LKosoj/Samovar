@@ -1,9 +1,11 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright Benoit Blanchon 2014-2021
+// Copyright © 2014-2022, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
 #include <catch.hpp>
+
+#include <sstream>
 
 TEST_CASE("JsonString") {
   SECTION("Default constructor creates a null JsonString") {
@@ -12,6 +14,23 @@ TEST_CASE("JsonString") {
     CHECK(s.isNull() == true);
     CHECK(s.c_str() == 0);
     CHECK(s.isStatic() == true);
+  }
+
+  SECTION("Compare null with boolean") {
+    JsonString s;
+
+    CHECK(bool(s) == false);
+    CHECK(false == bool(s));
+    CHECK(bool(s) != true);
+    CHECK(true != bool(s));
+  }
+
+  SECTION("Compare non-null with boolean") {
+    JsonString s("hello");
+    CHECK(bool(s) == true);
+    CHECK(true == bool(s));
+    CHECK(bool(s) != false);
+    CHECK(false != bool(s));
   }
 
   SECTION("Compare null with null") {
@@ -56,5 +75,11 @@ TEST_CASE("JsonString") {
 
     CHECK(a == b);
     CHECK_FALSE(a != b);
+  }
+
+  SECTION("std::stream") {
+    std::stringstream ss;
+    ss << JsonString("hello world!");
+    CHECK(ss.str() == "hello world!");
   }
 }
