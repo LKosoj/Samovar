@@ -287,11 +287,7 @@ String IRAM_ATTR get_sys_info() {
   }
   //Если используется Blynk - пишем оператору
   if (tb - ub < 200) {
-    PrepareMsg("Memory is full!");
-#ifdef SAMOVAR_USE_BLYNK
-    //Кончилось место, пишем оператору
-    Blynk.notify("Alarm! {DEVICE_NAME} Memory is full!");
-#endif
+    SendMsg("Memory is full!", ALARM_MSG);
   }
   vTaskDelay(5/portTICK_PERIOD_MS);
   result_st += "; BME t = " + (String)bme_temp + "; RSSI = " +  (String)WiFi.RSSI();

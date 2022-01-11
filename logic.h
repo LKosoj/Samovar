@@ -30,7 +30,7 @@ void set_pump_speed_pid(float temp);
 void set_power(bool On);
 void set_body_temp();
 void set_buzzer(bool fl);
-void PrepareMsg(String m);
+void SendMsg(String m, MESSAGE_TYPE msg_type);
 
 //Получить количество разделителей
 byte IRAM_ATTR getDelimCount(String data, char separator) {
@@ -127,11 +127,7 @@ void IRAM_ATTR withdrawal(void) {
       pause_withdrawal(true);
       t_min = millis() + SteamSensor.Delay * 1000;
       set_buzzer(true);
-      PrepareMsg("Пауза по Т пара");
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
-#endif
+      SendMsg("Пауза по Т пара", WARNING_MSG);
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
@@ -165,11 +161,7 @@ void IRAM_ATTR withdrawal(void) {
       pause_withdrawal(true);
       t_min = millis() + PipeSensor.Delay * 1000;
       set_buzzer(true);
-      PrepareMsg("Пауза по Т царги");
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
-#endif
+      SendMsg("Пауза по Т царги", WARNING_MSG);
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
@@ -416,12 +408,7 @@ void IRAM_ATTR run_program(byte num) {
       fileToAppend.close();
     }
     set_power(false);
-    PrepareMsg("Выполнение программы завершено.");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
-#endif
-
+    SendMsg("Выполнение программы завершено.", NOTIFY_MSG);
   } else {
 #ifdef SAMOVAR_USE_POWER
     if (program[num].Power > 40) {
@@ -431,9 +418,10 @@ void IRAM_ATTR run_program(byte num) {
     }
     if (program[num].WType == "C") alarm_c_low_min = millis();
 #endif
-    PrepareMsg("Программа: старт строки  №" + (String)(num + 1));
+    String p_s;
+    p_s = "Программа: старт строки  №" + (String)(num + 1);
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
-      Msg += ", отбор в ёмкость " + (String)program[num].capacity_num;
+      p_s += ", отбор в ёмкость " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
@@ -462,7 +450,7 @@ void IRAM_ATTR run_program(byte num) {
       TankSensor.BodyTemp = 0;
 
       //устанавливаем параметры ожидания для программы паузы. Время в секундах задано в program[num].Volume
-      Msg += ", пауза " + (String)program[num].Volume + " сек.";
+      p_s += ", пауза " + (String)program[num].Volume + " сек.";
       t_min = millis() + program[num].Volume * 1000;
       program_Pause = true;
       stopService();
@@ -473,10 +461,7 @@ void IRAM_ATTR run_program(byte num) {
       stepper.setCurrent(0);
       stepper.setTarget(0);
     }
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("{DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg(p_s, NOTIFY_MSG);
   }
   TargetStepps = stepper.getTarget();
 }
@@ -512,17 +497,9 @@ void IRAM_ATTR set_body_temp() {
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
     TankSensor.BodyTemp = TankSensor.avgTemp;
-    PrepareMsg("Новые Т тела: пар = " + String(SteamSensor.BodyTemp) + ", царга = " + String(PipeSensor.BodyTemp));
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Новые Т тела: пар = " + String(SteamSensor.BodyTemp) + ", царга = " + String(PipeSensor.BodyTemp), WARNING_MSG);
   } else {
-    PrepareMsg("Невозможно установить Т тела.");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Не возможно установить Т тела.", WARNING_MSG);
   }
 }
 
@@ -571,11 +548,7 @@ void IRAM_ATTR check_alarm() {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
-      PrepareMsg("Аварийное отключение! Ошибка управления нагревателем.");
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Тревога! {DEVICE_NAME} " + Msg);
-#endif
+      SendMsg("Аварийное отключение! Ошибка управления нагревателем.", ALARM_MSG);
     }
   } else power_err_cnt = 0;
 #endif
@@ -621,14 +594,9 @@ void IRAM_ATTR check_alarm() {
 
     if (TankSensor.avgTemp >= SamSetup.DistTemp) {
       //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
-      PrepareMsg("Лимит максимальной температуры куба. Программа завершена.");
+      SendMsg("Лимит максимальной температуры куба. Программа завершена.", NOTIFY_MSG);
     } else
-      PrepareMsg("Аварийное отключение! Превышена максимальная температура" + s);
-
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+      SendMsg("Аварийное отключение! Превышена максимальная температура" + s, ALARM_MSG);
   }
 
 #ifdef USE_WATERSENSOR
@@ -637,31 +605,19 @@ void IRAM_ATTR check_alarm() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    PrepareMsg("Аварийное отключение! Прекращена подача воды.");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Аварийное отключение! Прекращена подача воды.", ALARM_MSG);
   }
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    PrepareMsg("Критическая температура воды!");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Критическая температура воды!", WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      PrepareMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt);
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-      Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+      SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt, ALARM_MSG);
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5 * PWR_FACTOR);
     }
@@ -676,7 +632,7 @@ void IRAM_ATTR check_alarm() {
     whls.resetStates();
     if (program[ProgramNum].WType != "C") {
       set_buzzer(true);
-      PrepareMsg("Тревога от датчика захлёба! ");
+      SendMsg("Сработал датчик захлёба!", ALARM_MSG);
     } else {
 #ifdef SAMOVAR_USE_POWER
       //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
@@ -687,12 +643,8 @@ void IRAM_ATTR check_alarm() {
 #endif
     }
 #ifdef SAMOVAR_USE_POWER
-    PrepareMsg((String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt);
+    SendMsg((String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt, ALARM_MSG);
     set_current_power(target_power_volt - 1 * PWR_FACTOR);
-#endif
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
 #endif
     //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
     alarm_h_min = millis() + 1000 * 40;
@@ -706,12 +658,8 @@ void IRAM_ATTR check_alarm() {
 #endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     set_buzzer(true);
-    PrepareMsg("Разгон завершён. Стабилизация/работа на себя");
+    SendMsg("Разгон завершён. Стабилизация/работа на себя", NOTIFY_MSG);
     SamovarStatusInt = 51;
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
-#endif
 #ifdef SAMOVAR_USE_POWER
     set_current_power(program[0].Power);
 #else
@@ -730,11 +678,7 @@ void IRAM_ATTR check_alarm() {
       if (acceleration_temp == 60 * 6) {
         SamovarStatusInt = 52;
         set_buzzer(true);
-        PrepareMsg("Стабилизация завершена, колонна работает стабильно.");
-#ifdef SAMOVAR_USE_BLYNK
-        //Если используется Blynk - пишем оператору
-        Blynk.notify("{DEVICE_NAME} - " + Msg);
-#endif
+        SendMsg("Стабилизация завершена, колонна работает стабильно.", NOTIFY_MSG);
       }
     } else {
       acceleration_temp = 0;
@@ -753,18 +697,10 @@ void IRAM_ATTR check_alarm() {
 void IRAM_ATTR open_valve(bool Val) {
   valve_status = Val;
   if (Val) {
-    PrepareMsg("Откройте подачу воды!");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Откройте подачу воды!", WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
-    PrepareMsg("Закройте подачу воды!");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Внимание! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Закройте подачу воды!", WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
 }

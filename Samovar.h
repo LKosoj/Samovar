@@ -40,7 +40,8 @@
 #endif
 #endif
 volatile SemaphoreHandle_t xSemaphore = NULL;
-
+volatile SemaphoreHandle_t xMsgSemaphore = NULL;
+StaticSemaphore_t xMsgSemaphoreBuffer;
 
 #ifdef USE_BMP280_ALT
 #undef USE_BMP180
@@ -367,6 +368,9 @@ volatile SamovarCommands sam_command_sync;                      // переме�
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_SUVID_MODE};
 volatile SAMOVAR_MODE Samovar_Mode;
 volatile SAMOVAR_MODE Samovar_CR_Mode;
+
+enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2};
+volatile MESSAGE_TYPE msg_type;
 
 struct SetupEEPROM {
   byte flag;                                                   //Флаг для записи в память

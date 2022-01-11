@@ -8,7 +8,7 @@ void create_data();
 void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void PrepareMsg(String m);
+void SendMsg(String m, MESSAGE_TYPE msg_type);
 
 void set_water_temp(float duty){
 #ifdef USE_WATER_PUMP
@@ -36,11 +36,7 @@ void bk_proc() {
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
-    PrepareMsg("Включен нагрев бражной колонны");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("{DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Включен нагрев бражной колонны", NOTIFY_MSG);
   }
 
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
@@ -49,11 +45,7 @@ void bk_proc() {
 }
 
 void IRAM_ATTR bk_finish() {
-  PrepareMsg("Работа бражной колонны завершена");
-#ifdef SAMOVAR_USE_BLYNK
-  //Если используется Blynk - пишем оператору
-  Blynk.notify("{DEVICE_NAME} - " + Msg);
-#endif
+  SendMsg("Работа бражной колонны завершена", NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
 }
@@ -82,11 +74,7 @@ void IRAM_ATTR check_alarm_bk() {
     set_buzzer(true);
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
-    PrepareMsg("Аварийное отключение! Превышена максимальная температура воды охлаждения!");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Аварийное отключение! Превышена максимальная температура воды охлаждения!", ALARM_MSG);
   }
 
 #ifdef USE_WATERSENSOR
@@ -95,22 +83,14 @@ void IRAM_ATTR check_alarm_bk() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    PrepareMsg("Аварийное отключение! Прекращена подача воды.");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Аварийное отключение! Прекращена подача воды.", ALARM_MSG);
   }
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    PrepareMsg("Критическая температура воды!");
-#ifdef SAMOVAR_USE_BLYNK
-    //Если используется Blynk - пишем оператору
-    Blynk.notify("Предупреждение! {DEVICE_NAME} - " + Msg);
-#endif
+    SendMsg("Критическая температура воды!", WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
 
@@ -123,21 +103,13 @@ void IRAM_ATTR check_alarm_bk() {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
-      PrepareMsg("Аварийное отключение! Ошибка управления нагревателем.");
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+      SendMsg("Аварийное отключение! Ошибка управления нагревателем.", ALARM_MSG);
     }
   } else power_err_cnt = 0;
 #endif
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      PrepareMsg("Критическая температура воды! Напряжение снижено с " + (String)target_power_volt);
-#ifdef SAMOVAR_USE_BLYNK
-      //Если используется Blynk - пишем оператору
-    Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+      SendMsg("Критическая температура воды! Напряжение снижено с " + (String)target_power_volt, ALARM_MSG);
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
     }

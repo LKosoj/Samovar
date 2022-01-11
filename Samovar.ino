@@ -87,6 +87,9 @@
 //#define BLYNK_HEARTBEAT 17
 
 #include <BlynkSimpleEsp32.h>
+#include <cppQueue.h>
+
+cppQueue  msg_q(250, 10, FIFO);
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -265,6 +268,7 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 
 //Запускаем таск для получения точного времени из интернет
 void IRAM_ATTR triggerGetClock(void *parameter) {
+  String qMsg;
   while (true) {
     if (WiFi.status() == WL_CONNECTED) {
     }
@@ -275,6 +279,16 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 #ifdef SAMOVAR_USE_BLYNK
     if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
+    } else {
+        if (!msg_q.isEmpty()) {
+          if( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE){
+            char c[150];
+            msg_q.pop(&c);
+            qMsg = c;
+            Blynk.notify(qMsg);
+            xSemaphoreGive(xMsgSemaphore);
+          }
+        }
     }
 #endif
 #ifdef USE_MQTT
@@ -291,7 +305,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 //      server.begin();
 //    }
 
-    vTaskDelay(10000/portTICK_PERIOD_MS);
+    vTaskDelay(6000/portTICK_PERIOD_MS);
   }
 }
 
@@ -481,43 +495,23 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
       if (SteamSensor.ErrCount > 10) {
         SteamSensor.ErrCount = -110;
-        PrepareMsg("Ошибка датчика температуры пара!");
-#ifdef SAMOVAR_USE_BLYNK
-        //Если используется Blynk - пишем оператору
-        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+        SendMsg("Ошибка датчика температуры пара!", ALARM_MSG);
       }
       if (PipeSensor.ErrCount > 10) {
         PipeSensor.ErrCount = -110;
-        PrepareMsg("Ошибка датчика температуры царги!");
-#ifdef SAMOVAR_USE_BLYNK
-        //Если используется Blynk - пишем оператору
-        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+        SendMsg("Ошибка датчика температуры царги!", ALARM_MSG);
       }
       if (WaterSensor.ErrCount > 10) {
         WaterSensor.ErrCount = -110;
-        PrepareMsg("Ошибка датчика температуры воды!");
-#ifdef SAMOVAR_USE_BLYNK
-        //Если используется Blynk - пишем оператору
-        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+        SendMsg("Ошибка датчика температуры воды!", ALARM_MSG);
       }
       if (TankSensor.ErrCount > 10) {
         TankSensor.ErrCount = -110;
-        PrepareMsg("Ошибка датчика температуры куба!");
-#ifdef SAMOVAR_USE_BLYNK
-        //Если используется Blynk - пишем оператору
-        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+        SendMsg("Ошибка датчика температуры куба!", ALARM_MSG);
       }
       if (ACPSensor.ErrCount > 10) {
         ACPSensor.ErrCount = -110;
-        PrepareMsg("Ошибка датчика температуры в ТСА!");
-#ifdef SAMOVAR_USE_BLYNK
-        //Если используется Blynk - пишем оператору
-        Blynk.notify("Тревога! {DEVICE_NAME} - " + Msg);
-#endif
+        SendMsg("Ошибка датчика температуры в ТСА!", ALARM_MSG);
       }
 
       OldMinST = CurMinST;
@@ -810,6 +804,9 @@ void setup() {
 #endif  
 
   //WiFi.hostByName(ntpServerName, timeServerIP);
+
+  xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
+  xSemaphoreGive(xMsgSemaphore);
 
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
@@ -1125,13 +1122,30 @@ void read_config() {
   //  pump_regulator.Kd = SamSetup.Kd;
 }
 
-void PrepareMsg(String m){
-#ifdef USE_MQTT
+void SendMsg(String m, MESSAGE_TYPE msg_type){
      String MsgPl;
+#ifdef USE_MQTT
      MsgPl = m;
      MsgPl.replace(",",";");
      MqttSendMsg(MsgPl + ",0", "msg");
 #endif  
+#ifdef SAMOVAR_USE_BLYNK
+     switch (msg_type){
+       case 0 : MsgPl = "Тревога! "; break;
+       case 1 : MsgPl = "Предупреждение! "; break;
+       case 2 : MsgPl = ""; break;
+       default : MsgPl = "";
+     }
+        //Если используется Blynk - пишем оператору
+        //Blynk.notify(MsgPl + "{DEVICE_NAME} - " + m);
+        if( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE){
+          char c[150];
+          MsgPl += "{DEVICE_NAME} - " + m;
+          MsgPl.toCharArray(c, 150);
+          msg_q.push(&c);
+          xSemaphoreGive(xMsgSemaphore);
+        }
+#endif
 
   if (Msg!=""){
     Msg += "; ";
@@ -1155,7 +1169,7 @@ void WriteConsoleLog(String StringLogMsg) {
 String verbose_print_reset_reason(RESET_REASON reason)
 {
   String s;
-  switch ( reason)
+  switch (reason)
   {
     case 1  : s = "Vbat power on reset";break;
     case 3  : s = "Software reset digital core";break;
