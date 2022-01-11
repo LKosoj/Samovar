@@ -1127,7 +1127,7 @@ void SendMsg(String m, MESSAGE_TYPE msg_type){
 #ifdef USE_MQTT
      MsgPl = m;
      MsgPl.replace(",",";");
-     MqttSendMsg(MsgPl + ",0", "msg");
+     MqttSendMsg(MsgPl + "," + msg_type, "msg");
 #endif  
 #ifdef SAMOVAR_USE_BLYNK
      switch (msg_type){
@@ -1136,8 +1136,6 @@ void SendMsg(String m, MESSAGE_TYPE msg_type){
        case 2 : MsgPl = ""; break;
        default : MsgPl = "";
      }
-        //Если используется Blynk - пишем оператору
-        //Blynk.notify(MsgPl + "{DEVICE_NAME} - " + m);
         if( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE){
           char c[150];
           MsgPl += "{DEVICE_NAME} - " + m;
