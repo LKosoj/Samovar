@@ -557,7 +557,6 @@ void setup() {
 
   WFtotalMilliLitres = 0;
 
-
   // Configure the Prescaler at 80 the quarter of the ESP32 is cadence at 80Mhz
   // 80000000 / 80 = 1000000 tics / seconde
   timer = timerBegin(2, 80, true);
@@ -1025,7 +1024,9 @@ void getjson(void) {
   jsondoc["CurrrentStepps"] = stepper.getCurrent();
   jsondoc["WthdrwlStatus"] = startval;
   jsondoc["CurrrentSpeed"] = round(stepper.getSpeed() * (byte)stepper.getState());
+  
   vTaskDelay(10/portTICK_PERIOD_MS);
+  
   jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
   jsondoc["Status"] = get_Samovar_Status();
   jsondoc["BodyTemp_Steam"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
@@ -1034,7 +1035,9 @@ void getjson(void) {
 
   if (Msg != "") {
     jsondoc["Msg"] = Msg;
+    jsondoc["msglvl"] = msg_level;
     Msg = "";
+    msg_level = NONE_MSG;
   }
   if (LogMsg != "") {
     jsondoc["LogMsg"] = LogMsg;
@@ -1128,7 +1131,7 @@ void SendMsg(String m, MESSAGE_TYPE msg_type){
      MsgPl = m;
      MsgPl.replace(",",";");
      MqttSendMsg(MsgPl + "," + msg_type, "msg");
-#endif  
+#endif
 #ifdef SAMOVAR_USE_BLYNK
      switch (msg_type){
        case 0 : MsgPl = "Тревога! "; break;
@@ -1147,10 +1150,14 @@ void SendMsg(String m, MESSAGE_TYPE msg_type){
 
   if (Msg!=""){
     Msg += "; ";
-  }
+    if (msg_level > msg_type) msg_level = msg_type;
+  } else msg_level = msg_type;
+  
   Msg += m;
+  
   if (Msg.length() > 250) {
     Msg = m;
+    msg_level = msg_type;
   }
 }
 
