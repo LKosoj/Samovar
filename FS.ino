@@ -285,7 +285,6 @@ String IRAM_ATTR get_sys_info() {
       SPIFFS.remove("/data_old.csv");
     }
   }
-  //Если используется Blynk - пишем оператору
   if (tb - ub < 200) {
     SendMsg("Memory is full!", ALARM_MSG);
   }
