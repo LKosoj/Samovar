@@ -369,7 +369,7 @@ enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVA
 volatile SAMOVAR_MODE Samovar_Mode;
 volatile SAMOVAR_MODE Samovar_CR_Mode;
 
-enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2};
+enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100};
 volatile MESSAGE_TYPE msg_type;
 
 struct SetupEEPROM {
@@ -522,6 +522,7 @@ String WthdrwTimeS;                                             // Время о
 String jsonstr;                                                 // Строка, содержащая json ответ для страницы
 String Msg;                                                     // Строка для сообщений в web-интерфейсе
 String LogMsg;                                                  // Строка для вывода лога в javascript console
+byte msg_level;                                                 // Уровень сообщения - см. enum MESSAGE_TYPE
 bool pump_started;                                              // Признак стартовавшего насоса
 bool setautospeed;                                              // Признак для однократного снижения скорости насоса при паузе
 volatile bool heater_state;                                     // Статус нагрева при затирке
