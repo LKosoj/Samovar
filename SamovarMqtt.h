@@ -31,6 +31,8 @@ void initMqtt(){
   strcat(mqttstr,SamSetup.blynkauth);
   strcat(mqttstr,"/");
 
+  if (strlen(SamSetup.blynkauth) <30) send_mqtt = false; else send_mqtt = true;
+
 //  mqttClient.onSubscribe(onMqttSubscribe);
 //  mqttClient.onUnsubscribe(onMqttUnsubscribe);
 //  mqttClient.onMessage(onMqttMessage);
@@ -66,9 +68,7 @@ void onMqttPublish(uint16_t packetId) {
 }
 
 void MqttSendMsg(String Str, const char *chart ){
-  if (strlen(SamSetup.blynkauth) <30 ) return;
-//  Serial.println("mqttClient.StartSession");
-//  uint16_t packetIdPub1 = mqttClient.publish(MqttStr + "/st", 2, true, "test 1");
+  if (!send_mqtt) return;
   strcpy(mqttstr1, mqttstr);
   strcat(mqttstr1,chart);
   strcat(mqttstr1,"/1");
