@@ -96,7 +96,7 @@ void IRAM_ATTR check_alarm_beer() {
     set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
   }
 
-  if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp - 0.1) {
+  if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer(true);
@@ -105,7 +105,7 @@ void IRAM_ATTR check_alarm_beer() {
     startval = 2002;
   }
 
-  if (program[ProgramNum].WType == "P" && TankSensor.avgTemp >= program[ProgramNum].Temp - 0.1) {
+  if (program[ProgramNum].WType == "P" && TankSensor.avgTemp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
