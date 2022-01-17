@@ -125,6 +125,7 @@ void IRAM_ATTR check_alarm_beer() {
       setHeaterPosition(false);
       //Открываем клапан воды
       open_valve(true);
+      SendMsg("Открыт клапан воды охлаждения!", NOTIFY_MSG);
 #ifdef USE_WATER_PUMP
       if (pump_started) set_pump_pwm(1023);
 #endif
@@ -132,7 +133,7 @@ void IRAM_ATTR check_alarm_beer() {
     if (TankSensor.avgTemp <= program[ProgramNum].Temp) {
       //Если температура упала
       //Закрываем клапан воды
-      open_valve(false);
+      SendMsg("Закрыт клапан воды охлаждения!", NOTIFY_MSG);
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }
