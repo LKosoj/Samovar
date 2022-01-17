@@ -240,6 +240,13 @@ void IRAM_ATTR taskButton(void *pvParameters) {
   attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
 #endif
 
+#ifdef ALARM_BTN_PIN
+  alarm_btn.setType(LOW_PULL);
+  alarm_btn.setTickMode(MANUAL);
+  alarm_btn.setDebounce(30);
+  attachInterrupt(ALARM_BTN_PIN, isrBTN_TICK, CHANGE);
+#endif
+
   //  //вешаем прерывание на изменения по ногам энкодера
   attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
   attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
@@ -251,6 +258,9 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 #ifdef BTN_PIN
     detachInterrupt(BTN_PIN);
 #endif
+#ifdef ALARM_BTN_PIN
+    detachInterrupt(ALARM_BTN_PIN);
+#endif
     detachInterrupt(ENC_CLK);
     detachInterrupt(ENC_DT);
     detachInterrupt(ENC_SW);
@@ -258,6 +268,10 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 #ifdef BTN_PIN
     btn.tick();
     attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
+#endif
+#ifdef ALARM_BTN_PIN
+    alarm_btn.tick();
+    attachInterrupt(ALARM_BTN_PIN, isrBTN_TICK, CHANGE);
 #endif
     attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
     attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
@@ -765,7 +779,9 @@ void setup() {
   ArduinoOTA.setHostname(SAMOVAR_HOST);
   ArduinoOTA.begin();
 #endif
-
+ 
+  alarm_event = false;
+   
   sensor_init();
 
   samovar_reset();
@@ -878,6 +894,20 @@ void loop() {
 #endif
 
   ::ws.cleanupClients();
+
+#ifdef ALARM_BTN_PIN
+  alarm_btn.tick();      // отработка нажатия аварийной кнопки
+  if (btn.isPress()) {
+    // выключаем питание, выключаем воду, взводим флаг аварии
+    if (PowerOn) {
+      sam_command_sync = SAMOVAR_POWER;
+    }
+    set_power(false);
+    alarm_event = true;
+    open_valve(false);
+    set_pump_pwm(0);
+  }
+#endif
 
 #ifdef BTN_PIN
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы

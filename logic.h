@@ -696,7 +696,7 @@ void IRAM_ATTR check_alarm() {
 
 void IRAM_ATTR open_valve(bool Val) {
   valve_status = Val;
-  if (Val) {
+  if (Val && !alarm_event) {
     SendMsg("Откройте подачу воды!", WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
@@ -747,6 +747,9 @@ void IRAM_ATTR set_buzzer(bool fl) {
 }
 
 void IRAM_ATTR set_power(bool On) {
+  if (alarm_event) {
+    return;
+  }
   PowerOn = On;
   if (On) {
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);

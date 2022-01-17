@@ -22,6 +22,10 @@ void init_pump_pwm(byte pin, int freq) {
 }
 
 void set_pump_pwm(float duty) {
+  if (alarm_event) {
+    pump_pwm.write(0);
+    return;
+  }
   if (!pump_started && duty > 0) {
     wp_count = 0;
     pump_pwm.write(400);
