@@ -897,7 +897,7 @@ void loop() {
 
 #ifdef ALARM_BTN_PIN
   alarm_btn.tick();      // отработка нажатия аварийной кнопки
-  if (btn.isPress()) {
+  if (alarm_btn.isPress()) {
     // выключаем питание, выключаем воду, взводим флаг аварии
     if (PowerOn) {
       sam_command_sync = SAMOVAR_POWER;
@@ -906,6 +906,7 @@ void loop() {
     alarm_event = true;
     open_valve(false);
     set_pump_pwm(0);
+    SendMsg("Аварийное отключение!", ALARM_MSG);
   }
 #endif
 
