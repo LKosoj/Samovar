@@ -695,11 +695,12 @@ void IRAM_ATTR check_alarm() {
 }
 
 void IRAM_ATTR open_valve(bool Val) {
-  valve_status = Val;
   if (Val && !alarm_event) {
+    valve_status = true;
     SendMsg("Откройте подачу воды!", WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
+    valve_status = false;
     SendMsg("Закройте подачу воды!", WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
