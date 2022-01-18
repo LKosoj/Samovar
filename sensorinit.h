@@ -117,12 +117,14 @@ void IRAM_ATTR DS_getvalue(void) {
 
 //    float randNumber;
 //    randNumber = random(100) / float(500);
-//    if (TankSensor.avgTemp < 47) TankSensor.avgTemp = 49;
+//    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
+//    if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
 //    static float coef = 0;
 //    coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
 //    //if (coef > 0.5) coef = 0.5;
 //    //if (coef < -0.5) coef = -0.5;
 //    ts = TankSensor.avgTemp + coef;
+//    ws = WaterSensor.avgTemp + coef;
 
   sensors.requestTemperatures();
 
