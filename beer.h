@@ -185,6 +185,15 @@ void IRAM_ATTR check_alarm_beer() {
 }
 
 void set_heater_state(float setpoint, float temp) {
+#ifdef SAMOVAR_USE_POWER
+  //Если дельта большая и не тюнинг, включаем разгонный тэн, иначе выключаем
+  if (setpoint - temp > ACCELERATION_HEATER_DELTA && !tuning) {
+    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+  } else {
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+  }
+#endif
+
   if (setpoint - temp > HEAT_DELTA && !tuning) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
