@@ -118,7 +118,7 @@ BLYNK_WRITE(V3) {
 BLYNK_WRITE(V4) {
   int Value4 = param.asInt();  // assigning incoming value from pin V4 to a variable
   if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-    sam_command_sync = SAMOVAR_BEER;
+    if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
   } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
     if (!PowerOn) sam_command_sync = SAMOVAR_BK;
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
