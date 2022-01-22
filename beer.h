@@ -189,8 +189,10 @@ void set_heater_state(float setpoint, float temp) {
   //Если дельта большая и не тюнинг, включаем разгонный тэн, иначе выключаем
   if (setpoint - temp > ACCELERATION_HEATER_DELTA && !tuning) {
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+    acceleration_heater = true;
   } else {
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+    acceleration_heater = false;
   }
 #endif
 
