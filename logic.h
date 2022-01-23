@@ -761,7 +761,7 @@ void IRAM_ATTR set_buzzer(bool fl) {
 }
 
 void IRAM_ATTR set_power(bool On) {
-  if (alarm_event) {
+  if (alarm_event && On) {
     return;
   }
   PowerOn = On;
@@ -778,12 +778,13 @@ void IRAM_ATTR set_power(bool On) {
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   } else {
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #ifdef SAMOVAR_USE_POWER
     vTaskDelay(1000/portTICK_PERIOD_MS);
     set_power_mode(POWER_SLEEP_MODE);
+    acceleration_heater = false;
 #else
     current_power_mode = POWER_SLEEP_MODE;
-    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
     power_text_ptr = (char *)"ON";
     sam_command_sync = SAMOVAR_RESET;
