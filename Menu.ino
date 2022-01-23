@@ -386,6 +386,7 @@ void IRAM_ATTR samovar_reset() {
   reset_focus();
   set_menu_screen(3);
   reset_sensor_counter();
+  sam_command_sync = SAMOVAR_NONE;
 }
 
 void setupMenu() {
