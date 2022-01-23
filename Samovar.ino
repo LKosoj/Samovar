@@ -970,6 +970,9 @@ void loop() {
           bk_finish();
         else
           set_power(!PowerOn);
+          if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
+            SamovarStatusInt = 50;
+          }
         break;
       case SAMOVAR_RESET:
         samovar_reset();
