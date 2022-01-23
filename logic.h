@@ -513,6 +513,19 @@ void IRAM_ATTR check_alarm() {
     alarm_h_min = 0;
   }
 #ifdef SAMOVAR_USE_POWER
+  if (SamovarStatusInt == 50 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn){
+    if (!acceleration_heater){
+      //включаем разгонный тэн
+      digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+      acceleration_heater = true;
+    }
+  } else {
+    if (acceleration_heater){
+      //выключаем разгонный тэн
+      digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+      acceleration_heater = false;
+    }
+  }
   //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
   if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
