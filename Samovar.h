@@ -252,6 +252,11 @@ uint8_t temprature_sens_read();
 
 #include "user_config_override.h"
 
+#ifdef USE_LUA
+#include <LuaWrapper.h>
+LuaWrapper lua;
+#endif
+
 #include <FS.h>
 #ifdef USE_LittleFS
 #pragma message ("USE LITTLEFS")
