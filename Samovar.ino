@@ -311,6 +311,12 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
 
+#ifdef USE_LUA
+    //если установлена переменная запуска в цикле lua_script, запускаем
+    if (loop_lua_fl) start_lua_script();
+#endif
+
+
 #ifdef SAMOVAR_USE_POWER
       get_current_power();
 #endif
