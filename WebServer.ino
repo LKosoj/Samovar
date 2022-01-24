@@ -9,6 +9,9 @@ void calibrate_command(AsyncWebServerRequest *request);
 String setupKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
+#ifdef USE_LUA
+void start_lua_script();
+#endif
 
 void change_samovar_mode() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
@@ -101,6 +104,12 @@ void WebServerInit(void) {
     server_heart_beat = millis();
     get_old_data_log(request);
   });
+#ifdef USE_LUA
+  server.on("/lua", HTTP_GET, [](AsyncWebServerRequest * request) {
+    start_lua_script();
+    request->send(200, "text/html", "OK");
+  });
+#endif
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 

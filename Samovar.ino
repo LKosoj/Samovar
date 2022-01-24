@@ -152,37 +152,12 @@ void recvMsg(uint8_t *data, size_t len) {
     if (Var == "WFpulseCount") {
       WFpulseCount = (byte)Val.toInt();
       WebSerial.println(WFpulseCount);
-    } else if (Var == "pump_started") {
-      pump_started = Val.toInt();
-      WebSerial.println(pump_started);
-    } else if (Var == "valve_status") {
-      valve_status = Val.toInt();
-      WebSerial.println(valve_status);
-    } else if (Var == "SamSetup.Mode") {
-      SamSetup.Mode = Val.toInt();
-      WebSerial.println(SamSetup.Mode);
-    } else if (Var == "Samovar_Mode") {
-      Samovar_Mode = (SAMOVAR_MODE)Val.toInt();
-      WebSerial.println(Samovar_Mode);
-    } else if (Var == "Samovar_CR_Mode") {
-      Samovar_CR_Mode = (SAMOVAR_MODE)Val.toInt();
-      WebSerial.println(Samovar_CR_Mode);
     } else if (Var != "") {
     }
   } else if (d == "print") {
     WebSerial.println("_______________________________________________");
     WebSerial.print("WFpulseCount = ");
     WebSerial.println(WFpulseCount);
-    WebSerial.print("pump_started = ");
-    WebSerial.println(pump_started);
-    WebSerial.print("valve_status = ");
-    WebSerial.println(valve_status);
-    WebSerial.print("SamSetup.Mode = ");
-    WebSerial.println(SamSetup.Mode);
-    WebSerial.print("Samovar_Mode = ");
-    WebSerial.println(Samovar_Mode);
-    WebSerial.print("Samovar_CR_Mode = ");
-    WebSerial.println(Samovar_CR_Mode);
     WebSerial.println("_______________________________________________");
   } else
     WebSerial.print("echo ");
@@ -559,6 +534,10 @@ void setup() {
   //touch_pad_isr_deregister();
   //touch_pad_deinit();
   touch_pad_intr_disable();
+
+#ifdef USE_LUA
+  lua_init();
+#endif
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);

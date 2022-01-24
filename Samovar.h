@@ -252,11 +252,6 @@ uint8_t temprature_sens_read();
 
 #include "user_config_override.h"
 
-#ifdef USE_LUA
-#include <LuaWrapper.h>
-LuaWrapper lua;
-#endif
-
 #include <FS.h>
 #ifdef USE_LittleFS
 #pragma message ("USE LITTLEFS")
@@ -572,4 +567,9 @@ unsigned long alarm_c_low_min;                                  // Время д
 #ifdef USE_WATER_PUMP
 byte wp_count;                                                  // Переменная для расчета времени работы насоса на повышенной мощности при старте
 #endif
+
+#ifdef USE_LUA
+#include "lua.h"
+#endif
+
 #endif
