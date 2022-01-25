@@ -31,6 +31,7 @@ void beer_proc() {
 }
 
 void IRAM_ATTR run_beer_program(byte num) {
+  if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
   if (startval == 2000) startval = 2001;
   ProgramNum = num;
   begintime = 0;
