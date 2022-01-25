@@ -125,6 +125,7 @@ void change_samovar_mode();
 void saveConfigCallback();
 void configModeCallback(AsyncWiFiManager *myWiFiManager);
 String verbose_print_reset_reason(RESET_REASON reason);
+void set_alarm();
 
 #ifdef __SAMOVAR_DEBUG
 //LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -883,15 +884,7 @@ void loop() {
 #ifdef ALARM_BTN_PIN
   alarm_btn.tick();      // отработка нажатия аварийной кнопки
   if (alarm_btn.isPress()) {
-    // выключаем питание, выключаем воду, взводим флаг аварии
-    if (PowerOn) {
-      sam_command_sync = SAMOVAR_POWER;
-    }
-    set_power(false);
-    alarm_event = true;
-    open_valve(false);
-    set_pump_pwm(0);
-    SendMsg("Аварийное отключение!", ALARM_MSG);
+    set_alarm();
   }
 #endif
 
