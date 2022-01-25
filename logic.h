@@ -535,7 +535,7 @@ void IRAM_ATTR check_alarm() {
   } else {
     if (acceleration_heater){
       //выключаем разгонный тэн
-      digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+      digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
       acceleration_heater = false;
     }
   }
