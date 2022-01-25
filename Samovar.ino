@@ -1175,9 +1175,7 @@ void SendMsg(String m, MESSAGE_TYPE msg_type){
 
 void WriteConsoleLog(String StringLogMsg) {
   LogMsg = LogMsg + "\n" + StringLogMsg;
-#ifdef __SAMOVAR_DEBUG
-  //Serial.println(StringLogMsg);
-#endif
+  Serial.println(StringLogMsg);
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
 #endif
