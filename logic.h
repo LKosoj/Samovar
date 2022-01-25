@@ -212,6 +212,7 @@ void pump_calibrate(int stpspeed) {
 }
 
 void IRAM_ATTR pause_withdrawal(bool Pause) {
+  if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
   if (!stepper.getState() && !PauseOn) return;
   PauseOn = Pause;
   if (Pause) {
