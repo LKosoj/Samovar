@@ -87,6 +87,18 @@ int IRAM_ATTR get_liquid_volume() {
   return get_liguid_volume_by_step(stepper.getCurrent());
 }
 
+void set_alarm(){
+  // выключаем питание, выключаем воду, взводим флаг аварии
+  if (PowerOn) {
+    sam_command_sync = SAMOVAR_POWER;
+  }
+  set_power(false);
+  alarm_event = true;
+  open_valve(false);
+  set_pump_pwm(0);
+  SendMsg("Аварийное отключение!", ALARM_MSG);
+}
+
 void IRAM_ATTR withdrawal(void) {
   //Определяем, что необходимо сменить режим работы
   if (program_Pause) {
