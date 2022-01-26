@@ -55,8 +55,6 @@
 #include "SamovarMqtt.h"
 #endif
 
-#include <SPIFFSEditor.h>
-
 #ifdef USE_BME680
 #include <Adafruit_BME680.h>
 #endif
@@ -99,6 +97,7 @@ cppQueue  msg_q(250, 10, FIFO);
 #include "distiller.h"
 #include "beer.h"
 #include "BK.h"
+#include "SPIFFSEditor.h"
 
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
@@ -542,10 +541,6 @@ void setup() {
   //touch_pad_deinit();
   touch_pad_intr_disable();
 
-#ifdef USE_LUA
-  lua_init();
-#endif
-
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
   WiFi.setHostname(host);
@@ -855,6 +850,10 @@ void setup() {
 
   NTP.setTimeZoneOffset(-SamSetup.TimeZone * 3600,0);
   NTP.begin ();
+
+#ifdef USE_LUA
+  lua_init();
+#endif
 
   writeString("      Samovar     ", 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
