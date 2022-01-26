@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "4.08"
+#define SAMOVAR_VERSION "5.00"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -570,10 +570,6 @@ unsigned long alarm_c_low_min;                                  // Время д
 
 #ifdef USE_WATER_PUMP
 byte wp_count;                                                  // Переменная для расчета времени работы насоса на повышенной мощности при старте
-#endif
-
-#ifdef USE_LUA
-#include "lua.h"
 #endif
 
 #endif
