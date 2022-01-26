@@ -49,6 +49,15 @@
 
 #include "Samovar.h"
 
+#ifdef USE_EXPANDER
+#include <PCF8575.h>
+PCF8575 expander(USE_EXPANDER);
+#endif
+
+#ifdef USE_LUA
+#include "lua.h"
+#endif
+
 #include <ESPNtpClient.h>
 
 #ifdef USE_MQTT
