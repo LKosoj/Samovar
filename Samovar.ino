@@ -585,7 +585,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     taskButton,      /* Function to implement the task */
     "taskButton",    /* Name of the task */
-    4000,            /* Stack size in words */
+    2000,            /* Stack size in words */
     NULL,            /* Task input parameter */
     1,               /* Priority of the task */
     &SysTickerTask1, /* Task handle. */
@@ -817,7 +817,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    4000,             /* Stack size in words */
+    3000,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
