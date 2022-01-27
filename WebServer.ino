@@ -11,6 +11,7 @@ String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 #ifdef USE_LUA
 void start_lua_script();
+void load_lua_script();
 #endif
 
 void change_samovar_mode() {
@@ -109,6 +110,11 @@ void WebServerInit(void) {
     start_lua_script();
     request->send(200, "text/html", "OK");
   });
+
+  server.on("/load_lua", HTTP_GET, [](AsyncWebServerRequest * request) {
+    load_lua_script();
+    request->send(200, "text/html", "OK");
+  });  
 #endif
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
