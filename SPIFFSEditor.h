@@ -300,12 +300,6 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
   if(_authenticated && request->_tempFile){
     if(len){
       request->_tempFile.write(data,len);
-#ifdef USE_LUA
-      //request->_tempFile.flush();
-      if (getValue(filename, '.', 1) == "lua") {
-        load_lua_script();
-      }
-#endif
     }
     if(final){
       request->_tempFile.close();
