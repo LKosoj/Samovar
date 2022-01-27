@@ -357,8 +357,9 @@ static int lua_wrapper_set_object(lua_State *lua_state){
 }
 
 static int lua_wrapper_get_object(lua_State *lua_state){
-  String Var;
+  String Var, Type;
   const char *s;
+  int n = lua_gettop(lua_state);  /* number of arguments */
   size_t l;
   lua_getglobal(lua_state, "tostring");
   lua_pushvalue(lua_state, -1);
@@ -367,7 +368,23 @@ static int lua_wrapper_get_object(lua_State *lua_state){
   s = lua_tolstring(lua_state, -1, &l);
   Var = s;
   lua_pop(lua_state, 1);
-  lua_pushstring(lua_state, luaObj->get(Var).c_str());
+
+  String v = luaObj->get(Var);
+  if (n == 2){
+    const char *s2;
+    size_t l2;
+    lua_pushvalue(lua_state, -1);
+    lua_pushvalue(lua_state, 2);
+    lua_call(lua_state, 1, 1);
+    s2 = lua_tolstring(lua_state, -1, &l2);
+    Type = s2;
+    lua_pop(lua_state, 1);
+    if (Type == "NUMERIC" && v == "") {
+      v = "0";
+    }
+  }
+
+  lua_pushstring(lua_state, v.c_str());
   return 1;
 }
 
