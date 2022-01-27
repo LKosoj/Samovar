@@ -509,8 +509,10 @@ String get_lua_script(bool type){
 }
 
 void load_lua_script(){
-  script1 = get_lua_script(false).trim();
-  script2 = get_lua_script(true).trim();
+  script1 = get_lua_script(false);
+  script2 = get_lua_script(true);
+  script1.trim();
+  script2.trim();
   if (script1 != "") script1 = glv + script1;
   if (script2 != "") script2 = glv + script2;
 }
