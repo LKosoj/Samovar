@@ -557,23 +557,23 @@ void start_lua_script(){
 
 String get_global_variables(){
   String Variables;
-  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
+//  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
   Variables += "start_pressure = " + String(start_pressure) + "\r\n";
   Variables += "bme_pressure = " + String(bme_pressure) + "\r\n";
   Variables += "bme_prev_pressure = " + String(bme_prev_pressure) + "\r\n";
-  Variables += "bme_humidity = " + String(bme_humidity) + "\r\n";
-  Variables += "SamovarStatus = \"" + SamovarStatus + "\"\r\n";
+//  Variables += "bme_humidity = " + String(bme_humidity) + "\r\n";
+//  Variables += "SamovarStatus = \"" + SamovarStatus + "\"\r\n";
   Variables += "capacity_num = " + String(capacity_num) + "\r\n";
   Variables += "SamovarStatusInt = " + String(SamovarStatusInt) + "\r\n";
-  Variables += "prev_ProgramNum = " + String(prev_ProgramNum) + "\r\n";
+//  Variables += "prev_ProgramNum = " + String(prev_ProgramNum) + "\r\n";
   Variables += "ProgramNum = " + String(ProgramNum) + "\r\n";
   Variables += "ProgramLen = " + String(ProgramLen) + "\r\n";
-  Variables += "startval = " + String(startval) + "\r\n";
-  Variables += "Delay1 = " + String(Delay1) + "\r\n";
-  Variables += "Delay2 = " + String(Delay2) + "\r\n";
+//  Variables += "startval = " + String(startval) + "\r\n";
+//  Variables += "Delay1 = " + String(Delay1) + "\r\n";
+//  Variables += "Delay2 = " + String(Delay2) + "\r\n";
   Variables += "currentvolume = " + String(currentvolume) + "\r\n";
   Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
-  Variables += "prev_time_ms = " + String(prev_time_ms) + "\r\n";
+//  Variables += "prev_time_ms = " + String(prev_time_ms) + "\r\n";
   Variables += "ActualVolumePerHour = " + String(ActualVolumePerHour) + "\r\n";
   Variables += "CurrrentStepperSpeed = " + String(CurrrentStepperSpeed) + "\r\n";
   Variables += "CurrrentStepps = " + String(CurrrentStepps) + "\r\n";
@@ -585,10 +585,10 @@ String get_global_variables(){
   Variables += "program_Pause = " + String(program_Pause) + "\r\n";
   Variables += "program_Wait = " + String(program_Wait) + "\r\n";
   Variables += "program_Wait_Type = \"" + program_Wait_Type + "\"\r\n";
-  Variables += "begintime = " + String(begintime) + "\r\n";
-  Variables += "t_min = " + String(t_min) + "\r\n";
-  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
-  Variables += "alarm_h_min = " + String(alarm_h_min) + "\r\n";
+//  Variables += "begintime = " + String(begintime) + "\r\n";
+//  Variables += "t_min = " + String(t_min) + "\r\n";
+//  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
+//  Variables += "alarm_h_min = " + String(alarm_h_min) + "\r\n";
   Variables += "WFpulseCount = " + String(WFpulseCount) + "\r\n";
   Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
   Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
@@ -602,10 +602,10 @@ String get_global_variables(){
   Variables += "pump_started = " + String(pump_started) + "\r\n";
   Variables += "setautospeed = " + String(setautospeed) + "\r\n";
   Variables += "heater_state = " + String(heater_state) + "\r\n";
-  Variables += "ofl = \"" + ofl + "\"\r\n";
+//  Variables += "ofl = \"" + ofl + "\"\r\n";
   Variables += "mixer_status = " + String(mixer_status) + "\r\n";
-  Variables += "bk_pwm = " + String(bk_pwm) + "\r\n";
-  Variables += "chipId = " + String(chipId) + "\r\n";
+//  Variables += "bk_pwm = " + String(bk_pwm) + "\r\n";
+//  Variables += "chipId = " + String(chipId) + "\r\n";
   Variables += "alarm_event = " + String(alarm_event) + "\r\n";
   Variables += "acceleration_heater = " + String(acceleration_heater) + "\r\n";
   Variables += "valve_status = " + String(valve_status) + "\r\n";
@@ -617,8 +617,8 @@ String get_global_variables(){
   Variables += "program_time = " + String(program[ProgramNum].Time) + "\r\n";
   Variables += "program_capacity_num = " + String(program[ProgramNum].capacity_num) + "\r\n";
 
-  Variables += "loop_lua_fl = " + String(loop_lua_fl) + "\r\n";
-  Variables += "show_lua_script = " + String(show_lua_script) + "\r\n";
+//  Variables += "loop_lua_fl = " + String(loop_lua_fl) + "\r\n";
+//  Variables += "show_lua_script = " + String(show_lua_script) + "\r\n";
   Variables += "SamSetup_Mode = " + String(SamSetup.Mode) + "\r\n";
   Variables += "test_num_val = " + String(test_num_val) + "\r\n";
   Variables += "test_str_val = \"" + test_str_val + "\"\r\n";
