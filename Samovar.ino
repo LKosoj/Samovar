@@ -302,7 +302,6 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 //      server.end();
 //      server.begin();
 //    }
-
     vTaskDelay(6000/portTICK_PERIOD_MS);
   }
 }
