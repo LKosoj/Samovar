@@ -36,15 +36,28 @@ void IRAM_ATTR pause_withdrawal(bool Pause);
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  pinMode(a, b);
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 ) pinMode(a, b);
   return 0;
 }
 
 static int lua_wrapper_digitalWrite(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  digitalWrite(a, b);
+  if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN 
+#ifdef ALARM_BTN_PIN
+  || a == ALARM_BTN_PIN 
+#endif
+#ifdef BTN_PIN
+  || a == BTN_PIN
+#endif  
+  ) pinMode(a, b);  digitalWrite(a, b);
   return 0;
+}
+
+static int lua_wrapper_digitalRead(lua_State *lua_state) {
+  int a = luaL_checkinteger(lua_state, 1);
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 ) lua_pushnumber(lua_state, (lua_Number) digitalRead(a));
+  return 1;
 }
 
 static int lua_wrapper_analogRead(lua_State *lua_state) {
@@ -407,7 +420,10 @@ static int lua_wrapper_get_timer(lua_State *lua_state) {
     else {
       long l;
       l = lua_timer[a] - millis();
-      if (l <= 0) b = 0;
+      if (l <= 0) {
+        b = 0;
+        lua_timer[a] = 0;
+      }
       else b = l / 1000;
     }
   }
@@ -446,6 +462,7 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state){
 void lua_init(){
   lua.Lua_register("pinMode", (const lua_CFunction) &lua_wrapper_pinMode);
   lua.Lua_register("digitalWrite", (const lua_CFunction) &lua_wrapper_digitalWrite);
+  lua.Lua_register("digitalRead", (const lua_CFunction) &lua_wrapper_digitalRead);
   lua.Lua_register("analogRead", (const lua_CFunction) &lua_wrapper_analogRead);
 #ifdef USE_EXPANDER
   lua.Lua_register("exp_pinMode", (const lua_CFunction) &lua_wrapper_exp_pinMode);
@@ -577,9 +594,9 @@ void start_lua_script(){
 String get_global_variables(){
   String Variables;
 //  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
-  Variables += "start_pressure = " + String(start_pressure) + "\r\n";
+//  Variables += "start_pressure = " + String(start_pressure) + "\r\n";
   Variables += "bme_pressure = " + String(bme_pressure) + "\r\n";
-  Variables += "bme_prev_pressure = " + String(bme_prev_pressure) + "\r\n";
+//  Variables += "bme_prev_pressure = " + String(bme_prev_pressure) + "\r\n";
 //  Variables += "bme_humidity = " + String(bme_humidity) + "\r\n";
 //  Variables += "SamovarStatus = \"" + SamovarStatus + "\"\r\n";
   Variables += "capacity_num = " + String(capacity_num) + "\r\n";
@@ -591,12 +608,12 @@ String get_global_variables(){
 //  Variables += "Delay1 = " + String(Delay1) + "\r\n";
 //  Variables += "Delay2 = " + String(Delay2) + "\r\n";
   Variables += "currentvolume = " + String(currentvolume) + "\r\n";
-  Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
+//  Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
 //  Variables += "prev_time_ms = " + String(prev_time_ms) + "\r\n";
   Variables += "ActualVolumePerHour = " + String(ActualVolumePerHour) + "\r\n";
-  Variables += "CurrrentStepperSpeed = " + String(CurrrentStepperSpeed) + "\r\n";
-  Variables += "CurrrentStepps = " + String(CurrrentStepps) + "\r\n";
-  Variables += "TargetStepps = " + String(TargetStepps) + "\r\n";
+//  Variables += "CurrrentStepperSpeed = " + String(CurrrentStepperSpeed) + "\r\n";
+//  Variables += "CurrrentStepps = " + String(CurrrentStepps) + "\r\n";
+//  Variables += "TargetStepps = " + String(TargetStepps) + "\r\n";
   Variables += "WthdrwlProgress = " + String(WthdrwlProgress) + "\r\n";
   Variables += "PowerOn = " + String(PowerOn) + "\r\n";
   Variables += "PauseOn = " + String(PauseOn) + "\r\n";
@@ -608,12 +625,12 @@ String get_global_variables(){
 //  Variables += "t_min = " + String(t_min) + "\r\n";
 //  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
 //  Variables += "alarm_h_min = " + String(alarm_h_min) + "\r\n";
-  Variables += "WFpulseCount = " + String(WFpulseCount) + "\r\n";
-  Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
-  Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
-  Variables += "WFflowRate = " + String(WFflowRate) + "\r\n";
-  Variables += "WFAlarmCount = " + String(WFAlarmCount) + "\r\n";
-  Variables += "acceleration_temp = " + String(acceleration_temp) + "\r\n";
+//  Variables += "WFpulseCount = " + String(WFpulseCount) + "\r\n";
+//  Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
+//  Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
+//  Variables += "WFflowRate = " + String(WFflowRate) + "\r\n";
+//  Variables += "WFAlarmCount = " + String(WFAlarmCount) + "\r\n";
+//  Variables += "acceleration_temp = " + String(acceleration_temp) + "\r\n";
   Variables += "WthdrwTimeAll = " + String(WthdrwTimeAll) + "\r\n";
   Variables += "WthdrwTime = " + String(WthdrwTime) + "\r\n";
   Variables += "WthdrwTimeAllS = \"" + WthdrwTimeAllS + "\"\r\n";
