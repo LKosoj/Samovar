@@ -76,11 +76,66 @@ LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
 //LiquidSystem menu(main_menu, setup_menu, 1);
 
+#define LCD_UPDATE_TIMEOUT 200
+
 void reset_focus() {
-  //return;
-  do {
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    //return;
+    do {
+      main_menu1.switch_focus();
+    } while (main_menu1.is_callable(1));
+    xSemaphoreGive(xI2CSemaphore);
+  }
+}
+
+void change_screen(LiquidScreen* screen){
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    main_menu1.change_screen(screen);
+    xSemaphoreGive(xI2CSemaphore);
+  }
+}
+
+void menu_update(){
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    main_menu1.update();
+    xSemaphoreGive(xI2CSemaphore);
+  }
+}
+
+void menu_softUpdate(){
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    main_menu1.softUpdate();
+    xSemaphoreGive(xI2CSemaphore);
+  }
+}
+
+void menu_previous_screen(){
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    main_menu1.previous_screen();
+    xSemaphoreGive(xI2CSemaphore);
+  }
+}
+
+void menu_next_screen(){
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    main_menu1.next_screen();
+    xSemaphoreGive(xI2CSemaphore);
+  }
+}
+
+void menu_switch_focus(){
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
     main_menu1.switch_focus();
-  } while (main_menu1.is_callable(1));
+    xSemaphoreGive(xI2CSemaphore);
+  }
+}
+
+void menu_reset_lcd(){
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    lcd.begin(20, 4);
+    lcd.init();
+    xSemaphoreGive(xI2CSemaphore);
+  }
 }
 
 void set_menu_screen(byte param) {
@@ -98,7 +153,7 @@ void set_menu_screen(byte param) {
       setup_program_settings.hide(true);
       setup_program_back.hide(true);
       //main_menu1.switch_focus();
-      main_menu1.change_screen(&setup_temp_screen);
+      change_screen(&setup_temp_screen);
       break;
     case 2:  //основное меню после включения колонны
       setup_set_temp_screen.hide(true);
@@ -113,7 +168,7 @@ void set_menu_screen(byte param) {
       main_screen4.hide(false);
       main_screen5.hide(true);
       //main_menu1.switch_focus();
-      main_menu1.change_screen(&main_screen);
+      change_screen(&main_screen);
       break;
     case 3:  //основное меню до включения колонны
       setup_set_temp_screen.hide(true);
@@ -128,7 +183,7 @@ void set_menu_screen(byte param) {
       main_screen4.hide(false);
       main_screen5.hide(true);
       //main_menu1.switch_focus();
-      main_menu1.change_screen(&main_screen);
+      change_screen(&main_screen);
       break;
     case 4:  //меню установки программ
       setup_set_temp_screen.hide(true);
@@ -143,7 +198,7 @@ void set_menu_screen(byte param) {
       setup_program_settings.hide(false);
       setup_program_back.hide(false);
       //main_menu1.switch_focus();
-      main_menu1.change_screen(&setup_program_settings);
+      change_screen(&setup_program_settings);
       break;
   }
   if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
@@ -151,7 +206,7 @@ void set_menu_screen(byte param) {
     main_screen1.hide(true);
     main_screen2.hide(true);
     main_screen5.hide(false);
-    main_menu1.change_screen(&main_screen5);
+    change_screen(&main_screen5);
   }
 }
 
@@ -189,10 +244,10 @@ void writeString(String Str, byte num) {
       Str.toCharArray(welcomeStrArr4, 20);
       break;
     case 0:
-      main_menu1.update();
+      menu_update();
       break;
   }
-  main_menu1.softUpdate();
+  menu_softUpdate();
 }
 
 void set_delta_steam_temp_up() {
@@ -376,7 +431,7 @@ void menu_samovar_start() {
   }
   Str.toCharArray(startval_text_val, 20);
   reset_focus();
-  main_menu1.update();
+  menu_update();
 }
 
 void IRAM_ATTR samovar_reset() {
@@ -473,9 +528,9 @@ void setupMenu() {
   main_menu1.add_screen(setup_program_back);
 
   set_menu_screen(3);
-  main_menu1.change_screen(&welcome_screen);
+  change_screen(&welcome_screen);
 
-  main_menu1.update();
+  menu_update();
   welcome_screen.hide(true);
 }
 
@@ -495,7 +550,7 @@ void encoder_getvalue() {
     }
     if (!main_menu1.is_callable(1)) {
       updscreen = false;
-      main_menu1.next_screen();
+      menu_next_screen();
     } else {
       updscreen = false;
       main_menu1.call_function(1);
@@ -510,7 +565,7 @@ void encoder_getvalue() {
     }
     if (!main_menu1.is_callable(2)) {
       updscreen = false;
-      main_menu1.previous_screen();
+      menu_previous_screen();
     } else {
       updscreen = false;
       main_menu1.call_function(2);
@@ -530,25 +585,24 @@ void encoder_getvalue() {
       menu_calibrate();
     }
     updscreen = false;
-    main_menu1.switch_focus();
+    menu_switch_focus();
   }
 
   CurMin = (millis() / 1000);
   if (OldMin != CurMin) {
     //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
     if (CurMin == 120) {
-      lcd.begin(20, 4);
-      lcd.init();
+      menu_reset_lcd();
     }
 
 
-    tcnt++;
-    if (tcnt == 3) {
-      tcnt = 0;
-      BME_getvalue(false);
-    }
+//    tcnt++;
+//    if (tcnt == 3) {
+//      tcnt = 0;
+//      BME_getvalue(false);
+//    }
 
-    if (updscreen) main_menu1.softUpdate();
+    if (updscreen) menu_softUpdate();
 
     OldMin = CurMin;
   }
