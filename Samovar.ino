@@ -602,7 +602,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     taskButton,      /* Function to implement the task */
     "taskButton",    /* Name of the task */
-    1000,            /* Stack size in words */
+    1100,            /* Stack size in words */
     NULL,            /* Task input parameter */
     1,               /* Priority of the task */
     &SysTickerTask1, /* Task handle. */
@@ -831,7 +831,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    2000,             /* Stack size in words */
+    2100,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
@@ -841,7 +841,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetClock,  /* Function to implement the task */
     "GetClockTicker", /* Name of the task */
-    2500,             /* Stack size in words */
+    2600,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
@@ -851,7 +851,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetBMP,  /* Function to implement the task */
     "GetBMPTicker", /* Name of the task */
-    1500,             /* Stack size in words */
+    1600,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetBMPTask,   /* Task handle. */
@@ -862,7 +862,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
-    1500,               /* Stack size in words */
+    1600,               /* Stack size in words */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
