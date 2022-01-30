@@ -321,7 +321,9 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 
 #ifdef USE_LUA
     //если установлена переменная запуска в цикле lua_script, запускаем
-    if (loop_lua_fl) start_lua_script();
+    if (loop_lua_fl) {
+      start_lua_script();
+    }
 #endif
 
 

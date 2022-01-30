@@ -110,11 +110,6 @@ void WebServerInit(void) {
     start_lua_script();
     request->send(200, "text/html", "OK");
   });
-
-  server.on("/load_lua", HTTP_GET, [](AsyncWebServerRequest * request) {
-    load_lua_script();
-    request->send(200, "text/html", "OK");
-  });  
 #endif
 
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);

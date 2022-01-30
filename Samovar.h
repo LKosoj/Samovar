@@ -558,8 +558,8 @@ unsigned long server_heart_beat;                                // Время п
 bool alarm_event;                                               // Признак срабатывания кнопки тревоги
 bool acceleration_heater;                                       // Признак включенного разгонного тэна
 bool send_mqtt;                                                 // Отправлять данные в облако
-bool loop_lua_fl;                                               // Запускать lua скрипт в цикле
-bool show_lua_script;                                           // Показывать выполняемый lua скрипт в логе и в Serial
+volatile bool loop_lua_fl;                                      // Запускать lua скрипт в цикле
+volatile bool show_lua_script;                                  // Показывать выполняемый lua скрипт в логе и в Serial
 float test_num_val;                                             // Тестовое численное значение          
 String test_str_val;                                            // Тестовое строковое значение
 

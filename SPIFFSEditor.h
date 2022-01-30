@@ -158,7 +158,10 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request){
       if(request->hasParam("list"))
         return true;
       if(request->hasParam("edit")){
-        request->_tempFile = _fs.open(request->arg("edit"), "r");
+        String p = request->arg("edit");
+        if (request->arg("edit")[0] != '/') p = "/" + request->arg("edit");
+//        request->_tempFile = _fs.open(request->arg("edit"), "r");
+        request->_tempFile = _fs.open(p, "r");
         if(!request->_tempFile){
           return false;
         }
@@ -265,8 +268,11 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request){
     } else
       request->send(404);
   } else if(request->method() == HTTP_POST){
-    if(request->hasParam("data", true, true) && _fs.exists(request->getParam("data", true, true)->value()))
-      request->send(200, "", "UPLOADED: "+request->getParam("data", true, true)->value());
+      String p = request->getParam("data", true, true)->value();
+      if (p[0] != '/') p = "/" + p;
+
+    if(request->hasParam("data", true, true) && _fs.exists(p))
+      request->send(200, "", "UPLOADED: "+p);
     else
       request->send(500);
   } else if(request->method() == HTTP_PUT){
@@ -293,7 +299,11 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
   if(!index){
     if(!_username.length() || request->authenticate(_username.c_str(),_password.c_str())){
       _authenticated = true;
-      request->_tempFile = _fs.open(filename, "w");
+
+      String p = filename;
+      if (filename[0] != '/') p = "/" + filename;
+            
+      request->_tempFile = _fs.open(p, "w");
       _startTime = millis();
     }
   }

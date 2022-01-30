@@ -1,10 +1,18 @@
 #ifndef _SAMOVAR_LUA_H_
 #define _SAMOVAR_LUA_H_
 
+#ifdef ESP_ARDUINO_VERSION
+#define USE_HTTP_REQUEST
+#endif
+
 #include <LuaWrapper.h>
 LuaWrapper lua;
 
 #include <SimpleMap.h>
+
+#ifdef USE_HTTP_REQUEST
+#include <HTTPClient.h>
+#endif
 
 unsigned long lua_timer[9]; //10 таймеров для lua
 String lua_type_script;
@@ -32,6 +40,7 @@ void set_body_temp();
 void IRAM_ATTR set_mixer(bool On);
 void set_alarm();
 void IRAM_ATTR pause_withdrawal(bool Pause);
+String IRAM_ATTR getValue(String data, char separator, int index);
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
@@ -459,6 +468,72 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state){
   return 1;
 }
 
+#ifdef USE_HTTP_REQUEST
+static int lua_wrapper_http_request(lua_State *lua_state){
+  String Var;
+  const char *s;
+  size_t l;
+  int n = lua_gettop(lua_state);  /* number of arguments */
+
+  lua_getglobal(lua_state, "tostring");
+  lua_pushvalue(lua_state, -1);
+  lua_pushvalue(lua_state, 1);
+  lua_call(lua_state, 1, 1);
+  s = lua_tolstring(lua_state, -1, &l);
+  Var = s;
+  lua_pop(lua_state, 1);
+
+  HTTPClient http;
+  String payload;
+  int httpResponseCode;
+  
+  http.begin(Var); //Specify the URL
+  if (n == 1) {
+    httpResponseCode = http.GET(); //Make the request  
+  } else {
+    String RequestType;
+    String ContentType;
+    String Body;
+
+    lua_pushvalue(lua_state, -1);
+    lua_pushvalue(lua_state, 2);
+    lua_call(lua_state, 1, 1);
+    s = lua_tolstring(lua_state, -1, &l);
+    RequestType = s;
+    lua_pop(lua_state, 1);
+
+    lua_pushvalue(lua_state, -1);
+    lua_pushvalue(lua_state, 3);
+    lua_call(lua_state, 1, 1);
+    s = lua_tolstring(lua_state, -1, &l);
+    ContentType = s;
+    lua_pop(lua_state, 1);
+
+    lua_pushvalue(lua_state, -1);
+    lua_pushvalue(lua_state, 4);
+    lua_call(lua_state, 1, 1);
+    s = lua_tolstring(lua_state, -1, &l);
+    Body = s;
+    lua_pop(lua_state, 1);
+
+    http.addHeader("Content-Type", getValue(ContentType,':',1));
+    httpResponseCode = http.POST(Body);
+  }
+  if (httpResponseCode>0) {
+    payload = http.getString();
+  }
+  else {
+    payload = "error";
+  }
+  // Free resources
+  http.end();
+
+  lua_pushstring(lua_state, payload.c_str());
+  
+  return 1;
+}
+#endif
+
 void lua_init(){
   lua.Lua_register("pinMode", (const lua_CFunction) &lua_wrapper_pinMode);
   lua.Lua_register("digitalWrite", (const lua_CFunction) &lua_wrapper_digitalWrite);
@@ -492,7 +567,11 @@ void lua_init(){
   lua.Lua_register("getState", (const lua_CFunction) &lua_wrapper_get_state);
   lua.Lua_register("getObject", (const lua_CFunction) &lua_wrapper_get_object);
   lua.Lua_register("getTimer", (const lua_CFunction) &lua_wrapper_get_timer);
+#ifdef USE_HTTP_REQUEST
+  lua.Lua_register("http_request", (const lua_CFunction) &lua_wrapper_http_request);
+#endif
 
+  loop_lua_fl = 0;
   //Запускаем инициализирующий lua-скрипт
   File f = SPIFFS.open("/init.lua");
   if (f) {
