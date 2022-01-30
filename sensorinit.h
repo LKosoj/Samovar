@@ -59,6 +59,8 @@ void IRAM_ATTR BME_getvalue(bool fl) {
     return;
   }
 
+if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (30 / portTICK_RATE_MS)) == pdTRUE){
+
 #ifdef USE_BME680
   // Tell BME680 to begin measurement.
   if (bme.beginReading() == 0) {
@@ -96,6 +98,8 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   bme_temp = bme.readTemperature();
   bme_pressure = bme.readPressure() / 100 * 0.75;
 #endif
+xSemaphoreGive(xI2CSemaphore);
+}
 }
 
 //***************************************************************************************************************
