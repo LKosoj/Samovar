@@ -697,8 +697,6 @@ String get_global_variables(){
   Variables += "ProgramNum = " + String(ProgramNum) + "\r\n";
   Variables += "ProgramLen = " + String(ProgramLen) + "\r\n";
 //  Variables += "startval = " + String(startval) + "\r\n";
-//  Variables += "Delay1 = " + String(Delay1) + "\r\n";
-//  Variables += "Delay2 = " + String(Delay2) + "\r\n";
   Variables += "currentvolume = " + String(currentvolume) + "\r\n";
 //  Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
 //  Variables += "prev_time_ms = " + String(prev_time_ms) + "\r\n";
