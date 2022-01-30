@@ -554,7 +554,7 @@ String ofl;                                                     // Openlog filen
 bool mixer_status;                                              // Статус работы мешалки
 int bk_pwm;                                                     // Значение PWM насоса при работе с БК
 uint32_t chipId = 0;                                            // Идентификатор ESP32
-String vr;                                                      // Причина перезагрузки ESP32
+//String vr;                                                      // Причина перезагрузки ESP32
 String SessionDescription;                                      // Описание параметров работы в свободном формате для сохранения в облаке
 unsigned long server_heart_beat;                                // Время последнего запроса к вебсерверу
 bool alarm_event;                                               // Признак срабатывания кнопки тревоги
