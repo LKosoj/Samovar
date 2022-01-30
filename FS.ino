@@ -90,17 +90,17 @@ String formatBytes(size_t bytes) {
   }
 }
 
-String get_edit_script(){
-  File f = SPIFFS.open("/edit.htm");
-  if (f) {
-    //нашли файл со скриптом, выполняем
-    String s;
-    s = f.readString();
-    f.close();
-    return s;
-  }
-  return "";
-}
+//String get_edit_script(){
+//  File f = SPIFFS.open("/edit.htm");
+//  if (f) {
+//    //нашли файл со скриптом, выполняем
+//    String s;
+//    s = f.readString();
+//    f.close();
+//    return s;
+//  }
+//  return "";
+//}
 
 // Инициализация FFS
 void FS_init(void) {
