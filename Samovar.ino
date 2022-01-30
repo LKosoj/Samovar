@@ -306,6 +306,14 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
   }
 }
 
+//Запускаем таск для чтения давления
+void IRAM_ATTR triggerGetBMP(void *parameter) {
+  while (true) {
+    BME_getvalue(false);
+    vTaskDelay(3000/portTICK_PERIOD_MS);      
+  }
+}
+
 //Запускаем таск для получения температур и различных проверок
 void IRAM_ATTR triggerSysTicker(void *parameter) {
   byte CurMinST = 0;
@@ -550,6 +558,12 @@ void setup() {
   //touch_pad_isr_deregister();
   //touch_pad_deinit();
   touch_pad_intr_disable();
+
+  xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
+  xSemaphoreGive(xMsgSemaphore);
+
+  xI2CSemaphore = xSemaphoreCreateBinaryStatic(&xI2CSemaphoreBuffer);
+  xSemaphoreGive(xI2CSemaphore);
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
   WiFi.setSleep(false);
@@ -811,9 +825,6 @@ void setup() {
 
   //WiFi.hostByName(ntpServerName, timeServerIP);
 
-  xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
-  xSemaphoreGive(xMsgSemaphore);
-
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
@@ -834,12 +845,22 @@ void setup() {
     &GetClockTask1,   /* Task handle. */
     0);               /* Core where the task should run */
 
+  //Запускаем таск для чтения давления
+  xTaskCreatePinnedToCore(
+    triggerGetBMP,  /* Function to implement the task */
+    "GetBMPTicker", /* Name of the task */
+    1000,             /* Stack size in words */
+    NULL,             /* Task input parameter */
+    1,                /* Priority of the task */
+    &GetBMPTask,   /* Task handle. */
+    1);               /* Core where the task should run */
+
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
-    3000,               /* Stack size in words */
+    2000,               /* Stack size in words */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
