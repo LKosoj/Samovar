@@ -126,10 +126,10 @@ if (!myObj.WFflowRate){
 var powerstr;
 var powerstyle;
 if (myObj.PowerOn == 1){
-  powerstr = 'Выключить питание';
+  powerstr = 'Выключить нагрев';
   powerstyle='red';
 } else {
-  powerstr = 'Включить питание';
+  powerstr = 'Включить нагрев';
   powerstyle='lightgreen';
 }
 document.getElementById('power').value = powerstr;
@@ -240,7 +240,7 @@ Samovar v. <span id='version'></span>
 <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
 </div>
 <div>
-<input id='power' type='submit' name='power' value='Включить питание' onclick='setDistCommand();' class="button">
+<input id='power' type='submit' name='power' value='Включить нагрев' onclick='setDistCommand();' class="button">
 <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"' class="button">
 <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"' class="button">
 </div>
