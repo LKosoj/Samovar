@@ -226,10 +226,10 @@ document.getElementById('flowsensor').style = '';
 var powerstr;
 var powerstyle;
 if (myObj.PowerOn == 1){
-powerstr = 'Выключить питание';
+powerstr = 'Выключить нагрев';
 powerstyle='red';
 } else {
-powerstr = 'Включить питание';
+powerstr = 'Включить нагрев';
 powerstyle='lightgreen';
 }
 document.getElementById('power').value = powerstr;
@@ -557,7 +557,7 @@ headers.forEach(function (item) {
   
   <div class="container_column" style="margin-bottom: 1em;">
     <div class="container_row" style="justify-content: space-around; align-items: center;">
-      <input id='power' type='submit' name='power' value='Включить питание' onclick='sendbutton("power=1");'
+      <input id='power' type='submit' name='power' value='Включить нагрев' onclick='sendbutton("power=1");'
         class="button">
         <input id='start' type='submit' name='start' value='Начать отбор' onclick='sendbutton("start=1");'
           class="button">
