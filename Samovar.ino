@@ -96,7 +96,7 @@ PCF8575 expander(USE_EXPANDER);
 #include <BlynkSimpleEsp32.h>
 #include <cppQueue.h>
 
-cppQueue  msg_q(250, 10, FIFO);
+cppQueue  msg_q(150, 10, FIFO);
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -134,6 +134,7 @@ void saveConfigCallback();
 void configModeCallback(AsyncWiFiManager *myWiFiManager);
 String verbose_print_reset_reason(RESET_REASON reason);
 void set_alarm();
+void menu_switch_focus();
 
 #ifdef __SAMOVAR_DEBUG
 //LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -277,6 +278,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 #ifdef SAMOVAR_USE_BLYNK
     if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
+      vTaskDelay(50/portTICK_PERIOD_MS);
     } else {
         if (!msg_q.isEmpty()) {
           if( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE){
@@ -600,7 +602,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     taskButton,      /* Function to implement the task */
     "taskButton",    /* Name of the task */
-    2000,            /* Stack size in words */
+    1000,            /* Stack size in words */
     NULL,            /* Task input parameter */
     1,               /* Priority of the task */
     &SysTickerTask1, /* Task handle. */
@@ -829,42 +831,42 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    3000,             /* Stack size in words */
+    2000,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
-    1);               /* Core where the task should run */
+    0);               /* Core where the task should run */
 
   //Запускаем таск для получения точного времени и записи в лог
   xTaskCreatePinnedToCore(
     triggerGetClock,  /* Function to implement the task */
     "GetClockTicker", /* Name of the task */
-    4000,             /* Stack size in words */
+    2500,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
-    0);               /* Core where the task should run */
+    1);               /* Core where the task should run */
 
   //Запускаем таск для чтения давления
   xTaskCreatePinnedToCore(
     triggerGetBMP,  /* Function to implement the task */
     "GetBMPTicker", /* Name of the task */
-    1000,             /* Stack size in words */
+    1500,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetBMPTask,   /* Task handle. */
-    1);               /* Core where the task should run */
+    0);               /* Core where the task should run */
 
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
-    2000,               /* Stack size in words */
+    1500,               /* Stack size in words */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
-    1);                 /* Core where the task should run */
+    0);                 /* Core where the task should run */
   //На всякий случай пошлем команду выключения питания на UART
   set_power_mode(POWER_SLEEP_MODE);
 #endif
@@ -940,7 +942,7 @@ void loop() {
       if (startval == 100) {
         startval = 0;
         menu_calibrate();
-        main_menu1.switch_focus();
+        menu_switch_focus();
       }
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
       //если дистилляция включаем или выключаем
@@ -1039,11 +1041,12 @@ void loop() {
   encoder_getvalue();
   
   set_buzzer(false);
+  vTaskDelay(5/portTICK_PERIOD_MS);
 }
 
 void getjson(void) {
 
-  DynamicJsonDocument jsondoc(15000);
+  DynamicJsonDocument jsondoc(11000);
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
