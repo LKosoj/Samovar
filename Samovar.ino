@@ -312,7 +312,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 void IRAM_ATTR triggerGetBMP(void *parameter) {
   while (true) {
     BME_getvalue(false);
-    vTaskDelay(9600/portTICK_PERIOD_MS);      
+    vTaskDelay(5600/portTICK_PERIOD_MS);      
   }
 }
 
