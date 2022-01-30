@@ -159,7 +159,7 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request){
         return true;
       if(request->hasParam("edit")){
         String p = request->arg("edit");
-        if (request->arg("edit")[0] != '/') p = "/" + request->arg("edit");
+        if (request->arg("edit")[0] != '/') p = "/" + p;
 //        request->_tempFile = _fs.open(request->arg("edit"), "r");
         request->_tempFile = _fs.open(p, "r");
         if(!request->_tempFile){
@@ -173,7 +173,9 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request){
 #endif
       }
       if(request->hasParam("download")){
-        request->_tempFile = _fs.open(request->arg("download"), "r");
+        String p = request->arg("download");
+        if (request->arg("edit")[0] != '/') p = "/" + p;
+        request->_tempFile = _fs.open(p, "r");
         if(!request->_tempFile){
           return false;
         }
@@ -248,7 +250,9 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request){
       output = String();
     }
     else if(request->hasParam("edit") || request->hasParam("download")){
-      request->send(request->_tempFile, request->_tempFile.name(), String(), request->hasParam("download"));
+      String p = request->_tempFile.name();
+      if (p[0] != '/') p = "/" + p;
+      request->send(request->_tempFile, p, String(), request->hasParam("download"));
     }
     else {
       const char * buildTime = __DATE__ " " __TIME__ " GMT";
@@ -263,7 +267,9 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request){
     }
   } else if(request->method() == HTTP_DELETE){
     if(request->hasParam("path", true)){
-        _fs.remove(request->getParam("path", true)->value());
+      String p = request->getParam("path", true)->value();
+      if (p[0] != '/') p = "/" + p;
+      _fs.remove(p);
       request->send(200, "", "DELETE: "+request->getParam("path", true)->value());
     } else
       request->send(404);
