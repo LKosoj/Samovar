@@ -3,8 +3,8 @@
 #include "driver/uart.h"
 #include <string.h>
 //#include "app_config.h"
-#include "sdkconfig.h"
-#include "driver/gpio.h"
+//#include "sdkconfig.h"
+//#include "driver/gpio.h"
 #include "mod_rmvk.h"
 
 #define BUF_SIZE (1024)
