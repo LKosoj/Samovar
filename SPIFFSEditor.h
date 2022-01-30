@@ -256,8 +256,8 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request){
         request->send(304);
       } else {
 //        AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", edit_htm_gz, edit_htm_gz_len);
-//        AsyncWebServerResponse *response = beginResponse(SPIFFS, "/edit.htm", "text/plain");
-		AsyncWebServerResponse *response = request->beginResponse(200, "text/html", get_edit_script());
+        AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/edit.htm", "text/html");
+//		    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", get_edit_script());
         request->send(response);
       }
     }
