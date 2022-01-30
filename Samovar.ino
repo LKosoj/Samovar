@@ -350,7 +350,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 
       if (startval != 0) {
         tcntST++;
-        if (tcntST == SamSetup.LogPeriod) {
+        if (tcntST >= SamSetup.LogPeriod) {
           tcntST = 0;
           String s = append_data();  //Записываем данные в память ESP32;
           if (s != "") {
@@ -551,8 +551,8 @@ void setup() {
 #endif
 
   delay(500);
-  vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
-  vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
+  //vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
+  //vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
   
   //delay(2000);
   //dac_output_disable(DAC_CHANNEL_1);
@@ -687,8 +687,8 @@ void setup() {
   //delay(2000);
   writeString("Connecting to WI-FI", 3);
 
-  Serial.print("Reset reason: ");
-  Serial.println(vr);
+  //Serial.print("Reset reason: ");
+  //Serial.println(vr);
   for(int i=0; i<17; i=i+8) {
     chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
   }
@@ -871,15 +871,15 @@ void setup() {
   set_power_mode(POWER_SLEEP_MODE);
 #endif
 
-  //write reset reason
-  if (!SPIFFS.exists("/resetreason.css")) {
-    File f = SPIFFS.open("/resetreason.css", FILE_WRITE);
-    f.close();
-  }
-  File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
-  f1.println(vr);
-  f1.close();
-  vr.replace(",",";");
+//  //write reset reason
+//  if (!SPIFFS.exists("/resetreason.css")) {
+//    File f = SPIFFS.open("/resetreason.css", FILE_WRITE);
+//    f.close();
+//  }
+//  File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
+//  f1.println(vr);
+//  f1.close();
+//  vr.replace(",",";");
 
   NTP.setTimeZoneOffset(-SamSetup.TimeZone * 3600,0);
   NTP.begin ();
