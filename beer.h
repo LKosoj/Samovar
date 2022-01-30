@@ -63,7 +63,7 @@ void IRAM_ATTR beer_finish() {
   PowerOn = false;
   heater_state = false;
   startval = 0;
-  SendMsg("Программа затирания завершена", NOTIFY_MSG);
+  SendMsg(F("Программа затирания завершена"), NOTIFY_MSG);
   delay(200);
   set_power(false);
   reset_sensor_counter();
@@ -101,7 +101,7 @@ void IRAM_ATTR check_alarm_beer() {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer(true);
-      SendMsg("Достигнута температура засыпи солода!", NOTIFY_MSG);
+      SendMsg(F("Достигнута температура засыпи солода!"), NOTIFY_MSG);
     }
     startval = 2002;
   }
@@ -110,7 +110,7 @@ void IRAM_ATTR check_alarm_beer() {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
-      SendMsg("Достигнута температурная пауза. Ждем завершения.", NOTIFY_MSG);
+      SendMsg(F("Достигнута температурная пауза. Ждем завершения."), NOTIFY_MSG);
     }
     //Проверяем, что еще нужно держать паузу
     if ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time) {
@@ -126,7 +126,7 @@ void IRAM_ATTR check_alarm_beer() {
       setHeaterPosition(false);
       //Открываем клапан воды
       open_valve(true);
-      SendMsg("Открыт клапан воды охлаждения!", NOTIFY_MSG);
+      SendMsg(F("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
 #ifdef USE_WATER_PUMP
       if (pump_started) set_pump_pwm(1023);
 #endif
@@ -134,7 +134,7 @@ void IRAM_ATTR check_alarm_beer() {
     if (TankSensor.avgTemp <= program[ProgramNum].Temp) {
       //Если температура упала
       //Закрываем клапан воды
-      SendMsg("Закрыт клапан воды охлаждения!", NOTIFY_MSG);
+      SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }
@@ -150,7 +150,7 @@ void IRAM_ATTR check_alarm_beer() {
       if (abs(TankSensor.avgTemp - BOILING_TEMP) <= 0.5) {
         msgfl = true;
         begintime = millis();
-        SendMsg("Начался режим кипячения", NOTIFY_MSG);
+        SendMsg(F("Начался режим кипячения"), NOTIFY_MSG);
       }
     }
 
@@ -174,7 +174,7 @@ void IRAM_ATTR check_alarm_beer() {
     if (begintime > 0 && msgfl && ((float(millis()) - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {
       set_buzzer(true);
       msgfl = false;
-      SendMsg("Засыпьте хмель!", NOTIFY_MSG);
+      SendMsg(F("Засыпьте хмель!"), NOTIFY_MSG);
     }
 
     //Проверяем, что еще нужно держать паузу
@@ -270,7 +270,7 @@ void setHeaterPosition(bool state) {
     if (power_err_cnt > 10) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_power(false);
-      SendMsg("Аварийное отключение! Ошибка управления нагревателем.", ALARM_MSG);
+      SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
     }
   } else power_err_cnt = 0;
 #endif
