@@ -36,7 +36,7 @@ void bk_proc() {
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
-    SendMsg("Включен нагрев бражной колонны", NOTIFY_MSG);
+    SendMsg(F("Включен нагрев бражной колонны"), NOTIFY_MSG);
   }
 
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
@@ -45,7 +45,7 @@ void bk_proc() {
 }
 
 void IRAM_ATTR bk_finish() {
-  SendMsg("Работа бражной колонны завершена", NOTIFY_MSG);
+  SendMsg(F("Работа бражной колонны завершена"), NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
 }
@@ -74,7 +74,7 @@ void IRAM_ATTR check_alarm_bk() {
     set_buzzer(true);
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
-    SendMsg("Аварийное отключение! Превышена максимальная температура воды охлаждения!", ALARM_MSG);
+    SendMsg(F("Аварийное отключение! Превышена максимальная температура воды охлаждения!"), ALARM_MSG);
   }
 
 #ifdef USE_WATERSENSOR
@@ -83,14 +83,14 @@ void IRAM_ATTR check_alarm_bk() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    SendMsg("Аварийное отключение! Прекращена подача воды.", ALARM_MSG);
+    SendMsg(F("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
   }
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg("Критическая температура воды!", WARNING_MSG);
+    SendMsg(F("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
 
@@ -103,7 +103,7 @@ void IRAM_ATTR check_alarm_bk() {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
-      SendMsg("Аварийное отключение! Ошибка управления нагревателем.", ALARM_MSG);
+      SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
     }
   } else power_err_cnt = 0;
 #endif
