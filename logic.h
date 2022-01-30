@@ -96,7 +96,7 @@ void set_alarm(){
   alarm_event = true;
   open_valve(false);
   set_pump_pwm(0);
-  SendMsg("Аварийное отключение!", ALARM_MSG);
+  SendMsg(F("Аварийное отключение!"), ALARM_MSG);
 }
 
 void IRAM_ATTR withdrawal(void) {
@@ -139,7 +139,7 @@ void IRAM_ATTR withdrawal(void) {
       pause_withdrawal(true);
       t_min = millis() + SteamSensor.Delay * 1000;
       set_buzzer(true);
-      SendMsg("Пауза по Т пара", WARNING_MSG);
+      SendMsg(F("Пауза по Т пара"), WARNING_MSG);
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
@@ -173,7 +173,7 @@ void IRAM_ATTR withdrawal(void) {
       pause_withdrawal(true);
       t_min = millis() + PipeSensor.Delay * 1000;
       set_buzzer(true);
-      SendMsg("Пауза по Т царги", WARNING_MSG);
+      SendMsg(F("Пауза по Т царги"), WARNING_MSG);
     }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
@@ -421,7 +421,7 @@ void IRAM_ATTR run_program(byte num) {
       fileToAppend.close();
     }
     set_power(false);
-    SendMsg("Выполнение программы завершено.", NOTIFY_MSG);
+    SendMsg(F("Выполнение программы завершено."), NOTIFY_MSG);
   } else {
 #ifdef SAMOVAR_USE_POWER
     if (program[num].Power > 40) {
@@ -512,7 +512,7 @@ void IRAM_ATTR set_body_temp() {
     TankSensor.BodyTemp = TankSensor.avgTemp;
     SendMsg("Новые Т тела: пар = " + String(SteamSensor.BodyTemp) + ", царга = " + String(PipeSensor.BodyTemp), WARNING_MSG);
   } else {
-    SendMsg("Не возможно установить Т тела.", WARNING_MSG);
+    SendMsg(F("Не возможно установить Т тела."), WARNING_MSG);
   }
 }
 
@@ -574,7 +574,7 @@ void IRAM_ATTR check_alarm() {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
-      SendMsg("Аварийное отключение! Ошибка управления нагревателем.", ALARM_MSG);
+      SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
     }
   } else power_err_cnt = 0;
 #endif
@@ -620,7 +620,7 @@ void IRAM_ATTR check_alarm() {
 
     if (TankSensor.avgTemp >= SamSetup.DistTemp) {
       //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
-      SendMsg("Лимит максимальной температуры куба. Программа завершена.", NOTIFY_MSG);
+      SendMsg(F("Лимит максимальной температуры куба. Программа завершена."), NOTIFY_MSG);
     } else
       SendMsg("Аварийное отключение! Превышена максимальная температура" + s, ALARM_MSG);
   }
@@ -631,14 +631,14 @@ void IRAM_ATTR check_alarm() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    SendMsg("Аварийное отключение! Прекращена подача воды.", ALARM_MSG);
+    SendMsg(F("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
   }
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg("Критическая температура воды!", WARNING_MSG);
+    SendMsg(F("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
@@ -658,7 +658,7 @@ void IRAM_ATTR check_alarm() {
     whls.resetStates();
     if (program[ProgramNum].WType != "C") {
       set_buzzer(true);
-      SendMsg("Сработал датчик захлёба!", ALARM_MSG);
+      SendMsg(F("Сработал датчик захлёба!"), ALARM_MSG);
     } else {
 #ifdef SAMOVAR_USE_POWER
       //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
@@ -684,7 +684,7 @@ void IRAM_ATTR check_alarm() {
 #endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     set_buzzer(true);
-    SendMsg("Разгон завершён. Стабилизация/работа на себя", NOTIFY_MSG);
+    SendMsg(F("Разгон завершён. Стабилизация/работа на себя"), NOTIFY_MSG);
     SamovarStatusInt = 51;
 #ifdef SAMOVAR_USE_POWER
     set_current_power(program[0].Power);
@@ -704,7 +704,7 @@ void IRAM_ATTR check_alarm() {
       if (acceleration_temp == 60 * 6) {
         SamovarStatusInt = 52;
         set_buzzer(true);
-        SendMsg("Стабилизация завершена, колонна работает стабильно.", NOTIFY_MSG);
+        SendMsg(F("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
       }
     } else {
       acceleration_temp = 0;
@@ -723,11 +723,11 @@ void IRAM_ATTR check_alarm() {
 void IRAM_ATTR open_valve(bool Val) {
   if (Val && !alarm_event) {
     valve_status = true;
-    SendMsg("Откройте подачу воды!", WARNING_MSG);
+    SendMsg(F("Откройте подачу воды!"), WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
     valve_status = false;
-    SendMsg("Закройте подачу воды!", WARNING_MSG);
+    SendMsg(F("Закройте подачу воды!"), WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
 }
