@@ -222,10 +222,10 @@ document.getElementById('flowsensor').style = '';
 var powerstr;
 var powerstyle;
 if (myObj.PowerOn == 1){
-powerstr = 'Выключить питание';
+powerstr = 'Выключить нагрев';
 powerstyle='red';
 } else {
-powerstr = 'Включить питание';
+powerstr = 'Включить нагрев';
 powerstyle='lightgreen';
 }
 document.getElementById('power').value = powerstr;
@@ -556,7 +556,7 @@ slider = document.getElementById('PWM');
   
   <div class="container_column" style="margin-bottom: 1em;">
     <div class="container_row" style="justify-content: space-around; align-items: center;">
-      <input id='power' type='submit' name='power' value='Включить питание' onclick='setBKCommand();'
+      <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setBKCommand();'
         class="button">
       <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"'
         class="button">
