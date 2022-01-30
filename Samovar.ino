@@ -1046,7 +1046,7 @@ void loop() {
 
 void getjson(void) {
 
-  DynamicJsonDocument jsondoc(11000);
+  DynamicJsonDocument jsondoc(10000);
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
