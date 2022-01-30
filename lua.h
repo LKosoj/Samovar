@@ -14,6 +14,8 @@ LuaWrapper lua;
 #include <HTTPClient.h>
 #endif
 
+#define EXPANDER_UPDATE_TIMEOUT 500
+
 unsigned long lua_timer[9]; //10 таймеров для lua
 String lua_type_script;
 String script1, script2, glv;
@@ -78,20 +80,29 @@ static int lua_wrapper_analogRead(lua_State *lua_state) {
 static int lua_wrapper_exp_pinMode(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  expander.pinMode(a, b);
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    expander.pinMode(a, b);
+    xSemaphoreGive(xI2CSemaphore);
+  }
   return 0;
 }
 
 static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  expander.digitalWrite(a, b);
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    expander.digitalWrite(a, b);
+    xSemaphoreGive(xI2CSemaphore);
+  }
   return 0;
 }
 
 static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
-  lua_pushnumber(lua_state, (lua_Number) expander.digitalRead(a));
+  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+    lua_pushnumber(lua_state, (lua_Number) expander.digitalRead(a));
+    xSemaphoreGive(xI2CSemaphore);
+  }
   return 1;
 }
 #endif
@@ -642,6 +653,7 @@ void IRAM_ATTR do_lua_script(void *parameter) {
           WriteConsoleLog("-------END LUA SCRIPT-------");
         }
         sr = lua.Lua_dostring(&script1);
+        sr.trim();
         if (sr != "") WriteConsoleLog(sr);
       }
       vTaskDelay(10/portTICK_PERIOD_MS);
@@ -653,6 +665,7 @@ void IRAM_ATTR do_lua_script(void *parameter) {
           WriteConsoleLog("-------END LUA SCRIPT-------");
         }
         sr = lua.Lua_dostring(&script2);
+        sr.trim();
         if (sr != "") WriteConsoleLog(sr);
       }
       lua_finished = true;
