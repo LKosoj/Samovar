@@ -43,6 +43,9 @@ volatile SemaphoreHandle_t xSemaphore = NULL;
 volatile SemaphoreHandle_t xMsgSemaphore = NULL;
 StaticSemaphore_t xMsgSemaphoreBuffer;
 
+volatile SemaphoreHandle_t xI2CSemaphore = NULL;
+StaticSemaphore_t xI2CSemaphoreBuffer;
+
 #ifdef USE_BMP280_ALT
 #undef USE_BMP180
 #undef USE_BME280
@@ -313,6 +316,7 @@ byte CurMin, OldMin;
 TaskHandle_t SysTickerTask1 = NULL;
 TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t BuzzerTask = NULL;
+TaskHandle_t GetBMPTask = NULL;
 volatile bool BuzzerTaskFl;
 
 #ifdef SAMOVAR_USE_POWER
@@ -485,7 +489,7 @@ const char* ntpServerName = "time.nist.gov";
 
 //**************************************************************************************************************
 byte DScnt = 0;
-byte tcnt = 0;
+//byte tcnt = 0;
 bool bmefound = true;
 float SSPrevTemp;
 float PSPrevTemp;
