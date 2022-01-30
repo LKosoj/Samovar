@@ -727,10 +727,10 @@ void setup() {
   Serial.println(StIP);
 
   if (!MDNS.begin(host)) {  //http://samovar.local
-    Serial.println("Error setting up MDNS responder!");
+    Serial.println(F("Error setting up MDNS responder!"));
   } else {
 #ifdef __SAMOVAR_DEBUG
-    Serial.println("mDNS responder started");
+    Serial.println(F("mDNS responder started"));
 #endif
   }
 
@@ -743,7 +743,7 @@ void setup() {
     writeString("Connecting to Blynk ", 3);
     writeString("               ", 4);
 #ifdef __SAMOVAR_DEBUG
-    Serial.println("Connecting to Blynk");
+    Serial.println(F("Connecting to Blynk"));
 #endif
 #ifdef BLYNK_SAMOVAR_TOOL
     Blynk.config(SamSetup.blynkauth, BLYNK_SAMOVAR_TOOL, 8080);
@@ -753,7 +753,7 @@ void setup() {
     Blynk.connect(BLYNK_TIMEOUT_MS);
     Blynk.notify("{DEVICE_NAME} started");
 #ifdef __SAMOVAR_DEBUG
-    Serial.println("Blynk started");
+    Serial.println(F("Blynk started"));
 #endif
   }
 #endif
@@ -1046,7 +1046,7 @@ void loop() {
 
 void getjson(void) {
 
-  DynamicJsonDocument jsondoc(10000);
+  DynamicJsonDocument jsondoc(9000);
 
   jsondoc["bme_temp"] = bme_temp;
   jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
@@ -1214,27 +1214,27 @@ void WriteConsoleLog(String StringLogMsg) {
 #endif
 }
 
-String verbose_print_reset_reason(RESET_REASON reason)
-{
-  String s;
-  switch (reason)
-  {
-    case 1  : s = "Vbat power on reset";break;
-    case 3  : s = "Software reset digital core";break;
-    case 4  : s = "Legacy watch dog reset digital core";break;
-    case 5  : s = "Deep Sleep reset digital core";break;
-    case 6  : s = "Reset by SLC module, reset digital core";break;
-    case 7  : s = "Timer Group0 Watch dog reset digital core";break;
-    case 8  : s = "Timer Group1 Watch dog reset digital core";break;
-    case 9  : s = "RTC Watch dog Reset digital core";break;
-    case 10 : s = "Instrusion tested to reset CPU";break;
-    case 11 : s = "Time Group reset CPU";break;
-    case 12 : s = "Software reset CPU";break;
-    case 13 : s = "RTC Watch dog Reset CPU";break;
-    case 14 : s = "for APP CPU, reseted by PRO CPU";break;
-    case 15 : s = "Reset when the vdd voltage is not stable";break;
-    case 16 : s = "RTC Watch dog reset digital core and rtc module";break;
-    default : s = "NO_MEAN";
-  }
-  return s;
-}
+//String verbose_print_reset_reason(RESET_REASON reason)
+//{
+//  String s;
+//  switch (reason)
+//  {
+//    case 1  : s = "Vbat power on reset";break;
+//    case 3  : s = "Software reset digital core";break;
+//    case 4  : s = "Legacy watch dog reset digital core";break;
+//    case 5  : s = "Deep Sleep reset digital core";break;
+//    case 6  : s = "Reset by SLC module, reset digital core";break;
+//    case 7  : s = "Timer Group0 Watch dog reset digital core";break;
+//    case 8  : s = "Timer Group1 Watch dog reset digital core";break;
+//    case 9  : s = "RTC Watch dog Reset digital core";break;
+//    case 10 : s = "Instrusion tested to reset CPU";break;
+//    case 11 : s = "Time Group reset CPU";break;
+//    case 12 : s = "Software reset CPU";break;
+//    case 13 : s = "RTC Watch dog Reset CPU";break;
+//    case 14 : s = "for APP CPU, reseted by PRO CPU";break;
+//    case 15 : s = "Reset when the vdd voltage is not stable";break;
+//    case 16 : s = "RTC Watch dog reset digital core and rtc module";break;
+//    default : s = "NO_MEAN";
+//  }
+//  return s;
+//}
