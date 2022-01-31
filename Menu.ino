@@ -213,7 +213,6 @@ void set_menu_screen(byte param) {
 void menu_setup() {
   reset_focus();
   set_menu_screen(1);
-
   //menu.change_menu(setup_menu);
 }
 
