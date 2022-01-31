@@ -28,10 +28,10 @@ LiquidScreen main_screen1(lql_tank_temp, lql_atm, lql_w_progress, lql_time);
 
 LiquidLine lql_start(0, 0, ">Start: ", startval_text);
 //LiquidLine lql_stepper_speed(0, 1, ">Stepper spd: ", CurrrentStepperSpeed);
-LiquidLine lql_act_vlm_perh(0, 1, ">Speed l/h: ", ActualVolumePerHour);
+LiquidLine lql_pump_speed(0, 1, ">Speed l/h: ", ActualVolumePerHour);
 LiquidLine lql_pause(0, 2, ">Pause:", pause_text_ptr);
 LiquidLine lql_reset(0, 3, ">Reset withdrawal:");
-LiquidScreen main_screen2(lql_start, lql_act_vlm_perh, lql_pause, lql_reset);
+LiquidScreen main_screen2(lql_start, lql_pump_speed, lql_pause, lql_reset);
 
 LiquidLine lql_get_power(0, 0, ">Get power ", power_text_ptr);
 LiquidLine lql_setup(0, 1, "/Setup");
@@ -249,6 +249,13 @@ void writeString(String Str, byte num) {
   menu_softUpdate();
 }
 
+void menu_pump_speed_up() {
+  set_pump_speed(get_speed_from_rate(ActualVolumePerHour + 0.01 * multiplier), true);
+}
+void menu_pump_speed_down() {
+  set_pump_speed(get_speed_from_rate(ActualVolumePerHour - 0.01 * multiplier), true);
+}
+
 void set_delta_steam_temp_up() {
   SamSetup.DeltaSteamTemp += 0.01 * multiplier;
 }
@@ -459,13 +466,16 @@ void setupMenu() {
   lql_setup_pipe_temp.set_decimalPlaces(2);
   lql_setup_water_temp.set_decimalPlaces(2);
   lql_setup_tank_temp.set_decimalPlaces(2);
-  lql_act_vlm_perh.set_decimalPlaces(2);
+  lql_pump_speed.set_decimalPlaces(2);
 
   // Function to attach functions to LiquidLine objects.
   lql_start.attach_function(1, menu_samovar_start);
   lql_start.attach_function(2, menu_samovar_start);
   lql_reset.attach_function(1, samovar_reset);
   lql_reset.attach_function(2, samovar_reset);
+
+  lql_pump_speed.attach_function(1, menu_pump_speed_up);
+  lql_pump_speed.attach_function(2, menu_pump_speed_down);
 
   lql_setup.attach_function(1, menu_setup);
   lql_setup.attach_function(2, menu_setup);
