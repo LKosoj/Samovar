@@ -544,6 +544,7 @@ void setup() {
   disableCore0WDT();
   disableCore1WDT();
 #endif
+  delay(2000);
 
   Serial.begin(115200);
 #ifdef __SAMOVAR_DEBUG
