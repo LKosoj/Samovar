@@ -379,7 +379,9 @@ void IRAM_ATTR reset_sensor_counter(void) {
 
 #ifdef USE_OPENLOG
   if (ofl == "") {
-    ofl = NTP.getTimeDateString(true) + ".csv";    
+    ofl = NTP.getTimeDateString(true);    
+    ofl += ".csv";
+    
     char charVar[25];
     ofl.toCharArray(charVar, ofl.length());
     setupOpenLog();
