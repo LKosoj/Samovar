@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
-#include "openlog.h"
 
 #ifdef USE_BME680
 #define BME_STRING "BME680"
