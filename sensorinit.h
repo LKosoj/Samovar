@@ -377,21 +377,6 @@ void IRAM_ATTR reset_sensor_counter(void) {
   power_err_cnt = 0;
 #endif
 
-#ifdef USE_OPENLOG
-  if (ofl == "") {
-    ofl = NTP.getTimeDateString(true);    
-    ofl += ".csv";
-    
-    char charVar[25];
-    ofl.toCharArray(charVar, ofl.length());
-    setupOpenLog();
-    //Serial.println("FinishSetup");
-    gotoOLCommandMode();
-    //Serial.println("SetCMM");
-    createOLFile(charVar);
-    //Serial.println("FileCreated");
-  }
-#endif
 }
 
 String inline format_float(float v, int d) {

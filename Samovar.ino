@@ -362,9 +362,6 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
             s += (String)target_power_volt;
             s += ",";
             s += format_float(WFflowRate, 2);
-#ifdef USE_OPENLOG 
-            appendOLFile(s);
-#endif
 #ifdef USE_MQTT
             MqttSendMsg(s, "log");
 #endif  
