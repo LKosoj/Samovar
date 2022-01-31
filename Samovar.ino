@@ -836,7 +836,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetBMP,  /* Function to implement the task */
     "GetBMPTicker", /* Name of the task */
-    1600,             /* Stack size in words */
+    1900,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetBMPTask,   /* Task handle. */
