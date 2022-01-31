@@ -30,7 +30,9 @@
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <Update.h>
+
 #include <LiquidMenu.h>
+
 #include <EEPROM.h>
 #include <ESPAsyncWiFiManager.h>
 
@@ -547,7 +549,6 @@ void setup() {
   esp_log_level_set("*", ESP_LOG_VERBOSE);
 #endif
 
-  delay(500);
   //vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
   //vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
   
