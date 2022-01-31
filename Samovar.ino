@@ -643,16 +643,6 @@ void setup() {
     SamSetup.HeaterResistant = 15.2;
     SamSetup.LogPeriod = 3;
     SamSetup.TimeZone = 3;
-    char str1[] = "blue\0";
-    memcpy(str1, SamSetup.SteamColor, sizeof(str1));
-    char str2[] = "darkmagenta\0";
-    memcpy(str2, SamSetup.PipeColor, sizeof(str2));
-    char str3[] = "cornflowerblue\0";
-    memcpy(str3, SamSetup.WaterColor, sizeof(str3));
-    char str4[] = "crimson\0";
-    memcpy(str4, SamSetup.TankColor, sizeof(str4));
-    char str5[] = "grey\0";
-    memcpy(str5, SamSetup.ACPColor, sizeof(str5));
     SamSetup.blynkauth[0] = '\0';
     SamSetup.videourl[0] = '\0';
     save_profile();
