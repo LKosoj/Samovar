@@ -608,18 +608,13 @@ void setup() {
     1);              /* Core where the task should run */
 
 
-  encoder.tick();  // отработка нажатия
+  //Если при старте нажата кнопка энкодера или кнопка - сохраненные параметры сбрасываются на параметры по умолчанию
 #ifdef BTN_PIN
   btn.tick();      // отработка нажатия
-#endif
-  //Если при старте нажата кнопка энкодера или кнопка - сохраненные параметры сбрасываются на параметры по умолчанию
-  if (encoder.isPress()
-#ifdef BTN_PIN
-      || btn.isPress()
-#endif
-     ) {
+  if (btn.isPress()){
     SamSetup.flag = 255;
   }
+#endif
 
   if (SamSetup.flag > 250) {
     SamSetup.flag = 2;
@@ -698,14 +693,15 @@ void setup() {
   wifiManager.addParameter(&custom_blynk_token);
   wifiManager.autoConnect("Samovar");
 
-  //wifiManager.resetSettings();
-
   if (shouldSaveWiFiConfig) {
     if (strlen(custom_blynk_token.getValue()) == 33) {
       strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
       save_profile();
     }
   }
+
+  encoder.tick();  // отработка нажатия
+  if (encoder.isPress()) wifiManager.resetSettings();
 
   Serial.print(F("Connected to "));
   Serial.println(WiFi.SSID());
@@ -820,7 +816,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    2100,             /* Stack size in words */
+    2500,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
