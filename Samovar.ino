@@ -51,7 +51,7 @@
 
 #ifdef USE_EXPANDER
 #include <PCF8575.h>
-PCF8575 expander(USE_EXPANDER);
+PCF8575 expander(&Wire, USE_EXPANDER, LCD_SDA, LCD_SCL);
 #endif
 
 #ifdef USE_LUA
@@ -96,7 +96,7 @@ PCF8575 expander(USE_EXPANDER);
 #include <BlynkSimpleEsp32.h>
 #include <cppQueue.h>
 
-cppQueue  msg_q(150, 10, FIFO);
+cppQueue  msg_q(150, 5, FIFO);
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -572,7 +572,8 @@ void setup() {
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
 
-  Wire.begin();
+  Wire.begin(LCD_SDA,LCD_SCL);
+  //Wire.begin();
 
   stepper.disable();
 
