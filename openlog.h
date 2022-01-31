@@ -18,7 +18,7 @@ void setupOpenLog(void) {
 void createOLFile(char *fileName) {
 
   //Old way
-  OpenLog.print("new ");
+  OpenLog.print(F("new "));
   OpenLog.print(fileName);
   OpenLog.write(13);  //This is \r
 
@@ -32,7 +32,7 @@ void createOLFile(char *fileName) {
       if (OpenLog.read() == '>') break;
   }
 
-  OpenLog.print("append ");
+  OpenLog.print(F("append "));
   OpenLog.print(fileName);
   OpenLog.write(13);  //This is \r
 
@@ -54,7 +54,7 @@ void appendOLFile(String str) {
 void readOLFile(char *fileName) {
 
   //Old way
-  OpenLog.print("read ");
+  OpenLog.print(F("read "));
   OpenLog.print(fileName);
   OpenLog.write(13);  //This is \r
 
@@ -102,7 +102,7 @@ void readOLFile(char *fileName) {
 void readOLDisk() {
 
   //Old way
-  OpenLog.print("disk");
+  OpenLog.print(F("disk"));
   OpenLog.write(13);  //This is \r
 
   //New way
