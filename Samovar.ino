@@ -82,7 +82,6 @@ PCF8575 expander(&Wire, USE_EXPANDER, LCD_SDA, LCD_SCL);
 #include "mod_rmvk.h"
 #include "font.h"
 #include "logic.h"
-#include "openlog.h"
 
 #ifdef USE_UPDATE_OTA
 #include <ArduinoOTA.h>
