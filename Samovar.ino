@@ -23,7 +23,6 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
-#include <ArduinoJson.h>
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
 #include <AsyncTCP.h>
@@ -1030,63 +1029,96 @@ void loop() {
 }
 
 void getjson(void) {
+  jsonstr = "{";
+  jsonstr += "\"bme_temp\":" + format_float(bme_temp, 3);
+  jsonstr += ",";
+  jsonstr += "\"bme_pressure\":" + format_float(bme_pressure, 3);
+  jsonstr += ",";
+  jsonstr += "\"start_pressure\":" + format_float(start_pressure, 3);
+  jsonstr += ",";
+  jsonstr += "\"crnt_tm\":\"" + Crt + "\"";
+  jsonstr += ",";
+  jsonstr += "\"stm\":\"" + (String)NTP.getUptimeString() + "\"";
+  jsonstr += ",";
+  jsonstr += "\"SteamTemp\":" + format_float(SteamSensor.avgTemp, 3);
+  jsonstr += ",";
+  jsonstr += "\"PipeTemp\":" + format_float(PipeSensor.avgTemp, 3);
+  jsonstr += ",";
+  jsonstr += "\"WaterTemp\":" + format_float(WaterSensor.avgTemp, 3);
+  jsonstr += ",";
+  jsonstr += "\"TankTemp\":" + format_float(WaterSensor.avgTemp, 3);
+  jsonstr += ",";
+  jsonstr += "\"ACPTemp\":" + format_float(ACPSensor.avgTemp, 3);
+  jsonstr += ",";
+  jsonstr += "\"version\":" + (String)SAMOVAR_VERSION;
+  jsonstr += ",";
+  jsonstr += "\"VolumeAll\":" + (String)get_liquid_volume();
+  jsonstr += ",";
+  jsonstr += "\"currentvolume\":" + (String)currentvolume;
+  jsonstr += ",";
+  jsonstr += "\"ActualVolumePerHour\":" + format_float(ActualVolumePerHour, 3);
+  jsonstr += ",";
+  jsonstr += "\"PowerOn\":" + (String)PowerOn;
+  jsonstr += ",";
+  jsonstr += "\"PauseOn\":" + (String)PauseOn;
+  jsonstr += ",";
+  jsonstr += "\"WthdrwlProgress\":" + (String)WthdrwlProgress;
+  jsonstr += ",";
+  jsonstr += "\"TargetStepps\":" + (String)stepper.getTarget();
+  jsonstr += ",";
+  jsonstr += "\"CurrrentStepps\":" + (String)stepper.getCurrent();
+  jsonstr += ",";
+  jsonstr += "\"WthdrwlStatus\":" + (String)startval;
+  jsonstr += ",";
+  jsonstr += "\"CurrrentSpeed\":" + (String)(round(stepper.getSpeed() * (byte)stepper.getState()));
+  jsonstr += ",";
 
-  DynamicJsonDocument jsondoc(9000);
-
-  jsondoc["bme_temp"] = bme_temp;
-  jsondoc["bme_pressure"] = format_float(bme_pressure, 3);
-  jsondoc["start_pressure"] = format_float(start_pressure, 3);
-  jsondoc["crnt_tm"] = Crt;
-  jsondoc["stm"] = NTP.getUptimeString();
-  jsondoc["SteamTemp"] = format_float(SteamSensor.avgTemp, 3);
-  jsondoc["PipeTemp"] = format_float(PipeSensor.avgTemp, 3);
-  jsondoc["WaterTemp"] = format_float(WaterSensor.avgTemp, 3);
-  jsondoc["TankTemp"] = format_float(TankSensor.avgTemp, 3);
-  jsondoc["ACPTemp"] = format_float(ACPSensor.avgTemp, 3);
-  jsondoc["version"] = SAMOVAR_VERSION;
-  jsondoc["VolumeAll"] = get_liquid_volume();
-  jsondoc["currentvolume"] = currentvolume;
-  jsondoc["ActualVolumePerHour"] = format_float(ActualVolumePerHour, 3);
-  jsondoc["PowerOn"] = (byte)PowerOn;
-  jsondoc["PauseOn"] = (byte)PauseOn;
-  jsondoc["WthdrwlProgress"] = WthdrwlProgress;
-  jsondoc["TargetStepps"] = stepper.getTarget();
-  jsondoc["CurrrentStepps"] = stepper.getCurrent();
-  jsondoc["WthdrwlStatus"] = startval;
-  jsondoc["CurrrentSpeed"] = round(stepper.getSpeed() * (byte)stepper.getState());
-  
   vTaskDelay(10/portTICK_PERIOD_MS);
-  
-  jsondoc["StepperStepMl"] = SamSetup.StepperStepMl;
-  jsondoc["Status"] = get_Samovar_Status();
-  jsondoc["BodyTemp_Steam"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
-  jsondoc["BodyTemp_Pipe"] = format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
-  jsondoc["mixer"] = mixer_status;
+
+  jsonstr += "\"StepperStepMl\":" + (String)SamSetup.StepperStepMl;
+  jsonstr += ",";
+  jsonstr += "\"BodyTemp_Steam\":" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  jsonstr += ",";
+  jsonstr += "\"BodyTemp_Pipe\":" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);;
+  jsonstr += ",";
+  jsonstr += "\"mixer\":" + (String)mixer_status;
+  jsonstr += ",";
 
   if (Msg != "") {
-    jsondoc["Msg"] = Msg;
-    jsondoc["msglvl"] = msg_level;
+    jsonstr += "\"Msg\":\"" + Msg + "\"";
+    jsonstr += ",";
+    jsonstr += "\"msglvl\":" + (String)msg_level;
+    jsonstr += ",";
     Msg = "";
     msg_level = NONE_MSG;
   }
+
   if (LogMsg != "") {
-    jsondoc["LogMsg"] = LogMsg;
+    jsonstr += "\"LogMsg\":\"" + LogMsg + "\"";
+    jsonstr += ",";
     LogMsg = "";
   }
+
 #ifdef SAMOVAR_USE_POWER
-  jsondoc["current_power_volt"] = format_float(current_power_volt, 1);
-  jsondoc["target_power_volt"] = format_float(target_power_volt, 1);
-  jsondoc["current_power_mode"] = current_power_mode;
-  jsondoc["current_power_p"] = current_power_p;
+  jsonstr += "\"current_power_volt\":" + format_float(current_power_volt, 1);
+  jsonstr += ",";
+  jsonstr += "\"target_power_volt\":" + format_float(target_power_volt, 1);
+  jsonstr += ",";
+  jsonstr += "\"current_power_mode\":\"" + current_power_mode + "\"";
+  jsonstr += ",";
+  jsonstr += "\"current_power_p\":" + (String)current_power_p;
+  jsonstr += ",";
 #endif
 
 #ifdef USE_WATERSENSOR
-  jsondoc["WFflowRate"] = format_float(WFflowRate, 2);
-  jsondoc["WFtotalMl"] = WFtotalMilliLitres;
+  jsonstr += "\"WFflowRate\":" + format_float(WFflowRate, 2);
+  jsonstr += ",";
+  jsonstr += "\"WFtotalMl\":" + (String)WFtotalMilliLitres;
+  jsonstr += ",";
 #endif
-
-  jsonstr = "";
-  serializeJson(jsondoc, jsonstr);
+  
+  jsonstr += "\"Status\":\"" + get_Samovar_Status() + "\"";
+  jsonstr += "}";
 }
 
 void configModeCallback(AsyncWiFiManager *myWiFiManager) {
