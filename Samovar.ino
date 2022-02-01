@@ -1072,6 +1072,8 @@ void getjson(void) {
   jsonstr += ",";
   jsonstr += "\"CurrrentSpeed\":" + (String)(round(stepper.getSpeed() * (byte)stepper.getState()));
   jsonstr += ",";
+  jsonstr += "\"UseBBuzzer\":" + (String)SamSetup.UseBBuzzer;
+  jsonstr += ",";
 
   vTaskDelay(10/portTICK_PERIOD_MS);
 
