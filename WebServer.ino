@@ -273,6 +273,10 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.UseBuzzer) return "checked='true'";
     else
       return "";
+  } else if (var == "CUBBuzz") {
+    if (SamSetup.UseBBuzzer) return "checked='true'";
+    else
+      return "";
   } else if (var == "ChckPwr") {
     if (SamSetup.CheckPower) return "checked='true'";
     else
@@ -443,6 +447,11 @@ void handleSave(AsyncWebServerRequest *request) {
   SamSetup.UseBuzzer = false;
   if (request->hasArg("UseBuzzer")) {
     SamSetup.UseBuzzer = true;
+  }
+
+  SamSetup.UseBBuzzer = false;
+  if (request->hasArg("UseBBuzzer")) {
+    SamSetup.UseBBuzzer = true;
   }
 
   SamSetup.CheckPower = false;
