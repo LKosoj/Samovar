@@ -380,7 +380,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
 
 String inline format_float(float v, int d) {
   char outstr[15];
-  return (String)dtostrf(v, 1, d, outstr);
+  return dtostrf(v, 1, d, outstr);
 }
 
 void printAddress(DeviceAddress deviceAddress)  // функция печати адреса DS18B20
