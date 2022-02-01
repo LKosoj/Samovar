@@ -1030,96 +1030,96 @@ void loop() {
 
 void getjson(void) {
   jsonstr = "{";
-  jsonstr += "\"bme_temp\":" + format_float(bme_temp, 3);
+  jsonstr += "\"bme_temp\":";  jsonstr += format_float(bme_temp, 3);
   jsonstr += ",";
-  jsonstr += "\"bme_pressure\":" + format_float(bme_pressure, 3);
+  jsonstr += "\"bme_pressure\":";  jsonstr += format_float(bme_pressure, 3);
   jsonstr += ",";
-  jsonstr += "\"start_pressure\":" + format_float(start_pressure, 3);
+  jsonstr += "\"start_pressure\":"; jsonstr += format_float(start_pressure, 3);
   jsonstr += ",";
-  jsonstr += "\"crnt_tm\":\"" + Crt + "\"";
+  jsonstr += "\"crnt_tm\":\""; jsonstr += Crt; jsonstr += "\"";
   jsonstr += ",";
-  jsonstr += "\"stm\":\"" + (String)NTP.getUptimeString() + "\"";
+  jsonstr += "\"stm\":\""; jsonstr += (String)NTP.getUptimeString(); jsonstr += "\"";
   jsonstr += ",";
-  jsonstr += "\"SteamTemp\":" + format_float(SteamSensor.avgTemp, 3);
+  jsonstr += "\"SteamTemp\":"; jsonstr += format_float(SteamSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"PipeTemp\":" + format_float(PipeSensor.avgTemp, 3);
+  jsonstr += "\"PipeTemp\":"; jsonstr += format_float(PipeSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"WaterTemp\":" + format_float(WaterSensor.avgTemp, 3);
+  jsonstr += "\"WaterTemp\":"; jsonstr += format_float(WaterSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"TankTemp\":" + format_float(WaterSensor.avgTemp, 3);
+  jsonstr += "\"TankTemp\":"; jsonstr += format_float(WaterSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"ACPTemp\":" + format_float(ACPSensor.avgTemp, 3);
+  jsonstr += "\"ACPTemp\":"; jsonstr += format_float(ACPSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"version\":" + (String)SAMOVAR_VERSION;
+  jsonstr += "\"version\":"; jsonstr += (String)SAMOVAR_VERSION;
   jsonstr += ",";
-  jsonstr += "\"VolumeAll\":" + (String)get_liquid_volume();
+  jsonstr += "\"VolumeAll\":"; jsonstr += (String)get_liquid_volume();
   jsonstr += ",";
-  jsonstr += "\"currentvolume\":" + (String)currentvolume;
+  jsonstr += "\"currentvolume\":"; jsonstr += (String)currentvolume;
   jsonstr += ",";
-  jsonstr += "\"ActualVolumePerHour\":" + format_float(ActualVolumePerHour, 3);
+  jsonstr += "\"ActualVolumePerHour\":"; jsonstr += format_float(ActualVolumePerHour, 3);
   jsonstr += ",";
-  jsonstr += "\"PowerOn\":" + (String)PowerOn;
+  jsonstr += "\"PowerOn\":"; jsonstr += (String)PowerOn;
   jsonstr += ",";
-  jsonstr += "\"PauseOn\":" + (String)PauseOn;
+  jsonstr += "\"PauseOn\":"; jsonstr += (String)PauseOn;
   jsonstr += ",";
-  jsonstr += "\"WthdrwlProgress\":" + (String)WthdrwlProgress;
+  jsonstr += "\"WthdrwlProgress\":"; jsonstr += (String)WthdrwlProgress;
   jsonstr += ",";
-  jsonstr += "\"TargetStepps\":" + (String)stepper.getTarget();
+  jsonstr += "\"TargetStepps\":"; jsonstr += (String)stepper.getTarget();
   jsonstr += ",";
-  jsonstr += "\"CurrrentStepps\":" + (String)stepper.getCurrent();
+  jsonstr += "\"CurrrentStepps\":"; jsonstr += (String)stepper.getCurrent();
   jsonstr += ",";
-  jsonstr += "\"WthdrwlStatus\":" + (String)startval;
+  jsonstr += "\"WthdrwlStatus\":"; jsonstr += (String)startval;
   jsonstr += ",";
-  jsonstr += "\"CurrrentSpeed\":" + (String)(round(stepper.getSpeed() * (byte)stepper.getState()));
+  jsonstr += "\"CurrrentSpeed\":"; jsonstr += (String)(round(stepper.getSpeed() * (byte)stepper.getState()));
   jsonstr += ",";
-  jsonstr += "\"UseBBuzzer\":" + (String)SamSetup.UseBBuzzer;
+  jsonstr += "\"UseBBuzzer\":"; jsonstr += (String)SamSetup.UseBBuzzer;
   jsonstr += ",";
 
   vTaskDelay(10/portTICK_PERIOD_MS);
 
-  jsonstr += "\"StepperStepMl\":" + (String)SamSetup.StepperStepMl;
+  jsonstr += "\"StepperStepMl\":"; jsonstr += (String)SamSetup.StepperStepMl;
   jsonstr += ",";
-  jsonstr += "\"BodyTemp_Steam\":" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  jsonstr += "\"BodyTemp_Steam\":"; jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
   jsonstr += ",";
-  jsonstr += "\"BodyTemp_Pipe\":" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);;
+  jsonstr += "\"BodyTemp_Pipe\":"; jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);;
   jsonstr += ",";
-  jsonstr += "\"mixer\":" + (String)mixer_status;
+  jsonstr += "\"mixer\":"; jsonstr += (String)mixer_status;
   jsonstr += ",";
 
   if (Msg != "") {
-    jsonstr += "\"Msg\":\"" + Msg + "\"";
+    jsonstr += "\"Msg\":\""; jsonstr += Msg; jsonstr += "\"";
     jsonstr += ",";
-    jsonstr += "\"msglvl\":" + (String)msg_level;
+    jsonstr += "\"msglvl\":"; jsonstr += (String)msg_level;
     jsonstr += ",";
     Msg = "";
     msg_level = NONE_MSG;
   }
 
   if (LogMsg != "") {
-    jsonstr += "\"LogMsg\":\"" + LogMsg + "\"";
+    jsonstr += "\"LogMsg\":\""; jsonstr += LogMsg; jsonstr += "\"";
     jsonstr += ",";
     LogMsg = "";
   }
 
 #ifdef SAMOVAR_USE_POWER
-  jsonstr += "\"current_power_volt\":" + format_float(current_power_volt, 1);
+  jsonstr += "\"current_power_volt\":"; jsonstr += format_float(current_power_volt, 1);
   jsonstr += ",";
-  jsonstr += "\"target_power_volt\":" + format_float(target_power_volt, 1);
+  jsonstr += "\"target_power_volt\":"; jsonstr += format_float(target_power_volt, 1);
   jsonstr += ",";
-  jsonstr += "\"current_power_mode\":\"" + current_power_mode + "\"";
+  jsonstr += "\"current_power_mode\":\""; jsonstr += current_power_mode; jsonstr += "\"";
   jsonstr += ",";
-  jsonstr += "\"current_power_p\":" + (String)current_power_p;
+  jsonstr += "\"current_power_p\":"; jsonstr += (String)current_power_p;
   jsonstr += ",";
 #endif
 
 #ifdef USE_WATERSENSOR
-  jsonstr += "\"WFflowRate\":" + format_float(WFflowRate, 2);
+  jsonstr += "\"WFflowRate\":"; jsonstr += format_float(WFflowRate, 2);
   jsonstr += ",";
-  jsonstr += "\"WFtotalMl\":" + (String)WFtotalMilliLitres;
+  jsonstr += "\"WFtotalMl\":"; jsonstr += (String)WFtotalMilliLitres;
   jsonstr += ",";
 #endif
   
-  jsonstr += "\"Status\":\"" + get_Samovar_Status() + "\"";
+  jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
   jsonstr += "}";
 }
 
