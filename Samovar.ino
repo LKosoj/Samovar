@@ -1189,7 +1189,7 @@ void read_config() {
   //  pump_regulator.Kd = SamSetup.Kd;
 }
 
-void SendMsg(String m, MESSAGE_TYPE msg_type){
+void SendMsg(const String m, MESSAGE_TYPE msg_type){
      String MsgPl;
 #ifdef USE_MQTT
      MsgPl = m;
@@ -1204,10 +1204,8 @@ void SendMsg(String m, MESSAGE_TYPE msg_type){
        default : MsgPl = "";
      }
         if( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE){
-          char c[150];
           MsgPl += "{DEVICE_NAME} - " + m;
-          MsgPl.toCharArray(c, 150);
-          msg_q.push(&c);
+          msg_q.push(MsgPl.c_str());
           xSemaphoreGive(xMsgSemaphore);
         }
 #endif
@@ -1225,7 +1223,7 @@ void SendMsg(String m, MESSAGE_TYPE msg_type){
   }
 }
 
-void WriteConsoleLog(String StringLogMsg) {
+void WriteConsoleLog(const String StringLogMsg) {
   LogMsg = LogMsg + "\n" + StringLogMsg;
   Serial.println(StringLogMsg);
 #ifdef USE_WEB_SERIAL
