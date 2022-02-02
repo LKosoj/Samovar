@@ -86,7 +86,7 @@ void IRAM_ATTR check_alarm_distiller() {
       s = s + " Воды";
     else if (ACPSensor.avgTemp >= MAX_ACP_TEMP)
       s = s + " ТСА";
-    SendMsg(F("Аварийное отключение! Превышена максимальная температура") + s, ALARM_MSG);
+    SendMsg("Аварийное отключение! Превышена максимальная температура" + s, ALARM_MSG);
   }
 
 #ifdef USE_WATERSENSOR
