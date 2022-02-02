@@ -56,6 +56,10 @@ void IRAM_ATTR check_alarm_distiller() {
     open_valve(true);
   }
 
+  if (!valve_status) {
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true);
+  }
+
   if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
     open_valve(false);
 #ifdef USE_WATER_PUMP
@@ -66,16 +70,23 @@ void IRAM_ATTR check_alarm_distiller() {
 #ifdef USE_WATER_PUMP
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
-    set_pump_speed_pid(WaterSensor.avgTemp);
+    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(ACPSensor.avgTemp + 15);
+    else
+      set_pump_speed_pid(WaterSensor.avgTemp);
   }
 #endif
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
+  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_buzzer(true);
     set_power(false);
-    SendMsg(F("Аварийное отключение! Превышена максимальная температура воды охлаждения!"), ALARM_MSG);
+    String s = "";
+    if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
+      s = s + " Воды";
+    else if (ACPSensor.avgTemp >= MAX_ACP_TEMP)
+      s = s + " ТСА";
+    SendMsg(F("Аварийное отключение! Превышена максимальная температура") + s, ALARM_MSG);
   }
 
 #ifdef USE_WATERSENSOR
