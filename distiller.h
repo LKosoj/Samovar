@@ -28,11 +28,11 @@ void distiller_proc() {
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
     SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
-  }
-
 #ifdef SAMOVAR_USE_POWER
       digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
+  }
+
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
     distiller_finish();
   }
