@@ -30,12 +30,18 @@ void distiller_proc() {
     SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
   }
 
+#ifdef SAMOVAR_USE_POWER
+      digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+#endif
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
     distiller_finish();
   }
 }
 
 void IRAM_ATTR distiller_finish() {
+#ifdef SAMOVAR_USE_POWER
+      digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+#endif
   SendMsg(F("Дистилляция завершена"), NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
