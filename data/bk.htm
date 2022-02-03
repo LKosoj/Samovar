@@ -205,7 +205,7 @@ console.log(myObj.crnt_tm + "; " + myObj.LogMsg);
 }
 
 
-if (!myObj.current_power_volt){
+if (myObj.current_power_volt === null){
 document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
 document.getElementById('VoltH2').style = 'visibility: hidden;position: fixed;';
 } else {
@@ -213,7 +213,7 @@ document.getElementById('regulator').style = '';
 document.getElementById('VoltH2').style = '';
 }
 
-if (!myObj.WFflowRate){
+if (myObj.WFflowRate === null){
 document.getElementById('flowsensor').style = 'visibility: hidden;position: fixed;';
 } else {
 document.getElementById('flowsensor').style = '';
