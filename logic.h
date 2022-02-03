@@ -877,8 +877,8 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         target_power_volt = v;
       }
 #endif
-      vTaskDelay(RMVK_READ_DELAY/portTICK_PERIOD_MS);
     }
+    vTaskDelay(RMVK_READ_DELAY/portTICK_PERIOD_MS);
   }
 }
 #endif
