@@ -70,7 +70,7 @@ void IRAM_ATTR check_alarm_distiller() {
 #ifdef USE_WATER_PUMP
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
-    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(ACPSensor.avgTemp + 15);
+    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(TARGET_WATER_TEMP + 3);
     else
       set_pump_speed_pid(WaterSensor.avgTemp);
   }
