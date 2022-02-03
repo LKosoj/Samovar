@@ -1046,7 +1046,7 @@ void getjson(void) {
   jsonstr += ",";
   jsonstr += "\"WaterTemp\":"; jsonstr += format_float(WaterSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"TankTemp\":"; jsonstr += format_float(WaterSensor.avgTemp, 3);
+  jsonstr += "\"TankTemp\":"; jsonstr += format_float(TankSensor.avgTemp, 3);
   jsonstr += ",";
   jsonstr += "\"ACPTemp\":"; jsonstr += format_float(ACPSensor.avgTemp, 3);
   jsonstr += ",";
