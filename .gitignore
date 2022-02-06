@@ -7,4 +7,4 @@ tools/ngrok
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 user_config_override.h
-user_config_override.h
+doc/*.*
