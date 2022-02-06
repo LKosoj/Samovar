@@ -1,0 +1,12 @@
+[
+	{ "s": "UART", "p": [6, 23, 13, 7] },
+	{ "s": "URL", "p": [12] },
+	{ "s": "URL:GSUB", "p": [12] },
+	{ "s": "URL:GSUB(\"\\N", "p": [12] },
+	{ "s": "URLENCODE", "p": [12] },
+	{ "s": "URLENCODE(TEXT", "p": [12] },
+	{ "s": "URLENCODE(URL", "p": [12] },
+	{ "s": "USE_ALARM_BTN", "p": [8] },
+	{ "s": "UTF", "p": [12] },
+	{ "s": "UTF-8\\R\\N", "p": [12] }
+]

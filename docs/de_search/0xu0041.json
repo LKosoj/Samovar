@@ -1,0 +1,16 @@
+[
+	{ "s": "AAG0B", "p": [12] },
+	{ "s": "ACCELERATION_HEATER", "p": [12] },
+	{ "s": "ACCELERATION_HEATER_DELTA", "p": [7] },
+	{ "s": "ACP", "p": [17] },
+	{ "s": "ACPTEMP", "p": [12] },
+	{ "s": "ACTUALVOLUMEPERHOUR", "p": [12] },
+	{ "s": "ADUM", "p": [6] },
+	{ "s": "ALARM", "p": [17] },
+	{ "s": "ALARM_EVENT", "p": [12] },
+	{ "s": "ALCODISTILLERS", "p": [6, 20] },
+	{ "s": "ANALOGREAD", "p": [13, 12] },
+	{ "s": "AND", "p": [13, 12] },
+	{ "s": "ARDUINO", "p": [12] },
+	{ "s": "AVGTEMP", "p": [20] }
+]

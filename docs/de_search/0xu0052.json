@@ -1,0 +1,12 @@
+[
+	{ "s": "R", "p": [12] },
+	{ "s": "RECTIFICAT", "p": [12] },
+	{ "s": "RECTIFICAT.LUA", "p": [12] },
+	{ "s": "RELE_CHANNEL1", "p": [12] },
+	{ "s": "RELE_CHANNEL2", "p": [12] },
+	{ "s": "RELE_CHANNEL3", "p": [12] },
+	{ "s": "RELE_CHANNEL4", "p": [12] },
+	{ "s": "RETURN", "p": [12] },
+	{ "s": "RU", "p": [6, 20] },
+	{ "s": "R\\N", "p": [12] }
+]

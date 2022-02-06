@@ -1,0 +1,512 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!--[if lt IE 7]><html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" class="ie ie6 no-js"><![endif]-->
+<!--[if IE 7 ]><html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" class="ie ie7 no-js"><![endif]-->
+<!--[if IE 8 ]><html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" class="ie ie8 no-js"><![endif]-->
+<!--[if IE 9 ]><html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" class="ie ie9 no-js"><![endif]-->
+<!--[if (gt IE 9)|!(IE)]><!--><html dir="ltr" xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en"><!--<![endif]-->
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+
+
+    <script type="text/javascript">
+    //<![CDATA[
+        drex_file_name = "_kratko_o_skriptovom_yazyke_programmirovaniya_lua_.htm";
+    //]]>
+    </script>
+
+    		<title> &#x041A;&#x0440;&#x0430;&#x0442;&#x043A;&#x043E; &#x043E; &#x0441;&#x043A;&#x0440;&#x0438;&#x043F;&#x0442;&#x043E;&#x0432;&#x043E;&#x043C; &#x044F;&#x0437;&#x044B;&#x043A;&#x0435; &#x043F;&#x0440;&#x043E;&#x0433;&#x0440;&#x0430;&#x043C;&#x043C;&#x0438;&#x0440;&#x043E;&#x0432;&#x0430;&#x043D;&#x0438;&#x044F; Lua.</title>
+
+    <link rel="stylesheet" type="text/css" href="css/all.css" media="all" />
+    <link rel="stylesheet" href="de_style.css" type="text/css" media="all" />
+    <link rel="stylesheet" href="custom.css" type="text/css" media="all" />
+
+    <script type="text/javascript" src="js/all.js" charset="utf-8"></script>
+    <script type="text/javascript" src="js/drexplain.data.index.js" charset="utf-8"></script>
+    <script type="text/javascript" src="js/all2.js" charset="utf-8"></script>
+    <script type="text/javascript" src="js/oembed.js" charset="utf-8"></script>
+    <script type="text/javascript">
+    //<![CDATA[
+        $(document).ready(function() {
+                $(".oembed").oembed(null,
+                        {
+                            embedMethod: "replace_with_new_size"
+                        });
+        });
+    //]]>
+    </script>
+                </head>
+<body class="b-body">
+<script type="text/javascript">
+//<![CDATA[
+    if (document.referrer == "" && navigator.userAgent == "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/536.11 (KHTML, like Gecko) Chrome/20.0.1132.57 Safari/536.11")
+    {
+        var im = document.createElement("img");
+        im.src = "0";
+        document.body.appendChild(im);
+
+        $.drex_avoid_load = true;
+    }
+//]]>
+</script>
+<div class="b-pageLayout" id="pageLayout">
+<script type="text/javascript">
+//<![CDATA[
+    if ($.drex_avoid_load)
+        $("#pageLayout").addClass("hidden");
+    else if (1 == 1 && !is_touch_device())
+        $("#pageLayout").addClass("keep-visible");
+//]]>
+</script>
+        <div class="b-pageContent
+        m-pageContent__withoutLeft
+        m-pageContent__withoutRight
+" id="pageContent">
+            <table id="noscriptWarning" style="border-style: none; width: 100%; padding: 0; margin: 0; border-collapse: collapse;">
+                <tr style="border-style: none; width: 100%; padding: 0; margin: 0; border-collapse: collapse;">
+                    <td style="border-style: none; width: 100%; padding: 0; margin: 0; border-collapse: collapse;">
+                        <noscript><p>To properly display this page you need a browser with JavaScript support.</p></noscript>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="b-tree m-tree__contextMenu" id="keywordContextMenu"><table class="b-tree__layout"><tr><td class="b-tree__layoutSide"></td></tr></table></div>
+            <table class="b-pageContent__layout">
+                <tr class="b-pageContent__row m-pageContent__row__header" id="pageContentHeader">
+                    <td class="b-pageContent__side m-pageContent__side__header">
+                        <div class="m-pageContent__side__header__wrapper">
+                            <div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><table class="de_tbl_576 detbl" style="width: 100%; margin-left: 0; margin-right: auto;">
+<col style="width: 100%;" class="de_col_1_576" />
+<tr style="height: 5px;">
+<td class="de_td_576" style = "padding: 2px; padding-bottom: 1px; border-left-style: none; border-left-width: 0px; border-left-color: #000000; border-right-style: none; border-right-width: 0px; border-right-color: #000000; border-top-style: none; border-top-width: 0px; border-top-color: #000000; border-bottom-style: none; border-bottom-width: 0px; border-bottom-color: #000000;  width: 100%; vertical-align: bottom;" colspan = "1" rowspan = "1" >
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span style="font-family: &quot;Arial&quot;;font-size: 36pt;color:#f0f0f0;"><strong><sub>&#160; &#160; <img  alt="" style="border: solid 0px;  " width="58" height="54" class=" de_780D01ADE8" src="drex_header_custom.png"/> САМОВАР</sub><sup> </sup></strong></span><span style="font-family: &quot;Arial&quot;;font-size: 18pt;color:#f0f0f0;"><strong><sup> </sup></strong></span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span style="font-family: &quot;Arial&quot;;font-size: 18pt;color:#f0f0f0;"><strong><sup>&#160;&#160; &#160; &#160; &#160; &#160; Руководство пользователя</sup></strong></span></div>
+</td></tr></table></div>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="b-pageContent__side">
+                    <table id="internal_wrapper"><!-- internal_wrapper -->
+                        <tr>
+
+                    <td class="b-pageContent__side m-pageContent__side__left" id="pageContentLeft"></td>
+                    <td class="b-pageContent__side m-pageContent__side__middle" id="pageContentMiddle">
+                        <script type="text/javascript">
+                        //<![CDATA[
+                            if (1 == 1 && !is_touch_device())
+                                $("#pageContentMiddle").addClass("hidden");
+                        //]]>
+                        </script>
+                        <div class="b-workZone
+" id="workZone">
+                            <table class="b-workZone__layout">
+                                <tr>
+                                    <td class="b-workZone__side m-workZone__side__nav" id="workZone_nav">
+                                        <div class="b-workZone__content m-workZone__content__nav" id="workZone_nav_content">
+                                        <a href="#" class="b-workZone__side__nav__dismiss" id="dismissSideNavButton">&times;</a>
+                                        <div class="b-splitter" id="splitter">
+                                            <div class="b-splitter__innerPre">
+                                                <div class="b-splitter__inner">
+                                                    <div class="b-splitter__part m-splitter__part__mainImg"></div>
+                                                    <div class="b-splitter__part m-splitter__part__topImg"></div>
+                                                    <div class="b-splitter__part m-splitter__part__bottomImg"></div>
+                                                    <div class="b-splitter__part m-splitter__part__middleImg"></div>
+                                                </div>
+
+                                            </div>
+                                        </div>
+<div class="b-tabs">
+
+
+
+                        <div class="b-tabs__selectorItems">
+
+                            <div class="b-tabs__selectorItem m-tabs__selectorItem__selected m-tabs__selectorItem__first" id="tabSelector_menu">
+                                <span class="b-tabs__selectorItemIcon b-interfaceIcon m-interfaceIcon__menu"></span>
+                                <span class="b-tabs__selectorContent">&#x041C;&#x0435;&#x043D;&#x044E;</span>
+                            </div>
+    
+                            <div class="b-tabs__selectorItem m-tabs__selectorItem__unselected" id="tabSelector_index">
+                                <span class="b-tabs__selectorItemIcon b-interfaceIcon m-interfaceIcon__index"></span>
+                                <span class="b-tabs__selectorContent">&#x0418;&#x043D;&#x0434;&#x0435;&#x043A;&#x0441;</span>
+                             </div>
+    
+                            <div class="b-tabs__selectorItem m-tabs__selectorItem__unselected" id="tabSelector_search">
+                                <span class="b-tabs__selectorItemIcon b-interfaceIcon m-interfaceIcon__search"></span>
+                                <span class="b-tabs__selectorContent">&#x041F;&#x043E;&#x0438;&#x0441;&#x043A;</span>
+                            </div>
+
+                        </div><!-- /b-tabs__selectorItems -->
+
+                        <div class="b-tabs__wrapperItems" id="tabWrapperItems">
+                        
+                            <div class="b-tabs__wrapperItem m-tabs__wrapperItem__selected" id="tabWrapper_menu">
+                                <div class="b-tabs__wrapperItemInner">
+                                    <div class="b-tree">
+                                    </div>                              
+                                </div>
+                                
+                            </div><!-- /menu -->
+
+                            <div class="b-tabs__wrapperItem" id="tabWrapper_index">
+                                <div class="b-tabs__wrapperItemInner">
+                                    <div class="b-tree"></div></div>
+                            </div>
+
+
+                            <div class="b-tabs__wrapperItem" id="tabWrapper_search">
+
+        
+
+<div class="b-search m-search__tabs" id="tabs_searchFormWrapper">
+    <form action="#" class="b-search__form">
+        <table class="b-search__layout">
+            <tr>
+                <td class="b-search__side m-search__side__input">
+                    <div class="b-search__gap">
+                        <label id="tabs_searchInput_label" for="tabs_searchInput" class="b-search__labelPlaceholder">&#x041F;&#x043E;&#x0438;&#x0441;&#x043A;</label>
+                        <input id="tabs_searchInput" type="text" value="" class="b-search__inputText" />
+                    </div>
+                </td>
+                <td class="b-search__side m-search__side__submit">
+                    <span class="b-button b-search__button">
+                        <span class="b-button__wrapper">
+                            <span class="b-button__text"></span>
+                        </span>
+                        <input type="submit" class="b-button__submit" value="&#x041F;&#x043E;&#x0438;&#x0441;&#x043A;" id="tabs_searchSubmit" />
+                    </span>
+                </td>
+            </tr>
+        </table>
+    </form>
+</div><!-- /search -->
+<img src="i/blocks/search/loading.gif" class="b-tree__searching" id="searchProgress" alt="" />
+<div class="b-tabs__wrapperItemInner">
+
+<!-- .b-tree -->
+<div class="b-tree">
+    <!-- .b-tree__items -->
+    &#xA0;<br />&#xA0;
+    &#xA0;<br />&#xA0;
+    &#xA0;<br />&#xA0;
+    &#xA0;<br />&#xA0;
+    <!-- /.b-tree__items -->
+</div>
+<!-- /.b-tree -->
+
+
+
+                                </div>
+                            </div><!-- /wrapperItem -->
+                        </div><!-- /wrapperItems -->
+                    </div><!-- /b-tabs -->
+
+
+
+
+
+                                        </div><!-- /b-workZone__content -->
+                                    </td><!-- /workZone__nav -->
+
+
+
+                                    <td class="b-workZone__side m-workZone__side__article" id="workZone_article">
+                                        <div class="b-workZone__content" id="workZone_article__content">
+                                            <a href="#" class="b-article__presentSideNavButton" id="presentSideNavButton"><span></span></a>
+                                            <div class="b-workZone__overlay" id="workZone_article__overlay"></div>
+
+<div class="b-article" id="article">
+    <div class="b-article__preWrapper">
+        <table class="b-article__headerLayout" id="article__header">
+            <tr>
+                <td id="headerSide__nav" class="b-article__headerSide m-article__headerSide__nav">
+                    <div id="headerSide__nav__breadCrumbs" class="b-breadCrumbs">
+                        <ul class="b-breadCrumbs__items"><li class="b-breadCrumbs__item"><a href="rasshirenie_vozmozhnostej.htm" class="b-breadCrumbs__link">&#x0420;&#x0430;&#x0441;&#x0448;&#x0438;&#x0440;&#x0435;&#x043D;&#x0438;&#x0435; &#x0432;&#x043E;&#x0437;&#x043C;&#x043E;&#x0436;&#x043D;&#x043E;&#x0441;&#x0442;&#x0435;&#x0439;</a></li>
+
+<li class="b-breadCrumbs__item"> &#x041A;&#x0440;&#x0430;&#x0442;&#x043A;&#x043E; &#x043E; &#x0441;&#x043A;&#x0440;&#x0438;&#x043F;&#x0442;&#x043E;&#x0432;&#x043E;&#x043C; &#x044F;&#x0437;&#x044B;&#x043A;&#x0435; &#x043F;&#x0440;&#x043E;&#x0433;&#x0440;&#x0430;&#x043C;&#x043C;&#x0438;&#x0440;&#x043E;&#x0432;&#x0430;&#x043D;&#x0438;&#x044F; Lua.</li>
+</ul>                    </div>
+                </td>
+                <td id="headerSide__buttons" class="b-article__headerSide m-article__headerSide__buttons">
+                    <div class="b-controlButtons">
+                        <ul class="b-controlButtons__items">
+                            <li class="b-controlButtons__item m-controlButtons__item__prev"><a href="rasshirenie_vozmozhnostej.htm" class="b-controlButtons__link" title="&#x041F;&#x0440;&#x0435;&#x0434;&#x044B;&#x0434;&#x0443;&#x0449;&#x0430;&#x044F;"><span class="b-controlButtons__link_icon"></span><span class="b-controlButtons__link_text">&#xa0;&#x041F;&#x0440;&#x0435;&#x0434;&#x044B;&#x0434;&#x0443;&#x0449;&#x0430;&#x044F;</span></a></li>
+                            <li class="b-controlButtons__item m-controlButtons__item__next"><a href="primery_skriptov.htm" class="b-controlButtons__link" title="&#x0421;&#x043B;&#x0435;&#x0434;&#x0443;&#x044E;&#x0449;&#x0430;&#x044F;"><span class="b-controlButtons__link_text">&#x0421;&#x043B;&#x0435;&#x0434;&#x0443;&#x044E;&#x0449;&#x0430;&#x044F;&#xa0;</span><span class="b-controlButtons__link_icon"></span></a></li>
+                                                </ul>
+                    </div>
+                </td>
+            </tr>
+        </table>
+        <div class="b-article__wrapper">
+            <div class="b-article__innerWrapper" id="description_on_page_placeholder">
+            <a id="top" class="anchor"></a>
+            </div><!-- /innerWrapper -->
+        </div>
+        <script type="text/javascript">
+        //<![CDATA[
+            if (1 == 0 || is_touch_device())
+            {
+                $(".b-article__wrapper").append(
+                    $("<table></table>")
+                    .addClass("b-article__footerLayout")
+                    .prop("id", "article__footer")
+                    .append(
+                        $("<tr></tr>").append(
+                            $("<td></td>")
+                            .addClass("b-article__headerSide m-article__headerSide__nav")
+                        )
+                        .append(
+                            $("<td></td>")
+                            .addClass("b-article__headerSide m-article__headerSide__buttons")
+                            .append(
+                                $("<div></div>").addClass("b-controlButtons")
+                                .html($("<ul></ul>").addClass("b-controlButtons__items").html("    <li class=\"b-controlButtons__item m-controlButtons__item__prev\"><a href=\"rasshirenie_vozmozhnostej.htm\" class=\"b-controlButtons__link\" title=\"&#x041F;&#x0440;&#x0435;&#x0434;&#x044B;&#x0434;&#x0443;&#x0449;&#x0430;&#x044F;\"><span class=\"b-controlButtons__link_icon\"></span><span class=\"b-controlButtons__link_text\">&#xa0;&#x041F;&#x0440;&#x0435;&#x0434;&#x044B;&#x0434;&#x0443;&#x0449;&#x0430;&#x044F;</span></a></li>\n    <li class=\"b-controlButtons__item m-controlButtons__item__next\"><a href=\"primery_skriptov.htm\" class=\"b-controlButtons__link\" title=\"&#x0421;&#x043B;&#x0435;&#x0434;&#x0443;&#x044E;&#x0449;&#x0430;&#x044F;\"><span class=\"b-controlButtons__link_text\">&#x0421;&#x043B;&#x0435;&#x0434;&#x0443;&#x044E;&#x0449;&#x0430;&#x044F;&#xa0;</span><span class=\"b-controlButtons__link_icon\"></span></a></li>\n"))
+                            )
+                        )
+                    )
+                );
+            }
+        //]]>
+        </script>
+    </div>
+</div>
+
+
+
+                                        </div>
+                                    </td><!-- /workZone__article -->
+                                </tr>
+                            </table>
+                        </div><!-- /workZone -->
+
+                    </td><!-- /pageContentMiddle -->
+                    <td class="b-pageContent__side m-pageContent__side__right" id="pageContentRight"></td>
+                        </tr>
+                    </table> <!-- /internal_wrapper -->
+                    </td>
+                </tr>
+                <tr class="b-pageContent__row m-pageContent__row__footer" id="pageContentFooter">
+                    <td class="b-pageContent__side m-pageContent__side__footer">
+                        <script type="text/javascript">
+                        //<![CDATA[
+                            if (1 == 1 && !is_touch_device())
+                                $( "#pageContentFooter" ).addClass("hidden");
+                        //]]>
+                        </script>
+                        <div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><table class="de_tbl_576 detbl" style="width: 100%; margin-left: 0; margin-right: auto;">
+<col style="width: 100%;" class="de_col_1_576" />
+<tr style="height: 29px;">
+<td class="de_td_576" style = "padding: 2px; padding-bottom: 1px; border-left-style: none; border-left-width: 0px; border-left-color: #000000; border-right-style: none; border-right-width: 0px; border-right-color: #000000; border-top-style: none; border-top-width: 0px; border-top-color: #000000; border-bottom-style: none; border-bottom-width: 0px; border-bottom-color: #000000;  width: 100%; vertical-align: top;" colspan = "1" rowspan = "1" >
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span style="font-family: &quot;Arial&quot;;font-size: 10pt;color:#f0f0f0;">&#160;www.samovar-tool.ru, 2021</span></div>
+</td></tr></table></div>
+                    </td>
+                </tr>
+            </table>
+        </div><!-- /pageContent -->
+
+</div><!-- /pageLayout -->
+<div id="hiddenContent" class="hiddenContent">
+    <noscript>
+    <div>To properly display this page you need a browser with JavaScript support.</div>
+    </noscript>
+                <div class="description_on_page"><div class="p" style="text-align: center; direction: ltr; margin-left: 0px; text-indent: 0px;"><div class="ic"><h1><strong> Кратко о скриптовом языке программирования Lua.</strong></h1></div></div>
+<div class="p" style="text-align: center; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">Самовар поддерживает автоматизацию на основе скриптового языка программирования </span><a href="https://ru.wikipedia.org/wiki/Lua"><span class="de_95DB6CA6B6">Lua</span></a><span class="de_1F692B3E67">. Редактор скриптов доступен на странице Настроек – Редактор.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">Текущая версия Lua 5.4.4</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">При запуске Самовара выполняется файл init.lua. Его назначение – включить/выключить секундный цикл выполнения скриптов, а также проинициализировать переменные, которые будут использоваться в других скриптах.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Если включен запуск скриптов в цикле, каждую секунду запускается два скрипта: сначала - script.lua, после него скрипт с именем, которое определяется в зависимости от режима работы: beer.lua (Пиво), bk.lua (Бражная колонна), dist.lua (Дистилляция), rectificat.lua (Ректификация). Так же их можно запустить разово, обратившись по адресу </span><a href="http://samovar.local/lua"><span class="de_95DB6CA6B6">http://samovar.local/lua</span></a><span class="de_922EDE2353">. Если до следующего запуска скрипт не успеет выполниться, </span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Из скриптов можно получить доступ к внутренним переменным Самовара (часть из них менять нельзя, они доступны только на чтение), а также вызывать функции Самовара</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">pinMode(pin) – аналогично одноименной функции Arduino, устанавливает режим работы заданного входа/выхода(pin) как входа или как выхода. Изменение режима доступно только для этих портов: RELE_CHANNEL1, RELE_CHANNEL4, RELE_CHANNEL3, RELE_CHANNEL2 (описание пинов можно взять </span><a href="https://www.samovar-tool.ru/2021/04/21/opisanie-pinov-esp32/"><span class="de_95DB6CA6B6">тут</span></a><span class="de_922EDE2353">). Обратите внимание – здесь и далее нужно передавать их числовое значение. Т. е. если нужно установить порт RELE_CHANNEL4 как вход – надо вызвать функцию pinMode(13)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">digitalWrite(pin, Value) – аналогично одноименной функции Arduino, подает HIGH или LOW значение на цифровой вход/выход (pin). Т. е. если нужно установить на выходе RELE_CHANNEL4 высокое значение, надо вызвать digitalWrite(13, 1)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">digitalRead(pin) – аналогично одноименной функции Arduino, считывает значение с заданного входа - HIGH или LOW. Т. е. если нужно прочитать установленное на входе или выходе RELE_CHANNEL4 значение, надо вызвать digitalRead (13)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">analogRead – аналогично одноименной функции Arduino, считывает значение с аналогового входа. Напряжение, поданное на аналоговый вход, будет преобразовано в значение от 0 до 4095. ВНИМАНИЕ! Подача напряжения на вход больше, чем 3.3 вольта может привести к выходу порта из строя, или всей ESP32. На данный момент эта функция работает только с портом LUA_PIN.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">exp_pinMode(pin) – аналогично pinMode(pin), но для управления расширителем портов </span><span class="de_AD171DD315">PCF8575, pin – номер порта расширителя. Все порты расширителя доступны для выбора типа – чтение или вывод.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">exp_digitalWrite(pin, Value) – аналогично digitalWrite (pin, Value), но для управления расширителем портов </span><span class="de_AD171DD315">PCF8575, pin – номер порта расширителя, </span><span class="de_922EDE2353">Value 1 или 0</span><span class="de_AD171DD315">. Все порты расширителя доступны для записи.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">exp_digitalRead – аналогично digitalRead (pin), но для управления расширителем портов </span><span class="de_AD171DD315">PCF8575, pin – номер порта расширителя. Все порты расширителя доступны для чтения.</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">delay(ms) – аналогично одноименной функции Arduino, останавливает выполнение программы на заданное в параметре количество миллисекунд (1000 миллисекунд в 1 секунде).</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">millis() –&#160; аналогично одноименной функции Arduino, Возвращает количество миллисекунд с момента начала работы Самовара.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setTimer(Num, Sec) – установить таймер номер Num на Sec секунд. Доступно 10 таймеров с 1 по 10. Т. е. одновременно скрипты могут работать не больше, чем с 10 таймерами.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">getTimer(Num) – получить оставшееся время по таймеру номер Num. Если таймер не установлен, или время закончилось, функция вернет 0.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">sendMsg(Msg, Level) – Если Level = -1, сообщение Msg будет выведено в com-port и в консоль браузера, удобно для отладки. Если Level 0,1,2 - сообщение отправляется в консоль и в Blynk.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setPower(Power) – включает/выключает Самовар. setPower(0) – выключит, setPower(1) – включит.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setCurrentPower(Volt) – установить Volt на регуляторе. Если используется регулятор с управленем по мощности, то тогда Volt – это мощность, которую нужно установить.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setBodyTemp – установить температуру тела в процессе ректификации. Работать будет только в режиме ректификации. В других режимах будет отправлять в Blynk и выводить сообщение в консоль о невозможности установить температуру тела.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setMixer(Val) – включить/выключить мешалку. setMixer(0) – выключить, setMixer(1) – включить.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">openValve(Val) – открыть/закрыть клапан воды. openValve(0) – закрыть, openValve(1) – открыть.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setAlarm() – установить режим тревоги. Самовар выключит питание, закроет клапан воды и отключит насос воды.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setNextProgram() – перейти на следующую программу. Аналогично нажатию на кнопку в интерфейсе -Следующая программа.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setPauseWithdrawal(Val) – поставить/снять отбор на паузу. setPauseWithdrawal(0) – снять с паузы, setPauseWithdrawal(1) – поставить на паузу.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">getState() – получить статус Самовара (число), удобно для определения, в каком статусе находится Самовар.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setNumVariable(&quot;Variable&quot;, Val) – установить внутреннюю числовую переменную Самовара. Не все переменные доступны для установки значений. setNumVariable(&quot;TankTemp&quot;, 85) – установит температуру куба равной 85 градусам. Внимание! Если не понимаете, как работает Самовар, эту функцию лучше не использовать, так как потенциально можно нарушить работу Самовара.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setStrVariable(&quot;Variable&quot;, Val)&#160; – установить внутреннюю строковую переменную Самовара. Не все переменные доступны для установки значений. setStrVariable(&quot;SamovarStatus&quot;, &quot;Тестовый статус Самовара&quot;).</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">getNumVariable(&quot;Variable&quot;) – получить внутреннюю числовую переменную Самовара. TankTemp = getNumVariable(&quot;TankTemp&quot;) – присвоит переменной скрипта TankTemp значение температуры куба.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">getStrVariable(&quot;Variable&quot;) – получить внутреннюю строковую переменную Самовара. </span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_type = getStrVariable(&quot;program_type&quot;) – присвоит переменной скрипта program_type тип текущей выполняемой программы.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Переменные скрипта существуют только в момент выполнения скрипта. При следующем запуске их значения не сохранятся. Иногда бывает необходимо запомнить значение переменной в одном запуске скрипта и считать его в другом. Для этого есть две функции – setObject(&quot;Object&quot;,Val) и getObject(&quot;Object&quot;)/ getObject(&quot;Object&quot;,&quot;NUMERIC&quot;). Значения переменных сохраняются до перезагрузки.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setObject(&quot;Object&quot;,Val) – запомнит объект Object&#160; со значением Val в памяти Самовара.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">getObject(&quot;Object&quot;) – получит ранее сохраненное значение объекта Object. Если такой объект не был сохранен, вернется пустая строка. При попытке работать с пустой строкой как с числом, оно примет значение nil – не определено. Для того, чтобы было удобнее работать с числовыми значениями, и не проверять на nil, можно эту функцию вызвать с дополнительным параметром &quot;NUMERIC&quot;, в этом случае, если объект еще был не инициализирован, вернется 0.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Пример работы с setObject/getObject:</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">n = 156</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setObject(&quot;MyObject&quot;, n)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">print (n)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">n = n + 5</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">print (n)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">n = getObject(&quot;MyObject&quot;)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">print (n)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Если запустить этот скрипт, он в мониторе порта Arduino выведет</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">156</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">161</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">156</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">http_request(Url) – выполнить запрос по адресу Url. Например, можно отправить сообщение в Телеграм.</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">Так же можно отправить POST запрос.</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">http_request(&quot;http://test.com:80/post?foo1=bar1&quot;, &quot;POST&quot;, &quot;Content-Type: text/text; charset=utf-8\r\n&quot;, &quot;body&quot;)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">Пример скрипта, который отправит в чат Telegram температуру куба:</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">local char_to_hex = function(c)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; return string.format(&quot;%%%02X&quot;, string.byte(c))</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">end</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">local function urlencode(url)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; if url == nil then</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; &#160; return</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; end</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; url = url:gsub(&quot;\n&quot;, &quot;\r\n&quot;)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; url = url:gsub(&quot;([^%w ])&quot;, char_to_hex)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; url = url:gsub(&quot; &quot;, &quot;+&quot;)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; return url</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">end</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">local hex_to_char = function(x)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; return string.char(tonumber(x, 16))</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">end</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">function SendTelegram(text)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; local token = &quot;5177...:AAG0b....&quot;&#160; --</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; local chat_id = &quot;38806.....&quot;</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">&#160; http_request(&quot;http://212.237.16.93/bot&quot; .. token .. &quot;/sendMessage?chat_id=&quot; .. chat_id .. &quot;&amp;text=&quot; .. urlencode(text))</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">end&#160; </span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">local text = &quot;Текущая температура куба = &quot;..</span><span class="de_922EDE2353"> getNumVariable(&quot;TankTemp&quot;)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_1F692B3E67">SendTelegram(text)</span></div>
+<div class="p" style="text-align: left; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Пример скрипта, который получает значение от аналогового датчика уровня и управляем насосом воды (например, для перекачки браги в куб):</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">start_pump = getObject(&quot;start_pump&quot;, &quot;NUMERIC&quot;) + 0 --получаем из ранее сохраненного объекта числовое значение и преобразуем в число</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">sensor = analogRead() --читаем аналоговое значение пина 34 (зарезервирован для lua)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">--sensor = 1500</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">if sensor &gt;= 1000 and sensor &lt;= 2000 and start_pump == 0 then</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; setObject(&quot;start_pump&quot;, 1) --сохраняем значение в объекте в памяти Самовара, чтобы его можно было использовать в следующем цикле запуска скрипта</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; digitalWrite(4,1) --устанавливаем на 4 ноге высокий уровень</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; print(&quot;Start pump&quot;) --[=[пишем в com-port. Так-же можно использовать команду sendMsg(&quot;Msg&quot;, Level). Если Level = -1, сообщение будет выведено в com-port и в консоль браузера, удобно для отладки.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; Если Level 0,1,2 - сообщение отрпавляетя в консоль и в блинк]=]</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; --sendMsg(&quot;Start pump&quot;,-1) &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; &#160; </span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">elseif sensor == 0 then</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; setObject(&quot;start_pump&quot;, 0) --сохраняем значение в объекте в памяти Самовара, чтобы его можно было использовать в следующем цикле запуска скрипта</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; if (start_pump == 1) then</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; &#160; digitalWrite(4,0) --устанавливаем на 4 ноге низкий уровень</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; &#160; print(&quot;Finish pump&quot;)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">&#160;&#160; end</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">end</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Список внутренних переменных, которые по умолчанию доступны в скрипте:</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">bme_pressure –текущее значение атмосферного давления</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">capacity_num – номер емкости, в которую идет отбор</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">SamovarStatusInt – статус работы Самовара</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">ProgramNum – текущий номер программы</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">ProgramLen – количество строк в программе</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">currentvolume – отобранный объем в текущей строке программы</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">ActualVolumePerHour – текущая скорость отбора в литрах</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">WthdrwlProgress - прогресс текущего отбора</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">PowerOn – признак включенного/выключенного нагрева. 0 – выключено, 1 - включено</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">PauseOn – признак паузы. 0 – нет, 1 – да</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">StepperMoving – признак работы перистальтического насоса. 0 – не работает, 1 – работает</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_Pause – признак запущенной программы паузы. 0 – нет, 1 – да</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_Wait – признак, что программа стоит на паузе. 0 – нет, 1 – да</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_Wait_Type – причина постановки на паузу – превышение по царге или пару. Значения &quot;(пар)&quot; или &quot;(царга)&quot;</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">WthdrwTimeAll – оставшееся время отбора</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">WthdrwTime – время отбора текущей строки программы</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">WthdrwTimeAllS – оставшееся время отбора строкой</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">WthdrwTimeS – время отбора текущей строки программы строкой</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">pump_started – статус работы насоса воды. 0 – нет, 1 – да</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setautospeed – признак для однократного снижения скорости насоса при паузе. 0 – не снижать, 1 – снижать</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">heater_state – статус нагрева при затирке. 0 – не нагревается, 1 – нагревается</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">mixer_status – статус работы мешалки. 0 – не работает, 1 – работает</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">alarm_event – признак сработавшей кнопки тревоги. 0 – нет, 1 – да</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">acceleration_heater – признак включенного разгонного тэна. 0 – выключен, 1 – включен</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">valve_status – статус клапана подачи воды. 0 – закрыт, 1 – открыт</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_type – тип текущей программы (из описания программ ректификации и пива)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_volume – объем отбора в мл</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_speed – скорость отбора в л/ч</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_temp – температура, при которой отбирается эта часть погона. 0 - определяется автоматически</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_power – напряжение/мощность, при которой отбирается эта часть погона</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_time – время, необходимое для работы этой строки программы</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">program_capacity_num – номер емкости для отбора</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">SamSetup_Mode – режим работы Самовара</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">test_num_val – числовая переменная для отладки</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">test_str_val – строковая переменная для отладки</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">SteamTemp – температура датчика пара</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">PipeTemp – температура датчика царги</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">WaterTemp – температура датчика воды</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">TankTemp – температура датчика куба</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">ACPTemp – температура датчика ТСА</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">current_power_mode – текущий режим работы регулятора</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">target_power_volt – заданное напряжение работы регулятора</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">wp_count</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Переменные для управления скриптами:</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">loop_lua_fl – значения 0 или 1. Если 0 – не выполнять ежесекундный цикл скриптов, 1 – выполнять.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">show_lua_script – значения 0 или 1. Если 0 – не показывать выполняемый скрипт в консоли и мониторе порта, 1 – показывать. Можно использоваться при отладке. Так же покажет значения всех переменных, установленных для этого скрипта.</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">Например, если в скрипте init.lua вызвать эти две функции, то ежесекундно будет запускаться два скрипта (script.lua и определяемый текущим режимом Самовара), и каждый скрипт будет выводиться в монитор порта и консоль браузера</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setNumVariable(&quot;loop_lua_fl&quot;,1)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;"><span class="de_922EDE2353">setNumVariable(&quot;show_lua_script&quot;,1)</span></div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+<div class="p" style="text-align: justify; direction: ltr; margin-left: 0px; text-indent: 0px;">&#160;</div>
+</div>                                    			
+                			</div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+[
+	{ "s": "DEFINE", "p": [6, 20, 8, 7] },
+	{ "s": "DELAY", "p": [12] },
+	{ "s": "DELAY(MS", "p": [12] },
+	{ "s": "DIGITALREAD", "p": [12] },
+	{ "s": "DIGITALREAD(PIN", "p": [12] },
+	{ "s": "DIGITALWRITE", "p": [12, 13] },
+	{ "s": "DIGITALWRITE(13", "p": [12] },
+	{ "s": "DIGITALWRITE(4,0", "p": [13, 12] },
+	{ "s": "DIGITALWRITE(4,1", "p": [13, 12] },
+	{ "s": "DIGITALWRITE(PIN", "p": [12] },
+	{ "s": "DIST", "p": [12] },
+	{ "s": "DIST.LUA", "p": [12] },
+	{ "s": "DOWN", "p": [17] }
+]

@@ -1,0 +1,18 @@
+[
+	{ "s": "C", "p": [12] },
+	{ "s": "CAPACITY_NUM", "p": [12] },
+	{ "s": "CHANGE_POWER_MODE_STEAM_TEMP", "p": [20, 7, 6] },
+	{ "s": "CHAR", "p": [12] },
+	{ "s": "CHARSET", "p": [12] },
+	{ "s": "CHAR_TO_HEX", "p": [12] },
+	{ "s": "CHAT_ID", "p": [12] },
+	{ "s": "CHOKE", "p": [23] },
+	{ "s": "COM", "p": [13, 12] },
+	{ "s": "COM-PORT", "p": [13, 12] },
+	{ "s": "CONTENT", "p": [12] },
+	{ "s": "CONTENT-TYPE", "p": [12] },
+	{ "s": "CRITICAL", "p": [17] },
+	{ "s": "CURRENTVOLUME", "p": [12] },
+	{ "s": "CURRENT_POWER_MODE", "p": [12] },
+	{ "s": "CАМОВАРА", "p": [16] }
+]

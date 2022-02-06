@@ -1,0 +1,17 @@
+[
+	{ "s": "ELSE", "p": [13] },
+	{ "s": "ELSEIF", "p": [13, 12] },
+	{ "s": "EMERGENCY", "p": [17] },
+	{ "s": "END", "p": [12, 13] },
+	{ "s": "ERROR", "p": [17] },
+	{ "s": "ESP32", "p": [12] },
+	{ "s": "EXCEL", "p": [16] },
+	{ "s": "EXP_DIGITALREAD", "p": [13, 12] },
+	{ "s": "EXP_DIGITALREAD(1", "p": [13] },
+	{ "s": "EXP_DIGITALWRITE", "p": [13, 12] },
+	{ "s": "EXP_DIGITALWRITE(1,0", "p": [13] },
+	{ "s": "EXP_DIGITALWRITE(1,1", "p": [13] },
+	{ "s": "EXP_DIGITALWRITE(PIN", "p": [12] },
+	{ "s": "EXP_PINMODE", "p": [12] },
+	{ "s": "EXP_PINMODE(PIN", "p": [12] }
+]

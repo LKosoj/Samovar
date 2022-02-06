@@ -1,0 +1,9 @@
+[
+	{ "s": "OBJECT", "p": [12] },
+	{ "s": "OFF", "p": [17] },
+	{ "s": "OPENVALVE", "p": [12] },
+	{ "s": "OPENVALVE(0", "p": [12] },
+	{ "s": "OPENVALVE(1", "p": [12] },
+	{ "s": "OPENVALVE(VAL", "p": [12] },
+	{ "s": "OPEN_VALVE_TANK_TEMP", "p": [20] }
+]
