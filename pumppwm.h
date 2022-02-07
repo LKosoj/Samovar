@@ -29,12 +29,12 @@ void set_pump_pwm(float duty) {
   }
   if (!pump_started && duty > 0) {
     wp_count = 0;
-    pump_pwm.write(400);
+    pump_pwm.write(500);
     pump_started = true;
     return;
   }
-  if (duty > 0 && wp_count < 10) {
-    pump_pwm.write(400);
+  if (duty > 0 && wp_count < 5) {
+    pump_pwm.write(500);
     wp_count++;
     return;
   }
