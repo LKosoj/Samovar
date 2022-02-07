@@ -825,7 +825,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetClock,  /* Function to implement the task */
     "GetClockTicker", /* Name of the task */
-    2600,             /* Stack size in words */
+    3000,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
