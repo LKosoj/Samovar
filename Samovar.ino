@@ -815,7 +815,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    2500,             /* Stack size in words */
+    3000,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
@@ -823,23 +823,23 @@ void setup() {
 
   //Запускаем таск для получения точного времени и записи в лог
   xTaskCreatePinnedToCore(
-    triggerGetClock,  /* Function to implement the task */
-    "GetClockTicker", /* Name of the task */
-    3000,             /* Stack size in words */
-    NULL,             /* Task input parameter */
-    1,                /* Priority of the task */
-    &GetClockTask1,   /* Task handle. */
-    1);               /* Core where the task should run */
+    triggerGetClock,    /* Function to implement the task */
+    "GetClockTicker",   /* Name of the task */
+    3500,               /* Stack size in words */
+    NULL,               /* Task input parameter */
+    1,                  /* Priority of the task */
+    &GetClockTask1,     /* Task handle. */
+    1);                 /* Core where the task should run */
 
   //Запускаем таск для чтения давления
   xTaskCreatePinnedToCore(
-    triggerGetBMP,  /* Function to implement the task */
-    "GetBMPTicker", /* Name of the task */
-    1900,             /* Stack size in words */
-    NULL,             /* Task input parameter */
-    1,                /* Priority of the task */
-    &GetBMPTask,   /* Task handle. */
-    0);               /* Core where the task should run */
+    triggerGetBMP,      /* Function to implement the task */
+    "GetBMPTicker",     /* Name of the task */
+    2000,               /* Stack size in words */
+    NULL,               /* Task input parameter */
+    1,                  /* Priority of the task */
+    &GetBMPTask,        /* Task handle. */
+    0);                 /* Core where the task should run */
 
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора
