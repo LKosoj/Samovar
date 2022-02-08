@@ -282,18 +282,23 @@ void sensor_init(void) {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }
 
-  reset_sensor_counter();
-
 #ifdef SAMOVAR_USE_SEM_AVR
 //Если SEM_AVR иницииурем порт
+#ifdef __SAMOVAR_DEBUG
+  Serial.println("Init SEM_AVR");
+#endif
   Serial2.setTimeout(300);
   //Serial2.setRxBufferSize(10);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 #define USE_SERIAL
 #endif
 
+
 #ifdef SAMOVAR_USE_RMVK
 #ifndef USE_SERIAL
+#ifdef __SAMOVAR_DEBUG
+  Serial.println("Init RMVK");
+#endif
 //Иначе работаем с RMVK_
   RMVK_init();
 #define USE_SERIAL
@@ -302,11 +307,16 @@ void sensor_init(void) {
 
 #ifdef SAMOVAR_USE_POWER
 #ifndef USE_SERIAL
+#ifdef __SAMOVAR_DEBUG
+  Serial.println("Init KVIC");
+#endif
   Serial2.setRxBufferSize(10);
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
 #define USE_SERIAL
 #endif
 #endif
+
+  reset_sensor_counter();
 
 #ifdef USE_WATER_PUMP
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
@@ -368,6 +378,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   start_pressure = bme_pressure;
 
   set_power(false);
+  sam_command_sync = SAMOVAR_NONE;
   get_Samovar_Status();
 
   bk_pwm = PWM_LOW_VALUE * 40;
