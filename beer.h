@@ -22,7 +22,7 @@ void beer_proc() {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + "" + "," + get_beer_program() + "," + SessionDescription, "st");
-#endif  
+#endif
     create_data();  //создаем файл с данными
     PowerOn = true;
     set_power(true);
@@ -41,7 +41,7 @@ void IRAM_ATTR run_beer_program(byte num) {
 
   if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
 
-  if (SamSetup.ChangeProgramBuzzer){
+  if (SamSetup.ChangeProgramBuzzer) {
     set_buzzer(true);
   }
 
@@ -195,8 +195,8 @@ void set_heater_state(float setpoint, float temp) {
     }
   } else {
     if (acceleration_heater) {
-     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
-     acceleration_heater = false;
+      digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+      acceleration_heater = false;
     }
   }
 #endif
@@ -263,23 +263,23 @@ void setHeaterPosition(bool state) {
     set_current_power(SamSetup.StbVoltage);
 
 #ifndef __SAMOVAR_DEBUG
-  //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
-    power_err_cnt++;
-    //if (power_err_cnt > 8) set_current_power(target_power_volt);
-    if (power_err_cnt > 10) {
-      delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
-      set_power(false);
-      SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
-    }
-  } else power_err_cnt = 0;
+    //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
+    if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 0.1) {
+      power_err_cnt++;
+      //if (power_err_cnt > 8) set_current_power(target_power_volt);
+      if (power_err_cnt > 10) {
+        delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+        set_power(false);
+        SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
+      }
+    } else power_err_cnt = 0;
 #endif
 
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
-    vTaskDelay(200/portTICK_PERIOD_MS);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
 #endif
   } else {
 #ifdef SAMOVAR_USE_POWER

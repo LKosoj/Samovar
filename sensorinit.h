@@ -58,46 +58,46 @@ void IRAM_ATTR BME_getvalue(bool fl) {
     return;
   }
 
-if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (30 / portTICK_RATE_MS)) == pdTRUE){
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (30 / portTICK_RATE_MS)) == pdTRUE) {
 #ifdef USE_BME680
-  // Tell BME680 to begin measurement.
-  if (bme.beginReading() == 0) {
-    return;
-  }
+    // Tell BME680 to begin measurement.
+    if (bme.beginReading() == 0) {
+      return;
+    }
 
-  if (!bme.endReading()) {
-    return;
-  }
+    if (!bme.endReading()) {
+      return;
+    }
 
-  bme_temp = bme.temperature;
-  bme_pressure = bme.pressure / 100 * 0.75;
-  //bme_humidity = bme.humidity;
+    bme_temp = bme.temperature;
+    bme_pressure = bme.pressure / 100 * 0.75;
+    //bme_humidity = bme.humidity;
 
-  //filtered_val += (val - filtered_val) * 0.01;
+    //filtered_val += (val - filtered_val) * 0.01;
 #endif
 
 #ifdef USE_BMP180
-  sensors_event_t event;
-  bme.getEvent(&event);
-  if (event.pressure) {
-    bme_pressure = event.pressure * 0.75;
-    float temp;
-    bme.getTemperature(&temp);
-    bme_temp = temp;
-  }
+    sensors_event_t event;
+    bme.getEvent(&event);
+    if (event.pressure) {
+      bme_pressure = event.pressure * 0.75;
+      float temp;
+      bme.getTemperature(&temp);
+      bme_temp = temp;
+    }
 #endif
 
 #ifdef USE_BMP280
-  bme_temp = bme.readTemperature();
-  bme_pressure = bme.readPressure() / 100 * 0.75;
+    bme_temp = bme.readTemperature();
+    bme_pressure = bme.readPressure() / 100 * 0.75;
 #endif
 
 #ifdef USE_BME280
-  bme_temp = bme.readTemperature();
-  bme_pressure = bme.readPressure() / 100 * 0.75;
+    bme_temp = bme.readTemperature();
+    bme_pressure = bme.readPressure() / 100 * 0.75;
 #endif
-xSemaphoreGive(xI2CSemaphore);
-}
+    xSemaphoreGive(xI2CSemaphore);
+  }
 }
 
 //***************************************************************************************************************
@@ -105,11 +105,11 @@ xSemaphoreGive(xI2CSemaphore);
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
 
-//    SteamSensor.avgTemp = 50;
-//    PipeSensor.avgTemp = 50;
-//    WaterSensor.avgTemp = 50;
-//    TankSensor.avgTemp = 75;
-//    return;
+  //    SteamSensor.avgTemp = 50;
+  //    PipeSensor.avgTemp = 50;
+  //    WaterSensor.avgTemp = 50;
+  //    TankSensor.avgTemp = 75;
+  //    return;
   float ss, ps, ws, ts, acp;
   ss = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
   ps = sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
@@ -117,16 +117,16 @@ void IRAM_ATTR DS_getvalue(void) {
   ts = sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
   acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
 
-//    float randNumber;
-//    randNumber = random(100) / float(500);
-//    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
-//    if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
-//    static float coef = 0;
-//    coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
-//    //if (coef > 0.5) coef = 0.5;
-//    //if (coef < -0.5) coef = -0.5;
-//    ts = TankSensor.avgTemp + coef;
-//    ws = WaterSensor.avgTemp + coef;
+  //    float randNumber;
+  //    randNumber = random(100) / float(500);
+  //    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
+  //    if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
+  //    static float coef = 0;
+  //    coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
+  //    //if (coef > 0.5) coef = 0.5;
+  //    //if (coef < -0.5) coef = -0.5;
+  //    ts = TankSensor.avgTemp + coef;
+  //    ws = WaterSensor.avgTemp + coef;
 
   sensors.requestTemperatures();
 
@@ -283,7 +283,7 @@ void sensor_init(void) {
   }
 
 #ifdef SAMOVAR_USE_SEM_AVR
-//Если SEM_AVR иницииурем порт
+  //Если SEM_AVR иницииурем порт
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init SEM_AVR");
 #endif
@@ -299,7 +299,7 @@ void sensor_init(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init RMVK");
 #endif
-//Иначе работаем с RMVK_
+  //Иначе работаем с RMVK_
   RMVK_init();
 #define USE_SERIAL
 #endif

@@ -1,8 +1,8 @@
 #ifdef SAMOVAR_USE_BLYNK
 BLYNK_READ(V0) {
-  vTaskDelay(2/portTICK_PERIOD_MS);
+  vTaskDelay(2 / portTICK_PERIOD_MS);
   Blynk.virtualWrite(V0, SteamSensor.avgTemp);
-  vTaskDelay(2/portTICK_PERIOD_MS);
+  vTaskDelay(2 / portTICK_PERIOD_MS);
   Blynk.virtualWrite(V4, PowerOn);
   int i;
   int k;
@@ -11,7 +11,7 @@ BLYNK_READ(V0) {
   else
     i = 0;
   Blynk.virtualWrite(V3, i);
-  vTaskDelay(2/portTICK_PERIOD_MS);
+  vTaskDelay(2 / portTICK_PERIOD_MS);
   if (PauseOn)
     k = 1;
   else
@@ -96,7 +96,7 @@ BLYNK_WRITE(V18) {
 BLYNK_WRITE(V12) {
   if (!PowerOn) return;
   int State = param.asInt();
-  if (State == 1){
+  if (State == 1) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       sam_command_sync = SAMOVAR_BEER_NEXT;
     } else {

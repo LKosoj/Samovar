@@ -268,15 +268,15 @@ uint8_t temprature_sens_read();
 #ifdef USE_LittleFS
 #pragma message ("USE LITTLEFS")
 #ifdef ESP_ARDUINO_VERSION
-  #include <LittleFS.h> 
-  #define SPIFFS LittleFS
+#include <LittleFS.h>
+#define SPIFFS LittleFS
 #else
-  #include <LITTLEFS.h> 
-  #define SPIFFS LITTLEFS
+#include <LITTLEFS.h>
+#define SPIFFS LITTLEFS
 #endif
 #else
 #pragma message ("USE SPIFFS")
-  #include <SPIFFS.h>
+#include <SPIFFS.h>
 #endif
 
 void writeString(String Str, byte num);
@@ -565,7 +565,7 @@ bool acceleration_heater;                                       // Призна�
 bool send_mqtt;                                                 // Отправлять данные в облако
 volatile bool loop_lua_fl;                                      // Запускать lua скрипт в цикле
 volatile bool show_lua_script;                                  // Показывать выполняемый lua скрипт в логе и в Serial
-float test_num_val;                                             // Тестовое численное значение          
+float test_num_val;                                             // Тестовое численное значение
 String test_str_val;                                            // Тестовое строковое значение
 
 String current_power_mode;                                      // Режим работы регулятора напряжения

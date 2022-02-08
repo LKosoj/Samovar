@@ -144,7 +144,7 @@ void WebServerInit(void) {
 
 String indexKeyProcessor(const String &var) {
   if (var == "SteamColor") return (String)SamSetup.SteamColor;
-  else if (var == "v") 
+  else if (var == "v")
     return SAMOVAR_VERSION;
   else if (var == "PipeColor")
     return (String)SamSetup.PipeColor;
@@ -184,7 +184,7 @@ String indexKeyProcessor(const String &var) {
       return get_program(CAPACITY_NUM * 2);
   }
   else if (var == "Descr") {
-      return SessionDescription;
+    return SessionDescription;
   } else if (var == "videourl")
     return (String)SamSetup.videourl;
   else if (var == "PWM_LV")
@@ -619,8 +619,8 @@ void web_command(AsyncWebServerRequest *request) {
         sam_command_sync = SAMOVAR_POWER;
       }
     } else if (request->hasArg("watert")) {
-        set_water_temp(request->arg("watert").toFloat());
-      } else
+      set_water_temp(request->arg("watert").toFloat());
+    } else
 #ifdef SAMOVAR_USE_POWER
       if (request->hasArg("voltage")) {
         set_current_power(request->arg("voltage").toFloat());
@@ -668,7 +668,7 @@ void calibrate_command(AsyncWebServerRequest *request) {
       cl = true;
     }
   }
-  vTaskDelay(10/portTICK_PERIOD_MS);
+  vTaskDelay(10 / portTICK_PERIOD_MS);
   if (cl) {
     int s = round((float)stepper.getCurrent() / 100) * 100;
     request->send(200, "text/plain", (String)s);
@@ -677,8 +677,8 @@ void calibrate_command(AsyncWebServerRequest *request) {
 }
 
 void get_data_log(AsyncWebServerRequest *request) {
-    if (fileToAppend)
-      fileToAppend.flush();
+  if (fileToAppend)
+    fileToAppend.flush();
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data.csv", String(), true);
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");

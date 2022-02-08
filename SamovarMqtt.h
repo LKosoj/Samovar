@@ -17,7 +17,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
 void onMqttPublish(uint16_t packetId);
 void connectToMqtt();
 
-void initMqtt(){
+void initMqtt() {
   char buf[10];
   itoa(chipId, buf, 10);
   mqttClient.onConnect(onMqttConnect);
@@ -26,35 +26,35 @@ void initMqtt(){
   mqttClient.setClientId(buf);
   //mqttClient.setClientId("1234");
   mqttClient.setMaxTopicLength(PAYLOADSIZE);
-  mqttClient.setCredentials(mqttUser,mqttPassword);
+  mqttClient.setCredentials(mqttUser, mqttPassword);
   mqttClient.setServer("ora1.samovar-tool.ru", 1883);
-  strcat(mqttstr,SamSetup.blynkauth);
-  strcat(mqttstr,"/");
+  strcat(mqttstr, SamSetup.blynkauth);
+  strcat(mqttstr, "/");
 
-  if (strlen(SamSetup.blynkauth) <30) send_mqtt = false; else send_mqtt = true;
+  if (strlen(SamSetup.blynkauth) < 30) send_mqtt = false; else send_mqtt = true;
 
-//  mqttClient.onSubscribe(onMqttSubscribe);
-//  mqttClient.onUnsubscribe(onMqttUnsubscribe);
-//  mqttClient.onMessage(onMqttMessage);
-  
+  //  mqttClient.onSubscribe(onMqttSubscribe);
+  //  mqttClient.onUnsubscribe(onMqttUnsubscribe);
+  //  mqttClient.onMessage(onMqttMessage);
+
   connectToMqtt();
 }
 
 void connectToMqtt() {
-//  Serial.println("Connecting to MQTT...");
-//  byte i;
-//  i = 0;
+  //  Serial.println("Connecting to MQTT...");
+  //  byte i;
+  //  i = 0;
   mqttClient.connect();
-//  while (!mqttClient.connected()){
-//    delay(50);
-//    i++;
-//    if (i > 25) break;
-//  }
+  //  while (!mqttClient.connected()){
+  //    delay(50);
+  //    i++;
+  //    if (i > 25) break;
+  //  }
 }
 
 void onMqttConnect(bool sessionPresent) {
-//  Serial.print("mqttClient.connected = ");
-//  Serial.println(mqttClient.connected());
+  //  Serial.print("mqttClient.connected = ");
+  //  Serial.println(mqttClient.connected());
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
@@ -62,16 +62,16 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 }
 
 void onMqttPublish(uint16_t packetId) {
-//  Serial.println("Publish acknowledged.");
-//  Serial.print("  packetId: ");
-//  Serial.println(packetId);
+  //  Serial.println("Publish acknowledged.");
+  //  Serial.print("  packetId: ");
+  //  Serial.println(packetId);
 }
 
-void MqttSendMsg(String Str, const char *chart ){
+void MqttSendMsg(String Str, const char *chart ) {
   if (!send_mqtt) return;
   strcpy(mqttstr1, mqttstr);
-  strcat(mqttstr1,chart);
-  strcat(mqttstr1,"/1");
+  strcat(mqttstr1, chart);
+  strcat(mqttstr1, "/1");
   Str.toCharArray(payload, PAYLOADSIZE);
   uint16_t packetIdPub1 = mqttClient.publish(mqttstr1, 2, true, payload);
 }

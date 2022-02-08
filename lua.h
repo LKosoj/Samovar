@@ -54,14 +54,14 @@ static int lua_wrapper_pinMode(lua_State *lua_state) {
 static int lua_wrapper_digitalWrite(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN 
+  if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN
 #ifdef ALARM_BTN_PIN
-  || a == ALARM_BTN_PIN 
+      || a == ALARM_BTN_PIN
 #endif
 #ifdef BTN_PIN
-  || a == BTN_PIN
-#endif  
-  ) pinMode(a, b);  digitalWrite(a, b);
+      || a == BTN_PIN
+#endif
+     ) pinMode(a, b);  digitalWrite(a, b);
   return 0;
 }
 
@@ -80,7 +80,7 @@ static int lua_wrapper_analogRead(lua_State *lua_state) {
 static int lua_wrapper_exp_pinMode(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     expander.pinMode(a, b);
     xSemaphoreGive(xI2CSemaphore);
   }
@@ -90,7 +90,7 @@ static int lua_wrapper_exp_pinMode(lua_State *lua_state) {
 static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     expander.digitalWrite(a, b);
     xSemaphoreGive(xI2CSemaphore);
   }
@@ -99,7 +99,7 @@ static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
 
 static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     lua_pushnumber(lua_state, (lua_Number) expander.digitalRead(a));
     xSemaphoreGive(xI2CSemaphore);
   }
@@ -113,7 +113,7 @@ static int lua_wrapper_delay(lua_State *lua_state) {
   return 0;
 }
 
-void wait_command_sync(){
+void wait_command_sync() {
   while (sam_command_sync != SAMOVAR_NONE) delay(100);
 }
 
@@ -142,8 +142,8 @@ static int lua_wrapper_set_power(lua_State *lua_state) {
     } else
       sam_command_sync = SAMOVAR_POWER;
   }
-   else if (!a && PowerOn)
-     sam_command_sync = SAMOVAR_POWER;
+  else if (!a && PowerOn)
+    sam_command_sync = SAMOVAR_POWER;
 
   return 0;
 }
@@ -178,9 +178,9 @@ static int lua_wrapper_set_body_temp(lua_State *lua_state) {
 
 static int lua_wrapper_set_next_program(lua_State *lua_state) {
   wait_command_sync();
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
     sam_command_sync = SAMOVAR_START;
-  } else if (Samovar_Mode == SAMOVAR_BEER_MODE){
+  } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     sam_command_sync = SAMOVAR_BEER_NEXT;
   }
   return 0;
@@ -211,7 +211,7 @@ static int lua_wrapper_send_msg(lua_State *lua_state) {
   return 0;
 }
 
-static int lua_wrapper_set_num_variable(lua_State *lua_state){
+static int lua_wrapper_set_num_variable(lua_State *lua_state) {
   String Var;
   const char *s;
   size_t l;
@@ -223,42 +223,42 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state){
   s = lua_tolstring(lua_state, -1, &l);
   Var = s;
   lua_pop(lua_state, 1);
-  
-    if (Var == "WFpulseCount") {
-      WFpulseCount = (byte)a;
-    } else if (Var == "pump_started") {
-      pump_started = (int)a;
-    } else if (Var == "valve_status") {
-      valve_status = (int)a;
-    } else if (Var == "SamSetup_Mode") {
-      SamSetup.Mode = (int)a;
-    } else if (Var == "Samovar_Mode") {
-      Samovar_Mode = (SAMOVAR_MODE)a;
-    } else if (Var == "Samovar_CR_Mode") {
-      Samovar_CR_Mode = (SAMOVAR_MODE)a;
-    } else if (Var == "acceleration_temp") {
-      acceleration_temp = (uint16_t)a;
-    } else if (Var == "wp_count") {
-      wp_count = (byte)a;
-    } else if (Var == "SteamTemp") {
-      SteamSensor.avgTemp = a;
-    } else if (Var == "PipeTemp") {
-      PipeSensor.avgTemp = a;
-    } else if (Var == "WaterTemp") {
-      WaterSensor.avgTemp = a;
-    } else if (Var == "TankTemp") {
-      TankSensor.avgTemp = a;
-    } else if (Var == "ACPTemp") {
-      ACPSensor.avgTemp = a;
-    } else if (Var == "loop_lua_fl") {
-      loop_lua_fl = (int)a;
-    } else if (Var == "show_lua_script") {
-      show_lua_script = (int)a;
-    } else if (Var == "test_num_val") {
-      test_num_val = a;
-    } else if (Var != "") {
-      WriteConsoleLog("UNDEF NUMERIC LUA VAR " + Var + " = " + a);
-    }
+
+  if (Var == "WFpulseCount") {
+    WFpulseCount = (byte)a;
+  } else if (Var == "pump_started") {
+    pump_started = (int)a;
+  } else if (Var == "valve_status") {
+    valve_status = (int)a;
+  } else if (Var == "SamSetup_Mode") {
+    SamSetup.Mode = (int)a;
+  } else if (Var == "Samovar_Mode") {
+    Samovar_Mode = (SAMOVAR_MODE)a;
+  } else if (Var == "Samovar_CR_Mode") {
+    Samovar_CR_Mode = (SAMOVAR_MODE)a;
+  } else if (Var == "acceleration_temp") {
+    acceleration_temp = (uint16_t)a;
+  } else if (Var == "wp_count") {
+    wp_count = (byte)a;
+  } else if (Var == "SteamTemp") {
+    SteamSensor.avgTemp = a;
+  } else if (Var == "PipeTemp") {
+    PipeSensor.avgTemp = a;
+  } else if (Var == "WaterTemp") {
+    WaterSensor.avgTemp = a;
+  } else if (Var == "TankTemp") {
+    TankSensor.avgTemp = a;
+  } else if (Var == "ACPTemp") {
+    ACPSensor.avgTemp = a;
+  } else if (Var == "loop_lua_fl") {
+    loop_lua_fl = (int)a;
+  } else if (Var == "show_lua_script") {
+    show_lua_script = (int)a;
+  } else if (Var == "test_num_val") {
+    test_num_val = a;
+  } else if (Var != "") {
+    WriteConsoleLog("UNDEF NUMERIC LUA VAR " + Var + " = " + a);
+  }
   return 0;
 }
 
@@ -274,60 +274,60 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   Var = s;
   lua_pop(lua_state, 1);
   float a;
-    if (Var == "WFpulseCount") {
-      a = WFpulseCount;
-    } else if (Var == "pump_started") {
-      a = pump_started;
-    } else if (Var == "valve_status") {
-      a = valve_status;
-    } else if (Var == "SamSetup_Mode") {
-      a = SamSetup.Mode;
-    } else if (Var == "Samovar_Mode") {
-      a = Samovar_Mode;
-    } else if (Var == "Samovar_CR_Mode") {
-      a = Samovar_CR_Mode;
-    } else if (Var == "acceleration_temp") {
-      a = acceleration_temp;
-    } else if (Var == "wp_count") {
-      a = wp_count;
-    } else if (Var == "SteamTemp") {
-      a = SteamSensor.avgTemp;
-    } else if (Var == "PipeTemp") {
-      a = PipeSensor.avgTemp;
-    } else if (Var == "WaterTemp") {
-      a = WaterSensor.avgTemp;
-    } else if (Var == "TankTemp") {
-      a = TankSensor.avgTemp;
-    } else if (Var == "ACPTemp") {
-      a = ACPSensor.avgTemp;
-    } else if (Var == "loop_lua_fl") {
-      a = loop_lua_fl;
-    } else if (Var == "show_lua_script") {
-      a = show_lua_script;
-    } else if (Var == "program_volume") {
-      a = program[ProgramNum].Volume;
-    } else if (Var == "program_speed") {
-      a = program[ProgramNum].Speed;
-    } else if (Var == "program_temp") {
-      a = program[ProgramNum].Temp;
-    } else if (Var == "program_power") {
-      a = program[ProgramNum].Power;
-    } else if (Var == "program_time") {
-      a = program[ProgramNum].Time;
-    } else if (Var == "program_capacity_num") {
-      a = program[ProgramNum].capacity_num;
-    } else if (Var == "test_num_val") {
-      a = show_lua_script;
-    } else if (Var != "") {
-      WriteConsoleLog("SET UNDEF NUMERIC LUA VAR " + Var + " = " + a);
-      return 0;
-    }
+  if (Var == "WFpulseCount") {
+    a = WFpulseCount;
+  } else if (Var == "pump_started") {
+    a = pump_started;
+  } else if (Var == "valve_status") {
+    a = valve_status;
+  } else if (Var == "SamSetup_Mode") {
+    a = SamSetup.Mode;
+  } else if (Var == "Samovar_Mode") {
+    a = Samovar_Mode;
+  } else if (Var == "Samovar_CR_Mode") {
+    a = Samovar_CR_Mode;
+  } else if (Var == "acceleration_temp") {
+    a = acceleration_temp;
+  } else if (Var == "wp_count") {
+    a = wp_count;
+  } else if (Var == "SteamTemp") {
+    a = SteamSensor.avgTemp;
+  } else if (Var == "PipeTemp") {
+    a = PipeSensor.avgTemp;
+  } else if (Var == "WaterTemp") {
+    a = WaterSensor.avgTemp;
+  } else if (Var == "TankTemp") {
+    a = TankSensor.avgTemp;
+  } else if (Var == "ACPTemp") {
+    a = ACPSensor.avgTemp;
+  } else if (Var == "loop_lua_fl") {
+    a = loop_lua_fl;
+  } else if (Var == "show_lua_script") {
+    a = show_lua_script;
+  } else if (Var == "program_volume") {
+    a = program[ProgramNum].Volume;
+  } else if (Var == "program_speed") {
+    a = program[ProgramNum].Speed;
+  } else if (Var == "program_temp") {
+    a = program[ProgramNum].Temp;
+  } else if (Var == "program_power") {
+    a = program[ProgramNum].Power;
+  } else if (Var == "program_time") {
+    a = program[ProgramNum].Time;
+  } else if (Var == "program_capacity_num") {
+    a = program[ProgramNum].capacity_num;
+  } else if (Var == "test_num_val") {
+    a = show_lua_script;
+  } else if (Var != "") {
+    WriteConsoleLog("SET UNDEF NUMERIC LUA VAR " + Var + " = " + a);
+    return 0;
+  }
   lua_pushnumber(lua_state, (lua_Number) a);
   return 1;
 }
 
 
-static int lua_wrapper_set_str_variable(lua_State *lua_state){
+static int lua_wrapper_set_str_variable(lua_State *lua_state) {
   String Var, Val;
   lua_getglobal(lua_state, "tostring");
 
@@ -339,7 +339,7 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state){
   s1 = lua_tolstring(lua_state, -1, &l1);
   Var = s1;
   lua_pop(lua_state, 1);
-  
+
   const char *s2;
   size_t l2;
   lua_pushvalue(lua_state, -1);
@@ -349,21 +349,21 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state){
   Val = s2;
   lua_pop(lua_state, 1);
 
-    if (Var == "Msg") {
-      Msg = Val;
-    } else if (Var == "SamovarStatus") {
-      SamovarStatus = Val;
-    } else if (Var == "test_str_val") {
-      test_str_val = Val;
-    } else if (Var == "program_type") {
-      WriteConsoleLog("WARNING! program_type is read only property");
-    } else if (Var != "") {
-      WriteConsoleLog("UNDEF STRING LUA VAR " + Var + " = " + Val);
-    }
+  if (Var == "Msg") {
+    Msg = Val;
+  } else if (Var == "SamovarStatus") {
+    SamovarStatus = Val;
+  } else if (Var == "test_str_val") {
+    test_str_val = Val;
+  } else if (Var == "program_type") {
+    WriteConsoleLog("WARNING! program_type is read only property");
+  } else if (Var != "") {
+    WriteConsoleLog("UNDEF STRING LUA VAR " + Var + " = " + Val);
+  }
   return 0;
 }
 
-static int lua_wrapper_set_object(lua_State *lua_state){
+static int lua_wrapper_set_object(lua_State *lua_state) {
   String Var, Val;
   lua_getglobal(lua_state, "tostring");
 
@@ -375,7 +375,7 @@ static int lua_wrapper_set_object(lua_State *lua_state){
   s1 = lua_tolstring(lua_state, -1, &l1);
   Var = s1;
   lua_pop(lua_state, 1);
-  
+
   const char *s2;
   size_t l2;
   lua_pushvalue(lua_state, -1);
@@ -389,7 +389,7 @@ static int lua_wrapper_set_object(lua_State *lua_state){
   return 0;
 }
 
-static int lua_wrapper_get_object(lua_State *lua_state){
+static int lua_wrapper_get_object(lua_State *lua_state) {
   String Var, Type;
   const char *s;
   int n = lua_gettop(lua_state);  /* number of arguments */
@@ -403,7 +403,7 @@ static int lua_wrapper_get_object(lua_State *lua_state){
   lua_pop(lua_state, 1);
 
   String v = luaObj->get(Var);
-  if (n == 2){
+  if (n == 2) {
     const char *s2;
     size_t l2;
     lua_pushvalue(lua_state, -1);
@@ -451,7 +451,7 @@ static int lua_wrapper_get_timer(lua_State *lua_state) {
   return 1;
 }
 
-static int lua_wrapper_get_str_variable(lua_State *lua_state){
+static int lua_wrapper_get_str_variable(lua_State *lua_state) {
   String Var;
   const char *s;
   size_t l;
@@ -463,24 +463,24 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state){
   Var = s;
   lua_pop(lua_state, 1);
   String c;
-    if (Var == "Msg") {
-      c = Msg;
-    } else if (Var == "SamovarStatus") {
-      c = SamovarStatus;
-    } else if (Var == "test_str_val") {
-      c = test_str_val;
-    } else if (Var == "program_type") {
-      c = program[ProgramNum].WType;
-    } else if (Var != "") {
-      WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var + " = " + c);
-      return 0;
-    }
+  if (Var == "Msg") {
+    c = Msg;
+  } else if (Var == "SamovarStatus") {
+    c = SamovarStatus;
+  } else if (Var == "test_str_val") {
+    c = test_str_val;
+  } else if (Var == "program_type") {
+    c = program[ProgramNum].WType;
+  } else if (Var != "") {
+    WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var + " = " + c);
+    return 0;
+  }
   lua_pushstring(lua_state, c.c_str());
   return 1;
 }
 
 #ifdef USE_HTTP_REQUEST
-static int lua_wrapper_http_request(lua_State *lua_state){
+static int lua_wrapper_http_request(lua_State *lua_state) {
   String Var;
   const char *s;
   size_t l;
@@ -497,10 +497,10 @@ static int lua_wrapper_http_request(lua_State *lua_state){
   HTTPClient http;
   String payload;
   int httpResponseCode;
-  
+
   http.begin(Var); //Specify the URL
   if (n == 1) {
-    httpResponseCode = http.GET(); //Make the request  
+    httpResponseCode = http.GET(); //Make the request
   } else {
     String RequestType;
     String ContentType;
@@ -527,10 +527,10 @@ static int lua_wrapper_http_request(lua_State *lua_state){
     Body = s;
     lua_pop(lua_state, 1);
 
-    http.addHeader("Content-Type", getValue(ContentType,':',1));
+    http.addHeader("Content-Type", getValue(ContentType, ':', 1));
     httpResponseCode = http.POST(Body);
   }
-  if (httpResponseCode>0) {
+  if (httpResponseCode > 0) {
     payload = http.getString();
   }
   else {
@@ -540,12 +540,12 @@ static int lua_wrapper_http_request(lua_State *lua_state){
   http.end();
 
   lua_pushstring(lua_state, payload.c_str());
-  
+
   return 1;
 }
 #endif
 
-void lua_init(){
+void lua_init() {
   lua.Lua_register("pinMode", (const lua_CFunction) &lua_wrapper_pinMode);
   lua.Lua_register("digitalWrite", (const lua_CFunction) &lua_wrapper_digitalWrite);
   lua.Lua_register("digitalRead", (const lua_CFunction) &lua_wrapper_digitalRead);
@@ -556,7 +556,7 @@ void lua_init(){
   lua.Lua_register("exp_digitalRead", (const lua_CFunction) &lua_wrapper_exp_digitalRead);
 #endif
   lua.Lua_register("delay", (const lua_CFunction) &lua_wrapper_delay);
-  lua.Lua_register("millis", (const lua_CFunction) &lua_wrapper_millis);  
+  lua.Lua_register("millis", (const lua_CFunction) &lua_wrapper_millis);
   lua.Lua_register("sendMsg", (const lua_CFunction) &lua_wrapper_send_msg);
 
   lua.Lua_register("setPower", (const lua_CFunction) &lua_wrapper_set_power);
@@ -616,10 +616,10 @@ void lua_init(){
     0);               /* Core where the task should run */
 }
 
-String get_lua_script(bool type){
+String get_lua_script(bool type) {
   String s;
   File f;
-  if (!type){
+  if (!type) {
     f = SPIFFS.open("/script.lua");
   } else {
     f = SPIFFS.open(lua_type_script);
@@ -632,7 +632,7 @@ String get_lua_script(bool type){
   return s;
 }
 
-void load_lua_script(){
+void load_lua_script() {
   script1 = get_lua_script(false);
   script2 = get_lua_script(true);
   script1.trim();
@@ -644,8 +644,8 @@ void load_lua_script(){
 //Запускаем таск для запуска скрипта
 void IRAM_ATTR do_lua_script(void *parameter) {
   String sr;
-  while(1){
-    if(!lua_finished){
+  while (1) {
+    if (!lua_finished) {
       if (script1 != "") {
         if (show_lua_script) {
           WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
@@ -656,8 +656,8 @@ void IRAM_ATTR do_lua_script(void *parameter) {
         sr.trim();
         if (sr != "") WriteConsoleLog(sr);
       }
-      vTaskDelay(10/portTICK_PERIOD_MS);
-    
+      vTaskDelay(10 / portTICK_PERIOD_MS);
+
       if (script2 != "") {
         if (show_lua_script) {
           WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
@@ -674,36 +674,36 @@ void IRAM_ATTR do_lua_script(void *parameter) {
   }
 }
 
-void start_lua_script(){
+void start_lua_script() {
   if (!lua_finished) {
     WriteConsoleLog("lua runing");
     return;
   }
-  
+
   lua_finished = false;
 }
 
-String get_global_variables(){
+String get_global_variables() {
   String Variables;
-//  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
-//  Variables += "start_pressure = " + String(start_pressure) + "\r\n";
+  //  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
+  //  Variables += "start_pressure = " + String(start_pressure) + "\r\n";
   Variables += "bme_pressure = " + String(bme_pressure) + "\r\n";
-//  Variables += "bme_prev_pressure = " + String(bme_prev_pressure) + "\r\n";
-//  Variables += "bme_humidity = " + String(bme_humidity) + "\r\n";
-//  Variables += "SamovarStatus = \"" + SamovarStatus + "\"\r\n";
+  //  Variables += "bme_prev_pressure = " + String(bme_prev_pressure) + "\r\n";
+  //  Variables += "bme_humidity = " + String(bme_humidity) + "\r\n";
+  //  Variables += "SamovarStatus = \"" + SamovarStatus + "\"\r\n";
   Variables += "capacity_num = " + String(capacity_num) + "\r\n";
   Variables += "SamovarStatusInt = " + String(SamovarStatusInt) + "\r\n";
-//  Variables += "prev_ProgramNum = " + String(prev_ProgramNum) + "\r\n";
+  //  Variables += "prev_ProgramNum = " + String(prev_ProgramNum) + "\r\n";
   Variables += "ProgramNum = " + String(ProgramNum) + "\r\n";
   Variables += "ProgramLen = " + String(ProgramLen) + "\r\n";
-//  Variables += "startval = " + String(startval) + "\r\n";
+  //  Variables += "startval = " + String(startval) + "\r\n";
   Variables += "currentvolume = " + String(currentvolume) + "\r\n";
-//  Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
-//  Variables += "prev_time_ms = " + String(prev_time_ms) + "\r\n";
+  //  Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
+  //  Variables += "prev_time_ms = " + String(prev_time_ms) + "\r\n";
   Variables += "ActualVolumePerHour = " + String(ActualVolumePerHour) + "\r\n";
-//  Variables += "CurrrentStepperSpeed = " + String(CurrrentStepperSpeed) + "\r\n";
-//  Variables += "CurrrentStepps = " + String(CurrrentStepps) + "\r\n";
-//  Variables += "TargetStepps = " + String(TargetStepps) + "\r\n";
+  //  Variables += "CurrrentStepperSpeed = " + String(CurrrentStepperSpeed) + "\r\n";
+  //  Variables += "CurrrentStepps = " + String(CurrrentStepps) + "\r\n";
+  //  Variables += "TargetStepps = " + String(TargetStepps) + "\r\n";
   Variables += "WthdrwlProgress = " + String(WthdrwlProgress) + "\r\n";
   Variables += "PowerOn = " + String(PowerOn) + "\r\n";
   Variables += "PauseOn = " + String(PauseOn) + "\r\n";
@@ -711,16 +711,16 @@ String get_global_variables(){
   Variables += "program_Pause = " + String(program_Pause) + "\r\n";
   Variables += "program_Wait = " + String(program_Wait) + "\r\n";
   Variables += "program_Wait_Type = \"" + program_Wait_Type + "\"\r\n";
-//  Variables += "begintime = " + String(begintime) + "\r\n";
-//  Variables += "t_min = " + String(t_min) + "\r\n";
-//  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
-//  Variables += "alarm_h_min = " + String(alarm_h_min) + "\r\n";
-//  Variables += "WFpulseCount = " + String(WFpulseCount) + "\r\n";
-//  Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
-//  Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
-//  Variables += "WFflowRate = " + String(WFflowRate) + "\r\n";
-//  Variables += "WFAlarmCount = " + String(WFAlarmCount) + "\r\n";
-//  Variables += "acceleration_temp = " + String(acceleration_temp) + "\r\n";
+  //  Variables += "begintime = " + String(begintime) + "\r\n";
+  //  Variables += "t_min = " + String(t_min) + "\r\n";
+  //  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
+  //  Variables += "alarm_h_min = " + String(alarm_h_min) + "\r\n";
+  //  Variables += "WFpulseCount = " + String(WFpulseCount) + "\r\n";
+  //  Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
+  //  Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
+  //  Variables += "WFflowRate = " + String(WFflowRate) + "\r\n";
+  //  Variables += "WFAlarmCount = " + String(WFAlarmCount) + "\r\n";
+  //  Variables += "acceleration_temp = " + String(acceleration_temp) + "\r\n";
   Variables += "WthdrwTimeAll = " + String(WthdrwTimeAll) + "\r\n";
   Variables += "WthdrwTime = " + String(WthdrwTime) + "\r\n";
   Variables += "WthdrwTimeAllS = \"" + WthdrwTimeAllS + "\"\r\n";
@@ -728,10 +728,10 @@ String get_global_variables(){
   Variables += "pump_started = " + String(pump_started) + "\r\n";
   Variables += "setautospeed = " + String(setautospeed) + "\r\n";
   Variables += "heater_state = " + String(heater_state) + "\r\n";
-//  Variables += "ofl = \"" + ofl + "\"\r\n";
+  //  Variables += "ofl = \"" + ofl + "\"\r\n";
   Variables += "mixer_status = " + String(mixer_status) + "\r\n";
-//  Variables += "bk_pwm = " + String(bk_pwm) + "\r\n";
-//  Variables += "chipId = " + String(chipId) + "\r\n";
+  //  Variables += "bk_pwm = " + String(bk_pwm) + "\r\n";
+  //  Variables += "chipId = " + String(chipId) + "\r\n";
   Variables += "alarm_event = " + String(alarm_event) + "\r\n";
   Variables += "acceleration_heater = " + String(acceleration_heater) + "\r\n";
   Variables += "valve_status = " + String(valve_status) + "\r\n";
@@ -743,8 +743,8 @@ String get_global_variables(){
   Variables += "program_time = " + String(program[ProgramNum].Time) + "\r\n";
   Variables += "program_capacity_num = " + String(program[ProgramNum].capacity_num) + "\r\n";
 
-//  Variables += "loop_lua_fl = " + String(loop_lua_fl) + "\r\n";
-//  Variables += "show_lua_script = " + String(show_lua_script) + "\r\n";
+  //  Variables += "loop_lua_fl = " + String(loop_lua_fl) + "\r\n";
+  //  Variables += "show_lua_script = " + String(show_lua_script) + "\r\n";
   Variables += "SamSetup_Mode = " + String(SamSetup.Mode) + "\r\n";
   Variables += "test_num_val = " + String(test_num_val) + "\r\n";
   Variables += "test_str_val = \"" + test_str_val + "\"\r\n";
@@ -761,21 +761,21 @@ String get_global_variables(){
 #ifdef USE_WATER_PUMP
   Variables += "wp_count = " + String(wp_count) + "\r\n";
 #endif
-  
+
   return Variables;
 }
 
-String get_lua_mode_name(){
+String get_lua_mode_name() {
   String fl;
-    if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
-      fl = "/beer.lua";
-    } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
-      fl = "/dist.lua";
-    } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
-      fl = "/bk.lua";
-    } else {
-      fl = "/rectificat.lua";
-    }
+  if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
+    fl = "/beer.lua";
+  } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
+    fl = "/dist.lua";
+  } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
+    fl = "/bk.lua";
+  } else {
+    fl = "/rectificat.lua";
+  }
   return fl;
 }
 #endif

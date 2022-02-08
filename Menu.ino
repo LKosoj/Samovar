@@ -79,7 +79,7 @@ LiquidScreen setup_back_screen(lql_back_line, lql_time);
 #define LCD_UPDATE_TIMEOUT 200
 
 void reset_focus() {
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     //return;
     do {
       main_menu1.switch_focus();
@@ -88,50 +88,50 @@ void reset_focus() {
   }
 }
 
-void change_screen(LiquidScreen* screen){
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+void change_screen(LiquidScreen* screen) {
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     main_menu1.change_screen(screen);
     xSemaphoreGive(xI2CSemaphore);
   }
 }
 
-void menu_update(){
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+void menu_update() {
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     main_menu1.update();
     xSemaphoreGive(xI2CSemaphore);
   }
 }
 
-void menu_softUpdate(){
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+void menu_softUpdate() {
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     main_menu1.softUpdate();
     xSemaphoreGive(xI2CSemaphore);
   }
 }
 
-void menu_previous_screen(){
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+void menu_previous_screen() {
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     main_menu1.previous_screen();
     xSemaphoreGive(xI2CSemaphore);
   }
 }
 
-void menu_next_screen(){
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+void menu_next_screen() {
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     main_menu1.next_screen();
     xSemaphoreGive(xI2CSemaphore);
   }
 }
 
-void menu_switch_focus(){
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+void menu_switch_focus() {
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     main_menu1.switch_focus();
     xSemaphoreGive(xI2CSemaphore);
   }
 }
 
-void menu_reset_lcd(){
-  if( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE){
+void menu_reset_lcd() {
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     lcd.begin(20, 4);
     lcd.init();
     xSemaphoreGive(xI2CSemaphore);
@@ -417,7 +417,7 @@ void menu_samovar_start() {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + "" + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
-#endif  
+#endif
     startval = 1;
     Str = "Prg No 1";
     run_program(0);
@@ -605,11 +605,11 @@ void encoder_getvalue() {
     }
 
 
-//    tcnt++;
-//    if (tcnt == 3) {
-//      tcnt = 0;
-//      BME_getvalue(false);
-//    }
+    //    tcnt++;
+    //    if (tcnt == 3) {
+    //      tcnt = 0;
+    //      BME_getvalue(false);
+    //    }
 
     if (updscreen) menu_softUpdate();
 

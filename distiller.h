@@ -16,7 +16,7 @@ void distiller_proc() {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + "" + ",Distiller," + SessionDescription, "st");
-#endif  
+#endif
     set_power(true);
 #ifdef SAMOVAR_USE_POWER
     delay(1000);
@@ -29,7 +29,7 @@ void distiller_proc() {
     SteamSensor.Start_Pressure = bme_pressure;
     SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
 #ifdef SAMOVAR_USE_POWER
-      digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   }
 
@@ -40,7 +40,7 @@ void distiller_proc() {
 
 void IRAM_ATTR distiller_finish() {
 #ifdef SAMOVAR_USE_POWER
-      digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
   SendMsg(F("Дистилляция завершена"), NOTIFY_MSG);
   set_power(false);
@@ -107,17 +107,17 @@ void IRAM_ATTR check_alarm_distiller() {
 #ifdef SAMOVAR_USE_POWER
 
 #ifndef __SAMOVAR_DEBUG
-  //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
-    power_err_cnt++;
-    if (power_err_cnt > 8) set_current_power(target_power_volt);
-    if (power_err_cnt > 10) {
-      delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
-      set_buzzer(true);
-      set_power(false);
-      SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
-    }
-  } else power_err_cnt = 0;
+    //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
+    if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 0.1) {
+      power_err_cnt++;
+      if (power_err_cnt > 8) set_current_power(target_power_volt);
+      if (power_err_cnt > 10) {
+        delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+        set_buzzer(true);
+        set_power(false);
+        SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
+      }
+    } else power_err_cnt = 0;
 #endif
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
@@ -129,7 +129,7 @@ void IRAM_ATTR check_alarm_distiller() {
     alarm_t_min = millis() + 30000;
   }
 
- #ifdef USE_WATER_VALVE
+#ifdef USE_WATER_VALVE
   if (WaterSensor.avgTemp >= TARGET_WATER_TEMP + 1) {
     digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
   } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1) {

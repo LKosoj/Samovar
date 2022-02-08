@@ -285,7 +285,7 @@ String IRAM_ATTR get_sys_info() {
   uint32_t ub = SPIFFS.usedBytes();
   uint32_t tb = SPIFFS.totalBytes();
   String result_st = "totalBytes = " + (String)tb + "; usedBytes = ";
-  vTaskDelay(5/portTICK_PERIOD_MS);
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   result_st += (String)ub + "; Free Heap = " + (String)ESP.getFreeHeap();
   if (tb - ub < 400) {
     //Кончилось место, удалим старый файл. Надо было сохранять раньше
@@ -296,9 +296,9 @@ String IRAM_ATTR get_sys_info() {
   if (tb - ub < 200) {
     SendMsg("Memory is full!", ALARM_MSG);
   }
-  vTaskDelay(5/portTICK_PERIOD_MS);
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   result_st += "; BME t = " + (String)bme_temp + "; RSSI = " +  (String)WiFi.RSSI();
-  vTaskDelay(5/portTICK_PERIOD_MS);
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   return result_st;
 }
 

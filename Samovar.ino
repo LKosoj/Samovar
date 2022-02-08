@@ -171,7 +171,7 @@ void recvMsg(uint8_t *data, size_t len) {
     WebSerial.println("_______________________________________________");
   } else
     WebSerial.print("echo ");
-    WebSerial.println(d);
+  WebSerial.println(d);
 }
 #endif
 
@@ -180,7 +180,7 @@ void stopService(void) {
 }
 
 void startService(void) {
-//  timerAlarmDisable(timer);
+  //  timerAlarmDisable(timer);
   timerAlarmWrite(timer, stepper.stepTime, true);
   timerAlarmEnable(timer);
 }
@@ -275,36 +275,31 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
       WiFi.disconnect();
       WiFi.reconnect();
     }
+
 #ifdef SAMOVAR_USE_BLYNK
     if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
-      vTaskDelay(50/portTICK_PERIOD_MS);
+      vTaskDelay(50 / portTICK_PERIOD_MS);
     } else {
-        if (!msg_q.isEmpty()) {
-          if( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE){
-            char c[150];
-            msg_q.pop(&c);
-            qMsg = c;
-            Blynk.notify(qMsg);
-            xSemaphoreGive(xMsgSemaphore);
-          }
+      if (!msg_q.isEmpty()) {
+        if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
+          char c[150];
+          msg_q.pop(&c);
+          qMsg = c;
+          Blynk.notify(qMsg);
+          xSemaphoreGive(xMsgSemaphore);
         }
+      }
     }
 #endif
+
 #ifdef USE_MQTT
     if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
       connectToMqtt();
     }
-#endif  
+#endif
 
-//    if (server_heart_beat <= (millis() - 10000)) {
-//#ifdef __SAMOVAR_DEBUG
-//      Serial.println("Reset server");
-//#endif
-//      server.end();
-//      server.begin();
-//    }
-    vTaskDelay(6000/portTICK_PERIOD_MS);
+    vTaskDelay(6000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -312,7 +307,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 void IRAM_ATTR triggerGetBMP(void *parameter) {
   while (true) {
     BME_getvalue(false);
-    vTaskDelay(5600/portTICK_PERIOD_MS);      
+    vTaskDelay(5600 / portTICK_PERIOD_MS);
   }
 }
 
@@ -330,10 +325,10 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
     if (OldMinST != CurMinST) {
 
 #ifdef USE_LUA
-    //если установлена переменная запуска в цикле lua_script, запускаем
-    if (loop_lua_fl) {
-      start_lua_script();
-    }
+      //если установлена переменная запуска в цикле lua_script, запускаем
+      if (loop_lua_fl) {
+        start_lua_script();
+      }
 #endif
 
 
@@ -342,7 +337,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 #endif
 
       DS_getvalue();
-      vTaskDelay(10/portTICK_PERIOD_MS);
+      vTaskDelay(10 / portTICK_PERIOD_MS);
 
       Crt = NTP.getTimeDateString(false);
       StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
@@ -364,7 +359,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
             s += format_float(WFflowRate, 2);
 #ifdef USE_MQTT
             MqttSendMsg(s, "log");
-#endif  
+#endif
           }
         }
       }
@@ -381,7 +376,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         WFpulseCount = 100;
       }
 
-      vTaskDelay(10/portTICK_PERIOD_MS);
+      vTaskDelay(10 / portTICK_PERIOD_MS);
 
       //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
@@ -426,7 +421,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         WthdrwTimeAllS = h + ":" + m;
 
       } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-        
+
       }
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
       else if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE && (TargetStepps > 0 || program[ProgramNum].WType == "P")) {
@@ -484,7 +479,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       }
 
 
-      vTaskDelay(10/portTICK_PERIOD_MS);
+      vTaskDelay(10 / portTICK_PERIOD_MS);
 
 #ifdef USE_WATERSENSOR
 
@@ -501,7 +496,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 
       WFpulseCount = 0;
       oldTime = millis();
-      vTaskDelay(10/portTICK_PERIOD_MS);
+      vTaskDelay(10 / portTICK_PERIOD_MS);
 #endif
 
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
@@ -528,7 +523,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 
       OldMinST = CurMinST;
     }
-    vTaskDelay(10/portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
@@ -550,7 +545,7 @@ void setup() {
 
   //vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
   //vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
-  
+
   //delay(2000);
   //dac_output_disable(DAC_CHANNEL_1);
   //dac_output_disable(DAC_CHANNEL_2);
@@ -569,7 +564,7 @@ void setup() {
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
 
-  Wire.begin(LCD_SDA,LCD_SCL);
+  Wire.begin(LCD_SDA, LCD_SCL);
   //Wire.begin();
 
   stepper.disable();
@@ -610,7 +605,7 @@ void setup() {
   //Если при старте нажата кнопка энкодера или кнопка - сохраненные параметры сбрасываются на параметры по умолчанию
 #ifdef BTN_PIN
   btn.tick();      // отработка нажатия
-  if (btn.isPress()){
+  if (btn.isPress()) {
     SamSetup.flag = 255;
   }
 #endif
@@ -672,16 +667,16 @@ void setup() {
 
   //Serial.print("Reset reason: ");
   //Serial.println(vr);
-  for(int i=0; i<17; i=i+8) {
+  for (int i = 0; i < 17; i = i + 8) {
     chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
   }
   //uint8_t *MAC = ESP.getEfuseMac();
-  //Serial.printf("%02x%02x%02x%02x%02x%02x\n", MAC[5], MAC[4], MAC[3], MAC[2], MAC[1], MAC[0]); 
-  
+  //Serial.printf("%02x%02x%02x%02x%02x%02x\n", MAC[5], MAC[4], MAC[3], MAC[2], MAC[1], MAC[0]);
+
   Serial.printf("ESP32 Chip model = %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
   //Serial.printf("This chip has %d cores\n", ESP.getChipCores());
   Serial.print("Chip ID: "); Serial.println(chipId);
-  
+
   //Подключаемся к WI-FI
   AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
   AsyncWiFiManager wifiManager(&server, &dns);
@@ -770,9 +765,9 @@ void setup() {
   ArduinoOTA.setHostname(SAMOVAR_HOST);
   ArduinoOTA.begin();
 #endif
- 
+
   alarm_event = false;
-   
+
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора
   xTaskCreatePinnedToCore(
@@ -810,7 +805,7 @@ void setup() {
 #else
   whls.setType(LOW_PULL);
 #endif
-  
+
   whls.setDebounce(50);  //игнорируем дребезг
   whls.setTickMode(MANUAL);
   whls.setTimeout(WHLS_ALARM_TIME * 1000);  //время, через которое сработает тревога по уровню флегмы
@@ -821,7 +816,7 @@ void setup() {
 #ifdef USE_MQTT
   initMqtt();
   delay(500);
-#endif  
+#endif
 
   //WiFi.hostByName(ntpServerName, timeServerIP);
 
@@ -855,17 +850,17 @@ void setup() {
     &GetBMPTask,        /* Task handle. */
     0);                 /* Core where the task should run */
 
-//  //write reset reason
-//  if (!SPIFFS.exists("/resetreason.css")) {
-//    File f = SPIFFS.open("/resetreason.css", FILE_WRITE);
-//    f.close();
-//  }
-//  File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
-//  f1.println(vr);
-//  f1.close();
-//  vr.replace(",",";");
+  //  //write reset reason
+  //  if (!SPIFFS.exists("/resetreason.css")) {
+  //    File f = SPIFFS.open("/resetreason.css", FILE_WRITE);
+  //    f.close();
+  //  }
+  //  File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
+  //  f1.println(vr);
+  //  f1.close();
+  //  vr.replace(",",";");
 
-  NTP.setTimeZoneOffset(-SamSetup.TimeZone * 3600,0);
+  NTP.setTimeZoneOffset(-SamSetup.TimeZone * 3600, 0);
   NTP.begin ();
 
 #ifdef USE_LUA
@@ -964,9 +959,9 @@ void loop() {
           bk_finish();
         else
           set_power(!PowerOn);
-          if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE){
-            SamovarStatusInt = 50;
-          }
+        if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+          SamovarStatusInt = 50;
+        }
         break;
       case SAMOVAR_RESET:
         samovar_reset();
@@ -1023,9 +1018,9 @@ void loop() {
   }
 
   encoder_getvalue();
-  
+
   set_buzzer(false);
-  vTaskDelay(5/portTICK_PERIOD_MS);
+  vTaskDelay(5 / portTICK_PERIOD_MS);
 }
 
 void getjson(void) {
@@ -1075,7 +1070,7 @@ void getjson(void) {
   jsonstr += "\"UseBBuzzer\":"; jsonstr += (String)SamSetup.UseBBuzzer;
   jsonstr += ",";
 
-  vTaskDelay(10/portTICK_PERIOD_MS);
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 
   jsonstr += "\"StepperStepMl\":"; jsonstr += (String)SamSetup.StepperStepMl;
   jsonstr += ",";
@@ -1118,7 +1113,7 @@ void getjson(void) {
   jsonstr += "\"WFtotalMl\":"; jsonstr += (String)WFtotalMilliLitres;
   jsonstr += ",";
 #endif
-  
+
   jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
   jsonstr += "}";
 }
@@ -1189,34 +1184,34 @@ void read_config() {
   //  pump_regulator.Kd = SamSetup.Kd;
 }
 
-void SendMsg(const String m, MESSAGE_TYPE msg_type){
-     String MsgPl;
+void SendMsg(const String m, MESSAGE_TYPE msg_type) {
+  String MsgPl;
 #ifdef USE_MQTT
-     MsgPl = m;
-     MsgPl.replace(",",";");
-     MqttSendMsg(MsgPl + "," + msg_type, "msg");
+  MsgPl = m;
+  MsgPl.replace(",", ";");
+  MqttSendMsg(MsgPl + "," + msg_type, "msg");
 #endif
 #ifdef SAMOVAR_USE_BLYNK
-     switch (msg_type){
-       case 0 : MsgPl = "Тревога! "; break;
-       case 1 : MsgPl = "Предупреждение! "; break;
-       case 2 : MsgPl = ""; break;
-       default : MsgPl = "";
-     }
-        if( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE){
-          MsgPl += "{DEVICE_NAME} - " + m;
-          msg_q.push(MsgPl.c_str());
-          xSemaphoreGive(xMsgSemaphore);
-        }
+  switch (msg_type) {
+    case 0 : MsgPl = "Тревога! "; break;
+    case 1 : MsgPl = "Предупреждение! "; break;
+    case 2 : MsgPl = ""; break;
+    default : MsgPl = "";
+  }
+  if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
+    MsgPl += "{DEVICE_NAME} - " + m;
+    msg_q.push(MsgPl.c_str());
+    xSemaphoreGive(xMsgSemaphore);
+  }
 #endif
 
-  if (Msg!=""){
+  if (Msg != "") {
     Msg += "; ";
     if (msg_level > msg_type) msg_level = msg_type;
   } else msg_level = msg_type;
-  
+
   Msg += m;
-  
+
   if (Msg.length() > 250) {
     Msg = m;
     msg_level = msg_type;

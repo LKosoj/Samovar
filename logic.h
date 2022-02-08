@@ -87,7 +87,7 @@ int IRAM_ATTR get_liquid_volume() {
   return get_liguid_volume_by_step(stepper.getCurrent());
 }
 
-void set_alarm(){
+void set_alarm() {
   // выключаем питание, выключаем воду, взводим флаг аварии
   if (PowerOn) {
     sam_command_sync = SAMOVAR_POWER;
@@ -133,7 +133,7 @@ void IRAM_ATTR withdrawal(void) {
           set_current_power(target_power_volt - 3 * PWR_FACTOR);
         }
 #endif
-        vTaskDelay(50/portTICK_PERIOD_MS);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
       }
       program_Wait = true;
       pause_withdrawal(true);
@@ -167,7 +167,7 @@ void IRAM_ATTR withdrawal(void) {
           set_current_power(target_power_volt - 3 * PWR_FACTOR);
         }
 #endif
-        vTaskDelay(50/portTICK_PERIOD_MS);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
       }
       program_Wait = true;
       pause_withdrawal(true);
@@ -405,7 +405,7 @@ void IRAM_ATTR run_program(byte num) {
   program_Wait = false;
   PauseOn = false;
   pause_withdrawal(false);
-  if (SamSetup.ChangeProgramBuzzer){
+  if (SamSetup.ChangeProgramBuzzer) {
     set_buzzer(true);
   }
   if (num == CAPACITY_NUM * 2) {
@@ -526,14 +526,14 @@ void IRAM_ATTR check_alarm() {
     alarm_h_min = 0;
   }
 #ifdef SAMOVAR_USE_POWER
-  if (SamovarStatusInt == 50 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn){
-    if (!acceleration_heater){
+  if (SamovarStatusInt == 50 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
+    if (!acceleration_heater) {
       //включаем разгонный тэн
       digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
       acceleration_heater = true;
     }
   } else {
-    if (acceleration_heater){
+    if (acceleration_heater) {
       //выключаем разгонный тэн
       digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
       acceleration_heater = false;
@@ -567,7 +567,7 @@ void IRAM_ATTR check_alarm() {
 #ifdef SAMOVAR_USE_POWER
 #ifndef __SAMOVAR_DEBUG
   //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt)/current_power_volt) > 0.1) {
+  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 0.1) {
     power_err_cnt++;
     if (power_err_cnt > 8) set_current_power(target_power_volt);
     if (power_err_cnt > 10) {
@@ -739,19 +739,19 @@ void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   tick_buzz = 0;
 
   while (true) {
-    if (BuzzerTaskFl){
+    if (BuzzerTaskFl) {
       digitalWrite(BZZ_PIN, HIGH);
-      vTaskDelay(beep/portTICK_PERIOD_MS);
+      vTaskDelay(beep / portTICK_PERIOD_MS);
       digitalWrite(BZZ_PIN, LOW);
       tick_buzz++;
       if (tick_buzz > 5) BuzzerTaskFl = false;
     }
-    vTaskDelay(silent/portTICK_PERIOD_MS);
+    vTaskDelay(silent / portTICK_PERIOD_MS);
   }
 }
 
 void IRAM_ATTR set_buzzer(bool fl) {
-  if (fl && SamSetup.UseBuzzer){
+  if (fl && SamSetup.UseBuzzer) {
     if (BuzzerTask == NULL) {
       BuzzerTaskFl = true;
       //Запускаем таск для пищалки
@@ -784,7 +784,7 @@ void IRAM_ATTR set_power(bool On) {
     power_text_ptr = (char *)"OFF";
 
 #ifdef SAMOVAR_USE_POWER
-    vTaskDelay(600/portTICK_PERIOD_MS);
+    vTaskDelay(600 / portTICK_PERIOD_MS);
     set_power_mode(POWER_SPEED_MODE);
 #else
     current_power_mode = POWER_SPEED_MODE;
@@ -793,7 +793,7 @@ void IRAM_ATTR set_power(bool On) {
   } else {
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #ifdef SAMOVAR_USE_POWER
-    vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     set_power_mode(POWER_SLEEP_MODE);
     acceleration_heater = false;
 #else
@@ -816,7 +816,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
       Serial2.flush();
-      vTaskDelay(100/portTICK_PERIOD_MS);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
@@ -834,7 +834,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         }
       }
     }
-    vTaskDelay(400/portTICK_PERIOD_MS);
+    vTaskDelay(400 / portTICK_PERIOD_MS);
   }
 }
 #else
@@ -844,41 +844,41 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
 #ifdef SAMOVAR_USE_SEM_AVR
-        Serial2.flush();
-        Serial2.print("АТ+SS?\r");
-        vTaskDelay(200 / portTICK_RATE_MS);
-        if (Serial2.available()) {
-          current_power_mode = Serial2.readStringUntil('\r');
+      Serial2.flush();
+      Serial2.print("АТ+SS?\r");
+      vTaskDelay(200 / portTICK_RATE_MS);
+      if (Serial2.available()) {
+        current_power_mode = Serial2.readStringUntil('\r');
+      }
+      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
+      Serial2.flush();
+      Serial2.print("АТ+VO?\r");
+      vTaskDelay(200 / portTICK_RATE_MS);
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\r');
+        current_power_volt = resp.toInt();
+      }
+      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
+      Serial2.flush();
+      Serial2.print("АТ+VS?\r");
+      vTaskDelay(200 / portTICK_RATE_MS);
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\r');
+        v = resp.toInt();
+        if ( v != 0) {
+          target_power_volt = v;
         }
-      vTaskDelay(RMVK_READ_DELAY/portTICK_PERIOD_MS);
-        Serial2.flush();
-        Serial2.print("АТ+VO?\r");
-        vTaskDelay(200 / portTICK_RATE_MS);
-        if (Serial2.available()) {
-          resp = Serial2.readStringUntil('\r');
-          current_power_volt = resp.toInt();
-        }
-      vTaskDelay(RMVK_READ_DELAY/portTICK_PERIOD_MS);
-        Serial2.flush();
-        Serial2.print("АТ+VS?\r");
-        vTaskDelay(200 / portTICK_RATE_MS);
-        if (Serial2.available()) {
-          resp = Serial2.readStringUntil('\r');
-          v = resp.toInt();
-          if ( v!= 0) {
-            target_power_volt = v;
-          }
-        }
+      }
 #else
       current_power_volt = RMVK_get_out_voltge();
-      vTaskDelay(RMVK_READ_DELAY/portTICK_PERIOD_MS);
+      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       v = RMVK_get_store_out_voltge();
-      if ( v!= 0) {
+      if ( v != 0) {
         target_power_volt = v;
       }
 #endif
     }
-    vTaskDelay(RMVK_READ_DELAY/portTICK_PERIOD_MS);
+    vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
   }
 }
 #endif
@@ -906,7 +906,7 @@ void IRAM_ATTR set_current_power(float Volt) {
 #ifdef __SAMOVAR_DEBUG
   WriteConsoleLog("Set current power =" + (String)Volt);
 #endif
-  vTaskDelay(100/portTICK_PERIOD_MS);
+  vTaskDelay(100 / portTICK_PERIOD_MS);
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
@@ -915,7 +915,7 @@ void IRAM_ATTR set_current_power(float Volt) {
     //vTaskDelay(100/portTICK_PERIOD_MS);
   }
   target_power_volt = Volt;
-  vTaskDelay(100/portTICK_PERIOD_MS);
+  vTaskDelay(100 / portTICK_PERIOD_MS);
 #ifdef SAMOVAR_USE_RMVK
 #ifndef SAMOVAR_USE_SEM_AVR
   RMVK_set_out_voltge(Volt);
@@ -939,21 +939,21 @@ void IRAM_ATTR set_current_power(float Volt) {
 
 void IRAM_ATTR set_power_mode(String Mode) {
   current_power_mode = Mode;
-  vTaskDelay(20/portTICK_PERIOD_MS);
+  vTaskDelay(20 / portTICK_PERIOD_MS);
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
-  vTaskSuspend(PowerStatusTask);
-  Serial2.print("АТ+ON=0\r");
-  vTaskResume(PowerStatusTask);
+    vTaskSuspend(PowerStatusTask);
+    Serial2.print("АТ+ON=0\r");
+    vTaskResume(PowerStatusTask);
 #else
     RMVK_set_on(0);
 #endif
   } else if (Mode == POWER_SPEED_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
-  vTaskSuspend(PowerStatusTask);
-  Serial2.print("АТ+ON=1\r");
-  vTaskResume(PowerStatusTask);
+    vTaskSuspend(PowerStatusTask);
+    Serial2.print("АТ+ON=1\r");
+    vTaskResume(PowerStatusTask);
 #else
     RMVK_set_out_voltge(MAX_VOLTAGE);
 #endif
