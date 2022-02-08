@@ -816,7 +816,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
       Serial2.flush();
-      vTaskDelay(200/portTICK_PERIOD_MS);
+      vTaskDelay(100/portTICK_PERIOD_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
@@ -826,8 +826,8 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         resp = resp.substring(i, resp.length());
         if (resp.substring(1, 2) == "T") resp = resp.substring(1, 9);
         int cpv = hexToDec(resp.substring(1, 4));
-        //Если напряжение больше 300 - не корректно получено значение от регулятора, оставляем старое значение
-        if (cpv < 3000) {
+        //Если напряжение больше 300 или меньше 1 - не корректно получено значение от регулятора, оставляем старое значение
+        if (cpv > 10 && cpv < 3000) {
           current_power_volt = cpv / 10.0F;
           target_power_volt = hexToDec(resp.substring(4, 7)) / 10.0F;
           current_power_mode = resp.substring(7, 8);
@@ -906,7 +906,7 @@ void IRAM_ATTR set_current_power(float Volt) {
 #ifdef __SAMOVAR_DEBUG
   WriteConsoleLog("Set current power =" + (String)Volt);
 #endif
-  vTaskDelay(20/portTICK_PERIOD_MS);
+  vTaskDelay(100/portTICK_PERIOD_MS);
   if (Volt < 40) {
     set_power_mode(POWER_SLEEP_MODE);
     return;
@@ -915,6 +915,7 @@ void IRAM_ATTR set_current_power(float Volt) {
     //vTaskDelay(100/portTICK_PERIOD_MS);
   }
   target_power_volt = Volt;
+  vTaskDelay(100/portTICK_PERIOD_MS);
 #ifdef SAMOVAR_USE_RMVK
 #ifndef SAMOVAR_USE_SEM_AVR
   RMVK_set_out_voltge(Volt);
