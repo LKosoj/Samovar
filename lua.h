@@ -317,7 +317,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var == "program_capacity_num") {
     a = program[ProgramNum].capacity_num;
   } else if (Var == "test_num_val") {
-    a = show_lua_script;
+    a = test_num_val;
   } else if (Var != "") {
     WriteConsoleLog("SET UNDEF NUMERIC LUA VAR " + Var + " = " + a);
     return 0;
