@@ -57,7 +57,7 @@ void WebServerInit(void) {
   server.serveStatic("/plus.png", SPIFFS, "/plus.png");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
-  server.serveStatic("/data.csv", SPIFFS, "/data.csv");
+  //server.serveStatic("/data.csv", SPIFFS, "/data.csv");
   server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
