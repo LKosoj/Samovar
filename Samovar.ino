@@ -578,7 +578,7 @@ void setup() {
 
   // Configure the Prescaler at 80 the quarter of the ESP32 is cadence at 80Mhz
   // 80000000 / 80 = 1000000 tics / seconde
-  timer = timerBegin(2, 80, true);
+  timer = timerBegin(3, 80, true);
   timerAttachInterrupt(timer, &StepperTicker, true);
 
   ESP32PWM::allocateTimer(0);
@@ -773,6 +773,20 @@ void setup() {
  
   alarm_event = false;
    
+#ifdef SAMOVAR_USE_POWER
+  //Запускаем таск считывания параметров регулятора
+  xTaskCreatePinnedToCore(
+    triggerPowerStatus, /* Function to implement the task */
+    "PowerStatusTask",  /* Name of the task */
+    2000,               /* Stack size in words */
+    NULL,               /* Task input parameter */
+    1,                  /* Priority of the task */
+    &PowerStatusTask,   /* Task handle. */
+    0);                 /* Core where the task should run */
+  //На всякий случай пошлем команду выключения питания на UART
+  set_power_mode(POWER_SLEEP_MODE);
+#endif
+
   sensor_init();
 
   samovar_reset();
@@ -840,20 +854,6 @@ void setup() {
     1,                  /* Priority of the task */
     &GetBMPTask,        /* Task handle. */
     0);                 /* Core where the task should run */
-
-#ifdef SAMOVAR_USE_POWER
-  //Запускаем таск считывания параметров регулятора
-  xTaskCreatePinnedToCore(
-    triggerPowerStatus, /* Function to implement the task */
-    "PowerStatusTask",  /* Name of the task */
-    2000,               /* Stack size in words */
-    NULL,               /* Task input parameter */
-    1,                  /* Priority of the task */
-    &PowerStatusTask,   /* Task handle. */
-    0);                 /* Core where the task should run */
-  //На всякий случай пошлем команду выключения питания на UART
-  set_power_mode(POWER_SLEEP_MODE);
-#endif
 
 //  //write reset reason
 //  if (!SPIFFS.exists("/resetreason.css")) {
