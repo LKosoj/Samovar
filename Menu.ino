@@ -563,6 +563,7 @@ void encoder_getvalue() {
     } else {
       updscreen = false;
       main_menu1.call_function(1);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
     }
   } else if (encoder.isLeft()) {
     multiplier = 1;
@@ -578,6 +579,7 @@ void encoder_getvalue() {
     } else {
       updscreen = false;
       main_menu1.call_function(2);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
     }
   } else if (encoder.isRightH()) {
     multiplier = 10;
