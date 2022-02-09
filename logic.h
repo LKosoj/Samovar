@@ -643,7 +643,7 @@ void IRAM_ATTR check_alarm() {
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt, ALARM_MSG);
+      SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5 * PWR_FACTOR);
     }
@@ -669,7 +669,7 @@ void IRAM_ATTR check_alarm() {
 #endif
     }
 #ifdef SAMOVAR_USE_POWER
-    SendMsg((String)PWR_MSG + " снижаем напряжение с " + (String)target_power_volt, ALARM_MSG);
+    SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
     set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
     //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
