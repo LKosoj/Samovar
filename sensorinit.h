@@ -59,6 +59,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
   }
 
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (30 / portTICK_RATE_MS)) == pdTRUE) {
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 #ifdef USE_BME680
     // Tell BME680 to begin measurement.
     if (bme.beginReading() == 0) {
@@ -96,6 +97,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
     bme_temp = bme.readTemperature();
     bme_pressure = bme.readPressure() / 100 * 0.75;
 #endif
+    vTaskDelay(5 / portTICK_PERIOD_MS);
     xSemaphoreGive(xI2CSemaphore);
   }
 }
@@ -191,8 +193,23 @@ void sensor_init(void) {
     // Set up oversampling and filter initialization
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
-    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setPressureOversampling(BME680_OS_2X);
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+#endif
+
+#ifdef USE_BMP280
+    bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                    Adafruit_BME280::SAMPLING_X1, // temperature
+                    Adafruit_BME280::SAMPLING_X1, // pressure
+                    Adafruit_BME280::SAMPLING_X1, // humidity
+                    Adafruit_BME280::FILTER_OFF   );
+#endif
+#ifdef USE_BMP280_ALT
+    bme.setSampling(Adafruit_BME280::MODE_FORCED,
+                    Adafruit_BME280::SAMPLING_X1, // temperature
+                    Adafruit_BME280::SAMPLING_X1, // pressure
+                    Adafruit_BME280::SAMPLING_X1, // humidity
+                    Adafruit_BME280::FILTER_OFF   );
 #endif
   }
 #else
