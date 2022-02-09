@@ -1105,6 +1105,8 @@ void getjson(void) {
   jsonstr += ",";
   jsonstr += "\"current_power_p\":"; jsonstr += (String)current_power_p;
   jsonstr += ",";
+  jsonstr += "\"pwr_unit\":"; jsonstr += PWR_TYPE;
+  jsonstr += ",";
 #endif
 
 #ifdef USE_WATERSENSOR
