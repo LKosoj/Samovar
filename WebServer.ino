@@ -191,6 +191,8 @@ String indexKeyProcessor(const String &var) {
     return (String)(PWM_LOW_VALUE * 10);
   else if (var == "PWM_V")
     return (String)bk_pwm;
+  else if (var == "pwr_unit")
+    return PWR_TYPE;
   else if (var == "showvideo") {
     if ((String)SamSetup.videourl != "") return "inline";
     else
