@@ -8,6 +8,8 @@
 
 <script>
 
+var pwr_unit = "%pwr_unit%";
+
 var _lnIdx = 0;
 
 var headers = document.querySelectorAll("[data-name='spoiler-title']");
@@ -587,7 +589,7 @@ headers.forEach(function (item) {
 
  <div class="list-group">
    <div class="list-group-item list-header" data-name="spoiler-title">
-     <span class="spoiler-sign">[+]</span>Описание параметров работы в свободном формате для сохранения в облаке:
+     <span class="spoiler-sign">[+]</span>Описание программы отбора в текстовом формате для сохранения в облаке:
    </div>
    <div class="list-group-item list-content spoiler-body">
     <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
@@ -596,7 +598,7 @@ headers.forEach(function (item) {
 
  <div class="list-group">
    <div class="list-group-item list-header" data-name="spoiler-title">
-     <span class="spoiler-sign">[+]</span>Описание программы отбора:
+     <span class="spoiler-sign">[+]</span>Программа отбора:
    </div>
    <div class="list-group-item list-content spoiler-body">
     <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
