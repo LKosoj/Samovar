@@ -1089,7 +1089,6 @@ void getjson(void) {
     Msg = "";
     msg_level = NONE_MSG;
   }
-
   if (LogMsg != "") {
     jsonstr += "\"LogMsg\":\""; jsonstr += LogMsg; jsonstr += "\"";
     jsonstr += ",";
@@ -1104,8 +1103,6 @@ void getjson(void) {
   jsonstr += "\"current_power_mode\":\""; jsonstr += current_power_mode; jsonstr += "\"";
   jsonstr += ",";
   jsonstr += "\"current_power_p\":"; jsonstr += (String)current_power_p;
-  jsonstr += ",";
-  jsonstr += "\"pwr_unit\":"; jsonstr += PWR_TYPE;
   jsonstr += ",";
 #endif
 
@@ -1221,8 +1218,9 @@ void SendMsg(const String m, MESSAGE_TYPE msg_type) {
 }
 
 void WriteConsoleLog(const String StringLogMsg) {
-  LogMsg = LogMsg + "\n" + StringLogMsg;
-  Serial.println(StringLogMsg);
+  if (LogMsg != "") {
+    LogMsg = LogMsg + "; " + StringLogMsg;
+  } else LogMsg = StringLogMsg;
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
 #endif
