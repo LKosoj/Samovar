@@ -258,8 +258,13 @@ uint8_t temprature_sens_read();
 #define PWR_MSG "Мощность"
 #define PWR_TYPE "P"
 #else
+#ifdef SAMOVAR_USE_POWER
 #define PWR_MSG "Напряжение"
 #define PWR_TYPE "V"
+#else 
+#define PWR_MSG ""
+#define PWR_TYPE ""
+#endif
 #endif
 
 #include "user_config_override.h"
