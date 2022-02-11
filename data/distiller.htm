@@ -111,14 +111,6 @@ if (myObj.LogMsg){
   }
 }
 
-if (myObj.current_power_volt === null){
-  document.getElementById('regulator').style = 'visibility: hidden;position: fixed;';
-  document.getElementById('VoltH2').style = 'visibility: hidden;position: fixed;';
-} else {
-  document.getElementById('regulator').style = '';
-  document.getElementById('VoltH2').style = '';
-}
-
 if (myObj.WFflowRate === null){
   document.getElementById('flowsensor').style = 'visibility: hidden;position: fixed;';
 } else {
@@ -179,19 +171,23 @@ function setPowerUnit () {
   let powerTarget;
   let powerUnit;
   if (pwr_unit == 'P') {
-  setPowerLabel = 'Мощность регулятора: ';
-  setPowerButton = 'Установить мощность';
-  powerCurrent = 'Текущая мощн.: ';
-  powerTarget = 'Целевая мощн.: ';
-  powerUnit = ' Вт';
-  document.getElementById('current_power_line').style = 'visibility: hidden';
+    setPowerLabel = 'Мощность регулятора: ';
+    setPowerButton = 'Установить мощность';
+    powerCurrent = 'Текущая мощн.: ';
+    powerTarget = 'Целевая мощн.: ';
+    powerUnit = ' Вт';
+    document.getElementById('current_power_line').style = 'visibility: hidden';
+    document.getElementById('PWR').style = '';
+  } else if (pwr_unit == 'V') {
+    setPowerLabel = 'Напряжение регулятора: ';
+    setPowerButton = 'Установить напряжение';
+    powerCurrent = 'Текущее напр.: ';
+    powerTarget = 'Целевое напр.: ';
+    powerUnit = ' V';
+    document.getElementById('current_power_line').style = 'visibility: visible';
+    document.getElementById('PWR').style = '';
   } else {
-  setPowerLabel = 'Напряжение регулятора: ';
-  setPowerButton = 'Установить напряжение';
-  powerCurrent = 'Текущее напр.: ';
-  powerTarget = 'Целевое напр.: ';
-  powerUnit = ' V';
-  document.getElementById('current_power_line').style = 'visibility: visible';
+    document.getElementById('PWR').style = 'visibility: hidden;position: fixed;';  
   }
   document.getElementById('set_power_label').innerHTML = setPowerLabel;
   document.getElementById('SetVoltage').value = setPowerButton;
@@ -254,7 +250,7 @@ Samovar v. <span id='version'></span>
     </div>
   </div>
 
-  <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+  <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;" id="PWR">
     <div class="text" id='VoltH2'>
       <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
         <div>
