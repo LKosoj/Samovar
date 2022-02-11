@@ -210,7 +210,7 @@ document.getElementById('start').value = "Следующая программа"
 document.getElementById('start').value = "Начать отбор"
 }
 
-if (myObj.WFflowRate === null){
+if (myObj.WFflowRate === undefined){
 document.getElementById('flowsensor').style = 'visibility: hidden;position: fixed;';
 } else {
 document.getElementById('flowsensor').style = '';
@@ -560,7 +560,8 @@ function setPowerUnit () {
     </div>
   </div>
   
-  <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;" id="PWR">
+  <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;" id = "PWR">
+  <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
     <div class="text" id='VoltH2'>
       <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
         <div>
@@ -589,6 +590,7 @@ function setPowerUnit () {
         Мощность: <span id='current_power_p'></span> Вт
       </span>
     </div>
+  </div>
   </div>
   
   <div class='text' style="margin-top: 1em; margin-bottom: 1em;">
