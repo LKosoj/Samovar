@@ -383,6 +383,7 @@ function getProgram(){
 function set_bgcolor(obj){
   var l = document.getElementById("prgln" + obj);
   var t = document.getElementById("ptype" + obj).value;
+  let color = 'black';
   if (t == "H"){color = "background-color: #80FFFA;";}
   else if (t == "B"){color = "background-color: #32CD3229;";}
   else if (t == "C"){color = "background-color: #FFFF0039;";}
@@ -418,6 +419,7 @@ slider = document.getElementById('PWM');
   slider.addEventListener("change", sliderChange);
  txt = document.getElementById('PWMt');
  txt.value = document.getElementById('PWM').value;
+  setPowerUnit();
 });
 
   getProgram();
@@ -430,9 +432,38 @@ slider = document.getElementById('PWM');
     while (element.firstChild) {
       element.removeChild(element.firstChild);
     }
-    getProgram();
   });
+  getProgram();
 };
+
+function setPowerUnit () {
+  let setPowerLabel;
+  let setPowerButton;
+  let powerCurrent;
+  let powerTarget;
+  let powerUnit;
+  if (pwr_unit == 'P') {
+  setPowerLabel = 'Мощность регулятора: ';
+  setPowerButton = 'Установить мощность';
+  powerCurrent = 'Текущая мощн.: ';
+  powerTarget = 'Целевая мощн.: ';
+  powerUnit = ' Вт';
+  document.getElementById('current_power_line').style = 'visibility: hidden';
+  } else {
+  setPowerLabel = 'Напряжение регулятора: ';
+  setPowerButton = 'Установить напряжение';
+  powerCurrent = 'Текущее напр.: ';
+  powerTarget = 'Целевое напр.: ';
+  powerUnit = ' V';
+  document.getElementById('current_power_line').style = 'visibility: visible';
+  }
+  document.getElementById('set_power_label').innerHTML = setPowerLabel;
+  document.getElementById('SetVoltage').value = setPowerButton;
+  document.getElementById('power_current').innerHTML = powerCurrent;
+  document.getElementById('power_target').innerHTML = powerTarget;
+  document.getElementById('power_unit_current').innerHTML = powerUnit;
+  document.getElementById('power_unit_target').innerHTML = powerUnit;
+}
 
 </script>
 </head>
@@ -537,18 +568,30 @@ slider = document.getElementById('PWM');
     <div class="text" id='VoltH2'>
       <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
         <div>
-          Напряжение регулятора:
+          <span id='set_power_label'></span>
           <input name='Voltage' id='Voltage' type='text' value=''>
         </div>
-        <input id='SetVoltage' type='submit' name='SetVoltage' value='Установить напряжение' onclick='sendvoltage();'
+        <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();'
           class="button">
       </div>
     </div>
-    <div class='dvcs' id='regulator' style="padding-left: 0 !important;padding-right: 0 !important;">
-      <span class='dvcs'>Текущее напр.: <span id='current_power_volt'></span> V</span>
-      <span class='dvcs'>Целевое напр.: <span id='target_power_volt'></span> V</span>
-      <span class='dvcs'>Режим регулятора: <span id='current_power_mode'></span></span>
-      <span class='dvcs'>Мощность: <span id='current_power_p'></span></span>
+    <div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;">
+      <span class='dvcs'>
+        <span id='power_current'></span>
+        <span id='current_power_volt'></span>
+        <span id='power_unit_current'></span>
+      </span>
+      <span class='dvcs'>
+        <span id='power_target'></span>
+        <span id='target_power_volt'></span>
+        <span id='power_unit_target'></span>
+      </span>
+      <span class='dvcs'>
+        Режим регулятора: <span id='current_power_mode'></span>
+      </span>
+      <span class='dvcs' id='current_power_line'>
+        Мощность: <span id='current_power_p'></span> Вт
+      </span>
     </div>
   </div>
   
