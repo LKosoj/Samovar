@@ -160,11 +160,13 @@ static int lua_wrapper_open_valve(lua_State *lua_state) {
   return 0;
 }
 
+#ifdef SAMOVAR_USE_POWER
 static int lua_wrapper_set_current_power(lua_State *lua_state) {
   float a = luaL_checknumber(lua_state, 1);
   set_current_power(a);
   return 0;
 }
+#endif
 
 static int lua_wrapper_set_alarm(lua_State *lua_state) {
   set_alarm();
@@ -565,7 +567,9 @@ void lua_init() {
   lua.Lua_register("setNumVariable", (const lua_CFunction) &lua_wrapper_set_num_variable);
   lua.Lua_register("setStrVariable", (const lua_CFunction) &lua_wrapper_set_str_variable);
   lua.Lua_register("setObject", (const lua_CFunction) &lua_wrapper_set_object);
+#ifdef SAMOVAR_USE_POWER
   lua.Lua_register("setCurrentPower", (const lua_CFunction) &lua_wrapper_set_current_power);
+#endif
   lua.Lua_register("setMixer", (const lua_CFunction) &lua_wrapper_set_mixer);
   lua.Lua_register("setNextProgram", (const lua_CFunction) &lua_wrapper_set_next_program);
   lua.Lua_register("setPauseWithdrawal", (const lua_CFunction) &lua_wrapper_set_pause_withdrawal);
