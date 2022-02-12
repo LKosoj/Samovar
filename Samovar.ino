@@ -55,6 +55,11 @@
 PCF8575 expander(&Wire, USE_EXPANDER, LCD_SDA, LCD_SCL);
 #endif
 
+#ifdef USE_ANALOG_EXPANDER
+#include "PCF8591.h"
+PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
+#endif
+
 #ifdef USE_LUA
 #include "lua.h"
 #endif
