@@ -107,6 +107,26 @@ static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
 }
 #endif
 
+#ifdef USE_ANALOG_EXPANDER
+static int lua_wrapper_exp_analogWrite(lua_State *lua_state) {
+  int a = luaL_checkinteger(lua_state, 1);
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+    analog_expander.analogWrite(a);
+    xSemaphoreGive(xI2CSemaphore);
+  }
+  return 0;
+}
+
+static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
+  int a = luaL_checkinteger(lua_state, 1);
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+    lua_pushnumber(lua_state, (lua_Number) analog_expander.analogRead(a));
+    xSemaphoreGive(xI2CSemaphore);
+  }
+  return 1;
+}
+#endif
+
 static int lua_wrapper_delay(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   delay(a);
@@ -556,6 +576,10 @@ void lua_init() {
   lua.Lua_register("exp_pinMode", (const lua_CFunction) &lua_wrapper_exp_pinMode);
   lua.Lua_register("exp_digitalWrite", (const lua_CFunction) &lua_wrapper_exp_digitalWrite);
   lua.Lua_register("exp_digitalRead", (const lua_CFunction) &lua_wrapper_exp_digitalRead);
+#endif
+#ifdef USE_ANALOG_EXPANDER
+  lua.Lua_register("exp_analogWrite", (const lua_CFunction) &lua_wrapper_exp_analogWrite);
+  lua.Lua_register("exp_analogRead", (const lua_CFunction) &lua_wrapper_exp_analogRead);
 #endif
   lua.Lua_register("delay", (const lua_CFunction) &lua_wrapper_delay);
   lua.Lua_register("millis", (const lua_CFunction) &lua_wrapper_millis);
