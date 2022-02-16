@@ -200,18 +200,20 @@ void sensor_init(void) {
 #endif
 
 #ifdef USE_BMP280
-    bme.setSampling(Adafruit_BME280::MODE_FORCED,
-                    Adafruit_BME280::SAMPLING_X1, // temperature
-                    Adafruit_BME280::SAMPLING_X1, // pressure
-                    Adafruit_BME280::SAMPLING_X1, // humidity
-                    Adafruit_BME280::FILTER_OFF   );
+  bme.setSampling(Adafruit_BMP280::MODE_FORCED,     /* Operating Mode. */
+                  Adafruit_BMP280::SAMPLING_X1,     /* Temp. oversampling */
+                  Adafruit_BMP280::SAMPLING_X1,    /* Pressure oversampling */
+                  Adafruit_BMP280::FILTER_X2,      /* Filtering. */
+                  Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+
 #endif
-#ifdef USE_BMP280_ALT
+#ifdef USE_BME280
     bme.setSampling(Adafruit_BME280::MODE_FORCED,
                     Adafruit_BME280::SAMPLING_X1, // temperature
                     Adafruit_BME280::SAMPLING_X1, // pressure
                     Adafruit_BME280::SAMPLING_X1, // humidity
                     Adafruit_BME280::FILTER_OFF   );
+
 #endif
   }
 #else
