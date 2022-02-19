@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "5.03"
+#define SAMOVAR_VERSION "5.04"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -570,7 +570,7 @@ bool acceleration_heater;                                       // Призна�
 bool send_mqtt;                                                 // Отправлять данные в облако
 volatile bool loop_lua_fl;                                      // Запускать lua скрипт в цикле
 volatile bool show_lua_script;                                  // Показывать выполняемый lua скрипт в логе и в Serial
-float test_num_val;                                             // Тестовое численное значение
+volatile float test_num_val;                                    // Тестовое численное значение
 String test_str_val;                                            // Тестовое строковое значение
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
