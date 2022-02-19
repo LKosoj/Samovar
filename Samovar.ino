@@ -231,7 +231,7 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 #endif
 
 #ifdef ALARM_BTN_PIN
-  alarm_btn.setType(LOW_PULL);
+  alarm_btn.setType(HIGH_PULL);
   alarm_btn.setTickMode(MANUAL);
   alarm_btn.setDebounce(30);
   attachInterrupt(ALARM_BTN_PIN, isrBTN_TICK, CHANGE);
@@ -882,7 +882,6 @@ void setup() {
 }
 
 void loop() {
-
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
 #endif
