@@ -87,6 +87,7 @@ function check_program(str){
 }
 
 function set_program(){
+document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",",".");
 if (!check_program(document.getElementById('WProgram').value)){
   alert( "Program error!" );
   return;
