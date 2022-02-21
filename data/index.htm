@@ -75,6 +75,7 @@ function calc_program(){
 
 function set_program(){
 calc_program();
+document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",",".");
 var server = '/program';
 request = new XMLHttpRequest();
 request.onreadystatechange = function() {
