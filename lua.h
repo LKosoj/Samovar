@@ -43,6 +43,7 @@ void IRAM_ATTR set_mixer(bool On);
 void set_alarm();
 void IRAM_ATTR pause_withdrawal(bool Pause);
 String IRAM_ATTR getValue(String data, char separator, int index);
+String get_lua_script(String fn);
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
@@ -644,16 +645,31 @@ void lua_init() {
     0);               /* Core where the task should run */
 }
 
-String get_lua_script(bool type) {
+String get_lua_script_list() {
+  String s, fn;
+  File root = SPIFFS.open("/");
+  File file = root.openNextFile();
+  while (file) {
+    if (!file.isDirectory()) {
+      fn = file.name();
+      if (fn.substring(0, 4) == "btn_") {
+        s = s + fn + ",";
+      }
+    }
+    file = root.openNextFile();
+  }
+  s = s.substring(0, s.length() - 1);
+  Serial.println(s);
+  return s;
+}
+
+String get_lua_script(String fn) {
   String s;
   File f;
-  if (!type) {
-    f = SPIFFS.open("/script.lua");
-  } else {
-    f = SPIFFS.open(lua_type_script);
-  }
+  if (fn[0] != '/') fn = "/" + fn;
+  f = SPIFFS.open(fn);
   if (f) {
-    //нашли файл со скриптом, выполняем
+    //нашли файл со скриптом, загружаем
     s = f.readString();
     f.close();
   }
@@ -661,8 +677,8 @@ String get_lua_script(bool type) {
 }
 
 void load_lua_script() {
-  script1 = get_lua_script(false);
-  script2 = get_lua_script(true);
+  script1 = get_lua_script("script.lua");
+  script2 = get_lua_script(lua_type_script);
   script1.trim();
   script2.trim();
   if (script1 != "") script1 = glv + script1;
@@ -698,7 +714,7 @@ void IRAM_ATTR do_lua_script(void *parameter) {
       }
       lua_finished = true;
     }
-    delay (50);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
 
@@ -744,9 +760,11 @@ String get_global_variables() {
   //  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
   //  Variables += "alarm_h_min = " + String(alarm_h_min) + "\r\n";
   //  Variables += "WFpulseCount = " + String(WFpulseCount) + "\r\n";
-  //  Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
-  //  Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
-  //  Variables += "WFflowRate = " + String(WFflowRate) + "\r\n";
+#ifdef USE_WATERSENSOR
+  Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
+  Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
+  Variables += "WFflowRate = " + String(WFflowRate) + "\r\n";
+#endif
   //  Variables += "WFAlarmCount = " + String(WFAlarmCount) + "\r\n";
   //  Variables += "acceleration_temp = " + String(acceleration_temp) + "\r\n";
   Variables += "WthdrwTimeAll = " + String(WthdrwTimeAll) + "\r\n";
