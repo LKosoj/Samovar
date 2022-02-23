@@ -12,6 +12,7 @@ void set_pump_speed(float pumpspeed, bool continue_process);
 #ifdef USE_LUA
 void start_lua_script();
 void load_lua_script();
+String get_lua_script_list();
 #endif
 
 void change_samovar_mode() {
@@ -193,6 +194,10 @@ String indexKeyProcessor(const String &var) {
     return (String)bk_pwm;
   else if (var == "pwr_unit")
     return PWR_TYPE;
+#ifdef USE_LUA
+  else if (var == "btn_list")
+    return get_lua_script_list();
+#endif
   else if (var == "showvideo") {
     if ((String)SamSetup.videourl != "") return "inline";
     else
