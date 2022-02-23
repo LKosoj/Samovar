@@ -105,13 +105,13 @@ String formatBytes(size_t bytes) {
 // Инициализация FFS
 void FS_init(void) {
   SPIFFS.begin();
-  {
-    File dir = SPIFFS.open("/");
-    while (dir.openNextFile()) {
-      String fileName = dir.name();
-      //size_t fileSize = dir.size();
-    }
-  }
+//  {
+//    File dir = SPIFFS.open("/");
+//    while (dir.openNextFile()) {
+//      String fileName = dir.name();
+//      //size_t fileSize = dir.size();
+//    }
+//  }
 
   ::ws.onEvent(onWsEvent);
   server.addHandler(&::ws);
