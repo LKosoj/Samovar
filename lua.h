@@ -18,7 +18,7 @@ LuaWrapper lua;
 
 unsigned long lua_timer[9]; //10 таймеров для lua
 String lua_type_script;
-String script1, script2, glv;
+String script1, script2, btn_script;
 
 SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, String &b) -> int {
   if (a == b) return 0;      // a and b are equal
@@ -48,14 +48,14 @@ String get_lua_script(String fn);
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 ) pinMode(a, b);
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || WATER_PUMP_PIN) pinMode(a, b);
   return 0;
 }
 
 static int lua_wrapper_digitalWrite(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN
+  if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN || WATER_PUMP_PIN
 #ifdef ALARM_BTN_PIN
       || a == ALARM_BTN_PIN
 #endif
@@ -73,7 +73,7 @@ static int lua_wrapper_digitalRead(lua_State *lua_state) {
 }
 
 static int lua_wrapper_analogRead(lua_State *lua_state) {
-  lua_pushnumber(lua_state, (lua_Number) analogRead(34));
+  lua_pushnumber(lua_state, (lua_Number) analogRead(LUA_PIN));
   return 1;
 }
 
@@ -631,14 +631,13 @@ void lua_init() {
   lua_type_script = get_lua_mode_name();
   lua_finished = true;
 
-  glv = get_global_variables();
   load_lua_script();
 
   //Запускаем таск для запуска скрипта
   xTaskCreatePinnedToCore(
     do_lua_script,  /* Function to implement the task */
     "do_lua_script", /* Name of the task */
-    7000,             /* Stack size in words */
+    7500,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask,   /* Task handle. */
@@ -659,7 +658,6 @@ String get_lua_script_list() {
     file = root.openNextFile();
   }
   s = s.substring(0, s.length() - 1);
-  Serial.println(s);
   return s;
 }
 
@@ -676,39 +674,45 @@ String get_lua_script(String fn) {
   return s;
 }
 
+void run_lua_script(String fn) {
+  btn_script = get_lua_script(fn);
+  btn_script.trim();
+  if (btn_script.length() > 0) btn_script = get_global_variables() + btn_script;
+}
+
 void load_lua_script() {
   script1 = get_lua_script("script.lua");
   script2 = get_lua_script(lua_type_script);
   script1.trim();
   script2.trim();
-  if (script1 != "") script1 = glv + script1;
-  if (script2 != "") script2 = glv + script2;
 }
 
 //Запускаем таск для запуска скрипта
 void IRAM_ATTR do_lua_script(void *parameter) {
   String sr;
+  String glv;
   while (1) {
     if (!lua_finished) {
-      if (script1 != "") {
+      if (script1.length() > 0 || script2.length() > 0) glv = get_global_variables();
+      if (script1.length() > 0) {
         if (show_lua_script) {
           WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
-          WriteConsoleLog(script1);
+          WriteConsoleLog(glv + script1);
           WriteConsoleLog("-------END LUA SCRIPT-------");
         }
-        sr = lua.Lua_dostring(&script1);
+        sr = lua.Lua_dostring(&(glv + script1));
         sr.trim();
         if (sr != "") WriteConsoleLog(sr);
       }
       vTaskDelay(10 / portTICK_PERIOD_MS);
 
-      if (script2 != "") {
+      if (script2.length() > 0) {
         if (show_lua_script) {
           WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
-          WriteConsoleLog(script2);
+          WriteConsoleLog(glv + script2);
           WriteConsoleLog("-------END LUA SCRIPT-------");
         }
-        sr = lua.Lua_dostring(&script2);
+        sr = lua.Lua_dostring(&(glv + script2));
         sr.trim();
         if (sr != "") WriteConsoleLog(sr);
       }
@@ -728,6 +732,7 @@ void start_lua_script() {
 }
 
 String get_global_variables() {
+  return "";
   String Variables;
   //  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
   //  Variables += "start_pressure = " + String(start_pressure) + "\r\n";
