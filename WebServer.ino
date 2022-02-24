@@ -13,6 +13,7 @@ void set_pump_speed(float pumpspeed, bool continue_process);
 void start_lua_script();
 void load_lua_script();
 String get_lua_script_list();
+void run_lua_script(String fn);
 #endif
 
 void change_samovar_mode() {
@@ -66,6 +67,14 @@ void WebServerInit(void) {
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
   server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
   server.serveStatic("/Green.png", SPIFFS, "/Green.png");
+
+#ifdef USE_LUA
+  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
+  server.serveStatic("/btn_button2.lua", SPIFFS, "/btn_button2.lua");
+  server.serveStatic("/btn_button3.lua", SPIFFS, "/btn_button3.lua");
+  server.serveStatic("/btn_button4.lua", SPIFFS, "/btn_button4.lua");
+  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
+#endif
 
   change_samovar_mode();
 
@@ -627,21 +636,25 @@ void web_command(AsyncWebServerRequest *request) {
       }
     } else if (request->hasArg("watert")) {
       set_water_temp(request->arg("watert").toFloat());
-    } else
+    } else if (request->hasArg("pumpspeed")) {
+      set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
+    } else if (request->hasArg("pause")) {
+      if (PauseOn) {
+        sam_command_sync = SAMOVAR_CONTINUE;
+      } else {
+        sam_command_sync = SAMOVAR_PAUSE;
+      }
+    }
 #ifdef SAMOVAR_USE_POWER
-      if (request->hasArg("voltage")) {
-        set_current_power(request->arg("voltage").toFloat());
-      } else
+    else if (request->hasArg("voltage")) {
+      set_current_power(request->arg("voltage").toFloat());
+    }
 #endif
-        if (request->hasArg("pumpspeed")) {
-          set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
-        } else if (request->hasArg("pause")) {
-          if (PauseOn) {
-            sam_command_sync = SAMOVAR_CONTINUE;
-          } else {
-            sam_command_sync = SAMOVAR_PAUSE;
-          }
-        }
+#ifdef USE_LUA
+    else if (request->hasArg("lua")) {
+      run_lua_script(request->arg("lua"));
+    }
+#endif
   }
   request->send(200, "text/plain", "OK");
 }
