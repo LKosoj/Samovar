@@ -1,28 +1,25 @@
 /****************************************************************************************************************************
   ISR_16_Timers_Array_Complex.ino
-  For ESP32 boards
+  For ESP32, ESP32_S2, ESP32_S3, ESP32_C3 boards with ESP32 core v2.0.2+
   Written by Khoi Hoang
 
   Built by Khoi Hoang https://github.com/khoih-prog/ESP32TimerInterrupt
   Licensed under MIT license
 
-  The ESP32 has two timer groups, each one with two general purpose hardware timers. All the timers are based on 64 bits
-  counters and 16 bit prescalers. The timer counters can be configured to count up or down and support automatic reload
-  and software reload. They can also generate alarms when they reach a specific value, defined by the software. The value
-  of the counter can be read by the software program.
+  The ESP32, ESP32_S2, ESP32_S3, ESP32_C3 have two timer groups, TIMER_GROUP_0 and TIMER_GROUP_1
+  1) each group of ESP32, ESP32_S2, ESP32_S3 has two general purpose hardware timers, TIMER_0 and TIMER_1
+  2) each group of ESP32_C3 has ony one general purpose hardware timer, TIMER_0
+  
+  All the timers are based on 64-bit counters (except 54-bit counter for ESP32_S3 counter) and 16 bit prescalers. 
+  The timer counters can be configured to count up or down and support automatic reload and software reload. 
+  They can also generate alarms when they reach a specific value, defined by the software. 
+  The value of the counter can be read by the software program.
 
   Now even you use all these new 16 ISR-based timers,with their maximum interval practically unlimited (limited only by
-  unsigned long miliseconds), you just consume only one ESP32 timer and avoid conflicting with other cores' tasks.
+  unsigned long miliseconds), you just consume only one ESP32-S2 timer and avoid conflicting with other cores' tasks.
   The accuracy is nearly perfect compared to software timers. The most important feature is they're ISR-based timers
   Therefore, their executions are not blocked by bad-behaving functions / tasks.
   This important feature is absolutely necessary for mission-critical tasks.
-
-  Based on SimpleTimer - A timer library for Arduino.
-  Author: mromani@ottotecnica.com
-  Copyright (c) 2010 OTTOTECNICA Italy
-
-  Based on BlynkTimer.h
-  Author: Volodymyr Shymanskyy
 *****************************************************************************************************************************/
 /*
    Notes:
@@ -44,25 +41,19 @@
    written
 */
 
-#ifndef ESP32
-  #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
-#elif ( ARDUINO_ESP32S2_DEV || ARDUINO_FEATHERS2 || ARDUINO_ESP32S2_THING_PLUS || ARDUINO_MICROS2 || \
-        ARDUINO_METRO_ESP32S2 || ARDUINO_MAGTAG29_ESP32S2 || ARDUINO_FUNHOUSE_ESP32S2 || \
-        ARDUINO_ADAFRUIT_FEATHER_ESP32S2_NOPSRAM )
-  #define USING_ESP32_S2_TIMER_INTERRUPT            true
+#if !defined( ESP32 )
+  #error This code is intended to run on the ESP32 platform! Please check your Tools->Board setting.
 #endif
 
 // These define's must be placed at the beginning before #include "ESP32TimerInterrupt.h"
-// _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
-// Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
-// Don't define TIMER_INTERRUPT_DEBUG > 2. Only for special ISR debugging only. Can hang the system.
-#define TIMER_INTERRUPT_DEBUG         0
-#define _TIMERINTERRUPT_LOGLEVEL_     3
+#define _TIMERINTERRUPT_LOGLEVEL_     4
 
+// To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include "ESP32TimerInterrupt.h"
-#include "ESP32_ISR_Timer.h"
 
 #include <SimpleTimer.h>              // https://github.com/jfturcot/SimpleTimer
+
+// Don't use PIN_D1 in core v2.0.0 and v2.0.1. Check https://github.com/espressif/arduino-esp32/issues/5868
 
 #ifndef LED_BUILTIN
   #define LED_BUILTIN       2
@@ -88,19 +79,11 @@ ESP32_ISR_Timer ISR_Timer;
 
 #define LED_TOGGLE_INTERVAL_MS        2000L
 
-#if USING_ESP32_S2_TIMER_INTERRUPT
-  void IRAM_ATTR TimerHandler(void * timerNo)
-#else
-  void IRAM_ATTR TimerHandler()
-#endif
-{
-#if USING_ESP32_S2_TIMER_INTERRUPT
-  /////////////////////////////////////////////////////////
-  // Always call this for ESP32-S2 before processing ISR
-  TIMER_ISR_START(timerNo);
-  /////////////////////////////////////////////////////////
-#endif
-  
+// With core v2.0.0+, you can't use Serial.print/println in ISR or crash.
+// and you can't use float calculation inside ISR
+// Only OK in core v1.0.6-
+bool IRAM_ATTR TimerHandler(void * timerNo)
+{ 
   static bool toggle  = false;
   static int timeRun  = 0;
 
@@ -116,12 +99,7 @@ ESP32_ISR_Timer ISR_Timer;
     toggle = !toggle;
   }
 
-  #if USING_ESP32_S2_TIMER_INTERRUPT
-  /////////////////////////////////////////////////////////
-  // Always call this for ESP32-S2 after processing ISR
-  TIMER_ISR_END(timerNo);
-  /////////////////////////////////////////////////////////
-#endif
+  return true;
 }
 
 /////////////////////////////////////////////////
@@ -342,16 +320,10 @@ void setup()
   Serial.begin(115200);
   while (!Serial);
 
-  delay(100);
+  delay(200);
 
   Serial.print(F("\nStarting ISR_16_Timers_Array_Complex on ")); Serial.println(ARDUINO_BOARD);
-
-  #if USING_ESP32_S2_TIMER_INTERRUPT
-  Serial.println(ESP32_S2_TIMER_INTERRUPT_VERSION);
-#else
   Serial.println(ESP32_TIMER_INTERRUPT_VERSION);
-#endif
-
   Serial.print(F("CPU Frequency = ")); Serial.print(F_CPU / 1000000); Serial.println(F(" MHz"));
 
   // Interval in microsecs
