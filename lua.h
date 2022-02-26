@@ -69,20 +69,16 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
      ) {
     if (a != WATER_PUMP_PIN) digitalWrite(a, b);
     else {
-      bool use_pump_pwm = false;
 #ifdef USE_WATER_PUMP
-      use_pump_pwm = true;
+      if (b == LOW) pump_pwm.write(0);
+      else pump_pwm.write(1023);
+#else
+      digitalWrite(a, b);
 #endif
-      if (!use_pump_pwm) digitalWrite(a, b);
-      else {
-#ifdef USE_WATER_PUMP
-        if (b == LOW) pump_pwm.write(0);
-        else pump_pwm.write(1023);
-#endif
-      }
     }
   }
-  return 0;
+}
+return 0;
 }
 
 static int lua_wrapper_digitalRead(lua_State *lua_state) {
