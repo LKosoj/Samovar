@@ -395,7 +395,32 @@ headers.forEach(function (item) {
     getProgram();
   });
   setPowerUnit();
+  AddLuaButtons();
 };
+
+function AddLuaButtons() {
+  let btn_list = "%btn_list%";
+  if (btn_list != "") {
+    let btn_arr = btn_list.split(",");
+    for (z=0;z<btn_arr.length;z++){
+      if (btn_arr[z] != ""){
+        var btn = document.createElement("input");
+        btn.type = "submit";
+        btn.name = "luabtn" + z;
+        btn.value = "LUA " + (z + 1);
+        btn.className = "button";
+        btn.setAttribute("onclick", "run_lua(" + (z + 1) + ");");
+        document.getElementById('lua_btn_ln').appendChild(btn);
+        document.getElementById('lua_btn').style = 'visibility: visible';
+      }
+    }
+  }
+}
+
+function run_lua(num){
+  command = "lua=btn_button" + num + ".lua";
+  sendbutton(command);
+}
 
 function setPowerUnit () {
   let setPowerLabel;
@@ -442,6 +467,7 @@ Samovar v. <span id='version'></span>
 <div class="tab">
   <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Затирание">
   <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
 </div>
 <div id="Main" class="tabcontent" style="display: block;">
 
@@ -551,4 +577,16 @@ Samovar v. <span id='version'></span>
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'  class="button">
 </div>
 </div>
+
+<div id="Other" class="tabcontent">
+    <div style="visibility: hidden" id="lua_btn">
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+          <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_btn_ln">
+          </div>
+        </div>
+      </div>
+   </div>
+</div>
+
 </form>
