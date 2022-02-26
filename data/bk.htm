@@ -182,9 +182,6 @@ document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
 document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
 document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
 document.getElementById('start_pressure').innerHTML = myObj.start_pressure.toFixed(3);
-document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
-document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
-document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
 document.getElementById('Status').innerHTML = myObj.Status;
 document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
 document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
@@ -410,7 +407,6 @@ slider = document.getElementById('PWM');
   slider.addEventListener("change", sliderChange);
  txt = document.getElementById('PWMt');
  txt.value = document.getElementById('PWM').value;
-  setPowerUnit();
 });
 
   getProgram();
@@ -425,7 +421,33 @@ slider = document.getElementById('PWM');
     }
   });
   getProgram();
+  setPowerUnit();
+  AddLuaButtons();
 };
+
+function AddLuaButtons() {
+  let btn_list = "%btn_list%";
+  if (btn_list != "") {
+    let btn_arr = btn_list.split(",");
+    for (z=0;z<btn_arr.length;z++){
+      if (btn_arr[z] != ""){
+        var btn = document.createElement("input");
+        btn.type = "submit";
+        btn.name = "luabtn" + z;
+        btn.value = "LUA " + (z + 1);
+        btn.className = "button";
+        btn.setAttribute("onclick", "run_lua(" + (z + 1) + ");");
+        document.getElementById('lua_btn_ln').appendChild(btn);
+        document.getElementById('lua_btn').style = 'visibility: visible';
+      }
+    }
+  }
+}
+
+function run_lua(num){
+  command = "lua=btn_button" + num + ".lua";
+  sendbutton(command);
+}
 
 function setPowerUnit () {
   let setPowerLabel;
@@ -472,6 +494,7 @@ function setPowerUnit () {
 
 <div class="tab">
   <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Режим БК">
+  <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
 </div>
 
 <div id="Main" class="tabcontent" style="display: block;">
@@ -621,61 +644,14 @@ function setPowerUnit () {
     >
       
  <div class="list-group">
-   <div class="list-group-item list-header" data-name="spoiler-title">
-     <span class="spoiler-sign">[+]</span>Описание программы отбора:
-   </div>
    <div class="list-group-item list-content spoiler-body">
     <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
-    <ul>
-        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
-          Тип отбора
-          <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 0.7em;">
-            <div>
-              <span style="font-weight: bold;"> H </span> - головы (Heads)
-            </div>
-            <div>
-              <span style="font-weight: bold;"> B </span> - тело (Body)
-            </div>
-            <div>
-              <span style="font-weight: bold;"> P </span> - пауза (Pause)
-            </div>
-            <div>
-              <span style="font-weight: bold;"> T </span> - хвост (Tail)
-            </div>
-          </div>
-        </li>
-        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-          Объем отбора (мл)
-        </li>
-        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-          Скорость отбора (л/ч)
-        </li>
-        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-          Номер емкости для отбора
-        </li>
-        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-          Температура отбора
-          <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em;">
-            Температура отбора = 0 - автоматический режим. Температура отбора &lt; 10&#176;C - плюс к предыдущей
-            температуре, иначе отбор при заданной температуре * в текущей версии не используется
-          </div>
-        </li>
-        <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-          Напряжение отбора
-        </li>
-      </ul>
-    
     <div 
       style="border: 1px dashed #bbb; padding: 1em; 
       margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
       font-size: 1.2em; font-weight: bold; background-color: #f2f2f2"
       >
       Пример программы отбора:
-      <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
-        <div>H;100;0.1;1;0.00;120</div>
-        <div>P;120;0.00;0;0.00;140</div>
-        <div>B;5000;0.75;2;0.00;90</div>
-      </div>
     </div>
    </div>
  </div>
@@ -683,32 +659,10 @@ function setPowerUnit () {
 
   </div>
   
-  <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 2em; margin-bottom: 1em">
-    <input id='return' type='button' name='program' value='Расчитать программу'
-      onclick='javascript:location.href="/program.htm"' class="button">
-      <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();'
-        class="button">
-  </div>
+
 </div>
 
 <div id="Other" class="tabcontent">
-  <div style="text-align: center;">
-    <div class="text" id='pmpspd'>
-      <span class="tooltip">Скорость отбора:<span class="tooltiptext">Скорость установить можно при выполняющейся
-          программе отбора. Установка скорости влияет только на выполняющуюся строку программы.</span></span>
-      <input name='pumpspeed' id='pumpspeed' type='text' value=''> л/ч
-      <input id='Setpmpspd' type='submit' name='Setpmpspd' value='Установить' onclick='sendpumpspeed();' class="button">
-    </div>
-    <div class="tooltip"><span class="tooltiptext">Текущие значения температур Царги и Пара установятся как
-        основные</span>
-      <input id='setbody' type='submit' name='setbody' value='Задать Т отбора тела'
-        onclick='sendbutton("setbodytemp=1");' class="button"></div>
-  </div>
-  <div class="text">Скорость шагового двигателя: <span id='CurrrentSpeed'></span> шагов/сек</div>
-  <div class='dvcs'>
-    <span class='dvcs'>Текущие шаги: <span id='CurrrentStepps'></span></span>
-    <span class='dvcs'>Целевое шагов: <span id='TargetStepps'></span></span>
-  </div>
   <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
     <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
     <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
@@ -716,6 +670,16 @@ function setPowerUnit () {
   <div>
     <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
   </div>
+
+    <div style="visibility: hidden" id="lua_btn">
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+          <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_btn_ln">
+          </div>
+        </div>
+      </div>
+   </div>
+
 </div>
 
 </form>
