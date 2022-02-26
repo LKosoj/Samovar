@@ -1,6 +1,10 @@
 #ifndef _SAMOVAR_LUA_H_
 #define _SAMOVAR_LUA_H_
 
+#ifdef USE_WATER_PUMP
+#include "pumppwm.h"
+#endif
+
 #ifdef ESP_ARDUINO_VERSION
 #define USE_HTTP_REQUEST
 #endif
@@ -48,7 +52,7 @@ String get_lua_script(String fn);
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || WATER_PUMP_PIN) pinMode(a, b);
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN || WATER_PUMP_PIN) pinMode(a, b);
   return 0;
 }
 
@@ -62,13 +66,28 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
 #ifdef BTN_PIN
       || a == BTN_PIN
 #endif
-     ) pinMode(a, b);  digitalWrite(a, b);
+     ) {
+    if (a != WATER_PUMP_PIN) digitalWrite(a, b);
+    else {
+      bool use_pump_pwm = false;
+#ifdef USE_WATER_PUMP
+      use_pump_pwm = true;
+#endif
+      if (!use_pump_pwm) digitalWrite(a, b);
+      else {
+#ifdef USE_WATER_PUMP
+        if (b == LOW) pump_pwm.write(0);
+        else pump_pwm.write(1023);
+#endif
+      }
+    }
+  }
   return 0;
 }
 
 static int lua_wrapper_digitalRead(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
-  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 ) lua_pushnumber(lua_state, (lua_Number) digitalRead(a));
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || WATER_PUMP_PIN ) lua_pushnumber(lua_state, (lua_Number) digitalRead(a));
   return 1;
 }
 
@@ -130,12 +149,12 @@ static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
 
 static int lua_wrapper_delay(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
-  delay(a);
+  vTaskDelay(a / portTICK_PERIOD_MS);
   return 0;
 }
 
 void wait_command_sync() {
-  while (sam_command_sync != SAMOVAR_NONE) delay(100);
+  while (sam_command_sync != SAMOVAR_NONE) vTaskDelay(100 / portTICK_PERIOD_MS);
 }
 
 static int lua_wrapper_millis(lua_State *lua_state) {
@@ -261,8 +280,10 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
     Samovar_CR_Mode = (SAMOVAR_MODE)a;
   } else if (Var == "acceleration_temp") {
     acceleration_temp = (uint16_t)a;
+#ifdef USE_WATER_PUMP
   } else if (Var == "wp_count") {
     wp_count = (byte)a;
+#endif
   } else if (Var == "SteamTemp") {
     SteamSensor.avgTemp = a;
   } else if (Var == "PipeTemp") {
@@ -311,8 +332,10 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = Samovar_CR_Mode;
   } else if (Var == "acceleration_temp") {
     a = acceleration_temp;
+#ifdef USE_WATER_PUMP
   } else if (Var == "wp_count") {
     a = wp_count;
+#endif
   } else if (Var == "SteamTemp") {
     a = SteamSensor.avgTemp;
   } else if (Var == "PipeTemp") {
