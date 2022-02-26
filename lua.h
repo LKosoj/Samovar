@@ -77,8 +77,7 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
 #endif
     }
   }
-}
-return 0;
+  return 0;
 }
 
 static int lua_wrapper_digitalRead(lua_State *lua_state) {
