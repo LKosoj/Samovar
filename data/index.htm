@@ -421,7 +421,32 @@ headers.forEach(function (item) {
     getProgram();
   });
   setPowerUnit();
+  AddLuaButtons();
 };
+
+function AddLuaButtons() {
+  let btn_list = "%btn_list%";
+  if (btn_list != "") {
+    let btn_arr = btn_list.split(",");
+    for (z=0;z<btn_arr.length;z++){
+      if (btn_arr[z] != ""){
+        var btn = document.createElement("input");
+        btn.type = "submit";
+        btn.name = "luabtn" + z;
+        btn.value = "LUA " + (z + 1);
+        btn.className = "button";
+        btn.setAttribute("onclick", "run_lua(" + (z + 1) + ");");
+        document.getElementById('lua_btn_ln').appendChild(btn);
+        document.getElementById('lua_btn').style = 'visibility: visible';
+      }
+    }
+  }
+}
+
+function run_lua(num){
+  command = "lua=btn_button" + num + ".lua";
+  sendbutton(command);
+}
 
 function setPowerUnit () {
   let setPowerLabel;
@@ -537,9 +562,7 @@ function setPowerUnit () {
   </div>
   
   
-  <div class="container_row" 
-    style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"
-  >
+  <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
     <div class="container_column" style="flex: 1.1; padding-left: 2em;">
       <div class="text">
         Скорость отбора: &nbsp;
@@ -734,6 +757,18 @@ function setPowerUnit () {
   <div>
     <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
   </div>
+  
+    <div style="visibility: hidden" id="lua_btn">
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+          <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_btn_ln">
+          </div>
+        </div>
+      </div>
+   </div>
+
+
+
 </div>
 
 </form>
