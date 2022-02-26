@@ -331,7 +331,19 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 
 #ifdef USE_LUA
       //если установлена переменная запуска в цикле lua_script, запускаем
-      if (loop_lua_fl) {
+      if (loop_lua_fl || btn_script.length() > 0) {
+        if (btn_script.length() > 0) {
+          String sr;
+          if (show_lua_script) {
+            WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
+            WriteConsoleLog(btn_script);
+            WriteConsoleLog("-------END LUA SCRIPT-------");
+          }
+          sr = lua.Lua_dostring(&btn_script);
+          sr.trim();
+          if (sr != "") WriteConsoleLog(sr);
+          btn_script = "";
+        }
         start_lua_script();
       }
 #endif
@@ -1221,10 +1233,15 @@ void SendMsg(const String m, MESSAGE_TYPE msg_type) {
   }
 }
 
-void WriteConsoleLog(const String StringLogMsg) {
+void WriteConsoleLog(String StringLogMsg) {
   if (LogMsg != "") {
     LogMsg = LogMsg + "; " + StringLogMsg;
   } else LogMsg = StringLogMsg;
+
+  if (LogMsg.length() > 250) {
+    LogMsg = StringLogMsg;
+  }
+
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
 #endif
