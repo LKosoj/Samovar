@@ -1,6 +1,6 @@
-#include <Arduino.h>
-
 #ifdef USE_WATER_PUMP
+#pragma once
+#include <Arduino.h>
 //#define PID_OPTIMIZED_I
 #include <GyverPID.h>
 
