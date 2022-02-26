@@ -95,7 +95,9 @@ void set_alarm() {
   set_power(false);
   alarm_event = true;
   open_valve(false);
+#ifdef USE_WATER_PUMP
   set_pump_pwm(0);
+#endif
   SendMsg(F("Аварийное отключение!"), ALARM_MSG);
 }
 
