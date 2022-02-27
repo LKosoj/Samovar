@@ -18,6 +18,8 @@
 
 //#define USE_WEB_SERIAL                      //использовать библиотеку WebSerial для отладки
 
+#define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
+
 #ifndef SAM_NO_BEER_PRG
 #define SAM_BEER_PRG
 #endif
