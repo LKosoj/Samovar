@@ -1,7 +1,6 @@
 const char *http_username = "admin";
 const char *http_password = "admin";
 
-String get_sys_info();
 String get_prf_name();
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
@@ -122,12 +121,6 @@ void FS_init(void) {
   server.addHandler(&events);
 
   server.addHandler(new SPIFFSEditor(SPIFFS, http_username, http_password));
-
-  server.on("/heap", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(200, "text/plain", get_sys_info());
-  });
-
-  //server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.htm");
 
   server.onNotFound([](AsyncWebServerRequest * request) {
     Serial.printf("NOT_FOUND: ");
@@ -278,28 +271,6 @@ String IRAM_ATTR append_data() {
     return str;
   }
   return "";
-}
-
-String IRAM_ATTR get_sys_info() {
-  //Получаем системные параметры - размер свободного места, etc
-  uint32_t ub = SPIFFS.usedBytes();
-  uint32_t tb = SPIFFS.totalBytes();
-  String result_st = "totalBytes = " + (String)tb + "; usedBytes = ";
-  vTaskDelay(5 / portTICK_PERIOD_MS);
-  result_st += (String)ub + "; Free Heap = " + (String)ESP.getFreeHeap();
-  if (tb - ub < 400) {
-    //Кончилось место, удалим старый файл. Надо было сохранять раньше
-    if (SPIFFS.exists("/data_old.csv")) {
-      SPIFFS.remove("/data_old.csv");
-    }
-  }
-  if (tb - ub < 200) {
-    SendMsg("Memory is full!", ALARM_MSG);
-  }
-  vTaskDelay(5 / portTICK_PERIOD_MS);
-  result_st += "; BME t = " + (String)bme_temp + "; RSSI = " +  (String)WiFi.RSSI();
-  vTaskDelay(5 / portTICK_PERIOD_MS);
-  return result_st;
 }
 
 void save_profile() {

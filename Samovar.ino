@@ -4,6 +4,8 @@
 
 #include <Arduino.h>
 
+#undef CONFIG_BT_ENABLED
+
 #ifdef ESP_ARDUINO_VERSION
 #include "esp32/rom/rtc.h"
 #include <driver/touch_sensor.h>
@@ -42,6 +44,8 @@
 #include <GyverButton.h>
 
 #include <GyverPID.h>
+
+//#include <mString.h>
 
 #include <PID_v1.h>
 #include <PID_AutoTune_v0.h>
@@ -274,47 +278,56 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 void IRAM_ATTR triggerGetClock(void *parameter) {
   String qMsg;
   while (true) {
-    if (WiFi.status() == WL_CONNECTED) {
-    }
-    else {
-      WiFi.disconnect();
-      WiFi.reconnect();
+    {
+      if (WiFi.status() == WL_CONNECTED) {
+      }
+      else {
+        WiFi.disconnect();
+        WiFi.reconnect();
+      }
     }
 
 #ifdef SAMOVAR_USE_BLYNK
-    if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
-      Blynk.connect(BLYNK_TIMEOUT_MS);
-      vTaskDelay(50 / portTICK_PERIOD_MS);
-    } else {
-      if (!msg_q.isEmpty()) {
-        if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
-          char c[150];
-          msg_q.pop(&c);
-          qMsg = c;
-          Blynk.notify(qMsg);
-          xSemaphoreGive(xMsgSemaphore);
+    {
+      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
+        Blynk.connect(BLYNK_TIMEOUT_MS);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+      } else {
+        if (!msg_q.isEmpty()) {
+          if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
+            char c[150];
+            msg_q.pop(&c);
+            qMsg = c;
+            Blynk.notify(qMsg);
+            xSemaphoreGive(xMsgSemaphore);
+          }
         }
       }
     }
 #endif
 
 #ifdef USE_MQTT
-    if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
-      connectToMqtt();
+    {
+      if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
+        connectToMqtt();
+      }
     }
 #endif
+    {
+      BME_getvalue(false);
 
-    vTaskDelay(6000 / portTICK_PERIOD_MS);
+      vTaskDelay(5600 / portTICK_PERIOD_MS);
+    }
   }
 }
 
 //Запускаем таск для чтения давления
-void IRAM_ATTR triggerGetBMP(void *parameter) {
-  while (true) {
-    BME_getvalue(false);
-    vTaskDelay(5600 / portTICK_PERIOD_MS);
-  }
-}
+//void IRAM_ATTR triggerGetBMP(void *parameter) {
+//  while (true) {
+//    BME_getvalue(false);
+//    vTaskDelay(5600 / portTICK_PERIOD_MS);
+//  }
+//}
 
 //Запускаем таск для получения температур и различных проверок
 void IRAM_ATTR triggerSysTicker(void *parameter) {
@@ -329,21 +342,34 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
 
+      //      Serial.print("SysTickerButton = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
+      //      Serial.print("PowerStatusTask = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
+      //      Serial.print("SysTickerTask1 = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
+      //      Serial.print("GetClockTask1 = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
+      //      Serial.print("BuzzerTask = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
+      //      Serial.print("DoLuaScriptTask = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+
 #ifdef USE_LUA
       //если установлена переменная запуска в цикле lua_script, запускаем
-      if (loop_lua_fl || btn_script.length() > 0) {
-        if (btn_script.length() > 0) {
-          String sr;
-          if (show_lua_script) {
-            WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
-            WriteConsoleLog(btn_script);
-            WriteConsoleLog("-------END LUA SCRIPT-------");
-          }
-          sr = lua.Lua_dostring(&btn_script);
-          sr.trim();
-          if (sr != "") WriteConsoleLog(sr);
-          btn_script = "";
+      if (btn_script.length() > 0) {
+        String sr;
+        if (show_lua_script) {
+          WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+          WriteConsoleLog(btn_script);
+          WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
+        sr = lua.Lua_dostring(&btn_script);
+        sr.trim();
+        if (sr != "") WriteConsoleLog(sr);
+        btn_script = "";
+      }
+      if (loop_lua_fl) {
         start_lua_script();
       }
 #endif
@@ -519,23 +545,23 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
       if (SteamSensor.ErrCount > 10) {
         SteamSensor.ErrCount = -110;
-        SendMsg("Ошибка датчика температуры пара!", ALARM_MSG);
+        SendMsg(F("Ошибка датчика температуры пара!"), ALARM_MSG);
       }
       if (PipeSensor.ErrCount > 10) {
         PipeSensor.ErrCount = -110;
-        SendMsg("Ошибка датчика температуры царги!", ALARM_MSG);
+        SendMsg(F("Ошибка датчика температуры царги!"), ALARM_MSG);
       }
       if (WaterSensor.ErrCount > 10) {
         WaterSensor.ErrCount = -110;
-        SendMsg("Ошибка датчика температуры воды!", ALARM_MSG);
+        SendMsg(F("Ошибка датчика температуры воды!"), ALARM_MSG);
       }
       if (TankSensor.ErrCount > 10) {
         TankSensor.ErrCount = -110;
-        SendMsg("Ошибка датчика температуры куба!", ALARM_MSG);
+        SendMsg(F("Ошибка датчика температуры куба!"), ALARM_MSG);
       }
       if (ACPSensor.ErrCount > 10) {
         ACPSensor.ErrCount = -110;
-        SendMsg("Ошибка датчика температуры в ТСА!", ALARM_MSG);
+        SendMsg(F("Ошибка датчика температуры в ТСА!"), ALARM_MSG);
       }
 
       OldMinST = CurMinST;
@@ -612,10 +638,10 @@ void setup() {
   xTaskCreatePinnedToCore(
     taskButton,      /* Function to implement the task */
     "taskButton",    /* Name of the task */
-    1100,            /* Stack size in words */
+    750,            /* Stack size in words */
     NULL,            /* Task input parameter */
     1,               /* Priority of the task */
-    &SysTickerTask1, /* Task handle. */
+    &SysTickerButton, /* Task handle. */
     1);              /* Core where the task should run */
 
 
@@ -731,12 +757,12 @@ void setup() {
   }
 
   //connectWiFi();
-  writeString("Connected", 4);
+  writeString(F("Connected"), 4);
 
 #ifdef SAMOVAR_USE_BLYNK
   if (SamSetup.blynkauth[0] != 0) {
     //Blynk.begin(auth, ssid, password);
-    writeString("Connecting to Blynk ", 3);
+    writeString(F("Connecting to Blynk "), 3);
     writeString("               ", 4);
 #ifdef __SAMOVAR_DEBUG
     Serial.println(F("Connecting to Blynk"));
@@ -758,10 +784,10 @@ void setup() {
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
   ArduinoOTA.onStart([]() {
-    events.send("Update Start", "ota");
+    events.send(("Update Start"), "ota");
   });
   ArduinoOTA.onEnd([]() {
-    events.send("Update End", "ota");
+    events.send(("Update End"), "ota");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     char p[32];
@@ -771,13 +797,13 @@ void setup() {
   ArduinoOTA.onError([](ota_error_t error) {
     if (error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
     else if (error == OTA_BEGIN_ERROR)
-      events.send("Begin Failed", "ota");
+      events.send(("Begin Failed"), "ota");
     else if (error == OTA_CONNECT_ERROR)
-      events.send("Connect Failed", "ota");
+      events.send(("Connect Failed"), "ota");
     else if (error == OTA_RECEIVE_ERROR)
-      events.send("Recieve Failed", "ota");
+      events.send(("Recieve Failed"), "ota");
     else if (error == OTA_END_ERROR)
-      events.send("End Failed", "ota");
+      events.send(("End Failed"), "ota");
   });
   ArduinoOTA.setHostname(SAMOVAR_HOST);
   ArduinoOTA.begin();
@@ -841,7 +867,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    3000,             /* Stack size in words */
+    2600,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
@@ -851,21 +877,21 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetClock,    /* Function to implement the task */
     "GetClockTicker",   /* Name of the task */
-    3500,               /* Stack size in words */
+    2600,               /* Stack size in words */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &GetClockTask1,     /* Task handle. */
     1);                 /* Core where the task should run */
 
-  //Запускаем таск для чтения давления
-  xTaskCreatePinnedToCore(
-    triggerGetBMP,      /* Function to implement the task */
-    "GetBMPTicker",     /* Name of the task */
-    2000,               /* Stack size in words */
-    NULL,               /* Task input parameter */
-    1,                  /* Priority of the task */
-    &GetBMPTask,        /* Task handle. */
-    0);                 /* Core where the task should run */
+  //  //Запускаем таск для чтения давления
+  //  xTaskCreatePinnedToCore(
+  //    triggerGetBMP,      /* Function to implement the task */
+  //    "GetBMPTicker",     /* Name of the task */
+  //    1400,               /* Stack size in words */
+  //    NULL,               /* Task input parameter */
+  //    1,                  /* Priority of the task */
+  //    &GetBMPTask,        /* Task handle. */
+  //    0);                 /* Core where the task should run */
 
   //  //write reset reason
   //  if (!SPIFFS.exists("/resetreason.css")) {
@@ -894,6 +920,7 @@ void setup() {
 }
 
 void loop() {
+
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
 #endif
@@ -1097,6 +1124,13 @@ void getjson(void) {
   jsonstr += "\"mixer\":"; jsonstr += (String)mixer_status;
   jsonstr += ",";
 
+
+  jsonstr += "\"heap\":"; jsonstr += ESP.getFreeHeap();
+  jsonstr += ",";
+  jsonstr += "\"rssi\":"; jsonstr += WiFi.RSSI();
+  jsonstr += ",";
+  //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
+
   if (Msg != "") {
     jsonstr += "\"Msg\":\""; jsonstr += Msg; jsonstr += "\"";
     jsonstr += ",";
@@ -1131,6 +1165,22 @@ void getjson(void) {
 
   jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
   jsonstr += "}";
+
+  {
+    uint32_t ub, tb;
+    ub = SPIFFS.usedBytes();
+    tb = SPIFFS.totalBytes();
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    if (tb - ub < 400) {
+      //Кончилось место, удалим старый файл. Надо было сохранять раньше
+      if (SPIFFS.exists("/data_old.csv")) {
+        SPIFFS.remove("/data_old.csv");
+      }
+    }
+    if (tb - ub < 200) {
+      SendMsg(F("Memory is full!"), ALARM_MSG);
+    }
+  }
 }
 
 void configModeCallback(AsyncWiFiManager *myWiFiManager) {
@@ -1139,9 +1189,9 @@ void configModeCallback(AsyncWiFiManager *myWiFiManager) {
   Serial.println(myWiFiManager->getConfigPortalSSID());
   Serial.print(F("IP: "));
   Serial.println(WiFi.softAPIP());
-  writeString("Entered config WiFi ", 1);
-  writeString("SSID: Samovar       ", 2);
-  writeString("IP:                 ", 3);
+  writeString(F("Entered config WiFi "), 1);
+  writeString(F("SSID: Samovar       "), 2);
+  writeString(F("IP:                 "), 3);
   writeString(WiFi.softAPIP().toString(), 4);
 }
 
@@ -1208,8 +1258,8 @@ void SendMsg(const String m, MESSAGE_TYPE msg_type) {
 #endif
 #ifdef SAMOVAR_USE_BLYNK
   switch (msg_type) {
-    case 0 : MsgPl = "Тревога! "; break;
-    case 1 : MsgPl = "Предупреждение! "; break;
+    case 0 : MsgPl = F("Тревога! "); break;
+    case 1 : MsgPl = F("Предупреждение! "); break;
     case 2 : MsgPl = ""; break;
     default : MsgPl = "";
   }

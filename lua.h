@@ -6,7 +6,7 @@
 #endif
 
 #ifdef ESP_ARDUINO_VERSION
-#define USE_HTTP_REQUEST
+//#define USE_HTTP_REQUEST
 #endif
 
 #include <LuaWrapper.h>
@@ -50,6 +50,7 @@ String IRAM_ATTR getValue(String data, char separator, int index);
 String get_lua_script(String fn);
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
   if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN || WATER_PUMP_PIN) pinMode(a, b);
@@ -57,6 +58,7 @@ static int lua_wrapper_pinMode(lua_State *lua_state) {
 }
 
 static int lua_wrapper_digitalWrite(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
   if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN || WATER_PUMP_PIN
@@ -81,18 +83,21 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
 }
 
 static int lua_wrapper_digitalRead(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || WATER_PUMP_PIN ) lua_pushnumber(lua_state, (lua_Number) digitalRead(a));
   return 1;
 }
 
 static int lua_wrapper_analogRead(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   lua_pushnumber(lua_state, (lua_Number) analogRead(LUA_PIN));
   return 1;
 }
 
 #ifdef USE_EXPANDER
 static int lua_wrapper_exp_pinMode(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
@@ -103,6 +108,7 @@ static int lua_wrapper_exp_pinMode(lua_State *lua_state) {
 }
 
 static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
@@ -113,6 +119,7 @@ static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
 }
 
 static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     lua_pushnumber(lua_state, (lua_Number) expander.digitalRead(a));
@@ -124,6 +131,7 @@ static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
 
 #ifdef USE_ANALOG_EXPANDER
 static int lua_wrapper_exp_analogWrite(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     analog_expander.analogWrite(a);
@@ -133,6 +141,7 @@ static int lua_wrapper_exp_analogWrite(lua_State *lua_state) {
 }
 
 static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     lua_pushnumber(lua_state, (lua_Number) analog_expander.analogRead(a));
@@ -143,6 +152,7 @@ static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
 #endif
 
 static int lua_wrapper_delay(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   vTaskDelay(a / portTICK_PERIOD_MS);
   return 0;
@@ -153,17 +163,20 @@ void wait_command_sync() {
 }
 
 static int lua_wrapper_millis(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   lua_pushnumber(lua_state, (lua_Number) millis());
   return 1;
 }
 
 static int lua_wrapper_set_pause_withdrawal(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   pause_withdrawal(a);
   return 0;
 }
 
 static int lua_wrapper_set_power(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   wait_command_sync();
   int a = luaL_checkinteger(lua_state, 1);
 
@@ -184,12 +197,14 @@ static int lua_wrapper_set_power(lua_State *lua_state) {
 }
 
 static int lua_wrapper_set_mixer(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   set_mixer(a);
   return 0;
 }
 
 static int lua_wrapper_open_valve(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   bool a = luaL_checkinteger(lua_state, 1);
   open_valve(a);
   return 0;
@@ -197,6 +212,7 @@ static int lua_wrapper_open_valve(lua_State *lua_state) {
 
 #ifdef SAMOVAR_USE_POWER
 static int lua_wrapper_set_current_power(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   float a = luaL_checknumber(lua_state, 1);
   set_current_power(a);
   return 0;
@@ -204,16 +220,19 @@ static int lua_wrapper_set_current_power(lua_State *lua_state) {
 #endif
 
 static int lua_wrapper_set_alarm(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   set_alarm();
   return 0;
 }
 
 static int lua_wrapper_set_body_temp(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   set_body_temp();
   return 0;
 }
 
 static int lua_wrapper_set_next_program(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   wait_command_sync();
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
     sam_command_sync = SAMOVAR_START;
@@ -224,11 +243,13 @@ static int lua_wrapper_set_next_program(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_state(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   lua_pushnumber(lua_state, (lua_Number) SamovarStatusInt);
   return 1;
 }
 
 static int lua_wrapper_send_msg(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String st;
   const char *s;
   size_t l;
@@ -249,6 +270,7 @@ static int lua_wrapper_send_msg(lua_State *lua_state) {
 }
 
 static int lua_wrapper_set_num_variable(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var;
   const char *s;
   size_t l;
@@ -302,6 +324,7 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_num_variable(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var;
   const char *s;
   size_t l;
@@ -369,6 +392,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
 
 
 static int lua_wrapper_set_str_variable(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var, Val;
   lua_getglobal(lua_state, "tostring");
 
@@ -397,7 +421,7 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
   } else if (Var == "test_str_val") {
     test_str_val = Val;
   } else if (Var == "program_type") {
-    WriteConsoleLog("WARNING! program_type is read only property");
+    WriteConsoleLog(F("WARNING! program_type is read only property"));
   } else if (Var != "") {
     WriteConsoleLog("UNDEF STRING LUA VAR " + Var + " = " + Val);
   }
@@ -405,6 +429,7 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
 }
 
 static int lua_wrapper_set_object(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var, Val;
   lua_getglobal(lua_state, "tostring");
 
@@ -431,6 +456,7 @@ static int lua_wrapper_set_object(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_object(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var, Type;
   const char *s;
   int n = lua_gettop(lua_state);  /* number of arguments */
@@ -463,6 +489,7 @@ static int lua_wrapper_get_object(lua_State *lua_state) {
 }
 
 static int lua_wrapper_set_timer(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   byte a = luaL_checknumber(lua_state, 1);
   a--;
   if (a < 0 || a > 9) return 0;
@@ -472,6 +499,7 @@ static int lua_wrapper_set_timer(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_timer(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   byte a = luaL_checknumber(lua_state, 1);
   uint16_t b;
   a--;
@@ -493,6 +521,7 @@ static int lua_wrapper_get_timer(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_str_variable(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var;
   const char *s;
   size_t l;
@@ -522,6 +551,7 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
 
 #ifdef USE_HTTP_REQUEST
 static int lua_wrapper_http_request(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var;
   const char *s;
   size_t l;
@@ -639,12 +669,12 @@ void lua_init() {
     script += f.readString();
     f.close();
     if (show_lua_script) {
-      WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
+      WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
       WriteConsoleLog(script);
-      WriteConsoleLog("-------END LUA SCRIPT-------");
+      WriteConsoleLog(F("--END LUA SCRIPT--"));
     }
     String sr = lua.Lua_dostring(&script);
-    if (sr != "") WriteConsoleLog("init " + sr);
+    if (sr != "") WriteConsoleLog("ERR " + sr);
   }
   lua_type_script = get_lua_mode_name();
   lua_finished = true;
@@ -655,22 +685,31 @@ void lua_init() {
   xTaskCreatePinnedToCore(
     do_lua_script,  /* Function to implement the task */
     "do_lua_script", /* Name of the task */
-    7500,             /* Stack size in words */
+    3500,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask,   /* Task handle. */
-    0);               /* Core where the task should run */
+    1);               /* Core where the task should run */
 }
 
 String get_lua_script_list() {
   String s, fn;
+  byte i = 1;
   File root = SPIFFS.open("/");
   File file = root.openNextFile();
   while (file) {
     if (!file.isDirectory()) {
       fn = file.name();
       if (fn.substring(0, 4) == "btn_") {
-        s = s + fn + ",";
+        String str;
+        s = s + fn;
+        if (fn[0] != '/') fn = "/" + fn;
+        File f = SPIFFS.open(fn);
+        str = f.readStringUntil('^');
+        str = getValue(str, '|', 1);
+        if (str.length() == 0) str = "LUA" + (String)i;
+        i++;
+        s = s + "|" + str + ",";
       }
     }
     file = root.openNextFile();
@@ -722,7 +761,7 @@ void IRAM_ATTR do_lua_script(void *parameter) {
         sr.trim();
         if (sr != "") WriteConsoleLog(sr);
       }
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
 
       if (script2.length() > 0) {
         if (show_lua_script) {

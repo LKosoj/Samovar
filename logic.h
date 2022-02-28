@@ -760,7 +760,7 @@ void IRAM_ATTR set_buzzer(bool fl) {
       xTaskCreatePinnedToCore(
         triggerBuzzerTask, /* Function to implement the task */
         "BuzzerTask",      /* Name of the task */
-        1100,              /* Stack size in words */
+        800,              /* Stack size in words */
         NULL,              /* Task input parameter */
         0,                 /* Priority of the task */
         &BuzzerTask,       /* Task handle. */

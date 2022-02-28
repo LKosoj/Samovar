@@ -147,22 +147,6 @@ return 0;
 };
 
 setInterval(loadDoc,2000);
-setInterval(loadHeap,19000);
-
-//setInterval(addLine,2000);
-
-function loadHeap() {
-var xhttp = new XMLHttpRequest();
-xhttp.onreadystatechange = function() {
-if (this.readyState == 4 && this.status == 200) {
-var myObj = this.responseText;
-document.getElementById('Heap').innerHTML = myObj;
-}
-};
-xhttp.open("GET", "/heap", true);
-xhttp.send();
-};
-
 
 function loadDoc() {
 var xhttp = new XMLHttpRequest();
@@ -189,6 +173,10 @@ document.getElementById('current_power_mode').innerHTML = myObj.current_power_mo
 document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
 document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
 document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
+document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
+document.getElementById('heap').innerHTML = myObj.heap;
+document.getElementById('rssi').innerHTML = myObj.rssi;
+
 var dt = myObj.PipeTemp - myObj.SteamTemp;
 document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
 if (myObj.Msg){
@@ -668,7 +656,7 @@ function setPowerUnit () {
     <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
   </div>
   <div>
-    <span class='dvcs'>Системные параметры: <span id='Heap'></span></span>
+    <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span> </span>
   </div>
 
     <div style="visibility: hidden" id="lua_btn">

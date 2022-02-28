@@ -20,6 +20,10 @@
 
 #define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
 
+#ifdef USE_LUA
+//#undef USE_UPDATE_OTA
+#endif
+
 #ifndef SAM_NO_BEER_PRG
 #define SAM_BEER_PRG
 #endif
@@ -324,6 +328,7 @@ byte CurMin, OldMin;
 //**************************************************************************************************************
 
 /** Task handle for the  value read task */
+TaskHandle_t SysTickerButton = NULL;
 TaskHandle_t SysTickerTask1 = NULL;
 TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t BuzzerTask = NULL;
@@ -562,7 +567,6 @@ bool pump_started;                                              // Призна�
 bool setautospeed;                                              // Признак для однократного снижения скорости насоса при паузе
 volatile bool heater_state;                                     // Статус нагрева при затирке
 bool msgfl;                                                     // Флаг для одноразовых сообщений
-String ofl;                                                     // Openlog filename
 bool mixer_status;                                              // Статус работы мешалки
 int bk_pwm;                                                     // Значение PWM насоса при работе с БК
 uint32_t chipId = 0;                                            // Идентификатор ESP32
