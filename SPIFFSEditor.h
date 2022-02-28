@@ -278,16 +278,18 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
     } else
       request->send(404);
   } else if (request->method() == HTTP_POST) {
-    String p = request->getParam("data", true, true)->value();
-    if (p[0] != '/') p = "/" + p;
-
-    if (request->hasParam("data", true, true) && _fs.exists(p))
-      request->send(200, "", "UPLOADED: " + p);
-    else
-      request->send(500);
+    if (request->hasParam("data", true, true)) {
+      String p = request->getParam("data", true, true)->value();
+      if (p[0] != '/') p = "/" + p;
+      if (_fs.exists(p))
+        request->send(200, "", "UPLOADED: " + p);
+      else
+        request->send(500);
+    }
   } else if (request->method() == HTTP_PUT) {
     if (request->hasParam("path", true)) {
       String filename = request->getParam("path", true)->value();
+      if (filename[0] != '/') filename = "/" + filename;
       if (_fs.exists(filename)) {
         request->send(200);
       } else {
