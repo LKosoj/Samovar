@@ -785,6 +785,10 @@ void IRAM_ATTR set_power(bool On) {
     set_menu_screen(2);
     power_text_ptr = (char *)"OFF";
 
+#ifdef SAMOVAR_USE_SEM_AVR
+    vTaskDelay(4600 / portTICK_PERIOD_MS);
+#endif
+
 #ifdef SAMOVAR_USE_POWER
     vTaskDelay(600 / portTICK_PERIOD_MS);
     set_power_mode(POWER_SPEED_MODE);
