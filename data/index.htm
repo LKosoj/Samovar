@@ -430,12 +430,13 @@ function AddLuaButtons() {
     let btn_arr = btn_list.split(",");
     for (z=0;z<btn_arr.length;z++){
       if (btn_arr[z] != ""){
-        var btn = document.createElement("input");
+        let arr = btn_arr[z].split("|");
+        let btn = document.createElement("input");
         btn.type = "submit";
         btn.name = "luabtn" + z;
-        btn.value = "LUA " + (z + 1);
+        btn.value = arr[1];
         btn.className = "button";
-        btn.setAttribute("onclick", "run_lua(" + (z + 1) + ");");
+        btn.setAttribute("onclick", "run_lua(\"" + arr[0] + "\");");
         document.getElementById('lua_btn_ln').appendChild(btn);
         document.getElementById('lua_btn').style = 'visibility: visible';
       }
@@ -444,8 +445,7 @@ function AddLuaButtons() {
 }
 
 function run_lua(num){
-  command = "lua=btn_button" + num + ".lua";
-  sendbutton(command);
+  sendbutton("lua=" + num);
 }
 
 function setPowerUnit () {
