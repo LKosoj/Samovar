@@ -1170,7 +1170,7 @@ void getjson(void) {
     uint32_t ub, tb;
     ub = SPIFFS.usedBytes();
     tb = SPIFFS.totalBytes();
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
     if (tb - ub < 400) {
       //Кончилось место, удалим старый файл. Надо было сохранять раньше
       if (SPIFFS.exists("/data_old.csv")) {
