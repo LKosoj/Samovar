@@ -104,13 +104,13 @@ String formatBytes(size_t bytes) {
 // Инициализация FFS
 void FS_init(void) {
   SPIFFS.begin();
-//  {
-//    File dir = SPIFFS.open("/");
-//    while (dir.openNextFile()) {
-//      String fileName = dir.name();
-//      //size_t fileSize = dir.size();
-//    }
-//  }
+  //  {
+  //    File dir = SPIFFS.open("/");
+  //    while (dir.openNextFile()) {
+  //      String fileName = dir.name();
+  //      //size_t fileSize = dir.size();
+  //    }
+  //  }
 
   ::ws.onEvent(onWsEvent);
   server.addHandler(&::ws);
@@ -227,6 +227,21 @@ String IRAM_ATTR append_data() {
   bool w;
   w = false;
 
+  {
+    uint32_t ub, tb;
+    ub = SPIFFS.usedBytes();
+    tb = SPIFFS.totalBytes();
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    if (tb - ub < 400) {
+      //Кончилось место, удалим старый файл. Надо было сохранять раньше
+      if (SPIFFS.exists("/data_old.csv")) {
+        SPIFFS.remove("/data_old.csv");
+      }
+    }
+    if (tb - ub < 200) {
+      SendMsg(F("Memory is full!"), ALARM_MSG);
+    }
+  }
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SSPrevTemp) {
     SSPrevTemp = SteamSensor.avgTemp;
