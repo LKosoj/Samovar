@@ -227,21 +227,6 @@ String IRAM_ATTR append_data() {
   bool w;
   w = false;
 
-  {
-    uint32_t ub, tb;
-    ub = SPIFFS.usedBytes();
-    tb = SPIFFS.totalBytes();
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    if (tb - ub < 400) {
-      //Кончилось место, удалим старый файл. Надо было сохранять раньше
-      if (SPIFFS.exists("/data_old.csv")) {
-        SPIFFS.remove("/data_old.csv");
-      }
-    }
-    if (tb - ub < 200) {
-      SendMsg(F("Memory is full!"), ALARM_MSG);
-    }
-  }
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SSPrevTemp) {
     SSPrevTemp = SteamSensor.avgTemp;
@@ -283,6 +268,23 @@ String IRAM_ATTR append_data() {
     str += ProgramNum + 1;
 #endif
     fileToAppend.println(str);
+
+    {
+      uint32_t ub, tb;
+      ub = SPIFFS.usedBytes();
+      tb = SPIFFS.totalBytes();
+      if (tb - ub < 400) {
+        //Кончилось место, удалим старый файл. Надо было сохранять раньше
+        if (SPIFFS.exists("/data_old.csv")) {
+          SPIFFS.remove("/data_old.csv");
+        }
+      }
+      vTaskDelay(10 / portTICK_PERIOD_MS);
+      if (tb - ub < 200) {
+        SendMsg(F("Memory is full!"), ALARM_MSG);
+      }
+    }
+
     return str;
   }
   return "";
