@@ -695,7 +695,7 @@ void lua_init() {
       WriteConsoleLog(F("--END LUA SCRIPT--"));
     }
     String sr = lua.Lua_dostring(&script);
-    if (sr != "") WriteConsoleLog("ERR " + sr);
+    if (sr != "") WriteConsoleLog("INI ERR " + sr);
   }
   lua_type_script = get_lua_mode_name();
   lua_finished = true;
@@ -774,25 +774,25 @@ void IRAM_ATTR do_lua_script(void *parameter) {
       if (script1.length() > 0 || script2.length() > 0) glv = get_global_variables();
       if (script1.length() > 0) {
         if (show_lua_script) {
-          WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
+          WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
           WriteConsoleLog(glv + script1);
-          WriteConsoleLog("-------END LUA SCRIPT-------");
+          WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua.Lua_dostring(&(glv + script1));
         sr.trim();
-        if (sr != "") WriteConsoleLog(sr);
+        if (sr != "") WriteConsoleLog("ERR in script.lua: " + sr);
       }
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
       if (script2.length() > 0) {
         if (show_lua_script) {
-          WriteConsoleLog("-------BEGIN LUA SCRIPT-------");
+          WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
           WriteConsoleLog(glv + script2);
-          WriteConsoleLog("-------END LUA SCRIPT-------");
+          WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua.Lua_dostring(&(glv + script2));
         sr.trim();
-        if (sr != "") WriteConsoleLog(sr);
+        if (sr != "") WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       }
       lua_finished = true;
     }

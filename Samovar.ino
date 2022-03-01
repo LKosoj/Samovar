@@ -366,7 +366,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         }
         sr = lua.Lua_dostring(&btn_script);
         sr.trim();
-        if (sr != "") WriteConsoleLog(sr);
+        if (sr != "") WriteConsoleLog("ERR in BTN_SCRIPT " + sr);
         btn_script = "";
       }
       if (loop_lua_fl) {
@@ -867,7 +867,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    2600,             /* Stack size in words */
+    2700,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
@@ -1271,6 +1271,9 @@ void SendMsg(const String m, MESSAGE_TYPE msg_type) {
 }
 
 void WriteConsoleLog(String StringLogMsg) {
+  StringLogMsg.replace("\"", "'");
+  StringLogMsg.replace("\r", "^");
+  StringLogMsg.replace("\n", " ");
   if (LogMsg != "") {
     LogMsg = LogMsg + "; " + StringLogMsg;
   } else LogMsg = StringLogMsg;
