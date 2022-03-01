@@ -1166,21 +1166,6 @@ void getjson(void) {
   jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
   jsonstr += "}";
 
-  {
-    uint32_t ub, tb;
-    ub = SPIFFS.usedBytes();
-    tb = SPIFFS.totalBytes();
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    if (tb - ub < 400) {
-      //Кончилось место, удалим старый файл. Надо было сохранять раньше
-      if (SPIFFS.exists("/data_old.csv")) {
-        SPIFFS.remove("/data_old.csv");
-      }
-    }
-    if (tb - ub < 200) {
-      SendMsg(F("Memory is full!"), ALARM_MSG);
-    }
-  }
 }
 
 void configModeCallback(AsyncWiFiManager *myWiFiManager) {
