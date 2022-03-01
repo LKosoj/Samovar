@@ -580,6 +580,7 @@ volatile bool loop_lua_fl;                                      // Запуск�
 volatile bool show_lua_script;                                  // Показывать выполняемый lua скрипт в логе и в Serial
 volatile float test_num_val;                                    // Тестовое численное значение
 String test_str_val;                                            // Тестовое строковое значение
+String Lua_status;                                              // Статус Lua
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 volatile float target_power_volt;                               // Заданное напряжение регулятора

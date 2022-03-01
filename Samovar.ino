@@ -1164,6 +1164,8 @@ void getjson(void) {
 #endif
 
   jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
+  jsonstr += ",";
+  jsonstr += "\"Lstatus\":\""; jsonstr += Lua_status + "\"";
   jsonstr += "}";
 
 }

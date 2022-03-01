@@ -354,6 +354,10 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var == "wp_count") {
     a = wp_count;
 #endif
+  } else if (Var == "WFtotalMilliLitres") {
+    a = WFtotalMilliLitres;
+  } else if (Var == "WFflowRate") {
+    a = WFflowRate;
   } else if (Var == "SteamTemp") {
     a = SteamSensor.avgTemp;
   } else if (Var == "PipeTemp") {
@@ -383,13 +387,12 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {
-    WriteConsoleLog("SET UNDEF NUMERIC LUA VAR " + Var + " = " + a);
+    WriteConsoleLog("GET UNDEF NUMERIC LUA VAR " + Var + " = " + a);
     return 0;
   }
   lua_pushnumber(lua_state, (lua_Number) a);
   return 1;
 }
-
 
 static int lua_wrapper_set_str_variable(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -486,6 +489,23 @@ static int lua_wrapper_get_object(lua_State *lua_state) {
 
   lua_pushstring(lua_state, v.c_str());
   return 1;
+}
+
+static int lua_wrapper_set_lua_status(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  String Var;
+  lua_getglobal(lua_state, "tostring");
+
+  const char *s1;
+  size_t l1;
+  lua_pushvalue(lua_state, -1);
+  lua_pushvalue(lua_state, 1);
+  lua_call(lua_state, 1, 1);
+  s1 = lua_tolstring(lua_state, -1, &l1);
+  Var = s1;
+  lua_pop(lua_state, 1);
+  Lua_status = Var;
+  return 0;
 }
 
 static int lua_wrapper_set_timer(lua_State *lua_state) {
@@ -640,6 +660,7 @@ void lua_init() {
   lua.Lua_register("setNumVariable", (const lua_CFunction) &lua_wrapper_set_num_variable);
   lua.Lua_register("setStrVariable", (const lua_CFunction) &lua_wrapper_set_str_variable);
   lua.Lua_register("setObject", (const lua_CFunction) &lua_wrapper_set_object);
+  lua.Lua_register("setLuaStatus", (const lua_CFunction) &lua_wrapper_set_lua_status);
 #ifdef SAMOVAR_USE_POWER
   lua.Lua_register("setCurrentPower", (const lua_CFunction) &lua_wrapper_set_current_power);
 #endif

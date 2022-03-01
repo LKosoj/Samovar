@@ -177,6 +177,12 @@ document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
 document.getElementById('heap').innerHTML = myObj.heap;
 document.getElementById('rssi').innerHTML = myObj.rssi;
 
+if (myObj.Lstatus){
+if (myObj.Lstatus != "") {
+document.getElementById('Lstatus').innerHTML = myObj.Lstatus;
+}
+}
+
 var dt = myObj.PipeTemp - myObj.SteamTemp;
 document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
 if (myObj.Msg){
@@ -662,8 +668,8 @@ function setPowerUnit () {
     <div style="visibility: hidden" id="lua_btn">
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-          <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_btn_ln">
-          </div>
+          <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_btn_ln"></div>
+          <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
         </div>
       </div>
    </div>
