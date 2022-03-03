@@ -453,7 +453,7 @@ void IRAM_ATTR samovar_reset() {
 void setupMenu() {
 
   lcd.init();
-  lcd.begin(20, 4);
+  lcd.begin(LCD_COLUMNS, LCD_ROWS);
   lcd.backlight();
   lcd.clear();
 
