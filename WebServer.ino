@@ -81,7 +81,6 @@ void WebServerInit(void) {
   load_profile();
 
   server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest * request) {
-    server_heart_beat = millis();
     request->send(SPIFFS, "/resetreason.css", String());
   });
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -91,28 +90,22 @@ void WebServerInit(void) {
   });
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
     //TempStr = temp;
-    server_heart_beat = millis();
     getjson();
     request->send(200, "text/html", jsonstr);
   });
   server.on("/command", HTTP_GET, [](AsyncWebServerRequest * request) {
-    server_heart_beat = millis();
     web_command(request);
   });
   server.on("/program", HTTP_POST, [](AsyncWebServerRequest * request) {
-    server_heart_beat = millis();
     web_program(request);
   });
   server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest * request) {
-    server_heart_beat = millis();
     calibrate_command(request);
   });
   server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest * request) {
-    server_heart_beat = millis();
     get_data_log(request);
   });
   server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
-    server_heart_beat = millis();
     get_old_data_log(request);
   });
 #ifdef USE_LUA
@@ -126,7 +119,6 @@ void WebServerInit(void) {
 
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest * request) {
     //Serial.println("SAVE");
-    server_heart_beat = millis();
     handleSave(request);
   });
 

@@ -2,9 +2,8 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
-#include <Arduino.h>
-
 #undef CONFIG_BT_ENABLED
+#include <Arduino.h>
 
 #ifdef ESP_ARDUINO_VERSION
 #include "esp32/rom/rtc.h"
@@ -16,12 +15,10 @@
 #pragma message ("OLD SDK")
 #endif
 
-#include "soc/rtc_wdt.h"
-#include <esp_task_wdt.h>
 #include <driver/dac.h>
 
 #include <Wire.h>
-#include <SPI.h>
+//#include <SPI.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
@@ -53,6 +50,12 @@
 #include <ESP32Servo.h>
 
 #include "Samovar.h"
+
+#ifdef __SAMOVAR_NOT_USE_WDT
+#include "soc/rtc_wdt.h"
+#include <esp_task_wdt.h>
+#endif
+
 
 #ifdef USE_EXPANDER
 #include <PCF8575.h>
@@ -706,7 +709,7 @@ void setup() {
   writeString("      Samovar ", 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   //delay(2000);
-  writeString("Connecting to WI-FI", 3);
+  writeString(F("Connecting to WI-FI"), 3);
 
   //Serial.print("Reset reason: ");
   //Serial.println(vr);

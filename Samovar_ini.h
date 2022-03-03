@@ -1,5 +1,5 @@
-#ifndef SAMOVAR_I_H
-#define SAMOVAR_I_H
+#ifndef __SAMOVAR_I_H_
+#define __SAMOVAR_I_H_
 #include <Arduino.h>
 //**************************************************************************************************************
 // Параметры

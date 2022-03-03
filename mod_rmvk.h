@@ -1,5 +1,5 @@
-#ifndef _RMVK_UART_H_
-#define _RMVK_UART_H_
+#ifndef __RMVK_UART_H_
+#define __RMVK_UART_H_
 #include <sys/types.h>
 #include <stdint.h>
 #include "driver/uart.h"

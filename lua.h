@@ -1,5 +1,5 @@
-#ifndef _SAMOVAR_LUA_H_
-#define _SAMOVAR_LUA_H_
+#ifndef __SAMOVAR_LUA_H_
+#define __SAMOVAR_LUA_H_
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"

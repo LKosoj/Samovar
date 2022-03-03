@@ -1,5 +1,5 @@
-#ifndef SAMOVAR_MQTT_H
-#define SAMOVAR_MQTT_H
+#ifndef __SAMOVAR_MQTT_H_
+#define __SAMOVAR_MQTT_H_
 
 #include <AsyncMqttClient.h>
 #define PAYLOADSIZE 2000

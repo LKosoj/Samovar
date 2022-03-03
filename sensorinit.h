@@ -1,5 +1,5 @@
-#ifndef SAMOVAR_S_I_H
-#define SAMOVAR_S_I_H
+#ifndef __SAMOVAR_S_I_H_
+#define __SAMOVAR_S_I_H_
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"

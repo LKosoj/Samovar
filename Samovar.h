@@ -1,5 +1,5 @@
-#ifndef SAMOVAR_H
-#define SAMOVAR_H
+#ifndef __SAMOVAR_H_
+#define __SAMOVAR_H_
 
 #ifndef ESP32
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
@@ -47,11 +47,11 @@
 #define SAMOVAR_USE_RMVK
 #endif
 #endif
-volatile SemaphoreHandle_t xSemaphore = NULL;
-volatile SemaphoreHandle_t xMsgSemaphore = NULL;
+SemaphoreHandle_t xSemaphore = NULL;
+SemaphoreHandle_t xMsgSemaphore = NULL;
 StaticSemaphore_t xMsgSemaphoreBuffer;
 
-volatile SemaphoreHandle_t xI2CSemaphore = NULL;
+SemaphoreHandle_t xI2CSemaphore = NULL;
 StaticSemaphore_t xI2CSemaphoreBuffer;
 
 #ifdef USE_BMP280_ALT
@@ -500,9 +500,6 @@ WProgram program[CAPACITY_NUM * 2];                             //массив �
 
 //**************************************************************************************************************
 const char* host = SAMOVAR_HOST;
-//**************************************************************************************************************
-IPAddress timeServerIP;                                                  // для работы NTP
-const char* ntpServerName = "time.nist.gov";
 
 //**************************************************************************************************************
 byte DScnt = 0;
@@ -572,7 +569,6 @@ int bk_pwm;                                                     // Значен�
 uint32_t chipId = 0;                                            // Идентификатор ESP32
 //String vr;                                                      // Причина перезагрузки ESP32
 String SessionDescription;                                      // Описание параметров работы в свободном формате для сохранения в облаке
-unsigned long server_heart_beat;                                // Время последнего запроса к вебсерверу
 bool alarm_event;                                               // Признак срабатывания кнопки тревоги
 bool acceleration_heater;                                       // Признак включенного разгонного тэна
 bool send_mqtt;                                                 // Отправлять данные в облако

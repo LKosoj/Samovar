@@ -1,5 +1,5 @@
-#ifndef SPIFFSEditor_H_
-#define SPIFFSEditor_H_
+#ifndef __SPIFFSEditor_H_
+#define __SPIFFSEditor_H_
 
 #include <FS.h>
 
