@@ -635,7 +635,7 @@ void setup() {
 #endif
 
   //Читаем сохраненную конфигурацию
-  read_config();
+  //read_config();
 
   //Запускаем таск для обработки нажатия кнопки и энкодера
   xTaskCreatePinnedToCore(
@@ -653,6 +653,7 @@ void setup() {
   btn.tick();      // отработка нажатия
   if (btn.isPress()) {
     SamSetup.flag = 255;
+    Serial.println("Reset configuration");
   }
 #endif
 
@@ -681,9 +682,11 @@ void setup() {
     SamSetup.blynkauth[0] = '\0';
     SamSetup.videourl[0] = '\0';
     save_profile();
-    read_config();
   }
 
+  //Читаем сохраненную конфигурацию
+  read_config();
+  
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
   digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);

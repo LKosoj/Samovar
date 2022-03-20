@@ -28,6 +28,8 @@ void distiller_proc() {
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
     SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
+    dist_started = false;
+    d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
@@ -68,6 +70,20 @@ void IRAM_ATTR check_alarm_distiller() {
   }
 
 #ifdef USE_WATER_PUMP
+  //Определяем, что началось кипение - вода охлаждения начала нагреваться
+  if (!dist_started && d_s_temp_prev > WaterSensor.avgTemp) {
+    d_s_temp_prev = WaterSensor.avgTemp;
+  }
+  if (!dist_started && WaterSensor.avgTemp - d_s_temp_prev > 15) {
+    wp_count = 0;
+    dist_started = true;
+    SendMsg(F("Началось кипение!"), WARNING_MSG);
+  }
+  if (!dist_started && abs(WaterSensor.avgTemp - TARGET_WATER_TEMP) < 3){
+    dist_started = true;
+    SendMsg(F("Началось кипение!"), WARNING_MSG);
+  }
+
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
     if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(TARGET_WATER_TEMP + 3);

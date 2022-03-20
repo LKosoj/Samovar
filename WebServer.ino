@@ -208,59 +208,124 @@ String indexKeyProcessor(const String &var) {
 }
 
 String setupKeyProcessor(const String &var) {
-  if (var == "DeltaSteamTemp") return (String)SamSetup.DeltaSteamTemp;
-  else if (var == "DeltaPipeTemp")
-    return (String)SamSetup.DeltaPipeTemp;
-  else if (var == "DeltaWaterTemp")
-    return (String)SamSetup.DeltaWaterTemp;
-  else if (var == "DeltaTankTemp")
-    return (String)SamSetup.DeltaTankTemp;
-  else if (var == "DeltaACPTemp")
-    return (String)SamSetup.DeltaACPTemp;
-  else if (var == "SetSteamTemp")
-    return (String)SamSetup.SetSteamTemp;
-  else if (var == "SetPipeTemp")
-    return (String)SamSetup.SetPipeTemp;
-  else if (var == "SetWaterTemp")
-    return (String)SamSetup.SetWaterTemp;
-  else if (var == "SetTankTemp")
-    return (String)SamSetup.SetTankTemp;
-  else if (var == "SetACPTemp")
-    return (String)SamSetup.SetACPTemp;
-  else if (var == "StepperStepMl")
-    return (String)SamSetup.StepperStepMl;
+  static String s;
+  s = "";
+  if (var == "DeltaSteamTemp") {
+    s = format_float(SamSetup.DeltaSteamTemp, 3);
+    return s;
+  }
+  else if (var == "DeltaPipeTemp") {
+    s = format_float(SamSetup.DeltaPipeTemp, 3);
+    return s;
+  }
+  else if (var == "DeltaWaterTemp") {
+    s = format_float(SamSetup.DeltaWaterTemp, 3);
+    return s;
+  }
+  else if (var == "DeltaTankTemp") {
+    s = format_float(SamSetup.DeltaTankTemp, 3);
+    return s;
+  }
+  else if (var == "DeltaACPTemp") {
+    s = format_float(SamSetup.DeltaACPTemp, 3);
+    return s;
+  }
+  else if (var == "SetSteamTemp") {
+    s = format_float(SamSetup.SetSteamTemp, 3);
+    return s;
+  }
+  else if (var == "SetPipeTemp") {
+    if (isnan(SamSetup.SetPipeTemp)) {
+      SamSetup.SetPipeTemp = 0;
+    }
+    s = format_float(SamSetup.SetPipeTemp, 3);
+    return s;
+  }
+  else if (var == "SetWaterTemp") {
+    if (isnan(SamSetup.SetWaterTemp)) {
+      SamSetup.SetWaterTemp = 0;
+    }
+    s = format_float(SamSetup.SetWaterTemp, 3);
+    return s;
+  }
+  else if (var == "SetTankTemp") {
+    if (isnan(SamSetup.SetTankTemp)) {
+      SamSetup.SetTankTemp = 0;
+    }
+    s = format_float(SamSetup.SetTankTemp, 3);
+    return s;
+  }
+  else if (var == "SetACPTemp") {
+    if (isnan(SamSetup.SetACPTemp)) {
+      SamSetup.SetACPTemp = 0;
+    }
+    s = format_float(SamSetup.SetACPTemp, 3);
+    return s;
+  }
+  else if (var == "StepperStepMl") {
+    s = SamSetup.StepperStepMl;
+    return s;
+  }
   else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else
       return get_program(CAPACITY_NUM * 2);
-  } else if (var == "Kp")
-    return (String)SamSetup.Kp;
-  else if (var == "Ki")
-    return (String)SamSetup.Ki;
-  else if (var == "Kd")
-    return (String)SamSetup.Kd;
-  else if (var == "StbVoltage")
-    return (String)SamSetup.StbVoltage;
-  else if (var == "SteamDelay")
-    return (String)SamSetup.SteamDelay;
-  else if (var == "PipeDelay")
-    return (String)SamSetup.PipeDelay;
-  else if (var == "WaterDelay")
-    return (String)SamSetup.WaterDelay;
-  else if (var == "TankDelay")
-    return (String)SamSetup.TankDelay;
-  else if (var == "ACPDelay")
-    return (String)SamSetup.ACPDelay;
-  else if (var == "TimeZone")
-    return (String)SamSetup.TimeZone;
-  else if (var == "LogPeriod")
-    return (String)SamSetup.LogPeriod;
-  else if (var == "HeaterR")
-    return (String)SamSetup.HeaterResistant;
-  else if (var == "videourl")
-    return (String)SamSetup.videourl;
-  else if (var == "blynkauth")
-    return (String)SamSetup.blynkauth;
+  } else if (var == "Kp") {
+    s = format_float(SamSetup.Kp, 3);
+    return s;
+  }
+  else if (var == "Ki") {
+    s = format_float(SamSetup.Ki, 3);
+    return s;
+  }
+  else if (var == "Kd") {
+    s = format_float(SamSetup.Kd, 3);
+    return s;
+  }
+  else if (var == "StbVoltage") {
+    s = SamSetup.StbVoltage;
+    return s;
+  }
+  else if (var == "SteamDelay") {
+    s = SamSetup.SteamDelay;
+    return s;
+  }
+  else if (var == "PipeDelay") {
+    s = SamSetup.PipeDelay;
+    return s;
+  }
+  else if (var == "WaterDelay") {
+    s = SamSetup.WaterDelay;
+    return s;
+  }
+  else if (var == "TankDelay") {
+    s = SamSetup.TankDelay;
+    return s;
+  }
+  else if (var == "ACPDelay") {
+    s = SamSetup.ACPDelay;
+    return s;
+  }
+  else if (var == "TimeZone") {
+    s = SamSetup.TimeZone;
+    return s;
+  }
+  else if (var == "LogPeriod") {
+    s = SamSetup.LogPeriod;
+    return s;
+  }
+  else if (var == "HeaterR") {
+    s = format_float(SamSetup.HeaterResistant, 3);
+    return s;
+  }
+  else if (var == "videourl") {
+    s = SamSetup.videourl;
+    return s;
+  }
+  else if (var == "blynkauth") {
+    s = SamSetup.blynkauth;
+    return s;
+  }
   else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else
@@ -289,20 +354,34 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.CheckPower) return "checked='true'";
     else
       return "";
-  } else if (var == "autospeed")
-    return (String)SamSetup.autospeed;
-  else if (var == "DistTemp")
-    return (String)SamSetup.DistTemp;
-  else if (var == "SteamColor")
-    return (String)SamSetup.SteamColor;
-  else if (var == "PipeColor")
-    return (String)SamSetup.PipeColor;
-  else if (var == "WaterColor")
-    return (String)SamSetup.WaterColor;
-  else if (var == "TankColor")
-    return (String)SamSetup.TankColor;
-  else if (var == "ACPColor")
-    return (String)SamSetup.ACPColor;
+  } else if (var == "autospeed") {
+    s = SamSetup.autospeed;
+    return s;
+  }
+  else if (var == "DistTemp") {
+    s = format_float(SamSetup.DistTemp, 3);
+    return s;
+  }
+  else if (var == "SteamColor") {
+    s = SamSetup.SteamColor;
+    return s;
+  }
+  else if (var == "PipeColor") {
+    s = SamSetup.PipeColor;
+    return s;
+  }
+  else if (var == "WaterColor") {
+    s = SamSetup.WaterColor;
+    return s;
+  }
+  else if (var == "TankColor") {
+    s = SamSetup.TankColor;
+    return s;
+  }
+  else if (var == "ACPColor") {
+    s = SamSetup.ACPColor;
+    return s;
+  }
   else if (var == "RECT" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE)
     return "selected";
   else if (var == "DIST" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_DISTILLATION_MODE)
@@ -339,7 +418,7 @@ String setupKeyProcessor(const String &var) {
     return get_DSAddressList(getDSAddress(TankSensor.Sensor));
   else if (var == "ACPAddr")
     return get_DSAddressList(getDSAddress(ACPSensor.Sensor));
-  return String();
+  return "";
 }
 
 String calibrateKeyProcessor(const String &var) {

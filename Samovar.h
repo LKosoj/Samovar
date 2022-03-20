@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "5.05"
+#define SAMOVAR_VERSION "5.06"
 //#define __SAMOVAR_DEBUG
 
 #include "Samovar_ini.h"
@@ -92,7 +92,7 @@ uint8_t temprature_sens_read();
 //--------------------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------------------
 
-#define EEPROM_SIZE 512
+#define EEPROM_SIZE 600
 
 //**************************************************************************************************************
 // Распиновка
@@ -545,6 +545,8 @@ unsigned long begintime;                                        // Время н
 unsigned long t_min;                                            // Время для паузы в секундах с момента старта ESP32
 unsigned long alarm_t_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
 unsigned long alarm_h_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
+float d_s_temp_prev;                                            // Температура для определения начала кипения в режиме дистилляции
+bool dist_started;                                              // 
 volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
 volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
 volatile uint16_t WFtotalMilliLitres = 0;                       // Переменная для учета расхода воды
