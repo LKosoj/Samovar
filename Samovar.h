@@ -277,6 +277,10 @@ uint8_t temprature_sens_read();
 
 #include "user_config_override.h"
 
+#ifndef SAMOVAR_USE_POWER_START_TIME
+#define SAMOVAR_USE_POWER_START_TIME 3100
+#endif
+
 #include <FS.h>
 #ifdef USE_LittleFS
 #pragma message ("USE LITTLEFS")
