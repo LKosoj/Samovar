@@ -339,8 +339,8 @@ void menu_get_power() {
       set_menu_screen(2);
       sam_command_sync = SAMOVAR_BEER;
     } else {
-      sam_command_sync = SAMOVAR_POWER;
       set_menu_screen(3);
+      samovar_reset();
     }
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     if (!PowerOn) {
@@ -348,7 +348,7 @@ void menu_get_power() {
       sam_command_sync = SAMOVAR_DISTILLATION;
     } else {
       set_menu_screen(3);
-      sam_command_sync = SAMOVAR_POWER;
+      samovar_reset();
     }
   } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
     if (!PowerOn) {
@@ -356,16 +356,16 @@ void menu_get_power() {
       sam_command_sync = SAMOVAR_BK;
     } else {
       set_menu_screen(3);
-      sam_command_sync = SAMOVAR_POWER;
+      samovar_reset();
     }
   } else {
     if (!PowerOn) {
       set_menu_screen(2);
+      sam_command_sync = SAMOVAR_POWER;
     } else {
       set_menu_screen(3);
       samovar_reset();
     }
-    sam_command_sync = SAMOVAR_POWER;
   }
 }
 
