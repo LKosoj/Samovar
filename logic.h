@@ -580,7 +580,7 @@ void IRAM_ATTR check_alarm() {
     }
     alarm_c_min = 0;
   }
-  //Если программа предзахлеб и давно не было повышения срабатывания датчика - повышаем напряжение
+  //Если программа предзахлеб и давно не было срабатывания датчика - повышаем напряжение
   if (program[ProgramNum].WType == "C") {
     if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
       set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
