@@ -522,12 +522,8 @@ void IRAM_ATTR check_alarm() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
-#ifdef USE_HEAD_LEVEL_SENSOR
-  if (alarm_h_min > 0 && alarm_h_min <= millis()) {
-    whls.resetStates();
-    alarm_h_min = 0;
-  }
 #ifdef SAMOVAR_USE_POWER
+  //управляем разгонным тэном
   if (SamovarStatusInt == 50 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
     if (!acceleration_heater) {
       //включаем разгонный тэн
@@ -541,6 +537,38 @@ void IRAM_ATTR check_alarm() {
       acceleration_heater = false;
     }
   }
+#endif
+
+  //Если используется датчик уровня флегмы в голове
+#ifdef USE_HEAD_LEVEL_SENSOR
+  whls.tick();
+  if (whls.isHolded() && alarm_h_min == 0) {
+    whls.resetStates();
+    if (program[ProgramNum].WType != "C") {
+      set_buzzer(true);
+      SendMsg(F("Сработал датчик захлёба!"), ALARM_MSG);
+    } else {
+#ifdef SAMOVAR_USE_POWER
+      //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
+      alarm_c_min = millis() + 1000 * 60 * TIME_C / 5;
+      //счетчик для повышения напряжения сбрасываем
+      alarm_c_low_min = 0;
+      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
+#endif
+    }
+#ifdef SAMOVAR_USE_POWER
+    SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
+    set_current_power(target_power_volt - 1 * PWR_FACTOR);
+#endif
+    //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
+    alarm_h_min = millis() + 1000 * 40;
+  }
+
+  if (alarm_h_min > 0 && alarm_h_min <= millis()) {
+    whls.resetStates();
+    alarm_h_min = 0;
+  }
+#ifdef SAMOVAR_USE_POWER
   //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
   if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
@@ -564,7 +592,9 @@ void IRAM_ATTR check_alarm() {
   else alarm_c_low_min = 0;
 
 #endif
+  //Если используется датчик уровня флегмы в голове
 #endif
+
 
 #ifdef SAMOVAR_USE_POWER
 #ifndef __SAMOVAR_DEBUG
@@ -652,32 +682,6 @@ void IRAM_ATTR check_alarm() {
 #endif
     alarm_t_min = millis() + 1000 * 30;
   }
-
-  //Если используется датчик уровня флегмы в голове
-#ifdef USE_HEAD_LEVEL_SENSOR
-  whls.tick();
-  if (whls.isHolded() && alarm_h_min == 0) {
-    whls.resetStates();
-    if (program[ProgramNum].WType != "C") {
-      set_buzzer(true);
-      SendMsg(F("Сработал датчик захлёба!"), ALARM_MSG);
-    } else {
-#ifdef SAMOVAR_USE_POWER
-      //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
-      alarm_c_min = millis() + 1000 * 60 * TIME_C / 5;
-      //счетчик для повышения напряжения сбрасываем
-      alarm_c_low_min = 0;
-      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
-#endif
-    }
-#ifdef SAMOVAR_USE_POWER
-    SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
-    set_current_power(target_power_volt - 1 * PWR_FACTOR);
-#endif
-    //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
-    alarm_h_min = millis() + 1000 * 40;
-  }
-#endif
 
   if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && SamovarStatusInt == 50) {
 #ifdef USE_WATER_PUMP
