@@ -8,6 +8,9 @@
 #define SAMOVAR_VERSION "5.07"
 //#define __SAMOVAR_DEBUG
 
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
 #include "Samovar_ini.h"
 
 #ifdef __SAMOVAR_DEBUG
