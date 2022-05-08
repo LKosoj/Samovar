@@ -837,7 +837,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
         resp = resp.substring(i, resp.length());
         if (resp.substring(1, 2) == "T") resp = resp.substring(1, 9);
         int cpv = hexToDec(resp.substring(1, 4));
-        //Если напряжение больше 300 или меньше 1 - не корректно получено значение от регулятора, оставляем старое значение
+        //Если напряжение больше 300 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
         if (cpv > 10 && cpv < 3000) {
           current_power_volt = cpv / 10.0F;
           target_power_volt = hexToDec(resp.substring(4, 7)) / 10.0F;
