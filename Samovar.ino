@@ -345,18 +345,19 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
 
-      //      Serial.print("SysTickerButton = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
-      //      Serial.print("PowerStatusTask = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
-      //      Serial.print("SysTickerTask1 = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
-      //      Serial.print("GetClockTask1 = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
-      //      Serial.print("BuzzerTask = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
-      //      Serial.print("DoLuaScriptTask = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+      //            Serial.print("SysTickerButton = ");
+      //            Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
+      //            Serial.print("PowerStatusTask = ");
+      //            Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
+      //            Serial.print("SysTickerTask1 = ");
+      //            Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
+      //            Serial.print("GetClockTask1 = ");
+      //            Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
+      //            Serial.print("BuzzerTask = ");
+      //            Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
+      //            Serial.print("DoLuaScriptTask = ");
+      //            Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+      //            Serial.println("--------------------------------------------");
 
 #ifdef USE_LUA
       //если установлена переменная запуска в цикле lua_script, запускаем
@@ -641,7 +642,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     taskButton,      /* Function to implement the task */
     "taskButton",    /* Name of the task */
-    750,            /* Stack size in words */
+    950,            /* Stack size in words */
     NULL,            /* Task input parameter */
     1,               /* Priority of the task */
     &SysTickerButton, /* Task handle. */
@@ -686,7 +687,7 @@ void setup() {
 
   //Читаем сохраненную конфигурацию
   read_config();
-  
+
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
   digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
@@ -822,7 +823,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
-    2100,               /* Stack size in words */
+    2000,               /* Stack size in words */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
