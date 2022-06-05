@@ -1238,9 +1238,16 @@ void read_config() {
     SamSetup.StbVoltage = 100;
   }
 
+  if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;
+
   //  pump_regulator.Kp = SamSetup.Kp;
   //  pump_regulator.Ki = SamSetup.Ki;
   //  pump_regulator.Kd = SamSetup.Kd;
+
+#ifdef USE_WATER_PUMP
+  pump_regulator.setpoint = SamSetup.SetWaterTemp;         // сообщаем регулятору температуру, которую он должен поддерживать
+#endif
+
 }
 
 void SendMsg(const String m, MESSAGE_TYPE msg_type) {

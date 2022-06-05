@@ -62,7 +62,7 @@ void IRAM_ATTR check_alarm_distiller() {
     if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true);
   }
 
-  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
+  if (!PowerOn && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 20) {
     open_valve(false);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
@@ -79,14 +79,14 @@ void IRAM_ATTR check_alarm_distiller() {
     dist_started = true;
     SendMsg(F("Началось кипение!"), WARNING_MSG);
   }
-  if (!dist_started && abs(WaterSensor.avgTemp - TARGET_WATER_TEMP) < 3){
+  if (!dist_started && abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3){
     dist_started = true;
     SendMsg(F("Началось кипение!"), WARNING_MSG);
   }
 
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
-    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(TARGET_WATER_TEMP + 3);
+    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
     else
       set_pump_speed_pid(WaterSensor.avgTemp);
   }
@@ -146,9 +146,9 @@ void IRAM_ATTR check_alarm_distiller() {
   }
 
 #ifdef USE_WATER_VALVE
-  if (WaterSensor.avgTemp >= TARGET_WATER_TEMP + 1) {
+  if (WaterSensor.avgTemp >= SamSetup.SetWaterTemp + 1) {
     digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
-  } else if (WaterSensor.avgTemp <= TARGET_WATER_TEMP - 1) {
+  } else if (WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 1) {
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
