@@ -551,7 +551,7 @@ unsigned long t_min;                                            // Время д
 unsigned long alarm_t_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
 unsigned long alarm_h_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
 float d_s_temp_prev;                                            // Температура для определения начала кипения в режиме дистилляции
-bool dist_started;                                              // 
+bool boil_started;                                              // 
 volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
 volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
 volatile uint16_t WFtotalMilliLitres = 0;                       // Переменная для учета расхода воды
