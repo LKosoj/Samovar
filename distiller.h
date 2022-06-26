@@ -8,6 +8,9 @@ void create_data();
 void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
+#ifdef USE_WATER_PUMP
+void check_boiling();
+#endif
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 
 void distiller_proc() {
@@ -28,7 +31,6 @@ void distiller_proc() {
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
     SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
-    dist_started = false;
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
@@ -70,19 +72,8 @@ void IRAM_ATTR check_alarm_distiller() {
   }
 
 #ifdef USE_WATER_PUMP
-  //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  if (!dist_started && (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0)) {
-    d_s_temp_prev = WaterSensor.avgTemp;
-  }
-  if (!dist_started && WaterSensor.avgTemp - d_s_temp_prev > 15) {
-    wp_count = -10;
-    dist_started = true;
-    SendMsg(F("Началось кипение!"), WARNING_MSG);
-  }
-  if (!dist_started && abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3){
-    dist_started = true;
-    SendMsg(F("Началось кипение!"), WARNING_MSG);
-  }
+  //Определяем, что началось кипение - вода охлаждения начала нагреваться, значит надо времено увеличить подачу воды (на всякий случай)
+  check_boiling();
 
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {

@@ -31,6 +31,9 @@ void set_pump_speed_pid(float temp);
 void set_power(bool On);
 void set_body_temp();
 void set_buzzer(bool fl);
+#ifdef USE_WATER_PUMP
+void check_boiling();
+#endif
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 
 //Получить количество разделителей
@@ -630,6 +633,9 @@ void IRAM_ATTR check_alarm() {
   }
 
 #ifdef USE_WATER_PUMP
+  //Определяем, что началось кипение - вода охлаждения начала нагреваться, значит надо времено увеличить подачу воды (на всякий случай)
+  check_boiling();
+
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
     if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
@@ -815,6 +821,25 @@ void IRAM_ATTR set_power(bool On) {
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
   }
 }
+
+#ifdef USE_WATER_PUMP
+void check_boiling() {
+  //Определяем, что началось кипение - вода охлаждения начала нагреваться
+  if (!dist_started && (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0)) {
+    d_s_temp_prev = WaterSensor.avgTemp;
+  }
+  if (!dist_started && WaterSensor.avgTemp - d_s_temp_prev > 10) {
+    wp_count = -10;
+    dist_started = true;
+    SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
+  }
+  if (!dist_started && abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3) {
+    wp_count = -10;
+    dist_started = true;
+    SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
+  }
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SAMOVAR_USE_POWER
