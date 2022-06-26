@@ -33,7 +33,7 @@ void set_pump_pwm(float duty) {
     pump_started = true;
     return;
   }
-  if (duty > 0 && wp_count < 5) {
+  if (duty > 0 && wp_count < 10) {
     pump_pwm.write(PWM_START_VALUE * 10);
     wp_count++;
     return;

@@ -71,11 +71,11 @@ void IRAM_ATTR check_alarm_distiller() {
 
 #ifdef USE_WATER_PUMP
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  if (!dist_started && d_s_temp_prev > WaterSensor.avgTemp) {
+  if (!dist_started && (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0)) {
     d_s_temp_prev = WaterSensor.avgTemp;
   }
   if (!dist_started && WaterSensor.avgTemp - d_s_temp_prev > 15) {
-    wp_count = 0;
+    wp_count = -10;
     dist_started = true;
     SendMsg(F("Началось кипение!"), WARNING_MSG);
   }
