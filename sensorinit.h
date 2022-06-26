@@ -398,7 +398,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   if (bme_pressure < 100) BME_getvalue(false);
   start_pressure = bme_pressure;
 
-  dist_started = false;
+  boil_started = false;
 
 
   set_power(false);
