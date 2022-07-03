@@ -27,6 +27,22 @@ function loadFile(e) {
 	reader.readAsText(file, "UTF-8");
 }
 
+function getProgramFromFile(selectObject){
+var value = selectObject.value;
+var fn;
+if (value == 0) fn = '/program_fruit.txt';
+else if (value == 1) fn = '/program_grain.txt';
+else if (value == 2) fn = '/program_shugar.txt';
+
+fetch(fn)
+  .then(response => response.text())
+  .then((data) => {
+  document.getElementById('WProgram1').value = data
+  glcalcnum = false;
+  calc_program();
+  })
+}
+
 function SaveProgramToFile() {
   var filename, text;
   filename = 'programbackup.txt';
@@ -357,7 +373,7 @@ function set_bgcolor(obj){
 }
 
 window.onload = function() {
-  calc_program();
+  getProgramFromFile(document.getElementById("loadprogram"));
   return;
   getProgram();
   document.getElementById("WProgram1").addEventListener("change", function(event) {
@@ -381,7 +397,13 @@ window.onload = function() {
 <div class="message-box" style="display: none;" id="message"></div>
 Samovar v. <span id='version'>%v%</span>
 </h1>
-<div class="text">Расчет программы отбора</div>
+<div class="text">Расчет программы отбора
+<select id="loadprogram" name="loadprogram" onchange="getProgramFromFile(this)">
+  <option value="0">Фрукты</option>
+  <option value="1">Зерно</option>
+  <option value="2">Сахар</option>
+</select>
+</div>
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div id="Prog">
@@ -433,20 +455,7 @@ Samovar v. <span id='version'>%v%</span>
 </div>
 
 <div>
-<textarea cols="40" rows="15" id='WProgram1' name='WProgram1' style="visibility: hidden;position: absolute;width: 20;">
-0;0.07;25;H;135
-0;0.1;15;H;0
-1;0.3;20;H;0
-2;0.4;20;H;0
-3;0.4;20;H;0
-0;300;0;P;145
-4;1.4;10;B;0
-5;0.9;40;B;0
-0;300;0;P;170
-6;1.2;40;C;0
-7;1;10;B;0
-8;0.2;10;T;160
-9;0.1;10;T;0</textarea>
+<textarea cols="40" rows="15" id='WProgram1' name='WProgram1' style="visibility: hidden;position: absolute;width: 20;"></textarea>
 <textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20;">%WProgram%</textarea>
 </div>
 
