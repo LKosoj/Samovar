@@ -335,7 +335,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   s = lua_tolstring(lua_state, -1, &l);
   Var = s;
   lua_pop(lua_state, 1);
-  float a;
+  float a = 0;
   if (Var == "WFpulseCount") {
     a = WFpulseCount;
   } else if (Var == "pump_started") {
@@ -387,8 +387,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {
-    WriteConsoleLog("GET UNDEF NUMERIC LUA VAR " + Var + " = " + a);
-    return 0;
+    WriteConsoleLog("GET UNDEF NUMERIC LUA VAR " + Var);
   }
   lua_pushnumber(lua_state, (lua_Number) a);
   return 1;
@@ -562,7 +561,7 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
   } else if (Var == "program_type") {
     c = program[ProgramNum].WType;
   } else if (Var != "") {
-    WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var + " = " + c);
+    WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var);
     return 0;
   }
   lua_pushstring(lua_state, c.c_str());
