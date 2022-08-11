@@ -841,6 +841,33 @@ void check_boiling() {
 }
 #endif
 
+void start_self_test(void) {
+#ifdef USE_WATER_PUMP
+  //включаем насос воды
+  set_pump_pwm(PWM_START_VALUE * 10);
+#endif
+  //включаем шаговый двигатель
+  stopService();
+  stepper.setMaxSpeed(get_speed_from_rate(1));
+  stepper.setSpeed(get_speed_from_rate(1));
+  TargetStepps = 0.05 * SamSetup.StepperStepMl;
+  stepper.setCurrent(0);
+  stepper.setTarget(TargetStepps);
+  startService();
+  //включаем сервопривод
+  set_capacity(1);
+  while (capacity_num != 0 && capacity_num < 5) {
+    delay(2000);
+    next_capacity();
+  }
+}
+
+void stop_self_test(void) {
+  set_capacity(0);
+  set_pump_pwm(0);
+  stopService();
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SAMOVAR_USE_POWER
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
