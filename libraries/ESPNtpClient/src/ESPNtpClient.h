@@ -784,14 +784,14 @@ public:
    		char tz[33] = {0};
 
     	if(offset % 3600){
-        	sprintf(cst, "UTC%ld:%02d:%02d", offset / 3600, abs((offset % 3600) / 60), abs(offset % 60));
+        	sprintf(cst, "UTC%ld:%02u:%02u", offset / 3600, uint(abs((offset % 3600) / 60)), uint(abs(offset % 60)));
 	    } else {
     	    sprintf(cst, "UTC%ld", offset / 3600);
     	}
 	    if(daylight != 3600){
     	    long tz_dst = offset - daylight;
         	if(tz_dst % 3600){
-	            sprintf(cdt, "DST%ld:%02d:%02d", tz_dst / 3600, abs((tz_dst % 3600) / 60), abs(tz_dst % 60));
+	            sprintf(cdt, "DST%ld:%02u:%02u", tz_dst / 3600, uint(abs((tz_dst % 3600) / 60)), uint(abs(tz_dst % 60)));
     	    } else {
         	    sprintf(cdt, "DST%ld", tz_dst / 3600);
         	}
