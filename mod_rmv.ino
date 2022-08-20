@@ -16,7 +16,6 @@ rmvk_t rmvk;
 uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res) {
   size_t cmd_len;
   int len;
-  int len_bf = 0;
   cmd_len = strlen(cmd);
   char cmd_buf[cmd_len + 2];
   const char * pc = cmd_buf;
