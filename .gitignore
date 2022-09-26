@@ -8,3 +8,4 @@ tools/ngrok
 .vscode/launch.json
 user_config_override.h
 doc/*.*
+.theia/launch.json
