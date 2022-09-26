@@ -12,76 +12,49 @@
 
     Версии:
     v1.0 - релиз
+    v1.1 - разбил утилиты на .h .cpp
+    v1.1.1 - исправлена ошибка компиляции
 */
 
-#ifndef mString_h
-#define mString_h
+#ifndef _mString_h
+#define _mString_h
 
 #include <Arduino.h>
+#include "utils.h"
 
-// закодил, но тут вроде не используется
-char* mUtoa(uint32_t value, char *buffer, bool clear = 1);
-char* mLtoa(int32_t value, char *buffer, bool clear = 1);
-char* mFtoa(double value, int8_t decimals, char *buffer);
-
-char* mUtoa(uint32_t value, char *buffer, bool clear) {
-    buffer += 11;
-    if (clear) *--buffer = 0;
-    do {
-        *--buffer = value % 10 + '0';
-        value /= 10;
-    } while (value != 0);
-    return buffer;
-}
-
-char* mLtoa(int32_t value, char *buffer, bool clear) {
-    bool minus = value < 0;
-    if (minus) value = -value;
-    buffer = mUtoa(value, buffer, clear);
-    if (minus) *--buffer = '-';
-    return buffer;
-}
-
-char* mFtoa(double value, int8_t decimals, char *buffer) {
-    int32_t mant = (int32_t)value;
-    value -= mant;
-    uint32_t exp = 1;
-    while (decimals--) exp *= 10;
-    exp *= (float)value;
-    buffer = ltoa(mant, buffer, DEC);
-    byte len = strlen(buffer);
-    *(buffer + len++) = '.';
-    ltoa(exp, buffer + len++, DEC);
-    return buffer;
-}
-
-template < uint16_t SIZE >
+template < uint16_t _MS_SIZE >
 class mString {
 public:
-    char buf[SIZE] = "";
+    char buf[_MS_SIZE];
+    
+    mString() {
+        clear();
+    }
+    
     uint16_t length() {
         return strlen(buf);
     }
+    
     void clear() {
-        buf[0] = NULL;
+        buf[0] = '\0';
     }
 
     // add
     mString& add(const char c) {
         int len = length();
-        if (len + 1 >= SIZE) return *this;
+        if (len + 1 >= _MS_SIZE) return *this;
         buf[len++] = c;
-        buf[len] = NULL;
+        buf[len] = '\0';
         return *this;
     }
     mString& add(const char* data) {
-        if (length() + strlen(data) >= SIZE) return *this;
+        if (length() + strlen(data) >= _MS_SIZE) return *this;
         strcat(buf, data);
         return *this;
     }
     mString& add(const __FlashStringHelper *data) {
         PGM_P p = reinterpret_cast<PGM_P>(data);
-        if (length() + strlen_P(p) >= SIZE) return *this;
+        if (length() + strlen_P(p) >= _MS_SIZE) return *this;
         strcpy_P(buf + length(), p);
         return *this;
     }
@@ -315,7 +288,7 @@ public:
 
     void substring(uint16_t from, uint16_t to, char* arr) {
         char backup = buf[++to];
-        buf[to] = NULL;
+        buf[to] = '\0';
         strcpy(arr, buf + from);
         buf[to] = backup;
     }
@@ -324,7 +297,7 @@ public:
         ptrs[0] = buf;
         while (buf[i]) {
             if (buf[i] == div) {
-                buf[i] = NULL;
+                buf[i] = '\0';
                 ptrs[j++] = buf + i + 1;
             }
             i++;
@@ -334,7 +307,7 @@ public:
     void truncate(uint16_t amount) {
         uint16_t len = length();
         if (amount >= len) clear();
-        else buf[len - amount] = NULL;
+        else buf[len - amount] = '\0';
     }
     void remove(uint16_t index, uint16_t count) {
         uint16_t len = length();
@@ -371,7 +344,7 @@ public:
         return (temp == NULL) ? -1 : (temp - buf);
     }
 
-    int parseBytes(byte* data, int len, char div = ',', char ter = NULL) {
+    int parseBytes(byte* data, int len, char div = ',', char ter = '\0') {
         int b = 0, c = 0;
         data[b] = 0;
         while (true) {
@@ -388,7 +361,7 @@ public:
             c++;
         }
     }
-    int parseInts(int* data, int len, char div = ',', char ter = NULL) {
+    int parseInts(int* data, int len, char div = ',', char ter = '\0') {
         int b = 0, c = 0;
         data[b] = 0;
         while (true) {
@@ -405,6 +378,40 @@ public:
             c++;
         }
     }
+    //cast operators
+    operator const char*(){ // теперь mString автоматом переконвертируется в cstring (const char *) если будет нужно
+        return this->c_str();
+    }
+    /*
+    Пример:
+    void printString(const char * cstr){cout<<cstr;}
+    mString<16> mStr = "Hello";
+    
+        Было:
+        printString(mStr.c_str());
+        Стало:
+        printString(mStr);
+    
+    */
+    
+    operator bool()
+    {
+        return (this->length());
+    }
+    /* Теперь строка может возвращать bool 
+    Пример:
+        Было:
+        if(str.length())
+        {
+            doSomeMagic();
+        }
+        
+        Стало:
+        if(str)
+        {
+            doSomeMagic();
+        }
+    */
 private:
 };
 #endif

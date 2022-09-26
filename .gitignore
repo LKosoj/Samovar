@@ -9,3 +9,5 @@ tools/ngrok
 user_config_override.h
 doc/*.*
 .theia/launch.json
+user_config_override.h
+user_config_override.h
