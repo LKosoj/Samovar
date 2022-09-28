@@ -9,6 +9,7 @@ void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void SendMsg(String m, MESSAGE_TYPE msg_type);
+void check_boiling();
 
 void set_water_temp(float duty) {
 #ifdef USE_WATER_PUMP
@@ -16,6 +17,8 @@ void set_water_temp(float duty) {
   if (pump_started) {
     pump_pwm.write(bk_pwm);
   }
+#else
+  SendMsg(F("Управление бражной колонной не поддерживается вашим оборудованием"), NOTIFY_MSG);
 #endif
 }
 
@@ -61,6 +64,9 @@ void IRAM_ATTR check_alarm_bk() {
     set_pump_pwm(bk_pwm);
 #endif
   }
+
+  //Определяем, что началось кипение - вода охлаждения начала нагреваться
+  check_boiling();
 
   if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
     open_valve(false);
