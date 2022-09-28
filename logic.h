@@ -592,11 +592,10 @@ void IRAM_ATTR check_alarm() {
     } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
     }
-  }
-  else alarm_c_low_min = 0;
+  } else alarm_c_low_min = 0;
 
 #endif
-  //Если используется датчик уровня флегмы в голове
+    //Если используется датчик уровня флегмы в голове
 #endif
 
 
@@ -607,7 +606,7 @@ void IRAM_ATTR check_alarm() {
     power_err_cnt++;
     if (power_err_cnt > 8) set_current_power(target_power_volt);
     if (power_err_cnt > 10) {
-      delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+      delay(1000);  //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
       SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
@@ -632,10 +631,10 @@ void IRAM_ATTR check_alarm() {
 #endif
   }
 
-#ifdef USE_WATER_PUMP
-  //Определяем, что началось кипение - вода охлаждения начала нагреваться, значит надо времено увеличить подачу воды (на всякий случай)
-  //check_boiling();
+  //Определяем, что началось кипение - вода охлаждения начала нагреваться
+  check_boiling();
 
+#ifdef USE_WATER_PUMP
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
     if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
@@ -647,7 +646,7 @@ void IRAM_ATTR check_alarm() {
   //Проверяем, что температурные параметры не вышли за предельные значения
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
-    delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+    delay(1000);  //Пауза на всякий случай, чтобы прошли все другие команды
     set_buzzer(true);
     set_power(false);
     String s = "";
@@ -771,7 +770,7 @@ void IRAM_ATTR set_buzzer(bool fl) {
       xTaskCreatePinnedToCore(
         triggerBuzzerTask, /* Function to implement the task */
         "BuzzerTask",      /* Name of the task */
-        800,              /* Stack size in words */
+        800,               /* Stack size in words */
         NULL,              /* Task input parameter */
         0,                 /* Priority of the task */
         &BuzzerTask,       /* Task handle. */
@@ -822,24 +821,33 @@ void IRAM_ATTR set_power(bool On) {
   }
 }
 
-#ifdef USE_WATER_PUMP
 void check_boiling() {
+  if (!valve_status
+#ifdef USE_WATER_PUMP
+      || wp_count < 10
+#endif
+  )
+    return;
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (!boil_started && (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0)) {
     d_s_temp_prev = WaterSensor.avgTemp;
   }
   if (!boil_started && WaterSensor.avgTemp - d_s_temp_prev > 10) {
+#ifdef USE_WATER_PUMP
     wp_count = -10;
+#endif
     boil_started = true;
     SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
   }
   if (!boil_started && abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3) {
+#ifdef USE_WATER_PUMP
+    //Началось кипение, значит надо времено увеличить подачу воды (на всякий случай)
     wp_count = -10;
+#endif
     boil_started = true;
     SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
   }
 }
-#endif
 
 void start_self_test(void) {
 #ifdef USE_WATER_PUMP
@@ -928,7 +936,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         v = resp.toInt();
-        if ( v != 0) {
+        if (v != 0) {
           target_power_volt = v;
         }
       }
@@ -936,7 +944,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       current_power_volt = RMVK_get_out_voltge();
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       v = RMVK_get_store_out_voltge();
-      if ( v != 0) {
+      if (v != 0) {
         target_power_volt = v;
       }
 #endif
