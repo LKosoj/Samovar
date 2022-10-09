@@ -53,7 +53,7 @@ static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN || WATER_PUMP_PIN) pinMode(a, b);
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN) pinMode(a, b);
   return 0;
 }
 
@@ -73,11 +73,9 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
     else {
 #ifdef USE_WATER_PUMP
       if (b == LOW) {
-        //WriteConsoleLog("0");
         pump_pwm.write(0);
       }
       else {
-        //WriteConsoleLog("1");
         pump_pwm.write(1023);
       }
 #else
