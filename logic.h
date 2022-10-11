@@ -916,6 +916,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
     if (PowerOn) {
 #ifdef SAMOVAR_USE_SEM_AVR
       Serial2.flush();
+      vTaskDelay(100 / portTICK_RATE_MS);
       Serial2.print("АТ+SS?\r");
       vTaskDelay(200 / portTICK_RATE_MS);
       if (Serial2.available()) {
@@ -923,6 +924,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       Serial2.flush();
+      vTaskDelay(100 / portTICK_RATE_MS);
       Serial2.print("АТ+VO?\r");
       vTaskDelay(200 / portTICK_RATE_MS);
       if (Serial2.available()) {
@@ -931,6 +933,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       Serial2.flush();
+      vTaskDelay(100 / portTICK_RATE_MS);
       Serial2.print("АТ+VS?\r");
       vTaskDelay(200 / portTICK_RATE_MS);
       if (Serial2.available()) {
@@ -998,6 +1001,8 @@ void IRAM_ATTR set_current_power(float Volt) {
   else
     Cmd = "";
   Cmd = Cmd + (String)V;
+  Serial2.flush();
+  vTaskDelay(100/portTICK_PERIOD_MS);
   Serial2.print("АТ+VS=" + Cmd + "\r");
   vTaskResume(PowerStatusTask);
 #endif
@@ -1015,6 +1020,8 @@ void IRAM_ATTR set_power_mode(String Mode) {
   if (Mode == POWER_SLEEP_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
     vTaskSuspend(PowerStatusTask);
+    Serial2.flush();
+    vTaskDelay(100/portTICK_PERIOD_MS);
     Serial2.print("АТ+ON=0\r");
     vTaskResume(PowerStatusTask);
 #else
@@ -1023,6 +1030,8 @@ void IRAM_ATTR set_power_mode(String Mode) {
   } else if (Mode == POWER_SPEED_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
     vTaskSuspend(PowerStatusTask);
+    Serial2.flush();
+    vTaskDelay(100/portTICK_PERIOD_MS);
     Serial2.print("АТ+ON=1\r");
     vTaskResume(PowerStatusTask);
 #else
