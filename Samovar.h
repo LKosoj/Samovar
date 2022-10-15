@@ -261,9 +261,11 @@ uint8_t temprature_sens_read();
 #define POWER_SLEEP_MODE "2"
 //**************************************************************************************************************
 
+#include "user_config_override.h"
+
 #ifdef SAMOVAR_USE_SEM_AVR
 #undef PWR_FACTOR
-#define PWR_FACTOR 20
+#define PWR_FACTOR 10
 #define PWR_MSG "Мощность"
 #define PWR_TYPE "P"
 #else
@@ -275,8 +277,6 @@ uint8_t temprature_sens_read();
 #define PWR_TYPE ""
 #endif
 #endif
-
-#include "user_config_override.h"
 
 #ifndef SAMOVAR_USE_POWER_START_TIME
 #define SAMOVAR_USE_POWER_START_TIME 3100
