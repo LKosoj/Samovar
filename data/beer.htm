@@ -293,7 +293,7 @@ function addLine(obj, s){
   num.className = "prglabel";
   dl.appendChild(num);
 
-  num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option></select>');
+  num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брага</option></select>');
   
 //  var ptype = dl.getElementsByName("ptype");
 //  ptype[0].value = arr[0];
@@ -365,6 +365,7 @@ function set_bgcolor(obj){
   else if (t == "C"){color = "background-color: #00BFFF;";}
   else if (t == "P"){color = "background-color: #FFA500;";}
   else if (t == "W"){color = "background-color: #98FB98;";}
+  else if (t == "F"){color = "background-color: #DACEFF;";}
   l.setAttribute("style",color);
   var e = l.childNodes;
   for(q=0;q<e.length;q++){
