@@ -60,6 +60,7 @@ void IRAM_ATTR beer_finish() {
 #ifdef USE_WATER_PUMP
   if (pump_started) set_pump_pwm(0);
 #endif
+  setHeaterPosition(false);
   PowerOn = false;
   heater_state = false;
   startval = 0;
@@ -73,6 +74,13 @@ void IRAM_ATTR check_alarm_beer() {
   if (startval <= 2000) return;
 
   //Обрабатываем программу
+
+  //Проверяем, что клапан воды охлаждения не открыт, когда не нужно
+  if (program[ProgramNum].WType != "C" and program[ProgramNum].WType != "F" and valve_status) {
+    //Закрываем клапан воды
+    open_valve(false);
+    SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+  }
 
   //Если программа - ожидание - ждем, ничего не делаем
   if (program[ProgramNum].WType == "W") {
@@ -95,6 +103,37 @@ void IRAM_ATTR check_alarm_beer() {
   //Если режим Засыпь солода или Пауза
   if (program[ProgramNum].WType == "M" || program[ProgramNum].WType == "P") {
     set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
+  }
+
+  //Если режим Брага
+  if (program[ProgramNum].WType == "F") {
+    //Если температура меньше целевой - греем, иначе охлаждаем.
+    if  (TankSensor.avgTemp <= program[ProgramNum].Temp - TankSensor.SetTemp) {
+      if (valve_status) {
+        //Закрываем клапан воды
+        open_valve(false);
+        SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+      }
+      //Поддерживаем целевую температуру
+      set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
+    } else if (TankSensor.avgTemp >= program[ProgramNum].Temp + TankSensor.SetTemp) {
+      {
+        if (!valve_status) {
+          //Отключаем нагреватель
+          setHeaterPosition(false);
+          //Открываем клапан воды
+          open_valve(true);
+          SendMsg(F("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+        }
+      }
+    } else {
+      //Так как находимся в пределах температурной уставки, не нужно ни греть, ни охлаждать
+      //Отключаем нагреватель
+      setHeaterPosition(false);
+      //Закрываем клапан воды
+      open_valve(false);
+      SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+    }
   }
 
   if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
@@ -134,6 +173,7 @@ void IRAM_ATTR check_alarm_beer() {
     if (TankSensor.avgTemp <= program[ProgramNum].Temp) {
       //Если температура упала
       //Закрываем клапан воды
+      open_valve(false);
       SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
