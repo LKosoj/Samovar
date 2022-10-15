@@ -922,26 +922,35 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       Serial2.flush();
       vTaskDelay(100 / portTICK_RATE_MS);
       Serial2.print("АТ+SS?\r");
-      vTaskDelay(200 / portTICK_RATE_MS);
+      vTaskDelay(300 / portTICK_RATE_MS);
       if (Serial2.available()) {
         current_power_mode = Serial2.readStringUntil('\r');
+#ifdef __SAMOVAR_DEBUG
+        WriteConsoleLog("CPM=" + current_power_mode);
+#endif
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       Serial2.flush();
       vTaskDelay(100 / portTICK_RATE_MS);
       Serial2.print("АТ+VO?\r");
-      vTaskDelay(200 / portTICK_RATE_MS);
+      vTaskDelay(300 / portTICK_RATE_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
+#ifdef __SAMOVAR_DEBUG
+        WriteConsoleLog("CPV=" + resp);
+#endif
         current_power_volt = resp.toInt();
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       Serial2.flush();
       vTaskDelay(100 / portTICK_RATE_MS);
       Serial2.print("АТ+VS?\r");
-      vTaskDelay(200 / portTICK_RATE_MS);
+      vTaskDelay(300 / portTICK_RATE_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
+#ifdef __SAMOVAR_DEBUG
+        WriteConsoleLog("TPV=" + resp);
+#endif
         v = resp.toInt();
         if (v != 0) {
           target_power_volt = v;
@@ -1006,8 +1015,8 @@ void IRAM_ATTR set_current_power(float Volt) {
     Cmd = "";
   Cmd = Cmd + (String)V;
   Serial2.flush();
-  vTaskDelay(100 / portTICK_PERIOD_MS);
   Serial2.print("АТ+VS=" + Cmd + "\r");
+  vTaskDelay(100 / portTICK_PERIOD_MS);
   vTaskResume(PowerStatusTask);
 #endif
 #else
@@ -1025,18 +1034,23 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_SEM_AVR
     vTaskSuspend(PowerStatusTask);
     Serial2.flush();
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     Serial2.print("АТ+ON=0\r");
+    vTaskDelay(300 / portTICK_PERIOD_MS);
     vTaskResume(PowerStatusTask);
 #else
     RMVK_set_on(0);
 #endif
   } else if (Mode == POWER_SPEED_MODE) {
+#ifdef __SAMOVAR_DEBUG
+  WriteConsoleLog("Set power mode=" + Mode);
+#endif
 #ifdef SAMOVAR_USE_SEM_AVR
     vTaskSuspend(PowerStatusTask);
     Serial2.flush();
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     Serial2.print("АТ+ON=1\r");
+    vTaskDelay(300 / portTICK_PERIOD_MS);
     vTaskResume(PowerStatusTask);
 #else
     RMVK_set_out_voltge(MAX_VOLTAGE);
