@@ -348,7 +348,7 @@ function getProgram(){
     return;
   }  
   var e = document.getElementById("prg");
-  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение" и "Темп. закладки солода"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label></div>');
+  e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label></div>');
   var p = document.getElementById("WProgram");
   var varr = p.value.split("\n");
   for (z=0;z<varr.length;z++){
@@ -539,7 +539,7 @@ Samovar v. <span id='version'></span>
       <textarea cols="40" rows="7" id='WProgram' name='WProgram'>%WProgram%</textarea>
       <div class='dvcs'>
         <p><span>Параметры программы затирания: Тип программы;Температура;Время</span></p>
-        <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре), B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры), W - wait (режим ожидания, ничего не делает до смены строки программы).</span></p>
+        <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре), B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры), W - wait (режим ожидания, ничего не делает до смены строки программы), F - ferment (ферментирование, режим браги, поддерживает заданную температуру до сменты строки программы).</span></p>
         <p><span>Пример программы отбора</span></p>
         <p><span>M;45.00;0</span></p>
         <p><span>P;60.00;1</span></p>
