@@ -279,7 +279,7 @@ uint8_t temprature_sens_read();
 #endif
 
 #ifndef SAMOVAR_USE_POWER_START_TIME
-#define SAMOVAR_USE_POWER_START_TIME 3100
+#define SAMOVAR_USE_POWER_START_TIME 300
 #endif
 
 #include <FS.h>
