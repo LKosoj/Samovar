@@ -887,7 +887,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
       Serial2.flush();
-      vTaskDelay(300 / portTICK_PERIOD_MS);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
@@ -903,7 +903,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
             current_power_volt = cpv / 10.0F;
             target_power_volt = hexToDec(resp.substring(4, 7)) / 10.0F;
             current_power_mode = resp.substring(7, 8);
-            vTaskDelay(400 / portTICK_PERIOD_MS);
+            vTaskDelay(300 / portTICK_PERIOD_MS);
           }
         }
       }
