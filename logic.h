@@ -907,6 +907,8 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
           }
         }
       }
+    } else {
+      vTaskDelay(400 / portTICK_PERIOD_MS);
     }
   }
 }
