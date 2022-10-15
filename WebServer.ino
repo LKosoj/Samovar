@@ -68,6 +68,9 @@ void WebServerInit(void) {
   server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
   server.serveStatic("/Green.png", SPIFFS, "/Green.png");
   server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
+  server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt");
+  server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt");
+  server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt");
 
 #ifdef USE_LUA
   server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
