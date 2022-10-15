@@ -595,7 +595,7 @@ void IRAM_ATTR check_alarm() {
   } else alarm_c_low_min = 0;
 
 #endif
-    //Если используется датчик уровня флегмы в голове
+  //Если используется датчик уровня флегмы в голове
 #endif
 
 
@@ -826,7 +826,7 @@ void check_boiling() {
 #ifdef USE_WATER_PUMP
       || wp_count < 10
 #endif
-  )
+     )
     return;
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (!boil_started && (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0)) {
@@ -887,7 +887,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
       Serial2.flush();
-      vTaskDelay(100 / portTICK_PERIOD_MS);
+      vTaskDelay(200 / portTICK_PERIOD_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
@@ -895,17 +895,19 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
           resp = Serial2.readStringUntil('\r');
         }
         resp = resp.substring(i, resp.length());
-        if (resp.substring(1, 2) == "T") resp = resp.substring(1, 9);
-        int cpv = hexToDec(resp.substring(1, 4));
-        //Если напряжение больше 300 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
-        if (cpv > 10 && cpv < 3000) {
-          current_power_volt = cpv / 10.0F;
-          target_power_volt = hexToDec(resp.substring(4, 7)) / 10.0F;
-          current_power_mode = resp.substring(7, 8);
+        if (resp.substring(1, 2) == "T") {
+          resp = resp.substring(1, 9);
+          int cpv = hexToDec(resp.substring(1, 4));
+          //Если напряжение больше 300 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
+          if (cpv > 10 && cpv < 3000) {
+            current_power_volt = cpv / 10.0F;
+            target_power_volt = hexToDec(resp.substring(4, 7)) / 10.0F;
+            current_power_mode = resp.substring(7, 8);
+            vTaskDelay(400 / portTICK_PERIOD_MS);
+          }
         }
       }
     }
-    vTaskDelay(400 / portTICK_PERIOD_MS);
   }
 }
 #else
@@ -1002,7 +1004,7 @@ void IRAM_ATTR set_current_power(float Volt) {
     Cmd = "";
   Cmd = Cmd + (String)V;
   Serial2.flush();
-  vTaskDelay(100/portTICK_PERIOD_MS);
+  vTaskDelay(100 / portTICK_PERIOD_MS);
   Serial2.print("АТ+VS=" + Cmd + "\r");
   vTaskResume(PowerStatusTask);
 #endif
@@ -1021,7 +1023,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_SEM_AVR
     vTaskSuspend(PowerStatusTask);
     Serial2.flush();
-    vTaskDelay(100/portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     Serial2.print("АТ+ON=0\r");
     vTaskResume(PowerStatusTask);
 #else
@@ -1031,7 +1033,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_SEM_AVR
     vTaskSuspend(PowerStatusTask);
     Serial2.flush();
-    vTaskDelay(100/portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     Serial2.print("АТ+ON=1\r");
     vTaskResume(PowerStatusTask);
 #else
