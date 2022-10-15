@@ -307,8 +307,8 @@ void sensor_init(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init SEM_AVR");
 #endif
-  Serial2.setTimeout(300);
-  //Serial2.setRxBufferSize(10);
+  Serial2.setTimeout(500);
+  //Serial2.setRxBufferSize(12);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 #define USE_SERIAL
 #endif
