@@ -331,7 +331,7 @@ void sensor_init(void) {
   Serial.println("Init KVIC");
 #endif
   Serial2.setTimeout(300);
-  Serial2.setRxBufferSize(10);
+  Serial2.setRxBufferSize(25);
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
 #define USE_SERIAL
 #endif
