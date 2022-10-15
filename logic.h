@@ -822,24 +822,24 @@ void IRAM_ATTR set_power(bool On) {
 }
 
 void check_boiling() {
-  if (!valve_status
+  if (!valve_status || boil_started
 #ifdef USE_WATER_PUMP
       || wp_count < 10
 #endif
      )
     return;
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  if (!boil_started && (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0)) {
+  if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
     d_s_temp_prev = WaterSensor.avgTemp;
   }
-  if (!boil_started && WaterSensor.avgTemp - d_s_temp_prev > 10) {
+  if (WaterSensor.avgTemp - d_s_temp_prev > 10) {
 #ifdef USE_WATER_PUMP
     wp_count = -10;
 #endif
     boil_started = true;
     SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
   }
-  if (!boil_started && abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3) {
+  if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 5) {
 #ifdef USE_WATER_PUMP
     //Началось кипение, значит надо времено увеличить подачу воды (на всякий случай)
     wp_count = -10;
