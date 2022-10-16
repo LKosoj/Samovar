@@ -885,6 +885,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   int i;
   String resp;
   while (true) {
+    //T3EA3E80
     if (PowerOn) {
       Serial2.flush();
       vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -895,14 +896,21 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
           resp = Serial2.readStringUntil('\r');
         }
         resp = resp.substring(i, resp.length());
-        if (resp.substring(1, 2) == "T") {
+#ifdef __SAMOVAR_DEBUG
+        WriteConsoleLog("RESP_T =" + resp.substring(0, 1));
+#endif
+        if (resp.substring(0, 1) == "T") {
           resp = resp.substring(1, 9);
-          int cpv = hexToDec(resp.substring(1, 4));
+#ifdef __SAMOVAR_DEBUG
+          WriteConsoleLog("RESP_F =" + resp.substring(1, 7));
+          WriteConsoleLog("RESP_MODE =" + resp.substring(6, 7));
+#endif
+          int cpv = hexToDec(resp.substring(0, 3));
           //Если напряжение больше 300 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
           if (cpv > 10 && cpv < 3000) {
             current_power_volt = cpv / 10.0F;
-            target_power_volt = hexToDec(resp.substring(4, 7)) / 10.0F;
-            current_power_mode = resp.substring(7, 8);
+            target_power_volt = hexToDec(resp.substring(3, 6)) / 10.0F;
+            current_power_mode = resp.substring(6, 7);
             vTaskDelay(300 / portTICK_PERIOD_MS);
           }
         }
@@ -1043,7 +1051,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #endif
   } else if (Mode == POWER_SPEED_MODE) {
 #ifdef __SAMOVAR_DEBUG
-  WriteConsoleLog("Set power mode=" + Mode);
+    WriteConsoleLog("Set power mode=" + Mode);
 #endif
 #ifdef SAMOVAR_USE_SEM_AVR
     vTaskSuspend(PowerStatusTask);
