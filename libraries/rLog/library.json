@@ -1,0 +1,17 @@
+{
+  "name": "rLog",
+  "version": "1.4.0",
+  "description": "A universal approach to displaying debug messages on various platforms and frameworks. With the ability to completely exclude debug messages from the code. Analogue of <esp32-hal-log.h> for ESP32, but with the ability to work on AVR or ESP8266. Tested on AVR, ESP32, ESP8266 for PlatformIO and Arduino IDE.",
+  "keywords": "log, debug, serial",
+  "authors":
+  [
+    {
+      "name": "Alexander Razzhivin",
+      "email": "kotyara12@yandex.ru",
+      "url": "https://kotyara12.ru"
+    }
+  ],
+  "license": "MIT",
+  "platforms": ["atmelavr", "espressif32", "espressif8266"],
+  "frameworks": ["arduino", "espidf"]
+}
