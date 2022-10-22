@@ -112,7 +112,7 @@ void IRAM_ATTR check_alarm_beer() {
       if (valve_status) {
         //Закрываем клапан воды
         open_valve(false);
-        //SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+        SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       }
       //Поддерживаем целевую температуру
       set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
@@ -123,16 +123,18 @@ void IRAM_ATTR check_alarm_beer() {
           setHeaterPosition(false);
           //Открываем клапан воды
           open_valve(true);
-          //SendMsg(F("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+          SendMsg(F("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
         }
       }
     } else {
       //Так как находимся в пределах температурной уставки, не нужно ни греть, ни охлаждать
       //Отключаем нагреватель
       setHeaterPosition(false);
-      //Закрываем клапан воды
-      open_valve(false);
-      //SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+      //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
+      if ((TankSensor.avgTemp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status) {
+        open_valve(false);
+        SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+      }
     }
   }
 
