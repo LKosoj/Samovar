@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "5.13"
+#define SAMOVAR_VERSION "5.14"
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -259,6 +259,7 @@ uint8_t temprature_sens_read();
 #define POWER_WORK_MODE "0"
 #define POWER_SPEED_MODE "1"
 #define POWER_SLEEP_MODE "2"
+#define POWER_ERROR_MODE "3"
 //**************************************************************************************************************
 
 #include "user_config_override.h"
@@ -279,7 +280,7 @@ uint8_t temprature_sens_read();
 #endif
 
 #ifndef SAMOVAR_USE_POWER_START_TIME
-#define SAMOVAR_USE_POWER_START_TIME 300
+#define SAMOVAR_USE_POWER_START_TIME 2000
 #endif
 
 #include <FS.h>
