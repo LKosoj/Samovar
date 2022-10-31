@@ -31,6 +31,8 @@ void set_pump_speed_pid(float temp);
 void set_power(bool On);
 void set_body_temp();
 void set_buzzer(bool fl);
+void start_self_test(void);
+void stop_self_test(void);
 #ifdef USE_WATER_PUMP
 void check_boiling();
 #endif
@@ -850,6 +852,7 @@ void check_boiling() {
 }
 
 void start_self_test(void) {
+  open_valve(true);
 #ifdef USE_WATER_PUMP
   //включаем насос воды
   set_pump_pwm(PWM_START_VALUE * 10);
@@ -865,12 +868,14 @@ void start_self_test(void) {
   //включаем сервопривод
   set_capacity(1);
   while (capacity_num != 0 && capacity_num < 5) {
-    delay(2000);
+    delay(1000);
     next_capacity();
   }
+  stop_self_test();
 }
 
 void stop_self_test(void) {
+  open_valve(false);
   set_capacity(0);
   set_pump_pwm(0);
   stopService();
