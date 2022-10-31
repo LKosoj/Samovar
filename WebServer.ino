@@ -9,6 +9,8 @@ void calibrate_command(AsyncWebServerRequest *request);
 String setupKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
+void start_self_test(void);
+void stop_self_test(void);
 #ifdef USE_LUA
 void start_lua_script();
 void load_lua_script();
@@ -691,6 +693,10 @@ void web_command(AsyncWebServerRequest *request) {
       ESP.restart();
     } else if (request->hasArg("resetwifi")) {
       menu_reset_wifi();
+    } else if (request->hasArg("startst")) {
+      start_self_test();
+    } else if (request->hasArg("stopst")) {
+      stop_self_test();
     } else if (request->hasArg("mixer")) {
       if (request->arg("mixer").toInt() == 1) {
         set_mixer(true);
