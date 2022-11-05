@@ -199,11 +199,11 @@ void sensor_init(void) {
 #endif
 
 #ifdef USE_BMP280_1
-  bme.setSampling(Adafruit_BMP280::MODE_FORCED,     /* Operating Mode. */
-                  Adafruit_BMP280::SAMPLING_X1,     /* Temp. oversampling */
-                  Adafruit_BMP280::SAMPLING_X4,    /* Pressure oversampling */
-                  Adafruit_BMP280::FILTER_X2,      /* Filtering. */
-                  Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+    bme.setSampling(Adafruit_BMP280::MODE_FORCED,     /* Operating Mode. */
+                    Adafruit_BMP280::SAMPLING_X1,     /* Temp. oversampling */
+                    Adafruit_BMP280::SAMPLING_X4,    /* Pressure oversampling */
+                    Adafruit_BMP280::FILTER_X2,      /* Filtering. */
+                    Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
 
 #endif
 #ifdef USE_BME280_1
@@ -306,6 +306,8 @@ void sensor_init(void) {
   //Если SEM_AVR иницииурем порт
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init SEM_AVR");
+  xSemaphoreAVR = xSemaphoreCreateBinaryStatic( &xSemaphoreBufferAVR );
+  xSemaphoreGive( xSemaphoreAVR );
 #endif
   Serial2.setTimeout(500);
   //Serial2.setRxBufferSize(12);
