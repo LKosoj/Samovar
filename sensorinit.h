@@ -306,9 +306,9 @@ void sensor_init(void) {
   //Если SEM_AVR иницииурем порт
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init SEM_AVR");
+#endif
   xSemaphoreAVR = xSemaphoreCreateBinaryStatic( &xSemaphoreBufferAVR );
   xSemaphoreGive( xSemaphoreAVR );
-#endif
   Serial2.setTimeout(500);
   //Serial2.setRxBufferSize(12);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
@@ -321,7 +321,7 @@ void sensor_init(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init RMVK");
 #endif
-  //Иначе работаем с RMVK_
+  //Иначе работаем с RMVK
   RMVK_init();
 #define USE_SERIAL
 #endif
