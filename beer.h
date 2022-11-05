@@ -310,7 +310,7 @@ void setHeaterPosition(bool state) {
       power_err_cnt++;
       //if (power_err_cnt > 8) set_current_power(target_power_volt);
       if (power_err_cnt > 10) {
-        delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+        vTaskDelay(1000 / portTICK_PERIOD_MS); //Пауза на всякий случай, чтобы прошли все другие команды
         set_power(false);
         SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
       }
@@ -326,7 +326,7 @@ void setHeaterPosition(bool state) {
   } else {
 #ifdef SAMOVAR_USE_POWER
     if (current_power_mode != POWER_SLEEP_MODE) {
-      delay(200);
+      //delay(200); 5.13
       set_power_mode(POWER_SLEEP_MODE);
     }
     //Устанавливаем заданное напряжение
