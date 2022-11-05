@@ -820,6 +820,12 @@ void setup() {
 
   alarm_event = false;
 
+  sensor_init();
+
+  samovar_reset();
+
+  WebServerInit();
+
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора
   xTaskCreatePinnedToCore(
@@ -833,12 +839,6 @@ void setup() {
   //На всякий случай пошлем команду выключения питания на UART
   set_power_mode(POWER_SLEEP_MODE);
 #endif
-
-  sensor_init();
-
-  samovar_reset();
-
-  WebServerInit();
 
 #ifdef USE_WEB_SERIAL
   WebSerial.begin(&server);
