@@ -269,6 +269,10 @@ uint8_t temprature_sens_read();
 #define PWR_FACTOR 10
 #define PWR_MSG "Мощность"
 #define PWR_TYPE "P"
+
+SemaphoreHandle_t xSemaphoreAVR = NULL;
+StaticSemaphore_t xSemaphoreBufferAVR;
+
 #else
 #ifdef SAMOVAR_USE_POWER
 #define PWR_MSG "Напряжение"
