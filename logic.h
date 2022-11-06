@@ -875,9 +875,12 @@ void start_self_test(void) {
 }
 
 void stop_self_test(void) {
+#ifdef USE_WATER_PUMP
+  //выключаем насос воды
+  set_pump_pwm(0);
+#endif
   open_valve(false);
   set_capacity(0);
-  set_pump_pwm(0);
   stopService();
 }
 
