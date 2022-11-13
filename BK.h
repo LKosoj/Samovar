@@ -100,19 +100,7 @@ void IRAM_ATTR check_alarm_bk() {
 
 #ifdef SAMOVAR_USE_POWER
 
-#ifndef __SAMOVAR_DEBUG
-    //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-    if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 0.1) {
-      power_err_cnt++;
-      if (power_err_cnt > 8) set_current_power(target_power_volt);
-      if (power_err_cnt > 10) {
-        delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
-        set_buzzer(true);
-        set_power(false);
-        SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
-      }
-    } else power_err_cnt = 0;
-#endif
+    check_power_error();
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
       SendMsg("Критическая температура воды! Напряжение снижено с " + (String)target_power_volt, ALARM_MSG);

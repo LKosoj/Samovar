@@ -304,19 +304,7 @@ void setHeaterPosition(bool state) {
     //Устанавливаем заданное напряжение
     set_current_power(SamSetup.StbVoltage);
 
-#ifndef __SAMOVAR_DEBUG
-    //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-    if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 0.1) {
-      power_err_cnt++;
-      //if (power_err_cnt > 8) set_current_power(target_power_volt);
-      if (power_err_cnt > 10) {
-        vTaskDelay(1000 / portTICK_PERIOD_MS); //Пауза на всякий случай, чтобы прошли все другие команды
-        set_power(false);
-        SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
-      }
-    } else power_err_cnt = 0;
-#endif
-
+    check_power_error();
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
