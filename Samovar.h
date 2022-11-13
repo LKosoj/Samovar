@@ -592,8 +592,8 @@ String Lua_status;                                              // Статус 
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 volatile float target_power_volt;                               // Заданное напряжение регулятора
-#ifdef SAMOVAR_USE_POWER
 volatile float current_power_volt;                              // Текущее напряжение регулятора
+#ifdef SAMOVAR_USE_POWER
 volatile float prev_target_power_volt;                          // Предыдущее заданное напряжение регулятора
 volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
 byte power_err_cnt;                                             // Счетчик ошибок по напряжению/мощности
