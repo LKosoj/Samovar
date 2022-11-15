@@ -156,7 +156,6 @@ static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
 #endif
 
 static int lua_wrapper_delay(lua_State *lua_state) {
-  vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   vTaskDelay(a / portTICK_PERIOD_MS);
   return 0;
