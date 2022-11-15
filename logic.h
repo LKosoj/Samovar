@@ -845,6 +845,7 @@ void check_boiling() {
 }
 
 void start_self_test(void) {
+  SendMsg(F("Запуск самотестирования."), NOTIFY_MSG);
   open_valve(true);
 #ifdef USE_WATER_PUMP
   //включаем насос воды
@@ -861,10 +862,12 @@ void start_self_test(void) {
   //включаем сервопривод
   set_capacity(1);
   while (capacity_num != 0 && capacity_num < 5) {
-    delay(1000);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     next_capacity();
   }
+  vTaskDelay(3000 / portTICK_PERIOD_MS);
   stop_self_test();
+  SendMsg(F("Самотестирование закончено."), NOTIFY_MSG);
 }
 
 void stop_self_test(void) {
