@@ -421,6 +421,11 @@ font-size: 18px;
 width:90px !important;
 }
 
+.ingredients  {
+margin-left: 15px !important;
+width: 400;
+}
+
 .pointer {
 cursor: pointer;
 margin-left: auto;
