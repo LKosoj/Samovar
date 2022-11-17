@@ -423,7 +423,31 @@ width:90px !important;
 
 .ingredients  {
 margin-left: 15px !important;
-width: 400;
+width: 780;
+}
+
+.ingType {
+margin: 0 auto;
+width: 150;
+float:left;
+text-align:center;
+position: relative;
+}
+
+.ingName {
+margin: 0 auto;
+width: 380;
+float:left;
+text-align:left;
+position: relative;
+}
+
+.ingAmount {
+margin: 0 auto;
+width: 250;
+float:left;
+text-align:center;
+position: relative;
 }
 
 .pointer {
