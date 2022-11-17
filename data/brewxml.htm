@@ -10,6 +10,8 @@
 
 <script>
 
+var is_program = false;
+
 function loadFile(e) {
 	var file = e;
 	var reader = new FileReader();
@@ -66,12 +68,23 @@ function isArray(myArray) {
   return Symbol.iterator in Object(myArray);
 }
 
+function isNumeric(str) {
+  if (typeof str != "string") return false // we only process strings!  
+  return !isNaN(str) && // use type coercion to parse the _entirety_ of the string (`parseFloat` alone does not do this)...
+         !isNaN(parseFloat(str)) // ...and ensure strings of whitespace fail
+}
+
 function get_object_value(Obj, str = ""){
-    if (typeof Obj != "undefined") return Obj["#text"] + str;
+    if (typeof Obj != "undefined") {
+      if (isNumeric(Obj["#text"])) return (parseFloat(Obj["#text"])) + str;
+      else if (typeof Obj["#text"] != "undefined") return Obj["#text"] + str;
+            else return "Нет в рецепте";
+    }
     else return "Нет в рецепте";
 }
 
 function get_brew_info(xml){
+    is_program = false;
 	let recipe = parseXml(xml);
 	//show main info
     document.getElementById("STYLE").textContent = get_object_value(recipe.RECIPES.RECIPE.STYLE.NAME);
@@ -181,6 +194,69 @@ function get_brew_info(xml){
 
       dl.appendChild(dl1);
     }
+    
+    //show mash step
+    var dl = document.createElement("div");
+    var dl1 = document.createElement("div");
+    dl1.className = "ingredients";
+  
+    var name = document.createElement("label");
+    name.textContent = "Название";
+    name.className = "mashName";
+    dl1.appendChild(name);
+    var descr = document.createElement("label");
+    descr.textContent = "Тип";
+    descr.className = "mashType";
+    dl1.appendChild(descr);
+    var mtemp = document.createElement("label");
+    mtemp.textContent = "Температура";
+    mtemp.className = "mashTemp";
+    dl1.appendChild(mtemp);
+    var mtime = document.createElement("label");
+    mtime.textContent = "Время";
+    mtime.className = "mashTime";
+    dl1.appendChild(mtime);
+    dl.appendChild(dl1);
+    
+    //mash
+    var MASH = [];
+    if (Array.isArray(recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP)){
+       MASH = recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP;
+    } else {MASH.push(recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP) }
+    for (let mash of MASH){
+      var dl1 = document.createElement("div");
+      dl1.className = "ingredients";
+  
+      var name = document.createElement("label");
+      name.textContent = get_object_value(mash.NAME)
+      name.className = "mashName";
+      dl1.appendChild(name);
+      var type = document.createElement("label");
+      type.textContent = get_object_value(mash.TYPE)
+      type.className = "mashType";
+      dl1.appendChild(type);
+      var step_temp = document.createElement("label");
+      step_temp.textContent = get_object_value(mash.STEP_TEMP)
+      step_temp.className = "mashTemp";
+      dl1.appendChild(step_temp);
+      var step_time = document.createElement("label");
+      step_time.textContent = get_object_value(mash.STEP_TIME)
+      step_time.className = "mashTemp";
+      dl1.appendChild(step_time);
+
+      dl.appendChild(dl1);
+    }
+
+    var ingr = document.getElementById("mash");
+    ingr.innerHTML = "";
+    ingr.appendChild(dl);
+    
+    is_program = true;
+}
+
+function set_program(){
+	if (is_program) alert("Ok");
+	else alert("Error");
 }
 </script>
 </head>
@@ -203,43 +279,57 @@ Samovar v. <span id='version'>%v%</span>
 
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
 <div id="brew">
-<label>Описание рецепта:</label>
+<label style="font-size: 20px; font-weight: 600;">Описание рецепта:</label>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-<div className="specs">
+<div class="specs">
 <div>
-<label>Стиль: </label><label className="specs" id="STYLE"></label>
+<label>Стиль: </label><label class="specs" id="STYLE"></label>
 </div>
 <div>
-<label>Сорт: </label><label className="specs" id="NAME"></label>
+<label>Сорт: </label><label class="specs" id="NAME"></label>
 </div>
 <div>
-<label>Тип: </label><label className="specs" id="TYPE"></label>
+<label>Тип: </label><label class="specs" id="TYPE"></label>
 </div>
 <div>
-<label>Выход: </label><label className="specs" id="BATCH_SIZE"></label>
+<label>Выход: </label><label class="specs" id="BATCH_SIZE"></label>
 </div>
 <div>
-<label>Объем котла: </label><label className="specs" id="BOIL_SIZE"></label>
+<label>Объем котла: </label><label class="specs" id="BOIL_SIZE"></label>
 </div>
 <div>
-<label>Температура брожения: </label><label className="specs" id="PRIMARY_TEMP"></label>
+<label>Температура брожения: </label><label class="specs" id="PRIMARY_TEMP"></label>
 </div>
 <div>
-<label>Время кипения: </label><label className="specs" id="BOIL_TIME"></label>
+<label>Время кипения: </label><label class="specs" id="BOIL_TIME"></label>
 </div>
 <div>
-<label>Заметки: </label><label className="specs" id="NOTES"></label>
+<label>Заметки: </label><label class="specs" id="NOTES"></label>
 </div>
 </div>
 </div>
 
 <div className="ingredients">
-<label>Ингредиенты:</label>
+<label style="font-size: 20px; font-weight: 600;">Ингредиенты:</label>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div id="ingredients">
 </div>
 </div>
 </div>
+
+<div className="ingredients">
+<label style="font-size: 20px; font-weight: 600;">Температурные паузы:</label>
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+<div id="mash">
+</div>
+</div>
+</div>
+
+<div style="margin: 0 auto; width: 450px;">
+<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
+<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"' class="button">
+</div>
+
 
 </div>
 </div>
