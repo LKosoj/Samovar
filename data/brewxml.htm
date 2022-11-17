@@ -66,32 +66,40 @@ function isArray(myArray) {
   return Symbol.iterator in Object(myArray);
 }
 
+function get_object_value(Obj, str = ""){
+    if (typeof Obj != "undefined") return Obj["#text"] + str;
+    else return "Нет в рецепте";
+}
+
 function get_brew_info(xml){
 	let recipe = parseXml(xml);
 	//show main info
-    document.getElementById("STYLE").textContent = recipe.RECIPES.RECIPE.STYLE.NAME["#text"];
-    document.getElementById("NAME").textContent = recipe.RECIPES.RECIPE.NAME["#text"];
-    document.getElementById("TYPE").textContent = recipe.RECIPES.RECIPE.TYPE["#text"];
-    document.getElementById("BATCH_SIZE").textContent = recipe.RECIPES.RECIPE.BATCH_SIZE["#text"] + " л.";
-    document.getElementById("BOIL_SIZE").textContent = recipe.RECIPES.RECIPE.BOIL_SIZE["#text"] + " л.";
-    document.getElementById("BOIL_TIME").textContent = recipe.RECIPES.RECIPE.BOIL_TIME["#text"] + " мин.";
-    if (typeof recipe.RECIPES.RECIPE.PRIMARY_TEMP != "undefined") document.getElementById("PRIMARY_TEMP").innerHTML = recipe.RECIPES.RECIPE.PRIMARY_TEMP["#text"] + " &deg;С";
-    else document.getElementById("PRIMARY_TEMP").innerHTML = " Нет в рецепте";
+    document.getElementById("STYLE").textContent = get_object_value(recipe.RECIPES.RECIPE.STYLE.NAME);
+    document.getElementById("NAME").textContent = get_object_value(recipe.RECIPES.RECIPE.NAME);
+    document.getElementById("TYPE").textContent = get_object_value(recipe.RECIPES.RECIPE.TYPE);
+    document.getElementById("BATCH_SIZE").textContent = get_object_value(recipe.RECIPES.RECIPE.BATCH_SIZE, " л.");
+    document.getElementById("BOIL_SIZE").textContent = get_object_value(recipe.RECIPES.RECIPE.BOIL_SIZE, " л.");
+    document.getElementById("BOIL_TIME").textContent = get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME, " мин.");
+    document.getElementById("NOTES").innerHTML = get_object_value(recipe.RECIPES.RECIPE.NOTES);
+    document.getElementById("PRIMARY_TEMP").innerHTML = get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP, " &deg;С");
     
     //show ingredients
     var dl = document.createElement("div");
-    dl.className = "prgline";
   
     var dl1 = document.createElement("div");
     dl1.className = "ingredients";
     var type = document.createElement("label");
     type.textContent = "Тип";
+    type.className = "ingType";
     dl1.appendChild(type);
     var name = document.createElement("label");
     name.textContent = "Название";
+    name.className = "ingName";
+    name.style = "text-align: center;";
     dl1.appendChild(name);
     var amount = document.createElement("label");
     amount.textContent = "Количество";
+    amount.className = "ingAmount";
     dl1.appendChild(amount);
     dl.appendChild(dl1);
     
@@ -100,9 +108,7 @@ function get_brew_info(xml){
     ingr.appendChild(dl);
 
     var FERMENTABLE = [];
-    var A = [];
-    A = recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE;
-    if (Array.isArray(A)){
+    if (Array.isArray(recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE)){
        FERMENTABLE = recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE;
     } else {FERMENTABLE.push(recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE) }
     //grain
@@ -112,12 +118,15 @@ function get_brew_info(xml){
   
       var type = document.createElement("label");
       type.textContent = "Солод";
+      type.className = "ingType";
       dl1.appendChild(type);
       var name = document.createElement("label");
-      name.textContent = ferm.NAME["#text"];
+      name.textContent = get_object_value(ferm.NAME);
+      name.className = "ingName";
       dl1.appendChild(name);
       var amount = document.createElement("label");
-      amount.textContent = ferm.AMOUNT["#text"];
+      amount.textContent = get_object_value(ferm.AMOUNT);
+      amount.className = "ingAmount";
       dl1.appendChild(amount);
     
       dl.appendChild(dl1);
@@ -125,8 +134,7 @@ function get_brew_info(xml){
 
     //hop
     var HOP = [];
-    A = recipe.RECIPES.RECIPE.HOPS.HOP;
-    if (Array.isArray(A)){
+    if (Array.isArray(recipe.RECIPES.RECIPE.HOPS.HOP)){
        HOP = recipe.RECIPES.RECIPE.HOPS.HOP;
     } else {HOP.push(recipe.RECIPES.RECIPE.HOPS.HOP) }
     for (let hop of HOP){
@@ -135,12 +143,15 @@ function get_brew_info(xml){
   
       var type = document.createElement("label");
       type.textContent = "Хмель";
+      type.className = "ingType";
       dl1.appendChild(type);
       var name = document.createElement("label");
-      name.textContent = hop.NAME["#text"];
+      name.textContent = get_object_value(hop.NAME);
+      name.className = "ingName";
       dl1.appendChild(name);
       var amount = document.createElement("label");
-      amount.textContent = hop.AMOUNT["#text"];
+      amount.textContent = get_object_value(hop.AMOUNT);
+      amount.className = "ingAmount";
       dl1.appendChild(amount);
     
       dl.appendChild(dl1);
@@ -148,8 +159,7 @@ function get_brew_info(xml){
     
     //yeast
     var YEAST = [];
-    A = recipe.RECIPES.RECIPE.YEASTS.YEAST;
-    if (Array.isArray(A)){
+    if (Array.isArray(recipe.RECIPES.RECIPE.YEASTS.YEAST)){
        YEAST = recipe.RECIPES.RECIPE.YEASTSYEAST;
     } else {YEAST.push(recipe.RECIPES.RECIPE.YEASTS.YEAST) }
     for (let yeast of YEAST){
@@ -158,12 +168,15 @@ function get_brew_info(xml){
   
       var type = document.createElement("label");
       type.textContent = "Дрожжи";
+      type.className = "ingType";
       dl1.appendChild(type);
       var name = document.createElement("label");
-      name.textContent = yeast.NAME["#text"];
+      name.textContent = get_object_value(yeast.NAME)
+      name.className = "ingName";
       dl1.appendChild(name);
       var amount = document.createElement("label");
-      amount.textContent = yeast.AMOUNT["#text"];
+      amount.textContent = get_object_value(yeast.AMOUNT);
+      amount.className = "ingAmount";
       dl1.appendChild(amount);
 
       dl.appendChild(dl1);
@@ -182,7 +195,7 @@ Samovar v. <span id='version'>%v%</span>
 
 <div style="margin: 0 auto; width: 200px;">
 <label for="fileToLoad" class="button custom-file-upload">
-    <i class="fa fa-cloud-upload"></i>Загрузить программу
+    <i class="fa fa-cloud-upload"></i>Загрузить рецепт
 </label>
 <input type="file" id="fileToLoad" accept="application/xml" onchange="loadFile(this.files[0])" class="button"/>
 </div>
@@ -190,28 +203,32 @@ Samovar v. <span id='version'>%v%</span>
 
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
 <div id="brew">
+<label>Описание рецепта:</label>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div className="specs">
 <div>
-<label>Стиль:</label><label className="specs" id="STYLE"></label>
+<label>Стиль: </label><label className="specs" id="STYLE"></label>
 </div>
 <div>
-<label>Сорт:</label><label className="specs" id="NAME"></label>
+<label>Сорт: </label><label className="specs" id="NAME"></label>
 </div>
 <div>
-<label>Тип:</label><label className="specs" id="TYPE"></label>
+<label>Тип: </label><label className="specs" id="TYPE"></label>
 </div>
 <div>
-<label>Выход:</label><label className="specs" id="BATCH_SIZE"></label>
+<label>Выход: </label><label className="specs" id="BATCH_SIZE"></label>
 </div>
 <div>
-<label>Объем котла:</label><label className="specs" id="BOIL_SIZE"></label>
+<label>Объем котла: </label><label className="specs" id="BOIL_SIZE"></label>
 </div>
 <div>
-<label>Температура брожения:</label><label className="specs" id="PRIMARY_TEMP"></label>
+<label>Температура брожения: </label><label className="specs" id="PRIMARY_TEMP"></label>
 </div>
 <div>
-<label>Время кипения:</label><label className="specs" id="BOIL_TIME"></label>
+<label>Время кипения: </label><label className="specs" id="BOIL_TIME"></label>
+</div>
+<div>
+<label>Заметки: </label><label className="specs" id="NOTES"></label>
 </div>
 </div>
 </div>
