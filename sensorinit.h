@@ -394,6 +394,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   begintime = 0;
 
   d_s_temp_prev = 0;
+  is_self_test = false;
 
   if (fileToAppend) {
     fileToAppend.close();
