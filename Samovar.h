@@ -590,6 +590,7 @@ volatile float test_num_val;                                    // Тестов�
 String test_str_val;                                            // Тестовое строковое значение
 String Lua_status;                                              // Статус Lua
 
+volatile bool is_self_test;                                     // Находимся в режиме самотестирования
 String current_power_mode;                                      // Режим работы регулятора напряжения
 volatile float target_power_volt;                               // Заданное напряжение регулятора
 volatile float current_power_volt;                              // Текущее напряжение регулятора
