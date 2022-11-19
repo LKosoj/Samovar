@@ -68,7 +68,7 @@ void IRAM_ATTR check_alarm_bk() {
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   check_boiling();
 
-  if (!PowerOn && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
+  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
     open_valve(false);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
