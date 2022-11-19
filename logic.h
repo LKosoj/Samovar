@@ -618,7 +618,7 @@ void IRAM_ATTR check_alarm() {
     }
   }
 
-  if (!PowerOn && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 15 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
+  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 15 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
     open_valve(false);
     set_buzzer(true);
 #ifdef USE_WATER_PUMP
@@ -845,6 +845,7 @@ void check_boiling() {
 }
 
 void start_self_test(void) {
+  is_self_test = true;
   SendMsg(F("Запуск самотестирования."), NOTIFY_MSG);
   open_valve(true);
 #ifdef USE_WATER_PUMP
@@ -878,6 +879,7 @@ void stop_self_test(void) {
   open_valve(false);
   set_capacity(0);
   stopService();
+  is_self_test = false;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
