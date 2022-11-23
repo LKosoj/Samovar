@@ -590,7 +590,10 @@ void handleSave(AsyncWebServerRequest *request) {
     request->arg("ACPColor").toCharArray(SamSetup.ACPColor, request->arg("ACPColor").length() + 1);
   }
   if (request->hasArg("mode")) {
-    SamSetup.Mode = request->arg("mode").toInt();
+    if (SamSetup.Mode != request->arg("mode").toInt()) {
+      is_reboot = true;
+      SamSetup.Mode = request->arg("mode").toInt();
+    }
   }
   if (request->hasArg("rele1")) {
     SamSetup.rele1 = request->arg("rele1").toInt();
@@ -653,6 +656,9 @@ void handleSave(AsyncWebServerRequest *request) {
   response->addHeader("Location", "/");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
+  if (is_reboot) {
+    ESP.restart();
+  }
 }
 
 void web_command(AsyncWebServerRequest *request) {
