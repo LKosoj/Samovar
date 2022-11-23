@@ -73,7 +73,7 @@ void WebServerInit(void) {
   server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt");
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt");
-  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm");
+  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor);
 
 #ifdef USE_LUA
   server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
