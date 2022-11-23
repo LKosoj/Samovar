@@ -12,15 +12,15 @@
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
-#ifdef ESP_ARDUINO_VERSION
+//#ifdef ESP_ARDUINO_VERSION
 #include "esp32/rom/rtc.h"
 #include <driver/touch_sensor.h>
-#pragma message ("NEW SDK")
-#else
-#include <soc/touch_channel.h>
-#include "rom/rtc.h"
-#pragma message ("OLD SDK")
-#endif
+//#pragma message ("NEW SDK")
+//#else
+//#include <soc/touch_channel.h>
+//#include "rom/rtc.h"
+//#pragma message ("OLD SDK")
+//#endif
 
 #include <driver/dac.h>
 
