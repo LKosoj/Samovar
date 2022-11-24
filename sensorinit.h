@@ -368,6 +368,8 @@ void IRAM_ATTR reset_sensor_counter(void) {
   set_capacity(0);
   alarm_h_min = 0;
   alarm_t_min = 0;
+  d_s_time_min = 0;
+  d_s_temp_finish = 0;
 
   ProgramNum = 0;
   SteamSensor.BodyTemp = 0;
