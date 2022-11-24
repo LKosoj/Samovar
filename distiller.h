@@ -40,6 +40,17 @@ void distiller_proc() {
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
     distiller_finish();
   }
+
+  //Если Т в кубе больше 90 градусов и включено напряжение, проверяем, что десять минут температура в кубе не меняется от последнего заполненного значения больше, чем на 0.1 градус
+  if (TankSensor.avgTemp > 90 && PowerOn) {
+    if (abs(TankSensor.avgTemp - d_s_temp_finish) > 0.1) {
+      d_s_temp_finish = TankSensor.avgTemp;
+      d_s_time_min = millis();
+    } else if ((millis() - d_s_time_min) > 10 * 60 * 1000) {
+     SendMsg(F("В кубе не осталось спирта"), NOTIFY_MSG);
+     distiller_finish();
+    }
+  }
 }
 
 void IRAM_ATTR distiller_finish() {
