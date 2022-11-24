@@ -11,6 +11,35 @@
 <script>
 
 var is_program = false;
+var program = "";
+
+/**
+   * Корректировка округления десятичных дробей.
+   *
+   * @param {String}  type  Тип корректировки.
+   * @param {Number}  value Число.
+   * @param {Integer} exp   Показатель степени (десятичный логарифм основания корректировки).
+   * @returns {Number} Скорректированное значение.
+   */
+  function decimalAdjust(type, value, exp) {
+    // Если степень не определена, либо равна нулю...
+    if (typeof exp === 'undefined' || +exp === 0) {
+      return Math[type](value);
+    }
+    value = +value;
+    exp = +exp;
+    // Если значение не является числом, либо степень не является целым числом...
+    if (isNaN(value) || !(typeof exp === 'number' && exp % 1 === 0)) {
+      return NaN;
+    }
+    // Сдвиг разрядов
+    value = value.toString().split('e');
+    value = Math[type](+(value[0] + 'e' + (value[1] ? (+value[1] - exp) : -exp)));
+    // Обратный сдвиг
+    value = value.toString().split('e');
+    return +(value[0] + 'e' + (value[1] ? (+value[1] + exp) : exp));
+  }
+  
 
 function loadFile(e) {
 	var file = e;
@@ -74,9 +103,9 @@ function isNumeric(str) {
          !isNaN(parseFloat(str)) // ...and ensure strings of whitespace fail
 }
 
-function get_object_value(Obj, str = ""){
+function get_object_value(Obj, str = "", exp = -2){
     if (typeof Obj != "undefined") {
-      if (isNumeric(Obj["#text"])) return (parseFloat(Obj["#text"])) + str;
+      if (isNumeric(Obj["#text"])) return (decimalAdjust("round",parseFloat(Obj["#text"]),exp)) + str;
       else if (typeof Obj["#text"] != "undefined") return Obj["#text"] + str;
             else return "Нет в рецепте";
     }
@@ -86,6 +115,7 @@ function get_object_value(Obj, str = ""){
 function get_brew_info(xml){
     is_program = false;
 	let recipe = parseXml(xml);
+    program = "M;45.00;0\n";
 	//show main info
     document.getElementById("STYLE").textContent = get_object_value(recipe.RECIPES.RECIPE.STYLE.NAME);
     document.getElementById("NAME").textContent = get_object_value(recipe.RECIPES.RECIPE.NAME);
@@ -124,6 +154,7 @@ function get_brew_info(xml){
     if (Array.isArray(recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE)){
        FERMENTABLE = recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE;
     } else {FERMENTABLE.push(recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE) }
+    
     //grain
     for (let ferm of FERMENTABLE){
       var dl1 = document.createElement("div");
@@ -138,7 +169,7 @@ function get_brew_info(xml){
       name.className = "ingName";
       dl1.appendChild(name);
       var amount = document.createElement("label");
-      amount.textContent = get_object_value(ferm.AMOUNT);
+      amount.textContent = get_object_value(ferm.AMOUNT,"",-2);
       amount.className = "ingAmount";
       dl1.appendChild(amount);
     
@@ -163,7 +194,7 @@ function get_brew_info(xml){
       name.className = "ingName";
       dl1.appendChild(name);
       var amount = document.createElement("label");
-      amount.textContent = get_object_value(hop.AMOUNT);
+      amount.textContent = get_object_value(hop.AMOUNT,"",-4);
       amount.className = "ingAmount";
       dl1.appendChild(amount);
     
@@ -173,7 +204,7 @@ function get_brew_info(xml){
     //yeast
     var YEAST = [];
     if (Array.isArray(recipe.RECIPES.RECIPE.YEASTS.YEAST)){
-       YEAST = recipe.RECIPES.RECIPE.YEASTSYEAST;
+       YEAST = recipe.RECIPES.RECIPE.YEASTS.YEAST;
     } else {YEAST.push(recipe.RECIPES.RECIPE.YEASTS.YEAST) }
     for (let yeast of YEAST){
       var dl1 = document.createElement("div");
@@ -188,7 +219,32 @@ function get_brew_info(xml){
       name.className = "ingName";
       dl1.appendChild(name);
       var amount = document.createElement("label");
-      amount.textContent = get_object_value(yeast.AMOUNT);
+      amount.textContent = get_object_value(yeast.AMOUNT,"",-2);
+      amount.className = "ingAmount";
+      dl1.appendChild(amount);
+
+      dl.appendChild(dl1);
+    }
+    
+    //misc
+    var MISC = [];
+    if (Array.isArray(recipe.RECIPES.RECIPE.MISCS.MISC)){
+       MISC = recipe.RECIPES.RECIPE.MISCS.MISC;
+    } else {MISC.push(recipe.RECIPES.RECIPE.MISCS.MISC) }
+    for (let misc of MISC){
+      var dl1 = document.createElement("div");
+      dl1.className = "ingredients";
+  
+      var type = document.createElement("label");
+      type.textContent = "Специи";
+      type.className = "ingType";
+      dl1.appendChild(type);
+      var name = document.createElement("label");
+      name.textContent = get_object_value(misc.NAME)
+      name.className = "ingName";
+      dl1.appendChild(name);
+      var amount = document.createElement("label");
+      amount.textContent = get_object_value(misc.AMOUNT,"",-4);
       amount.className = "ingAmount";
       dl1.appendChild(amount);
 
@@ -245,6 +301,7 @@ function get_brew_info(xml){
       dl1.appendChild(step_time);
 
       dl.appendChild(dl1);
+      program = program + "P;" + step_temp.textContent + ";" + step_time.textContent + "\n";
     }
 
     var ingr = document.getElementById("mash");
@@ -252,12 +309,39 @@ function get_brew_info(xml){
     ingr.appendChild(dl);
     
     is_program = true;
+    program = program + "B;0.00;" + get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME) + 
+    "\nC;" + get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP) + 
+    ";0\nF;" + get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP) + ";0";
 }
 
 function set_program(){
-	if (is_program) alert("Ok");
-	else alert("Error");
+if (!is_program) {
+  alert("Error");
+  return;
 }
+//alert(program);
+document.getElementById("WProgram").value = program;
+
+var server = '/program';
+request = new XMLHttpRequest();
+request.onreadystatechange = function() {
+if (this.readyState == 4 && this.status == 200) {
+var myObj = this.responseText;
+if (myObj != "OK") {
+  document.getElementById('WProgram').value = myObj;
+  alert( "Ok" );
+}
+}
+};
+request.open('POST', server, false);
+let formData = new FormData(document.forms.mainform);
+request.send(formData);
+if(request.status != 200) {
+alert( request.status + ': ' + request.statusText );
+}
+return 0;
+};
+
 </script>
 </head>
 <body>
@@ -333,5 +417,6 @@ Samovar v. <span id='version'>%v%</span>
 
 </div>
 </div>
+<textarea cols="40" rows="7" id='WProgram' name='WProgram' style="visibility: hidden;"></textarea>
 </form>
 </body>
