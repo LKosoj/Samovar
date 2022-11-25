@@ -112,6 +112,12 @@ function get_object_value(Obj, str = "", exp = -2){
     else return "Нет в рецепте";
 }
 
+function check_value(val, type){
+  if (val != "Нет в рецепте") return val;
+  if (type == "bt") return 60;
+  if (type == "pt") return 20;
+}
+
 function get_brew_info(xml){
     is_program = false;
 	let recipe = parseXml(xml);
@@ -161,7 +167,8 @@ function get_brew_info(xml){
       dl1.className = "ingredients";
   
       var type = document.createElement("label");
-      type.textContent = "Солод";
+      if (get_object_value(ferm.TYPE) == "Adjunct") type.textContent = "Добавка";
+      else type.textContent = "Солод";
       type.className = "ingType";
       dl1.appendChild(type);
       var name = document.createElement("label");
@@ -230,25 +237,28 @@ function get_brew_info(xml){
     var MISC = [];
     if (Array.isArray(recipe.RECIPES.RECIPE.MISCS.MISC)){
        MISC = recipe.RECIPES.RECIPE.MISCS.MISC;
-    } else {MISC.push(recipe.RECIPES.RECIPE.MISCS.MISC) }
+    } else if (!(recipe.RECIPES.RECIPE.MISCS.MISC === undefined)) {MISC.push(recipe.RECIPES.RECIPE.MISCS.MISC) }
     for (let misc of MISC){
-      var dl1 = document.createElement("div");
-      dl1.className = "ingredients";
+      if (get_object_value(misc.TYPE) == "Flavor" || get_object_value(misc.TYPE) == "Fining"){
+        var dl1 = document.createElement("div");
+        dl1.className = "ingredients";
   
-      var type = document.createElement("label");
-      type.textContent = "Специи";
-      type.className = "ingType";
-      dl1.appendChild(type);
-      var name = document.createElement("label");
-      name.textContent = get_object_value(misc.NAME)
-      name.className = "ingName";
-      dl1.appendChild(name);
-      var amount = document.createElement("label");
-      amount.textContent = get_object_value(misc.AMOUNT,"",-4);
-      amount.className = "ingAmount";
-      dl1.appendChild(amount);
+        var type = document.createElement("label");
+        if (get_object_value(misc.TYPE) == "Flavor") type.textContent = "Специи";
+        else if (get_object_value(misc.TYPE) == "Fining") type.textContent = "Очистка";
+        type.className = "ingType";
+        dl1.appendChild(type);
+        var name = document.createElement("label");
+        name.textContent = get_object_value(misc.NAME)
+        name.className = "ingName";
+        dl1.appendChild(name);
+        var amount = document.createElement("label");
+        amount.textContent = get_object_value(misc.AMOUNT,"",-4);
+        amount.className = "ingAmount";
+        dl1.appendChild(amount);
 
-      dl.appendChild(dl1);
+        dl.appendChild(dl1);
+      }
     }
     
     //show mash step
@@ -280,7 +290,7 @@ function get_brew_info(xml){
        MASH = recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP;
     } else {MASH.push(recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP) }
     for (let mash of MASH){
-      var dl1 = document.createElement("div");
+	  var dl1 = document.createElement("div");
       dl1.className = "ingredients";
   
       var name = document.createElement("label");
@@ -309,9 +319,11 @@ function get_brew_info(xml){
     ingr.appendChild(dl);
     
     is_program = true;
-    program = program + "B;0.00;" + get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME) + 
-    "\nC;" + get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP) + 
-    ";0\nF;" + get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP) + ";0";
+    pt = check_value(get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP), "pt");
+    bt = check_value(get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME), "bt");
+    program = program + "B;0.00;" + bt + 
+    "\nC;" + pt + 
+    ";0\nF;" + pt + ";0";
 }
 
 function set_program(){
@@ -319,7 +331,7 @@ if (!is_program) {
   alert("Error");
   return;
 }
-//alert(program);
+alert(program);
 document.getElementById("WProgram").value = program;
 
 var server = '/program';
