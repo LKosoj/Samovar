@@ -58,11 +58,18 @@
 
 #include "Samovar.h"
 
+#ifndef __SAMOVAR_DEBUG
+#define ARDUINOTRACE_ENABLE 0  // Disable all traces
+#endif
+#include <ArduinoTrace.h>
+
 #ifdef __SAMOVAR_NOT_USE_WDT
 #include "soc/rtc_wdt.h"
 #include <esp_task_wdt.h>
 #endif
 
+#include <iarduino_I2C_connect.h>
+iarduino_I2C_connect I2CC;
 
 #ifdef USE_EXPANDER
 #include <PCF8575.h>
@@ -595,16 +602,21 @@ void setup() {
   Serial.begin(115200);
 #ifdef __SAMOVAR_DEBUG
   esp_log_level_set("*", ESP_LOG_VERBOSE);
+  Serial.println("Using ESP object:");
+  Serial.println(ESP.getSdkVersion());
+
+  Serial.println("Using lower level function:");
+  Serial.println(esp_get_idf_version());
 #endif
 
   //vr = verbose_print_reset_reason(rtc_get_reset_reason(0));
   //vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
 
   //delay(2000);
-  //dac_output_disable(DAC_CHANNEL_1);
-  //dac_output_disable(DAC_CHANNEL_2);
-  //touch_pad_isr_deregister();
-  //touch_pad_deinit();
+//  dac_output_disable(DAC_CHANNEL_1);
+//  dac_output_disable(DAC_CHANNEL_2);
+//  touch_pad_isr_deregister();
+//  touch_pad_deinit();
   touch_pad_intr_disable();
 
   xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
