@@ -104,8 +104,8 @@ local function fillTank ()
 	  if pump_started ~= "true" then
 			sendMsg("Начинаем заполнение куба...", -1) --отчитываемся в консоль браузера
 			sendMsg("Начинаем заполнение куба...", 2) --отправляем сообщение оператору
-      setLuaStatus("Заполнение куба")
-      startPump()
+            setLuaStatus("Заполнение куба")
+            startPump()
 		else
       if use_level_sensor and check4level() then stopFilling() end
       if use_flow_sensor and check4volume() then stopFilling() end
