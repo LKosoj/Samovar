@@ -1319,6 +1319,8 @@ void WriteConsoleLog(String StringLogMsg) {
 
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
+#else
+  Serial.println(StringLogMsg);
 #endif
 }
 
