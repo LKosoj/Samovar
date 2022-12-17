@@ -742,7 +742,7 @@ String get_lua_script_list() {
 }
 
 String get_lua_script(String fn) {
-  String s;
+  String s = "";
   File f;
   if (fn[0] != '/') fn = "/" + fn;
   f = SPIFFS.open(fn);
@@ -899,13 +899,13 @@ String get_global_variables() {
 String get_lua_mode_name() {
   String fl;
   if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
-    fl = "/beer.lua";
+    fl = "/beer" + String(LUA_BEER) + ".lua";
   } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
-    fl = "/dist.lua";
+    fl = "/dist" + String(LUA_DIST) + ".lua";
   } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
-    fl = "/bk.lua";
+    fl = "/bk" + String(LUA_BK) + ".lua";
   } else {
-    fl = "/rectificat.lua";
+    fl = "/rectificat" + String(LUA_RECT) + ".lua";
   }
   return fl;
 }
