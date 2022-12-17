@@ -287,6 +287,22 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 #define SAMOVAR_USE_POWER_START_TIME 2000
 #endif
 
+#ifndef LUA_BEER
+#define LUA_BEER ""
+#endif
+
+#ifndef LUA_DIST
+#define LUA_DIST ""
+#endif
+
+#ifndef LUA_BK
+#define LUA_BK ""
+#endif
+
+#ifndef LUA_RECT
+#define LUA_RECT ""
+#endif
+
 #include <FS.h>
 #ifdef USE_LittleFS
 #pragma message ("USE LITTLEFS")
