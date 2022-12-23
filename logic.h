@@ -998,7 +998,7 @@ void check_power_error() {
   //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
   if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 0.2) {
     power_err_cnt++;
-    if (power_err_cnt > 8) set_current_power(target_power_volt);
+    if (power_err_cnt > 6) set_current_power(target_power_volt);
     if (power_err_cnt > 12) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
@@ -1072,7 +1072,7 @@ void IRAM_ATTR set_current_power(float Volt) {
 void IRAM_ATTR set_power_mode(String Mode) {
   if (current_power_mode == Mode) return;
   current_power_mode = Mode;
-  vTaskDelay(20 / portTICK_PERIOD_MS);
+  vTaskDelay(50 / portTICK_PERIOD_MS);
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
