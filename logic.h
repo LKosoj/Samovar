@@ -558,6 +558,9 @@ void IRAM_ATTR check_alarm() {
     if (program[ProgramNum].WType != "C") {
       set_buzzer(true);
       SendMsg(F("Сработал датчик захлёба!"), ALARM_MSG);
+      alarm_c_min = 0;
+      alarm_c_low_min = 0;
+      prev_target_power_volt = 0;
     } else {
 #ifdef SAMOVAR_USE_POWER
       //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
