@@ -5,18 +5,12 @@
 #include "pumppwm.h"
 #endif
 
-#ifdef ESP_ARDUINO_VERSION
-//#define USE_HTTP_REQUEST
-#endif
-
 #include <LuaWrapper.h>
 LuaWrapper lua;
 
 #include <SimpleMap.h>
 
-#ifdef USE_HTTP_REQUEST
-#include <HTTPClient.h>
-#endif
+#include <asyncHTTPrequest.h>
 
 #define EXPANDER_UPDATE_TIMEOUT 500
 
@@ -571,7 +565,6 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
   return 1;
 }
 
-#ifdef USE_HTTP_REQUEST
 static int lua_wrapper_http_request(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var;
@@ -587,15 +580,19 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   Var = s;
   lua_pop(lua_state, 1);
 
-  HTTPClient http;
+  asyncHTTPrequest request;
   String payload;
+  String RequestType;
   int httpResponseCode;
 
-  http.begin(Var); //Specify the URL
+  request.setTimeout(3); //Таймаут три секунды
+  if (request.readyState() == 0 || request.readyState() == 4) {
+  }
   if (n == 1) {
-    httpResponseCode = http.GET(); //Make the request
+    RequestType = "GET";
+    request.open(RequestType.c_str(), Var.c_str());  //URL
+    request.send();
   } else {
-    String RequestType;
     String ContentType;
     String Body;
 
@@ -620,23 +617,26 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
     Body = s;
     lua_pop(lua_state, 1);
 
-    http.addHeader("Content-Type", getValue(ContentType, ':', 1));
-    httpResponseCode = http.POST(Body);
+    request.open(RequestType.c_str(), Var.c_str());  //URL
+    request.setReqHeader(String("Content-Type").c_str(), getValue(ContentType, ':', 1).c_str());
+    request.send(Body);
   }
-  if (httpResponseCode > 0) {
-    payload = http.getString();
+
+  while (request.readyState() != 4) {
+    vTaskDelay(5 / portTICK_PERIOD_MS);
+  }
+  if (request.responseHTTPcode() >= 0) {
+    payload = request.responseText();
   }
   else {
     payload = "error";
   }
   // Free resources
-  http.end();
 
   lua_pushstring(lua_state, payload.c_str());
 
   return 1;
 }
-#endif
 
 void lua_init() {
   lua.Lua_register("pinMode", (const lua_CFunction) &lua_wrapper_pinMode);
@@ -678,9 +678,7 @@ void lua_init() {
   lua.Lua_register("getState", (const lua_CFunction) &lua_wrapper_get_state);
   lua.Lua_register("getObject", (const lua_CFunction) &lua_wrapper_get_object);
   lua.Lua_register("getTimer", (const lua_CFunction) &lua_wrapper_get_timer);
-#ifdef USE_HTTP_REQUEST
   lua.Lua_register("http_request", (const lua_CFunction) &lua_wrapper_http_request);
-#endif
 
   loop_lua_fl = 0;
   //Запускаем инициализирующий lua-скрипт
