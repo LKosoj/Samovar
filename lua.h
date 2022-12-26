@@ -623,7 +623,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   }
 
   while (request.readyState() != 4) {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
   if (request.responseHTTPcode() >= 0) {
     payload = request.responseText();
