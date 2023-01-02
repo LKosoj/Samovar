@@ -368,8 +368,11 @@ void IRAM_ATTR reset_sensor_counter(void) {
   set_capacity(0);
   alarm_h_min = 0;
   alarm_t_min = 0;
+#ifdef SAMOVAR_USE_POWER
   alarm_c_min = 0;
   alarm_c_low_min = 0;
+  prev_target_power_volt = 0;
+#endif
   d_s_time_min = 0;
   d_s_temp_finish = 0;
 
@@ -409,6 +412,10 @@ void IRAM_ATTR reset_sensor_counter(void) {
 
   boil_started = false;
 
+  if (xSemaphore != NULL) xSemaphoreGive(xSemaphore);
+#ifdef SAMOVAR_USE_SEM_AVR
+  if (xSemaphoreAVR != NULL) xSemaphoreGive(xSemaphoreAVR);
+#endif
 
   set_power(false);
   sam_command_sync = SAMOVAR_NONE;

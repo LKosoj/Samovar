@@ -1,3 +1,5 @@
+#include <asyncHTTPrequest.h>
+
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request);
@@ -11,6 +13,8 @@ String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 void start_self_test(void);
 void stop_self_test(void);
+void get_web_file(String fn);
+
 #ifdef USE_LUA
 void start_lua_script();
 void load_lua_script();
@@ -74,6 +78,7 @@ void WebServerInit(void) {
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt");
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor);
+  server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
 
 #ifdef USE_LUA
   server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
@@ -149,6 +154,9 @@ void WebServerInit(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");
 #endif
+
+//  get_web_file("http://worldtimeapi.org/api/timezone/Europe/London.txt");
+
 }
 
 String indexKeyProcessor(const String &var) {
@@ -804,4 +812,30 @@ void get_old_data_log(AsyncWebServerRequest *request) {
   response->addHeader("Pragma", "public");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
+}
+
+void get_web_file(String fn) {
+  asyncHTTPrequest request;
+  //request.setDebug(true);
+  request.setTimeout(10); //Таймаут три секунды
+  request.open(String("GET").c_str(), fn.c_str());  //URL
+  while (request.readyState() < 1) {
+    vTaskDelay(5 / portTICK_PERIOD_MS);
+  }
+  vTaskDelay(65 / portTICK_PERIOD_MS);
+  request.send();
+  while (request.readyState() != 4) {
+    vTaskDelay(5 / portTICK_PERIOD_MS);
+  }
+  if (request.responseHTTPcode() >= 0) {
+    //Serial.println(request.responseHTTPcode());
+    File wf = SPIFFS.open("/test.txt", FILE_WRITE);
+    wf.print(request.responseText());
+    wf.close();
+    Serial.println("Done");
+  }
+  else {
+    Serial.println("error");
+    Serial.println(request.responseHTTPcode());
+  }
 }

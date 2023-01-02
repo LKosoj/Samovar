@@ -45,6 +45,7 @@ void GButton::setTickMode(bool tickMode) {
     flags.tickMode = tickMode;
 }
 
+
 // ==================== IS ====================
 boolean GButton::isPress() {
     if (flags.tickMode) GButton::tick();
@@ -146,6 +147,14 @@ void GButton::resetStates() {
     flags.counter_flag = false;
     last_hold_counter = 0;
     last_counter = 0;
+///////////////////////////////
+//!!!!!NOT REMOVE!!!!!!
+///////////////////////////////
+	btn_state = false;
+	btn_timer = 0;
+	btn_flag = false;
+	flags.hold_flag = false;
+///////////////////////////////
 }
 
 // ==================== TICK ====================

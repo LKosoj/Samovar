@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "5.17"
+#define SAMOVAR_VERSION "5.18"
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -15,7 +15,7 @@
 
 #ifdef __SAMOVAR_DEBUG
 #ifndef USE_WEB_SERIAL
-#define USE_WEB_SERIAL                      //использовать библиотеку WebSerial для отладки
+//#define USE_WEB_SERIAL                      //использовать библиотеку WebSerial для отладки
 #endif
 #endif
 
@@ -381,8 +381,6 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 File fileToAppend;
-
-//AsyncMqttClient mqttClient;
 
 #ifdef SERVO_PIN
 Servo servo;  // create servo object to control a servo

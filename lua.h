@@ -591,6 +591,10 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   if (n == 1) {
     RequestType = "GET";
     request.open(RequestType.c_str(), Var.c_str());  //URL
+    while (request.readyState() < 1) {
+      vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+    vTaskDelay(65 / portTICK_PERIOD_MS);
     request.send();
   } else {
     String ContentType;
@@ -618,12 +622,16 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
     lua_pop(lua_state, 1);
 
     request.open(RequestType.c_str(), Var.c_str());  //URL
+    while (request.readyState() < 1) {
+      vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+    vTaskDelay(65 / portTICK_PERIOD_MS);
     request.setReqHeader(String("Content-Type").c_str(), getValue(ContentType, ':', 1).c_str());
     request.send(Body);
   }
 
   while (request.readyState() != 4) {
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
   }
   if (request.responseHTTPcode() >= 0) {
     payload = request.responseText();
