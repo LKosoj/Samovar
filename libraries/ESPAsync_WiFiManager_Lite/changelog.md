@@ -1,4 +1,4 @@
-## ESPAsync_WiFiManager_Lite (Light Weight Credentials / WiFiManager for ESP32/ESP8266)
+## ESPAsync_WiFiManager_Lite Library (Light Weight Credentials / WiFiManager for ESP32/ESP8266)
 
 [![arduino-library-badge](https://www.ardu-badge.com/badge/ESPAsync_WiFiManager_Lite.svg?)](https://www.ardu-badge.com/ESPAsync_WiFiManager_Lite)
 [![GitHub release](https://img.shields.io/github/release/khoih-prog/ESPAsync_WiFiManager_Lite.svg)](https://github.com/khoih-prog/ESPAsync_WiFiManager_Lite/releases)
@@ -6,12 +6,17 @@
 [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](#Contributing)
 [![GitHub issues](https://img.shields.io/github/issues/khoih-prog/ESPAsync_WiFiManager_Lite.svg)](http://github.com/khoih-prog/ESPAsync_WiFiManager_Lite/issues)
 
+
+<a href="https://www.buymeacoffee.com/khoihprog6" title="Donate to my libraries using BuyMeACoffee"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Donate to my libraries using BuyMeACoffee" style="height: 50px !important;width: 181px !important;" ></a>
+<a href="https://www.buymeacoffee.com/khoihprog6" title="Donate to my libraries using BuyMeACoffee"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-donate-orange.svg?logo=buy-me-a-coffee&logoColor=FFDD00" style="height: 20px !important;width: 200px !important;" ></a>
+
 ---
 ---
 
 ## Table of Contents
 
 * [Changelog](#changelog)
+  * [Release v1.9.1](#release-v191)
   * [Release v1.9.0](#release-v190)
   * [Release v1.8.2](#release-v182)
   * [Release v1.8.1](#release-v181)
@@ -31,6 +36,13 @@
 
 
 ## Changelog
+
+
+### Release v1.9.1
+
+1. Add `Captive Portal` using AsyncDNSServer. Check [Captive portal #22](https://github.com/khoih-prog/ESPAsync_WiFiManager_Lite/pull/22)
+2. Cleanup reset code. Check [cleanup reset code #23](https://github.com/khoih-prog/ESPAsync_WiFiManager_Lite/pull/23)
+3. Periodical code clean-up
 
 ### Release v1.9.0
 

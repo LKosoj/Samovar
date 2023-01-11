@@ -586,8 +586,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   int httpResponseCode;
 
   request.setTimeout(3); //Таймаут три секунды
-  if (request.readyState() == 0 || request.readyState() == 4) {
-  }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
   if (n == 1) {
     RequestType = "GET";
     request.open(RequestType.c_str(), Var.c_str());  //URL

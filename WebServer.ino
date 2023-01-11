@@ -155,7 +155,7 @@ void WebServerInit(void) {
   Serial.println("HTTP server started");
 #endif
 
-//  get_web_file("http://worldtimeapi.org/api/timezone/Europe/London.txt");
+  //  get_web_file("http://worldtimeapi.org/api/timezone/Europe/London.txt");
 
 }
 
@@ -805,7 +805,10 @@ void get_data_log(AsyncWebServerRequest *request) {
 }
 
 void get_old_data_log(AsyncWebServerRequest *request) {
-  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data_old.csv", String(), true);
+  AsyncWebServerResponse *response;
+  if (SPIFFS.exists("/data_old.csv")) {
+    response = request->beginResponse(SPIFFS, "/data_old.csv", String(), true);
+  } else response = request->beginResponse(400, "text/plain", "");
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
   //response->addHeader("Content-Disposition", "attachment; filename='data_old.csv'");
@@ -818,6 +821,7 @@ void get_web_file(String fn) {
   asyncHTTPrequest request;
   //request.setDebug(true);
   request.setTimeout(10); //Таймаут три секунды
+  vTaskDelay(10 / portTICK_PERIOD_MS);
   request.open(String("GET").c_str(), fn.c_str());  //URL
   while (request.readyState() < 1) {
     vTaskDelay(5 / portTICK_PERIOD_MS);

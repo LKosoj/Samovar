@@ -116,16 +116,16 @@ void IRAM_ATTR DS_getvalue(void) {
   ts = sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
   acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
 
-  //  float randNumber;
-  //  randNumber = random(100) / float(500);
-  //  if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
-  //  if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
-  //  static float coef = 0;
-  //  coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
-  //  //if (coef > 0.5) coef = 0.5;
-  //  //if (coef < -0.5) coef = -0.5;
-  //  ts = TankSensor.avgTemp + coef;
-  //  ws = WaterSensor.avgTemp + coef;
+//    float randNumber;
+//    randNumber = random(100) / float(500);
+//    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
+//    if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
+//    static float coef = 0;
+//    coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
+//    //if (coef > 0.5) coef = 0.5;
+//    //if (coef < -0.5) coef = -0.5;
+//    ts = TankSensor.avgTemp + coef;
+//    ws = WaterSensor.avgTemp + coef;
 
   sensors.requestTemperatures();
 
@@ -339,12 +339,12 @@ void sensor_init(void) {
 #endif
 #endif
 
-  reset_sensor_counter();
 
 #ifdef USE_WATER_PUMP
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
 #endif
 
+  reset_sensor_counter();
   //  regulator.hysteresis = 0.3;
   //  regulator.k = 0.3;
   //  regulator.dT = 4000;    //система инерционная, считаем скорость раз в четыре секунды
@@ -406,6 +406,10 @@ void IRAM_ATTR reset_sensor_counter(void) {
   if (fileToAppend) {
     fileToAppend.close();
   }
+
+#ifdef USE_WATER_PUMP
+  set_pump_pwm(0);
+#endif
 
   if (bme_pressure < 100) BME_getvalue(false);
   start_pressure = bme_pressure;
