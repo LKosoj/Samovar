@@ -85,6 +85,11 @@
     function mapJson (data) {
       var inputs = Array.prototype.slice.call(document.querySelectorAll('form input, form select'));
 
+      for( var i = 0; i < inputs.length; i++){ 
+        if ( inputs[i].name === "StepperStepMl") { 
+            inputs.splice(i, 1); 
+        }
+      }
       Object.keys(data).map(function(dataItem) {
         inputs.map(function(inputItem) {
           if (inputItem.name === dataItem && inputItem.type == 'checkbox') {inputItem.checked = data[dataItem]; return true;}
