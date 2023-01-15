@@ -55,15 +55,18 @@ void connectToMqtt() {
 
 void onMqttConnect(bool sessionPresent) {
 #ifdef __SAMOVAR_DEBUG
-  Serial.print("mqttClient.connected = ");
-  Serial.println(mqttClient.connected());
+  String s = "mqttClient.connected";
+  SendMsg(s, ALARM_MSG);
+  WriteConsoleLog(s);
 #endif
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
+#ifdef __SAMOVAR_DEBUG
   String s = "Disconnected from MQTT: " + String(static_cast<std::underlying_type<AsyncMqttClientDisconnectReason>::type>(reason));
   SendMsg(s, ALARM_MSG);
-  Serial.print(s);
+  WriteConsoleLog(s);
+#endif
 }
 
 void onMqttPublish(uint16_t packetId) {
