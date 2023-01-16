@@ -342,6 +342,7 @@ void sensor_init(void) {
 
 #ifdef USE_WATER_PUMP
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
+  set_pump_pwm(0);
 #endif
 
   reset_sensor_counter();
@@ -406,10 +407,6 @@ void IRAM_ATTR reset_sensor_counter(void) {
   if (fileToAppend) {
     fileToAppend.close();
   }
-
-#ifdef USE_WATER_PUMP
-  set_pump_pwm(0);
-#endif
 
   if (bme_pressure < 100) BME_getvalue(false);
   start_pressure = bme_pressure;
