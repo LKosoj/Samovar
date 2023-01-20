@@ -36,6 +36,7 @@ document.getElementById('Status').innerHTML = myObj.Status;
 document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
 document.getElementById('heap').innerHTML = myObj.heap;
 document.getElementById('rssi').innerHTML = myObj.rssi;
+document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
 
 var dt = myObj.PipeTemp - myObj.SteamTemp;
 document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
@@ -271,7 +272,7 @@ function refresh_chart(){
 <input id='getoldlog' type='button' name='getoldlog' value='Сохранить старый лог' onclick='javascript:window.open("/getoldlog")' class="button">
 <div class='dvcs'>
 <div>
-    <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span> </span>
+    <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
 </div></div>
 </form>
 </body>

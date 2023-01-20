@@ -1157,6 +1157,8 @@ void getjson(void) {
   jsonstr += ",";
   jsonstr += "\"rssi\":"; jsonstr += WiFi.RSSI();
   jsonstr += ",";
+  jsonstr += "\"fr_bt\":"; jsonstr += total_byte - used_byte;
+  jsonstr += ",";
   //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
 
   if (Msg != "") {

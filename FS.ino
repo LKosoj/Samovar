@@ -272,17 +272,16 @@ String IRAM_ATTR append_data() {
     fileToAppend.println(str);
 
     {
-      uint32_t ub;
-      ub = SPIFFS.usedBytes();
-      if (total_byte - ub < 400) {
+      used_byte = SPIFFS.usedBytes();
+      if (total_byte - used_byte < 400) {
         //Кончилось место, удалим старый файл. Надо было сохранять раньше
         if (SPIFFS.exists("/data_old.csv")) {
           SPIFFS.remove("/data_old.csv");
         }
       }
       vTaskDelay(10 / portTICK_PERIOD_MS);
-      if (total_byte - ub < 50) {
-        SendMsg("Заканчивается память! Всего:" + String(total_byte) + ", использовано: " + String(ub), ALARM_MSG);
+      if (total_byte - used_byte < 50) {
+        SendMsg("Заканчивается память! Всего:" + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
       }
     }
 

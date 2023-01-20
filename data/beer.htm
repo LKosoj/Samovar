@@ -179,6 +179,7 @@ document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
 document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
 document.getElementById('heap').innerHTML = myObj.heap;
 document.getElementById('rssi').innerHTML = myObj.rssi;
+document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
 
 if (myObj.Lstatus){
 if (myObj.Lstatus != "") {
@@ -519,7 +520,7 @@ Samovar v. <span id='version'></span>
 <span>Статус: <span id='Status'></span></span>
 </div>
 <div>
-    <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span> </span>
+    <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
 </div>
 <div>
 <input id='power' type='submit' name='power' class="button" value='Включить нагрев' onclick='sendbutton("power=1");'>
