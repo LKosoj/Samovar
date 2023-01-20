@@ -105,6 +105,7 @@ String formatBytes(size_t bytes) {
 void FS_init(void) {
   SPIFFS.begin();
   total_byte = SPIFFS.totalBytes();
+  used_byte = SPIFFS.usedBytes();
 
   //  {
   //    File dir = SPIFFS.open("/");
