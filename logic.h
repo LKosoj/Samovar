@@ -437,7 +437,11 @@ void IRAM_ATTR run_program(byte num) {
     SendMsg(F("Выполнение программы завершено."), NOTIFY_MSG);
   } else {
 #ifdef SAMOVAR_USE_POWER
+#ifdef SAMOVAR_USE_SEM_AVR
+    if (program[num].Power > 400) {
+#else
     if (program[num].Power > 40) {
+#endif
       set_current_power(program[num].Power);
     } else if (program[num].Power != 0) {
       set_current_power(target_power_volt + program[num].Power);

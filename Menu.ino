@@ -417,6 +417,7 @@ void menu_samovar_start() {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + "" + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
+    delay(200);
 #endif
     startval = 1;
     Str = "Prg No 1";

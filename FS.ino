@@ -104,6 +104,8 @@ String formatBytes(size_t bytes) {
 // Инициализация FFS
 void FS_init(void) {
   SPIFFS.begin();
+  total_byte = SPIFFS.totalBytes();
+
   //  {
   //    File dir = SPIFFS.open("/");
   //    while (dir.openNextFile()) {
@@ -270,18 +272,17 @@ String IRAM_ATTR append_data() {
     fileToAppend.println(str);
 
     {
-      uint32_t ub, tb;
+      uint32_t ub;
       ub = SPIFFS.usedBytes();
-      tb = SPIFFS.totalBytes();
-      if (tb - ub < 400) {
+      if (total_byte - ub < 400) {
         //Кончилось место, удалим старый файл. Надо было сохранять раньше
         if (SPIFFS.exists("/data_old.csv")) {
           SPIFFS.remove("/data_old.csv");
         }
       }
       vTaskDelay(10 / portTICK_PERIOD_MS);
-      if (tb - ub < 50) {
-        SendMsg("Заканчивается память! Всего:" + String(tb) + ", использовано: " + String(ub), ALARM_MSG);
+      if (total_byte - ub < 50) {
+        SendMsg("Заканчивается память! Всего:" + String(total_byte) + ", использовано: " + String(ub), ALARM_MSG);
       }
     }
 
