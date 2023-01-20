@@ -280,8 +280,8 @@ String IRAM_ATTR append_data() {
         }
       }
       vTaskDelay(10 / portTICK_PERIOD_MS);
-      if (tb - ub < 200) {
-        SendMsg(F("Memory is full!"), ALARM_MSG);
+      if (tb - ub < 50) {
+        SendMsg("Заканчивается память! Всего:" + String(tb) + ", использовано: " + String(ub), ALARM_MSG);
       }
     }
 
