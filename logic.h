@@ -438,9 +438,9 @@ void IRAM_ATTR run_program(byte num) {
   } else {
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
-    if (program[num].Power > 400) {
+    if (abs(program[num].Power) > 400 && program[num].Power > 0) {
 #else
-    if (program[num].Power > 40) {
+    if (abs(program[num].Power) > 40 && program[num].Power > 0) {
 #endif
       set_current_power(program[num].Power);
     } else if (program[num].Power != 0) {
