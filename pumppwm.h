@@ -11,7 +11,7 @@
 #endif
 
 ESP32PWM pump_pwm;
-GyverPID pump_regulator(6.5, 0.3, 0.6, 1023);
+GyverPID pump_regulator(6.5, 0.3, 30, 1023);
 
 void init_pump_pwm(byte pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);

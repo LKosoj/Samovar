@@ -826,7 +826,7 @@ void IRAM_ATTR set_power(bool On) {
 }
 
 void check_boiling() {
-  if (!valve_status || boil_started
+  if (!valve_status || boil_started || !PowerOn
 #ifdef USE_WATER_PUMP
       || wp_count < 10
 #endif
