@@ -65,7 +65,6 @@ void WebServerInit(void) {
   server.serveStatic("/plus.png", SPIFFS, "/plus.png");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
-  //server.serveStatic("/data.csv", SPIFFS, "/data.csv");
   server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
@@ -796,9 +795,14 @@ void get_data_log(AsyncWebServerRequest *request) {
   if (fileToAppend)
     fileToAppend.flush();
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data.csv", String(), true);
+  if (SPIFFS.exists("/data.csv")) {
+    response = request->beginResponse(SPIFFS, "/data.csv", String(), true);
+  } else {
+    response = request->beginResponse(400, "text/plain", "");
+  }
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
-  //response->addHeader("Content-Disposition", "attachment; filename='data.csv'");
+  response->addHeader("Content-Disposition", "attachment; filename=data.csv");
   response->addHeader("Pragma", "public");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
@@ -808,10 +812,12 @@ void get_old_data_log(AsyncWebServerRequest *request) {
   AsyncWebServerResponse *response;
   if (SPIFFS.exists("/data_old.csv")) {
     response = request->beginResponse(SPIFFS, "/data_old.csv", String(), true);
-  } else response = request->beginResponse(400, "text/plain", "");
+  } else {
+    response = request->beginResponse(400, "text/plain", "");
+  }
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
-  //response->addHeader("Content-Disposition", "attachment; filename='data_old.csv'");
+  response->addHeader("Content-Disposition", "attachment; filename=data_old.csv");
   response->addHeader("Pragma", "public");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);

@@ -197,7 +197,7 @@
             </div>
           </h2>
           <h2>Корректировка датчика пара перед дефлегматором: <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176;C</h2>
-          <h2>Уставка датчика пара перед дефлегматором: <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика пара перед дефлегматором: <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176;C</h2>
           <h2>Задержка отбора при выходе Т пара за уставку: <input name='SteamDelay' type='text' value='%SteamDelay%'> сек</h2>
         </div>
       </div>
@@ -212,7 +212,7 @@
             </div>
           </h2>
           <h2>Корректировка датчика в царге на 2/3 колонны: <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176;C</h2>
-          <h2>Уставка датчика в царге на 2/3 колонны: <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика в царге на 2/3 колонны: <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176;C</h2>
           <h2>Задержка отбора при выходе Т в царге за уставку: <input name='PipeDelay' type='text' value='%PipeDelay%'> сек</h2>
         </div>
       </div>
@@ -227,8 +227,8 @@
             </div>
           </h2>
           <h2>Корректировка датчика воды: <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176;C</h2>
-          <h2>Уставка датчика воды: <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176;C</h2>
-          <h2>Задержка отбора при выходе Т воды за уставку: <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
+          <h2>Вылет за уставку датчика воды: <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т воды за уставку: <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
         </div>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -242,8 +242,8 @@
             </div>
           </h2>
           <h2>Корректировка датчика в кубе: <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176;C</h2>
-          <h2>Уставка датчика в кубе: <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176;C</h2>
-          <h2>Задержка отбора при выходе Т в кубе за уставку: <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
+          <h2>Вылет за уставку датчика в кубе: <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т в кубе за уставку: <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
         </div>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -257,8 +257,8 @@
             </div>
           </h2>
           <h2>Корректировка датчика в ТСА <input name='DeltaACPTemp' type='text' value='%DeltaACPTemp%'>&#176;C</h2>
-          <h2>Уставка датчика в ТСА: <input name='SetACPTemp' type='text' value='%SetACPTemp%'>&#176;C</h2>
-          <h2>Задержка отбора при выходе Т в ТСА за уставку: <input name='ACPDelay' type='text' value='%ACPDelay%'> сек</h2>
+          <h2>Вылет за уставку датчика в ТСА: <input name='SetACPTemp' type='text' value='%SetACPTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т в ТСА за уставку: <input name='ACPDelay' type='text' value='%ACPDelay%'> сек</h2>
         </div>
       </div>
     </div>
@@ -351,28 +351,26 @@
         </h2>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em 2em 1em 2em; justify-content: space-between;">
-        <div style="margin: 0 auto; width: 200px;">
-          <div>
-            <input id='resetwifi' type='button' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");' class="button">
-          </div>
-        </div>
-        <hr>
-        <div style="margin: 0 auto; width: 200px;">
+  <div class="container_column" style="margin-bottom: 1em;">
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
           <div>
             <input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);' class="button">
           </div>
+          <div>
+            <input id='resetwifi' type='button' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");' class="button">
+          </div>
+    </div>
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
           <div>
             <label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
               <i class="fa fa-cloud-upload"></i> Восстановить настройки
             </label>
             <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button" />
           </div>
-        </div>
-        <div>
-          <hr>
-        </div>
-        <div style="margin: 0 auto; width: 200px;">
-          <input id='reboot' type='button' name='reboot' value='Перегрузить Самовар' onclick='sendbutton("reboot");' class="button">
+          <div>
+            <input id='reboot' type='button' name='reboot' value='Перезагрузить Самовар' onclick='sendbutton("reboot");' class="button">
+          </div>
+    </div>
         </div>
       </div>
     </div>
