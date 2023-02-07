@@ -41,11 +41,44 @@ var program = "";
   }
   
 
+function conv_BMToBX(xml){
+  var S = "<?xml version=\"1.0\" encoding=\"windows-1251\"?><RECIPES><RECIPE>";
+  
+  if (window.DOMParser)
+  {
+    parser = new DOMParser();
+    xmlDoc = parser.parseFromString(xml, "text/xml");
+  }
+  else // Internet Explorer
+  {
+    xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+    xmlDoc.async = false;
+    xmlDoc.loadXML(xml);
+  }
+  S += "<NAME>" + xmlDoc.getElementsByTagName("namerecipe")[0].childNodes[0].nodeValue + "</NAME>";
+  S += "<BOIL_TIME>" + xmlDoc.getElementsByTagName("timeboil")[0].childNodes[0].nodeValue + "</BOIL_TIME>";
+  S += "<TYPE>All Grain</TYPE>";
+
+  S += "<STYLE><NAME>" + xmlDoc.getElementsByTagName("style")[0].childNodes[0].nodeValue + "</NAME></STYLE>"
+
+
+  S += "<YEASTS><YEAST><NAME>" + xmlDoc.getElementsByTagName("yeast")[0].childNodes[0].nodeValue + "</NAME>"
+  S += "<AMOUNT>" + xmlDoc.getElementsByTagName("aa")[0].childNodes[0].nodeValue + "</AMOUNT>"
+  S += "</YEAST><YEASTS>";
+  
+  S += "</RECIPE></RECIPES>";
+  return S;
+}
+
 function loadFile(e) {
 	var file = e;
 	var reader = new FileReader();
 	reader.onload = function () {
-		get_brew_info(reader.result);
+	    if (reader.result.indexOf("namerecipe") > 0){
+	        get_brew_info(conv_BMToBX(reader.result));
+	    } else {
+    		get_brew_info(reader.result);
+	    }
 	};
 	reader.readAsText(file, "UTF-8");
 }

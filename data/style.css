@@ -73,17 +73,58 @@ p{margin: 0 !important;}
 
 .dvcs{padding: 10;margin: 10;}
 
-.message-box{
-    background: red;
-    color: seashell;
-	z-index: 50000;
-    position: absolute;
-    width: 20em;
-    border-radius: 4px;
-    -webkit-transition: all 0.2s ease;
-    -moz-transition: all 0.2s ease;
-    -o-transition: all 0.2s ease;
-    transition: all 0.2s ease;
+.messages_box {
+  position: relative;
+  max-height: calc(100vh * 0.4);
+  background: #d0d0d0;
+  padding-top: 0.5em;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+  padding-bottom: 0.5em;
+  z-index: 50000;
+  overflow: auto;
+  border-radius: 0.5em;
+  -webkit-transition: all 0.2s ease;
+  -moz-transition: all 0.2s ease;
+  -o-transition: all 0.2s ease;
+  transition: all 0.2s ease;
+}
+
+.messages_array {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.message_0 {
+  background: red;
+  color: white;
+  font-size: 1.4em;
+  width: 100%;
+  margin-top: 0.5em;
+  border: 1 solid gray;
+  border-radius: 0.2em;
+}
+
+.message_1 {
+  background: #FF0;
+  color: black;
+  font-size: 1.4em;
+  width: 100%;
+  margin-top: 0.5em;
+  border: 1 solid gray;
+  border-radius: 0.2em;
+}
+
+.message_2 {
+  background: #00FF00C4;
+  color: black;
+  font-size: 1.4em;
+  width: 100%;
+  margin-top: 0.5em;
+  border: 1 solid gray;
+  border-radius: 0.2em;
 }
 
 .column{
@@ -407,7 +448,7 @@ border-style: solid !important;
 border-width: 1px !important;
 }
 
-.prgline{
+.prgline {
 font-size: 18px !important;
 margin-bottom: 4px !important;
 }
@@ -537,4 +578,8 @@ width: 400;
   }
 }
 
-
+.infotext {
+  font-size: 1em !important;
+  /* font-weight: bold !important; */
+  margin-left: 1em  !important;;
+}
