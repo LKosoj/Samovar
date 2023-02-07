@@ -61,6 +61,7 @@ void WebServerInit(void) {
   FS_init();  // Включаем работу с файловой системой
 
   server.serveStatic("/style.css", SPIFFS, "/style.css");
+  server.serveStatic("/script.js", SPIFFS, "/script.js");
   server.serveStatic("/minus.png", SPIFFS, "/minus.png");
   server.serveStatic("/plus.png", SPIFFS, "/plus.png");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
@@ -73,6 +74,7 @@ void WebServerInit(void) {
   server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
   server.serveStatic("/Green.png", SPIFFS, "/Green.png");
   server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
+  server.serveStatic("/pong.htm", SPIFFS, "/alarm.mp3");
   server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt");
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt");
@@ -802,7 +804,7 @@ void get_data_log(AsyncWebServerRequest *request) {
   }
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
-  response->addHeader("Content-Disposition", "attachment; filename=data.csv");
+  response->addHeader("Content-Disposition", "attachment; filename=\"data.csv\"");
   response->addHeader("Pragma", "public");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
@@ -817,7 +819,7 @@ void get_old_data_log(AsyncWebServerRequest *request) {
   }
   response->addHeader("Content-Type", "application/octet-stream");
   response->addHeader("Content-Description", "File Transfer");
-  response->addHeader("Content-Disposition", "attachment; filename=data_old.csv");
+  response->addHeader("Content-Disposition", "attachment; filename=\"data_old.csv\"");
   response->addHeader("Pragma", "public");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
