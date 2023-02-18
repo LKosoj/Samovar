@@ -131,10 +131,14 @@ void IRAM_ATTR withdrawal(void) {
   float c_temp;  //стартовая температура отбора тела с учетом корректировки от давления или без
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
 
-  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы
+  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
+    //Если строка программы - предзахлеб и после есть еще строка с отбором тела, то корректируем Т тела
+    if (program[ProgramNum].WType == "C" and (ProgramNum < ProgramLen - 2)  and (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C")) {
+      set_body_temp();
+    }
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-    if (!PauseOn && !program_Wait) {
+    else if (!PauseOn && !program_Wait) {
       program_Wait_Type = "(пар)";
       //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
       if (SamSetup.useautospeed && setautospeed) {
@@ -165,11 +169,14 @@ void IRAM_ATTR withdrawal(void) {
   }
 
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
-  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы
+  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
-    program_Wait_Type = "(царга)";
+    if (program[ProgramNum].WType == "C" and (ProgramNum < ProgramLen - 2)  and (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C")) {
+      set_body_temp();
+    }
     //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-    if (!PauseOn && !program_Wait) {
+    else if (!PauseOn && !program_Wait) {
+      program_Wait_Type = "(царга)";
       //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
       if (SamSetup.useautospeed && setautospeed) {
         setautospeed = false;
