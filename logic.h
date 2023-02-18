@@ -872,17 +872,17 @@ void start_self_test(void) {
   stopService();
   stepper.setMaxSpeed(get_speed_from_rate(1));
   stepper.setSpeed(get_speed_from_rate(1));
-  TargetStepps = 0.05 * SamSetup.StepperStepMl;
+  TargetStepps = 100 * SamSetup.StepperStepMl;
   stepper.setCurrent(0);
   stepper.setTarget(TargetStepps);
   startService();
   //включаем сервопривод
   set_capacity(1);
   while (capacity_num != 0 && capacity_num < 5) {
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(1500 / portTICK_PERIOD_MS);
     next_capacity();
   }
-  vTaskDelay(3000 / portTICK_PERIOD_MS);
+  vTaskDelay(10000 / portTICK_PERIOD_MS);
   stop_self_test();
   SendMsg(F("Самотестирование закончено."), NOTIFY_MSG);
 }
