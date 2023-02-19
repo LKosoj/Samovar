@@ -9,7 +9,7 @@ void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void SendMsg(String m, MESSAGE_TYPE msg_type);
-void check_boiling();
+bool check_boiling();
 
 void set_water_temp(float duty) {
 #ifdef USE_WATER_PUMP
@@ -66,7 +66,18 @@ void IRAM_ATTR check_alarm_bk() {
   }
 
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  check_boiling();
+  if (current_power_mode == POWER_SPEED_MODE && (check_boiling() || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
+#ifdef SAMOVAR_USE_POWER
+#ifndef SAMOVAR_USE_SEM_AVR
+    set_current_power(45);
+#else
+    set_current_power(200);
+#endif
+#else
+    current_power_mode = POWER_WORK_MODE;
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+#endif
+  }
 
   if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
     open_valve(false);
