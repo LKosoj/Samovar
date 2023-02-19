@@ -9,7 +9,7 @@ void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 #ifdef USE_WATER_PUMP
-void check_boiling();
+bool check_boiling();
 #endif
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 
