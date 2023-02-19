@@ -34,7 +34,7 @@ void set_buzzer(bool fl);
 void start_self_test(void);
 void stop_self_test(void);
 #ifdef USE_WATER_PUMP
-void check_boiling();
+bool check_boiling();
 #endif
 
 #ifdef SAMOVAR_USE_POWER
@@ -133,31 +133,40 @@ void IRAM_ATTR withdrawal(void) {
 
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
-    //Если строка программы - предзахлеб и после есть еще строка с отбором тела, то корректируем Т тела
-    if (program[ProgramNum].WType == "C" and (ProgramNum < ProgramLen - 2)  and (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C")) {
+#ifdef USE_BODY_TEMP_AUTOSET
+    //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
+    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
-    //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-    else if (!PauseOn && !program_Wait) {
-      program_Wait_Type = "(пар)";
-      //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
-      if (SamSetup.useautospeed && setautospeed) {
-        setautospeed = false;
-        CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
-        set_pump_speed(CurrrentStepperSpeed, false);
-#ifdef SAMOVAR_USE_POWER
-        if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
-          set_current_power(target_power_volt - 3 * PWR_FACTOR);
-        }
-#endif
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+    //Если это первая строка с телом - корректируем Т тела
+    else if (ProgramNum > 0) {
+      if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
+        set_body_temp();
       }
-      program_Wait = true;
-      pause_withdrawal(true);
-      t_min = millis() + SteamSensor.Delay * 1000;
-      set_buzzer(true);
-      SendMsg(F("Пауза по Т пара"), WARNING_MSG);
     }
+    else
+#endif
+      //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
+      if (!PauseOn && !program_Wait) {
+        program_Wait_Type = "(пар)";
+        //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
+        if (SamSetup.useautospeed && setautospeed) {
+          setautospeed = false;
+          CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
+          set_pump_speed(CurrrentStepperSpeed, false);
+#ifdef SAMOVAR_USE_POWER
+          if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
+            set_current_power(target_power_volt - 3 * PWR_FACTOR);
+          }
+#endif
+          vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
+        program_Wait = true;
+        pause_withdrawal(true);
+        t_min = millis() + SteamSensor.Delay * 1000;
+        set_buzzer(true);
+        SendMsg(F("Пауза по Т пара"), WARNING_MSG);
+      }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
@@ -171,30 +180,39 @@ void IRAM_ATTR withdrawal(void) {
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
-    if (program[ProgramNum].WType == "C" and (ProgramNum < ProgramLen - 2)  and (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C")) {
+#ifdef USE_BODY_TEMP_AUTOSET
+    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
-    //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-    else if (!PauseOn && !program_Wait) {
-      program_Wait_Type = "(царга)";
-      //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
-      if (SamSetup.useautospeed && setautospeed) {
-        setautospeed = false;
-        CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
-        set_pump_speed(CurrrentStepperSpeed, false);
-#ifdef SAMOVAR_USE_POWER
-        if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
-          set_current_power(target_power_volt - 3 * PWR_FACTOR);
-        }
-#endif
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+    //Если это первая строка с телом - корректируем Т тела
+    else if (ProgramNum > 0) {
+      if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
+        set_body_temp();
       }
-      program_Wait = true;
-      pause_withdrawal(true);
-      t_min = millis() + PipeSensor.Delay * 1000;
-      set_buzzer(true);
-      SendMsg(F("Пауза по Т царги"), WARNING_MSG);
     }
+    else
+#endif
+      //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
+      if (!PauseOn && !program_Wait) {
+        program_Wait_Type = "(царга)";
+        //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
+        if (SamSetup.useautospeed && setautospeed) {
+          setautospeed = false;
+          CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
+          set_pump_speed(CurrrentStepperSpeed, false);
+#ifdef SAMOVAR_USE_POWER
+          if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
+            set_current_power(target_power_volt - 3 * PWR_FACTOR);
+          }
+#endif
+          vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
+        program_Wait = true;
+        pause_withdrawal(true);
+        t_min = millis() + PipeSensor.Delay * 1000;
+        set_buzzer(true);
+        SendMsg(F("Пауза по Т царги"), WARNING_MSG);
+      }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
@@ -832,13 +850,15 @@ void IRAM_ATTR set_power(bool On) {
   }
 }
 
-void check_boiling() {
+bool check_boiling() {
   if (!valve_status || boil_started || !PowerOn
 #ifdef USE_WATER_PUMP
       || wp_count < 10
 #endif
-     )
-    return;
+     ) {
+    return false;
+  }
+  bool ret = false;
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
     d_s_temp_prev = WaterSensor.avgTemp;
@@ -848,6 +868,7 @@ void check_boiling() {
     wp_count = -10;
 #endif
     boil_started = true;
+    ret = true;
     SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
   }
   if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 5) {
@@ -856,8 +877,10 @@ void check_boiling() {
     wp_count = -10;
 #endif
     boil_started = true;
+    ret = true;
     SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
   }
+  return ret;
 }
 
 void start_self_test(void) {
