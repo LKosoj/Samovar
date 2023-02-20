@@ -75,7 +75,7 @@ void IRAM_ATTR check_alarm_distiller() {
     if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true);
   }
 
-  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 20) {
+  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE) {
     open_valve(false);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
