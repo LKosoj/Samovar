@@ -652,7 +652,7 @@ void IRAM_ATTR check_alarm() {
     }
   }
 
-  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 15 && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
+  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
     open_valve(false);
     set_buzzer(true);
 #ifdef USE_WATER_PUMP
