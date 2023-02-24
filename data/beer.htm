@@ -177,7 +177,7 @@
           else if (myObj.PrgType === "B") myObj.PrgType = "Кипячение"
           else if (myObj.PrgType === "C") myObj.PrgType = "Охлаждение"
           else if (myObj.PrgType === "W") myObj.PrgType = "Ожидание"
-          else if (myObj.PrgType === "F") myObj.PrgType = "Брага"
+          else if (myObj.PrgType === "F") myObj.PrgType = "Брожение"
           document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
@@ -278,7 +278,7 @@
       num.className = "prglabel";
       dl.appendChild(num);
 
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брага</option></select>');
+      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брожение</option></select>');
 
       //  var ptype = dl.getElementsByName("ptype");
       //  ptype[0].value = arr[0];
@@ -515,7 +515,7 @@
       </div>
       <div class="list-group">
         <div class="list-group-item list-header" data-name="spoiler-title">
-          <span class="spoiler-sign">[+]</span>Описание программы отбора в текстовом формате для сохранения в облаке:
+          <span class="spoiler-sign">[+]</span>Описание программы затирки в текстовом формате для сохранения в облаке:
         </div>
         <div class="list-group-item list-content spoiler-body">
           <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
@@ -539,7 +539,7 @@
       </div>
 
       <div style="margin: 0 auto; margin-top: 20px !important; width: 200px;">
-        <input id='loadprogram' type='button' name='loadprogram' value='Загрузить BeerXML' onclick='javascript:location.href="/brewxml.htm"' class="button">
+        <input id='loadprogram' type='button' name='loadprogram' value='Загрузить рецепт из XML' onclick='javascript:location.href="/brewxml.htm"' class="button">
       </div>
 
     </div>
