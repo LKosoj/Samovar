@@ -52,9 +52,6 @@ void change_samovar_mode() {
     server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest * request) {
-      request->send(SPIFFS, "/script.js", String(), false, indexKeyProcessor);
-    });
 }
   Samovar_CR_Mode = Samovar_Mode;
 }
@@ -130,6 +127,7 @@ void WebServerInit(void) {
   });
 #endif
 
+  server.serveStatic("/script.js", SPIFFS, "/script.js").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest * request) {
