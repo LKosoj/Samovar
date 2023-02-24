@@ -613,10 +613,10 @@ void setup() {
   //vr = vr + ";" + verbose_print_reset_reason(rtc_get_reset_reason(1));
 
   //delay(2000);
-//  dac_output_disable(DAC_CHANNEL_1);
-//  dac_output_disable(DAC_CHANNEL_2);
-//  touch_pad_isr_deregister();
-//  touch_pad_deinit();
+  //  dac_output_disable(DAC_CHANNEL_1);
+  //  dac_output_disable(DAC_CHANNEL_2);
+  //  touch_pad_isr_deregister();
+  //  touch_pad_deinit();
   touch_pad_intr_disable();
 
   xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
@@ -1161,6 +1161,15 @@ void getjson(void) {
   jsonstr += "\"fr_bt\":"; jsonstr += total_byte - used_byte;
   jsonstr += ",";
   //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
+
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE) {
+    String pt = "";
+    if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)){
+      pt = program[ProgramNum].WType;
+    }
+    jsonstr += "\"PrgType\":\""; jsonstr += pt; jsonstr += "\"";
+    jsonstr += ",";
+  }
 
   if (Msg != "") {
     jsonstr += "\"Msg\":\""; jsonstr += Msg; jsonstr += "\"";
