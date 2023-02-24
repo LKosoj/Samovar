@@ -44,10 +44,10 @@ function compare( a, b ) {
   a1 = decimalAdjust("round",get_object_value(a.TIME));
   b1 = decimalAdjust("round",get_object_value(b.TIME));
   if (a1 < b1){
-    return -1;
+    return 1;
   }
   if (a1 > b1){
-    return 1;
+    return -1;
   }
   return 0;
 }
@@ -155,7 +155,7 @@ function get_brewmate_info(xml){
 	recipe.RECIPES.RECIPE.BATCH_SIZE = recipe.recipe.part;
 	recipe.RECIPES.RECIPE.BOIL_TIME = recipe.recipe.timeboil;
 	recipe.RECIPES.RECIPE.PRIMARY_TEMP = recipe.recipe.timebro;
-	recipe.RECIPES.RECIPE.NOTES = recipe.recipe.comms.comm.lin;
+	//recipe.RECIPES.RECIPE.NOTES = recipe.recipe.comms.comm.lin;
 	
 	recipe.RECIPES.RECIPE.YEASTS = Object.create(null);
 	recipe.RECIPES.RECIPE.YEASTS.YEAST = Object.create(null);
@@ -416,24 +416,23 @@ function get_recipe(recipe){
     
     pt = check_value(get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP), "pt");
 
-    bth = 0; t = 0;
+    bth = decimalAdjust("round",check_value(get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME), "bt"));
+    t = 0;
     HOP.sort(compare);
-    
+
     for (let hop of HOP){
         t = decimalAdjust("round",get_object_value(hop.TIME));
-        if ((bth - t) === 0) t = 0
-        else {
-        	t1 = bth;
-        	bth = t;
-        	t = t - t1;
+        if ((bth - t) <= 0) {
+            program = program + "B;0.00;1\n";
         }
-        if (t == 0) t = 1;
-        program = program + "B;0.00;" + t + "\n";
+        else {
+            program = program + "B;0.00;" + (bth - t) + "\n";
+        	bth = t;
+        }
     }
 
-    bt = decimalAdjust("round",check_value(get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME), "bt"));
-    if (bth < bt) {
-          program = program + "B;0.00;" + (bt - bth) + "\n";
+    if (bth > 0) {
+          program = program + "B;0.00;" + bth + "\n";
     }
 
     program = program + "C;" + pt + ";0\nF;" + pt + ";0";
@@ -490,7 +489,6 @@ Samovar v. <span id='version'>%v%</span>
     <i class="fa fa-cloud-upload"></i>Загрузить рецепт BrewMate
 </label>
 <input type="file" id="fileToLoad2" accept="application/xml" onchange="loadBrewMate(this.files[0])" class="button"/>
-</div>
 </div>
 
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
