@@ -428,7 +428,7 @@ LiquidMenu main_menu1(lcd);
 DNSServer dns;
 
 enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_SELF_TEST};
-volatile SamovarCommands sam_command_sync;                      // переменная для передачи команд между процессами
+volatile SamovarCommands sam_command_sync;                    // переменная для передачи команд между процессами
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_SUVID_MODE};
 volatile SAMOVAR_MODE Samovar_Mode;
@@ -464,63 +464,63 @@ struct SetupEEPROM {
   bool rele2;
   bool rele3;
   bool rele4;
-  byte SteamAdress[8];                                          //адреса датчиков температуры
+  byte SteamAdress[8];                                         //адреса датчиков температуры
   byte PipeAdress[8];
   byte WaterAdress[8];
   byte TankAdress[8];
-  bool useautospeed;                                            //Настройка для использования автокорректировки скорости
-  byte autospeed;                                               //Процент изменения скорости
+  bool useautospeed;                                           //Настройка для использования автокорректировки скорости
+  byte autospeed;                                              //Процент изменения скорости
   char blynkauth[33];
-  char videourl[120];                                           //URL для потокового видео с камеры
-  float DistTemp;                                               //Температура, при которой завершится дистилляция
-  int Mode;                                                     //Режим работы Самовара
-  byte ACPAdress[8];                                            //адрес датчиков температуры
-  char ACPColor[20];                                            //Цвет температуры в интерфейсе
-  float DeltaACPTemp;                                           //Корректировка температурного датчика
-  float SetACPTemp;                                             //Уставка температурного датчика
-  uint16_t ACPDelay;                                            //Время задержки включения насоса в секундах при выходе температуры за значение уставки
-  float Kp;                                                     //Коэффициенты для PID-регулятора нагрева
+  char videourl[120];                                          //URL для потокового видео с камеры
+  float DistTemp;                                              //Температура, при которой завершится дистилляция
+  int Mode;                                                    //Режим работы Самовара
+  byte ACPAdress[8];                                           //адрес датчиков температуры
+  char ACPColor[20];                                           //Цвет температуры в интерфейсе
+  float DeltaACPTemp;                                          //Корректировка температурного датчика
+  float SetACPTemp;                                            //Уставка температурного датчика
+  uint16_t ACPDelay;                                           //Время задержки включения насоса в секундах при выходе температуры за значение уставки
+  float Kp;                                                    //Коэффициенты для PID-регулятора нагрева
   float Ki;
   float Kd;
-  float StbVoltage;                                             //Напряжение регулятора в режиме поддержания температуры
-  bool useautopowerdown;                                        //Настройка для использования автокорректировки подводимой мощности
-  bool ChangeProgramBuzzer;                                     //Настройка для использования пищалки при смене программы
-  bool UseBuzzer;                                               //Настройка для использования пищалки
-  bool CheckPower;                                              //Параметр для контроля работы регулятора напряжения (если он подключен)
-  bool UseBBuzzer;                                              //Настройка для использования пищалки в браузере
+  float StbVoltage;                                            //Напряжение регулятора в режиме поддержания температуры
+  bool useautopowerdown;                                       //Настройка для использования автокорректировки подводимой мощности
+  bool ChangeProgramBuzzer;                                    //Настройка для использования пищалки при смене программы
+  bool UseBuzzer;                                              //Настройка для использования пищалки
+  bool CheckPower;                                             //Параметр для контроля работы регулятора напряжения (если он подключен)
+  bool UseBBuzzer;                                             //Настройка для использования пищалки в браузере
 };
 
 struct DSSensor {
-  DeviceAddress Sensor;                                          //адрес датчика температуры
-  //  float Temp;                                                    //температура с датчика
-  float avgTemp;                                                 //средняя температура с датчика
-  float SetTemp;                                                 //уставка по температуре, при достижении которой требуется реакция
-  float BodyTemp;                                                //температура, с которой начался отбор тела
-  uint16_t Delay;                                                //Время задержки включения насоса в секундах при выходе температуры за значение уставки
-  float PrevTemp;                                                //Предыдущая температура
-  float Start_Pressure;                                          //Стартовое давление при начале отбора
-  int ErrCount;                                                  //Счетчик ошибок для оповещения о не возможности провести чтение с датчика
+  DeviceAddress Sensor;                                        //адрес датчика температуры
+  //  float Temp;                                                //температура с датчика
+  float avgTemp;                                               //средняя температура с датчика
+  float SetTemp;                                               //уставка по температуре, при достижении которой требуется реакция
+  float BodyTemp;                                              //температура, с которой начался отбор тела
+  uint16_t Delay;                                              //Время задержки включения насоса в секундах при выходе температуры за значение уставки
+  float PrevTemp;                                              //Предыдущая температура
+  float Start_Pressure;                                        //Стартовое давление при начале отбора
+  int ErrCount;                                                //Счетчик ошибок для оповещения о не возможности провести чтение с датчика
 };
 
 struct WProgram {
-  String WType;                                                   //тип отбора - головы или тело
-  uint16_t Volume;                                                //объем отбора в мл
-  float Speed;                                                    //скорость отбора в л/ч
-  byte capacity_num;                                              //номер емкости для отбора
-  float Temp;                                                     //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
-  int Power;                                                      //напряжение, при которой отбирается эта часть погона.
-  float Time;                                                     //время, необходимое для отбора программы
+  String WType;                                                //тип отбора - головы или тело
+  uint16_t Volume;                                             //объем отбора в мл
+  float Speed;                                                 //скорость отбора в л/ч
+  byte capacity_num;                                           //номер емкости для отбора
+  float Temp;                                                  //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
+  int Power;                                                   //напряжение, при которой отбирается эта часть погона.
+  float Time;                                                  //время, необходимое для отбора программы
 };
 
 SetupEEPROM SamSetup;
 
-DSSensor SteamSensor;                                           //сенсор температуры пара вверху колонны
-DSSensor PipeSensor;                                            //сенсор температуры в царге на 2/3 высоты
-DSSensor WaterSensor;                                           //сенсор температуры охлаждающей воды или флегмы
-DSSensor TankSensor;                                            //сенсор температуры в кубе
-DSSensor ACPSensor;                                             //сенсор температуры в ТСА
+DSSensor SteamSensor;                                          //сенсор температуры пара вверху колонны
+DSSensor PipeSensor;                                           //сенсор температуры в царге на 2/3 высоты
+DSSensor WaterSensor;                                          //сенсор температуры охлаждающей воды или флегмы
+DSSensor TankSensor;                                           //сенсор температуры в кубе
+DSSensor ACPSensor;                                            //сенсор температуры в ТСА
 
-WProgram program[CAPACITY_NUM * 2];                             //массив строк для записи программы отбора. Не больше чем CAPACITY_NUM * 2
+WProgram program[30];                                          //массив строк для записи программы отбора.
 
 //**************************************************************************************************************
 const char* host = SAMOVAR_HOST;
