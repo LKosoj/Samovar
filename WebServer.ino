@@ -52,7 +52,10 @@ void change_samovar_mode() {
     server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
-  }
+    server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/script.js", String(), false, indexKeyProcessor);
+    });
+}
   Samovar_CR_Mode = Samovar_Mode;
 }
 
@@ -61,7 +64,6 @@ void WebServerInit(void) {
   FS_init();  // Включаем работу с файловой системой
 
   server.serveStatic("/style.css", SPIFFS, "/style.css");
-  server.serveStatic("/script.js", SPIFFS, "/script.js");
   server.serveStatic("/minus.png", SPIFFS, "/minus.png");
   server.serveStatic("/plus.png", SPIFFS, "/plus.png");
   server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");

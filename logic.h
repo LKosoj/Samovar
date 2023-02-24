@@ -345,7 +345,7 @@ String IRAM_ATTR get_Samovar_Status() {
     } else if (program[ProgramNum].WType == "C") {
       SamovarStatus = SamovarStatus + "Охлаждение до " + String(program[ProgramNum].Temp);
     } else if (program[ProgramNum].WType == "W") {
-      SamovarStatus = SamovarStatus + "Ожидание. Нажмите \"Следующая программа\"";
+      SamovarStatus = SamovarStatus + "Ожидание. Нажмите 'Следующая программа'";
     } else if (program[ProgramNum].WType == "A") {
       SamovarStatus = SamovarStatus + "Автокалибровка. После завершения питание будет выключено";
     } else if (program[ProgramNum].WType == "B") {

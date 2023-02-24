@@ -172,7 +172,13 @@
           document.getElementById('stm').innerHTML = myObj.stm;
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
           document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
-          document.getElementById('Status').innerHTML = myObj.Status;
+          if (myObj.PrgType === "P") myObj.PrgType = "Пауза"
+          else if (myObj.PrgType === "M") myObj.PrgType = "Темп. закладки солода"
+          else if (myObj.PrgType === "B") myObj.PrgType = "Кипячение"
+          else if (myObj.PrgType === "C") myObj.PrgType = "Охлаждение"
+          else if (myObj.PrgType === "W") myObj.PrgType = "Ожидание"
+          else if (myObj.PrgType === "F") myObj.PrgType = "Брага"
+          document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
@@ -453,7 +459,7 @@
               <span id='set_power_label'></span>
               <input name='Voltage' id='Voltage' type='text' value=''>
             </div>
-              <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
+              <input id='SetVoltage' type='submit' name='SetVoltage' class="button">
           </div>
           <div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;">
             <span class='dvcs'>

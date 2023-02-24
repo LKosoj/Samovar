@@ -34,7 +34,12 @@
           document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
           document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
           document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
-          document.getElementById('Status').innerHTML = myObj.Status;
+          if (myObj.PrgType === "P") myObj.PrgType = "Пауза"
+          else if (myObj.PrgType === "H") myObj.PrgType = "Головы"
+          else if (myObj.PrgType === "B") myObj.PrgType = "Тело"
+          else if (myObj.PrgType === "C") myObj.PrgType = "Предзахлеб"
+          else if (myObj.PrgType === "T") myObj.PrgType = "Хвосты"
+          document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
           document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
           document.getElementById('heap').innerHTML = myObj.heap;
           document.getElementById('rssi').innerHTML = myObj.rssi;

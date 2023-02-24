@@ -170,7 +170,12 @@
           document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
           document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
           document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
-          document.getElementById('Status').innerHTML = myObj.Status;
+          if (myObj.PrgType === "P") myObj.PrgType = "Пауза"
+          else if (myObj.PrgType === "H") myObj.PrgType = "Головы"
+          else if (myObj.PrgType === "B") myObj.PrgType = "Тело"
+          else if (myObj.PrgType === "C") myObj.PrgType = "Предзахлеб"
+          else if (myObj.PrgType === "T") myObj.PrgType = "Хвосты"
+          document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt.toFixed(1);
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt.toFixed(1);
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
