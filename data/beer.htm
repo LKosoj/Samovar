@@ -448,11 +448,12 @@
 
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;" id="PWR">
         <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-          <div class="text" id='VoltH2'>
+          <div class="text" id='VoltH2' style="visibility: hidden; position: absolute;">
             <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
               <span id='set_power_label'></span>
               <input name='Voltage' id='Voltage' type='text' value=''>
             </div>
+              <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
           </div>
           <div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;">
             <span class='dvcs'>
