@@ -227,135 +227,6 @@
       xhttp.send();
     };
 
-    function set_num () {
-      var e = document.getElementById("prg").childNodes;
-      var a;
-      for (i = 1; i < e.length; i++) {
-        a = e[i].childNodes[0];
-        a.innerText = "";
-        if (i < 10) a.innerText = "0";
-        a.innerText = a.innerText + i;
-      }
-    }
-
-    function removeLine (ln) {
-      var prg = document.getElementById("prg").childNodes.length;
-      if (prg < 3) return;
-      var prgline = document.getElementById(ln);
-      prgline.remove();
-      calc_program();
-    }
-
-    function addLine (obj, s) {
-      //var s = "B;100;0.1;5;0.00;120";
-      var arr = s.split(";");
-
-      var dl = document.createElement("div");
-      dl.className = "prgline";
-      dl.id = "prgln" + _lnIdx;
-
-      var num = document.createElement("label");
-      num.className = "prglabel";
-      dl.appendChild(num);
-
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
-
-      //  var ptype = dl.getElementsByName("ptype");
-      //  ptype[0].value = arr[0];
-
-      var pvolume = document.createElement("input");
-      pvolume.type = "text";
-      pvolume.name = "pvolume" + _lnIdx;
-      pvolume.value = arr[1];
-      pvolume.setAttribute("onchange", "calc_program();");
-      dl.appendChild(pvolume);
-
-      var pspeed = document.createElement("input");
-      pspeed.type = "text";
-      pspeed.name = "pspeed" + _lnIdx;
-      pspeed.value = arr[2];
-      pspeed.setAttribute("onchange", "calc_program();");
-      dl.appendChild(pspeed);
-
-      pspeed.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
-
-      var ptemp = document.createElement("input");
-      ptemp.type = "text";
-      ptemp.name = "ptemp" + _lnIdx;
-      ptemp.value = arr[4];
-      ptemp.setAttribute("onchange", "calc_program();");
-      dl.appendChild(ptemp);
-
-      var pvolt = document.createElement("input");
-      pvolt.type = "text";
-      pvolt.name = "pvolt" + _lnIdx;
-      pvolt.value = arr[5];
-      pvolt.setAttribute("onchange", "calc_program();");
-      dl.appendChild(pvolt);
-
-      var plus = document.createElement("img");
-      plus.src = '/plus.png';
-      plus.setAttribute("width", "20");
-      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','H;0;0;0;0;0')");
-      dl.appendChild(plus);
-
-      var minus = document.createElement("img");
-      minus.src = '/minus.png';
-      minus.setAttribute("width", "20");
-      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
-      dl.appendChild(minus);
-
-      if (!obj) {
-        var prg = document.getElementById("prg");
-        prg.appendChild(dl);
-      } else {
-        prg = document.getElementById(obj);
-        prg.after(dl);
-      }
-
-      var p = "ptype" + _lnIdx;
-      var ptype = document.getElementById(p);
-      ptype.value = arr[0];
-
-      var pnum = document.getElementById("pnum" + _lnIdx);
-      pnum.value = arr[3];
-
-      set_bgcolor(_lnIdx);
-
-      _lnIdx++;
-      calc_program();
-    }
-
-    function getProgram () {
-      if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Program error!");
-        return;
-      }
-      var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Объем<span class="tooltiptext">Объем в мл</span></label><label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label><label class="tooltip">Емкость<span class="tooltiptext">Номер емкости (нумерация начинается от 0)</span></label><label class="tooltip">Темп</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Напр</label></div>');
-      var p = document.getElementById("WProgram");
-      var varr = p.value.split("\n");
-      for (z = 0; z < varr.length; z++) {
-        if (varr[z] != "") addLine(false, varr[z]);
-      }
-    }
-
-    function set_bgcolor (obj) {
-      var l = document.getElementById("prgln" + obj);
-      var t = document.getElementById("ptype" + obj).value;
-      let color = 'black';
-      if (t == "H") {color = "background-color: #80FFFA;";}
-      else if (t == "B") {color = "background-color: #32CD3229;";}
-      else if (t == "C") {color = "background-color: #FFFF0039;";}
-      else if (t == "P") {color = "background-color: #C4C4C4;";}
-      else if (t == "T") {color = "background-color: #8B451334;";}
-      l.setAttribute("style", color);
-      var e = l.childNodes;
-      for (q = 0; q < e.length; q++) {
-        e[q].setAttribute("style", color);
-      }
-    }
-
     function sliderChange () {
       document.getElementById('PWMt').value = document.getElementById('PWM').value;
       sendwaterpwm();
@@ -381,18 +252,6 @@
         txt.value = document.getElementById('PWM').value;
       });
 
-      getProgram();
-      document.getElementById("WProgram").addEventListener("change", function(event) {
-        if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Program error!");
-          return;
-        }
-        var element = document.getElementById("prg");
-        while (element.firstChild) {
-          element.removeChild(element.firstChild);
-        }
-      });
-      getProgram();
       setPowerUnit();
       AddLuaButtons();
     };
@@ -406,8 +265,6 @@
 
 
 <!-- =============================================================================================================== -->
-
-
 <body>
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
     
@@ -500,7 +357,7 @@
           <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
             <div>
               Скорость насоса:
-              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="600" value='%PWM_V%' list="tickmarks">
+              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="600" value='%PWM_V%' list="tickmarks" onchange='sliderChange();'>
               <datalist id="tickmarks">
                 <option value="%PWM_LV%">
                 <option value="200">
