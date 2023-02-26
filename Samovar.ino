@@ -56,6 +56,8 @@
 
 #include <ESP32Servo.h>
 
+#include <iarduino_I2C_connect.h>
+
 #include "Samovar.h"
 
 #ifndef __SAMOVAR_DEBUG
@@ -67,9 +69,6 @@
 #include "soc/rtc_wdt.h"
 #include <esp_task_wdt.h>
 #endif
-
-#include <iarduino_I2C_connect.h>
-iarduino_I2C_connect I2CC;
 
 #ifdef USE_EXPANDER
 #include <PCF8575.h>
@@ -133,6 +132,8 @@ cppQueue  msg_q(150, 5, FIFO);
 #include "beer.h"
 #include "BK.h"
 #include "SPIFFSEditor.h"
+
+#include "I2CStepper.h"
 
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
