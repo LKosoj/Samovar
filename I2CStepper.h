@@ -7,9 +7,8 @@
 
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 
-//byte           I2CStepper_arr[2 + 1 +       4 +    1           = 8]
 //                              spd direction target transaction
-
+//byte           I2CStepper_arr[2 + 1 +       4 +    1           = 8]
 
 //spd - скорость в оборотах в минуту, direction - прямое или обратное направление, time - время включения двигателя
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time){
