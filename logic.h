@@ -139,10 +139,8 @@ void IRAM_ATTR withdrawal(void) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
-    else if (ProgramNum > 0) {
-      if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
-        set_body_temp();
-      }
+    else if ((ProgramNum > 0) && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
+      set_body_temp();
     }
     else
 #endif
@@ -185,10 +183,8 @@ void IRAM_ATTR withdrawal(void) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
-    else if (ProgramNum > 0) {
-      if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
-        set_body_temp();
-      }
+    else if ((ProgramNum > 0) && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
+      set_body_temp();
     }
     else
 #endif
