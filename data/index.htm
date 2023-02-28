@@ -268,8 +268,8 @@
       for (i = 1; i < e.length; i++) {
         a = e[i].childNodes[0];
         a.innerText = "";
-        if (i < 10) a.innerText = "0";
-        a.innerText = a.innerText + i;
+        if (i < 11) a.innerText = "0";
+        a.innerText = a.innerText + (i-1);
       }
     }
 
