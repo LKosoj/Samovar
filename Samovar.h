@@ -266,7 +266,7 @@ uint8_t temprature_sens_read();
 
 #ifdef SAMOVAR_USE_SEM_AVR
 #undef PWR_FACTOR
-#define PWR_FACTOR 40
+#define PWR_FACTOR 20
 #define PWR_MSG "Мощность"
 #define PWR_TYPE "P"
 
