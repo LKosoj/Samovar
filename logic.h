@@ -154,7 +154,11 @@ void IRAM_ATTR withdrawal(void) {
           set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
           if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
+#ifdef SAMOVAR_USE_SEM_AVR
+            set_current_power(target_power_volt - target_power_volt / 100 * 6);
+#else
             set_current_power(target_power_volt - 3 * PWR_FACTOR);
+#endif
           }
 #endif
           vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -198,7 +202,11 @@ void IRAM_ATTR withdrawal(void) {
           set_pump_speed(CurrrentStepperSpeed, false);
 #ifdef SAMOVAR_USE_POWER
           if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
+#ifdef SAMOVAR_USE_SEM_AVR
+            set_current_power(target_power_volt - target_power_volt / 100 * 6);
+#else
             set_current_power(target_power_volt - 3 * PWR_FACTOR);
+#endif
           }
 #endif
           vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -599,7 +607,11 @@ void IRAM_ATTR check_alarm() {
     }
 #ifdef SAMOVAR_USE_POWER
     SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
+#ifdef SAMOVAR_USE_SEM_AVR
+    set_current_power(target_power_volt - target_power_volt / 100 * 2);
+#else
     set_current_power(target_power_volt - 1 * PWR_FACTOR);
+#endif
 #endif
     //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
     alarm_h_min = millis() + 1000 * 40;
@@ -613,8 +625,18 @@ void IRAM_ATTR check_alarm() {
   //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
   if (alarm_c_min > 0 && alarm_c_min <= millis()) {
     if (program[ProgramNum].WType == "C") {
-      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
-      set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
+      if (prev_target_power_volt == 0) {
+#ifdef SAMOVAR_USE_SEM_AVR
+        prev_target_power_volt = target_power_volt + target_power_volt / 100 * 3;
+#else
+        prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
+#endif
+      }
+#ifdef SAMOVAR_USE_SEM_AVR
+            set_current_power(target_power_volt - target_power_volt / 100 * 2);
+#else
+            set_current_power(target_power_volt - 1 * PWR_FACTOR);
+#endif
       prev_target_power_volt = 0;
       //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
@@ -624,7 +646,11 @@ void IRAM_ATTR check_alarm() {
   //Если программа предзахлеб и давно не было срабатывания датчика - повышаем напряжение
   if (program[ProgramNum].WType == "C") {
     if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
-      set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
+#ifdef SAMOVAR_USE_SEM_AVR
+      set_current_power(target_power_volt - target_power_volt / 100 * 1);
+#else
+      set_current_power(target_power_volt - 0.5 * PWR_FACTOR);
+#endif
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
     } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
@@ -708,7 +734,11 @@ void IRAM_ATTR check_alarm() {
       set_buzzer(true);
       SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
+#ifdef SAMOVAR_USE_SEM_AVR
+      set_current_power(target_power_volt - target_power_volt / 100 * 8);
+#else
       set_current_power(target_power_volt - 5 * PWR_FACTOR);
+#endif
     }
 #endif
     alarm_t_min = millis() + 1000 * 30;
@@ -972,7 +1002,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       {
         Serial2.flush();
         Serial2.print("АТ+SS?\r");
-        vTaskDelay(300 / portTICK_RATE_MS);
+        vTaskDelay(400 / portTICK_RATE_MS);
         if (Serial2.available()) {
           current_power_mode = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
@@ -986,7 +1016,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       {
         Serial2.flush();
         Serial2.print("АТ+VO?\r");
-        vTaskDelay(300 / portTICK_RATE_MS);
+        vTaskDelay(400 / portTICK_RATE_MS);
         if (Serial2.available()) {
           resp = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
@@ -1001,7 +1031,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       {
         Serial2.flush();
         Serial2.print("АТ+VS?\r");
-        vTaskDelay(300 / portTICK_RATE_MS);
+        vTaskDelay(400 / portTICK_RATE_MS);
         if (Serial2.available()) {
           resp = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
