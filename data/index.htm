@@ -1,11 +1,12 @@
+<html>
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
   <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="/style.css">
   <title>Самовар</title>
 
-  <link rel="stylesheet" href="/style.css">
-  <script src="script.js"></script>
+  <script src="/script.js"></script>
 
   <script>
 
@@ -63,6 +64,15 @@
       var k, s;
       s = "";
       for (i = 1; i < t.length; i++) {
+
+      if (t[i].childNodes[2].value.indexOf(".") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf("."));
+      if (t[i].childNodes[2].value.indexOf(",") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf(","));
+
+
+        t[i].childNodes[3].value = t[i].childNodes[3].value.replace(",",".");
+        t[i].childNodes[5].value = t[i].childNodes[5].value.replace(",",".");
+        t[i].childNodes[6].value = t[i].childNodes[6].value.replace(",",".");
+
         k = t[i].childNodes;
         for (j = 1; j < 7; j++) {
           s = s + k[j].value + ";";
@@ -175,7 +185,7 @@
           else if (myObj.PrgType === "B") myObj.PrgType = "Тело"
           else if (myObj.PrgType === "C") myObj.PrgType = "Предзахлеб"
           else if (myObj.PrgType === "T") myObj.PrgType = "Хвосты"
-          document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
+          document.getElementById('Status').innerHTML = myObj.PrgType + "; " + myObj.Status;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt.toFixed(1);
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt.toFixed(1);
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
@@ -733,3 +743,4 @@
 
   </form>
 </body>
+</html>

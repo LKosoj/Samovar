@@ -52,7 +52,7 @@ void change_samovar_mode() {
     server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
-}
+  }
   Samovar_CR_Mode = Samovar_Mode;
 }
 
@@ -60,25 +60,73 @@ void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
 
-  server.serveStatic("/style.css", SPIFFS, "/style.css");
-  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
-  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
-  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
+//  server.serveStatic("/style.css", SPIFFS, "/style.css");
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css");
+    response->addHeader("Cache-Control", "max-age=5000");
+    request->send(response);
+  });
+  server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png");
+    response->addHeader("Cache-Control", "max-age=604800");
+    request->send(response);
+  });
+  server.on("/plus.png", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/plus.png");
+    response->addHeader("Cache-Control", "max-age=614800");
+    request->send(response);
+  });
+  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/favicon.ico");
+    response->addHeader("Cache-Control", "max-age=624800");
+    request->send(response);
+  });
+
+  server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Red_light.gif");
+    response->addHeader("Cache-Control", "max-age=634800");
+    request->send(response);
+  });
+  server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Green.png");
+    response->addHeader("Cache-Control", "max-age=644800");
+    request->send(response);
+  });
+  server.on("/alarm.mp3", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/alarm.mp3", "audio/mpeg", false);
+    response->addHeader("Cache-Control", "max-age=594800");
+    response->addHeader("ETag", "samalarm");
+    request->send(response);
+  });
+
+  server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest * request) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/script.js", String(), false, indexKeyProcessor);
+    response->addHeader("Cache-Control", "max-age=6000");
+    request->send(response);
+  });
+
+//  server.serveStatic("/script.js", SPIFFS, "/script.js").setTemplateProcessor(indexKeyProcessor);
+
+  //  server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
+
+  //  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
+  //  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
+  //  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
+  //  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
+  //  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
   server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
-  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
-  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
-  server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
   server.serveStatic("/pong.htm", SPIFFS, "/alarm.mp3");
   server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt");
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt");
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
+  server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
 #ifdef USE_LUA
   server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
@@ -126,9 +174,6 @@ void WebServerInit(void) {
     request->send(200, "text/html", "OK");
   });
 #endif
-
-  server.serveStatic("/script.js", SPIFFS, "/script.js").setTemplateProcessor(indexKeyProcessor);
-  server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest * request) {
     //Serial.println("SAVE");

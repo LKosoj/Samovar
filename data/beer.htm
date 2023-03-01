@@ -1,10 +1,11 @@
+<html>
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
   <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="/style.css">
   <title>Самовар</title>
 
-  <link rel="stylesheet" href="/style.css">
   <script src="/script.js"></script>
 
   <script>
@@ -178,7 +179,7 @@
           else if (myObj.PrgType === "C") myObj.PrgType = "Охлаждение"
           else if (myObj.PrgType === "W") myObj.PrgType = "Ожидание"
           else if (myObj.PrgType === "F") myObj.PrgType = "Брожение"
-          document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
+          document.getElementById('Status').innerHTML = myObj.PrgType + "; " + myObj.Status;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
@@ -557,3 +558,4 @@
 
   </form>
 </body>
+</html>

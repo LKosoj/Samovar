@@ -3,9 +3,8 @@
 <meta charset='utf-8'>
 <meta http-equiv="Cache-Control" content="no-cache">
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
-<title>Самовар</title>
-
 <link rel="stylesheet" href="/style.css">
+<title>Самовар</title>
 
 <script>
 
@@ -124,6 +123,13 @@ function set_num(){
       if (i < 10) a.innerText = "0";
       a.innerText = a.innerText + i;
       //
+      if (e[i].childNodes[3].value.indexOf(".") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf("."));
+      if (e[i].childNodes[3].value.indexOf(",") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf(","));
+      
+      e[i].childNodes[2].value = e[i].childNodes[2].value.replace(",",".");
+      e[i].childNodes[5].value = e[i].childNodes[5].value.replace(",",".");
+
+
       v = e[i].childNodes[6];
       t = e[i].childNodes[7];
       var vlc = 1;
@@ -308,6 +314,7 @@ function addLine(obj, s){
   pvolt.type = "text";
   pvolt.name = "pvolt" + _lnIdx;
   pvolt.value = arr[4];
+  pvolt.setAttribute("onchange", "set_num();");
   dl.appendChild(pvolt);
   
   var pvl = document.createElement("input");
