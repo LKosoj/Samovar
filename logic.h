@@ -475,11 +475,17 @@ void IRAM_ATTR run_program(byte num) {
     } else if (program[num].Power != 0) {
       set_current_power(target_power_volt + program[num].Power);
     }
-    if (program[num].WType == "C") alarm_c_low_min = millis();
+    if (program[num].WType == "C" && alarm_c_low_min == 0) alarm_c_low_min = millis();
 #endif
     String p_s;
     p_s = "Программа: старт строки  №" + (String)(num + 1);
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
+      if (program[num].WType == "H" || program[num].WType == "T") {
+        SteamSensor.BodyTemp = 0;
+        PipeSensor.BodyTemp = 0;
+        WaterSensor.BodyTemp = 0;
+        TankSensor.BodyTemp = 0;
+      }
       p_s += ", отбор в ёмкость " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
@@ -633,9 +639,9 @@ void IRAM_ATTR check_alarm() {
 #endif
       }
 #ifdef SAMOVAR_USE_SEM_AVR
-            set_current_power(target_power_volt - target_power_volt / 100 * 2);
+      set_current_power(target_power_volt - target_power_volt / 100 * 2);
 #else
-            set_current_power(target_power_volt - 1 * PWR_FACTOR);
+      set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
       prev_target_power_volt = 0;
       //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
