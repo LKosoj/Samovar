@@ -60,7 +60,7 @@ void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
 
-//  server.serveStatic("/style.css", SPIFFS, "/style.css");
+  //  server.serveStatic("/style.css", SPIFFS, "/style.css");
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest * request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css");
     response->addHeader("Cache-Control", "max-age=5000");
@@ -98,14 +98,6 @@ void WebServerInit(void) {
     response->addHeader("ETag", "samalarm");
     request->send(response);
   });
-
-  server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/script.js", String(), false, indexKeyProcessor);
-    response->addHeader("Cache-Control", "max-age=6000");
-    request->send(response);
-  });
-
-//  server.serveStatic("/script.js", SPIFFS, "/script.js").setTemplateProcessor(indexKeyProcessor);
 
   //  server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
 
@@ -257,7 +249,7 @@ String indexKeyProcessor(const String &var) {
   else if (var == "pwr_unit")
     return PWR_TYPE;
 #ifdef USE_LUA
-  else if (var == "btn_list")
+  if (var == "btn_list")
     return get_lua_script_list();
 #endif
   else if (var == "showvideo") {

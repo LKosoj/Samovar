@@ -104,7 +104,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
 
-  //    SteamSensor.avgTemp = 50;
+  //    SteamSensor.avgTemp += 0.1;
   //    PipeSensor.avgTemp = 50;
   //    WaterSensor.avgTemp = 50;
   //    TankSensor.avgTemp = 75;
