@@ -653,9 +653,9 @@ void IRAM_ATTR check_alarm() {
   if (program[ProgramNum].WType == "C") {
     if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt - target_power_volt / 100 * 1);
+      set_current_power(target_power_volt + target_power_volt / 100 * 1);
 #else
-      set_current_power(target_power_volt - 0.5 * PWR_FACTOR);
+      set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
 #endif
       alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
     } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
