@@ -670,6 +670,18 @@ static int lua_wrapper_get_stepper_status(lua_State *lua_state) {
   return 1;
 }
 
+static int lua_wrapper_set_mixer_pump_target(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  byte a = luaL_checkinteger(lua_state, 1);
+  lua_pushnumber(lua_state, (lua_Number) set_mixer_pump_target(a));
+  return 1;
+}
+
+static int lua_wrapper_get_mixer_pump_status(lua_State *lua_state) {
+  lua_pushnumber(lua_state, (lua_Number) get_mixer_pump_status());
+  return 1;
+}
+
 static int lua_wrapper_check_I2C_device(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   byte a = luaL_checkinteger(lua_state, 1);
@@ -723,6 +735,8 @@ void lua_init() {
   lua.Lua_register("set_stepper_by_time", (const lua_CFunction) &lua_wrapper_set_stepper_by_time);
   lua.Lua_register("set_stepper_target", (const lua_CFunction) &lua_wrapper_set_stepper_target);
   lua.Lua_register("get_stepper_status", (const lua_CFunction) &lua_wrapper_get_stepper_status);
+  lua.Lua_register("set_mixer_pump_target", (const lua_CFunction) &lua_wrapper_set_mixer_pump_target);
+  lua.Lua_register("get_mixer_pump_status", (const lua_CFunction) &lua_wrapper_get_mixer_pump_status);
 
   loop_lua_fl = 0;
   //Запускаем инициализирующий lua-скрипт
