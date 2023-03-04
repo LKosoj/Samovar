@@ -65,9 +65,7 @@ uint32_t get_stepper_status(void) {
 bool set_mixer_pump_target(uint8_t on) {
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    I2C2.writeByte(0x01, 8, 1);
     I2C2.writeByte(0x01, 7, on);
-    I2C2.writeByte(0x01, 8, 0);
     xSemaphoreGive(xI2CSemaphore);
     result = true;
   }
