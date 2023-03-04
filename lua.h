@@ -11,8 +11,10 @@ LuaWrapper lua;
 #include <SimpleMap.h>
 
 #include <asyncHTTPrequest.h>
+#include "I2CStepper.h"
 
 #define EXPANDER_UPDATE_TIMEOUT 500
+
 
 unsigned long lua_timer[9]; //10 таймеров для lua
 String lua_type_script;
@@ -645,6 +647,36 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   return 1;
 }
 
+static int lua_wrapper_set_stepper_by_time(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  uint16_t a = luaL_checkinteger(lua_state, 1);
+  uint8_t b = luaL_checkinteger(lua_state, 2);
+  uint16_t c = luaL_checkinteger(lua_state, 3);
+  lua_pushnumber(lua_state, (lua_Number) set_stepper_by_time(a, b, c));
+  return 1;
+}
+
+static int lua_wrapper_set_stepper_target(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  uint16_t a = luaL_checkinteger(lua_state, 1);
+  uint8_t b = luaL_checkinteger(lua_state, 2);
+  uint32_t c = luaL_checkinteger(lua_state, 3);
+  lua_pushnumber(lua_state, (lua_Number) set_stepper_target(a, b, c));
+  return 1;
+}
+
+static int lua_wrapper_get_stepper_status(lua_State *lua_state) {
+  lua_pushnumber(lua_state, (lua_Number) get_stepper_status());
+  return 1;
+}
+
+static int lua_wrapper_check_I2C_device(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  byte a = luaL_checkinteger(lua_state, 1);
+  lua_pushnumber(lua_state, (lua_Number) check_I2C_device(a));
+  return 1;
+}
+
 void lua_init() {
   lua.Lua_register("pinMode", (const lua_CFunction) &lua_wrapper_pinMode);
   lua.Lua_register("digitalWrite", (const lua_CFunction) &lua_wrapper_digitalWrite);
@@ -686,6 +718,11 @@ void lua_init() {
   lua.Lua_register("getObject", (const lua_CFunction) &lua_wrapper_get_object);
   lua.Lua_register("getTimer", (const lua_CFunction) &lua_wrapper_get_timer);
   lua.Lua_register("http_request", (const lua_CFunction) &lua_wrapper_http_request);
+
+  lua.Lua_register("check_I2C_device", (const lua_CFunction) &lua_wrapper_check_I2C_device);
+  lua.Lua_register("set_stepper_by_time", (const lua_CFunction) &lua_wrapper_set_stepper_by_time);
+  lua.Lua_register("set_stepper_target", (const lua_CFunction) &lua_wrapper_set_stepper_target);
+  lua.Lua_register("get_stepper_status", (const lua_CFunction) &lua_wrapper_get_stepper_status);
 
   loop_lua_fl = 0;
   //Запускаем инициализирующий lua-скрипт
