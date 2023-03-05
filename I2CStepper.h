@@ -26,12 +26,14 @@ byte check_I2C_device(byte address) {
 
 //spd - скорость в оборотах в минуту, direction - прямое или обратное направление, time - время включения двигателя в секундах
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time) {
+  if (!use_I2C_dev) return false;
   return set_stepper_target(spd * 200 / 60, direction, time * spd * 200 / 60);
 }
 
 
 //spd - скорость в шагах в секунду, direction - прямое или обратное направление, target - количество шагов
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
+  if (!use_I2C_dev) return false;
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     I2C2.writeByte(0x01, 8, 1);
@@ -51,6 +53,8 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
 
 uint32_t get_stepper_status(void) {
   uint32_t rest = 0xFFFFFFFF;
+  if (!use_I2C_dev) return rest;
+  
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     //Читаем количество оставшихся шагов
     rest  = (uint32_t)I2C2.readByte(0x01, 3) << 24;       // Считываем старший байт значения шагов, сдвигаем полученный байт на 32 бит влево, т.к. он старший
@@ -63,6 +67,7 @@ uint32_t get_stepper_status(void) {
 }
 
 bool set_mixer_pump_target(uint8_t on) {
+  if (!use_I2C_dev) return false;
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     I2C2.writeByte(0x01, 7, on);
@@ -74,6 +79,7 @@ bool set_mixer_pump_target(uint8_t on) {
 
 byte get_mixer_pump_status(void) {
   byte state = 0xFF;
+  if (!use_I2C_dev) return state;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     state = I2C2.readByte(0x01, 7);
     xSemaphoreGive(xI2CSemaphore);
