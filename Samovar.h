@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "5.24"
+#define SAMOVAR_VERSION "5.25"
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -610,6 +610,7 @@ String Lua_status;                                              // Статус 
 bool is_reboot = false;                                         // Признак перезагрузки
 uint32_t total_byte;                                            // Доступно байт на файловой системе
 uint32_t used_byte;                                             // Использовано байт на файловой системе
+bool use_I2C_dev;                                               // Использовать Nano, подключенную по I2C для управления шаговым двигателем мешалки и насосом (основное назначение - пиво)
 
 volatile bool is_self_test;                                     // Находимся в режиме самотестирования
 String current_power_mode;                                      // Режим работы регулятора напряжения

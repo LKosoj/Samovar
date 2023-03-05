@@ -944,6 +944,8 @@ void setup() {
   Serial.println("Samovar ready");
   //Serial.print("Size = ");
   //Serial.println(sizeof(SamSetup));
+
+  if (check_I2C_device(1) == 1) use_I2C_dev = true;
 }
 
 void loop() {
