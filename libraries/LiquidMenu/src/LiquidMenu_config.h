@@ -7,6 +7,7 @@ used in the library, also configures the debugging messages.
 */
 
 #pragma once
+#define USE_SOFTWIRE_H_AS_PLAIN_INCLUDE
 
 /*!
  * @name "LiquidCrystal" libraries enumeration.
@@ -15,6 +16,7 @@ used in the library, also configures the debugging messages.
  */
 #define LiquidCrystal_LIBRARY (1)
 #define LiquidCrystal_I2C_LIBRARY (2)
+#define LiquidCrystal_I2C2_LIBRARY (3)
 //!@}
 
 
@@ -40,10 +42,21 @@ used in the library, also configures the debugging messages.
  * @see https://github.com/johnrickman/LiquidCrystal_I2C
  * @{
  */
+//  #define LIQUIDMENU_LIBRARY LiquidCrystal_I2C_LIBRARY
+//  #include <LiquidCrystal_I2C.h>
+//  #define DisplayClass LiquidCrystal_I2C
+//!@}
+
+#if defined(__AVR__)
+ #define LIQUIDMENU_LIBRARY LiquidCrystal_I2C2_LIBRARY
+ #include <LiquidCrystal_I2C2.h>
+ #define DisplayClass LiquidCrystal_I2C2
+#else
  #define LIQUIDMENU_LIBRARY LiquidCrystal_I2C_LIBRARY
  #include <LiquidCrystal_I2C.h>
  #define DisplayClass LiquidCrystal_I2C
-//!@}
+#endif
+
 
 /*!
  * @name Some other library

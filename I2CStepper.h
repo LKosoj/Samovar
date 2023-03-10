@@ -1,6 +1,12 @@
 #ifndef __SAMOVAR_I2CSTEPPER_H_
 #define __SAMOVAR_I2CSTEPPER_H_
 
+// Настройки для шагового двигателя
+#define STEPPER_I2C_MS 2
+#define STEPPER_I2C_STEPS 200 * STEPPER_I2C_MS //количество шагов, 200 x MS
+#define STEPPER_I2C_MAX_SPEED 1200
+
+
 #include <Arduino.h>
 //#include <Wire.h>
 #include "Samovar.h"
@@ -27,7 +33,7 @@ byte check_I2C_device(byte address) {
 //spd - скорость в оборотах в минуту, direction - прямое или обратное направление, time - время включения двигателя в секундах
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time) {
   if (!use_I2C_dev) return false;
-  return set_stepper_target(spd * 200 / 60, direction, time * spd * 200 / 60);
+  return set_stepper_target(spd * STEPPER_I2C_STEPS / 60, direction, time * spd * STEPPER_I2C_STEPS / 60);
 }
 
 
@@ -70,7 +76,9 @@ bool set_mixer_pump_target(uint8_t on) {
   if (!use_I2C_dev) return false;
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    I2C2.writeByte(0x01, 7, on);
+    byte b = I2C2.readByte(0x01, 7);
+    bitWrite(b, 0, on);
+    I2C2.writeByte(0x01, 7, b);
     xSemaphoreGive(xI2CSemaphore);
     result = true;
   }
@@ -81,10 +89,37 @@ byte get_mixer_pump_status(void) {
   byte state = 0xFF;
   if (!use_I2C_dev) return state;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    state = I2C2.readByte(0x01, 7);
+    state = BitIsSet(I2C2.readByte(0x01, 7), 0);
     xSemaphoreGive(xI2CSemaphore);
   }
   return state;
 }
+
+byte get_i2c_rele_state(uint8_t r) {
+  byte state = 0xFF;
+  if (!use_I2C_dev) return state;
+  byte s;
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
+    s = I2C2.readByte(0x01, 7);
+    state = BitIsSet(s, r - 1);
+    xSemaphoreGive(xI2CSemaphore);
+  }
+  return state;
+}
+
+bool set_i2c_rele_state(uint8_t r, bool s) {
+  if (!use_I2C_dev) return false;
+  bool result = false;
+  byte b;
+  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
+    b = I2C2.readByte(0x01, 7);
+    bitWrite(b, (r - 1), s);
+    I2C2.writeByte(0x01, 7, b);
+    xSemaphoreGive(xI2CSemaphore);
+    result = true;
+  }
+  return result;
+}
+
 
 #endif //__SAMOVAR_I2CSTEPPER_H_

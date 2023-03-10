@@ -945,7 +945,10 @@ void setup() {
   //Serial.print("Size = ");
   //Serial.println(sizeof(SamSetup));
 
-  if (check_I2C_device(1) == 1) use_I2C_dev = true;
+  if (check_I2C_device(1) == 1) {
+    use_I2C_dev = true;
+    Serial.println("I2C Stepper ready");
+  }
 }
 
 void loop() {

@@ -13,6 +13,8 @@
 
 #include "Samovar_ini.h"
 
+#define BitIsSet(reg, bit) ((reg & (1<<bit)) != 0)
+
 #ifdef __SAMOVAR_DEBUG
 #ifndef USE_WEB_SERIAL
 //#define USE_WEB_SERIAL                      //использовать библиотеку WebSerial для отладки

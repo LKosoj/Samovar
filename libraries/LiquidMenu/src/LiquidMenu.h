@@ -38,6 +38,7 @@ Include file for LiquidMenu library.
 */
 
 #pragma once
+#define USE_SOFTWIRE_H_AS_PLAIN_INCLUDE
 
 #include <stdint.h>
 #if defined(__AVR__)
