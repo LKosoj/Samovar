@@ -1,4 +1,5 @@
 <html>
+
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
@@ -7,206 +8,207 @@
   <title>Самовар</title>
 
   <script>
-var IsOffline = false; //признак обрыва связи
-var OfflineCouner = 0;
-// ==================== CONNECTION STATUS ============================================================
-var IsOffline = false; //признак обрыва связи
+    
+    var current_progNum = 0;
+      var totalTime = 0;
 
-function ConnectError(Type) {
-  if (Type) {
-	if (!OfflineCouner) { //если это первый обрыв
-		OfflineCouner++
-	} else {
-		document.getElementById('GreenT').style =
-		  'visibility: hidden;position: fixed;';
-		document.getElementById('RedT').style = '';
-		addMessage('Обрыв связи!', 0);
-		setTimeout(() => {
-		  IsOffline = true;
-		  OfflineCouner = 0
-		}, 100);
-	}
-  } else {
-    document.getElementById('GreenT').style = '';
-    document.getElementById('RedT').style =
-      'visibility: hidden;position: fixed;';
-    IsOffline = false;
-	OfflineCouner = 0
-  }
-}
+    // ==================== CONNECTION STATUS ============================================================
+    var IsOffline = false; //признак обрыва связи
+    var OfflineCouner = 0;
 
-// ==================== POWER UNIT ===================================================================
-function setPowerUnit() {
-  let setPowerLabel;
-  let setPowerButton;
-  let powerCurrent;
-  let powerTarget;
-  let powerUnit;
-  if (pwr_unit === 'P') {
-    setPowerLabel = 'Мощность регулятора: ';
-    setPowerButton = 'Установить мощность';
-    powerCurrent = 'Текущая мощн.: ';
-    powerTarget = 'Целевая мощн.: ';
-    powerUnit = ' Вт';
-    document.getElementById('current_power_line').style = 'visibility: hidden';
-    document.getElementById('PWR').style = '';
-  } else if (pwr_unit === 'V') {
-    setPowerLabel = 'Напряжение регулятора: ';
-    setPowerButton = 'Установить напряжение';
-    powerCurrent = 'Текущее напр.: ';
-    powerTarget = 'Целевое напр.: ';
-    powerUnit = ' V';
-    document.getElementById('current_power_line').style = 'visibility: visible';
-    document.getElementById('PWR').style = '';
-  } else {
-    document.getElementById('PWR').style =
-      'visibility: hidden;position: fixed;';
-  }
-  document.getElementById('set_power_label').innerHTML = setPowerLabel;
-  document.getElementById('SetVoltage').value = setPowerButton;
-  document.getElementById('power_current').innerHTML = powerCurrent;
-  document.getElementById('power_target').innerHTML = powerTarget;
-  document.getElementById('power_unit_current').innerHTML = powerUnit;
-  document.getElementById('power_unit_target').innerHTML = powerUnit;
-}
-
-// ==================== LUA BUTTONS ==================================================================
-function AddLuaButtons() {
-  let btn_list = '%btn_list%';
-  if (btn_list !== '') {
-    let btn_arr = btn_list.split(',');
-    for (z = 0; z < btn_arr.length; z++) {
-      if (btn_arr[z] !== '') {
-        let arr = btn_arr[z].split('|');
-        let btn = document.createElement('input');
-        btn.type = 'submit';
-        btn.name = 'luabtn' + z;
-        btn.value = arr[1];
-        btn.className = 'button';
-        btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
-        document.getElementById('lua_btn_ln').appendChild(btn);
-        document.getElementById('lua_btn').style = 'visibility: visible';
+    function ConnectError (Type) {
+      if (Type) {
+        if (!OfflineCouner) { //если это первый обрыв
+          OfflineCouner++
+        } else {
+          document.getElementById('connection_indicator').innerHTML = `
+          <img src="Red_light.gif" style="margin: 0!important; width: 20px">`;
+          addMessage('Обрыв связи!', 0);
+          setTimeout(() => {
+            IsOffline = true;
+            OfflineCouner = 0
+          }, 100);
+        }
+      } else {
+        document.getElementById('connection_indicator').innerHTML = `
+        <img src="Green.png" style="margin: 0 !important; width: 20px">`
+        IsOffline = false;
+        OfflineCouner = 0
       }
     }
-  }
-}
 
-// ==================== SOUND & MESSAGES QUEUE =======================================================
-var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax)
-var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
-
-var Messages_Array = []; //текущий массив сообщений
-var sound_is_playing = false; //звук сейчас восспроизводится
-var is_ALARM = false; //признак тревоги
-
-const sound = new Audio('alarm.mp3');
-sound.loop = true;
-sound.preload = 'auto';
-sound.autoplay = false;
-
-function playSound(play) {
-  if (!sound_is_playing && play) {
-    sound.play();
-    sound_is_playing = true;
-  } else if (sound_is_playing && !play) {
-    sound.pause();
-    sound_is_playing = false;
-  }
-}
-
-function addMessage(msg, lvl) {
-  if (IsOffline) {
-    return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
-  } else {
-    let time = new Date().toLocaleTimeString('ru-RU');
-    let style = null;
-    switch (lvl) {
-      case 0:
-        style = 'message_0';
-        is_ALARM = true;
-        break;
-      case 1:
-        style = 'message_1';
-        break;
-      case 2:
-        style = 'message_2';
-        break;
-      default:
-        style = 'message_0';
-        is_ALARM = true;
-        break;
+    // ==================== POWER UNIT ===================================================================
+    function setPowerUnit () {
+      let setPowerLabel;
+      let setPowerButton;
+      let powerCurrent;
+      let powerTarget;
+      let powerUnit;
+      if (pwr_unit === 'P') {
+        setPowerLabel = 'Мощность регулятора: ';
+        setPowerButton = 'Установить мощность';
+        powerCurrent = 'Текущая мощн.: ';
+        powerTarget = 'Целевая мощн.: ';
+        powerUnit = ' Вт';
+        document.getElementById('current_power_line').style = 'visibility: hidden';
+        document.getElementById('PWR').style = '';
+      } else if (pwr_unit === 'V') {
+        setPowerLabel = 'Напряжение регулятора: ';
+        setPowerButton = 'Установить напряжение';
+        powerCurrent = 'Текущее напр.: ';
+        powerTarget = 'Целевое напр.: ';
+        powerUnit = ' V';
+        document.getElementById('current_power_line').style = 'visibility: visible';
+        document.getElementById('PWR').style = '';
+      } else {
+        document.getElementById('PWR').style =
+          'visibility: hidden;position: fixed;';
+      }
+      document.getElementById('set_power_label').innerHTML = setPowerLabel;
+      document.getElementById('SetVoltage').value = setPowerButton;
+      document.getElementById('power_current').innerHTML = powerCurrent;
+      document.getElementById('power_target').innerHTML = powerTarget;
+      document.getElementById('power_unit_current').innerHTML = powerUnit;
+      document.getElementById('power_unit_target').innerHTML = powerUnit;
     }
-    let lastMsg = `
+
+    // ==================== LUA BUTTONS ==================================================================
+    function AddLuaButtons () {
+      let btn_list = '%btn_list%';
+      if (btn_list !== '') {
+        let btn_arr = btn_list.split(',');
+        for (z = 0; z < btn_arr.length; z++) {
+          if (btn_arr[z] !== '') {
+            let arr = btn_arr[z].split('|');
+            let btn = document.createElement('input');
+            btn.type = 'submit';
+            btn.name = 'luabtn' + z;
+            btn.value = arr[1];
+            btn.className = 'button';
+            btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
+            document.getElementById('lua_btn_ln').appendChild(btn);
+            document.getElementById('lua_btn').style = 'visibility: visible';
+          }
+        }
+      }
+    }
+
+    // ==================== SOUND & MESSAGES QUEUE =======================================================
+    var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax)
+    var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
+
+    var Messages_Array = []; //текущий массив сообщений
+    var sound_is_playing = false; //звук сейчас восспроизводится
+    var is_ALARM = false; //признак тревоги
+
+    const sound = new Audio('alarm.mp3');
+    sound.loop = true;
+    sound.preload = 'auto';
+    sound.autoplay = false;
+
+    function playSound (play) {
+      if (!sound_is_playing && play) {
+        sound.play();
+        sound_is_playing = true;
+      } else if (sound_is_playing && !play) {
+        sound.pause();
+        sound_is_playing = false;
+      }
+    }
+
+    function addMessage (msg, lvl) {
+      if (IsOffline) {
+        return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
+      } else {
+        let time = new Date().toLocaleTimeString('ru-RU');
+        let style = null;
+        switch (lvl) {
+          case 0:
+            style = 'message_0';
+            is_ALARM = true;
+            break;
+          case 1:
+            style = 'message_1';
+            break;
+          case 2:
+            style = 'message_2';
+            break;
+          default:
+            style = 'message_0';
+            is_ALARM = true;
+            break;
+        }
+        let lastMsg = `
             <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
               ${time}  ${msg}
             </div>`;
-    Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
-    if (Messages_Array.length > 1) {
-      //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
-      previousMsg = Messages_Array[Messages_Array.length - 2];
-      let changed = previousMsg.replace(
-        'onclick=removeLastMessage() style="cursor: pointer"',
-        ''
-      );
-      Messages_Array[Messages_Array.length - 2] = changed;
+        Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
+        if (Messages_Array.length > 1) {
+          //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
+          previousMsg = Messages_Array[Messages_Array.length - 2];
+          let changed = previousMsg.replace(
+            'onclick=removeLastMessage() style="cursor: pointer"',
+            ''
+          );
+          Messages_Array[Messages_Array.length - 2] = changed;
+        }
+        showMessages();
+      }
     }
-    showMessages();
-  }
-}
 
-function removeLastMessage() {
-  //удаляям последнее сообщение
-  Messages_Array.pop();
-  if (Messages_Array.length > 0) {
-    lastMsg = Messages_Array[Messages_Array.length - 1];
-    let changed = lastMsg.replace(
-      '<div align="left"',
-      '<div align="left" onclick=removeLastMessage() style="cursor: pointer"'
-    );
-    Messages_Array[Messages_Array.length - 1] = changed;
-  } else {
-    is_ALARM = false;
-    IsCalmingPause = false;
-  }
-  showMessages();
-}
-
-function showMessages() {
-  //показываем обновлённый список сообщений
-  if (Messages_Array.length > 0) {
-    let alarm_is_there = []; //массив false/true для признаков тревоги
-    document.getElementById('messages').innerHTML = '';
-    Messages_Array.forEach(message => {
-      document.getElementById('messages').innerHTML += message;
-      alarm_is_there.push(message.includes('class=message_0'));
-    });
-    document.getElementById('messagesBox').style.display = 'block';
-    let queue = document.getElementById('messagesBox');
-    queue.scrollTop = queue.scrollHeight;
-    function positive(item) {
-      return item === true;
+    function removeLastMessage () {
+      //удаляям последнее сообщение
+      Messages_Array.pop();
+      if (Messages_Array.length > 0) {
+        lastMsg = Messages_Array[Messages_Array.length - 1];
+        let changed = lastMsg.replace(
+          '<div align="left"',
+          '<div align="left" onclick=removeLastMessage() style="cursor: pointer"'
+        );
+        Messages_Array[Messages_Array.length - 1] = changed;
+      } else {
+        is_ALARM = false;
+        IsCalmingPause = false;
+      }
+      showMessages();
     }
-    is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
-    if (sound_is_on & is_ALARM) {
-      //играем звук тревоги, если включён
-      playSound(true);
-    } else {
-      playSound(false);
-    }
-  } else {
-    //убираем блок, если очередь пуста
-    document.getElementById('messagesBox').style.display = 'none';
-    playSound(false);
-  }
-}
 
-function clearMessages() {
-  Messages_Array = [];
-  showMessages();
-}
+    function showMessages () {
+      //показываем обновлённый список сообщений
+      if (Messages_Array.length > 0) {
+        let alarm_is_there = []; //массив false/true для признаков тревоги
+        document.getElementById('messages').innerHTML = '';
+        Messages_Array.forEach(message => {
+          document.getElementById('messages').innerHTML += message;
+          alarm_is_there.push(message.includes('class=message_0'));
+        });
+        document.getElementById('messagesBox').style.display = 'block';
+        let queue = document.getElementById('messagesBox');
+        queue.scrollTop = queue.scrollHeight;
+        function positive (item) {
+          return item === true;
+        }
+        is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
+        if (sound_is_on & is_ALARM) {
+          //играем звук тревоги, если включён
+          playSound(true);
+        } else {
+          playSound(false);
+        }
+      } else {
+        //убираем блок, если очередь пуста
+        document.getElementById('messagesBox').style.display = 'none';
+        playSound(false);
+      }
+    }
+
+    function clearMessages () {
+      Messages_Array = [];
+      showMessages();
+    }
 
     var pwr_unit = "%pwr_unit%";
-    
+
     var _lnIdx = 0;
 
     var headers = document.querySelectorAll("[data-name='spoiler-title']");
@@ -260,13 +262,13 @@ function clearMessages() {
       s = "";
       for (i = 1; i < t.length; i++) {
 
-      if (t[i].childNodes[2].value.indexOf(".") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf("."));
-      if (t[i].childNodes[2].value.indexOf(",") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf(","));
+        if (t[i].childNodes[2].value.indexOf(".") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf("."));
+        if (t[i].childNodes[2].value.indexOf(",") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf(","));
 
 
-        t[i].childNodes[3].value = t[i].childNodes[3].value.replace(",",".");
-        t[i].childNodes[5].value = t[i].childNodes[5].value.replace(",",".");
-        t[i].childNodes[6].value = t[i].childNodes[6].value.replace(",",".");
+        t[i].childNodes[3].value = t[i].childNodes[3].value.replace(",", ".");
+        t[i].childNodes[5].value = t[i].childNodes[5].value.replace(",", ".");
+        t[i].childNodes[6].value = t[i].childNodes[6].value.replace(",", ".");
 
         k = t[i].childNodes;
         for (j = 1; j < 7; j++) {
@@ -275,9 +277,33 @@ function clearMessages() {
         s = s.slice(0, -1);
         s = s + "\n";
       }
+      
       document.getElementById('WProgram').value = s;
       set_num();
+      calc_time()
     };
+    
+    function calc_time () {
+        totalTime = 0;
+        let stringTime = 0;
+        let program = document.getElementsByClassName("prgline");;
+        // console.log('program', program)
+        for (let i = 1; i < program.length; i++) {
+          let line = program[i];
+          if (line.childNodes[1].value === 'P') {
+            stringTime = line.childNodes[2].value / 3600;
+          } else {
+            let volume = line.childNodes[2].value / 1000;
+            let speed = line.childNodes[3].value;
+            stringTime = speed > 0 ? volume / speed : 0;
+            // console.log('volume', volume, '; speed', speed, ' = stringTime', stringTime)
+          }
+          let time = line.childNodes[7];
+          time.textContent = get_time(stringTime)
+          totalTime = totalTime + stringTime;
+        }
+        document.getElementById('totalTime').textContent = get_time(totalTime);
+      };
 
     function set_program () {
       calc_program();
@@ -381,6 +407,16 @@ function clearMessages() {
           else if (myObj.PrgType === "C") myObj.PrgType = "Предзахлеб; "
           else if (myObj.PrgType === "T") myObj.PrgType = "Хвосты; "
           document.getElementById('Status').innerHTML = myObj.PrgType + myObj.Status;
+          
+          let new_progNum = 0;
+          let progPosition = myObj.Status.indexOf('Прг №');
+          if (progPosition !== -1) {
+            new_progNum = parseInt(myObj.Status.substring(progPosition + 5, progPosition + 7))
+          }
+          if (current_progNum !== new_progNum) {
+            current_progNum = new_progNum;
+            getProgram()
+          }
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt.toFixed(1);
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt.toFixed(1);
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
@@ -466,7 +502,6 @@ function clearMessages() {
       xhttp.send();
     };
 
-
     function set_num () {
       var e = document.getElementById("prg").childNodes;
       var a;
@@ -474,7 +509,7 @@ function clearMessages() {
         a = e[i].childNodes[0];
         a.innerText = "";
         if (i < 11) a.innerText = "0";
-        a.innerText = a.innerText + (i-1);
+        a.innerText = a.innerText + (i - 1);
       }
     }
 
@@ -499,9 +534,6 @@ function clearMessages() {
       dl.appendChild(num);
 
       num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
-
-      //  var ptype = dl.getElementsByName("ptype");
-      //  ptype[0].value = arr[0];
 
       var pvolume = document.createElement("input");
       pvolume.type = "text";
@@ -532,6 +564,18 @@ function clearMessages() {
       pvolt.value = arr[5];
       pvolt.setAttribute("onchange", "calc_program();");
       dl.appendChild(pvolt);
+      
+      let timeBlock = document.createElement("span");
+      timeBlock.className = 'prgTime';
+      let stringTime = 0;
+      if (arr[0] === 'P') {
+        stringTime = arr[1] / 3600;
+      } else {
+        stringTime = arr[1] / 1000 / arr[2];
+        totalTime = totalTime + stringTime;
+      }
+      timeBlock.textContent = get_time(stringTime);
+      dl.appendChild(timeBlock);
 
       var plus = document.createElement("img");
       plus.src = '/plus.png';
@@ -564,14 +608,18 @@ function clearMessages() {
 
       _lnIdx++;
       calc_program();
-    }
+    };
 
     function getProgram () {
+      _lnIdx = 0;
       if (!check_program(document.getElementById('WProgram').value)) {
         alert("Program error!");
         return;
       }
       var e = document.getElementById("prg");
+      while (e.firstChild) {
+        e.removeChild(e.firstChild);
+      }
       let programPwrLabel = pwr_unit == 'P' ? 'Мощн' : 'Напр';
       e.insertAdjacentHTML("afterbegin", `
       <div class="prgline" id="hdr">
@@ -585,29 +633,48 @@ function clearMessages() {
         <label class="tooltip">Темп</label>
         &nbsp;&nbsp;
         <label class="tooltip">${programPwrLabel}</label>
+        <label class="tooltip">Время</label>
       </div>`);
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
       for (z = 0; z < varr.length; z++) {
         if (varr[z] != "") addLine(false, varr[z]);
       }
+      document.getElementById('totalTime').textContent = get_time(totalTime);
     };
 
-    function set_bgcolor (obj) {
-      var l = document.getElementById("prgln" + obj);
-      var t = document.getElementById("ptype" + obj).value;
-      let color = 'black';
-      if (t == "H") {color = "background-color: #80FFFA;";}
-      else if (t == "B") {color = "background-color: #32CD3229;";}
-      else if (t == "C") {color = "background-color: #FFFF0039;";}
-      else if (t == "P") {color = "background-color: #C4C4C4;";}
-      else if (t == "T") {color = "background-color: #8B451334;";}
-      l.setAttribute("style", color);
-      var e = l.childNodes;
-      for (q = 0; q < e.length; q++) {
-        e[q].setAttribute("style", color);
-      }
-    }
+    function set_bgcolor (indx) {
+        var l = document.getElementById("prgln" + indx);
+        var t = document.getElementById("ptype" + indx).value;
+        let bckg = "#FFF;";
+        if (t == "H") {bckg = "#80FFFA";}
+        else if (t == "B") {bckg = "#32CD3229";}
+        else if (t == "C") {bckg = "#FFFF0039";}
+        else if (t == "P") {bckg = "#C4C4C4";}
+        else if (t == "T") {bckg = "#8B451334";}
+        l.style.backgroundColor = bckg;
+        if (indx + 1 < current_progNum) {
+          l.style.fontStyle = 'italic';
+        }
+        if (indx + 1 == current_progNum) {
+          l.style.color = 'red';
+          l.style.fontStyle = 'italic';
+        }
+        var e = l.childNodes;
+        for (q = 0; q < e.length; q++) {
+          e[q].style.backgroundColor = bckg;
+          if (current_progNum === indx + 1) {
+            e[q].style.color = 'red';
+            e[q].style.fontStyle = 'italic';
+          }
+          if (indx + 1 < current_progNum) {
+            e[q].style.fontStyle = 'italic';
+            e[q].style.cursor = 'not-allowed';
+            e[q].onclick = null;
+            e[q].disabled = true;
+          }
+        }
+      };
 
     window.onload = function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
@@ -621,10 +688,6 @@ function clearMessages() {
           alert("Program error!");
           return;
         }
-        var element = document.getElementById("prg");
-        while (element.firstChild) {
-          element.removeChild(element.firstChild);
-        }
         getProgram();
       });
       setPowerUnit();
@@ -633,6 +696,17 @@ function clearMessages() {
 
     function run_lua (num) {
       sendbutton("lua=" + num);
+    };
+    
+    function get_time (tm) {
+      let s = "";
+      l = Math.trunc(tm);
+      if (l < 10) s = "0";
+      s = s + l + ":";
+      l = Math.trunc((tm - Math.trunc(tm)) * 60);
+      if (l < 10) s = s + "0";
+      s = s + l;
+      return s;
     };
 
   </script>
@@ -643,7 +717,7 @@ function clearMessages() {
 
 
 <body>
-  
+
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
     <div class="tab">
@@ -657,19 +731,16 @@ function clearMessages() {
       <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
         <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
           <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="visibility:hidden"></span>
+            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
             <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
               <div>v. </div>
               <div id='version'></div>
             </div>
           </div>
 
-          <div style="width: 21px; margin-left: 1em;">
-            <div id="GreenT" style="position: relative; top: 0; left: 0">
+          <div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center">
+            <div id="connection_indicator">
               <img src="Green.png" style="margin: 0 !important; width: 20px">
-            </div>
-            <div id="RedT" style="position: relative; top: 0; left: 0; visibility: hidden">
-              <img src="Red_light.gif" style="margin: 0 !important; width: 20px">
             </div>
           </div>
 
@@ -819,6 +890,11 @@ function clearMessages() {
       <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div>
 
       <div class="prg" id="prg"></div>
+      <div style="display: flex; flex-direction: row; justify-content: right; color: #555; font-size: 1.4em; font-weight: bold;">
+        Итого: &nbsp;
+        <div id="totalTime"> </div>
+        &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+      </div>
 
       <div>
 
@@ -938,4 +1014,5 @@ function clearMessages() {
 
   </form>
 </body>
+
 </html>

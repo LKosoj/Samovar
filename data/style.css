@@ -462,6 +462,10 @@ font-size: 18px;
 width:90px !important;
 }
 
+.prgTime {
+  margin-left: 1em;
+}
+
 .specs {
 font-size: 18px;
 margin: 10px;

@@ -1,4 +1,5 @@
 <html>
+
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
@@ -7,206 +8,205 @@
   <title>Самовар</title>
 
   <script>
-var IsOffline = false; //признак обрыва связи
-var OfflineCouner = 0;
-// ==================== CONNECTION STATUS ============================================================
-var IsOffline = false; //признак обрыва связи
+    var IsOffline = false; //признак обрыва связи
 
-function ConnectError(Type) {
-  if (Type) {
-	if (!OfflineCouner) { //если это первый обрыв
-		OfflineCouner++
-	} else {
-		document.getElementById('GreenT').style =
-		  'visibility: hidden;position: fixed;';
-		document.getElementById('RedT').style = '';
-		addMessage('Обрыв связи!', 0);
-		setTimeout(() => {
-		  IsOffline = true;
-		  OfflineCouner = 0
-		}, 100);
-	}
-  } else {
-    document.getElementById('GreenT').style = '';
-    document.getElementById('RedT').style =
-      'visibility: hidden;position: fixed;';
-    IsOffline = false;
-	OfflineCouner = 0
-  }
-}
+    // ==================== CONNECTION STATUS ============================================================
+    var IsOffline = false; //признак обрыва связи
+    var OfflineCouner = 0;
 
-// ==================== POWER UNIT ===================================================================
-function setPowerUnit() {
-  let setPowerLabel;
-  let setPowerButton;
-  let powerCurrent;
-  let powerTarget;
-  let powerUnit;
-  if (pwr_unit === 'P') {
-    setPowerLabel = 'Мощность регулятора: ';
-    setPowerButton = 'Установить мощность';
-    powerCurrent = 'Текущая мощн.: ';
-    powerTarget = 'Целевая мощн.: ';
-    powerUnit = ' Вт';
-    document.getElementById('current_power_line').style = 'visibility: hidden';
-    document.getElementById('PWR').style = '';
-  } else if (pwr_unit === 'V') {
-    setPowerLabel = 'Напряжение регулятора: ';
-    setPowerButton = 'Установить напряжение';
-    powerCurrent = 'Текущее напр.: ';
-    powerTarget = 'Целевое напр.: ';
-    powerUnit = ' V';
-    document.getElementById('current_power_line').style = 'visibility: visible';
-    document.getElementById('PWR').style = '';
-  } else {
-    document.getElementById('PWR').style =
-      'visibility: hidden;position: fixed;';
-  }
-  document.getElementById('set_power_label').innerHTML = setPowerLabel;
-  document.getElementById('SetVoltage').value = setPowerButton;
-  document.getElementById('power_current').innerHTML = powerCurrent;
-  document.getElementById('power_target').innerHTML = powerTarget;
-  document.getElementById('power_unit_current').innerHTML = powerUnit;
-  document.getElementById('power_unit_target').innerHTML = powerUnit;
-}
+    function ConnectError (Type) {
+      if (Type) {
+        if (!OfflineCouner) { //если это первый обрыв
+          OfflineCouner++
+        } else {
+          document.getElementById('connection_indicator').innerHTML = `
+          <img src="Red_light.gif" style="margin: 0!important; width: 20px">`;
+          addMessage('Обрыв связи!', 0);
+          setTimeout(() => {
+            IsOffline = true;
+            OfflineCouner = 0
+          }, 100);
+        }
+      } else {
+        document.getElementById('connection_indicator').innerHTML = `
+        <img src="Green.png" style="margin: 0 !important; width: 20px">`
+        IsOffline = false;
+        OfflineCouner = 0
+      }
+    };
 
-// ==================== LUA BUTTONS ==================================================================
-function AddLuaButtons() {
-  let btn_list = '%btn_list%';
-  if (btn_list !== '') {
-    let btn_arr = btn_list.split(',');
-    for (z = 0; z < btn_arr.length; z++) {
-      if (btn_arr[z] !== '') {
-        let arr = btn_arr[z].split('|');
-        let btn = document.createElement('input');
-        btn.type = 'submit';
-        btn.name = 'luabtn' + z;
-        btn.value = arr[1];
-        btn.className = 'button';
-        btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
-        document.getElementById('lua_btn_ln').appendChild(btn);
-        document.getElementById('lua_btn').style = 'visibility: visible';
+    // ==================== POWER UNIT ===================================================================
+    function setPowerUnit () {
+      let setPowerLabel;
+      let setPowerButton;
+      let powerCurrent;
+      let powerTarget;
+      let powerUnit;
+      if (pwr_unit === 'P') {
+        setPowerLabel = 'Мощность регулятора: ';
+        setPowerButton = 'Установить мощность';
+        powerCurrent = 'Текущая мощн.: ';
+        powerTarget = 'Целевая мощн.: ';
+        powerUnit = ' Вт';
+        document.getElementById('current_power_line').style = 'visibility: hidden';
+        document.getElementById('PWR').style = '';
+      } else if (pwr_unit === 'V') {
+        setPowerLabel = 'Напряжение регулятора: ';
+        setPowerButton = 'Установить напряжение';
+        powerCurrent = 'Текущее напр.: ';
+        powerTarget = 'Целевое напр.: ';
+        powerUnit = ' V';
+        document.getElementById('current_power_line').style = 'visibility: visible';
+        document.getElementById('PWR').style = '';
+      } else {
+        document.getElementById('PWR').style =
+          'visibility: hidden;position: fixed;';
+      }
+      document.getElementById('set_power_label').innerHTML = setPowerLabel;
+      document.getElementById('SetVoltage').value = setPowerButton;
+      document.getElementById('power_current').innerHTML = powerCurrent;
+      document.getElementById('power_target').innerHTML = powerTarget;
+      document.getElementById('power_unit_current').innerHTML = powerUnit;
+      document.getElementById('power_unit_target').innerHTML = powerUnit;
+    }
+
+    // ==================== LUA BUTTONS ==================================================================
+    function AddLuaButtons () {
+      let btn_list = '%btn_list%';
+      if (btn_list !== '') {
+        let btn_arr = btn_list.split(',');
+        for (z = 0; z < btn_arr.length; z++) {
+          if (btn_arr[z] !== '') {
+            let arr = btn_arr[z].split('|');
+            let btn = document.createElement('input');
+            btn.type = 'submit';
+            btn.name = 'luabtn' + z;
+            btn.value = arr[1];
+            btn.className = 'button';
+            btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
+            document.getElementById('lua_btn_ln').appendChild(btn);
+            document.getElementById('lua_btn').style = 'visibility: visible';
+          }
+        }
       }
     }
-  }
-}
 
-// ==================== SOUND & MESSAGES QUEUE =======================================================
-var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax)
-var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
+    // ==================== SOUND & MESSAGES QUEUE =======================================================
+    var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax)
+    var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
 
-var Messages_Array = []; //текущий массив сообщений
-var sound_is_playing = false; //звук сейчас восспроизводится
-var is_ALARM = false; //признак тревоги
+    var Messages_Array = []; //текущий массив сообщений
+    var sound_is_playing = false; //звук сейчас восспроизводится
+    var is_ALARM = false; //признак тревоги
 
-const sound = new Audio('alarm.mp3');
-sound.loop = true;
-sound.preload = 'auto';
-sound.autoplay = false;
+    const sound = new Audio('alarm.mp3');
+    sound.loop = true;
+    sound.preload = 'auto';
+    sound.autoplay = false;
 
-function playSound(play) {
-  if (!sound_is_playing && play) {
-    sound.play();
-    sound_is_playing = true;
-  } else if (sound_is_playing && !play) {
-    sound.pause();
-    sound_is_playing = false;
-  }
-}
-
-function addMessage(msg, lvl) {
-  if (IsOffline) {
-    return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
-  } else {
-    let time = new Date().toLocaleTimeString('ru-RU');
-    let style = null;
-    switch (lvl) {
-      case 0:
-        style = 'message_0';
-        is_ALARM = true;
-        break;
-      case 1:
-        style = 'message_1';
-        break;
-      case 2:
-        style = 'message_2';
-        break;
-      default:
-        style = 'message_0';
-        is_ALARM = true;
-        break;
+    function playSound (play) {
+      if (!sound_is_playing && play) {
+        sound.play();
+        sound_is_playing = true;
+      } else if (sound_is_playing && !play) {
+        sound.pause();
+        sound_is_playing = false;
+      }
     }
-    let lastMsg = `
+
+    function addMessage (msg, lvl) {
+      if (IsOffline) {
+        return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
+      } else {
+        let time = new Date().toLocaleTimeString('ru-RU');
+        let style = null;
+        switch (lvl) {
+          case 0:
+            style = 'message_0';
+            is_ALARM = true;
+            break;
+          case 1:
+            style = 'message_1';
+            break;
+          case 2:
+            style = 'message_2';
+            break;
+          default:
+            style = 'message_0';
+            is_ALARM = true;
+            break;
+        }
+        let lastMsg = `
             <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
               ${time}  ${msg}
             </div>`;
-    Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
-    if (Messages_Array.length > 1) {
-      //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
-      previousMsg = Messages_Array[Messages_Array.length - 2];
-      let changed = previousMsg.replace(
-        'onclick=removeLastMessage() style="cursor: pointer"',
-        ''
-      );
-      Messages_Array[Messages_Array.length - 2] = changed;
+        Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
+        if (Messages_Array.length > 1) {
+          //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
+          previousMsg = Messages_Array[Messages_Array.length - 2];
+          let changed = previousMsg.replace(
+            'onclick=removeLastMessage() style="cursor: pointer"',
+            ''
+          );
+          Messages_Array[Messages_Array.length - 2] = changed;
+        }
+        showMessages();
+      }
     }
-    showMessages();
-  }
-}
 
-function removeLastMessage() {
-  //удаляям последнее сообщение
-  Messages_Array.pop();
-  if (Messages_Array.length > 0) {
-    lastMsg = Messages_Array[Messages_Array.length - 1];
-    let changed = lastMsg.replace(
-      '<div align="left"',
-      '<div align="left" onclick=removeLastMessage() style="cursor: pointer"'
-    );
-    Messages_Array[Messages_Array.length - 1] = changed;
-  } else {
-    is_ALARM = false;
-    IsCalmingPause = false;
-  }
-  showMessages();
-}
-
-function showMessages() {
-  //показываем обновлённый список сообщений
-  if (Messages_Array.length > 0) {
-    let alarm_is_there = []; //массив false/true для признаков тревоги
-    document.getElementById('messages').innerHTML = '';
-    Messages_Array.forEach(message => {
-      document.getElementById('messages').innerHTML += message;
-      alarm_is_there.push(message.includes('class=message_0'));
-    });
-    document.getElementById('messagesBox').style.display = 'block';
-    let queue = document.getElementById('messagesBox');
-    queue.scrollTop = queue.scrollHeight;
-    function positive(item) {
-      return item === true;
+    function removeLastMessage () {
+      //удаляям последнее сообщение
+      Messages_Array.pop();
+      if (Messages_Array.length > 0) {
+        lastMsg = Messages_Array[Messages_Array.length - 1];
+        let changed = lastMsg.replace(
+          '<div align="left"',
+          '<div align="left" onclick=removeLastMessage() style="cursor: pointer"'
+        );
+        Messages_Array[Messages_Array.length - 1] = changed;
+      } else {
+        is_ALARM = false;
+        IsCalmingPause = false;
+      }
+      showMessages();
     }
-    is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
-    if (sound_is_on & is_ALARM) {
-      //играем звук тревоги, если включён
-      playSound(true);
-    } else {
-      playSound(false);
-    }
-  } else {
-    //убираем блок, если очередь пуста
-    document.getElementById('messagesBox').style.display = 'none';
-    playSound(false);
-  }
-}
 
-function clearMessages() {
-  Messages_Array = [];
-  showMessages();
-}
+    function showMessages () {
+      //показываем обновлённый список сообщений
+      if (Messages_Array.length > 0) {
+        let alarm_is_there = []; //массив false/true для признаков тревоги
+        document.getElementById('messages').innerHTML = '';
+        Messages_Array.forEach(message => {
+          document.getElementById('messages').innerHTML += message;
+          alarm_is_there.push(message.includes('class=message_0'));
+        });
+        document.getElementById('messagesBox').style.display = 'block';
+        let queue = document.getElementById('messagesBox');
+        queue.scrollTop = queue.scrollHeight;
+        function positive (item) {
+          return item === true;
+        }
+        is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
+        if (sound_is_on & is_ALARM) {
+          //играем звук тревоги, если включён
+          playSound(true);
+        } else {
+          playSound(false);
+        }
+      } else {
+        //убираем блок, если очередь пуста
+        document.getElementById('messagesBox').style.display = 'none';
+        playSound(false);
+      }
+    }
+
+    function clearMessages () {
+      Messages_Array = [];
+      showMessages();
+    }
 
     var pwr_unit = "%pwr_unit%";
-    
+
     function openTab (evt, tabName) {
       var i, tabcontent, tablinks;
       tabcontent = document.getElementsByClassName("tabcontent");
@@ -352,6 +352,7 @@ function clearMessages() {
 
 
 <body>
+  
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
     <div class="tab">
@@ -365,19 +366,16 @@ function clearMessages() {
       <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
         <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
           <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="visibility:hidden"></span>
+            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
             <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
               <div>v. </div>
               <div id='version'></div>
             </div>
           </div>
 
-          <div style="width: 21px; margin-left: 1em;">
-            <div id="GreenT" style="position: relative; top: 0; left: 0">
+          <div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center">
+            <div id="connection_indicator">
               <img src="Green.png" style="margin: 0 !important; width: 20px">
-            </div>
-            <div id="RedT" style="position: relative; top: 0; left: 0; visibility: hidden">
-              <img src="Red_light.gif" style="margin: 0 !important; width: 20px">
             </div>
           </div>
 
@@ -394,91 +392,91 @@ function clearMessages() {
       </div>
 
 
-    <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-      <div class="container">
-        <div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176;C</div>
-      </div>
-      <div class="container">
-        <div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176;C</div>
-      </div>
-    </div>
-
-    <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-      <div class="container">
-        <div class="text" style="color: %ACPColor%;">
-          Т в ТСА: &nbsp;&nbsp;
-          <span id='ACPTemp' style="font-size: xx-large;"></span>
-          &#176;C
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+        <div class="container">
+          <div class="text column" style="color: %WaterColor%;">Т воды: <span id='WaterTemp' style="font-size: xx-large;"></span>&#176;C</div>
+        </div>
+        <div class="container">
+          <div class="text column" style="color: %TankColor%;">Т в кубе: <span id='TankTemp' style="font-size: xx-large;"></span>&#176;C</div>
         </div>
       </div>
-    </div>
-    
-    <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
-      <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
-        Статус: <span id='Status'></span>
-      </span>
-    </div>
 
-    <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;" id="PWR">
-      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-        <div class="text" id='VoltH2'>
-          <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
-            <div>
-              <span id='set_power_label'></span>
-              <input name='Voltage' id='Voltage' type='text' value=''>
-            </div>
-            <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+        <div class="container">
+          <div class="text" style="color: %ACPColor%;">
+            Т в ТСА: &nbsp;&nbsp;
+            <span id='ACPTemp' style="font-size: xx-large;"></span>
+            &#176;C
           </div>
         </div>
-        <div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;">
-          <span class='dvcs'>
-            <span id='power_current'></span>
-            <span id='current_power_volt'></span>
-            <span id='power_unit_current'></span>
-          </span>
-          <span class='dvcs'>
-            <span id='power_target'></span>
-            <span id='target_power_volt'></span>
-            <span id='power_unit_target'></span>
-          </span>
-          <span class='dvcs'>
-            Режим регулятора: <span id='current_power_mode'></span>
-          </span>
-          <span class='dvcs' id='current_power_line'>
-            Мощность: <span id='current_power_p'></span> Вт
-          </span>
+      </div>
+
+      <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
+        <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
+          Статус: <span id='Status'></span>
+        </span>
+      </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;" id="PWR">
+        <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+          <div class="text" id='VoltH2'>
+            <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
+              <div>
+                <span id='set_power_label'></span>
+                <input name='Voltage' id='Voltage' type='text' value=''>
+              </div>
+              <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
+            </div>
+          </div>
+          <div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;">
+            <span class='dvcs'>
+              <span id='power_current'></span>
+              <span id='current_power_volt'></span>
+              <span id='power_unit_current'></span>
+            </span>
+            <span class='dvcs'>
+              <span id='power_target'></span>
+              <span id='target_power_volt'></span>
+              <span id='power_unit_target'></span>
+            </span>
+            <span class='dvcs'>
+              Режим регулятора: <span id='current_power_mode'></span>
+            </span>
+            <span class='dvcs' id='current_power_line'>
+              Мощность: <span id='current_power_p'></span> Вт
+            </span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-      <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
-        <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
-        <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
+      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+        <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
+          <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
+          <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
+        </div>
       </div>
-    </div>
-    
-    <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-      <div class="text">
-        Давление: &nbsp;
-        <span id='bme_pressure'></span>
-        мм рт.ст.
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="text">
+          Давление: &nbsp;
+          <span id='bme_pressure'></span>
+          мм рт.ст.
+        </div>
+        <div class="text">
+          В начале: &nbsp;
+          <span id='start_pressure'></span>
+          мм рт.ст.
+        </div>
       </div>
-      <div class="text">
-        В начале: &nbsp;
-        <span id='start_pressure'></span>
-        мм рт.ст.
+
+      <div>
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
       </div>
-    </div>
-    
-    <div>
-      <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
-    </div>
-    <div>
-      <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setDistCommand();' class="button">
-      <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"' class="button">
-      <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"' class="button">
-    </div>
+      <div>
+        <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setDistCommand();' class="button">
+        <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"' class="button">
+        <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"' class="button">
+      </div>
     </div>
     <div id="Video" class="tabcontent">
       <img src="%videourl%">
@@ -497,4 +495,5 @@ function clearMessages() {
 
   </form>
 </body>
+
 </html>
