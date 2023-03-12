@@ -1006,6 +1006,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
 #ifdef SAMOVAR_USE_SEM_AVR
       if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
       {
+        vTaskDelay(100 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+SS?\r");
         vTaskDelay(400 / portTICK_RATE_MS);
@@ -1020,6 +1021,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
       {
+        vTaskDelay(100 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VO?\r");
         vTaskDelay(400 / portTICK_RATE_MS);
@@ -1035,6 +1037,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
       {
+        vTaskDelay(100 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VS?\r");
         vTaskDelay(400 / portTICK_RATE_MS);
@@ -1127,9 +1130,11 @@ void IRAM_ATTR set_current_power(float Volt) {
     else
       Cmd = "";
     Cmd = Cmd + (String)V;
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     Serial2.flush();
     Serial2.print("АТ+VS=" + Cmd + "\r");
     vTaskDelay(300 / portTICK_PERIOD_MS);
+    Serial2.flush();
     xSemaphoreGive( xSemaphoreAVR );
   }
 #endif
@@ -1149,10 +1154,11 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_SEM_AVR
     if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
     {
-      Serial2.flush();
       vTaskDelay(200 / portTICK_PERIOD_MS);
+      Serial2.flush();
       Serial2.print("АТ+ON=0\r");
       vTaskDelay(300 / portTICK_PERIOD_MS);
+      Serial2.flush();
       xSemaphoreGive( xSemaphoreAVR );
     }
 #else
@@ -1165,10 +1171,11 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_SEM_AVR
     if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
     {
-      Serial2.flush();
       vTaskDelay(200 / portTICK_PERIOD_MS);
+      Serial2.flush();
       Serial2.print("АТ+ON=1\r");
       vTaskDelay(300 / portTICK_PERIOD_MS);
+      Serial2.flush();
       xSemaphoreGive( xSemaphoreAVR );
     }
 #else
