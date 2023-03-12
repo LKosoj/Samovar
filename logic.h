@@ -135,7 +135,7 @@ void IRAM_ATTR withdrawal(void) {
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
     //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
-    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
+    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
@@ -155,7 +155,7 @@ void IRAM_ATTR withdrawal(void) {
 #ifdef SAMOVAR_USE_POWER
           if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
 #ifdef SAMOVAR_USE_SEM_AVR
-            set_current_power(target_power_volt - target_power_volt / 100 * 6);
+            set_current_power(target_power_volt - target_power_volt / 100 * 3);
 #else
             set_current_power(target_power_volt - 3 * PWR_FACTOR);
 #endif
@@ -183,7 +183,7 @@ void IRAM_ATTR withdrawal(void) {
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
-    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
+    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
@@ -203,7 +203,7 @@ void IRAM_ATTR withdrawal(void) {
 #ifdef SAMOVAR_USE_POWER
           if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
 #ifdef SAMOVAR_USE_SEM_AVR
-            set_current_power(target_power_volt - target_power_volt / 100 * 6);
+            set_current_power(target_power_volt - target_power_volt / 100 * 3);
 #else
             set_current_power(target_power_volt - 3 * PWR_FACTOR);
 #endif
@@ -296,7 +296,7 @@ void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process) {
 
 String IRAM_ATTR get_Samovar_Status() {
   if (!PowerOn) {
-    SamovarStatus = "Выключено";
+    SamovarStatus = F("Выключено");
     SamovarStatusInt = 0;
   } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
     SamovarStatus = "Прг №" + String(ProgramNum + 1);
@@ -309,27 +309,27 @@ String IRAM_ATTR get_Samovar_Status() {
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + " пауза " + program_Wait_Type + ". Продолжение через " + (String)s + " сек.";
     SamovarStatusInt = 15;
   } else if (PowerOn && startval == 2) {
-    SamovarStatus = "Выполнение программы завершено";
+    SamovarStatus = F("Выполнение программы завершено");
     SamovarStatusInt = 20;
   } else if (PowerOn && startval == 100) {
-    SamovarStatus = "Калибровка";
+    SamovarStatus = F("Калибровка");
     SamovarStatusInt = 30;
   } else if (PauseOn) {
-    SamovarStatus = "Пауза";
+    SamovarStatus = F("Пауза");
     SamovarStatusInt = 40;
   } else if (PowerOn && startval == 0 && !stepper.getState()) {
     if (SamovarStatusInt != 51 && SamovarStatusInt != 52) {
-      SamovarStatus = "Разгон колонны";
+      SamovarStatus = F("Разгон колонны");
       SamovarStatusInt = 50;
     } else if (SamovarStatusInt == 51) {
-      SamovarStatus = "Разгон завершен. Стабилизация/Работа на себя";
+      SamovarStatus = F("Разгон завершен. Стабилизация/Работа на себя");
     } else if (SamovarStatusInt == 52) {
-      SamovarStatus = "Стабилизация завершена/Работа на себя";
+      SamovarStatus = F("Стабилизация завершена/Работа на себя");
     }
   } else if (SamovarStatusInt == 1000) {
-    SamovarStatus = "Режим дистилляции";
+    SamovarStatus = F("Режим дистилляции");
   } else if (SamovarStatusInt == 3000) {
-    SamovarStatus = "Режим бражной колонны";
+    SamovarStatus = F("Режим бражной колонны");
   } else if (SamovarStatusInt == 2000) {
 #ifdef SAM_BEER_PRG
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
@@ -614,7 +614,7 @@ void IRAM_ATTR check_alarm() {
 #ifdef SAMOVAR_USE_POWER
     SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
 #ifdef SAMOVAR_USE_SEM_AVR
-    set_current_power(target_power_volt - target_power_volt / 100 * 2);
+    set_current_power(target_power_volt - target_power_volt / 100 * 4);
 #else
     set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
@@ -633,13 +633,13 @@ void IRAM_ATTR check_alarm() {
     if (program[ProgramNum].WType == "C") {
       if (prev_target_power_volt == 0) {
 #ifdef SAMOVAR_USE_SEM_AVR
-        prev_target_power_volt = target_power_volt + target_power_volt / 100 * 3;
+        prev_target_power_volt = target_power_volt + target_power_volt / 100 * 6;
 #else
         prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
 #endif
       }
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt - target_power_volt / 100 * 2);
+      set_current_power(target_power_volt - target_power_volt / 100 * 4);
 #else
       set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
@@ -653,7 +653,7 @@ void IRAM_ATTR check_alarm() {
   if (program[ProgramNum].WType == "C") {
     if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt + target_power_volt / 100 * 1);
+      set_current_power(target_power_volt + target_power_volt / 100 * 2);
 #else
       set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
 #endif
@@ -750,15 +750,15 @@ void IRAM_ATTR check_alarm() {
     alarm_t_min = millis() + 1000 * 30;
   }
 
-  if (SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP && SamovarStatusInt == 50) {
+  if (SamovarStatusInt == 50 && SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
 #ifdef USE_WATER_PUMP
     //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
     wp_count = 0;
 #endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
-    set_buzzer(true);
-    SendMsg(F("Разгон завершён. Стабилизация/работа на себя"), NOTIFY_MSG);
     SamovarStatusInt = 51;
+    SendMsg(F("Разгон завершён. Стабилизация/работа на себя"), NOTIFY_MSG);
+    set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
     set_current_power(program[0].Power);
 #else
@@ -857,7 +857,7 @@ void IRAM_ATTR set_power(bool On) {
     power_text_ptr = (char *)"OFF";
 
 #ifdef SAMOVAR_USE_SEM_AVR
-    vTaskDelay(2600 / portTICK_PERIOD_MS);
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
 #endif
 
 #ifdef SAMOVAR_USE_POWER
