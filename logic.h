@@ -639,9 +639,9 @@ void IRAM_ATTR check_alarm() {
 #endif
       }
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt - target_power_volt / 100 * 4);
+      set_current_power(prev_target_power_volt - target_power_volt / 100 * 4);
 #else
-      set_current_power(target_power_volt - 1 * PWR_FACTOR);
+      set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
 #endif
       prev_target_power_volt = 0;
       //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
