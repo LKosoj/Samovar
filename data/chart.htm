@@ -281,7 +281,10 @@ function clearMessages() {
         am4core.color("%PipeColor%"),
         am4core.color("%WaterColor%"),
         am4core.color("%TankColor%"),
-        am4core.color("#21618C")
+        am4core.color("#3EFF42"),
+        am4core.color("#000000")
+        
+        
       ];
 
       chart.dataSource.url = "/data.csv";
@@ -348,7 +351,7 @@ function clearMessages() {
       series5.dataFields.valueY = "Pressure";
       series5.dataFields.categoryX = "Date";
       series5.name = "Атмосферное давление";
-      series5.strokeWidth = 3;
+      series5.strokeWidth = 2;
       series5.tensionX = 0.7;
       series5.tooltipText = "{valueY.value}";
       series5.hidden = %PressureHide%;
@@ -358,7 +361,7 @@ function clearMessages() {
       series6.dataFields.valueY = "ProgNum";
       series6.dataFields.categoryX = "Date";
       series6.name = "Строка программы";
-      series6.strokeWidth = 3;
+      series6.strokeWidth = 1;
       series6.tensionX = 0.7;
       series6.tooltipText = "{valueY.value}";
       series6.hidden = %ProgNumHide%;

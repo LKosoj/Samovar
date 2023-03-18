@@ -1,53 +1,125 @@
 <html>
+
 <head>
-<meta charset='utf-8'>
-<meta http-equiv="Cache-Control" content="no-cache">
-<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
-<title>Самовар</title>
+  <meta charset='utf-8'>
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+  <title>Самовар</title>
 </head>
 <style>
-#chartdiv {
-  width: 100%;
-  height: 500px;
-  background:#fff;
-}
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-}
-#file-input,input{width:200;height:34px;border-radius:4px;margin:10 10 0 10;font-size:15px}
-input{background:#f1f1f1;border:0;padding:0 15px;}
-input[type='checkbox']{width:20;margin:0}
-input[type='text']{background:#f1f1f1;border:0;padding:0 15px;width:80;margin:0}
-#file-input{padding:0;border:1px solid #ddd;line-height:44px;text-align:left;display:block;cursor:pointer}
-body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}
-#bar,#prgbar{background-color:#f1f1f1;border-radius:10px}#bar{background-color:#3498db;width:0;height:10px}
-form{background:#fff;max-width:800px;margin:25px auto;padding:30px;border-radius:5px;text-align:left}
-h1{text-align:center}
-.btn{background:#3498db;color:#fff;cursor:pointer}
-.dvcs{padding: 10px;margin: 10px;}
-input[type="checkbox"]:checked, 
-input[type="checkbox"]:not(:checked), 
-input[type="radio"]:checked, 
-input[type="radio"]:not(:checked) 
-{
+  #chartdiv {
+    width: 100%;
+    height: 500px;
+    background: #fff;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  }
+
+  #file-input,
+  input {
+    width: 200;
+    height: 34px;
+    border-radius: 4px;
+    margin: 10 10 0 10;
+    font-size: 15px
+  }
+
+  input {
+    background: #f1f1f1;
+    border: 0;
+    padding: 0 15px;
+  }
+
+  input[type='checkbox'] {
+    width: 20;
+    margin: 0
+  }
+
+  input[type='text'] {
+    background: #f1f1f1;
+    border: 0;
+    padding: 0 15px;
+    width: 80;
+    margin: 0
+  }
+
+  #file-input {
+    padding: 0;
+    border: 1px solid #ddd;
+    line-height: 44px;
+    text-align: left;
+    display: block;
+    cursor: pointer
+  }
+
+  body {
+    background: #3498db;
+    font-family: sans-serif;
+    font-size: 14px;
+    color: #777
+  }
+
+  #bar,
+  #prgbar {
+    background-color: #f1f1f1;
+    border-radius: 10px
+  }
+
+  #bar {
+    background-color: #3498db;
+    width: 0;
+    height: 10px
+  }
+
+  form {
+    background: #fff;
+    max-width: 800px;
+    margin: 25px auto;
+    padding: 30px;
+    border-radius: 5px;
+    text-align: left
+  }
+
+  h1 {
+    text-align: center
+  }
+
+  .btn {
+    background: #3498db;
+    color: #fff;
+    cursor: pointer
+  }
+
+  .dvcs {
+    padding: 10px;
+    margin: 10px;
+  }
+
+  input[type="checkbox"]:checked,
+  input[type="checkbox"]:not(:checked),
+  input[type="radio"]:checked,
+  input[type="radio"]:not(:checked) {
     position: absolute;
     left: -9999px;
-}
+  }
 
-input[type="checkbox"]:checked + label, 
-input[type="checkbox"]:not(:checked) + label, 
-input[type="radio"]:checked + label, 
-input[type="radio"]:not(:checked) + label {
+  input[type="checkbox"]:checked+label,
+  input[type="checkbox"]:not(:checked)+label,
+  input[type="radio"]:checked+label,
+  input[type="radio"]:not(:checked)+label {
     display: inline-block;
     position: relative;
     padding-left: 28px;
     line-height: 20px;
     cursor: pointer;
-}
-input[type="checkbox"]:checked + label:before, 
-input[type="checkbox"]:not(:checked) + label:before,
-input[type="radio"]:checked + label:before, 
-input[type="radio"]:not(:checked) + label:before {
+  }
+
+  input[type="checkbox"]:checked+label:before,
+  input[type="checkbox"]:not(:checked)+label:before,
+  input[type="radio"]:checked+label:before,
+  input[type="radio"]:not(:checked)+label:before {
     content: "";
     position: absolute;
     left: 0px;
@@ -56,26 +128,27 @@ input[type="radio"]:not(:checked) + label:before {
     height: 18px;
     border: 1px solid #dddddd;
     background-color: #ffffff;
-}
+  }
 
-input[type="checkbox"]:checked + label:before, 
-input[type="checkbox"]:not(:checked) + label:before {
+  input[type="checkbox"]:checked+label:before,
+  input[type="checkbox"]:not(:checked)+label:before {
     border-radius: 2px;
-}
-input[type="checkbox"]:checked + label:after, 
-input[type="checkbox"]:not(:checked) + label:after, 
-input[type="radio"]:checked + label:after, 
-input[type="radio"]:not(:checked) + label:after {
+  }
+
+  input[type="checkbox"]:checked+label:after,
+  input[type="checkbox"]:not(:checked)+label:after,
+  input[type="radio"]:checked+label:after,
+  input[type="radio"]:not(:checked)+label:after {
     content: "";
     position: absolute;
     -webkit-transition: all 0.2s ease;
     -moz-transition: all 0.2s ease;
     -o-transition: all 0.2s ease;
     transition: all 0.2s ease;
-}
+  }
 
-input[type="checkbox"]:checked + label:after, 
-input[type="checkbox"]:not(:checked) + label:after {
+  input[type="checkbox"]:checked+label:after,
+  input[type="checkbox"]:not(:checked)+label:after {
     left: 3px;
     top: 4px;
     width: 10px;
@@ -88,26 +161,27 @@ input[type="checkbox"]:not(:checked) + label:after {
     -o-transform: rotate(-45deg);
     -ms-transform: rotate(-45deg);
     transform: rotate(-45deg);
-}
+  }
 
-input[type="radio"]:checked + label:after, 
-input[type="radio"]:not(:checked) + label:after {
+  input[type="radio"]:checked+label:after,
+  input[type="radio"]:not(:checked)+label:after {
     left: 5px;
     top: 5px;
     width: 10px;
     height: 10px;
     border-radius: 100%;
     background-color: #3498db;
-}
-input[type="checkbox"]:not(:checked) + label:after, 
-input[type="radio"]:not(:checked) + label:after {
-    opacity: 0;
-}
+  }
 
-input[type="checkbox"]:checked + label:after, 
-input[type="radio"]:checked + label:after {
+  input[type="checkbox"]:not(:checked)+label:after,
+  input[type="radio"]:not(:checked)+label:after {
+    opacity: 0;
+  }
+
+  input[type="checkbox"]:checked+label:after,
+  input[type="radio"]:checked+label:after {
     opacity: 1;
-}
+  }
 </style>
 
 <script src="https://cdn.amcharts.com/lib/4/core.js"></script>
@@ -116,138 +190,141 @@ input[type="radio"]:checked + label:after {
 
 <!-- Chart code -->
 <script>
-var chart;
+  var chart;
 
-am4core.ready(function() {
-// Themes begin
-am4core.useTheme(am4themes_animated);
-// Themes end
-chart = am4core.create("chartdiv", am4charts.XYChart);
+  am4core.ready(function() {
+    // Themes begin
+    am4core.useTheme(am4themes_animated);
+    // Themes end
+    chart = am4core.create("chartdiv", am4charts.XYChart);
 
-chart.colors.list = [
-  am4core.color("#FF0000"),
-  am4core.color("#191970"),
-  am4core.color("#00BFFF"),
-  am4core.color("#000000"),
-  am4core.color("#21618C")
-];
+    chart.colors.list = [
+      am4core.color("#E9EC00"),
+      am4core.color("#FF8C00"),
+      am4core.color("#0900FF"),
+      am4core.color("#F60000"),
+      am4core.color("#3EFF42"),
+      am4core.color("#000000")
+    ];
 
-chart.dataSource.url = "/data.csv";
-//chart.numberFormatter.numberFormat = "#,###";
-chart.dataSource.disableCache = true;
-chart.dataSource.parser = new am4core.CSVParser();
-chart.dataSource.parser.options.useColumnNames = true;
-chart.dataSource.parser.options.emptyAs = "empty";
-//chart.dataSource.updateCurrentData = true;
-//chart.dataSource.reloadFrequency = 15000;
-// Create axes
-var dateAxis = chart.xAxes.push(new am4charts.CategoryAxis());
-dateAxis.dataFields.category = "Date";
-//dateAxis.renderer.minGridDistance = 60;
+    chart.dataSource.url = "/data.csv";
+    //chart.numberFormatter.numberFormat = "#,###";
+    chart.dataSource.disableCache = true;
+    chart.dataSource.parser = new am4core.CSVParser();
+    chart.dataSource.parser.options.useColumnNames = true;
+    chart.dataSource.parser.options.emptyAs = "empty";
+    //chart.dataSource.updateCurrentData = true;
+    //chart.dataSource.reloadFrequency = 15000;
+    // Create axes
+    var dateAxis = chart.xAxes.push(new am4charts.CategoryAxis());
+    dateAxis.dataFields.category = "Date";
+    //dateAxis.renderer.minGridDistance = 60;
 
-// Create value axis
-var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-var valueAxis1 = chart.yAxes.push(new am4charts.ValueAxis());
-var valueAxis2 = chart.yAxes.push(new am4charts.ValueAxis());
-// Create series
-var series1 = chart.series.push(new am4charts.LineSeries());
-series1.dataFields.valueY = "Steam";
-series1.dataFields.categoryX = "Date";
-series1.name = "Температура пара";
-series1.strokeWidth = 3;
-series1.tensionX = 0.7;
-series1.tooltipText = "{valueY.value}";
-//series1.bullets.push(new am4charts.CircleBullet());
+    // Create value axis
+    var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+    var valueAxis1 = chart.yAxes.push(new am4charts.ValueAxis());
+    var valueAxis2 = chart.yAxes.push(new am4charts.ValueAxis());
+    // Create series
+    var series1 = chart.series.push(new am4charts.LineSeries());
+    series1.dataFields.valueY = "Steam";
+    series1.dataFields.categoryX = "Date";
+    series1.name = "Температура пара";
+    series1.strokeWidth = 3;
+    series1.tensionX = 0.7;
+    series1.tooltipText = "{valueY.value}";
+    //series1.bullets.push(new am4charts.CircleBullet());
 
-var series2 = chart.series.push(new am4charts.LineSeries());
-series2.dataFields.valueY = "Pipe";
-series2.dataFields.categoryX = "Date";
-series2.name = "Температура в царге";
-series2.strokeWidth = 3;
-series2.tensionX = 0.7;
-series2.tooltipText = "{valueY.value}";
-//series2.bullets.push(new am4charts.CircleBullet());
+    var series2 = chart.series.push(new am4charts.LineSeries());
+    series2.dataFields.valueY = "Pipe";
+    series2.dataFields.categoryX = "Date";
+    series2.name = "Температура в царге";
+    series2.strokeWidth = 3;
+    series2.tensionX = 0.7;
+    series2.tooltipText = "{valueY.value}";
+    //series2.bullets.push(new am4charts.CircleBullet());
 
-var series3 = chart.series.push(new am4charts.LineSeries());
-series3.dataFields.valueY = "Water";
-series3.dataFields.categoryX = "Date";
-series3.name = "Температура воды";
-series3.strokeWidth = 3;
-series3.tensionX = 0.7;
-series3.tooltipText = "{valueY.value}";
-//series3.bullets.push(new am4charts.CircleBullet());
+    var series3 = chart.series.push(new am4charts.LineSeries());
+    series3.dataFields.valueY = "Water";
+    series3.dataFields.categoryX = "Date";
+    series3.name = "Температура воды";
+    series3.strokeWidth = 3;
+    series3.tensionX = 0.7;
+    series3.tooltipText = "{valueY.value}";
+    //series3.bullets.push(new am4charts.CircleBullet());
 
-var series4 = chart.series.push(new am4charts.LineSeries());
-series4.dataFields.valueY = "Tank";
-series4.dataFields.categoryX = "Date";
-series4.name = "Температура в кубе";
-series4.strokeWidth = 3;
-series4.tensionX = 0.7;
-series4.tooltipText = "{valueY.value}";
-//series4.bullets.push(new am4charts.CircleBullet());
+    var series4 = chart.series.push(new am4charts.LineSeries());
+    series4.dataFields.valueY = "Tank";
+    series4.dataFields.categoryX = "Date";
+    series4.name = "Температура в кубе";
+    series4.strokeWidth = 3;
+    series4.tensionX = 0.7;
+    series4.tooltipText = "{valueY.value}";
+    //series4.bullets.push(new am4charts.CircleBullet());
 
-var series5 = chart.series.push(new am4charts.LineSeries());
-series5.yAxis = valueAxis1;
-series5.dataFields.valueY = "Pressure";
-series5.dataFields.categoryX = "Date";
-series5.name = "Атмосферное давление";
-series5.strokeWidth = 3;
-series5.tensionX = 0.7;
-series5.tooltipText = "{valueY.value}";
+    var series5 = chart.series.push(new am4charts.LineSeries());
+    series5.yAxis = valueAxis1;
+    series5.dataFields.valueY = "Pressure";
+    series5.dataFields.categoryX = "Date";
+    series5.name = "Атмосферное давление";
+    series5.strokeWidth = 2;
+    series5.tensionX = 0.7;
+    series5.tooltipText = "{valueY.value}";
 
-var series6 = chart.series.push(new am4charts.LineSeries());
-series6.yAxis = valueAxis2;
-series6.dataFields.valueY = "ProgNum";
-series6.dataFields.categoryX = "Date";
-series6.name = "Строка программы";
-series6.strokeWidth = 3;
-series6.tensionX = 0.7;
-series6.tooltipText = "{valueY.value}";
+    var series6 = chart.series.push(new am4charts.LineSeries());
+    series6.yAxis = valueAxis2;
+    series6.dataFields.valueY = "ProgNum";
+    series6.dataFields.categoryX = "Date";
+    series6.name = "Строка программы";
+    series6.strokeWidth = 1;
+    series6.tensionX = 0.7;
+    series6.tooltipText = "{valueY.value}";
 
-//chart.cursor = new am4charts.XYCursor();
-//chart.cursor.snapToSeries = series1;
-//chart.cursor.xAxis = dateAxis;
+    //chart.cursor = new am4charts.XYCursor();
+    //chart.cursor.snapToSeries = series1;
+    //chart.cursor.xAxis = dateAxis;
 
-////chart.scrollbarY = new am4core.Scrollbar();
-chart.scrollbarX = new am4core.Scrollbar();
-//var scrollbarX = new am4charts.XYChartScrollbar();
-//scrollbarX.series.push(dateAxis);
-//chart.scrollbarX = scrollbarX;
+    ////chart.scrollbarY = new am4core.Scrollbar();
+    chart.scrollbarX = new am4core.Scrollbar();
+    //var scrollbarX = new am4charts.XYChartScrollbar();
+    //scrollbarX.series.push(dateAxis);
+    //chart.scrollbarX = scrollbarX;
 
-chart.cursor = new am4charts.XYCursor();
-chart.cursor.xAxis = dateAxis;
+    chart.cursor = new am4charts.XYCursor();
+    chart.cursor.xAxis = dateAxis;
 
 
-// Add legend
-chart.legend = new am4charts.Legend();
-//chart.legend = new am4charts.Legend();
-//chart.legend.parent = chart.plotContainer;
-//chart.legend.zIndex = 100;
-//chart.legend.valueLabels.template.text = "{valueY.value.formatNumber('$#.')}";
-});
+    // Add legend
+    chart.legend = new am4charts.Legend();
+    //chart.legend = new am4charts.Legend();
+    //chart.legend.parent = chart.plotContainer;
+    //chart.legend.zIndex = 100;
+    //chart.legend.valueLabels.template.text = "{valueY.value.formatNumber('$#.')}";
+  });
 
-function refresh_chart(){
-  if (!document.getElementById('refresh').checked) chart.dataSource.reloadFrequency = null;
-  else chart.dataSource.reloadFrequency = 15000;
-  chart.dataSource.load();
-};
+  function refresh_chart () {
+    if (!document.getElementById('refresh').checked) chart.dataSource.reloadFrequency = null;
+    else chart.dataSource.reloadFrequency = 15000;
+    chart.dataSource.load();
+  };
 </script>
+
 <body>
-<div id="chartdiv"></div>
-<form>
-<div>1. Файл data.csv необходимо положить в каталог с этой страницей (у меня - по пути ниже)</div>
-<div>cd /Users/kosoj/Documents/Arduino/Samovar/tools</div>
-<div>В этом каталоге из терминала запустить локальный вебсервер, это позволит открыть файл с данными. Без локального вебсервера файл с данными не будет доступен (ограничение безопасности браузера). После того, как будет запущен локальный вебсервер, можно будет перейти по ссылке внизу страницы</div>
-<div>Запуск локального вебсервера (на питоне)</div>
-<div>python -m SimpleHTTPServer 80</div>
-<div>или</div>
-<div>python3 -m http.server --cgi 80</div>
-<div>или для Windows, где %PATH_TO% - путь к запускаемому файлу python.exe</div>
-<div>%PATH_TO%/python.exe -m http.server --cgi 80</div>
-<div>или</div>
-<div>Запуск локального вебсервера на PHP</div>
-<div>sudo php -S localhost:80</div>
-<div><a href="http://localhost/chartlocal.htm">Открыть с локального сервера</a></div>
-</form>
+  <div id="chartdiv"></div>
+  <form>
+    <div>1. Файл data.csv необходимо положить в каталог с этой страницей (у меня - по пути ниже)</div>
+    <div>cd /Users/kosoj/Documents/Arduino/Samovar/tools</div>
+    <div>В этом каталоге из терминала запустить локальный вебсервер, это позволит открыть файл с данными. Без локального вебсервера файл с данными не будет доступен (ограничение безопасности браузера). После того, как будет запущен локальный вебсервер, можно будет перейти по ссылке внизу страницы</div>
+    <div>Запуск локального вебсервера (на питоне)</div>
+    <div>python -m SimpleHTTPServer 80</div>
+    <div>или</div>
+    <div>python3 -m http.server --cgi 80</div>
+    <div>или для Windows, где %PATH_TO% - путь к запускаемому файлу python.exe</div>
+    <div>%PATH_TO%/python.exe -m http.server --cgi 80</div>
+    <div>или</div>
+    <div>Запуск локального вебсервера на PHP</div>
+    <div>sudo php -S localhost:80</div>
+    <div><a href="http://localhost/chartlocal.htm">Открыть с локального сервера</a></div>
+  </form>
 </body>
+
 </html>
