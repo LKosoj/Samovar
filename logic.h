@@ -1181,6 +1181,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #else
     RMVK_set_out_voltge(MAX_VOLTAGE);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    RMVK_set_out_voltge(MAX_VOLTAGE);
 #endif
   }
 #else
