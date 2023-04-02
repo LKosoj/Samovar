@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION "5.25"
+#define SAMOVAR_VERSION F("5.25")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -258,10 +258,10 @@ uint8_t temprature_sens_read();
 
 //**************************************************************************************************************
 // Режимы работы регулятора напряжения
-#define POWER_WORK_MODE "0"
-#define POWER_SPEED_MODE "1"
-#define POWER_SLEEP_MODE "2"
-#define POWER_ERROR_MODE "3"
+#define POWER_WORK_MODE F("0")
+#define POWER_SPEED_MODE F("1")
+#define POWER_SLEEP_MODE F("2")
+#define POWER_ERROR_MODE F("3")
 //**************************************************************************************************************
 
 #include "user_config_override.h"
@@ -269,16 +269,16 @@ uint8_t temprature_sens_read();
 #ifdef SAMOVAR_USE_SEM_AVR
 #undef PWR_FACTOR
 #define PWR_FACTOR 20
-#define PWR_MSG "Мощность"
-#define PWR_TYPE "P"
+#define PWR_MSG F("Мощность")
+#define PWR_TYPE F("P")
 
 SemaphoreHandle_t xSemaphoreAVR = NULL;
 StaticSemaphore_t xSemaphoreBufferAVR;
 
 #else
 #ifdef SAMOVAR_USE_POWER
-#define PWR_MSG "Напряжение"
-#define PWR_TYPE "V"
+#define PWR_MSG F("Напряжение")
+#define PWR_TYPE F("V")
 #else 
 #define PWR_MSG ""
 #define PWR_TYPE ""
