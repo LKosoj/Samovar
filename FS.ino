@@ -200,6 +200,14 @@ bool exists(String path) {
 }
 
 void create_data() {
+
+  //Если режим ректификация, запишем в файл текущую программу отбора
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+    File fileState = SPIFFS.open("/prg.csv", FILE_WRITE);
+    fileState.println(get_program(0));
+    fileState.close();
+  }
+
   //Удаляем старый файл с архивным логом
   if (SPIFFS.exists("/data_old.csv")) {
     SPIFFS.remove("/data_old.csv");
@@ -233,9 +241,7 @@ String IRAM_ATTR append_data() {
   //Если режим ректификация и идет отбор, запишем в файл текущий статус
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
     File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
-    String s;
-    s = "P=" + String(ProgramNum + 1) + ";V=" + get_liquid_volume() + "\r\n" + GProgram;
-    fileState.println(s);
+    fileState.println("P=" + String(ProgramNum + 1) + ";V=" + get_liquid_volume());
     fileState.close();
   }
 
