@@ -108,6 +108,8 @@ void WebServerInit(void) {
   //  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
   server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
+  server.serveStatic("/prg.csv", SPIFFS, "/prg.csv");
+  server.serveStatic("/state.csv", SPIFFS, "/state.csv");
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
