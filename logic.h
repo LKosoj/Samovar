@@ -388,7 +388,6 @@ void set_program(String WProgram) {
   //  WProgram.trim();
   //  if (WProgram = "") return;
   char c[500];
-  GProgram = WProgram;
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
   int i = 0;
