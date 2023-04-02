@@ -330,7 +330,7 @@ void setHeaterPosition(bool state) {
 String get_beer_program() {
   String Str = "";
   int k = CAPACITY_NUM * 2;
-  for (int i = 0; i < k; i++) {
+  for (byte i = 0; i < k; i++) {
     if (program[i].WType == "") {
       i = CAPACITY_NUM * 2 + 1;
     } else {
