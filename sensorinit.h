@@ -453,7 +453,7 @@ String getDSAddress(DeviceAddress deviceAddress) {
 String get_DSAddressList(String Address) {
   String s = "<option value='-1'>NONE</option>";
   String dsaddr = "";
-  for (int i = 0; i != DScnt; i++) {
+  for (byte i = 0; i != DScnt; i++) {
     dsaddr = getDSAddress(DSAddr[i]);
     s += "<option value='" + String(i) + "'";
     if (Address == dsaddr) s = s + " " + "selected";
@@ -463,7 +463,7 @@ String get_DSAddressList(String Address) {
 }
 
 void IRAM_ATTR CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress) {
-  for (int dsj = 0; dsj < 8; dsj++) {
+  for (byte dsj = 0; dsj < 8; dsj++) {
     DevTAddress[dsj] = DevSAddress[dsj];
   }
 }
