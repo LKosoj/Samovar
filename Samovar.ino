@@ -452,7 +452,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         WthdrwTime = program[ProgramNum].Time * (1 - wp);
 
         WthdrwTimeAll = WthdrwTime;
-        for (int i = ProgramNum + 1; i < ProgramLen; i++) {
+        for (byte i = ProgramNum + 1; i < ProgramLen; i++) {
           WthdrwTimeAll += program[i].Time;
         }
 
@@ -503,7 +503,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         //суммируем время текущей строки программы и всех следующих за ней
         WthdrwTimeAll = WthdrwTime;
 
-        for (int i = ProgramNum + 1; i < ProgramLen; i++) {
+        for (byte i = ProgramNum + 1; i < ProgramLen; i++) {
           WthdrwTimeAll += program[i].Time;
         }
 
@@ -737,7 +737,7 @@ void setup() {
 
   //Serial.print("Reset reason: ");
   //Serial.println(vr);
-  for (int i = 0; i < 17; i = i + 8) {
+  for (byte i = 0; i < 17; i = i + 8) {
     chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
   }
   //uint8_t *MAC = ESP.getEfuseMac();
