@@ -35,9 +35,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       Serial.printf("%s\n", msg.c_str());
 
       if (info->opcode == WS_TEXT)
-        client->text("I got your text message");
+        client->text(F("I got your text message"));
       else
-        client->binary("I got your binary message");
+        client->binary(F("I got your binary message"));
     } else {
       //message is comprised of multiple frames or the frame is split into multiple packets
       if (info->index == 0) {
@@ -66,9 +66,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         if (info->final) {
           Serial.printf("ws[%s][%u] %s-message end\n", server->url(), client->id(), (info->message_opcode == WS_TEXT) ? "text" : "binary");
           if (info->message_opcode == WS_TEXT)
-            client->text("I got your text message");
+            client->text(F("I got your text message"));
           else
-            client->binary("I got your binary message");
+            client->binary(F("I got your binary message"));
         }
       }
     }
@@ -229,6 +229,15 @@ void create_data() {
 String IRAM_ATTR append_data() {
   bool w;
   w = false;
+
+  //Если режим ректификация и идет отбор, запишем в файл текущий статус
+  if (1 == 0) {
+    File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
+    String s;
+    s = "";
+    fileState.println(s);
+    fileState.close();
+  }
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SSPrevTemp) {
