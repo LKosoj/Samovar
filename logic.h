@@ -1195,7 +1195,7 @@ unsigned int IRAM_ATTR hexToDec(String hexString) {
   unsigned int decValue = 0;
   int nextInt;
 
-  for (int i = 0; i < hexString.length(); i++) {
+  for (byte i = 0; i < hexString.length(); i++) {
 
     nextInt = int(hexString.charAt(i));
     if (nextInt >= 48 && nextInt <= 57) nextInt = map(nextInt, 48, 57, 0, 9);
