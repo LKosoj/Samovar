@@ -946,8 +946,12 @@ void setup() {
   //Serial.println(sizeof(SamSetup));
 
   if (check_I2C_device(1) == 1) {
-    use_I2C_dev = true;
-    Serial.println("I2C Stepper ready");
+    use_I2C_dev = 1;
+    Serial.println("I2C Stepper as Mixer");
+  }
+  if (check_I2C_device(2) == 2) {
+    use_I2C_dev = 2;
+    Serial.println("I2C Stepper as Pump");
   }
 }
 
@@ -1337,6 +1341,7 @@ void WriteConsoleLog(String StringLogMsg) {
 
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
+  Serial.println(StringLogMsg);
 #else
   Serial.println(StringLogMsg);
 #endif
