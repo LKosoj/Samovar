@@ -7,7 +7,35 @@
 
 void read_config();
 
-LiquidLine lql_back_line(0, 0, "/Back");
+const char str_BACK[] PROGMEM = "<BACK";
+const char str_Steam_T[] PROGMEM = "Steam temp: ";
+const char str_Pipe_T[] PROGMEM = "Pipe temp: ";
+const char str_Water_T[] PROGMEM = "Water temp: ";
+const char str_Tank_T[] PROGMEM = "Tank temp: ";
+const char str_Pressure[] PROGMEM = "Atm: ";
+const char str_Progress[] PROGMEM = "Progress: ";
+const char str_Start[] PROGMEM = ">Start: ";
+const char str_Speed[] PROGMEM = ">Speed l/h: ";
+const char str_Pause[] PROGMEM = ">Pause: ";
+const char str_Reset_W[] PROGMEM = ">Reset withdrawal: ";
+const char str_Get_Power[] PROGMEM = ">Get power ";
+const char str_Setup[] PROGMEM = "/Setup";
+const char str_IP[] PROGMEM = "IP: ";
+const char str_Set_Steam_T[] PROGMEM = "Set Steam t: ";
+const char str_Set_Pipe_T[] PROGMEM = "Set Pipe t: ";
+const char str_Set_Water_T[] PROGMEM = "Set Water t: ";
+const char str_Set_Tank_T[] PROGMEM = "Set Tank t: ";
+const char str_Step_Ml[] PROGMEM = "^Step/ml: ";
+const char str_Calibrate[] PROGMEM = ">Calibrate: ";
+const char str_Program[] PROGMEM = "Program>";
+const char str_Type[] PROGMEM = "^Type: ";
+const char str_Volume[] PROGMEM = "^Volume: ";
+const char str_Capacity[] PROGMEM = "^Capacity: ";
+const char str_Temp[] PROGMEM = "^Temp: ";
+const char str_Power[] PROGMEM = "^Power: ";
+const char str_Reset_WiFi[] PROGMEM = ">Reset WiFi";
+
+LiquidLine lql_back_line(0, 0, str_BACK);
 LiquidLine lql_time(0, 3, timestr);
 
 LiquidLine welcome_line1(0, 0, welcomeStr1);
@@ -16,57 +44,56 @@ LiquidLine welcome_line3(0, 2, welcomeStr3);
 LiquidLine welcome_line4(0, 3, welcomeStr4);
 LiquidScreen welcome_screen(welcome_line1, welcome_line2, welcome_line3, welcome_line4);
 
-LiquidLine lql_steam_temp(0, 0, "Steam temp: ", SteamSensor.avgTemp);
-LiquidLine lql_pipe_temp(0, 1, "Pipe temp: ", PipeSensor.avgTemp);
-LiquidLine lql_water_temp(0, 2, "Water temp: ", WaterSensor.avgTemp);
+LiquidLine lql_steam_temp(0, 0, str_Steam_T, SteamSensor.avgTemp);
+LiquidLine lql_pipe_temp(0, 1, str_Pipe_T, PipeSensor.avgTemp);
+LiquidLine lql_water_temp(0, 2, str_Water_T, WaterSensor.avgTemp);
 LiquidScreen main_screen(lql_steam_temp, lql_pipe_temp, lql_water_temp, lql_time);
 
-LiquidLine lql_tank_temp(0, 0, "Tank temp: ", TankSensor.avgTemp);
-LiquidLine lql_atm(0, 1, "Atm: ", bme_pressure);
-LiquidLine lql_w_progress(0, 2, "Progress: ", WthdrwlProgress);
+LiquidLine lql_tank_temp(0, 0, str_Tank_T, TankSensor.avgTemp);
+LiquidLine lql_atm(0, 1, str_Pressure, bme_pressure);
+LiquidLine lql_w_progress(0, 2, str_Progress, WthdrwlProgress);
 LiquidScreen main_screen1(lql_tank_temp, lql_atm, lql_w_progress, lql_time);
 
-LiquidLine lql_start(0, 0, ">Start: ", startval_text);
-//LiquidLine lql_stepper_speed(0, 1, ">Stepper spd: ", CurrrentStepperSpeed);
-LiquidLine lql_pump_speed(0, 1, ">Speed l/h: ", ActualVolumePerHour);
-LiquidLine lql_pause(0, 2, ">Pause:", pause_text_ptr);
-LiquidLine lql_reset(0, 3, ">Reset withdrawal:");
+LiquidLine lql_start(0, 0, str_Start, startval_text);
+LiquidLine lql_pump_speed(0, 1, str_Speed, ActualVolumePerHour);
+LiquidLine lql_pause(0, 2, str_Pause, pause_text_ptr);
+LiquidLine lql_reset(0, 3, str_Reset_W);
 LiquidScreen main_screen2(lql_start, lql_pump_speed, lql_pause, lql_reset);
 
-LiquidLine lql_get_power(0, 0, ">Get power ", power_text_ptr);
-LiquidLine lql_setup(0, 1, "/Setup");
-LiquidLine lql_ip(0, 2, "IP: ", ipstr);
+LiquidLine lql_get_power(0, 0, str_Get_Power, power_text_ptr);
+LiquidLine lql_setup(0, 1, str_Setup);
+LiquidLine lql_ip(0, 2, str_IP, ipstr);
 LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
 
 LiquidScreen main_screen5(lql_tank_temp, lql_atm, lql_water_temp, lql_time);
 
-LiquidLine lql_setup_steam_temp(0, 0, "^Steam temp: ", SamSetup.DeltaSteamTemp);
-LiquidLine lql_setup_pipe_temp(0, 1, "^Pipe temp: ", SamSetup.DeltaPipeTemp);
-LiquidLine lql_setup_water_temp(0, 2, "^Water temp: ", SamSetup.DeltaWaterTemp);
-LiquidLine lql_setup_tank_temp(0, 3, "^Tank temp: ", SamSetup.DeltaTankTemp);
+LiquidLine lql_setup_steam_temp(0, 0, str_Steam_T, SamSetup.DeltaSteamTemp);
+LiquidLine lql_setup_pipe_temp(0, 1, str_Pipe_T, SamSetup.DeltaPipeTemp);
+LiquidLine lql_setup_water_temp(0, 2, str_Water_T, SamSetup.DeltaWaterTemp);
+LiquidLine lql_setup_tank_temp(0, 3, str_Tank_T, SamSetup.DeltaTankTemp);
 LiquidScreen setup_temp_screen(lql_setup_steam_temp, lql_setup_pipe_temp, lql_setup_water_temp, lql_setup_tank_temp);
 
-LiquidLine lql_setup_set_steam_temp(0, 0, "^Set Steam t: ", SamSetup.SetSteamTemp);
-LiquidLine lql_setup_set_pipe_temp(0, 1, "^Set Pipe t: ", SamSetup.SetPipeTemp);
-LiquidLine lql_setup_set_water_temp(0, 2, "^Set Water t: ", SamSetup.SetWaterTemp);
-LiquidLine lql_setup_set_tank_temp(0, 3, "^Set Tank t: ", SamSetup.SetTankTemp);
+LiquidLine lql_setup_set_steam_temp(0, 0, str_Set_Steam_T, SamSetup.SetSteamTemp);
+LiquidLine lql_setup_set_pipe_temp(0, 1, str_Set_Pipe_T, SamSetup.SetPipeTemp);
+LiquidLine lql_setup_set_water_temp(0, 2, str_Set_Water_T, SamSetup.SetWaterTemp);
+LiquidLine lql_setup_set_tank_temp(0, 3, str_Set_Tank_T, SamSetup.SetTankTemp);
 LiquidScreen setup_set_temp_screen(lql_setup_set_steam_temp, lql_setup_set_pipe_temp, lql_setup_set_water_temp, lql_setup_set_tank_temp);
 
-LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, "^Step/ml: ", SamSetup.StepperStepMl);
-LiquidLine lql_setup_stepper_calibrate(0, 1, ">Calibrate: ", calibrate_text_ptr);
-LiquidLine lql_setup_stepper_program(0, 2, ">Program: >");
+LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, str_Step_Ml, SamSetup.StepperStepMl);
+LiquidLine lql_setup_stepper_calibrate(0, 1, str_Calibrate, calibrate_text_ptr);
+LiquidLine lql_setup_stepper_program(0, 2, str_Program);
 LiquidScreen setup_stepper_settings(lql_setup_stepper_stepper_step_ml, lql_setup_stepper_calibrate, lql_setup_stepper_program, lql_time);
 
-LiquidLine lql_setup_program_WType(0, 0, "^Type: ", program[0].WType);
-LiquidLine lql_setup_program_Volume(0, 1, "^Volume: ", program[0].Volume);
-LiquidLine lql_setup_program_Speed(0, 2, "^Speed: ", program[0].Speed);
-LiquidLine lql_setup_program_capacity_num(0, 3, "^Capacity: ", program[0].capacity_num);
-LiquidLine lql_setup_program_Temp(0, 4, "^Temp: ", program[0].Temp);
-LiquidLine lql_setup_program_Power(0, 5, "^Power: ", program[0].Power);
+LiquidLine lql_setup_program_WType(0, 0, str_Type, program[0].WType);
+LiquidLine lql_setup_program_Volume(0, 1, str_Volume, program[0].Volume);
+LiquidLine lql_setup_program_Speed(0, 2, str_Speed, program[0].Speed);
+LiquidLine lql_setup_program_capacity_num(0, 3, str_Capacity, program[0].capacity_num);
+LiquidLine lql_setup_program_Temp(0, 4, str_Temp, program[0].Temp);
+LiquidLine lql_setup_program_Power(0, 5, str_Power, program[0].Power);
 LiquidScreen setup_program_settings(lql_setup_program_WType, lql_setup_program_Volume, lql_setup_program_Speed, lql_setup_program_capacity_num);
 
-LiquidLine lql_setup_program_reset_wifi(0, 0, ">Reset WiFi");
-LiquidLine lql_setup_program_back_line(0, 1, "/Back");
+LiquidLine lql_setup_program_reset_wifi(0, 0, str_Reset_WiFi);
+LiquidLine lql_setup_program_back_line(0, 1, str_BACK);
 LiquidScreen setup_program_back(lql_setup_program_reset_wifi, lql_setup_program_back_line, lql_time);
 
 LiquidScreen setup_back_screen(lql_back_line, lql_time);
