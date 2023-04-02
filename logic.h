@@ -388,6 +388,7 @@ void set_program(String WProgram) {
   //  WProgram.trim();
   //  if (WProgram = "") return;
   char c[500];
+  GProgram = WProgram;
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
   int i = 0;
@@ -418,15 +419,15 @@ void set_program(String WProgram) {
   }
 }
 
-String get_program(int s) {
+String get_program(byte s) {
   String Str = "";
-  int k = CAPACITY_NUM * 2;
+  byte k = CAPACITY_NUM * 2;
   if (s == CAPACITY_NUM * 2) {
     s = 0;
   } else {
     k = s + 1;
   }
-  for (int i = s; i < k; i++) {
+  for (byte i = s; i < k; i++) {
     if (program[i].WType == "") {
       i = CAPACITY_NUM * 2 + 1;
     } else {
