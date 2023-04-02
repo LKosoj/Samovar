@@ -231,10 +231,10 @@ String IRAM_ATTR append_data() {
   w = false;
 
   //Если режим ректификация и идет отбор, запишем в файл текущий статус
-  if (1 == 0) {
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
     File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
     String s;
-    s = "";
+    s = "P=" + String(ProgramNum + 1) + ";V=" + get_liquid_volume() + "\r\n" + GProgram;
     fileState.println(s);
     fileState.close();
   }
