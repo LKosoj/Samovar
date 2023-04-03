@@ -612,9 +612,9 @@ void IRAM_ATTR check_alarm() {
 #endif
     }
 #ifdef SAMOVAR_USE_POWER
-    SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
+    SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
 #ifdef SAMOVAR_USE_SEM_AVR
-    set_current_power(target_power_volt - target_power_volt / 100 * 4);
+    set_current_power(target_power_volt - target_power_volt / 100 * 2);
 #else
     set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
@@ -633,13 +633,13 @@ void IRAM_ATTR check_alarm() {
     if (program[ProgramNum].WType == "C") {
       if (prev_target_power_volt == 0) {
 #ifdef SAMOVAR_USE_SEM_AVR
-        prev_target_power_volt = target_power_volt + target_power_volt / 100 * 6;
+        prev_target_power_volt = target_power_volt + target_power_volt / 100 * 4;
 #else
         prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
 #endif
       }
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(prev_target_power_volt - target_power_volt / 100 * 4);
+      set_current_power(prev_target_power_volt - target_power_volt / 100 * 3);
 #else
       set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
 #endif
@@ -653,7 +653,7 @@ void IRAM_ATTR check_alarm() {
   if (program[ProgramNum].WType == "C") {
     if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt + target_power_volt / 100 * 2);
+      set_current_power(target_power_volt + target_power_volt / 100 * 1);
 #else
       set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
 #endif
