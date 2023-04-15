@@ -1281,6 +1281,7 @@ void read_config() {
   }
 
   if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;
+  if (isnan(SamSetup.SetACPTemp) || SamSetup.SetACPTemp == 0) SamSetup.SetACPTemp = 43;
 
   //  pump_regulator.Kp = SamSetup.Kp;
   //  pump_regulator.Ki = SamSetup.Ki;
