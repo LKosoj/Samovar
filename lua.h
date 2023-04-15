@@ -44,6 +44,7 @@ void set_alarm();
 void IRAM_ATTR pause_withdrawal(bool Pause);
 String IRAM_ATTR getValue(String data, char separator, int index);
 String get_lua_script(String fn);
+void IRAM_ATTR set_capacity(byte cap);
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -273,7 +274,7 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
   String Var;
   const char *s;
   size_t l;
-  double a = luaL_checknumber(lua_state, 2);
+  float a = luaL_checknumber(lua_state, 2);
   lua_getglobal(lua_state, "tostring");
   lua_pushvalue(lua_state, -1);
   lua_pushvalue(lua_state, 1);
@@ -302,6 +303,8 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
 #endif
   } else if (Var == "SteamTemp") {
     SteamSensor.avgTemp = a;
+  } else if (Var == "boil_temp") {
+    boil_temp = a;
   } else if (Var == "PipeTemp") {
     PipeSensor.avgTemp = a;
   } else if (Var == "WaterTemp") {
@@ -347,6 +350,8 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = Samovar_Mode;
   } else if (Var == "Samovar_CR_Mode") {
     a = Samovar_CR_Mode;
+  } else if (Var == "boil_temp") {
+    a = boil_temp;
   } else if (Var == "acceleration_temp") {
     a = acceleration_temp;
 #ifdef USE_WATER_PUMP
@@ -383,6 +388,8 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = program[ProgramNum].Time;
   } else if (Var == "program_capacity_num") {
     a = program[ProgramNum].capacity_num;
+  } else if (Var == "boil_temp") {
+    a = boil_temp;
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {
@@ -503,6 +510,13 @@ static int lua_wrapper_set_lua_status(lua_State *lua_state) {
   Var = s1;
   lua_pop(lua_state, 1);
   Lua_status = Var;
+  return 0;
+}
+
+static int lua_wrapper_set_capacity(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  byte a = luaL_checknumber(lua_state, 1);
+  set_capacity(a);
   return 0;
 }
 
@@ -736,6 +750,7 @@ void lua_init() {
   lua.Lua_register("setNextProgram", (const lua_CFunction) &lua_wrapper_set_next_program);
   lua.Lua_register("setPauseWithdrawal", (const lua_CFunction) &lua_wrapper_set_pause_withdrawal);
   lua.Lua_register("setTimer", (const lua_CFunction) &lua_wrapper_set_timer);
+  lua.Lua_register("setCapacity", (const lua_CFunction) &lua_wrapper_set_capacity);
 
   lua.Lua_register("openValve", (const lua_CFunction) &lua_wrapper_open_valve);
 
