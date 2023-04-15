@@ -297,7 +297,7 @@ void sensor_init(void) {
 
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-    set_beer_program("M;45;0;\nP;45;1\nP;60;1\nW;0;0\nB;0;1\nC;30;0\n");
+    set_beer_program("M;45;0;1^1^1^1\nP;45;1;1^1^1^1\nP;60;1;1^1^1^1\nW;0;0;1^1^1^1\nB;0;1;1^1^1^1\nC;30;0;1^1^1^1\n");
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }
@@ -322,6 +322,8 @@ void sensor_init(void) {
   Serial.println("Init RMVK");
 #endif
   //Иначе работаем с RMVK
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+  Serial2.end();
   RMVK_init();
 #define USE_SERIAL
 #endif
@@ -412,6 +414,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
   start_pressure = bme_pressure;
 
   boil_started = false;
+  boil_temp = 0;
 
   if (xSemaphore != NULL) xSemaphoreGive(xSemaphore);
 #ifdef SAMOVAR_USE_SEM_AVR
