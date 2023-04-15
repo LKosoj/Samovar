@@ -89,7 +89,7 @@ void IRAM_ATTR check_alarm_distiller() {
 
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
-    if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
+    if (ACPSensor.avgTemp > SamSetup.SetACPTemp && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
     else
       set_pump_speed_pid(WaterSensor.avgTemp);
   }
