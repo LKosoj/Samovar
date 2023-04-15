@@ -34,6 +34,7 @@ void set_buzzer(bool fl);
 void start_self_test(void);
 void stop_self_test(void);
 bool check_boiling();
+float get_alcohol(float t);
 
 #ifdef SAMOVAR_USE_POWER
 void check_power_error();
@@ -755,7 +756,7 @@ void IRAM_ATTR check_alarm() {
 #endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     SamovarStatusInt = 51;
-    SendMsg(F("Разгон завершён. Стабилизация/работа на себя"), NOTIFY_MSG);
+    SendMsg("Разгон завершён. Стабилизация/работа на себя. Спиртуозность " + format_float(get_alcohol(TankSensor.avgTemp), 1), NOTIFY_MSG);
     //началось кипение, запоминаем Т кипения
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
@@ -883,6 +884,15 @@ void IRAM_ATTR set_power(bool On) {
   }
 }
 
+float get_alcohol(float t){
+  float k,r;
+  k = (t - 89) / 6.49;
+
+  r = 19.26 - k * (18.32 - k * (7.81 - k * (1.77 - k * (4.81 - k * (2.95 + k * (1.43 - k *(0.8 + 0.05 * k) )))))); // формула Макеода для вычисления крепости
+  r = float (round (r * 10)) / 10; // округляем до одного знака после запятой
+  return r;
+}
+
 bool check_boiling() {
   if (!valve_status || boil_started || !PowerOn
 #ifdef USE_WATER_PUMP
@@ -901,7 +911,7 @@ bool check_boiling() {
 #endif
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
-    SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
+    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(get_alcohol(TankSensor.avgTemp), 1), WARNING_MSG);
   }
   if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 5) {
 #ifdef USE_WATER_PUMP
@@ -910,7 +920,7 @@ bool check_boiling() {
 #endif
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
-    SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
+    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(get_alcohol(TankSensor.avgTemp), 1), WARNING_MSG);
   }
   return boil_started;
 }
