@@ -507,13 +507,13 @@ struct DSSensor {
 };
 
 struct WProgram {
-  String WType;                                                //тип отбора - головы или тело
+  String WType; //                                               //тип отбора - головы или тело
   uint16_t Volume;                                             //объем отбора в мл
   float Speed;                                                 //скорость отбора в л/ч
   byte capacity_num;                                           //номер емкости для отбора
-  float Temp;                                                  //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
+  float Temp;   //                                               //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
   int Power;                                                   //напряжение, при которой отбирается эта часть погона.
-  float Time;                                                  //время, необходимое для отбора программы
+  float Time;   //                                               //время, необходимое для отбора программы
 };
 
 SetupEEPROM SamSetup;
@@ -576,7 +576,8 @@ unsigned long alarm_h_min;                                      // Время д
 float d_s_temp_prev;                                            // Температура для определения начала кипения в режиме дистилляции
 float d_s_temp_finish;                                          // Температура для определения завершения дистилляции
 unsigned long d_s_time_min;                                     // Время для определения завершения дистилляции
-bool boil_started;                                              // 
+bool boil_started;                                              // Флаг, определяющий, что кипение началось
+float boil_temp;                                                // Температура куба, при которой началось кипение
 volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
 volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
 volatile uint16_t WFtotalMilliLitres = 0;                       // Переменная для учета расхода воды
