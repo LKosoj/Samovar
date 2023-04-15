@@ -895,7 +895,7 @@ bool check_boiling() {
   if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
     d_s_temp_prev = WaterSensor.avgTemp;
   }
-  if (WaterSensor.avgTemp - d_s_temp_prev > 10) {
+  if (WaterSensor.avgTemp - d_s_temp_prev > 10 || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
 #ifdef USE_WATER_PUMP
     wp_count = -10;
 #endif
