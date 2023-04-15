@@ -33,9 +33,7 @@ void set_body_temp();
 void set_buzzer(bool fl);
 void start_self_test(void);
 void stop_self_test(void);
-#ifdef USE_WATER_PUMP
 bool check_boiling();
-#endif
 
 #ifdef SAMOVAR_USE_POWER
 void check_power_error();
@@ -758,6 +756,9 @@ void IRAM_ATTR check_alarm() {
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     SamovarStatusInt = 51;
     SendMsg(F("Разгон завершён. Стабилизация/работа на себя"), NOTIFY_MSG);
+    //началось кипение, запоминаем Т кипения
+    boil_started = true;
+    boil_temp = TankSensor.avgTemp;
     set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
     set_current_power(program[0].Power);
@@ -890,7 +891,6 @@ bool check_boiling() {
      ) {
     return false;
   }
-  bool ret = false;
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
     d_s_temp_prev = WaterSensor.avgTemp;
@@ -900,7 +900,7 @@ bool check_boiling() {
     wp_count = -10;
 #endif
     boil_started = true;
-    ret = true;
+    boil_temp = TankSensor.avgTemp;
     SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
   }
   if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 5) {
@@ -909,10 +909,10 @@ bool check_boiling() {
     wp_count = -10;
 #endif
     boil_started = true;
-    ret = true;
+    boil_temp = TankSensor.avgTemp;
     SendMsg(F("Началось кипение в кубе!"), WARNING_MSG);
   }
-  return ret;
+  return boil_started;
 }
 
 void start_self_test(void) {
