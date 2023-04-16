@@ -756,10 +756,11 @@ void IRAM_ATTR check_alarm() {
 #endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     SamovarStatusInt = 51;
-    SendMsg("Разгон завершён. Стабилизация/работа на себя. Спиртуозность " + format_float(get_alcohol(TankSensor.avgTemp), 1), NOTIFY_MSG);
     //началось кипение, запоминаем Т кипения
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
+    alcohol_s = get_alcohol(TankSensor.avgTemp);
+    SendMsg("Разгон завершён. Стабилизация/работа на себя. Спиртуозность " + format_float(alcohol_s, 1), NOTIFY_MSG);
     set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
     set_current_power(program[0].Power);
@@ -911,7 +912,8 @@ bool check_boiling() {
 #endif
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
-    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(get_alcohol(TankSensor.avgTemp), 1), WARNING_MSG);
+    alcohol_s = get_alcohol(TankSensor.avgTemp);
+    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
   }
   if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 5) {
 #ifdef USE_WATER_PUMP
@@ -920,7 +922,8 @@ bool check_boiling() {
 #endif
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
-    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(get_alcohol(TankSensor.avgTemp), 1), WARNING_MSG);
+    alcohol_s = get_alcohol(TankSensor.avgTemp);
+    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
   }
   return boil_started;
 }
