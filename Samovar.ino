@@ -11,20 +11,12 @@
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
-//#ifdef ESP_ARDUINO_VERSION
 #include "esp32/rom/rtc.h"
 #include <driver/touch_sensor.h>
-//#pragma message ("NEW SDK")
-//#else
-//#include <soc/touch_channel.h>
-//#include "rom/rtc.h"
-//#pragma message ("OLD SDK")
-//#endif
 
 #include <driver/dac.h>
 
 #include <Wire.h>
-//#include <SPI.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
