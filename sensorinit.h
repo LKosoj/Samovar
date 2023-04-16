@@ -415,6 +415,7 @@ void IRAM_ATTR reset_sensor_counter(void) {
 
   boil_started = false;
   boil_temp = 0;
+  alcohol_s = 0;
 
   if (xSemaphore != NULL) xSemaphoreGive(xSemaphore);
 #ifdef SAMOVAR_USE_SEM_AVR
