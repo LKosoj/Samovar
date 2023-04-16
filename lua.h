@@ -45,6 +45,7 @@ void IRAM_ATTR pause_withdrawal(bool Pause);
 String IRAM_ATTR getValue(String data, char separator, int index);
 String get_lua_script(String fn);
 void IRAM_ATTR set_capacity(byte cap);
+float get_alcohol(float t);
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -390,6 +391,10 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = program[ProgramNum].capacity_num;
   } else if (Var == "boil_temp") {
     a = boil_temp;
+  } else if (Var == "alcohol") {
+    a = get_alcohol(TankSensor.avgTemp);
+  } else if (Var == "alcohol_s") {
+    a = alcohol_s;
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {
