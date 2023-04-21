@@ -11,6 +11,7 @@ alcohol = getNumVariable("alcohol") + 0 --получаем текущую спи
 alcohol_s = getNumVariable("alcohol_s") + 0 --получаем спиртуозность, которая была посчитана в момент закипания куба
 sg = getObject("sg", "NUMERIC") + 0 -- получаем статус начала работы скрипта
 
+setLuaStatus("Текущая спиртуозность "..alcohol)
 
 -- скрипт начал работу, один раз отправим об этом сообщение
 if (sg == 0) then
