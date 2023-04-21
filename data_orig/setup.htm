@@ -1,0 +1,384 @@
+<html>
+
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="/style.css">
+  <title>Самовар</title>
+
+  <script>
+    function openTab (evt, tabName) {
+      var i, tabcontent, tablinks;
+      tabcontent = document.getElementsByClassName("tabcontent");
+      for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+      }
+      tablinks = document.getElementsByClassName("tablinks");
+      for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+      }
+      document.getElementById(tabName).style.display = "block";
+      evt.currentTarget.className += " active";
+      return 0;
+    }
+
+    function sendbutton (command) {
+      var server = '/command?' + command;
+      request = new XMLHttpRequest();
+      request.open('GET', server, false);
+      request.send();
+      if (request.status != 200) {
+        alert(request.status + ': ' + request.statusText);
+      }
+      return 0;
+    };
+
+    function set_program () {
+      var server = '/program';
+      request = new XMLHttpRequest();
+      request.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+          var myObj = this.responseText;
+          if (myObj != "OK") {
+            document.getElementById('WProgram').value = myObj;
+            alert("Ok");
+          }
+        }
+      };
+      request.open('POST', server, false);
+      let formData = new FormData(document.forms.setupform);
+      request.send(formData);
+      if (request.status != 200) {
+        alert(request.status + ': ' + request.statusText);
+      }
+      return 0;
+    };
+
+    HTMLElement.prototype.serialize = function() {
+      var obj = {};
+      var elements = this.querySelectorAll("input[type='text'], input[type='color'], input[type='checkbox'], select");
+      for (var i = 0; i < elements.length; ++i) {
+        var element = elements[i];
+        var name = element.name;
+        var value = element.value;
+        if (element.type == 'checkbox') value = element.checked;
+
+        if (name) {
+          obj[name] = value;
+        }
+      }
+      return JSON.stringify(obj);
+    }
+
+    function loadFile (e) {
+      var file = e;
+      var reader = new FileReader();
+      reader.onload = function() {
+        var data = JSON.parse(reader.result);
+        mapJson(data);
+      };
+      reader.readAsText(file, "UTF-8");
+    }
+
+    function mapJson (data) {
+      var inputs = Array.prototype.slice.call(document.querySelectorAll('form input, form select'));
+
+      for( var i = 0; i < inputs.length; i++){ 
+        if ( inputs[i].name === "StepperStepMl") { 
+            inputs.splice(i, 1); 
+        }
+      }
+      Object.keys(data).map(function(dataItem) {
+        inputs.map(function(inputItem) {
+          if (inputItem.name === dataItem && inputItem.type == 'checkbox') {inputItem.checked = data[dataItem]; return true;}
+          return (inputItem.name === dataItem) ? (inputItem.value = data[dataItem]) : false;
+        });
+      });
+    }
+
+    function SaveFormToFile (form) {
+      var filename, text;
+      filename = 'samovarbackup.txt';
+      //  text = getJson(document.getElementById('setupform'));
+      text = document.querySelector("form").serialize();
+
+      var pom = document.createElement('a');
+      pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+      pom.setAttribute('download', filename);
+
+      pom.style.display = 'none';
+      document.body.appendChild(pom);
+
+      pom.click();
+
+      document.body.removeChild(pom);
+    }
+  </script>
+</head>
+
+<body>
+  <form action='/save' method="post" name="setupform" id="setupform">
+    <h1>Настройки</h1>
+    <div class="tab">
+      <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Основные">
+      <input type='button' class="tablinks" onclick="openTab(event, 'Temp');" value="Температура">
+      <input type='button' class="tablinks" onclick="openTab(event, 'Pump');" value="Насос">
+      <input type='button' class="tablinks" onclick="openTab(event, 'Beer');" value="Пиво">
+      <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Прочие">
+    </div>
+    <div id="Main" class="tabcontent" style="display: block;">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>
+          <div>
+            Режим работы
+            <select name="mode">
+              <option value="0" %RECT%>Ректификация</option>
+              <option value="1" %DIST%>Дистилляция</option>
+              <option value="2" %BEER%>Пиво</option>
+              <option value="3" %BK%>Бражная колонна</option>
+            </select>
+          </div>
+        </h2>
+        <h2>Ректификация и дистилляция до температуры в кубе: <input name='DistTemp' type='text' value='%DistTemp%'>&#176;C</h2>
+        <h2>
+          <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
+          <label for='usepressure'>Использовать корректировку давления</label>
+        </h2>
+      </div>
+      <div>
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2>При выходе за уставки температур пара и царги при отборе тела</h2>
+          <h2>
+            <input id='useautospeed' type='checkbox' name='useautospeed' value='useautospeed' %UASChecked%>
+            <label for='useautospeed' class="tooltip">Использовать корректировку скорости насоса<span class="tooltiptext">для снижения скорости отбора при повышении температуры по пару</span></label>
+          </h2>
+          <h2>Процент корректировки: <input name='autospeed' type='text' value='%autospeed%'>&#37;</h2>
+          <h2>
+            <input id='useautopowerdown' type='checkbox' name='useautopowerdown' value='useautopowerdown' %UAPChecked%>
+            <label for='useautopowerdown' class="tooltip">Использовать корректировку подаваемой мощности<span class="tooltiptext">при при повышении температуры по пару (работает вместе с корректировкой скорости)</span></label>
+          </h2>
+        </div>
+        <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+          <h2>Настройки зуммера</h2>
+          <h2>
+            <input id='UseBuzzer' type='checkbox' name='UseBuzzer' value='UseBuzzer' %CUBuzz%>
+            <label for='UseBuzzer' class="tooltip">Использовать зуммер для нотификации<span class="tooltiptext">при выключенном параметре зуммер отключается полностью</span></label>
+          </h2>
+          <h2>
+            <input id='UseBBuzzer' type='checkbox' name='UseBBuzzer' value='UseBBuzzer' %CUBBuzz%>
+            <label for='UseBBuzzer' class="tooltip">Использовать зуммер для нотификации в браузере<span class="tooltiptext">при выключенном параметре зуммер в браузере не используется</span></label>
+          </h2>
+          <h2>
+            <input id='ChangeProgramBuzzer' type='checkbox' name='ChangeProgramBuzzer' value='ChangeProgramBuzzer' %CPBuzz%>
+            <label for='ChangeProgramBuzzer' class="tooltip">Включать зуммер при смене программы<span class="tooltiptext">для нотификации </span></label>
+          </h2>
+        </div>
+      </div>
+      <div 
+        style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
+        >
+        <input id='selftest' type='button' name='selftest' value='Самотестирование' onclick='sendbutton("startst")' class="button"
+          title="Включится насос (или откроется клапан) воды, запустится перистальтический насос отбора, сервопривод перейдет по 5 позициям."
+        >
+      </div>
+    </div>
+
+    <div id="Temp" class="tabcontent">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %SteamColor%;">
+          <h2>
+            <div>
+              Адрес датчика пара перед дефлегматором
+              <select name="SteamAddr">
+                %SteamAddr%
+              </select>
+            </div>
+          </h2>
+          <h2>Корректировка датчика пара перед дефлегматором: <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика пара перед дефлегматором: <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176;C</h2>
+          <h2>Задержка отбора при выходе Т пара за уставку: <input name='SteamDelay' type='text' value='%SteamDelay%'> сек</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %PipeColor%;">
+          <h2>
+            <div>
+              Адрес датчика в царге
+              <select name="PipeAddr">
+                %PipeAddr%
+              </select>
+            </div>
+          </h2>
+          <h2>Корректировка датчика в царге на 2/3 колонны: <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика в царге на 2/3 колонны: <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176;C</h2>
+          <h2>Задержка отбора при выходе Т в царге за уставку: <input name='PipeDelay' type='text' value='%PipeDelay%'> сек</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %WaterColor%;">
+          <h2>
+            <div>
+              Адрес датчика воды
+              <select name="WaterAddr">
+                %WaterAddr%
+              </select>
+            </div>
+          </h2>
+          <h2>Корректировка датчика воды: <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176;C</h2>
+          <h2>Уставка датчика воды: <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т воды за уставку: <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %TankColor%;">
+          <h2>
+            <div>
+              Адрес датчика в кубе
+              <select name="TankAddr">
+                %TankAddr%
+              </select>
+            </div>
+          </h2>
+          <h2>Корректировка датчика в кубе: <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика в кубе: <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т в кубе за уставку: <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
+        </div>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <div style="color: %ACPColor%;">
+          <h2>
+            <div>
+              Адрес датчика в ТСА
+              <select name="ACPAddr">
+                %ACPAddr%
+              </select>
+            </div>
+          </h2>
+          <h2>Корректировка датчика в ТСА <input name='DeltaACPTemp' type='text' value='%DeltaACPTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика в ТСА: <input name='SetACPTemp' type='text' value='%SetACPTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т в ТСА за уставку: <input name='ACPDelay' type='text' value='%ACPDelay%'> сек</h2>
+        </div>
+      </div>
+    </div>
+
+    <div id="Pump" class="tabcontent">
+      <h2>Количество шагов шагового двигателя: <input name='StepperStepMl' type='text' value='%StepperStepMl%' style="width: 6em;"> /мл.</h2>
+      <div style="margin: 0 auto; width: 200px;">
+        <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="/calibrate.htm"' class="button">
+      </div>
+    </div>
+
+    <div id="Beer" class="tabcontent">
+      <h2>Коэффициенты для PID регулятора нагрева:</h2>
+      <h2>Kp: <input name='Kp' type='text' value='%Kp%'></h2>
+      <h2>Ki: <input name='Ki' type='text' value='%Ki%'></h2>
+      <h2>Kd: <input name='Kd' type='text' value='%Kd%'></h2>
+      <div id='VoltH2' style=''>
+        <h2>Напр. регулятора в режиме поддержания темп.: <input name='StbVoltage' id='StbVoltage' type='text' value='%StbVoltage%'> V</h2>
+      </div>
+    </div>
+
+    <div id="Other" class="tabcontent">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>Токен Blynk: <input name='blynkauth' type='text' size="32" style="width: 22em;" value='%blynkauth%'></h2>
+        <h2>URL видео камеры: <input name='videourl' type='text' size="32" style="width: 30em;" value='%videourl%'></h2>
+        <h2>Часовой пояс: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
+        <h2>
+          <input id='CheckPower' type='checkbox' name='CheckPower' value='CheckPower' %ChckPwr%>
+          <label for='CheckPower' class="tooltip">Использовать проверку подключения регулятора<span class="tooltiptext">Если используется регулятор, при отсутствии связи с ним Самовар выключит питание</span></label>
+        </h2>
+        <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
+        <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>
+          <p>Цвета для температур:</p>
+          <div>
+            <input type="color" id="SteamColor" name="SteamColor" value="%SteamColor%">
+            <label for="SteamColor">Температура пара</label>
+          </div>
+          <div>
+            <input type="color" id="PipeColor" name="PipeColor" value="%PipeColor%">
+            <label for="PipeColor">Температура датчика в царге</label>
+          </div>
+          <div>
+            <input type="color" id="WaterColor" name="WaterColor" value="%WaterColor%">
+            <label for="WaterColor">Температура воды</label>
+          </div>
+          <div>
+            <input type="color" id="TankColor" name="TankColor" value="%TankColor%">
+            <label for="TankColor">Температура датчика в кубе</label>
+          </div>
+          <div>
+            <input type="color" id="ACPColor" name="ACPColor" value="%ACPColor%">
+            <label for="ACPColor">Температура датчика в ТСА</label>
+          </div>
+        </h2>
+        <p><a href="https://www.w3schools.com/colors/colors_picker.asp" target="blank">цвета можно подобрать тут</a></p>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
+        <h2>Настройки уровней для реле
+          <div>
+            Реле 1
+            <select name="rele1">
+              <option value="0" %RAL%>LOW</option>
+              <option value="1" %RAH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            Реле 2
+            <select name="rele2">
+              <option value="0" %RBL%>LOW</option>
+              <option value="1" %RBH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            Реле 3
+            <select name="rele3">
+              <option value="0" %RCL%>LOW</option>
+              <option value="1" %RCH%>HIGH</option>
+            </select>
+          </div>
+          <div>
+            Реле 4
+            <select name="rele4">
+              <option value="0" %RDL%>LOW</option>
+              <option value="1" %RDH%>HIGH</option>
+            </select>
+          </div>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em 2em 1em 2em; justify-content: space-between;">
+  <div class="container_column" style="margin-bottom: 1em;">
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <div>
+            <input id='saveform' type='button' name='saveform' value='Сохранить настройки' onclick='SaveFormToFile(this);' class="button">
+          </div>
+          <div>
+            <input id='resetwifi' type='button' name='resetwifi' value='Сбросить настройки WiFI' onclick='sendbutton("resetwifi=1");' class="button">
+          </div>
+    </div>
+    <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <div>
+            <label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
+              <i class="fa fa-cloud-upload"></i> Восстановить настройки
+            </label>
+            <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button" />
+          </div>
+          <div>
+            <input id='reboot' type='button' name='reboot' value='Перезагрузить Самовар' onclick='sendbutton("reboot");' class="button">
+          </div>
+    </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin: 0 auto; width: 668px;">
+      <input id='save' type='submit' name='save' value='Сохранить' class="button">
+      <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"' class="button">
+      <input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"' class="button">
+    </div>
+  </form>
+</body>
+
+</html>

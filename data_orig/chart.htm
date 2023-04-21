@@ -1,0 +1,503 @@
+<html>
+
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="/style.css">
+  <title>Самовар</title>
+
+  <script src="https://cdn.amcharts.com/lib/4/core.js"></script>
+  <script src="https://cdn.amcharts.com/lib/4/charts.js"></script>
+  <script src="https://cdn.amcharts.com/lib/4/themes/animated.js"></script>
+
+  <!-- Chart code -->
+  <script>
+var IsOffline = false; //признак обрыва связи
+var OfflineCouner = 0;
+// ==================== CONNECTION STATUS ============================================================
+var IsOffline = false; //признак обрыва связи
+
+function ConnectError(Type) {
+  if (Type) {
+	if (!OfflineCouner) { //если это первый обрыв
+		OfflineCouner++
+	} else {
+		document.getElementById('GreenT').style =
+		  'visibility: hidden;position: fixed;';
+		document.getElementById('RedT').style = '';
+		addMessage('Обрыв связи!', 0);
+		setTimeout(() => {
+		  IsOffline = true;
+		  OfflineCouner = 0
+		}, 100);
+	}
+  } else {
+    document.getElementById('GreenT').style = '';
+    document.getElementById('RedT').style =
+      'visibility: hidden;position: fixed;';
+    IsOffline = false;
+	OfflineCouner = 0
+  }
+}
+
+// ==================== POWER UNIT ===================================================================
+function setPowerUnit() {
+  let setPowerLabel;
+  let setPowerButton;
+  let powerCurrent;
+  let powerTarget;
+  let powerUnit;
+  if (pwr_unit === 'P') {
+    setPowerLabel = 'Мощность регулятора: ';
+    setPowerButton = 'Установить мощность';
+    powerCurrent = 'Текущая мощн.: ';
+    powerTarget = 'Целевая мощн.: ';
+    powerUnit = ' Вт';
+    document.getElementById('current_power_line').style = 'visibility: hidden';
+    document.getElementById('PWR').style = '';
+  } else if (pwr_unit === 'V') {
+    setPowerLabel = 'Напряжение регулятора: ';
+    setPowerButton = 'Установить напряжение';
+    powerCurrent = 'Текущее напр.: ';
+    powerTarget = 'Целевое напр.: ';
+    powerUnit = ' V';
+    document.getElementById('current_power_line').style = 'visibility: visible';
+    document.getElementById('PWR').style = '';
+  } else {
+    document.getElementById('PWR').style =
+      'visibility: hidden;position: fixed;';
+  }
+  document.getElementById('set_power_label').innerHTML = setPowerLabel;
+  document.getElementById('SetVoltage').value = setPowerButton;
+  document.getElementById('power_current').innerHTML = powerCurrent;
+  document.getElementById('power_target').innerHTML = powerTarget;
+  document.getElementById('power_unit_current').innerHTML = powerUnit;
+  document.getElementById('power_unit_target').innerHTML = powerUnit;
+}
+
+// ==================== LUA BUTTONS ==================================================================
+function AddLuaButtons() {
+  let btn_list = '%btn_list%';
+  if (btn_list !== '') {
+    let btn_arr = btn_list.split(',');
+    for (z = 0; z < btn_arr.length; z++) {
+      if (btn_arr[z] !== '') {
+        let arr = btn_arr[z].split('|');
+        let btn = document.createElement('input');
+        btn.type = 'submit';
+        btn.name = 'luabtn' + z;
+        btn.value = arr[1];
+        btn.className = 'button';
+        btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
+        document.getElementById('lua_btn_ln').appendChild(btn);
+        document.getElementById('lua_btn').style = 'visibility: visible';
+      }
+    }
+  }
+}
+
+// ==================== SOUND & MESSAGES QUEUE =======================================================
+var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax)
+var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
+
+var Messages_Array = []; //текущий массив сообщений
+var sound_is_playing = false; //звук сейчас восспроизводится
+var is_ALARM = false; //признак тревоги
+
+const sound = new Audio('alarm.mp3');
+sound.loop = true;
+sound.preload = 'auto';
+sound.autoplay = false;
+
+function playSound(play) {
+  if (!sound_is_playing && play) {
+    sound.play();
+    sound_is_playing = true;
+  } else if (sound_is_playing && !play) {
+    sound.pause();
+    sound_is_playing = false;
+  }
+}
+
+function addMessage(msg, lvl) {
+  if (IsOffline) {
+    return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
+  } else {
+    let time = new Date().toLocaleTimeString('ru-RU');
+    let style = null;
+    switch (lvl) {
+      case 0:
+        style = 'message_0';
+        is_ALARM = true;
+        break;
+      case 1:
+        style = 'message_1';
+        break;
+      case 2:
+        style = 'message_2';
+        break;
+      default:
+        style = 'message_0';
+        is_ALARM = true;
+        break;
+    }
+    let lastMsg = `
+            <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
+              ${time}  ${msg}
+            </div>`;
+    Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
+    if (Messages_Array.length > 1) {
+      //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
+      previousMsg = Messages_Array[Messages_Array.length - 2];
+      let changed = previousMsg.replace(
+        'onclick=removeLastMessage() style="cursor: pointer"',
+        ''
+      );
+      Messages_Array[Messages_Array.length - 2] = changed;
+    }
+    showMessages();
+  }
+}
+
+function removeLastMessage() {
+  //удаляям последнее сообщение
+  Messages_Array.pop();
+  if (Messages_Array.length > 0) {
+    lastMsg = Messages_Array[Messages_Array.length - 1];
+    let changed = lastMsg.replace(
+      '<div align="left"',
+      '<div align="left" onclick=removeLastMessage() style="cursor: pointer"'
+    );
+    Messages_Array[Messages_Array.length - 1] = changed;
+  } else {
+    is_ALARM = false;
+    IsCalmingPause = false;
+  }
+  showMessages();
+}
+
+function showMessages() {
+  //показываем обновлённый список сообщений
+  if (Messages_Array.length > 0) {
+    let alarm_is_there = []; //массив false/true для признаков тревоги
+    document.getElementById('messages').innerHTML = '';
+    Messages_Array.forEach(message => {
+      document.getElementById('messages').innerHTML += message;
+      alarm_is_there.push(message.includes('class=message_0'));
+    });
+    document.getElementById('messagesBox').style.display = 'block';
+    let queue = document.getElementById('messagesBox');
+    queue.scrollTop = queue.scrollHeight;
+    function positive(item) {
+      return item === true;
+    }
+    is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
+    if (sound_is_on & is_ALARM) {
+      //играем звук тревоги, если включён
+      playSound(true);
+    } else {
+      playSound(false);
+    }
+  } else {
+    //убираем блок, если очередь пуста
+    document.getElementById('messagesBox').style.display = 'none';
+    playSound(false);
+  }
+}
+
+function clearMessages() {
+  Messages_Array = [];
+  showMessages();
+}
+
+    var chart;
+    setInterval(loadDoc, 2000);
+
+    function loadDoc () {
+      var xhttp = new XMLHttpRequest();
+      xhttp.timeout = 4000;
+      xhttp.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+          ConnectError(false);
+          var myObj = JSON.parse(this.responseText);
+          document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
+          document.getElementById('stm').innerHTML = myObj.stm;
+          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
+          document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
+          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
+          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
+          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
+          document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
+          document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
+          document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
+          if (myObj.PrgType === "P") myObj.PrgType = "Пауза"
+          else if (myObj.PrgType === "H") myObj.PrgType = "Головы"
+          else if (myObj.PrgType === "B") myObj.PrgType = "Тело"
+          else if (myObj.PrgType === "C") myObj.PrgType = "Предзахлеб"
+          else if (myObj.PrgType === "T") myObj.PrgType = "Хвосты"
+          document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
+          document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
+          document.getElementById('heap').innerHTML = myObj.heap;
+          document.getElementById('rssi').innerHTML = myObj.rssi;
+          document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
+          sound_is_on = !!myObj.UseBBuzzer;
+
+          var dt = myObj.PipeTemp - myObj.SteamTemp;
+          document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
+          
+          let importantStatus = myObj.Status;
+          if (importantStatus && importantStatus !== '') {
+            if (importantStatus.includes('Продолжение через') && !IsCalmingPause) {
+              addMessage(importantStatus, 1);
+              IsCalmingPause = true;
+            }
+          };
+          
+          if (myObj.Msg && myObj.Msg !== "") {
+            addMessage(myObj.Msg, myObj.msglvl);
+          }
+          
+        }
+      };
+      xhttp.onerror = function() {
+        ConnectError(true);
+      };
+      xhttp.ontimeout = function() {
+        ConnectError(true);
+      };
+      xhttp.open("GET", "/ajax", true);
+      xhttp.send();
+    };
+
+    am4core.ready(function() {
+      // Themes begin
+      am4core.useTheme(am4themes_animated);
+      // Themes end
+      chart = am4core.create("chartdiv", am4charts.XYChart);
+
+      chart.colors.list = [
+        am4core.color("%SteamColor%"),
+        am4core.color("%PipeColor%"),
+        am4core.color("%WaterColor%"),
+        am4core.color("%TankColor%"),
+        am4core.color("#3EFF42"),
+        am4core.color("#000000")
+        
+        
+      ];
+
+      chart.dataSource.url = "/data.csv";
+      chart.dataSource.disableCache = true;
+      //chart.numberFormatter.numberFormat = "#,###";
+      chart.dataSource.parser = new am4core.CSVParser();
+      chart.dataSource.parser.options.useColumnNames = true;
+      chart.dataSource.parser.options.emptyAs = "empty";
+      //chart.dataSource.updateCurrentData = true;
+      chart.dataSource.reloadFrequency = 15000;
+
+      // Create axes
+      var dateAxis = chart.xAxes.push(new am4charts.CategoryAxis());
+      dateAxis.dataFields.category = "Date";
+      //dateAxis.renderer.minGridDistance = 60;
+
+      // Create value axis
+      var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+      var valueAxis1 = chart.yAxes.push(new am4charts.ValueAxis());
+      var valueAxis2 = chart.yAxes.push(new am4charts.ValueAxis());
+      // Create series
+      var series1 = chart.series.push(new am4charts.LineSeries());
+      series1.dataFields.valueY = "Steam";
+      series1.dataFields.categoryX = "Date";
+      series1.name = "Температура пара";
+      series1.strokeWidth = 3;
+      series1.tensionX = 0.7;
+      series1.tooltipText = "{valueY.value}";
+      series1.hidden = %SteamHide%;
+      //series1.bullets.push(new am4charts.CircleBullet());
+
+      var series2 = chart.series.push(new am4charts.LineSeries());
+      series2.dataFields.valueY = "Pipe";
+      series2.dataFields.categoryX = "Date";
+      series2.name = "Температура в царге";
+      series2.strokeWidth = 3;
+      series2.tensionX = 0.7;
+      series2.tooltipText = "{valueY.value}";
+      series2.hidden = %PipeHide%;
+      //series2.bullets.push(new am4charts.CircleBullet());
+
+      var series3 = chart.series.push(new am4charts.LineSeries());
+      series3.dataFields.valueY = "Water";
+      series3.dataFields.categoryX = "Date";
+      series3.name = "Температура воды";
+      series3.strokeWidth = 3;
+      series3.tensionX = 0.7;
+      series3.tooltipText = "{valueY.value}";
+      series3.hidden = %WaterHide%;
+      //series3.bullets.push(new am4charts.CircleBullet());
+
+      var series4 = chart.series.push(new am4charts.LineSeries());
+      series4.dataFields.valueY = "Tank";
+      series4.dataFields.categoryX = "Date";
+      series4.name = "Температура в кубе";
+      series4.strokeWidth = 3;
+      series4.tensionX = 0.7;
+      series4.tooltipText = "{valueY.value}";
+      series4.hidden = %TankHide%;
+      //series4.bullets.push(new am4charts.CircleBullet());
+
+      var series5 = chart.series.push(new am4charts.LineSeries());
+      series5.yAxis = valueAxis1;
+      series5.dataFields.valueY = "Pressure";
+      series5.dataFields.categoryX = "Date";
+      series5.name = "Атмосферное давление";
+      series5.strokeWidth = 2;
+      series5.tensionX = 0.7;
+      series5.tooltipText = "{valueY.value}";
+      series5.hidden = %PressureHide%;
+
+      var series6 = chart.series.push(new am4charts.LineSeries());
+      series6.yAxis = valueAxis2;
+      series6.dataFields.valueY = "ProgNum";
+      series6.dataFields.categoryX = "Date";
+      series6.name = "Строка программы";
+      series6.strokeWidth = 1;
+      series6.tensionX = 0.7;
+      series6.tooltipText = "{valueY.value}";
+      series6.hidden = %ProgNumHide%;
+
+      //chart.cursor = new am4charts.XYCursor();
+      //chart.cursor.snapToSeries = series1;
+      //chart.cursor.xAxis = dateAxis;
+
+      ////chart.scrollbarY = new am4core.Scrollbar();
+      chart.scrollbarX = new am4core.Scrollbar();
+      //var scrollbarX = new am4charts.XYChartScrollbar();
+      //scrollbarX.series.push(dateAxis);
+      //chart.scrollbarX = scrollbarX;
+
+      chart.cursor = new am4charts.XYCursor();
+      chart.cursor.xAxis = dateAxis;
+
+
+      // Add legend
+      chart.legend = new am4charts.Legend();
+      //chart.legend = new am4charts.Legend();
+      //chart.legend.parent = chart.plotContainer;
+      //chart.legend.zIndex = 100;
+      //chart.legend.valueLabels.template.text = "{valueY.value.formatNumber('$#.')}";
+    });
+
+    function refresh_chart () {
+      if (!document.getElementById('refresh').checked) chart.dataSource.reloadFrequency = null;
+      else chart.dataSource.reloadFrequency = 15000;
+      chart.dataSource.load();
+    };
+  </script>
+</head>
+
+
+<!-- ===================================================================================================================== -->
+
+<body>
+  
+  <div style='position: absolute; top: 1em; left: 20%; width: 60%;'>
+    <div class="messages_box" style="display: none;" id="messagesBox">
+      <div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='clearMessages()'>
+        [x] очистить
+      </div>
+      <div class="messages_array" id="messages"></div>
+    </div>
+  </div>
+  
+  <div id="chartdiv"></div>
+  <form action='none' onsubmit='return false'>
+    <h1>Статус</h1>
+    <h2><input id='refresh' type='checkbox' name='refresh' value='refresh' checked='checked' onclick='refresh_chart()'><label for='refresh'>Обновлять график</label></h2>
+    <div class="message-box" style="display: none;" id="message"></div>
+
+    <div class="container_row" style="justify-content: space-between; font-size: 0.7em;">
+      <div class="text">Текущее время: <span id='crnt_tm'></span></div>
+      <div class="text" id="GreenT"><img src="Green.png" width="20"></div>
+      <div class="text" id="RedT" style="visibility: hidden;position: fixed;"><img src="Red_light.gif" width="20"></div>
+      <div class="text">Время работы: <span id='stm'></span></div>
+    </div>
+    <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+
+      <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+        <div class="text" style="color: %PipeColor%;">
+          Т в царге: &nbsp;&nbsp;
+          <span id='PipeTemp' style="font-size: xx-large;"></span>
+          &#176;C
+        </div>
+        <div class="text" style="color: %SteamColor%;">
+          Т пара: &nbsp;&nbsp;
+          <span id='SteamTemp' style="font-size: xx-large;"></span>
+          &#176;C
+        </div>
+        <div class="text" style="color: black;">
+          &#916; температур:&nbsp;&nbsp;
+          <span id='DeltaTemp' style="font-size: xx-large;"></span>
+          &#176;C
+        </div>
+      </div>
+
+      <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
+        <div class="text" style="color: %WaterColor%;">
+          Т воды: &nbsp;&nbsp;
+          <span id='WaterTemp' style="font-size: xx-large;"></span>
+          &#176;C
+        </div>
+        <div class="text" style="color: %TankColor%;">
+          Т в кубе: &nbsp;&nbsp;
+          <span id='TankTemp' style="font-size: xx-large;"></span>
+          &#176;C
+        </div>
+        <div class="text" style="color: %ACPColor%;">
+          Т в ТСА: &nbsp;&nbsp;
+          <span id='ACPTemp' style="font-size: xx-large;"></span>
+          &#176;C
+        </div>
+      </div>
+
+    </div>
+
+    <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+      <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+        <div class="text">
+          Скорость отбора: &nbsp;
+          <span id='ActualVolumePerHour'></span>
+          л/ч
+        </div>
+        <div class="text">
+          Отобранный объем: &nbsp;
+          <span id='VolumeAll'></span>
+          мл
+        </div>
+      </div>
+      <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
+        <div class="text">
+          Прогресс отбора: &nbsp;
+          <span id='WthdrwlProgress'></span>
+          &#37;
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class='text'>
+        <span>Статус: <span id='Status'></span></span>
+      </div>
+    </div>
+    <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="/index.htm"' class="button">
+    <input id='getlog' type='button' name='getlog' value='Сохранить лог' onclick='javascript:window.open("/getlog")' class="button">
+    <input id='getoldlog' type='button' name='getoldlog' value='Сохранить старый лог' onclick='javascript:window.open("/getoldlog")' class="button">
+    <div class='dvcs'>
+      <div>
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
+      </div>
+    </div>
+  </form>
+</body>
+
+</html>
