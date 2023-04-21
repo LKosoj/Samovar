@@ -431,7 +431,7 @@
       s = "";
       for (i = 1; i < t.length; i++) {
         k = t[i].childNodes;
-        for (j = 1; j < 4; j++) {
+        for (j = 1; j < 5; j++) {
           s = s + k[j].value + ";";
         }
         s = s.slice(0, -1);
@@ -534,7 +534,7 @@
         return;
       }
       var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label><label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label></div>');
+      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label></div>');
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
       for (z = 0; z < varr.length; z++) {
@@ -555,7 +555,9 @@
       l.setAttribute("style", color);
       var e = l.childNodes;
       for (q = 0; q < e.length; q++) {
-        e[q].setAttribute("style", color);
+        if (q == 4) {
+          e[q].setAttribute("style", color + "width:150");
+        } else e[q].setAttribute("style", color);
       }
       calc_program();
     }
@@ -696,14 +698,25 @@
         <div class="list-group-item list-content spoiler-body">
           <textarea cols="40" rows="7" id='WProgram' name='WProgram'>%WProgram%</textarea>
           <div class='dvcs'>
-            <p><span>Параметры программы затирания: Тип программы;Температура;Время</span></p>
-            <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре), B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры), W - wait (режим ожидания, ничего не делает до смены строки программы), F - ferment (ферментирование, режим браги, поддерживает заданную температуру до сменты строки программы).</span></p>
-            <p><span>Пример программы отбора</span></p>
-            <p><span>M;45.00;0</span></p>
-            <p><span>P;60.00;1</span></p>
-            <p><span>W;0.00;1</span></p>
-            <p><span>B;0.00;1</span></p>
-            <p><span>C;30.00;0</span></p>
+            <p><span>Параметры программы затирания: Тип программы;Температура;Время;Режим работы мешалки</span></p>
+            <p><span>&nbsp;</span></p>
+            <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре),</span></p>
+            <p><span>B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры),</span></p>
+            <p><span>W - wait (режим ожидания, ничего не делает до смены строки программы), F - ferment (ферментирование, режим браги, поддерживает заданную температуру до сменты строки программы).</span></p>
+            <p><span>&nbsp;</span></p>
+            <p><span>Пример программы отбора:</span></p>
+            <p><span>M;45.00;0;1^1.00^1^1</span></p>
+            <p><span>P;60.00;1;1^1.00^1^1</span></p>
+            <p><span>W;0.00;1;1^1.00^1^1</span></p>
+            <p><span>B;0.00;1;1^1.00^1^1</span></p>
+            <p><span>C;30.00;0;1^1.00^1^1</span></p>
+            <p><span>&nbsp;</span></p>
+            <p><span>&nbsp;</span></p>
+            <p><span>Описание режима работы мешалки: последним значением задается режим работы мешалки. 1^-1.00^2^3, где</span></p>
+            <p><span>1 - Тип устройства - 1 - мешалка, 2 - насос, 3 - мешалка и насос одновременно</span></p>
+            <p><span>-1.00 - Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения (если поддерживает оборудование)</span></p>
+            <p><span>2 - Время включения в мин</span></p>
+            <p><span>3 - Время выключения в мин</span></p>
           </div>
         </div>
       </div>
