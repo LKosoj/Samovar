@@ -1,7 +1,30 @@
-target_temp = 94 --температура, с которой начнется укрепление при дистилляции - откроется клапан воды для охлаждения.
+--Скрипт для проведения дистилляции с укреплением - при определенных условиях откроется клапан воды, обеспечив укрепление оставшегося в кубе спирта.
+--Используется или температура или снижение содержания спирта (что наступит раньше)
 
-if (PowerOn == 1 and valve_status == 1 and TankTemp < target_temp) then
-  openValve(0)
-else if (PowerOn == 1 and valve_status == 0 and TankTemp >= target_temp) then
-  openValve(1)
+--НАЧАЛЬНЫЕ УСТАНОВКИ
+target_temp = 94 --температура, с которой начнется укрепление при дистилляции.
+alco_delta = 2/3 --снижение содержания спирта в кубе, после которого включится укрепление.
+
+-- ОПРЕДЕЛЕНИЕ ПЕРЕМЕННЫХ
+b_temp = getNumVariable("boil_temp") + 0 --получаем запомненную температуру кипения
+alcohol = getNumVariable("alcohol") + 0 --получаем текущую спиртуозность, посчитанную на основании температуры куба
+alcohol_s = getNumVariable("alcohol_s") + 0 --получаем спиртуозность, которая была посчитана в момент закипания куба
+sg = getObject("sg", "NUMERIC") + 0 -- получаем статус начала работы скрипта
+
+
+-- скрипт начал работу, один раз отправим об этом сообщение
+if (sg == 0) then
+  setObject("sg", 1)
+  sendMsg("Начата дистилляция с укреплением!", -1) --отчитываемся в консоль браузера
+  sendMsg("Начата дистилляция с укреплением!", 2) --отправляем информационное сообщение оператору
+end
+
+
+--Обрабатываем логику укрепления
+if b_temp > 0 then
+  if (PowerOn == 1 and valve_status == 1 and (TankTemp < target_temp or alcohol > alcohol_s * alco_delta)) then
+    openValve(0)
+  else if (PowerOn == 1 and valve_status == 0 and (TankTemp >= target_temp or alcohol < alcohol_s * alco_delta)) then
+    openValve(1)
+  end
 end
