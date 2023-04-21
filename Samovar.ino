@@ -13,6 +13,7 @@
 
 #include "esp32/rom/rtc.h"
 #include <driver/touch_sensor.h>
+#include <esp32-hal-cpu.h>
 
 #include <driver/dac.h>
 
@@ -932,6 +933,8 @@ void setup() {
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   writeString("                  ", 3);
   writeString("      Started     ", 4);
+//  Serial.print("CPU Frequency is: ");
+//  Serial.println(getCpuFrequencyMhz());
   Serial.println("Samovar ready");
   //Serial.print("Size = ");
   //Serial.println(sizeof(SamSetup));
