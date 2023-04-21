@@ -1,1 +1,676 @@
-<html><head><meta charset='utf-8'><meta http-equiv="Cache-Control" content="no-cache"><link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" /><link rel="stylesheet" href="/style.css"><title>Самовар</title><script> // ==================== CONNECTION STATUS ============================================================ var IsOffline = false; //признак обрыва связи var OfflineCouner = 0; function ConnectError (Type) { if (Type) { if (!OfflineCouner) { //если это первый обрыв OfflineCouner++ } else { document.getElementById('connection_indicator').innerHTML = ` <img src="Red_light.gif" style="margin: 0!important; width: 20px">`; addMessage('Обрыв связи!', 0); setTimeout(() => { IsOffline = true; OfflineCouner = 0 }, 100); } } else { document.getElementById('connection_indicator').innerHTML = ` <img src="Green.png" style="margin: 0 !important; width: 20px">` IsOffline = false; OfflineCouner = 0 } }; // ==================== POWER UNIT =================================================================== function setPowerUnit () { let setPowerLabel; let setPowerButton; let powerCurrent; let powerTarget; let powerUnit; if (pwr_unit === 'P') { setPowerLabel = 'Мощность регулятора: '; setPowerButton = 'Установить мощность'; powerCurrent = 'Текущая мощн.: '; powerTarget = 'Целевая мощн.: '; powerUnit = ' Вт'; document.getElementById('current_power_line').style = 'visibility: hidden'; document.getElementById('PWR').style = ''; } else if (pwr_unit === 'V') { setPowerLabel = 'Напряжение регулятора: '; setPowerButton = 'Установить напряжение'; powerCurrent = 'Текущее напр.: '; powerTarget = 'Целевое напр.: '; powerUnit = ' V'; document.getElementById('current_power_line').style = 'visibility: visible'; document.getElementById('PWR').style = ''; } else { document.getElementById('PWR').style = 'visibility: hidden;position: fixed;'; } document.getElementById('set_power_label').innerHTML = setPowerLabel; document.getElementById('SetVoltage').value = setPowerButton; document.getElementById('power_current').innerHTML = powerCurrent; document.getElementById('power_target').innerHTML = powerTarget; document.getElementById('power_unit_current').innerHTML = powerUnit; document.getElementById('power_unit_target').innerHTML = powerUnit; } // ==================== LUA BUTTONS ================================================================== function AddLuaButtons () { let btn_list = '%btn_list%'; if (btn_list !== '') { let btn_arr = btn_list.split(','); for (z = 0; z < btn_arr.length; z++) { if (btn_arr[z] !== '') { let arr = btn_arr[z].split('|'); let btn = document.createElement('input'); btn.type = 'submit'; btn.name = 'luabtn' + z; btn.value = arr[1]; btn.className = 'button'; btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");'); document.getElementById('lua_btn_ln').appendChild(btn); document.getElementById('lua_btn').style = 'visibility: visible'; } } } } // ==================== SOUND & MESSAGES QUEUE ======================================================= var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax) var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды) var Messages_Array = []; //текущий массив сообщений var sound_is_playing = false; //звук сейчас восспроизводится var is_ALARM = false; //признак тревоги const sound = new Audio('alarm.mp3'); sound.loop = true; sound.preload = 'auto'; sound.autoplay = false; function playSound (play) { if (!sound_is_playing && play) { sound.play(); sound_is_playing = true; } else if (sound_is_playing && !play) { sound.pause(); sound_is_playing = false; } } function addMessage (msg, lvl) { if (IsOffline) { return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи } else { let time = new Date().toLocaleTimeString('ru-RU'); let style = null; switch (lvl) { case 0: style = 'message_0'; is_ALARM = true; break; case 1: style = 'message_1'; break; case 2: style = 'message_2'; break; default: style = 'message_0'; is_ALARM = true; break; } let lastMsg = ` <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer"> ${time} ${msg} </div>`; Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди if (Messages_Array.length > 1) { //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее previousMsg = Messages_Array[Messages_Array.length - 2]; let changed = previousMsg.replace( 'onclick=removeLastMessage() style="cursor: pointer"', '' ); Messages_Array[Messages_Array.length - 2] = changed; } showMessages(); } } function removeLastMessage () { //удаляям последнее сообщение Messages_Array.pop(); if (Messages_Array.length > 0) { lastMsg = Messages_Array[Messages_Array.length - 1]; let changed = lastMsg.replace( '<div align="left"', '<div align="left" onclick=removeLastMessage() style="cursor: pointer"' ); Messages_Array[Messages_Array.length - 1] = changed; } else { is_ALARM = false; IsCalmingPause = false; } showMessages(); } function showMessages () { //показываем обновлённый список сообщений if (Messages_Array.length > 0) { let alarm_is_there = []; //массив false/true для признаков тревоги document.getElementById('messages').innerHTML = ''; Messages_Array.forEach(message => { document.getElementById('messages').innerHTML += message; alarm_is_there.push(message.includes('class=message_0')); }); document.getElementById('messagesBox').style.display = 'block'; let queue = document.getElementById('messagesBox'); queue.scrollTop = queue.scrollHeight; function positive (item) { return item === true; } is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги if (sound_is_on & is_ALARM) { //играем звук тревоги, если включён playSound(true); } else { playSound(false); } } else { //убираем блок, если очередь пуста document.getElementById('messagesBox').style.display = 'none'; playSound(false); } } function clearMessages () { Messages_Array = []; showMessages(); } var pwr_unit = "%pwr_unit%"; var _lnIdx = 0; var headers = document.querySelectorAll("[data-name='spoiler-title']"); function headerClick () { this.nextElementSibling.classList.toggle("spoiler-body"); var s = this.parentNode.getElementsByClassName("spoiler-sign"); if (s[0].innerHTML == "[+]") s[0].innerHTML = "[-]"; else s[0].innerHTML = "[+]"; } function openTab (evt, tabName) { var i, tabcontent, tablinks; tabcontent = document.getElementsByClassName("tabcontent"); for (i = 0; i < tabcontent.length; i++) { tabcontent[i].style.display = "none"; } tablinks = document.getElementsByClassName("tablinks"); for (i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(" active", ""); } document.getElementById(tabName).style.display = "block"; evt.currentTarget.className += " active"; return 0; } function check_program (str) { var arrayOfStrings = str.split("\n"); var prevcnt = 0; var ret = true; var cnt; for (i = 0; i < arrayOfStrings.length; i++) { var arrayOfDelim = arrayOfStrings[i].split(";"); cnt = arrayOfDelim.length; if (cnt == 1 && arrayOfDelim[0] != "" && arrayOfStrings.length == i - 1) ret = false; else if (prevcnt > 0 && cnt > 1) { if (prevcnt != cnt) ret = false; } prevcnt = cnt; } return ret; } function calc_program () { if (!check_program(document.getElementById('WProgram').value)) { alert("Program error!"); return; } var t = document.getElementsByClassName("prgline"); var k, s; s = ""; for (i = 1; i < t.length; i++) { k = t[i].childNodes; for (j = 1; j < 7; j++) { s = s + k[j].value + ";"; } s = s.slice(0, -1); s = s + "\n"; } document.getElementById('WProgram').value = s; set_num(); } function set_program () { calc_program(); var server = '/program'; request = new XMLHttpRequest(); request.onreadystatechange = function() { if (this.readyState == 4 && this.status == 200) { var myObj = this.responseText; if (myObj != "OK") { document.getElementById('WProgram').value = myObj; alert("Ok"); } } }; request.open('POST', server, false); let formData = new FormData(document.forms.mainform); request.send(formData); if (request.status != 200) { alert(request.status + ': ' + request.statusText); } return 0; }; function sleep (milliseconds) { var start = new Date().getTime(); for (var i = 0; i < 1e7; i++) { if ((new Date().getTime() - start) > milliseconds) { break; } } }; function setBKCommand () { var cmd = "startbk="; if (document.getElementById('power').value == "Выключить нагрев") { cmd = cmd + "0"; } else { cmd = cmd + "1"; } sendbutton(cmd); } function sendbutton (command) { var server = '/command?' + command; request = new XMLHttpRequest(); request.open('GET', server, false); request.send(); if (request.status != 200) { alert("sendbutton ERROR! " + request.status + ': ' + request.statusText); } sleep(1000); return 0; }; function sendwaterpwm () { var num = document.getElementById('PWM').value; var command = 'watert=' + num; sendbutton(command); //alert( "Ok! Pump speed set " + num); return 0; }; function sendvoltage () { var num = document.getElementById('Voltage').value; if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) { alert("Введите напряжение!"); return 0; } var command = 'voltage=' + num; sendbutton(command); alert("Установлено."); return 0; }; setInterval(loadDoc, 2000); function loadDoc () { var xhttp = new XMLHttpRequest(); xhttp.timeout = 4000; xhttp.onreadystatechange = function() { if (this.readyState == 4 && this.status == 200) { ConnectError(false); var myObj = JSON.parse(this.responseText); document.getElementById('version').innerHTML = myObj.version; document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm; document.getElementById('stm').innerHTML = myObj.stm; document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3); document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3); document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3); document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3); document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3); document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3); document.getElementById('start_pressure').innerHTML = myObj.start_pressure.toFixed(3); document.getElementById('Status').innerHTML = myObj.Status; document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt; document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt; document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode; document.getElementById('current_power_p').innerHTML = myObj.current_power_p; document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl; document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate; document.getElementById('bme_temp').innerHTML = myObj.bme_temp; document.getElementById('heap').innerHTML = myObj.heap; document.getElementById('rssi').innerHTML = myObj.rssi; document.getElementById('fr_bt').innerHTML = myObj.fr_bt; sound_is_on = !!myObj.UseBBuzzer; if (myObj.Lstatus) { if (myObj.Lstatus != "") { document.getElementById('Lstatus').innerHTML = myObj.Lstatus; } } var dt = myObj.PipeTemp - myObj.SteamTemp; document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3); if (myObj.Msg && myObj.Msg !== "") { addMessage(myObj.Msg, myObj.msglvl); } if (myObj.LogMsg && myObj.LogMsg !== "") { console.log(myObj.crnt_tm + "; " + myObj.LogMsg); } if (myObj.WFflowRate === undefined) { document.getElementById('flowsensor').style = 'visibility: hidden; position: fixed;'; } else { document.getElementById('flowsensor').style = ''; } var powerstr; var powerstyle; if (myObj.PowerOn == 1) { powerstr = 'Выключить нагрев'; powerstyle = 'red'; } else { powerstr = 'Включить нагрев'; powerstyle = 'lightgreen'; } document.getElementById('power').value = powerstr; document.getElementById('power').style.backgroundColor = powerstyle; } }; xhttp.onerror = function() { ConnectError(true); }; xhttp.ontimeout = function() { ConnectError(true); }; xhttp.open("GET", "/ajax", true); xhttp.send(); }; function sliderChange () { document.getElementById('PWMt').value = document.getElementById('PWM').value; sendwaterpwm(); } function changetxtpwm () { num = document.getElementById('PWMt').value; if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) { alert("Введите значение PWM!"); return 0; } document.getElementById('PWM').value = num; sliderChange(); } window.onload = function() { headers = document.querySelectorAll("[data-name='spoiler-title']"); headers.forEach(function(item) { item.addEventListener("click", headerClick); slider = document.getElementById('PWM'); slider.addEventListener("change", sliderChange); txt = document.getElementById('PWMt'); txt.value = document.getElementById('PWM').value; }); setPowerUnit(); AddLuaButtons(); }; function run_lua (num) { sendbutton("lua=" + num); }; </script></head><!-- =============================================================================================================== --><body><form action='none' onsubmit='return false' name="mainform" id="mainform"><div class="tab"><input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Режим БК"><input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно"></div><div id="Main" class="tabcontent" style="display: block;"><div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;"><div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold"><div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center"><div>Samovar</div><span id='crnt_tm' style="height: 0; visibility: hidden"></span><div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;"><div>v. </div><div id='version'></div></div></div><div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center"><div id="connection_indicator"><img src="Green.png" style="margin: 0 !important; width: 20px"></div></div><div class="messages_box" style="display: none;" id="messagesBox"><div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='clearMessages()'> [x] очистить </div><div class="messages_array" id="messages"></div></div></div><div style="display: flex; flex-direction: column; align-items: center; font-weight: bold;"> Работа: <span id='stm'></span></div></div><div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;"><div class="container_column" style="flex: 1.1; padding-left: 2em;"><div class="text" style="color: %PipeColor%;"> Т в царге: &nbsp;&nbsp; <span id='PipeTemp' style="font-size: xx-large;"></span> &#176;C </div><div class="text" style="color: %SteamColor%;"> Т пара: &nbsp;&nbsp; <span id='SteamTemp' style="font-size: xx-large;"></span> &#176;C </div><div class="text" style="color: black;"> &#916; температур:&nbsp;&nbsp; <span id='DeltaTemp' style="font-size: xx-large;"></span> &#176;C </div></div><div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;"><div class="text" style="color: %WaterColor%;"> Т воды: &nbsp;&nbsp; <span id='WaterTemp' style="font-size: xx-large;"></span> &#176;C </div><div class="text" style="color: %TankColor%;"> Т в кубе: &nbsp;&nbsp; <span id='TankTemp' style="font-size: xx-large;"></span> &#176;C </div><div class="text" style="color: %ACPColor%;"> Т в ТСА: &nbsp;&nbsp; <span id='ACPTemp' style="font-size: xx-large;"></span> &#176;C </div></div></div><div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;"><span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333"> Статус: <span id='Status'></span></span></div><div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"><div class="text" id='WaterH2'><div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;"><div> Скорость насоса: <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="600" value='%PWM_V%' list="tickmarks" onchange='sliderChange();'><datalist id="tickmarks"><option value="%PWM_LV%"><option value="200"><option value="300"><option value="400"><option value="500"><option value="600"></datalist></div><input id='PWMt' type='text' name='PWMt' value='' onchange='changetxtpwm();'></div></div></div><div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;" id="PWR"><div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;"><div class="text" id='VoltH2'><div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;"><div><span id='set_power_label'></span><input name='Voltage' id='Voltage' type='text' value=''></div><input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button"></div></div><div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;"><span class='dvcs'><span id='power_current'></span><span id='current_power_volt'></span><span id='power_unit_current'></span></span><span class='dvcs'><span id='power_target'></span><span id='target_power_volt'></span><span id='power_unit_target'></span></span><span class='dvcs'> Режим регулятора: <span id='current_power_mode'></span></span><span class='dvcs' id='current_power_line'> Мощность: <span id='current_power_p'></span> Вт </span></div></div></div><div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"><div class="text"> Давление: &nbsp; <span id='bme_pressure'></span> мм рт.ст. </div><div class="text"> В начале: &nbsp; <span id='start_pressure'></span> мм рт.ст. </div></div><div class="container_column" style="margin-bottom: 1em;"><div class="container_row" style="justify-content: space-around; align-items: center;"><input id='power' type='submit' name='power' value='Включить нагрев' onclick='setBKCommand();' class="button"><input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"' class="button"><input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"' class="button"></div></div></div><div id="Prog" class="tabcontent"><div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div><div class="prg" id="prg"></div><div><div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: #F7F7F7"><div class="list-group"><div class="list-group-item list-content spoiler-body"><textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea><div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; font-size: 1.2em; font-weight: bold; background-color: #f2f2f2"> Пример программы отбора: </div></div></div></div></div></div><div id="Other" class="tabcontent"><div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'><span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span><span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span></div><div><span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span></div><div style="visibility: hidden" id="lua_btn"><div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;"><div class="container_column" style="flex: 1.1; padding-left: 2em;"><div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_btn_ln"></div><div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div></div></div></div></div></form></body></html>
+<html>
+
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="/style.css">
+  <title>Самовар</title>
+
+  <script>
+
+    // ==================== CONNECTION STATUS ============================================================
+    var IsOffline = false; //признак обрыва связи
+    var OfflineCouner = 0;
+
+    function ConnectError (Type) {
+      if (Type) {
+        if (!OfflineCouner) { //если это первый обрыв
+          OfflineCouner++
+        } else {
+          document.getElementById('connection_indicator').innerHTML = `
+          <img src="Red_light.gif" style="margin: 0!important; width: 20px">`;
+          addMessage('Обрыв связи!', 0);
+          setTimeout(() => {
+            IsOffline = true;
+            OfflineCouner = 0
+          }, 100);
+        }
+      } else {
+        document.getElementById('connection_indicator').innerHTML = `
+        <img src="Green.png" style="margin: 0 !important; width: 20px">`
+        IsOffline = false;
+        OfflineCouner = 0
+      }
+    };
+
+    // ==================== POWER UNIT ===================================================================
+    function setPowerUnit () {
+      let setPowerLabel;
+      let setPowerButton;
+      let powerCurrent;
+      let powerTarget;
+      let powerUnit;
+      if (pwr_unit === 'P') {
+        setPowerLabel = 'Мощность регулятора: ';
+        setPowerButton = 'Установить мощность';
+        powerCurrent = 'Текущая мощн.: ';
+        powerTarget = 'Целевая мощн.: ';
+        powerUnit = ' Вт';
+        document.getElementById('current_power_line').style = 'visibility: hidden';
+        document.getElementById('PWR').style = '';
+      } else if (pwr_unit === 'V') {
+        setPowerLabel = 'Напряжение регулятора: ';
+        setPowerButton = 'Установить напряжение';
+        powerCurrent = 'Текущее напр.: ';
+        powerTarget = 'Целевое напр.: ';
+        powerUnit = ' V';
+        document.getElementById('current_power_line').style = 'visibility: visible';
+        document.getElementById('PWR').style = '';
+      } else {
+        document.getElementById('PWR').style =
+          'visibility: hidden;position: fixed;';
+      }
+      document.getElementById('set_power_label').innerHTML = setPowerLabel;
+      document.getElementById('SetVoltage').value = setPowerButton;
+      document.getElementById('power_current').innerHTML = powerCurrent;
+      document.getElementById('power_target').innerHTML = powerTarget;
+      document.getElementById('power_unit_current').innerHTML = powerUnit;
+      document.getElementById('power_unit_target').innerHTML = powerUnit;
+    }
+
+    // ==================== LUA BUTTONS ==================================================================
+    function AddLuaButtons () {
+      let btn_list = '%btn_list%';
+      if (btn_list !== '') {
+        let btn_arr = btn_list.split(',');
+        for (z = 0; z < btn_arr.length; z++) {
+          if (btn_arr[z] !== '') {
+            let arr = btn_arr[z].split('|');
+            let btn = document.createElement('input');
+            btn.type = 'submit';
+            btn.name = 'luabtn' + z;
+            btn.value = arr[1];
+            btn.className = 'button';
+            btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
+            document.getElementById('lua_btn_ln').appendChild(btn);
+            document.getElementById('lua_btn').style = 'visibility: visible';
+          }
+        }
+      }
+    }
+
+    // ==================== SOUND & MESSAGES QUEUE =======================================================
+    var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax)
+    var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
+
+    var Messages_Array = []; //текущий массив сообщений
+    var sound_is_playing = false; //звук сейчас восспроизводится
+    var is_ALARM = false; //признак тревоги
+
+    const sound = new Audio('alarm.mp3');
+    sound.loop = true;
+    sound.preload = 'auto';
+    sound.autoplay = false;
+
+    function playSound (play) {
+      if (!sound_is_playing && play) {
+        sound.play();
+        sound_is_playing = true;
+      } else if (sound_is_playing && !play) {
+        sound.pause();
+        sound_is_playing = false;
+      }
+    }
+
+    function addMessage (msg, lvl) {
+      if (IsOffline) {
+        return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
+      } else {
+        let time = new Date().toLocaleTimeString('ru-RU');
+        let style = null;
+        switch (lvl) {
+          case 0:
+            style = 'message_0';
+            is_ALARM = true;
+            break;
+          case 1:
+            style = 'message_1';
+            break;
+          case 2:
+            style = 'message_2';
+            break;
+          default:
+            style = 'message_0';
+            is_ALARM = true;
+            break;
+        }
+        let lastMsg = `
+            <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
+              ${time}  ${msg}
+            </div>`;
+        Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
+        if (Messages_Array.length > 1) {
+          //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
+          previousMsg = Messages_Array[Messages_Array.length - 2];
+          let changed = previousMsg.replace(
+            'onclick=removeLastMessage() style="cursor: pointer"',
+            ''
+          );
+          Messages_Array[Messages_Array.length - 2] = changed;
+        }
+        showMessages();
+      }
+    }
+
+    function removeLastMessage () {
+      //удаляям последнее сообщение
+      Messages_Array.pop();
+      if (Messages_Array.length > 0) {
+        lastMsg = Messages_Array[Messages_Array.length - 1];
+        let changed = lastMsg.replace(
+          '<div align="left"',
+          '<div align="left" onclick=removeLastMessage() style="cursor: pointer"'
+        );
+        Messages_Array[Messages_Array.length - 1] = changed;
+      } else {
+        is_ALARM = false;
+        IsCalmingPause = false;
+      }
+      showMessages();
+    }
+
+    function showMessages () {
+      //показываем обновлённый список сообщений
+      if (Messages_Array.length > 0) {
+        let alarm_is_there = []; //массив false/true для признаков тревоги
+        document.getElementById('messages').innerHTML = '';
+        Messages_Array.forEach(message => {
+          document.getElementById('messages').innerHTML += message;
+          alarm_is_there.push(message.includes('class=message_0'));
+        });
+        document.getElementById('messagesBox').style.display = 'block';
+        let queue = document.getElementById('messagesBox');
+        queue.scrollTop = queue.scrollHeight;
+        function positive (item) {
+          return item === true;
+        }
+        is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
+        if (sound_is_on & is_ALARM) {
+          //играем звук тревоги, если включён
+          playSound(true);
+        } else {
+          playSound(false);
+        }
+      } else {
+        //убираем блок, если очередь пуста
+        document.getElementById('messagesBox').style.display = 'none';
+        playSound(false);
+      }
+    }
+
+    function clearMessages () {
+      Messages_Array = [];
+      showMessages();
+    }
+
+    var pwr_unit = "%pwr_unit%";
+
+    var _lnIdx = 0;
+
+    var headers = document.querySelectorAll("[data-name='spoiler-title']");
+
+    function headerClick () {
+      this.nextElementSibling.classList.toggle("spoiler-body");
+      var s = this.parentNode.getElementsByClassName("spoiler-sign");
+      if (s[0].innerHTML == "[+]") s[0].innerHTML = "[-]";
+      else s[0].innerHTML = "[+]";
+    }
+
+    function openTab (evt, tabName) {
+      var i, tabcontent, tablinks;
+      tabcontent = document.getElementsByClassName("tabcontent");
+      for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+      }
+      tablinks = document.getElementsByClassName("tablinks");
+      for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+      }
+      document.getElementById(tabName).style.display = "block";
+      evt.currentTarget.className += " active";
+      return 0;
+    }
+
+    function check_program (str) {
+      var arrayOfStrings = str.split("\n");
+      var prevcnt = 0;
+      var ret = true;
+      var cnt;
+      for (i = 0; i < arrayOfStrings.length; i++) {
+        var arrayOfDelim = arrayOfStrings[i].split(";");
+        cnt = arrayOfDelim.length;
+        if (cnt == 1 && arrayOfDelim[0] != "" && arrayOfStrings.length == i - 1) ret = false;
+        else if (prevcnt > 0 && cnt > 1) {
+          if (prevcnt != cnt) ret = false;
+        }
+        prevcnt = cnt;
+      }
+      return ret;
+    }
+
+    function calc_program () {
+      if (!check_program(document.getElementById('WProgram').value)) {
+        alert("Program error!");
+        return;
+      }
+      var t = document.getElementsByClassName("prgline");
+      var k, s;
+      s = "";
+      for (i = 1; i < t.length; i++) {
+        k = t[i].childNodes;
+        for (j = 1; j < 7; j++) {
+          s = s + k[j].value + ";";
+        }
+        s = s.slice(0, -1);
+        s = s + "\n";
+      }
+      document.getElementById('WProgram').value = s;
+      set_num();
+    }
+
+    function set_program () {
+      calc_program();
+      var server = '/program';
+      request = new XMLHttpRequest();
+      request.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+          var myObj = this.responseText;
+          if (myObj != "OK") {
+            document.getElementById('WProgram').value = myObj;
+            alert("Ok");
+          }
+        }
+      };
+      request.open('POST', server, false);
+      let formData = new FormData(document.forms.mainform);
+      request.send(formData);
+      if (request.status != 200) {
+        alert(request.status + ': ' + request.statusText);
+      }
+      return 0;
+    };
+
+    function sleep (milliseconds) {
+      var start = new Date().getTime();
+      for (var i = 0; i < 1e7; i++) {
+        if ((new Date().getTime() - start) > milliseconds) {
+          break;
+        }
+      }
+    };
+
+    function setBKCommand () {
+      var cmd = "startbk=";
+      if (document.getElementById('power').value == "Выключить нагрев") {
+        cmd = cmd + "0";
+      } else {
+        cmd = cmd + "1";
+      }
+      sendbutton(cmd);
+    }
+
+    function sendbutton (command) {
+      var server = '/command?' + command;
+      request = new XMLHttpRequest();
+      request.open('GET', server, false);
+      request.send();
+      if (request.status != 200) {
+        alert("sendbutton ERROR! " + request.status + ': ' + request.statusText);
+      }
+      sleep(1000);
+      return 0;
+    };
+
+    function sendwaterpwm () {
+      var num = document.getElementById('PWM').value;
+      var command = 'watert=' + num;
+      sendbutton(command);
+      //alert( "Ok! Pump speed set " + num);
+      return 0;
+    };
+
+    function sendvoltage () {
+      var num = document.getElementById('Voltage').value;
+      if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
+        alert("Введите напряжение!");
+        return 0;
+      }
+      var command = 'voltage=' + num;
+      sendbutton(command);
+      alert("Установлено.");
+      return 0;
+    };
+
+    setInterval(loadDoc, 2000);
+
+    function loadDoc () {
+      var xhttp = new XMLHttpRequest();
+      xhttp.timeout = 4000;
+      xhttp.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+          ConnectError(false);
+          var myObj = JSON.parse(this.responseText);
+
+          document.getElementById('version').innerHTML = myObj.version;
+          document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
+          document.getElementById('stm').innerHTML = myObj.stm;
+          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
+          document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
+          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
+          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
+          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
+          document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
+          document.getElementById('start_pressure').innerHTML = myObj.start_pressure.toFixed(3);
+          document.getElementById('Status').innerHTML = myObj.Status;
+          document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
+          document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
+          document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
+          document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
+          document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
+          document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
+          document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
+          document.getElementById('heap').innerHTML = myObj.heap;
+          document.getElementById('rssi').innerHTML = myObj.rssi;
+          document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
+          sound_is_on = !!myObj.UseBBuzzer;
+
+          if (myObj.Lstatus) {
+            if (myObj.Lstatus != "") {
+              document.getElementById('Lstatus').innerHTML = myObj.Lstatus;
+            }
+          }
+
+          var dt = myObj.PipeTemp - myObj.SteamTemp;
+          document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
+
+          if (myObj.Msg && myObj.Msg !== "") {
+            addMessage(myObj.Msg, myObj.msglvl);
+          }
+
+          if (myObj.LogMsg && myObj.LogMsg !== "") {
+            console.log(myObj.crnt_tm + "; " + myObj.LogMsg);
+          }
+
+          if (myObj.WFflowRate === undefined) {
+            document.getElementById('flowsensor').style = 'visibility: hidden; position: fixed;';
+          } else {
+            document.getElementById('flowsensor').style = '';
+          }
+
+          var powerstr;
+          var powerstyle;
+          if (myObj.PowerOn == 1) {
+            powerstr = 'Выключить нагрев';
+            powerstyle = 'red';
+          } else {
+            powerstr = 'Включить нагрев';
+            powerstyle = 'lightgreen';
+          }
+          document.getElementById('power').value = powerstr;
+          document.getElementById('power').style.backgroundColor = powerstyle;
+
+        }
+      };
+
+      xhttp.onerror = function() {
+        ConnectError(true);
+      };
+      xhttp.ontimeout = function() {
+        ConnectError(true);
+      };
+      xhttp.open("GET", "/ajax", true);
+      xhttp.send();
+    };
+
+    function sliderChange () {
+      document.getElementById('PWMt').value = document.getElementById('PWM').value;
+      sendwaterpwm();
+    }
+
+    function changetxtpwm () {
+      num = document.getElementById('PWMt').value;
+      if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
+        alert("Введите значение PWM!");
+        return 0;
+      }
+      document.getElementById('PWM').value = num;
+      sliderChange();
+    }
+
+    window.onload = function() {
+      headers = document.querySelectorAll("[data-name='spoiler-title']");
+      headers.forEach(function(item) {
+        item.addEventListener("click", headerClick);
+        slider = document.getElementById('PWM');
+        slider.addEventListener("change", sliderChange);
+        txt = document.getElementById('PWMt');
+        txt.value = document.getElementById('PWM').value;
+      });
+
+      setPowerUnit();
+      AddLuaButtons();
+    };
+
+    function run_lua (num) {
+      sendbutton("lua=" + num);
+    };
+
+  </script>
+</head>
+
+
+<!-- =============================================================================================================== -->
+
+<body>
+  
+  <form action='none' onsubmit='return false' name="mainform" id="mainform">
+
+    <div class="tab">
+      <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Режим БК">
+      <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
+    </div>
+
+    <div id="Main" class="tabcontent" style="display: block;">
+
+      <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
+        <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
+          <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
+            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
+            <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
+              <div>v. </div>
+              <div id='version'></div>
+            </div>
+          </div>
+
+          <div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center">
+            <div id="connection_indicator">
+              <img src="Green.png" style="margin: 0 !important; width: 20px">
+            </div>
+          </div>
+
+          <div class="messages_box" style="display: none;" id="messagesBox">
+            <div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='clearMessages()'>
+              [x] очистить
+            </div>
+            <div class="messages_array" id="messages"></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; font-weight: bold;">
+          Работа: <span id='stm'></span>
+        </div>
+      </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+
+        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+          <div class="text" style="color: %PipeColor%;">
+            Т в царге: &nbsp;&nbsp;
+            <span id='PipeTemp' style="font-size: xx-large;"></span>
+            &#176;C
+          </div>
+          <div class="text" style="color: %SteamColor%;">
+            Т пара: &nbsp;&nbsp;
+            <span id='SteamTemp' style="font-size: xx-large;"></span>
+            &#176;C
+          </div>
+          <div class="text" style="color: black;">
+            &#916; температур:&nbsp;&nbsp;
+            <span id='DeltaTemp' style="font-size: xx-large;"></span>
+            &#176;C
+          </div>
+        </div>
+
+        <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
+          <div class="text" style="color: %WaterColor%;">
+            Т воды: &nbsp;&nbsp;
+            <span id='WaterTemp' style="font-size: xx-large;"></span>
+            &#176;C
+          </div>
+          <div class="text" style="color: %TankColor%;">
+            Т в кубе: &nbsp;&nbsp;
+            <span id='TankTemp' style="font-size: xx-large;"></span>
+            &#176;C
+          </div>
+          <div class="text" style="color: %ACPColor%;">
+            Т в ТСА: &nbsp;&nbsp;
+            <span id='ACPTemp' style="font-size: xx-large;"></span>
+            &#176;C
+          </div>
+        </div>
+
+      </div>
+
+      <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
+        <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
+          Статус: <span id='Status'></span>
+        </span>
+      </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="text" id='WaterH2'>
+          <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
+            <div>
+              Скорость насоса:
+              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="600" value='%PWM_V%' list="tickmarks" onchange='sliderChange();'>
+              <datalist id="tickmarks">
+                <option value="%PWM_LV%">
+                <option value="200">
+                <option value="300">
+                <option value="400">
+                <option value="500">
+                <option value="600">
+              </datalist>
+            </div>
+            <input id='PWMt' type='text' name='PWMt' value='' onchange='changetxtpwm();'>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;" id="PWR">
+        <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+          <div class="text" id='VoltH2'>
+            <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
+              <div>
+                <span id='set_power_label'></span>
+                <input name='Voltage' id='Voltage' type='text' value=''>
+              </div>
+              <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
+            </div>
+          </div>
+          <div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;">
+            <span class='dvcs'>
+              <span id='power_current'></span>
+              <span id='current_power_volt'></span>
+              <span id='power_unit_current'></span>
+            </span>
+            <span class='dvcs'>
+              <span id='power_target'></span>
+              <span id='target_power_volt'></span>
+              <span id='power_unit_target'></span>
+            </span>
+            <span class='dvcs'>
+              Режим регулятора: <span id='current_power_mode'></span>
+            </span>
+            <span class='dvcs' id='current_power_line'>
+              Мощность: <span id='current_power_p'></span> Вт
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="text">
+          Давление: &nbsp;
+          <span id='bme_pressure'></span>
+          мм рт.ст.
+        </div>
+        <div class="text">
+          В начале: &nbsp;
+          <span id='start_pressure'></span>
+          мм рт.ст.
+        </div>
+      </div>
+
+      <div class="container_column" style="margin-bottom: 1em;">
+        <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setBKCommand();' class="button">
+          <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"' class="button">
+          <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"' class="button">
+        </div>
+      </div>
+
+    </div>
+
+    <div id="Prog" class="tabcontent">
+      <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div>
+
+      <div class="prg" id="prg"></div>
+
+      <div>
+
+        <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; 
+      background-color: #F7F7F7">
+
+          <div class="list-group">
+            <div class="list-group-item list-content spoiler-body">
+              <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
+              <div style="border: 1px dashed #bbb; padding: 1em; 
+      margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
+      font-size: 1.2em; font-weight: bold; background-color: #f2f2f2">
+                Пример программы отбора:
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+
+    </div>
+
+    <div id="Other" class="tabcontent">
+      <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
+        <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
+        <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
+      </div>
+      <div>
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
+      </div>
+
+      <div style="visibility: hidden" id="lua_btn">
+        <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+          <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+            <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_btn_ln"></div>
+            <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </form>
+</body>
+
+</html>
