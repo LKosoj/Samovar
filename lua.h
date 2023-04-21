@@ -46,6 +46,7 @@ String IRAM_ATTR getValue(String data, char separator, int index);
 String get_lua_script(String fn);
 void IRAM_ATTR set_capacity(byte cap);
 float get_alcohol(float t);
+float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -392,7 +393,9 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var == "boil_temp") {
     a = boil_temp;
   } else if (Var == "alcohol") {
-    a = get_alcohol(TankSensor.avgTemp);
+    float c_temp;  //температура для определения спиртуозности с учетом давления
+    c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
+    a = get_alcohol(c_temp);
   } else if (Var == "alcohol_s") {
     a = alcohol_s;
   } else if (Var == "test_num_val") {
