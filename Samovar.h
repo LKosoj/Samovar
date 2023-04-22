@@ -21,8 +21,6 @@
 #endif
 #endif
 
-//#define USE_WEB_SERIAL                      //использовать библиотеку WebSerial для отладки
-
 #define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
 
 #ifdef USE_LUA
