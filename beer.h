@@ -14,6 +14,8 @@ void create_data();
 void open_valve(bool Val);
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 String get_beer_program();
+void check_mixer_state();
+void set_mixer_state(bool state, bool dir);
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
@@ -51,6 +53,10 @@ void IRAM_ATTR run_beer_program(byte num) {
   } else {
     SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
   }
+  //сбрасываем переменные для мешалки и насоса
+  alarm_c_low_min = 0;  //мешалка вкл
+  alarm_c_min = 0;  //мешалка пауза
+  currentstepcnt = 0; //счетчик циклов мешалки
 }
 
 void IRAM_ATTR beer_finish() {
@@ -108,7 +114,7 @@ void IRAM_ATTR check_alarm_beer() {
   //Если режим Брага
   if (program[ProgramNum].WType == "F") {
     //Если температура меньше целевой - греем, иначе охлаждаем.
-    if  (TankSensor.avgTemp <= program[ProgramNum].Temp - TankSensor.SetTemp) {
+    if (TankSensor.avgTemp <= program[ProgramNum].Temp - TankSensor.SetTemp) {
       if (valve_status) {
         //Закрываем клапан воды
         open_valve(false);
@@ -225,6 +231,84 @@ void IRAM_ATTR check_alarm_beer() {
       run_beer_program(ProgramNum + 1);
     }
   }
+  //Обрабатываем мешалку и насос
+  check_mixer_state();
+}
+
+void check_mixer_state() {
+  if (program[ProgramNum].capacity_num > 0) {
+    //обрабатываем время включения и управляем мешалкой и насосом
+
+    if (alarm_c_min > 0 && alarm_c_min <= millis()) {
+      //завершили паузу мешалки
+      alarm_c_min = 0;
+      alarm_c_low_min = 0;
+      set_mixer_state(false, false);
+    }
+
+    if ((alarm_c_low_min > 0) && (alarm_c_low_min <= millis())) {
+      //выключаем мешалку, если alarm_c_min > millis()
+      alarm_c_low_min = 0;
+      if (alarm_c_min > 0)
+        set_mixer_state(false, false);
+    }
+
+    if (alarm_c_low_min == 0 && alarm_c_min == 0) {
+      //включаем мешалку
+      alarm_c_low_min = millis() + program[ProgramNum].Volume * 60 * 1000;
+      if (program[ProgramNum].Power > 0) alarm_c_min = alarm_c_low_min + program[ProgramNum].Power * 60 * 1000;
+      currentstepcnt++;
+      bool dir = false;
+      if (currentstepcnt % 2 == 0 && program[ProgramNum].Speed < 0) dir = true;
+      set_mixer_state(true, dir);
+    }
+
+  } else {
+    if (mixer_status) {
+      //если мешалка или насос работают, их нужно выключить, так как в этой строке программы они не нужны
+      set_mixer_state(false, false);
+    }
+  }
+}
+
+void set_mixer_state(bool state, bool dir) {
+  mixer_status = state;
+  if (state) {
+    //включаем мешалку
+    if (BitIsSet(program[ProgramNum].capacity_num, 0)) {
+      //включаем реле 2
+      digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
+#ifdef USE_WATER_PUMP
+      //включаем SSD реле
+      pump_pwm.write(1023);
+#endif
+      //включаем I2CStepper шаговик
+      if (use_I2C_dev == 1) {
+        set_stepper_by_time(20, dir, abs(program[ProgramNum].Volume));
+      }
+    }
+    if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
+      //включаем I2CStepper реле 1
+      if (use_I2C_dev == 1 || use_I2C_dev == 2) {
+        set_mixer_pump_target(1);
+      }
+    }
+  } else {
+    //выключаем реле 2
+    digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+#ifdef USE_WATER_PUMP
+    //выключаем SSD реле
+    pump_pwm.write(0);
+#endif
+    //выключаем I2CStepper шаговик
+    if (use_I2C_dev == 1) {
+      set_stepper_by_time(0, 0, 0);
+    }
+    //выключаем I2CStepper реле 1
+    if (use_I2C_dev == 1 || use_I2C_dev == 2) {
+      set_mixer_pump_target(0);
+    }
+  }
 }
 
 void set_heater_state(float setpoint, float temp) {
@@ -336,7 +420,8 @@ String get_beer_program() {
     } else {
       Str += program[i].WType + ";";
       Str += (String)program[i].Temp + ";";
-      Str += (String)(int)program[i].Time + "\n";
+      Str += (String)(int)program[i].Time + ";";
+      Str += (String)program[i].capacity_num + "^" + program[i].Speed + "^" + program[i].Volume + "^" + program[i].Power + "\n";
     }
   }
   return Str;
@@ -347,13 +432,20 @@ void set_beer_program(String WProgram) {
   char c[500];
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
+  //String MeshTemplate;
   int i = 0;
   while (pair != NULL and i < CAPACITY_NUM * 2) {
     program[i].WType = pair;
     pair = strtok(NULL, ";");
     program[i].Temp = atof(pair);
-    pair = strtok(NULL, "\n");
+    pair = strtok(NULL, ";");
     program[i].Time = atof(pair);
+    pair = strtok(NULL, "\n");
+    //разберем шаблон для насоса/мешалки по частям
+    program[i].capacity_num = getValue(pair, '^', 0).toInt();  //Тип устройства - 1 - мешалка, 2 - насос, 3 - мешалка и насос одновременно
+    program[i].Speed = getValue(pair, '^', 1).toInt();         //Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения
+    program[i].Volume = getValue(pair, '^', 2).toInt();        //Время включения в мин
+    program[i].Power = getValue(pair, '^', 3).toInt();         //Время выключения в мин
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
