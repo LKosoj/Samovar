@@ -52,7 +52,7 @@ end
 
 --Обрабатываем логику переключения емкостей
 if b_temp > 0 then
-setLuaStatus(string.format("Текущая спиртуозность  = %.2f", alcohol))
+setLuaStatus(string.format("Текущая спиртуозность  = %.2f; Т начала кипения = %.2f", alcohol, b_temp))
   if (use_temp == 1) then
   --логика по температуре
     if ((capacity_num + 0 == 0) and ((b_temp + t_delta1) <= TankTemp)) then
