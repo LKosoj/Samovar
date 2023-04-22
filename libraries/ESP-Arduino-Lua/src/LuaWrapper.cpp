@@ -30,6 +30,7 @@ LuaWrapper::LuaWrapper() {
   luaopen_string(_state);
   luaopen_math(_state);
   lua_register(_state, "print", lua_wrapper_print);
+  luaL_openlibs(_state);
 }
 
 String LuaWrapper::Lua_dostring(const String *script) {
