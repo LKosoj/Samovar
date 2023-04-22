@@ -390,6 +390,12 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = program[ProgramNum].Time;
   } else if (Var == "program_capacity_num") {
     a = program[ProgramNum].capacity_num;
+  } else if (Var == "capacity_num") {
+    a = capacity_num;
+  } else if (Var == "target_power_volt") {
+    a = target_power_volt;
+  } else if (Var == "PowerOn") {
+    a = PowerOn;
   } else if (Var == "boil_temp") {
     a = boil_temp;
   } else if (Var == "alcohol") {
