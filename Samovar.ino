@@ -14,6 +14,8 @@
 #include "esp32/rom/rtc.h"
 #include <driver/touch_sensor.h>
 #include <esp32-hal-cpu.h>
+#include <esp_heap_caps.h>
+#include <esp_heap_caps_init.h>
 
 #include <driver/dac.h>
 
@@ -98,7 +100,7 @@ PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
 #endif
 
 #include "mod_rmvk.h"
-#include "font.h"
+//#include "font.h"
 #include "logic.h"
 
 #ifdef USE_UPDATE_OTA
@@ -582,6 +584,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 }
 
 void setup() {
+  Serial.begin(115200);
 #ifdef __SAMOVAR_NOT_USE_WDT
   esp_task_wdt_init(1, false);
   esp_task_wdt_init(2, false);
@@ -590,9 +593,10 @@ void setup() {
   disableCore0WDT();
   disableCore1WDT();
 #endif
-  delay(2000);
+  heap_caps_enable_nonos_stack_heaps();
 
-  Serial.begin(115200);
+  delay(500);
+
 #ifdef __SAMOVAR_DEBUG
   esp_log_level_set("*", ESP_LOG_VERBOSE);
   Serial.println("Using ESP object:");
