@@ -104,11 +104,13 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
 
-  //    SteamSensor.avgTemp += 0.1;
-  //    PipeSensor.avgTemp = 50;
-  //    WaterSensor.avgTemp = 50;
-  //    TankSensor.avgTemp = 75;
-  //    return;
+//      SteamSensor.avgTemp += 0.1;
+//      PipeSensor.avgTemp = 50;
+//      WaterSensor.avgTemp += 0.1;
+//      if (WaterSensor.avgTemp > 4) WaterSensor.avgTemp = 24; 
+//      if (TankSensor.avgTemp < 90) TankSensor.avgTemp = 90;
+//      else TankSensor.avgTemp+=0.01;
+//      return;
   float ss, ps, ws, ts, acp;
   ss = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
   ps = sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
