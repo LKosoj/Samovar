@@ -11,13 +11,21 @@
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
+#if defined(ARDUINO_ESP32S3_DEV)
+#else
 #include "esp32/rom/rtc.h"
+#endif
+
 #include <driver/touch_sensor.h>
 #include <esp32-hal-cpu.h>
 #include <esp_heap_caps.h>
 #include <esp_heap_caps_init.h>
 
+#if defined(ARDUINO_ESP32S3_DEV)
+//
+#else
 #include <driver/dac.h>
+#endif
 
 #include <Wire.h>
 #include <OneWire.h>
@@ -614,7 +622,10 @@ void setup() {
   //  dac_output_disable(DAC_CHANNEL_2);
   //  touch_pad_isr_deregister();
   //  touch_pad_deinit();
-  touch_pad_intr_disable();
+#if defined(ARDUINO_ESP32S3_DEV)
+#else
+touch_pad_intr_disable();
+#endif
 
   xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
   xSemaphoreGive(xMsgSemaphore);
