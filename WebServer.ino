@@ -866,7 +866,7 @@ void get_old_data_log(AsyncWebServerRequest *request) {
 
 void get_web_file(String fn) {
   asyncHTTPrequest request;
-  //request.setDebug(true);
+  request.setDebug(true);
   request.setTimeout(10); //Таймаут три секунды
   vTaskDelay(10 / portTICK_PERIOD_MS);
   request.open(String("GET").c_str(), fn.c_str());  //URL
@@ -883,6 +883,7 @@ void get_web_file(String fn) {
     File wf = SPIFFS.open("/test.txt", FILE_WRITE);
     wf.print(request.responseText());
     wf.close();
+    Serial.println(request.responseText());
     Serial.println("Done");
   }
   else {
