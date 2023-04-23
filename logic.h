@@ -1208,9 +1208,10 @@ void IRAM_ATTR set_power_mode(String Mode) {
       xSemaphoreGive( xSemaphoreAVR );
     }
 #else
+    RMVK_set_on(1);
+    vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
     RMVK_set_out_voltge(MAX_VOLTAGE);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    RMVK_set_out_voltge(MAX_VOLTAGE);
+    vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
 #endif
   }
 #else
