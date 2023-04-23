@@ -47,6 +47,8 @@ String get_lua_script(String fn);
 void IRAM_ATTR set_capacity(byte cap);
 float get_alcohol(float t);
 float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
+bool set_mixer_pump_target(uint8_t on);
+bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
