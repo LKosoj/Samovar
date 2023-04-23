@@ -899,9 +899,9 @@ String get_web_file(String fn, get_web_type type) {
   while (request.readyState() < 1) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
   }
-  vTaskDelay(120 / portTICK_PERIOD_MS);
+  vTaskDelay(150 / portTICK_PERIOD_MS);
   request.send();
-  vTaskDelay(120 / portTICK_PERIOD_MS);
+  vTaskDelay(150 / portTICK_PERIOD_MS);
   while (request.readyState() != 4) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
   }
