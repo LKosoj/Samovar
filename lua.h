@@ -623,9 +623,9 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
     RequestType = "GET";
     request.open(RequestType.c_str(), Var.c_str());  //URL
     while (request.readyState() < 1) {
-      vTaskDelay(5 / portTICK_PERIOD_MS);
+      vTaskDelay(25 / portTICK_PERIOD_MS);
     }
-    vTaskDelay(65 / portTICK_PERIOD_MS);
+    vTaskDelay(150 / portTICK_PERIOD_MS);
     request.send();
   } else {
     String ContentType;
@@ -654,16 +654,19 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
 
     request.open(RequestType.c_str(), Var.c_str());  //URL
     while (request.readyState() < 1) {
-      vTaskDelay(5 / portTICK_PERIOD_MS);
+      vTaskDelay(25 / portTICK_PERIOD_MS);
     }
-    vTaskDelay(65 / portTICK_PERIOD_MS);
-    request.setReqHeader(String("Content-Type").c_str(), getValue(ContentType, ':', 1).c_str());
+    vTaskDelay(150 / portTICK_PERIOD_MS);
+    String ct = "Content-Type";
+    request.setReqHeader(ct.c_str(), getValue(ContentType, ':', 1).c_str());
     request.send(Body);
   }
 
+  vTaskDelay(150 / portTICK_PERIOD_MS);
   while (request.readyState() != 4) {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(25 / portTICK_PERIOD_MS);
   }
+  vTaskDelay(60 / portTICK_PERIOD_MS);
   if (request.responseHTTPcode() >= 0) {
     payload = request.responseText();
   }
@@ -813,7 +816,7 @@ void lua_init() {
   xTaskCreatePinnedToCore(
     do_lua_script,  /* Function to implement the task */
     "do_lua_script", /* Name of the task */
-    3800,             /* Stack size in words */
+    4400,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask, /* Task handle. */

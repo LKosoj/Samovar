@@ -286,7 +286,9 @@ void set_mixer_state(bool state, bool dir) {
 #endif
       //включаем I2CStepper шаговик
       if (use_I2C_dev == 1) {
-        bool b = set_stepper_by_time(20, dir, abs(program[ProgramNum].Volume));
+        int tm = abs(program[ProgramNum].Volume);
+        if (tm == 0) tm = 600;
+        bool b = set_stepper_by_time(20, dir, tm);
       }
     }
     if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
@@ -497,10 +499,5 @@ void FinishAutoTune() {
 }
 
 void IRAM_ATTR set_mixer(bool On) {
-  mixer_status = On;
-  if (On) {
-    digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
-  } else {
-    digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-  }
+  set_mixer_state(On, false);
 }
