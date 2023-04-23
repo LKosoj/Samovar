@@ -103,9 +103,8 @@ String formatBytes(size_t bytes) {
 
 // Инициализация FFS
 void FS_init(void) {
-  SPIFFS.begin();
+  SPIFFS.begin(true);
   total_byte = SPIFFS.totalBytes();
-  used_byte = SPIFFS.usedBytes();
 
   //  {
   //    File dir = SPIFFS.open("/");
@@ -297,7 +296,7 @@ String IRAM_ATTR append_data() {
       }
       vTaskDelay(10 / portTICK_PERIOD_MS);
       if (total_byte - used_byte < 50) {
-        SendMsg("Заканчивается память! Всего:" + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
+        SendMsg("Заканчивается память! Всего: " + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
       }
     }
 

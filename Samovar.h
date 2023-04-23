@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("5.27")
+#define SAMOVAR_VERSION F("6.0")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -304,8 +304,11 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 #endif
 
 #include <FS.h>
+
+#define USE_LittleFS
+
 #ifdef USE_LittleFS
-#pragma message ("USE LITTLEFS")
+//#pragma message ("USE LITTLEFS")
 #ifdef ESP_ARDUINO_VERSION
 #include <LittleFS.h>
 #define SPIFFS LittleFS
@@ -438,6 +441,8 @@ volatile SAMOVAR_MODE Samovar_CR_Mode;
 
 enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100};
 volatile MESSAGE_TYPE msg_type;
+
+enum get_web_type {GET_CONTENT, SAVE_FILE_OVERRIDE, SAVE_FILE_IF_NOT_EXIST};
 
 struct SetupEEPROM {
   byte flag;                                                   //Флаг для записи в память
@@ -610,8 +615,8 @@ volatile float test_num_val;                                    // Тестов�
 String test_str_val;                                            // Тестовое строковое значение
 String Lua_status;                                              // Статус Lua
 bool is_reboot = false;                                         // Признак перезагрузки
-uint16_t total_byte;                                            // Доступно байт на файловой системе
-uint16_t used_byte;                                             // Использовано байт на файловой системе
+uint32_t total_byte;                                            // Доступно байт на файловой системе
+uint32_t used_byte;                                             // Использовано байт на файловой системе
 byte use_I2C_dev;                                               // Использовать Nano, подключенную по I2C для управления шаговым двигателем мешалки и насосом (основное назначение - пиво)
 
 volatile bool is_self_test;                                     // Находимся в режиме самотестирования

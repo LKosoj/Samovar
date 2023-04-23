@@ -962,6 +962,7 @@ touch_pad_intr_disable();
     use_I2C_dev = 2;
     Serial.println("I2C Stepper as Pump");
   }
+  used_byte = SPIFFS.usedBytes();
 }
 
 void loop() {

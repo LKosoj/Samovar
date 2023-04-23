@@ -759,7 +759,7 @@ void IRAM_ATTR check_alarm() {
     //началось кипение, запоминаем Т кипения
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
-    
+
     float c_temp;  //температура для определения спиртуозности с учетом давления
     c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
 
@@ -889,11 +889,11 @@ void IRAM_ATTR set_power(bool On) {
   }
 }
 
-float get_alcohol(float t){
-  float k,r;
+float get_alcohol(float t) {
+  float k, r;
   k = (t - 89) / 6.49;
 
-  r = 19.26 - k * (18.32 - k * (7.81 - k * (1.77 - k * (4.81 - k * (2.95 + k * (1.43 - k *(0.8 + 0.05 * k) )))))); // формула Макеода для вычисления крепости
+  r = 19.26 - k * (18.32 - k * (7.81 - k * (1.77 - k * (4.81 - k * (2.95 + k * (1.43 - k * (0.8 + 0.05 * k) )))))); // формула Макеода для вычисления крепости
   r = float (round (r * 10)) / 10; // округляем до одного знака после запятой
   return r;
 }
@@ -1084,6 +1084,8 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
       current_power_volt = RMVK_get_out_voltge();
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       v = RMVK_get_store_out_voltge();
+      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
+      rmvk.on = RMVK_get_state() > 0;
       if (v != 0) {
         target_power_volt = v;
       }

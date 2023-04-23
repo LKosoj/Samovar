@@ -13,7 +13,8 @@ String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 void start_self_test(void);
 void stop_self_test(void);
-void get_web_file(String fn);
+String get_web_file(String fn, get_web_type type);
+void get_web_interface();
 
 #ifdef USE_LUA
 void start_lua_script();
@@ -189,14 +190,13 @@ void WebServerInit(void) {
       Serial.printf("BodyEnd: %u\n", total);
   });
 
-  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*"); // CORS
+  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");  // CORS
   server.begin();
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");
 #endif
 
-  //  get_web_file("http://worldtimeapi.org/api/timezone/Europe/London.txt");
-
+  get_web_interface();
 }
 
 String indexKeyProcessor(const String &var) {
@@ -214,33 +214,26 @@ String indexKeyProcessor(const String &var) {
   else if (var == "SteamHide") {
     if (SteamSensor.avgTemp > 0) return "false";
     else return "true";
-  }
-  else if (var == "PipeHide") {
+  } else if (var == "PipeHide") {
     if (PipeSensor.avgTemp > 0) return "false";
     else return "true";
-  }
-  else if (var == "WaterHide") {
+  } else if (var == "WaterHide") {
     if (WaterSensor.avgTemp > 0) return "false";
     else return "true";
-  }
-  else if (var == "TankHide") {
+  } else if (var == "TankHide") {
     if (TankSensor.avgTemp > 0) return "false";
     else return "true";
-  }
-  else if (var == "PressureHide") {
+  } else if (var == "PressureHide") {
     if (bme_pressure > 0) return "false";
     else return "true";
-  }
-  else if (var == "ProgNumHide") {
+  } else if (var == "ProgNumHide") {
     if (ProgramNum > 0) return "false";
     else return "true";
-  }
-  else if (var == "WProgram") {
+  } else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else
       return get_program(CAPACITY_NUM * 2);
-  }
-  else if (var == "Descr") {
+  } else if (var == "Descr") {
     return SessionDescription;
   } else if (var == "videourl")
     return (String)SamSetup.videourl;
@@ -268,120 +261,95 @@ String setupKeyProcessor(const String &var) {
   if (var == "DeltaSteamTemp") {
     s = format_float(SamSetup.DeltaSteamTemp, 3);
     return s;
-  }
-  else if (var == "DeltaPipeTemp") {
+  } else if (var == "DeltaPipeTemp") {
     s = format_float(SamSetup.DeltaPipeTemp, 3);
     return s;
-  }
-  else if (var == "DeltaWaterTemp") {
+  } else if (var == "DeltaWaterTemp") {
     s = format_float(SamSetup.DeltaWaterTemp, 3);
     return s;
-  }
-  else if (var == "DeltaTankTemp") {
+  } else if (var == "DeltaTankTemp") {
     s = format_float(SamSetup.DeltaTankTemp, 3);
     return s;
-  }
-  else if (var == "DeltaACPTemp") {
+  } else if (var == "DeltaACPTemp") {
     s = format_float(SamSetup.DeltaACPTemp, 3);
     return s;
-  }
-  else if (var == "SetSteamTemp") {
+  } else if (var == "SetSteamTemp") {
     s = format_float(SamSetup.SetSteamTemp, 3);
     return s;
-  }
-  else if (var == "SetPipeTemp") {
+  } else if (var == "SetPipeTemp") {
     if (isnan(SamSetup.SetPipeTemp)) {
       SamSetup.SetPipeTemp = 0;
     }
     s = format_float(SamSetup.SetPipeTemp, 3);
     return s;
-  }
-  else if (var == "SetWaterTemp") {
+  } else if (var == "SetWaterTemp") {
     if (isnan(SamSetup.SetWaterTemp)) {
       SamSetup.SetWaterTemp = 0;
     }
     s = format_float(SamSetup.SetWaterTemp, 3);
     return s;
-  }
-  else if (var == "SetTankTemp") {
+  } else if (var == "SetTankTemp") {
     if (isnan(SamSetup.SetTankTemp)) {
       SamSetup.SetTankTemp = 0;
     }
     s = format_float(SamSetup.SetTankTemp, 3);
     return s;
-  }
-  else if (var == "SetACPTemp") {
+  } else if (var == "SetACPTemp") {
     if (isnan(SamSetup.SetACPTemp)) {
       SamSetup.SetACPTemp = 0;
     }
     s = format_float(SamSetup.SetACPTemp, 3);
     return s;
-  }
-  else if (var == "StepperStepMl") {
+  } else if (var == "StepperStepMl") {
     s = SamSetup.StepperStepMl;
     return s;
-  }
-  else if (var == "WProgram") {
+  } else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else
       return get_program(CAPACITY_NUM * 2);
   } else if (var == "Kp") {
     s = format_float(SamSetup.Kp, 3);
     return s;
-  }
-  else if (var == "Ki") {
+  } else if (var == "Ki") {
     s = format_float(SamSetup.Ki, 3);
     return s;
-  }
-  else if (var == "Kd") {
+  } else if (var == "Kd") {
     s = format_float(SamSetup.Kd, 3);
     return s;
-  }
-  else if (var == "StbVoltage") {
+  } else if (var == "StbVoltage") {
     s = SamSetup.StbVoltage;
     return s;
-  }
-  else if (var == "SteamDelay") {
+  } else if (var == "SteamDelay") {
     s = SamSetup.SteamDelay;
     return s;
-  }
-  else if (var == "PipeDelay") {
+  } else if (var == "PipeDelay") {
     s = SamSetup.PipeDelay;
     return s;
-  }
-  else if (var == "WaterDelay") {
+  } else if (var == "WaterDelay") {
     s = SamSetup.WaterDelay;
     return s;
-  }
-  else if (var == "TankDelay") {
+  } else if (var == "TankDelay") {
     s = SamSetup.TankDelay;
     return s;
-  }
-  else if (var == "ACPDelay") {
+  } else if (var == "ACPDelay") {
     s = SamSetup.ACPDelay;
     return s;
-  }
-  else if (var == "TimeZone") {
+  } else if (var == "TimeZone") {
     s = SamSetup.TimeZone;
     return s;
-  }
-  else if (var == "LogPeriod") {
+  } else if (var == "LogPeriod") {
     s = SamSetup.LogPeriod;
     return s;
-  }
-  else if (var == "HeaterR") {
+  } else if (var == "HeaterR") {
     s = format_float(SamSetup.HeaterResistant, 3);
     return s;
-  }
-  else if (var == "videourl") {
+  } else if (var == "videourl") {
     s = SamSetup.videourl;
     return s;
-  }
-  else if (var == "blynkauth") {
+  } else if (var == "blynkauth") {
     s = SamSetup.blynkauth;
     return s;
-  }
-  else if (var == "Checked") {
+  } else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else
       return "";
@@ -412,32 +380,25 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "autospeed") {
     s = SamSetup.autospeed;
     return s;
-  }
-  else if (var == "DistTemp") {
+  } else if (var == "DistTemp") {
     s = format_float(SamSetup.DistTemp, 3);
     return s;
-  }
-  else if (var == "SteamColor") {
+  } else if (var == "SteamColor") {
     s = SamSetup.SteamColor;
     return s;
-  }
-  else if (var == "PipeColor") {
+  } else if (var == "PipeColor") {
     s = SamSetup.PipeColor;
     return s;
-  }
-  else if (var == "WaterColor") {
+  } else if (var == "WaterColor") {
     s = SamSetup.WaterColor;
     return s;
-  }
-  else if (var == "TankColor") {
+  } else if (var == "TankColor") {
     s = SamSetup.TankColor;
     return s;
-  }
-  else if (var == "ACPColor") {
+  } else if (var == "ACPColor") {
     s = SamSetup.ACPColor;
     return s;
-  }
-  else if (var == "RECT" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE)
+  } else if (var == "RECT" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE)
     return "selected";
   else if (var == "DIST" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_DISTILLATION_MODE)
     return "selected";
@@ -864,30 +825,109 @@ void get_old_data_log(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
-void get_web_file(String fn) {
+void get_web_interface() {
+  String version;
+  String local_version;
+  String s = "";
+
+  version = get_web_file("version.txt", GET_CONTENT);
+  if (version == "<ERR>") return;
+  
+  Serial.print("WEB interface version = ");
+  Serial.println(version);
+
+  File fn = SPIFFS.open("/version.txt", FILE_READ);
+  if (fn) {
+    local_version = fn.readStringUntil('\n');
+    fn.close();
+  }
+  Serial.print("Local interface version = ");
+  Serial.println(local_version);
+  if (version != local_version) {
+    s += get_web_file("Green.png", SAVE_FILE_OVERRIDE);
+    s += get_web_file("Red_light.gif", SAVE_FILE_OVERRIDE);
+    s += get_web_file("alarm.mp3", SAVE_FILE_OVERRIDE);
+    s += get_web_file("arrow.png", SAVE_FILE_OVERRIDE);
+    s += get_web_file("favicon.ico", SAVE_FILE_OVERRIDE);
+    s += get_web_file("minus.png", SAVE_FILE_OVERRIDE);
+
+    s += get_web_file("style.css", SAVE_FILE_OVERRIDE);
+
+    s += get_web_file("beer.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("bk.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("brewxml.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("calibrate.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("chart.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("distiller.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("index.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("program.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("setup.htm", SAVE_FILE_OVERRIDE);
+
+    s += get_web_file("beer.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("bk.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("dist.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("init.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("rectificat.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("script.lua", SAVE_FILE_IF_NOT_EXIST);
+
+    s += get_web_file("program_fruit.txt", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("program_shugar.txt", SAVE_FILE_IF_NOT_EXIST);
+
+    if (s == "") {
+      s = get_web_file("version.txt", SAVE_FILE_OVERRIDE);
+    }
+  }
+}
+
+String get_web_file(String fn, get_web_type type) {
+  if (type == SAVE_FILE_IF_NOT_EXIST && SPIFFS.exists("/" + fn)) {
+    Serial.println("File " + fn + " already exist.");
+    return "";
+  }
   asyncHTTPrequest request;
-  request.setDebug(true);
-  request.setTimeout(10); //Таймаут три секунды
-  vTaskDelay(10 / portTICK_PERIOD_MS);
-  request.open(String("GET").c_str(), fn.c_str());  //URL
+  String command = "GET";
+  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn;
+  Serial.print("url = ");
+  Serial.println(url);
+  request.setDebug(false);
+  request.setTimeout(3);                      //Таймаут три секунды
+  request.open(command.c_str(), url.c_str());  //URL
   while (request.readyState() < 1) {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(25 / portTICK_PERIOD_MS);
   }
-  vTaskDelay(65 / portTICK_PERIOD_MS);
+  vTaskDelay(120 / portTICK_PERIOD_MS);
   request.send();
+  vTaskDelay(120 / portTICK_PERIOD_MS);
   while (request.readyState() != 4) {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(25 / portTICK_PERIOD_MS);
   }
+  vTaskDelay(60 / portTICK_PERIOD_MS);
   if (request.responseHTTPcode() >= 0) {
-    //Serial.println(request.responseHTTPcode());
-    File wf = SPIFFS.open("/test.txt", FILE_WRITE);
-    wf.print(request.responseText());
-    wf.close();
-    Serial.println(request.responseText());
+    if (request.responseHTTPcode() != 200) {
+      Serial.print("responseHTTPcode = ");
+      Serial.println(request.responseHTTPcode());
+      Serial.println("Content " + fn + " download error");
+      return "<ERR>";
+    }
+    if (type == GET_CONTENT) {
+      String s = String("") + request.responseText() + "";
+      return s;
+    } else {
+      File wf = SPIFFS.open("/" + fn, FILE_WRITE);
+      wf.print(request.responseText());
+      wf.close();
+      //Serial.print("responseText = ");
+      //Serial.println(s);
+    }
     Serial.println("Done");
-  }
-  else {
+  } else {
     Serial.println("error");
     Serial.println(request.responseHTTPcode());
+    return "<ERR>";
   }
+  return "";
 }

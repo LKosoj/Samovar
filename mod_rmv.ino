@@ -164,6 +164,6 @@ void RMVK_init(void) {
 
   xSemaphore = xSemaphoreCreateBinaryStatic( &xSemaphoreBuffer );
   xSemaphoreGive( xSemaphore );
-  rmvk_read();
   RMVK_set_on(0);
+  rmvk_read();
 }
