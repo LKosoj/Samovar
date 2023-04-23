@@ -16,6 +16,8 @@ void SendMsg(String m, MESSAGE_TYPE msg_type);
 String get_beer_program();
 void check_mixer_state();
 void set_mixer_state(bool state, bool dir);
+bool set_mixer_pump_target(uint8_t on);
+bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
@@ -284,13 +286,13 @@ void set_mixer_state(bool state, bool dir) {
 #endif
       //включаем I2CStepper шаговик
       if (use_I2C_dev == 1) {
-        set_stepper_by_time(20, dir, abs(program[ProgramNum].Volume));
+        bool b = set_stepper_by_time(20, dir, abs(program[ProgramNum].Volume));
       }
     }
     if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
       //включаем I2CStepper реле 1
       if (use_I2C_dev == 1 || use_I2C_dev == 2) {
-        set_mixer_pump_target(1);
+        bool b = set_mixer_pump_target(1);
       }
     }
   } else {
@@ -302,11 +304,11 @@ void set_mixer_state(bool state, bool dir) {
 #endif
     //выключаем I2CStepper шаговик
     if (use_I2C_dev == 1) {
-      set_stepper_by_time(0, 0, 0);
+      bool b = set_stepper_by_time(0, 0, 0);
     }
     //выключаем I2CStepper реле 1
     if (use_I2C_dev == 1 || use_I2C_dev == 2) {
-      set_mixer_pump_target(0);
+      bool b = set_mixer_pump_target(0);
     }
   }
 }
