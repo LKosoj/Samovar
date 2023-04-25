@@ -113,6 +113,7 @@ void set_alarm() {
 
 void IRAM_ATTR withdrawal(void) {
   //Определяем, что необходимо сменить режим работы
+  //По завершению паузы
   if (program_Pause) {
     if (millis() >= t_min) {
       t_min = 0;
@@ -121,10 +122,24 @@ void IRAM_ATTR withdrawal(void) {
     return;
   }
 
+  //По достижению шаговика цели
   CurrrentStepps = stepper.getCurrent();
 
   if (TargetStepps == CurrrentStepps && TargetStepps != 0 && (startval == 1 || startval == 2)) {
     menu_samovar_start();
+  }
+
+  //По превышению температуры в программе
+  if (program[ProgramNum].Temp != 0) {
+    if (program[ProgramNum].Temp > 0 && program[ProgramNum].Temp < 20){
+      if (SteamSensor.avgTemp > (program[ProgramNum].Temp + SteamSensor.StartProgTemp)) {
+        menu_samovar_start();
+      }
+    } else {
+      if (SteamSensor.avgTemp > program[ProgramNum].Temp) {
+        menu_samovar_start();
+      }
+    }
   }
 
   float c_temp;  //стартовая температура отбора тела с учетом корректировки от давления или без
@@ -446,6 +461,13 @@ void IRAM_ATTR run_program(byte num) {
   program_Wait = false;
   PauseOn = false;
   pause_withdrawal(false);
+
+  //запоминаем текущие значения температур
+  SteamSensor.StartProgTemp = SteamSensor.avgTemp;
+  PipeSensor.StartProgTemp = PipeSensor.avgTemp;
+  WaterSensor.StartProgTemp = WaterSensor.avgTemp;
+  TankSensor.StartProgTemp = TankSensor.avgTemp;
+  
   if (SamSetup.ChangeProgramBuzzer) {
     set_buzzer(true);
   }
