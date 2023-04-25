@@ -23,10 +23,6 @@
 
 #define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
 
-#ifdef USE_LUA
-//#undef USE_UPDATE_OTA
-#endif
-
 #ifndef SAM_NO_BEER_PRG
 #define SAM_BEER_PRG
 #endif
