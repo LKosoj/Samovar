@@ -61,7 +61,6 @@ void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
 
-  //  server.serveStatic("/style.css", SPIFFS, "/style.css");
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest * request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css");
     response->addHeader("Cache-Control", "max-age=5000");
@@ -93,20 +92,15 @@ void WebServerInit(void) {
     response->addHeader("Cache-Control", "max-age=644800");
     request->send(response);
   });
-  server.on("/alarm.mp3", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/alarm.mp3", "audio/mpeg", false);
-    response->addHeader("Cache-Control", "max-age=594800");
-    response->addHeader("ETag", "samalarm");
-    request->send(response);
-  });
 
-  //  server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
-
-  //  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
-  //  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
-  //  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
-  //  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
-  //  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
+//  server.serveStatic("/style.css", SPIFFS, "/style.css");
+//  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
+//  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
+//  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
+//  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
+//  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
+  
+  server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
   server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
   server.serveStatic("/prg.csv", SPIFFS, "/prg.csv");
@@ -847,9 +841,9 @@ void get_web_interface() {
     s += get_web_file("Green.png", SAVE_FILE_OVERRIDE);
     s += get_web_file("Red_light.gif", SAVE_FILE_OVERRIDE);
     s += get_web_file("alarm.mp3", SAVE_FILE_OVERRIDE);
-    s += get_web_file("arrow.png", SAVE_FILE_OVERRIDE);
     s += get_web_file("favicon.ico", SAVE_FILE_OVERRIDE);
     s += get_web_file("minus.png", SAVE_FILE_OVERRIDE);
+    s += get_web_file("plus.png", SAVE_FILE_OVERRIDE);
 
     s += get_web_file("style.css", SAVE_FILE_OVERRIDE);
 
