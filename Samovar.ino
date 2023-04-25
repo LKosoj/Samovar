@@ -669,7 +669,7 @@ touch_pad_intr_disable();
   xTaskCreatePinnedToCore(
     taskButton,      /* Function to implement the task */
     "taskButton",    /* Name of the task */
-    950,            /* Stack size in words */
+    1150,            /* Stack size in words */
     NULL,            /* Task input parameter */
     1,               /* Priority of the task */
     &SysTickerButton, /* Task handle. */
