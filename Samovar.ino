@@ -624,7 +624,7 @@ void setup() {
   //  touch_pad_deinit();
 #if defined(ARDUINO_ESP32S3_DEV)
 #else
-touch_pad_intr_disable();
+  touch_pad_intr_disable();
 #endif
 
   xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
@@ -818,7 +818,15 @@ touch_pad_intr_disable();
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
   ArduinoOTA.onStart([]() {
-    events.send(("Update Start"), "ota");
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH)
+      type = "Sketch";
+    else { // U_SPIFFS 
+      type = "Filesystem";
+      SPIFFS.end();
+    }
+    type = type + " update start";
+    events.send(type.c_str(), "ota");
   });
   ArduinoOTA.onEnd([]() {
     events.send(("Update End"), "ota");
@@ -948,8 +956,8 @@ touch_pad_intr_disable();
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   writeString("                  ", 3);
   writeString("      Started     ", 4);
-//  Serial.print("CPU Frequency is: ");
-//  Serial.println(getCpuFrequencyMhz());
+  //  Serial.print("CPU Frequency is: ");
+  //  Serial.println(getCpuFrequencyMhz());
   Serial.println("Samovar ready");
   //Serial.print("Size = ");
   //Serial.println(sizeof(SamSetup));
@@ -1184,7 +1192,7 @@ void getjson(void) {
 
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE) {
     String pt = "";
-    if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)){
+    if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
       pt = program[ProgramNum].WType;
     }
     jsonstr += "\"PrgType\":\""; jsonstr += pt; jsonstr += "\"";
