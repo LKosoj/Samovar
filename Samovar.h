@@ -507,6 +507,8 @@ struct DSSensor {
   float PrevTemp;                                              //Предыдущая температура
   float Start_Pressure;                                        //Стартовое давление при начале отбора
   int ErrCount;                                                //Счетчик ошибок для оповещения о не возможности провести чтение с датчика
+  float LogPrevTemp;                                           //Хранение предыдущей температуры для записи лога
+  float StartProgTemp;                                         //Хранение температуры, которая была на начало строки программы
 };
 
 struct WProgram {
@@ -536,10 +538,6 @@ const char* host = SAMOVAR_HOST;
 byte DScnt = 0;
 //byte tcnt = 0;
 bool bmefound = true;
-float SSPrevTemp;
-float PSPrevTemp;
-float WSPrevTemp;
-float TSPrevTemp;
 
 //volatile float samovar_temp;                                  // Температура ESP32
 volatile float bme_temp;                                        // Температура BME
