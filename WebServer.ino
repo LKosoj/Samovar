@@ -1,4 +1,5 @@
 #include <asyncHTTPrequest.h>
+#include <ESPping.h>
 
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
@@ -93,13 +94,13 @@ void WebServerInit(void) {
     request->send(response);
   });
 
-//  server.serveStatic("/style.css", SPIFFS, "/style.css");
-//  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
-//  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
-//  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
-//  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
-//  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
-  
+  //  server.serveStatic("/style.css", SPIFFS, "/style.css");
+  //  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
+  //  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
+  //  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
+  //  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
+  //  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
+
   server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
   server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
@@ -820,13 +821,20 @@ void get_old_data_log(AsyncWebServerRequest *request) {
 }
 
 void get_web_interface() {
+
+  bool ret = Ping.ping("www.google.com", 2);
+  if (!ret) {
+    Serial.println(F("Нет покдлючения к интернету. Не удалось проверить обновление интерфейса. Если это первичная установка - необходимо загрузить интерфейс в Самовар в соответствии с инструкцией"));
+    return;
+  }
+
   String version;
   String local_version;
   String s = "";
 
   version = get_web_file("version.txt", GET_CONTENT);
   if (version == "<ERR>") return;
-  
+
   Serial.print("WEB interface version = ");
   Serial.println(version);
 
