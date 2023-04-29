@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.0")
+#define SAMOVAR_VERSION F("6.1")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -420,6 +420,8 @@ float d_s_temp_finish;                                          // Темпер�
 unsigned long d_s_time_min;                                     // Время для определения завершения дистилляции
 bool boil_started;                                              // Флаг, определяющий, что кипение началось
 float boil_temp;                                                // Температура куба, при которой началось кипение
+float b_t_temp_prev;                                            // Температура для определения начала кипения
+unsigned long b_t_time_min;                                     // Время для определения начала кипения
 float alcohol_s;                                                // Спиртуозность, которая была при начале кипения
 volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
 volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
