@@ -35,6 +35,7 @@ void start_self_test(void);
 void stop_self_test(void);
 bool check_boiling();
 float get_alcohol(float t);
+void set_boiling();
 
 #ifdef SAMOVAR_USE_POWER
 void check_power_error();
@@ -131,7 +132,7 @@ void IRAM_ATTR withdrawal(void) {
 
   //По превышению температуры в программе
   if (program[ProgramNum].Temp != 0) {
-    if (program[ProgramNum].Temp > 0 && program[ProgramNum].Temp < 20){
+    if (program[ProgramNum].Temp > 0 && program[ProgramNum].Temp < 20) {
       if (SteamSensor.avgTemp > (program[ProgramNum].Temp + SteamSensor.StartProgTemp)) {
         menu_samovar_start();
       }
@@ -467,7 +468,7 @@ void IRAM_ATTR run_program(byte num) {
   PipeSensor.StartProgTemp = PipeSensor.avgTemp;
   WaterSensor.StartProgTemp = WaterSensor.avgTemp;
   TankSensor.StartProgTemp = TankSensor.avgTemp;
-  
+
   if (SamSetup.ChangeProgramBuzzer) {
     set_buzzer(true);
   }
@@ -778,15 +779,8 @@ void IRAM_ATTR check_alarm() {
 #endif
     //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
     SamovarStatusInt = 51;
-    //началось кипение, запоминаем Т кипения
-    boil_started = true;
-    boil_temp = TankSensor.avgTemp;
 
-    float c_temp;  //температура для определения спиртуозности с учетом давления
-    c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
-
-    alcohol_s = get_alcohol(c_temp);
-    SendMsg("Разгон завершён. Стабилизация/работа на себя. Спиртуозность " + format_float(alcohol_s, 1), NOTIFY_MSG);
+    SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
     set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
     set_current_power(program[0].Power);
@@ -794,6 +788,13 @@ void IRAM_ATTR check_alarm() {
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
+  }
+
+  if (SamovarStatusInt == 51 && !boil_started) {
+    set_boiling();
+    if (boil_started) {
+      SendMsg("Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
+    }
   }
 
   //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
@@ -920,12 +921,30 @@ float get_alcohol(float t) {
   return r;
 }
 
+void set_boiling() {
+  //Учитываем задержку измерения Т кипения
+  if (!boil_started) {
+    if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
+      b_t_temp_prev = TankSensor.avgTemp;
+      b_t_time_min = millis();
+    } else if ((millis() - b_t_time_min) > 6 * 1000) {
+      //6 секунд не было изменения температуры куба
+      //d_s_temp_finish = 0;
+      //d_s_time_min = 0;
+      //началось кипение, запоминаем Т кипения
+      boil_started = true;
+      boil_temp = TankSensor.avgTemp;
+
+      float c_temp;  //температура для определения спиртуозности с учетом давления
+      c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
+
+      alcohol_s = get_alcohol(c_temp);
+    }
+  }
+}
+
 bool check_boiling() {
-  if (!valve_status || boil_started || !PowerOn
-#ifdef USE_WATER_PUMP
-      || wp_count < 10
-#endif
-     ) {
+  if (boil_started || !PowerOn) {
     return false;
   }
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
@@ -936,29 +955,16 @@ bool check_boiling() {
 #ifdef USE_WATER_PUMP
     wp_count = -10;
 #endif
-    boil_started = true;
-    boil_temp = TankSensor.avgTemp;
-
-    float c_temp;  //температура для определения спиртуозности с учетом давления
-    c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
-
-    alcohol_s = get_alcohol(c_temp);
-
-    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
+    set_boiling();
   }
   if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 5) {
 #ifdef USE_WATER_PUMP
     //Началось кипение, значит надо времено увеличить подачу воды (на всякий случай)
     wp_count = -10;
 #endif
-    boil_started = true;
-    boil_temp = TankSensor.avgTemp;
-
-    float c_temp;  //температура для определения спиртуозности с учетом давления
-    c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
-
-    alcohol_s = get_alcohol(c_temp);
-
+    set_boiling();
+  }
+  if (boil_started) {
     SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
   }
   return boil_started;
