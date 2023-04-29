@@ -106,11 +106,22 @@ void IRAM_ATTR DS_getvalue(void) {
 
 //      SteamSensor.avgTemp += 0.1;
 //      PipeSensor.avgTemp = 50;
-//      WaterSensor.avgTemp += 0.1;
-//      if (WaterSensor.avgTemp > 4) WaterSensor.avgTemp = 24; 
-//      if (TankSensor.avgTemp < 90) TankSensor.avgTemp = 90;
-//      else TankSensor.avgTemp+=0.01;
-//      return;
+//  WaterSensor.avgTemp += 0.1;
+//  if (WaterSensor.avgTemp > 4) WaterSensor.avgTemp = 25;
+//  if (TankSensor.avgTemp < 90) TankSensor.avgTemp = 90;
+//  else {
+//    if (!boil_started)TankSensor.avgTemp += 0.002;
+//    else TankSensor.avgTemp += 0.01;
+//  }
+//
+//  SteamSensor.avgTemp = SamSetup.DeltaSteamTemp;
+//  PipeSensor.avgTemp = SamSetup.DeltaPipeTemp;
+//  WaterSensor.avgTemp = SamSetup.DeltaWaterTemp;
+//  TankSensor.avgTemp = SamSetup.DeltaTankTemp;
+//  ACPSensor.avgTemp = SamSetup.DeltaACPTemp;
+//
+//  return;
+  
   float ss, ps, ws, ts, acp;
   ss = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
   ps = sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
@@ -373,6 +384,9 @@ void IRAM_ATTR reset_sensor_counter(void) {
   set_capacity(0);
   alarm_h_min = 0;
   alarm_t_min = 0;
+  t_min = 0;
+  b_t_temp_prev = 0;
+  b_t_time_min = 0;
 #ifdef SAMOVAR_USE_POWER
   alarm_c_min = 0;
   alarm_c_low_min = 0;
