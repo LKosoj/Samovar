@@ -362,19 +362,19 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
 
-      //            Serial.print("SysTickerButton = ");
-      //            Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
-      //            Serial.print("PowerStatusTask = ");
-      //            Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
-      //            Serial.print("SysTickerTask1 = ");
-      //            Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
-      //            Serial.print("GetClockTask1 = ");
-      //            Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
-      //            Serial.print("BuzzerTask = ");
-      //            Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
-      //            Serial.print("DoLuaScriptTask = ");
-      //            Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
-      //            Serial.println("--------------------------------------------");
+      //      Serial.print("SysTickerButton = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
+      //      Serial.print("PowerStatusTask = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
+      //      Serial.print("SysTickerTask1 = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
+      //      Serial.print("GetClockTask1 = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
+      //      Serial.print("BuzzerTask = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
+      //      Serial.print("DoLuaScriptTask = ");
+      //      Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+      //      Serial.println("--------------------------------------------");
 
 #ifdef USE_LUA
       //если установлена переменная запуска в цикле lua_script, запускаем
@@ -821,7 +821,7 @@ void setup() {
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH)
       type = "Sketch";
-    else { // U_SPIFFS 
+    else { // U_SPIFFS
       type = "Filesystem";
       SPIFFS.end();
     }
@@ -909,7 +909,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    2700,             /* Stack size in words */
+    3000,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
