@@ -843,8 +843,7 @@ void IRAM_ATTR open_valve(bool Val) {
 void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   TickType_t beep = 400 / portTICK_RATE_MS;
   TickType_t silent = 600 / portTICK_RATE_MS;
-  int tick_buzz;
-  tick_buzz = 0;
+  int tick_buzz = 0;
 
   while (true) {
     if (BuzzerTaskFl) {
