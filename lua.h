@@ -816,7 +816,7 @@ void lua_init() {
   xTaskCreatePinnedToCore(
     do_lua_script,  /* Function to implement the task */
     "do_lua_script", /* Name of the task */
-    4400,             /* Stack size in words */
+    4600,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask, /* Task handle. */
@@ -857,6 +857,7 @@ String get_lua_script(String fn) {
   if (f) {
     //нашли файл со скриптом, загружаем
     s = f.readString();
+    s.trim();
     f.close();
   }
   return s;
@@ -864,31 +865,28 @@ String get_lua_script(String fn) {
 
 void run_lua_script(String fn) {
   btn_script = get_lua_script(fn);
-  btn_script.trim();
   if (btn_script.length() > 0) btn_script = get_global_variables() + btn_script;
 }
 
 void load_lua_script() {
   script1 = get_lua_script("script.lua");
   script2 = get_lua_script(lua_type_script);
-  script1.trim();
-  script2.trim();
 }
 
 //Запускаем таск для запуска скрипта
 void IRAM_ATTR do_lua_script(void *parameter) {
   String sr;
-  String glv;
+  //String glv;
   while (1) {
     if (!lua_finished) {
-      if (script1.length() > 0 || script2.length() > 0) glv = get_global_variables();
+      //if (script1.length() > 0 || script2.length() > 0) glv = get_global_variables();
       if (script1.length() > 0) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-          WriteConsoleLog(glv + script1);
+          WriteConsoleLog(script1);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua.Lua_dostring(&(glv + script1));
+        sr = lua.Lua_dostring(&(script1));
         sr.trim();
         if (sr != "") WriteConsoleLog("ERR in script.lua: " + sr);
       }
@@ -897,10 +895,10 @@ void IRAM_ATTR do_lua_script(void *parameter) {
       if (script2.length() > 0) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-          WriteConsoleLog(glv + script2);
+          WriteConsoleLog(script2);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua.Lua_dostring(&(glv + script2));
+        sr = lua.Lua_dostring(&(script2));
         sr.trim();
         if (sr != "") WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       }
