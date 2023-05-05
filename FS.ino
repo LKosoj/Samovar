@@ -202,9 +202,10 @@ void create_data() {
 
   //Если режим ректификация, запишем в файл текущую программу отбора
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-    File fileState = SPIFFS.open("/prg.csv", FILE_WRITE);
-    fileState.println(get_program(0));
-    fileState.close();
+    File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
+    filePrg.println(get_program(CAPACITY_NUM * 2));
+    Serial.println(get_program(CAPACITY_NUM * 2));
+    filePrg.close();
   }
 
   //Удаляем старый файл с архивным логом
