@@ -1237,9 +1237,11 @@ void getjson(void) {
     float c_temp;  //температура для определения спиртуозности с учетом давления
     c_temp = get_temp_by_pressure(0, TankSensor.avgTemp, bme_pressure);
     jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(c_temp), 2);
+    jsonstr += ",";
     jsonstr += "\"stm_alc\":"; jsonstr += format_float(get_steam_alcohol(c_temp), 2);
+    jsonstr += ",";
   }
-  
+
   jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
   jsonstr += ",";
   jsonstr += "\"Lstatus\":\""; jsonstr += Lua_status + "\"";
