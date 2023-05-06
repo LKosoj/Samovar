@@ -3,8 +3,8 @@
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="/style.css">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
   <script src="https://cdn.amcharts.com/lib/4/core.js"></script>
@@ -290,7 +290,7 @@ function clearMessages() {
         
       ];
 
-      chart.dataSource.url = "/data.csv";
+      chart.dataSource.url = "data.csv";
       chart.dataSource.disableCache = true;
       //chart.numberFormatter.numberFormat = "#,###";
       chart.dataSource.parser = new am4core.CSVParser();
@@ -492,7 +492,7 @@ function clearMessages() {
         <span>Статус: <span id='Status'></span></span>
       </div>
     </div>
-    <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="/index.htm"' class="button">
+    <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="index.htm"' class="button">
     <input id='getlog' type='button' name='getlog' value='Сохранить лог' onclick='javascript:window.open("/getlog")' class="button">
     <input id='getoldlog' type='button' name='getoldlog' value='Сохранить старый лог' onclick='javascript:window.open("/getoldlog")' class="button">
     <div class='dvcs'>

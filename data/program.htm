@@ -2,8 +2,8 @@
 <head>
 <meta charset='utf-8'>
 <meta http-equiv="Cache-Control" content="no-cache">
-<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"/>
-<link rel="stylesheet" href="/style.css">
+<link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
+<link rel="stylesheet" href="style.css">
 <title>Самовар</title>
 
 <script>
@@ -29,9 +29,9 @@ function loadFile(e) {
 function getProgramFromFile(selectObject){
 var value = selectObject.value;
 var fn;
-if (value == 0) fn = '/program_fruit.txt';
-else if (value == 1) fn = '/program_grain.txt';
-else if (value == 2) fn = '/program_shugar.txt';
+if (value == 0) fn = 'program_fruit.txt';
+else if (value == 1) fn = 'program_grain.txt';
+else if (value == 2) fn = 'program_shugar.txt';
 
 fetch(fn)
   .then(response => response.text())
@@ -325,13 +325,13 @@ function addLine(obj, s){
   dl.appendChild(tm);
 
   var plus = document.createElement("img");
-  plus.src = '/plus.png';
+  plus.src = 'plus.png';
   plus.setAttribute("width", "20");
   plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','')");
   dl.appendChild(plus);
   
   var minus = document.createElement("img");
-  minus.src = '/minus.png';
+  minus.src = 'minus.png';
   minus.setAttribute("width", "20");
   minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
   dl.appendChild(minus);
@@ -474,7 +474,7 @@ Samovar v. <span id='version'>%v%</span>
 </div>
 <div style="margin: 0 auto; width: 450px;">
 <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
-<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="/index.htm"' class="button">
+<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="index.htm"' class="button">
 </div>
 </div>
 </form>

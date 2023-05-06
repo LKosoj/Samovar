@@ -3,8 +3,8 @@
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="/style.css">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
   <script>
@@ -499,13 +499,13 @@
       dl.appendChild(pmixer);
 
       var plus = document.createElement("img");
-      plus.src = '/plus.png';
+      plus.src = 'plus.png';
       plus.setAttribute("width", "20");
       plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','W;0;0')");
       dl.appendChild(plus);
 
       var minus = document.createElement("img");
-      minus.src = '/minus.png';
+      minus.src = 'minus.png';
       minus.setAttribute("width", "20");
       minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
       dl.appendChild(minus);
@@ -684,8 +684,8 @@
       <div>
         <input id='power' type='submit' name='power' class="button" value='Включить нагрев' onclick='sendbutton("power=1");'>
         <input id='start' type='submit' name='start' class="button" value='Следующая программа' onclick='sendbutton("start=1");'>
-        <input id='chart' type='submit' name='chart' class="button" value='График' onclick='javascript:location.href="/chart.htm"'>
-        <input id='setup' type='submit' name='setup' class="button" value='Настройки' onclick='javascript:location.href="/setup.htm"'>
+        <input id='chart' type='submit' name='chart' class="button" value='График' onclick='javascript:location.href="chart.htm"'>
+        <input id='setup' type='submit' name='setup' class="button" value='Настройки' onclick='javascript:location.href="setup.htm"'>
       </div>
     </div>
     <div id="Prog" class="tabcontent">
@@ -746,7 +746,7 @@
       </div>
 
       <div style="margin: 0 auto; margin-top: 20px !important; width: 200px;">
-        <input id='loadprogram' type='button' name='loadprogram' value='Загрузить рецепт из XML' onclick='javascript:location.href="/brewxml.htm"' class="button">
+        <input id='loadprogram' type='button' name='loadprogram' value='Загрузить рецепт из XML' onclick='javascript:location.href="brewxml.htm"' class="button">
       </div>
 
     </div>

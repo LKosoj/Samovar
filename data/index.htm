@@ -3,8 +3,8 @@
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="/style.css">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
   <script>
@@ -578,13 +578,13 @@
       dl.appendChild(timeBlock);
 
       var plus = document.createElement("img");
-      plus.src = '/plus.png';
+      plus.src = 'plus.png';
       plus.setAttribute("width", "20");
       plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','H;0;0;0;0;0')");
       dl.appendChild(plus);
 
       var minus = document.createElement("img");
-      minus.src = '/minus.png';
+      minus.src = 'minus.png';
       minus.setAttribute("width", "20");
       minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
       dl.appendChild(minus);
@@ -879,8 +879,8 @@
         </div>
         <div class="container_row" style="justify-content: space-around; align-items: center;">
           <input id='reset' type='submit' name='reset' value='Сбросить процесс' onclick='sendbutton("reset=1");' class="button">
-          <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"' class="button">
-          <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"' class="button">
+          <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
+          <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
         </div>
       </div>
 
@@ -972,7 +972,7 @@
       </div>
 
       <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 2em; margin-bottom: 1em">
-        <input id='return' type='button' name='program' value='Расчитать программу' onclick='javascript:location.href="/program.htm"' class="button">
+        <input id='return' type='button' name='program' value='Расчитать программу' onclick='javascript:location.href="program.htm"' class="button">
         <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
       </div>
     </div>
