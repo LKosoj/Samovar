@@ -226,6 +226,7 @@ String indexKeyProcessor(const String &var) {
     else return "true";
   } else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
+    else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return get_dist_program();
     else
       return get_program(CAPACITY_NUM * 2);
   } else if (var == "Descr") {
@@ -755,6 +756,9 @@ void web_program(AsyncWebServerRequest *request) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       set_beer_program(request->arg("WProgram"));
       request->send(200, "text/plain", get_beer_program());
+    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      set_dist_program(request->arg("WProgram"));
+      request->send(200, "text/plain", get_dist_program());
     } else {
       set_program(request->arg("WProgram"));
       request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
