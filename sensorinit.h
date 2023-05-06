@@ -37,6 +37,7 @@ void startService(void);
 void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress);
 void set_beer_program(String WProgram);
 void set_program(String WProgram);
+void set_dist_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
 void setupOpenLog(void);
 void createFile(char* fileName);
@@ -57,7 +58,7 @@ void IRAM_ATTR BME_getvalue(bool fl) {
     bme_pressure = -1;
     return;
   }
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (30 / portTICK_RATE_MS)) == pdTRUE) {
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(30 / portTICK_RATE_MS)) == pdTRUE) {
 #ifdef USE_BME680
     // Tell BME680 to begin measurement.
     if (bme.beginReading() == 0) {
@@ -104,24 +105,24 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
 
-//      SteamSensor.avgTemp += 0.1;
-//      PipeSensor.avgTemp = 50;
-//  WaterSensor.avgTemp += 0.1;
-//  if (WaterSensor.avgTemp > 4) WaterSensor.avgTemp = 25;
-//  if (TankSensor.avgTemp < 90) TankSensor.avgTemp = 90;
-//  else {
-//    if (!boil_started)TankSensor.avgTemp += 0.002;
-//    else TankSensor.avgTemp += 0.01;
-//  }
-//
-//  SteamSensor.avgTemp = SamSetup.DeltaSteamTemp;
-//  PipeSensor.avgTemp = SamSetup.DeltaPipeTemp;
-//  WaterSensor.avgTemp = SamSetup.DeltaWaterTemp;
-//  TankSensor.avgTemp = SamSetup.DeltaTankTemp;
-//  ACPSensor.avgTemp = SamSetup.DeltaACPTemp;
-//
-//  return;
-  
+  //      SteamSensor.avgTemp += 0.1;
+  //      PipeSensor.avgTemp = 50;
+  //  WaterSensor.avgTemp += 0.1;
+  //  if (WaterSensor.avgTemp > 4) WaterSensor.avgTemp = 25;
+  //  if (TankSensor.avgTemp < 90) TankSensor.avgTemp = 90;
+  //  else {
+  //    if (!boil_started)TankSensor.avgTemp += 0.002;
+  //    else TankSensor.avgTemp += 0.01;
+  //  }
+  //
+  //  SteamSensor.avgTemp = SamSetup.DeltaSteamTemp;
+  //  PipeSensor.avgTemp = SamSetup.DeltaPipeTemp;
+  //  WaterSensor.avgTemp = SamSetup.DeltaWaterTemp;
+  //  TankSensor.avgTemp = SamSetup.DeltaTankTemp;
+  //  ACPSensor.avgTemp = SamSetup.DeltaACPTemp;
+  //
+  //  return;
+
   float ss, ps, ws, ts, acp;
   ss = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
   ps = sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
@@ -129,16 +130,16 @@ void IRAM_ATTR DS_getvalue(void) {
   ts = sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
   acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
 
-//    float randNumber;
-//    randNumber = random(100) / float(500);
-//    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
-//    if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
-//    static float coef = 0;
-//    coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
-//    //if (coef > 0.5) coef = 0.5;
-//    //if (coef < -0.5) coef = -0.5;
-//    ts = TankSensor.avgTemp + coef;
-//    ws = WaterSensor.avgTemp + coef;
+  //    float randNumber;
+  //    randNumber = random(100) / float(500);
+  //    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
+  //    if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
+  //    static float coef = 0;
+  //    coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
+  //    //if (coef > 0.5) coef = 0.5;
+  //    //if (coef < -0.5) coef = -0.5;
+  //    ts = TankSensor.avgTemp + coef;
+  //    ws = WaterSensor.avgTemp + coef;
 
   sensors.requestTemperatures();
 
@@ -214,17 +215,17 @@ void sensor_init(void) {
 #ifdef USE_BMP280_1
     bme.setSampling(Adafruit_BMP280::MODE_FORCED,     /* Operating Mode. */
                     Adafruit_BMP280::SAMPLING_X1,     /* Temp. oversampling */
-                    Adafruit_BMP280::SAMPLING_X4,    /* Pressure oversampling */
-                    Adafruit_BMP280::FILTER_X2,      /* Filtering. */
+                    Adafruit_BMP280::SAMPLING_X4,     /* Pressure oversampling */
+                    Adafruit_BMP280::FILTER_X2,       /* Filtering. */
                     Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
 
 #endif
 #ifdef USE_BME280_1
     bme.setSampling(Adafruit_BME280::MODE_FORCED,
-                    Adafruit_BME280::SAMPLING_X1, // temperature
-                    Adafruit_BME280::SAMPLING_X4, // pressure
-                    Adafruit_BME280::SAMPLING_X1, // humidity
-                    Adafruit_BME280::FILTER_OFF   );
+                    Adafruit_BME280::SAMPLING_X1,  // temperature
+                    Adafruit_BME280::SAMPLING_X4,  // pressure
+                    Adafruit_BME280::SAMPLING_X1,  // humidity
+                    Adafruit_BME280::FILTER_OFF);
 
 #endif
   }
@@ -311,6 +312,8 @@ void sensor_init(void) {
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
     set_beer_program("M;45;0;1^-1^2^3\nP;45;1;1^-1^2^3\nP;60;1;1^-1^2^3\nW;0;0;1^-1^2^3\nB;0;1;1^-1^2^3\nC;30;0;1^-1^2^3\n");
+  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    set_dist_program("T;90;0;50\nS;0.5;1;60\nA;11.3;2;70\nP;11.3;2;70\nR;11.3;2;70\n");
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }
@@ -320,8 +323,8 @@ void sensor_init(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init SEM_AVR");
 #endif
-  xSemaphoreAVR = xSemaphoreCreateBinaryStatic( &xSemaphoreBufferAVR );
-  xSemaphoreGive( xSemaphoreAVR );
+  xSemaphoreAVR = xSemaphoreCreateBinaryStatic(&xSemaphoreBufferAVR);
+  xSemaphoreGive(xSemaphoreAVR);
   Serial2.setTimeout(500);
   //Serial2.setRxBufferSize(12);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
@@ -447,7 +450,6 @@ void IRAM_ATTR reset_sensor_counter(void) {
 #ifdef SAMOVAR_USE_POWER
   power_err_cnt = 0;
 #endif
-
 }
 
 String inline format_float(float v, int d) {
