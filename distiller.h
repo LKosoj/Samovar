@@ -8,6 +8,9 @@ void create_data();
 void open_valve(bool Val);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
+void set_dist_program(String WProgram);
+void run_dist_program(byte num);
+
 #ifdef USE_WATER_PUMP
 bool check_boiling();
 #endif
@@ -30,6 +33,7 @@ void distiller_proc() {
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
+    run_dist_program(0);
     SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
@@ -41,14 +45,31 @@ void distiller_proc() {
     distiller_finish();
   }
 
+  //Обрабатываем программу дистилляции
+  if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed <= TankSensor.avgTemp) {
+    //Если температура куба превысила заданное в программе значение - переходим на следующую строку программы
+    run_dist_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "A" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp)) {
+    //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
+    run_dist_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "S" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp) / get_alcohol(TankSensor.StartProgTemp)) {
+    run_dist_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "P" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp)) {
+    //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
+    run_dist_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "R" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp) / get_steam_alcohol(TankSensor.StartProgTemp)) {
+    run_dist_program(ProgramNum + 1);
+  }
+
+
   //Если Т в кубе больше 90 градусов и включено напряжение, проверяем, что 16 минут температура в кубе не меняется от последнего заполненного значения больше, чем на 0.1 градус
   if (TankSensor.avgTemp > 90 && PowerOn) {
     if (abs(TankSensor.avgTemp - d_s_temp_finish) > 0.1) {
       d_s_temp_finish = TankSensor.avgTemp;
       d_s_time_min = millis();
     } else if ((millis() - d_s_time_min) > 16 * 60 * 1000) {
-     SendMsg(F("В кубе не осталось спирта"), NOTIFY_MSG);
-     distiller_finish();
+      SendMsg(F("В кубе не осталось спирта"), NOTIFY_MSG);
+      distiller_finish();
     }
   }
 }
@@ -142,4 +163,53 @@ void IRAM_ATTR check_alarm_distiller() {
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
+}
+
+void run_dist_program(byte num) {
+  ProgramNum = num;
+
+  //запоминаем текущие значения температур
+  SteamSensor.StartProgTemp = SteamSensor.avgTemp;
+  PipeSensor.StartProgTemp = PipeSensor.avgTemp;
+  WaterSensor.StartProgTemp = WaterSensor.avgTemp;
+  TankSensor.StartProgTemp = TankSensor.avgTemp;
+
+  if (program[num].WType != "") {
+    set_capacity(program[num].capacity_num);
+#ifdef SAMOVAR_USE_POWER
+#ifdef SAMOVAR_USE_SEM_AVR
+    if (abs(program[num].Power) > 400 && program[num].Power > 0) {
+#else
+    if (abs(program[num].Power) > 40 && program[num].Power > 0) {
+#endif
+      set_current_power(program[num].Power);
+    } else if (program[num].Power != 0) {
+      set_current_power(target_power_volt + program[num].Power);
+    }
+#endif
+  }
+}
+
+void set_dist_program(String WProgram) {
+  char c[500];
+  WProgram.toCharArray(c, 500);
+  char *pair = strtok(c, ";");
+  //String MeshTemplate;
+  int i = 0;
+  while (pair != NULL and i < CAPACITY_NUM * 2) {
+    program[i].WType = pair;
+    pair = strtok(NULL, ";");
+    program[i].Speed = atof(pair);  //Value
+    pair = strtok(NULL, ";");
+    program[i].capacity_num = atoi(pair);
+    pair = strtok(NULL, "\n");
+    program[i].Power = atof(pair);
+    i++;
+    ProgramLen = i;
+    pair = strtok(NULL, ";");
+    if ((!pair || pair == NULL || pair[0] == 13) and i < CAPACITY_NUM * 2) {
+      program[i].WType = "";
+      break;
+    }
+  }
 }
