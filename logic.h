@@ -556,6 +556,7 @@ void IRAM_ATTR run_program(byte num) {
 //функция корректировки температуры кипения спирта в зависимости от давления
 float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
   if (start_temp == 0) return 0;
+  if (current_pressure < 10) return start_temp;
 
   //скорректированная температура кипения спирта при текущем давлении
   static float c_temp;
