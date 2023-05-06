@@ -3,8 +3,8 @@
 <head>
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="/style.css">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
   <script>
@@ -207,6 +207,15 @@
 
     var pwr_unit = "%pwr_unit%";
 
+    var headers = document.querySelectorAll("[data-name='spoiler-title']");
+
+    function headerClick () {
+      this.nextElementSibling.classList.toggle("spoiler-body");
+      var s = this.parentNode.getElementsByClassName("spoiler-sign");
+      if (s[0].innerHTML == "[+]") s[0].innerHTML = "[-]";
+      else s[0].innerHTML = "[+]";
+    }
+
     function openTab (evt, tabName) {
       var i, tabcontent, tablinks;
       tabcontent = document.getElementsByClassName("tabcontent");
@@ -288,6 +297,8 @@
           document.getElementById('heap').innerHTML = myObj.heap;
           document.getElementById('rssi').innerHTML = myObj.rssi;
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
+          document.getElementById('alc').innerHTML = myObj.alc;
+          document.getElementById('stm_alc').innerHTML = myObj.stm_alc;
           sound_is_on = !!myObj.UseBBuzzer;
 
           if (myObj.Lstatus) {
@@ -336,6 +347,11 @@
 
 
     window.onload = function() {
+      headers = document.querySelectorAll("[data-name='spoiler-title']");
+      headers.forEach(function(item) {
+        item.addEventListener("click", headerClick);
+      });
+
       setPowerUnit();
       AddLuaButtons();
     };
@@ -357,8 +373,8 @@
 
     <div class="tab">
       <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Дистилляция">
+      <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
       <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
-      <input type='button' class="tablinks" onclick="openTab(event, 'Video');" value="Видео" style="display: %showvideo%;">
     </div>
 
     <div id="Main" class="tabcontent" style="display: block;">
@@ -410,6 +426,16 @@
           </div>
         </div>
       </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+		<div class="text"><span>Спиртуозность: </span></div>
+        <div class="container_column">
+          <div class="text column">в кубе: <span id='alc' style="font-size: xx-large;"></span>&#176;</div>
+        </div>
+        <div class="container_column">
+          <div class="text column">в отборе: <span id='stm_alc' style="font-size: xx-large;"></span>&#176;</div>
+        </div>
+        </div>
 
       <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
         <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
@@ -474,13 +500,90 @@
       </div>
       <div>
         <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setDistCommand();' class="button">
-        <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="/chart.htm"' class="button">
-        <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="/setup.htm"' class="button">
+        <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
+        <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
       </div>
     </div>
-    <div id="Video" class="tabcontent">
-      <img src="%videourl%">
+
+    <div id="Prog" class="tabcontent">
+      <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа дистилляции:</div>
+      <div class="prg" id="prg"></div>
+      <div>
+
+        <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: #F7F7F7">
+
+          <div class="list-group">
+            <div class="list-group-item list-header" data-name="spoiler-title">
+              <span class="spoiler-sign">[+]</span>Описание программы дистилляции в текстовом формате для сохранения в облаке:
+            </div>
+            <div class="list-group-item list-content spoiler-body">
+              <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
+            </div>
+          </div>
+
+          <div class="list-group">
+            <div class="list-group-item list-header" data-name="spoiler-title">
+              <span class="spoiler-sign">[+]</span>Программа дистилляции:
+            </div>
+            <div class="list-group-item list-content spoiler-body">
+              <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
+              <ul>
+                <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
+                  Тип программы
+                  <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 0.7em;">
+                    <div>
+                      <span style="font-weight: bold;"> T </span> - режим дистилляции по температуре в кубе
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> S </span> - режим дистилляции по относительному изменению содержания спирта в кубе
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> A </span> - режим дистилляции по абсолютному изменению содержания спирта в кубе
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> P </span> - режим дистилляции по относительному изменению содержания спирта в паре
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> R </span> - режим дистилляции по абсолютному изменению содержания спирта в паре
+                    </div>
+                  </div>
+                </li>
+                <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+                  Значение (зависит от типа программы). Температура, абсолютное или относительное значение спиртуозности
+                </li>
+                <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+                  Номер емкости для отбора
+                </li>
+                <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
+                  Напряжение отбора
+                </li>
+              </ul>
+
+              <div style="border: 1px dashed #bbb; padding: 1em; 
+      margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
+      font-size: 1.2em; font-weight: bold; background-color: #f2f2f2">
+                Пример программы дистилляции:
+                <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
+                  <div>T;90;0;50</div>
+                  <div>S;0.5;1;60</div>
+                  <div>A;11.3;2;70</div>
+                  <div>P;11.3;2;70</div>
+                  <div>R;11.3;2;70</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 2em; margin-bottom: 1em">
+        <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
+      </div>
     </div>
+
+	</div>
+
 
     <div id="Other" class="tabcontent">
       <div style="visibility: hidden" id="lua_btn">
