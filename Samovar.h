@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.2")
+#define SAMOVAR_VERSION F("6.3")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -340,7 +340,6 @@ struct SetupEEPROM {
 
 struct DSSensor {
   DeviceAddress Sensor;                                        //адрес датчика температуры
-  //  float Temp;                                                //температура с датчика
   float avgTemp;                                               //средняя температура с датчика
   float SetTemp;                                               //уставка по температуре, при достижении которой требуется реакция
   float BodyTemp;                                              //температура, с которой начался отбор тела
@@ -353,13 +352,13 @@ struct DSSensor {
 };
 
 struct WProgram {
-  String WType; //                                               //тип отбора - головы или тело
+  String WType;                                                //тип отбора - головы или тело
   uint16_t Volume;                                             //объем отбора в мл
   float Speed;                                                 //скорость отбора в л/ч
   byte capacity_num;                                           //номер емкости для отбора
-  float Temp;   //                                               //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
+  float Temp;                                                  //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
   int Power;                                                   //напряжение, при которой отбирается эта часть погона.
-  float Time;   //                                               //время, необходимое для отбора программы
+  float Time;                                                  //время, необходимое для отбора программы
 };
 
 SetupEEPROM SamSetup;
