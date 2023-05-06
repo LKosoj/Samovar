@@ -209,6 +209,8 @@
 
     var headers = document.querySelectorAll("[data-name='spoiler-title']");
 
+    var _lnIdx = 0;
+
     function headerClick () {
       this.nextElementSibling.classList.toggle("spoiler-body");
       var s = this.parentNode.getElementsByClassName("spoiler-sign");
@@ -270,6 +272,164 @@
     };
 
     setInterval(loadDoc, 2000);
+
+    function set_program () {
+      document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",", ".");
+      var server = '/program';
+      request = new XMLHttpRequest();
+      request.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+          var myObj = this.responseText;
+          if (myObj != "OK") {
+            document.getElementById('WProgram').value = myObj;
+            alert("Ok");
+          }
+        }
+      };
+      request.open('POST', server, false);
+      let formData = new FormData(document.forms.mainform);
+      request.send(formData);
+      if (request.status != 200) {
+        alert(request.status + ': ' + request.statusText);
+      }
+      return 0;
+    };
+
+    function calc_program () {
+      var t = document.getElementsByClassName("prgline");
+      var k, s;
+      s = "";
+      for (i = 1; i < t.length; i++) {
+        k = t[i].childNodes;
+        for (j = 1; j < 5; j++) {
+          s = s + k[j].value + ";";
+        }
+        s = s.slice(0, -1);
+        s = s + "\n";
+      }
+      document.getElementById('WProgram').value = s;
+      set_num();
+    }
+
+    function set_num () {
+      var e = document.getElementById("prg").childNodes;
+      var a;
+      for (i = 1; i < e.length; i++) {
+        a = e[i].childNodes[0];
+        a.innerText = "";
+        if (i < 10) a.innerText = "0";
+        a.innerText = a.innerText + i;
+      }
+    }
+
+    function removeLine (ln) {
+      var prg = document.getElementById("prg").childNodes.length;
+      if (prg < 3) return;
+      var prgline = document.getElementById(ln);
+      prgline.remove();
+      calc_program();
+    }
+
+    function addLine (obj, s) {
+      //var s = "B;100;0.1;5;0.00;120";
+      var arr = s.split(";");
+
+      var dl = document.createElement("div");
+      dl.className = "prgline";
+      dl.id = "prgln" + _lnIdx;
+
+      var num = document.createElement("label");
+      num.className = "prglabel";
+      dl.appendChild(num);
+
+      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option></select>');
+
+      //  var ptype = dl.getElementsByName("ptype");
+      //  ptype[0].value = arr[0];
+
+      var ptemp = document.createElement("input");
+      ptemp.type = "text";
+      ptemp.name = "ptemp" + _lnIdx;
+      ptemp.value = arr[1];
+      ptemp.setAttribute("onchange", "calc_program();");
+      dl.appendChild(ptemp);
+
+      ptemp.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
+
+      var ppower = document.createElement("input");
+      ppower.type = "text";
+      ppower.name = "ppower" + _lnIdx;
+      ppower.value = arr[3];
+      ppower.setAttribute("onchange", "calc_program();");
+      dl.appendChild(ppower);
+
+      var plus = document.createElement("img");
+      plus.src = 'plus.png';
+      plus.setAttribute("width", "20");
+      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','T;100;0;0')");
+      dl.appendChild(plus);
+
+      var minus = document.createElement("img");
+      minus.src = 'minus.png';
+      minus.setAttribute("width", "20");
+      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
+      dl.appendChild(minus);
+
+      if (!obj) {
+        var prg = document.getElementById("prg");
+        prg.appendChild(dl);
+      } else {
+        prg = document.getElementById(obj);
+        prg.after(dl);
+      }
+
+      var pnum = document.getElementById("pnum" + _lnIdx);
+      pnum.value = arr[2];
+
+      var p = "ptype" + _lnIdx;
+      var ptype = document.getElementById(p);
+      ptype.value = arr[0];
+
+      set_bgcolor(_lnIdx);
+
+      _lnIdx++;
+      calc_program();
+    }
+
+    function getProgram () {
+      var e = document.getElementById("prg");
+      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Значение<span class="tooltiptext">Тип значения зависит от типа программы. Температура, абсолютное или относительное значение спиртуозности</span></label>&nbsp;<label class="tooltip">№ емкости</label><label class="tooltip">Напряжение</label></div>');
+      var p = document.getElementById("WProgram");
+      var varr = p.value.split("\n");
+      for (z = 0; z < varr.length; z++) {
+        if (varr[z] != "") addLine(false, varr[z]);
+      }
+    }
+
+    function set_bgcolor (obj) {
+      var l = document.getElementById("prgln" + obj);
+      var t = document.getElementById("ptype" + obj).value;
+      let color = 'black';
+      if (t == "T") {color = "background-color: #FFFF00;";}
+      else if (t == "S") {color = "background-color: #FF6347;";}
+      else if (t == "A") {color = "background-color: #00BFFF;";}
+      else if (t == "R") {color = "background-color: #FFA500;";}
+      else if (t == "P") {color = "background-color: #98FB98;";}
+      l.setAttribute("style", color);
+      var e = l.childNodes;
+      for (q = 0; q < e.length; q++) {
+        if (q == 2) {
+          e[q].setAttribute("style", color + "width:85");
+        } else if (q == 3) {
+          e[q].setAttribute("style", color + "width:90");
+        } else if (q == 4) {
+          e[q].setAttribute("style", color + "width:100");
+        }
+        else e[q].setAttribute("style", color);
+      }
+      calc_program();
+    }
+
 
     function loadDoc () {
       var xhttp = new XMLHttpRequest();
@@ -350,6 +510,15 @@
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
+      });
+
+      getProgram();
+      document.getElementById("WProgram").addEventListener("change", function(event) {
+        var element = document.getElementById("prg");
+        while (element.firstChild) {
+          element.removeChild(element.firstChild);
+        }
+        getProgram();
       });
 
       setPowerUnit();
@@ -564,11 +733,11 @@
       font-size: 1.2em; font-weight: bold; background-color: #f2f2f2">
                 Пример программы дистилляции:
                 <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
-                  <div>T;90;0;50</div>
-                  <div>S;0.5;1;60</div>
-                  <div>A;11.3;2;70</div>
-                  <div>P;11.3;2;70</div>
-                  <div>R;11.3;2;70</div>
+                  <div>T;90;0;190</div>
+                  <div>P;10.3;2;200</div>
+                  <div>A;11.3;2;0</div>
+                  <div>S;0.5;1;160</div>
+                  <div>R;0.5;2;210</div>
                 </div>
               </div>
             </div>
@@ -581,9 +750,6 @@
         <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
       </div>
     </div>
-
-	</div>
-
 
     <div id="Other" class="tabcontent">
       <div style="visibility: hidden" id="lua_btn">
