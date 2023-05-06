@@ -164,6 +164,8 @@ void configModeCallback(AsyncWiFiManager *myWiFiManager);
 String verbose_print_reset_reason(RESET_REASON reason);
 void set_alarm();
 void menu_switch_focus();
+float get_steam_alcohol(float t);
+float get_alcohol(float t);
 
 #ifdef __SAMOVAR_DEBUG
 //LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -1231,6 +1233,13 @@ void getjson(void) {
   jsonstr += ",";
 #endif
 
+  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    float c_temp;  //температура для определения спиртуозности с учетом давления
+    c_temp = get_temp_by_pressure(0, TankSensor.avgTemp, bme_pressure);
+    jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(c_temp), 2);
+    jsonstr += "\"stm_alc\":"; jsonstr += format_float(get_steam_alcohol(c_temp), 2);
+  }
+  
   jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
   jsonstr += ",";
   jsonstr += "\"Lstatus\":\""; jsonstr += Lua_status + "\"";
