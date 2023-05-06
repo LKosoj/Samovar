@@ -213,3 +213,19 @@ void set_dist_program(String WProgram) {
     }
   }
 }
+
+String get_dist_program() {
+  String Str = "";
+  int k = CAPACITY_NUM * 2;
+  for (byte i = 0; i < k; i++) {
+    if (program[i].WType == "") {
+      i = CAPACITY_NUM * 2 + 1;
+    } else {
+      Str += program[i].WType + ";";
+      Str += (String)program[i].Speed + ";";
+      Str += (String)(int)program[i].capacity_num + ";";
+      Str += (String)program[i].Power + "\n";
+    }
+  }
+  return Str;
+}
