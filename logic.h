@@ -1004,6 +1004,7 @@ float get_steam_alcohol(float t) {
 }
 
 float get_alcohol(float t) {
+  if (!boil_started) return 0;
   static float r;
   float k;
   k = (t - 89) / 6.49;
