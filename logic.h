@@ -918,7 +918,7 @@ void IRAM_ATTR set_power(bool On) {
 }
 
 float get_steam_alcohol(float t) {
-  if (!boil_started) return 0;
+  if (!boil_started) return 100;
   static float r;
   float s;
   float k;
@@ -1005,7 +1005,7 @@ float get_steam_alcohol(float t) {
 }
 
 float get_alcohol(float t) {
-  if (!boil_started) return 0;
+  if (!boil_started) return 100;
   static float r;
   float k;
   k = (t - 89) / 6.49;
@@ -1028,7 +1028,7 @@ void set_boiling() {
     if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
       b_t_temp_prev = TankSensor.avgTemp;
       b_t_time_min = millis();
-    } else if ((millis() - b_t_time_min) > 6 * 1000) {
+    } else if ((millis() - b_t_time_min) > 5 * 1000) {
       //6 секунд не было изменения температуры куба
       //d_s_temp_finish = 0;
       //d_s_time_min = 0;
