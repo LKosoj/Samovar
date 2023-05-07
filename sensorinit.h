@@ -115,13 +115,13 @@ void IRAM_ATTR DS_getvalue(void) {
   //    else TankSensor.avgTemp += 0.01;
   //  }
   //
-  //  SteamSensor.avgTemp = SamSetup.DeltaSteamTemp;
-  //  PipeSensor.avgTemp = SamSetup.DeltaPipeTemp;
-  //  WaterSensor.avgTemp = SamSetup.DeltaWaterTemp;
-  //  TankSensor.avgTemp = SamSetup.DeltaTankTemp;
-  //  ACPSensor.avgTemp = SamSetup.DeltaACPTemp;
-  //
-  //  return;
+//    SteamSensor.avgTemp = SamSetup.DeltaSteamTemp;
+//    PipeSensor.avgTemp = SamSetup.DeltaPipeTemp;
+//    WaterSensor.avgTemp = SamSetup.DeltaWaterTemp;
+//    TankSensor.avgTemp = SamSetup.DeltaTankTemp;
+//    ACPSensor.avgTemp = SamSetup.DeltaACPTemp;
+//  
+//    return;
 
   float ss, ps, ws, ts, acp;
   ss = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
