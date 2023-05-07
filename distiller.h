@@ -176,8 +176,9 @@ void run_dist_program(byte num) {
   WaterSensor.StartProgTemp = WaterSensor.avgTemp;
   TankSensor.StartProgTemp = TankSensor.avgTemp;
 
+  if (num > 0) set_capacity(program[num - 1].capacity_num);
+  
   if (program[num].WType != "") {
-    set_capacity(program[num].capacity_num);
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
     if (abs(program[num].Power) > 400 && program[num].Power > 0) {
