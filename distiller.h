@@ -33,8 +33,8 @@ void distiller_proc() {
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
-    run_dist_program(0);
     SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
+    run_dist_program(0);
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
@@ -167,6 +167,8 @@ void IRAM_ATTR check_alarm_distiller() {
 
 void run_dist_program(byte num) {
   ProgramNum = num;
+
+  SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
 
   //запоминаем текущие значения температур
   SteamSensor.StartProgTemp = SteamSensor.avgTemp;
