@@ -423,6 +423,11 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
             s += (String)current_power_volt;
             s += ",";
             s += format_float(WFflowRate, 2);
+
+            s += ",";
+            s += format_float(get_alcohol(TankSensor.avgTemp), 2);
+            s += ",";
+            s += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
 #ifdef USE_MQTT
             MqttSendMsg(s, "log");
 #endif
@@ -1234,11 +1239,9 @@ void getjson(void) {
 #endif
 
   if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    float c_temp;  //температура для определения спиртуозности с учетом давления
-    c_temp = get_temp_by_pressure(0, TankSensor.avgTemp, bme_pressure);
-    jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(c_temp), 2);
+    jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);
     jsonstr += ",";
-    jsonstr += "\"stm_alc\":"; jsonstr += format_float(get_steam_alcohol(c_temp), 2);
+    jsonstr += "\"stm_alc\":"; jsonstr += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
     jsonstr += ",";
   }
 
