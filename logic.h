@@ -904,10 +904,11 @@ void IRAM_ATTR set_power(bool On) {
 #endif
   } else {
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
-#ifdef SAMOVAR_USE_POWER
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    set_power_mode(POWER_SLEEP_MODE);
     acceleration_heater = false;
+#ifdef SAMOVAR_USE_POWER
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+    set_power_mode(POWER_SLEEP_MODE);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
 #else
     current_power_mode = POWER_SLEEP_MODE;
 #endif
