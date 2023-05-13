@@ -401,9 +401,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var == "boil_temp") {
     a = boil_temp;
   } else if (Var == "alcohol") {
-    float c_temp;  //температура для определения спиртуозности с учетом давления
-    c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, TankSensor.avgTemp, bme_pressure);
-    a = get_alcohol(c_temp);
+    a = get_alcohol(TankSensor.avgTemp);
   } else if (Var == "alcohol_s") {
     a = alcohol_s;
   } else if (Var == "test_num_val") {
