@@ -570,7 +570,7 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
     i_temp = current_pressure * 0.038 + 49.27;
 
     if (start_pressure == 0) {
-      d_temp = 760 * 0.038 + 49.27;
+      d_temp = start_temp - 78.15;
     } else {
       d_temp = start_temp - start_pressure * 0.038 - 49.27;  //учитываем поправку на погрешность измерения датчиков
     }
@@ -920,6 +920,8 @@ void IRAM_ATTR set_power(bool On) {
 
 float get_steam_alcohol(float t) {
   if (!boil_started) return 100;
+  t = get_temp_by_pressure(0, t, bme_pressure);
+
   static float r;
   float s;
   float k;
@@ -1007,6 +1009,7 @@ float get_steam_alcohol(float t) {
 
 float get_alcohol(float t) {
   if (!boil_started) return 100;
+  t = get_temp_by_pressure(0, t, bme_pressure);
   static float r;
   float k;
   k = (t - 89) / 6.49;
@@ -1036,11 +1039,7 @@ void set_boiling() {
       //началось кипение, запоминаем Т кипения
       boil_started = true;
       boil_temp = TankSensor.avgTemp;
-
-      float c_temp;  //температура для определения спиртуозности с учетом давления
-      c_temp = get_temp_by_pressure(0, TankSensor.avgTemp, bme_pressure);
-
-      alcohol_s = get_alcohol(c_temp);
+      alcohol_s = get_alcohol(TankSensor.avgTemp);
     }
   }
 }
