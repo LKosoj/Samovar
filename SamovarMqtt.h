@@ -79,7 +79,8 @@ void MqttSendMsg(String Str, const char *chart ) {
   if (!send_mqtt) return;
   strcpy(mqttstr1, mqttstr);
   strcat(mqttstr1, chart);
-  strcat(mqttstr1, "/1");
+  //Версия сообщения
+  strcat(mqttstr1, "/2");
   Str.toCharArray(payload, PAYLOADSIZE);
   uint16_t packetIdPub1 = mqttClient.publish(mqttstr1, 2, true, payload);
 }
