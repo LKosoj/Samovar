@@ -826,7 +826,7 @@ void get_old_data_log(AsyncWebServerRequest *request) {
 
 void get_web_interface() {
 
-  bool ret = Ping.ping("www.google.com", 2);
+  bool ret = Ping.ping("ora1.samovar-tool.ru", 2);
   if (!ret) {
     Serial.println(F("Нет покдлючения к интернету. Не удалось проверить обновление интерфейса. Если это первичная установка - необходимо загрузить интерфейс в Самовар в соответствии с инструкцией"));
     return;
