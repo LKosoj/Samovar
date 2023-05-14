@@ -935,7 +935,7 @@ float get_steam_alcohol(float t) {
     k = -9.84;
     t0 = 98;
   } else if (t >= 97 && t < 98) {
-    s = 20.744;
+    s = 29.936;
     k = -9;
     t0 = 97;
   } else if (t >= 96 && t < 97) {
