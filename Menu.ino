@@ -443,7 +443,7 @@ void menu_samovar_start() {
   if (startval == 0) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + "" + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
+    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
     delay(200);
 #endif
     startval = 1;
