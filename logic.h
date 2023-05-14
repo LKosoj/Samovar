@@ -920,13 +920,17 @@ void IRAM_ATTR set_power(bool On) {
 
 float get_steam_alcohol(float t) {
   if (!boil_started) return 100;
-  t = get_temp_by_pressure(0, t, bme_pressure);
 
   static float r;
+  float t1;
   float s;
   float k;
   byte t0;
-  if (t >= 99) {
+
+  t1 = t;
+  t = get_temp_by_pressure(0, t, bme_pressure);
+
+  if (t >= 99 && t < 99.84) {
     s = 11.21;
     k = -13;
     t0 = 99;
@@ -1000,10 +1004,16 @@ float get_steam_alcohol(float t) {
     t0 = 82;
   }
 
-  if (t > 100) r = 0;
+  if (t > 100) {
+    r = 0;
+  }
+  else if (t > 99.84) {
+    r = get_alcohol(t1);
+  }
   else {
     r = s + k * (t - t0);
   }
+  if (r < 0) r = 0;
   return r;
 }
 
@@ -1015,6 +1025,7 @@ float get_alcohol(float t) {
   k = (t - 89) / 6.49;
 
   r = 17.26 - k * (18.32 - k * (7.81 - k * (1.77 - k * (4.81 - k * (2.95 + k * (1.43 - k * (0.8 + 0.05 * k) )))))); // формула Макеода для вычисления крепости
+  if (r < 0) r = 0;
   r = float (round (r * 10)) / 10; // округляем до одного знака после запятой
   return r;
 
