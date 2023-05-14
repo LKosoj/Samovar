@@ -457,8 +457,8 @@
           document.getElementById('heap').innerHTML = myObj.heap;
           document.getElementById('rssi').innerHTML = myObj.rssi;
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
-          document.getElementById('alc').innerHTML = myObj.alc;
-          document.getElementById('stm_alc').innerHTML = myObj.stm_alc;
+          document.getElementById('alc').innerHTML = myObj.alc.toFixed(1);
+          document.getElementById('stm_alc').innerHTML = myObj.stm_alc.toFixed(2);
           sound_is_on = !!myObj.UseBBuzzer;
 
           if (myObj.Lstatus) {
