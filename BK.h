@@ -27,7 +27,7 @@ void bk_proc() {
   if (!PowerOn) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + "" + ",BK," + SessionDescription, "st");
+    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + ",BK," + SessionDescription, "st");
 #endif
     set_power(true);
 #ifdef SAMOVAR_USE_POWER
