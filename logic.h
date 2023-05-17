@@ -1056,7 +1056,7 @@ void set_boiling() {
 }
 
 bool check_boiling() {
-  if (boil_started || !PowerOn) {
+  if (boil_started || !PowerOn || !valve_status) {
     return false;
   }
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
