@@ -303,6 +303,9 @@ void sensor_init(void) {
   stepper.setSpeed(0);
   //Драйвер выключится по достижении позиции
   stepper.autoPower(true);
+#ifdef STEPPER_REVERSE
+  stepper.reverse(true);
+#endif
 
 #ifdef USE_WATERSENSOR
   //Настраиваем датчик потока
