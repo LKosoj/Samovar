@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.5")
+#define SAMOVAR_VERSION F("6.6")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
