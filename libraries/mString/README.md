@@ -1,4 +1,4 @@
-[![arduino-library-badge](https://www.ardu-badge.com/badge/mString.svg?)](https://www.ardu-badge.com/mString)
+[![latest](https://img.shields.io/github/v/release/GyverLibs/mString.svg?color=brightgreen)](https://github.com/GyverLibs/mString/releases/latest/download/mString.zip)
 [![Foo](https://img.shields.io/badge/Website-AlexGyver.ru-blue.svg?style=flat-square)](https://alexgyver.ru/)
 [![Foo](https://img.shields.io/badge/%E2%82%BD$%E2%82%AC%20%D0%9D%D0%B0%20%D0%BF%D0%B8%D0%B2%D0%BE-%D1%81%20%D1%80%D1%8B%D0%B1%D0%BA%D0%BE%D0%B9-orange.svg?style=flat-square)](https://alexgyver.ru/support_alex/)
 [![Foo](https://img.shields.io/badge/README-ENGLISH-blueviolet.svg?style=flat-square)](https://github-com.translate.goog/GyverLibs/mString?_x_tr_sl=ru&_x_tr_tl=en)  
@@ -41,55 +41,78 @@
 
 <a id="init"></a>
 ## Инициализация
+Библиотека может работать в двух режимах:
+- Внутренний буфер (по умолчанию) - текстовый буфер создаётся внутри объекта `mString<размер>`
+- Внешний буфер - при создании объекта mString передаётся внешний char массив и его размер. Для включения режима внешнего буфера нужно объявить `#define MS_EXTERNAL` перед подключением библиотеки
+
 ```cpp
+// в обычном режиме (внутренний буфер)
+// размер в количестве символов
 mString<размер> str;
+
+// внешний буфер
+// размер в количестве байт (буфер должен быть на 1 длиннее макс. длины текста)
+char buf[размер];
+mString str(buf, размер);
 ```
 
 <a id="usage"></a>
 ## Использование
 ```cpp
-str.length() - текущий размер
-str.clear() - очистить
-str.add( [char / char* / Fchar / числа / String] ) - добавить
-str += [char / char* / Fchar / числа / String] - добавить
-str = str + [char / char* / Fchar / числа / String] - можно суммировать
-str == [char / char* / числа / String] - сравнить
-Для добавления/сравнения с mString используй str.buf
+uint16_t length();                                      // текущий размер
+uint16_t capacity();                                    // максимальный размер (в кол-ве символов)
+void clear();                                           // очистить
+void add( [char / char* / Fchar / числа / String] );    // добавить
+void add_P(PGM_P s);                                    // добавить строку из Flash
+str += [char / char* / Fchar / числа / String];         // добавить
+str = str + [char / char* / Fchar / числа / String];    // суммировать
+str == [char / char* / числа / String];                 // сравнить
 
-Чтение символа по индексу
-str[idx]
-str.buf[idx]
-str.charAt(idx)
+bool equals_P(PGM_P s);     // совпадает со строкой из Flash
 
-Запись символа по индексу
-str[idx] = с
-str.buf[idx] = с
-str.setCharAt(idx, c)
+// Чтение символа по индексу
+str[idx];
+str.buf[idx];
+str.charAt(idx);
 
-Доступ к char буферу
-str.buf
-str.c_str()
+// Запись символа по индексу
+str[idx] = с;
+str.buf[idx] = с;
+str.setCharAt(idx, c);
 
-str.toInt(from) - преобразовать в int начиная с from
-str.toUint(from) - преобразовать в uint начиная с from
-str.toFloat(from) - преобразовать в float начиная с from
-str.startsWith(char*) - начинается с
-str.substring(from, to, char* arr) - скопировать с from до to во внешний arr
-str.truncate(amount) - обрезать с конца на amount
-str.remove(idx, amount) - удалить (вырезать) amount символов начиная с idx
-str.toLowerCase() - преобразовать буквы в нижний регистр
-str.toUpperCase() - преобразовать буквы в верхний регистр
-str.indexOf(char, from) - найти символ char, искать начиная с from
-str.indexOf(char*, from) - найти строку char, искать начиная с from
-str.split(char* str[], div) - разделить на строки по разделителю div
+// Доступ к char буферу
+char[] buf;
+char* c_str();
 
-Парсинг пакета, в котором данные разделены разделителем div и оканчиваются символом ter
-str.parseBytes(data, len, div, ter) - распарсить содержимое в массив byte длиной len
-str.parseInts(data, len, div, ter) - распарсить содержимое в массив int длиной len
-div и ter по умолчанию , и NULL
-Например для парсинга таких пакетов: "12,34,56"
-Кастомные: "12;34;56;78\n"
-Парсим str.parseBytes(data, len, ';', '\n')
+int32_t toInt(from = 0);        // преобразовать в 32 бит целое начиная с from
+float toFloat(from = 0);        // преобразовать в float начиная с from
+
+bool startsWith(char*);         // начинается с
+bool startsWith_P(PGM_P s);     // начинается со строки из Flash
+
+void substring(from, to, char* arr);    // скопировать с from до to во внешний arr
+void truncate(amount);                  // обрезать с конца на amount
+void remove(idx, amount);               // удалить (вырезать) amount символов начиная с idx
+
+void toLowerCase();             // преобразовать буквы в нижний регистр
+void toUpperCase();             // преобразовать буквы в верхний регистр
+
+int indexOf(char, from);        // найти символ char, искать начиная с from
+int indexOf(char[], from);      // найти строку char, искать начиная с from
+
+int split(char* str[], div);    // разделить на строки по разделителю div
+void unsplit(div);              // вернуть разделители после split
+
+// Парсинг пакета, в котором данные разделены разделителем div
+// data - целочисленный массив любого типа
+// bsize - вес типа массива (byte - 1, uint16_t - 2, long - 4)
+// len - размер массива в количестве ячеек
+// div - разделитель
+int parse(void* data, uint8_t bsize, int len, char div = ',');
+
+// устаревшие
+int parseBytes(data, len, div); // распарсить содержимое в массив byte длиной len
+int parseInts(data, len, div);  // распарсить содержимое в массив int длиной len
 ```
 
 <a id="example"></a>
@@ -138,18 +161,18 @@ void setup() {
   Serial.println(test.buf);   // added String
 
   // парсинг
-  test = "1234,2345,3456,4567,5,6";
+  test = "1234,2345,-3456,4567,5,6";
   Serial.println(test.startsWith("lol2"));  // 0
   Serial.println(test.startsWith("1234"));  // 1
   Serial.println(test.indexOf('k'));    // -1
 
-  int data[10];
-  byte get = test.parseInts(data, 10);
+  int16_t data[10];
+  int get = test.parse(data, 2, 10);   // 10 ячеек по 2 байта
   Serial.println(get);    // 6
   Serial.println();
 
   for (int i = 0; i < get; i++) {
-    Serial.println(data[i]);   // 1234 2345 3456 4567 5 6
+    Serial.println(data[i]);   // 1234 2345 -3456 4567 5 6
   }
 
   // поиск
@@ -195,6 +218,12 @@ void setup() {
   for (int i = 0; i < amount; i++) {
     Serial.println(strings[i]);
   }
+  
+  Serial.println(atoi(strings[1]));
+  Serial.println(atof(strings[2]));
+  
+  // вернуть строку к исходному виду
+  test.unsplit();
 }
 
 void loop() {
@@ -206,6 +235,12 @@ void loop() {
 - v1.0
 - v1.1 - разбил утилиты на .h .cpp
 - v1.1.1 - исправлена ошибка компиляции
+- v1.2
+    - Исправлено прибавление uint32_t чисел
+    - Добавлен режим внешнего буфера
+    - Добавлены _P функции для строк из Flash
+    - Добавлена unsplit()
+- v1.3 - добавлена универсальная функция parse
 
 <a id="feedback"></a>
 ## Баги и обратная связь
