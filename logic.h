@@ -1043,7 +1043,7 @@ void set_boiling() {
     if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
       b_t_temp_prev = TankSensor.avgTemp;
       b_t_time_min = millis();
-    } else if ((millis() - b_t_time_min) > 5 * 1000) {
+    } else if ((millis() - b_t_time_min) > 6 * 1000) {
       //6 секунд не было изменения температуры куба
       //d_s_temp_finish = 0;
       //d_s_time_min = 0;
@@ -1059,17 +1059,26 @@ bool check_boiling() {
   if (boil_started || !PowerOn || !valve_status) {
     return false;
   }
+
+  //учтем задержку в 30 секунд до начала процесса определения кипения, чтобы датчик температуры воды успел остыть, если он нагрелся
+  if (b_t_time_delay == 0 || (b_t_time_delay + 30 * 1000 < millis())) {
+    if (b_t_time_delay == 0){
+      b_t_time_delay = millis();
+    }
+    return false;
+  }
+  
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
     d_s_temp_prev = WaterSensor.avgTemp;
   }
-  if (WaterSensor.avgTemp - d_s_temp_prev > 10 || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+  if (WaterSensor.avgTemp - d_s_temp_prev > 15 || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
 #ifdef USE_WATER_PUMP
     wp_count = -10;
 #endif
     set_boiling();
   }
-  if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 5) {
+  if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3) {
 #ifdef USE_WATER_PUMP
     //Началось кипение, значит надо времено увеличить подачу воды (на всякий случай)
     wp_count = -10;
