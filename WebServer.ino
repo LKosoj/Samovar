@@ -679,9 +679,15 @@ void web_command(AsyncWebServerRequest *request) {
   */
   if (request->params() == 1) {
     if (request->hasArg("start") && PowerOn) {
-      if (Samovar_Mode == SAMOVAR_BEER_MODE) sam_command_sync = SAMOVAR_BEER_NEXT;
-      else
+      if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+        sam_command_sync = SAMOVAR_BEER_NEXT;
+      }
+      else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+        sam_command_sync = SAMOVAR_DIST_NEXT;
+      }
+      else {
         sam_command_sync = SAMOVAR_START;
+      }
     } else if (request->hasArg("power")) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
