@@ -1098,6 +1098,9 @@ void loop() {
       case SAMOVAR_BEER_NEXT:
         run_beer_program(ProgramNum + 1);
         break;
+      case SAMOVAR_DIST_NEXT:
+        run_dist_program(ProgramNum + 1);
+        break;
       case SAMOVAR_BK:
         Samovar_Mode = SAMOVAR_BK_MODE;
         SamovarStatusInt = 3000;
