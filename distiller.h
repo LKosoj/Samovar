@@ -10,6 +10,7 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void set_dist_program(String WProgram);
 void run_dist_program(byte num);
+String get_dist_program();
 
 #ifdef USE_WATER_PUMP
 bool check_boiling();
@@ -21,7 +22,7 @@ void distiller_proc() {
   if (!PowerOn) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + ",Distiller," + SessionDescription, "st");
+    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_dist_program() + "," + SessionDescription, "st");
 #endif
     set_power(true);
 #ifdef SAMOVAR_USE_POWER
