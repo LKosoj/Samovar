@@ -169,7 +169,11 @@ void IRAM_ATTR check_alarm_distiller() {
 void run_dist_program(byte num) {
   ProgramNum = num;
 
-  SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+  if (program[num].WType != "") {
+    SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+  } else {
+    SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
+  }
 
   //запоминаем текущие значения температур
   SteamSensor.StartProgTemp = SteamSensor.avgTemp;
