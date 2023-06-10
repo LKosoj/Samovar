@@ -667,10 +667,16 @@
       <div>
         <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
       </div>
-      <div>
-        <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setDistCommand();' class="button">
-        <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
-        <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
+
+      <div class="container_column" style="margin-bottom: 1em;">
+        <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setDistCommand();' class="button">
+          <input id='nextprg' type='submit' name='nextprg' value='Следующая программа' onclick='sendbutton("start=1");' class="button">
+        </div>
+        <div class="container_row" style="justify-content: space-around; align-items: center;">
+          <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
+          <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
+        </div>
       </div>
     </div>
 
@@ -710,10 +716,10 @@
                       <span style="font-weight: bold;"> A </span> - режим дистилляции по абсолютному изменению содержания спирта в кубе
                     </div>
                     <div>
-                      <span style="font-weight: bold;"> P </span> - режим дистилляции по относительному изменению содержания спирта в паре
+                      <span style="font-weight: bold;"> P </span> - режим дистилляции по абсолютному изменению содержания спирта в паре
                     </div>
                     <div>
-                      <span style="font-weight: bold;"> R </span> - режим дистилляции по абсолютному изменению содержания спирта в паре
+                      <span style="font-weight: bold;"> R </span> - режим дистилляции по относительному изменению содержания спирта в паре
                     </div>
                   </div>
                 </li>
