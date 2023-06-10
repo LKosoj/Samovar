@@ -434,6 +434,7 @@ unsigned long d_s_time_min;                                     // Время д
 float boil_temp;                                                // Температура куба, при которой началось кипение
 float b_t_temp_prev;                                            // Температура для определения начала кипения
 unsigned long b_t_time_min;                                     // Время для определения начала кипения
+unsigned long b_t_time_delay;                                   // Задержка начала определения кипения
 float alcohol_s;                                                // Спиртуозность, которая была при начале кипения
 volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
 volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
