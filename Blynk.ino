@@ -99,6 +99,8 @@ BLYNK_WRITE(V12) {
   if (State == 1) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       sam_command_sync = SAMOVAR_BEER_NEXT;
+    }else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      sam_command_sync = SAMOVAR_DIST_NEXT;
     } else {
       sam_command_sync = SAMOVAR_START;
     }
