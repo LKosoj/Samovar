@@ -20,6 +20,8 @@
     - Добавлены _P функции для строк из Flash
     - Добавлена unsplit()
     v1.3 - добавлена универсальная функция parse
+    v1.4 - возможность инициализации внешнего буфера без очистки
+    v1.5 - добавлена updateLength()
 */
 
 #ifndef _mString_h
@@ -45,10 +47,11 @@ public:
     char* buf;
     uint16_t _MS_SIZE = 0;
     
-    mString(char* nbuf, uint16_t size) {
+    mString(char* nbuf, uint16_t size, bool clear = true) {
         buf = nbuf;
         _MS_SIZE = size;
-        clear();
+        if (clear) clear();
+        else _len = strlen(buf);
     }
 #endif
 
@@ -63,6 +66,10 @@ public:
     void clear() {
         buf[0] = '\0';
         _len = 0;
+    }
+    
+    void updateLength() {
+        _len = strlen(buf);
     }
 
     // add

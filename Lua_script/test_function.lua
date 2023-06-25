@@ -2,6 +2,18 @@ local function getNumVariable(var)
   return 0
 end
 
+local function openValve(var)
+  return 0
+end
+
+local function getTimer(var)
+  return 0
+end
+
+local function setTimer(num, var)
+  return 0
+end
+
 local function getObject(val, type)
   return 0
 end
