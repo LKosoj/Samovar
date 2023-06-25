@@ -24,7 +24,7 @@ elseif pos == 5 then
 
 elseif pos == 6 then
   setNumVariable("TankTemp",85)
-  setNumVariable("WaterTemp",27)
+  setNumVariable("WaterTemp",35)
 
 elseif pos == 7 then
   setNumVariable("TankTemp",86)
@@ -32,5 +32,17 @@ elseif pos == 7 then
 
 elseif pos == 8 then
   setNumVariable("TankTemp",87)
+  setNumVariable("WaterTemp",49)
+
+elseif pos == 9 then
+  setNumVariable("TankTemp",97)
+  setNumVariable("WaterTemp",49)
+
+elseif pos == 10 then
+  setNumVariable("TankTemp",99)
+  setNumVariable("WaterTemp",49)
+
+elseif pos == 11 then
+  setNumVariable("TankTemp",99.8)
   setNumVariable("WaterTemp",49)
 end
