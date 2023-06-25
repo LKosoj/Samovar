@@ -1040,10 +1040,10 @@ float get_alcohol(float t) {
 void set_boiling() {
   //Учитываем задержку измерения Т кипения
   if (!boil_started) {
-    if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
-      b_t_temp_prev = TankSensor.avgTemp;
-      b_t_time_min = millis();
-    } else if ((millis() - b_t_time_min) > 6 * 1000) {
+//    if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
+//      b_t_temp_prev = TankSensor.avgTemp;
+//      b_t_time_min = millis();
+//    } else if ((millis() - b_t_time_min) > 6 * 1000) {
       //6 секунд не было изменения температуры куба
       //d_s_temp_finish = 0;
       //d_s_time_min = 0;
@@ -1051,7 +1051,7 @@ void set_boiling() {
       boil_started = true;
       boil_temp = TankSensor.avgTemp;
       alcohol_s = get_alcohol(TankSensor.avgTemp);
-    }
+//    }
   }
 }
 
@@ -1060,14 +1060,14 @@ bool check_boiling() {
     return false;
   }
 
-  //учтем задержку в 30 секунд до начала процесса определения кипения, чтобы датчик температуры воды успел остыть, если он нагрелся
-  if (b_t_time_delay == 0 || (b_t_time_delay + 30 * 1000 < millis())) {
-    if (b_t_time_delay == 0){
+  //учтем задержку в 60 секунд до начала процесса определения кипения, чтобы датчик температуры воды успел остыть, если он нагрелся
+  if (b_t_time_delay == 0 || (b_t_time_delay + 60 * 1000 > millis())) {
+    if (b_t_time_delay == 0) {
       b_t_time_delay = millis();
     }
     return false;
   }
-  
+
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
     d_s_temp_prev = WaterSensor.avgTemp;
