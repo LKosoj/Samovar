@@ -181,21 +181,23 @@ void run_dist_program(byte num) {
   WaterSensor.StartProgTemp = WaterSensor.avgTemp;
   TankSensor.StartProgTemp = TankSensor.avgTemp;
 
-  if (num > 0) set_capacity(program[num - 1].capacity_num);
-  
-  if (program[num].WType != "") {
+  if (num > 0) {
+    set_capacity(program[num - 1].capacity_num);
+    if (program[num - 1].WType != "") {
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
-    if (abs(program[num].Power) > 400 && program[num].Power > 0) {
+      if (abs(program[num - 1].Power) > 400 && program[num - 1].Power > 0) {
 #else
-    if (abs(program[num].Power) > 40 && program[num].Power > 0) {
+      if (abs(program[num - 1].Power) > 40 && program[num - 1].Power > 0) {
 #endif
-      set_current_power(program[num].Power);
-    } else if (program[num].Power != 0) {
-      set_current_power(target_power_volt + program[num].Power);
+        set_current_power(program[num - 1].Power);
+      } else if (program[num - 1].Power != 0) {
+        set_current_power(target_power_volt + program[num - 1].Power);
+      }
+#endif
     }
-#endif
   }
+
 }
 
 void set_dist_program(String WProgram) {
