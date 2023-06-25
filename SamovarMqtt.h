@@ -83,6 +83,12 @@ void MqttSendMsg(String Str, const char *chart ) {
   strcat(mqttstr1, "/2");
   Str.toCharArray(payload, PAYLOADSIZE);
   uint16_t packetIdPub1 = mqttClient.publish(mqttstr1, 2, true, payload);
+  if (packetIdPub1 == 0) {
+    if (!mqttClient.connected()){
+      mqttClient.connect();
+    }
+    packetIdPub1 = mqttClient.publish(mqttstr1, 2, true, payload);
+  }
 }
 
 
