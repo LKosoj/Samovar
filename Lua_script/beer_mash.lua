@@ -17,7 +17,7 @@ else
    if ACPTemp < TankTemp and ValveStatus == 0 and Timer == 0 then
       openValve(1)
       setTimer(1, Time)
-   elseif ValveStatus == 1 and Timer == 0 then
+   elseif ACPTemp >= TankTemp and ValveStatus == 1 and Timer == 0 then
       openValve(0)
       setTimer(1, Time)
    end
