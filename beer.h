@@ -84,7 +84,7 @@ void IRAM_ATTR check_alarm_beer() {
   //Обрабатываем программу
 
   //Проверяем, что клапан воды охлаждения не открыт, когда не нужно
-  if (program[ProgramNum].WType != "C" and program[ProgramNum].WType != "F" and valve_status) {
+  if (program[ProgramNum].WType != "C" and program[ProgramNum].WType != "F" and valve_status && PowerOn) {
     //Закрываем клапан воды
     open_valve(false);
     SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
@@ -139,7 +139,7 @@ void IRAM_ATTR check_alarm_beer() {
       //Отключаем нагреватель
       setHeaterPosition(false);
       //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
-      if ((TankSensor.avgTemp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status) {
+      if ((TankSensor.avgTemp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status && PowerOn) {
         open_valve(false);
         SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       }
@@ -282,7 +282,7 @@ void set_mixer_state(bool state, bool dir) {
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
 #ifdef USE_WATER_PUMP
       //включаем SSD реле
-      pump_pwm.write(1023);
+      //pump_pwm.write(1023);
 #endif
       //включаем I2CStepper шаговик
       if (use_I2C_dev == 1) {
@@ -302,7 +302,7 @@ void set_mixer_state(bool state, bool dir) {
     digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 #ifdef USE_WATER_PUMP
     //выключаем SSD реле
-    pump_pwm.write(0);
+    //pump_pwm.write(0);
 #endif
     //выключаем I2CStepper шаговик
     if (use_I2C_dev == 1) {
