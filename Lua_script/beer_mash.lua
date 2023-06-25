@@ -17,7 +17,7 @@ else
    if ACPTemp < TankTemp and ValveStatus == 0 and Timer == 0 then
       openValve(1)
       setTimer(1, Time)
-   elseif ValveStatus == 1 and Timer == 0
+   elseif ValveStatus == 1 and Timer == 0 then
       openValve(0)
       setTimer(1, Time)
    end
@@ -28,4 +28,3 @@ ValveStatus = getNumVariable("valve_status") + 0
 status = string.format("ACPT = %.2f; TankT = %.2f; Клапан %.0f", ACPTemp, TankTemp, ValveStatus)
 
 setLuaStatus(status)
---sendMsg(status, 2) --пишем оператору
