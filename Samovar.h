@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.7")
+#define SAMOVAR_VERSION F("6.8")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -397,6 +397,7 @@ bool alarm_event;                                               // Призна�
 bool acceleration_heater;                                       // Признак включенного разгонного тэна
 bool send_mqtt;                                                 // Отправлять данные в облако
 bool is_reboot = false;                                         // Признак перезагрузки
+bool SetScriptOff = false;                                      // Признак остановки Lua скрипта
 
 //volatile float samovar_temp;                                  // Температура ESP32
 volatile float bme_temp;                                        // Температура BME

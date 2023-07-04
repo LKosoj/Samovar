@@ -321,6 +321,8 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
     ACPSensor.avgTemp = a;
   } else if (Var == "loop_lua_fl") {
     loop_lua_fl = (int)a;
+  } else if (Var == "SetScriptOff") {
+    SetScriptOff = (int)a;
   } else if (Var == "show_lua_script") {
     show_lua_script = (int)a;
   } else if (Var == "test_num_val") {
@@ -382,6 +384,8 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = loop_lua_fl;
   } else if (Var == "show_lua_script") {
     a = show_lua_script;
+  } else if (Var == "SetScriptOff") {
+    a = SetScriptOff;
   } else if (Var == "program_volume") {
     a = program[ProgramNum].Volume;
   } else if (Var == "program_speed") {
@@ -791,6 +795,8 @@ void lua_init() {
   lua.Lua_register("set_i2c_rele_state", (const lua_CFunction) &lua_wrapper_set_i2c_rele_state);
 
   loop_lua_fl = 0;
+  SetScriptOff = false;
+  
   //Запускаем инициализирующий lua-скрипт
   File f = SPIFFS.open("/init.lua");
   if (f) {

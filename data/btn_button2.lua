@@ -1,3 +1,3 @@
  --|Остановить^
-setNumVariable("loop_lua_fl",0)
+setNumVariable("SetScriptOff",1)
 setLuaStatus("Скрипт остановлен")

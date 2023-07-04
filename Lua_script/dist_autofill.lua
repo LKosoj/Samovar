@@ -91,6 +91,7 @@ local function stopFilling ()
 	setObject("tank_filled", "true")
 	sendMsg("Done: filling stopped.", -1)
 	sendMsg("Done: filling stopped.", 0)
+    setNumVariable("loop_lua_fl",0)
 end
 
 

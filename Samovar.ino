@@ -395,6 +395,10 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       if (loop_lua_fl) {
         start_lua_script();
       }
+      if (SetScriptOff){
+        loop_lua_fl = false;
+        SetScriptOff = false;
+      }
 #endif
 
 
