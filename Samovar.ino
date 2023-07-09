@@ -392,12 +392,9 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
         if (sr != "") WriteConsoleLog("ERR in BTN_SCRIPT " + sr);
         btn_script = "";
       }
+
       if (loop_lua_fl) {
         start_lua_script();
-      }
-      if (SetScriptOff){
-        loop_lua_fl = false;
-        SetScriptOff = false;
       }
 #endif
 

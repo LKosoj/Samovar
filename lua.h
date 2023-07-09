@@ -322,7 +322,7 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
   } else if (Var == "loop_lua_fl") {
     loop_lua_fl = (int)a;
   } else if (Var == "SetScriptOff") {
-    SetScriptOff = (int)a;
+    SetScriptOff = (bool)a;
   } else if (Var == "show_lua_script") {
     show_lua_script = (int)a;
   } else if (Var == "test_num_val") {
@@ -909,6 +909,10 @@ void IRAM_ATTR do_lua_script(void *parameter) {
         if (sr != "") WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       }
       lua_finished = true;
+    }
+    if (SetScriptOff) {
+      loop_lua_fl = false;
+      SetScriptOff = 0;
     }
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
