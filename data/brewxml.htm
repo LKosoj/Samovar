@@ -225,7 +225,7 @@ function get_brewmate_info(xml){
 
 function get_recipe(recipe){
     is_program = false;
-    program = "M;45.00;0\n";
+    program = "M;45.00;0;1^-1^2^3\n";
 	//show main info
     document.getElementById("STYLE").textContent = get_object_value(recipe.RECIPES.RECIPE.STYLE.NAME);
     document.getElementById("NAME").textContent = get_object_value(recipe.RECIPES.RECIPE.NAME);
@@ -414,7 +414,7 @@ function get_recipe(recipe){
       dl1.appendChild(step_time);
 
       dl.appendChild(dl1);
-      program = program + "P;" + step_temp.textContent + ";" + step_time.textContent + "\n";
+      program = program + "P;" + step_temp.textContent + ";" + step_time.textContent + ";1^-1^2^3" + "\n";
     }
 
     var ingr = document.getElementById("mash");
@@ -430,19 +430,19 @@ function get_recipe(recipe){
     for (let hop of HOP){
         t = decimalAdjust("round",get_object_value(hop.TIME));
         if ((bth - t) <= 0) {
-            program = program + "B;0.00;1\n";
+            program = program + "B;0.00;1;1^-1^2^3\n";
         }
         else {
-            program = program + "B;0.00;" + (bth - t) + "\n";
+            program = program + "B;0.00;" + (bth - t) + ";1^-1^2^3\n";
         	bth = t;
         }
     }
 
     if (bth > 0) {
-          program = program + "B;0.00;" + bth + "\n";
+          program = program + "B;0.00;" + bth + ";1^-1^2^3\n";
     }
 
-    program = program + "C;" + pt + ";0\nF;" + pt + ";0";
+    program = program + "C;" + pt + ";0;1^-1^2^3\nF;" + pt + ";0;1^-1^2^3";
     is_program = true;
 }
 
