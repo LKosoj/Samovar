@@ -4,12 +4,15 @@
 // Настройки для шагового двигателя
 #define STEPPER_I2C_MS 2
 #define STEPPER_I2C_STEPS 200 * STEPPER_I2C_MS //количество шагов, 200 x MS
-#define STEPPER_I2C_MAX_SPEED 1200
+//#define STEPPER_I2C_MAX_SPEED 1200
 
 
 #include <Arduino.h>
 //#include <Wire.h>
 #include "Samovar.h"
+
+void stopService(void);
+void startService(void);
 
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 
@@ -39,7 +42,15 @@ bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time) {
 
 //spd - скорость в шагах в секунду, direction - прямое или обратное направление, target - количество шагов
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
-  if (!use_I2C_dev) return false;
+  if (!use_I2C_dev) {
+    stopService();
+    if (spd > 0) {
+      stepper.setMaxSpeed(spd);
+      stepper.setSpeed(spd);
+      startService();
+    }
+    return true;
+  }
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     I2C2.writeByte(0x01, 8, 1);
@@ -60,7 +71,7 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
 uint32_t get_stepper_status(void) {
   uint32_t rest = 0xFFFFFFFF;
   if (!use_I2C_dev) return rest;
-  
+
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     //Читаем количество оставшихся шагов
     rest  = (uint32_t)I2C2.readByte(0x01, 3) << 24;       // Считываем старший байт значения шагов, сдвигаем полученный байт на 32 бит влево, т.к. он старший
