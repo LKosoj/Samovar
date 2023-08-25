@@ -832,7 +832,7 @@ void get_old_data_log(AsyncWebServerRequest *request) {
 
 void get_web_interface() {
 
-  bool ret = Ping.ping("ora1.samovar-tool.ru", 2);
+  bool ret = Ping.ping("web.samovar-tool.ru", 2);
   if (!ret) {
     Serial.println(F("Нет покдлючения к интернету. Не удалось проверить обновление интерфейса. Если это первичная установка - необходимо загрузить интерфейс в Самовар в соответствии с инструкцией"));
     return;
@@ -845,7 +845,7 @@ void get_web_interface() {
   version = get_web_file("version.txt", GET_CONTENT);
   if (version == "<ERR>") return;
 
-  Serial.print("WEB interface version = ");
+  Serial.print(F("WEB interface version = "));
   Serial.println(version);
 
   File fn = SPIFFS.open("/version.txt", FILE_READ);
@@ -853,9 +853,10 @@ void get_web_interface() {
     local_version = fn.readStringUntil('\n');
     fn.close();
   }
-  Serial.print("Local interface version = ");
+  Serial.print(F("Local interface version = "));
   Serial.println(local_version);
   if (version != local_version) {
+    s += get_web_file("index.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("Green.png", SAVE_FILE_OVERRIDE);
     s += get_web_file("Red_light.gif", SAVE_FILE_OVERRIDE);
     s += get_web_file("alarm.mp3", SAVE_FILE_OVERRIDE);
@@ -872,7 +873,7 @@ void get_web_interface() {
     s += get_web_file("chart.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("distiller.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("index.htm", SAVE_FILE_OVERRIDE);
+    
     s += get_web_file("program.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("setup.htm", SAVE_FILE_OVERRIDE);
 
@@ -906,7 +907,7 @@ String get_web_file(String fn, get_web_type type) {
   Serial.print("url = ");
   Serial.println(url);
   request.setDebug(false);
-  request.setTimeout(3);                      //Таймаут три секунды
+  request.setTimeout(4);                      //Таймаут три секунды
   request.open(command.c_str(), url.c_str());  //URL
   while (request.readyState() < 1) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
