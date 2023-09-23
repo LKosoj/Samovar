@@ -275,8 +275,15 @@
       <h2>Ki: <input name='Ki' type='text' value='%Ki%'></h2>
       <h2>Kd: <input name='Kd' type='text' value='%Kd%'></h2>
       <div id='VoltH2' style=''>
-        <h2>Напр. регулятора в режиме поддержания темп.: <input name='StbVoltage' id='StbVoltage' type='text' value='%StbVoltage%'> V</h2>
+        <h2>Напр./мощность регулятора в режиме поддержания темп.: <input name='StbVoltage' id='StbVoltage' type='text' value='%StbVoltage%'> V</h2>
       </div>
+      <div id='VoltBoil' style=''>
+        <h2>Напр./мощность регулятора в режиме кипения: <input name='BVolt' id='BVolt' type='text' value='%BVolt%'> V</h2>
+      </div>
+        <h2>
+          <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
+          <label for='UseST' class="tooltip">Использовать разгонный тэн при кипечении<span class="tooltiptext">Если используется разгонный тэн, можно использовать его в режиме кипения</span></label>
+        </h2>
     </div>
 
     <div id="Other" class="tabcontent">
@@ -290,6 +297,10 @@
         </h2>
         <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
         <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+        <h2>
+          <input id='UseWS' type='checkbox' name='UseWS' value='UseWS' %UseWS%>
+          <label for='UseWS' class="tooltip">Использовать контроль потока воды<span class="tooltiptext">При наличии подключенного датчика потока воды при отключенной опции можно не учитывать его показания</span></label>
+        </h2>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
         <h2>

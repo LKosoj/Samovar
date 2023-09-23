@@ -314,7 +314,7 @@ void sensor_init(void) {
 
   //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-    set_beer_program("M;45;0;1^-1^2^3\nP;45;1;1^-1^2^3\nP;60;1;1^-1^2^3\nW;0;0;1^-1^2^3\nB;0;1;1^-1^2^3\nC;30;0;1^-1^2^3\n");
+    set_beer_program("M;45;0;1^-1^2^2\nP;45;1;1^-1^2^3\nP;60;1;1^-1^2^3\nW;0;0;1^-1^2^3\nB;0;1;1^-1^2^3\nC;30;0;1^-1^2^3\n");
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     //set_dist_program("T;90;0;50\nS;0.5;1;60\nA;11.3;2;70\nP;11.3;2;70\nR;11.3;2;70\n");
     set_dist_program("A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n");

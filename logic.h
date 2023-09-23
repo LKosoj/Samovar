@@ -1097,7 +1097,7 @@ void start_self_test(void) {
   open_valve(true);
 #ifdef USE_WATER_PUMP
   //включаем насос воды
-  set_pump_pwm(PWM_START_VALUE * 10);
+  set_pump_pwm((PWM_START_VALUE + 20) * 10);
 #endif
   //включаем шаговый двигатель
   stopService();
@@ -1110,10 +1110,10 @@ void start_self_test(void) {
   //включаем сервопривод
   set_capacity(1);
   while (capacity_num != 0 && capacity_num < 5) {
-    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
     next_capacity();
   }
-  vTaskDelay(10000 / portTICK_PERIOD_MS);
+  vTaskDelay(15000 / portTICK_PERIOD_MS);
   stop_self_test();
   SendMsg(F("Самотестирование закончено."), NOTIFY_MSG);
 }

@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.9")
+#define SAMOVAR_VERSION F("6.10")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -336,6 +336,9 @@ struct SetupEEPROM {
   bool UseBuzzer;                                              //Настройка для использования пищалки
   bool CheckPower;                                             //Параметр для контроля работы регулятора напряжения (если он подключен)
   bool UseBBuzzer;                                             //Настройка для использования пищалки в браузере
+  bool UseWS;                                                  //Настройка использования датчика протока воды
+  float BVolt;                                                 //Напряжение/мощность в режиме кипения
+  bool UseST;                                                  //Настройка использования разгонного тэна в режиме кипения
 };
 
 struct DSSensor {

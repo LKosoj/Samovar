@@ -16,7 +16,7 @@ LuaWrapper lua;
 #define EXPANDER_UPDATE_TIMEOUT 500
 
 
-unsigned long lua_timer[9]; //10 таймеров для lua
+unsigned long lua_timer[9];  //10 таймеров для lua
 String lua_type_script;
 String script1, script2, btn_script;
 
@@ -62,21 +62,20 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN || WATER_PUMP_PIN
+  if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN
 #ifdef ALARM_BTN_PIN
       || a == ALARM_BTN_PIN
 #endif
 #ifdef BTN_PIN
       || a == BTN_PIN
 #endif
-     ) {
+  ) {
     if (a != WATER_PUMP_PIN) digitalWrite(a, b);
     else {
 #ifdef USE_WATER_PUMP
       if (b == LOW) {
         pump_pwm.write(0);
-      }
-      else {
+      } else {
         pump_pwm.write(1023);
       }
 #else
@@ -90,13 +89,13 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
 static int lua_wrapper_digitalRead(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
-  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || WATER_PUMP_PIN ) lua_pushnumber(lua_state, (lua_Number) digitalRead(a));
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || WATER_PUMP_PIN) lua_pushnumber(lua_state, (lua_Number)digitalRead(a));
   return 1;
 }
 
 static int lua_wrapper_analogRead(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  lua_pushnumber(lua_state, (lua_Number) analogRead(LUA_PIN));
+  lua_pushnumber(lua_state, (lua_Number)analogRead(LUA_PIN));
   return 1;
 }
 
@@ -105,7 +104,7 @@ static int lua_wrapper_exp_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     expander.pinMode(a, b);
     xSemaphoreGive(xI2CSemaphore);
   }
@@ -116,7 +115,7 @@ static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
   int b = luaL_checkinteger(lua_state, 2);
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     expander.digitalWrite(a, b);
     xSemaphoreGive(xI2CSemaphore);
   }
@@ -126,8 +125,8 @@ static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
 static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    lua_pushnumber(lua_state, (lua_Number) expander.digitalRead(a));
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+    lua_pushnumber(lua_state, (lua_Number)expander.digitalRead(a));
     xSemaphoreGive(xI2CSemaphore);
   }
   return 1;
@@ -138,7 +137,7 @@ static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
 static int lua_wrapper_exp_analogWrite(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     analog_expander.analogWrite(a);
     xSemaphoreGive(xI2CSemaphore);
   }
@@ -148,8 +147,8 @@ static int lua_wrapper_exp_analogWrite(lua_State *lua_state) {
 static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    lua_pushnumber(lua_state, (lua_Number) analog_expander.analogRead(a));
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+    lua_pushnumber(lua_state, (lua_Number)analog_expander.analogRead(a));
     xSemaphoreGive(xI2CSemaphore);
   }
   return 1;
@@ -168,7 +167,7 @@ void wait_command_sync() {
 
 static int lua_wrapper_millis(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  lua_pushnumber(lua_state, (lua_Number) millis());
+  lua_pushnumber(lua_state, (lua_Number)millis());
   return 1;
 }
 
@@ -193,8 +192,7 @@ static int lua_wrapper_set_power(lua_State *lua_state) {
       if (!PowerOn) sam_command_sync = SAMOVAR_DISTILLATION;
     } else
       sam_command_sync = SAMOVAR_POWER;
-  }
-  else if (!a && PowerOn)
+  } else if (!a && PowerOn)
     sam_command_sync = SAMOVAR_POWER;
 
   return 0;
@@ -250,7 +248,7 @@ static int lua_wrapper_set_next_program(lua_State *lua_state) {
 
 static int lua_wrapper_get_state(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  lua_pushnumber(lua_state, (lua_Number) SamovarStatusInt);
+  lua_pushnumber(lua_state, (lua_Number)SamovarStatusInt);
   return 1;
 }
 
@@ -415,7 +413,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var != "") {
     WriteConsoleLog("GET UNDEF NUMERIC LUA VAR " + Var);
   }
-  lua_pushnumber(lua_state, (lua_Number) a);
+  lua_pushnumber(lua_state, (lua_Number)a);
   return 1;
 }
 
@@ -487,7 +485,7 @@ static int lua_wrapper_get_object(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var, Type;
   const char *s;
-  int n = lua_gettop(lua_state);  /* number of arguments */
+  int n = lua_gettop(lua_state); /* number of arguments */
   size_t l;
   lua_getglobal(lua_state, "tostring");
   lua_pushvalue(lua_state, -1);
@@ -540,6 +538,15 @@ static int lua_wrapper_set_capacity(lua_State *lua_state) {
   return 0;
 }
 
+#ifdef USE_WATER_PUMP
+static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  byte a = luaL_checknumber(lua_state, 1);
+  pump_pwm.write(a);
+  return 0;
+}
+#endif
+
 static int lua_wrapper_set_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   byte a = luaL_checknumber(lua_state, 1);
@@ -564,11 +571,10 @@ static int lua_wrapper_get_timer(lua_State *lua_state) {
       if (l <= 0) {
         b = 0;
         lua_timer[a] = 0;
-      }
-      else b = l / 1000;
+      } else b = l / 1000;
     }
   }
-  lua_pushnumber(lua_state, (lua_Number) b);
+  lua_pushnumber(lua_state, (lua_Number)b);
   return 1;
 }
 
@@ -606,7 +612,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   String Var;
   const char *s;
   size_t l;
-  int n = lua_gettop(lua_state);  /* number of arguments */
+  int n = lua_gettop(lua_state); /* number of arguments */
 
   lua_getglobal(lua_state, "tostring");
   lua_pushvalue(lua_state, -1);
@@ -621,7 +627,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   String RequestType;
   int httpResponseCode;
 
-  request.setTimeout(3); //Таймаут три секунды
+  request.setTimeout(3);  //Таймаут три секунды
   vTaskDelay(10 / portTICK_PERIOD_MS);
   if (n == 1) {
     RequestType = "GET";
@@ -673,8 +679,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   vTaskDelay(60 / portTICK_PERIOD_MS);
   if (request.responseHTTPcode() >= 0) {
     payload = request.responseText();
-  }
-  else {
+  } else {
     payload = "error";
   }
   // Free resources
@@ -689,7 +694,7 @@ static int lua_wrapper_set_stepper_by_time(lua_State *lua_state) {
   uint16_t a = luaL_checkinteger(lua_state, 1);
   uint8_t b = luaL_checkinteger(lua_state, 2);
   uint16_t c = luaL_checkinteger(lua_state, 3);
-  lua_pushnumber(lua_state, (lua_Number) set_stepper_by_time(a, b, c));
+  lua_pushnumber(lua_state, (lua_Number)set_stepper_by_time(a, b, c));
   return 1;
 }
 
@@ -698,31 +703,31 @@ static int lua_wrapper_set_stepper_target(lua_State *lua_state) {
   uint16_t a = luaL_checkinteger(lua_state, 1);
   uint8_t b = luaL_checkinteger(lua_state, 2);
   uint32_t c = luaL_checkinteger(lua_state, 3);
-  lua_pushnumber(lua_state, (lua_Number) set_stepper_target(a, b, c));
+  lua_pushnumber(lua_state, (lua_Number)set_stepper_target(a, b, c));
   return 1;
 }
 
 static int lua_wrapper_get_stepper_status(lua_State *lua_state) {
-  lua_pushnumber(lua_state, (lua_Number) get_stepper_status());
+  lua_pushnumber(lua_state, (lua_Number)get_stepper_status());
   return 1;
 }
 
 static int lua_wrapper_set_mixer_pump_target(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   byte a = luaL_checkinteger(lua_state, 1);
-  lua_pushnumber(lua_state, (lua_Number) set_mixer_pump_target(a));
+  lua_pushnumber(lua_state, (lua_Number)set_mixer_pump_target(a));
   return 1;
 }
 
 static int lua_wrapper_get_mixer_pump_status(lua_State *lua_state) {
-  lua_pushnumber(lua_state, (lua_Number) get_mixer_pump_status());
+  lua_pushnumber(lua_state, (lua_Number)get_mixer_pump_status());
   return 1;
 }
 
 static int lua_wrapper_check_I2C_device(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   byte a = luaL_checkinteger(lua_state, 1);
-  lua_pushnumber(lua_state, (lua_Number) check_I2C_device(a));
+  lua_pushnumber(lua_state, (lua_Number)check_I2C_device(a));
   return 1;
 }
 
@@ -730,73 +735,76 @@ static int lua_wrapper_set_i2c_rele_state(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   uint8_t a = luaL_checkinteger(lua_state, 1);
   uint8_t b = luaL_checkinteger(lua_state, 2);
-  lua_pushnumber(lua_state, (lua_Number) set_i2c_rele_state(a, b));
+  lua_pushnumber(lua_state, (lua_Number)set_i2c_rele_state(a, b));
   return 1;
 }
 
 static int lua_wrapper_get_i2c_rele_state(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   uint8_t a = luaL_checkinteger(lua_state, 1);
-  lua_pushnumber(lua_state, (lua_Number) get_i2c_rele_state(a));
+  lua_pushnumber(lua_state, (lua_Number)get_i2c_rele_state(a));
   return 1;
 }
 
 void lua_init() {
-  lua.Lua_register("pinMode", (const lua_CFunction) &lua_wrapper_pinMode);
-  lua.Lua_register("digitalWrite", (const lua_CFunction) &lua_wrapper_digitalWrite);
-  lua.Lua_register("digitalRead", (const lua_CFunction) &lua_wrapper_digitalRead);
-  lua.Lua_register("analogRead", (const lua_CFunction) &lua_wrapper_analogRead);
+  lua.Lua_register("pinMode", (const lua_CFunction)&lua_wrapper_pinMode);
+  lua.Lua_register("digitalWrite", (const lua_CFunction)&lua_wrapper_digitalWrite);
+  lua.Lua_register("digitalRead", (const lua_CFunction)&lua_wrapper_digitalRead);
+  lua.Lua_register("analogRead", (const lua_CFunction)&lua_wrapper_analogRead);
 #ifdef USE_EXPANDER
-  lua.Lua_register("exp_pinMode", (const lua_CFunction) &lua_wrapper_exp_pinMode);
-  lua.Lua_register("exp_digitalWrite", (const lua_CFunction) &lua_wrapper_exp_digitalWrite);
-  lua.Lua_register("exp_digitalRead", (const lua_CFunction) &lua_wrapper_exp_digitalRead);
+  lua.Lua_register("exp_pinMode", (const lua_CFunction)&lua_wrapper_exp_pinMode);
+  lua.Lua_register("exp_digitalWrite", (const lua_CFunction)&lua_wrapper_exp_digitalWrite);
+  lua.Lua_register("exp_digitalRead", (const lua_CFunction)&lua_wrapper_exp_digitalRead);
 #endif
 #ifdef USE_ANALOG_EXPANDER
-  lua.Lua_register("exp_analogWrite", (const lua_CFunction) &lua_wrapper_exp_analogWrite);
-  lua.Lua_register("exp_analogRead", (const lua_CFunction) &lua_wrapper_exp_analogRead);
+  lua.Lua_register("exp_analogWrite", (const lua_CFunction)&lua_wrapper_exp_analogWrite);
+  lua.Lua_register("exp_analogRead", (const lua_CFunction)&lua_wrapper_exp_analogRead);
 #endif
-  lua.Lua_register("delay", (const lua_CFunction) &lua_wrapper_delay);
-  lua.Lua_register("millis", (const lua_CFunction) &lua_wrapper_millis);
-  lua.Lua_register("sendMsg", (const lua_CFunction) &lua_wrapper_send_msg);
+  lua.Lua_register("delay", (const lua_CFunction)&lua_wrapper_delay);
+  lua.Lua_register("millis", (const lua_CFunction)&lua_wrapper_millis);
+  lua.Lua_register("sendMsg", (const lua_CFunction)&lua_wrapper_send_msg);
 
-  lua.Lua_register("setPower", (const lua_CFunction) &lua_wrapper_set_power);
-  lua.Lua_register("setBodyTemp", (const lua_CFunction) &lua_wrapper_set_body_temp);
-  lua.Lua_register("setAlarm", (const lua_CFunction) &lua_wrapper_set_alarm);
-  lua.Lua_register("setNumVariable", (const lua_CFunction) &lua_wrapper_set_num_variable);
-  lua.Lua_register("setStrVariable", (const lua_CFunction) &lua_wrapper_set_str_variable);
-  lua.Lua_register("setObject", (const lua_CFunction) &lua_wrapper_set_object);
-  lua.Lua_register("setLuaStatus", (const lua_CFunction) &lua_wrapper_set_lua_status);
+  lua.Lua_register("setPower", (const lua_CFunction)&lua_wrapper_set_power);
+  lua.Lua_register("setBodyTemp", (const lua_CFunction)&lua_wrapper_set_body_temp);
+  lua.Lua_register("setAlarm", (const lua_CFunction)&lua_wrapper_set_alarm);
+  lua.Lua_register("setNumVariable", (const lua_CFunction)&lua_wrapper_set_num_variable);
+  lua.Lua_register("setStrVariable", (const lua_CFunction)&lua_wrapper_set_str_variable);
+  lua.Lua_register("setObject", (const lua_CFunction)&lua_wrapper_set_object);
+  lua.Lua_register("setLuaStatus", (const lua_CFunction)&lua_wrapper_set_lua_status);
+#ifdef USE_WATER_PUMP
+  lua.Lua_register("setPumpPwm", (const lua_CFunction)&lua_wrapper_set_pump_pwm);
+#endif
 #ifdef SAMOVAR_USE_POWER
-  lua.Lua_register("setCurrentPower", (const lua_CFunction) &lua_wrapper_set_current_power);
+  lua.Lua_register("setCurrentPower", (const lua_CFunction)&lua_wrapper_set_current_power);
 #endif
-  lua.Lua_register("setMixer", (const lua_CFunction) &lua_wrapper_set_mixer);
-  lua.Lua_register("setNextProgram", (const lua_CFunction) &lua_wrapper_set_next_program);
-  lua.Lua_register("setPauseWithdrawal", (const lua_CFunction) &lua_wrapper_set_pause_withdrawal);
-  lua.Lua_register("setTimer", (const lua_CFunction) &lua_wrapper_set_timer);
-  lua.Lua_register("setCapacity", (const lua_CFunction) &lua_wrapper_set_capacity);
+  lua.Lua_register("setMixer", (const lua_CFunction)&lua_wrapper_set_mixer);
+  lua.Lua_register("setNextProgram", (const lua_CFunction)&lua_wrapper_set_next_program);
+  lua.Lua_register("setPauseWithdrawal", (const lua_CFunction)&lua_wrapper_set_pause_withdrawal);
+  lua.Lua_register("setTimer", (const lua_CFunction)&lua_wrapper_set_timer);
+  lua.Lua_register("setCapacity", (const lua_CFunction)&lua_wrapper_set_capacity);
 
-  lua.Lua_register("openValve", (const lua_CFunction) &lua_wrapper_open_valve);
+  lua.Lua_register("openValve", (const lua_CFunction)&lua_wrapper_open_valve);
 
-  lua.Lua_register("getNumVariable", (const lua_CFunction) &lua_wrapper_get_num_variable);
-  lua.Lua_register("getStrVariable", (const lua_CFunction) &lua_wrapper_get_str_variable);
-  lua.Lua_register("getState", (const lua_CFunction) &lua_wrapper_get_state);
-  lua.Lua_register("getObject", (const lua_CFunction) &lua_wrapper_get_object);
-  lua.Lua_register("getTimer", (const lua_CFunction) &lua_wrapper_get_timer);
-  lua.Lua_register("http_request", (const lua_CFunction) &lua_wrapper_http_request);
+  lua.Lua_register("getNumVariable", (const lua_CFunction)&lua_wrapper_get_num_variable);
+  lua.Lua_register("getStrVariable", (const lua_CFunction)&lua_wrapper_get_str_variable);
+  lua.Lua_register("getState", (const lua_CFunction)&lua_wrapper_get_state);
+  lua.Lua_register("getObject", (const lua_CFunction)&lua_wrapper_get_object);
+  lua.Lua_register("getTimer", (const lua_CFunction)&lua_wrapper_get_timer);
+  lua.Lua_register("http_request", (const lua_CFunction)&lua_wrapper_http_request);
 
-  lua.Lua_register("check_I2C_device", (const lua_CFunction) &lua_wrapper_check_I2C_device);
-  lua.Lua_register("set_stepper_by_time", (const lua_CFunction) &lua_wrapper_set_stepper_by_time);
-  lua.Lua_register("set_stepper_target", (const lua_CFunction) &lua_wrapper_set_stepper_target);
-  lua.Lua_register("get_stepper_status", (const lua_CFunction) &lua_wrapper_get_stepper_status);
-  lua.Lua_register("set_mixer_pump_target", (const lua_CFunction) &lua_wrapper_set_mixer_pump_target);
-  lua.Lua_register("get_mixer_pump_status", (const lua_CFunction) &lua_wrapper_get_mixer_pump_status);
+  lua.Lua_register("check_I2C_device", (const lua_CFunction)&lua_wrapper_check_I2C_device);
+  lua.Lua_register("set_stepper_by_time", (const lua_CFunction)&lua_wrapper_set_stepper_by_time);
+  lua.Lua_register("set_stepper_target", (const lua_CFunction)&lua_wrapper_set_stepper_target);
+  lua.Lua_register("get_stepper_status", (const lua_CFunction)&lua_wrapper_get_stepper_status);
+  lua.Lua_register("set_mixer_pump_target", (const lua_CFunction)&lua_wrapper_set_mixer_pump_target);
+  lua.Lua_register("get_mixer_pump_status", (const lua_CFunction)&lua_wrapper_get_mixer_pump_status);
 
-  lua.Lua_register("get_i2c_rele_state", (const lua_CFunction) &lua_wrapper_get_i2c_rele_state);
-  lua.Lua_register("set_i2c_rele_state", (const lua_CFunction) &lua_wrapper_set_i2c_rele_state);
+  lua.Lua_register("get_i2c_rele_state", (const lua_CFunction)&lua_wrapper_get_i2c_rele_state);
+  lua.Lua_register("set_i2c_rele_state", (const lua_CFunction)&lua_wrapper_set_i2c_rele_state);
 
   loop_lua_fl = 0;
   SetScriptOff = false;
-  
+
   //Запускаем инициализирующий lua-скрипт
   File f = SPIFFS.open("/init.lua");
   if (f) {
@@ -820,8 +828,8 @@ void lua_init() {
 
   //Запускаем таск для запуска скрипта
   xTaskCreatePinnedToCore(
-    do_lua_script,  /* Function to implement the task */
-    "do_lua_script", /* Name of the task */
+    do_lua_script,    /* Function to implement the task */
+    "do_lua_script",  /* Name of the task */
     4600,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */

@@ -560,7 +560,7 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
 
-      if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && WFpulseCount == 0) {
+      if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && WFpulseCount == 0 && !SamSetup.UseWS) {
         WFAlarmCount++;
       } else {
         WFAlarmCount = 0;
@@ -717,6 +717,7 @@ void setup() {
     SamSetup.TimeZone = 3;
     SamSetup.blynkauth[0] = '\0';
     SamSetup.videourl[0] = '\0';
+    SamSetup.UseWS = 1;
     save_profile();
   }
 
@@ -1315,6 +1316,18 @@ void read_config() {
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
   if (isnan(SamSetup.StbVoltage)) {
     SamSetup.StbVoltage = 100;
+  }
+
+  if (isnan(SamSetup.UseWS)) {
+    SamSetup.UseWS = true;
+  }
+
+  if (isnan(SamSetup.UseST)) {
+    SamSetup.UseST = true;
+  }
+
+  if (isnan(SamSetup.BVolt)) {
+    SamSetup.BVolt = 230;
   }
 
   if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;

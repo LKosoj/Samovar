@@ -345,6 +345,9 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "blynkauth") {
     s = SamSetup.blynkauth;
     return s;
+  } else if (var == "BVolt") {
+    s = SamSetup.BVolt;
+    return s;
   } else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else
@@ -365,8 +368,12 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.UseBuzzer) return "checked='true'";
     else
       return "";
-  } else if (var == "CUBBuzz") {
-    if (SamSetup.UseBBuzzer) return "checked='true'";
+  } else if (var == "UseWS") {
+    if (SamSetup.UseWS) return "checked='true'";
+    else
+      return "";
+  } else if (var == "UseST") {
+    if (SamSetup.UseST) return "checked='true'";
     else
       return "";
   } else if (var == "ChckPwr") {
@@ -511,6 +518,9 @@ void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("StbVoltage")) {
     SamSetup.StbVoltage = request->arg("StbVoltage").toFloat();
   }
+  if (request->hasArg("BVolt")) {
+    SamSetup.BVolt = request->arg("BVolt").toFloat();
+  }
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
@@ -548,9 +558,14 @@ void handleSave(AsyncWebServerRequest *request) {
     SamSetup.UseBuzzer = true;
   }
 
-  SamSetup.UseBBuzzer = false;
-  if (request->hasArg("UseBBuzzer")) {
-    SamSetup.UseBBuzzer = true;
+  SamSetup.UseWS = false;
+  if (request->hasArg("UseWS")) {
+    SamSetup.UseWS = true;
+  }
+
+  SamSetup.UseST = false;
+  if (request->hasArg("UseST")) {
+    SamSetup.UseST = true;
   }
 
   SamSetup.CheckPower = false;
