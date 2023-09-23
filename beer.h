@@ -79,7 +79,27 @@ void IRAM_ATTR beer_finish() {
 }
 
 void IRAM_ATTR check_alarm_beer() {
+
   if (startval <= 2000) return;
+
+  float temp;
+  switch (program[ProgramNum].TempSensor) {
+    case 0:
+      temp = TankSensor.avgTemp;
+      break;
+    case 1:
+      temp = WaterSensor.avgTemp;
+      break;
+    case 2:
+      temp = PipeSensor.avgTemp;
+      break;
+    case 3:
+      temp = SteamSensor.avgTemp;
+      break;
+    case 4:
+      temp = ACPSensor.avgTemp;
+      break;
+  }
 
   //Обрабатываем программу
 
@@ -102,7 +122,7 @@ void IRAM_ATTR check_alarm_beer() {
   //Если режим Автотюнинг
   if (program[ProgramNum].WType == "A") {
     if (tuning) {
-      set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
+      set_heater_state(program[ProgramNum].Temp, temp);
     } else {
       beer_finish();
     }
@@ -110,21 +130,21 @@ void IRAM_ATTR check_alarm_beer() {
 
   //Если режим Засыпь солода или Пауза
   if (program[ProgramNum].WType == "M" || program[ProgramNum].WType == "P") {
-    set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
+    set_heater_state(program[ProgramNum].Temp, temp);
   }
 
   //Если режим Брага
   if (program[ProgramNum].WType == "F") {
     //Если температура меньше целевой - греем, иначе охлаждаем.
-    if (TankSensor.avgTemp <= program[ProgramNum].Temp - TankSensor.SetTemp) {
+    if (temp <= program[ProgramNum].Temp - TankSensor.SetTemp) {
       if (valve_status) {
         //Закрываем клапан воды
         open_valve(false);
         SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       }
       //Поддерживаем целевую температуру
-      set_heater_state(program[ProgramNum].Temp, TankSensor.avgTemp);
-    } else if (TankSensor.avgTemp >= program[ProgramNum].Temp + TankSensor.SetTemp) {
+      set_heater_state(program[ProgramNum].Temp, temp);
+    } else if (temp >= program[ProgramNum].Temp + TankSensor.SetTemp) {
       {
         if (!valve_status) {
           //Отключаем нагреватель
@@ -139,14 +159,14 @@ void IRAM_ATTR check_alarm_beer() {
       //Отключаем нагреватель
       setHeaterPosition(false);
       //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
-      if ((TankSensor.avgTemp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status && PowerOn) {
+      if ((temp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status && PowerOn) {
         open_valve(false);
         SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       }
     }
   }
 
-  if (program[ProgramNum].WType == "M" && TankSensor.avgTemp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
+  if (program[ProgramNum].WType == "M" && temp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer(true);
@@ -155,7 +175,7 @@ void IRAM_ATTR check_alarm_beer() {
     startval = 2002;
   }
 
-  if (program[ProgramNum].WType == "P" && TankSensor.avgTemp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
+  if (program[ProgramNum].WType == "P" && temp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
@@ -180,7 +200,7 @@ void IRAM_ATTR check_alarm_beer() {
       if (pump_started) set_pump_pwm(1023);
 #endif
     }
-    if (TankSensor.avgTemp <= program[ProgramNum].Temp) {
+    if (temp <= program[ProgramNum].Temp) {
       //Если температура упала
       //Закрываем клапан воды
       open_valve(false);
@@ -197,7 +217,7 @@ void IRAM_ATTR check_alarm_beer() {
 
     if (begintime == 0) {
       //Если температура в кубе достигла температуры кипения, засекаем время
-      if (abs(TankSensor.avgTemp - BOILING_TEMP) <= 0.5) {
+      if (abs(temp - BOILING_TEMP) <= 0.5) {
         msgfl = true;
         begintime = millis();
         SendMsg(F("Начался режим кипячения"), NOTIFY_MSG);
@@ -206,7 +226,7 @@ void IRAM_ATTR check_alarm_beer() {
 
     //Греем до температуры кипения, исходя из того, что датчик в кубе врет не сильно
     if (begintime == 0) {
-      set_heater_state(BOILING_TEMP + 5, TankSensor.avgTemp);
+      set_heater_state(BOILING_TEMP + 5, temp);
     } else {
       //Иначе поддерживаем температуру
       heater_state = true;
@@ -430,7 +450,8 @@ String get_beer_program() {
       Str += program[i].WType + ";";
       Str += (String)program[i].Temp + ";";
       Str += (String)(int)program[i].Time + ";";
-      Str += (String)program[i].capacity_num + "^" + program[i].Speed + "^" + program[i].Volume + "^" + program[i].Power + "\n";
+      Str += (String)program[i].capacity_num + "^" + program[i].Speed + "^" + program[i].Volume + "^" + program[i].Power + ";";
+      Str += (String)program[i].TempSensor + "\n";
     }
   }
   return Str;
@@ -449,12 +470,15 @@ void set_beer_program(String WProgram) {
     program[i].Temp = atof(pair);
     pair = strtok(NULL, ";");
     program[i].Time = atof(pair);
-    pair = strtok(NULL, "\n");
+    pair = strtok(NULL, ";");
     //разберем шаблон для насоса/мешалки по частям
     program[i].capacity_num = getValue(pair, '^', 0).toInt();  //Тип устройства - 1 - мешалка, 2 - насос, 3 - мешалка и насос одновременно
     program[i].Speed = getValue(pair, '^', 1).toInt();         //Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения
     program[i].Volume = getValue(pair, '^', 2).toInt();        //Время включения в мин
     program[i].Power = getValue(pair, '^', 3).toInt();         //Время выключения в мин
+    pair = strtok(NULL, "\n");
+    program[i].TempSensor = atoi(pair);
+
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
