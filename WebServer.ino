@@ -4,7 +4,6 @@
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request);
-void get_old_data_log(AsyncWebServerRequest *request);
 String calibrateKeyProcessor(const String &var);
 String indexKeyProcessor(const String &var);
 void web_program(AsyncWebServerRequest *request);
@@ -153,10 +152,10 @@ void WebServerInit(void) {
     calibrate_command(request);
   });
   server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest * request) {
-    get_data_log(request);
+    get_data_log(request, "data.csv");
   });
   server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
-    get_old_data_log(request);
+    get_data_log(request, "data_old.csv");
   });
 #ifdef USE_LUA
   server.on("/lua", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -813,35 +812,20 @@ void calibrate_command(AsyncWebServerRequest *request) {
     request->send(200, "text/plain", "OK");
 }
 
-void get_data_log(AsyncWebServerRequest *request) {
+void get_data_log(AsyncWebServerRequest *request, String fn) {
   if (fileToAppend)
     fileToAppend.flush();
-  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/data.csv", String(), true);
-  if (SPIFFS.exists("/data.csv")) {
-    response = request->beginResponse(SPIFFS, "/data.csv", String(), true);
-  } else {
-    response = request->beginResponse(400, "text/plain", "");
-  }
-  response->addHeader("Content-Type", "application/octet-stream");
-  response->addHeader("Content-Description", "File Transfer");
-  response->addHeader("Content-Disposition", "attachment; filename=\"data.csv\"");
-  response->addHeader("Pragma", "public");
-  response->addHeader("Cache-Control", "no-cache");
-  request->send(response);
-}
-
-void get_old_data_log(AsyncWebServerRequest *request) {
   AsyncWebServerResponse *response;
-  if (SPIFFS.exists("/data_old.csv")) {
-    response = request->beginResponse(SPIFFS, "/data_old.csv", String(), true);
+  if (SPIFFS.exists("/" + fn)) {
+    response = request->beginResponse(SPIFFS, "/" + fn, String(), true);
   } else {
     response = request->beginResponse(400, "text/plain", "");
   }
-  response->addHeader("Content-Type", "application/octet-stream");
-  response->addHeader("Content-Description", "File Transfer");
-  response->addHeader("Content-Disposition", "attachment; filename=\"data_old.csv\"");
-  response->addHeader("Pragma", "public");
-  response->addHeader("Cache-Control", "no-cache");
+  response->addHeader(F("Content-Type"), F("application/octet-stream"));
+  response->addHeader(F("Content-Description"), F("File Transfer"));
+  response->addHeader(F("Content-Disposition"), "attachment; filename=\""+ fn + "\"");
+  response->addHeader(F("Pragma"), F("public"));
+  response->addHeader(F("Cache-Control"), F("no-cache"));
   request->send(response);
 }
 
