@@ -435,7 +435,7 @@
       s = "";
       for (i = 1; i < t.length; i++) {
         k = t[i].childNodes;
-        for (j = 1; j < 5; j++) {
+        for (j = 1; j < 6; j++) {
           s = s + k[j].value + ";";
         }
         s = s.slice(0, -1);
@@ -502,10 +502,12 @@
       pmixer.setAttribute("onchange", "calc_program();");
       dl.appendChild(pmixer);
 
+      pmixer.insertAdjacentHTML("afterend", '<select id="dt' + _lnIdx + '" name="dt' + _lnIdx + '" onchange="calc_program()"><option value="0">Куб</option><option value="1">Вода</option><option value="2">Царга</option><option value="3">Пар</option><option value="4">ТСА</option></select>');
+
       var plus = document.createElement("img");
       plus.src = 'plus.png';
       plus.setAttribute("width", "20");
-      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','W;0;0;')");
+      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','W;0;0;;0')");
       dl.appendChild(plus);
 
       var minus = document.createElement("img");
@@ -526,6 +528,10 @@
       var ptype = document.getElementById(p);
       ptype.value = arr[0];
 
+      p = "dt" + _lnIdx;
+      ptype = document.getElementById(p);
+      ptype.value = arr[4];
+
       set_bgcolor(_lnIdx);
 
       _lnIdx++;
@@ -538,7 +544,7 @@
         return;
       }
       var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label></div>');
+      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>');
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
       for (z = 0; z < varr.length; z++) {
@@ -560,7 +566,7 @@
       var e = l.childNodes;
       for (q = 0; q < e.length; q++) {
         if (q == 4) {
-          e[q].setAttribute("style", color + "width:150");
+          e[q].setAttribute("style", color + "width:110");
         } else e[q].setAttribute("style", color);
       }
       calc_program();
