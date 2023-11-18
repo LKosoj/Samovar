@@ -412,6 +412,8 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = alcohol_s;
   } else if (Var == "water_pump_speed") {
     a = water_pump_speed;
+  } else if (Var == "pressure_value") {
+    a = pressure_value;
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {

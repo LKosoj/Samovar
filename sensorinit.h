@@ -101,6 +101,24 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 }
 
 //***************************************************************************************************************
+// считываем параметры с датчика XGZP6897D
+//***************************************************************************************************************
+#ifdef USE_PRESSURE
+void IRAM_ATTR pressure_sensor_get() {
+  if (!use_pressure_sensor) {
+    pressure_sensor = -1;
+    return;
+  }
+  float t;
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(30 / portTICK_RATE_MS)) == pdTRUE) {
+    pressure_sensor.readSensor(t, pressure_value);
+    xSemaphoreGive(xI2CSemaphore);
+  }
+  pressure_value = pressure_value / 133.32; //переводим паскали в мм. рт. столба
+}
+#endif
+
+//***************************************************************************************************************
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
 void IRAM_ATTR DS_getvalue(void) {
@@ -276,7 +294,7 @@ void sensor_init(void) {
 
   sensors.setWaitForConversion(false);  // работаем в асинхронном режиме
   sensors.requestTemperatures();
-  delay(750);
+  //delay(750);
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("1 Sensor Resolution: ");  // пишем разрешение для датчика 0
@@ -365,6 +383,22 @@ void sensor_init(void) {
 #ifdef USE_WATER_PUMP
   init_pump_pwm(WATER_PUMP_PIN, PUMP_PWM_FREQ);
   set_pump_pwm(0);
+#endif
+
+  use_pressure_sensor = false;
+#ifdef USE_PRESSURE
+#ifdef __SAMOVAR_DEBUG
+  Serial.println("Init pressure sensor");
+#endif
+
+  if (!pressure_sensor.begin())  // initialize and check the device
+  {
+    use_pressure_sensor = false;
+#ifdef __SAMOVAR_DEBUG
+    Serial.println("Device not responding.");
+#endif
+  } else use_pressure_sensor = true;
+
 #endif
 
   reset_sensor_counter();

@@ -107,6 +107,12 @@ PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
 #include <Adafruit_BME280.h>
 #endif
 
+#ifdef USE_PRESSURE
+#include <XGZP6897D.h>
+XGZP6897D pressure_sensor(USE_PRESSURE);
+#endif
+
+
 #include "mod_rmvk.h"
 //#include "font.h"
 #include "logic.h"
@@ -337,7 +343,9 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 #endif
     {
       BME_getvalue(false);
-
+#ifdef USE_PRESSURE      
+      pressure_sensor_get();
+#endif
       vTaskDelay(5600 / portTICK_PERIOD_MS);
     }
   }

@@ -1,0 +1,5 @@
+XGZP6897D	KEYWORD1
+begin	KEYWORD2
+readSensor	KEYWORD2
+readRawSensor 	KEYWORD2
+

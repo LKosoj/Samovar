@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.11")
+#define SAMOVAR_VERSION F("6.12")
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
@@ -462,6 +462,8 @@ uint32_t chipId = 0;                                            // Иденти�
 //String vr;                                                      // Причина перезагрузки ESP32
 String SessionDescription;                                      // Описание параметров работы в свободном формате для сохранения в облаке
 volatile float test_num_val;                                    // Тестовое численное значение
+float pressure_value;                                           // Давление от датчика давления
+bool use_pressure_sensor;                                       // Использовать датчик давления (по результатам инициализации)
 String test_str_val;                                            // Тестовое строковое значение
 String Lua_status;                                              // Статус Lua
 uint32_t total_byte;                                            // Доступно байт на файловой системе
