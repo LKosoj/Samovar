@@ -434,6 +434,10 @@
       for (i = 1; i < t.length; i++) {
         k = t[i].childNodes;
         for (j = 1; j < 6; j++) {
+          if (j == 4) {
+            if (k[j].value == "") k[j].value = "0^0.00^0^0";
+            if (char_count(k[j].value, "^") != 3) k[j].value = "0^0.00^0^0";
+          }
           s = s + k[j].value + ";";
         }
         s = s.slice(0, -1);
@@ -616,6 +620,14 @@
       }
       document.getElementById('PWM').value = num;
       sliderChange();
+    }
+    
+    function char_count(str, ch) {
+      counter = 0;
+      for (let i = 0; i < str.length; i++) {
+       if (str[i] === ch) counter++;
+      }
+      return counter;
     }
 
   </script>
