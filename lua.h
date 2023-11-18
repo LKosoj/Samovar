@@ -541,7 +541,7 @@ static int lua_wrapper_set_capacity(lua_State *lua_state) {
 #ifdef USE_WATER_PUMP
 static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  byte a = luaL_checknumber(lua_state, 1);
+  int a = luaL_checknumber(lua_state, 1);
   pump_pwm.write(a);
   return 0;
 }
