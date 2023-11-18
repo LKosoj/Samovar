@@ -141,9 +141,14 @@
           </div>
         </h2>
         <h2>Ректификация и дистилляция до температуры в кубе: <input name='DistTemp' type='text' value='%DistTemp%'>&#176;C</h2>
+        <h2  class="tooltip">Время для контроля завершения процесса дистилляции: <input name='DistTimeF' type='text' value='%DistTimeF%'> мин<span class="tooltiptext">Время в минутах для прекращению дистилляции, при условии, что значение датчика куба не меняется. Не более 255 минут. 0 - не учитывать</span></h2>
         <h2>
           <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
           <label for='usepressure'>Использовать корректировку давления</label>
+        </h2>
+        <h2>
+          <input id='useflevel' type='checkbox' name='useflevel' value='useflevel' %FLChecked%>
+          <label for='useflevel'>Использовать датчик уровня флегмы при ректификации</label>
         </h2>
       </div>
       <div>

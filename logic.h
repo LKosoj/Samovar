@@ -619,79 +619,81 @@ void IRAM_ATTR check_alarm() {
 
   //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
+  if (SamSetup.UseHLS) {
   whls.tick();
-  if (whls.isHolded() && alarm_h_min == 0) {
-    whls.resetStates();
-    if (program[ProgramNum].WType != "C") {
-      set_buzzer(true);
-      SendMsg(F("Сработал датчик захлёба!"), ALARM_MSG);
+    if (whls.isHolded() && alarm_h_min == 0) {
+      whls.resetStates();
+      if (program[ProgramNum].WType != "C") {
+        set_buzzer(true);
+        SendMsg(F("Сработал датчик захлёба!"), ALARM_MSG);
 #ifdef SAMOVAR_USE_POWER
-      alarm_c_min = 0;
-      alarm_c_low_min = 0;
-      prev_target_power_volt = 0;
+        alarm_c_min = 0;
+        alarm_c_low_min = 0;
+        prev_target_power_volt = 0;
 #endif
-    } else {
+      } else {
 #ifdef SAMOVAR_USE_POWER
-      //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
-      alarm_c_min = millis() + 1000 * 60 * TIME_C / 5;
-      //счетчик для повышения напряжения сбрасываем
-      alarm_c_low_min = 0;
-      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
-#endif
-    }
-#ifdef SAMOVAR_USE_POWER
-    SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
-#ifdef SAMOVAR_USE_SEM_AVR
-    set_current_power(target_power_volt - target_power_volt / 100 * 2);
-#else
-    set_current_power(target_power_volt - 1 * PWR_FACTOR);
-#endif
-#endif
-    //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
-    alarm_h_min = millis() + 1000 * 40;
-  }
-
-  if (alarm_h_min > 0 && alarm_h_min <= millis()) {
-    whls.resetStates();
-    alarm_h_min = 0;
-  }
-#ifdef SAMOVAR_USE_POWER
-  //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
-  if (alarm_c_min > 0 && alarm_c_min <= millis()) {
-    if (program[ProgramNum].WType == "C") {
-      if (prev_target_power_volt == 0) {
-#ifdef SAMOVAR_USE_SEM_AVR
-        prev_target_power_volt = target_power_volt + target_power_volt / 100 * 4;
-#else
-        prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
+        //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
+        alarm_c_min = millis() + 1000 * 60 * TIME_C / 5;
+        //счетчик для повышения напряжения сбрасываем
+        alarm_c_low_min = 0;
+        if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
 #endif
       }
+#ifdef SAMOVAR_USE_POWER
+      SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(prev_target_power_volt - target_power_volt / 100 * 3);
+      set_current_power(target_power_volt - target_power_volt / 100 * 2);
 #else
-      set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
+      set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
-      prev_target_power_volt = 0;
-      //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
-      alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+#endif
+      //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
+      alarm_h_min = millis() + 1000 * 40;
     }
-    alarm_c_min = 0;
-  }
-  //Если программа предзахлеб и давно не было срабатывания датчика - повышаем напряжение
-  if (program[ProgramNum].WType == "C") {
-    if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
+
+    if (alarm_h_min > 0 && alarm_h_min <= millis()) {
+      whls.resetStates();
+      alarm_h_min = 0;
+    }
+#ifdef SAMOVAR_USE_POWER
+    //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
+    if (alarm_c_min > 0 && alarm_c_min <= millis()) {
+      if (program[ProgramNum].WType == "C") {
+        if (prev_target_power_volt == 0) {
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt + target_power_volt / 100 * 1);
+          prev_target_power_volt = target_power_volt + target_power_volt / 100 * 4;
 #else
-      set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
+          prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
 #endif
-      alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
-    } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
-      alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+        }
+#ifdef SAMOVAR_USE_SEM_AVR
+        set_current_power(prev_target_power_volt - target_power_volt / 100 * 3);
+#else
+        set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
+#endif
+        prev_target_power_volt = 0;
+        //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
+        alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+      }
+      alarm_c_min = 0;
     }
-  } else alarm_c_low_min = 0;
+    //Если программа предзахлеб и давно не было срабатывания датчика - повышаем напряжение
+    if (program[ProgramNum].WType == "C") {
+      if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
+#ifdef SAMOVAR_USE_SEM_AVR
+        set_current_power(target_power_volt + target_power_volt / 100 * 1);
+#else
+        set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
+#endif
+        alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+      } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
+        alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+      }
+    } else alarm_c_low_min = 0;
 
 #endif
+  }
   //Если используется датчик уровня флегмы в голове
 #endif
 
@@ -992,7 +994,7 @@ float get_steam_alcohol(float t) {
     t0 = 85;
   } else if (t >= 84 && t < 85) {
     s = 79.88;
-    k = -2,67;
+    k = -2, 67;
     t0 = 84;
   } else if (t >= 83 && t < 84) {
     s = 81.08;
@@ -1040,18 +1042,18 @@ float get_alcohol(float t) {
 void set_boiling() {
   //Учитываем задержку измерения Т кипения
   if (!boil_started) {
-//    if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
-//      b_t_temp_prev = TankSensor.avgTemp;
-//      b_t_time_min = millis();
-//    } else if ((millis() - b_t_time_min) > 6 * 1000) {
-      //6 секунд не было изменения температуры куба
-      //d_s_temp_finish = 0;
-      //d_s_time_min = 0;
-      //началось кипение, запоминаем Т кипения
-      boil_started = true;
-      boil_temp = TankSensor.avgTemp;
-      alcohol_s = get_alcohol(TankSensor.avgTemp);
-//    }
+    //    if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
+    //      b_t_temp_prev = TankSensor.avgTemp;
+    //      b_t_time_min = millis();
+    //    } else if ((millis() - b_t_time_min) > 6 * 1000) {
+    //6 секунд не было изменения температуры куба
+    //d_s_temp_finish = 0;
+    //d_s_time_min = 0;
+    //началось кипение, запоминаем Т кипения
+    boil_started = true;
+    boil_temp = TankSensor.avgTemp;
+    alcohol_s = get_alcohol(TankSensor.avgTemp);
+    //    }
   }
 }
 

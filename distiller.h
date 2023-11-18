@@ -63,12 +63,12 @@ void distiller_proc() {
   }
 
 
-  //Если Т в кубе больше 90 градусов и включено напряжение, проверяем, что 16 минут температура в кубе не меняется от последнего заполненного значения больше, чем на 0.1 градус
-  if (TankSensor.avgTemp > 90 && PowerOn) {
+  //Если Т в кубе больше 90 градусов и включено напряжение и DistTimeF > 0, проверяем, что DistTimeF минут температура в кубе не меняется от последнего заполненного значения больше, чем на 0.1 градус
+  if (TankSensor.avgTemp > 90 && PowerOn && SamSetup.DistTimeF > 0) {
     if (abs(TankSensor.avgTemp - d_s_temp_finish) > 0.1) {
       d_s_temp_finish = TankSensor.avgTemp;
       d_s_time_min = millis();
-    } else if ((millis() - d_s_time_min) > 16 * 60 * 1000) {
+    } else if ((millis() - d_s_time_min) > SamSetup.DistTimeF * 60 * 1000) {
       SendMsg(F("В кубе не осталось спирта"), NOTIFY_MSG);
       distiller_finish();
     }

@@ -1332,6 +1332,16 @@ void read_config() {
 
   if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;
   if (isnan(SamSetup.SetACPTemp) || SamSetup.SetACPTemp == 0) SamSetup.SetACPTemp = 43;
+  if (isnan(SamSetup.DistTimeF)) {
+    SamSetup.DistTimeF = 16;
+  }
+
+#ifdef USE_HEAD_LEVEL_SENSOR
+  if (isnan(SamSetup.UseHLS)) {
+    SamSetup.UseHLS = true;
+  }
+#endif
+  
 
   //  pump_regulator.Kp = SamSetup.Kp;
   //  pump_regulator.Ki = SamSetup.Ki;

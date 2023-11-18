@@ -347,8 +347,15 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "BVolt") {
     s = SamSetup.BVolt;
     return s;
+  } else if (var == "DistTimeF") {
+    s = SamSetup.DistTimeF;
+    return s;
   } else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
+    else
+      return "";
+  } else if (var == "FLChecked") {
+    if (SamSetup.UseHLS) return "checked='true'";
     else
       return "";
   } else if (var == "UAPChecked") {
@@ -520,6 +527,9 @@ void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("BVolt")) {
     SamSetup.BVolt = request->arg("BVolt").toFloat();
   }
+  if (request->hasArg("DistTimeF")) {
+    SamSetup.DistTimeF = request->arg("DistTimeF").toInt();
+  }
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
@@ -530,6 +540,11 @@ void handleSave(AsyncWebServerRequest *request) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
     else
       set_program(request->arg("WProgram"));
+  }
+
+  SamSetup.UseHLS = false;
+  if (request->hasArg("useflevel")) {
+    SamSetup.UseHLS = true;
   }
 
   SamSetup.UsePreccureCorrect = false;
