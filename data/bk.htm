@@ -15,7 +15,7 @@
 
     function ConnectError (Type) {
       if (Type) {
-        if (!OfflineCouner) { //если это первый обрыв
+        if (OfflineCouner < 3) { //считаем 3 обрыва подряд
           OfflineCouner++
         } else {
           document.getElementById('connection_indicator').innerHTML = `
@@ -48,7 +48,6 @@
         powerTarget = 'Целевая мощн.: ';
         powerUnit = ' Вт';
         document.getElementById('current_power_line').style = 'visibility: hidden';
-        document.getElementById('PWR').style = '';
       } else if (pwr_unit === 'V') {
         setPowerLabel = 'Напряжение регулятора: ';
         setPowerButton = 'Установить напряжение';
@@ -56,7 +55,6 @@
         powerTarget = 'Целевое напр.: ';
         powerUnit = ' V';
         document.getElementById('current_power_line').style = 'visibility: visible';
-        document.getElementById('PWR').style = '';
       } else {
         document.getElementById('PWR').style =
           'visibility: hidden;position: fixed;';
@@ -552,14 +550,14 @@
           <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
             <div>
               Скорость насоса:
-              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="600" value='%PWM_V%' list="tickmarks" onchange='sliderChange();'>
+              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="1023" value='%PWM_V%' list="tickmarks" onchange='sliderChange();'>
               <datalist id="tickmarks">
                 <option value="%PWM_LV%">
-                <option value="200">
                 <option value="300">
-                <option value="400">
                 <option value="500">
-                <option value="600">
+                <option value="700">
+                <option value="900">
+                <option value="1023">
               </datalist>
             </div>
             <input id='PWMt' type='text' name='PWMt' value='' onchange='changetxtpwm();'>
@@ -568,35 +566,35 @@
 
       </div>
 
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;" id="PWR">
-        <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-          <div class="text" id='VoltH2'>
-            <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
-              <div>
-                <span id='set_power_label'></span>
-                <input name='Voltage' id='Voltage' type='text' value=''>
-              </div>
-              <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
-            </div>
+      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em; padding-top: 1em;">
+        <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
+          <div class="flex_row">
+            <span class="text" id='set_power_label'></span>
+            <input name='Voltage' id='Voltage' type='text' value=''>
           </div>
-          <div class='dvcs' id='regulator' style="padding-left: 0 !important; padding-right: 0 !important;">
-            <span class='dvcs'>
-              <span id='power_current'></span>
-              <span id='current_power_volt'></span>
-              <span id='power_unit_current'></span>
-            </span>
-            <span class='dvcs'>
-              <span id='power_target'></span>
-              <span id='target_power_volt'></span>
-              <span id='power_unit_target'></span>
-            </span>
-            <span class='dvcs'>
-              Режим регулятора: <span id='current_power_mode'></span>
-            </span>
-            <span class='dvcs' id='current_power_line'>
-              Мощность: <span id='current_power_p'></span> Вт
-            </span>
+          <div class="flex_row" style="padding-bottom: 0.5em;">
+            <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
           </div>
+        </div>
+        <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
+          <div class='flex_row'>
+            <span id='power_current'></span>
+            <span id='current_power_volt'></span>
+            <span id='power_unit_current'></span>
+          </div>
+          <div class='flex_row'>
+            <span id='power_target'></span>
+            <span id='target_power_volt'></span>
+            <span id='power_unit_target'></span>
+          </div>
+          <div class='flex_row'>
+            Режим регулятора: <span id='current_power_mode'></span>
+          </div>
+        </div>
+        <div class="container_row" style="justify-content: center; font-size: 1.6em; font-weight: bold;">
+          <span class='dvcs' id='current_power_line'>
+            Мощность: <span id='current_power_p'></span> Вт
+          </span>
         </div>
       </div>
 

@@ -8,9 +8,8 @@
   <title>Самовар</title>
 
   <script>
-    
     var current_progNum = 0;
-      var totalTime = 0;
+    var totalTime = 0;
 
     // ==================== CONNECTION STATUS ============================================================
     var IsOffline = false; //признак обрыва связи
@@ -18,7 +17,7 @@
 
     function ConnectError (Type) {
       if (Type) {
-        if (!OfflineCouner) { //если это первый обрыв
+        if (OfflineCouner < 3) { //считаем 3 обрыва подряд
           OfflineCouner++
         } else {
           document.getElementById('connection_indicator').innerHTML = `
@@ -51,7 +50,6 @@
         powerTarget = 'Целевая мощн.: ';
         powerUnit = ' Вт';
         document.getElementById('current_power_line').style = 'visibility: hidden';
-        document.getElementById('PWR').style = '';
       } else if (pwr_unit === 'V') {
         setPowerLabel = 'Напряжение регулятора: ';
         setPowerButton = 'Установить напряжение';
@@ -59,7 +57,6 @@
         powerTarget = 'Целевое напр.: ';
         powerUnit = ' V';
         document.getElementById('current_power_line').style = 'visibility: visible';
-        document.getElementById('PWR').style = '';
       } else {
         document.getElementById('PWR').style =
           'visibility: hidden;position: fixed;';
@@ -377,6 +374,7 @@
 
     setInterval(loadDoc, 2000);
 
+
     function loadDoc () {
       var xhttp = new XMLHttpRequest();
       xhttp.timeout = 4000;
@@ -502,6 +500,8 @@
       xhttp.send();
     };
 
+
+
     function set_num () {
       var e = document.getElementById("prg").childNodes;
       var a;
@@ -539,6 +539,7 @@
       pvolume.type = "text";
       pvolume.name = "pvolume" + _lnIdx;
       pvolume.value = arr[1];
+      pvolume.style = 'margin-left: 2em !important';
       pvolume.setAttribute("onchange", "calc_program();");
       dl.appendChild(pvolume);
 
@@ -546,22 +547,26 @@
       pspeed.type = "text";
       pspeed.name = "pspeed" + _lnIdx;
       pspeed.value = arr[2];
+      pspeed.style = 'margin-left: 2em !important';
       pspeed.setAttribute("onchange", "calc_program();");
       dl.appendChild(pspeed);
 
-      pspeed.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
+      pspeed.insertAdjacentHTML("afterend", '<select style="margin-left: 2em !important" id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
 
-      var ptemp = document.createElement("input");
-      ptemp.type = "text";
+      var ptemp = document.createElement("span");
+      // var ptemp = document.createElement("input");
+      // ptemp.type = "text";
       ptemp.name = "ptemp" + _lnIdx;
       ptemp.value = arr[4];
-      ptemp.setAttribute("onchange", "calc_program();");
+      // ptemp.setAttribute("onchange", "calc_program();");
+      ptemp.style = 'width: 0px; visibility: hidden';
       dl.appendChild(ptemp);
 
       var pvolt = document.createElement("input");
       pvolt.type = "text";
       pvolt.name = "pvolt" + _lnIdx;
       pvolt.value = arr[5];
+      pvolt.style = 'margin-left: 2em !important';
       pvolt.setAttribute("onchange", "calc_program();");
       dl.appendChild(pvolt);
       
@@ -575,11 +580,13 @@
         totalTime = totalTime + stringTime;
       }
       timeBlock.textContent = get_time(stringTime);
+      timeBlock.style = 'margin-left: 2em !important';
       dl.appendChild(timeBlock);
 
       var plus = document.createElement("img");
       plus.src = 'plus.png';
       plus.setAttribute("width", "20");
+      plus.style = 'margin-left: 2em !important';
       plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','H;0;0;0;0;0')");
       dl.appendChild(plus);
 
@@ -622,17 +629,13 @@
       }
       let programPwrLabel = pwr_unit == 'P' ? 'Мощн' : 'Напр';
       e.insertAdjacentHTML("afterbegin", `
-      <div class="prgline" id="hdr">
-        <label class="tooltip">№</label>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        <label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        <label class="tooltip">Объем<span class="tooltiptext">Объем в мл</span></label>
-        <label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label>
-        <label class="tooltip">Емкость<span class="tooltiptext">Номер емкости (нумерация начинается от 0)</span></label>
-        <label class="tooltip">Темп</label>
-        &nbsp;&nbsp;
-        <label class="tooltip">${programPwrLabel}</label>
+      <div class="flex_row" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
+        &nbsp;&nbsp;&nbsp;<label class="tooltip">№</label>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+        <label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+        &nbsp; &nbsp;<label class="tooltip">Выход<span class="tooltiptext">Объем в мл</span></label>&nbsp; &nbsp; &nbsp; &nbsp;
+        <label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label>&nbsp; &nbsp;
+        <label class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label>&nbsp; &nbsp; &nbsp;&nbsp;
+        <label class="tooltip">${programPwrLabel}</label>&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
         <label class="tooltip">Время</label>
       </div>`);
       var p = document.getElementById("WProgram");
@@ -825,35 +828,35 @@
         </div>
       </div>
 
-      <div id="PWR" class="container_row" style="justify-content: center;">
-        <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-          <div class="text" id='VoltH2'>
-            <div class="container_row" style="justify-content: space-around; align-items: center; width: 100%">
-              <div>
-                <span id='set_power_label'></span>
-                <input name='Voltage' id='Voltage' type='text' value=''>
-              </div>
-              <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
-            </div>
+      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em; padding-top: 1em;">
+        <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
+          <div class="flex_row">
+            <span class="text" id='set_power_label'></span>
+            <input name='Voltage' id='Voltage' type='text' value=''>
           </div>
-          <div id='regulator' class='container_row' style="justify-content: space-around; align-items: center">
-            <span class='dvcs'>
-              <span id='power_current'></span>
-              <span id='current_power_volt'></span>
-              <span id='power_unit_current'></span>
-            </span>
-            <span class='dvcs'>
-              <span id='power_target'></span>
-              <span id='target_power_volt'></span>
-              <span id='power_unit_target'></span>
-            </span>
-            <span class='dvcs'>
-              Режим регулятора: <span id='current_power_mode'></span>
-            </span>
-            <span class='dvcs' id='current_power_line'>
-              Мощность: <span id='current_power_p'></span> Вт
-            </span>
+          <div class="flex_row" style="padding-bottom: 0.5em;">
+            <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
           </div>
+        </div>
+        <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
+          <div class='flex_row'>
+            <span id='power_current'></span>
+            <span id='current_power_volt'></span>
+            <span id='power_unit_current'></span>
+          </div>
+          <div class='flex_row'>
+            <span id='power_target'></span>
+            <span id='target_power_volt'></span>
+            <span id='power_unit_target'></span>
+          </div>
+          <div class='flex_row'>
+            Режим регулятора: <span id='current_power_mode'></span>
+          </div>
+        </div>
+        <div class="container_row" style="justify-content: center; font-size: 1.6em; font-weight: bold;">
+          <span class='dvcs' id='current_power_line'>
+            Мощность: <span id='current_power_p'></span> Вт
+          </span>
         </div>
       </div>
 
@@ -893,7 +896,7 @@
       <div style="display: flex; flex-direction: row; justify-content: right; color: #555; font-size: 1.4em; font-weight: bold;">
         Итого: &nbsp;
         <div id="totalTime"> </div>
-        &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+        &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
       </div>
 
       <div>
