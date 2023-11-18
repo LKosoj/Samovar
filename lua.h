@@ -69,13 +69,15 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
 #ifdef BTN_PIN
       || a == BTN_PIN
 #endif
-  ) {
+     ) {
     if (a != WATER_PUMP_PIN) digitalWrite(a, b);
     else {
 #ifdef USE_WATER_PUMP
       if (b == LOW) {
+        water_pump_speed = 0;
         pump_pwm.write(0);
       } else {
+        water_pump_speed = 1023;
         pump_pwm.write(1023);
       }
 #else
@@ -408,6 +410,8 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = get_alcohol(TankSensor.avgTemp);
   } else if (Var == "alcohol_s") {
     a = alcohol_s;
+  } else if (Var == "water_pump_speed") {
+    a = water_pump_speed;
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {
@@ -543,6 +547,7 @@ static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checknumber(lua_state, 1);
   pump_pwm.write(a);
+  water_pump_speed = a;
   return 0;
 }
 #endif

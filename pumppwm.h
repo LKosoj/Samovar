@@ -23,6 +23,7 @@ void init_pump_pwm(byte pin, int freq) {
 
 void set_pump_pwm(float duty) {
   if (alarm_event) {
+    water_pump_speed = 0;
     pump_pwm.write(0);
     pump_started = false;
     return;
@@ -30,16 +31,19 @@ void set_pump_pwm(float duty) {
   if (!pump_started && duty > 0) {
     wp_count = 0;
     pump_pwm.write(PWM_START_VALUE * 10);
+    water_pump_speed = PWM_START_VALUE * 10;
     pump_started = true;
     return;
   }
   if (duty > 0 && wp_count < 10) {
     pump_pwm.write(PWM_START_VALUE * 10);
+    water_pump_speed = PWM_START_VALUE * 10;
     wp_count++;
     return;
   }
   if (duty == 0) pump_started = false;
   pump_pwm.write(duty);
+  water_pump_speed = duty;
   //MsgLog = duty;
 }
 

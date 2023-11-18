@@ -16,9 +16,10 @@ void set_water_temp(float duty) {
   bk_pwm = duty;
   if (pump_started) {
     pump_pwm.write(bk_pwm);
+    water_pump_speed = bk_pwm;
   }
 #else
-  SendMsg(F("Управление бражной колонной не поддерживается вашим оборудованием"), NOTIFY_MSG);
+  SendMsg(F("Управление насосом не поддерживается вашим оборудованием"), NOTIFY_MSG);
 #endif
 }
 

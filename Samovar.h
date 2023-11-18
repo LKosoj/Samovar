@@ -465,6 +465,7 @@ String Lua_status;                                              // Статус 
 uint32_t total_byte;                                            // Доступно байт на файловой системе
 uint32_t used_byte;                                             // Использовано байт на файловой системе
 byte use_I2C_dev;                                               // Использовать Nano, подключенную по I2C для управления шаговым двигателем мешалки и насосом (основное назначение - пиво)
+int water_pump_speed;                                           // Скорость насоса
 
 String current_power_mode;                                      // Режим работы регулятора напряжения
 volatile float target_power_volt;                               // Заданное напряжение регулятора

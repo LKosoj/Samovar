@@ -597,6 +597,29 @@
       sendbutton("lua=" + num);
     };
 
+    function sendwaterpwm () {
+      var num = document.getElementById('PWM').value;
+      var command = 'watert=' + num;
+      sendbutton(command);
+      //alert( "Ok! Pump speed set " + num);
+      return 0;
+    };
+
+    function sliderChange () {
+      document.getElementById('PWMt').value = document.getElementById('PWM').value;
+      sendwaterpwm();
+    }
+
+    function changetxtpwm () {
+      num = document.getElementById('PWMt').value;
+      if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
+        alert("Введите значение PWM!");
+        return 0;
+      }
+      document.getElementById('PWM').value = num;
+      sliderChange();
+    }
+
   </script>
 </head>
 
@@ -791,6 +814,27 @@
     </div>
 
     <div id="Other" class="tabcontent">
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="text" id='WaterH2'>
+          <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
+            <div>
+              Скорость насоса:
+              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="1023" value='%PWM_V%' list="tickmarks" onchange='sliderChange();'>
+              <datalist id="tickmarks">
+                <option value="%PWM_LV%">
+                <option value="300">
+                <option value="500">
+                <option value="700">
+                <option value="900">
+                <option value="1023">
+              </datalist>
+            </div>
+            <input id='PWMt' type='text' name='PWMt' value='' onchange='changetxtpwm();'>
+          </div>
+        </div>
+
+      </div>
+
       <div style="visibility: hidden" id="lua_btn">
         <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
           <div class="container_column" style="flex: 1.1; padding-left: 2em;">
