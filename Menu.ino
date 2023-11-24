@@ -228,13 +228,15 @@ void set_menu_screen(byte param) {
       change_screen(&setup_program_settings);
       break;
   }
-  if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+/*  
+    if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     main_screen.hide(true);
     main_screen1.hide(true);
     main_screen2.hide(true);
     main_screen5.hide(false);
     change_screen(&main_screen5);
   }
+*/
 }
 
 void menu_setup() {
