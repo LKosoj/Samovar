@@ -243,6 +243,7 @@ void withdrawal(void) {
     program_Wait = false;
     pause_withdrawal(false);
   }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void pump_calibrate(int stpspeed) {

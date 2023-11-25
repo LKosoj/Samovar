@@ -32,6 +32,7 @@ void beer_proc() {
     set_power(true);
     run_beer_program(0);
   }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void run_beer_program(byte num) {
@@ -259,6 +260,8 @@ void check_alarm_beer() {
   }
   //Обрабатываем мешалку и насос
   check_mixer_state();
+
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void check_mixer_state() {

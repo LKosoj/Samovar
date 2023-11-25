@@ -73,6 +73,7 @@ void distiller_proc() {
       distiller_finish();
     }
   }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void distiller_finish() {
@@ -164,6 +165,7 @@ void check_alarm_distiller() {
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void run_dist_program(byte num) {

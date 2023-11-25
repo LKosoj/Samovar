@@ -46,6 +46,7 @@ void bk_proc() {
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
     bk_finish();
   }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void bk_finish() {
@@ -122,4 +123,5 @@ void check_alarm_bk() {
 #endif
     alarm_t_min = millis() + 30000;
   }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
