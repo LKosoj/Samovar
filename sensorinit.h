@@ -52,7 +52,7 @@ void reset_sensor_counter(void);
 //***************************************************************************************************************
 // считываем параметры с датчика BME680
 //***************************************************************************************************************
-void IRAM_ATTR BME_getvalue(bool fl) {
+void BME_getvalue(bool fl) {
   if (!bmefound) {
     bme_temp = -1;
     bme_pressure = -1;
@@ -101,27 +101,33 @@ void IRAM_ATTR BME_getvalue(bool fl) {
 }
 
 //***************************************************************************************************************
-// считываем параметры с датчика XGZP6897D
+// считываем параметры с датчика XGZP6897D или MPX5010D
 //***************************************************************************************************************
-#ifdef USE_PRESSURE
-void IRAM_ATTR pressure_sensor_get() {
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
+void pressure_sensor_get() {
   if (!use_pressure_sensor) {
-    pressure_sensor = -1;
+    pressure_value = -1;
     return;
   }
   float t;
+#ifdef USE_PRESSURE_XGZ
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(30 / portTICK_RATE_MS)) == pdTRUE) {
     pressure_sensor.readSensor(t, pressure_value);
     xSemaphoreGive(xI2CSemaphore);
   }
   pressure_value = pressure_value / 133.32; //переводим паскали в мм. рт. столба
+#elif defined(USE_PRESSURE_MPX)
+  pressure_value=(analogRead(LUA_PIN)-36.7)/12;
+#else
+  pressure_value = -1;
+#endif
 }
 #endif
 
 //***************************************************************************************************************
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
-void IRAM_ATTR DS_getvalue(void) {
+void DS_getvalue(void) {
 
   //  SteamSensor.avgTemp += 0.1;
   //  PipeSensor.avgTemp = 50;
@@ -386,7 +392,7 @@ void sensor_init(void) {
 #endif
 
   use_pressure_sensor = false;
-#ifdef USE_PRESSURE
+#ifdef USE_PRESSURE_XGZ
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Init pressure sensor");
 #endif
@@ -401,6 +407,10 @@ void sensor_init(void) {
 
 #endif
 
+#ifdef USE_PRESSURE_MPX
+  use_pressure_sensor = true;
+#endif
+
   reset_sensor_counter();
   //  regulator.hysteresis = 0.3;
   //  regulator.k = 0.3;
@@ -413,7 +423,7 @@ void sensor_init(void) {
 }
 
 //Обнуляем все счетчики
-void IRAM_ATTR reset_sensor_counter(void) {
+void reset_sensor_counter(void) {
   sam_command_sync = SAMOVAR_NONE;
   stopService();
   stepper.setMaxSpeed(-1);
@@ -523,7 +533,7 @@ String get_DSAddressList(String Address) {
   return s;
 }
 
-void IRAM_ATTR CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress) {
+void CopyDSAddress(uint8_t* DevSAddress, uint8_t* DevTAddress) {
   for (byte dsj = 0; dsj < 8; dsj++) {
     DevTAddress[dsj] = DevSAddress[dsj];
   }

@@ -107,9 +107,9 @@ PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
 #include <Adafruit_BME280.h>
 #endif
 
-#ifdef USE_PRESSURE
+#ifdef USE_PRESSURE_XGZ
 #include <XGZP6897D.h>
-XGZP6897D pressure_sensor(USE_PRESSURE);
+XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #endif
 
 
@@ -343,7 +343,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 #endif
     {
       BME_getvalue(false);
-#ifdef USE_PRESSURE
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
       pressure_sensor_get();
 #endif
       vTaskDelay(5600 / portTICK_PERIOD_MS);
@@ -758,6 +758,11 @@ void setup() {
   //Инициализируем ногу для пищалки
   pinMode(BZZ_PIN, OUTPUT);
   digitalWrite(BZZ_PIN, LOW);
+
+#ifdef USE_PRESSURE_MPX
+  //Инициализируем ногу для датчика давления MPX5010D
+  pinMode(LUA_PIN, INPUT);
+#endif
 
   //Настраиваем меню
   Serial.println(F("Samovar started"));
