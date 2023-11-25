@@ -359,7 +359,7 @@
     };
 
     function sendpumpspeed () {
-      var num = document.getElementById('pumpspeed').value;
+      var num = document.getElementById('pumpspeed').value.replace(",", ".");
       if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
         alert("Введите скорость!");
         return 0;
