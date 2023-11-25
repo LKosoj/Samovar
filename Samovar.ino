@@ -1112,6 +1112,8 @@ void loop() {
         break;
       case SAMOVAR_CONTINUE:
         pause_withdrawal(false);
+        t_min = 0;
+        program_Wait = false;
         break;
       case SAMOVAR_SETBODYTEMP:
         set_body_temp();

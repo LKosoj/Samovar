@@ -188,6 +188,7 @@ void withdrawal(void) {
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
+    SendMsg(F("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     setautospeed = true;
     t_min = 0;
     program_Wait = false;
@@ -236,6 +237,7 @@ void withdrawal(void) {
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
+    SendMsg(F("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     setautospeed = true;
     t_min = 0;
     program_Wait = false;
@@ -620,7 +622,7 @@ void check_alarm() {
   //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
   if (SamSetup.UseHLS) {
-  whls.tick();
+    whls.tick();
     if (whls.isHolded() && alarm_h_min == 0) {
       whls.resetStates();
       if (program[ProgramNum].WType != "C") {

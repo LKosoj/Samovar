@@ -401,8 +401,11 @@ void menu_get_power() {
 void menu_pause() {
   pause_withdrawal(!PauseOn);
   if (PauseOn) pause_text_ptr = (char *)"Continue";
-  else
+  else {
     pause_text_ptr = (char *)"Pause";
+    t_min = 0;
+    program_Wait = false;
+  }
 }
 void menu_calibrate() {
   if (startval > 0 && startval != 100) return;
