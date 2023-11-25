@@ -48,14 +48,14 @@ void bk_proc() {
   }
 }
 
-void IRAM_ATTR bk_finish() {
+void bk_finish() {
   SendMsg(F("Работа бражной колонны завершена"), NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
 }
 
 
-void IRAM_ATTR check_alarm_bk() {
+void check_alarm_bk() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 

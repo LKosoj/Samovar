@@ -234,7 +234,7 @@ void create_data() {
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
 }
 
-String IRAM_ATTR append_data() {
+String append_data() {
   bool w;
   w = false;
 

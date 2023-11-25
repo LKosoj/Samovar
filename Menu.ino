@@ -470,7 +470,7 @@ void menu_samovar_start() {
   menu_update();
 }
 
-void IRAM_ATTR samovar_reset() {
+void samovar_reset() {
   char str[20] = "Stoped             ";
   memcpy(str, startval_text_val, 20);
   power_text_ptr = (char *)"ON";

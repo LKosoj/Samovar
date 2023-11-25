@@ -303,7 +303,7 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 }
 
 //Запускаем таск для получения точного времени из интернет
-void IRAM_ATTR triggerGetClock(void *parameter) {
+void triggerGetClock(void *parameter) {
   String qMsg;
   while (true) {
     {
@@ -360,7 +360,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 //}
 
 //Запускаем таск для получения температур и различных проверок
-void IRAM_ATTR triggerSysTicker(void *parameter) {
+void triggerSysTicker(void *parameter) {
   byte CurMinST = 0;
   byte OldMinST = 0;
   byte tcntST = 0;

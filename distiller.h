@@ -75,7 +75,7 @@ void distiller_proc() {
   }
 }
 
-void IRAM_ATTR distiller_finish() {
+void distiller_finish() {
 #ifdef SAMOVAR_USE_POWER
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
@@ -85,7 +85,7 @@ void IRAM_ATTR distiller_finish() {
 }
 
 
-void IRAM_ATTR check_alarm_distiller() {
+void check_alarm_distiller() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 

@@ -34,7 +34,7 @@ void beer_proc() {
   }
 }
 
-void IRAM_ATTR run_beer_program(byte num) {
+void run_beer_program(byte num) {
   if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
   if (startval == 2000) startval = 2001;
   ProgramNum = num;
@@ -61,7 +61,7 @@ void IRAM_ATTR run_beer_program(byte num) {
   currentstepcnt = 0; //счетчик циклов мешалки
 }
 
-void IRAM_ATTR beer_finish() {
+void beer_finish() {
   if (valve_status) {
     open_valve(false);
   }
@@ -78,7 +78,7 @@ void IRAM_ATTR beer_finish() {
   reset_sensor_counter();
 }
 
-void IRAM_ATTR check_alarm_beer() {
+void check_alarm_beer() {
 
   if (startval <= 2000) return;
 
@@ -527,6 +527,6 @@ void FinishAutoTune() {
   set_heater_state(0, 50);
 }
 
-void IRAM_ATTR set_mixer(bool On) {
+void set_mixer(bool On) {
   set_mixer_state(On, false);
 }

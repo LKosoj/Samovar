@@ -44,7 +44,7 @@ void check_power_error();
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 
 //Получить количество разделителей
-byte IRAM_ATTR getDelimCount(String data, char separator) {
+byte getDelimCount(String data, char separator) {
   int cnt = 0;
   int maxIndex = data.length() - 1;
 
@@ -57,7 +57,7 @@ byte IRAM_ATTR getDelimCount(String data, char separator) {
 }
 
 //Получить подстроку через разделитель
-String IRAM_ATTR getValue(String data, char separator, int index) {
+String getValue(String data, char separator, int index) {
   int found = 0;
   int strIndex[] = { 0, -1 };
   int maxIndex = data.length() - 1;
@@ -73,7 +73,7 @@ String IRAM_ATTR getValue(String data, char separator, int index) {
 }
 
 //Получаем объем отбора
-float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
+float get_liguid_volume_by_step(int StepCount) {
   static float retval;
   if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
   else
@@ -82,11 +82,11 @@ float IRAM_ATTR get_liguid_volume_by_step(int StepCount) {
 }
 
 //Получаем скорость отбора
-float IRAM_ATTR get_liguid_rate_by_step(int StepperSpeed) {
+float get_liguid_rate_by_step(int StepperSpeed) {
   return round(get_liguid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000.00;
 }
 
-float IRAM_ATTR get_speed_from_rate(float volume_per_hour) {
+float get_speed_from_rate(float volume_per_hour) {
   static float v;
   ActualVolumePerHour = volume_per_hour;
   v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.00;
@@ -94,7 +94,7 @@ float IRAM_ATTR get_speed_from_rate(float volume_per_hour) {
   return v;
 }
 
-int IRAM_ATTR get_liquid_volume() {
+int get_liquid_volume() {
   return get_liguid_volume_by_step(stepper.getCurrent());
 }
 
@@ -112,7 +112,7 @@ void set_alarm() {
   SendMsg(F("Аварийное отключение!"), ALARM_MSG);
 }
 
-void IRAM_ATTR withdrawal(void) {
+void withdrawal(void) {
   //Определяем, что необходимо сменить режим работы
   //По завершению паузы
   if (program_Pause) {
@@ -268,7 +268,7 @@ void pump_calibrate(int stpspeed) {
   }
 }
 
-void IRAM_ATTR pause_withdrawal(bool Pause) {
+void pause_withdrawal(bool Pause) {
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
   if (!stepper.getState() && !PauseOn) return;
   PauseOn = Pause;
@@ -288,7 +288,7 @@ void IRAM_ATTR pause_withdrawal(bool Pause) {
   }
 }
 
-void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process) {
+void set_pump_speed(float pumpspeed, bool continue_process) {
   if (pumpspeed < 1) return;
   if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
 
@@ -309,7 +309,7 @@ void IRAM_ATTR set_pump_speed(float pumpspeed, bool continue_process) {
     startService();
 }
 
-String IRAM_ATTR get_Samovar_Status() {
+String get_Samovar_Status() {
   if (!PowerOn) {
     SamovarStatus = F("Выключено");
     SamovarStatusInt = 0;
@@ -384,7 +384,7 @@ String IRAM_ATTR get_Samovar_Status() {
   return SamovarStatus;
 }
 
-void IRAM_ATTR set_capacity(byte cap) {
+void set_capacity(byte cap) {
   capacity_num = cap;
 
 #ifdef SERVO_PIN
@@ -395,7 +395,7 @@ void IRAM_ATTR set_capacity(byte cap) {
 #endif
 }
 
-void IRAM_ATTR next_capacity(void) {
+void next_capacity(void) {
   set_capacity(capacity_num + 1);
 }
 
@@ -456,7 +456,7 @@ String get_program(byte s) {
   return Str;
 }
 
-void IRAM_ATTR run_program(byte num) {
+void run_program(byte num) {
   t_min = 0;
   program_Pause = false;
   program_Wait = false;
@@ -554,7 +554,7 @@ void IRAM_ATTR run_program(byte num) {
 }
 
 //функция корректировки температуры кипения спирта в зависимости от давления
-float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
+float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
   if (start_temp == 0) return 0;
   if (current_pressure < 10) return start_temp;
 
@@ -583,7 +583,7 @@ float IRAM_ATTR get_temp_by_pressure(float start_pressure, float start_temp, flo
   return c_temp;
 }
 
-void IRAM_ATTR set_body_temp() {
+void set_body_temp() {
   if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C" || program[ProgramNum].WType == "P") {
     SteamSensor.Start_Pressure = bme_pressure;
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
@@ -596,7 +596,7 @@ void IRAM_ATTR set_body_temp() {
   }
 }
 
-void IRAM_ATTR check_alarm() {
+void check_alarm() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
@@ -831,7 +831,7 @@ void IRAM_ATTR check_alarm() {
 #endif
 }
 
-void IRAM_ATTR open_valve(bool Val) {
+void open_valve(bool Val) {
   if (Val && !alarm_event) {
     valve_status = true;
     SendMsg(F("Откройте подачу воды!"), WARNING_MSG);
@@ -843,7 +843,7 @@ void IRAM_ATTR open_valve(bool Val) {
   }
 }
 
-void IRAM_ATTR triggerBuzzerTask(void *parameter) {
+void triggerBuzzerTask(void *parameter) {
   TickType_t beep = 400 / portTICK_RATE_MS;
   TickType_t silent = 600 / portTICK_RATE_MS;
   int tick_buzz = 0;
@@ -860,7 +860,7 @@ void IRAM_ATTR triggerBuzzerTask(void *parameter) {
   }
 }
 
-void IRAM_ATTR set_buzzer(bool fl) {
+void set_buzzer(bool fl) {
   if (fl && SamSetup.UseBuzzer) {
     if (BuzzerTask == NULL) {
       BuzzerTaskFl = true;
@@ -883,7 +883,7 @@ void IRAM_ATTR set_buzzer(bool fl) {
   }
 }
 
-void IRAM_ATTR set_power(bool On) {
+void set_power(bool On) {
   if (alarm_event && On) {
     return;
   }
@@ -1137,7 +1137,7 @@ void stop_self_test(void) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
 #ifndef SAMOVAR_USE_RMVK
-void IRAM_ATTR triggerPowerStatus(void *parameter) {
+void triggerPowerStatus(void *parameter) {
   int i;
   String resp;
   while (true) {
@@ -1177,7 +1177,7 @@ void IRAM_ATTR triggerPowerStatus(void *parameter) {
   }
 }
 #else
-void IRAM_ATTR triggerPowerStatus(void *parameter) {
+void triggerPowerStatus(void *parameter) {
   String resp;
   uint16_t v;
   while (true) {
@@ -1267,7 +1267,7 @@ void check_power_error() {
 
 
 //получаем текущие параметры работы регулятора напряжения
-void IRAM_ATTR get_current_power() {
+void get_current_power() {
   if (!PowerOn) {
     current_power_volt = 0;
     target_power_volt = 0;
@@ -1284,7 +1284,7 @@ void IRAM_ATTR get_current_power() {
 }
 
 //устанавливаем напряжение для регулятора напряжения
-void IRAM_ATTR set_current_power(float Volt) {
+void set_current_power(float Volt) {
   if (!PowerOn) return;
 #ifdef __SAMOVAR_DEBUG
   WriteConsoleLog("Set current power =" + (String)Volt);
@@ -1326,7 +1326,7 @@ void IRAM_ATTR set_current_power(float Volt) {
   target_power_volt = Volt;
 }
 
-void IRAM_ATTR set_power_mode(String Mode) {
+void set_power_mode(String Mode) {
   if (current_power_mode == Mode) return;
   current_power_mode = Mode;
   vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -1372,7 +1372,7 @@ void IRAM_ATTR set_power_mode(String Mode) {
 #endif
 }
 
-unsigned int IRAM_ATTR hexToDec(String hexString) {
+unsigned int hexToDec(String hexString) {
   unsigned int decValue = 0;
   int nextInt;
 

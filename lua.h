@@ -28,7 +28,7 @@ SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, 
 
 TaskHandle_t DoLuaScriptTask = NULL;
 volatile bool lua_finished;
-void IRAM_ATTR do_lua_script(void *parameter);
+void do_lua_script(void *parameter);
 
 String get_lua_mode_name();
 void load_lua_script();
@@ -39,12 +39,12 @@ String get_global_variables();
 void open_valve(bool Val);
 void set_current_power(float Volt);
 void set_body_temp();
-void IRAM_ATTR set_mixer(bool On);
+void set_mixer(bool On);
 void set_alarm();
-void IRAM_ATTR pause_withdrawal(bool Pause);
-String IRAM_ATTR getValue(String data, char separator, int index);
+void pause_withdrawal(bool Pause);
+String getValue(String data, char separator, int index);
 String get_lua_script(String fn);
-void IRAM_ATTR set_capacity(byte cap);
+void set_capacity(byte cap);
 float get_alcohol(float t);
 float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
 bool set_mixer_pump_target(uint8_t on);
@@ -895,7 +895,7 @@ void load_lua_script() {
 }
 
 //Запускаем таск для запуска скрипта
-void IRAM_ATTR do_lua_script(void *parameter) {
+void do_lua_script(void *parameter) {
   String sr;
   //String glv;
   while (1) {
