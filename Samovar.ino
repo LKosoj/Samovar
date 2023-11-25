@@ -343,7 +343,7 @@ void IRAM_ATTR triggerGetClock(void *parameter) {
 #endif
     {
       BME_getvalue(false);
-#ifdef USE_PRESSURE      
+#ifdef USE_PRESSURE
       pressure_sensor_get();
 #endif
       vTaskDelay(5600 / portTICK_PERIOD_MS);
@@ -608,6 +608,14 @@ void IRAM_ATTR triggerSysTicker(void *parameter) {
 }
 
 void setup() {
+  pinMode(0, INPUT);
+  delay(300);
+  if (digitalRead(0) == LOW) {
+    WiFi.mode(WIFI_STA); // cannot erase if not in STA mode !
+    WiFi.persistent(true);
+    WiFi.disconnect(true, true);
+    WiFi.persistent(false);
+  }
   Serial.begin(115200);
 #ifdef __SAMOVAR_NOT_USE_WDT
   esp_task_wdt_init(1, false);
@@ -774,12 +782,21 @@ void setup() {
   //Подключаемся к WI-FI
   AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
   AsyncWiFiManager wifiManager(&server, &dns);
-  wifiManager.setConfigPortalTimeout(180);
+  wifiManager.setConfigPortalTimeout(360);
   wifiManager.setSaveConfigCallback(saveConfigCallback);
   wifiManager.setAPCallback(configModeCallback);
   wifiManager.setDebugOutput(false);
   wifiManager.addParameter(&custom_blynk_token);
-  wifiManager.autoConnect("Samovar");
+
+  String StIP;
+
+  if (!wifiManager.autoConnect("Samovar", "SamApp123")) {
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("Samovar", "SamApp123");
+    StIP = WiFi.softAPIP().toString();
+  } else {
+    StIP = WiFi.localIP().toString();
+  }
 
   if (shouldSaveWiFiConfig) {
     if (strlen(custom_blynk_token.getValue()) == 33) {
@@ -794,7 +811,6 @@ void setup() {
   Serial.print(F("Connected to "));
   Serial.println(WiFi.SSID());
   Serial.print(F("IP address: "));
-  String StIP = WiFi.localIP().toString();
   StIP.toCharArray(ipst, 16);
 
   Serial.println(StIP);
@@ -1349,7 +1365,7 @@ void read_config() {
     SamSetup.UseHLS = true;
   }
 #endif
-  
+
 
   //  pump_regulator.Kp = SamSetup.Kp;
   //  pump_regulator.Ki = SamSetup.Ki;
