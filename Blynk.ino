@@ -67,6 +67,12 @@ BLYNK_READ(V19) {
   Blynk.virtualWrite(V19, SAMOVAR_VERSION);
 }
 
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
+BLYNK_READ(V22) {
+  Blynk.virtualWrite(V22, pressure_value);
+}
+#endif
+
 #ifdef SAMOVAR_USE_POWER
 BLYNK_READ(V21) {
   Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String) + target_power_volt);

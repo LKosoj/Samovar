@@ -154,6 +154,12 @@ void DS_getvalue(void) {
   ts = sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
   acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
 
+#ifdef USE_PRESSURE_1WIRE
+  use_pressure_sensor = true;
+  byte p_addr[8] = USE_PRESSURE_1WIRE;
+  pressure_value = sensors.getTempC(p_addr);   // считываем давление с расширителя по 1Wire
+#endif
+
   //    float randNumber;
   //    randNumber = random(100) / float(500);
   //    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;

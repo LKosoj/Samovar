@@ -23,8 +23,13 @@
 
 #define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
 
+#ifdef USE_PRESSURE_1WIRE
+#undef USE_PRESSURE_XGZ
+#endif
+
 #ifdef USE_PRESSURE_MPX
 #undef USE_PRESSURE_XGZ
+#undef USE_PRESSURE_1WIRE
 #endif
 
 #ifndef SAM_NO_BEER_PRG
@@ -122,7 +127,7 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 #ifdef SAMOVAR_USE_POWER
 #define PWR_MSG F("Напряжение")
 #define PWR_TYPE F("V")
-#else 
+#else
 #define PWR_MSG ""
 #define PWR_TYPE ""
 #endif
