@@ -350,6 +350,9 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "DistTimeF") {
     s = SamSetup.DistTimeF;
     return s;
+  } else if (var == "MaxPressureValue") {
+    s = SamSetup.MaxPressureValue;
+    return s;
   } else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else
@@ -529,6 +532,9 @@ void handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("DistTimeF")) {
     SamSetup.DistTimeF = request->arg("DistTimeF").toInt();
+  }
+  if (request->hasArg("MaxPressureValue")) {
+    SamSetup.MaxPressureValue = request->arg("MaxPressureValue").toFloat();
   }
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();

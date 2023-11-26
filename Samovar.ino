@@ -351,14 +351,6 @@ void triggerGetClock(void *parameter) {
   }
 }
 
-//Запускаем таск для чтения давления
-//void IRAM_ATTR triggerGetBMP(void *parameter) {
-//  while (true) {
-//    BME_getvalue(false);
-//    vTaskDelay(5600 / portTICK_PERIOD_MS);
-//  }
-//}
-
 //Запускаем таск для получения температур и различных проверок
 void triggerSysTicker(void *parameter) {
   byte CurMinST = 0;
@@ -368,6 +360,14 @@ void triggerSysTicker(void *parameter) {
 
   while (true) {
     CurMinST = (millis() / 1000);
+
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
+    //Проверим, что давление не вышло за пределы, если вышло - авария
+    if (SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue) {
+      SendMsg(F("Превышено предельное давление!"), ALARM_MSG);
+      set_alarm();
+    }
+#endif
 
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
@@ -1274,6 +1274,11 @@ void getjson(void) {
   jsonstr += ",";
 #endif
 
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
+  jsonstr += "\"prvl\":"; jsonstr += format_float(pressure_value, 2);
+  jsonstr += ",";
+#endif
+
   if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);
     jsonstr += ",";
@@ -1366,6 +1371,14 @@ void read_config() {
   if (isnan(SamSetup.DistTimeF)) {
     SamSetup.DistTimeF = 16;
   }
+
+  if (isnan(SamSetup.DistTimeF)) {
+    SamSetup.DistTimeF = 16;
+  }
+  if (isnan(SamSetup.MaxPressureValue)) {
+    SamSetup.MaxPressureValue = 0;
+  }
+
 
 #ifdef USE_HEAD_LEVEL_SENSOR
   if (isnan(SamSetup.UseHLS)) {

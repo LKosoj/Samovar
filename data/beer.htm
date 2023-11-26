@@ -501,6 +501,7 @@
       pmixer.type = "text";
       pmixer.name = "pmixer" + _lnIdx;
       pmixer.value = arr[3];
+      pmixer.setAttribute("width", "70");
       pmixer.setAttribute("onchange", "calc_program();");
       dl.appendChild(pmixer);
 
@@ -546,7 +547,7 @@
         return;
       }
       var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>');
+      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>');
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
       for (z = 0; z < varr.length; z++) {
@@ -567,9 +568,7 @@
       l.setAttribute("style", color);
       var e = l.childNodes;
       for (q = 0; q < e.length; q++) {
-        if (q == 4) {
-          e[q].setAttribute("style", color + "width:110");
-        } else e[q].setAttribute("style", color);
+		e[q].setAttribute("style", color);
       }
       calc_program();
     }
