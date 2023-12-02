@@ -1,19 +1,23 @@
 #include <Arduino.h>
 #include <Wire.h>
-#include <avr/wdt.h>
+#include <avr/wdt.h> // watchdog
 #include "OneWireHub.h"
 #include "DS18B20.h"
-#include <ASOLED.h> //! библиотека дисплея
-#include <XGZP6897D.h>  //! библиотека датчика давления
+#include <ASOLED.h>      //Dranek:  библиотека дисплея
+#include <XGZP6897D.h>   //Dranek: библиотека датчика давления
 
 /* С какой характеристикой В(25/100) подключены NTC-термисторы */
+#define ChinaNTC    /* B(25/100) = ???? */ //Dranek: Вариант, когда датчики "китай", либо напряжение питания АЦП отличается от 3,3 В, либо резисторы не совсем 10/6.2 кОм
 //#define B4300    /* B(25/100) = 4300 */
 //#define B3988    /* B(25/100) = 3988 */
-#define B3950    /* B(25/100) = 3950 */
+//#define B3950    /* B(25/100) = 3950 */
 //#define B3625    /* B(25/100) = 3625 */
 //#define B3530    /* B(25/100) = 3530 */
 //#define B3492    /* B(25/100) = 3492 */
 /* NTC-термисторы c характеристикой B(25/100) = 3380, если все остальные закомментированы */
+#define DeltaPress 0                  // Dranek: Поправка для датчика давления, равна его среднему значению при отсутствии давления и нулевой поправке, её надо изменить на свою
+#define ADS_Trg 30750                 // Dranek: предел для определения подключенных термисторов, в исходнике был 32750, у меня, как оказалось, он должен быть меньше, если оставить 
+                                      //         прежний Самовар из предлагаемых 9 датчиков выбирает себе какие то 5 и глючит, т.к. некоторых в реальности нет.
 
 #define ADS_I2CADDR_1     (0x48)
 #define ADS_I2CADDR_2     (0x49)
@@ -23,23 +27,41 @@
 #define ADS1115_REG_CONFIG_MUX_SINGLE_3     (0x7000)
 #define ADS1115_REG_POINTER_CONVERT         (0x00)
 #define ADS1115_REG_POINTER_CONFIG          (0x01)
-#define ASOled LD // ! Заюзаем уже созданный в библиотеке дисплея объект LD
+#define ASOled LD // Dranek: Используем уже созданный в библиотеке дисплея объект LD
 // Включаем отладку, только если чтото пошло не так :(
 //#define SERIAL_DEBUG
 //#define SERIAL_TEST_NTC
 
-XGZP6897D mysensor(128); //Объект датчика давления с делителем К=128 //! делитель зависит от диапазона датчика
-
-float pressure, temperature; // переменные для него //!
-static char outstr[8]; //строка для вывода цифр на экран //!
-float DeltaPress = 0.47; // ! Поправка для датчика давления, равна его среднему значению при отсутствии давления и нулевой поправке
-bool W1_Connect_Enable = false;
-uint8_t ntcEn[8];
+XGZP6897D mysensor(128);              // Dranek: Объект датчика давления с делителем К=128, делитель зависит от диапазона датчика, искать в даташите, мой (-40 - 40 Pa)
+/*
+   K value for XGZP6897D. It depend on the pressure range of the sensor.
+   Table found in the data sheet from CFSensor.com
+    https://cfsensor.com/product-category/i2c-sensor/https://cfsensor.com/product-category/i2c-sensor/
+  pressure_range (kPa)   K value
+  131<P≤260               32
+  65<P≤131                64
+  32<P≤65                 128
+  16<P≤32                 256
+  8<P≤16                  512
+  4<P≤8                   1024
+  2≤P≤4                   2048
+  1≤P<2                   4096
+  P<1                     8192
+  the K value is selected according to the positive pressure value only,
+  like -100～100kPa,the K value is 64.*/
+float pressure, temperature;          // Dranek: переменные для него 
+bool Pressure_enable;
+static char outstr[8];                // Dranek: строка для вывода цифр на экран 
+bool OneWireConnectDetected = false;  // Dranek: для определения факта соединения по 1Wire
+float Temp[9];                        // Dranek: массив текущих температур, чтоб не читать по 2 раза за цикл
+unsigned long timer;                  // Dranek: таймер для отображения при отсутствии соединения по 1Wire
+uint8_t ntcEn[9];                     // Массив флагов наличия подключенных датчиков
 uint32_t millisConvert;
 constexpr uint8_t pin_led      { 13 };
 constexpr uint8_t pin_onewire  { 2 };
 auto hub = OneWireHub(pin_onewire);
-auto ds18bP = DS18B20(0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22); // ! Датчик давления
+auto ds18bP = DS18B20(0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22); // 0x55 Dranek: Адрес для датчика давления, байт 0x55 вычисляемый в OneWireItem.cpp
+                                                                 // в OneWireHub_Config.h изменён параметр #define HUB_SLAVE_LIMIT 9 (было 8)
 auto ds18b1 = DS18B20(0x28, 0x10, 0x55, 0x44, 0x33, 0x22, 0x01); // 0xD8
 auto ds18b2 = DS18B20(0x28, 0x20, 0x55, 0x44, 0x33, 0x22, 0x02); // 0xD7
 auto ds18b3 = DS18B20(0x28, 0x30, 0x55, 0x44, 0x33, 0x22, 0x03); // 0xD2
@@ -95,7 +117,17 @@ int32_t computeTemp_15bit(uint16_t adcRez) {
  *    Ra/Rb: 6.2кОм/10кОм
  *    Напряжения U0/Uref: 3.3В/2.048В
  */
-#if defined (B4300)
+#if defined (ChinaNTC) // Dranek: Эта таблица под мои текущие термисторы, напряжение и делитель
+                       // Таблицу под свои термисторы, Ra/Rb и напряжение питания АЦП можно получить здесь https://aterlux.ru/article/ntcresistor 
+                       // какие исходные параметры вставлять читать здесь https://forum.homedistiller.ru/msg.php?id=13976866 и здесь https://forum.homedistiller.ru/msg.php?id=14020829
+/*         ChinaNTC          */
+  uint16_t m_adc[151] = {32605, 32550, 32493, 32432, 32368, 32301, 32230, 32156, 32078, 31996, 31911, 31821, 31727, 31629, 31526, 31419, 31307, 31190, 31068, 30942, 30810, 30673, 30530, 30382,
+                         30228, 30069, 29904, 29734, 29557, 29375, 29187, 28992, 28792, 28586, 28374, 28156, 27932, 27702, 27466, 27224, 26977, 26724, 26466, 26202, 25933, 25659, 25380, 25096,
+                         24808, 24515, 24218, 23917, 23612, 23304, 22992, 22678, 22360, 22040, 21718, 21394, 21068, 20741, 20412, 20083, 19753, 19423, 19093, 18763, 18433, 18104, 17776, 17450,
+                         17125, 16801, 16480, 16160, 15844, 15529, 15218, 14909, 14604, 14301, 14003, 13707, 13416, 13128, 12844, 12564, 12289, 12017, 11750, 11487, 11228, 10974, 10725, 10479,
+                         10238, 10002, 9770, 9543, 9320, 9102, 8888, 8678, 8473, 8273, 8076, 7884, 7696, 7513, 7333, 7157, 6986, 6819, 6655, 6495, 6339, 6187, 6038, 5893, 5752, 5614, 5479, 5348,
+                         5220, 5095, 4973, 4854, 4739, 4626, 4516, 4408, 4304, 4202, 4103, 4006, 3912, 3820, 3730, 3643, 3558, 3475, 3394, 3316, 3239, 3164, 3092, 3021, 2952, 2884, 2819};
+#elif defined (B4300)
 /*         B25/100: 4300         */
   uint16_t m_adc[151] = {31924, 31877, 31827, 31774, 31719, 31659, 31597, 31531, 31461, 31388, 31310, 31229, 31143, 31052, 30958, 30858, 30754, 30644, 30530, 30410, 30284, 30153, 30016, 29873,
                          29724, 29569, 29408, 29241, 29067, 28886, 28699, 28505, 28304, 28097, 27883, 27662, 27434, 27199, 26958, 26710, 26455, 26194, 25926, 25652, 25372, 25086, 24794, 24496,
@@ -166,155 +198,154 @@ int32_t computeTemp_15bit(uint16_t adcRez) {
   return 0;
 }
 
-void disp() { // Чтение датчика давления и выдача на дисплей
-     uint16_t ad_temp;
-     int16_t tempCompute; 
-     float tempComputeResDS;
-              mysensor.readSensor(temperature, pressure); //! чтение датчика давления
-            pressure = pressure * 0.00750063755419211 - DeltaPress; //! перевод Паскалей в мм.р.ст и применение поправки
-
-            // tempComputeResDS = (float)computeTemp_15bit(pressure); //! колдунство
-            tempCompute = int16_t(pressure * 256);
-            ds18bP.scratchpad[3] = tempCompute >> 8; ds18bP.scratchpad[2] = tempCompute & 0xff; ds18bP.setTemperature(pressure);
-            
-    
-
-                                                      // ! Вывод на дисплей 
-            dtostrf((float)(pressure),6, 2, outstr);
-            ASOled.printString_12x16(F("Pк= "), 0, 0);
-            ASOled.printString_12x16(outstr, 40, 0);
-            dtostrf((float)computeTemp_15bit(readADS(0, 16))/1000,6, 2, outstr);
-            ASOled.printString_12x16(F("Tп= "), 0, 2);
-            ASOled.printString_12x16(outstr, 40, 2);            
-            dtostrf((float)computeTemp_15bit(readADS(1, 16))/1000,6, 2, outstr);
-            ASOled.printString_12x16(F("Tц= "), 0, 4);
-            ASOled.printString_12x16(outstr, 40, 4);     
-            dtostrf((float)computeTemp_15bit(readADS(2, 16))/1000,6, 2, outstr);
-            ASOled.printString_12x16(F("Tк= "), 0, 6);
-            ASOled.printString_12x16(outstr, 40, 6); 
+void ReadPressure() {                                 //Dranek: Чтение датчика давления и, если есть 1Wire связь, запись его в хаб
+            mysensor.readSensor(temperature, pressure);             //Dranek: чтение датчика давления
+            Temp[0] = pressure * 0.00750063755419211 - DeltaPress;  //Dranek: перевод Паскалей в мм.р.ст и применение поправки
+                                                                    
+ if (OneWireConnectDetected)  {  
+    int16_t tempCompute = int16_t(Temp[0] * 256);                   //Dranek: колдунство (абра кадабра)
+            ds18bP.scratchpad[3] = tempCompute >> 8; 
+            ds18bP.scratchpad[2] = tempCompute & 0xff; 
+            ds18bP.setTemperature(Temp[0]); }
 }
 
-void setup() {
-    ASOled.init();                        // Инициализируем OLED дисплей //!
-    ASOled.clearDisplay();  // Очищаем, иначе некорректно работает для дисплеев на SH1106 (косяк библиотеки) /!
-    ASOled.printString_12x16(F("Запуск..."), 0, 0);
+void disp() {                                         //Dranek:  Вывод на дисплей 
+            for(int i=0; i<4; i++) {
+            if (ntcEn[i]) {
+              dtostrf((float)(Temp[i]),6, 2, outstr);           //// Dranek: ИМХО, хоть и через ж., но так лучше
+              ASOled.printString_12x16(outstr, 40, i+i);
+              } else ASOled.printString_12x16("  ----  ", 40, i+i); 
+          //  ASOled.printString_12x16("        ", 40, i+i);  // Dranek: этот вариант мерцает
+          //  ASOled.printNumber(float(Temp[i]), 2, 44, i+i); // Dranek: а если без предыдущей строки возможны артефакты           
+} }
 
- 
+void setup() {
+    ASOled.init();                        //Dranek: Инициализируем OLED дисплей 
+    ASOled.clearDisplay();  // Очищаем, иначе некорректно работает для дисплеев на SH1106 (косяк библиотеки) 
+    ASOled.printString_12x16(F("Pк= "), 0, 0);  //Dranek: Печатаем заголовки
+    ASOled.printString_12x16(F("Tп= "), 0, 2);
+    ASOled.printString_12x16(F("Tц= "), 0, 4);
+    ASOled.printString_12x16(F("Tк= "), 0, 6);
+    
 #if defined (SERIAL_DEBUG) || defined (SERIAL_TEST_NTC)
   Serial.begin(115200);
   millisConvert = millis();
 #endif
   pinMode(pin_led, OUTPUT);
   digitalWrite(pin_led, 1);
-  wdt_enable(WDTO_1S);
+  wdt_enable(WDTO_1S); //Dranek: Установка таймера watchdog
   Wire.begin();
-  hub.attach(ds18bP);  ds18bP.setTemperature((float)85.0); // Добавляем в хаб 1Ware датчик давления
-  if (readADS(0, 1) < 32750) {
-    hub.attach(ds18b1); ntcEn[0] = 1; ds18b1.setTemperature((float)85.0);
-  } else ntcEn[0] = 0;
-  if (readADS(1, 1) < 32750) {
-    hub.attach(ds18b2); ntcEn[1] = 1; ds18b2.setTemperature((float)85.0);
+  Pressure_enable = mysensor.begin();                           //Dranek: Инициализация манометра
+  if (Pressure_enable) {                                        // Dranek: Добавляем в хаб 1Ware датчик давления
+    hub.attach(ds18bP);  ds18bP.setTemperature((float)0.0); ntcEn[0] = 1;
+    } else ntcEn[0] = 0;
+  if (readADS(0, 1) < ADS_Trg) {
+    hub.attach(ds18b1); ntcEn[1] = 1; ds18b1.setTemperature((float)85.0);
   } else ntcEn[1] = 0;
-  if (readADS(2, 1) < 32750) {
-    hub.attach(ds18b3); ntcEn[2] = 1; ds18b3.setTemperature((float)85.0);
+  if (readADS(1, 1) < ADS_Trg) {
+    hub.attach(ds18b2); ntcEn[2] = 1; ds18b2.setTemperature((float)85.0);
   } else ntcEn[2] = 0;
-  if (readADS(3, 1) < 32750) {
-    hub.attach(ds18b4); ntcEn[3] = 1; ds18b4.setTemperature((float)85.0);
+  if (readADS(2, 1) < ADS_Trg) {
+    hub.attach(ds18b3); ntcEn[3] = 1; ds18b3.setTemperature((float)85.0);
   } else ntcEn[3] = 0;
-  if (readADS(4, 1) < 32750) {
-    hub.attach(ds18b5); ntcEn[4] = 1; ds18b5.setTemperature((float)85.0);
+  if (readADS(3, 1) < ADS_Trg) {
+    hub.attach(ds18b4); ntcEn[4] = 1; ds18b4.setTemperature((float)85.0);
   } else ntcEn[4] = 0;
-  if (readADS(5, 1) < 32750) {
-    hub.attach(ds18b6); ntcEn[5] = 1; ds18b6.setTemperature((float)85.0);
+  if (readADS(4, 1) < ADS_Trg) {
+    hub.attach(ds18b5); ntcEn[5] = 1; ds18b5.setTemperature((float)85.0);
   } else ntcEn[5] = 0;
-  if (readADS(6, 1) < 32750) {
-    hub.attach(ds18b7); ntcEn[6] = 1; ds18b7.setTemperature((float)85.0);
+  if (readADS(5, 1) < ADS_Trg) {
+    hub.attach(ds18b6); ntcEn[6] = 1; ds18b6.setTemperature((float)85.0);
   } else ntcEn[6] = 0;
-  if (readADS(7, 1) < 32750) {
-    hub.attach(ds18b8); ntcEn[7] = 1; ds18b8.setTemperature((float)85.0);
+  if (readADS(6, 1) < ADS_Trg) {
+    hub.attach(ds18b7); ntcEn[7] = 1; ds18b7.setTemperature((float)85.0);
   } else ntcEn[7] = 0;
+  if (readADS(7, 1) < ADS_Trg) {
+    hub.attach(ds18b8); ntcEn[8] = 1; ds18b8.setTemperature((float)85.0);
+  } else ntcEn[8] = 0;
 
 #if defined (SERIAL_DEBUG)  || defined (SERIAL_TEST_NTC)
   uint32_t iT = millis() - millisConvert;
   Serial.print("Инициализация длилась: "); Serial.print(iT); Serial.println(" мСек.");
-  for (int i=0; i<8; i++) {
+  for (int i=1; i<9; i++) {
     if (ntcEn[i]) {
-      Serial.print("Датчик "); Serial.print(i+1); Serial.println(" подключен.");
+      Serial.print("Датчик "); Serial.print(i); Serial.println(" подключен.");
     }
   }
 #endif
 
   digitalWrite(pin_led, 0);
-mysensor.begin(); //! Инициализация манометра
-    
+
 }
 
 void loop() {
 #ifndef SERIAL_TEST_NTC  
 
-  hub.poll();
-  wdt_reset();
+  hub.poll();  // Обработка запросов по 1Wire
+  wdt_reset(); // Сброс таймера watchdog
   
-
-    
   if (!hub.startConvert) millisConvert = millis() + 50;
   if (hub.startConvert && millisConvert < millis()) {
     uint16_t ad_temp;
-    int16_t tempCompute; 
-    float tempComputeResDS;
-    
-    W1_Connect_Enable = true; //! Есть контакт по 1 Ware
+    int16_t tempCompute;    
+    OneWireConnectDetected = true;                      //Dranek: Раз мы сюда попали, значит есть контакт по 1 Ware
     hub.startConvert = false;
     digitalWrite(pin_led, 1);
-    for(int i=0; i<8; i++) {
+    for(int i=1; i<9; i++) {
       if (ntcEn[i]) {
-        ad_temp = readADS(i, 16);
-        tempComputeResDS = (float)computeTemp_15bit(ad_temp) / 1000;
-        tempCompute = int16_t(tempComputeResDS * 256);
+             ad_temp = readADS(i-1, 16);                  // Чтение из АЦП канала i, среднее из 16 выборок
+             Temp[i] = (float)computeTemp_15bit(ad_temp) / 1000; // Dranek: запоминаем для последующего вывода на дисплей
+             tempCompute = int16_t(Temp[i] * 256);
 #ifdef SERIAL_DEBUG
-        Serial.print(ad_temp); Serial.print("  Температура датчика "); Serial.print(i+1); Serial.print(": "); Serial.print(tempComputeResDS, 3); Serial.println(" гр.С");
+        Serial.print(ad_temp); Serial.print("  Температура датчика "); Serial.print(i); Serial.print(": "); Serial.print(Temp[i], 3); Serial.println(" гр.С");
 #endif
         switch (i) {
-          case 0: ds18b1.scratchpad[3] = tempCompute >> 8; ds18b1.scratchpad[2] = tempCompute & 0xff; ds18b1.setTemperature(tempComputeResDS); break;
-          case 1: ds18b2.scratchpad[3] = tempCompute >> 8; ds18b2.scratchpad[2] = tempCompute & 0xff; ds18b2.setTemperature(tempComputeResDS); break;
-          case 2: ds18b3.scratchpad[3] = tempCompute >> 8; ds18b3.scratchpad[2] = tempCompute & 0xff; ds18b3.setTemperature(tempComputeResDS); break;
-          case 3: ds18b4.scratchpad[3] = tempCompute >> 8; ds18b4.scratchpad[2] = tempCompute & 0xff; ds18b4.setTemperature(tempComputeResDS); break;
-          case 4: ds18b5.scratchpad[3] = tempCompute >> 8; ds18b5.scratchpad[2] = tempCompute & 0xff; ds18b5.setTemperature(tempComputeResDS); break;
-          case 5: ds18b6.scratchpad[3] = tempCompute >> 8; ds18b6.scratchpad[2] = tempCompute & 0xff; ds18b6.setTemperature(tempComputeResDS); break;
-          case 6: ds18b7.scratchpad[3] = tempCompute >> 8; ds18b7.scratchpad[2] = tempCompute & 0xff; ds18b7.setTemperature(tempComputeResDS); break;
-          case 7: ds18b8.scratchpad[3] = tempCompute >> 8; ds18b8.scratchpad[2] = tempCompute & 0xff; ds18b8.setTemperature(tempComputeResDS); break;
+          case 1: ds18b1.scratchpad[3] = tempCompute >> 8; ds18b1.scratchpad[2] = tempCompute & 0xff; ds18b1.setTemperature(Temp[i]); break;
+          case 2: ds18b2.scratchpad[3] = tempCompute >> 8; ds18b2.scratchpad[2] = tempCompute & 0xff; ds18b2.setTemperature(Temp[i]); break;
+          case 3: ds18b3.scratchpad[3] = tempCompute >> 8; ds18b3.scratchpad[2] = tempCompute & 0xff; ds18b3.setTemperature(Temp[i]); break;
+          case 4: ds18b4.scratchpad[3] = tempCompute >> 8; ds18b4.scratchpad[2] = tempCompute & 0xff; ds18b4.setTemperature(Temp[i]); break;
+          case 5: ds18b5.scratchpad[3] = tempCompute >> 8; ds18b5.scratchpad[2] = tempCompute & 0xff; ds18b5.setTemperature(Temp[i]); break;
+          case 6: ds18b6.scratchpad[3] = tempCompute >> 8; ds18b6.scratchpad[2] = tempCompute & 0xff; ds18b6.setTemperature(Temp[i]); break;
+          case 7: ds18b7.scratchpad[3] = tempCompute >> 8; ds18b7.scratchpad[2] = tempCompute & 0xff; ds18b7.setTemperature(Temp[i]); break;
+          case 8: ds18b8.scratchpad[3] = tempCompute >> 8; ds18b8.scratchpad[2] = tempCompute & 0xff; ds18b8.setTemperature(Temp[i]); break;
         }
       }
     }
 
 
- disp(); // Вывод на дисплей
+ if (Pressure_enable) ReadPressure();                      // Dranek: Чтение давления
+ disp();                              // Вывод на дисплей
    digitalWrite(pin_led, 0); 
 
     
   }
-if (!W1_Connect_Enable) {  //нет соединения по 1Ware, просто выводим цифры
-if ((millis() % 1000) == 0) {      // ! Раз в секунду
- disp(); // Вывод на дисплей
+if (!OneWireConnectDetected) {        // Dranek: нет соединения по 1Ware, просто выводим цифры
+  // Мракобесие: (первые 10 секунд данные выводятся по возможности раз в секунду для того, чтоб не мешать опознать датчики Самовару, затем стабильно раз в секунду).
+if ((((millis() > (timer + 1000)) && (millis() > 10000))) || (((((millis() % 1000)==0) && (millis() < 10000))))) 
+{   
+ timer+=1000;
+ if (Pressure_enable) ReadPressure();                      // Dranek: Чтение давления
+ for(int i=1; i<4; i++) {             // Dranek: читаем три температуры в массив, только то что выводим на дисплей чтоб не занимать процессор и не мешать инициализации датчиков Самовара
+  if (ntcEn[i]) Temp[i] = (float)computeTemp_15bit(readADS(i-1, 16)) / 1000;}
+ disp();                              // Dranek: вывод на дисплей
    } }
 #else
 
 
   Serial.println();
   uint32_t tm = millis() + 1000;
-  for(int i=0; i<8; i++) {
+  for(int i=1; i<9; i++) {
     if (ntcEn[i]) {
       int16_t ad_temp = readADS(i, 16);
       Serial.print("ADC = "); Serial.print(ad_temp);
       Serial.print("  |  T"); Serial.print(i+1); Serial.print(" = "); Serial.print((float)computeTemp_15bit(ad_temp)/1000-3.3, 3);
       Serial.print("  |  Time convert (millis) = "); Serial.println(millis() + 1000 - tm);
       computeTemp_15bit(ad_temp);
-      
                   }
                           }
    
   while (tm > millis()) {
-    wdt_reset();
+    wdt_reset(); // Сброс таймера watchdog
   }
 
 #endif
