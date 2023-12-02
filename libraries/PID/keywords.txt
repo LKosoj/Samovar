@@ -7,6 +7,10 @@
 #######################################
 
 PID	KEYWORD1
+Mode	KEYWORD1
+Direction	KEYWORD1
+P_On	KEYWORD1
+PID_v2	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -23,6 +27,13 @@ GetKi	KEYWORD2
 GetKd	KEYWORD2
 GetMode	KEYWORD2
 GetDirection	KEYWORD2
+GetLastP	KEYWORD2
+GetLastI	KEYWORD2
+GetLastD	KEYWORD2
+Start	KEYWORD2
+Run	KEYWORD2
+Setpoint	KEYWORD2
+GetSetpoint	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
@@ -34,3 +45,9 @@ DIRECT	LITERAL1
 REVERSE	LITERAL1
 P_ON_E	LITERAL1
 P_ON_M	LITERAL1
+Automatic	LITERAL1
+Manual	LITERAL1
+Direct	LITERAL1
+Reverse	LITERAL1
+Error	LITERAL1
+Measurement	LITERAL1

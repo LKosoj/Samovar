@@ -3,33 +3,23 @@
  * Reading analog input 0 to control analog PWM output 3
  ********************************************************/
 
-#include <PID_v1.h>
+#include <PID_v2.h>
 
 #define PIN_INPUT 0
 #define PIN_OUTPUT 3
 
-//Define Variables we'll be connecting to
-double Setpoint, Input, Output;
+// Specify the links and initial tuning parameters
+double Kp = 2, Ki = 5, Kd = 1;
+PID_v2 myPID(Kp, Ki, Kd, PID::Direct);
 
-//Specify the links and initial tuning parameters
-double Kp=2, Ki=5, Kd=1;
-PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
-
-void setup()
-{
-  //initialize the variables we're linked to
-  Input = analogRead(PIN_INPUT);
-  Setpoint = 100;
-
-  //turn the PID on
-  myPID.SetMode(AUTOMATIC);
+void setup() {
+  myPID.Start(analogRead(PIN_INPUT),  // input
+              0,                      // current output
+              100);                   // setpoint
 }
 
-void loop()
-{
-  Input = analogRead(PIN_INPUT);
-  myPID.Compute();
-  analogWrite(PIN_OUTPUT, Output);
+void loop() {
+  const double input = analogRead(PIN_INPUT);
+  const double output = myPID.Run(input);
+  analogWrite(PIN_OUTPUT, output);
 }
-
-
