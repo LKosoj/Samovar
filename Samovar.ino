@@ -361,7 +361,7 @@ void triggerSysTicker(void *parameter) {
   while (true) {
     CurMinST = (millis() / 1000);
 
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
     //Проверим, что давление не вышло за пределы, если вышло - авария
     if (SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue) {
       SendMsg(F("Превышено предельное давление!"), ALARM_MSG);
