@@ -210,6 +210,7 @@ void ReadPressure() {                                 //Dranek: Чтение д�
 }
 
 void disp() {                                         //Dranek:  Вывод на дисплей 
+
             for(int i=0; i<4; i++) {
             if (ntcEn[i]) {
               dtostrf((float)(Temp[i]),6, 2, outstr);           //// Dranek: ИМХО, хоть и через ж., но так лучше
@@ -238,7 +239,7 @@ void setup() {
   Pressure_enable = mysensor.begin();                           //Dranek: Инициализация манометра
   if (Pressure_enable) {                                        // Dranek: Добавляем в хаб 1Ware датчик давления
     hub.attach(ds18bP);  ds18bP.setTemperature((float)0.0); ntcEn[0] = 1;
-    } else ntcEn[0] = 0;
+    } else { ntcEn[0] = 0; ASOled.printString_12x16(F("Тв= "), 0, 0);  } // Dranek: если датчика давления нет заменяем его вывод на дисплей на 4 датчик температуры
   if (readADS(0, 1) < ADS_Trg) {
     hub.attach(ds18b1); ntcEn[1] = 1; ds18b1.setTemperature((float)85.0);
   } else ntcEn[1] = 0;
@@ -263,7 +264,7 @@ void setup() {
   if (readADS(7, 1) < ADS_Trg) {
     hub.attach(ds18b8); ntcEn[8] = 1; ds18b8.setTemperature((float)85.0);
   } else ntcEn[8] = 0;
-
+if (!Pressure_enable) ntcEn[0]=ntcEn[4]; // Dranek: в случае отсутствия датчика давления подмена его на 4 термометр
 #if defined (SERIAL_DEBUG)  || defined (SERIAL_TEST_NTC)
   uint32_t iT = millis() - millisConvert;
   Serial.print("Инициализация длилась: "); Serial.print(iT); Serial.println(" мСек.");
@@ -314,6 +315,7 @@ void loop() {
 
 
  if (Pressure_enable) ReadPressure();                      // Dranek: Чтение давления
+ if (!Pressure_enable) Temp[0]=Temp[4]; // Dranek: в случае отсутствия датчика давления подмена его на 4 термометр
  disp();                              // Вывод на дисплей
    digitalWrite(pin_led, 0); 
 
@@ -325,8 +327,9 @@ if ((((millis() > (timer + 1000)) && (millis() > 10000))) || (((((millis() % 100
 {   
  timer+=1000;
  if (Pressure_enable) ReadPressure();                      // Dranek: Чтение давления
- for(int i=1; i<4; i++) {             // Dranek: читаем три температуры в массив, только то что выводим на дисплей чтоб не занимать процессор и не мешать инициализации датчиков Самовара
+ for(int i=1; i<5; i++) {             // Dranek: читаем три температуры в массив, только то что выводим на дисплей чтоб не занимать процессор и не мешать инициализации датчиков Самовара
   if (ntcEn[i]) Temp[i] = (float)computeTemp_15bit(readADS(i-1, 16)) / 1000;}
+if (!Pressure_enable) Temp[0]=Temp[4]; // Dranek: в случае отсутствия датчика давления подмена его на 4 термометр
  disp();                              // Dranek: вывод на дисплей
    } }
 #else
