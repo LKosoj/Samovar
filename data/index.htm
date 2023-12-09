@@ -257,14 +257,14 @@
       var t = document.getElementsByClassName("prgline");
       var k, s;
       s = "";
-      for (i = 1; i < t.length; i++) {
+      for (i = 0; i < t.length; i++) {
 
         if (t[i].childNodes[2].value.indexOf(".") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf("."));
         if (t[i].childNodes[2].value.indexOf(",") > 0) t[i].childNodes[2].value = t[i].childNodes[2].value.substring(0, t[i].childNodes[2].value.indexOf(","));
 
 
         t[i].childNodes[3].value = t[i].childNodes[3].value.replace(",", ".");
-        t[i].childNodes[5].value = t[i].childNodes[5].value.replace(",", ".");
+        //t[i].childNodes[5].value = t[i].childNodes[5].value.replace(",", ".");
         t[i].childNodes[6].value = t[i].childNodes[6].value.replace(",", ".");
 
         k = t[i].childNodes;
