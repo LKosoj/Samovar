@@ -310,7 +310,7 @@ void set_mixer_state(bool state, bool dir) {
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
 #ifdef USE_WATER_PUMP
       //включаем SSD реле
-      //pump_pwm.write(1023);
+      pump_pwm.write(1023);
 #endif
       //включаем I2CStepper шаговик
       if (use_I2C_dev == 1) {
@@ -330,7 +330,7 @@ void set_mixer_state(bool state, bool dir) {
     digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 #ifdef USE_WATER_PUMP
     //выключаем SSD реле
-    //pump_pwm.write(0);
+    pump_pwm.write(0);
 #endif
     //выключаем I2CStepper шаговик
     if (use_I2C_dev == 1) {
