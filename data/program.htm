@@ -216,11 +216,11 @@ function calc_program(){
       &nbsp;&nbsp;&nbsp;<label class="tooltip">№<span class="tooltiptext">Номер строки программы</span></label>
       &nbsp;&nbsp;<label class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label>
       &nbsp;<label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час. Для строки с типом "Пауза" - время паузы в секундах</span></label>
-      &nbsp;&nbsp;&nbsp;<label class="tooltip">Процент<span class="tooltiptext">Процент от объема фракции данного типа</span></label>&nbsp;&nbsp;&nbsp;
+      &nbsp;<label class="tooltip">Процент<span class="tooltiptext">Процент от объема фракции данного типа</span></label>&nbsp;&nbsp;&nbsp;
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Тип программы. Для режима Пауза время паузы в секундах задается в поле "Скорость"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">${programPwrLabel}<span class="tooltiptext">Напряжение или мощность на регуляторе (зависит от типа используемого регулятора)</span></label>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Выход<span class="tooltiptext">Объем отбираемой фракции в данной строке программы</span></label>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Время, необходимое на отбор фракции в данной строке программы</span></label></div>`);
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Время, необходимое на отбор фракции в данной строке программы</span></label></div>`);
     var p = document.getElementById("WProgram1");
     var arr = p.value.split("\n");
     for (z=0;z<arr.length;z++){

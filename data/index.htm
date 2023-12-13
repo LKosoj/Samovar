@@ -285,7 +285,7 @@
         let stringTime = 0;
         let program = document.getElementsByClassName("prgline");;
         // console.log('program', program)
-        for (let i = 1; i < program.length; i++) {
+        for (let i = 0; i < program.length; i++) {
           let line = program[i];
           if (line.childNodes[1].value === 'P') {
             stringTime = line.childNodes[2].value / 3600;
@@ -515,7 +515,7 @@
 
     function removeLine (ln) {
       var prg = document.getElementById("prg").childNodes.length;
-      if (prg < 3) return;
+      if (prg < 4) return;
       var prgline = document.getElementById(ln);
       prgline.remove();
       calc_program();
