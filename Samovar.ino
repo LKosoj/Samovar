@@ -437,6 +437,8 @@ void triggerSysTicker(void *parameter) {
             s += format_float(get_alcohol(TankSensor.avgTemp), 2);
             s += ",";
             s += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
+            s += ",";
+            s += format_float(pressure_value, 2);
 #ifdef USE_MQTT
             MqttSendMsg(s, "log");
 #endif
