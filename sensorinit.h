@@ -155,9 +155,10 @@ void DS_getvalue(void) {
   acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
 
 #ifdef USE_PRESSURE_1WIRE
-  use_pressure_sensor = true;
+  float pv;
   byte p_addr[8] = USE_PRESSURE_1WIRE;
-  pressure_value = sensors.getTempC(p_addr);   // считываем давление с расширителя по 1Wire
+  pv = sensors.getTempC(p_addr);   // считываем давление с расширителя по 1Wire
+  if (pv > -120) pressure_value = pv;
 #endif
 
   //    float randNumber;
@@ -414,6 +415,10 @@ void sensor_init(void) {
 #endif
 
 #ifdef USE_PRESSURE_MPX
+  use_pressure_sensor = true;
+#endif
+
+#ifdef USE_PRESSURE_1WIRE
   use_pressure_sensor = true;
 #endif
 
