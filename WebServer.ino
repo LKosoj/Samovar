@@ -797,6 +797,11 @@ void web_command(AsyncWebServerRequest *request) {
     else if (request->hasArg("lua")) {
       run_lua_script(request->arg("lua"));
     }
+    else if (request->hasArg("luastr")) {
+      String lstr = request->arg("luastr");
+      lstr.replace("^"," ");
+      run_lua_string(lstr);
+    }
 #endif
   }
   request->send(200, "text/plain", "OK");

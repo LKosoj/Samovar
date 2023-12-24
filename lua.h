@@ -889,6 +889,25 @@ void run_lua_script(String fn) {
   if (btn_script.length() > 0) btn_script = get_global_variables() + btn_script;
 }
 
+String run_lua_string(String lstr) {
+  String sr = "";
+  if (lstr.length() > 0) {
+    if (show_lua_script) {
+      WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+      WriteConsoleLog(lstr);
+      WriteConsoleLog(F("--END LUA SCRIPT--"));
+    }
+    sr = lua.Lua_dostring(&lstr);
+    sr.trim();
+    if (sr != "") {
+      WriteConsoleLog("ERR in lua: " + sr);
+    } else {
+      WriteConsoleLog(F("Lua run complete"));
+    }
+  }
+  return sr;
+}
+
 void load_lua_script() {
   script1 = get_lua_script("script.lua");
   script2 = get_lua_script(lua_type_script);

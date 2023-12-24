@@ -1,4 +1,23 @@
 #ifdef SAMOVAR_USE_BLYNK
+
+#ifdef USE_LUA
+String run_lua_string(String lstr);
+WidgetTerminal terminal(V22);
+
+BLYNK_WRITE(V22) {
+  String lstr = param.asStr();  // assigning incoming value from pin V22 to a variable
+  terminal.println(lstr);
+  lstr = run_lua_string(lstr);
+  if (lstr != "") {
+    terminal.println("ERR in lua: " + lstr);
+  }
+  else {
+    terminal.println(F("Lua run complete"));
+  }
+  terminal.flush();
+}
+#endif
+
 BLYNK_READ(V0) {
   vTaskDelay(2 / portTICK_PERIOD_MS);
   Blynk.virtualWrite(V0, SteamSensor.avgTemp);
