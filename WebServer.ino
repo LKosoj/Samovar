@@ -377,6 +377,10 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.UseBuzzer) return "checked='true'";
     else
       return "";
+  } else if (var == "CUBBuzz") {
+    if (SamSetup.UseBBuzzer) return "checked='true'";
+    else
+      return "";
   } else if (var == "UseWS") {
     if (SamSetup.UseWS) return "checked='true'";
     else
@@ -576,6 +580,11 @@ void handleSave(AsyncWebServerRequest *request) {
   SamSetup.UseBuzzer = false;
   if (request->hasArg("UseBuzzer")) {
     SamSetup.UseBuzzer = true;
+  }
+
+  SamSetup.UseBBuzzer = false;
+  if (request->hasArg("UseBBuzzer")) {
+    SamSetup.UseBBuzzer = true;
   }
 
   SamSetup.UseWS = false;
@@ -923,7 +932,7 @@ String get_web_file(String fn, get_web_type type) {
   }
   asyncHTTPrequest request;
   String command = "GET";
-  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn;
+  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn;// + "?" + NTP.getUptimeString();
   Serial.print("url = ");
   Serial.println(url);
   request.setDebug(false);
