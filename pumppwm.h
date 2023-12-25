@@ -17,7 +17,8 @@ void init_pump_pwm(byte pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);
   pump_regulator.setDirection(REVERSE);                // направление регулирования (NORMAL/REVERSE). ПО УМОЛЧАНИЮ СТОИТ NORMAL
   pump_regulator.setLimits(PWM_LOW_VALUE * 10, 1023);  // пределы (ставим для 8 битного ШИМ). ПО УМОЛЧАНИЮ СТОЯТ 0 И 255
-  pump_regulator.setpoint = SamSetup.SetWaterTemp;         // сообщаем регулятору температуру, которую он должен поддерживать
+  //pump_regulator.setMode(ON_RATE);
+  pump_regulator.setpoint = SamSetup.SetWaterTemp;     // сообщаем регулятору температуру, которую он должен поддерживать
   pump_started = false;
 }
 
