@@ -307,6 +307,14 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
   } else if (Var == "wp_count") {
     wp_count = (byte)a;
 #endif
+#ifdef USE_WATER_PUMP
+  } else if (Var == "pmpKp") {
+    pump_regulator.Kp = (byte)a;
+  } else if (Var == "pmpKi") {
+    pump_regulator.Ki = (byte)a;
+  } else if (Var == "pmpKd") {
+    pump_regulator.Kd = (byte)a;
+#endif
   } else if (Var == "SteamTemp") {
     SteamSensor.avgTemp = a;
   } else if (Var == "boil_temp") {
