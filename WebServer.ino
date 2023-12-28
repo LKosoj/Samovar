@@ -937,7 +937,7 @@ String get_web_file(String fn, get_web_type type) {
   }
   asyncHTTPrequest request;
   String command = "GET";
-  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn;// + "?" + NTP.getUptimeString();
+  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn + "?" + micros();
   Serial.print("url = ");
   Serial.println(url);
   request.setDebug(false);
