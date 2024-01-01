@@ -600,7 +600,8 @@
     };
 
     function run_strlua() {
-      sendbutton("luastr=" + document.getElementById('lua_str_i').value);
+      var str = document.getElementById('lua_str_i').value.replace(" ", "^");
+      sendbutton("luastr=" + str);
       sleep(1000);
     };
     
