@@ -21,6 +21,7 @@ void start_lua_script();
 void load_lua_script();
 String get_lua_script_list();
 void run_lua_script(String fn);
+String run_lua_string(String lstr);
 #endif
 
 void change_samovar_mode() {
@@ -799,7 +800,7 @@ void web_command(AsyncWebServerRequest *request) {
     }
     else if (request->hasArg("luastr")) {
       String lstr = request->arg("luastr");
-      lstr.replace("^"," ");
+      lstr.replace("^", " ");
       run_lua_string(lstr);
     }
 #endif
@@ -858,7 +859,7 @@ void get_data_log(AsyncWebServerRequest *request, String fn) {
   }
   response->addHeader(F("Content-Type"), F("application/octet-stream"));
   response->addHeader(F("Content-Description"), F("File Transfer"));
-  response->addHeader(F("Content-Disposition"), "attachment; filename=\""+ fn + "\"");
+  response->addHeader(F("Content-Disposition"), "attachment; filename=\"" + fn + "\"");
   response->addHeader(F("Pragma"), F("public"));
   response->addHeader(F("Cache-Control"), F("no-cache"));
   request->send(response);
@@ -907,7 +908,7 @@ void get_web_interface() {
     s += get_web_file("chart.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("distiller.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
-    
+
     s += get_web_file("program.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("setup.htm", SAVE_FILE_OVERRIDE);
 
