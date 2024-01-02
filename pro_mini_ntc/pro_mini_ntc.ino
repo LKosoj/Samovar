@@ -1,11 +1,12 @@
-// ---------------------------------БИБЛИОТЕКИ----------------------------------------------------------------------------
+// -----------------------------------------------БИБЛИОТЕКИ----------------------------------------------------------------
 #include <Arduino.h>
 #include <Wire.h>
-#include <avr/wdt.h>     // watchdog (по моему нихрена оно не работает, но пусть уж будет)
+#include <avr/wdt.h>    // watchdog (по моему нихрена оно не работает, но пусть уж будет)
 #include "OneWireHub.h"
 #include "DS18B20.h"
-#include <ASOLED.h>     // библиотека дисплея
-#include <XGZP6897D.h>  //библиотека датчика давления 
+#include <ASOLED.h>     // Библиотека дисплея
+#include <XGZP6897D.h>  // Библиотека датчика давления XGZP6897D
+#include "HX710B.h"     // Библиотека датчика давления на АЦП HX710B
 
 //-------------------------------------------------ИСХОДНЫЕ КОНСТАНТЫ, ПЕРЕМЕННЫЕ, ОБЪЕКТЫ---------------------------------
 //                                                   то, что можно менять помечено *
@@ -47,18 +48,27 @@ const float R10 = 9.990;   // * точное значение 10 кОм рези
 uint8_t Mode_R = 0;        // триггер режима килоомметра
 uint8_t ADSCh = 0;         // * канал измерений килоомметра
 //------------------------------------------Значения для датчиков давления-------------------------------------------------
-int8_t Pressure_enable=0;      // Признак наличия датчиков давления для XGZP6897D = 1 (установится если откликнется по I2C), для MPX10DP = 2 (установится если стоит перемычка с D8 на массу)
+int8_t Pressure_enable=0;      // Признак наличия датчиков давления, вычисляемый, для XGZP6897D = 1 (установится если откликнется по I2C), 
+                               // для MPX10DP = 2 (установится если стоит перемычка с D8 на массу), для HX710B =3 (установится если стоит перемычка с D7 на массу)
 float pressure, temperature;   // переменные для чтения датчиков давления
-float DeltaPress = 0;          // * Поправка для датчика давления, равна его среднему значению при отсутствии давления и нулевой поправке, её можно изменить на свою, но правильнее менять PressureBaseADS
+float DeltaPress = -11.46;     // * Поправка для датчика давления, равна его среднему значению при отсутствии давления и нулевой поправке, её можно изменить на свою, но правильнее менять PressureBaseADS
 //                                         Значения для термокомпенсации (если понадобится)
-const float KTemp=1;           // * Коэффициент термокомпенсации (наклон кривой), требуется подбор, зависит от выходного диапазона напряжений датчика (при моих экспериментах работает с 0.8-1)
+const float KTemp=0;           // * Коэффициент термокомпенсации (наклон кривой), требуется подбор, зависит от выходного диапазона напряжений датчика (при моих экспериментах работает с 0.8-1)
                                // если здесь не 0, то седьмой термометр резервируется под термокомпенсацию и по 1Ware не публикуется 
 const float BaseTemp=28.97;    // * Базовая температура для термокомпенсации, для MPX10DP и подобных можно увидеть на экране настройки датчика давления при реальном давлении =0 
                                // и после выдержки во включенном состоянии минут 15.
 float dPt=0;                   // Вычисляемая поправка термокомпенсации  
+
 //                                         Датчики подключенные к 8 каналу АЦП (MPX10DP и т.п.)
 const uint16_t PressureBaseADS = 24364;// * ADS нулевого давления при базовой температуре, узнать величину можно на экране настройки датчика давления при реальном давлении =0 и после выдержки во включенном состоянии минут 15
 float PressureQ = 0.261;       // * Квант изменения давления (мм.рт.ст.), на сколько изменится давление при приросте значения от АЦП на 1, для своего датчика надо считать свой, если подключить датчик не напрямую, а через делитель 6.2/10 кОм он будет около 0.3149
+
+//                                         Датчик 040DR1 на АЦП HX710B (0-40кПа) и ему подобные, MPS20N0040D-S например
+const int SCLK  = 4;           // Ноги ардуины
+const int DOUT = 3;
+HX710B pressure_sensor;        // Объект датчика
+const float HX710B_Mult = 4.35;// Множитель для врунишки чтоб не лезть в библиотеку, характеристика всё равно линейная, ставите 1 и вычисляете при поверке с манометром
+
 //                                         Датчик XGZP6897D, подключенный к I2C
 XGZP6897D mysensor(128);       // Объект датчика давления с делителем К=128, делитель зависит от диапазона датчика, искать в даташите, мой (-40 - 40 Pa)
 /*   K value for XGZP6897D. It depend on the pressure range of the sensor.
@@ -286,9 +296,16 @@ void ReadPressure() {      // Чтение датчиков давления и 
                          //применение поправки и температурной компенсации (эмпирически)
    Temp[6]=(float)computeTemp_15bit(readADS(6, 4)) / 1000; // чтение температуры 7 датчика
    if (KTemp !=  0) dPt = ((float)Temp[6] - BaseTemp) * KTemp; // * расчет поправки термокомпенсации если используется
-   
-  Temp[0] = ((float)pressure - (float)DeltaPress) - dPt;   }   // запись в массив с учетом поправок
+   Temp[0] = ((float)pressure - (float)DeltaPress) - dPt;   }   // запись в массив с учетом поправок
   
+ if ((Pressure_enable==3) && (pressure_sensor.is_ready())) {  //Чтение датчика давления на АЦП HX710B  
+ if ((digitalRead(buttonPin) == LOW) && (DispMode == 0)) DeltaPress = (float)pressure;  // Убираем дрейф нуля датчика давления по замыканию пина D12 на минус если включен 1 экран
+     pressure = pressure_sensor.raw2mmHg(pressure_sensor.get_value(1)*HX710B_Mult);    //чтение датчика, перевод значения в мм.рт.ст, умножение на коэф вранья
+                         //применение поправки и температурной компенсации (эмпирически)
+   Temp[6]=(float)computeTemp_15bit(readADS(6, 4)) / 1000; // чтение температуры 7 датчика
+   if (KTemp !=  0) dPt = ((float)Temp[6] - BaseTemp) * KTemp; // * расчет поправки термокомпенсации если используется
+      Temp[0] = ((float)pressure - (float)DeltaPress) - dPt;   }   // запись в массив с учетом поправок
+
   if (OneWireConnectDetected) {
     int16_t tempCompute = int16_t(Temp[0] * 256);  //запись значения давления в виде температуры по 1Ware
     ds18bP.scratchpad[3] = tempCompute >> 8;
@@ -325,23 +342,31 @@ void disp() {  // Вывод на дисплей
   if (digitalRead(buttonPin) == LOW) {DispMode--; ASOled.clearDisplay(); } // Возврат на 1 дисплей по кнопке 1
   }
     if (DispMode == 2) {                   // Экран для настройки датчика давления
-  ASOled.printString_12x16(F("dPt"), 0, 6);  //Печатаем заголовки
-  ASOled.printString_12x16(F("T7= "), 0, 4);
-  ASOled.printString_12x16(F("ADS8 "), 0, 2);
+    if (Pressure_enable==2) {
   ASOled.printString_12x16(F("P8= "), 0, 0);
-  dtostrf((float)dPt, 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 6);
-  dtostrf((float)Temp[6], 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 4);
-  dtostrf((float)readADS(7, 16), 6, 0, outstr); ASOled.printString_12x16(outstr, 52, 2);
   dtostrf((float)Temp[0], 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 0);
+  ASOled.printString_12x16(F("ADS8 "), 0, 2); 
+  dtostrf((float)readADS(7, 16), 6, 0, outstr); ASOled.printString_12x16(outstr, 52, 2);
+  ASOled.printString_12x16(F("T7= "), 0, 4);
+  dtostrf((float)Temp[6], 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 4);
+  ASOled.printString_12x16(F("dPt"), 0, 6);  
+  dtostrf((float)dPt, 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 6); }
+else {
+  ASOled.printString_12x16(F("P= "), 0, 0);
+  dtostrf((float)Temp[0], 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 0);
+  ASOled.printString_12x16(F("Pi= "), 0, 2); 
+  dtostrf((float)((float)pressure - (float)DeltaPress), 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 2);
+  ASOled.printString_12x16(F("T7= "), 0, 4);
+  dtostrf((float)Temp[6], 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 4);
+  ASOled.printString_12x16(F("dPt"), 0, 6);  
+  dtostrf((float)dPt, 6, 2, outstr); ASOled.printString_12x16(outstr, 52, 6); }
   if (digitalRead(buttonPin) == LOW) {DispMode--; ASOled.clearDisplay(); } // Возврат на 2 дисплей по кнопке 1
-  }
- }
+} }
 
 void setup() {
   wdt_enable(WDTO_1S);  //Установка таймера watchdog
   Wire.begin();
   pinMode(buttonPin, INPUT_PULLUP); pinMode(button2Pin, INPUT_PULLUP);
-  pinMode(8, INPUT_PULLUP);
   ASOled.init();                              //Инициализируем OLED дисплей
   ASOled.clearDisplay();                      // Очищаем, иначе некорректно работает для дисплеев на SH1106 (косяк библиотеки)
 
@@ -352,15 +377,21 @@ void setup() {
 #endif
   pinMode(pin_led, OUTPUT);
   digitalWrite(pin_led, 1);
-  if (digitalRead(8) == LOW) Pressure_enable = 2;  // Если стоит джампер значит датчик MPX50DP
-  
-  
-  if (digitalRead(buttonPin) == LOW) {  // Если кнопка зажата включаем режим измерения сопротивлений
+
+    if (digitalRead(buttonPin) == LOW) {  // Если кнопка зажата включаем режим измерения сопротивлений
     Mode_R = 1;
     ASOled.clearDisplay();
-    return (0);
-  }
-  if (mysensor.begin()) Pressure_enable =1;  //Инициализация манометра
+    return (0);  }
+  
+  pinMode(7, INPUT_PULLUP); 
+  if (digitalRead(7) == LOW) { // Если D7 ардуины замкнут на массу значит подключен датчик 040DR1 или т.п. с АЦП HX710B
+  Pressure_enable = 3;  pressure_sensor.begin(DOUT, SCLK); } // Инициализация датчика
+
+  pinMode(8, INPUT_PULLUP); 
+  if (digitalRead(8) == LOW) Pressure_enable = 2; // Если D8 ардуины замкнут на массу значит подключен датчик  MPX50DP или т.п.
+
+  if (mysensor.begin()) Pressure_enable = 1;                                 // Инициализация датчика XGZP6897D
+ 
   if (Pressure_enable) {               // Добавляем в хаб 1Ware датчик давления
     hub.attach(ds18bP);
     ds18bP.setTemperature((float)0.0);
@@ -424,7 +455,7 @@ void setup() {
 #endif
 
   digitalWrite(pin_led, 0);
-}
+ }
 
 void loop() {
   if (!Mode_R) {  //Если не режим измерения сопротивления
