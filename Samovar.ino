@@ -702,12 +702,12 @@ void setup() {
     1);              /* Core where the task should run */
 
 
-  //Если при старте нажата кнопка энкодера или кнопка - сохраненные параметры сбрасываются на параметры по умолчанию
+  //Если при старте нажата кнопка - Самовар запустится в режиме AP
+  bool wifiAP = false;
 #ifdef BTN_PIN
   btn.tick();      // отработка нажатия
   if (btn.isPress()) {
-    SamSetup.flag = 255;
-    Serial.println("Reset configuration");
+    wifiAP = true;
   }
 #endif
 
@@ -786,37 +786,45 @@ void setup() {
   //Serial.printf("This chip has %d cores\n", ESP.getChipCores());
   Serial.print("Chip ID: "); Serial.println(chipId);
 
-  //Подключаемся к WI-FI
-  AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
-  AsyncWiFiManager wifiManager(&server, &dns);
-  wifiManager.setConfigPortalTimeout(360);
-  wifiManager.setSaveConfigCallback(saveConfigCallback);
-  wifiManager.setAPCallback(configModeCallback);
-  wifiManager.setDebugOutput(false);
-  wifiManager.addParameter(&custom_blynk_token);
-
   String StIP;
 
-  if (!wifiManager.autoConnect("Samovar", "SamApp123")) {
+  if (!wifiAP) {
+    //Подключаемся к WI-FI
+    AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
+    AsyncWiFiManager wifiManager(&server, &dns);
+
+    encoder.tick();  // отработка нажатия
+    if (encoder.isPress()) wifiManager.resetSettings();
+
+    wifiManager.setConfigPortalTimeout(360);
+    wifiManager.setSaveConfigCallback(saveConfigCallback);
+    wifiManager.setAPCallback(configModeCallback);
+    wifiManager.setDebugOutput(false);
+    wifiManager.addParameter(&custom_blynk_token);
+
+    if (!wifiManager.autoConnect("Samovar")) {
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP("Samovar", "SamApp123");
+      StIP = WiFi.softAPIP().toString();
+    } else {
+      StIP = WiFi.localIP().toString();
+    }
+
+    if (shouldSaveWiFiConfig) {
+      if (strlen(custom_blynk_token.getValue()) == 33) {
+        strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
+        save_profile();
+      }
+    }
+    Serial.print(F("Connected to "));
+    Serial.println(WiFi.SSID());
+  } else {
     WiFi.mode(WIFI_AP);
     WiFi.softAP("Samovar", "SamApp123");
     StIP = WiFi.softAPIP().toString();
-  } else {
-    StIP = WiFi.localIP().toString();
+    Serial.println(F("Started as WiFi AP"));
   }
 
-  if (shouldSaveWiFiConfig) {
-    if (strlen(custom_blynk_token.getValue()) == 33) {
-      strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
-      save_profile();
-    }
-  }
-
-  encoder.tick();  // отработка нажатия
-  if (encoder.isPress()) wifiManager.resetSettings();
-
-  Serial.print(F("Connected to "));
-  Serial.println(WiFi.SSID());
   Serial.print(F("IP address: "));
   StIP.toCharArray(ipst, 16);
 
@@ -834,7 +842,7 @@ void setup() {
   writeString(F("Connected"), 4);
 
 #ifdef SAMOVAR_USE_BLYNK
-  if (SamSetup.blynkauth[0] != 0) {
+  if (SamSetup.blynkauth[0] != 0 && !wifiAP) {
     //Blynk.begin(auth, ssid, password);
     writeString(F("Connecting to Blynk "), 3);
     writeString("               ", 4);
@@ -939,8 +947,10 @@ void setup() {
 #endif
 
 #ifdef USE_MQTT
-  initMqtt();
-  delay(500);
+  if (!wifiAP) {
+    initMqtt();
+    delay(500);
+  }
 #endif
 
   //WiFi.hostByName(ntpServerName, timeServerIP);
