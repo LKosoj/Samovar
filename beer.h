@@ -18,6 +18,7 @@ void check_mixer_state();
 void set_mixer_state(bool state, bool dir);
 bool set_mixer_pump_target(uint8_t on);
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
+void HopStepperStep();
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
@@ -250,6 +251,7 @@ void check_alarm_beer() {
       set_buzzer(true);
       msgfl = false;
       SendMsg(F("Засыпьте хмель!"), NOTIFY_MSG);
+      HopStepperStep();
     }
 
     //Проверяем, что еще нужно держать паузу
@@ -532,4 +534,16 @@ void FinishAutoTune() {
 
 void set_mixer(bool On) {
   set_mixer_state(On, false);
+}
+
+//Крутим шаговым двигателем на заданное количество шагов
+void HopStepperStep(){
+    stopService();
+    stepper.brake();
+    stepper.disable();
+    stepper.setMaxSpeed(200); //скорость движения шагового двигателя
+    stepper.setSpeed(200);    //скорость движения шагового двигателя, должна быть равна предыдущей
+    stepper.setCurrent(0);
+    stepper.setTarget(200 * 16 / 360 * 20); //16 - множитель на драйвере двигателя. 20 - количество отверстий по целому кругу (если бы они занимали всю окружность)
+    startService();
 }
