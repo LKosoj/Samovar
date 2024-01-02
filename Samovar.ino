@@ -708,6 +708,7 @@ void setup() {
   btn.tick();      // отработка нажатия
   if (btn.isPress()) {
     wifiAP = true;
+    delay(2000);
   }
 #endif
 
