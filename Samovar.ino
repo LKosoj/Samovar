@@ -1408,6 +1408,10 @@ void read_config() {
   pump_regulator.setpoint = SamSetup.SetWaterTemp;         // сообщаем регулятору температуру, которую он должен поддерживать
 #endif
 
+#ifdef IGNORE_HEAD_LEVEL_SENSOR_SETTING
+  SamSetup.UseHLS = true;
+#endif
+
 }
 
 void SendMsg(const String m, MESSAGE_TYPE msg_type) {
