@@ -145,13 +145,13 @@ BLYNK_WRITE(V3) {
     sam_command_sync = SAMOVAR_RESET;
 }
 BLYNK_WRITE(V4) {
-  int Value4 = param.asInt();  // assigning incoming value from pin V4 to a variable
+  //int Value4 = param.asInt();  // assigning incoming value from pin V4 to a variable
   if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-    if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
+    sam_command_sync = SAMOVAR_BEER;
   } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-    if (!PowerOn) sam_command_sync = SAMOVAR_BK;
+    sam_command_sync = SAMOVAR_BK;
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
-    if (!PowerOn) sam_command_sync = SAMOVAR_DISTILLATION;
+    sam_command_sync = SAMOVAR_DISTILLATION;
   } else
     sam_command_sync = SAMOVAR_POWER;
   //set_power(Value4);
