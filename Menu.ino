@@ -587,7 +587,7 @@ void encoder_getvalue() {
     //Если калибровка - энкодером регулируем скорость шагового двигателя
     if (startval == 100) {
       menu_calibrate();
-      updscreen = false;
+      //updscreen = false;
       return;
     }
     if (!main_menu1.is_callable(1)) {
@@ -602,7 +602,7 @@ void encoder_getvalue() {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
     if (startval == 100) {
-      updscreen = false;
+      //updscreen = false;
       menu_calibrate_down();
       return;
     }
