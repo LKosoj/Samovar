@@ -362,6 +362,10 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.UseHLS) return "checked='true'";
     else
       return "";
+#ifdef IGNORE_HEAD_LEVEL_SENSOR_SETTING
+  } else if (var == "IgnFL") {
+     return F("style=""display: none""");
+#endif
   } else if (var == "UAPChecked") {
     if (SamSetup.useautopowerdown) return "checked='true'";
     else
