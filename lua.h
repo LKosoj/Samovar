@@ -19,7 +19,7 @@ LuaWrapper lua;
 void MqttSendMsg(String Str, const char *chart );
 #endif
 
-unsigned long lua_timer[9];  //10 таймеров для lua
+unsigned long lua_timer[10];  //10 таймеров для lua
 String lua_type_script;
 String script1, script2, btn_script;
 
@@ -190,11 +190,11 @@ static int lua_wrapper_set_power(lua_State *lua_state) {
 
   if (a && !PowerOn) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-      if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
+      sam_command_sync = SAMOVAR_BEER;
     } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-      if (!PowerOn) sam_command_sync = SAMOVAR_BK;
+      sam_command_sync = SAMOVAR_BK;
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
-      if (!PowerOn) sam_command_sync = SAMOVAR_DISTILLATION;
+      sam_command_sync = SAMOVAR_DISTILLATION;
     } else
       sam_command_sync = SAMOVAR_POWER;
   } else if (!a && PowerOn)
@@ -643,7 +643,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   asyncHTTPrequest request;
   String payload;
   String RequestType;
-  int httpResponseCode;
+  //int httpResponseCode;
 
   request.setTimeout(3);  //Таймаут три секунды
   vTaskDelay(10 / portTICK_PERIOD_MS);
