@@ -543,7 +543,9 @@ void HopStepperStep(){
     stepper.disable();
     stepper.setMaxSpeed(200); //скорость движения шагового двигателя
     stepper.setSpeed(200);    //скорость движения шагового двигателя, должна быть равна предыдущей
+    TargetStepps = 360 / 1.8 * 16 / 20;  //16 - множитель на драйвере двигателя. 20 - количество отверстий по целому кругу (если бы они занимали всю окружность)
     stepper.setCurrent(0);
-    stepper.setTarget(360 / 1.8 * 16 / 10); //16 - множитель на драйвере двигателя. 20 - количество отверстий по целому кругу (если бы они занимали всю окружность)
-    startService();
+    stepper.setTarget(TargetStepps);
+    stepper.enable();
+    startService();    
 }
