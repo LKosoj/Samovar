@@ -8,7 +8,15 @@
 #ifndef LIBRARIES_ESP32SERVO_SRC_ESP32PWM_H_
 #define LIBRARIES_ESP32SERVO_SRC_ESP32PWM_H_
 #include "esp32-hal-ledc.h"
+
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+#define NUM_PWM 6
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)   ||  defined(CONFIG_IDF_TARGET_ESP32S3)
+#define NUM_PWM 8
+#else 
 #define NUM_PWM 16
+#endif
+
 #define PWM_BASE_INDEX 0
 #define USABLE_ESP32_PWM (NUM_PWM-PWM_BASE_INDEX)
 #include <cstdint>
