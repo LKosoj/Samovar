@@ -373,21 +373,22 @@ void triggerSysTicker(void *parameter) {
 
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
-
-      //      Serial.print("SysTickerButton = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
-      //      Serial.print("PowerStatusTask = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
-      //      Serial.print("SysTickerTask1 = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
-      //      Serial.print("GetClockTask1 = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
-      //      Serial.print("BuzzerTask = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
-      //      Serial.print("DoLuaScriptTask = ");
-      //      Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
-      //      Serial.println("--------------------------------------------");
-
+#ifdef __SAMOVAR_DEBUG1
+      Serial.println(F("--------------------------------------------"));
+      Serial.print(F("SysTickerButton = "));
+      Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
+      Serial.print(F("PowerStatusTask = "));
+      Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
+      Serial.print(F("SysTickerTask1 = "));
+      Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
+      Serial.print(F("GetClockTask1 = "));
+      Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
+      Serial.print(F("BuzzerTask = "));
+      Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
+      Serial.print(F("DoLuaScriptTask = "));
+      Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+      Serial.println(F("--------------------------------------------"));
+#endif
 #ifdef USE_LUA
       //если установлена переменная запуска в цикле lua_script, запускаем
       if (btn_script.length() > 0) {
