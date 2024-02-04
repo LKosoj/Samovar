@@ -253,6 +253,9 @@ void check_alarm_beer() {
       set_buzzer(true);
       msgfl = false;
       SendMsg(F("Засыпьте хмель!"), NOTIFY_MSG);
+#ifdef __SAMOVAR_DEBUG
+      Serial.println("Засыпьте хмель!");
+#endif
       HopStepperStep();
     }
 
