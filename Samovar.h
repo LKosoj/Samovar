@@ -6,6 +6,7 @@
 #endif
 
 #define SAMOVAR_VERSION F("6.15")
+
 //#define __SAMOVAR_DEBUG
 
 #include <OneWire.h>
