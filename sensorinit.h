@@ -117,7 +117,7 @@ void pressure_sensor_get() {
   }
   pressure_value = pressure_value / 133.32; //переводим паскали в мм. рт. столба
 #elif defined(USE_PRESSURE_MPX)
-  pressure_value=(analogRead(LUA_PIN)-36.7)/12;
+  pressure_value = (analogRead(LUA_PIN) - 36.7) / 12;
 #else
   pressure_value = -1;
 #endif
@@ -209,6 +209,14 @@ void DS_getvalue(void) {
   } else {
     if (ACPSensor.PrevTemp > 0) ACPSensor.ErrCount++;
   }
+
+#ifdef __SAMOVAR_DEBUG1
+  SteamSensor.avgTemp = SamSetup.DeltaSteamTemp;
+  PipeSensor.avgTemp = SamSetup.DeltaPipeTemp;
+  WaterSensor.avgTemp = SamSetup.DeltaWaterTemp;
+  TankSensor.avgTemp = SamSetup.DeltaTankTemp;
+  ACPSensor.avgTemp = SamSetup.DeltaACPTemp;
+#endif
 }
 
 void sensor_init(void) {
