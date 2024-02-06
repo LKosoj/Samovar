@@ -5,7 +5,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.15")
+#define SAMOVAR_VERSION F("6.16")
 
 //#define __SAMOVAR_DEBUG
 
@@ -56,6 +56,13 @@
 #define SAMOVAR_USE_RMVK
 #endif
 #endif
+
+#ifndef USE_HEAD_LEVEL_SENSOR
+#ifndef IGNORE_HEAD_LEVEL_SENSOR_SETTING
+#define IGNORE_HEAD_LEVEL_SENSOR_SETTING
+#endif
+#endif
+
 SemaphoreHandle_t xSemaphore = NULL;
 SemaphoreHandle_t xMsgSemaphore = NULL;
 StaticSemaphore_t xMsgSemaphoreBuffer;
