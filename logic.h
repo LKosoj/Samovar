@@ -622,7 +622,7 @@ void check_alarm() {
 
   //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
-  if (SamSetup.UseHLS) {
+  if (SamSetup.UseHLS && PowerOn) {
     whls.tick();
     if (whls.isHolded() && alarm_h_min == 0) {
       whls.resetStates();
