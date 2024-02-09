@@ -439,7 +439,6 @@ volatile byte prev_ProgramNum;                                  // Пердыд�
 volatile byte ProgramNum;                                       // Текущая программа отбора
 volatile byte ProgramLen;                                       // Количество строк программы отбора
 volatile int16_t startval = 0;                                  // Признак идущего отбора
-volatile int currentvolume = 0;                                 // Текущий отбираемый объем
 volatile int currentstepcnt = 0;                                // Текущее количество шагов шагового двигателя
 volatile unsigned long prev_time_ms;                            // Предыдущее время
 volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
