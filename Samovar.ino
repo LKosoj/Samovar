@@ -131,7 +131,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #include <BlynkSimpleEsp32.h>
 #include <cppQueue.h>
 
-cppQueue  msg_q(150, 5, FIFO);
+cppQueue  msg_q(100, 5, FIFO);
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -1207,8 +1207,6 @@ void getjson(void) {
   jsonstr += "\"version\":\""; jsonstr += (String)SAMOVAR_VERSION; jsonstr += "\"";
   jsonstr += ",";
   jsonstr += "\"VolumeAll\":"; jsonstr += (String)get_liquid_volume();
-  jsonstr += ",";
-  jsonstr += "\"currentvolume\":"; jsonstr += (String)currentvolume;
   jsonstr += ",";
   jsonstr += "\"ActualVolumePerHour\":"; jsonstr += format_float(ActualVolumePerHour, 3);
   jsonstr += ",";
