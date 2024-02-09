@@ -336,10 +336,10 @@ void sensor_init(void) {
 #endif
 
   //Для шагового двигателя устанавливаем режим работы - следовать до позиции
-  stepper.setRunMode(FOLLOW_POS);
+//  stepper.setRunMode(FOLLOW_POS);
   // установка макс. скорости в шагах/сек
   stepper.setMaxSpeed(STEPPER_MAX_SPEED);
-  stepper.setSpeed(0);
+  //stepper.setSpeed(0);
   //Драйвер выключится по достижении позиции
   stepper.autoPower(true);
 #ifdef STEPPER_REVERSE
@@ -445,8 +445,8 @@ void sensor_init(void) {
 void reset_sensor_counter(void) {
   sam_command_sync = SAMOVAR_NONE;
   stopService();
-  stepper.setMaxSpeed(-1);
-  stepper.setSpeed(-1);
+  stepper.setMaxSpeed(0);
+  //stepper.setSpeed(0);
   stepper.brake();
   stepper.disable();
   stepper.setCurrent(0);

@@ -239,7 +239,17 @@ LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
 Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 
-GStepper< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
+
+#define DRIVER_STEP_TIME 4
+
+#ifdef USE_STEPPER_ACCELERATION
+#define GS_FAST_PROFILE 10
+#else
+#define GS_NO_ACCEL
+#endif
+
+#include <GyverStepper2.h>
+GStepper2< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 iarduino_I2C_connect I2C2;
 

@@ -6,7 +6,19 @@
 # Datatypes (KEYWORD1)
 #######################################
 GyverStepper	KEYWORD1
+GyverStepper2	KEYWORD1
+GyverPlanner	KEYWORD1
+GyverPlanner2	KEYWORD1
+StepperCore	KEYWORD1
+
 GStepper	KEYWORD1
+GStepper2	KEYWORD1
+GPlanner	KEYWORD1
+GPlanner2	KEYWORD1
+Stepper	KEYWORD1
+
+GS_NO_ACCEL	KEYWORD1
+GS_FAST_PROFILE	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -37,11 +49,32 @@ getSpeedDeg	KEYWORD2
 setRunMode	KEYWORD2
 enable	KEYWORD2
 disable	KEYWORD2
+power	KEYWORD2
 getState	KEYWORD2
+home	KEYWORD2
 getMinPeriod	KEYWORD2
 stepTime	KEYWORD2
 degPerMinute	KEYWORD2
 degPerHour	KEYWORD2
+attachStep	KEYWORD2
+attachPower	KEYWORD2
+setBacklash	KEYWORD2
+step	KEYWORD2
+
+addStepper	KEYWORD2
+ready	KEYWORD2
+pause	KEYWORD2
+resume	KEYWORD2
+tickManual	KEYWORD2
+getPeriod	KEYWORD2
+getStatus	KEYWORD2
+
+clearBuffer	KEYWORD2
+checkBuffer	KEYWORD2
+addTarget	KEYWORD2
+available	KEYWORD2
+setDtA	KEYWORD2
+start	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
@@ -57,3 +90,5 @@ STEPPER4WIRE	LITERAL1
 STEPPER4WIRE_HALF	LITERAL1
 SMOOTH_ALGORITHM	LITERAL1
 DRIVER_STEP_TIME	LITERAL1
+STEPPER_PINS	LITERAL1
+STEPPER_VIRTUAL	LITERAL1

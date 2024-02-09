@@ -45,10 +45,8 @@
 #include <EEPROM.h>
 #include <ESPAsyncWiFiManager.h>
 
-#define DRIVER_STEP_TIME 1
 #include <GyverEncoder.h>
 
-#include <GyverStepper.h>
 #include <GyverButton.h>
 
 #include <GyverPID.h>
@@ -220,13 +218,14 @@ void stopService(void) {
 
 void startService(void) {
   //  timerAlarmDisable(timer);
-  timerAlarmWrite(timer, stepper.stepTime, true);
+  timerAlarmWrite(timer, stepper.getPeriod(), true);
+  //  timerAlarmWrite(timer, stepper.stepTime, true);
   timerAlarmEnable(timer);
 }
 
 void ICACHE_RAM_ATTR StepperTicker(void) {
   portENTER_CRITICAL_ISR(&timerMux);
-  StepperMoving = stepper.quicktick();
+  StepperMoving = stepper.tickManual();
   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
@@ -1028,6 +1027,8 @@ void setup() {
 }
 
 void loop() {
+//пересчитаем время работы таймера для шагового двигателя
+  timerAlarmWrite(timer, stepper.getPeriod(), true);
 
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();

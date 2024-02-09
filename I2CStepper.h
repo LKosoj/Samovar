@@ -47,7 +47,7 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
     if (spd > 0) {
       stepper.setTarget(2147483646);
       stepper.setMaxSpeed(spd);
-      stepper.setSpeed(spd);
+      //stepper.setSpeed(spd);
       startService();
     }
     return true;

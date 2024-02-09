@@ -265,7 +265,7 @@ void pump_calibrate(int stpspeed) {
     //крутим двигатель, пока не остановят
     if (!stepper.getState()) stepper.setCurrent(0);
     stepper.setMaxSpeed(stpspeed);
-    stepper.setSpeed(stpspeed);
+    //stepper.setSpeed(stpspeed);
     stepper.setTarget(999999999);
     startService();
   }
@@ -284,7 +284,7 @@ void pause_withdrawal(bool Pause) {
     stepper.disable();
   } else {
     stepper.setMaxSpeed(CurrrentStepperSpeed);
-    stepper.setSpeed(CurrrentStepperSpeed);
+    //stepper.setSpeed(CurrrentStepperSpeed);
     stepper.setCurrent(CurrrentStepps);
     stepper.setTarget(TargetStepps);
     startService();
@@ -303,7 +303,8 @@ void set_pump_speed(float pumpspeed, bool continue_process) {
 
   stopService();
   stepper.setMaxSpeed(CurrrentStepperSpeed);
-  stepper.setSpeed(CurrrentStepperSpeed);
+  stepper.setTarget(stepper.getTarget());
+  //stepper.setSpeed(CurrrentStepperSpeed);
   //Пересчитываем время отбора этой строки программы на текущую скорость
   if (ActualVolumePerHour == 0) program[ProgramNum].Time = 65535;
   else
@@ -515,7 +516,7 @@ void run_program(byte num) {
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
-      stepper.setSpeed(get_speed_from_rate(program[num].Speed));
+      //stepper.setSpeed(get_speed_from_rate(program[num].Speed));
       TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
       stepper.setCurrent(0);
       stepper.setTarget(TargetStepps);
@@ -544,8 +545,8 @@ void run_program(byte num) {
       t_min = millis() + program[num].Volume * 1000;
       program_Pause = true;
       stopService();
-      stepper.setMaxSpeed(-1);
-      stepper.setSpeed(-1);
+      stepper.setMaxSpeed(0);
+      //stepper.setSpeed(-1);
       stepper.brake();
       stepper.disable();
       stepper.setCurrent(0);
@@ -1107,7 +1108,7 @@ void start_self_test(void) {
   //включаем шаговый двигатель
   stopService();
   stepper.setMaxSpeed(get_speed_from_rate(1));
-  stepper.setSpeed(get_speed_from_rate(1));
+  //stepper.setSpeed(get_speed_from_rate(1));
   TargetStepps = 100 * SamSetup.StepperStepMl;
   stepper.setCurrent(0);
   stepper.setTarget(TargetStepps);
