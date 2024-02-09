@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<recipe>
+<!--BrewMate Recipe File - www.brewmate.ru-->
+<namerecipe>Кофейный стаут Caffeine от Дегустатор меда</namerecipe>
+<style></style>
+<color>22.3</color>
+<ibu>16.37</ibu>
+<np>1.052</np>
+<kp>1.013</kp>
+<al>5.24</al>
+<part>32</part>
+<hydromodule>4</hydromodule>
+<eff>72</eff>
+<timeboil>100</timeboil>
+<timebro>14</timebro>
+<grains>
+<grain>
+<grainname>Пилснер  -  Базовый солод</grainname>
+<graincolor>1.9</graincolor>
+<grainekstr>82</grainekstr>
+<grainkg>5</grainkg>
+<grainproc>58.1</grainproc>
+</grain>
+<grain>
+<grainname>Венский  -  Базовый солод</grainname>
+<graincolor>3</graincolor>
+<grainekstr>80.5</grainekstr>
+<grainkg>2</grainkg>
+<grainproc>23.3</grainproc>
+</grain>
+<grain>
+<grainname>Карамельный  -  Спец солод</grainname>
+<graincolor>25.4</graincolor>
+<grainekstr>70</grainekstr>
+<grainkg>0.5</grainkg>
+<grainproc>5.8</grainproc>
+</grain>
+<grain>
+<grainname>Жженый солод  -  Спец солод</grainname>
+<graincolor>609.1</graincolor>
+<grainekstr>70</grainekstr>
+<grainkg>0.3</grainkg>
+<grainproc>3.5</grainproc>
+</grain>
+<grain>
+<grainname>Меланоидиновый  -  Спец солод</grainname>
+<graincolor>40.6</graincolor>
+<grainekstr>77</grainekstr>
+<grainkg>0.5</grainkg>
+<grainproc>5.8</grainproc>
+</grain>
+<grain>
+<grainname>Овсяные хлопья  -  Несоложенка</grainname>
+<graincolor>1</graincolor>
+<grainekstr>60</grainekstr>
+<grainkg>0.3</grainkg>
+<grainproc>3.5</grainproc>
+</grain>
+</grains>
+<hops>
+<hop>
+<hopname>Sladek</hopname>
+<hopalfa>7.1</hopalfa>
+<hopgr>20</hopgr>
+<hoptime>60</hoptime>
+<hopibu>8.58</hopibu>
+<hopproc>40</hopproc>
+<hoptype>Шишки</hoptype>
+</hop>
+<hop>
+<hopname>Sladek</hopname>
+<hopalfa>7.1</hopalfa>
+<hopgr>30</hopgr>
+<hoptime>20</hoptime>
+<hopibu>7.79</hopibu>
+<hopproc>60</hopproc>
+<hoptype>Шишки</hoptype>
+</hop>
+</hops>
+<dryhops>
+</dryhops>
+<miscs>
+<misc>
+<miscname>Кофе</miscname>
+<misctype>Растение</misctype>
+<miscisp>На вирпул</miscisp>
+<miscgr>150</miscgr>
+<misctime>0</misctime>
+</misc>
+</miscs>
+<yeast>Safale S-04   -   Элевые (тем-ра брожения 18гр)</yeast>
+<aa>75</aa>
+<zatirs>
+<zatir>
+<zatirgr>70</zatirgr>
+<zatirtime>40</zatirtime>
+</zatir>
+<zatir>
+<zatirgr>78</zatirgr>
+<zatirtime>10</zatirtime>
+</zatir>
+</zatirs>
+<comms>
+<comm>
+<lin>После варки, на отстаивание засыпаем 150 грамм кофе.</lin>
+</comm>
+<comm>
+<lin></lin>
+</comm>
+<comm>
+<lin>Брожение при температуре +19+20гр. </lin>
+</comm>
+<comm>
+<lin></lin>
+</comm>
+<comm>
+<lin>Через 7 суток вносим 350 грамм кофе, предварительно залив </lin>
+</comm>
+<comm>
+<lin>кипятком и остудив. </lin>
+</comm>
+<comm>
+<lin></lin>
+</comm>
+<comm>
+<lin>На 12-15 сутки брожения разливаем на карбонизацию. Для </lin>
+</comm>
+<comm>
+<lin>праймера можно использовать декстрозу 10 грамм/литр.</lin>
+</comm>
+<comm>
+<lin></lin>
+</comm>
+<comm>
+<lin>Кофейного стаута "Caffeine", завоевал золотую медаль на </lin>
+</comm>
+<comm>
+<lin>конкурсе Hop Cap Ukraine в октябре 2020 года.</lin>
+</comm>
+</comms>
+</recipe>
