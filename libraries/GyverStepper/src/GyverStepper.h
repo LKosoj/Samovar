@@ -391,7 +391,7 @@ class GStepper : public Stepper<_DRV, _TYPE> {
                 int speed2 = (int)abs(_accelSpeed);
                 _speedPlannerPrd = map(max(speed1, speed2), 1000, 20000, 15000, 2000);
                 _speedPlannerPrd = constrain(_speedPlannerPrd, 15000, 2000);
-                stepTime = abs(1000000.0 / _accelSpeed);
+                stepTime = abs(1000000.0f / _accelSpeed);
             }
         } else {               // резкий старт
             if (speed == 0) {  // скорость 0? Отключаемся и выходим
@@ -399,7 +399,7 @@ class GStepper : public Stepper<_DRV, _TYPE> {
                 return;
             }
             _accelSpeed = _speed;
-            stepTime = abs(1000000.0 / _speed);
+            stepTime = abs(1000000.0f / _speed);
         }
         enable();
     }
@@ -537,7 +537,7 @@ class GStepper : public Stepper<_DRV, _TYPE> {
             if (_stopSpeed == 0) _accelSpeed = constrain(_accelSpeed, -_maxSpeed, _maxSpeed);          // ограничение
             else _accelSpeed = constrain(_accelSpeed, -_stopSpeed, _stopSpeed);
 
-            if (abs(_accelSpeed) > _MIN_SPEED_FP) stepTime = abs(1000000.0 / _accelSpeed);  // ограничение на мин. скорость
+            if (abs(_accelSpeed) > _MIN_SPEED_FP) stepTime = abs(1000000.0f / _accelSpeed);  // ограничение на мин. скорость
             else stepTime = _MAX_PERIOD_FP;
             dir = _sign(_accelSpeed);  // направление для шагов
         }
@@ -558,7 +558,7 @@ class GStepper : public Stepper<_DRV, _TYPE> {
             _speedPlannerTime = tickUs;
             _accelSpeed += (_accelTime * _speedPlannerPrd * _sign(_speed - _accelSpeed));
             dir = _sign(_accelSpeed);
-            stepTime = abs(1000000.0 / _accelSpeed);
+            stepTime = abs(1000000.0f / _accelSpeed);
             if (_stopF && abs(_accelSpeed) <= _MIN_STEP_SPEED) brake();
         }
     }
