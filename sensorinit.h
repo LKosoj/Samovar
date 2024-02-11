@@ -336,7 +336,7 @@ void sensor_init(void) {
 #endif
 
   //Для шагового двигателя устанавливаем режим работы - следовать до позиции
-//  stepper.setRunMode(FOLLOW_POS);
+  //  stepper.setRunMode(FOLLOW_POS);
   // установка макс. скорости в шагах/сек
   stepper.setMaxSpeed(STEPPER_MAX_SPEED);
   //stepper.setSpeed(0);
@@ -395,7 +395,12 @@ void sensor_init(void) {
 #endif
   Serial2.setTimeout(300);
   Serial2.setRxBufferSize(25);
+#ifdef KVIC_USE_9600
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+#else
   Serial2.begin(38400, SERIAL_8N1, RXD2, TXD2);
+#endif
+
 #define USE_SERIAL
 #endif
 #endif
