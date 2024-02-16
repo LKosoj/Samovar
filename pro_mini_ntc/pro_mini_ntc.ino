@@ -68,12 +68,12 @@
  float Pressure3Temp, 
        dPt_3 = 0;                  // Вычисляемая поправка термокомпенсации
 // -----------------------------------------Электронный попугай------------------------------------------------------------
-uint8_t N_dPressure=0;             // * Номер датчика давления электронного попугая (0-3), 0 - для отключения попугая
-float k_Alc_T=0.3;                 // * Коэффициент для температурной коррекции, 0 - для отключения
-float k_Alc=136;                   // * Коэффициент перевода давления в плотность =G(г/мл)*10000/P (мм.рт.с.)=10*133,322(мм.рт.ст->Па)/(g(9.8 м/с)*h(высота столба жидкости попугая 1 м))
-float Alc=0;                       // Рассчетная крепость 
-float Alc_T=0;                     // Рассчетная крепость с коррекцией по t6  
-float Alc_tar=0;                   // * Крепость раствора для тарирования
+ uint8_t N_dPressure=0;             // * Номер датчика давления электронного попугая (0-3), 0 - для отключения попугая
+ float k_Alc_T=0.3;                 // * Коэффициент для температурной коррекции, 0 - для отключения
+ float k_Alc=136;                   // * Коэффициент перевода давления в плотность =G(г/мл)*10000/P (мм.рт.с.)=10*133,322(мм.рт.ст->Па)/(g(9.8 м/с)*h(высота столба жидкости попугая 1 м))
+ float Alc=0;                       // Рассчетная крепость 
+ float Alc_T=0;                     // Рассчетная крепость с коррекцией по t6  
+ float Alc_tar=0;                   // * Крепость раствора для тарирования
 // -----------------------------------------Для взаимодействия с пользователем---------------------------------------------
  const int BtnEnter = 12;          // кнопка действия: на 1 экране отображения сброс дрейфа нуля датчика давления
  int BtnEnterFlg = 0;
@@ -85,6 +85,7 @@ float Alc_tar=0;                   // * Крепость раствора для
  static char outstr[8];            // строка для вывода цифр на экран
  constexpr uint8_t pin_led{ 13 };  // мигаем светодиодом на ардуине для контроля передачи по 1Ware
  unsigned long timer;              // таймер для отображения при отсутствии соединения по 1Wire
+ bool Rec=1;                       // флаг для отображения факта записи значения
 //----------------------------------------- Работа с EEPROM ---------------------------------------------------------------
  const uint8_t EepromKey = 1;      // ключ EEPROM 0-255, менять для сброса EEPROM
  const uint16_t U33_EAdr = 1; 
@@ -252,9 +253,8 @@ float Alc_tar=0;                   // * Крепость раствора для
                           7150, 7015, 6881, 6751, 6623, 6497, 6374, 6254, 6135, 6020, 5906, 5795, 5685, 5578, 5474, 5371, 5270, 5172, 5075, 4980, 4888, 4797, 4708, 4621, 4535, 4451, 4370, 4289 };
  #endif
 
-//
+ //
 //=================================================ФУНКЦИИ===================================================================
-
 static void writeRegister(uint8_t i2cAddress, uint8_t reg, uint16_t value) {  // Запись регистров АЦП
   Wire.beginTransmission(i2cAddress);
   Wire.write((uint8_t)reg);
@@ -435,7 +435,7 @@ void RotatePSensor() {                                                        //
 } 
 bool EnterPressed(){                                                          // Нажатие Enter с контролем последующего отпускания
  if (digitalRead(BtnEnter) == LOW) 
-        { if (BtnEnterFlg == false) {BtnEnterFlg = true; LD.clearDisplay(); return(true); 
+        { if (BtnEnterFlg == false) {BtnEnterFlg = true; return(true); 
 		                     } else return(false);
    } else 	{ BtnEnterFlg = false; return(false); }
 }
@@ -447,48 +447,48 @@ bool SelectPressed(){                                                         //
 }
 void Caption(uint8_t Cap, uint8_t Str){                                       // Вывод сообщений на дисплей
   switch (Cap) {                                                              // (для экономии памяти ардуины, первое число в комментариях - количество вызовов)
-      case 1: LD.printString_6x8(F("Настройка д. давлен."), 0, Str); break; //1 Cap_NastrDD = 1;
-      case 2: LD.printString_6x8(F("Датчик XGZP6897D I2C"), 0, Str); break; //3 Cap_XGZP6897D = 2;
-      case 3: LD.printString_6x8(F("Датчик MPX5010DP АЦП"), 0, Str); break; //3 Cap_MPX5010DP = 3;
-      case 4: LD.printString_6x8(F("Датчик на АЦП HX710B"), 0, Str); break; //3 Cap_HX710B = 4;
-      case 5: LD.printString_6x8(F("Настройка термист."), 0, Str); break; //12 Cap_NastrNTC = 5;
-      case 6: LD.printString_6x8(F("Настройка э.попугая."), 0, Str); break; //4 Cap_NastrEP = 6;
+      case 1: LD.printString_6x8(F("Настройка д. давлен."), 1, Str); break; //1 Cap_NastrDD = 1;
+      case 2: LD.printString_6x8(F("Датчик XGZP6897D I2C"), 1, Str); break; //3 Cap_XGZP6897D = 2;
+      case 3: LD.printString_6x8(F("Датчик MPX5010DP АЦП"), 1, Str); break; //3 Cap_MPX5010DP = 3;
+      case 4: LD.printString_6x8(F("Датчик на АЦП HX710B"), 1, Str); break; //3 Cap_HX710B = 4;
+      case 5: LD.printString_6x8(F("Настройка термист."), 1, Str); break; //12 Cap_NastrNTC = 5;
+      case 6: LD.printString_6x8(F("Настройка э.попугая."), 1, Str); break; //4 Cap_NastrEP = 6;
      
-      case 21: LD.printString_6x8(F("Настр. базового ADS "), 0, Str); break; //1 Cap_NastrBasADS = 21;
-      case 22: LD.printString_6x8(F("Настройка смещения 0"), 0, Str); break; //2 Cap_NastrOffset0 = 22;
-      case 23: LD.printString_6x8(F("Настр.коэф.термокомп"), 0, Str); break; //3 Cap_NastrKtk = 23;
-      case 25: LD.printString_6x8(F("Расчет В25/100"), 0, Str); break; //5 Cap_RaschB25 = 25;
-      case 26: LD.printString_6x8(F("B25 расчитанный/тек."), 0, Str); break; //1 Cap_B25Rasch_Current = 26;
-      case 27: LD.printString_6x8(F("N датчика давления"), 0, Str); break; //2 Cap_N_DP = 27;
-      case 28: LD.printString_6x8(F("Корр. по t. 0-выкл"), 0, Str); break; //1 Cap_K_cor_po_t = 28;
-      case 30: LD.printString_6x8(F("Настройка не треб."), 0, Str); break; //1 Cap_NastrNoNeed = 30;
-      case 31: LD.printString_6x8(F("Цена разр.АЦП, квант"), 0, Str); break; //1 Cap_Quant = 31;
-      case 32: LD.printString_6x8(F("Установка множителя"), 0, Str); break; //1 Cap_SetMult = 32;
-      case 33: LD.printString_6x8(F("Сброс всех настроек?"), 0, Str); break; //1 Cap_EEPROM_0 = 33
+      case 21: LD.printString_6x8(F("Настр. базового ADS "), 1, Str); break; //1 Cap_NastrBasADS = 21;
+      case 22: LD.printString_6x8(F("Настройка смещения 0"), 1, Str); break; //2 Cap_NastrOffset0 = 22;
+      case 23: LD.printString_6x8(F("Настр.коэф.термокомп"), 1, Str); break; //3 Cap_NastrKtk = 23;
+      case 25: LD.printString_6x8(F("Расчет В25/100"), 1, Str); break; //5 Cap_RaschB25 = 25;
+      case 26: LD.printString_6x8(F("B25 расчитанный/тек."), 1, Str); break; //1 Cap_B25Rasch_Current = 26;
+      case 27: LD.printString_6x8(F("N датчика давления"), 1, Str); break; //2 Cap_N_DP = 27;
+      case 28: LD.printString_6x8(F("Корр. по t. 0-выкл"), 1, Str); break; //1 Cap_K_cor_po_t = 28;
+      case 30: LD.printString_6x8(F("Настройка не треб."), 1, Str); break; //1 Cap_NastrNoNeed = 30;
+      case 31: LD.printString_6x8(F("Цена разр.АЦП, квант"), 1, Str); break; //1 Cap_Quant = 31;
+      case 32: LD.printString_6x8(F("Установка множителя"), 1, Str); break; //1 Cap_SetMult = 32;
+      case 33: LD.printString_6x8(F("Сброс всех настроек?"), 1, Str); break; //1 Cap_EEPROM_0 = 33
       
-      case 51: LD.printString_6x8(F("Подайте 0 мм.рт.ст. "), 0, Str); break; //3 Cap_0mmg = 51;
-      case 52: LD.printString_6x8(F("Подайте 30 мм.рт.ст."), 0, Str); break; //1 Cap_30mmg = 52;
-      case 53: LD.printString_6x8(F("Подайте 50 мм.рт.ст."), 0, Str); break; //1 Cap_50mmg = 53;
-      case 54: LD.printString_6x8(F("Ent-Начать,Sel-Проп."), 0, Str); break; //4 Cap_NextQ = 54;
-      case 56: LD.printString_6x8(F("Напряжение 3.3 В"), 0, Str); break; //1 Cap_U33 = 56;
-      case 57: LD.printString_6x8(F("Референс. напряжение"), 0, Str); break; //1 Cap_Uref = 57;
-      case 60: LD.printString_6x8(F("Залейте раствор, %"), 0, Str); break; //1 Cap_Fill_Sort = 60;
-      case 63: LD.printString_6x8(F("Нагрейте датчик 36.6"), 0, Str); break; //3 Cap_Burn_P_36_6 = 63;
-      case 64: LD.printString_6x8(F("Сохранить? (Enter)"), 0, Str); break; //2 Cap_SaveQ = 64;
-      case 65: LD.printString_6x8(F("Расч.кривую термист?"), 0, Str); break; //1 Cap_NextCalc = 65;
-      case 66: LD.printString_6x8(F("Резистор 6.2 кОм"), 0, Str); break; //1 Cap_R_62kOm = 66;
-      case 67: LD.printString_6x8(F("Резистор 10 кОм"), 0, Str); break; //1 Cap_R_10kOm = 67;
+      case 51: LD.printString_6x8(F("Подайте 0 мм.рт.ст. "), 1, Str); break; //3 Cap_0mmg = 51;
+      case 52: LD.printString_6x8(F("Подайте 30 мм.рт.ст."), 1, Str); break; //1 Cap_30mmg = 52;
+      case 53: LD.printString_6x8(F("Подайте 50 мм.рт.ст."), 1, Str); break; //1 Cap_50mmg = 53;
+      case 54: LD.printString_6x8(F("Ent-Начать,Sel-Проп."), 1, Str); break; //4 Cap_NextQ = 54;
+      case 56: LD.printString_6x8(F("Напряжение 3.3 В"), 1, Str); break; //1 Cap_U33 = 56;
+      case 57: LD.printString_6x8(F("Референс. напряжение"), 1, Str); break; //1 Cap_Uref = 57;
+      case 60: LD.printString_6x8(F("Залейте раствор, %"), 1, Str); break; //1 Cap_Fill_Sort = 60;
+      case 63: LD.printString_6x8(F("Нагрейте датчик 36.6"), 1, Str); break; //3 Cap_Burn_P_36_6 = 63;
+      case 64: LD.printString_6x8(F("Сохранить? (Enter)"), 1, Str); break; //2 Cap_SaveQ = 64;
+      case 65: LD.printString_6x8(F("Расч.кривую термист?"), 1, Str); break; //1 Cap_NextCalc = 65;
+      case 66: LD.printString_6x8(F("Резистор 6.2 кОм"), 1, Str); break; //1 Cap_R_62kOm = 66;
+      case 67: LD.printString_6x8(F("Резистор 10 кОм"), 1, Str); break; //1 Cap_R_10kOm = 67;
       
-      case 81: LD.printString_6x8(F("Зап.-Ent. След.-Sel"), 0, Str); break; //21 Menu_Write_Next = 81;
-      case 82: LD.printString_6x8(F(" Да -Ent. След.-Sel"), 0, Str); break; //2 Menu_Yes_Next = 82;
-      case 83: LD.printString_6x8(F("Зап-Ent.След-Sel,+/-"), 0, Str); break; //5 Menu_Write_Next_PgUp_PgDn = 83;
-      case 84: LD.printString_6x8(F(" Up (+),    Dwn (-) "), 0, Str); break; //6 Menu_PgUp_PgDn = 84;
-      case 85: LD.printString_6x8(F(" След.-Sel"), 0, Str); break; //4 Menu_Next = 85;
-      case 86: LD.printString_6x8(F("Ent.-Настр.Sel-Верн."), 0, Str); break; //1 Menu_Nastr = 86;
+      case 81: LD.printString_6x8(F("Зап.-Ent. След.-Sel"), 1, Str); break; //21 Menu_Write_Next = 81;
+      case 82: LD.printString_6x8(F(" Да -Ent. След.-Sel"), 1, Str); break; //2 Menu_Yes_Next = 82;
+      case 83: LD.printString_6x8(F("Зап-Ent.След-Sel,+/-"), 1, Str); break; //5 Menu_Write_Next_PgUp_PgDn = 83;
+      case 84: LD.printString_6x8(F(" Up (+),    Dwn (-) "), 1, Str); break; //6 Menu_PgUp_PgDn = 84;
+      case 85: LD.printString_6x8(F(" След.-Sel"), 1, Str); break; //4 Menu_Next = 85;
+      case 86: LD.printString_6x8(F("Ent.-Настр.Sel-Верн."), 1, Str); break; //1 Menu_Nastr = 86;
         }        
 }
 void PrintPar(char Name[4], uint8_t Str, uint8_t r, float Par){               // Вывод на дисплей переменной
- LD.printString_12x16(Name, 0, Str); 
+ if (Rec) {LD.printString_12x16(Name, 0, Str); } else  {LD.printString_12x16(F("Rec"), 0, Str); Rec=1;} // печатаем название, если перед этим была запись в EEPROM, печатаем 1 раз Rec
  dtostrf((float)Par, 6, r, outstr); 
  LD.printString_12x16(outstr, 48, Str);
 }
@@ -501,7 +501,7 @@ bool Select(){                                                                //
   return(false);
 }
 void EnterJump(uint8_t disp){                                                 // переход по Enter на экран № disp
- if (EnterPressed()) DispMode=disp; 
+ if (EnterPressed()) {DispMode=disp; LD.clearDisplay();}
 }
 void InputPar(float& Par, float dPar) {                                       // Диалог ввода параметра
 	 if (digitalRead(BtnUp) == LOW)  Par += dPar;  // Коррекция параметра кнопками
@@ -576,9 +576,10 @@ void disp() {                                                                 //
     PrintTemp(4, "Тв= ", 0);
     PrintTemp(5, "TСА ", 2); 
     if (N_dPressure) {
-      Alc=(float)G_to_alc((uint16_t)(k_Alc*pressure[N_dPressure]))/10;    // Рассчет объемного содержания спирта, %
-      Alc_T=Alc+(20-Temp[6])*k_Alc_T;                                         // Простенькая и совсем не точная коррекция по температуре
-      PrintPar("Alc%",4,1,Alc_T);
+      if (pressure[N_dPressure]>5) 
+       {Alc=(float)G_to_alc((uint16_t)(k_Alc*pressure[N_dPressure]))/10;    // Рассчет объемного содержания спирта, %
+       Alc_T=Alc+(20-Temp[6])*k_Alc_T;                                         // Простенькая и совсем не точная коррекция по температуре
+       PrintPar("Alc%",4,1,Alc_T);} else LD.printString_12x16(F("Alc%  --- "), 0, 4);
       } else PrintTemp(6, "Тep ", 4);
     //PrintTemp(7, "Тtk ", 6);
     Caption(Menu_Nastr,7);
@@ -587,7 +588,6 @@ void disp() {                                                                 //
      LD.clearDisplay();  
      } 
     if (EnterPressed()) {      // По нажатию BtnDwn переход на экран настроек давления если есть активный датчик давления, иначе на экран настроек характеристик термисторов
-      
       if (Pressure_enable[0]) DispMode = 2; else DispMode = 7;
       LD.clearDisplay();
       }
@@ -610,19 +610,25 @@ void disp() {                                                                 //
         break;
       case 2: 
         Caption(Cap_MPX5010DP,0); Caption(Cap_Quant,1); Caption(Cap_50mmg,2); Caption(Menu_Write_Next,7);
-        PrintPar("Q=  ",3, 6,PressureQ); PrintPar("Qr= ", 5, 6, (50/(ADSt - ADSt1)));
+        PrintPar("Q=  ",3, 6,PressureQ); 
+        if ((ADSt - ADSt1)>10) PrintPar("Qr= ", 5, 6, (50/(ADSt - ADSt1))); else PrintPar("Qr= ", 5, 6, PressureQ);
         if (EnterPressed()) {
                     PressureQ =(50/(ADSt - ADSt1));
-                    EEPROM.put(PressureQ_EAdr,PressureQ);
+                    EEPROM.put(PressureQ_EAdr,PressureQ); 
+                    Rec = 0;
                    }
         break;
       case 3: 
         Caption(Cap_HX710B,0); Caption(Cap_SetMult,1); Caption(Cap_30mmg,2); Caption(Menu_Write_Next,7);
-        if (HX710B_Obj.is_ready()) Mr = 30 / ((float)HX710B_Obj.raw2mmHg((int32_t)HX710B_Obj.get_value(2)) - Pressure3Temp);
-        PrintPar("M=  ", 3, 5, HX710B_Mult); PrintPar("Мr= ", 5, 5, Mr);
+        if (HX710B_Obj.is_ready()) {
+          Mr = (float)HX710B_Obj.raw2mmHg((int32_t)HX710B_Obj.get_value(2));
+          if (Mr>1) Mr = 30 / (Mr - Pressure3Temp); else Mr = HX710B_Mult;
+          }
+        PrintPar("M=  ", 3, 2, HX710B_Mult); PrintPar("Мr= ", 5, 2, Mr);
         if (EnterPressed()) {
                      HX710B_Mult = Mr;
-                     EEPROM.put(HX710B_Mult_EAdr,HX710B_Mult);}
+                     EEPROM.put(HX710B_Mult_EAdr,HX710B_Mult);
+                     Rec = 0;}
         } 
   } Select(); break;
   case 5: {                             // Экран для настройки смещения или базовой АДС датчика давления + запись базовой температуры
@@ -634,6 +640,7 @@ void disp() {                                                                 //
 	     if (EnterPressed()) {
                    dPress_1 = pressure[1] + dPress_1 + dPt_1;
                    EEPROM.put(dPress_1_EAdr,dPress_1);
+                   Rec = 0;
                    BaseTemp_1=temperature[1]; EEPROM.put(BaseTemp_1_EAdr,BaseTemp_1);
                    return(0);}
         break;
@@ -643,6 +650,7 @@ void disp() {                                                                 //
        if (EnterPressed()) {
                    PressureBaseADS = ADSt; // По нажатию BtnEnter запись АДС
                    EEPROM.put(PressureBaseADS_EAdr,PressureBaseADS);
+                   Rec = 0;
                    BaseTemp_2=Temp[6]; EEPROM.put(BaseTemp_2_EAdr,BaseTemp_2);
                    return(0);} 
         break;
@@ -652,6 +660,7 @@ void disp() {                                                                 //
        if (EnterPressed()) {
                    dPress_3 = pressure[3] + dPress_3 + dPt_3;
                    EEPROM.put(dPress_3_EAdr,dPress_3);
+                   Rec = 0;
                    BaseTemp_3=Temp[6]; EEPROM.put(BaseTemp_3_EAdr,BaseTemp_3);
                    return(0);}
     }
@@ -664,6 +673,7 @@ void disp() {                                                                 //
        PrintPar("Ktк=", 3, 2, KTemp_1); PrintPar("P=  ", 5, 2, pressure[1]);
        if (EnterPressed()) {
                    EEPROM.put(KTemp_1_EAdr,KTemp_1);  
+                   Rec = 0;
                    }
        break;
      case 2:         //Для датчика на 8 канале АЦП
@@ -672,6 +682,7 @@ void disp() {                                                                 //
        PrintPar("Ktк=", 3, 2, KTemp_2); PrintPar("P=  ", 5, 2, pressure[2]);
        if (EnterPressed()) {
                    EEPROM.put(KTemp_2_EAdr,KTemp_2);  
+                   Rec = 0;
                    }
        break;
      case 3:   //Для датчика на АЦП HX710B
@@ -680,6 +691,7 @@ void disp() {                                                                 //
        PrintPar("Ktк=", 3, 2, KTemp_3); PrintPar("P=  ", 5, 2, pressure[3]);
        if (EnterPressed()) {
                    EEPROM.put(KTemp_3_EAdr,KTemp_3);
+                   Rec = 0;
                    }
     }
   } Select(); break;//  далее по Select
@@ -714,7 +726,7 @@ void disp() {                                                                 //
          Caption(Cap_NastrNTC,0); Caption(Cap_B25Rasch_Current,1); Caption(Cap_SaveQ,2); Caption(Menu_Write_Next_PgUp_PgDn,7);
          InputPar(B25t, 1);
          PrintPar("B25r", 3, 0, B25t); PrintPar("В25 ", 5, 0, B25);
-         if (EnterPressed()) {B25 = B25t; EEPROM.put(B25_EAdr,B25);}
+         if (EnterPressed()) {B25 = B25t; EEPROM.put(B25_EAdr,B25); Rec = 0;}
   } Select();  break;
   case 14:  {                           // Экран настройка характеристик термисторов запрос рассчета кривой 
        Caption(Cap_NastrNTC,0); Caption(Cap_NextCalc,4); Caption(Cap_NextQ,6); 
@@ -725,32 +737,32 @@ void disp() {                                                                 //
        Caption(Cap_NastrNTC,0); Caption(Cap_U33,1); Caption(Menu_Write_Next,6); Caption(Menu_PgUp_PgDn,7);
        InputPar(U33, 0.01);
        PrintPar("U33=", 3, 2, U33);
-       if (EnterPressed()) EEPROM.put(U33_EAdr,U33);
+       if (EnterPressed()) {EEPROM.put(U33_EAdr,U33); Rec = 0;}
   } Select(); break;
   case 17:  {                           // Экран настройка характеристик термисторов Uref
        Caption(Cap_NastrNTC,0); Caption(Cap_Uref,1); Caption(Menu_Write_Next,6); Caption(Menu_PgUp_PgDn,7);
        InputPar(Uref, 0.001);
        PrintPar("Urf=", 3, 3, Uref);
-       if (EnterPressed()) EEPROM.put(Uref_EAdr,Uref);
+       if (EnterPressed()) {EEPROM.put(Uref_EAdr,Uref); Rec = 0;}
   } Select(); break;
   case 18:  {                           // Экран настройка характеристик термисторов R10 
        Caption(Cap_NastrNTC,0); Caption(Cap_R_10kOm,1); Caption(Menu_Write_Next,6); Caption(Menu_PgUp_PgDn,7);
        InputPar(R10, 0.001);
        PrintPar("R10=", 3, 3, R10);
-       if (EnterPressed()) EEPROM.put(R10_EAdr,R10);
+       if (EnterPressed()) {EEPROM.put(R10_EAdr,R10); Rec = 0;}
   } Select(); break;
   case 19:  {                           // Экран настройка характеристик термисторов R62
        Caption(Cap_NastrNTC,0); Caption(Cap_R_62kOm,1); Caption(Menu_Write_Next,6); Caption(Menu_PgUp_PgDn,7);
        InputPar(R62, 0.001);
        PrintPar("R62=", 3, 3, R62);
-       if (EnterPressed()) EEPROM.put(R62_EAdr,R62);
+       if (EnterPressed()) {EEPROM.put(R62_EAdr,R62);  Rec = 0;}
   } Select(); break;
   case 20:  {                           // Экран настройка характеристик термисторов запрос сохранения результатов расчёта 
        Caption(Cap_NastrNTC,0); Caption(Cap_SaveQ,1);
        InputPar(Ttemp, 1);
        if (Ttemp>125) Ttemp=-25; if (Ttemp<-25) Ttemp=125;
        PrintPar("T=  ", 2, 1, Ttemp); PrintPar("ADSr", 4, 0, (float)T_to_ADS(Ttemp)); PrintPar("ADS ", 6, 0, (float)m_adc[(round(Ttemp)+25)]);
-       if (EnterPressed()) { ADS_Construct(); EEPROM.put(m_adc_EAdr,m_adc);};
+       if (EnterPressed()) { ADS_Construct(); EEPROM.put(m_adc_EAdr,m_adc);  Rec = 0;};
   } Select();  break;  
   case 21:  {                           // Экран настройка электронного попугая запрос начала 
        Caption(Cap_NastrEP,0); Caption(Cap_NextQ,6); 
@@ -763,7 +775,7 @@ void disp() {                                                                 //
        if (N_dPressure>3) N_dPressure=0; 
        if (!Pressure_enable[N_dPressure]) N_dPressure++; //.......!!!!!!!!!!!!!!
        PrintPar("   N", 4, 0, N_dPressure); 
-       if (EnterPressed()) { EEPROM.put(N_dPressure_EAdr,N_dPressure);};
+       if (EnterPressed()) { EEPROM.put(N_dPressure_EAdr,N_dPressure); Rec = 0;};
   } Select(); break;
   case 24:  {                           // Экран настройка электронного попугая включение/отключение термокоррекции
        Caption(Cap_NastrEP,0); Caption(Cap_K_cor_po_t,1); Caption(Menu_Write_Next,7);
@@ -771,7 +783,7 @@ void disp() {                                                                 //
        if (k_Alc_T<-0.1) k_Alc_T=0.3;
        if (k_Alc_T>0.4) k_Alc_T=0.0;
        PrintPar("  Kt", 4, 1, k_Alc_T);
-       if (EnterPressed()) EEPROM.put(k_Alc_T_EAdr,k_Alc_T);
+       if (EnterPressed()) {EEPROM.put(k_Alc_T_EAdr,k_Alc_T); Rec = 0;}
   } Select(); break;  
   case 25:  {                           // Экран настройка электронного попугая калибровка с сортировкой
        Caption(Cap_NastrEP,0); Caption(Cap_Fill_Sort,1); Caption(Menu_Write_Next_PgUp_PgDn,7);
@@ -779,8 +791,12 @@ void disp() {                                                                 //
        if (Alc_tar<0) Alc_tar=100;
        if (Alc_tar>100) Alc_tar=0;
        PrintPar("Sor%", 2, 1, Alc_tar);
-       PrintPar("kG/P", 5, 1, (Alc_to_G((uint16_t)(Alc_tar*100))/pressure[N_dPressure])); //K_alc
-       if (EnterPressed()) { k_Alc=Alc_to_G((uint16_t)(Alc_tar*100))/pressure[N_dPressure]; EEPROM.put(k_Alc_EAdr,k_Alc); }
+       if (pressure[N_dPressure]>0.2) {
+         PrintPar("kG/P", 5, 1, (Alc_to_G((uint16_t)(Alc_tar*100))/pressure[N_dPressure])); //K_alc
+         if (EnterPressed()) { 
+          k_Alc=Alc_to_G((uint16_t)(Alc_tar*100))/pressure[N_dPressure]; EEPROM.put(k_Alc_EAdr,k_Alc);  Rec = 0;}
+          } 
+        else LD.printString_12x16(F(" Нет давл. "), 0, 5); 
   } Select();  break;  
   case 26:  {                           // Сбросить настройки на дефолтные?
    Caption(Cap_EEPROM_0,2); Caption(Menu_Yes_Next,6);
@@ -791,6 +807,7 @@ void disp() {                                                                 //
 }
 void setup() {                                                                // Инициализация
   wdt_enable(WDTO_2S);                  // Установка таймера watchdog  
+  //wdt_disable();
   Wire.begin();                         // Инициализация I2C
   EEPROM_Init();                        // Инициализация переменных из EEPROM
   pinMode(BtnEnter, INPUT_PULLUP);      // Инициализация кнопок, перемычек и светодиода
