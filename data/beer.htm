@@ -559,6 +559,7 @@
      document.getElementById("popup").style.display = "none";
      document.getElementById("overlay").classList.remove("show");
      document.getElementById("pmixer" + document.getElementById("m_p_id").value).value = document.getElementById("m_type").value + "^" + document.getElementById("m_direction").value + "^" + document.getElementById("m_time").value + "^" + document.getElementById("m_pause").value;
+     calc_program();
     }
 
     function popup_cancel(){
