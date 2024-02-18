@@ -54,15 +54,15 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
   }
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    I2C2.writeByte(0x01, 8, 1);
-    I2C2.writeByte(0x01, 0, spd >> 8);
-    I2C2.writeByte(0x01, 1, spd);
-    I2C2.writeByte(0x01, 2, direction);
-    I2C2.writeByte(0x01, 3, target >> 24);
-    I2C2.writeByte(0x01, 4, target >> 16);
-    I2C2.writeByte(0x01, 5, target >> 8);
-    I2C2.writeByte(0x01, 6, target);
-    I2C2.writeByte(0x01, 8, 0);
+    I2C2.writeByte(use_I2C_dev, 8, 1);
+    I2C2.writeByte(use_I2C_dev, 0, spd >> 8);
+    I2C2.writeByte(use_I2C_dev, 1, spd);
+    I2C2.writeByte(use_I2C_dev, 2, direction);
+    I2C2.writeByte(use_I2C_dev, 3, target >> 24);
+    I2C2.writeByte(use_I2C_dev, 4, target >> 16);
+    I2C2.writeByte(use_I2C_dev, 5, target >> 8);
+    I2C2.writeByte(use_I2C_dev, 6, target);
+    I2C2.writeByte(use_I2C_dev, 8, 0);
     xSemaphoreGive(xI2CSemaphore);
     result = true;
   }
@@ -75,10 +75,10 @@ uint32_t get_stepper_status(void) {
 
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     //Читаем количество оставшихся шагов
-    rest  = (uint32_t)I2C2.readByte(0x01, 3) << 24;       // Считываем старший байт значения шагов, сдвигаем полученный байт на 32 бит влево, т.к. он старший
-    rest += (uint32_t)I2C2.readByte(0x01, 4) << 16;
-    rest += (uint32_t)I2C2.readByte(0x01, 5) << 8;
-    rest += (uint32_t)I2C2.readByte(0x01, 6);           // Считываем младший байт значения шагов, добавляя его значение к ранее полученному старшему байту
+    rest  = (uint32_t)I2C2.readByte(use_I2C_dev, 3) << 24;       // Считываем старший байт значения шагов, сдвигаем полученный байт на 32 бит влево, т.к. он старший
+    rest += (uint32_t)I2C2.readByte(use_I2C_dev, 4) << 16;
+    rest += (uint32_t)I2C2.readByte(use_I2C_dev, 5) << 8;
+    rest += (uint32_t)I2C2.readByte(use_I2C_dev, 6);           // Считываем младший байт значения шагов, добавляя его значение к ранее полученному старшему байту
     xSemaphoreGive(xI2CSemaphore);
   }
   return rest;
@@ -88,9 +88,9 @@ bool set_mixer_pump_target(uint8_t on) {
   if (!use_I2C_dev) return false;
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    byte b = I2C2.readByte(0x01, 7);
+    byte b = I2C2.readByte(use_I2C_dev, 7);
     bitWrite(b, 0, on);
-    I2C2.writeByte(0x01, 7, b);
+    I2C2.writeByte(use_I2C_dev, 7, b);
     xSemaphoreGive(xI2CSemaphore);
     result = true;
   }
@@ -101,7 +101,7 @@ byte get_mixer_pump_status(void) {
   byte state = 0xFF;
   if (!use_I2C_dev) return state;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    state = BitIsSet(I2C2.readByte(0x01, 7), 0);
+    state = BitIsSet(I2C2.readByte(use_I2C_dev, 7), 0);
     xSemaphoreGive(xI2CSemaphore);
   }
   return state;
@@ -112,7 +112,7 @@ byte get_i2c_rele_state(uint8_t r) {
   if (!use_I2C_dev) return state;
   byte s;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    s = I2C2.readByte(0x01, 7);
+    s = I2C2.readByte(use_I2C_dev, 7);
     xSemaphoreGive(xI2CSemaphore);
     state = BitIsSet(s, r - 1);
   }
@@ -124,9 +124,9 @@ bool set_i2c_rele_state(uint8_t r, bool s) {
   bool result = false;
   byte b;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    b = I2C2.readByte(0x01, 7);
+    b = I2C2.readByte(use_I2C_dev, 7);
     bitWrite(b, (r - 1), s);
-    I2C2.writeByte(0x01, 7, b);
+    I2C2.writeByte(use_I2C_dev, 7, b);
     xSemaphoreGive(xI2CSemaphore);
     result = true;
   }
