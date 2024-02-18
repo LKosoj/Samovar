@@ -1015,6 +1015,8 @@ void setup() {
   //Serial.print("Size = ");
   //Serial.println(sizeof(SamSetup));
 
+  use_I2C_dev = 0;
+  
   if (check_I2C_device(1) == 1) {
     use_I2C_dev = 1;
     Serial.println("I2C Stepper as Mixer");
