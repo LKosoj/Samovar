@@ -535,7 +535,16 @@ function createEditor(element, file, lang, theme, type){
     if(lang === "c_cpp") type = "text/plain";
   }
 
+  ace.require("ace/ext/language_tools");
   var editor = ace.edit(element);
+
+    editor.setOptions({
+        enableBasicAutocompletion: true,
+        enableSnippets: true,
+        enableLiveAutocompletion: true
+    });
+    
+    
   function httpPostProcessRequest(status, responseText){
     if(status != 200) alert("ERROR["+status+"]: "+responseText);
   }
@@ -609,7 +618,8 @@ function onBodyLoad(){
   editor.loadUrl(vars.file);
 };
 </script>
-<script id='ace' src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.13/ace.js" type="text/javascript" charset="utf-8"></script>
+<script id='ace' src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.min.js" type="text/javascript" charset="utf-8"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ext-language_tools.min.js" integrity="sha512-iK7yTkCkv7MbFwTqRgHTbmIqoiiLq6BsyNjymnFyB5a7pEQwYThj9QIgqBy9+XPPwj7+hAEHyR2npOHL1bz4Qg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
   if  (typeof ace.edit == "undefined") {
     var script = document.createElement('script');
