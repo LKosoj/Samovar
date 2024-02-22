@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+                <RECIPES>
+  <RECIPE>
+    <NAME>TRASHY BLONDE</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>All Grain</TYPE>
+    <BREWER>BREWDOG</BREWER>
+    <ASST_BREWER/>
+    <BATCH_SIZE>20</BATCH_SIZE>
+    <BOIL_SIZE>25</BOIL_SIZE>
+    <BOIL_TIME>60</BOIL_TIME>
+    <EFFICIENCY>76.02</EFFICIENCY>
+    <OG>1.042</OG>
+    <FG>1.010</FG>
+                <STYLE>
+        <NAME>Pale Ale</NAME>
+        <CATEGORY>Pale Ale</CATEGORY>
+        <CATEGORY_NUMBER></CATEGORY_NUMBER>
+        <STYLE_LETTER></STYLE_LETTER>
+        <STYLE_GUIDE></STYLE_GUIDE>
+        <VERSION>1</VERSION>
+        <TYPE></TYPE>
+        <OG_MIN></OG_MIN>
+        <OG_MAX></OG_MAX>
+        <FG_MIN></FG_MIN>
+        <FG_MAX></FG_MAX>
+        <IBU_MIN></IBU_MIN>
+        <IBU_MAX></IBU_MAX>
+        <COLOR_MIN></COLOR_MIN>
+        <COLOR_MAX></COLOR_MAX>
+      </STYLE>
+              <FERMENTABLES>
+            <FERMENTABLE>
+        <NAME>Extra Pale Maris Otter</NAME>
+        <VERSION>1</VERSION>
+        <TYPE>Grain</TYPE>
+        <AMOUNT>3.25</AMOUNT>
+        <YIELD>82.00</YIELD>
+        <COLOR>1</COLOR>
+      </FERMENTABLE>
+            <FERMENTABLE>
+        <NAME>Caramalt</NAME>
+        <VERSION>1</VERSION>
+        <TYPE>Grain</TYPE>
+        <AMOUNT>0.20</AMOUNT>
+        <YIELD>71.00</YIELD>
+        <COLOR>15</COLOR>
+      </FERMENTABLE>
+            <FERMENTABLE>
+        <NAME>Munich</NAME>
+        <VERSION>1</VERSION>
+        <TYPE>Grain</TYPE>
+        <AMOUNT>0.40</AMOUNT>
+        <YIELD>82.00</YIELD>
+        <COLOR>6</COLOR>
+      </FERMENTABLE>
+          </FERMENTABLES>
+    <HOPS>
+                      <HOP>
+          <NAME>Amarillo</NAME>
+          <VERSION>1</VERSION>
+          <ORIGIN></ORIGIN>
+          <ALPHA>8.90</ALPHA>
+          <AMOUNT>0.0138</AMOUNT>
+
+                    <USE>Boil</USE>
+          <TIME>60</TIME>
+                    <TYPE>Bittering</TYPE>
+          <FORM>Pellet</FORM>
+          <BETA>0.00</BETA>
+        </HOP>
+                      <HOP>
+          <NAME>Simcoe</NAME>
+          <VERSION>1</VERSION>
+          <ORIGIN></ORIGIN>
+          <ALPHA>12.80</ALPHA>
+          <AMOUNT>0.0138</AMOUNT>
+
+                    <USE>Boil</USE>
+          <TIME>60</TIME>
+                    <TYPE>Bittering</TYPE>
+          <FORM>Pellet</FORM>
+          <BETA>0.00</BETA>
+        </HOP>
+                      <HOP>
+          <NAME>Amarillo</NAME>
+          <VERSION>1</VERSION>
+          <ORIGIN></ORIGIN>
+          <ALPHA>8.90</ALPHA>
+          <AMOUNT>0.0263</AMOUNT>
+
+                    <USE>Boil</USE>
+          <TIME>0</TIME>
+                    <TYPE>Bittering</TYPE>
+          <FORM>Pellet</FORM>
+          <BETA>0.00</BETA>
+        </HOP>
+                      <HOP>
+          <NAME>Motueka</NAME>
+          <VERSION>1</VERSION>
+          <ORIGIN></ORIGIN>
+          <ALPHA>7.10</ALPHA>
+          <AMOUNT>0.0188</AMOUNT>
+
+                    <USE>Boil</USE>
+          <TIME>0</TIME>
+                    <TYPE>Bittering</TYPE>
+          <FORM>Pellet</FORM>
+          <BETA>0.00</BETA>
+        </HOP>
+          </HOPS>
+    <YEASTS>
+              <YEAST>
+          <NAME>Wyeast 1056 - American Ale</NAME>
+          <VERSION>1</VERSION>
+          <TYPE>Ale</TYPE>
+          <FORM>Liquid</FORM>
+          <AMOUNT>0.0350000</AMOUNT>
+        </YEAST>
+          </YEASTS>
+    <MISCS>
+      
+          </MISCS>
+    <MASH>
+      <NAME>Mash</NAME>
+      <VERSION>1</VERSION>
+      <GRAIN_TEMP>20</GRAIN_TEMP>
+      <MASH_STEPS>
+                        <MASH_STEP>
+            <NAME>Mash step</NAME>
+            <VERSION>1</VERSION>
+            <TYPE>Temperature</TYPE>
+            <STEP_TEMP>69</STEP_TEMP>
+            <STEP_TIME>75</STEP_TIME>
+          </MASH_STEP>
+                                  </MASH_STEPS>
+    </MASH>
+                    
+                        <PRIMARY_TEMP>18</PRIMARY_TEMP>
+              
+      </RECIPE>
+</RECIPES>

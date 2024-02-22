@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<recipe>
+<!--BrewMate Recipe File - www.brewmate.ru-->
+<namerecipe>Атаманское</namerecipe>
+<style>American Brown Ale</style>
+<color>13.5</color>
+<ibu>17.56</ibu>
+<np>1.053</np>
+<kp>1.013</kp>
+<al>5.38</al>
+<part>28</part>
+<hydromodule>4</hydromodule>
+<eff>70</eff>
+<timeboil>90</timeboil>
+<timebro>14</timebro>
+<grains>
+<grain>
+<grainname>Пэйл Эль  -  Базовый солод</grainname>
+<graincolor>2.4</graincolor>
+<grainekstr>79</grainekstr>
+<grainkg>4</grainkg>
+<grainproc>60.3</grainproc>
+</grain>
+<grain>
+<grainname>Карамельный 250  -  Спец солод</grainname>
+<graincolor>95</graincolor>
+<grainekstr>77.9</grainekstr>
+<grainkg>0.667</grainkg>
+<grainproc>10.1</grainproc>
+</grain>
+<grain>
+<grainname>Венский Курский солод  -  Базовый солод</grainname>
+<graincolor>3.2</graincolor>
+<grainekstr>81</grainekstr>
+<grainkg>1.700</grainkg>
+<grainproc>25.6</grainproc>
+</grain>
+<grain>
+<grainname>Бисквит Шато  -  Спец солод</grainname>
+<graincolor>19.3</graincolor>
+<grainekstr>77</grainekstr>
+<grainkg>0.267</grainkg>
+<grainproc>4</grainproc>
+</grain>
+</grains>
+<hops>
+<hop>
+<hopname>Hallertaur Magnum</hopname>
+<hopalfa>12</hopalfa>
+<hopgr>10.734</hopgr>
+<hoptime>60</hoptime>
+<hopibu>11.9</hopibu>
+<hopproc>23.5</hopproc>
+<hoptype>Гранулы</hoptype>
+</hop>
+<hop>
+<hopname>Cascade</hopname>
+<hopalfa>5.5</hopalfa>
+<hopgr>14</hopgr>
+<hoptime>15</hoptime>
+<hopibu>3.53</hopibu>
+<hopproc>30.6</hopproc>
+<hoptype>Гранулы</hoptype>
+</hop>
+<hop>
+<hopname>Cascade</hopname>
+<hopalfa>5.5</hopalfa>
+<hopgr>21</hopgr>
+<hoptime>5</hoptime>
+<hopibu>2.13</hopibu>
+<hopproc>45.9</hopproc>
+<hoptype>Гранулы</hoptype>
+</hop>
+</hops>
+<dryhops>
+</dryhops>
+<miscs>
+<misc>
+<miscname>Таблетка Whirlfloc</miscname>
+<misctype>Другое</misctype>
+<miscisp>Кипячение</miscisp>
+<miscgr>2.4</miscgr>
+<misctime>10</misctime>
+</misc>
+</miscs>
+<yeast>Safale US-05   -   Элевые (тем-ра брожения 18гр)</yeast>
+<aa>75</aa>
+<zatirs>
+<zatir>
+<zatirgr>45</zatirgr>
+<zatirtime>15</zatirtime>
+</zatir>
+<zatir>
+<zatirgr>58</zatirgr>
+<zatirtime>20</zatirtime>
+</zatir>
+<zatir>
+<zatirgr>65</zatirgr>
+<zatirtime>50</zatirtime>
+</zatir>
+<zatir>
+<zatirgr>72</zatirgr>
+<zatirtime>25</zatirtime>
+</zatir>
+<zatir>
+<zatirgr>78</zatirgr>
+<zatirtime>10</zatirtime>
+</zatir>
+</zatirs>
+<comms>
+<comm>
+<lin>Дрожжи 8 грам</lin>
+</comm>
+</comms>
+</recipe>

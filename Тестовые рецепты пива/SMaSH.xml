@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<recipe>
+<!--BrewMate Recipe File - www.brewmate.ru-->
+<namerecipe>SMaSH</namerecipe>
+<style></style>
+<color>3.7</color>
+<ibu>20.39</ibu>
+<np>1.047</np>
+<kp>1.014</kp>
+<al>4.4</al>
+<part>23</part>
+<hydromodule>4</hydromodule>
+<eff>80</eff>
+<timeboil>60</timeboil>
+<timebro>14</timebro>
+<grains>
+<grain>
+<grainname>Пэйл Эль Курский  -  Базовый солод</grainname>
+<graincolor>2.4</graincolor>
+<grainekstr>79</grainekstr>
+<grainkg>5</grainkg>
+<grainproc>100</grainproc>
+</grain>
+</grains>
+<hops>
+<hop>
+<hopname>Northern Brewer</hopname>
+<hopalfa>8.5</hopalfa>
+<hopgr>10.001</hopgr>
+<hoptime>60</hoptime>
+<hopibu>8.67</hopibu>
+<hopproc>20</hopproc>
+<hoptype>Гранулы</hoptype>
+</hop>
+<hop>
+<hopname>Northern Brewer</hopname>
+<hopalfa>8.5</hopalfa>
+<hopgr>15</hopgr>
+<hoptime>30</hoptime>
+<hopibu>9.99</hopibu>
+<hopproc>30</hopproc>
+<hoptype>Гранулы</hoptype>
+</hop>
+<hop>
+<hopname>Northern Brewer</hopname>
+<hopalfa>8.5</hopalfa>
+<hopgr>10.001</hopgr>
+<hoptime>5</hoptime>
+<hopibu>1.73</hopibu>
+<hopproc>20</hopproc>
+<hoptype>Гранулы</hoptype>
+</hop>
+<hop>
+<hopname>Northern Brewer</hopname>
+<hopalfa>8.5</hopalfa>
+<hopgr>15</hopgr>
+<hoptime>0</hoptime>
+<hopibu>0</hopibu>
+<hopproc>30</hopproc>
+<hoptype>Гранулы</hoptype>
+</hop>
+</hops>
+<dryhops>
+</dryhops>
+<miscs>
+</miscs>
+<yeast>Safale US-05   -   Элевые (тем-ра брожения 18гр)</yeast>
+<aa>70</aa>
+<zatirs>
+<zatir>
+<zatirgr>62</zatirgr>
+<zatirtime>40</zatirtime>
+</zatir>
+<zatir>
+<zatirgr>72</zatirgr>
+<zatirtime>30</zatirtime>
+</zatir>
+<zatir>
+<zatirgr>78</zatirgr>
+<zatirtime>5</zatirtime>
+</zatir>
+</zatirs>
+<comms>
+</comms>
+</recipe>
