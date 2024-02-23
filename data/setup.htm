@@ -114,6 +114,15 @@
 
       document.body.removeChild(pom);
     }
+
+    function sleep (milliseconds) {
+      var start = new Date().getTime();
+      for (var i = 0; i < 1e7; i++) {
+        if ((new Date().getTime() - start) > milliseconds) {
+          break;
+        }
+      }
+    };
   </script>
 </head>
 
@@ -270,6 +279,13 @@
           <h2>Уставка датчика в ТСА: <input name='SetACPTemp' type='text' value='%SetACPTemp%'>&#176;C</h2>
           <h2>Задержка срабатывания при выходе Т в ТСА за уставку: <input name='ACPDelay' type='text' value='%ACPDelay%'> сек</h2>
         </div>
+      </div>
+      <div 
+        style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
+        >
+        <input id='selftest' type='button' name='selftest' value='Сканировать датчики' onclick='sendbutton("rescands"); sleep(1000); location.reload();' class="button"
+          title="Прочитать адреса подключенных датчиков температуры"
+        >
       </div>
     </div>
 
