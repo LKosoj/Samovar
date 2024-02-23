@@ -219,6 +219,68 @@ void DS_getvalue(void) {
 #endif
 }
 
+void scan_ds_adress(){
+  sensors.begin();  // стартуем датчики температуры
+
+  byte dc = 0;
+
+  while (sensors.getAddress(DSAddr[dc], dc)) {
+    sensors.setResolution(DSAddr[dc], 12);  // устанавливаем разрешение для датчика
+    dc++;
+    if (dc > 4) break;
+  }
+
+  DScnt = dc;
+
+  // определяем устройства на шине
+#ifdef __SAMOVAR_DEBUG
+  Serial.print("Locating DS18B20...");
+  Serial.print("Found ");
+  Serial.print(DScnt, DEC);
+  Serial.println(" devices.");
+#endif
+
+#ifdef __SAMOVAR_DEBUG
+  Serial.print("1 Sensor Address: ");  // пишем адрес датчика 0
+  printAddress(DSAddr[0]);
+  Serial.println();
+  Serial.print("2 Sensor Address: ");  // пишем адрес датчика 1
+  printAddress(DSAddr[1]);
+  Serial.println();
+  Serial.print("3 Sensor Address: ");  // пишем адрес датчика 2
+  printAddress(DSAddr[2]);
+  Serial.println();
+  Serial.print("4 Sensor Address: ");  // пишем адрес датчика 3
+  printAddress(DSAddr[3]);
+  Serial.println();
+  Serial.print("5 Sensor Address: ");  // пишем адрес датчика 4
+  printAddress(DSAddr[4]);
+  Serial.println();
+#endif
+
+  sensors.setWaitForConversion(false);  // работаем в асинхронном режиме
+  sensors.requestTemperatures();
+  //delay(750);
+
+#ifdef __SAMOVAR_DEBUG
+  Serial.print("1 Sensor Resolution: ");  // пишем разрешение для датчика 0
+  Serial.print(sensors.getResolution(DSAddr[0]), DEC);
+  Serial.println();
+  Serial.print("2 Sensor Resolution: ");  // пишем разрешение для датчика 1
+  Serial.print(sensors.getResolution(DSAddr[1]), DEC);
+  Serial.println();
+  Serial.print("3 Sensor Resolution: ");  // пишем разрешение для датчика 2
+  Serial.print(sensors.getResolution(DSAddr[2]), DEC);
+  Serial.println();
+  Serial.print("4 Sensor Resolution: ");  // пишем разрешение для датчика 3
+  Serial.print(sensors.getResolution(DSAddr[3]), DEC);
+  Serial.println();
+  Serial.print("5 Sensor Resolution: ");  // пишем разрешение для датчика 3
+  Serial.print(sensors.getResolution(DSAddr[4]), DEC);
+  Serial.println();
+#endif
+}
+
 void sensor_init(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("Pressure sensor initialization");
@@ -273,67 +335,8 @@ void sensor_init(void) {
 #endif
 
   writeString("DS1820 init...     ", 3);
-  sensors.begin();  // стартуем датчики температуры
-
-  int dc = 0;
-
-  while (sensors.getAddress(DSAddr[dc], dc)) {
-    sensors.setResolution(DSAddr[dc], 12);  // устанавливаем разрешение для датчика
-    dc++;
-    if (dc > 4) break;
-  }
-
-  DScnt = dc;
-
-  // определяем устройства на шине
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("Locating DS18B20...");
-  Serial.print("Found ");
-  Serial.print(DScnt, DEC);
-  Serial.println(" devices.");
-#endif
-
+  scan_ds_adress();
   writeString("Found " + (String)DScnt + "         ", 4);
-
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("1 Sensor Address: ");  // пишем адрес датчика 0
-  printAddress(DSAddr[0]);
-  Serial.println();
-  Serial.print("2 Sensor Address: ");  // пишем адрес датчика 1
-  printAddress(DSAddr[1]);
-  Serial.println();
-  Serial.print("3 Sensor Address: ");  // пишем адрес датчика 2
-  printAddress(DSAddr[2]);
-  Serial.println();
-  Serial.print("4 Sensor Address: ");  // пишем адрес датчика 3
-  printAddress(DSAddr[3]);
-  Serial.println();
-  Serial.print("5 Sensor Address: ");  // пишем адрес датчика 4
-  printAddress(DSAddr[4]);
-  Serial.println();
-#endif
-
-  sensors.setWaitForConversion(false);  // работаем в асинхронном режиме
-  sensors.requestTemperatures();
-  //delay(750);
-
-#ifdef __SAMOVAR_DEBUG
-  Serial.print("1 Sensor Resolution: ");  // пишем разрешение для датчика 0
-  Serial.print(sensors.getResolution(DSAddr[0]), DEC);
-  Serial.println();
-  Serial.print("2 Sensor Resolution: ");  // пишем разрешение для датчика 1
-  Serial.print(sensors.getResolution(DSAddr[1]), DEC);
-  Serial.println();
-  Serial.print("3 Sensor Resolution: ");  // пишем разрешение для датчика 2
-  Serial.print(sensors.getResolution(DSAddr[2]), DEC);
-  Serial.println();
-  Serial.print("4 Sensor Resolution: ");  // пишем разрешение для датчика 3
-  Serial.print(sensors.getResolution(DSAddr[3]), DEC);
-  Serial.println();
-  Serial.print("5 Sensor Resolution: ");  // пишем разрешение для датчика 3
-  Serial.print(sensors.getResolution(DSAddr[4]), DEC);
-  Serial.println();
-#endif
 
   //Для шагового двигателя устанавливаем режим работы - следовать до позиции
   //  stepper.setRunMode(FOLLOW_POS);
