@@ -762,6 +762,8 @@ void web_command(AsyncWebServerRequest *request) {
       menu_reset_wifi();
     } else if (request->hasArg("startst")) {
       sam_command_sync = SAMOVAR_SELF_TEST;
+    } else if (request->hasArg("rescands")) {
+      scan_ds_adress();
     } else if (request->hasArg("stopst")) {
       stop_self_test();
     } else if (request->hasArg("mixer")) {
