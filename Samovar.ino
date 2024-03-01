@@ -225,7 +225,7 @@ void startService(void) {
   timerAlarmEnable(timer);
 }
 
-void ICACHE_RAM_ATTR StepperTicker(void) {
+void IRAM_ATTR StepperTicker(void) {
   portENTER_CRITICAL_ISR(&timerMux);
   StepperMoving = stepper.tickManual();
   portEXIT_CRITICAL_ISR(&timerMux);
@@ -677,7 +677,7 @@ void setup() {
 
   // Configure the Prescaler at 80 the quarter of the ESP32 is cadence at 80Mhz
   // 80000000 / 80 = 1000000 tics / seconde
-  timer = timerBegin(3, 80, true);
+  timer = timerBegin(2, 80, true);
   timerAttachInterrupt(timer, &StepperTicker, true);
 
   ESP32PWM::allocateTimer(0);
@@ -1018,7 +1018,7 @@ void setup() {
   //Serial.println(sizeof(SamSetup));
 
   use_I2C_dev = 0;
-  
+
   if (check_I2C_device(1) == 1) {
     use_I2C_dev = 1;
     Serial.println("I2C Stepper as Mixer");
@@ -1031,8 +1031,10 @@ void setup() {
 }
 
 void loop() {
-//пересчитаем время работы таймера для шагового двигателя
+  //пересчитаем время работы таймера для шагового двигателя
+  portENTER_CRITICAL_ISR(&timerMux);
   timerAlarmWrite(timer, stepper.getPeriod(), true);
+  portEXIT_CRITICAL_ISR(&timerMux);
 
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
