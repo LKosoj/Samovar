@@ -18,7 +18,7 @@
  * "down" button.
  *
  * The circuit:
- * https://github.com/VasilKalchev/LiquidMenu/blob/master/examples/D_buttons_menu/D_buttons_menu.png
+ * https://raw.githubusercontent.com/VaSe7u/LiquidMenu/master/examples/D_buttons_menu/buttons_menu.png
  * - LCD RS pin to Arduino pin 12
  * - LCD E pin to Arduino pin 11
  * - LCD D4 pin to Arduino pin 5
@@ -95,10 +95,13 @@ const byte pwmPin = 6;
 byte pwmLevel = 0;
 
 // Variables for controlling a pin and displaying the state with text.
-// char* is used for adding changing text to the LiquidLine object.
+// char[] is used for adding changing text to the LiquidLine object.
 const byte ledPin = LED_BUILTIN;
 bool ledState = LOW;
-char* ledState_text;
+char ledState_text[4];
+
+char string_on[] = "ON";
+char string_off[] = "OFF";
 
 /*
  * Variable 'analogValue' is later configured to be printed on the display.
@@ -162,6 +165,10 @@ void setup() {
 	menu.add_screen(welcome_screen);
 	menu.add_screen(screen2);
 	menu.add_screen(pwm_screen);
+
+	strncpy(ledState_text, string_off, sizeof(string_off));
+
+	menu.update();
 }
 
 void loop() {
@@ -202,12 +209,12 @@ void loop() {
 		if (ledState == LOW) {
 			ledState = HIGH;
 			// Changes the text that is printed on the display.
-			ledState_text = (char*)"ON";
+			strncpy(ledState_text, string_on, sizeof(string_on));
 			Serial.println(ledState_text);
 			menu.update();
 		} else {
 			ledState = LOW;
-			ledState_text = (char*)"OFF";
+			strncpy(ledState_text, string_off, sizeof(string_off));
 			Serial.println(ledState_text);
 			menu.update();
 		}

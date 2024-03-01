@@ -114,8 +114,8 @@ void FS_init(void) {
   //    }
   //  }
 
-  ::ws.onEvent(onWsEvent);
-  server.addHandler(&::ws);
+  //::ws.onEvent(onWsEvent);
+  //server.addHandler(&::ws);
 
   events.onConnect([](AsyncEventSourceClient * client) {
     client->send("hello!", NULL, millis(), 1000);

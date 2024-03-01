@@ -7,18 +7,8 @@ used in the library, also configures the debugging messages.
 */
 
 #pragma once
-#define USE_SOFTWIRE_H_AS_PLAIN_INCLUDE
 
-/*!
- * @name "LiquidCrystal" libraries enumeration.
- * These defines are used for determining the compiler messages.
- * @{
- */
-#define LiquidCrystal_LIBRARY (1)
-#define LiquidCrystal_I2C_LIBRARY (2)
-#define LiquidCrystal_I2C2_LIBRARY (3)
-//!@}
-
+#include "LiquidMenu_const.h"
 
 // Select a "LiquidCrystal" library:
 // ---------------------------------
@@ -32,21 +22,6 @@ used in the library, also configures the debugging messages.
  * @name Arduino's parallel "LiquidCrystal" library
  * @{
  */
-//#define LIQUIDMENU_LIBRARY LiquidCrystal_LIBRARY
-//#include <LiquidCrystal.h>
-//#define DisplayClass LiquidCrystal
-//!@}
-
-/*!
- * @name I2C library
- * @see https://github.com/johnrickman/LiquidCrystal_I2C
- * @{
- */
-//  #define LIQUIDMENU_LIBRARY LiquidCrystal_I2C_LIBRARY
-//  #include <LiquidCrystal_I2C.h>
-//  #define DisplayClass LiquidCrystal_I2C
-//!@}
-
 #if defined(__AVR__)
  #define LIQUIDMENU_LIBRARY LiquidCrystal_I2C2_LIBRARY
  #include <LiquidCrystal_I2C2.h>
@@ -56,14 +31,29 @@ used in the library, also configures the debugging messages.
  #include <LiquidCrystal_I2C.h>
  #define DisplayClass LiquidCrystal_I2C
 #endif
+//!@}
 
+/*!
+ * @name I2C library
+ * @see https://github.com/johnrickman/LiquidCrystal_I2C
+ * @{
+ */
+// #ifndef LIQUIDMENU_LIBRARY
+//     #define LIQUIDMENU_LIBRARY LiquidCrystal_I2C_LIBRARY
+// #endif
+// #ifndef DisplayClass
+//     #define DisplayClass LiquidCrystal_I2C
+// #endif
+//!@}
 
 /*!
  * @name Some other library
  * @{
  */
 // #include <LIBRARY_HEADER.h>
+// #ifndef DisplayClass
 // #define DisplayClass LIBRARY_CONSTRUCTOR
+// #endif
 //!@}
 //!@}
 
@@ -85,5 +75,17 @@ const uint8_t MAX_SCREENS = 14; ///< @note Default: 14
 /// Configures the number of available menus per menus system.
 const uint8_t MAX_MENUS = 8; ///< @note Default: 8
 
+/*!
+ * Enable/disable hiding the focus indicator.
+ * 
+ * When enabled the focus indicator will disappear for one step after
+ * completing an iteration through the focusable lines. When disabled the focus
+ * indicator will go from the last focusable line directly to the first
+ * focusable line without disappearing (i.e. it will be always visible).
+ */
+#define LM_FOCUS_INDICATOR_GHOSTING true ///< @note Default: true
+
 // Turns the debugging messages on or off.
+#ifndef LIQUIDMENU_DEBUG
 #define LIQUIDMENU_DEBUG false ///< @note Default: false
+#endif

@@ -7,41 +7,41 @@
 
 void read_config();
 
-const char str_BACK[] = "<BACK";
-const char str_Steam_T[] = "Steam T: ";
-const char str_Pipe_T[] = "Pipe T: ";
-const char str_Water_T[] = "Water T: ";
-const char str_Tank_T[] = "Tank T: ";
-const char str_Pressure[] = "Atm: ";
-const char str_Progress[] = "Progress: ";
-const char str_Start[] = ">Start: ";
-const char str_Speed[] = ">Speed l/h: ";
-const char str_Pause[] = ">Pause: ";
-const char str_Reset_W[] = ">Reset withdrawal: ";
-const char str_Get_Power[] = ">Get power ";
-const char str_Setup[] = "/Setup";
-const char str_IP[] = "IP: ";
-const char str_Set_Steam_T[] = "Set Steam T: ";
-const char str_Set_Pipe_T[] = "Set Pipe T: ";
-const char str_Set_Water_T[] = "Set Water T: ";
-const char str_Set_Tank_T[] = "Set Tank T: ";
-const char str_Step_Ml[] = "^Step/ml: ";
-const char str_Calibrate[] = ">Calibrate: ";
-const char str_Program[] = "Prog>";
-const char str_Type[] = "^Type: ";
-const char str_Volume[] = "^Volume: ";
-const char str_Capacity[] = "^Capacity: ";
-const char str_Temp[] = "^Temp: ";
-const char str_Power[] = "^Power: ";
-const char str_Reset_WiFi[] = ">Reset WiFi";
+const char str_BACK[] PROGMEM = "<BACK";
+const char str_Steam_T[] PROGMEM = "Steam T: ";
+const char str_Pipe_T[] PROGMEM = "Pipe T: ";
+const char str_Water_T[] PROGMEM = "Water T: ";
+const char str_Tank_T[] PROGMEM = "Tank T: ";
+const char str_Pressure[] PROGMEM = "Atm: ";
+const char str_Progress[] PROGMEM = "Progress: ";
+const char str_Start[] PROGMEM = ">Start: ";
+const char str_Speed[] PROGMEM = ">Speed l/h: ";
+const char str_Pause[] PROGMEM = ">Pause: ";
+const char str_Reset_W[] PROGMEM = ">Reset withdrawal: ";
+const char str_Get_Power[] PROGMEM = ">Get power ";
+const char str_Setup[] PROGMEM = "/Setup";
+const char str_IP[] PROGMEM = "IP: ";
+const char str_Set_Steam_T[] PROGMEM = "Set Steam T: ";
+const char str_Set_Pipe_T[] PROGMEM = "Set Pipe T: ";
+const char str_Set_Water_T[] PROGMEM = "Set Water T: ";
+const char str_Set_Tank_T[] PROGMEM = "Set Tank T: ";
+const char str_Step_Ml[] PROGMEM = "^Step/ml: ";
+const char str_Calibrate[] PROGMEM = ">Calibrate: ";
+const char str_Program[] PROGMEM = "Prog>";
+const char str_Type[] PROGMEM = "^Type: ";
+const char str_Volume[] PROGMEM = "^Volume: ";
+const char str_Capacity[] PROGMEM = "^Capacity: ";
+const char str_Temp[] PROGMEM = "^Temp: ";
+const char str_Power[] PROGMEM = "^Power: ";
+const char str_Reset_WiFi[] PROGMEM = ">Reset WiFi";
 
-LiquidLine lql_back_line(0, 0, str_BACK);
-LiquidLine lql_time(0, 3, timestr);
+LiquidLine lql_back_line(0, 10, str_BACK);
+LiquidLine lql_time(0, 10, get_timestr);
 
-LiquidLine welcome_line1(0, 0, welcomeStr1);
-LiquidLine welcome_line2(0, 1, welcomeStr2);
-LiquidLine welcome_line3(0, 2, welcomeStr3);
-LiquidLine welcome_line4(0, 3, welcomeStr4);
+LiquidLine welcome_line1(0, 0, get_welcomeStr1);
+LiquidLine welcome_line2(0, 1, get_welcomeStr2);
+LiquidLine welcome_line3(0, 2, get_welcomeStr3);
+LiquidLine welcome_line4(0, 3, get_welcomeStr4);
 LiquidScreen welcome_screen(welcome_line1, welcome_line2, welcome_line3, welcome_line4);
 
 LiquidLine lql_steam_temp(0, 0, str_Steam_T, SteamSensor.avgTemp);
@@ -54,15 +54,15 @@ LiquidLine lql_atm(0, 1, str_Pressure, bme_pressure);
 LiquidLine lql_w_progress(0, 2, str_Progress, WthdrwlProgress);
 LiquidScreen main_screen1(lql_tank_temp, lql_atm, lql_w_progress, lql_time);
 
-LiquidLine lql_start(0, 0, str_Start, startval_text);
+LiquidLine lql_start(0, 0, str_Start, get_startval_text);
 LiquidLine lql_pump_speed(0, 1, str_Speed, ActualVolumePerHour);
-LiquidLine lql_pause(0, 2, str_Pause, pause_text_ptr);
+LiquidLine lql_pause(0, 2, str_Pause, get_pause_text);
 LiquidLine lql_reset(0, 3, str_Reset_W);
 LiquidScreen main_screen2(lql_start, lql_pump_speed, lql_pause, lql_reset);
 
-LiquidLine lql_get_power(0, 0, str_Get_Power, power_text_ptr);
+LiquidLine lql_get_power(0, 0, str_Get_Power, get_power_text);
 LiquidLine lql_setup(0, 1, str_Setup);
-LiquidLine lql_ip(0, 2, str_IP, ipstr);
+LiquidLine lql_ip(0, 2, str_IP, get_ipstr);
 LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
 
 LiquidScreen main_screen5(lql_tank_temp, lql_atm, lql_water_temp, lql_time);
@@ -80,7 +80,7 @@ LiquidLine lql_setup_set_tank_temp(0, 3, str_Set_Tank_T, SamSetup.SetTankTemp);
 LiquidScreen setup_set_temp_screen(lql_setup_set_steam_temp, lql_setup_set_pipe_temp, lql_setup_set_water_temp, lql_setup_set_tank_temp);
 
 LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, str_Step_Ml, SamSetup.StepperStepMl);
-LiquidLine lql_setup_stepper_calibrate(0, 1, str_Calibrate, calibrate_text_ptr);
+LiquidLine lql_setup_stepper_calibrate(0, 1, str_Calibrate, get_calibrate_text);
 LiquidLine lql_setup_stepper_program(0, 2, str_Program);
 LiquidScreen setup_stepper_settings(lql_setup_stepper_stepper_step_ml, lql_setup_stepper_calibrate, lql_setup_stepper_program, lql_time);
 
@@ -104,6 +104,46 @@ LiquidScreen setup_back_screen(lql_back_line, lql_time);
 //LiquidSystem menu(main_menu, setup_menu, 1);
 
 #define LCD_UPDATE_TIMEOUT 200
+
+const char* get_power_text(){
+  return power_text_ptr;
+}
+
+const char* get_startval_text(){
+  return startval_text_val;
+}
+
+const char* get_pause_text(){
+  return pause_text_ptr;
+}
+
+const char* get_timestr(){
+  return timestr;
+}
+
+const char* get_ipstr(){
+  return ipstr;
+}
+
+const char* get_calibrate_text(){
+  return calibrate_text_ptr;
+}
+
+const char* get_welcomeStr1(){
+  return welcomeStr1;
+}
+
+const char* get_welcomeStr2(){
+  return welcomeStr2;
+}
+
+const char* get_welcomeStr3(){
+  return welcomeStr3;
+}
+
+const char* get_welcomeStr4(){
+  return welcomeStr4;
+}
 
 void reset_focus() {
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
@@ -228,15 +268,15 @@ void set_menu_screen(byte param) {
       change_screen(&setup_program_settings);
       break;
   }
-/*  
-    if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    main_screen.hide(true);
-    main_screen1.hide(true);
-    main_screen2.hide(true);
-    main_screen5.hide(false);
-    change_screen(&main_screen5);
-  }
-*/
+  /*
+      if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      main_screen.hide(true);
+      main_screen1.hide(true);
+      main_screen2.hide(true);
+      main_screen5.hide(false);
+      change_screen(&main_screen5);
+    }
+  */
 }
 
 void menu_setup() {
@@ -550,6 +590,41 @@ void setupMenu() {
 
   lql_pause.attach_function(1, menu_pause);
   lql_pause.attach_function(2, menu_pause);
+
+
+
+  lql_steam_temp.set_asProgmem(1);
+  lql_pipe_temp.set_asProgmem(1);
+  lql_water_temp.set_asProgmem(1);
+  lql_tank_temp.set_asProgmem(1);
+  lql_atm.set_asProgmem(1);
+  lql_w_progress.set_asProgmem(1);
+  lql_start.set_asProgmem(1);
+  lql_pump_speed.set_asProgmem(1);
+  lql_pause.set_asProgmem(1);
+  lql_reset.set_asProgmem(1);
+  lql_get_power.set_asProgmem(1);
+  lql_setup.set_asProgmem(1);
+  lql_ip.set_asProgmem(1);
+  lql_setup_steam_temp.set_asProgmem(1);
+  lql_setup_pipe_temp.set_asProgmem(1);
+  lql_setup_water_temp.set_asProgmem(1);
+  lql_setup_tank_temp.set_asProgmem(1);
+  lql_setup_set_steam_temp.set_asProgmem(1);
+  lql_setup_set_pipe_temp.set_asProgmem(1);
+  lql_setup_set_water_temp.set_asProgmem(1);
+  lql_setup_set_tank_temp.set_asProgmem(1);
+  lql_setup_stepper_stepper_step_ml.set_asProgmem(1);
+  lql_setup_stepper_calibrate.set_asProgmem(1);
+  lql_setup_stepper_program.set_asProgmem(1);
+  lql_setup_program_WType.set_asProgmem(1);
+  lql_setup_program_Volume.set_asProgmem(1);
+  lql_setup_program_Speed.set_asProgmem(1);
+  lql_setup_program_capacity_num.set_asProgmem(1);
+  lql_setup_program_Temp.set_asProgmem(1);
+  lql_setup_program_Power.set_asProgmem(1);
+  lql_setup_program_reset_wifi.set_asProgmem(1);
+  lql_setup_program_back_line.set_asProgmem(1);
 
 
   main_menu1.add_screen(welcome_screen);

@@ -23,7 +23,7 @@
  * shown on the display will overwrite the old.
  *
  * The circuit:
- * https://github.com/VasilKalchev/LiquidMenu/blob/master/examples/glyph_menu/G_glyph_menu.png
+ * https://raw.githubusercontent.com/VaSe7u/LiquidMenu/master/examples/G_glyph_menu/glyph_menu.png
  * - LCD RS pin to Arduino pin 12
  * - LCD E pin to Arduino pin 11
  * - LCD D4 pin to Arduino pin 5
@@ -114,7 +114,7 @@ byte thermometer_glyphIndex = 2;
 byte celsiusSymbol_glyphIndex = 3;
 
 LiquidLine welcome_line1(1, 0, "LiquidMenu ", LIQUIDMENU_VERSION);
-LiquidLine welcome_line2(0, 1, "PROGMEM example");
+LiquidLine welcome_line2(1, 1, "Glyphs example");
 LiquidScreen welcome_screen(welcome_line1, welcome_line2);
 
 LiquidLine line1(1, 1, fan_glyphIndex);

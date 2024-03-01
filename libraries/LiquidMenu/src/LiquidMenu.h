@@ -28,11 +28,9 @@ Include file for LiquidMenu library.
 
 @author Vasil Kalchev
 @date 2016
-@version 1.5.0
+@version 1.6.0
 @copyright The MIT License
 
-@todo: Change/Remove variables/screens/menus maybe
-@todo: screen wide glyphs
 @todo: dynamic memory
 @todo: variadic templates
 */
@@ -51,33 +49,55 @@ Include file for LiquidMenu library.
 #include "LiquidMenu_debug.h"
 
 
-// #if LIQUIDMENU_LIBRARY == LiquidCrystal_LIBRARY
-// # pragma message ("LiquidMenu: Selected 'LiquidCrystal' (parallel) library. Edit 'LiquidMenu_config.h' file to change it.")
-// #elif LIQUIDMENU_LIBRARY == LiquidCrystal_I2C_LIBRARY
-// # pragma message ("LiquidMenu: Selected 'LiquidCrystal_I2C' (I2C) library. Edit 'LiquidMenu_config.h' file to change it.")
-// #else
-// # pragma message ("LiquidMenu: Selected custom library. Edit 'LiquidMenu_config.h' file to change it.")
-// #endif
+//#if LIQUIDMENU_LIBRARY == LiquidCrystal_LIBRARY
+//# pragma message ("LiquidMenu: Selected 'LiquidCrystal' (parallel) library. Edit 'LiquidMenu_config.h' file to change it.")
+//#include <LiquidCrystal.h>
+//#elif LIQUIDMENU_LIBRARY == LiquidCrystal_I2C_LIBRARY
+//# pragma message ("LiquidMenu: Selected 'LiquidCrystal_I2C' (I2C) library. Edit 'LiquidMenu_config.h' file to change it.")
+//#include <LiquidCrystal_I2C.h>
+//#else
+//# pragma message ("LiquidMenu: Selected custom library. Edit 'LiquidMenu_config.h' file to change it.")
+//#endif
 
 #if LIQUIDMENU_DEBUG
 # warning "LiquidMenu: Debugging messages are enabled."
 #endif
 
+const char LIQUIDMENU_VERSION[] = "1.6"; ///< The version of the library.
 
+
+
+/// @name Getter function typedefs
+/**
+
+*/
+///@{
+/// bool
 typedef bool (*boolFnPtr)();
+/// int8_t
 typedef int8_t (*int8tFnPtr)();
+/// uint8_t
 typedef uint8_t (*uint8tFnPtr)();
+/// int16_t
 typedef int16_t (*int16tFnPtr)();
+/// `uint16_t`
 typedef uint16_t (*uint16tFnPtr)();
+/// `int32_t`
 typedef int32_t (*int32tFnPtr)();
+/// `uint32_t`
 typedef uint32_t (*uint32tFnPtr)();
+/// `float`
 typedef float (*floatFnPtr)();
+/// `double`
 typedef double (*doubleFnPtr)();
+/// `char`
 typedef char (*charFnPtr)();
+/// `char*`
 typedef char * (*charPtrFnPtr)();
+/// `const char*`
 typedef const char * (*constcharPtrFnPtr)();
+///@}
 
-const char LIQUIDMENU_VERSION[] = "1.5"; ///< The version of the library.
 
 /// Data type enum.
 /**
@@ -98,6 +118,7 @@ enum class DataType : uint8_t {
   CONST_CHAR_PTR = 62,
   PROG_CONST_CHAR_PTR = 65,
   GLYPH = 70,
+  FIRST_GETTER = 200,
   BOOL_GETTER = 201, BOOLEAN_GETTER = 201,
   INT8_T_GETTER = 208,
   UINT8_T_GETTER = 209, BYTE_GETTER = 209,
@@ -247,7 +268,7 @@ DataType recognizeType(int32tFnPtr variable);
 @param variable - variable to be checked
 @returns the data type in `DataType` enum format
 */
-DataType recognizeType(uint32tFnPtr varible);
+DataType recognizeType(uint32tFnPtr variable);
 
 
 /**
@@ -286,9 +307,9 @@ DataType recognizeType(constcharPtrFnPtr variable);
 
 
 
-/// Prints the number passed to it in a specific way.
+/// Debug prints an address
 /**
-Used for convenience when printing the class's address for indentification.
+Used for convenience when printing the class's address for identification.
 
 @param address - number to be printed
 */
@@ -320,15 +341,16 @@ public:
   LiquidLine(uint8_t column, uint8_t row)
     : _row(row), _column(column), _focusRow(row - 1),
       _focusColumn(column - 1), _focusPosition(Position::NORMAL),
-      _variableCount(0), _focusable(false) {
+      _floatDecimalPlaces(2), _variableCount(0), _focusable(false) {
+
     for (uint8_t i = 0; i < MAX_VARIABLES; i++) {
       _variable[i] = nullptr;
       _variableType[i] = DataType::NOT_USED;
     }
+
     for (uint8_t f = 0; f < MAX_FUNCTIONS; f++) {
       _function[f] = 0;
     }
-	  _floatDecimalPlaces = 2;
   }
 
   /// Constructor for one variable/constant.
@@ -408,31 +430,33 @@ public:
   */
   template <typename T>
   bool add_variable(T &variable) {
-    print_me(reinterpret_cast<uintptr_t>(this));
+    DEBUG(F("LLine ")); print_me(reinterpret_cast<uintptr_t>(this));
+
+    DataType varType = recognizeType(variable);
+
+    #if LIQUIDMENU_DEBUG
+    DEBUG(F("Add "));
+    if ((uint8_t)varType < (uint8_t)DataType::FIRST_GETTER) {
+      DEBUG(F("variable \""));
+      DEBUG(variable);
+    } else {
+      DEBUG(F("getter \"N/A"));
+    }
+    DEBUG(F("\" of DataType("));
+    DEBUG((uint8_t)varType); DEBUG(F(")"));
+    #endif
+
     if (_variableCount < MAX_VARIABLES) {
       _variable[_variableCount] = (void*)&variable;
-      _variableType[_variableCount] = recognizeType(variable);
-#     if LIQUIDMENU_DEBUG
-        DEBUG(F("Added variable "));
-        // Check if the variable is actually a getter functions
-        // and don't diplay it if so.
-        if ((uint8_t)_variableType[_variableCount] < 200) { // 200+ are getters
-          DEBUG(reinterpret_cast<uintptr_t>(variable)); DEBUGLN(F(""));
-        }
-#     endif
+      _variableType[_variableCount] = varType;
       _variableCount++;
+      
+      DEBUGLN(F(""));
       return true;
+    } else {
+      DEBUGLN(F(" failed, edit LiquidMenu_config.h to allow for more variables"));
+      return false;
     }
-#   if LIQUIDMENU_DEBUG
-      DEBUG(F("Adding variable "));
-      // Check if the variable is actually a getter functions
-      // and don't diplay it if so.
-      if ((uint8_t)_variableType[_variableCount] < 200) { // 200+ are getters
-        DEBUG(reinterpret_cast<uintptr_t>(variable));
-      }
-#   endif
-    DEBUGLN(F(" failed, edit LiquidMenu_config.h to allow for more variables"));
-    return false;
   }
 
   /// Attaches a callback function to the line.
@@ -695,6 +719,10 @@ private:
   /**
   Switches the focus to the next or previous line
   according to the passed parameter.
+  
+  @note After one iteration through the focusable lines is completed, the focus
+  indicator will hide for one step. To disable this behavior set
+  `LM_FOCUS_INDICATOR_GHOSTING` to false in `LiquiMenu_config.h`
 
   @param forward - true for forward, false for backward
   */
@@ -980,13 +1008,14 @@ public:
   screen and for the focused line.
 
   @param number - number of the function in the array
+  @param refresh - enable/disable updating the display
   @returns true if there is a function at the specified number
 
   @note Function numbering starts from 1.
 
   @see bool LiquidLine::attach_function(uint8_t number, void (*function)(void))
   */
-  bool call_function(uint8_t number) const;
+  bool call_function(uint8_t number, bool refresh = true) const;
 
   /// Prints the current screen to the display.
   /**
@@ -1243,13 +1272,14 @@ public:
   screen and for the focused line.
 
   @param number - number of the function in the array
+  @param refresh - enable/disable updating the display
   @returns true if there is a function at the specified number
 
   @note Function numbering starts from 1.
 
   @see bool LiquidLine::attach_function(uint8_t number, void (*function)(void))
   */
-  bool call_function(uint8_t number) const;
+  bool call_function(uint8_t number, bool refresh = true) const;
 
   /// Prints the current screen to the display.
   /**

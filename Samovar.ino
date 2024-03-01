@@ -143,6 +143,8 @@ cppQueue  msg_q(100, 5, FIFO);
 
 #include "I2CStepper.h"
 
+//#include <HTTPClient.h>
+//HTTPClient client;
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
 //**************************************************************************************************************
@@ -772,7 +774,7 @@ void setup() {
   //Настраиваем меню
   Serial.println(F("Samovar started"));
   setupMenu();
-  writeString("      Samovar ", 1);
+  writeString(F("      Samovar "), 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   //delay(2000);
   writeString(F("Connecting to WI-FI"), 3);
@@ -848,7 +850,7 @@ void setup() {
   if (SamSetup.blynkauth[0] != 0 && !wifiAP) {
     //Blynk.begin(auth, ssid, password);
     writeString(F("Connecting to Blynk "), 3);
-    writeString("               ", 4);
+    writeString(F("               "), 4);
 #ifdef __SAMOVAR_DEBUG
     Serial.println(F("Connecting to Blynk"));
 #endif
@@ -1005,10 +1007,10 @@ void setup() {
   lua_init();
 #endif
 
-  writeString("      Samovar     ", 1);
+  writeString(F("      Samovar     "), 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
-  writeString("                  ", 3);
-  writeString("      Started     ", 4);
+  writeString(F("                  "), 3);
+  writeString(F("      Started     "), 4);
   //  Serial.print("CPU Frequency is: ");
   //  Serial.println(getCpuFrequencyMhz());
   Serial.println("Samovar ready");
@@ -1044,7 +1046,7 @@ void loop() {
   }
 #endif
 
-  ::ws.cleanupClients();
+  //::ws.cleanupClients();
 
 #ifdef ALARM_BTN_PIN
   alarm_btn.tick();      // отработка нажатия аварийной кнопки
