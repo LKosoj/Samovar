@@ -239,18 +239,18 @@ String append_data() {
   w = false;
 
   //Если режим ректификация и идет отбор, запишем в файл текущий статус
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE) {
-    File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
-    String s;
-    s = "P=" + String(ProgramNum + 1);
-    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-      s += ";V=" + get_liquid_volume();
-    } else {
-      s += ";T=" + WthdrwTimeS;
-    }
-    fileState.println(s);
-    fileState.close();
-  }
+//  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE) {
+//    File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
+//    String s;
+//    s = "P=" + String(ProgramNum + 1);
+//    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+//      s += ";V=" + get_liquid_volume();
+//    } else {
+//      s += ";T=" + WthdrwTimeS;
+//    }
+//    fileState.println(s);
+//    fileState.close();
+//  }
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SteamSensor.LogPrevTemp) {
