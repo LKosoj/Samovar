@@ -508,7 +508,7 @@ unsigned long alarm_c_low_min;                                  // Время д
 volatile float prev_target_power_volt;                          // Предыдущее заданное напряжение регулятора
 volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
 byte power_err_cnt;                                             // Счетчик ошибок по напряжению/мощности
-#define TIME_C 5                                                // Время ожидания в минутах для программы режима предзахлеба
+#define TIME_C 4                                                // Время ожидания в минутах для программы режима предзахлеба
 #endif
 
 #ifdef USE_WATER_PUMP
