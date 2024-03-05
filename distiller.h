@@ -34,7 +34,7 @@ void distiller_proc() {
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
-    SendMsg(F("Включен нагрев дистиллятора"), NOTIFY_MSG);
+    SendMsg(("Включен нагрев дистиллятора"), NOTIFY_MSG);
     run_dist_program(0);
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
@@ -69,7 +69,7 @@ void distiller_proc() {
       d_s_temp_finish = TankSensor.avgTemp;
       d_s_time_min = millis();
     } else if ((millis() - d_s_time_min) > SamSetup.DistTimeF * 60 * 1000) {
-      SendMsg(F("В кубе не осталось спирта"), NOTIFY_MSG);
+      SendMsg(("В кубе не осталось спирта"), NOTIFY_MSG);
       distiller_finish();
     }
   }
@@ -80,7 +80,7 @@ void distiller_finish() {
 #ifdef SAMOVAR_USE_POWER
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
-  SendMsg(F("Дистилляция завершена"), NOTIFY_MSG);
+  SendMsg(("Дистилляция завершена"), NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
 }
@@ -137,14 +137,14 @@ void check_alarm_distiller() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    SendMsg(F("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
+    SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
   }
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(F("Критическая температура воды!"), WARNING_MSG);
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
     check_power_error();

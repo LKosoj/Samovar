@@ -367,7 +367,7 @@ void triggerSysTicker(void *parameter) {
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
     //Проверим, что давление не вышло за пределы, если вышло - авария
     if (SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue) {
-      SendMsg(F("Превышено предельное давление!"), ALARM_MSG);
+      SendMsg("Превышено предельное давление!", ALARM_MSG);
       set_alarm();
     }
 #endif
@@ -588,23 +588,23 @@ void triggerSysTicker(void *parameter) {
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
       if (SteamSensor.ErrCount > 10) {
         SteamSensor.ErrCount = -110;
-        SendMsg(F("Ошибка датчика температуры пара!"), ALARM_MSG);
+        SendMsg(("Ошибка датчика температуры пара!"), ALARM_MSG);
       }
       if (PipeSensor.ErrCount > 10) {
         PipeSensor.ErrCount = -110;
-        SendMsg(F("Ошибка датчика температуры царги!"), ALARM_MSG);
+        SendMsg(("Ошибка датчика температуры царги!"), ALARM_MSG);
       }
       if (WaterSensor.ErrCount > 10) {
         WaterSensor.ErrCount = -110;
-        SendMsg(F("Ошибка датчика температуры воды!"), ALARM_MSG);
+        SendMsg(("Ошибка датчика температуры воды!"), ALARM_MSG);
       }
       if (TankSensor.ErrCount > 10) {
         TankSensor.ErrCount = -110;
-        SendMsg(F("Ошибка датчика температуры куба!"), ALARM_MSG);
+        SendMsg(("Ошибка датчика температуры куба!"), ALARM_MSG);
       }
       if (ACPSensor.ErrCount > 10) {
         ACPSensor.ErrCount = -110;
-        SendMsg(F("Ошибка датчика температуры в ТСА!"), ALARM_MSG);
+        SendMsg(("Ошибка датчика температуры в ТСА!"), ALARM_MSG);
       }
 
       OldMinST = CurMinST;
@@ -614,6 +614,7 @@ void triggerSysTicker(void *parameter) {
 }
 
 void setup() {
+  Serial.begin(115200);
   pinMode(0, INPUT);
   delay(300);
   if (digitalRead(0) == LOW) {
@@ -622,7 +623,6 @@ void setup() {
     WiFi.disconnect(true, true);
     WiFi.persistent(false);
   }
-  Serial.begin(115200);
 #ifdef __SAMOVAR_NOT_USE_WDT
   esp_task_wdt_init(1, false);
   esp_task_wdt_init(2, false);

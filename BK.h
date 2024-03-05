@@ -19,7 +19,7 @@ void set_water_temp(float duty) {
     water_pump_speed = bk_pwm;
   }
 #else
-  SendMsg(F("Управление насосом не поддерживается вашим оборудованием"), NOTIFY_MSG);
+  SendMsg(("Управление насосом не поддерживается вашим оборудованием"), NOTIFY_MSG);
 #endif
 }
 
@@ -40,7 +40,7 @@ void bk_proc() {
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
-    SendMsg(F("Включен нагрев бражной колонны"), NOTIFY_MSG);
+    SendMsg(("Включен нагрев бражной колонны"), NOTIFY_MSG);
   }
 
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
@@ -50,7 +50,7 @@ void bk_proc() {
 }
 
 void bk_finish() {
-  SendMsg(F("Работа бражной колонны завершена"), NOTIFY_MSG);
+  SendMsg(("Работа бражной колонны завершена"), NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
 }
@@ -93,7 +93,7 @@ void check_alarm_bk() {
     set_buzzer(true);
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
     set_power(false);
-    SendMsg(F("Аварийное отключение! Превышена максимальная температура воды охлаждения!"), ALARM_MSG);
+    SendMsg(("Аварийное отключение! Превышена максимальная температура воды охлаждения!"), ALARM_MSG);
   }
 
 #ifdef USE_WATERSENSOR
@@ -102,14 +102,14 @@ void check_alarm_bk() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    SendMsg(F("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
+    SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
   }
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(F("Критическая температура воды!"), WARNING_MSG);
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
 

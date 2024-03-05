@@ -241,12 +241,11 @@ String append_data() {
   //Если режим ректификация и идет отбор, запишем в файл текущий статус
 //  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE) {
 //    File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
-//    String s;
-//    s = "P=" + String(ProgramNum + 1);
+//    String sapd = "P=" + String(ProgramNum + 1);
 //    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-//      s += ";V=" + get_liquid_volume();
+//      sapd += ";V=" + get_liquid_volume();
 //    } else {
-//      s += ";T=" + WthdrwTimeS;
+//      sapd += ";T=" + WthdrwTimeS;
 //    }
 //    fileState.println(s);
 //    fileState.close();

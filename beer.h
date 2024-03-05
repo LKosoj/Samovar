@@ -76,7 +76,7 @@ void beer_finish() {
   PowerOn = false;
   heater_state = false;
   startval = 0;
-  SendMsg(F("Программа затирания завершена"), NOTIFY_MSG);
+  SendMsg(("Программа затирания завершена"), NOTIFY_MSG);
   delay(200);
   set_power(false);
   reset_sensor_counter();
@@ -111,7 +111,7 @@ void check_alarm_beer() {
   if (program[ProgramNum].WType != "C" and program[ProgramNum].WType != "F" and valve_status && PowerOn) {
     //Закрываем клапан воды
     open_valve(false);
-    SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+    SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
   }
 
   //Если программа - ожидание - ждем, ничего не делаем
@@ -144,7 +144,7 @@ void check_alarm_beer() {
       if (valve_status) {
         //Закрываем клапан воды
         open_valve(false);
-        SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+        SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       }
       //Поддерживаем целевую температуру
       set_heater_state(program[ProgramNum].Temp, temp);
@@ -155,7 +155,7 @@ void check_alarm_beer() {
           setHeaterPosition(false);
           //Открываем клапан воды
           open_valve(true);
-          SendMsg(F("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+          SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
         }
       }
     } else {
@@ -165,7 +165,7 @@ void check_alarm_beer() {
       //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
       if ((temp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status && PowerOn) {
         open_valve(false);
-        SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+        SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       }
     }
   }
@@ -174,7 +174,7 @@ void check_alarm_beer() {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer(true);
-      SendMsg(F("Достигнута температура засыпи солода!"), NOTIFY_MSG);
+      SendMsg(("Достигнута температура засыпи солода!"), NOTIFY_MSG);
     }
     startval = 2002;
   }
@@ -183,7 +183,7 @@ void check_alarm_beer() {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
-      SendMsg(F("Достигнута температурная пауза. Ждем завершения."), NOTIFY_MSG);
+      SendMsg(("Достигнута температурная пауза. Ждем завершения."), NOTIFY_MSG);
     }
     //Проверяем, что еще нужно держать паузу
     if ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time) {
@@ -199,7 +199,7 @@ void check_alarm_beer() {
       setHeaterPosition(false);
       //Открываем клапан воды
       open_valve(true);
-      SendMsg(F("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+      SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
 #ifdef USE_WATER_PUMP
       if (pump_started) set_pump_pwm(1023);
 #endif
@@ -208,7 +208,7 @@ void check_alarm_beer() {
       //Если температура упала
       //Закрываем клапан воды
       open_valve(false);
-      SendMsg(F("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+      SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }
@@ -224,7 +224,7 @@ void check_alarm_beer() {
       if (abs(temp - BOILING_TEMP) <= 0.5) {
         msgfl = true;
         begintime = millis();
-        SendMsg(F("Начался режим кипячения"), NOTIFY_MSG);
+        SendMsg(("Начался режим кипячения"), NOTIFY_MSG);
       }
     }
 
@@ -252,7 +252,7 @@ void check_alarm_beer() {
     if (begintime > 0 && msgfl && ((float(millis()) - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {
       set_buzzer(true);
       msgfl = false;
-      SendMsg(F("Засыпьте хмель!"), NOTIFY_MSG);
+      SendMsg(("Засыпьте хмель!"), NOTIFY_MSG);
 #ifdef __SAMOVAR_DEBUG
       Serial.println("Засыпьте хмель!");
 #endif

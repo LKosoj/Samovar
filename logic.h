@@ -109,7 +109,7 @@ void set_alarm() {
 #ifdef USE_WATER_PUMP
   set_pump_pwm(0);
 #endif
-  SendMsg(F("Аварийное отключение!"), ALARM_MSG);
+  SendMsg(("Аварийное отключение!"), ALARM_MSG);
 }
 
 void withdrawal(void) {
@@ -182,13 +182,13 @@ void withdrawal(void) {
         pause_withdrawal(true);
         t_min = millis() + SteamSensor.Delay * 1000;
         set_buzzer(true);
-        SendMsg(F("Пауза по Т пара"), WARNING_MSG);
+        SendMsg(("Пауза по Т пара"), WARNING_MSG);
       }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
-    SendMsg(F("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
+    SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     setautospeed = true;
     t_min = 0;
     program_Wait = false;
@@ -231,13 +231,13 @@ void withdrawal(void) {
         pause_withdrawal(true);
         t_min = millis() + PipeSensor.Delay * 1000;
         set_buzzer(true);
-        SendMsg(F("Пауза по Т царги"), WARNING_MSG);
+        SendMsg(("Пауза по Т царги"), WARNING_MSG);
       }
     // если время вышло, еще раз пытаемся дождаться
     if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
-    SendMsg(F("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
+    SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     setautospeed = true;
     t_min = 0;
     program_Wait = false;
@@ -489,7 +489,7 @@ void run_program(byte num) {
       fileToAppend.close();
     }
     set_power(false);
-    SendMsg(F("Выполнение программы завершено."), NOTIFY_MSG);
+    SendMsg(("Выполнение программы завершено."), NOTIFY_MSG);
   } else {
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
@@ -596,7 +596,7 @@ void set_body_temp() {
     TankSensor.BodyTemp = TankSensor.avgTemp;
     SendMsg("Новые Т тела: пар = " + String(SteamSensor.BodyTemp) + ", царга = " + String(PipeSensor.BodyTemp), WARNING_MSG);
   } else {
-    SendMsg(F("Не возможно установить Т тела."), WARNING_MSG);
+    SendMsg(("Не возможно установить Т тела."), WARNING_MSG);
   }
 }
 
@@ -629,7 +629,7 @@ void check_alarm() {
       whls.resetStates();
       if (program[ProgramNum].WType != "C") {
         set_buzzer(true);
-        SendMsg(F("Сработал датчик захлёба!"), ALARM_MSG);
+        SendMsg(("Сработал датчик захлёба!"), ALARM_MSG);
 #ifdef SAMOVAR_USE_POWER
         alarm_c_min = 0;
         alarm_c_low_min = 0;
@@ -749,7 +749,7 @@ void check_alarm() {
 
     if (TankSensor.avgTemp >= SamSetup.DistTemp) {
       //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
-      SendMsg(F("Лимит максимальной температуры куба. Программа завершена."), NOTIFY_MSG);
+      SendMsg(("Лимит максимальной температуры куба. Программа завершена."), NOTIFY_MSG);
     } else
       SendMsg("Аварийное отключение! Превышена максимальная температура" + s, ALARM_MSG);
   }
@@ -760,14 +760,14 @@ void check_alarm() {
     set_buzzer(true);
     //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
-    SendMsg(F("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
+    SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
   }
 #endif
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(F("Критическая температура воды!"), WARNING_MSG);
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
@@ -819,7 +819,7 @@ void check_alarm() {
       if (acceleration_temp == 60 * 6) {
         SamovarStatusInt = 52;
         set_buzzer(true);
-        SendMsg(F("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
+        SendMsg(("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
       }
     } else {
       acceleration_temp = 0;
@@ -838,11 +838,11 @@ void check_alarm() {
 void open_valve(bool Val) {
   if (Val && !alarm_event) {
     valve_status = true;
-    SendMsg(F("Откройте подачу воды!"), WARNING_MSG);
+    SendMsg(("Откройте подачу воды!"), WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
     valve_status = false;
-    SendMsg(F("Закройте подачу воды!"), WARNING_MSG);
+    SendMsg(("Закройте подачу воды!"), WARNING_MSG);
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
 }
@@ -1099,7 +1099,7 @@ bool check_boiling() {
 
 void start_self_test(void) {
   is_self_test = true;
-  SendMsg(F("Запуск самотестирования."), NOTIFY_MSG);
+  SendMsg(("Запуск самотестирования."), NOTIFY_MSG);
   open_valve(true);
 #ifdef USE_WATER_PUMP
   //включаем насос воды
@@ -1121,7 +1121,7 @@ void start_self_test(void) {
   }
   vTaskDelay(15000 / portTICK_PERIOD_MS);
   stop_self_test();
-  SendMsg(F("Самотестирование закончено."), NOTIFY_MSG);
+  SendMsg(("Самотестирование закончено."), NOTIFY_MSG);
 }
 
 void stop_self_test(void) {
@@ -1262,7 +1262,7 @@ void check_power_error() {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
-      SendMsg(F("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
+      SendMsg(("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
     }
   } else
 #endif
