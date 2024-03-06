@@ -676,6 +676,7 @@ void check_alarm() {
 #else
         set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
 #endif
+        SendMsg((String)PWR_MSG + " повышаем до " + (String)target_power_volt, NOTIFY_MSG);
         prev_target_power_volt = 0;
         //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
         alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
