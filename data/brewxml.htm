@@ -161,7 +161,7 @@ function get_brewmate_info(xml){
 	recipe.RECIPES.RECIPE.NAME = recipe.recipe.namerecipe;
 	recipe.RECIPES.RECIPE.BATCH_SIZE = recipe.recipe.part;
 	recipe.RECIPES.RECIPE.BOIL_TIME = recipe.recipe.timeboil;
-	recipe.RECIPES.RECIPE.PRIMARY_TEMP = recipe.recipe.timebro;
+	recipe.RECIPES.RECIPE.FERMENTABLE_TIME = recipe.recipe.timebro;
 	//recipe.RECIPES.RECIPE.NOTES = recipe.recipe.comms.comm.lin;
 	
 	recipe.RECIPES.RECIPE.YEASTS = Object.create(null);
@@ -190,7 +190,7 @@ function get_brewmate_info(xml){
     } else {HOP.push(recipe.RECIPES.RECIPE.HOPS.HOP) }
     for (let hop of HOP){
 		hop.NAME = hop.hopname;
-		hop.AMOUNT = hop.hopproc;
+		hop.AMOUNT = hop.hopgr;
 		hop.TIME = hop.hoptime;
 	}
 
@@ -235,6 +235,8 @@ function get_recipe(recipe){
     document.getElementById("BOIL_TIME").textContent = get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME, " мин.");
     document.getElementById("NOTES").innerHTML = get_object_value(recipe.RECIPES.RECIPE.NOTES);
     document.getElementById("PRIMARY_TEMP").innerHTML = get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP, " &deg;С");
+    document.getElementById("FERMENTABLE_TIME").innerHTML = get_object_value(recipe.RECIPES.RECIPE.FERMENTABLE_TIME, " дней");
+
         
     //show ingredients
     var dl = document.createElement("div");
@@ -517,6 +519,9 @@ Samovar v. <span id='version'>%v%</span>
 </div>
 <div>
 <label>Время кипения: </label><label class="specs" id="BOIL_TIME"></label>
+</div>
+<div>
+<label>Время брожения: </label><label class="specs" id="FERMENTABLE_TIME"></label>
 </div>
 <div>
 <label>Заметки: </label><label class="specs" id="NOTES"></label>
