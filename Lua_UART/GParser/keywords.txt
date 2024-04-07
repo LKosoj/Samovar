@@ -1,0 +1,47 @@
+#######################################
+# Syntax Coloring Map For GParser
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+GParser	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+setDiv	KEYWORD2
+clear	KEYWORD2
+amount	KEYWORD2
+split	KEYWORD2
+getInt	KEYWORD2
+getFloat	KEYWORD2
+equals	KEYWORD2
+parseInts	KEYWORD2
+parseBytes	KEYWORD2
+parseLongs	KEYWORD2
+buf	KEYWORD2
+str	KEYWORD2
+restore	KEYWORD2
+
+GP_listSize	KEYWORD2
+GP_splitList	KEYWORD2
+GP_inList	KEYWORD2
+GP_numToChar	KEYWORD2
+GP_floatToChar	KEYWORD2
+GP_charToNum	KEYWORD2
+GP_charToFloat	KEYWORD2
+GP_numFromList	KEYWORD2
+GP_listToNum	KEYWORD2
+GP_decodeColor	KEYWORD2
+
+GP_urlencode	KEYWORD2
+GP_urldecode	KEYWORD2
+GP_uniencode	KEYWORD2
+GP_unistrlen	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
