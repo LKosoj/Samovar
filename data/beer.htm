@@ -374,6 +374,7 @@
           else if (myObj.PrgType === "C") myObj.PrgType = "Охлаждение; "
           else if (myObj.PrgType === "W") myObj.PrgType = "Ожидание; "
           else if (myObj.PrgType === "F") myObj.PrgType = "Брожение; "
+          else if (myObj.PrgType === "A") myObj.PrgType = "Автотюнинг; "
           document.getElementById('Status').innerHTML = myObj.PrgType + myObj.Status;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
@@ -478,7 +479,7 @@
       num.className = "prglabel";
       dl.appendChild(num);
 
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брожение</option></select>');
+      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брожение</option><option value="A">Автотюнинг</option></select>');
 
       //  var ptype = dl.getElementsByName("ptype");
       //  ptype[0].value = arr[0];
@@ -868,7 +869,7 @@
           <label>Выкл мин</label>
         </div>
         <div id="popup_mesh" class="modalline">
-          <select id="m_type" style="margin-left: 4px !important;"><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select>
+          <select id="m_type" style="margin-left: 4px !important;"><option value="0">Выключено</option><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select>
           <select id="m_direction" style="margin-left: 4px !important;"><option value="-1">Реверс после паузы</option><option value="0">Вращение в прямом направлении</option><option value="1">Вращение в обратную сторону</option></select>
           <input type="text" id="m_time" style="padding-top: 4px !important; padding-bottom: 4px !important; height: 31px !important;">
           <input type="text" id="m_pause" style="padding-top: 4px !important; padding-bottom: 4px !important; height: 31px !important;">
