@@ -67,7 +67,7 @@ void run_beer_program(byte num) {
 
 void beer_finish() {
   if (valve_status) {
-    open_valve(false);
+    open_valve(false, true);
   }
 #ifdef USE_WATER_PUMP
   if (pump_started) set_pump_pwm(0);
@@ -110,8 +110,7 @@ void check_alarm_beer() {
   //Проверяем, что клапан воды охлаждения не открыт, когда не нужно
   if (program[ProgramNum].WType != "C" and program[ProgramNum].WType != "F" and valve_status && PowerOn) {
     //Закрываем клапан воды
-    open_valve(false);
-    SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+    open_valve(false, false);
   }
 
   //Если программа - ожидание - ждем, ничего не делаем
@@ -143,8 +142,7 @@ void check_alarm_beer() {
     if (temp <= program[ProgramNum].Temp - TankSensor.SetTemp) {
       if (valve_status) {
         //Закрываем клапан воды
-        open_valve(false);
-        SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+        open_valve(false, false);
       }
       //Поддерживаем целевую температуру
       set_heater_state(program[ProgramNum].Temp, temp);
@@ -154,8 +152,7 @@ void check_alarm_beer() {
           //Отключаем нагреватель
           setHeaterPosition(false);
           //Открываем клапан воды
-          open_valve(true);
-          SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+          open_valve(true, false);
         }
       }
     } else {
@@ -164,8 +161,7 @@ void check_alarm_beer() {
       setHeaterPosition(false);
       //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
       if ((temp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status && PowerOn) {
-        open_valve(false);
-        SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+        open_valve(false, false);
       }
     }
   }
@@ -198,8 +194,7 @@ void check_alarm_beer() {
       begintime = millis();
       setHeaterPosition(false);
       //Открываем клапан воды
-      open_valve(true);
-      SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+      open_valve(true, false);
 #ifdef USE_WATER_PUMP
       if (pump_started) set_pump_pwm(1023);
 #endif
@@ -207,8 +202,7 @@ void check_alarm_beer() {
     if (temp <= program[ProgramNum].Temp) {
       //Если температура упала
       //Закрываем клапан воды
-      open_valve(false);
-      SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+      open_valve(false, false);
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }

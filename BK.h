@@ -5,7 +5,7 @@ void bk_finish();
 void set_power_mode(String Mode);
 void set_power(bool On);
 void create_data();
-void open_valve(bool Val);
+void open_valve(bool Val, bool msg);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void SendMsg(String m, MESSAGE_TYPE msg_type);
@@ -61,7 +61,7 @@ void check_alarm_bk() {
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
-    open_valve(true);
+    open_valve(true, true);
 #ifdef USE_WATER_PUMP
     set_pump_pwm(bk_pwm);
 #endif
@@ -82,7 +82,7 @@ void check_alarm_bk() {
   }
 
   if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
-    open_valve(false);
+    open_valve(false, true);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
 #endif

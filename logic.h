@@ -21,7 +21,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 unsigned int hexToDec(String hexString);
 void set_current_power(float Volt);
 void set_power_mode(String Mode);
-void open_valve(bool Val);
+void open_valve(bool Val, bool msg);
 void stopService(void);
 void startService(void);
 void reset_sensor_counter(void);
@@ -105,7 +105,7 @@ void set_alarm() {
   }
   set_power(false);
   alarm_event = true;
-  open_valve(false);
+  open_valve(false, true);
 #ifdef USE_WATER_PUMP
   set_pump_pwm(0);
 #endif
@@ -708,15 +708,15 @@ void check_alarm() {
 #endif
 
   if (!valve_status) {
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true);
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true, true);
     else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
       set_buzzer(true);
-      open_valve(true);
+      open_valve(true, true);
     }
   }
 
   if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
-    open_valve(false);
+    open_valve(false, true);
     set_buzzer(true);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
@@ -836,14 +836,22 @@ void check_alarm() {
 #endif
 }
 
-void open_valve(bool Val) {
+void open_valve(bool Val, bool msg = true) {
   if (Val && !alarm_event) {
     valve_status = true;
-    SendMsg(("Откройте подачу воды!"), WARNING_MSG);
+    if (msg) {
+      SendMsg(("Откройте подачу воды!"), WARNING_MSG);
+    } else {
+      SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
+    }
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
     valve_status = false;
-    SendMsg(("Закройте подачу воды!"), WARNING_MSG);
+    if (msg) {
+      SendMsg(("Закройте подачу воды!"), WARNING_MSG);
+    } else {
+      SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
+    }
     digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
 }
@@ -1101,7 +1109,7 @@ bool check_boiling() {
 void start_self_test(void) {
   is_self_test = true;
   SendMsg(("Запуск самотестирования."), NOTIFY_MSG);
-  open_valve(true);
+  open_valve(true, true);
 #ifdef USE_WATER_PUMP
   //включаем насос воды
   set_pump_pwm((PWM_START_VALUE + 20) * 10);
@@ -1130,7 +1138,7 @@ void stop_self_test(void) {
   //выключаем насос воды
   set_pump_pwm(0);
 #endif
-  open_valve(false);
+  open_valve(false, true);
   set_capacity(0);
   stopService();
   is_self_test = false;

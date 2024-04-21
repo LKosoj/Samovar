@@ -39,7 +39,7 @@ void load_lua_script();
 void set_power(bool On);
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 String get_global_variables();
-void open_valve(bool Val);
+void open_valve(bool Val, bool msg);
 void set_current_power(float Volt);
 void set_body_temp();
 void set_mixer(bool On);
@@ -213,7 +213,7 @@ static int lua_wrapper_set_mixer(lua_State *lua_state) {
 static int lua_wrapper_open_valve(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   bool a = luaL_checkinteger(lua_state, 1);
-  open_valve(a);
+  open_valve(a, false);
   return 0;
 }
 
@@ -425,6 +425,10 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = water_pump_speed;
   } else if (Var == "pressure_value") {
     a = pressure_value;
+  } else if (Var == "PauseOn") {
+    a = PauseOn;
+  } else if (Var == "program_Wait") {
+    a = program_Wait;
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {
@@ -909,10 +913,10 @@ String run_lua_string(String lstr) {
       WriteConsoleLog(F("--END LUA SCRIPT--"));
     }
 #ifdef USE_MQTT
-  String MsgPl = lstr;
-  MsgPl.replace(",", ";");
-  MqttSendMsg(MsgPl + "," + NOTIFY_MSG, "msg");
-#endif    
+    String MsgPl = lstr;
+    MsgPl.replace(",", ";");
+    MqttSendMsg(MsgPl + "," + NOTIFY_MSG, "msg");
+#endif
     sr = lua.Lua_dostring(&lstr);
     sr.trim();
     if (sr != "") {

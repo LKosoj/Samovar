@@ -5,7 +5,7 @@ void distiller_finish();
 void set_power_mode(String Mode);
 void set_power(bool On);
 void create_data();
-void open_valve(bool Val);
+void open_valve(bool Val, bool msg);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void set_dist_program(String WProgram);
@@ -91,15 +91,15 @@ void check_alarm_distiller() {
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
-    open_valve(true);
+    open_valve(true, true);
   }
 
   if (!valve_status) {
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true);
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true, true);
   }
 
   if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE) {
-    open_valve(false);
+    open_valve(false, true);
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
 #endif
