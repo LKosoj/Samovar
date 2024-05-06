@@ -14,6 +14,9 @@ bool  ESP32PWM::explicateAllocationMode=false;
 ESP32PWM * ESP32PWM::ChannelUsed[NUM_PWM]; // used to track whether a channel is in service
 long ESP32PWM::timerFreqSet[4] = { -1, -1, -1, -1 };
 int ESP32PWM::timerCount[4] = { 0, 0, 0, 0 };
+
+static const char* TAG = "ESP32PWM";
+
 // The ChannelUsed array elements are 0 if never used, 1 if in use, and -1 if used and disposed
 // (i.e., available for reuse)
 /**
@@ -111,16 +114,15 @@ int ESP32PWM::allocatenext(double freq) {
 	} else {
 		return pwmChannel;
 	}
-	Serial.println(
-			"ERROR All PWM timers allocated! Can't accomodate " + String(freq)
-					+ "Hz\r\nHalting...");
+	ESP_LOGE(TAG, 
+			"ERROR All PWM timers allocated! Can't accomodate %d Hz\r\nHalting...", freq);
 	while (1)
 		;
 }
 void ESP32PWM::deallocate() {
 	if (pwmChannel < 0)
 		return;
-// 	Serial.println("PWM deallocating LEDc #" + String(pwmChannel));
+	ESP_LOGV(TAG, "PWM deallocating LEDc #%d",pwmChannel);
 	timerCount[getTimer()]--;
 	if (timerCount[getTimer()] == 0) {
 		timerFreqSet[getTimer()] = -1; // last pwn closed out
@@ -135,7 +137,7 @@ void ESP32PWM::deallocate() {
 
 int ESP32PWM::getChannel() {
 	if (pwmChannel < 0) {
-		Serial.println("FAIL! must setup() before using get channel!");
+		ESP_LOGE(TAG, "FAIL! must setup() before using get channel!");
 	}
 	return pwmChannel;
 }
@@ -234,21 +236,20 @@ void ESP32PWM::attachPin(uint8_t pin) {
 		attach(pin);
 		ledcAttachPin(pin, getChannel());
 	} else {
-		Serial.println(
-				"ERROR PWM channel unavailable on pin requested! " + String(pin)
+		
 #if defined(CONFIG_IDF_TARGET_ESP32S2)
-						+ "\r\nPWM available on: 1-21,26,33-42"
+						ESP_LOGE(TAG, "ERROR PWM channel unavailable on pin requested! %d PWM available on: 1-21,26,33-42",pin);
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-						+ "\r\nPWM available on: 1-21,35-45,47-48"
+						ESP_LOGE(TAG, "ERROR PWM channel unavailable on pin requested! %d PWM available on: 1-21,35-45,47-48",pin);
 #elif defined(CONFIG_IDF_TARGET_ESP32C3)
-						+ "\r\nPWM available on: 1-10,18-21"
+						ESP_LOGE(TAG, "ERROR PWM channel unavailable on pin requested! %d PWM available on: 1-10,18-21",pin);
 #else
-						+ "\r\nPWM available on: 2,4,5,12-19,21-23,25-27,32-33"
+						ESP_LOGE(TAG, "ERROR PWM channel unavailable on pin requested! %d PWM available on: 2,4,5,12-19,21-23,25-27,32-33",pin);
 #endif
 
 // Possible PWM GPIO pins on the ESP32-S3: 0(used by on-board button),1-21,35-45,47,48(used by on-board LED)
 // Possible PWM GPIO pins on the ESP32-C3: 0(used by on-board button),1-7,8(used by on-board LED),9-10,18-21
-		);
+		
 		return;
 	}
 	//Serial.print(" on pin "+String(pin));
@@ -296,17 +297,13 @@ bool ESP32PWM::checkFrequencyForSideEffects(double freq) {
 			if (ChannelUsed[pwm]->getTimer() == getTimer()) {
 				double diff = abs(ChannelUsed[pwm]->myFreq - freq);
 				if (abs(diff) > 0.1) {
-					Serial.println(
-							"\tWARNING PWM channel " + String(pwmChannel)
-									+ " shares a timer with channel "
-									+ String(pwm) + "\n"
-											"\tchanging the frequency to "
-									+ String(freq)
-									+ " Hz will ALSO change channel "
-									+ String(pwm)
-									+ " \n\tfrom its previous frequency of "
-									+ String(ChannelUsed[pwm]->myFreq) + " Hz\n"
-											" ");
+					ESP_LOGW(TAG, 
+							"\tWARNING PWM channel %d	\
+							 shares a timer with channel %d\n	\
+							\tchanging the frequency to %d		\
+							Hz will ALSO change channel %d	\
+							\n\tfrom its previous frequency of %d Hz\n "
+								,pwmChannel, pwm, freq,pwm, ChannelUsed[pwm]->myFreq);
 					ChannelUsed[pwm]->myFreq = freq;
 				}
 			}

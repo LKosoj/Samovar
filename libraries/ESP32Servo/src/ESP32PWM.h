@@ -8,6 +8,9 @@
 #ifndef LIBRARIES_ESP32SERVO_SRC_ESP32PWM_H_
 #define LIBRARIES_ESP32SERVO_SRC_ESP32PWM_H_
 #include "esp32-hal-ledc.h"
+#if defined(ARDUINO)
+	#include "Arduino.h"
+#endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32C3)
 #define NUM_PWM 6
@@ -21,7 +24,6 @@
 #define USABLE_ESP32_PWM (NUM_PWM-PWM_BASE_INDEX)
 #include <cstdint>
 
-#include "Arduino.h"
 class ESP32PWM {
 private:
 
