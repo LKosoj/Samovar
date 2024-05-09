@@ -147,11 +147,17 @@ void DS_getvalue(void) {
   //
   //  return;
 
-  float ss, ps, ws, ts, acp;
-  ss = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
-  ps = sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
+  float ss, ps, ws, ts, acp, correctT;
+
+  //Считаем корректировку температуры от атмосферного давления
+  if (bme_pressure > 0 && PowerOn) {
+    correctT = (760 - bme_pressure) * 0.037;
+  } else correctT = 0;
+
+  ss = correctT + sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
+  ps = correctT + sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
   ws = sensors.getTempC(WaterSensor.Sensor);  // считываем температуру с датчика 2
-  ts = sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
+  ts = correctT + sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
   acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
 
 #ifdef USE_PRESSURE_1WIRE
@@ -219,7 +225,7 @@ void DS_getvalue(void) {
 #endif
 }
 
-void scan_ds_adress(){
+void scan_ds_adress() {
   sensors.begin();  // стартуем датчики температуры
 
   byte dc = 0;
