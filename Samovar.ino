@@ -1328,6 +1328,9 @@ void getjson(void) {
   jsonstr += "\"Lstatus\":\""; jsonstr += Lua_status + "\"";
   jsonstr += "}";
 
+#ifdef USE_MQTT
+//  MqttSendMsg(jsonstr, "getI");
+#endif
 }
 
 void configModeCallback(AsyncWiFiManager *myWiFiManager) {
