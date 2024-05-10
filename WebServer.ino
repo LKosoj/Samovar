@@ -46,6 +46,13 @@ void change_samovar_mode() {
     server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
       request->send(SPIFFS, "/bk.htm", String(), false, indexKeyProcessor);
     });
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/nbk.htm", String(), false, indexKeyProcessor);
+    });
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+      request->send(SPIFFS, "/nbk.htm", String(), false, indexKeyProcessor);
+    });
   } else {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
     server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -427,6 +434,8 @@ String setupKeyProcessor(const String &var) {
     return "selected";
   else if (var == "BK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BK_MODE)
     return "selected";
+  else if (var == "NBK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_NBK_MODE)
+    return "selected";
   else if (var == "SUVID" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_SUVID_MODE)
     return "selected";
   else if (var == "RAL" && !SamSetup.rele1)
@@ -750,6 +759,10 @@ void web_command(AsyncWebServerRequest *request) {
         if (!PowerOn) sam_command_sync = SAMOVAR_BK;
         else
           sam_command_sync = SAMOVAR_POWER;
+      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+        if (!PowerOn) sam_command_sync = SAMOVAR_NBK;
+        else
+          sam_command_sync = SAMOVAR_POWER;
       } else
         sam_command_sync = SAMOVAR_POWER;
     } else if (request->hasArg("setbodytemp")) {
@@ -909,6 +922,7 @@ void get_web_interface() {
 
     s += get_web_file("beer.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("bk.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("nbk.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("brewxml.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("calibrate.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("chart.htm", SAVE_FILE_OVERRIDE);
@@ -920,6 +934,7 @@ void get_web_interface() {
 
     s += get_web_file("beer.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("bk.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("nbk.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("btn_button1.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("btn_button2.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("dist.lua", SAVE_FILE_IF_NOT_EXIST);

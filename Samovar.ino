@@ -139,6 +139,7 @@ cppQueue  msg_q(100, 5, FIFO);
 #include "distiller.h"
 #include "beer.h"
 #include "BK.h"
+#include "nbk.h"
 #include "SPIFFSEditor.h"
 
 #include "I2CStepper.h"
@@ -457,6 +458,8 @@ void triggerSysTicker(void *parameter) {
         check_alarm_distiller();
       } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
         check_alarm_bk();
+      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+        check_alarm_nbk();
       } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         check_alarm_beer();
         WFpulseCount = 100;
@@ -507,6 +510,8 @@ void triggerSysTicker(void *parameter) {
         WthdrwTimeAllS = h + ":" + m;
 
       } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+
+      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
 
       }
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
@@ -1093,6 +1098,12 @@ void loop() {
         sam_command_sync = SAMOVAR_BK;
       } else
         bk_finish();
+    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+      //если дистилляция включаем или выключаем
+      if (!PowerOn) {
+        sam_command_sync = SAMOVAR_NBK;
+      } else
+        nbk_finish();
     } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       //если пиво включаем или двигаем программу
       if (!PowerOn) {
@@ -1161,6 +1172,11 @@ void loop() {
         Samovar_Mode = SAMOVAR_BK_MODE;
         SamovarStatusInt = 3000;
         startval = 3000;
+        break;
+      case SAMOVAR_NBK:
+        Samovar_Mode = SAMOVAR_NBK_MODE;
+        SamovarStatusInt = 4000;
+        startval = 4000;
         break;
       case SAMOVAR_SELF_TEST:
         start_self_test();

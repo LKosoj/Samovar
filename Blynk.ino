@@ -150,6 +150,8 @@ BLYNK_WRITE(V4) {
     sam_command_sync = SAMOVAR_BEER;
   } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
     sam_command_sync = SAMOVAR_BK;
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
+    sam_command_sync = SAMOVAR_NBK;
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
     sam_command_sync = SAMOVAR_DISTILLATION;
   } else

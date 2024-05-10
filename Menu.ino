@@ -427,6 +427,14 @@ void menu_get_power() {
       set_menu_screen(3);
       samovar_reset();
     }
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    if (!PowerOn) {
+      set_menu_screen(2);
+      sam_command_sync = SAMOVAR_NBK;
+    } else {
+      set_menu_screen(3);
+      samovar_reset();
+    }
   } else {
     if (!PowerOn) {
       set_menu_screen(2);

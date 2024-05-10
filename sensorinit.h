@@ -147,12 +147,13 @@ void DS_getvalue(void) {
   //
   //  return;
 
-  float ss, ps, ws, ts, acp, correctT;
+  float ss, ps, ws, ts, acp;
+  float correctT = 0;
 
   //Считаем корректировку температуры от атмосферного давления
   if (bme_pressure > 0 && PowerOn) {
     correctT = (760 - bme_pressure) * 0.037;
-  } else correctT = 0;
+  }
 
   ss = correctT + sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
   ps = correctT + sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1

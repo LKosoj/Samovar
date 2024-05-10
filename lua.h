@@ -13,6 +13,8 @@ LuaWrapper lua;
 #include <asyncHTTPrequest.h>
 #include "I2CStepper.h"
 
+#include <TimeLib.h>
+
 #define EXPANDER_UPDATE_TIMEOUT 500
 
 #ifdef USE_MQTT
@@ -193,6 +195,8 @@ static int lua_wrapper_set_power(lua_State *lua_state) {
       sam_command_sync = SAMOVAR_BEER;
     } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
       sam_command_sync = SAMOVAR_BK;
+    } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
+      sam_command_sync = SAMOVAR_NBK;
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
       sam_command_sync = SAMOVAR_DISTILLATION;
     } else
@@ -429,6 +433,18 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = PauseOn;
   } else if (Var == "program_Wait") {
     a = program_Wait;
+  } else if (Var == "YY") {
+    a = year(time(NULL));
+  } else if (Var == "MM") {
+    a = month(time(NULL));
+  } else if (Var == "DD") {
+    a = day(time(NULL));
+  } else if (Var == "HH") {
+    a = hour(time(NULL)) + SamSetup.TimeZone;
+  } else if (Var == "MI") {
+    a = minute(time(NULL));
+  } else if (Var == "SS") {
+    a = second(time(NULL));
   } else if (Var == "test_num_val") {
     a = test_num_val;
   } else if (Var != "") {
@@ -1073,6 +1089,8 @@ String get_lua_mode_name() {
     fl = "/dist" + String(LUA_DIST) + ".lua";
   } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
     fl = "/bk" + String(LUA_BK) + ".lua";
+  } else if (Samovar_CR_Mode == SAMOVAR_NBK_MODE) {
+    fl = "/nbk" + String(LUA_NBK) + ".lua";
   } else {
     fl = "/rectificat" + String(LUA_RECT) + ".lua";
   }
