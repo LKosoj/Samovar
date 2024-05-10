@@ -125,13 +125,13 @@ void WebServerInit(void) {
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
-#ifdef USE_LUA
-  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
-  server.serveStatic("/btn_button2.lua", SPIFFS, "/btn_button2.lua");
-  server.serveStatic("/btn_button3.lua", SPIFFS, "/btn_button3.lua");
-  server.serveStatic("/btn_button4.lua", SPIFFS, "/btn_button4.lua");
-  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
-#endif
+//#ifdef USE_LUA
+//  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
+//  server.serveStatic("/btn_button2.lua", SPIFFS, "/btn_button2.lua");
+//  server.serveStatic("/btn_button3.lua", SPIFFS, "/btn_button3.lua");
+//  server.serveStatic("/btn_button4.lua", SPIFFS, "/btn_button4.lua");
+//  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
+//#endif
 
   change_samovar_mode();
 
@@ -935,12 +935,23 @@ void get_web_interface() {
     s += get_web_file("beer.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("bk.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("nbk.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_button1.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_button2.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("dist.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("init.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("rectificat.lua", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("script.lua", SAVE_FILE_IF_NOT_EXIST);
+
+    s += get_web_file("btn_rect_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_rect_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_beer_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_beer_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_dist_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_dist_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_bk_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_bk_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_nbk_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    s += get_web_file("btn_nbk_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+
+
 
     s += get_web_file("program_fruit.txt", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);

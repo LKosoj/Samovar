@@ -35,7 +35,7 @@ TaskHandle_t DoLuaScriptTask = NULL;
 volatile bool lua_finished;
 void do_lua_script(void *parameter);
 
-String get_lua_mode_name();
+String get_lua_mode_name(bool filename = true);
 void load_lua_script();
 
 void set_power(bool On);
@@ -883,7 +883,7 @@ String get_lua_script_list() {
   while (file) {
     if (!file.isDirectory()) {
       fn = file.name();
-      if (fn.substring(0, 4) == "btn_") {
+      if (fn.substring(0, 4) == "btn_" && getValue(fn, '_', 1) == get_lua_mode_name(false)) {
         String str;
         s = s + fn;
         if (fn[0] != '/') fn = "/" + fn;
@@ -1081,18 +1081,38 @@ String get_global_variables() {
   return Variables;
 }
 
-String get_lua_mode_name() {
+String get_lua_mode_name(bool filename) {
   String fl;
   if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
-    fl = "/beer" + String(LUA_BEER) + ".lua";
+    if (filename) {
+      fl = "/beer" + String(LUA_BEER) + ".lua";
+    } else {
+      fl = "beer";
+    }
   } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
-    fl = "/dist" + String(LUA_DIST) + ".lua";
+    if (filename) {
+      fl = "/dist" + String(LUA_DIST) + ".lua";
+    } else {
+      fl = "dist";
+    }
   } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
-    fl = "/bk" + String(LUA_BK) + ".lua";
+    if (filename) {
+      fl = "/bk" + String(LUA_BK) + ".lua";
+    } else {
+      fl = "bk";
+    }
   } else if (Samovar_CR_Mode == SAMOVAR_NBK_MODE) {
-    fl = "/nbk" + String(LUA_NBK) + ".lua";
+    if (filename) {
+      fl = "/nbk" + String(LUA_NBK) + ".lua";
+    } else {
+      fl = "nbk";
+    }
   } else {
-    fl = "/rectificat" + String(LUA_RECT) + ".lua";
+    if (filename) {
+      fl = "/rectificat" + String(LUA_RECT) + ".lua";
+    } else {
+      fl = "rect";
+    }
   }
   return fl;
 }
