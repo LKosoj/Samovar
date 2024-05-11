@@ -12,7 +12,11 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-#include "Samovar_ini.h"
+//определение поддерживаемых плат
+#define DEVKIT 1
+#define LILYGO 2
+#define ESP32S3 3
+
 
 #define BitIsSet(reg, bit) ((reg & (1<<bit)) != 0)
 
@@ -23,6 +27,14 @@
 #endif
 
 #define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
+
+
+#include "Samovar_ini.h"
+
+#include "user_config_override.h"
+
+#include "Samovar_pin.h"
+
 
 #ifdef USE_PRESSURE_1WIRE
 #undef USE_PRESSURE_XGZ
@@ -110,8 +122,6 @@ uint8_t temprature_sens_read();
 
 #define EEPROM_SIZE 600
 
-#include "Samovar_pin.h"
-
 //**************************************************************************************************************
 // Режимы работы регулятора напряжения
 #define POWER_WORK_MODE F("0")
@@ -119,8 +129,6 @@ uint8_t temprature_sens_read();
 #define POWER_SLEEP_MODE F("2")
 #define POWER_ERROR_MODE F("3")
 //**************************************************************************************************************
-
-#include "user_config_override.h"
 
 #ifdef SAMOVAR_USE_SEM_AVR
 #undef PWR_FACTOR
