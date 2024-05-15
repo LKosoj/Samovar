@@ -1,0 +1,8 @@
+--|Start/Stop^
+--setNumVariable("show_lua_script",0) -- включаем отладку в сом порт
+if (getNumVariable("loop_lua_fl", "NUMERIC") + 0) == 0 then
+setNumVariable("loop_lua_fl", 1) 
+else
+setNumVariable("loop_lua_fl",0) -- выключаем циклическое исполнение луа-скриптов
+print ("Ручной останов скрипта")
+end
