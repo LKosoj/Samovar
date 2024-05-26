@@ -501,6 +501,7 @@ void run_program(byte num) {
     } else if (program[num].Power != 0) {
       set_current_power(target_power_volt + program[num].Power);
     }
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     if (program[num].WType == "C" && alarm_c_low_min == 0) alarm_c_low_min = millis();
 #endif
     String p_s;
