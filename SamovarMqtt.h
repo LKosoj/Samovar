@@ -43,7 +43,7 @@ void initMqtt() {
 
 void connectToMqtt() {
   //  Serial.println("Connecting to MQTT...");
-  //  byte i;
+  //  uint8_t i;
   //  i = 0;
   mqttClient.connect();
   //  while (!mqttClient.connected()){

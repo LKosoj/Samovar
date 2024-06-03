@@ -6,6 +6,8 @@
 #include <ESPAsyncWiFiManager.h>
 
 void read_config();
+void run_program(uint8_t num);
+void set_menu_screen(uint8_t param);
 
 const char str_BACK[] PROGMEM = "<BACK";
 const char str_Steam_T[] PROGMEM = "Steam T: ";
@@ -205,7 +207,7 @@ void menu_reset_lcd() {
   }
 }
 
-void set_menu_screen(byte param) {
+void set_menu_screen(uint8_t param) {
   switch (param) {
     case 1:  //меню установок
       setup_temp_screen.hide(false);
@@ -297,7 +299,7 @@ void setup_go_back() {
   //main_menu1.change_menu(main_menu);
 }
 
-void writeString(String Str, byte num) {
+void writeString(String Str, uint8_t num) {
   switch (num) {
     case 1:
       Str.toCharArray(welcomeStrArr1, 20);

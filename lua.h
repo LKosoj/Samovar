@@ -49,7 +49,7 @@ void set_alarm();
 void pause_withdrawal(bool Pause);
 String getValue(String data, char separator, int index);
 String get_lua_script(String fn);
-void set_capacity(byte cap);
+void set_capacity(uint8_t cap);
 float get_alcohol(float t);
 float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
 bool set_mixer_pump_target(uint8_t on);
@@ -570,7 +570,7 @@ static int lua_wrapper_set_lua_status(lua_State *lua_state) {
 
 static int lua_wrapper_set_capacity(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  byte a = luaL_checknumber(lua_state, 1);
+  uint8_t a = luaL_checknumber(lua_state, 1);
   set_capacity(a);
   return 0;
 }
@@ -587,7 +587,7 @@ static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
 
 static int lua_wrapper_set_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  byte a = luaL_checknumber(lua_state, 1);
+  uint8_t a = luaL_checknumber(lua_state, 1);
   a--;
   if (a < 0 || a > 9) return 0;
   uint16_t b = luaL_checknumber(lua_state, 2);
@@ -597,7 +597,7 @@ static int lua_wrapper_set_timer(lua_State *lua_state) {
 
 static int lua_wrapper_get_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  byte a = luaL_checknumber(lua_state, 1);
+  uint8_t a = luaL_checknumber(lua_state, 1);
   uint16_t b;
   a--;
   if (a < 0 || a > 9) b = 0;
@@ -752,7 +752,7 @@ static int lua_wrapper_get_stepper_status(lua_State *lua_state) {
 
 static int lua_wrapper_set_mixer_pump_target(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  byte a = luaL_checkinteger(lua_state, 1);
+  uint8_t a = luaL_checkinteger(lua_state, 1);
   lua_pushnumber(lua_state, (lua_Number)set_mixer_pump_target(a));
   return 1;
 }
@@ -764,7 +764,7 @@ static int lua_wrapper_get_mixer_pump_status(lua_State *lua_state) {
 
 static int lua_wrapper_check_I2C_device(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  byte a = luaL_checkinteger(lua_state, 1);
+  uint8_t a = luaL_checkinteger(lua_state, 1);
   lua_pushnumber(lua_state, (lua_Number)check_I2C_device(a));
   return 1;
 }
@@ -877,7 +877,7 @@ void lua_init() {
 
 String get_lua_script_list() {
   String s, fn;
-  byte i = 1;
+  uint8_t i = 1;
   File root = SPIFFS.open("/");
   File file = root.openNextFile();
   while (file) {

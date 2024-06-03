@@ -314,7 +314,7 @@ String append_data() {
 
 void save_profile() {
   File file = SPIFFS.open(get_prf_name(), FILE_WRITE);
-  file.write((byte *)&SamSetup, sizeof(SamSetup));
+  file.write((uint8_t *)&SamSetup, sizeof(SamSetup));
   file.close();
   EEPROM.put(0, SamSetup);
   EEPROM.commit();
@@ -326,7 +326,7 @@ void load_profile() {
   if (SPIFFS.exists(f)) {
     File file = SPIFFS.open(f, FILE_READ);
     file.setTimeout(0);
-    file.read((byte *)&SamSetup, sizeof(SamSetup));
+    file.read((uint8_t *)&SamSetup, sizeof(SamSetup));
     SamSetup.Mode = Samovar_CR_Mode;
     file.close();
   } else

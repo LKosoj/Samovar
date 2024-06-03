@@ -163,7 +163,7 @@ void DS_getvalue(void) {
 
 #ifdef USE_PRESSURE_1WIRE
   float pv;
-  byte p_addr[8] = USE_PRESSURE_1WIRE;
+  uint8_t p_addr[8] = USE_PRESSURE_1WIRE;
   pv = sensors.getTempC(p_addr);   // считываем давление с расширителя по 1Wire
   if (pv > -120) pressure_value = pv;
 #endif
@@ -229,7 +229,7 @@ void DS_getvalue(void) {
 void scan_ds_adress() {
   sensors.begin();  // стартуем датчики температуры
 
-  byte dc = 0;
+  uint8_t dc = 0;
 
   while (sensors.getAddress(DSAddr[dc], dc)) {
     sensors.setResolution(DSAddr[dc], 12);  // устанавливаем разрешение для датчика
@@ -558,7 +558,7 @@ String getDSAddress(DeviceAddress deviceAddress) {
 String get_DSAddressList(String Address) {
   String s = "<option value='-1'>NONE</option>";
   String dsaddr = "";
-  for (byte i = 0; i != DScnt; i++) {
+  for (uint8_t i = 0; i != DScnt; i++) {
     dsaddr = getDSAddress(DSAddr[i]);
     s += "<option value='" + String(i) + "'";
     if (Address == dsaddr) s = s + " " + "selected";
@@ -568,7 +568,7 @@ String get_DSAddressList(String Address) {
 }
 
 void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress) {
-  for (byte dsj = 0; dsj < 8; dsj++) {
+  for (uint8_t dsj = 0; dsj < 8; dsj++) {
     DevTAddress[dsj] = DevSAddress[dsj];
   }
 }

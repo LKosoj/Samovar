@@ -17,7 +17,7 @@ void startService(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 
 
-byte check_I2C_device(byte address) {
+uint8_t check_I2C_device(uint8_t address) {
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     Wire.beginTransmission(address);
     int r = Wire.endTransmission();
@@ -31,7 +31,7 @@ byte check_I2C_device(byte address) {
 }
 
 //                              spd direction target transaction
-//byte           I2CStepper_arr[2 + 1 +       5 +    1           = 9]
+//uint8_t           I2CStepper_arr[2 + 1 +       5 +    1           = 9]
 
 //spd - скорость в оборотах в минуту, direction - прямое или обратное направление, time - время включения двигателя в секундах
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time) {
@@ -88,7 +88,7 @@ bool set_mixer_pump_target(uint8_t on) {
   if (!use_I2C_dev) return false;
   bool result = false;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
-    byte b = I2C2.readByte(use_I2C_dev, 7);
+    uint8_t b = I2C2.readByte(use_I2C_dev, 7);
     bitWrite(b, 0, on);
     I2C2.writeByte(use_I2C_dev, 7, b);
     xSemaphoreGive(xI2CSemaphore);
@@ -97,8 +97,8 @@ bool set_mixer_pump_target(uint8_t on) {
   return result;
 }
 
-byte get_mixer_pump_status(void) {
-  byte state = 0xFF;
+uint8_t get_mixer_pump_status(void) {
+  uint8_t state = 0xFF;
   if (!use_I2C_dev) return state;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     state = BitIsSet(I2C2.readByte(use_I2C_dev, 7), 0);
@@ -107,10 +107,10 @@ byte get_mixer_pump_status(void) {
   return state;
 }
 
-byte get_i2c_rele_state(uint8_t r) {
-  byte state = 0xFF;
+uint8_t get_i2c_rele_state(uint8_t r) {
+  uint8_t state = 0xFF;
   if (!use_I2C_dev) return state;
-  byte s;
+  uint8_t s;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     s = I2C2.readByte(use_I2C_dev, 7);
     xSemaphoreGive(xI2CSemaphore);
@@ -122,7 +122,7 @@ byte get_i2c_rele_state(uint8_t r) {
 bool set_i2c_rele_state(uint8_t r, bool s) {
   if (!use_I2C_dev) return false;
   bool result = false;
-  byte b;
+  uint8_t b;
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     b = I2C2.readByte(use_I2C_dev, 7);
     bitWrite(b, (r - 1), s);

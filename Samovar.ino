@@ -176,6 +176,7 @@ void set_alarm();
 void menu_switch_focus();
 float get_steam_alcohol(float t);
 float get_alcohol(float t);
+void startService(void);
 
 #ifdef __SAMOVAR_DEBUG
 //LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -358,9 +359,9 @@ void triggerGetClock(void *parameter) {
 
 //Запускаем таск для получения температур и различных проверок
 void triggerSysTicker(void *parameter) {
-  byte CurMinST = 0;
-  byte OldMinST = 0;
-  byte tcntST = 0;
+  uint8_t CurMinST = 0;
+  uint8_t OldMinST = 0;
+  uint8_t tcntST = 0;
   unsigned long oldTime = 0;  // Предыдущее время в милисекундах
 
   while (true) {
@@ -480,7 +481,7 @@ void triggerSysTicker(void *parameter) {
         WthdrwTime = program[ProgramNum].Time * (1 - wp);
 
         WthdrwTimeAll = WthdrwTime;
-        for (byte i = ProgramNum + 1; i < ProgramLen; i++) {
+        for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
           WthdrwTimeAll += program[i].Time;
         }
 
@@ -533,7 +534,7 @@ void triggerSysTicker(void *parameter) {
         //суммируем время текущей строки программы и всех следующих за ней
         WthdrwTimeAll = WthdrwTime;
 
-        for (byte i = ProgramNum + 1; i < ProgramLen; i++) {
+        for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
           WthdrwTimeAll += program[i].Time;
         }
 
@@ -787,7 +788,7 @@ void setup() {
 
   //Serial.print("Reset reason: ");
   //Serial.println(vr);
-  for (byte i = 0; i < 17; i = i + 8) {
+  for (uint8_t i = 0; i < 17; i = i + 8) {
     chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
   }
   //uint8_t *MAC = ESP.getEfuseMac();

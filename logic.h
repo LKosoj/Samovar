@@ -11,7 +11,7 @@
 //**************************************************************************************************************
 void save_profile();
 void menu_samovar_start();
-void set_menu_screen(byte param);
+void set_menu_screen(uint8_t param);
 void samovar_reset();
 void create_data();
 void pause_withdrawal(bool Pause);
@@ -44,7 +44,7 @@ void check_power_error();
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 
 //Получить количество разделителей
-byte getDelimCount(String data, char separator) {
+uint8_t getDelimCount(String data, char separator) {
   int cnt = 0;
   int maxIndex = data.length() - 1;
 
@@ -388,7 +388,7 @@ String get_Samovar_Status() {
   return SamovarStatus;
 }
 
-void set_capacity(byte cap) {
+void set_capacity(uint8_t cap) {
   capacity_num = cap;
 
 #ifdef SERVO_PIN
@@ -437,15 +437,15 @@ void set_program(String WProgram) {
   }
 }
 
-String get_program(byte s) {
+String get_program(uint8_t s) {
   String Str = "";
-  byte k = CAPACITY_NUM * 2;
+  uint8_t k = CAPACITY_NUM * 2;
   if (s == CAPACITY_NUM * 2) {
     s = 0;
   } else {
     k = s + 1;
   }
-  for (byte i = s; i < k; i++) {
+  for (uint8_t i = s; i < k; i++) {
     if (program[i].WType == "") {
       i = CAPACITY_NUM * 2 + 1;
     } else {
@@ -460,7 +460,7 @@ String get_program(byte s) {
   return Str;
 }
 
-void run_program(byte num) {
+void run_program(uint8_t num) {
   t_min = 0;
   program_Pause = false;
   program_Wait = false;
@@ -941,7 +941,7 @@ float get_steam_alcohol(float t) {
   float t1;
   float s;
   float k;
-  byte t0;
+  uint8_t t0;
 
   t1 = t;
   t = get_temp_by_pressure(0, t, bme_pressure);
@@ -1390,7 +1390,7 @@ unsigned int hexToDec(String hexString) {
   unsigned int decValue = 0;
   int nextInt;
 
-  for (byte i = 0; i < hexString.length(); i++) {
+  for (uint8_t i = 0; i < hexString.length(); i++) {
 
     nextInt = int(hexString.charAt(i));
     if (nextInt >= 48 && nextInt <= 57) nextInt = map(nextInt, 48, 57, 0, 9);

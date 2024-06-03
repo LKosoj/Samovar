@@ -6,7 +6,7 @@ void beer_finish();
 void set_heater_state(float setpoint, float temp);
 void set_heater(double dutyCycle);
 void setHeaterPosition(bool state);
-void run_beer_program(byte num);
+void run_beer_program(uint8_t num);
 void StartAutoTune();
 void FinishAutoTune();
 void set_power(bool On);
@@ -36,7 +36,7 @@ void beer_proc() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
-void run_beer_program(byte num) {
+void run_beer_program(uint8_t num) {
   if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
   if (startval == 2000) startval = 2001;
   ProgramNum = num;
@@ -447,7 +447,7 @@ void setHeaterPosition(bool state) {
 String get_beer_program() {
   String Str = "";
   int k = CAPACITY_NUM * 2;
-  for (byte i = 0; i < k; i++) {
+  for (uint8_t i = 0; i < k; i++) {
     if (program[i].WType == "") {
       i = CAPACITY_NUM * 2 + 1;
     } else {
