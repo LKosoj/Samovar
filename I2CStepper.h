@@ -114,7 +114,7 @@ uint8_t get_i2c_rele_state(uint8_t r) {
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (1000 / portTICK_RATE_MS)) == pdTRUE) {
     s = I2C2.readByte(use_I2C_dev, 7);
     xSemaphoreGive(xI2CSemaphore);
-    state = BitIsSet(s, r - 1);
+    state = BitIsSet(s, (r - 1));
   }
   return state;
 }
