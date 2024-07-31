@@ -589,7 +589,7 @@ static int lua_wrapper_set_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   uint8_t a = luaL_checknumber(lua_state, 1);
   a--;
-  if (a < 0 || a > 9) return 0;
+  if (a <= 0 || a > 9) return 0;
   uint16_t b = luaL_checknumber(lua_state, 2);
   lua_timer[a] = millis() + b * 1000;
   return 0;
@@ -600,7 +600,7 @@ static int lua_wrapper_get_timer(lua_State *lua_state) {
   uint8_t a = luaL_checknumber(lua_state, 1);
   uint16_t b;
   a--;
-  if (a < 0 || a > 9) b = 0;
+  if (a <= 0 || a > 9) b = 0;
   else {
     if (lua_timer[a] == 0) b = 0;
     else {
