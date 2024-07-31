@@ -86,7 +86,7 @@ void check_alarm_beer() {
 
   if (startval <= 2000) return;
 
-  float temp;
+  float temp = 0;
   switch (program[ProgramNum].TempSensor) {
     case 0:
       temp = TankSensor.avgTemp;
