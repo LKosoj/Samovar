@@ -150,9 +150,9 @@ void PingClass::_ping_recv_cb(void *opt, void *resp) {
     }
 }
 
-byte PingClass::_expected_count = 0;
-byte PingClass::_errors = 0;
-byte PingClass::_success = 0;
+uint8_t PingClass::_expected_count = 0;
+uint8_t PingClass::_errors = 0;
+uint8_t PingClass::_success = 0;
 float PingClass::_avg_time = 0;
 uint PingClass::_min_time = INT_MAX;
 uint PingClass::_max_time = 0;

@@ -81,6 +81,7 @@ int Servo::attach(int pin)
 
 int Servo::attach(int pin, int min, int max)
 {
+    ESP_LOGW(TAG, "Attempting to Attach servo on pin=%d min=%d max=%d",pin,min,max);
 
 #ifdef ENFORCE_PINS
         // ESP32 Recommend only the following pins 2,4,12-19,21-23,25-27,32-33
@@ -128,8 +129,10 @@ if(
         this->max = max;    //store this value in uS
         // Set up this channel
         // if you want anything other than default timer width, you must call setTimerWidth() before attach
+
         pwm.attachPin(this->pinNumber,REFRESH_CPS, this->timer_width );   // GPIO pin assigned to channel
-        ESP_LOGI(TAG, "Attaching servo : %d on PWM %d",pin,pwm.getChannel());
+        ESP_LOGW(TAG, "Success to Attach servo : %d on PWM %d",pin,pwm.getChannel());
+
         return pwm.getChannel();
 }
 

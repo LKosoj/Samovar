@@ -8,20 +8,24 @@
 */
 #include <XGZP6897D.h>
 #include <Wire.h>
+
 //  Descriptor. K depends on the exact model of the sensor. See datasheet and documentation
-XGZP6897D::XGZP6897D(uint16_t K)
+XGZP6897D::XGZP6897D(uint16_t K, TwoWire* theWire)
 {
   _K = K;
   _I2C_address = I2C_device_address;
+  _Wire = theWire;  
 }
 //
 //  
 bool XGZP6897D::begin()
 {
-  Wire.begin();
+  _Wire->begin();
+  
+
   // A basic scanner, see if it ACK's
-  Wire.beginTransmission(_I2C_address);
-  if (Wire.endTransmission() == 0) {
+  _Wire->beginTransmission(_I2C_address);
+  if (_Wire->endTransmission() == 0) {
     return true;  // Ok device is responding
   }
   return false; // device not responding
@@ -36,28 +40,28 @@ void XGZP6897D::readRawSensor(int16_t &rawTemperature, int32_t &rawPressure)
   uint8_t pressure_H, pressure_M, pressure_L, temperature_H, temperature_L;
   uint8_t CMD_reg;
   // start conversion
-  Wire.beginTransmission(_I2C_address);
-  Wire.write(0x30);
-  Wire.write(0x0A);   //start combined conversion pressure and temperature
-  Wire.endTransmission();
+  _Wire->beginTransmission(_I2C_address);
+  _Wire->write(0x30);
+  _Wire->write(0x0A);   //start combined conversion pressure and temperature
+  _Wire->endTransmission();
   // wait until the end of conversion (Sco bit in CMD_reg. bit 3)
   do {
-    Wire.beginTransmission(_I2C_address);
-    Wire.write(0x30);                       //send 0x30 CMD register address
-    Wire.endTransmission();
-    Wire.requestFrom(_I2C_address, byte(1));
-    CMD_reg = Wire.read();                //read 0x30 register value
+    _Wire->beginTransmission(_I2C_address);
+    _Wire->write(0x30);                       //send 0x30 CMD register address
+    _Wire->endTransmission();
+    _Wire->requestFrom(_I2C_address, byte(1));
+    CMD_reg = _Wire->read();                //read 0x30 register value
   } while ((CMD_reg & 0x08) > 0);        //loop while bit 3 of 0x30 register copy is 1
   // read temperature and pressure
-  Wire.beginTransmission(_I2C_address);
-  Wire.write(0x06);                        //send pressure high byte register address
-  Wire.endTransmission();
-  Wire.requestFrom(_I2C_address, byte(5)); // read 3 bytes for pressure and 2 for temperature
-  pressure_H = Wire.read();
-  pressure_M = Wire.read();
-  pressure_L = Wire.read();
-  temperature_H = Wire.read();
-  temperature_L = Wire.read();
+  _Wire->beginTransmission(_I2C_address);
+  _Wire->write(0x06);                        //send pressure high byte register address
+  _Wire->endTransmission();
+  _Wire->requestFrom(_I2C_address, byte(5)); // read 3 bytes for pressure and 2 for temperature
+  pressure_H = _Wire->read();
+  pressure_M = _Wire->read();
+  pressure_L = _Wire->read();
+  temperature_H = _Wire->read();
+  temperature_L = _Wire->read();
   pressure_adc = ((uint32_t)pressure_H << 8) + (uint32_t) pressure_M;
   pressure_adc = (pressure_adc << 8) + (uint32_t) pressure_L;
   temperature_adc = ((uint16_t)temperature_H << 8) + (uint16_t) temperature_L;
@@ -89,5 +93,5 @@ void XGZP6897D::readSensor(float &temperature, float &pressure)
   #ifdef debugFS
   Serial.print(" - " + String(temperature) + ":" + String(pressure));
   Serial.println();
-#endif
+  #endif
 }

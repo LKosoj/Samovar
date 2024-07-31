@@ -62,7 +62,7 @@ class PingClass {
     IPAddress _dest;
     ping_option _options;
 
-    static byte _expected_count, _errors, _success;
+    static uint8_t _expected_count, _errors, _success;
     static uint _min_time, _max_time;
     static float _avg_time;
 };

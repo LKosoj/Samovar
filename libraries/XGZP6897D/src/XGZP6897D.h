@@ -9,12 +9,16 @@
 #ifndef XGZP6897D_H
 #define XGZP6897D_H
 #include <Arduino.h>
+#include <Wire.h>
+
 //#define debugFS
 #define I2C_device_address 0x6D
 class XGZP6897D
 {
   public:
-    XGZP6897D(uint16_t K); // K depends on sensor. See datasheet.
+    XGZP6897D(uint16_t K, TwoWire* theWire = &Wire); 
+      // K depends on sensor. See datasheet.
+      // theWire is a pointer the used interface. If NULL, the default is Wire is used
     bool begin();  // true: device responding.  false:device not responding
     // readSensor:
     //  Read temperature (degree Celsius), and pressure (PA)
@@ -28,6 +32,8 @@ class XGZP6897D
   private:
     float _K;
     uint8_t _I2C_address;
+    TwoWire* _Wire;
+
 };
 
 #endif

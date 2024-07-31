@@ -50,14 +50,31 @@ ESP32PWM::ESP32PWM() {
 
 ESP32PWM::~ESP32PWM() {
 	if (attached()) {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+		ledcDetach(pin);
+#else
 		ledcDetachPin(pin);
+#endif
+#else
+		ledcDetachPin(pin);
+#endif
 	}
 	deallocate();
 }
 
-double ESP32PWM::_ledcSetupTimerFreq(uint8_t chan, double freq,
+double ESP32PWM::_ledcSetupTimerFreq(uint8_t pin, double freq,
 		uint8_t bit_num) {
-	return ledcSetup(chan, freq, bit_num);
+
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+	return ledcAttach(pin, freq, bit_num);
+#else
+	return ledcSetup(pin, freq, bit_num);
+#endif
+#else
+	return ledcSetup(pin, freq, bit_num);
+#endif
 
 }
 
@@ -122,7 +139,7 @@ int ESP32PWM::allocatenext(double freq) {
 void ESP32PWM::deallocate() {
 	if (pwmChannel < 0)
 		return;
-	ESP_LOGV(TAG, "PWM deallocating LEDc #%d",pwmChannel);
+	ESP_LOGE(TAG, "PWM deallocating LEDc #%d",pwmChannel);
 	timerCount[getTimer()]--;
 	if (timerCount[getTimer()] == 0) {
 		timerFreqSet[getTimer()] = -1; // last pwn closed out
@@ -147,12 +164,31 @@ double ESP32PWM::setup(double freq, uint8_t resolution_bits) {
 
 	resolutionBits = resolution_bits;
 	if (attached()) {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+		ledcDetach(pin);
+		double val = ledcAttach(getPin(), freq, resolution_bits);
+#else
 		ledcDetachPin(pin);
 		double val = ledcSetup(getChannel(), freq, resolution_bits);
+#endif
+#else
+		ledcDetachPin(pin);
+		double val = ledcSetup(getChannel(), freq, resolution_bits);
+#endif
+
 		attachPin(pin);
 		return val;
 	}
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+	return ledcAttach(getPin(), freq, resolution_bits);
+#else
 	return ledcSetup(getChannel(), freq, resolution_bits);
+#endif
+#else
+	return ledcSetup(getChannel(), freq, resolution_bits);
+#endif
 }
 double ESP32PWM::getDutyScaled() {
 	return mapf((double) myDuty, 0, (double) ((1 << resolutionBits) - 1), 0.0,
@@ -163,19 +199,44 @@ void ESP32PWM::writeScaled(double duty) {
 }
 void ESP32PWM::write(uint32_t duty) {
 	myDuty = duty;
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+	ledcWrite(getPin(), duty);
+#else
 	ledcWrite(getChannel(), duty);
+#endif
+#else
+	ledcWrite(getChannel(), duty);
+#endif
 }
 void ESP32PWM::adjustFrequencyLocal(double freq, double dutyScaled) {
 	timerFreqSet[getTimer()] = (long) freq;
 	myFreq = freq;
 	if (attached()) {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+		ledcDetach(pin);
+		// Remove the PWM during frequency adjust
+		_ledcSetupTimerFreq(getPin(), freq, resolutionBits);
+		writeScaled(dutyScaled);
+		ledcAttach(getPin(), freq, resolutionBits); // re-attach the pin after frequency adjust
+#else
 		ledcDetachPin(pin);
 		// Remove the PWM during frequency adjust
 		_ledcSetupTimerFreq(getChannel(), freq, resolutionBits);
 		writeScaled(dutyScaled);
 		ledcAttachPin(pin, getChannel()); // re-attach the pin after frequency adjust
-	} else {
+#endif
+#else
+		ledcDetachPin(pin);
+		// Remove the PWM during frequency adjust
 		_ledcSetupTimerFreq(getChannel(), freq, resolutionBits);
+		writeScaled(dutyScaled);
+		ledcAttachPin(pin, getChannel()); // re-attach the pin after frequency adjust
+#endif
+
+	} else {
+		_ledcSetupTimerFreq(getPin(), freq, resolutionBits);
 		writeScaled(dutyScaled);
 	}
 }
@@ -221,7 +282,16 @@ double ESP32PWM::writeNote(note_t note, uint8_t octave) {
 	return writeTone(noteFreq);
 }
 uint32_t ESP32PWM::read() {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+	return ledcRead(getPin());
+#else
 	return ledcRead(getChannel());
+#endif
+#else
+	return ledcRead(getChannel());
+#endif
+
 }
 double ESP32PWM::readFreq() {
 	return myFreq;
@@ -234,8 +304,21 @@ void ESP32PWM::attachPin(uint8_t pin) {
 
 	if (hasPwm(pin)) {
 		attach(pin);
+		bool success=true;
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+		success=ledcAttach(pin, readFreq(), resolutionBits);
+#else
 		ledcAttachPin(pin, getChannel());
-	} else {
+#endif
+#else
+		ledcAttachPin(pin, getChannel());
+#endif
+		if(success)
+			return;
+		ESP_LOGE(TAG, "ERROR PWM channel failed to configure on!",pin);
+		return;
+	}
 		
 #if defined(CONFIG_IDF_TARGET_ESP32S2)
 						ESP_LOGE(TAG, "ERROR PWM channel unavailable on pin requested! %d PWM available on: 1-21,26,33-42",pin);
@@ -247,21 +330,28 @@ void ESP32PWM::attachPin(uint8_t pin) {
 						ESP_LOGE(TAG, "ERROR PWM channel unavailable on pin requested! %d PWM available on: 2,4,5,12-19,21-23,25-27,32-33",pin);
 #endif
 
-// Possible PWM GPIO pins on the ESP32-S3: 0(used by on-board button),1-21,35-45,47,48(used by on-board LED)
-// Possible PWM GPIO pins on the ESP32-C3: 0(used by on-board button),1-7,8(used by on-board LED),9-10,18-21
-		
-		return;
-	}
-	//Serial.print(" on pin "+String(pin));
 }
 void ESP32PWM::attachPin(uint8_t pin, double freq, uint8_t resolution_bits) {
 
-	if (hasPwm(pin))
-		setup(freq, resolution_bits);
+	if (hasPwm(pin)){
+		int ret=setup(freq, resolution_bits);
+		ESP_LOGW(TAG, "Pin Setup %d with code %d",pin,ret);
+	}
+	else
+		ESP_LOGE(TAG, "ERROR Pin Failed %d ",pin);
 	attachPin(pin);
 }
 void ESP32PWM::detachPin(int pin) {
+#ifdef ESP_ARDUINO_VERSION_MAJOR
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+
+	ledcDetach(pin);
+#else
 	ledcDetachPin(pin);
+#endif
+#else
+	ledcDetachPin(pin);
+#endif
 	deallocate();
 }
 /* Side effects of frequency changes happen because of shared timers

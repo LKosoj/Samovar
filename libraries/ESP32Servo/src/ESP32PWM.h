@@ -35,7 +35,7 @@ private:
 	double myFreq;
 	int allocatenext(double freq);
 
-	static double _ledcSetupTimerFreq(uint8_t chan, double freq,
+	static double _ledcSetupTimerFreq(uint8_t pin, double freq,
 			uint8_t bit_num);
 
 	bool checkFrequencyForSideEffects(double freq);
