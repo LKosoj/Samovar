@@ -4,6 +4,7 @@
 //При старте колонны до стабилизации реализовать выход на предзахлеб (если установлен датчик флегмы) для смачивания насадки (дополнительная опция)
 //Перейти на GyverPID
 //Перейти на ESPAsyncWebSrv
+//вывести в ВЕБ-интерфейс на главную данные о текущей скважности ШИМ насоса охлаждения
 
 //**************************************************************************************************************
 // Подключение библиотек
@@ -218,14 +219,21 @@ void recvMsg(uint8_t *data, size_t len) {
 #endif
 
 void stopService(void) {
+#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+  //timerEnd(timer);
+  timerWrite(timer, 0);
+#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarmDisable(timer);
+#endif
 }
 
 void startService(void) {
-  //  timerAlarmDisable(timer);
+#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+  timerAlarm(timer, stepper.getPeriod(), true, 0);
+#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarmWrite(timer, stepper.getPeriod(), true);
-  //  timerAlarmWrite(timer, stepper.stepTime, true);
   timerAlarmEnable(timer);
+#endif
 }
 
 void IRAM_ATTR StepperTicker(void) {
@@ -684,8 +692,13 @@ void setup() {
 
   // Configure the Prescaler at 80 the quarter of the ESP32 is cadence at 80Mhz
   // 80000000 / 80 = 1000000 tics / seconde
+#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+  timer = timerBegin(1000000);
+  timerAttachInterrupt(timer, &StepperTicker);
+#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
   timer = timerBegin(2, 80, true);
   timerAttachInterrupt(timer, &StepperTicker, true);
+#endif
 
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
@@ -915,6 +928,7 @@ void setup() {
 
   sensor_init();
 
+  startService();
   samovar_reset();
 
   WebServerInit();
@@ -1040,7 +1054,11 @@ void setup() {
 void loop() {
   //пересчитаем время работы таймера для шагового двигателя
   portENTER_CRITICAL_ISR(&timerMux);
+#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+  timerAlarm(timer, stepper.getPeriod(), true, 0);
+#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarmWrite(timer, stepper.getPeriod(), true);
+#endif
   portEXIT_CRITICAL_ISR(&timerMux);
 
 #ifdef USE_UPDATE_OTA
@@ -1247,7 +1265,7 @@ void getjson(void) {
   jsonstr += ",";
   jsonstr += "\"WthdrwlStatus\":"; jsonstr += (String)startval;
   jsonstr += ",";
-  jsonstr += "\"CurrrentSpeed\":"; jsonstr += (String)(round(stepper.getSpeed() * (byte)stepper.getState()));
+  jsonstr += "\"CurrrentSpeed\":"; jsonstr += (String)(round(stepper.getSpeed() * (uint8_t)stepper.getState()));
   jsonstr += ",";
   jsonstr += "\"UseBBuzzer\":"; jsonstr += (String)SamSetup.UseBBuzzer;
   jsonstr += ",";
@@ -1306,6 +1324,11 @@ void getjson(void) {
   jsonstr += ",";
 #endif
 
+#ifdef USE_WATER_PUMP
+  jsonstr += "\"wp_spd\":"; jsonstr += (String)water_pump_speed;
+  jsonstr += ",";
+#endif
+
 #ifdef USE_WATERSENSOR
   jsonstr += "\"WFflowRate\":"; jsonstr += format_float(WFflowRate, 2);
   jsonstr += ",";
@@ -1331,7 +1354,7 @@ void getjson(void) {
   jsonstr += "}";
 
 #ifdef USE_MQTT
-//  MqttSendMsg(jsonstr, "getI");
+  //  MqttSendMsg(jsonstr, "getI");
 #endif
 }
 

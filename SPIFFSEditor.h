@@ -7,7 +7,7 @@ String get_edit_script();
 
 #ifdef USE_LUA
 void load_lua_script();
-String IRAM_ATTR getValue(String data, char separator, int index);
+String getValue(String data, char separator, int index);
 #endif
 
 
