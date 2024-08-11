@@ -528,13 +528,13 @@
 
     function run_lua (num) {
       sendbutton("lua=" + num);
-      sleep(1000);
+      sleep(2000);
     };
 
     function run_strlua() {
       var str = document.getElementById('lua_str_i').value.replace(" ", "^");
       sendbutton("luastr=" + str);
-      sleep(1000);
+      sleep(2000);
     };
     
   </script>
