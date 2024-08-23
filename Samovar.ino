@@ -1341,7 +1341,7 @@ void getjson(void) {
   jsonstr += ",";
 #endif
 
-  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);
     jsonstr += ",";
     jsonstr += "\"stm_alc\":"; jsonstr += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
