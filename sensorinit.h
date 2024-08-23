@@ -181,35 +181,35 @@ void DS_getvalue(void) {
 
   sensors.requestTemperatures();
 
-  if (ss > -120) {
+  if (ss > -10) {
     SteamSensor.avgTemp = ss + SamSetup.DeltaSteamTemp;
     SteamSensor.PrevTemp = SteamSensor.avgTemp;
     SteamSensor.ErrCount = 0;
   } else {
     if (SteamSensor.PrevTemp > 0) SteamSensor.ErrCount++;
   }
-  if (ps > -120) {
+  if (ps > -10) {
     PipeSensor.avgTemp = ps + SamSetup.DeltaPipeTemp;
     PipeSensor.PrevTemp = PipeSensor.avgTemp;
     PipeSensor.ErrCount = 0;
   } else {
     if (PipeSensor.PrevTemp > 0) PipeSensor.ErrCount++;
   }
-  if (ws > -120) {
+  if (ws > -10) {
     WaterSensor.avgTemp = ws + SamSetup.DeltaWaterTemp;
     WaterSensor.PrevTemp = WaterSensor.avgTemp;
     WaterSensor.ErrCount = 0;
   } else {
     if (WaterSensor.PrevTemp > 0) WaterSensor.ErrCount++;
   }
-  if (ts > -120) {
+  if (ts > -10) {
     TankSensor.avgTemp = ts + SamSetup.DeltaTankTemp;
     TankSensor.PrevTemp = TankSensor.avgTemp;
     TankSensor.ErrCount = 0;
   } else {
     if (TankSensor.PrevTemp > 0) TankSensor.ErrCount++;
   }
-  if (acp > -120) {
+  if (acp > -10) {
     ACPSensor.avgTemp = acp + SamSetup.DeltaACPTemp;
     ACPSensor.PrevTemp = ACPSensor.avgTemp;
     ACPSensor.ErrCount = 0;
