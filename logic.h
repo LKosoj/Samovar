@@ -1158,7 +1158,7 @@ void triggerPowerStatus(void *parameter) {
     //T3EA3E80
     if (PowerOn) {
       Serial2.flush();
-      vTaskDelay(100 / portTICK_PERIOD_MS);
+      vTaskDelay(10 / portTICK_PERIOD_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
@@ -1199,49 +1199,58 @@ void triggerPowerStatus(void *parameter) {
 #ifdef SAMOVAR_USE_SEM_AVR
       if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
       {
-        vTaskDelay(100 / portTICK_RATE_MS);
+        vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+SS?\r");
-        vTaskDelay(400 / portTICK_RATE_MS);
-        if (Serial2.available()) {
-          current_power_mode = Serial2.readStringUntil('\r');
+        for (int i = 0; i < 4; i++) {
+          vTaskDelay(600 / portTICK_RATE_MS);
+          if (Serial2.available()) {
+            current_power_mode = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
-          WriteConsoleLog("CPM=" + current_power_mode);
+            WriteConsoleLog("CPM=" + current_power_mode);
 #endif
+            break;
+          }
         }
         xSemaphoreGive( xSemaphoreAVR );
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
       {
-        vTaskDelay(100 / portTICK_RATE_MS);
+        vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VO?\r");
-        vTaskDelay(400 / portTICK_RATE_MS);
-        if (Serial2.available()) {
-          resp = Serial2.readStringUntil('\r');
+        for (int i = 0; i < 4; i++) {
+          vTaskDelay(600 / portTICK_RATE_MS);
+          if (Serial2.available()) {
+            resp = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
-          WriteConsoleLog("CPV=" + resp);
+            WriteConsoleLog("CPV=" + resp);
 #endif
-          current_power_volt = resp.toInt();
+            current_power_volt = resp.toInt();
+            break;
+          }
         }
         xSemaphoreGive( xSemaphoreAVR );
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
       if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
       {
-        vTaskDelay(100 / portTICK_RATE_MS);
+        vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VS?\r");
-        vTaskDelay(400 / portTICK_RATE_MS);
-        if (Serial2.available()) {
-          resp = Serial2.readStringUntil('\r');
+        for (int i = 0; i < 4; i++) {
+          vTaskDelay(600 / portTICK_RATE_MS);
+          if (Serial2.available()) {
+            resp = Serial2.readStringUntil('\r');
 #ifdef __SAMOVAR_DEBUG
-          WriteConsoleLog("TPV=" + resp);
+            WriteConsoleLog("TPV=" + resp);
 #endif
-          v = resp.toInt();
-          if (v != 0) {
-            target_power_volt = v;
+            v = resp.toInt();
+            if (v != 0) {
+              target_power_volt = v;
+            }
+            break;
           }
         }
         xSemaphoreGive( xSemaphoreAVR );
