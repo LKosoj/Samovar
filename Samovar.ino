@@ -1290,7 +1290,7 @@ void getjson(void) {
   jsonstr += ",";
   //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
 
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE) {
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || SAMOVAR_DISTILLATION_MODE || SAMOVAR_NBK_MODE) {
     String pt = "";
     if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
       pt = program[ProgramNum].WType;
