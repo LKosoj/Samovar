@@ -347,6 +347,7 @@
     };
 
     function sendvoltage () {
+      document.getElementById('Voltage').value = document.getElementById('Voltage').value.replace(",",".");
       var num = document.getElementById('Voltage').value;
       if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
         alert("Введите значение!");

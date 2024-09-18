@@ -263,6 +263,7 @@
     };
 
     function sendvoltage () {
+      document.getElementById('Voltage').value = document.getElementById('Voltage').value.replace(",",".");
       var command = 'voltage=' + document.getElementById('Voltage').value;
       sendbutton(command);
       alert("Установлено.");
