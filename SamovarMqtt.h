@@ -56,7 +56,7 @@ void connectToMqtt() {
 void onMqttConnect(bool sessionPresent) {
 #ifdef __SAMOVAR_DEBUG
   String s = "mqttClient.connected";
-  SendMsg(s, ALARM_MSG);
+  SendMsg(s, NOTIFY_MSG);
   WriteConsoleLog(s);
 #endif
 }
