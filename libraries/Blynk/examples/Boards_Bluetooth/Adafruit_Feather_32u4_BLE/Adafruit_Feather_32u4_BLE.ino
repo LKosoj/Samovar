@@ -30,6 +30,10 @@
 
 #define BLYNK_PRINT Serial
 
+/* Fill-in your Template ID (only if using Blynk.Cloud) */
+//#define BLYNK_TEMPLATE_ID   "YourTemplateID"
+
+
 #include <BlynkSimpleSerialBLE.h>
 #include <Adafruit_BLE.h>
 #include <Adafruit_BluefruitLE_SPI.h>
@@ -57,7 +61,7 @@ void setup() {
 
   Serial.println("Waiting for connections...");
 
-  Blynk.begin(auth, ble);
+  Blynk.begin(ble, auth);
 }
 
 void loop() {
