@@ -21,8 +21,18 @@
 #error Please update your ESP8266 Arduino Core
 #endif
 
-static const char BLYNK_DEFAULT_ROOT_CA[] PROGMEM =
-#include <certs/letsencrypt_pem.h>
+// Fingerprint is not used by default
+//#define BLYNK_DEFAULT_FINGERPRINT "FD C0 7D 8D 47 97 F7 E3 07 05 D3 4E E3 BB 8E 3D C0 EA BE 1C"
+
+#if defined(BLYNK_SSL_USE_LETSENCRYPT)
+  static const unsigned char BLYNK_DEFAULT_CERT_DER[] PROGMEM =
+  #include <certs/dst_der.h>  // TODO: using DST Root CA X3 for now
+  //#include <certs/isrgroot_der.h>
+  //#include <certs/letsencrypt_der.h>
+#else
+  static const unsigned char BLYNK_DEFAULT_CERT_DER[] PROGMEM =
+  #include <certs/blynkcloud_der.h>
+#endif
 
 #include <BlynkApiArduino.h>
 #include <Blynk/BlynkProtocol.h>
@@ -31,24 +41,6 @@ static const char BLYNK_DEFAULT_ROOT_CA[] PROGMEM =
 #include <WiFiClientSecure.h>
 #include <time.h>
 
-#ifndef wificlientbearssl_h
-#error BearSSL is needed, please update your ESP8266 Arduino Core
-#endif
-#ifdef USING_AXTLS
-#error BearSSL is needed, but USING_AXTLS is defined
-#endif
-
-#ifndef BLYNK_SSL_RX_BUF_SIZE
-#define BLYNK_SSL_RX_BUF_SIZE 2048
-#endif
-
-#ifndef BLYNK_SSL_TX_BUF_SIZE
-#define BLYNK_SSL_TX_BUF_SIZE 512
-#endif
-
-
-static X509List BlynkCert(BLYNK_DEFAULT_ROOT_CA);
-
 template <typename Client>
 class BlynkArduinoClientSecure
     : public BlynkArduinoClientGen<Client>
@@ -56,49 +48,59 @@ class BlynkArduinoClientSecure
 public:
     BlynkArduinoClientSecure(Client& client)
         : BlynkArduinoClientGen<Client>(client)
-    {
-        this->client->setBufferSizes(BLYNK_SSL_RX_BUF_SIZE, BLYNK_SSL_TX_BUF_SIZE);
+        , fingerprint(NULL)
+    {}
+
+    void setFingerprint(const char* fp) { fingerprint = fp; }
+
+    bool setCACert(const uint8_t* caCert, unsigned caCertLen) {
+        bool res = this->client->setCACert(caCert, caCertLen);
+        if (!res) {
+          BLYNK_LOG1("Failed to load root CA certificate!");
+        }
+        return res;
     }
 
-    void setFingerprint(const char* fp) {
-        this->client->setFingerprint(fp);
-    }
-
-    void setTrustAnchors(X509List* certs) {
-        this->client->setTrustAnchors(certs);
+    bool setCACert_P(const uint8_t* caCert, unsigned caCertLen) {
+        bool res = this->client->setCACert_P(caCert, caCertLen);
+        if (!res) {
+          BLYNK_LOG1("Failed to load root CA certificate!");
+        }
+        return res;
     }
 
     bool connect() {
-
+        // Synchronize time useing SNTP. This is necessary to verify that
+        // the TLS certificates offered by the server are currently valid.
+        configTime(0, 0, "pool.ntp.org", "time.nist.gov");
         time_t now = time(nullptr);
-        if (now < 100000) {
-            // Synchronize time useing SNTP. This is necessary to verify that
-            // the TLS certificates offered by the server are currently valid.
-            configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-
-            while (now < 100000) {
-                delay(100);
-                now = time(nullptr);
-            }
+        while (now < 100000) {
+          delay(500);
+          now = time(nullptr);
         }
         struct tm timeinfo;
         gmtime_r(&now, &timeinfo);
         String ntpTime = asctime(&timeinfo);
         ntpTime.trim();
-        BLYNK_LOG2("Current time: ", ntpTime);
+        BLYNK_LOG2("NTP time: ", ntpTime);
 
-        if (!BlynkArduinoClientGen<Client>::connect()) {
-            int err = this->client->getLastSSLError();
-            if (err == 0) {
-                BLYNK_LOG1("Connection failed");
-            } else {
-                BLYNK_LOG2(BLYNK_F("SSL error: "), err);
-            }
-            return false;
+        // Now try connecting
+        if (BlynkArduinoClientGen<Client>::connect()) {
+          if (fingerprint && this->client->verify(fingerprint, this->domain)) {
+              BLYNK_LOG1(BLYNK_F("Fingerprint OK"));
+              return true;
+          } else if (this->client->verifyCertChain(this->domain)) {
+              BLYNK_LOG1(BLYNK_F("Certificate OK"));
+              return true;
+          }
+          BLYNK_LOG1(BLYNK_F("Certificate not validated"));
+          return false;
         }
-        return true;
+        return false;
     }
 
+private:
+    const char* fingerprint;
 };
 
 template <typename Transport>
@@ -128,7 +130,6 @@ public:
         BLYNK_LOG1(BLYNK_F("Connected to WiFi"));
 
         IPAddress myip = WiFi.localIP();
-        (void)myip; // Eliminate warnings about unused myip
         BLYNK_LOG_IP("IP: ", myip);
     }
 
@@ -143,7 +144,7 @@ public:
         if (fingerprint) {
           this->conn.setFingerprint(fingerprint);
         } else {
-          this->conn.setTrustAnchors(&BlynkCert);
+          this->conn.setCACert_P(BLYNK_DEFAULT_CERT_DER, sizeof(BLYNK_DEFAULT_CERT_DER));
         }
     }
 
@@ -158,7 +159,7 @@ public:
         if (fingerprint) {
           this->conn.setFingerprint(fingerprint);
         } else {
-          this->conn.setTrustAnchors(&BlynkCert);
+          this->conn.setCACert_P(BLYNK_DEFAULT_CERT_DER, sizeof(BLYNK_DEFAULT_CERT_DER));
         }
     }
 
@@ -188,13 +189,9 @@ public:
 
 };
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static WiFiClientSecure _blynkWifiClient;
-  static BlynkArduinoClientSecure<WiFiClientSecure> _blynkTransport(_blynkWifiClient);
-  BlynkWifi<BlynkArduinoClientSecure<WiFiClientSecure> > Blynk(_blynkTransport);
-#else
-  extern BlynkWifi<BlynkArduinoClientSecure<WiFiClientSecure> > Blynk
-#endif
+static WiFiClientSecure _blynkWifiClient;
+static BlynkArduinoClientSecure<WiFiClientSecure> _blynkTransport(_blynkWifiClient);
+BlynkWifi<BlynkArduinoClientSecure<WiFiClientSecure> > Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

@@ -22,14 +22,10 @@
 
  *************************************************************/
 
-#define BLYNK_USE_DIRECT_CONNECT
+//#define BLYNK_USE_DIRECT_CONNECT
 
 // For CoreUSB, use Serial for debug output
 #define BLYNK_PRINT Serial
-
-/* Fill-in your Template ID (only if using Blynk.Cloud) */
-//#define BLYNK_TEMPLATE_ID   "YourTemplateID"
-
 
 #include <BlynkSimpleSerialBLE.h>
 
@@ -47,7 +43,7 @@ void setup()
   // Blynk will work through Serial1
   // Do not read or write this serial manually in your sketch
   Serial1.begin(9600);
-  Blynk.begin(Serial1, auth);
+  Blynk.begin(auth, Serial1);
 }
 
 void loop()

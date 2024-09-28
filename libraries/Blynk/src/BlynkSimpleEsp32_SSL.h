@@ -15,8 +15,13 @@
 #error This code is intended to run on the ESP32 platform! Please check your Tools->Board setting.
 #endif
 
-static const char BLYNK_DEFAULT_ROOT_CA[] =
-#include <certs/letsencrypt_pem.h>
+#if defined(BLYNK_SSL_USE_LETSENCRYPT)
+  static const char BLYNK_DEFAULT_ROOT_CA[] =
+  #include <certs/letsencrypt_pem.h>
+#else
+  static const char BLYNK_DEFAULT_ROOT_CA[] =
+  #include <certs/blynkcloud_pem.h>
+#endif
 
 #include <BlynkApiArduino.h>
 #include <Blynk/BlynkProtocol.h>
@@ -36,7 +41,6 @@ public:
     void setRootCA(const char* fp) { caCert = fp; }
 
     bool connect() {
-        this->client->setHandshakeTimeout(30);
         this->client->setCACert(caCert);
         if (BlynkArduinoClientGen<Client>::connect()) {
           BLYNK_LOG1(BLYNK_F("Certificate OK"));
@@ -76,7 +80,6 @@ public:
         BLYNK_LOG1(BLYNK_F("Connected to WiFi"));
 
         IPAddress myip = WiFi.localIP();
-        (void)myip; // Eliminate warnings about unused myip
         BLYNK_LOG_IP("IP: ", myip);
     }
 
@@ -126,13 +129,9 @@ public:
 
 };
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static WiFiClientSecure _blynkWifiClient;
-  static BlynkArduinoClientSecure<WiFiClientSecure> _blynkTransport(_blynkWifiClient);
-  BlynkWifi<BlynkArduinoClientSecure<WiFiClientSecure> > Blynk(_blynkTransport);
-#else
-  extern BlynkWifi<BlynkArduinoClientSecure<WiFiClientSecure> > Blynk;
-#endif
+static WiFiClientSecure _blynkWifiClient;
+static BlynkArduinoClientSecure<WiFiClientSecure> _blynkTransport(_blynkWifiClient);
+BlynkWifi<BlynkArduinoClientSecure<WiFiClientSecure> > Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

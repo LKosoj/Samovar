@@ -261,12 +261,8 @@ public:
 
 BlynkTransportRedBearDuoBLE* BlynkTransportRedBearDuoBLE::instance = NULL;
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static BlynkTransportRedBearDuoBLE _blynkTransport;
-  BlynkRedBearDuoBLE Blynk(_blynkTransport);
-#else
-  extern BlynkRedBearDuoBLE Blynk;
-#endif
+static BlynkTransportRedBearDuoBLE _blynkTransport;
+BlynkRedBearDuoBLE Blynk(_blynkTransport);
 
 void BlynkTransportRedBearDuoBLE::deviceConnectedCallback(BLEStatus_t status, uint16_t handle) {
   switch (status) {

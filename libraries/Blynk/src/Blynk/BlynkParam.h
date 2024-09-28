@@ -19,14 +19,6 @@
 #define BLYNK_PARAM_KV(k, v) k "\0" v "\0"
 #define BLYNK_PARAM_PLACEHOLDER_64 "PlaceholderPlaceholderPlaceholderPlaceholderPlaceholderPlaceholder"
 
-#if !defined(BLYNK_NO_FLOAT)
-extern char*        dtostrf_internal(double number, signed char width, unsigned char prec, char *s);
-#endif
-
-#if !defined(BLYNK_NO_LONGLONG)
-extern long long    atoll_internal(const char *s);
-#endif
-
 class BlynkParam
 {
 public:
@@ -42,12 +34,8 @@ public:
         const char* asString() const    { return ptr; }
         int         asInt() const       { if(!isValid()) return 0; return atoi(ptr); }
         long        asLong() const      { if(!isValid()) return 0; return atol(ptr); }
-#if !defined(BLYNK_NO_LONGLONG) && defined(BLYNK_USE_INTERNAL_ATOLL)
-        long long   asLongLong() const  { return atoll_internal(ptr); }
-#elif !defined(BLYNK_NO_LONGLONG)
-        long long   asLongLong() const  { return atoll(ptr); }
-#endif
-#if !defined(BLYNK_NO_FLOAT)
+        //long long   asLongLong() const  { return atoll(ptr); }
+#ifndef BLYNK_NO_FLOAT
         double      asDouble() const    { if(!isValid()) return 0; return atof(ptr); }
         float       asFloat() const     { if(!isValid()) return 0; return atof(ptr); }
 #endif
@@ -83,12 +71,8 @@ public:
     const char* asString() const    { return buff; }
     int         asInt() const       { return atoi(buff); }
     long        asLong() const      { return atol(buff); }
-#if !defined(BLYNK_NO_LONGLONG) && defined(BLYNK_USE_INTERNAL_ATOLL)
-    long long   asLongLong() const  { return atoll_internal(buff); }
-#elif !defined(BLYNK_NO_LONGLONG)
-    long long   asLongLong() const  { return atoll(buff); }
-#endif
-#if !defined(BLYNK_NO_FLOAT)
+    //long long   asLongLong() const  { return atoll(buff); }
+#ifndef BLYNK_NO_FLOAT
     double      asDouble() const    { return atof(buff); }
     float       asFloat() const     { return atof(buff); }
 #endif
@@ -102,11 +86,8 @@ public:
 
     void*  getBuffer() const { return (void*)buff; }
     size_t getLength() const { return len; }
-    size_t getBuffSize() const { return buff_size; }
 
     // Modification
-    void clear() { len = 0; }
-
     void add(int value);
     void add(unsigned int value);
     void add(long value);
@@ -142,8 +123,6 @@ public:
         add(key);
         add(val);
     }
-
-    void remove_key(const char* key);
 
 protected:
     char*    buff;
@@ -188,29 +167,6 @@ BlynkParam::iterator BlynkParam::operator[](const char* key) const
         if (it >= e) break;
     }
     return iterator::invalid();
-}
-
-inline
-void BlynkParam::remove_key(const char* key)
-{
-    bool found;
-    do {
-        found = false;
-        const iterator e = end();
-        for (iterator it = begin(); it < e; ++it) {
-            if (!strcmp(it.asStr(), key)) {
-                const char* key = it.asStr();
-                ++it; ++it;
-                const char* next = it.asStr();
-                memmove((void*)key, next, (buff+len)-next);
-                len -= (next-key);
-                found = true;
-                break;
-            }
-            ++it;
-            if (it >= e) break;
-        }
-    } while (found);
 }
 
 inline
@@ -381,6 +337,8 @@ void BlynkParam::add(const __FlashStringHelper* ifsh)
 #ifndef BLYNK_NO_FLOAT
 
 #if defined(BLYNK_USE_INTERNAL_DTOSTRF)
+
+    extern char* dtostrf_internal(double number, signed char width, unsigned char prec, char *s);
 
     inline
     void BlynkParam::add(float value)

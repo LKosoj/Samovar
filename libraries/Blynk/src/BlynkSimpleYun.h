@@ -64,13 +64,9 @@ public:
 
 };
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static BridgeClient _blynkYunClient;
-  static BlynkArduinoClient _blynkTransport(_blynkYunClient);
-  BlynkYun Blynk(_blynkTransport);
-#endif
-  extern BlynkYun Blynk;
-#endif
+static BridgeClient _blynkYunClient;
+static BlynkArduinoClient _blynkTransport(_blynkYunClient);
+BlynkYun Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

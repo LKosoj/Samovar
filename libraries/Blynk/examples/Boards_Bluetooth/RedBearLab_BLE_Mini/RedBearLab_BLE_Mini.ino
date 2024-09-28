@@ -26,10 +26,6 @@
 
 #define BLYNK_PRINT Serial
 
-/* Fill-in your Template ID (only if using Blynk.Cloud) */
-//#define BLYNK_TEMPLATE_ID   "YourTemplateID"
-
-
 #include <BlynkSimpleSerialBLE.h>
 
 // You should get Auth Token in the Blynk App.

@@ -24,12 +24,8 @@
 //static WiFiSSLClient _blynkWifiClient;
 static WiFiClient _blynkWifiClient;
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static BlynkArduinoClient _blynkTransport(_blynkWifiClient);
-  BlynkWifiCommon Blynk(_blynkTransport);
-#else
-  extern BlynkWifiCommon Blynk;
-#endif
+static BlynkArduinoClient _blynkTransport(_blynkWifiClient);
+BlynkWifiCommon Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

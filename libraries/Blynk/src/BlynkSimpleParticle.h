@@ -13,12 +13,8 @@
 
 #include "BlynkParticle.h"
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static BlynkTransportParticle _blynkTransport;
-  BlynkParticle Blynk(_blynkTransport);
-#else
-  extern BlynkParticle Blynk;
-#endif
+static BlynkTransportParticle _blynkTransport;
+BlynkParticle Blynk(_blynkTransport);
 
 #include "BlynkWidgets.h"
 

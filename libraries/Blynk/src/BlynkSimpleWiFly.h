@@ -13,12 +13,8 @@
 
 #include <Adapters/BlynkWiFly.h>
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static BlynkTransportWiFly _blynkTransport;
-  BlynkWiFly Blynk(_blynkTransport);
-#else
-  extern BlynkWiFly Blynk;
-#endif
+static BlynkTransportWiFly _blynkTransport;
+BlynkWiFly Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

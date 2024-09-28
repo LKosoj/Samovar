@@ -106,13 +106,9 @@ public:
 
 };
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static FishinoClient _blynkFishinoClient;
-  static BlynkArduinoClient _blynkTransport(_blynkFishinoClient);
-  BlynkFishino Blynk(_blynkTransport);
-#else
-  extern BlynkFishino Blynk;
-#endif
+static FishinoClient _blynkFishinoClient;
+static BlynkArduinoClient _blynkTransport(_blynkFishinoClient);
+BlynkFishino Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

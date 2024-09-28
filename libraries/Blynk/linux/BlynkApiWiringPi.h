@@ -17,6 +17,14 @@
     #define BLYNK_INFO_DEVICE  "Raspberry"
 #endif
 
+#ifdef BLYNK_NO_INFO
+
+template<class Proto>
+BLYNK_FORCE_INLINE
+void BlynkApi<Proto>::sendInfo() {}
+
+#else
+
 template<class Proto>
 BLYNK_FORCE_INLINE
 void BlynkApi<Proto>::sendInfo()
@@ -34,11 +42,8 @@ void BlynkApi<Proto>::sendInfo()
 #ifdef BLYNK_INFO_CONNECTION
         BLYNK_PARAM_KV("con"    , BLYNK_INFO_CONNECTION)
 #endif
-#ifdef BLYNK_FIRMWARE_TYPE
-        BLYNK_PARAM_KV("fw-type", BLYNK_FIRMWARE_TYPE)
-#endif
-#ifdef BLYNK_FIRMWARE_VERSION
-        BLYNK_PARAM_KV("fw"     , BLYNK_FIRMWARE_VERSION)
+#ifdef BOARD_FIRMWARE_VERSION
+        BLYNK_PARAM_KV("fw"     , BOARD_FIRMWARE_VERSION)
 #endif
         BLYNK_PARAM_KV("build"  , __DATE__ " " __TIME__)
         "\0"
@@ -48,18 +53,15 @@ void BlynkApi<Proto>::sendInfo()
     char mem_dyn[64];
     BlynkParam profile_dyn(mem_dyn, 0, sizeof(mem_dyn));
     profile_dyn.add_key("conn", "Socket");
-#ifdef BLYNK_TEMPLATE_ID
-    {
-        const char* tmpl = BLYNK_TEMPLATE_ID;
-        if (tmpl && strlen(tmpl)) {
-            profile_dyn.add_key("tmpl", tmpl);
-        }
-    }
+#ifdef BOARD_TEMPLATE_ID
+    profile_dyn.add_key("tmpl", BOARD_TEMPLATE_ID);
 #endif
 
     static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_INTERNAL, 0, profile+8, profile_len, profile_dyn.getBuffer(), profile_dyn.getLength());
     return;
 }
+
+#endif
 
 
 // Check if analog pins can be referenced by name on this device
@@ -87,7 +89,7 @@ void BlynkApi<Proto>::processCmd(const void* buff, size_t len)
     if (++it >= param.end())
         return;
 
-    const uint8_t pin = BLYNK_DECODE_PIN(it);
+    uint8_t pin = BLYNK_DECODE_PIN(it);
 
     switch(cmd16) {
 
@@ -95,7 +97,7 @@ void BlynkApi<Proto>::processCmd(const void* buff, size_t len)
 
     case BLYNK_HW_PM: {
         while (it < param.end()) {
-            const uint8_t pin = BLYNK_DECODE_PIN(it);
+            pin = BLYNK_DECODE_PIN(it);
             ++it;
             if (!strcmp(it.asStr(), "in")) {
                 pinMode(pin, INPUT);

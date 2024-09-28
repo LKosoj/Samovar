@@ -19,13 +19,9 @@
 #include <UIPEthernet.h>
 #include <Adapters/BlynkEthernet.h>
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static EthernetClient _blynkEthernetClient;
-  static BlynkArduinoClient _blynkTransport(_blynkEthernetClient);
-  BlynkEthernet Blynk(_blynkTransport);
-#else
-  extern BlynkEthernet Blynk;
-#endif
+static EthernetClient _blynkEthernetClient;
+static BlynkArduinoClient _blynkTransport(_blynkEthernetClient);
+BlynkEthernet Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

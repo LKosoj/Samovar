@@ -17,12 +17,8 @@
 
 #include <Adapters/BlynkSerial.h>
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  BlynkTransportStream _blynkTransport;
-  BlynkStream Blynk(_blynkTransport);
-#else
-  extern BlynkStream Blynk;
-#endif
+BlynkTransportStream _blynkTransport;
+BlynkStream Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 

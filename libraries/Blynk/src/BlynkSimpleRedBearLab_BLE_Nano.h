@@ -168,12 +168,8 @@ public:
 
 BlynkTransportRedBearLab_BLE_Nano* BlynkTransportRedBearLab_BLE_Nano::instance = NULL;
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static BlynkTransportRedBearLab_BLE_Nano _blynkTransport;
-  BlynkRedBearLab_BLE_Nano Blynk(_blynkTransport);
-#else
-  extern BlynkRedBearLab_BLE_Nano Blynk;
-#endif
+static BlynkTransportRedBearLab_BLE_Nano _blynkTransport;
+BlynkRedBearLab_BLE_Nano Blynk(_blynkTransport);
 
 void BlynkTransportRedBearLab_BLE_Nano::connectCallback(const Gap::ConnectionCallbackParams_t *params)
 {

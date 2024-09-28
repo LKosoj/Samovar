@@ -52,7 +52,6 @@ public:
         BLYNK_LOG1(BLYNK_F("Connected to WiFi"));
 
         IPAddress myip = WiFi.localIP();
-        (void)myip; // Eliminate warnings about unused myip
         BLYNK_LOG_IP("IP: ", myip);
     }
 
@@ -96,13 +95,9 @@ public:
 
 };
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_BLYNK)
-  static WiFiClient _blynkWifiClient;
-  static BlynkArduinoClient _blynkTransport(_blynkWifiClient);
-  BlynkWifi Blynk(_blynkTransport);
-#else
-  extern BlynkWifi Blynk;
-#endif
+static WiFiClient _blynkWifiClient;
+static BlynkArduinoClient _blynkTransport(_blynkWifiClient);
+BlynkWifi Blynk(_blynkTransport);
 
 #include <BlynkWidgets.h>
 
