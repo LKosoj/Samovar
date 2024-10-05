@@ -298,8 +298,8 @@
       }
     };
 
-    function setBKCommand () {
-      var cmd = "startbk=";
+    function setNBKCommand () {
+      var cmd = "startnbk=";
       if (document.getElementById('power').value == "Выключить нагрев") {
         cmd = cmd + "0";
       } else {
@@ -619,7 +619,7 @@
 
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
-          <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setBKCommand();' class="button">
+          <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setNBKCommand();' class="button">
           <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
           <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
         </div>

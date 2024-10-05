@@ -150,7 +150,7 @@ void check_alarm_distiller() {
     check_power_error();
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      SendMsg("Критическая температура воды! Напряжение снижено с " + (String)target_power_volt, ALARM_MSG);
+      SendMsg("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
     }

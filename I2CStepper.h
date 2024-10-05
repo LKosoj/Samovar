@@ -50,6 +50,7 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
       //stepper.setSpeed(spd);
       startService();
     }
+    I2CStepperSpeed = spd;
     return true;
   }
   bool result = false;
@@ -64,6 +65,7 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
     I2C2.writeByte(use_I2C_dev, 6, target);
     I2C2.writeByte(use_I2C_dev, 8, 0);
     xSemaphoreGive(xI2CSemaphore);
+    I2CStepperSpeed = spd;
     result = true;
   }
   return result;

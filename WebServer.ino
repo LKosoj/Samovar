@@ -15,6 +15,7 @@ void start_self_test(void);
 void stop_self_test(void);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
+String http_sync_request_get(String url);
 
 #ifdef USE_LUA
 void start_lua_script();
@@ -125,13 +126,13 @@ void WebServerInit(void) {
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
 
-//#ifdef USE_LUA
-//  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
-//  server.serveStatic("/btn_button2.lua", SPIFFS, "/btn_button2.lua");
-//  server.serveStatic("/btn_button3.lua", SPIFFS, "/btn_button3.lua");
-//  server.serveStatic("/btn_button4.lua", SPIFFS, "/btn_button4.lua");
-//  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
-//#endif
+  //#ifdef USE_LUA
+  //  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
+  //  server.serveStatic("/btn_button2.lua", SPIFFS, "/btn_button2.lua");
+  //  server.serveStatic("/btn_button3.lua", SPIFFS, "/btn_button3.lua");
+  //  server.serveStatic("/btn_button4.lua", SPIFFS, "/btn_button4.lua");
+  //  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
+  //#endif
 
   change_samovar_mode();
 
@@ -352,6 +353,12 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "blynkauth") {
     s = SamSetup.blynkauth;
     return s;
+  } else if (var == "tgtoken") {
+    s = SamSetup.tg_token;
+    return s;
+  } else if (var == "tgchatid") {
+    s = SamSetup.tg_chat_id;
+    return s;
   } else if (var == "BVolt") {
     s = SamSetup.BVolt;
     return s;
@@ -371,7 +378,7 @@ String setupKeyProcessor(const String &var) {
       return "";
 #ifdef IGNORE_HEAD_LEVEL_SENSOR_SETTING
   } else if (var == "IgnFL") {
-     return F("style=""display: none""");
+    return F("style=""display: none""");
 #endif
   } else if (var == "UAPChecked") {
     if (SamSetup.useautopowerdown) return "checked='true'";
@@ -637,6 +644,12 @@ void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("blynkauth")) {
     request->arg("blynkauth").toCharArray(SamSetup.blynkauth, 33);
   }
+  if (request->hasArg("tgtoken")) {
+    request->arg("tgtoken").toCharArray(SamSetup.tg_token, request->arg("tgtoken").length() + 1);
+  }
+  if (request->hasArg("tgchatid")) {
+    SamSetup.tg_chat_id = request->arg("tgchatid").toInt();;
+  }
   if (request->hasArg("SteamColor")) {
     request->arg("SteamColor").toCharArray(SamSetup.SteamColor, request->arg("SteamColor").length() + 1);
   }
@@ -794,6 +807,12 @@ void web_command(AsyncWebServerRequest *request) {
     } else if (request->hasArg("startbk")) {
       if (request->arg("startbk").toInt() == 1) {
         sam_command_sync = SAMOVAR_BK;
+      } else {
+        sam_command_sync = SAMOVAR_POWER;
+      }
+    } else if (request->hasArg("startnbk")) {
+      if (request->arg("startnbk").toInt() == 1) {
+        sam_command_sync = SAMOVAR_NBK;
       } else {
         sam_command_sync = SAMOVAR_POWER;
       }
@@ -968,14 +987,36 @@ String get_web_file(String fn, get_web_type type) {
     Serial.println("File " + fn + " already exist.");
     return "";
   }
-  asyncHTTPrequest request;
-  String command = "GET";
+
   String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn + "?" + micros();
   Serial.print("url = ");
   Serial.println(url);
+
+  String s = http_sync_request_get(url);
+
+  if (s == "<ERR>") {
+    return s;
+  } else {
+    if (type == GET_CONTENT) {
+      return s;
+    } else {
+      File wf = SPIFFS.open("/" + fn, FILE_WRITE);
+      wf.print(s);
+      wf.close();
+      //Serial.print("responseText = ");
+      //Serial.println(s);
+    }
+    Serial.println("Done");
+  }
+
+  return "";
+}
+
+String http_sync_request_get(String url) {
+  asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(4);                      //Таймаут три секунды
-  request.open(command.c_str(), url.c_str());  //URL
+  request.setTimeout(4);                      //Таймаут четыре секунды
+  request.open("GET", url.c_str());  //URL
   while (request.readyState() < 1) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
   }
@@ -988,26 +1029,45 @@ String get_web_file(String fn, get_web_type type) {
   vTaskDelay(60 / portTICK_PERIOD_MS);
   if (request.responseHTTPcode() >= 0) {
     if (request.responseHTTPcode() != 200) {
-      Serial.print("responseHTTPcode = ");
+      Serial.print(F("responseHTTPcode = "));
       Serial.println(request.responseHTTPcode());
-      Serial.println("Content " + fn + " download error");
+      Serial.println("Content " + url + " download error");
       return "<ERR>";
     }
-    if (type == GET_CONTENT) {
-      String s = String("") + request.responseText() + "";
-      return s;
-    } else {
-      File wf = SPIFFS.open("/" + fn, FILE_WRITE);
-      wf.print(request.responseText());
-      wf.close();
-      //Serial.print("responseText = ");
-      //Serial.println(s);
-    }
+    String s = String("") + request.responseText() + "";
+    return s;
     Serial.println("Done");
   } else {
-    Serial.println("error");
+    Serial.print(F("responseHTTPcode = "));
     Serial.println(request.responseHTTPcode());
+    Serial.println("Content " + url + " download error (2)");
     return "<ERR>";
   }
+
   return "";
+}
+
+String http_sync_request_post(String url, String body, String ContentType) {
+  asyncHTTPrequest request;
+  request.setDebug(false);
+  request.setTimeout(4);                      //Таймаут четыре секунды
+
+  request.open("POST", url.c_str());  //URL
+  while (request.readyState() < 1) {
+    vTaskDelay(25 / portTICK_PERIOD_MS);
+  }
+  vTaskDelay(150 / portTICK_PERIOD_MS);
+  request.setReqHeader("Content-Type", getValue(ContentType, ':', 1).c_str());
+  request.send(body);
+
+  vTaskDelay(150 / portTICK_PERIOD_MS);
+  while (request.readyState() != 4) {
+    vTaskDelay(25 / portTICK_PERIOD_MS);
+  }
+  vTaskDelay(60 / portTICK_PERIOD_MS);
+  if (request.responseHTTPcode() >= 0) {
+    return request.responseText();
+  } else {
+    return "<ERR>";
+  }
 }

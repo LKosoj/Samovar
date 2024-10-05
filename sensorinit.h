@@ -38,6 +38,7 @@ void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
 void set_beer_program(String WProgram);
 void set_program(String WProgram);
 void set_dist_program(String WProgram);
+void set_nbk_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
 void setupOpenLog(void);
 void createFile(char* fileName);
@@ -165,7 +166,13 @@ void DS_getvalue(void) {
   float pv;
   uint8_t p_addr[8] = USE_PRESSURE_1WIRE;
   pv = sensors.getTempC(p_addr);   // считываем давление с расширителя по 1Wire
-  if (pv > -120) pressure_value = pv;
+  if (pv > -120) {
+    pressure_value = pv
+    use_pressure_sensor = true;
+  } else {
+    pressure_value = -1;
+    use_pressure_sensor = false;
+  }
 #endif
 
   //    float randNumber;
@@ -365,8 +372,9 @@ void sensor_init(void) {
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
     set_beer_program("M;45;0;1^-1^2^2;0\nP;45;1;1^-1^2^3;0\nP;60;1;1^-1^2^3;0\nW;0;0;1^-1^2^3;0\nB;0;1;1^-1^2^3;0\nC;30;0;1^-1^2^3;0\n");
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    //set_dist_program("T;90;0;50\nS;0.5;1;60\nA;11.3;2;70\nP;11.3;2;70\nR;11.3;2;70\n");
     set_dist_program("A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n");
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    set_nbk_program("H;3;0;3000;24\nS;18;0;2400;24\nT;20;0;0;24\nP;0;20;-100;24\nW;0;0;0;24\n");
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }

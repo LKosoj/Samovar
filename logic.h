@@ -349,6 +349,21 @@ String get_Samovar_Status() {
     SamovarStatus = F("Режим дистилляции");
   } else if (SamovarStatusInt == 3000) {
     SamovarStatus = F("Режим бражной колонны");
+  } else if (SamovarStatusInt == 4000) {
+    if (startval == 4001) {
+      SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
+      if (program[ProgramNum].WType == "H") {
+        SamovarStatus = SamovarStatus + "Прогрев НБК";
+      } else if (program[ProgramNum].WType == "S") {
+        SamovarStatus = SamovarStatus + "Стабилизация НБК; Осталось " + (millis() / 1000 ) + " сек";
+      } else if (program[ProgramNum].WType == "T") {
+        SamovarStatus = SamovarStatus + "Первичная подача браги";
+      } else if (program[ProgramNum].WType == "P") {
+        SamovarStatus = SamovarStatus + "Выход на заданное давление";
+      } else if (program[ProgramNum].WType == "W") {
+        SamovarStatus = SamovarStatus + "Рабочий режим";
+      }
+    }
   } else if (SamovarStatusInt == 2000) {
 #ifdef SAM_BEER_PRG
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
@@ -1202,7 +1217,7 @@ void triggerPowerStatus(void *parameter) {
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+SS?\r");
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
           vTaskDelay(600 / portTICK_RATE_MS);
           if (Serial2.available()) {
             current_power_mode = Serial2.readStringUntil('\r');
@@ -1220,7 +1235,7 @@ void triggerPowerStatus(void *parameter) {
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VO?\r");
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
           vTaskDelay(600 / portTICK_RATE_MS);
           if (Serial2.available()) {
             resp = Serial2.readStringUntil('\r');
@@ -1239,7 +1254,7 @@ void triggerPowerStatus(void *parameter) {
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VS?\r");
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
           vTaskDelay(600 / portTICK_RATE_MS);
           if (Serial2.available()) {
             resp = Serial2.readStringUntil('\r');

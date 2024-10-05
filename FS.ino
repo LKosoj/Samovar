@@ -201,7 +201,7 @@ bool exists(String path) {
 void create_data() {
 
   //Если режим ректификация, запишем в файл текущую программу отбора
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
     filePrg.println(get_program(CAPACITY_NUM * 2));
     Serial.println(get_program(CAPACITY_NUM * 2));
@@ -239,17 +239,20 @@ String append_data() {
   w = false;
 
   //Если режим ректификация и идет отбор, запишем в файл текущий статус
-//  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE) {
-//    File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
-//    String sapd = "P=" + String(ProgramNum + 1);
-//    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-//      sapd += ";V=" + get_liquid_volume();
-//    } else {
-//      sapd += ";T=" + WthdrwTimeS;
-//    }
-//    fileState.println(s);
-//    fileState.close();
-//  }
+  STcnt++;
+  if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
+    File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
+    String sapd = "P=" + String(ProgramNum + 1);
+    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+      sapd += ";V=" + String(get_liquid_volume());
+    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      sapd += ";T=" + WthdrwTimeS;
+    }
+    fileState.println(sapd);
+    Serial.println(sapd);
+    fileState.close();
+    STcnt = 0;
+  }
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   if (SteamSensor.avgTemp != SteamSensor.LogPrevTemp) {

@@ -109,17 +109,18 @@ void check_alarm_bk() {
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
 
     check_power_error();
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      SendMsg("Критическая температура воды! Напряжение снижено с " + (String)target_power_volt, ALARM_MSG);
+      SendMsg("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
     }
+#elif
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 #endif
     alarm_t_min = millis() + 30000;
   }

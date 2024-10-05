@@ -178,8 +178,6 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 #define LUA_RECT ""
 #endif
 
-#include <FS.h>
-
 #define USE_LittleFS
 
 #ifdef USE_LittleFS
@@ -195,6 +193,8 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 #pragma message ("USE SPIFFS")
 #include <SPIFFS.h>
 #endif
+
+#include <FS.h>
 
 void writeString(String Str, uint8_t num);
 void WriteConsoleLog(String StringLogMsg);
@@ -309,6 +309,8 @@ PID_ATune aTune(&Input, &Output);
 GButton whls(WHEAD_LEVEL_SENSOR_PIN);
 #endif
 
+GButton nbkls(LUA_PIN);
+
 LiquidMenu main_menu1(lcd);
 
 #ifdef USE_WEB_SERIAL
@@ -386,6 +388,8 @@ struct SetupEEPROM {
   uint8_t DistTimeF;                                           //Время в минутах для контроля завершения процесса дистилляции
   bool UseHLS;                                                 //Использовать датчик флегмы
   float MaxPressureValue;                                      //Максимальное давление, при котором сработает аварийный режим
+  char tg_token[50];                                           //Токен Телеграм-бота
+  uint64_t  tg_chat_id;                                        //Идентификатор чата Телеграм
 };
 
 struct DSSensor {
@@ -427,6 +431,7 @@ const char* host = SAMOVAR_HOST;
 
 //**************************************************************************************************************
 uint8_t DScnt = 0;
+uint8_t STcnt = 0;                                              // Счетчик для записи текущего статуса
 //uint8_t tcnt = 0;
 bool bmefound = true;
 volatile bool PowerOn = false;                                  // Индикатор включенного питания
@@ -471,6 +476,7 @@ volatile int currentstepcnt = 0;                                // Текуще�
 volatile unsigned long prev_time_ms;                            // Предыдущее время
 volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
 volatile uint16_t CurrrentStepperSpeed;                         // Скорость шагового двигателя
+volatile uint16_t I2CStepperSpeed;                              // Скорость шагового двигателя
 volatile unsigned int CurrrentStepps;                           // Количество пройденных степпером шагов
 volatile unsigned int TargetStepps;                             // Количество шагов до нужного объема
 String program_Wait_Type;                                       // Тип ожидания

@@ -69,6 +69,7 @@ void beer_finish() {
   if (valve_status) {
     open_valve(false, true);
   }
+  set_mixer_state(false, false);
 #ifdef USE_WATER_PUMP
   if (pump_started) set_pump_pwm(0);
 #endif
@@ -309,10 +310,6 @@ void set_mixer_state(bool state, bool dir) {
     if (BitIsSet(program[ProgramNum].capacity_num, 0)) {
       //включаем реле 2
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
-#ifdef USE_WATER_PUMP
-      //включаем SSD реле
-      pump_pwm.write(1023);
-#endif
       //включаем I2CStepper шаговик
       if (use_I2C_dev == 1) {
         int tm = abs(program[ProgramNum].Volume);
@@ -321,6 +318,10 @@ void set_mixer_state(bool state, bool dir) {
       }
     }
     if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
+#ifdef USE_WATER_PUMP
+      //включаем SSD реле
+      pump_pwm.write(1023);
+#endif
       //включаем I2CStepper реле 1
       if (use_I2C_dev == 1 || use_I2C_dev == 2) {
         bool b = set_mixer_pump_target(1);
@@ -364,7 +365,8 @@ void set_heater_state(float setpoint, float temp) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
     delay(50);
-    set_power_mode(POWER_SPEED_MODE);
+    //set_power_mode(POWER_SPEED_MODE);
+    set_current_power(SamSetup.BVolt);
 #else
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);

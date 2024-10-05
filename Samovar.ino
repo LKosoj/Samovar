@@ -1,10 +1,11 @@
 //TODO
 //
+//вывести в ВЕБ-интерфейс на главную данные о текущей скважности ШИМ насоса охлаждения (сделано в скетче, нужно только вывести в интерфейс)
+//Неправильное отображение файла prg.csv
 //Проверить на С подъем напряжения
 //При старте колонны до стабилизации реализовать выход на предзахлеб (если установлен датчик флегмы) для смачивания насадки (дополнительная опция)
 //Перейти на GyverPID
 //Перейти на ESPAsyncWebSrv
-//вывести в ВЕБ-интерфейс на главную данные о текущей скважности ШИМ насоса охлаждения
 
 //**************************************************************************************************************
 // Подключение библиотек
@@ -116,6 +117,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 
 #include "mod_rmvk.h"
+
 //#include "font.h"
 #include "logic.h"
 
@@ -132,6 +134,10 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #include <cppQueue.h>
 
 cppQueue  msg_q(100, 5, FIFO);
+#endif
+
+#ifdef USE_TELEGRAM
+#include <UrlEncode.h>
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -178,6 +184,7 @@ void menu_switch_focus();
 float get_steam_alcohol(float t);
 float get_alcohol(float t);
 void startService(void);
+String http_sync_request_get(String url);
 
 #ifdef __SAMOVAR_DEBUG
 //LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -203,7 +210,7 @@ void recvMsg(uint8_t *data, size_t len) {
     WebSerial.print(Var);
     WebSerial.print(" = ");
     if (Var == "WFpulseCount") {
-      WFpulseCount = (byte)Val.toInt();
+      WFpulseCount = (uint8_t)Val.toInt();
       WebSerial.println(WFpulseCount);
     } else if (Var != "") {
     }
@@ -329,24 +336,43 @@ void triggerGetClock(void *parameter) {
       }
     }
 
-#ifdef SAMOVAR_USE_BLYNK
+#ifdef USE_TELEGRAM
     {
-      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
-        Blynk.connect(BLYNK_TIMEOUT_MS);
-        vTaskDelay(50 / portTICK_PERIOD_MS);
-      } else {
+      if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0) {
         if (!msg_q.isEmpty()) {
           if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
-            char c[150];
+            char c[120];
             msg_q.pop(&c);
             qMsg = c;
-            Blynk.notify(qMsg);
+            //Serial.println(qMsg);
+            http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg));
             xSemaphoreGive(xMsgSemaphore);
           }
         }
       }
     }
 #endif
+
+    //#ifdef SAMOVAR_USE_BLYNK
+    //    {
+    //      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
+    //        Blynk.connect(BLYNK_TIMEOUT_MS);
+    //        vTaskDelay(50 / portTICK_PERIOD_MS);
+    //      } else {
+    //        if (!msg_q.isEmpty()) {
+    //          if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
+    //            char c[120];
+    //            msg_q.pop(&c);
+    //            qMsg = c;
+    //            //Serial.println(qMsg);
+    //            Blynk.notify(qMsg);
+    ////            Blynk.notify(c);
+    //            xSemaphoreGive(xMsgSemaphore);
+    //          }
+    //        }
+    //      }
+    //    }
+    //#endif
 
 #ifdef USE_MQTT
     {
@@ -597,7 +623,7 @@ void triggerSysTicker(void *parameter) {
 
       WFpulseCount = 0;
       oldTime = millis();
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      vTaskDelay(20 / portTICK_PERIOD_MS);
 #endif
 
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
@@ -624,7 +650,7 @@ void triggerSysTicker(void *parameter) {
 
       OldMinST = CurMinST;
     }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
   }
 }
 
@@ -880,13 +906,17 @@ void setup() {
     Blynk.config(SamSetup.blynkauth);
 #endif
     Blynk.connect(BLYNK_TIMEOUT_MS);
-    Blynk.notify("{DEVICE_NAME} started");
 #ifdef __SAMOVAR_DEBUG
     Serial.println(F("Blynk started"));
 #endif
   }
 #endif
 
+#ifdef USE_TELEGRAM
+  if (SamSetup.tg_token[0] != 0) {
+    http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=Самовар+готов+к+работе");
+  }
+#endif
 
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
@@ -949,7 +979,7 @@ void setup() {
 
 #ifdef USE_WEB_SERIAL
   WebSerial.begin(&server);
-  WebSerial.msgCallback(recvMsg);
+  WebSerial.onMessage(recvMsg);
 #endif
 
 #ifdef USE_WATERSENSOR
@@ -1215,6 +1245,8 @@ void loop() {
     distiller_proc();  //функция для проведения дистилляции
   } else if (SamovarStatusInt == 3000) {
     bk_proc();  //функция для работы с БК
+  } else if (SamovarStatusInt == 4000) {
+    nbk_proc();  //функция для работы с НБК
   } else if (SamovarStatusInt == 2000 && startval == 2000) {
     beer_proc();  //функция для проведения затирания
   }
@@ -1336,10 +1368,10 @@ void getjson(void) {
   jsonstr += ",";
 #endif
 
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
-  jsonstr += "\"prvl\":"; jsonstr += format_float(pressure_value, 2);
-  jsonstr += ",";
-#endif
+  if (use_pressure_sensor) {
+    jsonstr += "\"prvl\":"; jsonstr += format_float(pressure_value, 2);
+    jsonstr += ",";
+  }
 
   if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);
@@ -1464,6 +1496,12 @@ void read_config() {
   SamSetup.UseHLS = true;
 #endif
 
+#ifdef USE_TELEGRAM
+  if (SamSetup.tg_token[0] == 255) {
+    SamSetup.tg_token[0] = 0;
+  }
+#endif
+
 }
 
 void SendMsg(const String m, MESSAGE_TYPE msg_type) {
@@ -1481,7 +1519,7 @@ void SendMsg(const String m, MESSAGE_TYPE msg_type) {
     default : MsgPl = "";
   }
   if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
-    MsgPl += "{DEVICE_NAME} - " + m;
+    MsgPl += "Самовар - " + m;
     msg_q.push(MsgPl.c_str());
     xSemaphoreGive(xMsgSemaphore);
   }

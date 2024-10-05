@@ -306,7 +306,7 @@
         <h2>Напр./мощность регулятора в режиме поддержания темп.: <input name='StbVoltage' id='StbVoltage' type='text' value='%StbVoltage%'> V</h2>
       </div>
       <div id='VoltBoil' style=''>
-        <h2>Напр./мощность регулятора в режиме кипения: <input name='BVolt' id='BVolt' type='text' value='%BVolt%'> V</h2>
+        <h2>Напр./мощность регулятора в режиме нагрева и кипения: <input name='BVolt' id='BVolt' type='text' value='%BVolt%'> V</h2>
       </div>
         <h2>
           <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
@@ -317,7 +317,11 @@
     <div id="Other" class="tabcontent">
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
         <h2>Токен Blynk: <input name='blynkauth' type='text' size="32" style="width: 22em;" value='%blynkauth%'></h2>
+        <h2>Токен Telegram: <input name='tgtoken' type='text' size="50" style="width: 22em;" value='%tgtoken%'></h2>
+        <h2>Chat ID Telegram: <input name='tgchatid' type='text' size="15" style="width: 22em;" value='%tgchatid%'></h2>
         <h2>URL видео камеры: <input name='videourl' type='text' size="32" style="width: 30em;" value='%videourl%'></h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
         <h2>Часовой пояс: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
         <h2>
           <input id='CheckPower' type='checkbox' name='CheckPower' value='CheckPower' %ChckPwr%>

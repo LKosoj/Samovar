@@ -11,9 +11,27 @@ void set_pump_speed_pid(float temp);
 void SendMsg(String m, MESSAGE_TYPE msg_type);
 bool check_boiling();
 void set_water_temp(float duty);
+String getValue(String data, char separator, int index);
+void run_nbk_program(uint8_t num);
+bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 
+//--При выполнении строк программы осуществляются проверки:
+// 1) Работа датчика захлёба - мощность снижаем на 100 Вт и ждём 60 сек.
+// 2) Превышение уставки по давлению - мощность снижаем на 10 Вт и ждём 10 сек.
+// 3) Т пара>98.1 гр.Ц - Закончилась брага - останавливаем процесс.
+// 4) Ттса (спирт) > 60 гр.Ц или Тводы > 70 гр.Ц - не достаточное охлаждение, ждем 60 сек, если не снижается останавливаем процесс.
+// 5) Срабатывание датчика недостаточного уровня воды в парогене (LUA pin) - ждем 60 сек, если не восстановится останавливаем процесс.
+
+void IRAM_ATTR isrNBKLS_TICK() {
+  nbkls.tick();
+}
 
 void nbk_proc() {
+
+  if (!use_pressure_sensor) {
+    SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
+    return;
+  }
 
   if (!PowerOn) {
 #ifdef USE_MQTT
@@ -23,28 +41,119 @@ void nbk_proc() {
     set_power(true);
 #ifdef SAMOVAR_USE_POWER
     delay(1000);
-    set_power_mode(POWER_SPEED_MODE);
+    set_current_power(program[ProgramNum].Power);
 #else
     current_power_mode = POWER_SPEED_MODE;
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
     create_data();  //создаем файл с данными
     SteamSensor.Start_Pressure = bme_pressure;
-    SendMsg(("Включен нагрев непрерывной бражной колонны"), NOTIFY_MSG);
+    SendMsg(("Включен нагрев НБК"), NOTIFY_MSG);
+
+    //настраиваем параметры датчика уровня воды в парогене
+    nbkls.setType(LOW_PULL);
+    nbkls.setDebounce(50);  //игнорируем дребезг
+    nbkls.setTickMode(MANUAL);
+    nbkls.setTimeout(60 * 1000);  //время, через которое сработает остановка по уровню воды в парогенераторе
+    //вешаем прерывание на изменение датчика уровня флегмы
+    attachInterrupt(LUA_PIN, isrNBKLS_TICK, CHANGE);
+
+    run_nbk_program(0);
+    set_stepper_target(program[ProgramNum].Speed, 0, 0);
   }
 
-  if (TankSensor.avgTemp >= SamSetup.DistTemp) {
-    nbk_finish();
+  //H;3;0;3000;24\nS;18;0;2400;24\nT;20;0;0;24\nP;0;20;-100;24\nW;0;0;0;24\n
+  //Обрабатываем программу НБК
+  if (program[ProgramNum].WType == "H" && SteamSensor.avgTemp >= 85) {
+    //Если Т пара больше 85 градусов, переходим к стабилизации НБК
+    begintime = millis() * 300 * 1000;
+    set_stepper_target(program[ProgramNum + 1].Speed, 0, 0);
+    run_nbk_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "S" && begintime >= millis()) {
+    //Если прошло 300 секунд с начала стабилизации НБК, переходим к программе выхода на заданную скорость отбора
+    //Запомним Тниз = d_s_temp_prev
+    d_s_temp_prev = TankSensor.avgTemp;
+    begintime = 0;
+    run_nbk_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed >= I2CStepperSpeed && d_s_temp_prev - 0.5 <= TankSensor.avgTemp ) {
+    //Если достигли заданной скорости и вышли за пределы Т внизу колонны, переходим к программе выхода на заданное давление
+    run_nbk_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "P" && pressure_value > program[ProgramNum].capacity_num) {
+    //Если достигли заданного давления, переходим к рабочей программе
+    run_nbk_program(ProgramNum + 1);
   }
+
+  //управляющие воздействия для текущей программы
+  if (program[ProgramNum].WType == "T") {
+    if (t_min <= millis()) {
+      float spdinc;
+      if (program[ProgramNum].Speed < I2CStepperSpeed) {
+        spdinc = 100;
+      } else {
+        spdinc = 50;
+      }
+      set_stepper_target(I2CStepperSpeed + spdinc, 0, 0);
+    } else {
+      t_min = millis() + 5 * 1000;
+    }
+  } else if (program[ProgramNum].WType == "P") {
+    if (t_min <= millis()) {
+#ifdef SAMOVAR_USE_SEM_AVR
+      //Если регулятор мощности - повышаем на 15 ватт
+      set_current_power(target_power_volt + 15);
+#else
+      //Если регулятор напряжения - снижаем на 2 вольта
+      set_current_power(target_power_volt + 2);
+#endif
+      if (TankSensor.avgTemp >= d_s_temp_prev - 0.5) {
+        set_stepper_target(I2CStepperSpeed + 50, 0, 0);
+      }
+    } else {
+      t_min = millis() + 5 * 1000;
+    }
+  } else if (program[ProgramNum].WType == "W") {
+    if (t_min <= millis()) {
+      if (TankSensor.avgTemp < d_s_temp_prev - 0.5) {
+        set_stepper_target(I2CStepperSpeed - 50, 0, 0);
+      } else if (TankSensor.avgTemp > d_s_temp_prev) {
+        set_stepper_target(I2CStepperSpeed + 50, 0, 0);
+      }
+    } else {
+      t_min = millis() + 5 * 1000;
+    }
+  }
+
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void nbk_finish() {
-  SendMsg(("Работа непрерывной бражной колонны завершена"), NOTIFY_MSG);
+  SendMsg(("Работа НБК завершена"), NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
 }
 
+void run_nbk_program(uint8_t num) {
+  if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return;
+  if (startval == 4000) startval = 4001;
+  ProgramNum = num;
+  begintime = 0;
+  t_min = 0;
+  msgfl = true;
+
+  if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
+
+  if (SamSetup.ChangeProgramBuzzer) {
+    set_buzzer(true);
+  }
+
+  if (num == CAPACITY_NUM * 2) {
+    //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
+    nbk_finish();
+  } else {
+    SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+  }
+
+}
 
 void check_alarm_nbk() {
   //сбросим паузу события безопасности
@@ -54,20 +163,6 @@ void check_alarm_nbk() {
     open_valve(true, true);
 #ifdef USE_WATER_PUMP
     set_pump_pwm(bk_pwm);
-#endif
-  }
-
-  //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  if (current_power_mode == POWER_SPEED_MODE && (check_boiling() || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
-#ifdef SAMOVAR_USE_POWER
-#ifndef SAMOVAR_USE_SEM_AVR
-    set_current_power(45);
-#else
-    set_current_power(200);
-#endif
-#else
-    current_power_mode = POWER_WORK_MODE;
-    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
   }
 
@@ -96,22 +191,153 @@ void check_alarm_nbk() {
   }
 #endif
 
-  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
+  //Контролируем воду, 4)
+  if (((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) || ACPSensor.avgTemp >= 60) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
-    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(("Критическая температура воды!"), WARNING_MSG);
+    //Если уже реагировали - надо подождать 60 секунд, так как процесс инерционный
 
 #ifdef SAMOVAR_USE_POWER
 
     check_power_error();
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      SendMsg("Критическая температура воды! Напряжение снижено с " + (String)target_power_volt, ALARM_MSG);
+      SendMsg("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
     }
+#elif
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 #endif
-    alarm_t_min = millis() + 30000;
+    alarm_t_min = millis() + 60000;
   }
+
+  //Контролируем Т пара>98.1 3)
+  if ((SteamSensor.avgTemp >= 98.1) && PowerOn) {
+    SendMsg(("Брага зкончилась! Остановка"), WARNING_MSG);
+    run_nbk_program(CAPACITY_NUM * 2);
+  }
+
+  //Работа датчика захлёба - мощность снижаем на 100 Вт и ждём 60 сек. 1)
+  //Если используется датчик уровня флегмы в голове
+#ifdef USE_HEAD_LEVEL_SENSOR
+  if (PowerOn) {
+    whls.tick();
+    if (whls.isHolded()) {
+      //alarm_h_min == 0
+      whls.resetStates();
+      if (alarm_h_min == 0) {
+#ifdef SAMOVAR_USE_POWER
+        SendMsg("Сработал датчик захлеба! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);
+        //Снижаем напряжение регулятора
+#ifdef SAMOVAR_USE_SEM_AVR
+        //Если регулятор мощности - снижаем на 100 ватт
+        set_current_power(target_power_volt - 100);
+#else
+        //Если регулятор напряжения - снижаем на 5 вольт
+        set_current_power(target_power_volt - 5);
+#endif
+#endif
+        //Запускаем таймер
+        alarm_h_min = millis() + 60000;
+      } else if (millis() >= alarm_h_min) {
+        //подождали, сбросим таймер
+        alarm_h_min = 0;
+      }
+    } else {
+      alarm_h_min = 0;
+    }
+  }
+#endif
+
+  //Срабатывание датчика недостаточного уровня воды в парогене (LUA pin) 5)
+  nbkls.tick();
+  if (nbkls.isHolded()) {
+    SendMsg(("Не достаточно воды в парогенераторе! Остановка"), WARNING_MSG);
+    run_nbk_program(CAPACITY_NUM * 2);
+  }
+
+  //Превышение уставки по давлению - мощность снижаем на 10 Вт и ждём 10 сек. 2)
+  if (pressure_value >= program[ProgramNum].TempSensor) {
+    if (d_s_time_min == 0) {
+      //Снижаем напряжение регулятора
+#ifdef SAMOVAR_USE_SEM_AVR
+      //Если регулятор мощности - снижаем на 10 ватт
+      set_current_power(target_power_volt - 10);
+#else
+      //Если регулятор напряжения - снижаем на 3 вольта
+      set_current_power(target_power_volt - 3);
+#endif
+      SendMsg(("Высокое давление! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt), WARNING_MSG);
+      d_s_time_min = millis() + 10 * 1000;
+    } else {
+      if (d_s_time_min >= millis()) {
+        d_s_time_min = 0;
+      }
+    }
+  } else {
+    d_s_time_min = 0;
+  }
+
+  if (TankSensor.avgTemp >= SamSetup.DistTemp) {
+    SendMsg(("Т куба выше Т, заданной в настройках! Остановка"), WARNING_MSG);
+    run_nbk_program(CAPACITY_NUM * 2);
+  }
+
   vTaskDelay(10 / portTICK_PERIOD_MS);
+}
+
+
+//H;3;0;3000;24\nS;18;0;2400;24\nT;20;0;0;24\nP;0;20;-100;24\nW;0;0;0;24\n
+//struct WProgram {
+//  String WType;                                                //тип отбора - головы или тело
+//  uint16_t Volume;                                             //объем отбора в мл
+//  float Speed;                                                 //скорость отбора в л/ч
+//  uint8_t capacity_num;                                        //номер емкости для отбора
+//  float Temp;                                                  //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
+//  uint16_t Power;                                              //напряжение, при которой отбирается эта часть погона.
+//  uint8_t TempSensor;                                          //температурный сенсор, используемый в программе Пиво для контроля нагрева
+//  float Time;                                                  //время, необходимое для отбора программы
+//};
+//
+void set_nbk_program(String WProgram) {
+  char c[500];
+  WProgram.toCharArray(c, 500);
+  char *pair = strtok(c, ";");
+  //String MeshTemplate;
+  int i = 0;
+  while (pair != NULL and i < CAPACITY_NUM * 2) {
+    program[i].WType = pair;  // Тип программы
+    pair = strtok(NULL, ";");
+    program[i].Speed = atof(pair);  //Скорость отбора
+    pair = strtok(NULL, ";");
+    program[i].capacity_num = atoi(pair); // Целевое давление
+    pair = strtok(NULL, ";");
+    program[i].Power = atof(pair); // Коррекция мощности
+    pair = strtok(NULL, "\n");
+    program[i].TempSensor = atof(pair); // Максимальное давление
+    i++;
+    ProgramLen = i;
+    pair = strtok(NULL, ";");
+    if ((!pair || pair == NULL || pair[0] == 13) and i < CAPACITY_NUM * 2) {
+      program[i].WType = "";
+      break;
+    }
+  }
+}
+
+String get_nbk_program() {
+  String Str = "";
+  int k = CAPACITY_NUM * 2;
+  for (uint8_t i = 0; i < k; i++) {
+    if (program[i].WType == "") {
+      i = CAPACITY_NUM * 2 + 1;
+    } else {
+      Str += program[i].WType + ";";
+      Str += (String)program[i].Speed + ";";
+      Str += (String)(int)program[i].capacity_num + ";";
+      Str += (String)(int)program[i].Power + ";";
+      Str += (String)program[i].TempSensor + "\n";
+    }
+  }
+  return Str;
 }
