@@ -355,7 +355,7 @@ String get_Samovar_Status() {
       if (program[ProgramNum].WType == "H") {
         SamovarStatus = SamovarStatus + "Прогрев НБК";
       } else if (program[ProgramNum].WType == "S") {
-        SamovarStatus = SamovarStatus + "Стабилизация НБК; Осталось " + (millis() / 1000 ) + " сек";
+        SamovarStatus = SamovarStatus + "Стабилизация НБК; Осталось " + ((begintime - millis()) / 1000 ) + " сек";
       } else if (program[ProgramNum].WType == "T") {
         SamovarStatus = SamovarStatus + "Первичная подача браги";
       } else if (program[ProgramNum].WType == "P") {
