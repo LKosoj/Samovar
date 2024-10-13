@@ -35,7 +35,7 @@ void IRAM_ATTR isrNBKLS_TICK() {
 
 void nbk_proc() {
 
-  if (use_pressure_sensor) {
+  if (!use_pressure_sensor) {
     SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
     nbk_finish();
     return;
