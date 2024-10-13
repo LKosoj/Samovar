@@ -756,6 +756,9 @@ void web_command(AsyncWebServerRequest *request) {
       else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
         sam_command_sync = SAMOVAR_DIST_NEXT;
       }
+      else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+        sam_command_sync = SAMOVAR_NBK_NEXT;
+      }
       else {
         sam_command_sync = SAMOVAR_START;
       }
@@ -853,6 +856,9 @@ void web_program(AsyncWebServerRequest *request) {
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
       set_dist_program(request->arg("WProgram"));
       request->send(200, "text/plain", get_dist_program());
+    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+      set_nbk_program(request->arg("WProgram"));
+      request->send(200, "text/plain", get_nbk_program());
     } else {
       set_program(request->arg("WProgram"));
       request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));

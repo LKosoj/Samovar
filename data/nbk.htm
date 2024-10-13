@@ -257,14 +257,13 @@
       s = "";
       for (i = 1; i < t.length; i++) {
         k = t[i].childNodes;
-        for (j = 1; j < 7; j++) {
+        for (j = 2; j < 6; j++) {
           s = s + k[j].value + ";";
         }
         s = s.slice(0, -1);
         s = s + "\n";
       }
       document.getElementById('WProgram').value = s;
-      set_num();
     }
 
     function set_program () {
@@ -472,6 +471,7 @@
 
     <div class="tab">
       <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Режим НБК">
+      <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
       <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
     </div>
 
@@ -620,6 +620,7 @@
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
           <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setNBKCommand();' class="button">
+          <input id='start' type='submit' name='start' class="button" value='Следующая программа' onclick='sendbutton("start=1");'>
           <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
           <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
         </div>
@@ -628,22 +629,72 @@
     </div>
 
     <div id="Prog" class="tabcontent">
-      <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div>
-
-      <div class="prg" id="prg"></div>
-
+      <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа НБК</div>
+      
+      
+		<div class="prg" id="prg">
+		  <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="width: 252; display: inline-block; text-align: center;">Тип программы</label>&nbsp;&nbsp;&nbsp;<label class="tooltip" style="width: 85; display: inline-block; text-align: center;">Скорость</label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Давление</label>&nbsp;&nbsp;<label class="tooltip">Напряжение</label>&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Предел</label></div>
+		  <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label><label style="width: 252;display: inline-block;color: honeydew;">Прогрев НБК</label><input type="text" name="ptemp1" onchange="calc_program();" style="background-color: #FF6347;width:85"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"></div>
+		  <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label><label style="width: 252;display: inline-block;color: navy;">Стабилизация НБК</label><input type="text" name="ptemp2" onchange="calc_program();" style="background-color: #FFFF00;width:85"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"></div>
+		  <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label><label style="width: 252;display: inline-block;color: navy;">Первичная подача браги</label><input type="text" name="ptemp3" onchange="calc_program();" style="background-color: #00BFFF;width:85"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"></div>
+		  <div class="prgline" id="prgln4" style="background-color: #FFA500;"><label class="prglabel" style="background-color: #FFA500;">04</label><label style="width: 252;display: inline-block;color: navy;">Выход на заданное давление</label><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #FFA500;width:85"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"></div>
+		  <div class="prgline" id="prgln5" style="background-color: #98FB98;"><label class="prglabel" style="background-color: #98FB98;">05</label><label style="width: 252;display: inline-block;color: navy;">Рабочий режим</label><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #98FB98;width:85"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"></div>
+		</div>      
+      
+      
       <div>
 
-        <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; 
-      background-color: #F7F7F7">
+        <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: #F7F7F7">
 
           <div class="list-group">
+            <div class="list-group-item list-header" data-name="spoiler-title">
+              <span class="spoiler-sign">[+]</span>Описание программы НБК в текстовом формате для сохранения в облаке:
+            </div>
+            <div class="list-group-item list-content spoiler-body">
+              <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
+            </div>
+          </div>
+
+          <div class="list-group">
+            <div class="list-group-item list-header" data-name="spoiler-title">
+              <span class="spoiler-sign">[+]</span>Программа НБК:
+            </div>
             <div class="list-group-item list-content spoiler-body">
               <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
+              <ul>
+                <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
+                  Тип программы
+                  <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 0.7em;">
+                    <div>
+                      <span style="font-weight: bold;"> H </span> - Прогрев НБК
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> S </span> - Стабилизация НБК
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> T </span> - Первичная подача браги
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> P </span> - Выход на заданное давление
+                    </div>
+                    <div>
+                      <span style="font-weight: bold;"> W </span> - Рабочий режим
+                    </div>
+                  </div>
+                </li>
+              </ul>
+
               <div style="border: 1px dashed #bbb; padding: 1em; 
       margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
       font-size: 1.2em; font-weight: bold; background-color: #f2f2f2">
-                Пример программы отбора:
+                Пример программы НБК:
+                <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
+                  <div>H;3;0;3000;24</div>
+                  <div>S;18;0;2400;24</div>
+                  <div>T;20;0;0;24</div>
+                  <div>P;0;20;-100;24</div>
+                  <div>W;0;0;0;24</div>
+                </div>
               </div>
             </div>
           </div>
@@ -651,7 +702,9 @@
 
       </div>
 
-
+      <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 2em; margin-bottom: 1em">
+        <input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
+      </div>
     </div>
 
     <div id="Other" class="tabcontent">

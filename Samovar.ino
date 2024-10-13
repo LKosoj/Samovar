@@ -1228,6 +1228,9 @@ void loop() {
         SamovarStatusInt = 4000;
         startval = 4000;
         break;
+      case SAMOVAR_NBK_NEXT:
+        run_nbk_program(ProgramNum + 1);
+        break;
       case SAMOVAR_SELF_TEST:
         start_self_test();
         break;
