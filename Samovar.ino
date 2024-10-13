@@ -133,7 +133,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #include <BlynkSimpleEsp32.h>
 #include <cppQueue.h>
 
-cppQueue  msg_q(100, 5, FIFO);
+cppQueue  msg_q(80, 4, FIFO);
 #endif
 
 #ifdef USE_TELEGRAM

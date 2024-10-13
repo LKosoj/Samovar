@@ -35,8 +35,9 @@ void IRAM_ATTR isrNBKLS_TICK() {
 
 void nbk_proc() {
 
-  if (!use_pressure_sensor) {
+  if (use_pressure_sensor) {
     SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
+    nbk_finish();
     return;
   }
 
@@ -72,22 +73,14 @@ void nbk_proc() {
   //Обрабатываем программу НБК
   if (program[ProgramNum].WType == "H" && SteamSensor.avgTemp >= 85) {
     //Если Т пара больше 85 градусов, переходим к стабилизации НБК
-    begintime = millis() * 300 * 1000;
-    set_stepper_target(program[ProgramNum + 1].Speed, 0, 0);
-    set_current_power(program[ProgramNum + 1].Power);
     run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "S" && begintime >= millis()) {
+  } else if (program[ProgramNum].WType == "S" && begintime <= millis()) {
     //Если прошло 300 секунд с начала стабилизации НБК, переходим к программе выхода на заданную скорость отбора
-    //Запомним Тниз = d_s_temp_prev
-    d_s_temp_prev = TankSensor.avgTemp;
-    begintime = 0;
     run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed >= I2CStepperSpeed && d_s_temp_prev - 0.5 <= TankSensor.avgTemp ) {
+  } else if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed >= I2CStepperSpeed && d_s_temp_prev - 0.5 <= TankSensor.avgTemp && TankSensor.avgTemp > 80) {
     //Если достигли заданной скорости и вышли за пределы Т внизу колонны, переходим к программе выхода на заданное давление
     run_nbk_program(ProgramNum + 1);
   } else if (program[ProgramNum].WType == "P" && pressure_value > program[ProgramNum].capacity_num) {
-    //Изменяем на заданную мощность
-    set_current_power(target_power_volt + program[ProgramNum].Power);
     //Если достигли заданного давления, переходим к рабочей программе
     run_nbk_program(ProgramNum + 1);
   }
@@ -158,13 +151,38 @@ void run_nbk_program(uint8_t num) {
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
     nbk_finish();
+    return;
   } else {
     SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
   }
 
+  if (program[ProgramNum].WType == "S") {
+    begintime = millis() + 300 * 1000;
+    set_stepper_target(program[ProgramNum].Speed, 0, 0);
+    set_current_power(program[ProgramNum].Power);
+  } else if (program[ProgramNum].WType == "T") {
+    //Запомним Тниз = d_s_temp_prev
+    d_s_temp_prev = TankSensor.avgTemp;
+    begintime = 0;
+  } else if (program[ProgramNum].WType == "W") {
+    //Изменяем на заданную мощность
+    set_current_power(target_power_volt + program[ProgramNum].Power);
+  }
+  
 }
 
 void check_alarm_nbk() {
+
+  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
+    open_valve(false, true);
+#ifdef USE_WATER_PUMP
+    if (pump_started) set_pump_pwm(0);
+#endif
+  }
+
+  if (!PowerOn){
+    return;
+  }
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
@@ -172,13 +190,6 @@ void check_alarm_nbk() {
     open_valve(true, true);
 #ifdef USE_WATER_PUMP
     set_pump_pwm(bk_pwm);
-#endif
-  }
-
-  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
-    open_valve(false, true);
-#ifdef USE_WATER_PUMP
-    if (pump_started) set_pump_pwm(0);
 #endif
   }
 

@@ -257,7 +257,7 @@
       s = "";
       for (i = 1; i < t.length; i++) {
         k = t[i].childNodes;
-        for (j = 2; j < 6; j++) {
+        for (j = 2; j < 7; j++) {
           s = s + k[j].value + ";";
         }
         s = s.slice(0, -1);
@@ -287,6 +287,23 @@
       }
       return 0;
     };
+
+    function getProgram () {
+      if (!check_program(document.getElementById('WProgram').value)) {
+        alert("Program error!");
+        return;
+      }
+      var t = document.getElementsByClassName("prgline");
+      var p = document.getElementById("WProgram");
+      var varr = p.value.split("\n");
+      for (z = 0; z < varr.length - 1; z++) {
+        k = t[z+1].childNodes;
+        var arr = varr[z].split(";");
+        for (j = 0; j < 5; j++) {
+          k[j+2].value = arr[j];
+        }
+      }
+    }
 
     function sleep (milliseconds) {
       var start = new Date().getTime();
@@ -358,8 +375,6 @@
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
-          document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
-          document.getElementById('start_pressure').innerHTML = myObj.start_pressure.toFixed(3);
           document.getElementById('Status').innerHTML = myObj.Status;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
@@ -372,6 +387,10 @@
           document.getElementById('rssi').innerHTML = myObj.rssi;
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
           sound_is_on = !!myObj.UseBBuzzer;
+
+          if (myObj.prvl && myObj.prvl !== "") {
+            document.getElementById('pressure_value').innerHTML = myObj.prvl;
+          }
 
           if (myObj.Lstatus) {
             if (myObj.Lstatus != "") {
@@ -440,12 +459,15 @@
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
-        slider = document.getElementById('PWM');
-        slider.addEventListener("change", sliderChange);
-        txt = document.getElementById('PWMt');
-        txt.value = document.getElementById('PWM').value;
       });
-
+      getProgram();
+      document.getElementById("WProgram").addEventListener("change", function(event) {
+        if (!check_program(document.getElementById('WProgram').value)) {
+          alert("Program error!");
+          return;
+        }
+        getProgram();
+      });
       setPowerUnit();
       AddLuaButtons();
     };
@@ -551,27 +573,6 @@
         </span>
       </div>
 
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-        <div class="text" id='WaterH2'>
-          <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
-            <div>
-              Скорость насоса:
-              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="1023" value='%PWM_V%' list="tickmarks" onchange='sliderChange();'>
-              <datalist id="tickmarks">
-                <option value="%PWM_LV%">
-                <option value="300">
-                <option value="500">
-                <option value="700">
-                <option value="900">
-                <option value="1023">
-              </datalist>
-            </div>
-            <input id='PWMt' type='text' name='PWMt' value='' onchange='changetxtpwm();'>
-          </div>
-        </div>
-
-      </div>
-
       <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em; padding-top: 1em;">
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
           <div class="flex_row">
@@ -606,15 +607,15 @@
 
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="text">
-          Давление: &nbsp;
-          <span id='bme_pressure'></span>
+          Давление в колонне: &nbsp;
+          <span id='pressure_value'></span>
           мм рт.ст.
         </div>
-        <div class="text">
-          В начале: &nbsp;
-          <span id='start_pressure'></span>
-          мм рт.ст.
-        </div>
+      </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: center; padding-bottom: 8;">
+          <input id='pmpl' type='submit' name='pmpl' value='Насос НБК ++' onclick='sendbutton("pnbk=1");' class="button">
+          <input id='pmmn' type='submit' name='pmmn' class="button" value='Насос НБК --' onclick='sendbutton("pnbk=2");'>
       </div>
 
       <div class="container_column" style="margin-bottom: 1em;">
@@ -634,11 +635,11 @@
       
 		<div class="prg" id="prg">
 		  <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="width: 252; display: inline-block; text-align: center;">Тип программы</label>&nbsp;&nbsp;&nbsp;<label class="tooltip" style="width: 85; display: inline-block; text-align: center;">Скорость</label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Давление</label>&nbsp;&nbsp;<label class="tooltip">Напряжение</label>&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Предел</label></div>
-		  <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label><label style="width: 252;display: inline-block;color: honeydew;">Прогрев НБК</label><input type="text" name="ptemp1" onchange="calc_program();" style="background-color: #FF6347;width:85"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"></div>
-		  <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label><label style="width: 252;display: inline-block;color: navy;">Стабилизация НБК</label><input type="text" name="ptemp2" onchange="calc_program();" style="background-color: #FFFF00;width:85"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"></div>
-		  <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label><label style="width: 252;display: inline-block;color: navy;">Первичная подача браги</label><input type="text" name="ptemp3" onchange="calc_program();" style="background-color: #00BFFF;width:85"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"></div>
-		  <div class="prgline" id="prgln4" style="background-color: #FFA500;"><label class="prglabel" style="background-color: #FFA500;">04</label><label style="width: 252;display: inline-block;color: navy;">Выход на заданное давление</label><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #FFA500;width:85"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"></div>
-		  <div class="prgline" id="prgln5" style="background-color: #98FB98;"><label class="prglabel" style="background-color: #98FB98;">05</label><label style="width: 252;display: inline-block;color: navy;">Рабочий режим</label><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #98FB98;width:85"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"></div>
+		  <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label><label style="width: 252;display: inline-block;color: honeydew;">Прогрев НБК</label><input type="hidden" name="ptype1" value="W"><input type="text" name="ptemp1" onchange="calc_program();" style="background-color: #FF6347;width:85"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"></div>
+		  <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label><label style="width: 252;display: inline-block;color: navy;">Стабилизация НБК</label><input type="hidden" name="ptype2" value="W"><input type="text" name="ptemp2" onchange="calc_program();" style="background-color: #FFFF00;width:85"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"></div>
+		  <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label><label style="width: 252;display: inline-block;color: navy;">Первичная подача браги</label><input type="hidden" name="ptype3" value="W"><input type="text" name="ptemp3" onchange="calc_program();" style="background-color: #00BFFF;width:85"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"></div>
+		  <div class="prgline" id="prgln4" style="background-color: #FFA500;"><label class="prglabel" style="background-color: #FFA500;">04</label><label style="width: 252;display: inline-block;color: navy;">Выход на заданное давление</label><input type="hidden" name="ptype4" value="W"><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #FFA500;width:85"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #FFA500;width:100"></div>
+		  <div class="prgline" id="prgln5" style="background-color: #98FB98;"><label class="prglabel" style="background-color: #98FB98;">05</label><label style="width: 252;display: inline-block;color: navy;">Рабочий режим</label><input type="hidden" name="ptype5" value="W"><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #98FB98;width:85"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"></div>
 		</div>      
       
       

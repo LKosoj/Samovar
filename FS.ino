@@ -203,8 +203,19 @@ void create_data() {
   //Если режим ректификация, запишем в файл текущую программу отбора
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
-    filePrg.println(get_program(CAPACITY_NUM * 2));
-    Serial.println(get_program(CAPACITY_NUM * 2));
+    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+      filePrg.println(get_program(CAPACITY_NUM * 2));
+      Serial.println(get_program(CAPACITY_NUM * 2));
+    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      filePrg.println(get_beer_program());
+      Serial.println(get_beer_program());
+    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      filePrg.println(get_dist_program());
+      Serial.println(get_dist_program());
+    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+      filePrg.println(get_nbk_program());
+      Serial.println(get_nbk_program());
+    }
     filePrg.close();
   }
 
@@ -249,7 +260,7 @@ String append_data() {
       sapd += ";T=" + WthdrwTimeS;
     }
     fileState.println(sapd);
-    Serial.println(sapd);
+    //Serial.println(sapd);
     fileState.close();
     STcnt = 0;
   }

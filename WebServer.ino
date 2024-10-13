@@ -235,6 +235,7 @@ String indexKeyProcessor(const String &var) {
   } else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return get_dist_program();
+    else if (Samovar_Mode == SAMOVAR_NBK_MODE) return get_nbk_program();
     else
       return get_program(CAPACITY_NUM * 2);
   } else if (var == "Descr") {
@@ -801,6 +802,16 @@ void web_command(AsyncWebServerRequest *request) {
       } else {
         set_mixer(false);
       }
+    } else if (request->hasArg("pnbk")) {
+      if (request->arg("pnbk").toInt() == 1) {
+        set_stepper_target(I2CStepperSpeed + 1000, 0, 0);
+      } else {
+        if (I2CStepperSpeed - 1000 < 0) {
+          set_stepper_target(0, 0, 0);
+        } else {
+          set_stepper_target(I2CStepperSpeed - 1000, 0, 0);
+        }
+      }
     } else if (request->hasArg("distiller")) {
       if (request->arg("distiller").toInt() == 1) {
         sam_command_sync = SAMOVAR_DISTILLATION;
@@ -1012,7 +1023,7 @@ String get_web_file(String fn, get_web_type type) {
       //Serial.print("responseText = ");
       //Serial.println(s);
     }
-    Serial.println("Done");
+    Serial.println("Done (L=" + String(s.length()) + ")");
   }
 
   return "";
@@ -1021,7 +1032,7 @@ String get_web_file(String fn, get_web_type type) {
 String http_sync_request_get(String url) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(4);                      //Таймаут четыре секунды
+  request.setTimeout(5);                      //Таймаут пять секунд
   request.open("GET", url.c_str());  //URL
   while (request.readyState() < 1) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
@@ -1040,8 +1051,7 @@ String http_sync_request_get(String url) {
       Serial.println("Content " + url + " download error");
       return "<ERR>";
     }
-    String s = String("") + request.responseText() + "";
-    return s;
+    return request.responseText();
     Serial.println("Done");
   } else {
     Serial.print(F("responseHTTPcode = "));
@@ -1056,7 +1066,7 @@ String http_sync_request_get(String url) {
 String http_sync_request_post(String url, String body, String ContentType) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(4);                      //Таймаут четыре секунды
+  request.setTimeout(5);                      //Таймаут пять секунд
 
   request.open("POST", url.c_str());  //URL
   while (request.readyState() < 1) {
