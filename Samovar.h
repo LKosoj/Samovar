@@ -389,7 +389,7 @@ struct SetupEEPROM {
   bool UseHLS;                                                 //Использовать датчик флегмы
   float MaxPressureValue;                                      //Максимальное давление, при котором сработает аварийный режим
   char tg_token[50];                                           //Токен Телеграм-бота
-  uint64_t  tg_chat_id;                                        //Идентификатор чата Телеграм
+  char  tg_chat_id[14];                                        //Идентификатор чата Телеграм
 };
 
 struct DSSensor {
