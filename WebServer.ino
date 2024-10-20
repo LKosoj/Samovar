@@ -649,7 +649,7 @@ void handleSave(AsyncWebServerRequest *request) {
     request->arg("tgtoken").toCharArray(SamSetup.tg_token, request->arg("tgtoken").length() + 1);
   }
   if (request->hasArg("tgchatid")) {
-    SamSetup.tg_chat_id = request->arg("tgchatid").toInt();;
+    request->arg("tgchatid").toCharArray(SamSetup.tg_chat_id, request->arg("tgchatid").length() + 1);
   }
   if (request->hasArg("SteamColor")) {
     request->arg("SteamColor").toCharArray(SamSetup.SteamColor, request->arg("SteamColor").length() + 1);
