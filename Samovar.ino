@@ -1,7 +1,6 @@
 //TODO
 //
 //вывести в ВЕБ-интерфейс на главную данные о текущей скважности ШИМ насоса охлаждения (сделано в скетче, нужно только вывести в интерфейс)
-//Неправильное отображение файла prg.csv
 //Проверить на С подъем напряжения
 //При старте колонны до стабилизации реализовать выход на предзахлеб (если установлен датчик флегмы) для смачивания насадки (дополнительная опция)
 //Перейти на GyverPID
@@ -131,8 +130,11 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 //#define BLYNK_HEARTBEAT 17
 
 #include <BlynkSimpleEsp32.h>
-#include <cppQueue.h>
 
+#endif
+
+#if defined(SAMOVAR_USE_BLYNK) || defined(USE_TELEGRAM)
+#include <cppQueue.h>
 cppQueue  msg_q(80, 4, FIFO);
 #endif
 
@@ -1315,6 +1317,8 @@ void getjson(void) {
   jsonstr += ",";
   jsonstr += "\"mixer\":"; jsonstr += (String)mixer_status;
   jsonstr += ",";
+  jsonstr += "\"ISspd\":"; jsonstr += (String)I2CStepperSpeed;
+  jsonstr += ",";
 
 
   jsonstr += "\"heap\":"; jsonstr += ESP.getFreeHeap();
@@ -1503,6 +1507,10 @@ void read_config() {
   if (SamSetup.tg_token[0] == 255) {
     SamSetup.tg_token[0] = 0;
   }
+  if (SamSetup.tg_chat_id[0] == 255) {
+    SamSetup.tg_chat_id[0] = 0;
+  }
+
 #endif
 
 }
