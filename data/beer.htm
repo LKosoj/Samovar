@@ -10,26 +10,29 @@
   <script>
     // ==================== CONNECTION STATUS ============================================================
     var IsOffline = false; //признак обрыва связи
-    var OfflineCouner = 0;
+    var OfflineCounter = 0;
 
     function ConnectError (Type) {
       if (Type) {
-        if (OfflineCouner < 3) { //считаем 3 обрыва подряд
-          OfflineCouner++
+        if (OfflineCounter < 3) { //считаем 3 обрыва подряд
+          OfflineCounter++
         } else {
           document.getElementById('connection_indicator').innerHTML = `
           <img src="Red_light.gif" style="margin: 0!important; width: 20px">`;
           addMessage('Обрыв связи!', 0);
           setTimeout(() => {
             IsOffline = true;
-            OfflineCouner = 0
+            OfflineCounter++
           }, 100);
         }
       } else {
         document.getElementById('connection_indicator').innerHTML = `
         <img src="Green.png" style="margin: 0 !important; width: 20px">`
-        IsOffline = false;
-        OfflineCouner = 0
+        IIsOffline = false;
+        if (OfflineCounter > 3) {
+          playSound(false);
+        }
+        OfflineCounter = 0
       }
     };
 
@@ -926,6 +929,7 @@
     </div>
 
   </form>
+  <img src="Red_light.gif" style="width: 0; height: 0; visibility: hidden;">
 </body>
 
 </html>

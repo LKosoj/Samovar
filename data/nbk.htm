@@ -11,30 +11,34 @@
 
     // ==================== CONNECTION STATUS ============================================================
     var IsOffline = false; //признак обрыва связи
-    var OfflineCouner = 0;
+    var OfflineCounter = 0;
 
     function ConnectError (Type) {
       if (Type) {
-        if (OfflineCouner < 3) { //считаем 3 обрыва подряд
-          OfflineCouner++
+        if (OfflineCounter < 3) { //считаем 3 обрыва подряд
+          OfflineCounter++
         } else {
           document.getElementById('connection_indicator').innerHTML = `
           <img src="Red_light.gif" style="margin: 0!important; width: 20px">`;
           addMessage('Обрыв связи!', 0);
           setTimeout(() => {
             IsOffline = true;
-            OfflineCouner = 0
+            OfflineCounter++
           }, 100);
         }
       } else {
         document.getElementById('connection_indicator').innerHTML = `
         <img src="Green.png" style="margin: 0 !important; width: 20px">`
         IsOffline = false;
-        OfflineCouner = 0
+        if (OfflineCounter > 3) {
+          playSound(false);
+        }
+        OfflineCounter = 0
       }
     };
 
     // ==================== POWER UNIT ===================================================================
+    var programPwrLabel = 'Напр';
     function setPowerUnit () {
       let setPowerLabel;
       let setPowerButton;
@@ -47,7 +51,8 @@
         powerCurrent = 'Текущая мощн.: ';
         powerTarget = 'Целевая мощн.: ';
         powerUnit = ' Вт';
-        document.getElementById('current_power_line').style = 'visibility: hidden';
+        programPwrLabel = 'Мощн';
+        document.getElementById('current_power_line').style = 'visibility: hidden; margin: 0; padding: 0';
       } else if (pwr_unit === 'V') {
         setPowerLabel = 'Напряжение регулятора: ';
         setPowerButton = 'Установить напряжение';
@@ -57,7 +62,7 @@
         document.getElementById('current_power_line').style = 'visibility: visible';
       } else {
         document.getElementById('PWR').style =
-          'visibility: hidden;position: fixed;';
+          'visibility: hidden; position: fixed;';
       }
       document.getElementById('set_power_label').innerHTML = setPowerLabel;
       document.getElementById('SetVoltage').value = setPowerButton;
@@ -65,6 +70,7 @@
       document.getElementById('power_target').innerHTML = powerTarget;
       document.getElementById('power_unit_current').innerHTML = powerUnit;
       document.getElementById('power_unit_target').innerHTML = powerUnit;
+      document.getElementById('programPwrLabel').innerHTML = programPwrLabel;
     }
 
     // ==================== LUA BUTTONS ==================================================================
@@ -272,10 +278,10 @@
       request = new XMLHttpRequest();
       request.onreadystatechange = function() {
         if (this.readyState == 4 && this.status == 200) {
-          var myObj = this.responseText;
+          let myObj = this.responseText;
           if (myObj != "OK") {
             document.getElementById('WProgram').value = myObj;
-            alert("Ok");
+            alert("Программа установлена.");
           }
         }
       };
@@ -348,7 +354,7 @@
       document.getElementById('Voltage').value = document.getElementById('Voltage').value.replace(",",".");
       var num = document.getElementById('Voltage').value;
       if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
-        alert("Введите напряжение!");
+        alert("Введите значение!");
         return 0;
       }
       var command = 'voltage=' + num;
@@ -366,12 +372,10 @@
         if (this.readyState == 4 && this.status == 200) {
           ConnectError(false);
           var myObj = JSON.parse(this.responseText);
-
           document.getElementById('version').innerHTML = myObj.version;
           document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
           document.getElementById('stm').innerHTML = myObj.stm;
           document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
-          document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
@@ -382,6 +386,7 @@
           document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
           document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
+          document.getElementById('ISspd').innerHTML = myObj.ISspd;
           document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
           document.getElementById('heap').innerHTML = myObj.heap;
           document.getElementById('rssi').innerHTML = myObj.rssi;
@@ -397,9 +402,6 @@
               document.getElementById('Lstatus').innerHTML = myObj.Lstatus;
             }
           }
-
-          var dt = myObj.PipeTemp - myObj.SteamTemp;
-          document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
 
           if (myObj.Msg && myObj.Msg !== "") {
             addMessage(myObj.Msg, myObj.msglvl);
@@ -440,21 +442,7 @@
       xhttp.send();
     };
 
-    function sliderChange () {
-      document.getElementById('PWMt').value = document.getElementById('PWM').value;
-      sendwaterpwm();
-    }
-
-    function changetxtpwm () {
-      num = document.getElementById('PWMt').value;
-      if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
-        alert("Введите значение PWM!");
-        return 0;
-      }
-      document.getElementById('PWM').value = num;
-      sliderChange();
-    }
-
+    
     window.onload = function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
@@ -488,7 +476,6 @@
 <!-- =============================================================================================================== -->
 
 <body>
-  
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
     <div class="tab">
@@ -527,22 +514,17 @@
         </div>
       </div>
 
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+      <div id="Temperatures" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 
         <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-          <div class="text" style="color: %PipeColor%;">
-            Т в царге: &nbsp;&nbsp;
-            <span id='PipeTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
           <div class="text" style="color: %SteamColor%;">
             Т пара: &nbsp;&nbsp;
             <span id='SteamTemp' style="font-size: xx-large;"></span>
             &#176;C
           </div>
-          <div class="text" style="color: black;">
-            &#916; температур:&nbsp;&nbsp;
-            <span id='DeltaTemp' style="font-size: xx-large;"></span>
+          <div class="text" style="color: %TankColor%;">
+            Т барды: &nbsp;&nbsp;
+            <span id='TankTemp' style="font-size: xx-large;"></span>
             &#176;C
           </div>
         </div>
@@ -551,11 +533,6 @@
           <div class="text" style="color: %WaterColor%;">
             Т воды: &nbsp;&nbsp;
             <span id='WaterTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="color: %TankColor%;">
-            Т в кубе: &nbsp;&nbsp;
-            <span id='TankTemp' style="font-size: xx-large;"></span>
             &#176;C
           </div>
           <div class="text" style="color: %ACPColor%;">
@@ -567,13 +544,13 @@
 
       </div>
 
-      <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
+      <div id="status_div" class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
         <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
           Статус: <span id='Status'></span>
         </span>
       </div>
 
-      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em; padding-top: 1em;">
+      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em;">
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
           <div class="flex_row">
             <span class="text" id='set_power_label'></span>
@@ -585,31 +562,39 @@
         </div>
         <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
           <div class='flex_row'>
-            <span id='power_current'></span>
-            <span id='current_power_volt'></span>
+            <span id='power_current'></span>&nbsp;&nbsp;
+            <span id='current_power_volt' style="font-size: 1.5em; font-weight: bold;"></span>
             <span id='power_unit_current'></span>
           </div>
           <div class='flex_row'>
-            <span id='power_target'></span>
+            <span id='power_target'></span>&nbsp;
             <span id='target_power_volt'></span>
             <span id='power_unit_target'></span>
           </div>
           <div class='flex_row'>
-            Режим регулятора: <span id='current_power_mode'></span>
+            Режим: <span id='current_power_mode'></span>
           </div>
         </div>
         <div class="container_row" style="justify-content: center; font-size: 1.6em; font-weight: bold;">
           <span class='dvcs' id='current_power_line'>
-            Мощность: <span id='current_power_p'></span> Вт
+            Мощность: &nbsp;&nbsp;<span id='current_power_p' style="font-size: 1.3em; font-weight: bold;"></span>&nbsp;Вт
           </span>
         </div>
       </div>
 
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+      <div id="Pressure" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="text">
           Давление в колонне: &nbsp;
-          <span id='pressure_value'></span>
+          <span id='pressure_value' style="font-size: 1.5em; font-weight: bold;"></span>
           мм рт.ст.
+        </div>
+      </div>
+
+      <div id="Speed" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="text">
+          Скорость подачи браги: &nbsp;
+          <span id='ISspd' style="font-size: 1.5em; font-weight: bold;"></span>
+          л/ч
         </div>
       </div>
 
@@ -634,7 +619,7 @@
       
       
 		<div class="prg" id="prg">
-		  <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="width: 252; display: inline-block; text-align: center;">Тип программы</label>&nbsp;&nbsp;&nbsp;<label class="tooltip" style="width: 85; display: inline-block; text-align: center;">Скорость</label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Давление</label>&nbsp;&nbsp;<label class="tooltip">Напряжение</label>&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Предел</label></div>
+		  <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="width: 252; display: inline-block; text-align: center;">Тип программы</label>&nbsp;&nbsp;&nbsp;<label class="tooltip" style="width: 85; display: inline-block; text-align: center;">Скорость</label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Давление</label>&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip" id="programPwrLabel"></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Предел</label></div>
 		  <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label><label style="width: 252;display: inline-block;color: honeydew;">Прогрев НБК</label><input type="hidden" name="ptype1" value="W"><input type="text" name="ptemp1" onchange="calc_program();" style="background-color: #FF6347;width:85"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"></div>
 		  <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label><label style="width: 252;display: inline-block;color: navy;">Стабилизация НБК</label><input type="hidden" name="ptype2" value="W"><input type="text" name="ptemp2" onchange="calc_program();" style="background-color: #FFFF00;width:85"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"></div>
 		  <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label><label style="width: 252;display: inline-block;color: navy;">Первичная подача браги</label><input type="hidden" name="ptype3" value="W"><input type="text" name="ptemp3" onchange="calc_program();" style="background-color: #00BFFF;width:85"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"></div>
@@ -714,7 +699,7 @@
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
       </div>
       <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
+        <span class='dvcs'>Системные параметры: 3333=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
       </div>
 
       <div style="visibility: hidden" id="lua_btn">
@@ -733,6 +718,7 @@
     </div>
 
   </form>
+  <img src="Red_light.gif" style="width: 0; height: 0; visibility: hidden;">
 </body>
 
 </html>

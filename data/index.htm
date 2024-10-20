@@ -8,31 +8,35 @@
   <title>Самовар</title>
 
   <script>
+      
     var current_progNum = 0;
     var totalTime = 0;
 
     // ==================== CONNECTION STATUS ============================================================
     var IsOffline = false; //признак обрыва связи
-    var OfflineCouner = 0;
+    var OfflineCounter = 0;
 
     function ConnectError (Type) {
       if (Type) {
-        if (OfflineCouner < 3) { //считаем 3 обрыва подряд
-          OfflineCouner++
+        if (OfflineCounter < 3) { //считаем 3 обрыва подряд
+          OfflineCounter++
         } else {
           document.getElementById('connection_indicator').innerHTML = `
           <img src="Red_light.gif" style="margin: 0!important; width: 20px">`;
           addMessage('Обрыв связи!', 0);
           setTimeout(() => {
             IsOffline = true;
-            OfflineCouner = 0
+            OfflineCounter++
           }, 100);
         }
       } else {
         document.getElementById('connection_indicator').innerHTML = `
         <img src="Green.png" style="margin: 0 !important; width: 20px">`
         IsOffline = false;
-        OfflineCouner = 0
+        if (OfflineCounter > 3) {
+          playSound(false);
+        }
+        OfflineCounter = 0
       }
     }
 
@@ -49,7 +53,7 @@
         powerCurrent = 'Текущая мощн.: ';
         powerTarget = 'Целевая мощн.: ';
         powerUnit = ' Вт';
-        document.getElementById('current_power_line').style = 'visibility: hidden';
+        document.getElementById('current_power_line').style = 'visibility: hidden; margin: 0; padding: 0';
       } else if (pwr_unit === 'V') {
         setPowerLabel = 'Напряжение регулятора: ';
         setPowerButton = 'Установить напряжение';
@@ -204,7 +208,7 @@
       showMessages();
     }
 
-    var pwr_unit = "%pwr_unit%";
+    var pwr_unit = "%pwr_unit%"; 
 
     var _lnIdx = 0;
 
@@ -383,7 +387,6 @@
         if (this.readyState == 4 && this.status == 200) {
           ConnectError(false);
           var myObj = JSON.parse(this.responseText);
-
           document.getElementById('version').innerHTML = myObj.version;
           document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
           document.getElementById('stm').innerHTML = myObj.stm;
@@ -815,8 +818,8 @@
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="container_column" style="flex: 1.1; padding-left: 2em;">
           <div class="text">
-            Скорость отбора: &nbsp;
-            <span id='ActualVolumePerHour'></span>
+            Скорость отбора: &nbsp;&nbsp;
+            <span id='ActualVolumePerHour' style="font-size: 1.5em; font-weight: bold;"></span>
             л/ч
           </div>
           <div class="text">
@@ -834,7 +837,7 @@
         </div>
       </div>
 
-      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em; padding-top: 1em;">
+      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em;">
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
           <div class="flex_row">
             <span class="text" id='set_power_label'></span>
@@ -846,8 +849,8 @@
         </div>
         <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
           <div class='flex_row'>
-            <span id='power_current'></span>
-            <span id='current_power_volt'></span>
+            <span id='power_current'></span>&nbsp;&nbsp;
+            <span id='current_power_volt' style="font-size: 1.5em; font-weight: bold;"></span>
             <span id='power_unit_current'></span>
           </div>
           <div class='flex_row'>
@@ -856,12 +859,12 @@
             <span id='power_unit_target'></span>
           </div>
           <div class='flex_row'>
-            Режим регулятора: <span id='current_power_mode'></span>
+            Режим: <span id='current_power_mode'></span>
           </div>
         </div>
-        <div class="container_row" style="justify-content: center; font-size: 1.6em; font-weight: bold;">
+        <div class="container_row" style="width: 100%; justify-content: center; align-items: center; font-size: 1.6em; font-weight: bold;">
           <span class='dvcs' id='current_power_line'>
-            Мощность: <span id='current_power_p'></span> Вт
+            Мощность:&nbsp;&nbsp; <span id='current_power_p' style="font-size: 1.3em; font-weight: bold;"></span>&nbsp;Вт
           </span>
         </div>
       </div>
@@ -1027,6 +1030,7 @@
     </div>
 
   </form>
+  <img src="Red_light.gif" style="width: 0; height: 0; visibility: hidden;">
 </body>
 
 </html>
