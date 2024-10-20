@@ -167,7 +167,7 @@ void DS_getvalue(void) {
   uint8_t p_addr[8] = USE_PRESSURE_1WIRE;
   pv = sensors.getTempC(p_addr);   // считываем давление с расширителя по 1Wire
   if (pv > -120) {
-    pressure_value = pv
+    pressure_value = pv;
     use_pressure_sensor = true;
   } else {
     pressure_value = -1;
