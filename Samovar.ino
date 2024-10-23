@@ -1313,11 +1313,11 @@ void getjson(void) {
   jsonstr += ",";
   jsonstr += "\"BodyTemp_Steam\":"; jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
   jsonstr += ",";
-  jsonstr += "\"BodyTemp_Pipe\":"; jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);;
+  jsonstr += "\"BodyTemp_Pipe\":"; jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
   jsonstr += ",";
   jsonstr += "\"mixer\":"; jsonstr += (String)mixer_status;
   jsonstr += ",";
-  jsonstr += "\"ISspd\":"; jsonstr += (String)I2CStepperSpeed;
+  jsonstr += "\"ISspd\":"; jsonstr += format_float(i2c_get_liguid_rate_by_step(get_stepper_speed()), 3);
   jsonstr += ",";
 
 
@@ -1375,10 +1375,10 @@ void getjson(void) {
   jsonstr += ",";
 #endif
 
-  if (use_pressure_sensor) {
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined (USE_PRESSURE_MPX)
     jsonstr += "\"prvl\":"; jsonstr += format_float(pressure_value, 2);
     jsonstr += ",";
-  }
+#endif
 
   if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);

@@ -170,9 +170,10 @@ void DS_getvalue(void) {
     pressure_value = pv;
     use_pressure_sensor = true;
   } else {
-    pressure_value = -1;
-    use_pressure_sensor = false;
+    //pressure_value = -1;
+    //use_pressure_sensor = false;
   }
+
 #endif
 
   //    float randNumber;
@@ -241,7 +242,7 @@ void scan_ds_adress() {
   while (sensors.getAddress(DSAddr[dc], dc)) {
     sensors.setResolution(DSAddr[dc], 12);  // устанавливаем разрешение для датчика
     dc++;
-    if (dc > 4) break;
+    if (dc > 5) break;
   }
 
   DScnt = dc;
@@ -269,6 +270,9 @@ void scan_ds_adress() {
   Serial.println();
   Serial.print("5 Sensor Address: ");  // пишем адрес датчика 4
   printAddress(DSAddr[4]);
+  Serial.println();
+  Serial.print("6 Sensor Address: ");  // пишем адрес датчика 5
+  printAddress(DSAddr[5]);
   Serial.println();
 #endif
 

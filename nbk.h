@@ -35,11 +35,12 @@ void IRAM_ATTR isrNBKLS_TICK() {
 
 void nbk_proc() {
 
-  if (!use_pressure_sensor) {
-    SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
-    nbk_finish();
-    return;
-  }
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined (USE_PRESSURE_MPX)
+#else
+  SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
+  nbk_finish();
+  return;
+#endif
 
   if (!PowerOn) {
 #ifdef USE_MQTT
@@ -67,7 +68,7 @@ void nbk_proc() {
     attachInterrupt(LUA_PIN, isrNBKLS_TICK, CHANGE);
 
     run_nbk_program(0);
-    set_stepper_target(program[ProgramNum].Speed, 0, 0);
+    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 0);
   }
 
   //Обрабатываем программу НБК
@@ -94,7 +95,7 @@ void nbk_proc() {
       } else {
         spdinc = 50;
       }
-      set_stepper_target(I2CStepperSpeed + spdinc, 0, 0);
+      set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(spdinc / 1000.00), 0, 0);
     } else {
       t_min = millis() + 5 * 1000;
     }
@@ -108,7 +109,7 @@ void nbk_proc() {
       set_current_power(target_power_volt + 2);
 #endif
       if (TankSensor.avgTemp >= d_s_temp_prev - 0.5) {
-        set_stepper_target(I2CStepperSpeed + 50, 0, 0);
+        set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
       }
     } else {
       t_min = millis() + 5 * 1000;
@@ -116,9 +117,9 @@ void nbk_proc() {
   } else if (program[ProgramNum].WType == "W") {
     if (t_min <= millis()) {
       if (TankSensor.avgTemp < d_s_temp_prev - 0.5) {
-        set_stepper_target(I2CStepperSpeed - 50, 0, 0);
+        set_stepper_target(I2CStepperSpeed - i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
       } else if (TankSensor.avgTemp > d_s_temp_prev) {
-        set_stepper_target(I2CStepperSpeed + 50, 0, 0);
+        set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
       }
     } else {
       t_min = millis() + 5 * 1000;
@@ -158,7 +159,7 @@ void run_nbk_program(uint8_t num) {
 
   if (program[ProgramNum].WType == "S") {
     begintime = millis() + 300 * 1000;
-    set_stepper_target(program[ProgramNum].Speed, 0, 0);
+    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 0);
     set_current_power(program[ProgramNum].Power);
   } else if (program[ProgramNum].WType == "T") {
     //Запомним Тниз = d_s_temp_prev
@@ -168,7 +169,7 @@ void run_nbk_program(uint8_t num) {
     //Изменяем на заданную мощность
     set_current_power(target_power_volt + program[ProgramNum].Power);
   }
-  
+
 }
 
 void check_alarm_nbk() {
@@ -180,7 +181,7 @@ void check_alarm_nbk() {
 #endif
   }
 
-  if (!PowerOn){
+  if (!PowerOn) {
     return;
   }
   //сбросим паузу события безопасности
@@ -269,12 +270,12 @@ void check_alarm_nbk() {
   }
 #endif
 
-  //Срабатывание датчика недостаточного уровня воды в парогене (LUA pin) 5)
-  nbkls.tick();
-  if (nbkls.isHolded()) {
-    SendMsg(("Не достаточно воды в парогенераторе! Остановка"), WARNING_MSG);
-    run_nbk_program(CAPACITY_NUM * 2);
-  }
+  //  //Срабатывание датчика недостаточного уровня воды в парогене (LUA pin) 5)
+  //  nbkls.tick();
+  //  if (nbkls.isHolded()) {
+  //    SendMsg(("Не достаточно воды в парогенераторе! Остановка"), WARNING_MSG);
+  //    run_nbk_program(CAPACITY_NUM * 2);
+  //  }
 
   //Превышение уставки по давлению - мощность снижаем на 10 Вт и ждём 10 сек. 2)
   if (pressure_value >= program[ProgramNum].TempSensor) {

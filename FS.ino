@@ -117,10 +117,10 @@ void FS_init(void) {
   //::ws.onEvent(onWsEvent);
   //server.addHandler(&::ws);
 
-  events.onConnect([](AsyncEventSourceClient * client) {
-    client->send("hello!", NULL, millis(), 1000);
-  });
-  server.addHandler(&events);
+//  events.onConnect([](AsyncEventSourceClient * client) {
+//    client->send("hello!", NULL, millis(), 1000);
+//  });
+//  server.addHandler(&events);
 
   server.addHandler(new SPIFFSEditor(SPIFFS, http_username, http_password));
 

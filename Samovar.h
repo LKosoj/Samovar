@@ -245,12 +245,12 @@ TaskHandle_t PowerStatusTask = NULL;
 
 AsyncWebServer server(80);
 
-AsyncWebSocket ws("/ws");
-AsyncEventSource events("/events");
+//AsyncWebSocket ws("/ws");
+//AsyncEventSource events("/events");
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
-DeviceAddress DSAddr[5];
+DeviceAddress DSAddr[6];
 
 LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 

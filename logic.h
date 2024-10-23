@@ -74,7 +74,7 @@ String getValue(String data, char separator, int index) {
 
 //Получаем объем отбора
 float get_liguid_volume_by_step(int StepCount) {
-  static float retval;
+  float retval;
   if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
   else
     retval = 0;
@@ -87,7 +87,7 @@ float get_liguid_rate_by_step(int StepperSpeed) {
 }
 
 float get_speed_from_rate(float volume_per_hour) {
-  static float v;
+  float v;
   ActualVolumePerHour = volume_per_hour;
   v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.00;
   if (v < 1) v = 1;
@@ -579,7 +579,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
   if (current_pressure < 10) return start_temp;
 
   //скорректированная температура кипения спирта при текущем давлении
-  static float c_temp;
+  float c_temp;
 
   if (SamSetup.UsePreccureCorrect) {
     //идеальная температура кипения спирта при текущем давлении
@@ -952,7 +952,7 @@ void set_power(bool On) {
 float get_steam_alcohol(float t) {
   if (!boil_started) return 100;
 
-  static float r;
+  float r;
   float t1;
   float s;
   float k;
@@ -1051,7 +1051,7 @@ float get_steam_alcohol(float t) {
 float get_alcohol(float t) {
   if (!boil_started) return 100;
   t = get_temp_by_pressure(0, t, bme_pressure);
-  static float r;
+  float r;
   float k;
   k = (t - 89) / 6.49;
 
