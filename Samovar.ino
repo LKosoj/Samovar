@@ -915,7 +915,7 @@ void setup() {
 
 #ifdef USE_TELEGRAM
   if (SamSetup.tg_token[0] != 0) {
-    http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode("Самовар готов к работе; IP=" + StIP));
+    http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode("Самовар готов к работе; IP=http://" + StIP));
   }
 #endif
 
