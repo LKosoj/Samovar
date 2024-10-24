@@ -135,8 +135,12 @@ void nbk_proc() {
 void nbk_finish() {
   SendMsg(("Работа НБК завершена"), NOTIFY_MSG);
   set_power(false);
-  set_stepper_target(0,0,0);
+  set_stepper_target(0, 0, 0);
   reset_sensor_counter();
+  if (fileToAppend) {
+    fileToAppend.close();
+  }
+
 }
 
 void run_nbk_program(uint8_t num) {
