@@ -137,7 +137,7 @@ uint16_t get_stepper_speed(void) {
       xSemaphoreGive(xI2CSemaphore);
     }
     I2CStepperSpeed = rest;
-    return rest;
+    return I2CStepperSpeed;
   }
   return rest;
 }
