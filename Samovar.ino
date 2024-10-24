@@ -1150,7 +1150,7 @@ void loop() {
       } else
         bk_finish();
     } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      //если дистилляция включаем или выключаем
+      //если НБК включаем или выключаем
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_NBK;
       } else
@@ -1177,6 +1177,8 @@ void loop() {
           beer_finish();
         else if (SamovarStatusInt == 3000)
           bk_finish();
+        else if (SamovarStatusInt == 4000)
+          nbk_finish();
         else
           set_power(!PowerOn);
         if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
