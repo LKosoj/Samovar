@@ -98,6 +98,7 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
   bool result = false;
   I2CStepperSpeed = spd;
   if (!use_I2C_dev) {
+    CurrrentStepperSpeed = spd;
     stopService();
     if (spd > 0) {
       CurrrentStepperSpeed = spd;
@@ -105,6 +106,12 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
       stepper.setMaxSpeed(spd);
       //stepper.setSpeed(spd);
       startService();
+    } else {
+      stopService();
+      stepper.brake();
+      stepper.disable();
+      stepper.setCurrent(0);
+      stepper.setTarget(0);
     }
     return true;
   } else {
