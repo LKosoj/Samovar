@@ -91,6 +91,7 @@ void check_alarm_distiller() {
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
+    set_buzzer(true);
     open_valve(true, true);
   }
 
