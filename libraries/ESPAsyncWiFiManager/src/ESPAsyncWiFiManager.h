@@ -135,11 +135,14 @@ public:
                       unsigned long retryDelayMs = 1000);
   boolean autoConnect(char const *apName,
                       char const *apPassword = NULL,
+                      char const *apMessage = NULL,
                       unsigned long maxConnectRetries = 1,
                       unsigned long retryDelayMs = 1000);
 
+  String getChipID();
+
   // if you want to always start the config portal, without trying to connect first
-  boolean startConfigPortal(char const *apName, char const *apPassword = NULL);
+  boolean startConfigPortal(char const *apName, char const *apPassword = NULL, char const *apMessage = NULL);
   void startConfigPortalModeless(char const *apName, char const *apPassword);
 
   // get the AP name of the config portal, so it can be used in the callback
@@ -220,6 +223,8 @@ private:
   wl_status_t wifiStatus;
   const char *_apName = "no-net";
   const char *_apPassword = NULL;
+  const char *_apMessage = NULL;
+
   String _ssid = "";
   String _pass = "";
   unsigned long _configPortalTimeout = 0;

@@ -658,8 +658,8 @@ void triggerSysTicker(void *parameter) {
 
 void setup() {
   Serial.begin(115200);
+  delay(500);
   pinMode(0, INPUT);
-  delay(300);
   if (digitalRead(0) == LOW) {
     WiFi.mode(WIFI_STA); // cannot erase if not in STA mode !
     WiFi.persistent(true);
@@ -916,7 +916,7 @@ void setup() {
 
 #ifdef USE_TELEGRAM
   if (SamSetup.tg_token[0] != 0) {
-    http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=Самовар+готов+к+работе");
+    http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode("Самовар готов к работе; IP=" + StIP));
   }
 #endif
 
@@ -1105,7 +1105,7 @@ void loop() {
   }
 #endif
 
-  //::ws.cleanupClients();
+  ::ws.cleanupClients();
 
 #ifdef ALARM_BTN_PIN
   alarm_btn.tick();      // отработка нажатия аварийной кнопки
@@ -1376,8 +1376,8 @@ void getjson(void) {
 #endif
 
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined (USE_PRESSURE_MPX)
-    jsonstr += "\"prvl\":"; jsonstr += format_float(pressure_value, 2);
-    jsonstr += ",";
+  jsonstr += "\"prvl\":"; jsonstr += format_float(pressure_value, 2);
+  jsonstr += ",";
 #endif
 
   if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {

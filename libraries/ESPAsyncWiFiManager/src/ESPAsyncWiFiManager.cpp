@@ -193,12 +193,12 @@ static const char HEX_CHAR_ARRAY[17] = "0123456789ABCDEF";
 
 #if !defined(ESP8266)
 /**
-* convert char array (hex values) to readable string by seperator
-* buf:           buffer to convert
-* length:        data length
-* strSeperator   seperator between each hex value
-* return:        formated value as String
-*/
+ * convert char array (hex values) to readable string by seperator
+ * buf:           buffer to convert
+ * length:        data length
+ * strSeperator   seperator between each hex value
+ * return:        formated value as String
+ */
 static String byteToHexString(uint8_t *buf, uint8_t length, String strSeperator = "-")
 {
   String dataString = "";
@@ -245,6 +245,7 @@ boolean AsyncWiFiManager::autoConnect(unsigned long maxConnectRetries,
 
 boolean AsyncWiFiManager::autoConnect(char const *apName,
                                       char const *apPassword,
+                                      char const *apMessage,
                                       unsigned long maxConnectRetries,
                                       unsigned long retryDelayMs)
 {
@@ -285,7 +286,7 @@ boolean AsyncWiFiManager::autoConnect(char const *apName,
     }
   }
 
-  return startConfigPortal(apName, apPassword);
+  return startConfigPortal(apName, apPassword, apMessage);
 }
 
 String AsyncWiFiManager::networkListAsString()
@@ -526,7 +527,7 @@ void AsyncWiFiManager::criticalLoop()
     if (connect)
     {
       connect = false;
-      //delay(2000);
+      // delay(2000);
       DEBUG_WM(F("Connecting to new AP"));
 
       // using user-provided _ssid, _pass in place of system-stored ssid and pass
@@ -571,7 +572,7 @@ void AsyncWiFiManager::safeLoop()
 #endif
 }
 
-boolean AsyncWiFiManager::startConfigPortal(char const *apName, char const *apPassword)
+boolean AsyncWiFiManager::startConfigPortal(char const *apName, char const *apPassword, char const *apMessage)
 {
   // setup AP
   WiFi.mode(WIFI_AP_STA);
@@ -579,6 +580,7 @@ boolean AsyncWiFiManager::startConfigPortal(char const *apName, char const *apPa
 
   _apName = apName;
   _apPassword = apPassword;
+  _apMessage = apMessage;
   bool connectedDuringConfigPortal = false;
 
   // notify we entered AP mode
@@ -659,8 +661,8 @@ boolean AsyncWiFiManager::startConfigPortal(char const *apName, char const *apPa
       }
       else
       {
-          if(_tryConnectDuringConfigPortal)
-            DEBUG_WM(F("Failed to connect"));
+        if (_tryConnectDuringConfigPortal)
+          DEBUG_WM(F("Failed to connect"));
       }
 
       if (_shouldBreakAfterConfig)
@@ -788,7 +790,7 @@ void AsyncWiFiManager::startWPS()
 #if defined(ESP8266)
   WiFi.beginWPSConfig();
 #else
-  //esp_wps_config_t config = WPS_CONFIG_INIT_DEFAULT(ESP_WPS_MODE);
+  // esp_wps_config_t config = WPS_CONFIG_INIT_DEFAULT(ESP_WPS_MODE);
   esp_wps_config_t config = {};
   config.wps_type = ESP_WPS_MODE;
   config.crypto_funcs = &g_wifi_default_wps_crypto_funcs;
@@ -822,7 +824,7 @@ void AsyncWiFiManager::resetSettings()
 #endif
   WiFi.persistent(false);
 
-  //delay(200);
+  // delay(200);
 }
 void AsyncWiFiManager::setTimeout(unsigned long seconds)
 {
@@ -909,6 +911,13 @@ void AsyncWiFiManager::handleRoot(AsyncWebServerRequest *request)
   page += _apName;
   page += "</h1>";
   page += F("<h3>AsyncWiFiManager</h3>");
+  if (_apMessage)
+  {
+    page += F("<p style=\"color: red;\">");
+    page += String(_apMessage);
+    page += F("</p>");
+  }
+
   page += FPSTR(HTTP_PORTAL_OPTIONS);
   page += _customOptionsElement;
   page += FPSTR(HTTP_END);
@@ -1123,6 +1132,15 @@ void AsyncWiFiManager::handleWifiSave(AsyncWebServerRequest *request)
   connect = true; // signal ready to connect/reset
 }
 
+String AsyncWiFiManager::getChipID()
+{
+#if defined(ESP8266)
+  return ESP.getChipId();
+#else
+  return getESP32ChipID();
+#endif
+}
+
 // handle the info page
 String AsyncWiFiManager::infoAsString()
 {
@@ -1261,7 +1279,7 @@ boolean AsyncWiFiManager::captivePortal(AsyncWebServerRequest *request)
   {
     DEBUG_WM(F("Request redirected to captive portal"));
     AsyncWebServerResponse *response = request->beginResponse(302, "text/plain", "");
-    response->addHeader("Location", String("http://") + toStringIp(request->client()->localIP()));
+    response->addHeader("Location", String("http://") + toStringIp(request->client()->localIP()) + String("?message=ok"));
     request->send(response);
     return true;
   }

@@ -117,10 +117,10 @@ void FS_init(void) {
   //::ws.onEvent(onWsEvent);
   //server.addHandler(&::ws);
 
-//  events.onConnect([](AsyncEventSourceClient * client) {
-//    client->send("hello!", NULL, millis(), 1000);
-//  });
-//  server.addHandler(&events);
+  events.onConnect([](AsyncEventSourceClient * client) {
+    client->send("hello!", NULL, millis(), 1000);
+  });
+  server.addHandler(&events);
 
   server.addHandler(new SPIFFSEditor(SPIFFS, http_username, http_password));
 
@@ -152,13 +152,13 @@ void FS_init(void) {
     int headers = request->headers();
     int i;
     for (i = 0; i < headers; i++) {
-      AsyncWebHeader *h = request->getHeader(i);
+      const AsyncWebHeader *h = request->getHeader(i);
       Serial.printf("_HEADER[%s]: %s\n", h->name().c_str(), h->value().c_str());
     }
 
     int params = request->params();
     for (i = 0; i < params; i++) {
-      AsyncWebParameter *p = request->getParam(i);
+      const AsyncWebParameter *p = request->getParam(i);
       if (p->isFile()) {
         Serial.printf("_FILE[%s]: %s, size: %u\n", p->name().c_str(), p->value().c_str(), p->size());
       } else if (p->isPost()) {

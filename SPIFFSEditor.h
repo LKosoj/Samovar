@@ -7,7 +7,7 @@ String get_edit_script();
 
 #ifdef USE_LUA
 void load_lua_script();
-String getValue(String data, char separator, int index);
+String IRAM_ATTR getValue(String data, char separator, int index);
 #endif
 
 
@@ -24,10 +24,10 @@ class SPIFFSEditor: public AsyncWebHandler {
 #else
     SPIFFSEditor(const String& username = String(), const String& password = String(), const fs::FS& fs = SPIFFS);
 #endif
-    virtual bool canHandle(AsyncWebServerRequest *request) override final;
+    virtual bool canHandle(AsyncWebServerRequest *request) const override final;
     virtual void handleRequest(AsyncWebServerRequest *request) override final;
     virtual void handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) override final;
-    virtual bool isRequestHandlerTrivial() override final {
+    virtual bool isRequestHandlerTrivial() const override final {
       return false;
     }
 };
@@ -156,7 +156,7 @@ SPIFFSEditor::SPIFFSEditor(const String& username, const String& password, const
   , _startTime(0)
 {}
 
-bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) {
+bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
   if (request->url().equalsIgnoreCase("/edit")) {
     if (request->method() == HTTP_GET) {
       if (request->hasParam("list"))
@@ -165,7 +165,9 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) {
         String p = request->arg("edit");
         if (request->arg("edit")[0] != '/') p = "/" + p;
         //        request->_tempFile = _fs.open(request->arg("edit"), "r");
-        request->_tempFile = _fs.open(p, "r");
+        //request->_tempFile = _fs.open(p, "r");
+        fs::FS& ref = const_cast <fs::FS&>(_fs);
+        request->_tempFile = ref.open(p, "r");
         if (!request->_tempFile) {
           return false;
         }
@@ -179,7 +181,9 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) {
       if (request->hasParam("download")) {
         String p = request->arg("download");
         if (request->arg("edit")[0] != '/') p = "/" + p;
-        request->_tempFile = _fs.open(p, "r");
+        //request->_tempFile = _fs.open(p, "r");
+        fs::FS& ref = const_cast <fs::FS&>(_fs);
+        request->_tempFile = ref.open(p, "r");
         if (!request->_tempFile) {
           return false;
         }

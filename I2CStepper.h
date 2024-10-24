@@ -6,6 +6,9 @@
 #define STEPPER_I2C_STEPS 200 * STEPPER_I2C_MS //количество шагов, 200 x MS
 //#define STEPPER_I2C_MAX_SPEED 1200
 
+#ifndef I2CStepperStepMl
+#define I2CStepperStepMl 16000                //количество шагов на мл для I2CStepper
+#endif
 
 #include <Arduino.h>
 //#include <Wire.h>

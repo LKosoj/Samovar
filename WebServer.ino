@@ -71,33 +71,33 @@ void WebServerInit(void) {
   FS_init();  // Включаем работу с файловой системой
 
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=5000");
     request->send(response);
   });
   server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=604800");
     request->send(response);
   });
   server.on("/plus.png", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/plus.png");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/plus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=614800");
     request->send(response);
   });
   server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/favicon.ico");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/favicon.ico", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=624800");
     request->send(response);
   });
 
   server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Red_light.gif");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Red_light.gif", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=634800");
     request->send(response);
   });
   server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest * request) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Green.png");
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Green.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=644800");
     request->send(response);
   });
@@ -125,6 +125,7 @@ void WebServerInit(void) {
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
+  //server.serveStatic("/edit", SPIFFS, "/edit.htm");
 
   //#ifdef USE_LUA
   //  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
@@ -804,12 +805,12 @@ void web_command(AsyncWebServerRequest *request) {
       }
     } else if (request->hasArg("pnbk")) {
       if (request->arg("pnbk").toInt() == 1) {
-        set_stepper_target(I2CStepperSpeed + 1000, 0, 0);
+        set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(0.05), 0, 0);
       } else {
         if (I2CStepperSpeed - 1000 < 0) {
           set_stepper_target(0, 0, 0);
         } else {
-          set_stepper_target(I2CStepperSpeed - 1000, 0, 0);
+          set_stepper_target(I2CStepperSpeed - i2c_get_speed_from_rate(0.0499), 0, 0);
         }
       }
     } else if (request->hasArg("distiller")) {

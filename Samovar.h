@@ -34,8 +34,9 @@
 #include "user_config_override.h"
 
 #if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+//https://esp32.jgarrettcorbin.com/
 //Если используется SDK >= 3 версии, отключаем использование OTA
-#undef USE_UPDATE_OTA 
+#undef USE_UPDATE_OTA
 #endif
 
 #include "Samovar_pin.h"
@@ -245,8 +246,8 @@ TaskHandle_t PowerStatusTask = NULL;
 
 AsyncWebServer server(80);
 
-//AsyncWebSocket ws("/ws");
-//AsyncEventSource events("/events");
+AsyncWebSocket ws("/ws");
+AsyncEventSource events("/events");
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
