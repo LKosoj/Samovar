@@ -90,13 +90,15 @@ void check_alarm_distiller() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
-  if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
-    set_buzzer(true);
-    open_valve(true, true);
-  }
-
   if (!valve_status) {
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true, true);
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) {
+      set_buzzer(true);
+      open_valve(true, true);
+    }
+    else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
+      set_buzzer(true);
+      open_valve(true, true);
+    }
   }
 
   if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE) {
