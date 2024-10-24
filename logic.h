@@ -724,7 +724,10 @@ void check_alarm() {
 #endif
 
   if (!valve_status) {
-    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) open_valve(true, true);
+    if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) {
+      set_buzzer(true);
+      open_valve(true, true);
+    }
     else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
       set_buzzer(true);
       open_valve(true, true);
