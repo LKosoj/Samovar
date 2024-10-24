@@ -1522,7 +1522,7 @@ void SendMsg(const String m, MESSAGE_TYPE msg_type) {
   MsgPl.replace(",", ";");
   MqttSendMsg(MsgPl + "," + msg_type, "msg");
 #endif
-#ifdef SAMOVAR_USE_BLYNK
+#ifdef USE_TELEGRAM
   switch (msg_type) {
     case 0 : MsgPl = F("Тревога! "); break;
     case 1 : MsgPl = F("Предупреждение! "); break;
