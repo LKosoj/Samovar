@@ -81,7 +81,7 @@ void nbk_proc() {
   } else if (program[ProgramNum].WType == "S" && begintime <= millis()) {
     //Если прошло 300 секунд с начала стабилизации НБК, переходим к программе выхода на заданную скорость отбора
     run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed >= I2CStepperSpeed && d_s_temp_prev - 0.5 <= TankSensor.avgTemp && TankSensor.avgTemp > 80) {
+  } else if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed >= get_stepper_speed() && d_s_temp_prev - 0.5 <= TankSensor.avgTemp && TankSensor.avgTemp > 80) {
     //Если достигли заданной скорости и вышли за пределы Т внизу колонны, переходим к программе выхода на заданное давление
     run_nbk_program(ProgramNum + 1);
   } else if (program[ProgramNum].WType == "P" && pressure_value > program[ProgramNum].capacity_num) {
@@ -93,12 +93,12 @@ void nbk_proc() {
   if (program[ProgramNum].WType == "T") {
     if (t_min <= millis()) {
       float spdinc;
-      if (program[ProgramNum].Speed < I2CStepperSpeed) {
+      if (program[ProgramNum].Speed < get_stepper_speed()) {
         spdinc = 100;
       } else {
         spdinc = 50;
       }
-      set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(spdinc / 1000.00), 0, 0);
+      set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(spdinc / 1000.00), 0, 0);
     } else {
       t_min = millis() + 5 * 1000;
     }
@@ -112,7 +112,7 @@ void nbk_proc() {
       set_current_power(target_power_volt + 2);
 #endif
       if (TankSensor.avgTemp >= d_s_temp_prev - 0.5) {
-        set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
       }
     } else {
       t_min = millis() + 5 * 1000;
@@ -120,9 +120,9 @@ void nbk_proc() {
   } else if (program[ProgramNum].WType == "W") {
     if (t_min <= millis()) {
       if (TankSensor.avgTemp < d_s_temp_prev - 0.5) {
-        set_stepper_target(I2CStepperSpeed - i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
+        set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
       } else if (TankSensor.avgTemp > d_s_temp_prev) {
-        set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(50 / 1000.00), 0, 0);
       }
     } else {
       t_min = millis() + 5 * 1000;
@@ -135,6 +135,7 @@ void nbk_proc() {
 void nbk_finish() {
   SendMsg(("Работа НБК завершена"), NOTIFY_MSG);
   set_power(false);
+  set_stepper_target(0,0,0);
   reset_sensor_counter();
 }
 
