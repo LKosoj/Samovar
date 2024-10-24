@@ -805,12 +805,12 @@ void web_command(AsyncWebServerRequest *request) {
       }
     } else if (request->hasArg("pnbk")) {
       if (request->arg("pnbk").toInt() == 1) {
-        set_stepper_target(I2CStepperSpeed + i2c_get_speed_from_rate(0.05), 0, 0);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(0.05), 0, 0);
       } else {
-        if (I2CStepperSpeed - 1000 < 0) {
+        if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
           set_stepper_target(0, 0, 0);
         } else {
-          set_stepper_target(I2CStepperSpeed - i2c_get_speed_from_rate(0.0499), 0, 0);
+          set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(0.0499), 0, 0);
         }
       }
     } else if (request->hasArg("distiller")) {
