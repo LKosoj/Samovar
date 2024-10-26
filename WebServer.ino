@@ -25,6 +25,9 @@ void run_lua_script(String fn);
 String run_lua_string(String lstr);
 #endif
 
+// filter out specific headers from the incoming request
+HeaderFilterMiddleware headerFilter;
+
 void change_samovar_mode() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -110,21 +113,21 @@ void WebServerInit(void) {
   //  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
 
   server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
-  server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css");
-  server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv");
-  server.serveStatic("/prg.csv", SPIFFS, "/prg.csv");
-  server.serveStatic("/state.csv", SPIFFS, "/state.csv");
-  server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor);
-  server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor);
-  server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor);
-  server.serveStatic("/manual.htm", SPIFFS, "/manual.htm");
+  server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css").setCacheControl("max-age=1");
+  server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv").setCacheControl("max-age=1");
+  server.serveStatic("/prg.csv", SPIFFS, "/prg.csv").setCacheControl("max-age=1");
+  server.serveStatic("/state.csv", SPIFFS, "/state.csv").setCacheControl("max-age=1");
+  server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+  server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+  server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor).setCacheControl("max-age=800");
+  server.serveStatic("/manual.htm", SPIFFS, "/manual.htm").setCacheControl("max-age=800");
   server.serveStatic("/pong.htm", SPIFFS, "/alarm.mp3");
-  server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt");
-  server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt");
-  server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt");
-  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor);
+  server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt").setCacheControl("max-age=1");
+  server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt").setCacheControl("max-age=1");
+  server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt").setCacheControl("max-age=1");
+  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
-  server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor);
+  server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
   //server.serveStatic("/edit", SPIFFS, "/edit.htm");
 
   //#ifdef USE_LUA
@@ -195,6 +198,11 @@ void WebServerInit(void) {
   });
 
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");  // CORS
+  headerFilter.filter("If-Modified-Since");
+//  DefaultHeaders::Instance().addHeader("Cache-Control", "no-cache");
+//  DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
+//  DefaultHeaders::Instance().addHeader("Expires", "Thu, 01 Jan 1970 00:00:00 UTC");
+//  DefaultHeaders::Instance().addHeader("Last-Modified", "Mon, 03 Jan 2050 00:00:00 UTC");
   server.begin();
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");

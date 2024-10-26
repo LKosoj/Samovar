@@ -386,7 +386,7 @@
           document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
           document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
-          document.getElementById('ISspd').innerHTML = myObj.ISspd;
+          document.getElementById('ISspd').innerHTML = myObj.ISspd.toFixed(1);
           document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
           document.getElementById('heap').innerHTML = myObj.heap;
           document.getElementById('rssi').innerHTML = myObj.rssi;
@@ -394,7 +394,7 @@
           sound_is_on = !!myObj.UseBBuzzer;
 
           if (myObj.prvl && myObj.prvl !== "") {
-            document.getElementById('pressure_value').innerHTML = myObj.prvl;
+            document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);
           }
 
           if (myObj.Lstatus) {
@@ -699,7 +699,7 @@
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
       </div>
       <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
+        <span class='dvcs'>Системные параметры: 3333=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
       </div>
 
       <div style="visibility: hidden" id="lua_btn">
