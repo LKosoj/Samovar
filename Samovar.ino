@@ -657,7 +657,7 @@ void triggerSysTicker(void *parameter) {
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(600);
   pinMode(0, INPUT);
   if (digitalRead(0) == LOW) {
     WiFi.mode(WIFI_STA); // cannot erase if not in STA mode !
@@ -1080,6 +1080,7 @@ void setup() {
     Serial.println("I2C Stepper as Pump");
   }
   used_byte = SPIFFS.usedBytes();
+  //Serial.println(sizeof(SamSetup));
 }
 
 void loop() {
