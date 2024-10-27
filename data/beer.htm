@@ -390,6 +390,11 @@
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
           sound_is_on = !!myObj.UseBBuzzer;
 
+          if (myObj.wp_spd === undefined) {
+          } else {
+            document.getElementById('add_param').innerHTML = "ШИМ насоса воды: " + myObj.wp_spd;
+          }
+
           if (myObj.Lstatus) {
             if (myObj.Lstatus != "") {
               document.getElementById('Lstatus').innerHTML = myObj.Lstatus;
@@ -787,7 +792,7 @@
       </div>
 
       <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
       </div>
       <div>
         <input id='power' type='submit' name='power' class="button" value='Включить нагрев' onclick='sendbutton("power=1");'>

@@ -400,6 +400,11 @@
             document.getElementById('flowsensor').style = '';
           }
 
+          if (myObj.wp_spd === undefined) {
+          } else {
+            document.getElementById('add_param').innerHTML = "ШИМ насоса воды: " + myObj.wp_spd;
+          }
+
           var powerstr;
           var powerstyle;
           if (myObj.PowerOn == 1) {
@@ -665,7 +670,7 @@
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
       </div>
       <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span></span>
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
       </div>
 
       <div style="visibility: hidden" id="lua_btn">
