@@ -1416,7 +1416,7 @@ void saveConfigCallback() {
 }
 
 void read_config() {
-  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.begin(sizeof(SamSetup));
   EEPROM.get(0, SamSetup);
   SteamSensor.SetTemp = SamSetup.SetSteamTemp;
   PipeSensor.SetTemp = SamSetup.SetPipeTemp;
@@ -1507,12 +1507,14 @@ void read_config() {
 
 #ifdef USE_TELEGRAM
   if (SamSetup.tg_token[0] == 255) {
-    SamSetup.tg_token[0] = 0;
+    SamSetup.tg_token[0] = '\0';
   }
   if (SamSetup.tg_chat_id[0] == 255) {
-    SamSetup.tg_chat_id[0] = 0;
+    SamSetup.tg_chat_id[0] = '\0';
   }
-
+#else
+  SamSetup.tg_token[0] = '\0';
+  SamSetup.tg_chat_id[0] = '\0';
 #endif
 
 }
