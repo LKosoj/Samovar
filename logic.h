@@ -1292,8 +1292,9 @@ void triggerPowerStatus(void *parameter) {
 void check_power_error() {
 #ifndef __SAMOVAR_DEBUG
   //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 0.2) {
+  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && abs((current_power_volt - target_power_volt) / current_power_volt) > 2) {
     power_err_cnt++;
+    //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
     if (power_err_cnt > 6) set_current_power(target_power_volt);
     if (power_err_cnt > 12) {
       delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
