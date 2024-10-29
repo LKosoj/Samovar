@@ -4,7 +4,7 @@
 [![Continuous Integration](https://github.com/mathieucarbou/AsyncTCP/actions/workflows/ci.yml/badge.svg)](https://github.com/mathieucarbou/AsyncTCP/actions/workflows/ci.yml)
 [![PlatformIO Registry](https://badges.registry.platformio.org/packages/mathieucarbou/library/AsyncTCP.svg)](https://registry.platformio.org/libraries/mathieucarbou/AsyncTCP)
 
-A fork of the [AsyncTCP](https://github.com/me-no-dev/AsyncTCP) library by [@me-no-dev](https://github.com/me-no-dev) for [ESPHome](https://esphome.io).
+A fork of the [AsyncTCP](https://github.com/me-no-dev/AsyncTCP) library by [@me-no-dev](https://github.com/me-no-dev).
 
 ### Async TCP Library for ESP32 Arduino
 
@@ -18,15 +18,32 @@ The base classes on which everything else is built. They expose all possible sce
 
 ## Changes in this fork
 
-- All improvements from [ESPHome fork](https://github.com/esphome/AsyncTCP)
-- Reverted back `library.properties` for Arduino IDE users
+- Based on [ESPHome fork](https://github.com/esphome/AsyncTCP)
+
+- `library.properties` for Arduino IDE users
+- Add `CONFIG_ASYNC_TCP_MAX_ACK_TIME`
+- Add `CONFIG_ASYNC_TCP_PRIORITY`
+- Add `CONFIG_ASYNC_TCP_QUEUE_SIZE`
+- Add `setKeepAlive()`
 - Arduino 3 / ESP-IDF 5 compatibility
-- IPv6 support
+- Better CI
+- Better example
+- Customizable macros
+- Fix for "Required to lock TCPIP core functionality". Ref: https://github.com/mathieucarbou/AsyncTCP/issues/27 and https://github.com/espressif/arduino-esp32/issues/10526
+- Fix for "ack timeout 4" client disconnects.
+- Fix from https://github.com/me-no-dev/AsyncTCP/pull/173 (partially applied)
+- Fix from https://github.com/me-no-dev/AsyncTCP/pull/184
+- IPv6
+- LIBRETINY support
+- LibreTuya
+- Reduce logging of non critical messages
+- Use IPADDR6_INIT() macro to set connecting IPv6 address
+- xTaskCreateUniversal function
 
 ## Coordinates
 
 ```
-mathieucarbou/AsyncTCP @ ^3.2.11
+mathieucarbou/AsyncTCP @ ^3.2.12
 ```
 
 ## Important recommendations

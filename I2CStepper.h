@@ -102,7 +102,7 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
     stopService();
     if (spd > 0) {
       CurrrentStepperSpeed = spd;
-      stepper.setTarget(2147483646);
+      stepper.setTarget(target);
       stepper.setMaxSpeed(spd);
       //stepper.setSpeed(spd);
       startService();
@@ -127,6 +127,8 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
       I2C2.writeByte(use_I2C_dev, 8, 0);
       xSemaphoreGive(xI2CSemaphore);
       result = true;
+    } else {
+      return false;
     }
   }
   return result;

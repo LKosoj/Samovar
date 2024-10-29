@@ -73,7 +73,7 @@ void nbk_proc() {
 //    attachInterrupt(LUA_PIN, isrNBKLS_TICK, CHANGE);
 
     run_nbk_program(0);
-    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 0);
+    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 4294967295);
   }
 
   //Обрабатываем программу НБК
@@ -100,7 +100,7 @@ void nbk_proc() {
       } else {
         spdinc = NBK_PUMP_INCREMENT;
       }
-      set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(spdinc / 1000.00), 0, 0);
+      set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(spdinc / 1000.00), 0, 4294967295);
     } else {
       t_min = millis() + 5 * 1000;
     }
@@ -114,7 +114,7 @@ void nbk_proc() {
       set_current_power(target_power_volt + 2);
 #endif
       if (TankSensor.avgTemp >= d_s_temp_prev - 0.5) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000.00), 0, 0);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000.00), 0, 4294967295);
       }
     } else {
       t_min = millis() + 5 * 1000;
@@ -122,9 +122,9 @@ void nbk_proc() {
   } else if (program[ProgramNum].WType == "W") {
     if (t_min <= millis()) {
       if (TankSensor.avgTemp < d_s_temp_prev - 0.5) {
-        set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000.00 - 0.0001), 0, 0);
+        set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000.00 - 0.0001), 0, 4294967295);
       } else if (TankSensor.avgTemp > d_s_temp_prev) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000.00), 0, 0);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000.00), 0, 4294967295);
       }
     } else {
       t_min = millis() + 5 * 1000;
@@ -169,7 +169,7 @@ void run_nbk_program(uint8_t num) {
 
   if (program[ProgramNum].WType == "S") {
     begintime = millis() + 300 * 1000;
-    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 0);
+    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 4294967295);
     set_current_power(program[ProgramNum].Power);
   } else if (program[ProgramNum].WType == "T") {
     //Запомним Тниз = d_s_temp_prev

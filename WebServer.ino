@@ -1041,7 +1041,7 @@ String get_web_file(String fn, get_web_type type) {
 String http_sync_request_get(String url) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(5);                      //Таймаут пять секунд
+  request.setTimeout(8);                      //Таймаут восемь секунд
   request.open("GET", url.c_str());  //URL
   while (request.readyState() < 1) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
@@ -1075,7 +1075,7 @@ String http_sync_request_get(String url) {
 String http_sync_request_post(String url, String body, String ContentType) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(5);                      //Таймаут пять секунд
+  request.setTimeout(8);                      //Таймаут восемь секунд
 
   request.open("POST", url.c_str());  //URL
   while (request.readyState() < 1) {
