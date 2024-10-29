@@ -888,6 +888,10 @@
         </div>
       </div>
 
+      <div style="margin-top: 1em;">
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
+      </div>
+
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
           <input id='power' type='submit' name='power' value='Включить нагрев' onclick='sendbutton("power=1");' class="button">
@@ -1015,9 +1019,6 @@
       <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
         <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> л</span>
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
-      </div>
-      <div style="margin-top: 1em;">
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
       </div>
 
       <div style="visibility: hidden" id="lua_btn">

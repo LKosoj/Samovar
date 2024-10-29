@@ -627,6 +627,10 @@
         </div>
       </div>
 
+      <div>
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
+      </div>
+
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
           <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setBKCommand();' class="button">
@@ -668,9 +672,6 @@
       <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
         <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
-      </div>
-      <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
       </div>
 
       <div style="visibility: hidden" id="lua_btn">

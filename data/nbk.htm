@@ -603,6 +603,10 @@
         </div>
       </div>
 
+      <div>
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
+      </div>
+
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: center; padding-bottom: 8;">
           <input id='pmpl' type='submit' name='pmpl' value='Насос НБК ++' onclick='sendbutton("pnbk=1");' class="button">
           <input id='pmmn' type='submit' name='pmmn' class="button" value='Насос НБК --' onclick='sendbutton("pnbk=2");'>
@@ -702,9 +706,6 @@
       <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
         <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
-      </div>
-      <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
       </div>
 
       <div style="visibility: hidden" id="lua_btn">
