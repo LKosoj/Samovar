@@ -1084,6 +1084,7 @@ void setup() {
 
 void loop() {
   //пересчитаем время работы таймера для шагового двигателя
+#ifdef USE_STEPPER_ACCELERATION
   portENTER_CRITICAL_ISR(&timerMux);
 #if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
   timerAlarm(timer, stepper.getPeriod(), true, 0);
@@ -1091,6 +1092,7 @@ void loop() {
   timerAlarmWrite(timer, stepper.getPeriod(), true);
 #endif
   portEXIT_CRITICAL_ISR(&timerMux);
+#endif //USE_STEPPER_ACCELERATION
 
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
