@@ -7,7 +7,7 @@
 //#define STEPPER_I2C_MAX_SPEED 1200
 
 #ifndef I2CStepperStepMl
-#define I2CStepperStepMl 16000                  //количество шагов на мл для I2CStepper
+#define I2CStepperStepMl 16000  //количество шагов на мл для I2CStepper
 #endif
 
 #include <Arduino.h>
@@ -102,6 +102,7 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
     stopService();
     if (spd > 0) {
       CurrrentStepperSpeed = spd;
+      stepper.setCurrent(0);
       stepper.setTarget(target);
       stepper.setMaxSpeed(spd);
       //stepper.setSpeed(spd);
