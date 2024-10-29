@@ -30,39 +30,39 @@ HeaderFilterMiddleware headerFilter;
 
 void change_samovar_mode() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/beer.htm", String(), false, indexKeyProcessor);
     });
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/distiller.htm", String(), false, indexKeyProcessor);
     });
   } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/bk.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/bk.htm", String(), false, indexKeyProcessor);
     });
   } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/nbk.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/nbk.htm", String(), false, indexKeyProcessor);
     });
   } else {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
-    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest * request) {
+    server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/index.htm", String(), false, indexKeyProcessor);
     });
   }
@@ -73,33 +73,33 @@ void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
 
-  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=5000");
     request->send(response);
   });
-  server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=604800");
     request->send(response);
   });
-  server.on("/plus.png", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/plus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/plus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=614800");
     request->send(response);
   });
-  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/favicon.ico", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=624800");
     request->send(response);
   });
 
-  server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Red_light.gif", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=634800");
     request->send(response);
   });
-  server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Green.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=644800");
     request->send(response);
@@ -142,54 +142,54 @@ void WebServerInit(void) {
 
   load_profile();
 
-  server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/resetreason.css", String());
   });
-  server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (fileToAppend)
       fileToAppend.flush();
     request->send(SPIFFS, "/data.csv", String());
   });
-  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
     //TempStr = temp;
     getjson();
     request->send(200, "text/html", jsonstr);
   });
-  server.on("/command", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request) {
     web_command(request);
   });
-  server.on("/program", HTTP_POST, [](AsyncWebServerRequest * request) {
+  server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request) {
     web_program(request);
   });
-  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request) {
     calibrate_command(request);
   });
-  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_data_log(request, "data.csv");
   });
-  server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/getoldlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_data_log(request, "data_old.csv");
   });
 #ifdef USE_LUA
-  server.on("/lua", HTTP_GET, [](AsyncWebServerRequest * request) {
+  server.on("/lua", HTTP_GET, [](AsyncWebServerRequest *request) {
     start_lua_script();
     request->send(200, "text/html", "OK");
   });
 #endif
 
-  server.on("/save", HTTP_POST, [](AsyncWebServerRequest * request) {
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
     //Serial.println("SAVE");
     handleSave(request);
   });
 
-  server.onFileUpload([](AsyncWebServerRequest * request, const String & filename, size_t index, uint8_t *data, size_t len, bool final) {
+  server.onFileUpload([](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
     if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
     Serial.printf("%s", (const char *)data);
     if (final)
       Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
-  server.onRequestBody([](AsyncWebServerRequest * request, uint8_t *data, size_t len, size_t index, size_t total) {
+  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!index)
       Serial.printf("BodyStart: %u\n", total);
     Serial.printf("%s", (const char *)data);
@@ -199,10 +199,10 @@ void WebServerInit(void) {
 
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");  // CORS
   headerFilter.filter("If-Modified-Since");
-//  DefaultHeaders::Instance().addHeader("Cache-Control", "no-cache");
-//  DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
-//  DefaultHeaders::Instance().addHeader("Expires", "Thu, 01 Jan 1970 00:00:00 UTC");
-//  DefaultHeaders::Instance().addHeader("Last-Modified", "Mon, 03 Jan 2050 00:00:00 UTC");
+  //  DefaultHeaders::Instance().addHeader("Cache-Control", "no-cache");
+  //  DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
+  //  DefaultHeaders::Instance().addHeader("Expires", "Thu, 01 Jan 1970 00:00:00 UTC");
+  //  DefaultHeaders::Instance().addHeader("Last-Modified", "Mon, 03 Jan 2050 00:00:00 UTC");
   server.begin();
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");
@@ -388,7 +388,9 @@ String setupKeyProcessor(const String &var) {
       return "";
 #ifdef IGNORE_HEAD_LEVEL_SENSOR_SETTING
   } else if (var == "IgnFL") {
-    return F("style=""display: none""");
+    return F("style="
+             "display: none"
+             "");
 #endif
   } else if (var == "UAPChecked") {
     if (SamSetup.useautopowerdown) return "checked='true'";
@@ -762,14 +764,11 @@ void web_command(AsyncWebServerRequest *request) {
     if (request->hasArg("start") && PowerOn) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         sam_command_sync = SAMOVAR_BEER_NEXT;
-      }
-      else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
         sam_command_sync = SAMOVAR_DIST_NEXT;
-      }
-      else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
         sam_command_sync = SAMOVAR_NBK_NEXT;
-      }
-      else {
+      } else {
         sam_command_sync = SAMOVAR_START;
       }
     } else if (request->hasArg("power")) {
@@ -813,12 +812,17 @@ void web_command(AsyncWebServerRequest *request) {
       }
     } else if (request->hasArg("pnbk")) {
       if (request->arg("pnbk").toInt() == 1) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000), 0, 0);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00), 0, 4294967295);
+        // Serial.println("pnbk inc");
+        // Serial.println(get_stepper_speed());
+        // Serial.println(i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00));
+        // Serial.println(get_stepper_speed());
+        // Serial.println(i2c_get_liguid_rate_by_step(get_stepper_speed()));
       } else {
         if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
           set_stepper_target(0, 0, 0);
         } else {
-          set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(NBK_PUMP_INCREMENT / 1000 - 0.0001), 0, 0);
+          set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 4294967295);
         }
       }
     } else if (request->hasArg("distiller")) {
@@ -858,8 +862,7 @@ void web_command(AsyncWebServerRequest *request) {
 #ifdef USE_LUA
     else if (request->hasArg("lua")) {
       run_lua_script(request->arg("lua"));
-    }
-    else if (request->hasArg("luastr")) {
+    } else if (request->hasArg("luastr")) {
       String lstr = request->arg("luastr");
       lstr.replace("^", " ");
       run_lua_string(lstr);
@@ -1041,7 +1044,7 @@ String get_web_file(String fn, get_web_type type) {
 String http_sync_request_get(String url) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(8);                      //Таймаут восемь секунд
+  request.setTimeout(8);             //Таймаут восемь секунд
   request.open("GET", url.c_str());  //URL
   while (request.readyState() < 1) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
@@ -1075,7 +1078,7 @@ String http_sync_request_get(String url) {
 String http_sync_request_post(String url, String body, String ContentType) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(8);                      //Таймаут восемь секунд
+  request.setTimeout(8);  //Таймаут восемь секунд
 
   request.open("POST", url.c_str());  //URL
   while (request.readyState() < 1) {
