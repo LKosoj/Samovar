@@ -1,3 +1,4 @@
+#include "HardwareSerial.h"
 #ifndef __SAMOVAR_I2CSTEPPER_H_
 #define __SAMOVAR_I2CSTEPPER_H_
 
@@ -102,9 +103,9 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
     stopService();
     if (spd > 0) {
       CurrrentStepperSpeed = spd;
+      stepper.setMaxSpeed(spd);
       stepper.setCurrent(0);
       stepper.setTarget(target);
-      stepper.setMaxSpeed(spd);
       //stepper.setSpeed(spd);
       startService();
     } else {
