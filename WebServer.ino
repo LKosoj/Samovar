@@ -812,7 +812,7 @@ void web_command(AsyncWebServerRequest *request) {
       }
     } else if (request->hasArg("pnbk") && PowerOn) {
       if (request->arg("pnbk").toInt() == 1) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 4294967295);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
         // Serial.println("pnbk inc");
         // Serial.println(get_stepper_speed());
         // Serial.println(i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00));
@@ -822,7 +822,7 @@ void web_command(AsyncWebServerRequest *request) {
         if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
           set_stepper_target(0, 0, 0);
         } else {
-          set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 4294967295);
+          set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 2147483640);
         }
       }
     } else if (request->hasArg("distiller")) {
