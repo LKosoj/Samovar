@@ -810,9 +810,9 @@ void web_command(AsyncWebServerRequest *request) {
       } else {
         set_mixer(false);
       }
-    } else if (request->hasArg("pnbk")) {
+    } else if (request->hasArg("pnbk") && PowerOn) {
       if (request->arg("pnbk").toInt() == 1) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00), 0, 4294967295);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 4294967295);
         // Serial.println("pnbk inc");
         // Serial.println(get_stepper_speed());
         // Serial.println(i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00));
