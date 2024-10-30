@@ -93,9 +93,9 @@ void nbk_proc() {
 
   //управляющие воздействия для текущей программы
   if (program[ProgramNum].WType == "T") {
-    if (t_min <= millis()) {
+    if (t_min != 0 && t_min <= millis()) {
       float spdinc;
-      if (program[ProgramNum].Speed < get_stepper_speed()) {
+      if (program[ProgramNum].Speed < i2c_get_speed_from_rate(get_stepper_speed())) {
         spdinc = NBK_PUMP_INCREMENT * 2;
       } else {
         spdinc = NBK_PUMP_INCREMENT;
@@ -105,7 +105,7 @@ void nbk_proc() {
       t_min = millis() + 5 * 1000;
     }
   } else if (program[ProgramNum].WType == "P") {
-    if (t_min <= millis()) {
+    if (t_min != 0 && t_min <= millis()) {
 #ifdef SAMOVAR_USE_SEM_AVR
       //Если регулятор мощности - повышаем на 15 ватт
       set_current_power(target_power_volt + 15);
@@ -120,7 +120,7 @@ void nbk_proc() {
       t_min = millis() + 5 * 1000;
     }
   } else if (program[ProgramNum].WType == "W") {
-    if (t_min <= millis()) {
+    if (t_min != 0 && t_min <= millis()) {
       if (TankSensor.avgTemp < d_s_temp_prev - 0.5) {
         set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 2147483640);
       } else if (TankSensor.avgTemp > d_s_temp_prev) {
@@ -131,7 +131,7 @@ void nbk_proc() {
     }
   }
 
-  vTaskDelay(10 / portTICK_PERIOD_MS);
+  vTaskDelay(200 / portTICK_PERIOD_MS);
 }
 
 void nbk_finish() {
