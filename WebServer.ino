@@ -208,7 +208,9 @@ void WebServerInit(void) {
   Serial.println("HTTP server started");
 #endif
 
+#ifndef NOT_USE_INTERFACE_UPDATE
   get_web_interface();
+#endif
 }
 
 String indexKeyProcessor(const String &var) {
