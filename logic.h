@@ -1176,11 +1176,12 @@ void triggerPowerStatus(void *parameter) {
     //T3EA3E80
     if (PowerOn) {
       Serial2.flush();
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      vTaskDelay(300 / portTICK_PERIOD_MS);
       if (Serial2.available()) {
         resp = Serial2.readStringUntil('\r');
         i = resp.indexOf("T");
         if (i < 0) {
+          vTaskDelay(50 / portTICK_PERIOD_MS);
           resp = Serial2.readStringUntil('\r');
         }
         resp = resp.substring(i, resp.length());
@@ -1199,7 +1200,7 @@ void triggerPowerStatus(void *parameter) {
             current_power_volt = cpv / 10.0F;
             target_power_volt = hexToDec(resp.substring(3, 6)) / 10.0F;
             current_power_mode = resp.substring(6, 7);
-            vTaskDelay(300 / portTICK_PERIOD_MS);
+            vTaskDelay(100 / portTICK_PERIOD_MS);
           }
         }
       }
