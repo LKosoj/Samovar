@@ -1,5 +1,6 @@
 //TODO
 //
+//Закройте подачу воды - при аварии спамит
 //Проверить на С подъем напряжения
 //При старте колонны до стабилизации реализовать выход на предзахлеб (если установлен датчик флегмы) для смачивания насадки (дополнительная опция)
 //Перейти на GyverPID
@@ -133,7 +134,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 #if defined(SAMOVAR_USE_BLYNK) || defined(USE_TELEGRAM)
 #include <cppQueue.h>
-cppQueue  msg_q(80, 4, FIFO);
+cppQueue msg_q(80, 4, FIFO);
 #endif
 
 #ifdef USE_TELEGRAM
@@ -226,18 +227,18 @@ void recvMsg(uint8_t *data, size_t len) {
 #endif
 
 void stopService(void) {
-#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+#if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))
   //timerEnd(timer);
   timerWrite(timer, 0);
-#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
+#else  // ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarmDisable(timer);
 #endif
 }
 
 void startService(void) {
-#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+#if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))
   timerAlarm(timer, stepper.getPeriod(), true, 0);
-#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
+#else  // ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarmWrite(timer, stepper.getPeriod(), true);
   timerAlarmEnable(timer);
 #endif
@@ -329,8 +330,7 @@ void triggerGetClock(void *parameter) {
   while (true) {
     {
       if (WiFi.status() == WL_CONNECTED) {
-      }
-      else {
+      } else {
         WiFi.disconnect();
         WiFi.reconnect();
       }
@@ -338,10 +338,10 @@ void triggerGetClock(void *parameter) {
 
 #ifdef USE_TELEGRAM
     {
-      if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0) {
+      if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
         if (!msg_q.isEmpty()) {
-          if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
-            char c[120];
+          if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
+            char c[150];
             msg_q.pop(&c);
             qMsg = c;
             //Serial.println(qMsg);
@@ -350,6 +350,13 @@ void triggerGetClock(void *parameter) {
           }
         }
       }
+    }
+#endif
+
+#ifdef SAMOVAR_USE_BLYNK
+    if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
+      Blynk.connect(BLYNK_TIMEOUT_MS);
+      vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 #endif
 
@@ -386,7 +393,7 @@ void triggerGetClock(void *parameter) {
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
       pressure_sensor_get();
 #endif
-      vTaskDelay(5600 / portTICK_PERIOD_MS);
+      vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
   }
 }
@@ -659,7 +666,7 @@ void setup() {
   delay(600);
   pinMode(0, INPUT);
   if (digitalRead(0) == LOW) {
-    WiFi.mode(WIFI_STA); // cannot erase if not in STA mode !
+    WiFi.mode(WIFI_STA);  // cannot erase if not in STA mode !
     WiFi.persistent(true);
     WiFi.disconnect(true, true);
     WiFi.persistent(false);
@@ -718,10 +725,10 @@ void setup() {
 
   // Configure the Prescaler at 80 the quarter of the ESP32 is cadence at 80Mhz
   // 80000000 / 80 = 1000000 tics / seconde
-#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+#if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))
   timer = timerBegin(1000000);
   timerAttachInterrupt(timer, &StepperTicker);
-#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
+#else  // ESP_ARDUINO_VERSION_MAJOR >= 3
   timer = timerBegin(2, 80, true);
   timerAttachInterrupt(timer, &StepperTicker, true);
 #endif
@@ -743,19 +750,19 @@ void setup() {
 
   //Запускаем таск для обработки нажатия кнопки и энкодера
   xTaskCreatePinnedToCore(
-    taskButton,      /* Function to implement the task */
-    "taskButton",    /* Name of the task */
-    1150,            /* Stack size in words */
-    NULL,            /* Task input parameter */
-    1,               /* Priority of the task */
+    taskButton,       /* Function to implement the task */
+    "taskButton",     /* Name of the task */
+    1150,             /* Stack size in words */
+    NULL,             /* Task input parameter */
+    1,                /* Priority of the task */
     &SysTickerButton, /* Task handle. */
-    1);              /* Core where the task should run */
+    1);               /* Core where the task should run */
 
 
   //Если при старте нажата кнопка - Самовар запустится в режиме AP
   bool wifiAP = false;
 #ifdef BTN_PIN
-  btn.tick();      // отработка нажатия
+  btn.tick();  // отработка нажатия
   if (btn.isPress()) {
     wifiAP = true;
     delay(2000);
@@ -835,7 +842,8 @@ void setup() {
 
   Serial.printf("ESP32 Chip model = %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
   //Serial.printf("This chip has %d cores\n", ESP.getChipCores());
-  Serial.print("Chip ID: "); Serial.println(chipId);
+  Serial.print("Chip ID: ");
+  Serial.println(chipId);
 
   String StIP;
 
@@ -924,7 +932,7 @@ void setup() {
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH)
       type = "Sketch";
-    else { // U_SPIFFS
+    else {  // U_SPIFFS
       type = "Filesystem";
       SPIFFS.end();
     }
@@ -1023,13 +1031,13 @@ void setup() {
 
   //Запускаем таск для получения точного времени и записи в лог
   xTaskCreatePinnedToCore(
-    triggerGetClock,    /* Function to implement the task */
-    "GetClockTicker",   /* Name of the task */
-    3200,               /* Stack size in words */
-    NULL,               /* Task input parameter */
-    1,                  /* Priority of the task */
-    &GetClockTask1,     /* Task handle. */
-    1);                 /* Core where the task should run */
+    triggerGetClock,  /* Function to implement the task */
+    "GetClockTicker", /* Name of the task */
+    3200,             /* Stack size in words */
+    NULL,             /* Task input parameter */
+    1,                /* Priority of the task */
+    &GetClockTask1,   /* Task handle. */
+    1);               /* Core where the task should run */
 
   //  //Запускаем таск для чтения давления
   //  xTaskCreatePinnedToCore(
@@ -1052,7 +1060,7 @@ void setup() {
   //  vr.replace(",",";");
 
   NTP.setTimeZoneOffset(-SamSetup.TimeZone * 3600, 0);
-  NTP.begin ();
+  NTP.begin();
 
 #ifdef USE_LUA
   lua_init();
@@ -1086,13 +1094,13 @@ void loop() {
   //пересчитаем время работы таймера для шагового двигателя
 #ifdef USE_STEPPER_ACCELERATION
   portENTER_CRITICAL_ISR(&timerMux);
-#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+#if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))
   timerAlarm(timer, stepper.getPeriod(), true, 0);
-#else   // ESP_ARDUINO_VERSION_MAJOR >= 3
+#else  // ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarmWrite(timer, stepper.getPeriod(), true);
 #endif
   portEXIT_CRITICAL_ISR(&timerMux);
-#endif //USE_STEPPER_ACCELERATION
+#endif  //USE_STEPPER_ACCELERATION
 
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
@@ -1109,7 +1117,7 @@ void loop() {
   ::ws.cleanupClients();
 
 #ifdef ALARM_BTN_PIN
-  alarm_btn.tick();      // отработка нажатия аварийной кнопки
+  alarm_btn.tick();  // отработка нажатия аварийной кнопки
   if (alarm_btn.isPress()) {
     set_alarm();
   }
@@ -1267,68 +1275,100 @@ void loop() {
 
 void getjson(void) {
   jsonstr = "{";
-  jsonstr += "\"bme_temp\":";  jsonstr += format_float(bme_temp, 3);
+  jsonstr += "\"bme_temp\":";
+  jsonstr += format_float(bme_temp, 3);
   jsonstr += ",";
-  jsonstr += "\"bme_pressure\":";  jsonstr += format_float(bme_pressure, 3);
+  jsonstr += "\"bme_pressure\":";
+  jsonstr += format_float(bme_pressure, 3);
   jsonstr += ",";
-  jsonstr += "\"start_pressure\":"; jsonstr += format_float(start_pressure, 3);
+  jsonstr += "\"start_pressure\":";
+  jsonstr += format_float(start_pressure, 3);
   jsonstr += ",";
-  jsonstr += "\"crnt_tm\":\""; jsonstr += Crt; jsonstr += "\"";
+  jsonstr += "\"crnt_tm\":\"";
+  jsonstr += Crt;
+  jsonstr += "\"";
   jsonstr += ",";
-  jsonstr += "\"stm\":\""; jsonstr += (String)NTP.getUptimeString(); jsonstr += "\"";
+  jsonstr += "\"stm\":\"";
+  jsonstr += (String)NTP.getUptimeString();
+  jsonstr += "\"";
   jsonstr += ",";
-  jsonstr += "\"SteamTemp\":"; jsonstr += format_float(SteamSensor.avgTemp, 3);
+  jsonstr += "\"SteamTemp\":";
+  jsonstr += format_float(SteamSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"PipeTemp\":"; jsonstr += format_float(PipeSensor.avgTemp, 3);
+  jsonstr += "\"PipeTemp\":";
+  jsonstr += format_float(PipeSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"WaterTemp\":"; jsonstr += format_float(WaterSensor.avgTemp, 3);
+  jsonstr += "\"WaterTemp\":";
+  jsonstr += format_float(WaterSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"TankTemp\":"; jsonstr += format_float(TankSensor.avgTemp, 3);
+  jsonstr += "\"TankTemp\":";
+  jsonstr += format_float(TankSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"ACPTemp\":"; jsonstr += format_float(ACPSensor.avgTemp, 3);
+  jsonstr += "\"ACPTemp\":";
+  jsonstr += format_float(ACPSensor.avgTemp, 3);
   jsonstr += ",";
-  jsonstr += "\"version\":\""; jsonstr += (String)SAMOVAR_VERSION; jsonstr += "\"";
+  jsonstr += "\"version\":\"";
+  jsonstr += (String)SAMOVAR_VERSION;
+  jsonstr += "\"";
   jsonstr += ",";
-  jsonstr += "\"VolumeAll\":"; jsonstr += (String)get_liquid_volume();
+  jsonstr += "\"VolumeAll\":";
+  jsonstr += (String)get_liquid_volume();
   jsonstr += ",";
-  jsonstr += "\"ActualVolumePerHour\":"; jsonstr += format_float(ActualVolumePerHour, 3);
+  jsonstr += "\"ActualVolumePerHour\":";
+  jsonstr += format_float(ActualVolumePerHour, 3);
   jsonstr += ",";
-  jsonstr += "\"PowerOn\":"; jsonstr += (String)PowerOn;
+  jsonstr += "\"PowerOn\":";
+  jsonstr += (String)PowerOn;
   jsonstr += ",";
-  jsonstr += "\"PauseOn\":"; jsonstr += (String)PauseOn;
+  jsonstr += "\"PauseOn\":";
+  jsonstr += (String)PauseOn;
   jsonstr += ",";
-  jsonstr += "\"WthdrwlProgress\":"; jsonstr += (String)WthdrwlProgress;
+  jsonstr += "\"WthdrwlProgress\":";
+  jsonstr += (String)WthdrwlProgress;
   jsonstr += ",";
-  jsonstr += "\"TargetStepps\":"; jsonstr += (String)stepper.getTarget();
+  jsonstr += "\"TargetStepps\":";
+  jsonstr += (String)stepper.getTarget();
   jsonstr += ",";
-  jsonstr += "\"CurrrentStepps\":"; jsonstr += (String)stepper.getCurrent();
+  jsonstr += "\"CurrrentStepps\":";
+  jsonstr += (String)stepper.getCurrent();
   jsonstr += ",";
-  jsonstr += "\"WthdrwlStatus\":"; jsonstr += (String)startval;
+  jsonstr += "\"WthdrwlStatus\":";
+  jsonstr += (String)startval;
   jsonstr += ",";
-  jsonstr += "\"CurrrentSpeed\":"; jsonstr += (String)(round(stepper.getSpeed() * (uint8_t)stepper.getState()));
+  jsonstr += "\"CurrrentSpeed\":";
+  jsonstr += (String)(round(stepper.getSpeed() * (uint8_t)stepper.getState()));
   jsonstr += ",";
-  jsonstr += "\"UseBBuzzer\":"; jsonstr += (String)SamSetup.UseBBuzzer;
+  jsonstr += "\"UseBBuzzer\":";
+  jsonstr += (String)SamSetup.UseBBuzzer;
   jsonstr += ",";
 
   vTaskDelay(10 / portTICK_PERIOD_MS);
 
-  jsonstr += "\"StepperStepMl\":"; jsonstr += (String)SamSetup.StepperStepMl;
+  jsonstr += "\"StepperStepMl\":";
+  jsonstr += (String)SamSetup.StepperStepMl;
   jsonstr += ",";
-  jsonstr += "\"BodyTemp_Steam\":"; jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
+  jsonstr += "\"BodyTemp_Steam\":";
+  jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
   jsonstr += ",";
-  jsonstr += "\"BodyTemp_Pipe\":"; jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
+  jsonstr += "\"BodyTemp_Pipe\":";
+  jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
   jsonstr += ",";
-  jsonstr += "\"mixer\":"; jsonstr += (String)mixer_status;
+  jsonstr += "\"mixer\":";
+  jsonstr += (String)mixer_status;
   jsonstr += ",";
-  jsonstr += "\"ISspd\":"; jsonstr += format_float(i2c_get_liguid_rate_by_step(get_stepper_speed()), 3);
+  jsonstr += "\"ISspd\":";
+  jsonstr += format_float(i2c_get_liguid_rate_by_step(get_stepper_speed()), 3);
   jsonstr += ",";
 
 
-  jsonstr += "\"heap\":"; jsonstr += ESP.getFreeHeap();
+  jsonstr += "\"heap\":";
+  jsonstr += ESP.getFreeHeap();
   jsonstr += ",";
-  jsonstr += "\"rssi\":"; jsonstr += WiFi.RSSI();
+  jsonstr += "\"rssi\":";
+  jsonstr += WiFi.RSSI();
   jsonstr += ",";
-  jsonstr += "\"fr_bt\":"; jsonstr += total_byte - used_byte;
+  jsonstr += "\"fr_bt\":";
+  jsonstr += total_byte - used_byte;
   jsonstr += ",";
   //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
 
@@ -1337,62 +1377,82 @@ void getjson(void) {
     if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
       pt = program[ProgramNum].WType;
     }
-    jsonstr += "\"PrgType\":\""; jsonstr += pt; jsonstr += "\"";
+    jsonstr += "\"PrgType\":\"";
+    jsonstr += pt;
+    jsonstr += "\"";
     jsonstr += ",";
   }
 
   if (Msg != "") {
-    jsonstr += "\"Msg\":\""; jsonstr += Msg; jsonstr += "\"";
+    jsonstr += "\"Msg\":\"";
+    jsonstr += Msg;
+    jsonstr += "\"";
     jsonstr += ",";
-    jsonstr += "\"msglvl\":"; jsonstr += (String)msg_level;
+    jsonstr += "\"msglvl\":";
+    jsonstr += (String)msg_level;
     jsonstr += ",";
     Msg = "";
     msg_level = NONE_MSG;
   }
   if (LogMsg != "") {
-    jsonstr += "\"LogMsg\":\""; jsonstr += LogMsg; jsonstr += "\"";
+    jsonstr += "\"LogMsg\":\"";
+    jsonstr += LogMsg;
+    jsonstr += "\"";
     jsonstr += ",";
     LogMsg = "";
   }
 
 #ifdef SAMOVAR_USE_POWER
-  jsonstr += "\"current_power_volt\":"; jsonstr += format_float(current_power_volt, 1);
+  jsonstr += "\"current_power_volt\":";
+  jsonstr += format_float(current_power_volt, 1);
   jsonstr += ",";
-  jsonstr += "\"target_power_volt\":"; jsonstr += format_float(target_power_volt, 1);
+  jsonstr += "\"target_power_volt\":";
+  jsonstr += format_float(target_power_volt, 1);
   jsonstr += ",";
-  jsonstr += "\"current_power_mode\":\""; jsonstr += current_power_mode; jsonstr += "\"";
+  jsonstr += "\"current_power_mode\":\"";
+  jsonstr += current_power_mode;
+  jsonstr += "\"";
   jsonstr += ",";
-  jsonstr += "\"current_power_p\":"; jsonstr += (String)current_power_p;
+  jsonstr += "\"current_power_p\":";
+  jsonstr += (String)current_power_p;
   jsonstr += ",";
 #endif
 
 #ifdef USE_WATER_PUMP
-  jsonstr += "\"wp_spd\":"; jsonstr += (String)water_pump_speed;
+  jsonstr += "\"wp_spd\":";
+  jsonstr += (String)water_pump_speed;
   jsonstr += ",";
 #endif
 
 #ifdef USE_WATERSENSOR
-  jsonstr += "\"WFflowRate\":"; jsonstr += format_float(WFflowRate, 2);
+  jsonstr += "\"WFflowRate\":";
+  jsonstr += format_float(WFflowRate, 2);
   jsonstr += ",";
-  jsonstr += "\"WFtotalMl\":"; jsonstr += (String)WFtotalMilliLitres;
+  jsonstr += "\"WFtotalMl\":";
+  jsonstr += (String)WFtotalMilliLitres;
   jsonstr += ",";
 #endif
 
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined (USE_PRESSURE_MPX)
-  jsonstr += "\"prvl\":"; jsonstr += format_float(pressure_value, 2);
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
+  jsonstr += "\"prvl\":";
+  jsonstr += format_float(pressure_value, 2);
   jsonstr += ",";
 #endif
 
   if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-    jsonstr += "\"alc\":"; jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);
+    jsonstr += "\"alc\":";
+    jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);
     jsonstr += ",";
-    jsonstr += "\"stm_alc\":"; jsonstr += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
+    jsonstr += "\"stm_alc\":";
+    jsonstr += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
     jsonstr += ",";
   }
 
-  jsonstr += "\"Status\":\""; jsonstr += get_Samovar_Status() + "\"";
+  jsonstr += "\"Status\":\"";
+  jsonstr += get_Samovar_Status() + "\"";
   jsonstr += ",";
-  jsonstr += "\"Lstatus\":\""; jsonstr += Lua_status + "\"";
+  jsonstr += "\"Lstatus\":\"";
+  jsonstr += Lua_status + "\"";
   jsonstr += "}";
 
 #ifdef USE_MQTT
@@ -1501,7 +1561,7 @@ void read_config() {
   //  pump_regulator.Kd = SamSetup.Kd;
 
 #ifdef USE_WATER_PUMP
-  pump_regulator.setpoint = SamSetup.SetWaterTemp;         // сообщаем регулятору температуру, которую он должен поддерживать
+  pump_regulator.setpoint = SamSetup.SetWaterTemp;  // сообщаем регулятору температуру, которую он должен поддерживать
 #endif
 
 #ifdef IGNORE_HEAD_LEVEL_SENSOR_SETTING
@@ -1519,7 +1579,6 @@ void read_config() {
   SamSetup.tg_token[0] = '\0';
   SamSetup.tg_chat_id[0] = '\0';
 #endif
-
 }
 
 void SendMsg(const String m, MESSAGE_TYPE msg_type) {
@@ -1531,12 +1590,12 @@ void SendMsg(const String m, MESSAGE_TYPE msg_type) {
 #endif
 #ifdef USE_TELEGRAM
   switch (msg_type) {
-    case 0 : MsgPl = F("Тревога! "); break;
-    case 1 : MsgPl = F("Предупреждение! "); break;
-    case 2 : MsgPl = ""; break;
-    default : MsgPl = "";
+    case 0: MsgPl = F("Тревога! "); break;
+    case 1: MsgPl = F("Предупреждение! "); break;
+    case 2: MsgPl = ""; break;
+    default: MsgPl = "";
   }
-  if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
+  if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
     MsgPl += "Самовар - " + m;
     msg_q.push(MsgPl.c_str());
     xSemaphoreGive(xMsgSemaphore);

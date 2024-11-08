@@ -48,10 +48,10 @@
 
 #include "literals.h"
 
-#define ASYNCWEBSERVER_VERSION          "3.3.21"
+#define ASYNCWEBSERVER_VERSION          "3.3.22"
 #define ASYNCWEBSERVER_VERSION_MAJOR    3
 #define ASYNCWEBSERVER_VERSION_MINOR    3
-#define ASYNCWEBSERVER_VERSION_REVISION 21
+#define ASYNCWEBSERVER_VERSION_REVISION 22
 #define ASYNCWEBSERVER_FORK_mathieucarbou
 
 #ifdef ASYNCWEBSERVER_REGEX
@@ -733,8 +733,8 @@ class AsyncWebHandler : public AsyncMiddlewareChain {
     AsyncWebHandler() {}
     virtual ~AsyncWebHandler() {}
     AsyncWebHandler& setFilter(ArRequestFilterFunction fn);
-    AsyncWebHandler& setAuthentication(const char* username, const char* password);
-    AsyncWebHandler& setAuthentication(const String& username, const String& password) { return setAuthentication(username.c_str(), password.c_str()); };
+    AsyncWebHandler& setAuthentication(const char* username, const char* password, AsyncAuthType authMethod = AsyncAuthType::AUTH_DIGEST);
+    AsyncWebHandler& setAuthentication(const String& username, const String& password, AsyncAuthType authMethod = AsyncAuthType::AUTH_DIGEST) { return setAuthentication(username.c_str(), password.c_str(), authMethod); };
     bool filter(AsyncWebServerRequest* request) { return _filter == NULL || _filter(request); }
     virtual bool canHandle(AsyncWebServerRequest* request __attribute__((unused))) const { return false; }
     virtual void handleRequest(__unused AsyncWebServerRequest* request) {}

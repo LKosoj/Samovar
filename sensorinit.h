@@ -484,6 +484,7 @@ void reset_sensor_counter(void) {
   t_min = 0;
   b_t_temp_prev = 0;
   b_t_time_min = 0;
+  b_t_time_delay = 0;
 #ifdef SAMOVAR_USE_POWER
   alarm_c_min = 0;
   alarm_c_low_min = 0;
