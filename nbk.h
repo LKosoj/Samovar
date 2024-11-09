@@ -22,10 +22,10 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 
 // Описание алгоритма работы
 // 1) Прогрев на мощности 3000 Вт с подачей браги 3 л/ч до температуры пара 85 гр.Ц.
-// 2) Стабилизация 300 сек, с подачей браги 18 л/ч на мощности 2400 Вт. После чего запоминаем температуру внизу колонны Тн.
-// 3) Увеличение подачи браги, до 20 л/ч ступенями 0.1 л/ч каждых 5 сек, далее 0.05 л/ч каждых 5 сек, пока температура внизу колонны не просядет на 0.5 гр.Ц от Тн.
-// 4) Каждых 5 сек. пока давление не достигнет 20 мм.рт.ст. наращивается мощность ступенями по 5 Вт и если просадка температуры от запомненной Тн внизу колонны менее 0.5 гр.Ц наращивается подача браги ступенями по 0.05 л/ч. В конце убавляем мощность на 100 Вт.
-// 5) Работа. Раз в 5 сек: Если Твнизу<Тн-0.5 гр.Ц то уменьшаем подачу браги на 0.05 л/ч, если Твнизу>Тн то увеличиваем подачу браги на 0.05 л/ч.
+// 3) Стабилизация 1200 сек, с подачей браги 18 л/ч на мощности 2400 Вт. После чего запоминаем температуру внизу колонны Тн.
+// 4) Увеличение подачи браги, до 20 л/ч ступенями 0.1 л/ч каждых 5 сек, далее 0.05 л/ч каждых 5 сек, пока температура внизу колонны не просядет на 0.5 гр.Ц от Тн.
+// 5) Каждых 5 сек. пока давление не достигнет 20 мм.рт.ст. наращивается мощность ступенями по 5 Вт и если просадка температуры от запомненной Тн внизу колонны менее 0.5 гр.Ц наращивается подача браги ступенями по 0.05 л/ч. В конце убавляем мощность на 100 Вт.
+// 6) Работа. Раз в 5 сек: Если Твнизу<Тн-0.5 гр.Ц то уменьшаем подачу браги на 0.05 л/ч, если Твнизу>Тн то увеличиваем подачу браги на 0.05 л/ч.
 
 // При выполнении строк программы осуществляются проверки:
 // 1) Работа датчика захлёба - мощность снижаем на 100 Вт и ждём 60 сек.
@@ -40,12 +40,20 @@ void IRAM_ATTR isrNBKLS_TICK() {
 
 void nbk_proc() {
 
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined (USE_PRESSURE_MPX)
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
 #else
   SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
   nbk_finish();
   return;
 #endif
+
+#if defined(SAMOVAR_USE_POWER)
+#else
+  SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
+  nbk_finish();
+  return;
+#endif
+
 
   if (!PowerOn) {
 #ifdef USE_MQTT
@@ -65,12 +73,12 @@ void nbk_proc() {
     SendMsg(("Включен нагрев НБК"), NOTIFY_MSG);
 
     //настраиваем параметры датчика уровня воды в парогене
-//    nbkls.setType(LOW_PULL);
-//    nbkls.setDebounce(50);  //игнорируем дребезг
-//    nbkls.setTickMode(MANUAL);
-//    nbkls.setTimeout(60 * 1000);  //время, через которое сработает остановка по уровню воды в парогенераторе
-//    //вешаем прерывание на изменение датчика уровня флегмы
-//    attachInterrupt(LUA_PIN, isrNBKLS_TICK, CHANGE);
+    //    nbkls.setType(LOW_PULL);
+    //    nbkls.setDebounce(50);  //игнорируем дребезг
+    //    nbkls.setTickMode(MANUAL);
+    //    nbkls.setTimeout(60 * 1000);  //время, через которое сработает остановка по уровню воды в парогенераторе
+    //    //вешаем прерывание на изменение датчика уровня флегмы
+    //    attachInterrupt(LUA_PIN, isrNBKLS_TICK, CHANGE);
 
     run_nbk_program(0);
     set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
@@ -81,19 +89,36 @@ void nbk_proc() {
     //Если Т пара больше 85 градусов, переходим к стабилизации НБК
     run_nbk_program(ProgramNum + 1);
   } else if (program[ProgramNum].WType == "S" && begintime <= millis()) {
-    //Если прошло 300 секунд с начала стабилизации НБК, переходим к программе выхода на заданную скорость отбора
+    //Если прошло 1200 секунд с начала стабилизации НБК, переходим к программе выхода на заданную скорость отбора
     run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed >= get_stepper_speed() && d_s_temp_prev - 0.5 <= TankSensor.avgTemp && TankSensor.avgTemp > 80) {
+  } else if (program[ProgramNum].WType == "T") {
+    //превысили предельные значения, идем дальше или температура упала ниже дельты
+    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed()) || target_power_volt > program[0].Power || (d_s_temp_prev - NBK_TEMPERATURE_DELTA <= TankSensor.avgTemp && TankSensor.avgTemp > 80)) {
+      run_nbk_program(ProgramNum + 1);
+    }
     //Если достигли заданной скорости и вышли за пределы Т внизу колонны, переходим к программе выхода на заданное давление
     run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "P" && pressure_value > program[ProgramNum].capacity_num) {
-    //Если достигли заданного давления, переходим к рабочей программе
-    run_nbk_program(ProgramNum + 1);
+  } else if (program[ProgramNum].WType == "P") {
+    // && pressure_value > program[ProgramNum].capacity_num) {
+    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed()) || target_power_volt > program[0].Power) {
+      //Если достигли заданного давления, переходим к рабочей программе
+      run_nbk_program(ProgramNum + 1);
+    }
+  } else if (program[ProgramNum].WType == "W") {
+    if (pressure_value >= start_pressure + 2 || SteamSensor.avgTemp > 98.1) {
+      //превышено давление или температура пара - завершаем работу
+      run_nbk_program(ProgramNum + 1);
+    }
   }
 
   //управляющие воздействия для текущей программы
   if (program[ProgramNum].WType == "T") {
-    if (t_min != 0 && t_min <= millis()) {
+    //сохраняем максимальное давление, если не будет давления захлеба - будем считать его максимальным
+    if (bme_prev_pressure < pressure_value) {
+      bme_prev_pressure = pressure_value;
+    }
+
+    if (t_min <= millis()) {
       float spdinc;
       if (program[ProgramNum].Speed < i2c_get_speed_from_rate(get_stepper_speed())) {
         spdinc = NBK_PUMP_INCREMENT * 2;
@@ -101,33 +126,61 @@ void nbk_proc() {
         spdinc = NBK_PUMP_INCREMENT;
       }
       set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(spdinc / 1000.00 + 0.0001), 0, 2147483640);
-    } else {
       t_min = millis() + 5 * 1000;
     }
   } else if (program[ProgramNum].WType == "P") {
-    if (t_min != 0 && t_min <= millis()) {
+    //сохраняем максимальное давление, если не будет давления захлеба - будем считать его максимальным
+    if (bme_prev_pressure < pressure_value) {
+      bme_prev_pressure = pressure_value;
+    }
+
+    if (t_min <= millis()) {
 #ifdef SAMOVAR_USE_SEM_AVR
-      //Если регулятор мощности - повышаем на 15 ватт
-      set_current_power(target_power_volt + 15);
+      //Если регулятор мощности - повышаем на 5 ватт
+      set_current_power(target_power_volt + 5);
 #else
-      //Если регулятор напряжения - снижаем на 2 вольта
-      set_current_power(target_power_volt + 2);
+      //Если регулятор напряжения - повышаем на 1 вольт
+      set_current_power(target_power_volt + 1);
 #endif
-      if (TankSensor.avgTemp >= d_s_temp_prev - 0.5) {
+      if (TankSensor.avgTemp >= d_s_temp_prev - NBK_TEMPERATURE_DELTA) {
         set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
       }
-    } else {
       t_min = millis() + 5 * 1000;
     }
   } else if (program[ProgramNum].WType == "W") {
-    if (t_min != 0 && t_min <= millis()) {
+    if (t_min <= millis()) {
       if (TankSensor.avgTemp < d_s_temp_prev - 0.5) {
         set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 2147483640);
       } else if (TankSensor.avgTemp > d_s_temp_prev) {
         set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
       }
-    } else {
       t_min = millis() + 5 * 1000;
+    }
+    if (alarm_c_min <= millis()) {
+      uint8_t inc = 0;
+      if (pressure_value > start_pressure) {
+#ifdef SAMOVAR_USE_POWER
+#ifdef SAMOVAR_USE_SEM_AVR
+        //Если регулятор мощности - снижаем на 10 ватт
+        inc = -10;
+#else
+        //если регулятор напряжения - снижаем на 2 вольта
+        inc = -2;
+#endif
+#endif
+      } else if (start_pressure - pressure_value > 2) {
+#ifdef SAMOVAR_USE_POWER
+#ifdef SAMOVAR_USE_SEM_AVR
+        //Если регулятор мощности - повышаем на 5 ватт
+        inc = 5;
+#else
+        //если регулятор напряжения - повышаем на 1 вольт
+        inc = 1;
+#endif
+#endif
+      }
+      if (inc != 0) set_current_power(target_power_volt + inc);
+      alarm_c_min = millis() + 20 * 1000;
     }
   }
 
@@ -142,7 +195,6 @@ void nbk_finish() {
   if (fileToAppend) {
     fileToAppend.close();
   }
-
 }
 
 void run_nbk_program(uint8_t num) {
@@ -151,6 +203,7 @@ void run_nbk_program(uint8_t num) {
   ProgramNum = num;
   begintime = 0;
   t_min = 0;
+  alarm_c_min = 0;
   msgfl = true;
 
   if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
@@ -167,19 +220,72 @@ void run_nbk_program(uint8_t num) {
     SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
   }
 
-  if (program[ProgramNum].WType == "S") {
-    begintime = millis() + 300 * 1000;
-    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
+  //Изменяем на заданную мощность
+#ifdef SAMOVAR_USE_SEM_AVR
+  if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 500 && (target_power_volt + program[ProgramNum].Power) <= program[0].Power) {
+#else SAMOVAR_USE_POWER
+  if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 50) {
+#endif
+    set_current_power(target_power_volt + program[ProgramNum].Power);
+  } else {
     set_current_power(program[ProgramNum].Power);
+  }
+
+  if (program[ProgramNum].WType == "S") {
+    begintime = millis() + 1200 * 1000;
+    //Если задана скорость - устанавливаем или абсолютнуюю или относительную
+    if (program[ProgramNum].Speed != 0) {
+      if (abs(program[ProgramNum].Speed) < 3 && (i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed) <= program[2].Speed) {
+        set_stepper_target(i2c_get_speed_from_rate(i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed), 0, 2147483640);
+      } else {
+        set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
+      }
+    }
   } else if (program[ProgramNum].WType == "T") {
     //Запомним Тниз = d_s_temp_prev
     d_s_temp_prev = TankSensor.avgTemp;
     begintime = 0;
+  } else if (program[ProgramNum].WType == "P") {
+    //Запомним Тниз = d_s_temp_prev
+    if (program[ProgramNum].Temp > 0) {
+      d_s_temp_prev = program[ProgramNum].Temp;
+    } else {
+      d_s_temp_prev = TankSensor.avgTemp;
+    }
+    //Если задана скорость - устанавливаем или абсолютнуюю или относительную
+    if (program[ProgramNum].Speed != 0) {
+      if (abs(program[ProgramNum].Speed) < 3 && (i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed) <= program[2].Speed) {
+        set_stepper_target(i2c_get_speed_from_rate(i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed), 0, 2147483640);
+      } else {
+        set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
+      }
+    }
   } else if (program[ProgramNum].WType == "W") {
-    //Изменяем на заданную мощность
-    set_current_power(target_power_volt + program[ProgramNum].Power);
+    //Если задана температура, установим Тниз = d_s_temp_prev
+    if (program[ProgramNum].Temp > 0) {
+      d_s_temp_prev = program[ProgramNum].Temp;
+    }
+    //Если задана скорость - устанавливаем или абсолютнуюю или относительную
+    if (program[ProgramNum].Speed != 0) {
+      if (abs(program[ProgramNum].Speed) < 3 && (i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed) <= program[2].Speed) {
+        set_stepper_target(i2c_get_speed_from_rate(i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed), 0, 2147483640);
+      } else {
+        set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
+      }
+    }
+    //Определяем давление захлеба
+    //Если задано в программе - берем из программы
+    if (program[ProgramNum].capacity_num > 0) {
+      start_pressure = program[ProgramNum].capacity_num;
+    } else {
+      //Если не поймали захлеб - берем максимальное, которое было, иначе давление захлеба - 2
+      if (start_pressure == 0) {
+        start_pressure = bme_prev_pressure;
+      } else {
+        start_pressure = start_pressure - 2;
+      }
+    }
   }
-
 }
 
 void check_alarm_nbk() {
@@ -254,6 +360,8 @@ void check_alarm_nbk() {
   if (PowerOn) {
     whls.tick();
     if (whls.isHolded()) {
+      //Получили давление захлеба
+      start_pressure = pressure_value;
       //alarm_h_min == 0
       whls.resetStates();
       if (alarm_h_min == 0) {
@@ -317,7 +425,10 @@ void check_alarm_nbk() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
-//H;3;0;3000;24\nS;18;0;2400;24\nT;20;0;0;24\nP;0;20;-100;24\nW;0;0;0;24\n
+//H;3;0;3000;0\nS;18;0;2400;0\nT;20;0;0;0\nP;0;20;-100;0\nW;0;0;0;0\n
+//program[0].Power - максимальная мощность
+//program[2].Speed - максимальная скорость
+//start_pressure - давление захлеба
 void set_nbk_program(String WProgram) {
   char c[500];
   WProgram.toCharArray(c, 500);
@@ -329,11 +440,11 @@ void set_nbk_program(String WProgram) {
     pair = strtok(NULL, ";");
     program[i].Speed = atof(pair);  //Скорость отбора
     pair = strtok(NULL, ";");
-    program[i].capacity_num = atoi(pair); // Целевое давление
+    program[i].capacity_num = atoi(pair);  // Целевое давление
     pair = strtok(NULL, ";");
-    program[i].Power = atof(pair); // Коррекция мощности
+    program[i].Power = atof(pair);  // Коррекция мощности
     pair = strtok(NULL, "\n");
-    program[i].TempSensor = atof(pair); // Максимальное давление
+    program[i].Temp = atof(pair);  // Температура Тн
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
@@ -355,7 +466,7 @@ String get_nbk_program() {
       Str += (String)program[i].Speed + ";";
       Str += (String)(int)program[i].capacity_num + ";";
       Str += (String)(int)program[i].Power + ";";
-      Str += (String)program[i].TempSensor + "\n";
+      Str += (String)program[i].Temp + "\n";
     }
   }
   return Str;
