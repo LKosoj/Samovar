@@ -371,7 +371,7 @@ void check_alarm_nbk() {
       //Получили давление захлеба
       start_pressure = pressure_value;
 
-      //SendMsg("Сработал датчик захлеба! Дн=" + (String)start_pressure + "; С=" + (String)i2c_get_speed_from_rate(get_stepper_speed()) + "; М=" + (String)target_power_volt, ALARM_MSG);
+      SendMsg("Сработал датчик захлеба! Дн=" + (String)start_pressure + "; С=" + (String)i2c_get_speed_from_rate(get_stepper_speed()) + "; М=" + (String)target_power_volt, ALARM_MSG);
       //set_alarm();
       
       whls.resetStates();
