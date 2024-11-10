@@ -162,7 +162,7 @@ void nbk_proc() {
     }
     if (alarm_c_min <= millis()) {
       uint8_t inc = 0;
-      if (pressure_value > start_pressure) {
+      if (start_pressure != 0 && pressure_value > start_pressure) {
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
         //Если регулятор мощности - снижаем на 10 ватт
@@ -288,9 +288,15 @@ void run_nbk_program(uint8_t num) {
     } else {
       //Если не поймали захлеб - берем максимальное, которое было, иначе давление захлеба - 2
       if (start_pressure == 0) {
-        start_pressure = bme_prev_pressure;
+        //Если перешли на программу W а давление = 0, берем максимальное, которое было
+        if (program[ProgramNum].WType == "W") {
+          start_pressure = bme_prev_pressure;
+        }
       } else {
-        start_pressure = start_pressure - 2;
+        //Если программа W, скинем Дн на 2 единицы и будем использовать его для ориентира
+        if (program[ProgramNum].WType == "W") {
+          start_pressure = start_pressure - 2;
+        }
       }
     }
   }
@@ -373,7 +379,7 @@ void check_alarm_nbk() {
 
       SendMsg("Сработал датчик захлеба! Дн=" + (String)start_pressure + "; С=" + (String)i2c_get_speed_from_rate(get_stepper_speed()) + "; М=" + (String)target_power_volt, ALARM_MSG);
       //set_alarm();
-      
+
       whls.resetStates();
       if (alarm_h_min <= millis()) {
 #ifdef SAMOVAR_USE_POWER
@@ -406,7 +412,7 @@ void check_alarm_nbk() {
   //  }
 
   //Превышение уставки по давлению - мощность снижаем на 10 Вт и ждём 10 сек. 2)
-  if (start_pressure > 0 && pressure_value >= start_pressure) {
+  if (start_pressure != 0 && pressure_value >= start_pressure) {
     if (d_s_time_min <= millis()) {
       //Снижаем напряжение регулятора
 #ifdef SAMOVAR_USE_SEM_AVR
