@@ -93,14 +93,14 @@ void nbk_proc() {
     run_nbk_program(ProgramNum + 1);
   } else if (program[ProgramNum].WType == "T") {
     //превысили предельные значения, идем дальше или температура упала ниже дельты
-    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed()) || target_power_volt > program[0].Power || (d_s_temp_prev - NBK_TEMPERATURE_DELTA <= TankSensor.avgTemp && TankSensor.avgTemp > 80)) {
+    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed()) || (d_s_temp_prev - NBK_TEMPERATURE_DELTA <= TankSensor.avgTemp && TankSensor.avgTemp > 80)) {
       run_nbk_program(ProgramNum + 1);
     }
     //Если достигли заданной скорости и вышли за пределы Т внизу колонны, переходим к программе выхода на заданное давление
     run_nbk_program(ProgramNum + 1);
   } else if (program[ProgramNum].WType == "P") {
     // && pressure_value > program[ProgramNum].capacity_num) {
-    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed()) || target_power_volt > program[0].Power) {
+    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed())) {
       //Если достигли заданного давления, переходим к рабочей программе
       run_nbk_program(ProgramNum + 1);
     }
@@ -137,10 +137,14 @@ void nbk_proc() {
     if (t_min <= millis()) {
 #ifdef SAMOVAR_USE_SEM_AVR
       //Если регулятор мощности - повышаем на 5 ватт
-      set_current_power(target_power_volt + 5);
+      if (target_power_volt + 5 <= program[0].Power) {
+        set_current_power(target_power_volt + 5);
+      }
 #else
       //Если регулятор напряжения - повышаем на 1 вольт
-      set_current_power(target_power_volt + 1);
+      if (target_power_volt + 1 <= program[0].Power) {
+        set_current_power(target_power_volt + 1);
+      }
 #endif
       if (TankSensor.avgTemp >= d_s_temp_prev - NBK_TEMPERATURE_DELTA) {
         set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
@@ -179,7 +183,9 @@ void nbk_proc() {
 #endif
 #endif
       }
-      if (inc != 0) set_current_power(target_power_volt + inc);
+      if (inc != 0 && target_power_volt + inc <= program[0].Power) {
+        set_current_power(target_power_volt + inc);
+      }
       alarm_c_min = millis() + 20 * 1000;
     }
   }
@@ -222,11 +228,13 @@ void run_nbk_program(uint8_t num) {
 
   //Изменяем на заданную мощность
 #ifdef SAMOVAR_USE_SEM_AVR
-  if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 500 && (target_power_volt + program[ProgramNum].Power) <= program[0].Power) {
+  if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 500) {
 #else SAMOVAR_USE_POWER
   if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 50) {
 #endif
-    set_current_power(target_power_volt + program[ProgramNum].Power);
+    if (target_power_volt + program[ProgramNum].Power <= program[0].Power) {
+      set_current_power(target_power_volt + program[ProgramNum].Power);
+    }
   } else {
     set_current_power(program[ProgramNum].Power);
   }
@@ -354,7 +362,7 @@ void check_alarm_nbk() {
     run_nbk_program(CAPACITY_NUM * 2);
   }
 
-  //Работа датчика захлёба - мощность снижаем на 100 Вт и ждём 60 сек. 1)
+  //Работа датчика захлёба - мощность снижаем на 100 Вт и ждём 15 сек. 1)
   //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
   if (PowerOn) {
@@ -362,9 +370,12 @@ void check_alarm_nbk() {
     if (whls.isHolded()) {
       //Получили давление захлеба
       start_pressure = pressure_value;
-      //alarm_h_min == 0
+
+      //SendMsg("Сработал датчик захлеба! Дн=" + (String)start_pressure + "; С=" + (String)i2c_get_speed_from_rate(get_stepper_speed()) + "; М=" + (String)target_power_volt, ALARM_MSG);
+      //set_alarm();
+      
       whls.resetStates();
-      if (alarm_h_min == 0) {
+      if (alarm_h_min <= millis()) {
 #ifdef SAMOVAR_USE_POWER
         SendMsg("Сработал датчик захлеба! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);
         //Снижаем напряжение регулятора
@@ -376,11 +387,10 @@ void check_alarm_nbk() {
         set_current_power(target_power_volt - 5);
 #endif
 #endif
+        //снижаем скорость подачи
+        set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 2147483640);
         //Запускаем таймер
-        alarm_h_min = millis() + 60000;
-      } else if (millis() >= alarm_h_min) {
-        //подождали, сбросим таймер
-        alarm_h_min = 0;
+        alarm_h_min = millis() + 15 * 1000;
       }
     } else {
       alarm_h_min = 0;
@@ -396,8 +406,8 @@ void check_alarm_nbk() {
   //  }
 
   //Превышение уставки по давлению - мощность снижаем на 10 Вт и ждём 10 сек. 2)
-  if (pressure_value >= program[ProgramNum].TempSensor) {
-    if (d_s_time_min == 0) {
+  if (start_pressure > 0 && pressure_value >= start_pressure) {
+    if (d_s_time_min <= millis()) {
       //Снижаем напряжение регулятора
 #ifdef SAMOVAR_USE_SEM_AVR
       //Если регулятор мощности - снижаем на 10 ватт
@@ -408,10 +418,6 @@ void check_alarm_nbk() {
 #endif
       SendMsg(("Высокое давление! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt), WARNING_MSG);
       d_s_time_min = millis() + 10 * 1000;
-    } else {
-      if (d_s_time_min >= millis()) {
-        d_s_time_min = 0;
-      }
     }
   } else {
     d_s_time_min = 0;
