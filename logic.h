@@ -73,7 +73,7 @@ String getValue(String data, char separator, int index) {
 }
 
 //Получаем объем отбора
-float get_liguid_volume_by_step(int StepCount) {
+float get_liquid_volume_by_step(int StepCount) {
   float retval;
   if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
   else
@@ -82,8 +82,8 @@ float get_liguid_volume_by_step(int StepCount) {
 }
 
 //Получаем скорость отбора
-float get_liguid_rate_by_step(int StepperSpeed) {
-  return round(get_liguid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000.00;
+float get_liquid_rate_by_step(int StepperSpeed) {
+  return round(get_liquid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000.00;
 }
 
 float get_speed_from_rate(float volume_per_hour) {
@@ -95,7 +95,7 @@ float get_speed_from_rate(float volume_per_hour) {
 }
 
 int get_liquid_volume() {
-  return get_liguid_volume_by_step(stepper.getCurrent());
+  return get_liquid_volume_by_step(stepper.getCurrent());
 }
 
 void set_alarm() {
@@ -299,7 +299,7 @@ void set_pump_speed(float pumpspeed, bool continue_process) {
   if (!stepper.getState()) cp = false;
 
   CurrrentStepperSpeed = pumpspeed;
-  ActualVolumePerHour = get_liguid_rate_by_step(CurrrentStepperSpeed);
+  ActualVolumePerHour = get_liquid_rate_by_step(CurrrentStepperSpeed);
 
   stopService();
   stepper.setMaxSpeed(CurrrentStepperSpeed);

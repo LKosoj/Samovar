@@ -14,7 +14,7 @@ void set_water_temp(float duty);
 String getValue(String data, char separator, int index);
 void run_nbk_program(uint8_t num);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
-float i2c_get_liguid_rate_by_step(int StepperSpeed);
+float i2c_get_liquid_rate_by_step(int StepperSpeed);
 float i2c_get_speed_from_rate(float volume_per_hour);
 float i2c_get_liquid_volume();
 uint16_t get_stepper_speed(void);

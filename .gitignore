@@ -10,3 +10,4 @@ user_config_override.h
 doc/*.*
 .theia/launch.json
 user_config_override.h
+pgpt.py

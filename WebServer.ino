@@ -819,7 +819,7 @@ void web_command(AsyncWebServerRequest *request) {
         // Serial.println(get_stepper_speed());
         // Serial.println(i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00));
         // Serial.println(get_stepper_speed());
-        // Serial.println(i2c_get_liguid_rate_by_step(get_stepper_speed()));
+        // Serial.println(i2c_get_liquid_rate_by_step(get_stepper_speed()));
       } else {
         if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
           set_stepper_target(0, 0, 0);

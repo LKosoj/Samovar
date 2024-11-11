@@ -13,15 +13,14 @@
 
 #include <Arduino.h>
 //#include <Wire.h>
-#include "Samovar.h"
 
 void stopService(void);
 void startService(void);
 
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 uint16_t get_stepper_speed(void);
-float get_liguid_volume_by_step(int StepCount);
-float get_liguid_rate_by_step(int StepperSpeed);
+float get_liquid_volume_by_step(int StepCount);
+float get_liquid_rate_by_step(int StepperSpeed);
 float get_speed_from_rate(float volume_per_hour);
 
 uint8_t check_I2C_device(uint8_t address) {
@@ -29,12 +28,10 @@ uint8_t check_I2C_device(uint8_t address) {
     Wire.beginTransmission(address);
     int r = Wire.endTransmission();
     xSemaphoreGive(xI2CSemaphore);
-    if (r == 0) {
-      return address;
-    } else {
-      return 0;
-    }
-  } else return 255;
+    return (r == 0) ? address : 0;
+  } else {
+    return 255;
+  }
 }
 
 //                              spd direction target transaction
@@ -44,53 +41,39 @@ uint8_t check_I2C_device(uint8_t address) {
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time) {
   if (!use_I2C_dev) {
     return false;
-  } else {
-    return set_stepper_target(spd * STEPPER_I2C_STEPS / 60, direction, time * spd * STEPPER_I2C_STEPS / 60);
   }
+  return set_stepper_target(spd * STEPPER_I2C_STEPS / 60, direction, time * spd * STEPPER_I2C_STEPS / 60);
 }
 
 //Получаем объем отбора
-float i2c_get_liguid_volume_by_step(int StepCount) {
-  float retval;
+float i2c_get_liquid_volume_by_step(int StepCount) {
   if (!use_I2C_dev) {
-    retval = get_liguid_volume_by_step(StepCount);
-  } else {
-    if (I2CStepperStepMl > 0) retval = (float)StepCount / I2CStepperStepMl;
-    else
-      retval = 0;
+    return get_liquid_volume_by_step(StepCount);
   }
-  return retval;
+  return (I2CStepperStepMl > 0) ? static_cast<float>(StepCount) / I2CStepperStepMl : 0;
 }
 
 //Получаем скорость отбора
-float i2c_get_liguid_rate_by_step(int StepperSpeed) {
+float i2c_get_liquid_rate_by_step(int StepperSpeed) {
   if (!use_I2C_dev) {
-    return get_liguid_rate_by_step(StepperSpeed);
-  } else {
-    return round(i2c_get_liguid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000.00;
+    return get_liquid_rate_by_step(StepperSpeed);
   }
+  return round(i2c_get_liquid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000.0;
 }
 
 float i2c_get_speed_from_rate(float volume_per_hour) {
-  float v;
-  //ActualVolumePerHour = volume_per_hour;
-  ////////
-  ////////
-  ////////
   if (!use_I2C_dev) {
-    v = get_speed_from_rate(volume_per_hour);
-  } else {
-    v = round(I2CStepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.00;
-    if (v < 1) v = 1;
+    return get_speed_from_rate(volume_per_hour);
   }
-  return v;
+  float v = round(I2CStepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.0;
+  return (v < 1) ? 1 : v;
 }
 
 float i2c_get_liquid_volume() {
   if (!use_I2C_dev) {
-    return get_liguid_volume_by_step(get_stepper_speed());
+    return get_liquid_volume_by_step(get_stepper_speed());
   } else {
-    return i2c_get_liguid_volume_by_step(get_stepper_speed());
+    return i2c_get_liquid_volume_by_step(get_stepper_speed());
   }
 }
 
@@ -137,88 +120,78 @@ bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
 }
 
 uint16_t get_stepper_speed(void) {
-  uint16_t rest = 0xFFFF;
   if (!use_I2C_dev) {
     return CurrrentStepperSpeed;
-  } else {
-    if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
-      //Читаем скорость
-      rest = (uint32_t)I2C2.readByte(use_I2C_dev, 0) << 8;
-      rest += (uint32_t)I2C2.readByte(use_I2C_dev, 1);  // Считываем младший байт значения скорости, добавляя его значение к ранее полученному старшему байту
-      xSemaphoreGive(xI2CSemaphore);
-    }
+  }
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
+    //Читаем скорость
+    uint16_t rest = (static_cast<uint32_t>(I2C2.readByte(use_I2C_dev, 0)) << 8) |
+                    static_cast<uint32_t>(I2C2.readByte(use_I2C_dev, 1)); // Считываем младший байт значения скорости, добавляя его значение к ранее полученному старшему байту
+    xSemaphoreGive(xI2CSemaphore);
     I2CStepperSpeed = rest;
     return I2CStepperSpeed;
   }
-  return rest;
+  return 0xFFFF;
 }
 
 uint32_t get_stepper_status(void) {
-  uint32_t rest = 0xFFFFFFFF;
   if (!use_I2C_dev) {
     return stepper.getTarget();
-  } else {
-
-    if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
-      //Читаем количество оставшихся шагов
-      rest = (uint32_t)I2C2.readByte(use_I2C_dev, 3) << 24;  // Считываем старший байт значения шагов, сдвигаем полученный байт на 32 бит влево, т.к. он старший
-      rest += (uint32_t)I2C2.readByte(use_I2C_dev, 4) << 16;
-      rest += (uint32_t)I2C2.readByte(use_I2C_dev, 5) << 8;
-      rest += (uint32_t)I2C2.readByte(use_I2C_dev, 6);  // Считываем младший байт значения шагов, добавляя его значение к ранее полученному старшему байту
-      xSemaphoreGive(xI2CSemaphore);
-    }
+  }
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
+    //Читаем количество оставшихся шагов
+    uint32_t rest = (static_cast<uint32_t>(I2C2.readByte(use_I2C_dev, 3)) << 24) | // Считываем старший байт значения шагов, сдвигаем полученный байт на 32 бит влево, т.к. он старший
+                    (static_cast<uint32_t>(I2C2.readByte(use_I2C_dev, 4)) << 16) |
+                    (static_cast<uint32_t>(I2C2.readByte(use_I2C_dev, 5)) << 8) |
+                    static_cast<uint32_t>(I2C2.readByte(use_I2C_dev, 6));          // Считываем младший байт значения шагов, добавляя его значение к ранее полученному старшему байту
+    xSemaphoreGive(xI2CSemaphore);
     return rest;
   }
-  return rest;
+  return 0xFFFFFFFF;
 }
 
 bool set_mixer_pump_target(uint8_t on) {
   if (!use_I2C_dev) return false;
-  bool result = false;
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
     uint8_t b = I2C2.readByte(use_I2C_dev, 7);
     bitWrite(b, 0, on);
     I2C2.writeByte(use_I2C_dev, 7, b);
     xSemaphoreGive(xI2CSemaphore);
-    result = true;
+    return true;
   }
-  return result;
+  return false;
 }
 
 uint8_t get_mixer_pump_status(void) {
-  uint8_t state = 0xFF;
-  if (!use_I2C_dev) return state;
+  if (!use_I2C_dev) return 0xFF;
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
-    state = BitIsSet(I2C2.readByte(use_I2C_dev, 7), 0);
+    uint8_t state = bitRead(I2C2.readByte(use_I2C_dev, 7), 0);
     xSemaphoreGive(xI2CSemaphore);
+    return state;
   }
-  return state;
+  return 0xFF;
 }
 
 uint8_t get_i2c_rele_state(uint8_t r) {
-  uint8_t state = 0xFF;
-  if (!use_I2C_dev) return state;
-  uint8_t s;
+  if (!use_I2C_dev) return 0xFF;
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
-    s = I2C2.readByte(use_I2C_dev, 7);
+    uint8_t s = I2C2.readByte(use_I2C_dev, 7);
     xSemaphoreGive(xI2CSemaphore);
-    state = BitIsSet(s, (r - 1));
+    return bitRead(s, r - 1);
   }
-  return state;
+  return 0xFF;
 }
 
 bool set_i2c_rele_state(uint8_t r, bool s) {
   if (!use_I2C_dev) return false;
-  bool result = false;
-  uint8_t b;
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
-    b = I2C2.readByte(use_I2C_dev, 7);
-    bitWrite(b, (r - 1), s);
+    uint8_t b = I2C2.readByte(use_I2C_dev, 7);
+    bitWrite(b, r - 1, s);
     I2C2.writeByte(use_I2C_dev, 7, b);
     xSemaphoreGive(xI2CSemaphore);
-    result = true;
+    return true;
   }
-  return result;
+  return false;
 }
 
 

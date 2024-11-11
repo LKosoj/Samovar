@@ -662,9 +662,9 @@ void triggerSysTicker(void *parameter) {
 }
 
 void setup() {
+  pinMode(0, INPUT);
   Serial.begin(115200);
   delay(600);
-  pinMode(0, INPUT);
   if (digitalRead(0) == LOW) {
     WiFi.mode(WIFI_STA);  // cannot erase if not in STA mode !
     WiFi.persistent(true);
@@ -1357,7 +1357,7 @@ void getjson(void) {
   jsonstr += (String)mixer_status;
   jsonstr += ",";
   jsonstr += "\"ISspd\":";
-  jsonstr += format_float(i2c_get_liguid_rate_by_step(get_stepper_speed()), 3);
+  jsonstr += format_float(i2c_get_liquid_rate_by_step(get_stepper_speed()), 3);
   jsonstr += ",";
 
 
