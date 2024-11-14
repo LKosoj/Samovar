@@ -12,7 +12,7 @@ char payload[PAYLOADSIZE];
 static const char mqttUser[] = "samovar";
 static const char mqttPassword[] = "samovar-tool.ru";
 
-void SendMsg(const String m, MESSAGE_TYPE msg_type);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void onMqttConnect(bool sessionPresent);
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
 void onMqttPublish(uint16_t packetId);

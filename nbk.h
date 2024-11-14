@@ -8,7 +8,7 @@ void create_data();
 void open_valve(bool Val, bool msg);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void SendMsg(String m, MESSAGE_TYPE msg_type);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 bool check_boiling();
 void set_water_temp(float duty);
 String getValue(String data, char separator, int index);
@@ -162,7 +162,7 @@ void nbk_proc() {
     }
     if (alarm_c_min <= millis()) {
       uint8_t inc = 0;
-      if (start_pressure != 0 && pressure_value > start_pressure) {
+      if (start_pressure > 0 && pressure_value > start_pressure) {
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
         //Если регулятор мощности - снижаем на 10 ватт

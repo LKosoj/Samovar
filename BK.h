@@ -8,7 +8,7 @@ void create_data();
 void open_valve(bool Val, bool msg);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void SendMsg(String m, MESSAGE_TYPE msg_type);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 bool check_boiling();
 
 void set_water_temp(float duty) {

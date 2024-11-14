@@ -664,7 +664,7 @@ void triggerSysTicker(void *parameter) {
 void setup() {
   pinMode(0, INPUT);
   Serial.begin(115200);
-  delay(600);
+  vTaskDelay(600);
   if (digitalRead(0) == LOW) {
     WiFi.mode(WIFI_STA);  // cannot erase if not in STA mode !
     WiFi.persistent(true);
@@ -681,7 +681,7 @@ void setup() {
 #endif
   heap_caps_enable_nonos_stack_heaps();
 
-  delay(500);
+  vTaskDelay(500);
 
 #ifdef __SAMOVAR_DEBUG
   esp_log_level_set("*", ESP_LOG_VERBOSE);
@@ -765,7 +765,7 @@ void setup() {
   btn.tick();  // отработка нажатия
   if (btn.isPress()) {
     wifiAP = true;
-    delay(2000);
+    vTaskDelay(2000);
   }
 #endif
 
@@ -1013,7 +1013,7 @@ void setup() {
 #ifdef USE_MQTT
   if (!wifiAP) {
     initMqtt();
-    delay(500);
+    vTaskDelay(500);
   }
 #endif
 
@@ -1581,7 +1581,7 @@ void read_config() {
 #endif
 }
 
-void SendMsg(const String m, MESSAGE_TYPE msg_type) {
+void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   String MsgPl;
 #ifdef USE_MQTT
   MsgPl = m;

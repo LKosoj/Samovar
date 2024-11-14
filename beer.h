@@ -12,7 +12,7 @@ void FinishAutoTune();
 void set_power(bool On);
 void create_data();
 void open_valve(bool Val);
-void SendMsg(String m, MESSAGE_TYPE msg_type);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 String get_beer_program();
 void check_mixer_state();
 void set_mixer_state(bool state, bool dir);
@@ -26,7 +26,7 @@ void beer_proc() {
   if (startval == 2000 && !PowerOn) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + SessionDescription, "st");
+    MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + SessionDescription, "st");
 #endif
     create_data();  //создаем файл с данными
     PowerOn = true;
@@ -57,7 +57,7 @@ void run_beer_program(uint8_t num) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
     beer_finish();
   } else {
-    SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+    SendMsg("Переход к строке программы №" + String((num + 1)), NOTIFY_MSG);
   }
   //сбрасываем переменные для мешалки и насоса
   alarm_c_low_min = 0;  //мешалка вкл

@@ -39,7 +39,7 @@ String get_lua_mode_name(bool filename = true);
 void load_lua_script();
 
 void set_power(bool On);
-void SendMsg(String m, MESSAGE_TYPE msg_type);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 String get_global_variables();
 void open_valve(bool Val, bool msg);
 void set_current_power(float Volt);

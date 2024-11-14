@@ -16,7 +16,7 @@ void samovar_reset();
 void create_data();
 void pause_withdrawal(bool Pause);
 void read_config();
-String inline format_float(float v, int d);
+inline String format_float(float v, int d);
 float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
 unsigned int hexToDec(String hexString);
 void set_current_power(float Volt);
@@ -41,16 +41,14 @@ void set_boiling();
 void check_power_error();
 #endif
 
-void SendMsg(String m, MESSAGE_TYPE msg_type);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 
 //Получить количество разделителей
 uint8_t getDelimCount(String data, char separator) {
-  int cnt = 0;
-  int maxIndex = data.length() - 1;
-
-  for (int i = 0; i <= maxIndex; i++) {
-    if (data.charAt(i) == separator) {
-      cnt++;
+  uint8_t cnt = 0;
+  for (char c : data) {
+    if (c == separator) {
+      ++cnt;
     }
   }
   return cnt;
@@ -64,7 +62,7 @@ String getValue(String data, char separator, int index) {
 
   for (int i = 0; i <= maxIndex && found <= index; i++) {
     if (data.charAt(i) == separator || i == maxIndex) {
-      found++;
+      ++found;
       strIndex[0] = strIndex[1] + 1;
       strIndex[1] = (i == maxIndex) ? i + 1 : i;
     }
@@ -150,14 +148,13 @@ void withdrawal(void) {
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
     //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
-    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
+    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3) && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
     else if ((ProgramNum > 0) && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
       set_body_temp();
-    }
-    else
+    } else
 #endif
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
       if (!PauseOn && !program_Wait) {
@@ -199,14 +196,13 @@ void withdrawal(void) {
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
-    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3)  && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
+    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3) && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
     else if ((ProgramNum > 0) && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
       set_body_temp();
-    }
-    else
+    } else
 #endif
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
       if (!PauseOn && !program_Wait) {
@@ -355,7 +351,7 @@ String get_Samovar_Status() {
       if (program[ProgramNum].WType == "H") {
         SamovarStatus = SamovarStatus + "Прогрев НБК";
       } else if (program[ProgramNum].WType == "S") {
-        SamovarStatus = SamovarStatus + "Стабилизация НБК; Осталось " + ((begintime - millis()) / 1000 ) + " сек";
+        SamovarStatus = SamovarStatus + "Стабилизация НБК; Осталось " + ((begintime - millis()) / 1000) + " сек";
       } else if (program[ProgramNum].WType == "T") {
         SamovarStatus = SamovarStatus + "Первичная подача браги";
       } else if (program[ProgramNum].WType == "P") {
@@ -445,7 +441,7 @@ void set_program(String WProgram) {
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
-    if ((!pair || pair == NULL || pair[0] == 13) and i < CAPACITY_NUM * 2) {
+    if ((!pair || pair == NULL || pair[0] == 13) && i < CAPACITY_NUM * 2) {
       program[i].WType = "";
       break;
     }
@@ -594,7 +590,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
     } else {
       d_temp = start_temp - start_pressure * 0.038 - 49.27;  //учитываем поправку на погрешность измерения датчиков
     }
-    c_temp = i_temp + d_temp;                              // получаем текущую температуру кипения при переданном давлении с учетом поправки
+    c_temp = i_temp + d_temp;  // получаем текущую температуру кипения при переданном давлении с учетом поправки
   } else {
     //Используем сохраненную температуру отбора тела без корректировки
     c_temp = start_temp;
@@ -727,8 +723,7 @@ void check_alarm() {
     if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) {
       set_buzzer(true);
       open_valve(true, true);
-    }
-    else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
+    } else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
       set_buzzer(true);
       open_valve(true, true);
     }
@@ -1040,11 +1035,9 @@ float get_steam_alcohol(float t) {
 
   if (t > 100) {
     r = 0;
-  }
-  else if (t > 99.84) {
+  } else if (t > 99.84) {
     r = get_alcohol(t1);
-  }
-  else {
+  } else {
     r = s + k * (t - t0);
   }
   if (r < 0) r = 0;
@@ -1058,9 +1051,9 @@ float get_alcohol(float t) {
   float k;
   k = (t - 89) / 6.49;
 
-  r = 17.26 - k * (18.32 - k * (7.81 - k * (1.77 - k * (4.81 - k * (2.95 + k * (1.43 - k * (0.8 + 0.05 * k) )))))); // формула Макеода для вычисления крепости
+  r = 17.26 - k * (18.32 - k * (7.81 - k * (1.77 - k * (4.81 - k * (2.95 + k * (1.43 - k * (0.8 + 0.05 * k)))))));  // формула Макеода для вычисления крепости
   if (r < 0) r = 0;
-  r = float (round (r * 10)) / 10; // округляем до одного знака после запятой
+  r = float(round(r * 10)) / 10;  // округляем до одного знака после запятой
   return r;
 
   //reverse
@@ -1068,7 +1061,6 @@ float get_alcohol(float t) {
   //Где  Ti = ( К%об - 43,15 ) / 30,18
   //более точно
   // Темп=105.47* крепость^-0.065 - применима для растворов крепче 2%мас.
-
 }
 
 void set_boiling() {
@@ -1216,8 +1208,7 @@ void triggerPowerStatus(void *parameter) {
   while (true) {
     if (PowerOn) {
 #ifdef SAMOVAR_USE_SEM_AVR
-      if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
-      {
+      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+SS?\r");
@@ -1231,11 +1222,10 @@ void triggerPowerStatus(void *parameter) {
             break;
           }
         }
-        xSemaphoreGive( xSemaphoreAVR );
+        xSemaphoreGive(xSemaphoreAVR);
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-      if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
-      {
+      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VO?\r");
@@ -1250,11 +1240,10 @@ void triggerPowerStatus(void *parameter) {
             break;
           }
         }
-        xSemaphoreGive( xSemaphoreAVR );
+        xSemaphoreGive(xSemaphoreAVR);
       }
       vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-      if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
-      {
+      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.flush();
         Serial2.print("АТ+VS?\r");
@@ -1272,7 +1261,7 @@ void triggerPowerStatus(void *parameter) {
             break;
           }
         }
-        xSemaphoreGive( xSemaphoreAVR );
+        xSemaphoreGive(xSemaphoreAVR);
       }
 #else
       current_power_volt = RMVK_get_out_voltge();
@@ -1298,7 +1287,7 @@ void check_power_error() {
     //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
     if (power_err_cnt > 6) set_current_power(target_power_volt);
     if (power_err_cnt > 12) {
-      delay(1000); //Пауза на всякий случай, чтобы прошли все другие команды
+      delay(1000);  //Пауза на всякий случай, чтобы прошли все другие команды
       set_buzzer(true);
       set_power(false);
       SendMsg(("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
@@ -1346,8 +1335,7 @@ void set_current_power(float Volt) {
 #ifndef SAMOVAR_USE_SEM_AVR
   RMVK_set_out_voltge(Volt);
 #else
-  if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
-  {
+  if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE) {
     String Cmd;
     int V = Volt;
     if (V < 100) Cmd = "0";
@@ -1359,7 +1347,7 @@ void set_current_power(float Volt) {
     Serial2.print("АТ+VS=" + Cmd + "\r");
     vTaskDelay(300 / portTICK_PERIOD_MS);
     Serial2.flush();
-    xSemaphoreGive( xSemaphoreAVR );
+    xSemaphoreGive(xSemaphoreAVR);
   }
 #endif
 #else
@@ -1376,14 +1364,13 @@ void set_power_mode(String Mode) {
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {
 #ifdef SAMOVAR_USE_SEM_AVR
-    if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
-    {
+    if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE) {
       vTaskDelay(200 / portTICK_PERIOD_MS);
       Serial2.flush();
       Serial2.print("АТ+ON=0\r");
       vTaskDelay(300 / portTICK_PERIOD_MS);
       Serial2.flush();
-      xSemaphoreGive( xSemaphoreAVR );
+      xSemaphoreGive(xSemaphoreAVR);
     }
 #else
     RMVK_set_on(0);
@@ -1393,14 +1380,13 @@ void set_power_mode(String Mode) {
     WriteConsoleLog("Set power mode=" + Mode);
 #endif
 #ifdef SAMOVAR_USE_SEM_AVR
-    if ( xSemaphoreTake( xSemaphoreAVR, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
-    {
+    if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE) {
       vTaskDelay(200 / portTICK_PERIOD_MS);
       Serial2.flush();
       Serial2.print("АТ+ON=1\r");
       vTaskDelay(300 / portTICK_PERIOD_MS);
       Serial2.flush();
-      xSemaphoreGive( xSemaphoreAVR );
+      xSemaphoreGive(xSemaphoreAVR);
     }
 #else
     RMVK_set_on(1);

@@ -15,7 +15,7 @@ String get_dist_program();
 #ifdef USE_WATER_PUMP
 bool check_boiling();
 #endif
-void SendMsg(String m, MESSAGE_TYPE msg_type);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 
 void distiller_proc() {
 

@@ -548,7 +548,7 @@ void reset_sensor_counter(void) {
 #endif
 }
 
-String inline format_float(float v, int d) {
+inline String format_float(float v, int d) {
   char outstr[15];
   dtostrf(v, 1, d, outstr);
   return outstr;
