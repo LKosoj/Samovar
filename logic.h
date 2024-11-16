@@ -38,10 +38,11 @@ float get_alcohol(float t);
 void set_boiling();
 
 #ifdef SAMOVAR_USE_POWER
+// Проверка ошибок питания
 void check_power_error();
 #endif
 
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+void SendMsg(const String &m, MESSAGE_TYPE msg_type);
 
 //Получить количество разделителей
 uint8_t getDelimCount(String data, char separator) {
@@ -70,32 +71,29 @@ String getValue(String data, char separator, int index) {
   return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
-//Получаем объем отбора
+// Получить объем отбора
 float get_liquid_volume_by_step(int StepCount) {
-  float retval;
-  if (SamSetup.StepperStepMl > 0) retval = (float)StepCount / SamSetup.StepperStepMl;
-  else
-    retval = 0;
-  return retval;
+  return (SamSetup.StepperStepMl > 0) ? (float)StepCount / SamSetup.StepperStepMl : 0;
 }
 
-//Получаем скорость отбора
+// Получить скорость отбора
 float get_liquid_rate_by_step(int StepperSpeed) {
   return round(get_liquid_volume_by_step(StepperSpeed) * 3.6 * 1000) / 1000.00;
 }
 
+// Получить скорость из расхода
 float get_speed_from_rate(float volume_per_hour) {
-  float v;
   ActualVolumePerHour = volume_per_hour;
-  v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.00;
-  if (v < 1) v = 1;
-  return v;
+  float v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.00;
+  return (v < 1) ? 1 : v;  // Минимальная скорость 1
 }
 
+// Получить объем жидкости
 int get_liquid_volume() {
   return get_liquid_volume_by_step(stepper.getCurrent());
 }
 
+// Установить сигнализацию
 void set_alarm() {
   // выключаем питание, выключаем воду, взводим флаг аварии
   if (PowerOn) {
@@ -110,6 +108,7 @@ void set_alarm() {
   SendMsg(("Аварийное отключение!"), ALARM_MSG);
 }
 
+// Функция для управления отбором
 void withdrawal(void) {
   //Определяем, что необходимо сменить режим работы
   //По завершению паузы
@@ -242,6 +241,7 @@ void withdrawal(void) {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
+// Калибровка насоса
 void pump_calibrate(int stpspeed) {
   if (startval != 0 && startval != 100) {
     return;
@@ -267,6 +267,7 @@ void pump_calibrate(int stpspeed) {
   }
 }
 
+// Пауза отбора
 void pause_withdrawal(bool Pause) {
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
   if (!stepper.getState() && !PauseOn) return;
@@ -287,6 +288,7 @@ void pause_withdrawal(bool Pause) {
   }
 }
 
+// Установить скорость насоса
 void set_pump_speed(float pumpspeed, bool continue_process) {
   if (pumpspeed < 1) return;
   if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
@@ -309,6 +311,7 @@ void set_pump_speed(float pumpspeed, bool continue_process) {
     startService();
 }
 
+// Получить статус Самовара
 String get_Samovar_Status() {
   if (!PowerOn) {
     SamovarStatus = F("Выключено");
@@ -394,11 +397,14 @@ String get_Samovar_Status() {
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
     SamovarStatus += "; Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }
-  if (SteamSensor.BodyTemp > 0) SamovarStatus += ";Т тела пар:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3) + ";Т тела царга:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
+  if (SteamSensor.BodyTemp > 0) {
+    SamovarStatus += ";Т тела пар:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3) + ";Т тела царга:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
+  }
 
   return SamovarStatus;
 }
 
+// Установить емкость
 void set_capacity(uint8_t cap) {
   capacity_num = cap;
 
@@ -410,10 +416,12 @@ void set_capacity(uint8_t cap) {
 #endif
 }
 
+// Переход к следующей емкости
 void next_capacity(void) {
   set_capacity(capacity_num + 1);
 }
 
+// Установить программу
 void set_program(String WProgram) {
   //  WProgram.trim();
   //  if (WProgram = "") return;
@@ -421,7 +429,7 @@ void set_program(String WProgram) {
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
   int i = 0;
-  while (pair != NULL and i < CAPACITY_NUM * 2) {
+  while (pair != NULL && i < CAPACITY_NUM * 2) {
     program[i].WType = pair;
     pair = strtok(NULL, ";");
     program[i].Volume = atoi(pair);
@@ -448,6 +456,7 @@ void set_program(String WProgram) {
   }
 }
 
+// Получить программу
 String get_program(uint8_t s) {
   String Str = "";
   uint8_t k = CAPACITY_NUM * 2;
@@ -471,6 +480,7 @@ String get_program(uint8_t s) {
   return Str;
 }
 
+// Запустить программу
 void run_program(uint8_t num) {
   t_min = 0;
   program_Pause = false;
@@ -599,6 +609,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
   return c_temp;
 }
 
+// Установить температуру тела
 void set_body_temp() {
   if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C" || program[ProgramNum].WType == "P") {
     SteamSensor.Start_Pressure = bme_pressure;
