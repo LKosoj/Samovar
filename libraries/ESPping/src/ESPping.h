@@ -20,6 +20,7 @@
 #ifndef ESPping_H
 #define ESPping_H
 
+#include <stdint.h>
 #include <Arduino.h>
 #ifdef ESP32
 #include <WiFi.h>
@@ -48,8 +49,8 @@ class PingClass {
   public:
     PingClass();
 
-    bool ping(IPAddress dest,   unsigned int count = 5);
-    bool ping(const char* host, unsigned int count = 5);
+    bool ping(IPAddress dest,   int16_t count = 5);
+    bool ping(const char* host, int16_t count = 5);
 
     float averageTime();
     uint minTime();
@@ -62,7 +63,7 @@ class PingClass {
     IPAddress _dest;
     ping_option _options;
 
-    static uint8_t _expected_count, _errors, _success;
+    static byte _expected_count, _errors, _success;
     static uint _min_time, _max_time;
     static float _avg_time;
 };
