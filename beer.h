@@ -109,7 +109,7 @@ void check_alarm_beer() {
   //Обрабатываем программу
 
   //Проверяем, что клапан воды охлаждения не открыт, когда не нужно
-  if (program[ProgramNum].WType != "C" and program[ProgramNum].WType != "F" and valve_status && PowerOn) {
+  if (program[ProgramNum].WType != "C" && program[ProgramNum].WType != "F" && valve_status && PowerOn) {
     //Закрываем клапан воды
     open_valve(false, false);
   }
@@ -470,7 +470,7 @@ void set_beer_program(String WProgram) {
   char *pair = strtok(c, ";");
   //String MeshTemplate;
   int i = 0;
-  while (pair != NULL and i < CAPACITY_NUM * 2) {
+  while (pair != NULL && i < CAPACITY_NUM * 2) {
     program[i].WType = pair;
     pair = strtok(NULL, ";");
     program[i].Temp = atof(pair);
@@ -488,7 +488,7 @@ void set_beer_program(String WProgram) {
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
-    if ((!pair || pair == NULL || pair[0] == 13) and i < CAPACITY_NUM * 2) {
+    if ((!pair || pair == NULL || pair[0] == 13) && i < CAPACITY_NUM * 2) {
       program[i].WType = "";
       break;
     }
