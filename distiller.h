@@ -211,7 +211,7 @@ void set_dist_program(String WProgram) {
   char *pair = strtok(c, ";");
   //String MeshTemplate;
   int i = 0;
-  while (pair != NULL and i < CAPACITY_NUM * 2) {
+  while (pair != NULL && i < CAPACITY_NUM * 2) {
     program[i].WType = pair;
     pair = strtok(NULL, ";");
     program[i].Speed = atof(pair);  //Value
@@ -222,7 +222,7 @@ void set_dist_program(String WProgram) {
     i++;
     ProgramLen = i;
     pair = strtok(NULL, ";");
-    if ((!pair || pair == NULL || pair[0] == 13) and i < CAPACITY_NUM * 2) {
+    if ((!pair || pair == NULL || pair[0] == 13) && i < CAPACITY_NUM * 2) {
       program[i].WType = "";
       break;
     }
