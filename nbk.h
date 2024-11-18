@@ -56,6 +56,7 @@ void nbk_proc() {
 
 
   if (!PowerOn) {
+    start_pressure = 0;
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + ",NBK," + SessionDescription, "st");
@@ -153,7 +154,7 @@ void nbk_proc() {
     }
   } else if (program[ProgramNum].WType == "W") {
     if (t_min <= millis()) {
-      if (TankSensor.avgTemp < d_s_temp_prev - 0.5) {
+      if (TankSensor.avgTemp < d_s_temp_prev - NBK_TEMPERATURE_DELTA) {
         set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 2147483640);
       } else if (TankSensor.avgTemp > d_s_temp_prev) {
         set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
@@ -239,6 +240,13 @@ void run_nbk_program(uint8_t num) {
     set_current_power(program[ProgramNum].Power);
   }
 
+  //Запомним Тниз = d_s_temp_prev
+  if (program[ProgramNum].Temp > 0) {
+    d_s_temp_prev = program[ProgramNum].Temp;
+  } else {
+    d_s_temp_prev = TankSensor.avgTemp;
+  }
+
   if (program[ProgramNum].WType == "S") {
     begintime = millis() + 1200 * 1000;
     //Если задана скорость - устанавливаем или абсолютнуюю или относительную
@@ -254,12 +262,6 @@ void run_nbk_program(uint8_t num) {
     d_s_temp_prev = TankSensor.avgTemp;
     begintime = 0;
   } else if (program[ProgramNum].WType == "P") {
-    //Запомним Тниз = d_s_temp_prev
-    if (program[ProgramNum].Temp > 0) {
-      d_s_temp_prev = program[ProgramNum].Temp;
-    } else {
-      d_s_temp_prev = TankSensor.avgTemp;
-    }
     //Если задана скорость - устанавливаем или абсолютнуюю или относительную
     if (program[ProgramNum].Speed != 0) {
       if (abs(program[ProgramNum].Speed) < 3 && (i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed) <= program[2].Speed) {
@@ -444,7 +446,7 @@ void check_alarm_nbk() {
 void set_nbk_program(String WProgram) {
   char c[500];
   WProgram.toCharArray(c, 500);
-  char *pair = strtok(c, ";");
+  char* pair = strtok(c, ";");
   //String MeshTemplate;
   int i = 0;
   while (pair != NULL and i < CAPACITY_NUM * 2) {
