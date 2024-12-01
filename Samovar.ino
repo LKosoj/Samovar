@@ -1372,7 +1372,7 @@ void getjson(void) {
   jsonstr += ",";
   //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
 
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || SAMOVAR_DISTILLATION_MODE || SAMOVAR_NBK_MODE) {
+  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     String pt = "";
     if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
       pt = program[ProgramNum].WType;
@@ -1595,8 +1595,8 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
     case 2: MsgPl = ""; break;
     default: MsgPl = "";
   }
+  MsgPl += "Самовар - " + m;
   if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-    MsgPl += "Самовар - " + m;
     msg_q.push(MsgPl.c_str());
     xSemaphoreGive(xMsgSemaphore);
   }
