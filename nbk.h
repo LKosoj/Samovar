@@ -230,7 +230,7 @@ void run_nbk_program(uint8_t num) {
   //Изменяем на заданную мощность
 #ifdef SAMOVAR_USE_SEM_AVR
   if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 500) {
-#else SAMOVAR_USE_POWER
+#else
   if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 50) {
 #endif
     if (target_power_volt + program[ProgramNum].Power <= program[0].Power) {
@@ -358,7 +358,7 @@ void check_alarm_nbk() {
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
     }
-#elif
+#else
     SendMsg(("Критическая температура воды!"), WARNING_MSG);
 #endif
     alarm_t_min = millis() + 60000;
