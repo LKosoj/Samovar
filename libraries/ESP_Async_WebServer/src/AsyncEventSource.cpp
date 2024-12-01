@@ -190,7 +190,7 @@ AsyncEventSourceClient::~AsyncEventSourceClient() {
 }
 
 bool AsyncEventSourceClient::_queueMessage(const char* message, size_t len) {
-  if (!_client)
+  if (!_client || !message)
     return false;
 
 #ifdef ESP32

@@ -161,6 +161,7 @@ static bool _remove_events_with_arg(void * arg){
             first_packet = NULL;
         //return first packet to the back of the queue
         } else if(xQueueSend(_async_queue, &first_packet, portMAX_DELAY) != pdPASS){
+            free(first_packet);
             return false;
         }
     }
