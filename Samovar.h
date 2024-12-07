@@ -11,6 +11,17 @@
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <ESPAsyncWebServer.h>
+#include <ESP32Servo.h>
+#include <PID_v1.h>
+#include <PID_AutoTune_v0.h>
+#include <ESP32Servo.h>
+#include <iarduino_I2C_connect.h>
+#include <GyverEncoder.h>
+#include <GyverButton.h>
+#include <ESPmDNS.h>
+#include <LiquidMenu.h>
+
 
 //определение поддерживаемых плат
 #define DEVKIT 1
