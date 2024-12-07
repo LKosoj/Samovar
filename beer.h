@@ -394,7 +394,7 @@ void set_heater_state(float setpoint, float temp) {
   if (setpoint - temp > HEAT_DELTA && !tuning) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
-    delay(50);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     //set_power_mode(POWER_SPEED_MODE);
     set_current_power(SamSetup.BVolt);
 #else
@@ -495,7 +495,7 @@ String get_beer_program() {
 
 void set_beer_program(String WProgram) {
   //M - malt application temp, P - pause, B - boil, C - cool
-  char c[500];
+  char c[500] = {0};
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
   //String MeshTemplate;

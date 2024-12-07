@@ -152,6 +152,7 @@ void WebServerInit(void) {
 
   load_profile();
 
+
   server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/resetreason.css", String());
   });
@@ -518,80 +519,80 @@ void handleSave(AsyncWebServerRequest *request) {
         //return;
   */
 
-  if (request->hasArg("SteamDelay")) {
+  if (request && request->hasArg("SteamDelay")) {
     SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
   }
-  if (request->hasArg("PipeDelay")) {
+  if (request && request->hasArg("PipeDelay")) {
     SamSetup.PipeDelay = request->arg("PipeDelay").toInt();
   }
-  if (request->hasArg("WaterDelay")) {
+  if (request && request->hasArg("WaterDelay")) {
     SamSetup.WaterDelay = request->arg("WaterDelay").toInt();
   }
-  if (request->hasArg("TankDelay")) {
+  if (request && request->hasArg("TankDelay")) {
     SamSetup.TankDelay = request->arg("TankDelay").toInt();
   }
-  if (request->hasArg("ACPDelay")) {
+  if (request && request->hasArg("ACPDelay")) {
     SamSetup.ACPDelay = request->arg("ACPDelay").toInt();
   }
 
-  if (request->hasArg("DeltaSteamTemp")) {
+  if (request && request->hasArg("DeltaSteamTemp")) {
     SamSetup.DeltaSteamTemp = request->arg("DeltaSteamTemp").toFloat();
   }
-  if (request->hasArg("DeltaPipeTemp")) {
+  if (request && request->hasArg("DeltaPipeTemp")) {
     SamSetup.DeltaPipeTemp = request->arg("DeltaPipeTemp").toFloat();
   }
-  if (request->hasArg("DeltaWaterTemp")) {
+  if (request && request->hasArg("DeltaWaterTemp")) {
     SamSetup.DeltaWaterTemp = request->arg("DeltaWaterTemp").toFloat();
   }
-  if (request->hasArg("DeltaTankTemp")) {
+  if (request && request->hasArg("DeltaTankTemp")) {
     SamSetup.DeltaTankTemp = request->arg("DeltaTankTemp").toFloat();
   }
-  if (request->hasArg("DeltaACPTemp")) {
+  if (request && request->hasArg("DeltaACPTemp")) {
     SamSetup.DeltaACPTemp = request->arg("DeltaACPTemp").toFloat();
   }
-  if (request->hasArg("SetSteamTemp")) {
+  if (request && request->hasArg("SetSteamTemp")) {
     SamSetup.SetSteamTemp = request->arg("SetSteamTemp").toFloat();
   }
-  if (request->hasArg("SetPipeTemp")) {
+  if (request && request->hasArg("SetPipeTemp")) {
     SamSetup.SetPipeTemp = request->arg("SetPipeTemp").toFloat();
   }
-  if (request->hasArg("SetWaterTemp")) {
+  if (request && request->hasArg("SetWaterTemp")) {
     SamSetup.SetWaterTemp = request->arg("SetWaterTemp").toFloat();
   }
-  if (request->hasArg("SetTankTemp")) {
+  if (request && request->hasArg("SetTankTemp")) {
     SamSetup.SetTankTemp = request->arg("SetTankTemp").toFloat();
   }
-  if (request->hasArg("SetACPTemp")) {
+  if (request && request->hasArg("SetACPTemp")) {
     SamSetup.SetACPTemp = request->arg("SetACPTemp").toFloat();
   }
-  if (request->hasArg("Kp")) {
+  if (request && request->hasArg("Kp")) {
     SamSetup.Kp = request->arg("Kp").toFloat();
   }
-  if (request->hasArg("Ki")) {
+  if (request && request->hasArg("Ki")) {
     SamSetup.Ki = request->arg("Ki").toFloat();
   }
-  if (request->hasArg("Kd")) {
+  if (request && request->hasArg("Kd")) {
     SamSetup.Kd = request->arg("Kd").toFloat();
   }
-  if (request->hasArg("StbVoltage")) {
+  if (request && request->hasArg("StbVoltage")) {
     SamSetup.StbVoltage = request->arg("StbVoltage").toFloat();
   }
-  if (request->hasArg("BVolt")) {
+  if (request && request->hasArg("BVolt")) {
     SamSetup.BVolt = request->arg("BVolt").toFloat();
   }
-  if (request->hasArg("DistTimeF")) {
+  if (request && request->hasArg("DistTimeF")) {
     SamSetup.DistTimeF = request->arg("DistTimeF").toInt();
   }
-  if (request->hasArg("MaxPressureValue")) {
+  if (request && request->hasArg("MaxPressureValue")) {
     SamSetup.MaxPressureValue = request->arg("MaxPressureValue").toFloat();
   }
-  if (request->hasArg("StepperStepMl")) {
+  if (request && request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
-  if (request->hasArg("stepperstepml")) {
+  if (request && request->hasArg("stepperstepml")) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
   }
-  if (request->hasArg("WProgram")) {
+  if (request && request->hasArg("WProgram")) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
     else
       set_program(request->arg("WProgram"));
@@ -1076,7 +1077,6 @@ String http_sync_request_get(String url) {
       return "<ERR>";
     }
     return request.responseText();
-    Serial.println("Done");
   } else {
     Serial.print(F("responseHTTPcode = "));
     Serial.println(request.responseHTTPcode());

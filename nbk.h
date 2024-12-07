@@ -444,7 +444,7 @@ void check_alarm_nbk() {
 //program[2].Speed - максимальная скорость
 //start_pressure - давление захлеба
 void set_nbk_program(String WProgram) {
-  char c[500];
+  char c[500] = {0};
   WProgram.toCharArray(c, 500);
   char* pair = strtok(c, ";");
   //String MeshTemplate;

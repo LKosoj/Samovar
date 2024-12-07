@@ -1,5 +1,5 @@
-#ifdef USE_WATER_PUMP
 #pragma once
+#ifdef USE_WATER_PUMP
 #include <Arduino.h>
 //#define PID_OPTIMIZED_I
 #include <GyverPID.h>
@@ -10,8 +10,8 @@
 #pragma message ("CUSTOM PUMP_PWM_FREQ")
 #endif
 
-ESP32PWM pump_pwm;
-GyverPID pump_regulator(6.5, 0.3, 30, 1023);
+static ESP32PWM pump_pwm;
+static GyverPID pump_regulator(6.5, 0.3, 30, 1023);
 
 void init_pump_pwm(uint8_t pin, int freq) {
   pump_pwm.attachPin(pin, freq, 10);
@@ -29,6 +29,9 @@ void set_pump_pwm(float duty) {
     pump_started = false;
     return;
   }
+
+  duty = constrain(duty, 0, 1023);
+
   if (!pump_started && duty > 0) {
     wp_count = 0;
     pump_pwm.write(PWM_START_VALUE * 10);

@@ -266,13 +266,17 @@ void create_data() {
 
   append_data();
   fileToWrite.close();
+  if (fileToAppend) {
+    fileToAppend.close(); // Close existing file handle if open
+  }
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
 }
 
 String append_data() {
-  bool w;
-  w = false;
-
+  bool w = false;
+  if (!fileToAppend) {
+    fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
+  }
   //Если режим ректификация и идет отбор, запишем в файл текущий статус
   STcnt++;
   if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {

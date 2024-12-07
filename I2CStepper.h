@@ -4,7 +4,7 @@
 
 // Настройки для шагового двигателя
 #define STEPPER_I2C_MS 2
-#define STEPPER_I2C_STEPS 200 * STEPPER_I2C_MS  //количество шагов, 200 x MS
+#define STEPPER_I2C_STEPS (200 * STEPPER_I2C_MS)  //количество шагов, 200 x MS
 //#define STEPPER_I2C_MAX_SPEED 1200
 
 #ifndef I2CStepperStepMl

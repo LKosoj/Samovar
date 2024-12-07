@@ -119,7 +119,7 @@ void check_alarm_bk() {
       //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
       set_current_power(target_power_volt - 5);
     }
-#elif
+#else
     SendMsg(("Критическая температура воды!"), WARNING_MSG);
 #endif
     alarm_t_min = millis() + 30000;

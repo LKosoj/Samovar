@@ -429,7 +429,7 @@ void next_capacity(void) {
 void set_program(String WProgram) {
   //  WProgram.trim();
   //  if (WProgram = "") return;
-  char c[500];
+  char c[500] = {0};
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
   int i = 0;

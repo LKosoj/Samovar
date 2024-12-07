@@ -1097,6 +1097,12 @@ void setup() {
 }
 
 void loop() {
+  // Проверка переполнения стека
+  if (uxTaskGetStackHighWaterMark(NULL) < 325) {
+    SendMsg("Стек переполнился. Перезагрузка", ALARM_MSG);
+    vTaskDelay(5000);
+    ESP.restart();
+  }
   //пересчитаем время работы таймера для шагового двигателя
 #ifdef USE_STEPPER_ACCELERATION
   portENTER_CRITICAL_ISR(&timerMux);

@@ -96,7 +96,7 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
 static int lua_wrapper_digitalRead(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
-  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || WATER_PUMP_PIN) lua_pushnumber(lua_state, (lua_Number)digitalRead(a));
+  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == WATER_PUMP_PIN) lua_pushnumber(lua_state, (lua_Number)digitalRead(a));
   return 1;
 }
 
