@@ -146,11 +146,11 @@ void DS_getvalue(void) {
   //    else TankSensor.avgTemp += 0.01;
   //  }
   //
-  //  SteamSensor.avgTemp += SamSetup.DeltaSteamTemp;
-  //  PipeSensor.avgTemp += SamSetup.DeltaPipeTemp;
-  //  WaterSensor.avgTemp += SamSetup.DeltaWaterTemp;
-  //  TankSensor.avgTemp += SamSetup.DeltaTankTemp;
-  //  ACPSensor.avgTemp += SamSetup.DeltaACPTemp;
+  //    SteamSensor.avgTemp += SamSetup.DeltaSteamTemp;
+  //    PipeSensor.avgTemp += SamSetup.DeltaPipeTemp;
+  //    WaterSensor.avgTemp += SamSetup.DeltaWaterTemp;
+  //    TankSensor.avgTemp += SamSetup.DeltaTankTemp;
+  //    ACPSensor.avgTemp += SamSetup.DeltaACPTemp;
   //
   //  return;
 
