@@ -156,7 +156,7 @@ void withdrawal(void) {
     } else
 #endif
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-      if (!PauseOn && !program_Wait) {
+      if (!program_Wait) {
         program_Wait_Type = "(пар)";
         //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
         if (SamSetup.useautospeed && setautospeed) {
@@ -181,7 +181,9 @@ void withdrawal(void) {
         SendMsg(("Пауза по Т пара"), WARNING_MSG);
       }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min) t_min = millis() + SteamSensor.Delay * 1000;
+    if (millis() >= t_min && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
+      t_min = millis() + SteamSensor.Delay * 1000;
+    }
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
@@ -204,7 +206,7 @@ void withdrawal(void) {
     } else
 #endif
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-      if (!PauseOn && !program_Wait) {
+      if (!program_Wait) {
         program_Wait_Type = "(царга)";
         //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
         if (SamSetup.useautospeed && setautospeed) {
@@ -229,7 +231,9 @@ void withdrawal(void) {
         SendMsg(("Пауза по Т царги"), WARNING_MSG);
       }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min) t_min = millis() + PipeSensor.Delay * 1000;
+    if (millis() >= t_min && PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) {
+      t_min = millis() + PipeSensor.Delay * 1000;
+    }
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
