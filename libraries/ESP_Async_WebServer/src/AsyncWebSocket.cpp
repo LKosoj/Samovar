@@ -202,11 +202,27 @@ class AsyncWebSocketControl {
 /*
  * AsyncWebSocketMessage Message
  */
-
+/*
 AsyncWebSocketMessage::AsyncWebSocketMessage(AsyncWebSocketSharedBuffer buffer, uint8_t opcode, bool mask) : _WSbuffer{buffer},
                                                                                                              _opcode(opcode & 0x07),
                                                                                                              _mask{mask},
                                                                                                              _status{_WSbuffer ? WS_MSG_SENDING : WS_MSG_ERROR} {
+}
+*/
+AsyncWebSocketMessage::AsyncWebSocketMessage(AsyncWebSocketSharedBuffer buffer, uint8_t opcode, bool mask)
+    : _WSbuffer{buffer},
+      _opcode(opcode & 0x07), 
+      _mask{mask},
+      _status{WS_MSG_ERROR} {
+      
+    if (_WSbuffer && _WSbuffer->size() > 0) {
+        _status = WS_MSG_SENDING;
+    }
+    
+    // Clear buffer if error occurred
+    if (_status == WS_MSG_ERROR) {
+        _WSbuffer.reset();
+    }
 }
 
 void AsyncWebSocketMessage::ack(size_t len, uint32_t time) {
@@ -677,6 +693,8 @@ bool AsyncWebSocketClient::text(const char* message) {
 }
 
 bool AsyncWebSocketClient::text(const String& message) {
+  ////// Дополнительная проверка
+  if(message.length() == 0) return false;
   return text(message.c_str(), message.length());
 }
 

@@ -227,6 +227,8 @@ void AsyncWebServerRequest::_addGetParams(const String& params) {
 bool AsyncWebServerRequest::_parseReqHead() {
   // Split the head into method, url and version
   int index = _temp.indexOf(' ');
+  //// Дополнительная проверка
+  if(index < 0) return false;
   String m = _temp.substring(0, index);
   index = _temp.indexOf(' ', index + 1);
   String u = _temp.substring(m.length() + 1, index);

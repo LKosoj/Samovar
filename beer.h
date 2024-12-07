@@ -131,6 +131,8 @@ void check_alarm_beer() {
     if (begintime == 0) {
       begintime = millis();
       setHeaterPosition(false);
+      set_mixer_state(false, false);
+      open_valve(false, false);
     }
     return;
   }
@@ -152,14 +154,14 @@ void check_alarm_beer() {
   //Если режим Брага
   if (program[ProgramNum].WType == "F") {
     //Если температура меньше целевой - греем, иначе охлаждаем.
-    if (temp <= program[ProgramNum].Temp - TankSensor.SetTemp) {
+    if (temp < program[ProgramNum].Temp - TankSensor.SetTemp) {
       if (valve_status) {
         //Закрываем клапан воды
         open_valve(false, false);
       }
       //Поддерживаем целевую температуру
       set_heater_state(program[ProgramNum].Temp, temp);
-    } else if (temp >= program[ProgramNum].Temp + TankSensor.SetTemp) {
+    } else if (temp > program[ProgramNum].Temp + TankSensor.SetTemp) {
       {
         if (!valve_status) {
           //Отключаем нагреватель

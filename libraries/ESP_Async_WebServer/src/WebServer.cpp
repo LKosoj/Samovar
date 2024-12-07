@@ -65,10 +65,12 @@ AsyncWebServer::AsyncWebServer(uint16_t port)
 }
 
 AsyncWebServer::~AsyncWebServer() {
-  reset();
+  ////Корректировка
   end();
+  reset();
   if (_catchAllHandler)
     delete _catchAllHandler;
+  _catchAllHandler = nullptr;
 }
 
 AsyncWebRewrite& AsyncWebServer::addRewrite(std::shared_ptr<AsyncWebRewrite> rewrite) {
