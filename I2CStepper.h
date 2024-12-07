@@ -12,14 +12,15 @@
 #endif
 
 #include <Arduino.h>
-//#include <Wire.h>
+#include <Wire.h>
+#include "Samovar.h"
 
 void stopService(void);
 void startService(void);
 
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 uint16_t get_stepper_speed(void);
-float get_liquid_volume_by_step(int StepCount);
+float get_liquid_volume_by_step(float StepCount);
 float get_liquid_rate_by_step(int StepperSpeed);
 float get_speed_from_rate(float volume_per_hour);
 

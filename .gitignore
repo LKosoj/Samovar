@@ -14,3 +14,6 @@ pgpt.py
 .vscode/lua.booster.lint.json
 libraries/Async_TCP/src/.vscode/lua.booster.lint.json
 libraries/ESP_Async_WebServer/src/.vscode/lua.booster.lint.json
+/.pio
+/.vscode
+/data/.vscode

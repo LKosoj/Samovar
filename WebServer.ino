@@ -1,9 +1,11 @@
 #include <asyncHTTPrequest.h>
 #include <ESPping.h>
 
+#include "Samovar.h"
+
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
-void get_data_log(AsyncWebServerRequest *request);
+void get_data_log(AsyncWebServerRequest *request, String fn);
 String calibrateKeyProcessor(const String &var);
 String indexKeyProcessor(const String &var);
 void web_program(AsyncWebServerRequest *request);
@@ -72,6 +74,14 @@ void change_samovar_mode() {
 void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
+
+  HeaderFreeMiddleware spiffsHeaderFree;
+  spiffsHeaderFree.keep("If-Modified-Since");
+  spiffsHeaderFree.keep("Host");
+  // Add any other headers you need to keep
+
+  // Then either add it globally
+  server.addMiddleware(&spiffsHeaderFree);
 
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css", emptyString, false, nullptr);

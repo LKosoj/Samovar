@@ -37,6 +37,17 @@ const char str_Temp[] PROGMEM = "^Temp: ";
 const char str_Power[] PROGMEM = "^Power: ";
 const char str_Reset_WiFi[] PROGMEM = ">Reset WiFi";
 
+const char* get_calibrate_text();
+const char* get_startval_text();
+const char* get_timestr();
+const char* get_welcomeStr1();
+const char* get_welcomeStr2();
+const char* get_welcomeStr3();
+const char* get_welcomeStr4();
+const char* get_pause_text();
+const char* get_power_text();
+const char* get_ipstr();
+
 LiquidLine lql_back_line(0, 10, str_BACK);
 LiquidLine lql_time(0, 10, get_timestr);
 

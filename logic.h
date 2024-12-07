@@ -72,7 +72,7 @@ String getValue(String data, char separator, int index) {
 }
 
 // Получить объем отбора
-float get_liquid_volume_by_step(int StepCount) {
+float get_liquid_volume_by_step(float StepCount) {
   return (SamSetup.StepperStepMl > 0) ? (float)StepCount / SamSetup.StepperStepMl : 0;
 }
 

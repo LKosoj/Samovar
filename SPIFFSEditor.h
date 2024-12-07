@@ -194,7 +194,7 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
         }
 #endif
       }
-      request->addInterestingHeader("If-Modified-Since");
+//      request->addInterestingHeader("If-Modified-Since");
       return true;
     }
     else if (request->method() == HTTP_POST)

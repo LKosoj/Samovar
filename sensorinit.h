@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
+#include "pumppwm.h"
 
 #ifdef USE_BME680
 #define BME_STRING "BME680"
@@ -28,6 +29,8 @@ Adafruit_BMP280 bme;  // I2C
 Adafruit_BME280 bme;  // I2C
 #endif
 
+String get_Samovar_Status();
+void set_power(bool On);
 void clok();
 void clok1();
 void getjson(void);
@@ -42,6 +45,9 @@ void set_nbk_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
 void setupOpenLog(void);
 void createFile(char* fileName);
+void set_capacity(uint8_t cap);
+void init_pump_pwm(uint8_t pin, int freq);
+void set_pump_pwm(float duty);
 
 //**************************************************************************************************************
 // Функции для работы с сенсорами
@@ -492,6 +498,9 @@ void reset_sensor_counter(void) {
 #endif
   d_s_time_min = 0;
   d_s_temp_finish = 0;
+
+  current_power_volt = 0.0;
+  target_power_volt = 0.0;
 
   ProgramNum = 0;
   SteamSensor.BodyTemp = 0;

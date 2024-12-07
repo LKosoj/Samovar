@@ -522,8 +522,8 @@ static uint8_t use_I2C_dev;                                            // Исп
 static uint16_t water_pump_speed;                                      // Скорость насоса
 
 static String current_power_mode;                                      // Режим работы регулятора напряжения
-static volatile float target_power_volt;                               // Заданное напряжение регулятора
-static volatile float current_power_volt;                              // Текущее напряжение регулятора
+static volatile float target_power_volt = 0;                           // Заданное напряжение регулятора
+static volatile float current_power_volt = 0;                          // Текущее напряжение регулятора
 static unsigned long alarm_c_min;                                      // Время для ожидания возврата к заданному напряжению-1 Вольт для режима предзахлеба в секундах с момента старта ESP32
 static unsigned long alarm_c_low_min;                                  // Время для ожидания возврата к заданному напряжению-1 Вольт для режима предзахлеба в секундах с момента старта ESP32
 
