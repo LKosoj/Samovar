@@ -3,6 +3,7 @@
 #include "SamovarMqtt.h"
 #include "pumppwm.h"
 
+/// @brief 
 void read_config();
 String getValue(String data, char separator, int index);
 void startService(void);
@@ -493,6 +494,8 @@ String get_beer_program() {
   return Str;
 }
 
+/// @brief 
+/// @param WProgram 
 void set_beer_program(String WProgram) {
   //M - malt application temp, P - pause, B - boil, C - cool
   char c[500] = {0};
