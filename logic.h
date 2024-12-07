@@ -156,7 +156,7 @@ void withdrawal(void) {
     } else
 #endif
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-      if (!program_Wait) {
+      if (!PauseOn && !program_Wait) {
         program_Wait_Type = "(пар)";
         //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
         if (SamSetup.useautospeed && setautospeed) {
@@ -206,7 +206,7 @@ void withdrawal(void) {
     } else
 #endif
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-      if (!program_Wait) {
+      if (!PauseOn && !program_Wait) {
         program_Wait_Type = "(царга)";
         //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
         if (SamSetup.useautospeed && setautospeed) {
