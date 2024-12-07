@@ -137,7 +137,7 @@ static err_t ping_send(int s, ip4_addr_t *addr, int size) {
 
     iecho = (struct icmp_echo_hdr *)mem_malloc((mem_size_t)ping_size);
     if (!iecho) {
-	mem_free(iecho);    
+	//mem_free(iecho);    //Ошибка, исправлена
         return ERR_MEM;
     }
 
@@ -343,10 +343,11 @@ bool ping_start(IPAddress adr, int16_t count=0, int interval=0, int size=0, int 
           ((((float)transmitted - (float)received) / (float)transmitted) * 100.0)
     );
     
-    
-    if (ping_o) {
+    // Добавлена дополнительная проверка
+    if (ping_o && ping_o->recv_function) {
         ping_resp pingresp;
-        log_i("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms", min_time, mean_time, max_time, sqrt(var_time / received));
+        if (received > 0) log_i("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms", min_time, mean_time, max_time, sqrt(var_time / received));
+        else log_i("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms", min_time, mean_time, max_time, sqrt(var_time / 1));
         pingresp.total_count = count; //Number of pings
         pingresp.resp_time = mean_time; //Average time for the pings
         pingresp.seqno = 0; //not relevant

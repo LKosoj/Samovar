@@ -111,8 +111,12 @@ void PingClass::_ping_recv_cb(void *opt, void *resp) {
     #else
     _errors = ping_resp->ping_err;
     _success = _expected_count - _errors;
-    _avg_time = ping_resp->resp_time;
-    _min_time = 0;
+    // Исправлен расчет среднего, минимального и максимального значения
+    _avg_time += ping_resp->resp_time;
+    if(ping_resp->resp_time < _min_time)
+        _min_time = ping_resp->resp_time;
+    if(ping_resp->resp_time > _max_time)
+        _max_time = ping_resp->resp_time;
     #endif
 
     // Some debug info

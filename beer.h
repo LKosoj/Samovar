@@ -1,6 +1,15 @@
 #include <Arduino.h>
 #include "Samovar.h"
+#include "SamovarMqtt.h"
+#include "pumppwm.h"
 
+void read_config();
+String getValue(String data, char separator, int index);
+void startService(void);
+void stopService(void);
+void set_power_mode(String Mode);
+void check_power_error();
+void set_current_power(float Volt);
 void save_profile();
 void beer_finish();
 void set_heater_state(float setpoint, float temp);
@@ -11,7 +20,7 @@ void StartAutoTune();
 void FinishAutoTune();
 void set_power(bool On);
 void create_data();
-void open_valve(bool Val);
+void open_valve(bool Val, bool msg);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 String get_beer_program();
 void check_mixer_state();
@@ -19,6 +28,9 @@ void set_mixer_state(bool state, bool dir);
 bool set_mixer_pump_target(uint8_t on);
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
 void HopStepperStep();
+void set_buzzer(bool fl);
+void set_pump_pwm(float duty);
+void reset_sensor_counter(void);
 
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
@@ -180,11 +192,27 @@ void check_alarm_beer() {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
-      SendMsg(("Достигнута температурная пауза. Ждем завершения."), NOTIFY_MSG);
+      SendMsg("Достигнута температурная пауза. Ждем завершения.", NOTIFY_MSG);
     }
-    //Проверяем, что еще нужно держать паузу
-    if ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time) {
-      //Запускаем следующую программу
+
+    // Считаем пройденное время
+    uint32_t currentTime = millis();
+    uint32_t elapsedTime;
+    
+    if (currentTime < begintime) {
+      // Перехватываем переполнение
+      elapsedTime = (UINT32_MAX - begintime) + currentTime;
+    } else {
+      elapsedTime = currentTime - begintime;
+    }
+    
+    float elapsedMinutes = elapsedTime / (1000.0 * 60.0);
+
+    // Проверяем, что пауза закончилась
+    if (elapsedMinutes >= program[ProgramNum].Time) {
+      // Reset begintime before moving to next program
+      begintime = 0;
+      // Переходим к следующей программе
       run_beer_program(ProgramNum + 1);
     }
   }

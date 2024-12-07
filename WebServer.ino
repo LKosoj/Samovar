@@ -75,13 +75,13 @@ void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
 
-  HeaderFreeMiddleware spiffsHeaderFree;
-  spiffsHeaderFree.keep("If-Modified-Since");
-  spiffsHeaderFree.keep("Host");
-  // Add any other headers you need to keep
-
-  // Then either add it globally
-  server.addMiddleware(&spiffsHeaderFree);
+//  HeaderFreeMiddleware spiffsHeaderFree;
+//  spiffsHeaderFree.keep("If-Modified-Since");
+//  spiffsHeaderFree.keep("Host");
+//  // Add any other headers you need to keep
+//
+//  // Then either add it globally
+//  server.addMiddleware(&spiffsHeaderFree);
 
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css", emptyString, false, nullptr);

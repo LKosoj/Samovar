@@ -1,6 +1,19 @@
+#include <Arduino.h>
+#include <EEPROM.h>
+
+#include "Samovar.h"
+
 const char *http_username = "admin";
 const char *http_password = "admin";
 
+int get_liquid_volume();
+inline String format_float(float v, int d);
+String get_program(uint8_t s);
+String get_beer_program();
+String get_dist_program();
+String get_nbk_program();
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+void read_config();
 String get_prf_name();
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
@@ -103,7 +116,18 @@ String formatBytes(size_t bytes) {
 
 // Инициализация FFS
 void FS_init(void) {
-  SPIFFS.begin(true);
+    if(!SPIFFS.begin(false)) {
+        Serial.println(F("Не удалось подключиться к файловой системе, форматируем..."));
+        if(!SPIFFS.format()) {
+            Serial.println(F("Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino"));
+            return;
+        }
+        if(!SPIFFS.begin(false)) {
+            Serial.println(F("Ошибка файловой системы! Загрузите через Arduino"));
+            return;
+        }
+    }
+
   total_byte = SPIFFS.totalBytes();
 
   //  {

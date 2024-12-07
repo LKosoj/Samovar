@@ -2,6 +2,7 @@
 #define __SPIFFSEditor_H_
 
 #include <FS.h>
+#include <ESPAsyncWebServer.h>
 
 String get_edit_script();
 
