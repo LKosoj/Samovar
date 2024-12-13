@@ -70,7 +70,6 @@ AsyncWebServer::~AsyncWebServer() {
   reset();
   if (_catchAllHandler)
     delete _catchAllHandler;
-  _catchAllHandler = nullptr;
 }
 
 AsyncWebRewrite& AsyncWebServer::addRewrite(std::shared_ptr<AsyncWebRewrite> rewrite) {
