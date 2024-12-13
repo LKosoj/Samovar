@@ -1,10 +1,3 @@
-/*
-  -D CONFIG_ASYNC_TCP_MAX_ACK_TIME=3000
-  -D CONFIG_ASYNC_TCP_PRIORITY=10
-  -D CONFIG_ASYNC_TCP_QUEUE_SIZE=128
-  -D CONFIG_ASYNC_TCP_RUNNING_CORE=1
-  -D CONFIG_ASYNC_TCP_STACK_SIZE=4096
-*/
 #include <Arduino.h>
 #include <AsyncTCP.h>
 #include <WiFi.h>
@@ -15,7 +8,7 @@
 // #define HOST "www.google.com"
 // #define PORT 80
 
-#define HOST "192.168.125.118"
+#define HOST "192.168.125.122"
 #define PORT 4000
 
 // 16 slots on esp32 (CONFIG_LWIP_MAX_ACTIVE_TCP)
@@ -52,7 +45,7 @@ void makeRequest() {
     });
 
     client->onData([](void* arg, AsyncClient* client, void* data, size_t len) {
-      Serial.printf("** data received by client: %" PRIu16 ": len=%u\n", client->localPort(), len);
+      // Serial.printf("** data received by client: %" PRIu16 ": len=%u\n", client->localPort(), len);
     });
 
     client->write("GET / HTTP/1.1\r\nHost: " HOST "\r\nUser-Agent: ESP\r\nConnection: close\r\n\r\n");

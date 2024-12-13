@@ -503,6 +503,29 @@ void setup() {
     request->send(response);
   });
 
+  // time curl -N -v -G -d 'd=3000' -d 'l=10000'  http://192.168.4.1/slow.html --output -
+  server.on("/slow.html", HTTP_GET, [](AsyncWebServerRequest* request) {
+    uint32_t d = request->getParam("d")->value().toInt();
+    uint32_t l = request->getParam("l")->value().toInt();
+    Serial.printf("d = %" PRIu32 ", l = %" PRIu32 "\n", d, l);
+    AsyncWebServerResponse* response = request->beginChunkedResponse("text/html", [d, l](uint8_t* buffer, size_t maxLen, size_t index) -> size_t {
+      Serial.printf("%u\n", index);
+      // finished ?
+      if (index >= l)
+        return 0;
+
+      // slow down the task by 2 seconds
+      // to simulate some heavy processing, like SD card reading
+      delay(d);
+
+      memset(buffer, characters[charactersIndex], 256);
+      charactersIndex = (charactersIndex + 1) % sizeof(characters);
+      return 256;
+    });
+
+    request->send(response);
+  });
+
   /*
     ❯ curl -I -X HEAD http://192.168.4.1/download
     HTTP/1.1 200 OK
@@ -653,57 +676,71 @@ void setup() {
   // launch 16 concurrent workers for 30 seconds
   // > for i in {1..16}; do ( count=$(gtimeout 30 curl -s -N -H "Accept: text/event-stream" http://192.168.4.1/events 2>&1 | grep -c "^data:"); echo "Total: $count events, $(echo "$count / 4" | bc -l) events / second" ) & done;
   //
-  // With AsyncTCP, with 16 workers: a lot of Too many messages queued: deleting message
+  // With AsyncTCP, with 16 workers: a lot of "Event message queue overflow: discard message", no crash
   //
-  // Total: 119 events, 29.75000000000000000000 events / second
-  // Total: 727 events, 181.75000000000000000000 events / second
-  // Total: 1386 events, 346.50000000000000000000 events / second
-  // Total: 1385 events, 346.25000000000000000000 events / second
-  // Total: 1276 events, 319.00000000000000000000 events / second
-  // Total: 1411 events, 352.75000000000000000000 events / second
-  // Total: 1276 events, 319.00000000000000000000 events / second
-  // Total: 1333 events, 333.25000000000000000000 events / second
-  // Total: 1250 events, 312.50000000000000000000 events / second
-  // Total: 1275 events, 318.75000000000000000000 events / second
-  // Total: 1271 events, 317.75000000000000000000 events / second
-  // Total: 1271 events, 317.75000000000000000000 events / second
-  // Total: 1254 events, 313.50000000000000000000 events / second
-  // Total: 1251 events, 312.75000000000000000000 events / second
-  // Total: 1254 events, 313.50000000000000000000 events / second
-  // Total: 1262 events, 315.50000000000000000000 events / second
+  // Total: 1711 events, 427.75 events / second
+  // Total: 1711 events, 427.75 events / second
+  // Total: 1626 events, 406.50 events / second
+  // Total: 1562 events, 390.50 events / second
+  // Total: 1706 events, 426.50 events / second
+  // Total: 1659 events, 414.75 events / second
+  // Total: 1624 events, 406.00 events / second
+  // Total: 1706 events, 426.50 events / second
+  // Total: 1487 events, 371.75 events / second
+  // Total: 1573 events, 393.25 events / second
+  // Total: 1569 events, 392.25 events / second
+  // Total: 1559 events, 389.75 events / second
+  // Total: 1560 events, 390.00 events / second
+  // Total: 1562 events, 390.50 events / second
+  // Total: 1626 events, 406.50 events / second
   //
   // With AsyncTCP, with 10 workers:
   //
-  // Total: 1875 events, 468.75000000000000000000 events / second
-  // Total: 1870 events, 467.50000000000000000000 events / second
-  // Total: 1871 events, 467.75000000000000000000 events / second
-  // Total: 1875 events, 468.75000000000000000000 events / second
-  // Total: 1871 events, 467.75000000000000000000 events / second
-  // Total: 1805 events, 451.25000000000000000000 events / second
-  // Total: 1803 events, 450.75000000000000000000 events / second
-  // Total: 1873 events, 468.25000000000000000000 events / second
-  // Total: 1872 events, 468.00000000000000000000 events / second
-  // Total: 1805 events, 451.25000000000000000000 events / second
+  // Total: 2038 events, 509.50 events / second
+  // Total: 2120 events, 530.00 events / second
+  // Total: 2119 events, 529.75 events / second
+  // Total: 2038 events, 509.50 events / second
+  // Total: 2037 events, 509.25 events / second
+  // Total: 2119 events, 529.75 events / second
+  // Total: 2119 events, 529.75 events / second
+  // Total: 2120 events, 530.00 events / second
+  // Total: 2038 events, 509.50 events / second
+  // Total: 2038 events, 509.50 events / second
   //
   // With AsyncTCPSock, with 16 workers: ESP32 CRASH !!!
   //
   // With AsyncTCPSock, with 10 workers:
   //
-  // Total: 1242 events, 310.50000000000000000000 events / second
-  // Total: 1242 events, 310.50000000000000000000 events / second
-  // Total: 1242 events, 310.50000000000000000000 events / second
-  // Total: 1242 events, 310.50000000000000000000 events / second
-  // Total: 1181 events, 295.25000000000000000000 events / second
-  // Total: 1182 events, 295.50000000000000000000 events / second
-  // Total: 1240 events, 310.00000000000000000000 events / second
-  // Total: 1181 events, 295.25000000000000000000 events / second
-  // Total: 1181 events, 295.25000000000000000000 events / second
-  // Total: 1183 events, 295.75000000000000000000 events / second
+  // Total: 1242 events, 310.50 events / second
+  // Total: 1242 events, 310.50 events / second
+  // Total: 1242 events, 310.50 events / second
+  // Total: 1242 events, 310.50 events / second
+  // Total: 1181 events, 295.25 events / second
+  // Total: 1182 events, 295.50 events / second
+  // Total: 1240 events, 310.00 events / second
+  // Total: 1181 events, 295.25 events / second
+  // Total: 1181 events, 295.25 events / second
+  // Total: 1183 events, 295.75 events / second
   //
   server.addHandler(&events);
 
-  // Run: websocat ws://192.168.4.1/ws
-  server.addHandler(&ws);
+  // Run in terminal 1: websocat ws://192.168.4.1/ws => stream data
+  // Run in terminal 2: websocat ws://192.168.4.1/ws => stream data
+  // Run in terminal 3: websocat ws://192.168.4.1/ws => should fail:
+  /*
+❯  websocat ws://192.168.4.1/ws
+websocat: WebSocketError: WebSocketError: Received unexpected status code (503 Service Unavailable)
+websocat: error running
+  */
+  server.addHandler(&ws).addMiddleware([](AsyncWebServerRequest* request, ArMiddlewareNext next) {
+    if (ws.count() > 2) {
+      // too many clients - answer back immediately and stop processing next middlewares and handler
+      request->send(503, "text/plain", "Server is busy");
+    } else {
+      // process next middleware and at the end the handler
+      next();
+    }
+  });
 
 #if __has_include("ArduinoJson.h")
   server.addHandler(jsonHandler);
@@ -729,9 +766,9 @@ void loop() {
   }
   if (now - lastWS >= deltaWS) {
     ws.printfAll("kp%.4f", (10.0 / 3.0));
-    for (auto& client : ws.getClients()) {
-      client.printf("kp%.4f", (10.0 / 3.0));
-    }
+    // for (auto& client : ws.getClients()) {
+    //   client.printf("kp%.4f", (10.0 / 3.0));
+    // }
     lastWS = millis();
   }
 }
