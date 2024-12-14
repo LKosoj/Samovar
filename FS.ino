@@ -224,6 +224,10 @@ bool exists(String path) {
 
 void create_data() {
 
+  if (fileToAppend) {
+    fileToAppend.close(); // Close existing file handle if open
+  }
+
   //Если режим ректификация, запишем в файл текущую программу отбора
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
@@ -258,18 +262,16 @@ void create_data() {
 #endif
   fileToWrite.println(str);
 
+  fileToWrite.close();
+
   SteamSensor.PrevTemp = 0;
   PipeSensor.PrevTemp = 0;
   WaterSensor.PrevTemp = 0;
   TankSensor.PrevTemp = 0;
   bme_prev_pressure = 0;
 
-  append_data();
-  fileToWrite.close();
-  if (fileToAppend) {
-    fileToAppend.close(); // Close existing file handle if open
-  }
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
+  append_data();
 }
 
 String append_data() {
