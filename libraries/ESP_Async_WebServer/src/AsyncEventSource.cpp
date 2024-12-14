@@ -289,8 +289,11 @@ void AsyncEventSourceClient::_onDisconnect() {
 }
 
 void AsyncEventSourceClient::close() {
-  if (_client)
+  if (_client){
     _client->close();
+    //// Очищаем указатель после закрытия
+    _client = nullptr;
+  }
 }
 
 bool AsyncEventSourceClient::send(const char* message, const char* event, uint32_t id, uint32_t reconnect) {
