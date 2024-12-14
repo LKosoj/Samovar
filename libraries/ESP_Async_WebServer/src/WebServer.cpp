@@ -68,8 +68,11 @@ AsyncWebServer::~AsyncWebServer() {
   ////Корректировка
   end();
   reset();
-  if (_catchAllHandler)
+  if (_catchAllHandler) {
     delete _catchAllHandler;
+    ////Обнуляем после удаления 
+    _catchAllHandler = nullptr;
+  }
 }
 
 AsyncWebRewrite& AsyncWebServer::addRewrite(std::shared_ptr<AsyncWebRewrite> rewrite) {
