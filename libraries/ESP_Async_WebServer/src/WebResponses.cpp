@@ -606,6 +606,13 @@ void AsyncFileResponse::_setContentTypeFromPath(const String& path) {
 
 AsyncFileResponse::AsyncFileResponse(FS& fs, const String& path, const char* contentType, bool download, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
   _code = 200;
+
+  //// Проверка существования файла
+  if(!fs.exists(path)) {
+    _code = 404;
+    return;
+  }
+
   _path = path;
 
   if (!download && !fs.exists(_path) && fs.exists(_path + T__gz)) {
