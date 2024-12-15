@@ -1,15 +1,19 @@
 #include <Arduino.h>
 #include "Samovar.h"
 
+void reset_sensor_counter(void);
 void nbk_finish();
+void check_power_error();
 void set_power_mode(String Mode);
 void set_power(bool On);
+void set_current_power(float Volt);
 void create_data();
 void open_valve(bool Val, bool msg);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 bool check_boiling();
+void set_buzzer(bool fl);
 void set_water_temp(float duty);
 String getValue(String data, char separator, int index);
 void run_nbk_program(uint8_t num);
@@ -19,6 +23,7 @@ float i2c_get_speed_from_rate(float volume_per_hour);
 float i2c_get_liquid_volume();
 uint16_t get_stepper_speed(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
+void MqttSendMsg(String Str, const char *chart );
 
 // Описание алгоритма работы
 // 1) Прогрев на мощности 3000 Вт с подачей браги 3 л/ч до температуры пара 85 гр.Ц.
