@@ -2,6 +2,7 @@
 #define __SAMOVAR_MQTT_H_
 
 #include <AsyncMqttClient.h>
+#include "Samovar.h"
 #define PAYLOADSIZE 2000
 
 AsyncMqttClient mqttClient;
