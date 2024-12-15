@@ -276,6 +276,7 @@ static Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 #endif
 
 #include <GyverStepper2.h>
+#include <DNSServer.h>
 static GStepper2< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 static iarduino_I2C_connect I2C2;
