@@ -352,7 +352,21 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
     request->client()->close();
     return 0;
   }
+  // return a credit for each chunk of acked data (polls does not give any credits)
+  if (len)
+    ++_in_flight_credit;
+
+  // for chunked responses ignore acks if there are no _in_flight_credits left
+  if (_chunked && !_in_flight_credit) {
+#ifdef ESP32
+    log_d("(chunk) out of in-flight credits");
+#endif
+    return 0;
+  }
+
   _ackedLength += len;
+  _in_flight -= (_in_flight > len) ? len : _in_flight;
+  // get the size of available sock space
   size_t space = request->client()->space();
 
   size_t headLen = _head.length();
@@ -364,16 +378,31 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
       String out = _head.substring(0, space);
       _head = _head.substring(space);
       _writtenLength += request->client()->write(out.c_str(), out.length());
+      _in_flight += out.length();
+      --_in_flight_credit; // take a credit
       return out.length();
     }
   }
 
   if (_state == RESPONSE_CONTENT) {
+    // for response data we need to control the queue and in-flight fragmentation. Sending small chunks could give low latency,
+    // but flood asynctcp's queue and fragment socket buffer space for large responses.
+    // Let's ignore polled acks and acks in case when we have more in-flight data then the available socket buff space.
+    // That way we could balance on having half the buffer in-flight while another half is filling up, while minimizing events in asynctcp q
+    if (_in_flight > space) {
+      // log_d("defer user call %u/%u", _in_flight, space);
+      //  take the credit back since we are ignoring this ack and rely on other inflight data
+      if (len)
+        --_in_flight_credit;
+      return 0;
+    }
+
     size_t outLen;
     if (_chunked) {
       if (space <= 8) {
         return 0;
       }
+
       outLen = space;
     } else if (!_sendContentLength) {
       outLen = space;
@@ -422,6 +451,8 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
 
     if (outLen) {
       _writtenLength += request->client()->write((const char*)buf, outLen);
+      _in_flight += outLen;
+      --_in_flight_credit; // take a credit
     }
 
     if (_chunked) {
@@ -606,13 +637,11 @@ void AsyncFileResponse::_setContentTypeFromPath(const String& path) {
 
 AsyncFileResponse::AsyncFileResponse(FS& fs, const String& path, const char* contentType, bool download, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
   _code = 200;
-
   //// Проверка существования файла
   if(!fs.exists(path)) {
     _code = 404;
     return;
   }
-
   _path = path;
 
   if (!download && !fs.exists(_path) && fs.exists(_path + T__gz)) {
@@ -647,13 +676,12 @@ AsyncFileResponse::AsyncFileResponse(FS& fs, const String& path, const char* con
 
 AsyncFileResponse::AsyncFileResponse(File content, const String& path, const char* contentType, bool download, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
   _code = 200;
-  _path = path;
-
   //// Дополнительная проверка
   if(!content) {
       _code = 404;
       return;
   }
+  _path = path;
 
   if (!download && String(content.name()).endsWith(T__gz) && !path.endsWith(T__gz)) {
     addHeader(T_Content_Encoding, T_gzip, false);
