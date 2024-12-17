@@ -216,19 +216,10 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest* request) {
     } else {
       etag = String(request->_tempFile.size());
     }
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    ///////REMOVE THIS!!!!
-    if (false && _last_modified.length() && _last_modified == request->header(T_IMS)) {
+    if (_last_modified.length() && _last_modified == request->header(T_IMS)) {
       request->_tempFile.close();
       request->send(304); // Not modified
-    } else if (false && _cache_control.length() && request->hasHeader(T_INM) && request->header(T_INM).equals(etag)) {
+    } else if (_cache_control.length() && request->hasHeader(T_INM) && request->header(T_INM).equals(etag)) {
       request->_tempFile.close();
       AsyncWebServerResponse* response = new AsyncBasicResponse(304); // Not modified
       response->addHeader(T_Cache_Control, _cache_control.c_str());
