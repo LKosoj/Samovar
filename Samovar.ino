@@ -5,8 +5,8 @@
 //При старте колонны до стабилизации реализовать выход на предзахлеб (если установлен датчик флегмы) для смачивания насадки (дополнительная опция)
 //Перейти на GyverPID
 
-// copy to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/2.0.17/tools/partitions/samovar.csv
-// add to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/2.0.17/boards.txt
+// copy to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.1.0/tools/partitions/samovar.csv
+// add to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.1.0/boards.txt
 // esp32.menu.PartitionScheme.samovar=Samovar
 // esp32.menu.PartitionScheme.samovar.build.partitions=samovar
 // esp32.menu.PartitionScheme.samovar.upload.maximum_size=1638400
