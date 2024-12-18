@@ -39,9 +39,12 @@ void setup() {
 void loop()
 {
   // read the temperature (in °Celsius), and the pressure (in Pa)
-  mysensor.readSensor(temperature, pressure);
-  Serial.print(temperature); Serial.print("C\t ");
-  Serial.print(pressure); Serial.print("Pa");
-  Serial.println();
+     if (mysensor.readSensor(temperature, pressure))
+  {
+    Serial.print(temperature); Serial.print("C\t ");
+    Serial.print(pressure); Serial.print("Pa");
+    Serial.println();
+  }
+  else Serial.println("Reading fails. Timeout ??");
   delay(1000);
 }

@@ -23,12 +23,14 @@ class XGZP6897D
     // readSensor:
     //  Read temperature (degree Celsius), and pressure (PA)
     //  Return float values
-    void readSensor(float &temperature, float &pressure);
+    // Return "true" if the read is a success , "false" if an error occurs (timeout ??)
+    bool readSensor(float &temperature, float &pressure);
     //  readRawSensor:
     //  Return raw integer values for temperature and pressure.
     //  The raw integer value of temperature must be devided by 256 to convert in degree Celsius.
     //  The raw integer value of pressure must be devided by the K factor to convert in Pa.
-    void readRawSensor(int16_t &rawTemperature, int32_t &rawPressure);
+    // Return "true" if the read is a success , "false" if an error occurs (timeout ??)
+    bool readRawSensor(int16_t &rawTemperature, int32_t &rawPressure);
   private:
     float _K;
     uint8_t _I2C_address;

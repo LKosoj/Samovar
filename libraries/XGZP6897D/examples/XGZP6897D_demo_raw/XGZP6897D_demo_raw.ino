@@ -43,13 +43,16 @@ void setup() {
 void loop()
 {
   // read the raw values for temperature and pressure
-  mysensor.readRawSensor(temperature, pressure);
-  //  we can avoid floating point computations if we don't need precision
-  //  and if the size of the sketch is an issue.
-  temperature = temperature / 256;
-  pressure = pressure / K;
-  Serial.print(temperature); Serial.print("C\t ");
-  Serial.print(pressure); Serial.print("Pa");
-  Serial.println();
+  if (mysensor.readRawSensor(temperature, pressure))
+  {
+    //  we can avoid floating point computations if we don't need precision
+    //  and if the size of the sketch is an issue.
+    temperature = temperature / 256;
+    pressure = pressure / K;
+    Serial.print(temperature); Serial.print("C\t ");
+    Serial.print(pressure); Serial.print("Pa");
+    Serial.println();
+  }
+  else Serial.println("Reading fails. Timeout ??");
   delay(1000);
 }
