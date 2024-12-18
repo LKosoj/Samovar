@@ -46,6 +46,7 @@
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <Update.h>
+#include <ESPping.h>
 
 #include <LiquidMenu.h>
 
@@ -344,8 +345,9 @@ void triggerGetClock(void *parameter) {
 
 #ifdef USE_TELEGRAM
     {
-      if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
+      if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0 && Ping.ping("web.samovar-tool.ru", 1)) {
         if (!msg_q.isEmpty()) {
+          vTaskDelay(50 / portTICK_PERIOD_MS);
           if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
             char c[150];
             msg_q.pop(&c);
@@ -927,7 +929,8 @@ void setup() {
 #endif
 
 #ifdef USE_TELEGRAM
-  if (SamSetup.tg_token[0] != 0) {
+  if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0 && Ping.ping("web.samovar-tool.ru", 1)) {
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode("Самовар готов к работе; IP=http://" + StIP));
   }
 #endif
