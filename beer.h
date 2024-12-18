@@ -197,27 +197,6 @@ void check_alarm_beer() {
       begintime = millis();
       SendMsg("Достигнута температурная пауза. Ждем завершения.", NOTIFY_MSG);
     }
-
-    // Считаем пройденное время
-    uint32_t currentTime = millis();
-    uint32_t elapsedTime;
-    
-    if (currentTime < begintime) {
-      // Перехватываем переполнение
-      elapsedTime = (UINT32_MAX - begintime) + currentTime;
-    } else {
-      elapsedTime = currentTime - begintime;
-    }
-    
-    float elapsedMinutes = elapsedTime / (1000.0 * 60.0);
-
-    // Проверяем, что пауза закончилась
-    if (elapsedMinutes >= program[ProgramNum].Time) {
-      // Reset begintime before moving to next program
-      begintime = 0;
-      // Переходим к следующей программе
-      run_beer_program(ProgramNum + 1);
-    }
   }
 
   //Если программа - охлаждение - ждем, когда температура в кубе упадет ниже заданной, и управляем водой для охлаждения
@@ -285,12 +264,14 @@ void check_alarm_beer() {
       HopStepperStep();
     }
 
-    //Проверяем, что еще нужно держать паузу
-    if (begintime > 0 && ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time)) {
-      //Запускаем следующую программу
-      run_beer_program(ProgramNum + 1);
-    }
   }
+
+  //Проверяем, что еще нужно держать паузу
+  if (begintime > 0 && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "P") && ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time)) {
+    //Запускаем следующую программу
+    run_beer_program(ProgramNum + 1);
+  }
+  
   //Обрабатываем мешалку и насос
   check_mixer_state();
 
