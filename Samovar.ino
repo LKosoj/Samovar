@@ -344,20 +344,20 @@ void triggerGetClock(void *parameter) {
     }
 
 #ifdef USE_TELEGRAM
-    {
-      if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0 && Ping.ping("web.samovar-tool.ru", 1)) {
-        if (!msg_q.isEmpty()) {
-          vTaskDelay(50 / portTICK_PERIOD_MS);
-          if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-            char c[150];
-            msg_q.pop(&c);
-            qMsg = c;
-            //Serial.println(qMsg);
-            http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg));
-            xSemaphoreGive(xMsgSemaphore);
-          }
+    if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0 && Ping.ping("web.samovar-tool.ru", 1)) {
+      if (!msg_q.isEmpty()) {
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+        if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
+          char c[150];
+          msg_q.pop(&c);
+          qMsg = c;
+          //Serial.println(qMsg);
+          http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg));
+          xSemaphoreGive(xMsgSemaphore);
         }
       }
+    } else {
+      Serial.println(F("Проблема с покдлючением к интернету."));
     }
 #endif
 
@@ -930,8 +930,10 @@ void setup() {
 
 #ifdef USE_TELEGRAM
   if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0 && Ping.ping("web.samovar-tool.ru", 1)) {
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
     http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode("Самовар готов к работе; IP=http://" + StIP));
+  } else {
+    Serial.println(F("Проблема с покдлючением к интернету."));
   }
 #endif
 
