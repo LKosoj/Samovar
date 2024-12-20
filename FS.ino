@@ -116,17 +116,17 @@ String formatBytes(size_t bytes) {
 
 // Инициализация FFS
 void FS_init(void) {
-    if(!SPIFFS.begin(false)) {
-        Serial.println(F("Не удалось подключиться к файловой системе, форматируем..."));
-        if(!SPIFFS.format()) {
-            Serial.println(F("Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino"));
-            return;
-        }
-        if(!SPIFFS.begin(false)) {
-            Serial.println(F("Ошибка файловой системы! Загрузите через Arduino"));
-            return;
-        }
+  if (!SPIFFS.begin(false)) {
+    Serial.println(F("Не удалось подключиться к файловой системе, форматируем..."));
+    if (!SPIFFS.format()) {
+      Serial.println(F("Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino"));
+      return;
     }
+    if (!SPIFFS.begin(false)) {
+      Serial.println(F("Ошибка файловой системы! Загрузите через Arduino"));
+      return;
+    }
+  }
 
   total_byte = SPIFFS.totalBytes();
 
@@ -253,6 +253,10 @@ void create_data() {
   }
   //Переименовываем файл с логом в архивный (на всякий случай)
   if (SPIFFS.exists("/data.csv")) {
+    if (fileToAppend) {
+      fileToAppend.close();
+    }
+
     SPIFFS.rename("/data.csv", "/data_old.csv");
   }
   File fileToWrite = SPIFFS.open("/data.csv", FILE_WRITE);
