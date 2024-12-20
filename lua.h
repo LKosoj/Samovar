@@ -843,6 +843,11 @@ void lua_init() {
   loop_lua_fl = 0;
   SetScriptOff = false;
 
+  // 1. Уменьшим размер стека для lua скриптов
+  lua_State* L = lua.GetState();
+  lua_gc(L, LUA_GCSETPAUSE, 120); // Увеличим паузу между сборками мусора
+  lua_gc(L, LUA_GCSETSTEPMUL, 200); // Увеличим агрессивность сборки
+  
   //Запускаем инициализирующий lua-скрипт
   File f = SPIFFS.open("/init.lua");
   if (f) {
@@ -952,6 +957,7 @@ void load_lua_script() {
 //Запускаем таск для запуска скрипта
 void do_lua_script(void *parameter) {
   String sr;
+  sr.reserve(128);
   //String glv;
   while (1) {
     if (!lua_finished) {
@@ -963,6 +969,7 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua.Lua_dostring(&(script1));
+        script1 = "";
         sr.trim();
         if (sr != "") WriteConsoleLog("ERR in script.lua: " + sr);
       }
@@ -975,9 +982,12 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua.Lua_dostring(&(script2));
+        script2 = "";
         sr.trim();
         if (sr != "") WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       }
+      // Принудительно вызываем сборщик мусора
+      lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
       lua_finished = true;
     }
     if (SetScriptOff) {
