@@ -1,4 +1,5 @@
 #include "ESPNtpClient.h"
+#include <lwip/tcpip.h>
 
 
 #define DBG_PORT Serial
@@ -163,6 +164,11 @@ bool NTPClient::begin (const char* ntpServerName) {
     }
     DEBUGLOGI ("Got server name");
 
+    // Lock TCPIP core before UDP operations
+#ifdef ESP32
+    LOCK_TCPIP_CORE();
+#endif
+
     if (udp) {
         DEBUGLOGI ("Remove UDP connection");
         udp_disconnect (udp);
@@ -174,6 +180,9 @@ bool NTPClient::begin (const char* ntpServerName) {
     udp = udp_new ();
     if (!udp){
         DEBUGLOGE ("Failed to create NTP socket");
+#ifdef ESP32
+        UNLOCK_TCPIP_CORE();
+#endif
         return false;
     }
     DEBUGLOGI ("NTP socket created");
@@ -196,6 +205,9 @@ bool NTPClient::begin (const char* ntpServerName) {
                 udp_remove (udp);
                 udp = NULL;
             }
+#ifdef ESP32
+            UNLOCK_TCPIP_CORE();
+#endif
             isConnected = false;
             actualInterval = shortInterval;
             return false;
@@ -205,6 +217,9 @@ bool NTPClient::begin (const char* ntpServerName) {
         
         udp_recv (udp, &NTPClient::s_recvPacket, this);
     }
+#ifdef ESP32
+    UNLOCK_TCPIP_CORE();
+#endif
     lastSyncd.tv_sec = 0;
     lastSyncd.tv_usec = 0;
 
@@ -229,7 +244,7 @@ bool NTPClient::begin (const char* ntpServerName) {
         xTaskCreateUniversal (
             &NTPClient::s_getTimeloop, /* Task function. */
             "NTP loop", /* name of task. */
-            2048, /* Stack size of task */
+            2348, /* Stack size of task */
             this, /* parameter of the task */
             1, /* priority of the task */
             &loopHandle, /* Task handle to keep track of created task */
@@ -537,12 +552,24 @@ void NTPClient::s_getTimeloop (void* arg) {
                 if (WiFi.isConnected ()) {
                     DEBUGLOGD ("CONNECTED. Binding");
                     if (self->udp) {
+#ifdef ESP32
+                        LOCK_TCPIP_CORE();
+#endif
                         udp_disconnect (self->udp);
                         udp_remove (self->udp);
+#ifdef ESP32
+                        UNLOCK_TCPIP_CORE();
+#endif
                         self->udp = NULL;
                     }
 
+#ifdef ESP32
+                    LOCK_TCPIP_CORE();
+#endif
                     self->udp = udp_new ();
+#ifdef ESP32
+                    UNLOCK_TCPIP_CORE();
+#endif
                     if (!self->udp) {
                         DEBUGLOGE ("Failed to create NTP socket");
                         return; // false;
@@ -560,8 +587,14 @@ void NTPClient::s_getTimeloop (void* arg) {
                     if (result) {
                         DEBUGLOGE ("Failed to bind to NTP port. %d: %s", result, lwip_strerr (result));
                         if (self->udp) {
+#ifdef ESP32
+                            LOCK_TCPIP_CORE();
+#endif
                             udp_disconnect (self->udp);
                             udp_remove (self->udp);
+#ifdef ESP32
+                            UNLOCK_TCPIP_CORE();
+#endif
                             self->udp = NULL;
                         }
 
@@ -570,8 +603,15 @@ void NTPClient::s_getTimeloop (void* arg) {
                     } else {
                         self->isConnected = true;
                     }
+                    vTaskDelay (50);
 
+#ifdef ESP32
+                    LOCK_TCPIP_CORE();
+#endif
                     udp_recv (self->udp, &NTPClient::s_recvPacket, self);
+#ifdef ESP32
+                    UNLOCK_TCPIP_CORE();
+#endif
                     self->getTime ();
                 }
             }
@@ -639,7 +679,14 @@ void NTPClient::getTime () {
     ntpAddr.addr = ntpServerIPAddress;
 #endif
     DEBUGLOGI ("NTP server IP address %s", ipaddr_ntoa (&ntpAddr));
+#ifdef ESP32
+    LOCK_TCPIP_CORE();
+#endif
     result = udp_connect (udp, &ntpAddr, DEFAULT_NTP_PORT);
+#ifdef ESP32
+    UNLOCK_TCPIP_CORE();
+#endif
+    vTaskDelay (50);
     if (result == ERR_USE) {
         DEBUGLOGE ("Port already used");
         if (onSyncEvent) {
@@ -737,7 +784,14 @@ boolean NTPClient::sendNTPpacket () {
 
     DEBUGLOGI ("Sending packet");
     memcpy (buffer->payload, &packet, sizeof (NTPUndecodedPacket_t));
+#ifdef ESP32
+    LOCK_TCPIP_CORE();
+#endif
     result = udp_send (udp, buffer);
+#ifdef ESP32
+    UNLOCK_TCPIP_CORE();
+#endif
+    vTaskDelay (50);
     if (buffer->ref > 0) {
 // #ifdef ESP32
 //         DEBUGLOGV ("pbuff type: %d", buffer->type);
