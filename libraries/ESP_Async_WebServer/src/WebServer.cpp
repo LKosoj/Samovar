@@ -56,8 +56,7 @@ AsyncWebServer::AsyncWebServer(uint16_t port)
     c->setRxTimeout(3);
     AsyncWebServerRequest* r = new AsyncWebServerRequest((AsyncWebServer*)s, c);
     if (r == NULL) {
-      c->close(true);
-      c->free();
+      c->abort();
       delete c;
     }
   },
@@ -65,14 +64,10 @@ AsyncWebServer::AsyncWebServer(uint16_t port)
 }
 
 AsyncWebServer::~AsyncWebServer() {
-  ////Корректировка
-  end();
   reset();
-  if (_catchAllHandler) {
+  end();
+  if (_catchAllHandler)
     delete _catchAllHandler;
-    ////Обнуляем после удаления 
-    _catchAllHandler = nullptr;
-  }
 }
 
 AsyncWebRewrite& AsyncWebServer::addRewrite(std::shared_ptr<AsyncWebRewrite> rewrite) {
