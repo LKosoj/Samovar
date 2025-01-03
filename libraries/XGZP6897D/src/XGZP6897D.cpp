@@ -39,7 +39,7 @@ bool XGZP6897D::readRawSensor(int16_t &rawTemperature, int32_t &rawPressure)
   int16_t  temperature_adc ;
   uint8_t pressure_H, pressure_M, pressure_L, temperature_H, temperature_L;
   uint8_t CMD_reg;
-  unsigned long endConversion, deb;
+  unsigned long endConversion;
   // start conversion
   _Wire->beginTransmission(_I2C_address);
   _Wire->write(0x30);
