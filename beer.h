@@ -33,6 +33,55 @@ void set_buzzer(bool fl);
 void set_pump_pwm(float duty);
 void reset_sensor_counter(void);
 
+#define TEMP_HISTORY_SIZE 10  // Размер буфера истории температур
+#define BOILING_DETECT_THRESHOLD 0.2  // Порог определения стабилизации температуры
+#define MIN_BOILING_TEMP 98.0  // Минимальная температура кипения (с учетом погрешности)
+
+struct BoilingDetector {
+    float tempHistory[TEMP_HISTORY_SIZE];
+    uint8_t historyIndex = 0;
+    bool isBoiling = false;
+    unsigned long lastUpdateTime = 0;
+};
+
+BoilingDetector boilingDetector;
+
+bool isBoilingStarted(float currentTemp) {
+    unsigned long currentTime = millis();
+    
+    // Обновляем историю раз в секунду
+    if (currentTime - boilingDetector.lastUpdateTime >= 1000) {
+        boilingDetector.lastUpdateTime = currentTime;
+        boilingDetector.tempHistory[boilingDetector.historyIndex] = currentTemp;
+        boilingDetector.historyIndex = (boilingDetector.historyIndex + 1) % TEMP_HISTORY_SIZE;
+
+        // Проверяем только когда буфер заполнен
+        if (currentTemp >= MIN_BOILING_TEMP) {
+            float maxDiff = 0;
+            float avgTemp = 0;
+            
+            // Вычисляем среднюю температуру и максимальное отклонение
+            for (int i = 0; i < TEMP_HISTORY_SIZE; i++) {
+                avgTemp += boilingDetector.tempHistory[i];
+            }
+            avgTemp /= TEMP_HISTORY_SIZE;
+            
+            for (int i = 0; i < TEMP_HISTORY_SIZE; i++) {
+                float diff = abs(boilingDetector.tempHistory[i] - avgTemp);
+                if (diff > maxDiff) maxDiff = diff;
+            }
+            
+            // Если температура стабилизировалась около точки кипения
+            if (maxDiff < BOILING_DETECT_THRESHOLD) {
+                boilingDetector.isBoiling = true;
+                return true;
+            }
+        }
+    }
+    
+    return boilingDetector.isBoiling;
+}
+
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
 
@@ -225,8 +274,8 @@ void check_alarm_beer() {
     if (begintime == 0 && ProgramNum > 0 && program[ProgramNum - 1].WType == "B") begintime = millis();
 
     if (begintime == 0) {
-      //Если температура в кубе достигла температуры кипения, засекаем время
-      if (abs(temp - BOILING_TEMP) <= 0.5) {
+      //Определяем начало кипения
+      if (isBoilingStarted(temp)) {
         msgfl = true;
         begintime = millis();
         SendMsg(("Начался режим кипячения"), NOTIFY_MSG);
@@ -263,7 +312,6 @@ void check_alarm_beer() {
 #endif
       HopStepperStep();
     }
-
   }
 
   //Проверяем, что еще нужно держать паузу
