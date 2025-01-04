@@ -25,6 +25,14 @@ uint16_t get_stepper_speed(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 void MqttSendMsg(String Str, const char *chart );
 
+struct {
+  float avgSpeed;
+  float totalVolume;
+  uint32_t startTime;
+  uint32_t lastVolumeUpdate;
+} stats;
+
+
 // Описание алгоритма работы
 // 1) Прогрев на мощности 3000 Вт с подачей браги 3 л/ч до температуры пара 85 гр.Ц.
 // 3) Стабилизация 1200 сек, с подачей браги 18 л/ч на мощности 2400 Вт. После чего запоминаем температуру внизу колонны Тн.
@@ -88,6 +96,14 @@ void nbk_proc() {
 
     run_nbk_program(0);
     set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
+  }
+
+  uint32_t currentTime = millis();
+  if (currentTime - stats.lastVolumeUpdate >= 1000) { // Обновляем каждую секунду
+    float currentSpeed = i2c_get_liquid_rate_by_step(get_stepper_speed()); // л/ч
+    float seconds = (float)(currentTime - stats.lastVolumeUpdate) / 1000.0;
+    stats.totalVolume += (currentSpeed / 3600.0) * seconds;
+    stats.lastVolumeUpdate = currentTime;
   }
 
   //Обрабатываем программу НБК
@@ -207,6 +223,22 @@ void nbk_finish() {
   if (fileToAppend) {
     fileToAppend.close();
   }
+  // Вычислить и отправить статистику
+  uint32_t totalTime = (millis() - stats.startTime) / 1000; // в секундах
+  if (totalTime > 0) {
+    stats.avgSpeed = (stats.totalVolume * 3600.0) / (float)totalTime;
+  } else {
+    stats.avgSpeed = 0;
+  }
+  
+  String summary = "Итоги работы НБК:\n";
+  summary += "Средняя скорость: " + String(stats.avgSpeed, 2) + " л/ч\n";
+  summary += "Текущая мощность: " + String(target_power_volt) + "\n";
+  summary += "Максимальное давление: " + String(bme_prev_pressure) + " мм.рт.ст.\n";
+  summary += "Общий объем: " + String(stats.totalVolume, 2) + " л\n";
+  summary += "Время работы: " + String(totalTime / 3600.0, 2) + " ч";
+  
+  SendMsg(summary, NOTIFY_MSG);
 }
 
 void run_nbk_program(uint8_t num) {
@@ -217,6 +249,12 @@ void run_nbk_program(uint8_t num) {
   t_min = 0;
   alarm_c_min = 0;
   msgfl = true;
+
+  if (num == 0) {
+    stats.startTime = millis();
+    stats.avgSpeed = 0;
+    stats.totalVolume = 0;
+  }
 
   if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
 

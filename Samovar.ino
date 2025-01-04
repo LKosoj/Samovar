@@ -1475,6 +1475,16 @@ void getjson(void) {
 #ifdef USE_MQTT
   //  MqttSendMsg(jsonstr, "getI");
 #endif
+
+  // Добавляем информацию о прогнозе времени
+  if (PowerOn && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    jsonstr += "\"TimeRemaining\":";
+    jsonstr += String(int(timePredictor.remainingTime));
+    jsonstr += ",";
+    jsonstr += "\"TotalTime\":";
+    jsonstr += String(int(timePredictor.predictedTotalTime));
+    jsonstr += ",";
+  }
 }
 
 void configModeCallback(AsyncWiFiManager *myWiFiManager) {

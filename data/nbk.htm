@@ -101,16 +101,27 @@
     var Messages_Array = []; //текущий массив сообщений
     var sound_is_playing = false; //звук сейчас восспроизводится
     var is_ALARM = false; //признак тревоги
+    var sound_play_count = 0; //счетчик воспроизведений сигнала
+    const MAX_SOUND_PLAYS = 2; //максимальное количество воспроизведений
 
     const sound = new Audio('alarm.mp3');
-    sound.loop = true;
+    sound.loop = false; // Отключаем бесконечное повторение
     sound.preload = 'auto';
     sound.autoplay = false;
 
     function playSound (play) {
-      if (!sound_is_playing && play) {
+      if (!sound_is_playing && play && sound_play_count < MAX_SOUND_PLAYS) {
         sound.play();
         sound_is_playing = true;
+        sound_play_count++;
+        
+        // Когда звук закончится
+        sound.onended = function() {
+          sound_is_playing = false;
+          if (sound_play_count < MAX_SOUND_PLAYS && is_ALARM) {
+            setTimeout(() => playSound(true), 2000); // Пауза 2 секунды между повторами
+          }
+        };
       } else if (sound_is_playing && !play) {
         sound.pause();
         sound_is_playing = false;
@@ -158,7 +169,6 @@
     }
 
     function removeLastMessage () {
-      //удаляям последнее сообщение
       Messages_Array.pop();
       if (Messages_Array.length > 0) {
         lastMsg = Messages_Array[Messages_Array.length - 1];
@@ -169,7 +179,7 @@
         Messages_Array[Messages_Array.length - 1] = changed;
       } else {
         is_ALARM = false;
-        IsCalmingPause = false;
+        sound_play_count = 0; // Сбрасываем счетчик когда все сообщения удалены
       }
       showMessages();
     }
@@ -205,6 +215,7 @@
 
     function clearMessages () {
       Messages_Array = [];
+      sound_play_count = 0; // Сбрасываем счетчик при очистке сообщений
       showMessages();
     }
 

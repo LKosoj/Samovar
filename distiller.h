@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "Samovar.h"
+#include "quality.h"
 
 void distiller_finish();
 void set_power_mode(String Mode);
@@ -17,7 +18,27 @@ bool check_boiling();
 #endif
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 
+// Структура для прогнозирования времени
+struct TimePredictor {
+    unsigned long startTime;           // Время начала процесса
+    float initialAlcohol;             // Начальное содержание спирта
+    float initialTemp;                // Начальная температура
+    float lastTemp;                   // Последняя температура
+    float tempChangeRate;             // Скорость изменения температуры
+    unsigned long lastUpdateTime;      // Время последнего обновления
+    float predictedTotalTime;         // Прогнозируемое общее время в минутах
+    float remainingTime;              // Оставшееся время в минутах
+};
+
+TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};
+
+// Функции прогнозирования времени
+void updateTimePredictor();
+float calculateRemainingTime();
+void resetTimePredictor();
+
 void distiller_proc() {
+  if (SamovarStatusInt != 2000) return;
 
   if (!PowerOn) {
 #ifdef USE_MQTT
@@ -40,7 +61,12 @@ void distiller_proc() {
 #ifdef SAMOVAR_USE_POWER
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
+    // Инициализируем систему прогнозирования
+    resetTimePredictor();
   }
+
+  // Обновляем прогноз времени
+  updateTimePredictor();
 
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
     distiller_finish();
@@ -73,6 +99,30 @@ void distiller_proc() {
       distiller_finish();
     }
   }
+
+  // // Добавляем оценку качества
+  // static unsigned long lastQualityCheck = 0;
+  // if (millis() - lastQualityCheck >= 5000) { // Проверяем каждые 5 секунд
+  //   lastQualityCheck = millis();
+    
+  //   QualityParams quality = getQualityAssessment();
+    
+  //   // Если качество низкое, отправляем предупреждение
+  //   if (quality.overallScore < 70) {
+  //     SendMsg(("Внимание! Качество отбора снижено: " + String(quality.overallScore, 1) + 
+  //             "%. " + quality.recommendation), WARNING_MSG);
+  //   }
+    
+  //   // Если качество критически низкое, можно автоматически корректировать процесс
+  //   if (quality.overallScore < 50) {
+  //     // Автоматическая коррекция процесса
+  //     if (quality.stabilityScore < 50) {
+  //       // Уменьшаем мощность для стабилизации
+  //       set_current_power(target_power_volt - 5);
+  //     }
+  //   }
+  // }
+
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
@@ -80,7 +130,7 @@ void distiller_finish() {
 #ifdef SAMOVAR_USE_POWER
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
-  SendMsg(("Дистилляция завершена"), NOTIFY_MSG);
+  SendMsg(("Дистилляция завершена. Общее время: " + String(int((millis() - timePredictor.startTime) / 60000)) + " мин."), NOTIFY_MSG);
   set_power(false);
   reset_sensor_counter();
 }
@@ -176,6 +226,8 @@ void run_dist_program(uint8_t num) {
 
   if (program[num].WType != "") {
     SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+    // Сбрасываем прогноз при переходе к новой программе
+    resetTimePredictor();
   } else {
     SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
   }
@@ -243,4 +295,69 @@ String get_dist_program() {
     }
   }
   return Str;
+}
+
+void resetTimePredictor() {
+    timePredictor.startTime = millis();
+    timePredictor.initialAlcohol = get_alcohol(TankSensor.avgTemp);
+    timePredictor.initialTemp = TankSensor.avgTemp;
+    timePredictor.lastTemp = TankSensor.avgTemp;
+    timePredictor.lastUpdateTime = millis();
+    timePredictor.tempChangeRate = 0;
+    timePredictor.predictedTotalTime = 0;
+    timePredictor.remainingTime = 0;
+}
+
+void updateTimePredictor() {
+    unsigned long currentTime = millis();
+    float currentTemp = TankSensor.avgTemp;
+    float currentAlcohol = get_alcohol(currentTemp);
+    
+    // Обновляем скорость изменения температуры
+    unsigned long timeDelta = (currentTime - timePredictor.lastUpdateTime) / 1000; // в секундах
+    if (timeDelta >= 60) { // обновляем каждую минуту
+        timePredictor.tempChangeRate = (currentTemp - timePredictor.lastTemp) / (timeDelta / 60.0); // градусов в минуту
+        timePredictor.lastTemp = currentTemp;
+        timePredictor.lastUpdateTime = currentTime;
+        
+        // Прогнозируем общее время на основе текущих данных
+        float remainingAlcoholDelta = 0;
+        float targetTemp = 0;
+        
+        if (program[ProgramNum].WType == "T") {
+            targetTemp = program[ProgramNum].Speed;
+            if (timePredictor.tempChangeRate > 0) {
+                float tempRemaining = targetTemp - currentTemp;
+                timePredictor.remainingTime = tempRemaining / timePredictor.tempChangeRate;
+            }
+        } 
+        else if (program[ProgramNum].WType == "A" || program[ProgramNum].WType == "S") {
+            float targetAlcohol = program[ProgramNum].Speed;
+            if (program[ProgramNum].WType == "S") {
+                targetAlcohol *= get_alcohol(TankSensor.StartProgTemp);
+            }
+            remainingAlcoholDelta = currentAlcohol - targetAlcohol;
+            
+            // Прогнозируем на основе скорости изменения спирта
+            float alcoholChangeRate = (timePredictor.initialAlcohol - currentAlcohol) / 
+                                    ((currentTime - timePredictor.startTime) / 60000.0); // % в минуту
+            
+            if (alcoholChangeRate > 0) {
+                timePredictor.remainingTime = remainingAlcoholDelta / alcoholChangeRate;
+            }
+        }
+        
+        // Обновляем общее прогнозируемое время
+        float elapsedMinutes = (currentTime - timePredictor.startTime) / 60000.0;
+        timePredictor.predictedTotalTime = elapsedMinutes + timePredictor.remainingTime;
+        
+        // Отправляем информацию о прогнозе
+        String msg = "Прогноз: осталось " + String(int(timePredictor.remainingTime)) + 
+                    " мин. Всего: " + String(int(timePredictor.predictedTotalTime)) + " мин.";
+        SendMsg(msg, NOTIFY_MSG);
+    }
+}
+
+float calculateRemainingTime() {
+    return timePredictor.remainingTime;
 }

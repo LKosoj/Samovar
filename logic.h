@@ -379,22 +379,35 @@ String get_Samovar_Status() {
       SamovarStatus = SamovarStatus + "Ожидание засыпи солода";
     } else if (program[ProgramNum].WType == "P") {
       if (begintime == 0) {
-        SamovarStatus = SamovarStatus + "Нагрев до " + String(program[ProgramNum].Temp);
+        SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Temp) + "°; Разогрев";
+        if (TankSensor.avgTemp < program[ProgramNum].Temp - 0.5) {
+          SamovarStatus += "; Текущая Т: " + String(TankSensor.avgTemp) + "°";
+        }
       } else {
-        SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Time - (millis() - begintime) / 1000 / 60) + " мин";
+        SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Temp) + "°";
       }
     } else if (program[ProgramNum].WType == "C") {
       SamovarStatus = SamovarStatus + "Охлаждение до " + String(program[ProgramNum].Temp);
     } else if (program[ProgramNum].WType == "W") {
-      SamovarStatus = SamovarStatus + "Ожидание. Нажмите 'Следующая программа'";
+      SamovarStatus = SamovarStatus + "Ожидание. Нажмите 'Следующая программа'; ";
     } else if (program[ProgramNum].WType == "A") {
       SamovarStatus = SamovarStatus + "Автокалибровка. После завершения питание будет выключено";
     } else if (program[ProgramNum].WType == "B") {
       if (begintime == 0) {
-        SamovarStatus = SamovarStatus + "; Кипячение - нагрев";
+        SamovarStatus = SamovarStatus + "Кипячение - нагрев";
       } else {
-        SamovarStatus = SamovarStatus + "; Кипячение " + String(program[ProgramNum].Time - (millis() - begintime) / 1000 / 60) + " мин";
+        SamovarStatus = SamovarStatus + "Кипячение " + String(program[ProgramNum].Time) + " мин";
       }
+    } else if (program[ProgramNum].WType == "F") {
+      SamovarStatus = SamovarStatus + "Ферментация; Поддержание температуры " + String(program[ProgramNum].Temp) + "°";
+    } else if (!PowerOn) {
+      SamovarStatus = "Выключено";
+    }
+
+    if (PowerOn && (program[ProgramNum].WType == "P" || program[ProgramNum].WType == "B") && begintime > 0) {
+      float progress = ((float)(millis() - begintime) / (program[ProgramNum].Time * 60 * 1000)) * 100;
+      if (progress > 100) progress = 100;
+      SamovarStatus += "; Прогресс: " + String(progress, 1) + "%";
     }
   }
 

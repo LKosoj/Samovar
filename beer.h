@@ -119,7 +119,21 @@ void run_beer_program(uint8_t num) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
     beer_finish();
   } else {
-    SendMsg("Переход к строке программы №" + String((num + 1)), NOTIFY_MSG);
+    String msg = "Переход к строке программы №" + String((num + 1));
+    if (program[num].WType == "M") {
+      msg += "; Нагрев до температуры засыпи солода: " + String(program[num].Temp) + "°";
+    } else if (program[num].WType == "P") {
+      msg += "; Температурная пауза: " + String(program[num].Temp) + "°, время: " + String(program[num].Time) + " мин";
+    } else if (program[num].WType == "B") {
+      msg += "; Кипячение, время: " + String(program[num].Time) + " мин";
+    } else if (program[num].WType == "C") {
+      msg += "; Охлаждение до температуры: " + String(program[num].Temp) + "°";
+    } else if (program[num].WType == "F") {
+      msg += "; Ферментация, поддержание температуры: " + String(program[num].Temp) + "°";
+    } else if (program[num].WType == "W") {
+      msg += "; Режим ожидания";
+    }
+    SendMsg(msg, NOTIFY_MSG);
   }
   //сбрасываем переменные для мешалки и насоса
   alarm_c_low_min = 0;  //мешалка вкл
@@ -244,7 +258,7 @@ void check_alarm_beer() {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
-      SendMsg("Достигнута температурная пауза. Ждем завершения.", NOTIFY_MSG);
+      SendMsg("Достигнута температурная пауза " + String(program[ProgramNum].Temp) + "°. Ждем " + String(program[ProgramNum].Time) + " минут.", NOTIFY_MSG);
     }
   }
 

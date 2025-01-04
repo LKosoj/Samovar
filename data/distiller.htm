@@ -97,16 +97,27 @@
     var Messages_Array = []; //текущий массив сообщений
     var sound_is_playing = false; //звук сейчас восспроизводится
     var is_ALARM = false; //признак тревоги
+    var sound_play_count = 0; //счетчик воспроизведений сигнала
+    const MAX_SOUND_PLAYS = 2; //максимальное количество воспроизведений
 
     const sound = new Audio('alarm.mp3');
-    sound.loop = true;
+    sound.loop = false; // Отключаем бесконечное повторение
     sound.preload = 'auto';
     sound.autoplay = false;
 
     function playSound (play) {
-      if (!sound_is_playing && play) {
+      if (!sound_is_playing && play && sound_play_count < MAX_SOUND_PLAYS) {
         sound.play();
         sound_is_playing = true;
+        sound_play_count++;
+        
+        // Когда звук закончится
+        sound.onended = function() {
+          sound_is_playing = false;
+          if (sound_play_count < MAX_SOUND_PLAYS && is_ALARM) {
+            setTimeout(() => playSound(true), 2000); // Пауза 2 секунды между повторами
+          }
+        };
       } else if (sound_is_playing && !play) {
         sound.pause();
         sound_is_playing = false;
@@ -154,7 +165,6 @@
     }
 
     function removeLastMessage () {
-      //удаляям последнее сообщение
       Messages_Array.pop();
       if (Messages_Array.length > 0) {
         lastMsg = Messages_Array[Messages_Array.length - 1];
@@ -165,7 +175,7 @@
         Messages_Array[Messages_Array.length - 1] = changed;
       } else {
         is_ALARM = false;
-        IsCalmingPause = false;
+        sound_play_count = 0; // Сбрасываем счетчик когда все сообщения удалены
       }
       showMessages();
     }
@@ -201,6 +211,7 @@
 
     function clearMessages () {
       Messages_Array = [];
+      sound_play_count = 0; // Сбрасываем счетчик при очистке сообщений
       showMessages();
     }
 
@@ -473,6 +484,14 @@
             addMessage(myObj.Msg, myObj.msglvl);
           }
 
+          // Обновляем значения прогноза времени
+          if (myObj.TimeRemaining !== undefined) {
+            document.getElementById('TimeRemaining').innerHTML = myObj.TimeRemaining;
+          }
+          if (myObj.TotalTime !== undefined) {
+            document.getElementById('TotalTime').innerHTML = myObj.TotalTime;
+          }
+
           if (myObj.LogMsg && myObj.LogMsg !== "") {
             console.log(myObj.crnt_tm + "; " + myObj.LogMsg);
           }
@@ -639,6 +658,21 @@
         <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
           Статус: <span id='Status'></span>
         </span>
+      </div>
+
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+          <div class="text">
+            Осталось времени (прогноз): &nbsp;&nbsp;
+            <span id='TimeRemaining' style="font-size: 1.5em; font-weight: bold;">--</span>
+            мин
+          </div>
+          <div class="text">
+            Общее время: &nbsp;
+            <span id='TotalTime' style="font-size: 1.5em; font-weight: bold;">--</span>
+            мин
+          </div>
+        </div>
       </div>
 
       <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em;">
