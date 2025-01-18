@@ -140,10 +140,15 @@ void DS_getvalue(void) {
   //  PipeSensor.avgTemp = 50;
   //  WaterSensor.avgTemp += 0.1;
   //  if (WaterSensor.avgTemp > 4) WaterSensor.avgTemp = 25;
-  //  if (TankSensor.avgTemp < 90) TankSensor.avgTemp = 90;
+  //  if (SteamSensor.avgTemp < 20) SteamSensor.avgTemp = 20;
   //  else {
-  //    if (!boil_started)TankSensor.avgTemp += 0.002;
-  //    else TankSensor.avgTemp += 0.01;
+  //    if (!boil_started)SteamSensor.avgTemp += 1;
+  //    else SteamSensor.avgTemp += 0.001;
+  //  }
+  //  if (TankSensor.avgTemp < 85) TankSensor.avgTemp = 85;
+  //  else {
+  //    if (!boil_started)TankSensor.avgTemp += 0.2;
+  //    else TankSensor.avgTemp += 0.001;
   //  }
   //
   //    SteamSensor.avgTemp += SamSetup.DeltaSteamTemp;
