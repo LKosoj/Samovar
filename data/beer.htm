@@ -608,27 +608,6 @@
       calc_program();
     }
 
-    window.onload = function() {
-      headers = document.querySelectorAll("[data-name='spoiler-title']");
-      headers.forEach(function(item) {
-        item.addEventListener("click", headerClick);
-      });
-      getProgram();
-      document.getElementById("WProgram").addEventListener("change", function(event) {
-        if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Program error!");
-          return;
-        }
-        var element = document.getElementById("prg");
-        while (element.firstChild) {
-          element.removeChild(element.firstChild);
-        }
-        getProgram();
-      });
-      setPowerUnit();
-      AddLuaButtons();
-    };
-
     function run_lua (num) {
       sendbutton("lua=" + num);
     };
@@ -669,7 +648,31 @@
       return counter;
     }
 
-  </script>
+    window.onload = function() {
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      headers = document.querySelectorAll("[data-name='spoiler-title']");
+      headers.forEach(function(item) {
+        item.addEventListener("click", headerClick);
+      });
+      getProgram();
+      document.getElementById("WProgram").addEventListener("change", function(event) {
+        if (!check_program(document.getElementById('WProgram').value)) {
+          alert("Program error!");
+          return;
+        }
+        var element = document.getElementById("prg");
+        while (element.firstChild) {
+          element.removeChild(element.firstChild);
+        }
+        getProgram();
+      });
+      setPowerUnit();
+      AddLuaButtons();
+    });
+
+</script>
 </head>
 
 <body>

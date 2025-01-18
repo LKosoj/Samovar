@@ -531,26 +531,6 @@
       xhttp.send();
     };
 
-
-    window.onload = function() {
-      headers = document.querySelectorAll("[data-name='spoiler-title']");
-      headers.forEach(function(item) {
-        item.addEventListener("click", headerClick);
-      });
-
-      getProgram();
-      document.getElementById("WProgram").addEventListener("change", function(event) {
-        var element = document.getElementById("prg");
-        while (element.firstChild) {
-          element.removeChild(element.firstChild);
-        }
-        getProgram();
-      });
-
-      setPowerUnit();
-      AddLuaButtons();
-    };
-
     function run_lua (num) {
       sendbutton("lua=" + num);
     };
@@ -560,6 +540,27 @@
       sendbutton("luastr=" + str);
     };
     
+    window.onload = function() {
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      headers = document.querySelectorAll("[data-name='spoiler-title']");
+      headers.forEach(function(item) {
+        item.addEventListener("click", headerClick);
+      });
+
+      AddLuaButtons();
+      document.getElementById("WProgram").addEventListener("change", function(event) {
+        var element = document.getElementById("prg");
+        while (element.firstChild) {
+          element.removeChild(element.firstChild);
+        }
+        getProgram();
+      });
+      setPowerUnit();
+      getProgram();
+    });
+
   </script>
 </head>
 

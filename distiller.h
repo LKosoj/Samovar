@@ -38,7 +38,11 @@ float calculateRemainingTime();
 void resetTimePredictor();
 
 void distiller_proc() {
-  if (SamovarStatusInt != 2000) return;
+//    SendMsg("Статус: " + String(SamovarStatusInt) + 
+//            ", Режим: " + String(Samovar_Mode) + 
+//            ", PowerOn: " + String(PowerOn), NOTIFY_MSG);
+    
+  if (SamovarStatusInt != 1000) return;
 
   if (!PowerOn) {
 #ifdef USE_MQTT
@@ -352,9 +356,9 @@ void updateTimePredictor() {
         timePredictor.predictedTotalTime = elapsedMinutes + timePredictor.remainingTime;
         
         // Отправляем информацию о прогнозе
-        String msg = "Прогноз: осталось " + String(int(timePredictor.remainingTime)) + 
-                    " мин. Всего: " + String(int(timePredictor.predictedTotalTime)) + " мин.";
-        SendMsg(msg, NOTIFY_MSG);
+        //String msg = "Прогноз: осталось " + String(int(timePredictor.remainingTime)) + 
+        //            " мин. Всего: " + String(int(timePredictor.predictedTotalTime)) + " мин.";
+        //SendMsg(msg, NOTIFY_MSG);
     }
 }
 

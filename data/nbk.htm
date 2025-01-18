@@ -458,8 +458,19 @@
       xhttp.send();
     };
 
+    function run_lua (num) {
+      sendbutton("lua=" + num);
+    };
+
+    function run_strlua() {
+      var str = document.getElementById('lua_str_i').value.replace(" ", "^");
+      sendbutton("luastr=" + str);
+    };
     
     window.onload = function() {
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
@@ -474,18 +485,9 @@
       });
       setPowerUnit();
       AddLuaButtons();
-    };
+    });
 
-    function run_lua (num) {
-      sendbutton("lua=" + num);
-    };
-
-    function run_strlua() {
-      var str = document.getElementById('lua_str_i').value.replace(" ", "^");
-      sendbutton("luastr=" + str);
-    };
-    
-  </script>
+</script>
 </head>
 
 

@@ -456,7 +456,21 @@
       sliderChange();
     }
 
+    function run_lua (num) {
+      sendbutton("lua=" + num);
+      sleep(2000);
+    };
+
+    function run_strlua() {
+      var str = document.getElementById('lua_str_i').value.replace(" ", "^");
+      sendbutton("luastr=" + str);
+      sleep(2000);
+    };
+
     window.onload = function() {
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
@@ -468,19 +482,8 @@
 
       setPowerUnit();
       AddLuaButtons();
-    };
+    });
 
-    function run_lua (num) {
-      sendbutton("lua=" + num);
-      sleep(2000);
-    };
-
-    function run_strlua() {
-      var str = document.getElementById('lua_str_i').value.replace(" ", "^");
-      sendbutton("luastr=" + str);
-      sleep(2000);
-    };
-    
   </script>
 </head>
 
