@@ -1,3 +1,4 @@
+#pragma once
 #ifndef __SAMOVAR_I_H_
 #define __SAMOVAR_I_H_
 #include <Arduino.h>
