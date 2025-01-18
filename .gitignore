@@ -17,3 +17,4 @@ libraries/ESP_Async_WebServer/src/.vscode/lua.booster.lint.json
 /.pio
 /.vscode
 /data/.vscode
+/.specstory
