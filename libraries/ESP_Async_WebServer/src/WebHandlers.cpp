@@ -235,7 +235,7 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest* request) {
 
     AsyncWebServerResponse* response;
 
-    not_modified = true;
+    not_modified = false;
     if (not_modified){
       request->_tempFile.close();
       response = new AsyncBasicResponse(304); // Not modified
