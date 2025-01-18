@@ -48,10 +48,10 @@
 
 #include "literals.h"
 
-#define ASYNCWEBSERVER_VERSION          "3.6.0"
+#define ASYNCWEBSERVER_VERSION          "3.4.5"
 #define ASYNCWEBSERVER_VERSION_MAJOR    3
-#define ASYNCWEBSERVER_VERSION_MINOR    6
-#define ASYNCWEBSERVER_VERSION_REVISION 0
+#define ASYNCWEBSERVER_VERSION_MINOR    4
+#define ASYNCWEBSERVER_VERSION_REVISION 5
 #define ASYNCWEBSERVER_FORK_mathieucarbou
 
 #ifdef ASYNCWEBSERVER_REGEX
@@ -285,12 +285,12 @@ class AsyncWebServerRequest {
     void setHandler(AsyncWebHandler* handler) { _handler = handler; }
 
 #ifndef ESP8266
-    [[deprecated("All headers are now collected. Use removeHeader(name) or AsyncHeaderFreeMiddleware if you really need to free some headers.")]]
+    [[deprecated("All headers are now collected. Use removeHeader(name) or HeaderFreeMiddleware if you really need to free some headers.")]]
 #endif
     void addInterestingHeader(__unused const char* name) {
     }
 #ifndef ESP8266
-    [[deprecated("All headers are now collected. Use removeHeader(name) or AsyncHeaderFreeMiddleware if you really need to free some headers.")]]
+    [[deprecated("All headers are now collected. Use removeHeader(name) or HeaderFreeMiddleware if you really need to free some headers.")]]
 #endif
     void addInterestingHeader(__unused const String& name) {
     }
@@ -557,8 +557,8 @@ class AsyncMiddlewareChain {
     std::list<AsyncMiddleware*> _middlewares;
 };
 
-// AsyncAuthenticationMiddleware is a middleware that checks if the request is authenticated
-class AsyncAuthenticationMiddleware : public AsyncMiddleware {
+// AuthenticationMiddleware is a middleware that checks if the request is authenticated
+class AuthenticationMiddleware : public AsyncMiddleware {
   public:
     void setUsername(const char* username);
     void setPassword(const char* password);
@@ -601,11 +601,11 @@ class AsyncAuthenticationMiddleware : public AsyncMiddleware {
 };
 
 using ArAuthorizeFunction = std::function<bool(AsyncWebServerRequest* request)>;
-// AsyncAuthorizationMiddleware is a middleware that checks if the request is authorized
-class AsyncAuthorizationMiddleware : public AsyncMiddleware {
+// AuthorizationMiddleware is a middleware that checks if the request is authorized
+class AuthorizationMiddleware : public AsyncMiddleware {
   public:
-    AsyncAuthorizationMiddleware(ArAuthorizeFunction authorizeConnectHandler) : _code(403), _authz(authorizeConnectHandler) {}
-    AsyncAuthorizationMiddleware(int code, ArAuthorizeFunction authorizeConnectHandler) : _code(code), _authz(authorizeConnectHandler) {}
+    AuthorizationMiddleware(ArAuthorizeFunction authorizeConnectHandler) : _code(403), _authz(authorizeConnectHandler) {}
+    AuthorizationMiddleware(int code, ArAuthorizeFunction authorizeConnectHandler) : _code(code), _authz(authorizeConnectHandler) {}
 
     void run(AsyncWebServerRequest* request, ArMiddlewareNext next) { return _authz && !_authz(request) ? request->send(_code) : next(); }
 
@@ -615,7 +615,7 @@ class AsyncAuthorizationMiddleware : public AsyncMiddleware {
 };
 
 // remove all headers from the incoming request except the ones provided in the constructor
-class AsyncHeaderFreeMiddleware : public AsyncMiddleware {
+class HeaderFreeMiddleware : public AsyncMiddleware {
   public:
     void keep(const char* name) { _toKeep.push_back(name); }
     void unKeep(const char* name) { _toKeep.erase(std::remove(_toKeep.begin(), _toKeep.end(), name), _toKeep.end()); }
@@ -627,7 +627,7 @@ class AsyncHeaderFreeMiddleware : public AsyncMiddleware {
 };
 
 // filter out specific headers from the incoming request
-class AsyncHeaderFilterMiddleware : public AsyncMiddleware {
+class HeaderFilterMiddleware : public AsyncMiddleware {
   public:
     void filter(const char* name) { _toRemove.push_back(name); }
     void unFilter(const char* name) { _toRemove.erase(std::remove(_toRemove.begin(), _toRemove.end(), name), _toRemove.end()); }
@@ -639,7 +639,7 @@ class AsyncHeaderFilterMiddleware : public AsyncMiddleware {
 };
 
 // curl-like logging of incoming requests
-class AsyncLoggingMiddleware : public AsyncMiddleware {
+class LoggingMiddleware : public AsyncMiddleware {
   public:
     void setOutput(Print& output) { _out = &output; }
     void setEnabled(bool enabled) { _enabled = enabled; }
@@ -653,7 +653,7 @@ class AsyncLoggingMiddleware : public AsyncMiddleware {
 };
 
 // CORS Middleware
-class AsyncCorsMiddleware : public AsyncMiddleware {
+class CorsMiddleware : public AsyncMiddleware {
   public:
     void setOrigin(const char* origin) { _origin = origin; }
     void setMethods(const char* methods) { _methods = methods; }
@@ -674,7 +674,7 @@ class AsyncCorsMiddleware : public AsyncMiddleware {
 };
 
 // Rate limit Middleware
-class AsyncRateLimitMiddleware : public AsyncMiddleware {
+class RateLimitMiddleware : public AsyncMiddleware {
   public:
     void setMaxRequests(size_t maxRequests) { _maxRequests = maxRequests; }
     void setWindowSize(uint32_t seconds) { _windowSizeMillis = seconds * 1000; }
@@ -727,7 +727,7 @@ class AsyncWebRewrite {
 class AsyncWebHandler : public AsyncMiddlewareChain {
   protected:
     ArRequestFilterFunction _filter = nullptr;
-    AsyncAuthenticationMiddleware* _authMiddleware = nullptr;
+    AuthenticationMiddleware* _authMiddleware = nullptr;
 
   public:
     AsyncWebHandler() {}

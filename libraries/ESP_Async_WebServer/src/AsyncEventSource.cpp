@@ -291,8 +291,11 @@ void AsyncEventSourceClient::_onDisconnect() {
 }
 
 void AsyncEventSourceClient::close() {
-  if (_client)
+  if (_client){
     _client->close();
+    //// Очищаем указатель после закрытия
+    _client = nullptr;
+  }
 }
 
 bool AsyncEventSourceClient::send(const char* message, const char* event, uint32_t id, uint32_t reconnect) {
@@ -332,7 +335,7 @@ void AsyncEventSourceClient::set_max_inflight_bytes(size_t value) {
 /*  AsyncEventSource  */
 
 void AsyncEventSource::authorizeConnect(ArAuthorizeConnectHandler cb) {
-  AsyncAuthorizationMiddleware* m = new AsyncAuthorizationMiddleware(401, cb);
+  AuthorizationMiddleware* m = new AuthorizationMiddleware(401, cb);
   m->_freeOnRemoval = true;
   addMiddleware(m);
 }

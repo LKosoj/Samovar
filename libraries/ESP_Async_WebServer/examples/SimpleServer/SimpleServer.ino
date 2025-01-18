@@ -110,27 +110,27 @@ AsyncWebSocket ws("/ws");
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // log incoming requests
-AsyncLoggingMiddleware requestLogger;
+LoggingMiddleware requestLogger;
 
 // CORS
-AsyncCorsMiddleware cors;
+CorsMiddleware cors;
 
 // maximum 5 requests per 10 seconds
-AsyncRateLimitMiddleware rateLimit;
+RateLimitMiddleware rateLimit;
 
 // filter out specific headers from the incoming request
-AsyncHeaderFilterMiddleware headerFilter;
+HeaderFilterMiddleware headerFilter;
 
 // remove all headers from the incoming request except the ones provided in the constructor
-AsyncHeaderFreeMiddleware headerFree;
+HeaderFreeMiddleware headerFree;
 
 // basicAuth
-AsyncAuthenticationMiddleware basicAuth;
-AsyncAuthenticationMiddleware basicAuthHash;
+AuthenticationMiddleware basicAuth;
+AuthenticationMiddleware basicAuthHash;
 
 // simple digest authentication
-AsyncAuthenticationMiddleware digestAuth;
-AsyncAuthenticationMiddleware digestAuthHash;
+AuthenticationMiddleware digestAuth;
+AuthenticationMiddleware digestAuthHash;
 
 // complex authentication which adds request attributes for the next middlewares and handler
 AsyncMiddlewareFunction complexAuth([](AsyncWebServerRequest* request, ArMiddlewareNext next) {
@@ -145,7 +145,7 @@ AsyncMiddlewareFunction complexAuth([](AsyncWebServerRequest* request, ArMiddlew
   request->getResponse()->addHeader("X-Rate-Limit", "200");
 });
 
-AsyncAuthorizationMiddleware authz([](AsyncWebServerRequest* request) { return request->getAttribute("role") == "staff"; });
+AuthorizationMiddleware authz([](AsyncWebServerRequest* request) { return request->getAttribute("role") == "staff"; });
 
 int wsClients = 0;
 
