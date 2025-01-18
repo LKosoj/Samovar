@@ -295,6 +295,12 @@ static GButton btn(BTN_PIN);
 static GButton alarm_btn(ALARM_BTN_PIN);
 #endif
 
+#ifdef COLUMN_WETTING
+#ifndef USE_HEAD_LEVEL_SENSOR
+#undef COLUMN_WETTING
+#endif
+#endif
+
 static double Input, Output, Setpoint;
 static double Kp, Ki, Kd;
 
