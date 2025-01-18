@@ -41,6 +41,9 @@ void set_boiling();
 // Проверка ошибок питания
 void check_power_error();
 #endif
+#ifdef COLUMN_WETTING
+bool column_wetting();
+#endif
 
 void SendMsg(const String &m, MESSAGE_TYPE msg_type);
 
@@ -830,19 +833,29 @@ void check_alarm() {
   if (SamovarStatusInt == 50 && SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
 #ifdef USE_WATER_PUMP
     //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
-    wp_count = 0;
+    wp_count = -5;
 #endif
-    //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
-    SamovarStatusInt = 51;
 
-    SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
-    set_buzzer(true);
-#ifdef SAMOVAR_USE_POWER
-    set_current_power(program[0].Power);
-#else
-    current_power_mode = POWER_WORK_MODE;
-    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+    bool column_wetting_result = true;
+    // Смачивание насадки колонны
+#ifdef COLUMN_WETTING
+    column_wetting_result = column_wetting();
 #endif
+
+    if (column_wetting_result) {
+
+        //достигли заданной температуры на разгоне, переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
+        SamovarStatusInt = 51;
+
+        SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
+        set_buzzer(true);
+#ifdef SAMOVAR_USE_POWER
+        set_current_power(program[0].Power);
+#else
+        current_power_mode = POWER_WORK_MODE;
+        digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+#endif
+    }
   }
 
   if (SamovarStatusInt == 51 && !boil_started) {
@@ -1445,5 +1458,61 @@ unsigned int hexToDec(String hexString) {
   }
 
   return decValue;
+}
+#endif
+
+#ifdef COLUMN_WETTING
+// Функция для смачивания насадки колонны
+bool column_wetting() {
+  // Статические переменные для сохранения состояния между вызовами
+  static unsigned long wetting_start_time = 0;
+  static bool wetting_started = false;
+  static bool wetting_completed = false;
+
+  // Проверяем, что датчик уровня флегмы установлен
+  #ifdef USE_HEAD_LEVEL_SENSOR
+  if (SamSetup.UseHLS) {
+    // Инициализация процесса смачивания
+    if (!wetting_started) {
+      SendMsg(F("Начало смачивания насадки колонны. Следите за уровнем флегмы!"), WARNING_MSG);
+      
+      wetting_start_time = millis();
+      wetting_started = true;
+      wetting_completed = false;
+      
+    }
+
+    // Максимальное время смачивания - 60 секунд
+    unsigned long max_wetting_time = 60 * 1000;
+    
+    // Проверяем условия завершения
+    if (whls.isHolded()) {
+      // Датчик сработал - смачивание успешно
+      SendMsg(F("Насадка колонны успешно смочена"), NOTIFY_MSG);
+      
+      // Сбрасываем статические переменные
+      wetting_started = false;
+      wetting_completed = true;
+      return true;
+    }
+    
+    // Проверяем превышение максимального времени
+    if (millis() - wetting_start_time >= max_wetting_time) {
+      SendMsg(F("Не удалось смочить насадку колонны за отведенное время"), WARNING_MSG);
+      
+      // Сбрасываем статические переменные
+      wetting_started = false;
+      wetting_completed = false;
+      return true;  // Завершаем попытку
+    }
+    
+    // Продолжаем процесс смачивания
+    return false;
+  }
+  #endif
+
+  // Если датчик не установлен
+  SendMsg(F("Датчик уровня флегмы не установлен, смачивание насадки невозможно"), WARNING_MSG);
+  return true;  // Немедленно завершаем
 }
 #endif
