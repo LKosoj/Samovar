@@ -53,24 +53,24 @@ void AsyncMiddlewareChain::_runChain(AsyncWebServerRequest* request, ArMiddlewar
   return next();
 }
 
-void AsyncAuthenticationMiddleware::setUsername(const char* username) {
+void AuthenticationMiddleware::setUsername(const char* username) {
   _username = username;
   _hasCreds = _username.length() && _credentials.length();
 }
 
-void AsyncAuthenticationMiddleware::setPassword(const char* password) {
+void AuthenticationMiddleware::setPassword(const char* password) {
   _credentials = password;
   _hash = false;
   _hasCreds = _username.length() && _credentials.length();
 }
 
-void AsyncAuthenticationMiddleware::setPasswordHash(const char* hash) {
+void AuthenticationMiddleware::setPasswordHash(const char* hash) {
   _credentials = hash;
   _hash = _credentials.length();
   _hasCreds = _username.length() && _credentials.length();
 }
 
-bool AsyncAuthenticationMiddleware::generateHash() {
+bool AuthenticationMiddleware::generateHash() {
   // ensure we have all the necessary data
   if (!_hasCreds)
     return false;
@@ -95,7 +95,7 @@ bool AsyncAuthenticationMiddleware::generateHash() {
   }
 }
 
-bool AsyncAuthenticationMiddleware::allowed(AsyncWebServerRequest* request) const {
+bool AuthenticationMiddleware::allowed(AsyncWebServerRequest* request) const {
   if (_authMethod == AsyncAuthType::AUTH_NONE)
     return true;
 
@@ -108,11 +108,11 @@ bool AsyncAuthenticationMiddleware::allowed(AsyncWebServerRequest* request) cons
   return request->authenticate(_username.c_str(), _credentials.c_str(), _realm.c_str(), _hash);
 }
 
-void AsyncAuthenticationMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
+void AuthenticationMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
   return allowed(request) ? next() : request->requestAuthentication(_authMethod, _realm.c_str(), _authFailMsg.c_str());
 }
 
-void AsyncHeaderFreeMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
+void HeaderFreeMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
   std::vector<const char*> reqHeaders;
   request->getHeaderNames(reqHeaders);
   for (const char* h : reqHeaders) {
@@ -130,13 +130,13 @@ void AsyncHeaderFreeMiddleware::run(AsyncWebServerRequest* request, ArMiddleware
   next();
 }
 
-void AsyncHeaderFilterMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
+void HeaderFilterMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
   for (auto it = _toRemove.begin(); it != _toRemove.end(); ++it)
     request->removeHeader(*it);
   next();
 }
 
-void AsyncLoggingMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
+void LoggingMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
   if (!isEnabled()) {
     next();
     return;
@@ -194,7 +194,7 @@ void AsyncLoggingMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNex
   }
 }
 
-void AsyncCorsMiddleware::addCORSHeaders(AsyncWebServerResponse* response) {
+void CorsMiddleware::addCORSHeaders(AsyncWebServerResponse* response) {
   response->addHeader(asyncsrv::T_CORS_ACAO, _origin.c_str());
   response->addHeader(asyncsrv::T_CORS_ACAM, _methods.c_str());
   response->addHeader(asyncsrv::T_CORS_ACAH, _headers.c_str());
@@ -202,7 +202,7 @@ void AsyncCorsMiddleware::addCORSHeaders(AsyncWebServerResponse* response) {
   response->addHeader(asyncsrv::T_CORS_ACMA, String(_maxAge).c_str());
 }
 
-void AsyncCorsMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
+void CorsMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
   // Origin header ? => CORS handling
   if (request->hasHeader(asyncsrv::T_CORS_O)) {
     // check if this is a preflight request => handle it and return
@@ -226,7 +226,7 @@ void AsyncCorsMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext n
   }
 }
 
-bool AsyncRateLimitMiddleware::isRequestAllowed(uint32_t& retryAfterSeconds) {
+bool RateLimitMiddleware::isRequestAllowed(uint32_t& retryAfterSeconds) {
   uint32_t now = millis();
 
   while (!_requestTimes.empty() && _requestTimes.front() <= now - _windowSizeMillis)
@@ -244,7 +244,7 @@ bool AsyncRateLimitMiddleware::isRequestAllowed(uint32_t& retryAfterSeconds) {
   return true;
 }
 
-void AsyncRateLimitMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
+void RateLimitMiddleware::run(AsyncWebServerRequest* request, ArMiddlewareNext next) {
   uint32_t retryAfterSeconds;
   if (isRequestAllowed(retryAfterSeconds)) {
     next();

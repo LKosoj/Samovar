@@ -29,7 +29,7 @@ AsyncWebHandler& AsyncWebHandler::setFilter(ArRequestFilterFunction fn) {
 }
 AsyncWebHandler& AsyncWebHandler::setAuthentication(const char* username, const char* password, AsyncAuthType authMethod) {
   if (!_authMiddleware) {
-    _authMiddleware = new AsyncAuthenticationMiddleware();
+    _authMiddleware = new AuthenticationMiddleware();
     _authMiddleware->_freeOnRemoval = true;
     addMiddleware(_authMiddleware);
   }
@@ -70,12 +70,12 @@ AsyncStaticWebHandler& AsyncStaticWebHandler::setIsDir(bool isDir) {
 }
 
 AsyncStaticWebHandler& AsyncStaticWebHandler::setDefaultFile(const char* filename) {
-  _default_file = filename;
+  _default_file = String(filename);
   return *this;
 }
 
 AsyncStaticWebHandler& AsyncStaticWebHandler::setCacheControl(const char* cache_control) {
-  _cache_control = cache_control;
+  _cache_control = String(cache_control);
   return *this;
 }
 
@@ -85,20 +85,16 @@ AsyncStaticWebHandler& AsyncStaticWebHandler::setLastModified(const char* last_m
 }
 
 AsyncStaticWebHandler& AsyncStaticWebHandler::setLastModified(struct tm* last_modified) {
-  char result[30];
-#ifdef ESP8266
-  auto formatP = PSTR("%a, %d %b %Y %H:%M:%S GMT");
+  auto formatP = PSTR("%a, %d %b %Y %H:%M:%S %Z");
   char format[strlen_P(formatP) + 1];
   strcpy_P(format, formatP);
-#else
-  static constexpr const char* format = "%a, %d %b %Y %H:%M:%S GMT";
-#endif
 
+  char result[30];
   strftime(result, sizeof(result), format, last_modified);
-  _last_modified = result;
-  return *this;
+  return setLastModified((const char*)result);
 }
 
+#ifdef ESP8266
 AsyncStaticWebHandler& AsyncStaticWebHandler::setLastModified(time_t last_modified) {
   return setLastModified((struct tm*)gmtime(&last_modified));
 }
@@ -109,7 +105,7 @@ AsyncStaticWebHandler& AsyncStaticWebHandler::setLastModified() {
     return *this;
   return setLastModified(last_modified);
 }
-
+#endif
 bool AsyncStaticWebHandler::canHandle(AsyncWebServerRequest* request) const {
   return request->isHTTP() && request->method() == HTTP_GET && request->url().startsWith(_uri) && _getFile(request);
 }
@@ -198,60 +194,59 @@ uint8_t AsyncStaticWebHandler::_countBits(const uint8_t value) const {
 
 void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest* request) {
   // Get the filename from request->_tempObject and free it
-  String filename((char*)request->_tempObject);
+  String filename = String((char*)request->_tempObject);
   free(request->_tempObject);
   request->_tempObject = NULL;
 
-  if (request->_tempFile != true){
-    request->send(404);
-    return;
-  }
-
+  if (request->_tempFile == true) {
     time_t lw = request->_tempFile.getLastWrite(); // get last file mod time (if supported by FS)
     // set etag to lastmod timestamp if available, otherwise to size
     String etag;
     if (lw) {
-      setLastModified(lw);
+      setLastModified(gmtime(&lw));
 #if defined(TARGET_RP2040)
       // time_t == long long int
-      constexpr size_t len = 1 + 8 * sizeof(time_t);
+      const size_t len = 1 + 8 * sizeof(time_t);
       char buf[len];
-      char* ret = lltoa(lw ^ request->_tempFile.size(), buf, len, 10);
+      char* ret = lltoa(lw, buf, len, 10);
       etag = ret ? String(ret) : String(request->_tempFile.size());
 #else
-      etag = lw ^ request->_tempFile.size();   // etag combines file size and lastmod timestamp
+      etag = String(lw);
 #endif
     } else {
-      etag = request->_tempFile.size();
+      etag = String(request->_tempFile.size());
     }
-
-    bool not_modified = false;
-
-    // if-none-match has precedence over if-modified-since
-    if (request->hasHeader(T_INM))
-      not_modified = request->header(T_INM).equals(etag);
-    else if (_last_modified.length())
-      not_modified = request->header(T_IMS).equals(_last_modified);
-
-    AsyncWebServerResponse* response;
-
-    not_modified = true;
-    if (not_modified){
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    ///////REMOVE THIS!!!!
+    if (false && _last_modified.length() && _last_modified == request->header(T_IMS)) {
       request->_tempFile.close();
-      response = new AsyncBasicResponse(304); // Not modified
-    } else {
-      response = new AsyncFileResponse(request->_tempFile, filename, emptyString, false, _callback);
-    }
-
-    response->addHeader(T_ETag, etag.c_str());
-
-    if (_last_modified.length())
-      response->addHeader(T_Last_Modified, _last_modified.c_str());
-    if (_cache_control.length())
+      request->send(304); // Not modified
+    } else if (false && _cache_control.length() && request->hasHeader(T_INM) && request->header(T_INM).equals(etag)) {
+      request->_tempFile.close();
+      AsyncWebServerResponse* response = new AsyncBasicResponse(304); // Not modified
       response->addHeader(T_Cache_Control, _cache_control.c_str());
-  
-    request->send(response);
-
+      response->addHeader(T_ETag, etag.c_str());
+      request->send(response);
+    } else {
+      AsyncWebServerResponse* response = new AsyncFileResponse(request->_tempFile, filename, String(), false, _callback);
+      if (_last_modified.length())
+        response->addHeader(T_Last_Modified, _last_modified.c_str());
+      if (_cache_control.length()) {
+        response->addHeader(T_Cache_Control, _cache_control.c_str());
+        response->addHeader(T_ETag, etag.c_str());
+      }
+      request->send(response);
+    }
+  } else {
+    request->send(404);
+  }
 }
 
 AsyncStaticWebHandler& AsyncStaticWebHandler::setTemplateProcessor(AwsTemplateProcessor newCallback) {
