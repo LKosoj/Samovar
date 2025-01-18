@@ -1,3 +1,4 @@
+#pragma once
 #ifndef __RMVK_UART_H_
 #define __RMVK_UART_H_
 #include <sys/types.h>
