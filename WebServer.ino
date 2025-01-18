@@ -28,7 +28,7 @@ String run_lua_string(String lstr);
 #endif
 
 // filter out specific headers from the incoming request
-HeaderFilterMiddleware headerFilter;
+AsyncHeaderFilterMiddleware headerFilter;
 
 void change_samovar_mode() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
