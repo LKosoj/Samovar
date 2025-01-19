@@ -364,8 +364,14 @@ void check_alarm_nbk() {
 
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true, true);
+
 #ifdef USE_WATER_PUMP
-    set_pump_pwm(bk_pwm);
+  //Устанавливаем ШИМ для насоса в зависимости от температуры воды
+  if (valve_status) {
+    if (ACPSensor.avgTemp > SamSetup.SetACPTemp && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
+    else
+      set_pump_speed_pid(WaterSensor.avgTemp);
+  }
 #endif
   }
 
