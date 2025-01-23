@@ -271,6 +271,7 @@ void run_nbk_program(uint8_t num) {
   }
 
   //Изменяем на заданную мощность
+#ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
   if (program[ProgramNum].Power > 0 && program[ProgramNum].Power < 500) {
 #else
@@ -282,7 +283,7 @@ void run_nbk_program(uint8_t num) {
   } else {
     set_current_power(program[ProgramNum].Power);
   }
-
+#endif
   //Запомним Тниз = d_s_temp_prev
   if (program[ProgramNum].Temp > 0) {
     d_s_temp_prev = program[ProgramNum].Temp;
@@ -466,14 +467,19 @@ void check_alarm_nbk() {
   if (start_pressure != 0 && pressure_value >= start_pressure) {
     if (d_s_time_min <= millis()) {
       //Снижаем напряжение регулятора
+#ifdef SAMOVAR_USE_POWER
+        SendMsg("Сработал датчик захлеба! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);
+        //Снижаем напряжение регулятора
 #ifdef SAMOVAR_USE_SEM_AVR
-      //Если регулятор мощности - снижаем на 10 ватт
-      set_current_power(target_power_volt - 10);
+        //Если регулятор мощности - снижаем на 25 ватт
+        set_current_power(target_power_volt - 25);
 #else
-      //Если регулятор напряжения - снижаем на 3 вольта
-      set_current_power(target_power_volt - 3);
+        //Если регулятор напряжения - снижаем на 3 вольта
+        set_current_power(target_power_volt - 3);
 #endif
       SendMsg(("Высокое давление! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt), WARNING_MSG);
+#endif
+
       d_s_time_min = millis() + 10 * 1000;
     }
   } else {
