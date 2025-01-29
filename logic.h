@@ -1217,6 +1217,9 @@ void triggerPowerStatus(void *parameter) {
           vTaskDelay(50 / portTICK_PERIOD_MS);
           resp = Serial2.readStringUntil('\r');
         }
+#ifdef KVIC_DEBUG
+        String r = resp;
+#endif
         resp = resp.substring(i, resp.length());
 #ifdef __SAMOVAR_DEBUG
         WriteConsoleLog("RESP_T =" + resp.substring(0, 1));
@@ -1235,6 +1238,12 @@ void triggerPowerStatus(void *parameter) {
             current_power_mode = resp.substring(6, 7);
             vTaskDelay(100 / portTICK_PERIOD_MS);
           }
+#ifdef KVIC_DEBUG
+            if (fileToAppend && fileToAppend.available()) {
+              r+=";" + String(current_power_volt) + ";" + String(target_power_volt) + ";" + String(current_power_mode) + ";" + String(millis());
+              fileToAppend.println(r);
+            }
+#endif
         }
       }
     } else {
