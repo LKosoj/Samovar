@@ -121,4 +121,5 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 
 //#define NOT_USE_INTERFACE_UPDATE              //не использовать обновление интерфейса при загрузке
 
+//#define KVIC_DEBUG
 #endif
