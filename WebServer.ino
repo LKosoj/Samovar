@@ -138,7 +138,7 @@ void WebServerInit(void) {
     request->send(SPIFFS, "/resetreason.css", String());
   });
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (fileToAppend)
+    if (fileToAppend && fileToAppend.available())
       fileToAppend.flush();
     request->send(SPIFFS, "/data.csv", String());
   });
@@ -910,7 +910,7 @@ void calibrate_command(AsyncWebServerRequest *request) {
 }
 
 void get_data_log(AsyncWebServerRequest *request, String fn) {
-  if (fileToAppend)
+  if (fileToAppend && fileToAppend.available())
     fileToAppend.flush();
   AsyncWebServerResponse *response;
   if (SPIFFS.exists("/" + fn)) {
