@@ -80,16 +80,6 @@
 #include <esp_task_wdt.h>
 #endif
 
-#ifdef USE_EXPANDER
-#include <PCF8575.h>
-PCF8575 expander(&Wire, USE_EXPANDER, LCD_SDA, LCD_SCL);
-#endif
-
-#ifdef USE_ANALOG_EXPANDER
-#include "PCF8591.h"
-PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
-#endif
-
 #ifdef USE_LUA
 #include "lua.h"
 #endif
@@ -356,7 +346,7 @@ void triggerGetClock(void *parameter) {
           xSemaphoreGive(xMsgSemaphore);
         }
       }
-    } else {
+    } else if (SamSetup.tg_chat_id[0] != 0){
       Serial.println(F("Проблема с покдлючением к интернету."));
     }
 #endif
@@ -932,7 +922,7 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0 && Ping.ping("212.237.16.93", 1)) {
     vTaskDelay(5 / portTICK_PERIOD_MS);
     http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode("Самовар готов к работе; IP=http://" + StIP));
-  } else {
+  } else if (SamSetup.tg_chat_id[0] != 0) {
     Serial.println(F("Проблема с покдлючением к интернету."));
   }
 #endif

@@ -1,6 +1,8 @@
 #ifndef __SAMOVAR_LUA_H_
 #define __SAMOVAR_LUA_H_
 
+#include "Samovar.h"
+
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"
 #endif

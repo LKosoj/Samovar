@@ -1,4 +1,15 @@
+#include "Samovar.h"
 #ifdef SAMOVAR_USE_BLYNK
+#include <BlynkSimpleEsp32.h>
+
+void menu_samovar_start();
+void pause_withdrawal(bool PauseOn);
+void set_current_power(float power);
+void set_pump_speed(float speed, bool msg);
+void set_body_temp();
+int get_liquid_volume();
+String get_Samovar_Status();
+float get_speed_from_rate(float rate);
 
 #ifdef USE_LUA
 String run_lua_string(String lstr);

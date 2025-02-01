@@ -12,6 +12,27 @@ void set_pump_speed_pid(float temp);
 void set_dist_program(String WProgram);
 void run_dist_program(uint8_t num);
 String get_dist_program();
+void resetTimePredictor();
+void updateTimePredictor();
+float calculateRemainingTime();
+void check_alarm_distiller();
+void set_buzzer(bool On);
+void set_current_power(float power);
+void set_pump_speed(float speed, bool msg);
+void set_body_temp();
+int get_liquid_volume();
+String get_Samovar_Status();
+float get_speed_from_rate(float rate);
+float get_alcohol(float t);
+float get_steam_alcohol(float t);
+void set_capacity(uint8_t cap);
+void reset_sensor_counter();
+void check_power_error();
+void set_capacity(uint8_t cap);
+
+#ifdef USE_MQTT
+#include "SamovarMqtt.h"
+#endif
 
 #ifdef USE_WATER_PUMP
 bool check_boiling();

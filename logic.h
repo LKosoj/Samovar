@@ -1217,14 +1217,14 @@ void triggerPowerStatus(void *parameter) {
           vTaskDelay(50 / portTICK_PERIOD_MS);
           resp = Serial2.readStringUntil('\r');
         }
-#ifdef KVIC_DEBUG
-        String r = resp;
-#endif
         resp = resp.substring(i, resp.length());
 #ifdef __SAMOVAR_DEBUG
         WriteConsoleLog("RESP_T =" + resp.substring(0, 1));
 #endif
-        if (resp.substring(0, 1) == "T") {
+        if (resp.substring(0, 1) == "T" && resp.length() == 8 ) {
+#ifdef KVIC_DEBUG
+          String r = resp;
+#endif
           resp = resp.substring(1, 9);
 #ifdef __SAMOVAR_DEBUG
           WriteConsoleLog("RESP_F =" + resp.substring(1, 7));
@@ -1232,16 +1232,18 @@ void triggerPowerStatus(void *parameter) {
 #endif
           int cpv = hexToDec(resp.substring(0, 3));
           //Если напряжение больше 300 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
-          if (cpv > 10 && cpv < 3000) {
+          if (cpv > 30 && cpv < 3000) {
             current_power_volt = cpv / 10.0F;
             target_power_volt = hexToDec(resp.substring(3, 6)) / 10.0F;
             current_power_mode = resp.substring(6, 7);
             vTaskDelay(100 / portTICK_PERIOD_MS);
           }
 #ifdef KVIC_DEBUG
-            if (fileToAppend && fileToAppend.available()) {
-              r+=";" + String(current_power_volt) + ";" + String(target_power_volt) + ";" + String(current_power_mode) + ";" + String(millis());
-              fileToAppend.println(r);
+            //Serial.println(r);
+            if (current_power_volt < 30 || current_power_volt > 240)
+            {
+                r+=";" + String(current_power_volt) + ";" + String(target_power_volt) + ";" + String(current_power_mode) + ";" + String(millis());
+                SendMsg(("НАПРЯЖЕНИЕ!!!: " + r), NOTIFY_MSG);
             }
 #endif
         }

@@ -2,7 +2,44 @@
 #include <ESPping.h>
 
 #include "Samovar.h"
+#include "FS.h"
+#include "sensorinit.h"
 
+float i2c_get_speed_from_rate(float volume_per_hour);
+String getValue(String data, char separator, int index);
+void set_current_power(float Volt);
+void menu_reset_wifi();
+uint16_t get_stepper_speed(void);
+bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
+String get_program(uint8_t s);
+String get_beer_program();
+String get_dist_program();
+String get_nbk_program();
+float get_speed_from_rate(float rate);
+float get_alcohol(float t);
+void set_mixer(bool On);
+void FS_init(void);
+void save_profile();
+void read_config();
+void load_profile();
+void change_samovar_mode();
+void WebServerInit(void);
+String indexKeyProcessor(const String &var);
+String setupKeyProcessor(const String &var);
+String get_DSAddressList(String Address);
+void set_pump_speed(float pumpspeed, bool continue_process);
+void start_self_test(void);
+void stop_self_test(void);
+String get_web_file(String fn, get_web_type type);
+void get_web_interface();
+String http_sync_request_get(String url);
+void set_water_temp(float temp);
+void set_body_temp();
+void set_power(bool On);
+void set_pump_pwm(float duty);
+void set_pump_speed_pid(float temp);
+void set_power_mode(String Mode);
+void set_capacity(uint8_t cap);
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request, String fn);

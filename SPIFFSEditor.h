@@ -3,6 +3,7 @@
 
 #include <FS.h>
 #include <ESPAsyncWebServer.h>
+#include "Samovar.h"
 
 String get_edit_script();
 

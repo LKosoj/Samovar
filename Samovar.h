@@ -301,6 +301,16 @@ static GButton alarm_btn(ALARM_BTN_PIN);
 #endif
 #endif
 
+#ifdef USE_EXPANDER
+#include <PCF8575.h>
+PCF8575 expander(&Wire, USE_EXPANDER, LCD_SDA, LCD_SCL);
+#endif
+
+#ifdef USE_ANALOG_EXPANDER
+#include "PCF8591.h"
+PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
+#endif
+
 static double Input, Output, Setpoint;
 static double Kp, Ki, Kd;
 

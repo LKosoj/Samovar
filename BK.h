@@ -1,8 +1,21 @@
 #include <Arduino.h>
 #include "Samovar.h"
 
+#ifdef USE_WATER_PUMP
+#include "pumppwm.h"
+#endif
+
+#ifdef USE_MQTT
+#include "SamovarMqtt.h"
+#endif
+
+
 void bk_finish();
 void set_power_mode(String Mode);
+void set_current_power(float power);
+void set_buzzer(bool On);
+void reset_sensor_counter();
+void check_power_error();
 void set_power(bool On);
 void create_data();
 void open_valve(bool Val, bool msg);

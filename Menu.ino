@@ -5,9 +5,31 @@
 #include <EEPROM.h>
 #include <ESPAsyncWiFiManager.h>
 
+#ifdef USE_MQTT
+#include "SamovarMqtt.h"
+#endif
+
 void read_config();
 void run_program(uint8_t num);
 void set_menu_screen(uint8_t param);
+void save_profile();
+void set_pump_speed(float speed, bool continue_process);
+float get_speed_from_rate(float rate);
+void pump_calibrate(int stpspeed);
+void pause_withdrawal(bool Pause);
+void set_pump_pwm(float duty);
+void set_pump_speed_pid(float temp);
+void set_power(bool On);
+void set_buzzer(bool fl);
+bool check_boiling();
+float get_alcohol(float t);
+void check_power_error();
+bool column_wetting();
+void reset_sensor_counter();
+void set_capacity(uint8_t cap);
+void set_program(String WProgram);
+String get_program(uint8_t s);
+void create_data();
 
 const char str_BACK[] PROGMEM = "<BACK";
 const char str_Steam_T[] PROGMEM = "Steam T: ";

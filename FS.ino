@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 
 #include "Samovar.h"
+#include "SPIFFSEditor.h"
 
 const char *http_username = "admin";
 const char *http_password = "admin";
@@ -278,7 +279,6 @@ void create_data() {
   append_data();
 }
 
-#ifndef KVIC_DEBUG
 String append_data() {
   bool w = false;
   if (!fileToAppend) {
@@ -360,11 +360,6 @@ String append_data() {
   }
   return "";
 }
-#else
-String append_data() {
-  return "";
-}
-#endif
 
 void save_profile() {
   File file = SPIFFS.open(get_prf_name(), FILE_WRITE);
