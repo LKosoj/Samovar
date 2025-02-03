@@ -5,10 +5,17 @@
 #include <stdint.h>
 #include "driver/uart.h"
 
+#ifndef SAMOVAR_USE_SEM_AVR
+#ifndef RMVK_DEFAULT_READ_TIMEOUT
 #define RMVK_DEFAULT_READ_TIMEOUT 110
+#endif
+#ifndef RMVK_READ_DELAY
+#define RMVK_READ_DELAY 200
+#endif
+#endif
+
 #define RMVK_BAUD_RATE 9600
 #define RMVK_TASK_DELAY 5000
-#define RMVK_READ_DELAY 200
 #define RMVK_TXD 17
 #define RMVK_RXD 16
 uart_port_t RMVK_UART = UART_NUM_1;
