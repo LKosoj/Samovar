@@ -154,6 +154,13 @@ uint8_t temprature_sens_read();
 static SemaphoreHandle_t xSemaphoreAVR = NULL;
 static StaticSemaphore_t xSemaphoreBufferAVR;
 
+#ifndef RMVK_DEFAULT_READ_TIMEOUT
+#define RMVK_DEFAULT_READ_TIMEOUT 1100 // Таймаут по умолчанию (мс)
+#endif
+#ifndef RMVK_READ_DELAY
+#define RMVK_READ_DELAY 300 // Задержка между запросами (мс)
+#endif
+
 #else
 #ifdef SAMOVAR_USE_POWER
 #define PWR_MSG F("Напряжение")
