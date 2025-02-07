@@ -3,7 +3,7 @@
 
 #include <AsyncMqttClient.h>
 #include "Samovar.h"
-#define PAYLOADSIZE 2000
+#define PAYLOADSIZE 500
 
 AsyncMqttClient mqttClient;
 char mqttstr[100] = "SMV/\0";
@@ -76,7 +76,7 @@ void onMqttPublish(uint16_t packetId) {
   //  Serial.println(packetId);
 }
 
-void MqttSendMsg(String Str, const char *chart ) {
+void MqttSendMsg(const String &Str, const char *chart ) {
   if (!send_mqtt) return;
   strcpy(mqttstr1, mqttstr);
   strcat(mqttstr1, chart);

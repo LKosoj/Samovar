@@ -438,7 +438,7 @@ void set_heater_state(float setpoint, float temp) {
   if (setpoint - temp > HEAT_DELTA && !tuning) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
     //set_power_mode(POWER_SPEED_MODE);
     set_current_power(SamSetup.BVolt);
 #else
@@ -502,7 +502,7 @@ void setHeaterPosition(bool state) {
     current_power_mode = POWER_WORK_MODE;
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
 #endif
   } else {
 #ifdef SAMOVAR_USE_POWER

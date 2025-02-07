@@ -23,7 +23,7 @@ float i2c_get_speed_from_rate(float volume_per_hour);
 float i2c_get_liquid_volume();
 uint16_t get_stepper_speed(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
-void MqttSendMsg(String Str, const char *chart );
+void MqttSendMsg(const String &Str, const char *chart );
 
 struct {
   float avgSpeed;

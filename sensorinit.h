@@ -65,7 +65,7 @@ void BME_getvalue(bool fl) {
     bme_pressure = -1;
     return;
   }
-  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(30 / portTICK_RATE_MS)) == pdTRUE) {
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
 #ifdef USE_BME680
     // Tell BME680 to begin measurement.
     if (bme.beginReading() == 0) {

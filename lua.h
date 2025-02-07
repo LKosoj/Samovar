@@ -20,7 +20,7 @@ LuaWrapper lua;
 #define EXPANDER_UPDATE_TIMEOUT 500
 
 #ifdef USE_MQTT
-void MqttSendMsg(String Str, const char *chart );
+void MqttSendMsg(const String &Str, const char *chart );
 #endif
 
 unsigned long lua_timer[10];  //10 таймеров для lua
@@ -664,14 +664,12 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
 
   asyncHTTPrequest request;
   String payload;
-  String RequestType;
   //int httpResponseCode;
 
   request.setTimeout(3);  //Таймаут три секунды
   vTaskDelay(10 / portTICK_PERIOD_MS);
   if (n == 1) {
-    RequestType = "GET";
-    request.open(RequestType.c_str(), Var.c_str());  //URL
+    request.open("GET", Var.c_str());  //URL
     while (request.readyState() < 1) {
       vTaskDelay(25 / portTICK_PERIOD_MS);
     }
@@ -680,6 +678,7 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   } else {
     String ContentType;
     String Body;
+    String RequestType;
 
     lua_pushvalue(lua_state, -1);
     lua_pushvalue(lua_state, 2);
@@ -996,7 +995,7 @@ void do_lua_script(void *parameter) {
       loop_lua_fl = false;
       SetScriptOff = 0;
     }
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
   }
 }
 

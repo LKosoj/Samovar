@@ -175,7 +175,7 @@ void withdrawal(void) {
 #endif
           }
 #endif
-          vTaskDelay(50 / portTICK_PERIOD_MS);
+          vTaskDelay(10 / portTICK_PERIOD_MS);
         }
         program_Wait = true;
         pause_withdrawal(true);
@@ -225,7 +225,7 @@ void withdrawal(void) {
 #endif
           }
 #endif
-          vTaskDelay(50 / portTICK_PERIOD_MS);
+          vTaskDelay(10 / portTICK_PERIOD_MS);
         }
         program_Wait = true;
         pause_withdrawal(true);
@@ -976,9 +976,9 @@ void set_power(bool On) {
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
     acceleration_heater = false;
 #ifdef SAMOVAR_USE_POWER
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(700 / portTICK_PERIOD_MS);
     set_power_mode(POWER_SLEEP_MODE);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
 #else
     current_power_mode = POWER_SLEEP_MODE;
 #endif
@@ -1489,7 +1489,7 @@ bool column_wetting() {
   if (SamSetup.UseHLS) {
     // Инициализация процесса смачивания
     if (!wetting_started) {
-      SendMsg(F("Начало смачивания насадки колонны. Следите за уровнем флегмы!"), WARNING_MSG);
+      SendMsg(("Начало смачивания насадки колонны. Следите за уровнем флегмы!"), WARNING_MSG);
       
       wetting_start_time = millis();
       wetting_started = true;
@@ -1503,7 +1503,7 @@ bool column_wetting() {
     // Проверяем условия завершения
     if (whls.isHolded()) {
       // Датчик сработал - смачивание успешно
-      SendMsg(F("Насадка колонны успешно смочена"), NOTIFY_MSG);
+      SendMsg(("Насадка колонны успешно смочена"), NOTIFY_MSG);
       
       // Сбрасываем статические переменные
       wetting_started = false;
@@ -1513,7 +1513,7 @@ bool column_wetting() {
     
     // Проверяем превышение максимального времени
     if (millis() - wetting_start_time >= max_wetting_time) {
-      SendMsg(F("Не удалось смочить насадку колонны за отведенное время"), WARNING_MSG);
+      SendMsg(("Не удалось смочить насадку колонны за отведенное время"), WARNING_MSG);
       
       // Сбрасываем статические переменные
       wetting_started = false;
@@ -1527,7 +1527,7 @@ bool column_wetting() {
   #endif
 
   // Если датчик не установлен
-  SendMsg(F("Датчик уровня флегмы не установлен, смачивание насадки невозможно"), WARNING_MSG);
+  SendMsg(("Датчик уровня флегмы не установлен, смачивание насадки невозможно"), WARNING_MSG);
   return true;  // Немедленно завершаем
 }
 #endif

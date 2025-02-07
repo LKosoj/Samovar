@@ -354,7 +354,7 @@ void triggerGetClock(void *parameter) {
 #ifdef SAMOVAR_USE_BLYNK
     if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
-      vTaskDelay(50 / portTICK_PERIOD_MS);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
     }
 #endif
 
@@ -387,11 +387,15 @@ void triggerGetClock(void *parameter) {
     }
 #endif
     {
+      vTaskDelay(500 / portTICK_PERIOD_MS);
       BME_getvalue(false);
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX)
+#if !(defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX))
+      vTaskDelay(500 / portTICK_PERIOD_MS);
+#else
+      vTaskDelay(400 / portTICK_PERIOD_MS);
       pressure_sensor_get();
 #endif
-      vTaskDelay(2000 / portTICK_PERIOD_MS);
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
   }
 }
@@ -458,7 +462,7 @@ void triggerSysTicker(void *parameter) {
 #endif
 
       DS_getvalue();
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
 
       Crt = NTP.getTimeDateString(false);
       StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
@@ -506,7 +510,7 @@ void triggerSysTicker(void *parameter) {
         WFpulseCount = 100;
       }
 
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
 
       //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
@@ -611,7 +615,7 @@ void triggerSysTicker(void *parameter) {
       }
 
 
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
 
 #ifdef USE_WATERSENSOR
 
@@ -628,7 +632,7 @@ void triggerSysTicker(void *parameter) {
 
       WFpulseCount = 0;
       oldTime = millis();
-      vTaskDelay(20 / portTICK_PERIOD_MS);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
 #endif
 
       //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
@@ -655,14 +659,13 @@ void triggerSysTicker(void *parameter) {
 
       OldMinST = CurMinST;
     }
-    vTaskDelay(20 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
   }
 }
 
 void setup() {
   pinMode(0, INPUT);
-  Serial.begin(115200);
-  vTaskDelay(600);
+  vTaskDelay(600 / portTICK_PERIOD_MS);
   if (digitalRead(0) == LOW) {
     WiFi.mode(WIFI_STA);  // cannot erase if not in STA mode !
     WiFi.persistent(true);
@@ -679,7 +682,8 @@ void setup() {
 #endif
   heap_caps_enable_nonos_stack_heaps();
 
-  vTaskDelay(500);
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+  Serial.begin(115200);
 
 #ifdef __SAMOVAR_DEBUG
   esp_log_level_set("*", ESP_LOG_VERBOSE);
@@ -1349,7 +1353,7 @@ void getjson(void) {
   jsonstr += (String)SamSetup.UseBBuzzer;
   jsonstr += ",";
 
-  vTaskDelay(10 / portTICK_PERIOD_MS);
+  vTaskDelay(2 / portTICK_PERIOD_MS);
 
   jsonstr += "\"StepperStepMl\":";
   jsonstr += (String)SamSetup.StepperStepMl;
