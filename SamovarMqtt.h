@@ -3,12 +3,11 @@
 
 #include <AsyncMqttClient.h>
 #include "Samovar.h"
-#define PAYLOADSIZE 500
+#define PAYLOADSIZE 800
 
 AsyncMqttClient mqttClient;
 char mqttstr[100] = "SMV/\0";
 char mqttstr1[100];
-char payload[PAYLOADSIZE];
 
 static const char mqttUser[] = "samovar";
 static const char mqttPassword[] = "samovar-tool.ru";
@@ -80,6 +79,8 @@ void MqttSendMsg(const String &Str, const char *chart ) {
   if (!send_mqtt) return;
   strcpy(mqttstr1, mqttstr);
   strcat(mqttstr1, chart);
+  static char payload[PAYLOADSIZE];
+
   //Версия сообщения
   strcat(mqttstr1, "/3");
   Str.toCharArray(payload, PAYLOADSIZE);
