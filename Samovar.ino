@@ -176,7 +176,7 @@ void beer_finish();
 void change_samovar_mode();
 void saveConfigCallback();
 void configModeCallback(AsyncWiFiManager *myWiFiManager);
-String verbose_print_reset_reason(RESET_REASON reason);
+void verbose_print_reset_reason();
 void set_alarm();
 void menu_switch_focus();
 float get_steam_alcohol(float t);
@@ -1092,6 +1092,7 @@ void setup() {
     Serial.println("I2C Stepper as Pump");
   }
   used_byte = SPIFFS.usedBytes();
+  verbose_print_reset_reason();
   //Serial.println(sizeof(SamSetup));
 }
 
@@ -1658,27 +1659,30 @@ void WriteConsoleLog(String StringLogMsg) {
 #endif
 }
 
-//String verbose_print_reset_reason(RESET_REASON reason)
-//{
-//  String s;
-//  switch (reason)
-//  {
-//    case 1  : s = "Vbat power on reset";break;
-//    case 3  : s = "Software reset digital core";break;
-//    case 4  : s = "Legacy watch dog reset digital core";break;
-//    case 5  : s = "Deep Sleep reset digital core";break;
-//    case 6  : s = "Reset by SLC module, reset digital core";break;
-//    case 7  : s = "Timer Group0 Watch dog reset digital core";break;
-//    case 8  : s = "Timer Group1 Watch dog reset digital core";break;
-//    case 9  : s = "RTC Watch dog Reset digital core";break;
-//    case 10 : s = "Instrusion tested to reset CPU";break;
-//    case 11 : s = "Time Group reset CPU";break;
-//    case 12 : s = "Software reset CPU";break;
-//    case 13 : s = "RTC Watch dog Reset CPU";break;
-//    case 14 : s = "for APP CPU, reseted by PRO CPU";break;
-//    case 15 : s = "Reset when the vdd voltage is not stable";break;
-//    case 16 : s = "RTC Watch dog reset digital core and rtc module";break;
-//    default : s = "NO_MEAN";
-//  }
-//  return s;
-//}
+void verbose_print_reset_reason()
+{
+ esp_reset_reason_t reason = esp_reset_reason();
+ String s;
+ switch (reason)
+ {
+   case 1  : s = "Vbat power on reset";break;
+   case 3  : s = "Software reset digital core";break;
+   case 4  : s = "Legacy watch dog reset digital core";break;
+   case 5  : s = "Deep Sleep reset digital core";break;
+   case 6  : s = "Reset by SLC module, reset digital core";break;
+   case 7  : s = "Timer Group0 Watch dog reset digital core";break;
+   case 8  : s = "Timer Group1 Watch dog reset digital core";break;
+   case 9  : s = "RTC Watch dog Reset digital core";break;
+   case 10 : s = "Instrusion tested to reset CPU";break;
+   case 11 : s = "Time Group reset CPU";break;
+   case 12 : s = "Software reset CPU";break;
+   case 13 : s = "RTC Watch dog Reset CPU";break;
+   case 14 : s = "for APP CPU, reseted by PRO CPU";break;
+   case 15 : s = "Reset when the vdd voltage is not stable";break;
+   case 16 : s = "RTC Watch dog reset digital core and rtc module";break;
+   default : s = "NO_MEAN";
+ }
+ if (reason != 0) {
+  SendMsg("Причина последней перезагрузки: " + s, NOTIFY_MSG);
+ }
+}
