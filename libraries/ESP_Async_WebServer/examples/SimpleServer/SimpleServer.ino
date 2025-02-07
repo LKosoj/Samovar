@@ -183,10 +183,6 @@ const char* SSE_HTLM PROGMEM = R"(
 </html>
 )";
 
-void notFound(AsyncWebServerRequest* request) {
-  request->send(404, "text/plain", "Not found");
-}
-
 #if __has_include("ArduinoJson.h")
 AsyncCallbackJsonWebHandler* jsonHandler = new AsyncCallbackJsonWebHandler("/json2");
 AsyncCallbackMessagePackWebHandler* msgPackHandler = new AsyncCallbackMessagePackWebHandler("/msgpack2");
@@ -759,7 +755,23 @@ websocat: error running
   server.addHandler(msgPackHandler);
 #endif
 
-  server.onNotFound(notFound);
+  // catch any request, and send a 404 Not Found response
+  // except for /game_log which is handled by onRequestBody
+  server.onNotFound([](AsyncWebServerRequest* request) {
+    if (request->url() == "/game_log")
+      return; // response object already creted by onRequestBody
+
+    request->send(404, "text/plain", "Not found");
+  });
+
+  // https://github.com/ESP32Async/ESPAsyncWebServer/issues/6
+  // curl -v -X POST http://192.168.4.1/game_log -H "Content-Type: application/json" -d '{"game": "test"}'
+  // catch any POST request and send a 200 OK response
+  server.onRequestBody([](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+    if (request->url() == "/game_log") {
+      request->send(200, "application/json", "{\"status\":\"OK\"}");
+    }
+  });
 
   server.begin();
 }

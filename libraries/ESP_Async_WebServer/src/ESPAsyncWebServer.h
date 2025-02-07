@@ -48,16 +48,22 @@
 
 #include "literals.h"
 
-#define ASYNCWEBSERVER_VERSION          "3.6.0"
+#define ASYNCWEBSERVER_VERSION          "3.6.2"
 #define ASYNCWEBSERVER_VERSION_MAJOR    3
 #define ASYNCWEBSERVER_VERSION_MINOR    6
-#define ASYNCWEBSERVER_VERSION_REVISION 0
-#define ASYNCWEBSERVER_FORK_mathieucarbou
+#define ASYNCWEBSERVER_VERSION_REVISION 2
+#define ASYNCWEBSERVER_FORK_ESP32Async
 
 #ifdef ASYNCWEBSERVER_REGEX
   #define ASYNCWEBSERVER_REGEX_ATTRIBUTE
 #else
   #define ASYNCWEBSERVER_REGEX_ATTRIBUTE __attribute__((warning("ASYNCWEBSERVER_REGEX not defined")))
+#endif
+
+// See https://github.com/ESP32Async/ESPAsyncWebServer/commit/3d3456e9e81502a477f6498c44d0691499dda8f9#diff-646b25b11691c11dce25529e3abce843f0ba4bd07ab75ec9eee7e72b06dbf13fR388-R392
+// This setting slowdown chunk serving but avoids crashing or deadlocks in the case where slow chunk responses are created, like file serving form SD Card
+#ifndef ASYNCWEBSERVER_USE_CHUNK_INFLIGHT
+  #define ASYNCWEBSERVER_USE_CHUNK_INFLIGHT 1
 #endif
 
 class AsyncWebServer;
