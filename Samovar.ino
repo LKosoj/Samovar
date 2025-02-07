@@ -204,13 +204,13 @@ void recvMsg(uint8_t *data, size_t len) {
   Val = getValue(d, '=', 1);
   Var.trim();
   Val.trim();
-  if (Val != "") {
+  if (Val.length() > 0) {
     WebSerial.print(Var);
     WebSerial.print(" = ");
     if (Var == "WFpulseCount") {
       WFpulseCount = (uint8_t)Val.toInt();
       WebSerial.println(WFpulseCount);
-    } else if (Var != "") {
+    } else if (Var.length() > 0) {
     }
   } else if (d == "print") {
     WebSerial.println("_______________________________________________");
@@ -447,7 +447,7 @@ void triggerSysTicker(void *parameter) {
         }
         sr = lua.Lua_dostring(&btn_script);
         sr.trim();
-        if (sr != "") WriteConsoleLog("ERR in BTN_SCRIPT " + sr);
+        if (sr.length() > 0) WriteConsoleLog("ERR in BTN_SCRIPT " + sr);
         btn_script = "";
       }
 
@@ -473,7 +473,7 @@ void triggerSysTicker(void *parameter) {
         if (tcntST >= SamSetup.LogPeriod) {
           tcntST = 0;
           String s = append_data();  //Записываем данные в память ESP32;
-          if (s != "") {
+          if (s.length() > 0) {
             s += ",";
             s += format_float(ACPSensor.avgTemp, 3);
             s += ",";
@@ -1286,102 +1286,103 @@ void loop() {
 }
 
 void getjson(void) {
-  jsonstr = "{";
-  jsonstr += "\"bme_temp\":";
-  jsonstr += format_float(bme_temp, 3);
-  jsonstr += ",";
-  jsonstr += "\"bme_pressure\":";
-  jsonstr += format_float(bme_pressure, 3);
-  jsonstr += ",";
-  jsonstr += "\"start_pressure\":";
-  jsonstr += format_float(start_pressure, 3);
-  jsonstr += ",";
-  jsonstr += "\"crnt_tm\":\"";
-  jsonstr += Crt;
-  jsonstr += "\"";
-  jsonstr += ",";
-  jsonstr += "\"stm\":\"";
-  jsonstr += (String)NTP.getUptimeString();
-  jsonstr += "\"";
-  jsonstr += ",";
-  jsonstr += "\"SteamTemp\":";
-  jsonstr += format_float(SteamSensor.avgTemp, 3);
-  jsonstr += ",";
-  jsonstr += "\"PipeTemp\":";
-  jsonstr += format_float(PipeSensor.avgTemp, 3);
-  jsonstr += ",";
-  jsonstr += "\"WaterTemp\":";
-  jsonstr += format_float(WaterSensor.avgTemp, 3);
-  jsonstr += ",";
-  jsonstr += "\"TankTemp\":";
-  jsonstr += format_float(TankSensor.avgTemp, 3);
-  jsonstr += ",";
-  jsonstr += "\"ACPTemp\":";
-  jsonstr += format_float(ACPSensor.avgTemp, 3);
-  jsonstr += ",";
-  jsonstr += "\"version\":\"";
-  jsonstr += (String)SAMOVAR_VERSION;
-  jsonstr += "\"";
-  jsonstr += ",";
-  jsonstr += "\"VolumeAll\":";
-  jsonstr += (String)get_liquid_volume();
-  jsonstr += ",";
-  jsonstr += "\"ActualVolumePerHour\":";
-  jsonstr += format_float(ActualVolumePerHour, 3);
-  jsonstr += ",";
-  jsonstr += "\"PowerOn\":";
-  jsonstr += (String)PowerOn;
-  jsonstr += ",";
-  jsonstr += "\"PauseOn\":";
-  jsonstr += (String)PauseOn;
-  jsonstr += ",";
-  jsonstr += "\"WthdrwlProgress\":";
-  jsonstr += (String)WthdrwlProgress;
-  jsonstr += ",";
-  jsonstr += "\"TargetStepps\":";
-  jsonstr += (String)stepper.getTarget();
-  jsonstr += ",";
-  jsonstr += "\"CurrrentStepps\":";
-  jsonstr += (String)stepper.getCurrent();
-  jsonstr += ",";
-  jsonstr += "\"WthdrwlStatus\":";
-  jsonstr += (String)startval;
-  jsonstr += ",";
-  jsonstr += "\"CurrrentSpeed\":";
-  jsonstr += (String)(round(stepper.getSpeed() * (uint8_t)stepper.getState()));
-  jsonstr += ",";
-  jsonstr += "\"UseBBuzzer\":";
-  jsonstr += (String)SamSetup.UseBBuzzer;
-  jsonstr += ",";
+  jsonstr.clear();
+  jsonstr.concat("{");
+  jsonstr.concat("\"bme_temp\":");
+  jsonstr.concat(format_float(bme_temp, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"bme_pressure\":");
+  jsonstr.concat(format_float(bme_pressure, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"start_pressure\":");
+  jsonstr.concat(format_float(start_pressure, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"crnt_tm\":\"");
+  jsonstr.concat(Crt);
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
+  jsonstr.concat("\"stm\":\"");
+  jsonstr.concat(NTP.getUptimeString());
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
+  jsonstr.concat("\"SteamTemp\":");
+  jsonstr.concat(format_float(SteamSensor.avgTemp, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"PipeTemp\":");
+  jsonstr.concat(format_float(PipeSensor.avgTemp, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"WaterTemp\":");
+  jsonstr.concat(format_float(WaterSensor.avgTemp, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"TankTemp\":");
+  jsonstr.concat(format_float(TankSensor.avgTemp, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"ACPTemp\":");
+  jsonstr.concat(format_float(ACPSensor.avgTemp, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"version\":\"");
+  jsonstr.concat(SAMOVAR_VERSION);
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
+  jsonstr.concat("\"VolumeAll\":");
+  jsonstr.concat(get_liquid_volume());
+  jsonstr.concat(",");
+  jsonstr.concat("\"ActualVolumePerHour\":");
+  jsonstr.concat(format_float(ActualVolumePerHour, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"PowerOn\":");
+  jsonstr.concat(PowerOn);
+  jsonstr.concat(",");
+  jsonstr.concat("\"PauseOn\":");
+  jsonstr.concat(PauseOn);
+  jsonstr.concat(",");
+  jsonstr.concat("\"WthdrwlProgress\":");
+  jsonstr.concat(WthdrwlProgress);
+  jsonstr.concat(",");
+  jsonstr.concat("\"TargetStepps\":");
+  jsonstr.concat(stepper.getTarget());
+  jsonstr.concat(",");
+  jsonstr.concat("\"CurrrentStepps\":");
+  jsonstr.concat(stepper.getCurrent());
+  jsonstr.concat(",");
+  jsonstr.concat("\"WthdrwlStatus\":");
+  jsonstr.concat(startval);
+  jsonstr.concat(",");
+  jsonstr.concat("\"CurrrentSpeed\":");
+  jsonstr.concat(round(stepper.getSpeed() * (uint8_t)stepper.getState()));
+  jsonstr.concat(",");
+  jsonstr.concat("\"UseBBuzzer\":");
+  jsonstr.concat(SamSetup.UseBBuzzer);
+  jsonstr.concat(",");
 
   vTaskDelay(2 / portTICK_PERIOD_MS);
 
-  jsonstr += "\"StepperStepMl\":";
-  jsonstr += (String)SamSetup.StepperStepMl;
-  jsonstr += ",";
-  jsonstr += "\"BodyTemp_Steam\":";
-  jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3);
-  jsonstr += ",";
-  jsonstr += "\"BodyTemp_Pipe\":";
-  jsonstr += format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
-  jsonstr += ",";
-  jsonstr += "\"mixer\":";
-  jsonstr += (String)mixer_status;
-  jsonstr += ",";
-  jsonstr += "\"ISspd\":";
-  jsonstr += format_float(i2c_get_liquid_rate_by_step(get_stepper_speed()), 3);
-  jsonstr += ",";
+  jsonstr.concat("\"StepperStepMl\":");
+  jsonstr.concat(SamSetup.StepperStepMl);
+  jsonstr.concat(",");
+  jsonstr.concat("\"BodyTemp_Steam\":");
+  jsonstr.concat(format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"BodyTemp_Pipe\":");
+  jsonstr.concat(format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"mixer\":");
+  jsonstr.concat(mixer_status);
+  jsonstr.concat(",");
+  jsonstr.concat("\"ISspd\":");
+  jsonstr.concat(format_float(i2c_get_liquid_rate_by_step(get_stepper_speed()), 3));
+  jsonstr.concat(",");
 
 
-  jsonstr += "\"heap\":";
-  jsonstr += ESP.getFreeHeap();
-  jsonstr += ",";
-  jsonstr += "\"rssi\":";
-  jsonstr += WiFi.RSSI();
-  jsonstr += ",";
-  jsonstr += "\"fr_bt\":";
-  jsonstr += total_byte - used_byte;
-  jsonstr += ",";
+  jsonstr.concat("\"heap\":");
+  jsonstr.concat(ESP.getFreeHeap());
+  jsonstr.concat(",");
+  jsonstr.concat("\"rssi\":");
+  jsonstr.concat(WiFi.RSSI());
+  jsonstr.concat(",");
+  jsonstr.concat("\"fr_bt\":");
+  jsonstr.concat(total_byte - used_byte);
+  jsonstr.concat(",");
   //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
 
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
@@ -1389,94 +1390,96 @@ void getjson(void) {
     if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
       pt = program[ProgramNum].WType;
     }
-    jsonstr += "\"PrgType\":\"";
-    jsonstr += pt;
-    jsonstr += "\"";
-    jsonstr += ",";
+    jsonstr.concat("\"PrgType\":\"");
+    jsonstr.concat(pt);
+    jsonstr.concat("\"");
+    jsonstr.concat(",");
   }
 
-  if (Msg != "") {
-    jsonstr += "\"Msg\":\"";
-    jsonstr += Msg;
-    jsonstr += "\"";
-    jsonstr += ",";
-    jsonstr += "\"msglvl\":";
-    jsonstr += (String)msg_level;
-    jsonstr += ",";
+  if (Msg.length() > 0) {
+    jsonstr.concat("\"Msg\":\"");
+    jsonstr.concat(Msg);
+    jsonstr.concat("\"");
+    jsonstr.concat(",");
+    jsonstr.concat("\"msglvl\":");
+    jsonstr.concat(msg_level);
+    jsonstr.concat(",");
     Msg = "";
     msg_level = NONE_MSG;
   }
-  if (LogMsg != "") {
-    jsonstr += "\"LogMsg\":\"";
-    jsonstr += LogMsg;
-    jsonstr += "\"";
-    jsonstr += ",";
+  if (LogMsg.length() > 0) {
+    jsonstr.concat("\"LogMsg\":\"");
+    jsonstr.concat(LogMsg);
+    jsonstr.concat("\"");
+    jsonstr.concat(",");
     LogMsg = "";
   }
 
 #ifdef SAMOVAR_USE_POWER
-  jsonstr += "\"current_power_volt\":";
-  jsonstr += format_float(current_power_volt, 1);
-  jsonstr += ",";
-  jsonstr += "\"target_power_volt\":";
-  jsonstr += format_float(target_power_volt, 1);
-  jsonstr += ",";
-  jsonstr += "\"current_power_mode\":\"";
-  jsonstr += current_power_mode;
-  jsonstr += "\"";
-  jsonstr += ",";
-  jsonstr += "\"current_power_p\":";
-  jsonstr += (String)current_power_p;
-  jsonstr += ",";
+  jsonstr.concat("\"current_power_volt\":");
+  jsonstr.concat(format_float(current_power_volt, 1));
+  jsonstr.concat(",");
+  jsonstr.concat("\"target_power_volt\":");
+  jsonstr.concat(format_float(target_power_volt, 1));
+  jsonstr.concat(",");
+  jsonstr.concat("\"current_power_mode\":\"");
+  jsonstr.concat(current_power_mode);
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
+  jsonstr.concat("\"current_power_p\":");
+  jsonstr.concat(current_power_p);
+  jsonstr.concat(",");
 #endif
 
 #ifdef USE_WATER_PUMP
-  jsonstr += "\"wp_spd\":";
-  jsonstr += (String)water_pump_speed;
-  jsonstr += ",";
+  jsonstr.concat("\"wp_spd\":");
+  jsonstr.concat(water_pump_speed);
+  jsonstr.concat(",");
 #endif
 
 #ifdef USE_WATERSENSOR
-  jsonstr += "\"WFflowRate\":";
-  jsonstr += format_float(WFflowRate, 2);
-  jsonstr += ",";
-  jsonstr += "\"WFtotalMl\":";
-  jsonstr += (String)WFtotalMilliLitres;
-  jsonstr += ",";
+  jsonstr.concat("\"WFflowRate\":");
+  jsonstr.concat(format_float(WFflowRate, 2));
+  jsonstr.concat(",");
+  jsonstr.concat("\"WFtotalMl\":");
+  jsonstr.concat(WFtotalMilliLitres);
+  jsonstr.concat(",");
 #endif
 
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
-  jsonstr += "\"prvl\":";
-  jsonstr += format_float(pressure_value, 2);
-  jsonstr += ",";
+  jsonstr.concat("\"prvl\":");
+  jsonstr.concat(format_float(pressure_value, 2));
+  jsonstr.concat(",");
 #endif
 
   if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-    jsonstr += "\"alc\":";
-    jsonstr += format_float(get_alcohol(TankSensor.avgTemp), 2);
-    jsonstr += ",";
-    jsonstr += "\"stm_alc\":";
-    jsonstr += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
-    jsonstr += ",";
+    jsonstr.concat("\"alc\":");
+    jsonstr.concat(format_float(get_alcohol(TankSensor.avgTemp), 2));
+    jsonstr.concat(",");
+    jsonstr.concat("\"stm_alc\":");
+    jsonstr.concat(format_float(get_steam_alcohol(TankSensor.avgTemp), 2));
+    jsonstr.concat(",");
   }
 
   // Добавляем информацию о прогнозе времени
   if (PowerOn && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    jsonstr += "\"TimeRemaining\":";
-    jsonstr += String(int(timePredictor.remainingTime));
-    jsonstr += ",";
-    jsonstr += "\"TotalTime\":";
-    jsonstr += String(int(timePredictor.predictedTotalTime));
-    jsonstr += ",";
+    jsonstr.concat("\"TimeRemaining\":");
+    jsonstr.concat(String(int(timePredictor.remainingTime)));
+    jsonstr.concat(",");
+    jsonstr.concat("\"TotalTime\":");
+    jsonstr.concat(String(int(timePredictor.predictedTotalTime)));
+    jsonstr.concat(",");
   }
 
-  jsonstr += "\"Status\":\"";
-  jsonstr += get_Samovar_Status() + "\"";
-  jsonstr += ",";
-  jsonstr += "\"Lstatus\":\"";
-  jsonstr += Lua_status + "\"";
-  
-  jsonstr += "}";
+  jsonstr.concat("\"Status\":\"");
+  jsonstr.concat(get_Samovar_Status());
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
+  jsonstr.concat("\"Lstatus\":\"");
+  jsonstr.concat(Lua_status);
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
+  jsonstr.concat("}");
 
 #ifdef USE_MQTT
   //  MqttSendMsg(jsonstr, "getI");
@@ -1527,7 +1530,7 @@ void read_config() {
 
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
 #ifdef SAMOVAR_USE_BLYNK
-  if ((String)SamSetup.videourl != "") Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
+  if (strlen(SamSetup.videourl) > 0) Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
   Blynk.virtualWrite(V15, ipst);
 #else
   SamSetup.blynkauth[0] = '\0';
@@ -1614,19 +1617,19 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
 #endif
 #ifdef USE_TELEGRAM
   switch (msg_type) {
-    case 0: MsgPl = F("Тревога! "); break;
-    case 1: MsgPl = F("Предупреждение! "); break;
+    case 0: MsgPl = F("Тревога!"); break;
+    case 1: MsgPl = F("Предупреждение!"); break;
     case 2: MsgPl = ""; break;
     default: MsgPl = "";
   }
-  MsgPl += "Самовар - " + m;
+  MsgPl += " Самовар - " + m;
   if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
     msg_q.push(MsgPl.c_str());
     xSemaphoreGive(xMsgSemaphore);
   }
 #endif
 
-  if (Msg != "") {
+  if (Msg.length() > 0) {
     Msg += "; ";
     if (msg_level > msg_type) msg_level = msg_type;
   } else msg_level = msg_type;
@@ -1640,10 +1643,13 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
 }
 
 void WriteConsoleLog(String StringLogMsg) {
-  StringLogMsg.replace("\"", "'");
-  StringLogMsg.replace("\r", "^");
-  StringLogMsg.replace("\n", " ");
-  if (LogMsg != "") {
+
+  for(size_t i = 0; i < StringLogMsg.length(); i++) {
+      if(StringLogMsg[i] == '"') StringLogMsg[i] = '\'';
+      else if(StringLogMsg[i] == '\r') StringLogMsg[i] = '^';
+      else if(StringLogMsg[i] == '\n') StringLogMsg[i] = ' ';
+  }
+  if (LogMsg.length() > 0) {
     LogMsg = LogMsg + "; " + StringLogMsg;
   } else LogMsg = StringLogMsg;
 

@@ -293,7 +293,7 @@ String indexKeyProcessor(const String &var) {
     return get_lua_script_list();
 #endif
   else if (var == "showvideo") {
-    if ((String)SamSetup.videourl != "") return "inline";
+    if (strlen(SamSetup.videourl) > 0) return "inline";
     else
       return "none";
   };
@@ -1036,7 +1036,7 @@ void get_web_interface() {
     s += get_web_file("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("program_shugar.txt", SAVE_FILE_IF_NOT_EXIST);
 
-    if (s == "") {
+    if (s.length() == 0) {
       s = get_web_file("version.txt", SAVE_FILE_OVERRIDE);
     }
   }

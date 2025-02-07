@@ -19,7 +19,7 @@ BLYNK_WRITE(V22) {
   String lstr = param.asStr();  // assigning incoming value from pin V22 to a variable
   terminal.println(lstr);
   lstr = run_lua_string(lstr);
-  if (lstr != "") {
+  if (lstr.length() > 0) {
     terminal.println("ERR in lua: " + lstr);
   }
   else {

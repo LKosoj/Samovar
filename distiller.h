@@ -249,7 +249,7 @@ void check_alarm_distiller() {
 void run_dist_program(uint8_t num) {
   ProgramNum = num;
 
-  if (program[num].WType != "") {
+  if (program[num].WType.length() > 0) {
     SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
     // Сбрасываем прогноз при переходе к новой программе
     resetTimePredictor();
@@ -265,7 +265,7 @@ void run_dist_program(uint8_t num) {
 
   if (num > 0) {
     set_capacity(program[num - 1].capacity_num);
-    if (program[num - 1].WType != "") {
+    if (program[num - 1].WType.length() > 0) {
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
       if (abs(program[num - 1].Power) > 400 && program[num - 1].Power > 0) {
@@ -310,7 +310,7 @@ String get_dist_program() {
   String Str = "";
   int k = CAPACITY_NUM * 2;
   for (uint8_t i = 0; i < k; i++) {
-    if (program[i].WType == "") {
+    if (program[i].WType.length() == 0) {
       i = CAPACITY_NUM * 2 + 1;
     } else {
       Str += program[i].WType + ";";

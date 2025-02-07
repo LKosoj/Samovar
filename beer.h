@@ -524,7 +524,7 @@ String get_beer_program() {
   String Str = "";
   int k = CAPACITY_NUM * 2;
   for (uint8_t i = 0; i < k; i++) {
-    if (program[i].WType == "") {
+    if (program[i].WType.length() == 0) {
       i = CAPACITY_NUM * 2 + 1;
     } else {
       Str += program[i].WType + ";";

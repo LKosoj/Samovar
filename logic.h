@@ -444,7 +444,7 @@ void next_capacity(void) {
 // Установить программу
 void set_program(String WProgram) {
   //  WProgram.trim();
-  //  if (WProgram = "") return;
+  //  if (WProgram.length() == 0) return;
   char c[500] = {0};
   WProgram.toCharArray(c, 500);
   char *pair = strtok(c, ";");
@@ -486,7 +486,7 @@ String get_program(uint8_t s) {
     k = s + 1;
   }
   for (uint8_t i = s; i < k; i++) {
-    if (program[i].WType == "") {
+    if (program[i].WType.length() == 0) {
       i = CAPACITY_NUM * 2 + 1;
     } else {
       Str += program[i].WType + ";";

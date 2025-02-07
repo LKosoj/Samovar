@@ -344,7 +344,7 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
     show_lua_script = (int)a;
   } else if (Var == "test_num_val") {
     test_num_val = a;
-  } else if (Var != "") {
+  } else if (Var.length() > 0) {
     WriteConsoleLog("UNDEF NUMERIC LUA VAR " + Var + " = " + a);
   }
   return 0;
@@ -449,7 +449,7 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
     a = second(time(NULL));
   } else if (Var == "test_num_val") {
     a = test_num_val;
-  } else if (Var != "") {
+  } else if (Var.length() > 0) {
     WriteConsoleLog("GET UNDEF NUMERIC LUA VAR " + Var);
   }
   lua_pushnumber(lua_state, (lua_Number)a);
@@ -487,7 +487,7 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
     test_str_val = Val;
   } else if (Var == "program_type") {
     WriteConsoleLog(F("WARNING! program_type is read only property"));
-  } else if (Var != "") {
+  } else if (Var.length() > 0) {
     WriteConsoleLog("UNDEF STRING LUA VAR " + Var + " = " + Val);
   }
   return 0;
@@ -544,7 +544,7 @@ static int lua_wrapper_get_object(lua_State *lua_state) {
     s2 = lua_tolstring(lua_state, -1, &l2);
     Type = s2;
     lua_pop(lua_state, 1);
-    if (Type == "NUMERIC" && v == "") {
+    if (Type == "NUMERIC" && v.length() == 0) {
       v = "0";
     }
   }
@@ -639,7 +639,7 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
     c = test_str_val;
   } else if (Var == "program_type") {
     c = program[ProgramNum].WType;
-  } else if (Var != "") {
+  } else if (Var.length() > 0) {
     WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var);
     return 0;
   }
@@ -863,7 +863,7 @@ void lua_init() {
       WriteConsoleLog(F("--END LUA SCRIPT--"));
     }
     String sr = lua.Lua_dostring(&script);
-    if (sr != "") WriteConsoleLog("INI ERR " + sr);
+    if (sr.length() > 0) WriteConsoleLog("INI ERR " + sr);
   }
   lua_type_script = get_lua_mode_name();
   lua_finished = true;
@@ -941,7 +941,7 @@ String run_lua_string(String lstr) {
 #endif
     sr = lua.Lua_dostring(&lstr);
     sr.trim();
-    if (sr != "") {
+    if (sr.length() > 0) {
       WriteConsoleLog("ERR in lua: " + sr);
     } else {
       WriteConsoleLog(F("Lua run complete"));
@@ -972,7 +972,7 @@ void do_lua_script(void *parameter) {
         sr = lua.Lua_dostring(&(script1));
         script1 = "";
         sr.trim();
-        if (sr != "") WriteConsoleLog("ERR in script.lua: " + sr);
+        if (sr.length() > 0) WriteConsoleLog("ERR in script.lua: " + sr);
       }
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
@@ -985,7 +985,7 @@ void do_lua_script(void *parameter) {
         sr = lua.Lua_dostring(&(script2));
         script2 = "";
         sr.trim();
-        if (sr != "") WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
+        if (sr.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       }
       // Принудительно вызываем сборщик мусора
       lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
