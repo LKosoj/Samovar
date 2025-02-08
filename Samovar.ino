@@ -131,7 +131,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 #if defined(SAMOVAR_USE_BLYNK) || defined(USE_TELEGRAM)
 #include <cppQueue.h>
-cppQueue msg_q(80, 4, FIFO);
+cppQueue msg_q(200, 4, FIFO);
 #endif
 
 #ifdef USE_TELEGRAM
@@ -338,7 +338,7 @@ void triggerGetClock(void *parameter) {
       if (!msg_q.isEmpty()) {
         vTaskDelay(5 / portTICK_PERIOD_MS);
         if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-          char c[150];
+          char c[200];
           msg_q.pop(&c);
           qMsg = c;
           //Serial.println(qMsg);
@@ -346,7 +346,7 @@ void triggerGetClock(void *parameter) {
           xSemaphoreGive(xMsgSemaphore);
         }
       }
-    } else if (SamSetup.tg_chat_id[0] != 0){
+    } else if (SamSetup.tg_chat_id[0] != 0) {
       Serial.println(F("Проблема с покдлючением к интернету."));
     }
 #endif
@@ -1429,6 +1429,21 @@ void getjson(void) {
   jsonstr.concat("\"current_power_p\":");
   jsonstr.concat(current_power_p);
   jsonstr.concat(",");
+#else
+  jsonstr.concat("\"current_power_volt\":");
+  jsonstr.concat(0);
+  jsonstr.concat(",");
+  jsonstr.concat("\"target_power_volt\":");
+  jsonstr.concat(0);
+  jsonstr.concat(",");
+  jsonstr.concat("\"current_power_mode\":\"");
+  jsonstr.concat(0);
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
+  jsonstr.concat("\"current_power_p\":");
+  jsonstr.concat(0);
+  jsonstr.concat(",");
+
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -1478,7 +1493,6 @@ void getjson(void) {
   jsonstr.concat("\"Lstatus\":\"");
   jsonstr.concat(Lua_status);
   jsonstr.concat("\"");
-  jsonstr.concat(",");
   jsonstr.concat("}");
 
 #ifdef USE_MQTT
@@ -1617,8 +1631,8 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
 #endif
 #ifdef USE_TELEGRAM
   switch (msg_type) {
-    case 0: MsgPl = F("Тревога!"); break;
-    case 1: MsgPl = F("Предупреждение!"); break;
+    case 0: MsgPl = F("*Тревога!*\n"); break;
+    case 1: MsgPl = F("*Предупреждение!*\n"); break;
     case 2: MsgPl = ""; break;
     default: MsgPl = "";
   }
@@ -1644,10 +1658,10 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
 
 void WriteConsoleLog(String StringLogMsg) {
 
-  for(size_t i = 0; i < StringLogMsg.length(); i++) {
-      if(StringLogMsg[i] == '"') StringLogMsg[i] = '\'';
-      else if(StringLogMsg[i] == '\r') StringLogMsg[i] = '^';
-      else if(StringLogMsg[i] == '\n') StringLogMsg[i] = ' ';
+  for (size_t i = 0; i < StringLogMsg.length(); i++) {
+    if (StringLogMsg[i] == '"') StringLogMsg[i] = '\'';
+    else if (StringLogMsg[i] == '\r') StringLogMsg[i] = '^';
+    else if (StringLogMsg[i] == '\n') StringLogMsg[i] = ' ';
   }
   if (LogMsg.length() > 0) {
     LogMsg = LogMsg + "; " + StringLogMsg;
@@ -1667,28 +1681,30 @@ void WriteConsoleLog(String StringLogMsg) {
 
 void verbose_print_reset_reason()
 {
- esp_reset_reason_t reason = esp_reset_reason();
- String s;
- switch (reason)
- {
-   case 1  : s = "Vbat power on reset";break;
-   case 3  : s = "Software reset digital core";break;
-   case 4  : s = "Legacy watch dog reset digital core";break;
-   case 5  : s = "Deep Sleep reset digital core";break;
-   case 6  : s = "Reset by SLC module, reset digital core";break;
-   case 7  : s = "Timer Group0 Watch dog reset digital core";break;
-   case 8  : s = "Timer Group1 Watch dog reset digital core";break;
-   case 9  : s = "RTC Watch dog Reset digital core";break;
-   case 10 : s = "Instrusion tested to reset CPU";break;
-   case 11 : s = "Time Group reset CPU";break;
-   case 12 : s = "Software reset CPU";break;
-   case 13 : s = "RTC Watch dog Reset CPU";break;
-   case 14 : s = "for APP CPU, reseted by PRO CPU";break;
-   case 15 : s = "Reset when the vdd voltage is not stable";break;
-   case 16 : s = "RTC Watch dog reset digital core and rtc module";break;
-   default : s = "NO_MEAN";
- }
- if (reason != 0) {
-  SendMsg("Причина последней перезагрузки: " + s, NOTIFY_MSG);
- }
+  esp_reset_reason_t reason = esp_reset_reason();
+  switch (reason)
+  {
+    case 1  : SamovarStatus = "Vbat power on reset"; break;
+    case 3  : SamovarStatus = "Software reset digital core"; break;
+    case 4  : SamovarStatus = "Legacy watch dog reset digital core"; break;
+    case 5  : SamovarStatus = "Deep Sleep reset digital core"; break;
+    case 6  : SamovarStatus = "Reset by SLC module, reset digital core"; break;
+    case 7  : SamovarStatus = "Timer Group0 Watch dog reset digital core"; break;
+    case 8  : SamovarStatus = "Timer Group1 Watch dog reset digital core"; break;
+    case 9  : SamovarStatus = "RTC Watch dog Reset digital core"; break;
+    case 10 : SamovarStatus = "Instrusion tested to reset CPU"; break;
+    case 11 : SamovarStatus = "Time Group reset CPU"; break;
+    case 12 : SamovarStatus = "Software reset CPU"; break;
+    case 13 : SamovarStatus = "RTC Watch dog Reset CPU"; break;
+    case 14 : SamovarStatus = "for APP CPU, reseted by PRO CPU"; break;
+    case 15 : SamovarStatus = "Reset when the vdd voltage is not stable"; break;
+    case 16 : SamovarStatus = "RTC Watch dog reset digital core and rtc module"; break;
+    default : SamovarStatus = "NO_MEAN";
+  }
+  if (reason != 0) {
+    SamovarStatus = "Причина последней перезагрузки: " + SamovarStatus;
+    Serial.println(SamovarStatus);
+    SendMsg(SamovarStatus, NOTIFY_MSG);
+    SamovarStatus.clear();
+  }
 }
