@@ -1240,9 +1240,9 @@ void triggerPowerStatus(void *parameter) {
           }
 #ifdef KVIC_DEBUG
             //Serial.println(r);
-            if (current_power_volt < 30 || current_power_volt > 240)
+            if (cpv < 300 || cpv > 2400)
             {
-                r+=";" + String(current_power_volt) + ";" + String(target_power_volt) + ";" + String(current_power_mode) + ";" + String(millis());
+                r+=";" + String(cpv) + ";" + String(target_power_volt) + ";" + String(current_power_mode);
                 SendMsg(("НАПРЯЖЕНИЕ!!!: " + r), NOTIFY_MSG);
             }
 #endif
