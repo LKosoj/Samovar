@@ -1231,8 +1231,8 @@ void triggerPowerStatus(void *parameter) {
           WriteConsoleLog("RESP_MODE =" + resp.substring(6, 7));
 #endif
           int cpv = hexToDec(resp.substring(0, 3));
-          //Если напряжение больше 300 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
-          if (cpv > 30 && cpv < 3000) {
+          //Если напряжение больше 249 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
+          if (cpv > 30 && cpv < 2490) {
             current_power_volt = cpv / 10.0F;
             target_power_volt = hexToDec(resp.substring(3, 6)) / 10.0F;
             current_power_mode = resp.substring(6, 7);
