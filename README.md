@@ -44,8 +44,7 @@
 - Блок питания
 
 Схема подключения
-![alt text](https://github.com/LKosoj/Samovar/blob/master/Fritzing%20scheme/
-Samovar_bb.png)
+![alt text](https://github.com/LKosoj/Samovar/blob/master/Fritzing%20scheme/Samovar_bb.png)
 
 ### Программные
 - PlatformIO IDE или Arduino IDE
