@@ -644,6 +644,7 @@ void set_body_temp() {
 }
 
 void check_alarm() {
+  static bool close_valve_message_sent = false;
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
@@ -761,11 +762,16 @@ void check_alarm() {
   }
 
   if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
-    open_valve(false, true);
-    set_buzzer(true);
+    if (!close_valve_message_sent) {
+      open_valve(false, true);
+      set_buzzer(true);
+      close_valve_message_sent = true;
+    }
 #ifdef USE_WATER_PUMP
     if (pump_started) set_pump_pwm(0);
 #endif
+  } else {
+    close_valve_message_sent = false;
   }
 
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
@@ -1481,8 +1487,11 @@ unsigned int hexToDec(String hexString) {
 bool column_wetting() {
   // Статические переменные для сохранения состояния между вызовами
   static unsigned long wetting_start_time = 0;
+  static unsigned long last_voltage_decrease_time = 0;
   static bool wetting_started = false;
   static bool wetting_completed = false;
+  static bool voltage_decrease_started = false;
+  static float initial_voltage = 0;
 
   // Проверяем, что датчик уровня флегмы установлен
   #ifdef USE_HEAD_LEVEL_SENSOR
@@ -1492,13 +1501,29 @@ bool column_wetting() {
       SendMsg(("Начало смачивания насадки колонны. Следите за уровнем флегмы!"), WARNING_MSG);
       
       wetting_start_time = millis();
+      last_voltage_decrease_time = 0;
       wetting_started = true;
       wetting_completed = false;
-      
+      voltage_decrease_started = false;
+      //set_power_mode(POWER_WORK_MODE);
+      //vTaskDelay(2000 / portTICK_PERIOD_MS);
+      if (target_power_volt > 40) {
+        initial_voltage = target_power_volt;
+      } else {
+#ifdef SAMOVAR_USE_SEM_AVR
+        initial_voltage = WETTING_POWER;
+#else
+        initial_voltage = 220;
+#endif
+      }
     }
 
-    // Максимальное время смачивания - 90 секунд
-    unsigned long max_wetting_time = 90 * 1000;
+    // Максимальное время смачивания до начала понижения напряжения - 120 секунд
+    unsigned long max_wetting_time = 120 * 1000;
+    // Интервал снижения напряжения - 50 секунд
+    unsigned long voltage_decrease_interval = 50 * 1000;
+    // Минимальное допустимое напряжение (80% от начального)
+    float min_voltage = initial_voltage * 0.8;
     
     // Проверяем условия завершения
     if (whls.isHolded()) {
@@ -1508,17 +1533,33 @@ bool column_wetting() {
       // Сбрасываем статические переменные
       wetting_started = false;
       wetting_completed = true;
+      voltage_decrease_started = false;
       return true;
     }
     
     // Проверяем превышение максимального времени
     if (millis() - wetting_start_time >= max_wetting_time) {
-      SendMsg(("Не удалось смочить насадку колонны за отведенное время"), WARNING_MSG);
+      // Если время вышло и мы еще не начали снижать напряжение
+      if (!voltage_decrease_started) {
+        SendMsg(("Начинаем постепенное снижение напряжения"), WARNING_MSG);
+        voltage_decrease_started = true;
+        last_voltage_decrease_time = millis();
+      }
       
-      // Сбрасываем статические переменные
-      wetting_started = false;
-      wetting_completed = false;
-      return true;  // Завершаем попытку
+      // Проверяем, нужно ли снизить напряжение
+      if (voltage_decrease_started && (millis() - last_voltage_decrease_time >= voltage_decrease_interval)) {
+        // Снижаем напряжение на 2% от текущего
+        float new_voltage = target_power_volt * 0.98;
+        
+        // Проверяем, не опустились ли мы ниже минимального значения
+        if (new_voltage >= min_voltage) {
+          set_current_power(new_voltage);
+          SendMsg(("Снижение напряжения до " + String(new_voltage)), WARNING_MSG);
+        } else {
+          SendMsg(("Достигнуто минимальное напряжение: " + String(min_voltage)), WARNING_MSG);
+        }
+        last_voltage_decrease_time = millis();
+      }
     }
     
     // Продолжаем процесс смачивания
