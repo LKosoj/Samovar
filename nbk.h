@@ -69,7 +69,7 @@ void nbk_proc() {
 
 
   if (!PowerOn) {
-    start_pressure = 0;
+    start_pressure = 0.0;
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + ",NBK," + SessionDescription, "st");
