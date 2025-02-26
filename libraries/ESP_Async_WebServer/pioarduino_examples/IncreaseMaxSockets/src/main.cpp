@@ -2,21 +2,22 @@
 // Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
 
 //
-// Perf tests
+// This example demonstrates how to increase the maximum number of active TCP connections
+//
+// in platformo.ini:
+//
+// Use hybrid compilation to set the maximum number of active TCP connections
+//
+// custom_sdkconfig = CONFIG_LWIP_MAX_ACTIVE_TCP=32
+//
+// and increase the queue stack size
+//
+// -D CONFIG_ASYNC_TCP_QUEUE_SIZE=128
 //
 
 #include <Arduino.h>
-#ifdef ESP32
 #include <AsyncTCP.h>
 #include <WiFi.h>
-#elif defined(ESP8266)
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
-#elif defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350)
-#include <RPAsyncTCP.h>
-#include <WiFi.h>
-#endif
-
 #include <ESPAsyncWebServer.h>
 
 static const char *htmlContent PROGMEM = R"(
@@ -80,8 +81,6 @@ static const char *htmlContent PROGMEM = R"(
 )";
 
 static const size_t htmlContentLength = strlen_P(htmlContent);
-static constexpr char characters[] = "0123456789ABCDEF";
-static size_t charactersIndex = 0;
 
 static AsyncWebServer server(80);
 static AsyncEventSource events("/events");
@@ -91,131 +90,31 @@ static volatile size_t requests = 0;
 void setup() {
   Serial.begin(115200);
 
-#ifndef CONFIG_IDF_TARGET_ESP32H2
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP("esp-captive");
-#endif
+  Serial.println("============================");
+  Serial.printf("CONFIG_LWIP_MAX_ACTIVE_TCP %d\n", CONFIG_LWIP_MAX_ACTIVE_TCP);
+  Serial.println("============================");
 
-  // Pauses in the request parsing phase
-  //
-  // autocannon -c 32 -w 32 -a 96 -t 30 --renderStatusCodes -m POST -H "Content-Type: application/json" -b '{"foo": "bar"}' http://192.168.4.1/delay
-  //
-  // curl -v -X POST -H "Content-Type: application/json" -d '{"game": "test"}' http://192.168.4.1/delay
-  //
-  server.onNotFound([](AsyncWebServerRequest *request) {
-    requests++;
-    if (request->url() == "/delay") {
-      request->send(200, "application/json", "{\"status\":\"OK\"}");
-    } else {
-      request->send(404, "text/plain", "Not found");
-    }
-  });
-  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    if (request->url() == "/delay") {
-      delay(3000);
-    }
-  });
+  WiFi.mode(WIFI_STA);
+  WiFi.begin("IoT", "");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("Connecting to WiFi...");
+  }
 
   // HTTP endpoint
   //
-  // > brew install autocannon
-  // > autocannon -c 10 -w 10 -d 20 http://192.168.4.1
-  // > autocannon -c 16 -w 16 -d 20 http://192.168.4.1
+  // > autocannon -c 32 -d 20 -t 30 --renderStatusCodes http://192.168.125.146/
   //
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    // need to cast to uint8_t*
-    // if you do not, the const char* will be copied in a temporary String buffer
     requests++;
     request->send(200, "text/html", (uint8_t *)htmlContent, htmlContentLength);
   });
 
-  // IMPORTANT - DO NOT WRITE SUCH CODE IN PRODUCTON !
-  //
-  // This example simulates the slowdown that can happen when:
-  // - downloading a huge file from sdcard
-  // - doing some file listing on SDCard because it is horribly slow to get a file listing with file stats on SDCard.
-  // So in both cases, ESP would deadlock or TWDT would trigger.
-  //
-  // This example simulats that by slowing down the chunk callback:
-  // - d=2000 is the delay in ms in the callback
-  // - l=10000 is the length of the response
-  //
-  // time curl -N -v -G -d 'd=2000' -d 'l=10000'  http://192.168.4.1/slow.html --output -
-  //
-  server.on("/slow.html", HTTP_GET, [](AsyncWebServerRequest *request) {
-    requests++;
-    uint32_t d = request->getParam("d")->value().toInt();
-    uint32_t l = request->getParam("l")->value().toInt();
-    Serial.printf("d = %" PRIu32 ", l = %" PRIu32 "\n", d, l);
-    AsyncWebServerResponse *response = request->beginChunkedResponse("text/html", [d, l](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-      Serial.printf("%u\n", index);
-      // finished ?
-      if (index >= l) {
-        return 0;
-      }
-
-      // slow down the task to simulate some heavy processing, like SD card reading
-      delay(d);
-
-      memset(buffer, characters[charactersIndex], 256);
-      charactersIndex = (charactersIndex + 1) % sizeof(characters);
-      return 256;
-    });
-
-    request->send(response);
-  });
-
   // SSS endpoint
   //
-  // launch 16 concurrent workers for 30 seconds
-  // > for i in {1..10}; do ( count=$(gtimeout 30 curl -s -N -H "Accept: text/event-stream" http://192.168.4.1/events 2>&1 | grep -c "^data:"); echo "Total: $count events, $(echo "$count / 4" | bc -l) events / second" ) & done;
-  // > for i in {1..16}; do ( count=$(gtimeout 30 curl -s -N -H "Accept: text/event-stream" http://192.168.4.1/events 2>&1 | grep -c "^data:"); echo "Total: $count events, $(echo "$count / 4" | bc -l) events / second" ) & done;
-  //
-  // With AsyncTCP, with 16 workers: a lot of "Event message queue overflow: discard message", no crash
-  //
-  // Total: 1711 events, 427.75 events / second
-  // Total: 1711 events, 427.75 events / second
-  // Total: 1626 events, 406.50 events / second
-  // Total: 1562 events, 390.50 events / second
-  // Total: 1706 events, 426.50 events / second
-  // Total: 1659 events, 414.75 events / second
-  // Total: 1624 events, 406.00 events / second
-  // Total: 1706 events, 426.50 events / second
-  // Total: 1487 events, 371.75 events / second
-  // Total: 1573 events, 393.25 events / second
-  // Total: 1569 events, 392.25 events / second
-  // Total: 1559 events, 389.75 events / second
-  // Total: 1560 events, 390.00 events / second
-  // Total: 1562 events, 390.50 events / second
-  // Total: 1626 events, 406.50 events / second
-  //
-  // With AsyncTCP, with 10 workers:
-  //
-  // Total: 2038 events, 509.50 events / second
-  // Total: 2120 events, 530.00 events / second
-  // Total: 2119 events, 529.75 events / second
-  // Total: 2038 events, 509.50 events / second
-  // Total: 2037 events, 509.25 events / second
-  // Total: 2119 events, 529.75 events / second
-  // Total: 2119 events, 529.75 events / second
-  // Total: 2120 events, 530.00 events / second
-  // Total: 2038 events, 509.50 events / second
-  // Total: 2038 events, 509.50 events / second
-  //
-  // With AsyncTCPSock, with 16 workers: ESP32 CRASH !!!
-  //
-  // With AsyncTCPSock, with 10 workers:
-  //
-  // Total: 1242 events, 310.50 events / second
-  // Total: 1242 events, 310.50 events / second
-  // Total: 1242 events, 310.50 events / second
-  // Total: 1242 events, 310.50 events / second
-  // Total: 1181 events, 295.25 events / second
-  // Total: 1182 events, 295.50 events / second
-  // Total: 1240 events, 310.00 events / second
-  // Total: 1181 events, 295.25 events / second
-  // Total: 1181 events, 295.25 events / second
-  // Total: 1183 events, 295.75 events / second
+  // launch 32 concurrent workers for 30 seconds
+  // > for i in {1..32}; do ( count=$(gtimeout 30 curl -s -N -H "Accept: text/event-stream" http://192.168.125.146/events 2>&1 | grep -c "^data:"); echo "Total: $count events, $(echo "$count / 4" | bc -l) events / second" ) & done;
   //
   server.addHandler(&events);
 
