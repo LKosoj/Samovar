@@ -499,6 +499,7 @@ void check_alarm_nbk() {
 //start_pressure - давление захлеба
 void set_nbk_program(String WProgram) {
   char c[500] = {0};
+  if (WProgram.length() == 0) return;
   WProgram.toCharArray(c, 500);
   char* pair = strtok(c, ";");
   //String MeshTemplate;

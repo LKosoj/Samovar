@@ -167,6 +167,8 @@ void AsyncWebServerRequest::_onData(void *buf, size_t len) {
       // A handler should be already attached at this point in _parseLine function.
       // If handler does nothing (_onRequest is NULL), we don't need to really parse the body.
       const bool needParse = _handler && !_handler->isRequestHandlerTrivial();
+      // Discard any bytes after content length; handlers may overrun their buffers
+      len = std::min(len, _contentLength - _parsedLength);
       if (_isMultipart) {
         if (needParse) {
           size_t i;

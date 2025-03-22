@@ -26,10 +26,10 @@ files:
     - "pre-commit.requirements.txt"
 dependencies:
   esp32async/asynctcp:
-    version: "^3.3.5"
+    version: "^3.3.8"
     require: public
   bblanchon/arduinojson:
-    version: "^7.3.0"
+    version: "^7.3.1"
     require: public
 examples:
   - path: ./idf_component_examples/catchall

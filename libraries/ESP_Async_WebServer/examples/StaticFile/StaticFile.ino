@@ -105,6 +105,22 @@ void setup() {
     f.close();
   }
 
+  LittleFS.mkdir("/files");
+
+  {
+    File f = LittleFS.open("/files/a.txt", "w");
+    assert(f);
+    f.print("Hello from a.txt");
+    f.close();
+  }
+
+  {
+    File f = LittleFS.open("/files/b.txt", "w");
+    assert(f);
+    f.print("Hello from b.txt");
+    f.close();
+  }
+
   // curl -v http://192.168.4.1/
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->redirect("/index.html");
@@ -112,6 +128,12 @@ void setup() {
 
   // curl -v http://192.168.4.1/index.html
   server.serveStatic("/index.html", LittleFS, "/index.html");
+
+  // Example to serve a directory content
+  // curl -v http://192.168.4.1/base/ => serves a.txt
+  // curl -v http://192.168.4.1/base/a.txt => serves a.txt
+  // curl -v http://192.168.4.1/base/b.txt => serves b.txt
+  server.serveStatic("/base", LittleFS, "/files").setDefaultFile("a.txt");
 
   server.begin();
 }

@@ -60,8 +60,14 @@ private:
 
 public:
   AsyncEventSourceMessage(AsyncEvent_SharedData_t data) : _data(data){};
-#ifdef ESP32
+#if defined(ESP32)
   AsyncEventSourceMessage(const char *data, size_t len) : _data(std::make_shared<String>(data, len)){};
+#elif defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350)
+  AsyncEventSourceMessage(const char *data, size_t len) : _data(std::make_shared<String>()) {
+    if (data && len > 0) {
+      _data->concat(data, len);
+    }
+  };
 #else
   // esp8266's String does not have constructor with data/length arguments. Use a concat method here
   AsyncEventSourceMessage(const char *data, size_t len) {

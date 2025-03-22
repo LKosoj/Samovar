@@ -78,9 +78,9 @@ public:
   AsyncClient &operator=(const AsyncClient &other);
   AsyncClient &operator+=(const AsyncClient &other);
 
-  bool operator==(const AsyncClient &other);
+  bool operator==(const AsyncClient &other) const;
 
-  bool operator!=(const AsyncClient &other) {
+  bool operator!=(const AsyncClient &other) const {
     return !(*this == other);
   }
   bool connect(const IPAddress &ip, uint16_t port);
@@ -102,9 +102,9 @@ public:
   bool free();
 
   // ack is not pending
-  bool canSend();
+  bool canSend() const;
   // TCP buffer space available
-  size_t space();
+  size_t space() const;
 
   /**
      * @brief add data to be send (but do not send yet)
@@ -154,51 +154,51 @@ public:
     return data == NULL ? 0 : write(data, strlen(data));
   };
 
-  uint8_t state();
-  bool connecting();
-  bool connected();
-  bool disconnecting();
-  bool disconnected();
+  uint8_t state() const;
+  bool connecting() const;
+  bool connected() const;
+  bool disconnecting() const;
+  bool disconnected() const;
 
   // disconnected or disconnecting
-  bool freeable();
+  bool freeable() const;
 
-  uint16_t getMss();
+  uint16_t getMss() const;
 
-  uint32_t getRxTimeout();
+  uint32_t getRxTimeout() const;
   // no RX data timeout for the connection in seconds
   void setRxTimeout(uint32_t timeout);
 
-  uint32_t getAckTimeout();
+  uint32_t getAckTimeout() const;
   // no ACK timeout for the last sent packet in milliseconds
   void setAckTimeout(uint32_t timeout);
 
-  void setNoDelay(bool nodelay);
+  void setNoDelay(bool nodelay) const;
   bool getNoDelay();
 
   void setKeepAlive(uint32_t ms, uint8_t cnt);
 
-  uint32_t getRemoteAddress();
-  uint16_t getRemotePort();
-  uint32_t getLocalAddress();
-  uint16_t getLocalPort();
+  uint32_t getRemoteAddress() const;
+  uint16_t getRemotePort() const;
+  uint32_t getLocalAddress() const;
+  uint16_t getLocalPort() const;
 #if LWIP_IPV6
-  ip6_addr_t getRemoteAddress6();
-  ip6_addr_t getLocalAddress6();
+  ip6_addr_t getRemoteAddress6() const;
+  ip6_addr_t getLocalAddress6() const;
 #if ESP_IDF_VERSION_MAJOR < 5
-  IPv6Address remoteIP6();
-  IPv6Address localIP6();
+  IPv6Address remoteIP6() const;
+  IPv6Address localIP6() const;
 #else
-  IPAddress remoteIP6();
-  IPAddress localIP6();
+  IPAddress remoteIP6() const;
+  IPAddress localIP6() const;
 #endif
 #endif
 
   // compatibility
-  IPAddress remoteIP();
-  uint16_t remotePort();
-  IPAddress localIP();
-  uint16_t localPort();
+  IPAddress remoteIP() const;
+  uint16_t remotePort() const;
+  IPAddress localIP() const;
+  uint16_t localPort() const;
 
   // set callback - on successful connect
   void onConnect(AcConnectHandler cb, void *arg = 0);
@@ -228,7 +228,7 @@ public:
   }
 
   static const char *errorToString(int8_t error);
-  const char *stateToString();
+  const char *stateToString() const;
 
   // internal callbacks - Do NOT call any of the functions below in user code!
   static int8_t _s_poll(void *arg, struct tcp_pcb *tpcb);
@@ -239,6 +239,7 @@ public:
   static int8_t _s_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
   static int8_t _s_connected(void *arg, struct tcp_pcb *tpcb, int8_t err);
   static void _s_dns_found(const char *name, struct ip_addr *ipaddr, void *arg);
+  static void _tcp_error(void *arg, int8_t err);
 
   int8_t _recv(tcp_pcb *pcb, pbuf *pb, int8_t err);
   tcp_pcb *pcb() {
@@ -246,6 +247,8 @@ public:
   }
 
 protected:
+  friend class AsyncServer;
+
   bool _connect(ip_addr_t addr, uint16_t port);
 
   tcp_pcb *_pcb;
@@ -305,8 +308,8 @@ public:
   void begin();
   void end();
   void setNoDelay(bool nodelay);
-  bool getNoDelay();
-  uint8_t status();
+  bool getNoDelay() const;
+  uint8_t status() const;
 
   // Do not use any of the functions below!
   static int8_t _s_accept(void *arg, tcp_pcb *newpcb, int8_t err);

@@ -4,9 +4,10 @@
 #ifndef _ESPAsyncWebServer_H_
 #define _ESPAsyncWebServer_H_
 
-#include "Arduino.h"
+#include <Arduino.h>
+#include <FS.h>
+#include <lwip/tcpbase.h>
 
-#include "FS.h"
 #include <algorithm>
 #include <deque>
 #include <functional>
@@ -468,7 +469,9 @@ public:
   }
 
   AsyncWebServerResponse *beginChunkedResponse(const char *contentType, AwsResponseFiller callback, AwsTemplateProcessor templateCallback = nullptr);
-  AsyncWebServerResponse *beginChunkedResponse(const String &contentType, AwsResponseFiller callback, AwsTemplateProcessor templateCallback = nullptr);
+  AsyncWebServerResponse *beginChunkedResponse(const String &contentType, AwsResponseFiller callback, AwsTemplateProcessor templateCallback = nullptr) {
+    return beginChunkedResponse(contentType.c_str(), callback, templateCallback);
+  }
 
   AsyncResponseStream *beginResponseStream(const char *contentType, size_t bufferSize = RESPONSE_STREAM_BUFFER_SIZE);
   AsyncResponseStream *beginResponseStream(const String &contentType, size_t bufferSize = RESPONSE_STREAM_BUFFER_SIZE) {
@@ -537,6 +540,9 @@ public:
      * @return const AsyncWebParameter*
      */
   const AsyncWebParameter *getParam(size_t num) const;
+  const AsyncWebParameter *getParam(int num) const {
+    return num < 0 ? nullptr : getParam((size_t)num);
+  }
 
   size_t args() const {
     return params();
@@ -551,9 +557,15 @@ public:
 #ifdef ESP8266
   const String &arg(const __FlashStringHelper *data) const;  // get request argument value by F(name)
 #endif
-  const String &arg(size_t i) const;      // get request argument value by number
+  const String &arg(size_t i) const;  // get request argument value by number
+  const String &arg(int i) const {
+    return i < 0 ? emptyString : arg((size_t)i);
+  };
   const String &argName(size_t i) const;  // get request argument name by number
-  bool hasArg(const char *name) const;    // check if argument exists
+  const String &argName(int i) const {
+    return i < 0 ? emptyString : argName((size_t)i);
+  };
+  bool hasArg(const char *name) const;  // check if argument exists
   bool hasArg(const String &name) const {
     return hasArg(name.c_str());
   };
@@ -562,6 +574,9 @@ public:
 #endif
 
   const String &ASYNCWEBSERVER_REGEX_ATTRIBUTE pathArg(size_t i) const;
+  const String &ASYNCWEBSERVER_REGEX_ATTRIBUTE pathArg(int i) const {
+    return i < 0 ? emptyString : pathArg((size_t)i);
+  }
 
   // get request header value by name
   const String &header(const char *name) const;
@@ -573,8 +588,14 @@ public:
   const String &header(const __FlashStringHelper *data) const;  // get request header value by F(name)
 #endif
 
-  const String &header(size_t i) const;      // get request header value by number
+  const String &header(size_t i) const;  // get request header value by number
+  const String &header(int i) const {
+    return i < 0 ? emptyString : header((size_t)i);
+  };
   const String &headerName(size_t i) const;  // get request header name by number
+  const String &headerName(int i) const {
+    return i < 0 ? emptyString : headerName((size_t)i);
+  };
 
   size_t headers() const;  // get header count
 
@@ -596,6 +617,9 @@ public:
 #endif
 
   const AsyncWebHeader *getHeader(size_t num) const;
+  const AsyncWebHeader *getHeader(int num) const {
+    return num < 0 ? nullptr : getHeader((size_t)num);
+  };
 
   const std::list<AsyncWebHeader> &getHeaders() const {
     return _headers;
@@ -1074,6 +1098,15 @@ public:
 
   void begin();
   void end();
+
+  tcp_state state() const {
+#ifdef ESP8266
+    // ESPAsyncTCP and RPAsyncTCP methods are not corrected declared with const for immutable ones.
+    return static_cast<tcp_state>(const_cast<AsyncWebServer *>(this)->_server.status());
+#else
+    return static_cast<tcp_state>(_server.status());
+#endif
+  }
 
 #if ASYNC_TCP_SSL_ENABLED
   void onSslFileRequest(AcSSlFileHandler cb, void *arg);
