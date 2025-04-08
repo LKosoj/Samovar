@@ -103,7 +103,7 @@ void setup() {
   // curl -v -X POST -H "Content-Type: application/json" -d '{"game": "test"}' http://192.168.4.1/delay
   //
   server.onNotFound([](AsyncWebServerRequest *request) {
-    requests++;
+    requests = requests + 1;
     if (request->url() == "/delay") {
       request->send(200, "application/json", "{\"status\":\"OK\"}");
     } else {
@@ -125,7 +125,7 @@ void setup() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     // need to cast to uint8_t*
     // if you do not, the const char* will be copied in a temporary String buffer
-    requests++;
+    requests = requests + 1;
     request->send(200, "text/html", (uint8_t *)htmlContent, htmlContentLength);
   });
 
@@ -143,7 +143,7 @@ void setup() {
   // time curl -N -v -G -d 'd=2000' -d 'l=10000'  http://192.168.4.1/slow.html --output -
   //
   server.on("/slow.html", HTTP_GET, [](AsyncWebServerRequest *request) {
-    requests++;
+    requests = requests + 1;
     uint32_t d = request->getParam("d")->value().toInt();
     uint32_t l = request->getParam("l")->value().toInt();
     Serial.printf("d = %" PRIu32 ", l = %" PRIu32 "\n", d, l);

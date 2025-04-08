@@ -820,7 +820,9 @@ AsyncResponseStream::AsyncResponseStream(const char *contentType, size_t bufferS
   _code = 200;
   _contentLength = 0;
   _contentType = contentType;
-  if (!_content.reserve(bufferSize)) {
+  // internal buffer will be null on allocation failure
+  _content = std::unique_ptr<cbuf>(new cbuf(bufferSize));
+  if (_content->size() != bufferSize) {
 #ifdef ESP32
     log_e("Failed to allocate");
 #endif
@@ -828,14 +830,18 @@ AsyncResponseStream::AsyncResponseStream(const char *contentType, size_t bufferS
 }
 
 size_t AsyncResponseStream::_fillBuffer(uint8_t *buf, size_t maxLen) {
-  return _content.readBytes((char *)buf, maxLen);
+  return _content->read((char *)buf, maxLen);
 }
 
 size_t AsyncResponseStream::write(const uint8_t *data, size_t len) {
   if (_started()) {
     return 0;
   }
-  size_t written = _content.write(data, len);
+  if (len > _content->room()) {
+    size_t needed = len - _content->room();
+    _content->resizeAdd(needed);
+  }
+  size_t written = _content->write((const char *)data, len);
   _contentLength += written;
   return written;
 }
