@@ -360,8 +360,8 @@ void check_mixer_state() {
 
     if (alarm_c_low_min == 0 && alarm_c_min == 0) {
       //включаем мешалку
-      alarm_c_low_min = millis() + program[ProgramNum].Volume * 60 * 1000;
-      if (program[ProgramNum].Power > 0) alarm_c_min = alarm_c_low_min + program[ProgramNum].Power * 60 * 1000;
+      alarm_c_low_min = millis() + program[ProgramNum].Volume * 1000;
+      if (program[ProgramNum].Power > 0) alarm_c_min = alarm_c_low_min + program[ProgramNum].Power * 1000;
       currentstepcnt++;
       bool dir = false;
       if (currentstepcnt % 2 == 0 && program[ProgramNum].Speed < 0) dir = true;
@@ -387,7 +387,7 @@ void set_mixer_state(bool state, bool dir) {
       //включаем I2CStepper шаговик
       if (use_I2C_dev == 1) {
         int tm = abs(program[ProgramNum].Volume);
-        if (tm == 0) tm = 600;
+        if (tm == 0) tm = 10;
         bool b = set_stepper_by_time(20, dir, tm);
       }
     }
@@ -556,8 +556,8 @@ void set_beer_program(String WProgram) {
     //разберем шаблон для насоса/мешалки по частям
     program[i].capacity_num = getValue(pair, '^', 0).toInt();  //Тип устройства - 1 - мешалка, 2 - насос, 3 - мешалка и насос одновременно
     program[i].Speed = getValue(pair, '^', 1).toInt();         //Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения
-    program[i].Volume = getValue(pair, '^', 2).toInt();        //Время включения в мин
-    program[i].Power = getValue(pair, '^', 3).toInt();         //Время выключения в мин
+    program[i].Volume = getValue(pair, '^', 2).toInt();        //Время включения в секундах
+    program[i].Power = getValue(pair, '^', 3).toInt();         //Время выключения в секундах
     pair = strtok(NULL, "\n");
     program[i].TempSensor = atoi(pair);
 
