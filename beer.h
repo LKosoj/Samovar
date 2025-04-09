@@ -147,7 +147,8 @@ void beer_finish() {
   }
   set_mixer_state(false, false);
 #ifdef USE_WATER_PUMP
-  if (pump_started) set_pump_pwm(0);
+  set_pump_pwm(0);
+  pump_started = false;
 #endif
   setHeaterPosition(false);
   PowerOn = false;
@@ -162,6 +163,11 @@ void beer_finish() {
 void check_alarm_beer() {
 
   if (startval <= 2000) return;
+
+  // Если процесс запущен, обеспечиваем корректное состояние флага PowerOn
+  if (!PowerOn && startval > 2000) {
+    PowerOn = true;
+  }
 
   float temp = 0;
   switch (program[ProgramNum].TempSensor) {
@@ -270,13 +276,18 @@ void check_alarm_beer() {
       //Открываем клапан воды
       open_valve(true, false);
 #ifdef USE_WATER_PUMP
-      if (pump_started) set_pump_pwm(1023);
+      set_pump_pwm(1023);
+      pump_started = true;
 #endif
     }
     if (temp <= program[ProgramNum].Temp) {
       //Если температура упала
       //Закрываем клапан воды
       open_valve(false, false);
+#ifdef USE_WATER_PUMP
+      set_pump_pwm(0);
+      pump_started = false;
+#endif
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }
