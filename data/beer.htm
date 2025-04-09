@@ -564,9 +564,30 @@
       document.getElementById("m_p_id").innerHTML = idx;
     }
     
+    function validateMixerInput(inputElement) {
+      let value = inputElement.value.trim();
+      
+      value = value.replace(/[^0-9]/g, '');
+      
+      let intValue = parseInt(value, 10);
+      
+      if (isNaN(intValue)) {
+        intValue = 0;
+      }
+      
+      const MAX_VALUE = 0x7fff; // 32767
+      if (intValue > MAX_VALUE) {
+        intValue = MAX_VALUE;
+      }
+      
+      inputElement.value = intValue;
+    }
+    
     function popup_ok(){
      document.getElementById("popup").style.display = "none";
      document.getElementById("overlay").classList.remove("show");
+     validateMixerInput(document.getElementById("m_time"));
+     validateMixerInput(document.getElementById("m_pause"));
      document.getElementById("pmixer" + document.getElementById("m_p_id").value).value = document.getElementById("m_type").value + "^" + document.getElementById("m_direction").value + "^" + document.getElementById("m_time").value + "^" + document.getElementById("m_pause").value;
      calc_program();
     }
@@ -881,8 +902,8 @@
         <div id="popup_mesh" class="modalline">
           <select id="m_type" style="margin-left: 4px !important;"><option value="0">Выключено</option><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select>
           <select id="m_direction" style="margin-left: 4px !important;"><option value="-1">Реверс после паузы</option><option value="0">Вращение в прямом направлении</option><option value="1">Вращение в обратную сторону</option></select>
-          <input type="text" id="m_time" style="padding-top: 4px !important; padding-bottom: 4px !important; height: 31px !important;">
-          <input type="text" id="m_pause" style="padding-top: 4px !important; padding-bottom: 4px !important; height: 31px !important;">
+          <input type="text" id="m_time" style="padding-top: 4px !important; padding-bottom: 4px !important; height: 31px !important;" onchange="validateMixerInput(this)" onblur="validateMixerInput(this)">
+          <input type="text" id="m_pause" style="padding-top: 4px !important; padding-bottom: 4px !important; height: 31px !important;" onchange="validateMixerInput(this)" onblur="validateMixerInput(this)">
           <input type="hidden" id="m_p_id">
         </div>
       </div>
