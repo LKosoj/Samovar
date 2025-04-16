@@ -18,6 +18,8 @@
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
+#include <esp_wifi.h>
+
 #if defined(ARDUINO_ESP32S3_DEV)
 #else
 #include "esp32/rom/rtc.h"
@@ -869,6 +871,7 @@ void setup() {
       StIP = WiFi.localIP().toString();
     }
 
+    esp_wifi_set_ps( WIFI_PS_NONE );
     if (shouldSaveWiFiConfig) {
       if (strlen(custom_blynk_token.getValue()) == 33) {
         strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
