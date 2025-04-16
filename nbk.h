@@ -1,28 +1,183 @@
 #include <Arduino.h>
 #include "Samovar.h"
 
+/**
+ * @brief Сбросить счетчик датчиков.
+ */
 void reset_sensor_counter(void);
+
+/**
+ * @brief Завершить работу НБК, отправить статистику, выключить нагрев и подачу.
+ */
 void nbk_finish();
+
+/**
+ * @brief Проверить ошибки питания и обработать их.
+ */
 void check_power_error();
+
+/**
+ * @brief Установить режим питания.
+ * @param Mode Режим (строка)
+ */
 void set_power_mode(String Mode);
+
+/**
+ * @brief Включить или выключить питание.
+ * @param On true — включить, false — выключить
+ */
 void set_power(bool On);
+
+/**
+ * @brief Установить текущую мощность.
+ * @param Volt Мощность (Ватт)
+ */
 void set_current_power(float Volt);
+
+/**
+ * @brief Создать файл с данными текущей сессии.
+ */
 void create_data();
+
+/**
+ * @brief Открыть или закрыть клапан.
+ * @param Val true — открыть, false — закрыть
+ * @param msg true — отправить сообщение
+ */
 void open_valve(bool Val, bool msg);
+
+/**
+ * @brief Установить ШИМ для насоса.
+ * @param duty Значение ШИМ
+ */
 void set_pump_pwm(float duty);
+
+/**
+ * @brief Установить скорость насоса по ПИД-регулированию.
+ * @param temp Целевая температура
+ */
 void set_pump_speed_pid(float temp);
+
+/**
+ * @brief Отправить сообщение пользователю.
+ * @param m Текст сообщения
+ * @param msg_type Тип сообщения
+ */
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+
+/**
+ * @brief Проверить, идет ли кипячение.
+ * @return true если кипит, иначе false
+ */
 bool check_boiling();
+
+/**
+ * @brief Включить или выключить буззер.
+ * @param fl true — включить, false — выключить
+ */
 void set_buzzer(bool fl);
+
+/**
+ * @brief Установить температуру воды.
+ * @param duty Целевая температура
+ */
 void set_water_temp(float duty);
+
+/**
+ * @brief Получить значение из строки по разделителю.
+ * @param data Строка
+ * @param separator Разделитель
+ * @param index Индекс значения
+ * @return Значение (строка)
+ */
 String getValue(String data, char separator, int index);
+
+/**
+ * @brief Перейти к строке программы с номером num, инициализировать этап.
+ * @param num Номер строки программы
+ */
 void run_nbk_program(uint8_t num);
+
+/**
+ * @brief Установить целевую скорость шагового двигателя.
+ * @param spd Скорость
+ * @param direction Направление
+ * @param target Целевое значение
+ * @return true если успешно
+ */
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
+
+/**
+ * @brief Получить расход жидкости по скорости шагового двигателя.
+ * @param StepperSpeed Скорость шагового
+ * @return Расход (л/ч)
+ */
 float i2c_get_liquid_rate_by_step(int StepperSpeed);
+
+/**
+ * @brief Получить скорость шагового двигателя по расходу.
+ * @param volume_per_hour Расход (л/ч)
+ * @return Скорость шагового
+ */
 float i2c_get_speed_from_rate(float volume_per_hour);
+
+/**
+ * @brief Получить текущий объем жидкости.
+ * @return Объем (л)
+ */
 float i2c_get_liquid_volume();
+
+/**
+ * @brief Получить текущую скорость шагового двигателя.
+ * @return Скорость
+ */
 uint16_t get_stepper_speed(void);
+
+/**
+ * @brief Отправить MQTT-сообщение.
+ * @param Str Строка
+ * @param chart Канал/тип
+ */
 void MqttSendMsg(const String &Str, const char *chart );
+
+/**
+ * @brief Основной цикл обработки этапов НБК. Вызывает обработку текущего этапа и проверку аварий.
+ */
+void nbk_proc();
+
+/**
+ * @brief Обработка этапа разгона (H). Устанавливает параметры, контролирует переход к следующему этапу.
+ */
+void handle_nbk_stage_heatup();
+
+/**
+ * @brief Обработка этапа ручной настройки (S). Устанавливает параметры, контролирует захлёб и переход.
+ */
+void handle_nbk_stage_manual();
+
+/**
+ * @brief Обработка этапа оптимизации (O). Реализует цикл оптимизации параметров.
+ */
+void handle_nbk_stage_optimization();
+
+/**
+ * @brief Обработка этапа работы (W). Реализует цикл регулирования подачи и мощности, обработку захлёба.
+ */
+void handle_nbk_stage_work();
+
+/**
+ * @brief Проверка критических аварий (перегрев, недостаточное охлаждение). Останавливает процесс при необходимости.
+ * @return true если была авария и процесс завершён
+ */
+bool check_nbk_critical_alarms();
+
+/**
+ * @brief Централизованная обработка захлёба: сброс параметров, сообщение, завершение или пауза.
+ * @param msg Сообщение пользователю
+ * @param finish true — завершить процесс, false — только пауза
+ * @param pause_ms Длительность паузы (мс), если требуется
+ */
+void handle_overflow(const String& msg, bool finish = true, uint32_t pause_ms = 0);
 
 struct {
   float avgSpeed;
@@ -31,187 +186,331 @@ struct {
   uint32_t lastVolumeUpdate;
 } stats;
 
+// === Описание алгоритма работы ===
+//
+// 1) Разгон (H):
+//    - Мощность = 3000 Вт, подача = 1 л/ч (если не задано).
+//    - Включение разгонного ТЭНа.
+//    - Переход к следующему этапу при достижении T пара >= 85°C.
+//    - При захлёбе — останов процесса.
+//
+// 2) Ручная настройка (S):
+//    - Мощность = 500 Вт, подача = 1 л/ч (если не задано).
+//    - Переход по кнопке или по времени.
+//    - При захлёбе — останов процесса.
+//    - Передача текущих М и П в оптимизацию.
+//
+// 3) Оптимизация (O):
+//    - Ждать Ин/2 перед стартом.
+//    - Цикл: ждать Ин, корректировать М и П по алгоритму (см. ТЗ).
+//    - При захлёбе — завершение оптимизации, переход к работе.
+//    - Сохраняются оптимальные Мо и По.
+//
+// 4) Работа (W):
+//    - М = Мо, П = По (или из строки).
+//    - Цикл: ждать Ин, корректировать подачу по температуре барды.
+//    - При захлёбе — пауза, корректировка Мо, восстановление параметров.
+//
+// 5) Аварийные ситуации (везде, кроме S):
+//    - T пара > 95°C — "Кончилась брага", останов процесса.
+//    - Tтса > 60°C или Tводы > 70°C более 60 сек — "Недостаточное охлаждение", останов процесса.
+//
+// 6) Все этапы, аварии и переходы сопровождаются сообщениями.
 
-// Описание алгоритма работы
-// 1) Прогрев на мощности 3000 Вт с подачей браги 3 л/ч до температуры пара 85 гр.Ц.
-// 3) Стабилизация 1200 сек, с подачей браги 18 л/ч на мощности 2400 Вт. После чего запоминаем температуру внизу колонны Тн.
-// 4) Увеличение подачи браги, до 20 л/ч ступенями 0.1 л/ч каждых 5 сек, далее 0.05 л/ч каждых 5 сек, пока температура внизу колонны не просядет на 0.5 гр.Ц от Тн.
-// 5) Каждых 5 сек. пока давление не достигнет 20 мм.рт.ст. наращивается мощность ступенями по 5 Вт и если просадка температуры от запомненной Тн внизу колонны менее 0.5 гр.Ц наращивается подача браги ступенями по 0.05 л/ч. В конце убавляем мощность на 100 Вт.
-// 6) Работа. Раз в 5 сек: Если Твнизу<Тн-0.5 гр.Ц то уменьшаем подачу браги на 0.05 л/ч, если Твнизу>Тн то увеличиваем подачу браги на 0.05 л/ч.
 
-// При выполнении строк программы осуществляются проверки:
-// 1) Работа датчика захлёба - мощность снижаем на 100 Вт и ждём 60 сек.
-// 2) Превышение уставки по давлению - мощность снижаем на 10 Вт и ждём 10 сек.
-// 3) Т пара>98.1 гр.Ц - Закончилась брага - останавливаем процесс.
-// 4) Ттса (спирт) > 60 гр.Ц или Тводы > 70 гр.Ц - не достаточное охлаждение, ждем 60 сек, если не снижается останавливаем процесс.
-// 5) Срабатывание датчика недостаточного уровня воды в парогене (LUA pin) - ждем 60 сек, если не восстановится останавливаем процесс.
+// === Новые и переименованные параметры по ТЗ ===
+
+// Инерция колонны (Ин), по умолчанию 180 секунд
+#define NBK_COLUMN_INERTIA_DEFAULT 180
+uint16_t nbk_column_inertia = NBK_COLUMN_INERTIA_DEFAULT; // секунд
+
+// Допустимая просадка Т барды (dT), по умолчанию 0.5°C
+#define NBK_DT_DEFAULT 0.5
+float nbk_dT = NBK_DT_DEFAULT;
+
+// Давление захлёба (Дз), по умолчанию 40 мм рт.ст.
+#define NBK_OVERFLOW_PRESSURE_DEFAULT 40
+float nbk_overflow_pressure = NBK_OVERFLOW_PRESSURE_DEFAULT;
+
+// М — текущая мощность, Вт
+float nbk_M = 0;
+// Мо — оптимальная мощность, Вт
+float nbk_Mo = 0;
+// dM — шаг регулирования мощности
+float nbk_dM = 5; // по умолчанию 5 Вт
+
+// П — текущая подача браги, л/ч
+float nbk_P = 0;
+// По — оптимальная подача, л/ч
+float nbk_Po = 0;
+// dП — шаг регулирования подачи
+float nbk_dP = 0.05; // по умолчанию 0.05 л/ч
+
+// Тб — текущая температура барды
+float nbk_Tb = 0;
+// Тн — температура окончания, по умолчанию 98.5°C
+#define NBK_TN_DEFAULT 98.5
+float nbk_Tn = NBK_TN_DEFAULT;
+// dT — допустимая просадка Тб от Тн (см. выше)
+// Тп — температура пара
+float nbk_Tp = 0;
+// Тводы — температура воды
+float nbk_Tvody = 0;
+// Д — текущее давление
+float nbk_D = 0;
+// dД — поправка к Тн по давлению (используется при #define USE_NBK_DELTA_PRESSURE)
+float nbk_dD = 0;
+// ДУФ — датчик уровня флегмы (логический флаг)
+bool nbk_DUF = false;
+
+// === Переменные для этапа оптимизации ===
+static uint8_t nbk_opt_iter = 0;
+static uint32_t nbk_opt_next_time = 0;
+static bool nbk_opt_in_progress = false;
+
+// === Переменные для этапа работы ===
+static uint32_t nbk_work_next_time = 0;
+static bool nbk_work_in_pause = false;
+static uint8_t nbk_work_pause_stage = 0;
 
 void IRAM_ATTR isrNBKLS_TICK() {
   nbkls.tick();
 }
 
+// === Прототипы функций для этапов ===
+void handle_nbk_stage_heatup();
+void handle_nbk_stage_manual();
+void handle_nbk_stage_optimization();
+void handle_nbk_stage_work();
+bool check_nbk_critical_alarms();
+
 void nbk_proc() {
+  // Проверка критических аварий (true — авария, процесс завершён)
+  if (check_nbk_critical_alarms()) return;
 
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
-#else
-  SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
-  nbk_finish();
-  return;
-#endif
-
-#if defined(SAMOVAR_USE_POWER)
-#else
-  SendMsg(("Управление НБК не поддерживается вашим оборудованием!"), NOTIFY_MSG);
-  nbk_finish();
-  return;
-#endif
-
-
-  if (!PowerOn) {
-    start_pressure = 0.0;
-#ifdef USE_MQTT
-    SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + ",NBK," + SessionDescription, "st");
-#endif
-    set_power(true);
-#ifdef SAMOVAR_USE_POWER
-    delay(1000);
-    set_current_power(program[ProgramNum].Power);
-#else
-    current_power_mode = POWER_SPEED_MODE;
-    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
-#endif
-    create_data();  //создаем файл с данными
-    SteamSensor.Start_Pressure = bme_pressure;
-    SendMsg(("Включен нагрев НБК"), NOTIFY_MSG);
-
-    //настраиваем параметры датчика уровня воды в парогене
-    //    nbkls.setType(LOW_PULL);
-    //    nbkls.setDebounce(50);  //игнорируем дребезг
-    //    nbkls.setTickMode(MANUAL);
-    //    nbkls.setTimeout(60 * 1000);  //время, через которое сработает остановка по уровню воды в парогенераторе
-    //    //вешаем прерывание на изменение датчика уровня флегмы
-    //    attachInterrupt(LUA_PIN, isrNBKLS_TICK, CHANGE);
-
-    run_nbk_program(0);
-    set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
+  // Выбор и обработка этапа
+  String wtype = program[ProgramNum].WType;
+  if (wtype == "H") {
+    handle_nbk_stage_heatup();
+    return;
+  } else if (wtype == "S") {
+    handle_nbk_stage_manual();
+    return;
+  } else if (wtype == "O") {
+    handle_nbk_stage_optimization();
+    return;
+  } else if (wtype == "W") {
+    handle_nbk_stage_work();
+    return;
   }
+  // Для других этапов — оставить старую обработку или добавить новые функции
+  vTaskDelay(10 / portTICK_PERIOD_MS);
+}
 
-  uint32_t currentTime = millis();
-  if (currentTime - stats.lastVolumeUpdate >= 1000) { // Обновляем каждую секунду
-    float currentSpeed = i2c_get_liquid_rate_by_step(get_stepper_speed()); // л/ч
-    float seconds = (float)(currentTime - stats.lastVolumeUpdate) / 1000.0;
-    stats.totalVolume += (currentSpeed / 3600.0) * seconds;
-    stats.lastVolumeUpdate = currentTime;
+// === Реализация функций этапов ===
+// =================================
+
+void handle_nbk_stage_heatup() {
+  // Логика этапа разгона (H)
+  // Если мощность и подача не заданы — дефолты
+  if (program[ProgramNum].Power <= 0) {
+    program[ProgramNum].Power = 3000;
   }
-
-  //Обрабатываем программу НБК
-  if (program[ProgramNum].WType == "H" && SteamSensor.avgTemp >= 85) {
-    //Если Т пара больше 85 градусов, переходим к стабилизации НБК
+  if (program[ProgramNum].Speed <= 0) {
+    program[ProgramNum].Speed = 1.0;
+  }
+  nbk_M = program[ProgramNum].Power;
+  nbk_P = program[ProgramNum].Speed;
+  set_power(true); // Включаем разгонный ТЭН
+  set_current_power(nbk_M);
+  set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
+  if (SteamSensor.avgTemp >= 85) {
     run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "S" && begintime <= millis()) {
-    //Если прошло 1200 секунд с начала стабилизации НБК, переходим к программе выхода на заданную скорость отбора
-    run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "T") {
-    //превысили предельные значения, идем дальше или температура упала ниже дельты
-    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed()) || (d_s_temp_prev - NBK_TEMPERATURE_DELTA <= TankSensor.avgTemp && TankSensor.avgTemp > 80)) {
-      run_nbk_program(ProgramNum + 1);
-    }
-    //Если достигли заданной скорости и вышли за пределы Т внизу колонны, переходим к программе выхода на заданное давление
-    run_nbk_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "P") {
-    // && pressure_value > program[ProgramNum].capacity_num) {
-    if (start_pressure > 0 || program[2].Speed < i2c_get_speed_from_rate(get_stepper_speed())) {
-      //Если достигли заданного давления, переходим к рабочей программе
-      run_nbk_program(ProgramNum + 1);
-    }
-  } else if (program[ProgramNum].WType == "W") {
-    if (pressure_value >= start_pressure + 2 || SteamSensor.avgTemp > 98.1) {
-      //превышено давление или температура пара - завершаем работу
-      run_nbk_program(ProgramNum + 1);
-    }
+    return;
   }
-
-  //управляющие воздействия для текущей программы
-  if (program[ProgramNum].WType == "T") {
-    //сохраняем максимальное давление, если не будет давления захлеба - будем считать его максимальным
-    if (bme_prev_pressure < pressure_value) {
-      bme_prev_pressure = pressure_value;
-    }
-
-    if (t_min <= millis()) {
-      float spdinc;
-      if (program[ProgramNum].Speed < i2c_get_speed_from_rate(get_stepper_speed())) {
-        spdinc = NBK_PUMP_INCREMENT * 2;
-      } else {
-        spdinc = NBK_PUMP_INCREMENT;
-      }
-      set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(spdinc / 1000.00 + 0.0001), 0, 2147483640);
-      t_min = millis() + 5 * 1000;
-    }
-  } else if (program[ProgramNum].WType == "P") {
-    //сохраняем максимальное давление, если не будет давления захлеба - будем считать его максимальным
-    if (bme_prev_pressure < pressure_value) {
-      bme_prev_pressure = pressure_value;
-    }
-
-    if (t_min <= millis()) {
-#ifdef SAMOVAR_USE_SEM_AVR
-      //Если регулятор мощности - повышаем на 5 ватт
-      if (target_power_volt + 5 <= program[0].Power) {
-        set_current_power(target_power_volt + 5);
-      }
-#else
-      //Если регулятор напряжения - повышаем на 1 вольт
-      if (target_power_volt + 1 <= program[0].Power) {
-        set_current_power(target_power_volt + 1);
-      }
-#endif
-      if (TankSensor.avgTemp >= d_s_temp_prev - NBK_TEMPERATURE_DELTA) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
-      }
-      t_min = millis() + 5 * 1000;
-    }
-  } else if (program[ProgramNum].WType == "W") {
-    if (t_min <= millis()) {
-      if (TankSensor.avgTemp < d_s_temp_prev - NBK_TEMPERATURE_DELTA) {
-        set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 2147483640);
-      } else if (TankSensor.avgTemp > d_s_temp_prev) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
-      }
-      t_min = millis() + 5 * 1000;
-    }
-    if (alarm_c_min <= millis()) {
-      uint8_t inc = 0;
-      if (start_pressure > 0 && pressure_value > start_pressure) {
-#ifdef SAMOVAR_USE_POWER
-#ifdef SAMOVAR_USE_SEM_AVR
-        //Если регулятор мощности - снижаем на 10 ватт
-        inc = -10;
-#else
-        //если регулятор напряжения - снижаем на 2 вольта
-        inc = -2;
-#endif
-#endif
-      } else if (start_pressure - pressure_value > 2) {
-#ifdef SAMOVAR_USE_POWER
-#ifdef SAMOVAR_USE_SEM_AVR
-        //Если регулятор мощности - повышаем на 5 ватт
-        inc = 5;
-#else
-        //если регулятор напряжения - повышаем на 1 вольт
-        inc = 1;
-#endif
-#endif
-      }
-      if (inc != 0 && target_power_volt + inc <= program[0].Power) {
-        set_current_power(target_power_volt + inc);
-      }
-      alarm_c_min = millis() + 20 * 1000;
-    }
-  }
-
   vTaskDelay(200 / portTICK_PERIOD_MS);
+}
+
+void handle_nbk_stage_manual() {
+  // Логика этапа ручной настройки (S)
+  if (program[ProgramNum].Power <= 0) {
+    program[ProgramNum].Power = 500;
+  }
+  if (program[ProgramNum].Speed <= 0) {
+    program[ProgramNum].Speed = 1.0;
+  }
+  nbk_M = program[ProgramNum].Power;
+  nbk_P = program[ProgramNum].Speed;
+  set_power(true);
+  set_current_power(nbk_M);
+  set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
+  // Захлёб на этапе S
+#ifdef USE_HEAD_LEVEL_SENSOR
+  if (PowerOn && whls.isHolded()) {
+    handle_overflow("Захлёб колонны! Остановка этапа ручной настройки.", true, 0);
+    return;
+  }
+#endif
+  // Переход по кнопке или по времени (если реализовано)
+  if (begintime <= millis()) {
+    run_nbk_program(ProgramNum + 1);
+    return;
+  }
+  vTaskDelay(200 / portTICK_PERIOD_MS);
+}
+
+void handle_nbk_stage_optimization() {
+  // Логика этапа оптимизации (O)
+  if (!nbk_opt_in_progress) {
+    // Ждем окончания паузы перед стартом
+    if (begintime > 0 && begintime > millis()) {
+      vTaskDelay(200 / portTICK_PERIOD_MS);
+      return;
+    }
+    nbk_opt_in_progress = true;
+    nbk_opt_iter = 0;
+    nbk_opt_next_time = millis();
+    SendMsg("Оптимизация начата", NOTIFY_MSG);
+  }
+  if (nbk_opt_in_progress && millis() >= nbk_opt_next_time) {
+    nbk_Tb = TankSensor.avgTemp;
+    // Проверка на захлёб (датчик уровня флегмы или давление)
+    bool overflow = false;
+#ifdef USE_HEAD_LEVEL_SENSOR
+    if (whls.isHolded()) overflow = true;
+#endif
+    if (pressure_value >= nbk_overflow_pressure) overflow = true;
+    if (overflow) {
+      if (nbk_opt_iter == 0) {
+        handle_overflow("Заданные параметры слишком велики — оптимизация невозможна. Останов.", true, 0);
+      } else {
+        SendMsg("Оптимизация завершена. Найденные параметры: " + String(nbk_Mo) + " Вт, " + String(nbk_Po) + " л/ч", NOTIFY_MSG);
+        handle_overflow("Захлёб колонны во время оптимизации. Переход к этапу 'Работа'.", true, 0);
+      }
+      nbk_opt_in_progress = false;
+      nbk_opt_iter = 0;
+      // Переход к следующему этапу через паузу 3*Ин
+      begintime = millis() + 3 * nbk_column_inertia * 1000;
+      run_nbk_program(ProgramNum + 1);
+      return;
+    }
+    // Основной цикл оптимизации
+    if (nbk_Tb >= nbk_Tn) {
+      nbk_Po = nbk_P;
+      nbk_Mo = nbk_M;
+      nbk_P += nbk_dP;
+      SendMsg("Оптимизация: Тб >= Тн, увеличиваем подачу. Итерация " + String(nbk_opt_iter+1), NOTIFY_MSG);
+    } else {
+      nbk_P = nbk_P * 0.8;
+      nbk_M += nbk_dM;
+      SendMsg("Оптимизация: Тб < Тн, увеличиваем мощность. Итерация " + String(nbk_opt_iter+1), NOTIFY_MSG);
+    }
+    set_current_power(nbk_M);
+    set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
+    nbk_opt_iter++;
+    if (nbk_opt_iter >= 10) {
+      SendMsg("Оптимизация завершена по лимиту итераций. Найденные параметры: " + String(nbk_Mo) + " Вт, " + String(nbk_Po) + " л/ч", NOTIFY_MSG);
+      handle_overflow("Захлёб колонны во время оптимизации. Переход к этапу 'Работа'.", true, 0);
+      nbk_opt_in_progress = false;
+      nbk_opt_iter = 0;
+      begintime = millis() + 3 * nbk_column_inertia * 1000;
+      run_nbk_program(ProgramNum + 1);
+      return;
+    }
+    nbk_opt_next_time = millis() + nbk_column_inertia * 1000;
+  }
+  vTaskDelay(200 / portTICK_PERIOD_MS);
+}
+
+void handle_nbk_stage_work() {
+  // Логика этапа работы (W)
+  if (!nbk_work_in_pause && nbk_work_next_time == 0) {
+    // Инициализация этапа: М=Мо, П=По, если заданы, иначе из строки
+    nbk_M = (nbk_Mo > 0) ? nbk_Mo : (program[ProgramNum].Power > 0 ? program[ProgramNum].Power : 500);
+    nbk_P = (nbk_Po > 0) ? nbk_Po : (program[ProgramNum].Speed > 0 ? program[ProgramNum].Speed : 1.0);
+    set_current_power(nbk_M);
+    set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
+    SendMsg("Начало этапа 'Работа'. Мощность: " + String(nbk_M) + " Вт, Подача: " + String(nbk_P) + " л/ч", NOTIFY_MSG);
+    nbk_work_next_time = millis() + nbk_column_inertia * 1000;
+  }
+  if (!nbk_work_in_pause && millis() >= nbk_work_next_time) {
+    nbk_Tb = TankSensor.avgTemp;
+    float dD = nbk_dD; // поправка по давлению, если используется
+    // Проверка на захлёб
+    bool overflow = false;
+#ifdef USE_HEAD_LEVEL_SENSOR
+    if (whls.isHolded()) overflow = true;
+#endif
+    if (pressure_value >= nbk_overflow_pressure) overflow = true;
+    if (overflow) {
+      handle_overflow("Захлёб колонны! Остановка подачи и нагрева.", true, 3 * nbk_column_inertia * 1000);
+      return;
+    }
+    // Основной цикл: корректировка подачи
+    if (nbk_Tb < nbk_Tn - nbk_dT + dD) {
+      nbk_P -= nbk_dP / 10.0;
+      if (nbk_P < 0) nbk_P = 0;
+      set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
+      SendMsg("Работа: Тб < Тн-dT+dД, уменьшаем подачу: " + String(nbk_P) + " л/ч", NOTIFY_MSG);
+    }
+    nbk_work_next_time = millis() + nbk_column_inertia * 1000;
+  }
+  // Обработка паузы после захлёба
+  if (nbk_work_in_pause && millis() >= nbk_work_next_time) {
+    if (nbk_work_pause_stage == 1) {
+      // После 3*Ин: корректируем Мо, восстанавливаем параметры
+      nbk_Mo = nbk_Mo - nbk_dM / 10.0;
+      if (nbk_Mo < 0) nbk_Mo = 0;
+      nbk_M = nbk_Mo;
+      nbk_P = nbk_Po;
+      set_current_power(nbk_M);
+      set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
+      SendMsg("Работа: после захлёба, корректируем Мо и восстанавливаем параметры.", NOTIFY_MSG);
+      nbk_work_pause_stage = 2;
+      nbk_work_next_time = millis() + 2 * nbk_column_inertia * 1000;
+    } else if (nbk_work_pause_stage == 2) {
+      // После 2*Ин: продолжаем работу
+      nbk_work_in_pause = false;
+      nbk_work_pause_stage = 0;
+      nbk_work_next_time = millis() + nbk_column_inertia * 1000;
+      SendMsg("Работа: продолжаем цикл после паузы.", NOTIFY_MSG);
+    }
+  }
+  vTaskDelay(200 / portTICK_PERIOD_MS);
+}
+
+// === Проверка критических аварий ===
+bool check_nbk_critical_alarms() {
+  static uint32_t overheat_start_time = 0;
+  bool is_manual = (program[ProgramNum].WType == "S");
+  if (!is_manual) {
+    if (SteamSensor.avgTemp > 95.0) {
+      SendMsg("Кончилась брага! Остановка процесса.", ALARM_MSG);
+      nbk_M = 0;
+      nbk_P = 0;
+      set_power(false);
+      set_stepper_target(0, 0, 0);
+      run_nbk_program(CAPACITY_NUM * 2);
+      vTaskDelay(200 / portTICK_PERIOD_MS);
+      return true;
+    }
+    if (ACPSensor.avgTemp > 60.0 || WaterSensor.avgTemp > 70.0) {
+      if (overheat_start_time == 0) overheat_start_time = millis();
+      if (millis() - overheat_start_time > 60000) {
+        SendMsg("Недостаточное охлаждение! Остановка процесса.", ALARM_MSG);
+        nbk_M = 0;
+        nbk_P = 0;
+        set_power(false);
+        set_stepper_target(0, 0, 0);
+        run_nbk_program(CAPACITY_NUM * 2);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
+        return true;
+      }
+    } else {
+      overheat_start_time = 0;
+    }
+  }
+  return false;
 }
 
 void nbk_finish() {
@@ -249,24 +548,49 @@ void run_nbk_program(uint8_t num) {
   alarm_c_min = 0;
   msgfl = true;
 
+  // Сообщение о переходе между этапами
   if (num == 0) {
     stats.startTime = millis();
     stats.avgSpeed = 0;
     stats.totalVolume = 0;
-  }
-
-  if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
-
-  if (SamSetup.ChangeProgramBuzzer) {
-    set_buzzer(true);
-  }
-
-  if (num == CAPACITY_NUM * 2) {
-    //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
+    SendMsg("Запуск программы НБК. Этап 1", NOTIFY_MSG);
+  } else if (num == CAPACITY_NUM * 2) {
     nbk_finish();
     return;
   } else {
-    SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+    SendMsg("Переход к строке программы №" + (String)(num + 1) + ". Тип: " + program[num].WType, NOTIFY_MSG);
+  }
+
+  // === Передача параметров Мо и По после оптимизации ===
+  if (ProgramNum > 0 && program[ProgramNum - 1].WType == "O") {
+    // Если оптимизация завершена, передаем найденные параметры в этап работы
+    if (nbk_Mo > 0 && nbk_Po > 0) {
+      SendMsg("Передача оптимальных параметров в этап 'Работа': Мо=" + String(nbk_Mo) + " Вт, По=" + String(nbk_Po) + " л/ч", NOTIFY_MSG);
+    } else {
+      SendMsg("Оптимизация не дала результата, используются параметры по умолчанию.", WARNING_MSG);
+    }
+  }
+
+  // === Передача параметров в оптимизацию при переходе с S ===
+  if (ProgramNum > 0 && program[ProgramNum - 1].WType == "S") {
+    nbk_Mo = nbk_M;
+    nbk_Po = nbk_P;
+    SendMsg("Передача текущих параметров в оптимизацию: Мо=" + String(nbk_Mo) + " Вт, По=" + String(nbk_Po) + " л/ч", NOTIFY_MSG);
+  }
+
+  // === Захлёб на этапе ручной настройки (S) ===
+  if (program[ProgramNum].WType == "S") {
+#ifdef USE_HEAD_LEVEL_SENSOR
+    if (PowerOn && whls.isHolded()) {
+      nbk_M = 0;
+      nbk_P = 0;
+      set_power(false);
+      set_stepper_target(0, 0, 0);
+      SendMsg("Захлёб колонны! Остановка этапа ручной настройки.", ALARM_MSG);
+      run_nbk_program(CAPACITY_NUM * 2);
+      return;
+    }
+#endif
   }
 
   //Изменяем на заданную мощность
@@ -291,15 +615,17 @@ void run_nbk_program(uint8_t num) {
   }
 
   if (program[ProgramNum].WType == "S") {
-    begintime = millis() + 1200 * 1000;
-    //Если задана скорость - устанавливаем или абсолютнуюю или относительную
-    if (program[ProgramNum].Speed != 0) {
-      if (abs(program[ProgramNum].Speed) < 3 && (i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed) <= program[2].Speed) {
-        set_stepper_target(i2c_get_speed_from_rate(i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed), 0, 2147483640);
-      } else {
-        set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
-      }
+    if (program[ProgramNum].Power <= 0) {
+      program[ProgramNum].Power = 500;
     }
+    if (program[ProgramNum].Speed <= 0) {
+      program[ProgramNum].Speed = 1.0;
+    }
+    nbk_M = program[ProgramNum].Power;
+    nbk_P = program[ProgramNum].Speed;
+    set_power(true);
+    set_current_power(nbk_M);
+    set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
   } else if (program[ProgramNum].WType == "T") {
     //Запомним Тниз = d_s_temp_prev
     d_s_temp_prev = TankSensor.avgTemp;
@@ -540,3 +866,21 @@ String get_nbk_program() {
   }
   return Str;
 }
+
+// === Централизованная обработка захлёба ===
+void handle_overflow(const String& msg, bool finish, uint32_t pause_ms) {
+  nbk_M = 0;
+  nbk_P = 0;
+  set_power(false);
+  set_stepper_target(0, 0, 0);
+  SendMsg(msg, ALARM_MSG);
+  if (finish) {
+    run_nbk_program(CAPACITY_NUM * 2);
+  } else if (pause_ms > 0) {
+    // Для этапа W: пауза и переход к восстановлению
+    nbk_work_in_pause = true;
+    nbk_work_pause_stage = 1;
+    nbk_work_next_time = millis() + pause_ms;
+  }
+}
+
