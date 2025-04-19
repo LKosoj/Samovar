@@ -2,32 +2,163 @@
 #include "Samovar.h"
 #include "quality.h"
 
+/**
+ * @brief Завершить процесс дистилляции, выключить нагрев и сбросить счетчики.
+ */
 void distiller_finish();
+
+/**
+ * @brief Установить режим питания.
+ * @param Mode Режим (строка)
+ */
 void set_power_mode(String Mode);
+
+/**
+ * @brief Включить или выключить питание.
+ * @param On true — включить, false — выключить
+ */
 void set_power(bool On);
+
+/**
+ * @brief Создать файл с данными текущей сессии дистилляции.
+ */
 void create_data();
+
+/**
+ * @brief Открыть или закрыть клапан.
+ * @param Val true — открыть, false — закрыть
+ * @param msg true — отправить сообщение
+ */
 void open_valve(bool Val, bool msg);
+
+/**
+ * @brief Установить ШИМ для насоса.
+ * @param duty Значение ШИМ
+ */
 void set_pump_pwm(float duty);
+
+/**
+ * @brief Установить скорость насоса по ПИД-регулированию.
+ * @param temp Целевая температура
+ */
 void set_pump_speed_pid(float temp);
+
+/**
+ * @brief Установить программу дистилляции из строки.
+ * @param WProgram Строка с программой
+ */
 void set_dist_program(String WProgram);
+
+/**
+ * @brief Перейти к строке программы дистилляции с номером num.
+ * @param num Номер строки программы
+ */
 void run_dist_program(uint8_t num);
+
+/**
+ * @brief Получить текущую программу дистилляции в виде строки.
+ * @return Строка с программой
+ */
 String get_dist_program();
+
+/**
+ * @brief Сбросить прогноз времени.
+ */
 void resetTimePredictor();
+
+/**
+ * @brief Обновить прогноз времени.
+ */
 void updateTimePredictor();
+
+/**
+ * @brief Получить расчетное оставшееся время.
+ * @return Оставшееся время (минуты)
+ */
 float calculateRemainingTime();
+
+/**
+ * @brief Проверить аварийные ситуации дистиллятора.
+ */
 void check_alarm_distiller();
+
+/**
+ * @brief Включить или выключить буззер.
+ * @param On true — включить, false — выключить
+ */
 void set_buzzer(bool On);
+
+/**
+ * @brief Установить текущую мощность.
+ * @param power Мощность (Ватт)
+ */
 void set_current_power(float power);
+
+/**
+ * @brief Установить скорость насоса.
+ * @param speed Скорость
+ * @param msg true — отправить сообщение
+ */
 void set_pump_speed(float speed, bool msg);
+
+/**
+ * @brief Установить температуру тела колонны.
+ */
 void set_body_temp();
+
+/**
+ * @brief Получить объем жидкости.
+ * @return Объем (мл)
+ */
 int get_liquid_volume();
+
+/**
+ * @brief Получить статус самовара в виде строки.
+ * @return Статус (строка)
+ */
 String get_Samovar_Status();
+
+/**
+ * @brief Получить скорость по расходу.
+ * @param rate Расход
+ * @return Скорость
+ */
 float get_speed_from_rate(float rate);
+
+/**
+ * @brief Получить расчетную спиртуозность по температуре.
+ * @param t Температура
+ * @return Спиртуозность (%)
+ */
 float get_alcohol(float t);
+
+/**
+ * @brief Получить расчетную спиртуозность пара по температуре.
+ * @param t Температура
+ * @return Спиртуозность пара (%)
+ */
 float get_steam_alcohol(float t);
+
+/**
+ * @brief Установить емкость.
+ * @param cap Номер емкости
+ */
 void set_capacity(uint8_t cap);
+
+/**
+ * @brief Сбросить счетчик датчиков.
+ */
 void reset_sensor_counter();
+
+/**
+ * @brief Проверить ошибки питания и обработать их.
+ */
 void check_power_error();
+
+/**
+ * @brief Установить емкость (дублирующая функция).
+ * @param cap Номер емкости
+ */
 void set_capacity(uint8_t cap);
 
 #ifdef USE_MQTT
@@ -35,29 +166,41 @@ void set_capacity(uint8_t cap);
 #endif
 
 #ifdef USE_WATER_PUMP
+/**
+ * @brief Проверить, идет ли кипячение.
+ * @return true если кипит, иначе false
+ */
 bool check_boiling();
 #endif
+
+/**
+ * @brief Отправить сообщение пользователю.
+ * @param m Текст сообщения
+ * @param msg_type Тип сообщения
+ */
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 
-// Структура для прогнозирования времени
+/**
+ * @brief Структура для прогнозирования времени процесса дистилляции.
+ */
 struct TimePredictor {
-    unsigned long startTime;           // Время начала процесса
-    float initialAlcohol;             // Начальное содержание спирта
-    float initialTemp;                // Начальная температура
-    float lastTemp;                   // Последняя температура
-    float tempChangeRate;             // Скорость изменения температуры
-    unsigned long lastUpdateTime;      // Время последнего обновления
-    float predictedTotalTime;         // Прогнозируемое общее время в минутах
-    float remainingTime;              // Оставшееся время в минутах
+    unsigned long startTime;           ///< Время начала процесса
+    float initialAlcohol;              ///< Начальное содержание спирта
+    float initialTemp;                 ///< Начальная температура
+    float lastTemp;                    ///< Последняя температура
+    float tempChangeRate;              ///< Скорость изменения температуры
+    unsigned long lastUpdateTime;      ///< Время последнего обновления
+    float predictedTotalTime;          ///< Прогнозируемое общее время (мин)
+    float remainingTime;               ///< Оставшееся время (мин)
 };
 
 TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};
 
-// Функции прогнозирования времени
-void updateTimePredictor();
-float calculateRemainingTime();
-void resetTimePredictor();
-
+/**
+ * @brief Основной цикл обработки процесса дистилляции.
+ *
+ * Вызывает обработку текущего этапа, обновляет прогноз времени, контролирует аварии и переходы между этапами.
+ */
 void distiller_proc() {
 //    SendMsg("Статус: " + String(SamovarStatusInt) + 
 //            ", Режим: " + String(Samovar_Mode) + 

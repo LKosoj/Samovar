@@ -626,19 +626,6 @@ void run_nbk_program(uint8_t num) {
     set_power(true);
     set_current_power(nbk_M);
     set_stepper_target(i2c_get_speed_from_rate(nbk_P), 0, 2147483640);
-  } else if (program[ProgramNum].WType == "T") {
-    //Запомним Тниз = d_s_temp_prev
-    d_s_temp_prev = TankSensor.avgTemp;
-    begintime = 0;
-  } else if (program[ProgramNum].WType == "P") {
-    //Если задана скорость - устанавливаем или абсолютнуюю или относительную
-    if (program[ProgramNum].Speed != 0) {
-      if (abs(program[ProgramNum].Speed) < 3 && (i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed) <= program[2].Speed) {
-        set_stepper_target(i2c_get_speed_from_rate(i2c_get_speed_from_rate(get_stepper_speed()) + program[ProgramNum].Speed), 0, 2147483640);
-      } else {
-        set_stepper_target(i2c_get_speed_from_rate(program[ProgramNum].Speed), 0, 2147483640);
-      }
-    }
   } else if (program[ProgramNum].WType == "W") {
     //Если задана температура, установим Тниз = d_s_temp_prev
     if (program[ProgramNum].Temp > 0) {
@@ -819,7 +806,7 @@ void check_alarm_nbk() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
-//H;3;0;3000;0\nS;18;0;2400;0\nT;20;0;0;0\nP;0;20;-100;0\nW;0;0;0;0\n
+//H;3;0;3000;0\nS;18;0;2400;0\nO;0;0;0;0\nW;0;0;0;0\n
 //program[0].Power - максимальная мощность
 //program[2].Speed - максимальная скорость
 //start_pressure - давление захлеба

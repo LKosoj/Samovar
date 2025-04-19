@@ -3,34 +3,171 @@
 #include "SamovarMqtt.h"
 #include "pumppwm.h"
 
-/// @brief 
+/**
+ * @brief Прочитать конфигурацию из памяти.
+ */
 void read_config();
+
+/**
+ * @brief Получить значение из строки по разделителю.
+ * @param data Строка
+ * @param separator Разделитель
+ * @param index Индекс значения
+ * @return Значение (строка)
+ */
 String getValue(String data, char separator, int index);
+
+/**
+ * @brief Запустить сервисные задачи (например, шаговый двигатель).
+ */
 void startService(void);
+
+/**
+ * @brief Остановить сервисные задачи.
+ */
 void stopService(void);
+
+/**
+ * @brief Установить режим питания.
+ * @param Mode Режим (строка)
+ */
 void set_power_mode(String Mode);
+
+/**
+ * @brief Проверить ошибки питания и обработать их.
+ */
 void check_power_error();
+
+/**
+ * @brief Установить текущую мощность.
+ * @param Volt Мощность (Вольт)
+ */
 void set_current_power(float Volt);
+
+/**
+ * @brief Сохранить текущий профиль настроек.
+ */
 void save_profile();
+
+/**
+ * @brief Завершить программу затирания, выключить нагрев, насос и клапаны.
+ */
 void beer_finish();
+
+/**
+ * @brief Управлять состоянием нагревателя по ПИД-регулятору.
+ * @param setpoint Целевая температура
+ * @param temp Текущая температура
+ */
 void set_heater_state(float setpoint, float temp);
+
+/**
+ * @brief Установить ШИМ для нагревателя.
+ * @param dutyCycle Скважность (0.0 - 1.0)
+ */
 void set_heater(double dutyCycle);
+
+/**
+ * @brief Включить или выключить нагреватель.
+ * @param state true — включить, false — выключить
+ */
 void setHeaterPosition(bool state);
+
+/**
+ * @brief Перейти к строке программы с номером num, инициализировать этап.
+ * @param num Номер строки программы
+ */
 void run_beer_program(uint8_t num);
+
+/**
+ * @brief Запустить автотюнинг ПИД-регулятора.
+ */
 void StartAutoTune();
+
+/**
+ * @brief Завершить автотюнинг ПИД-регулятора и применить параметры.
+ */
 void FinishAutoTune();
+
+/**
+ * @brief Включить или выключить питание.
+ * @param On true — включить, false — выключить
+ */
 void set_power(bool On);
+
+/**
+ * @brief Создать файл с данными текущей сессии.
+ */
 void create_data();
+
+/**
+ * @brief Открыть или закрыть клапан.
+ * @param Val true — открыть, false — закрыть
+ * @param msg true — отправить сообщение
+ */
 void open_valve(bool Val, bool msg);
+
+/**
+ * @brief Отправить сообщение пользователю.
+ * @param m Текст сообщения
+ * @param msg_type Тип сообщения
+ */
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+
+/**
+ * @brief Получить строковое описание программы затирания.
+ * @return Строка с описанием программы
+ */
 String get_beer_program();
+
+/**
+ * @brief Проверить и обработать состояние мешалки и насоса.
+ */
 void check_mixer_state();
+
+/**
+ * @brief Установить состояние мешалки.
+ * @param state true — включить, false — выключить
+ * @param dir true — реверс, false — прямое вращение
+ */
 void set_mixer_state(bool state, bool dir);
+
+/**
+ * @brief Установить целевое состояние насоса через I2C.
+ * @param on 1 — включить, 0 — выключить
+ * @return true если успешно
+ */
 bool set_mixer_pump_target(uint8_t on);
+
+/**
+ * @brief Управлять шаговым двигателем по времени.
+ * @param spd Скорость
+ * @param direction Направление
+ * @param time Время работы (мс)
+ * @return true если успешно
+ */
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
+
+/**
+ * @brief Совершить шаг шаговым двигателем для засыпи хмеля.
+ */
 void HopStepperStep();
+
+/**
+ * @brief Включить или выключить буззер.
+ * @param fl true — включить, false — выключить
+ */
 void set_buzzer(bool fl);
+
+/**
+ * @brief Установить ШИМ для насоса.
+ * @param duty Значение ШИМ
+ */
 void set_pump_pwm(float duty);
+
+/**
+ * @brief Сбросить счетчик датчиков и состояния процесса.
+ */
 void reset_sensor_counter(void);
 
 #define TEMP_HISTORY_SIZE 10  // Размер буфера истории температур
@@ -46,6 +183,11 @@ struct BoilingDetector {
 
 BoilingDetector boilingDetector;
 
+/**
+ * @brief Проверяет, началось ли кипение по истории температур.
+ * @param currentTemp Текущая температура
+ * @return true, если кипение началось, иначе false
+ */
 bool isBoilingStarted(float currentTemp) {
     unsigned long currentTime = millis();
     
@@ -82,10 +224,14 @@ bool isBoilingStarted(float currentTemp) {
     return boilingDetector.isBoiling;
 }
 
+/**
+ * @brief Основной цикл запуска процесса затирания. Инициализация и старт программы.
+ */
 void beer_proc() {
   if (SamovarStatusInt != 2000) return;
 
   if (startval == 2000 && !PowerOn) {
+    boilingDetector.isBoiling = false;
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + SessionDescription, "st");
@@ -98,6 +244,10 @@ void beer_proc() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
+/**
+ * @brief Переход к этапу программы с номером num, обработка сообщений и сброс переменных этапа.
+ * @param num Номер этапа программы
+ */
 void run_beer_program(uint8_t num) {
   if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
   if (startval == 2000) startval = 2001;
@@ -141,6 +291,9 @@ void run_beer_program(uint8_t num) {
   currentstepcnt = 0; //счетчик циклов мешалки
 }
 
+/**
+ * @brief Завершает процесс затирания: выключает насос, нагрев, клапаны, сбрасывает состояния.
+ */
 void beer_finish() {
   if (valve_status) {
     open_valve(false, true);
@@ -160,6 +313,9 @@ void beer_finish() {
   reset_sensor_counter();
 }
 
+/**
+ * @brief Проверяет и управляет состоянием процесса затирания, включая нагрев, охлаждение, паузы и кипячение.
+ */
 void check_alarm_beer() {
 
   if (startval <= 2000) return;
@@ -351,6 +507,9 @@ void check_alarm_beer() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
+/**
+ * @brief Управляет состоянием мешалки и насоса в зависимости от этапа программы и времени.
+ */
 void check_mixer_state() {
   if (program[ProgramNum].capacity_num > 0) {
     //обрабатываем время включения и управляем мешалкой и насосом
@@ -387,6 +546,11 @@ void check_mixer_state() {
   }
 }
 
+/**
+ * @brief Включает или выключает мешалку и насос, а также управляет направлением вращения.
+ * @param state true — включить, false — выключить
+ * @param dir true — реверс, false — прямое вращение
+ */
 void set_mixer_state(bool state, bool dir) {
   mixer_status = state;
   //Serial.println("State = " + String(state) + "; DIR = " + String(dir) + "; alarm_c_min = " + String(alarm_c_min) + "; alarm_c_low_min = " + String(alarm_c_low_min));
@@ -430,6 +594,11 @@ void set_mixer_state(bool state, bool dir) {
   }
 }
 
+/**
+ * @brief Управляет состоянием нагревателя по ПИД-регулятору и логике разгона.
+ * @param setpoint Целевая температура
+ * @param temp Текущая температура
+ */
 void set_heater_state(float setpoint, float temp) {
 #ifdef SAMOVAR_USE_POWER
   //Если дельта большая и не тюнинг, включаем разгонный тэн, иначе выключаем
@@ -476,6 +645,10 @@ void set_heater_state(float setpoint, float temp) {
   }
 }
 
+/**
+ * @brief Устанавливает скважность ШИМ для нагревателя.
+ * @param dutyCycle Скважность (0.0 - 1.0)
+ */
 void set_heater(double dutyCycle) {
   static uint32_t oldTime = 0;
   static uint32_t periodTime = 0;
@@ -500,6 +673,10 @@ void set_heater(double dutyCycle) {
   }
 }
 
+/**
+ * @brief Включает или выключает нагреватель (реле).
+ * @param state true — включить, false — выключить
+ */
 void setHeaterPosition(bool state) {
   heater_state = state;
 
@@ -531,6 +708,10 @@ void setHeaterPosition(bool state) {
   }
 }
 
+/**
+ * @brief Возвращает строковое описание текущей программы затирания.
+ * @return Строка с описанием программы
+ */
 String get_beer_program() {
   String Str = "";
   int k = CAPACITY_NUM * 2;
@@ -548,8 +729,10 @@ String get_beer_program() {
   return Str;
 }
 
-/// @brief 
-/// @param WProgram 
+/**
+ * @brief Устанавливает программу затирания из строки.
+ * @param WProgram Строка с описанием программы
+ */
 void set_beer_program(String WProgram) {
   //M - malt application temp, P - pause, B - boil, C - cool
   char c[500] = {0};
@@ -582,6 +765,9 @@ void set_beer_program(String WProgram) {
   }
 }
 
+/**
+ * @brief Запускает автотюнинг ПИД-регулятора.
+ */
 void StartAutoTune() {
   // REmember the mode we were in
   ATuneModeRemember = heaterPID.GetMode();
@@ -597,6 +783,9 @@ void StartAutoTune() {
   tuning = true;
 }
 
+/**
+ * @brief Завершает автотюнинг ПИД-регулятора, применяет параметры и сохраняет профиль.
+ */
 void FinishAutoTune() {
   aTune.Cancel();
   tuning = false;
@@ -620,11 +809,17 @@ void FinishAutoTune() {
   set_heater_state(0, 50);
 }
 
+/**
+ * @brief Включает или выключает мешалку (обертка для set_mixer_state).
+ * @param On true — включить, false — выключить
+ */
 void set_mixer(bool On) {
   set_mixer_state(On, false);
 }
 
-//Крутим шаговым двигателем на заданное количество шагов
+/**
+ * @brief Совершает шаг шаговым двигателем для засыпи хмеля.
+ */
 void HopStepperStep() {
   stopService();
   stepper.brake();

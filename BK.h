@@ -9,21 +9,86 @@
 #include "SamovarMqtt.h"
 #endif
 
-
+/**
+ * @brief Завершить работу бражной колонны, отправить уведомление, выключить нагрев и сбросить счетчики.
+ */
 void bk_finish();
+
+/**
+ * @brief Установить режим питания.
+ * @param Mode Режим (строка)
+ */
 void set_power_mode(String Mode);
+
+/**
+ * @brief Установить текущую мощность.
+ * @param power Мощность (Вт)
+ */
 void set_current_power(float power);
+
+/**
+ * @brief Включить или выключить буззер.
+ * @param On true — включить, false — выключить
+ */
 void set_buzzer(bool On);
+
+/**
+ * @brief Сбросить счетчик датчиков.
+ */
 void reset_sensor_counter();
+
+/**
+ * @brief Проверить ошибки питания и обработать их.
+ */
 void check_power_error();
+
+/**
+ * @brief Включить или выключить питание.
+ * @param On true — включить, false — выключить
+ */
 void set_power(bool On);
+
+/**
+ * @brief Создать файл с данными текущей сессии.
+ */
 void create_data();
+
+/**
+ * @brief Открыть или закрыть клапан.
+ * @param Val true — открыть, false — закрыть
+ * @param msg true — отправить сообщение
+ */
 void open_valve(bool Val, bool msg);
+
+/**
+ * @brief Установить ШИМ для насоса.
+ * @param duty Значение ШИМ
+ */
 void set_pump_pwm(float duty);
+
+/**
+ * @brief Установить скорость насоса по ПИД-регулированию.
+ * @param temp Целевая температура
+ */
 void set_pump_speed_pid(float temp);
+
+/**
+ * @brief Отправить сообщение пользователю.
+ * @param m Текст сообщения
+ * @param msg_type Тип сообщения
+ */
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+
+/**
+ * @brief Проверить, идет ли кипячение.
+ * @return true если кипит, иначе false
+ */
 bool check_boiling();
 
+/**
+ * @brief Установить температуру воды (ШИМ).
+ * @param duty Значение ШИМ
+ */
 void set_water_temp(float duty) {
 #ifdef USE_WATER_PUMP
   bk_pwm = duty;
@@ -36,6 +101,9 @@ void set_water_temp(float duty) {
 #endif
 }
 
+/**
+ * @brief Основной цикл работы бражной колонны. Запускает нагрев, проверяет условия завершения.
+ */
 void bk_proc() {
 
   if (!PowerOn) {
@@ -62,13 +130,9 @@ void bk_proc() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
-void bk_finish() {
-  SendMsg(("Работа бражной колонны завершена"), NOTIFY_MSG);
-  set_power(false);
-  reset_sensor_counter();
-}
-
-
+/**
+ * @brief Проверка и обработка аварийных ситуаций в работе бражной колонны.
+ */
 void check_alarm_bk() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
@@ -138,4 +202,10 @@ void check_alarm_bk() {
     alarm_t_min = millis() + 30000;
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
+}
+
+void bk_finish() {
+  SendMsg(("Работа бражной колонны завершена"), NOTIFY_MSG);
+  set_power(false);
+  reset_sensor_counter();
 }

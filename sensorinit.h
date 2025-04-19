@@ -389,7 +389,7 @@ void sensor_init(void) {
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     set_dist_program("A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n");
   } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    set_nbk_program("H;3;0;3000;0\nS;18;0;2400;0\nT;20;0;0;0\nP;0;20;-100;0\nW;0;0;0;0\n");
+    set_nbk_program("H;3;0;3000;0\nS;1;0;500;0\nO;0;0;0;0\nW;0;0;0;0\n");
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }
