@@ -4,3 +4,6 @@ dependencies:
     version: "*"
     override_path: "../../../"
     pre_release: true
+  espressif/arduino-esp32:
+    version: ">=3.0.5"
+    require: public
