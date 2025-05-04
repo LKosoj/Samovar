@@ -488,6 +488,7 @@ static bool alarm_event;                                               // При
 static bool acceleration_heater;                                       // Признак включенного разгонного тэна
 static bool send_mqtt;                                                 // Отправлять данные в облако
 static bool is_reboot = false;                                         // Признак перезагрузки
+static bool lcd_found = false;                                         // Признак наличия дисплея
 
 //volatile float samovar_temp;                                  // Температура ESP32
 static volatile float bme_temp;                                        // Температура BME
