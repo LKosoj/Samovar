@@ -2,7 +2,7 @@
 
 <head>
   <meta charset='utf-8'>
-  <meta http-equiv="Cache-Control" content="no-cache">
+  <meta http-equiv="Cache-Control" content="no-store, max-age=0">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
@@ -33,7 +33,7 @@
         document.getElementById('connection_indicator').innerHTML = `
         <img src="Green.png" style="margin: 0 !important; width: 20px">`
         IsOffline = false;
-        if (OfflineCounter > 3) {
+        if (OfflineCounter >= 3) { //связь вернулась, отключаем звук
           playSound(false);
         }
         OfflineCounter = 0
@@ -101,59 +101,94 @@
     var Messages_Array = []; //текущий массив сообщений
     var sound_is_playing = false; //звук сейчас восспроизводится
     var is_ALARM = false; //признак тревоги
-    var sound_play_count = 0; //счетчик воспроизведений сигнала
-    const MAX_SOUND_PLAYS = 2; //максимальное количество воспроизведений
 
     const sound = new Audio('alarm.mp3');
-    sound.loop = false; // Отключаем бесконечное повторение
+    sound.loop = true;
     sound.preload = 'auto';
     sound.autoplay = false;
 
     function playSound (play) {
-      if (!sound_is_playing && play && sound_play_count < MAX_SOUND_PLAYS) {
+      if (!sound_is_playing && play) {
         sound.play();
         sound_is_playing = true;
-        sound_play_count++;
-        
-        // Когда звук закончится
-        sound.onended = function() {
-          sound_is_playing = false;
-          if (sound_play_count < MAX_SOUND_PLAYS && is_ALARM) {
-            setTimeout(() => playSound(true), 2000); // Пауза 2 секунды между повторами
-          }
-        };
       } else if (sound_is_playing && !play) {
         sound.pause();
         sound_is_playing = false;
       }
     }
 
+    function getHistory(){
+      let history = [];
+      let fromStorage = localStorage.getItem('samovarHistory');
+      try {
+        let parsed = JSON.parse(fromStorage);
+        history = parsed ? parsed : [];
+      } catch (err) {
+        console.log('ERR parsed: ', err)
+        history = []
+      };
+      return history
+    }
+
+    function saveHistory(message){
+      let saved = getHistory();
+      saved.push(message);
+      localStorage.setItem('samovarHistory', JSON.stringify(saved));
+    }
+
+    let historyShown = false;
+    function showHystory() {
+      if (historyShown) {
+        document.getElementById('historyBox').style.display = 'none';
+        historyShown = false
+      } else {
+        let historyArray = getHistory();
+        document.getElementById('historyList').innerHTML = historyArray;
+        document.getElementById('historyBox').style.display = 'block';
+        let queue = document.getElementById('historyBox');
+        queue.scrollTop = queue.scrollHeight;
+        historyShown = true
+      }
+    };
+
+    function clearHystory () {
+      localStorage.setItem('samovarHistory', JSON.stringify([]));
+      showHystory()
+    }
+
+
+
+
     function addMessage (msg, lvl) {
       if (IsOffline) {
         return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
       } else {
         let time = new Date().toLocaleTimeString('ru-RU');
-        let style = null;
+        let cssClass = null;
         switch (lvl) {
           case 0:
-            style = 'message_0';
+            cssClass = 'message_0';
             is_ALARM = true;
             break;
           case 1:
-            style = 'message_1';
+            cssClass = 'message_1';
             break;
           case 2:
-            style = 'message_2';
+            cssClass = 'message_2';
             break;
           default:
-            style = 'message_0';
+            cssClass = 'message_0';
             is_ALARM = true;
             break;
         }
         let lastMsg = `
-            <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
+            <div align="left" class=${cssClass} onclick=removeLastMessage() style="cursor: pointer;">
               ${time}  ${msg}
             </div>`;
+        
+        let msg4history = `<div align="left" class=${cssClass} style="margin-top: 0"> <span style="text-decoration: underline">${time}</span>  ${msg}</div>`;
+        saveHistory(msg4history);
+        
         Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
         if (Messages_Array.length > 1) {
           //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
@@ -179,7 +214,6 @@
         Messages_Array[Messages_Array.length - 1] = changed;
       } else {
         is_ALARM = false;
-        sound_play_count = 0; // Сбрасываем счетчик когда все сообщения удалены
       }
       showMessages();
     }
@@ -215,7 +249,6 @@
 
     function clearMessages () {
       Messages_Array = [];
-      sound_play_count = 0; // Сбрасываем счетчик при очистке сообщений
       showMessages();
     }
 
@@ -386,7 +419,7 @@
       return 0;
     };
 
-
+    var pressureLabel, pressureValue;
 
     setInterval(loadDoc, 2000);
 
@@ -407,7 +440,15 @@
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
           document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
-          document.getElementById('start_pressure').innerHTML = myObj.start_pressure.toFixed(3);
+          if (myObj.prvl !== -1) {
+            pressureLabel = 'В колонне: ';
+            pressureValue = myObj.prvl.toFixed(1)
+          } else {
+            pressureLabel = 'В начале: ';
+            pressureValue = myObj.start_pressure.toFixed(1)
+          }
+          document.getElementById('pressureLabel').innerHTML = pressureLabel;
+          document.getElementById('pressureValue').innerHTML = pressureValue;
           document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
           document.getElementById('ActualVolumePerHour').innerHTML = myObj.ActualVolumePerHour;
           document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
@@ -649,14 +690,14 @@
       }
       let programPwrLabel = pwr_unit == 'P' ? 'Мощн' : 'Напр';
       e.insertAdjacentHTML("afterbegin", `
-      <div class="flex_row" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
-        &nbsp;&nbsp;&nbsp;<label class="tooltip">№</label>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-        <label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-        &nbsp; &nbsp;<label class="tooltip">Выход<span class="tooltiptext">Объем в мл</span></label>&nbsp; &nbsp; &nbsp; &nbsp;
-        <label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label>&nbsp; &nbsp;
-        <label class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label>&nbsp; &nbsp; &nbsp;&nbsp;
-        <label class="tooltip">${programPwrLabel}</label>&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
-        <label class="tooltip">Время</label>
+      <div class="flex_row program_header" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
+        <div class="flex_row_center"><label class="tooltip">№</label></div>
+        <div class="flex_row_center"><label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label></div>
+        <div class="flex_row_center"><label class="tooltip">Выход<span class="tooltiptext">Объем в мл</span></label></div>
+        <div class="flex_row_center"><label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label></div>
+        <div class="flex_row_center"><label class="tooltip">Тара<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label></div>
+        <div class="flex_row_center"><label class="tooltip">${programPwrLabel}</label></div>
+        <div class="flex_row_center"><label class="tooltip">Время</label></div>
       </div>`);
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
@@ -720,12 +761,16 @@
     };
 
     window.onload = function() {
+      getProgram();
+      setPowerUnit();
+      AddLuaButtons();
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
       });
-
-      getProgram();
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
           alert("Program error!");
@@ -733,9 +778,7 @@
         }
         getProgram();
       });
-      setPowerUnit();
-      AddLuaButtons();
-    };
+    });
 
   </script>
 </head>
@@ -746,6 +789,17 @@
 
 <body>
 
+  <div style="position: absolute; top: 0.3em; left: 0.5em; width: 20%; size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHystory()'>История</div>
+  <div class="history_box" style="display: none;" id="historyBox">
+    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHystory()'>
+      [x] очистить историю
+    </div>
+    <div class="history_array" id="historyList"></div>
+  </div>
+
+
+
+  
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
     <div class="tab">
@@ -831,29 +885,42 @@
       </div>
 
 
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; padding-top: 0.5em; padding-bottom: 0.5em; justify-content: space-between;">
+        <div class="container_column" style="flex: 1.1; padding-left: 1em;">
           <div class="text">
-            Скорость отбора: &nbsp;&nbsp;
-            <span id='ActualVolumePerHour' style="font-size: 1.5em; font-weight: bold;"></span>
-            л/ч
+            Скорость отбора:&nbsp;
+            <span id='ActualVolumePerHour' style="font-size: 1.4em; font-weight: bold;"></span>&nbsp;л/ч
           </div>
           <div class="text">
-            Отобранный объем: &nbsp;
-            <span id='VolumeAll'></span>
-            мл
+            Отобранный объем:&nbsp;
+            <span id='VolumeAll'></span>&nbsp;мл
           </div>
         </div>
-        <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
+        <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 1em;">
           <div class="text">
-            Прогресс отбора: &nbsp;
-            <span id='WthdrwlProgress'></span>
-            &#37;
+            Прогресс отбора: &nbsp; <span id='WthdrwlProgress'></span>&#37;
           </div>
         </div>
       </div>
 
       <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em;">
+        <div id='regulator' class='container_column' style="align-items: center; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
+          <div class='container_row' style="justify-content: space-around;">
+            <div class='flex_row'>
+              <span id='power_current'></span>&nbsp;&nbsp;
+              <span id='current_power_volt' style="font-size: 1.5em; font-weight: bold;"></span>&nbsp;
+              <span id='power_unit_current' style="font-size: 1.5em; font-weight: bold;"></span>
+            </div>
+            <div class='flex_row'>
+              Режим:&nbsp;<span id='current_power_mode'></span>
+            </div>
+          </div>
+          <div class='flex_row' style="margin-top: 0.7em;">
+            <span id='power_target'></span>&nbsp;
+            <span id='target_power_volt'></span>&nbsp;
+            <span id='power_unit_target'></span>
+          </div>
+        </div>
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
           <div class="flex_row">
             <span class="text" id='set_power_label'></span>
@@ -861,21 +928,6 @@
           </div>
           <div class="flex_row" style="padding-bottom: 0.5em;">
             <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
-          </div>
-        </div>
-        <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
-          <div class='flex_row'>
-            <span id='power_current'></span>&nbsp;&nbsp;
-            <span id='current_power_volt' style="font-size: 1.5em; font-weight: bold;"></span>
-            <span id='power_unit_current'></span>
-          </div>
-          <div class='flex_row'>
-            <span id='power_target'></span>
-            <span id='target_power_volt'></span>
-            <span id='power_unit_target'></span>
-          </div>
-          <div class='flex_row'>
-            Режим: <span id='current_power_mode'></span>
           </div>
         </div>
         <div class="container_row" style="width: 100%; justify-content: center; align-items: center; font-size: 1.6em; font-weight: bold;">
@@ -893,8 +945,8 @@
           мм рт.ст.
         </div>
         <div class="text">
-          В начале: &nbsp;
-          <span id='start_pressure'></span>
+          <span id='pressureLabel'></span> &nbsp;
+          <span id='pressureValue'></span>
           мм рт.ст.
         </div>
       </div>
