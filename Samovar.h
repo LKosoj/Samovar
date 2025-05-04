@@ -91,12 +91,12 @@
 #endif
 #endif
 
-static SemaphoreHandle_t xSemaphore = NULL;
-static SemaphoreHandle_t xMsgSemaphore = NULL;
-static StaticSemaphore_t xMsgSemaphoreBuffer;
+SemaphoreHandle_t xSemaphore = NULL;
+SemaphoreHandle_t xMsgSemaphore = NULL;
+StaticSemaphore_t xMsgSemaphoreBuffer;
 
-static SemaphoreHandle_t xI2CSemaphore = NULL;
-static StaticSemaphore_t xI2CSemaphoreBuffer;
+SemaphoreHandle_t xI2CSemaphore = NULL;
+StaticSemaphore_t xI2CSemaphoreBuffer;
 
 #ifdef USE_BMP280_ALT
 #undef USE_BMP180
@@ -150,8 +150,8 @@ uint8_t temprature_sens_read();
 #define PWR_MSG F("Мощность")
 #define PWR_TYPE F("P")
 
-static SemaphoreHandle_t xSemaphoreAVR = NULL;
-static StaticSemaphore_t xSemaphoreBufferAVR;
+SemaphoreHandle_t xSemaphoreAVR = NULL;
+StaticSemaphore_t xSemaphoreBufferAVR;
 
 #ifndef RMVK_DEFAULT_READ_TIMEOUT
 #define RMVK_DEFAULT_READ_TIMEOUT 1100 // Таймаут по умолчанию (мс)
@@ -221,56 +221,56 @@ void WriteConsoleLog(String StringLogMsg);
 
 //**************************************************************************************************************
 // Переменные для меню
-static uint8_t multiplier = 1;
+uint8_t multiplier = 1;
 
-static char tst[20] = "00:00:00   00:00:00";
-static char ipst[16] = "000.000.000.000";
-static char welcomeStrArr1[20];
-static char welcomeStrArr2[20];
-static char welcomeStrArr3[20];
-static char welcomeStrArr4[20];
-static char* welcomeStr1 = (char*)welcomeStrArr1;
-static char* welcomeStr2 = (char*)welcomeStrArr2;
-static char* welcomeStr3 = (char*)welcomeStrArr3;
-static char* welcomeStr4 = (char*)welcomeStrArr4;
+char tst[20] = "00:00:00   00:00:00";
+char ipst[16] = "000.000.000.000";
+char welcomeStrArr1[20];
+char welcomeStrArr2[20];
+char welcomeStrArr3[20];
+char welcomeStrArr4[20];
+char* welcomeStr1 = (char*)welcomeStrArr1;
+char* welcomeStr2 = (char*)welcomeStrArr2;
+char* welcomeStr3 = (char*)welcomeStrArr3;
+char* welcomeStr4 = (char*)welcomeStrArr4;
 
-static char* timestr = (char*)tst;
-static char* ipstr = (char*)ipst;
-static char startval_text_val[20];
-static char* startval_text = (char*)startval_text_val;
-static char* power_text_ptr = (char*)"ON";
-static char* calibrate_text_ptr = (char*)"Start";
-static char* pause_text_ptr = (char*)"Pause";
-static String StrCrt;
-static String Crt;
-static uint8_t CurMin, OldMin;
+char* timestr = (char*)tst;
+char* ipstr = (char*)ipst;
+char startval_text_val[20];
+char* startval_text = (char*)startval_text_val;
+char* power_text_ptr = (char*)"ON";
+char* calibrate_text_ptr = (char*)"Start";
+char* pause_text_ptr = (char*)"Pause";
+String StrCrt;
+String Crt;
+uint8_t CurMin, OldMin;
 
 //**************************************************************************************************************
 
 /** Task handle for the  value read task */
-static TaskHandle_t SysTickerButton = NULL;
-static TaskHandle_t SysTickerTask1 = NULL;
-static TaskHandle_t GetClockTask1 = NULL;
-static TaskHandle_t BuzzerTask = NULL;
-static TaskHandle_t GetBMPTask = NULL;
-static volatile bool BuzzerTaskFl;
+TaskHandle_t SysTickerButton = NULL;
+TaskHandle_t SysTickerTask1 = NULL;
+TaskHandle_t GetClockTask1 = NULL;
+TaskHandle_t BuzzerTask = NULL;
+TaskHandle_t GetBMPTask = NULL;
+volatile bool BuzzerTaskFl;
 
 #ifdef SAMOVAR_USE_POWER
-static TaskHandle_t PowerStatusTask = NULL;
+TaskHandle_t PowerStatusTask = NULL;
 #endif
 
-static AsyncWebServer server(80);
+AsyncWebServer server(80);
 
-static AsyncWebSocket ws("/ws");
-static AsyncEventSource events("/events");
+AsyncWebSocket ws("/ws");
+AsyncEventSource events("/events");
 
-static OneWire oneWire(ONE_WIRE_BUS);
-static DallasTemperature sensors(&oneWire);
-static DeviceAddress DSAddr[6];
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+DeviceAddress DSAddr[6];
 
-static LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
+LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
-static Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
+Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 
 
 #define DRIVER_STEP_TIME 4
@@ -283,22 +283,22 @@ static Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 
 #include <GyverStepper2.h>
 #include <DNSServer.h>
-static GStepper2< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
+GStepper2< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
-static iarduino_I2C_connect I2C2;
+iarduino_I2C_connect I2C2;
 
-static File fileToAppend;
+File fileToAppend;
 
 #ifdef SERVO_PIN
-static Servo servo;  // create servo object to control a servo
+Servo servo;  // create servo object to control a servo
 #endif
 
 #ifdef BTN_PIN
-static GButton btn(BTN_PIN);
+GButton btn(BTN_PIN);
 #endif
 
 #ifdef ALARM_BTN_PIN
-static GButton alarm_btn(ALARM_BTN_PIN);
+GButton alarm_btn(ALARM_BTN_PIN);
 #endif
 
 #ifdef COLUMN_WETTING
@@ -317,20 +317,20 @@ PCF8575 expander(&Wire, USE_EXPANDER, LCD_SDA, LCD_SCL);
 PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
 #endif
 
-static double Input, Output, Setpoint;
-static double Kp, Ki, Kd;
+double Input, Output, Setpoint;
+double Kp, Ki, Kd;
 
 //Relay relay(RELAY_PIN, RELAY_PERIOD);
-static PID heaterPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
-static int periodInSeconds = 6;
+PID heaterPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
+int periodInSeconds = 6;
 
-static uint8_t ATuneModeRemember = 2;
-static double aTuneStep = 50;
-static double aTuneNoise = 1;
-static unsigned int aTuneLookBack = 9;
-static boolean tuning = false;
+uint8_t ATuneModeRemember = 2;
+double aTuneStep = 50;
+double aTuneNoise = 1;
+unsigned int aTuneLookBack = 9;
+boolean tuning = false;
 
-static PID_ATune aTune(&Input, &Output);
+PID_ATune aTune(&Input, &Output);
 
 #ifdef WHLS_HIGH_PULL
 #ifndef USE_HEAD_LEVEL_SENSOR
@@ -339,28 +339,28 @@ static PID_ATune aTune(&Input, &Output);
 #endif
 
 #ifdef USE_HEAD_LEVEL_SENSOR
-static GButton whls(WHEAD_LEVEL_SENSOR_PIN);
+GButton whls(WHEAD_LEVEL_SENSOR_PIN);
 #endif
 
-static GButton nbkls(LUA_PIN);
+GButton nbkls(LUA_PIN);
 
-static LiquidMenu main_menu1(lcd);
+LiquidMenu main_menu1(lcd);
 
 #ifdef USE_WEB_SERIAL
 //WebSerialClass WebSerial;
 #endif
 
-static DNSServer dns;
+DNSServer dns;
 
 enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT};
-static volatile SamovarCommands sam_command_sync;                    // переменная для передачи команд между процессами
+volatile SamovarCommands sam_command_sync;                    // переменная для передачи команд между процессами
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
-static volatile SAMOVAR_MODE Samovar_Mode;
-static volatile SAMOVAR_MODE Samovar_CR_Mode;
+volatile SAMOVAR_MODE Samovar_Mode;
+volatile SAMOVAR_MODE Samovar_CR_Mode;
 
 enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100};
-static volatile MESSAGE_TYPE msg_type;
+volatile MESSAGE_TYPE msg_type;
 
 enum get_web_type {GET_CONTENT, SAVE_FILE_OVERRIDE, SAVE_FILE_IF_NOT_EXIST};
 
@@ -450,127 +450,127 @@ struct WProgram {
   float Time;                                                  //время, необходимое для отбора программы
 };
 
-static SetupEEPROM SamSetup;
+SetupEEPROM SamSetup;
 
-static DSSensor SteamSensor;                                          //сенсор температуры пара вверху колонны
-static DSSensor PipeSensor;                                           //сенсор температуры в царге на 2/3 высоты
-static DSSensor WaterSensor;                                          //сенсор температуры охлаждающей воды или флегмы
-static DSSensor TankSensor;                                           //сенсор температуры в кубе
-static DSSensor ACPSensor;                                            //сенсор температуры в ТСА
+DSSensor SteamSensor;                                          //сенсор температуры пара вверху колонны
+DSSensor PipeSensor;                                           //сенсор температуры в царге на 2/3 высоты
+DSSensor WaterSensor;                                          //сенсор температуры охлаждающей воды или флегмы
+DSSensor TankSensor;                                           //сенсор температуры в кубе
+DSSensor ACPSensor;                                            //сенсор температуры в ТСА
 
-static WProgram program[30];                                          //массив строк для записи программы отбора.
-
-//**************************************************************************************************************
-static const char* host = SAMOVAR_HOST;
+WProgram program[30];                                          //массив строк для записи программы отбора.
 
 //**************************************************************************************************************
-static uint8_t DScnt = 0;
-static uint8_t STcnt = 0;                                              // Счетчик для записи текущего статуса
+const char* host = SAMOVAR_HOST;
+
+//**************************************************************************************************************
+uint8_t DScnt = 0;
+uint8_t STcnt = 0;                                              // Счетчик для записи текущего статуса
 //uint8_t tcnt = 0;
-static bool bmefound = true;
-static volatile bool PowerOn = false;                                  // Индикатор включенного питания
-static volatile bool PauseOn = false;                                  // Индикатор постановки отбора на паузу
-static volatile bool StepperMoving = false;                            // Индикатор движущегося шагового двигателя
-static volatile bool program_Pause;                                    // Признак, что запущена программа паузы
-static volatile bool program_Wait;                                     // Признак, что программа ожидает возврата колонны в заданные параметры
-static volatile bool heater_state;                                     // Статус нагрева при затирке
-static volatile bool loop_lua_fl;                                      // Запускать lua скрипт в цикле
-static volatile bool show_lua_script;                                  // Показывать выполняемый lua скрипт в логе и в Serial
-static volatile bool is_self_test;                                     // Находимся в режиме самотестирования
-static volatile bool SetScriptOff;                                     // Признак остановки Lua скрипта
-static bool boil_started;                                              // Флаг, определяющий, что кипение началось
-static bool valve_status;                                              // Состояние клапана подачи воды
-static bool pump_started;                                              // Признак стартовавшего насоса
-static bool setautospeed;                                              // Признак для однократного снижения скорости насоса при паузе
-static bool msgfl;                                                     // Флаг для одноразовых сообщений
-static bool mixer_status;                                              // Статус работы мешалки
-static bool alarm_event;                                               // Признак срабатывания кнопки тревоги
-static bool acceleration_heater;                                       // Признак включенного разгонного тэна
-static bool send_mqtt;                                                 // Отправлять данные в облако
-static bool is_reboot = false;                                         // Признак перезагрузки
-static bool lcd_found = false;                                         // Признак наличия дисплея
+bool bmefound = true;
+volatile bool PowerOn = false;                                  // Индикатор включенного питания
+volatile bool PauseOn = false;                                  // Индикатор постановки отбора на паузу
+volatile bool StepperMoving = false;                            // Индикатор движущегося шагового двигателя
+volatile bool program_Pause;                                    // Признак, что запущена программа паузы
+volatile bool program_Wait;                                     // Признак, что программа ожидает возврата колонны в заданные параметры
+volatile bool heater_state;                                     // Статус нагрева при затирке
+volatile bool loop_lua_fl;                                      // Запускать lua скрипт в цикле
+volatile bool show_lua_script;                                  // Показывать выполняемый lua скрипт в логе и в Serial
+volatile bool is_self_test;                                     // Находимся в режиме самотестирования
+volatile bool SetScriptOff;                                     // Признак остановки Lua скрипта
+bool boil_started;                                              // Флаг, определяющий, что кипение началось
+bool valve_status;                                              // Состояние клапана подачи воды
+bool pump_started;                                              // Признак стартовавшего насоса
+bool setautospeed;                                              // Признак для однократного снижения скорости насоса при паузе
+bool msgfl;                                                     // Флаг для одноразовых сообщений
+bool mixer_status;                                              // Статус работы мешалки
+bool alarm_event;                                               // Признак срабатывания кнопки тревоги
+bool acceleration_heater;                                       // Признак включенного разгонного тэна
+bool send_mqtt;                                                 // Отправлять данные в облако
+bool is_reboot = false;                                         // Признак перезагрузки
+bool lcd_found = false;                                         // Признак наличия дисплея
 
 //volatile float samovar_temp;                                  // Температура ESP32
-static volatile float bme_temp;                                        // Температура BME
-static volatile float start_pressure;                                  // Давление BME стартовое
-static volatile float bme_pressure;                                    // Давление BME
-static volatile float bme_prev_pressure;                               // Давление BME предыдущее значение
+volatile float bme_temp;                                        // Температура BME
+volatile float start_pressure;                                  // Давление BME стартовое
+volatile float bme_pressure;                                    // Давление BME
+volatile float bme_prev_pressure;                               // Давление BME предыдущее значение
 //float bme_humidity;                                           // Влажность
 //float bme_altitude;                                           // Высота
 //float bme_gas;                                                // Газ
-static String SamovarStatus;                                           // Текущий статус работы Самовара строкой
-static volatile int16_t SamovarStatusInt;                              // Текущий статус работы Самовара числом
-static volatile uint8_t capacity_num;                                  // Текущая позиция емкости для отбора
+String SamovarStatus;                                           // Текущий статус работы Самовара строкой
+volatile int16_t SamovarStatusInt;                              // Текущий статус работы Самовара числом
+volatile uint8_t capacity_num;                                  // Текущая позиция емкости для отбора
 
-static volatile uint8_t prev_ProgramNum;                               // Пердыдущая программа отбора
-static volatile uint8_t ProgramNum;                                    // Текущая программа отбора
-static volatile uint8_t ProgramLen;                                    // Количество строк программы отбора
-static volatile uint8_t WthdrwlProgress;                               // Прогресс текущего отбора
-static volatile int16_t startval = 0;                                  // Признак идущего отбора
-static volatile int currentstepcnt = 0;                                // Текущее количество шагов шагового двигателя
-static volatile unsigned long prev_time_ms;                            // Предыдущее время
-static volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
-static volatile uint16_t CurrrentStepperSpeed;                         // Скорость шагового двигателя
-static volatile uint16_t I2CStepperSpeed;                              // Скорость шагового двигателя
-static volatile unsigned int CurrrentStepps;                           // Количество пройденных степпером шагов
-static volatile unsigned int TargetStepps;                             // Количество шагов до нужного объема
-static String program_Wait_Type;                                       // Тип ожидания
-static unsigned long begintime;                                        // Время начала отбора
+volatile uint8_t prev_ProgramNum;                               // Пердыдущая программа отбора
+volatile uint8_t ProgramNum;                                    // Текущая программа отбора
+volatile uint8_t ProgramLen;                                    // Количество строк программы отбора
+volatile uint8_t WthdrwlProgress;                               // Прогресс текущего отбора
+volatile int16_t startval = 0;                                  // Признак идущего отбора
+volatile int currentstepcnt = 0;                                // Текущее количество шагов шагового двигателя
+volatile unsigned long prev_time_ms;                            // Предыдущее время
+volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
+volatile uint16_t CurrrentStepperSpeed;                         // Скорость шагового двигателя
+volatile uint16_t I2CStepperSpeed;                              // Скорость шагового двигателя
+volatile unsigned int CurrrentStepps;                           // Количество пройденных степпером шагов
+volatile unsigned int TargetStepps;                             // Количество шагов до нужного объема
+String program_Wait_Type;                                       // Тип ожидания
+unsigned long begintime;                                        // Время начала отбора
 //unsigned long endtime;                                          // Время завершения отбора
-static unsigned long t_min;                                            // Время для паузы в секундах с момента старта ESP32
-static unsigned long alarm_t_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
-static unsigned long alarm_h_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
-static float d_s_temp_prev;                                            // Температура для определения начала кипения в режиме дистилляции
-static float d_s_temp_finish;                                          // Температура для определения завершения дистилляции
-static unsigned long d_s_time_min;                                     // Время для определения завершения дистилляции
-static float boil_temp;                                                // Температура куба, при которой началось кипение
-static float b_t_temp_prev;                                            // Температура для определения начала кипения
-static unsigned long b_t_time_min;                                     // Время для определения начала кипения
-static unsigned long b_t_time_delay;                                   // Задержка начала определения кипения
-static float alcohol_s;                                                // Спиртуозность, которая была при начале кипения
-static volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
-static volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
-static volatile uint16_t WFtotalMilliLitres = 0;                       // Переменная для учета расхода воды
-static volatile float WFflowRate;                                      // Переменная для учета расхода воды
-static volatile int WFAlarmCount;                                      // Переменная, считающая, сколько секунд не было подачи воды
-static uint16_t acceleration_temp;                                     // Счетчик для определения завершения разгона колонны
-static volatile float WthdrwTimeAll;                                   // Оставшееся время отбора
-static volatile float WthdrwTime;                                      // Время отбора текущей строки программы
-static String WthdrwTimeAllS;                                          // Оставшееся время отбора строкой
-static String WthdrwTimeS;                                             // Время отбора текущей строки программы строкой
-static String jsonstr;                                                 // Строка, содержащая json ответ для страницы
-static String Msg;                                                     // Строка для сообщений в web-интерфейсе
-static String LogMsg;                                                  // Строка для вывода лога в javascript console
-static uint8_t msg_level;                                              // Уровень сообщения - см. enum MESSAGE_TYPE
-static int bk_pwm;                                                     // Значение PWM насоса при работе с БК
-static uint32_t chipId = 0;                                            // Идентификатор ESP32
+unsigned long t_min;                                            // Время для паузы в секундах с момента старта ESP32
+unsigned long alarm_t_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
+unsigned long alarm_h_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
+float d_s_temp_prev;                                            // Температура для определения начала кипения в режиме дистилляции
+float d_s_temp_finish;                                          // Температура для определения завершения дистилляции
+unsigned long d_s_time_min;                                     // Время для определения завершения дистилляции
+float boil_temp;                                                // Температура куба, при которой началось кипение
+float b_t_temp_prev;                                            // Температура для определения начала кипения
+unsigned long b_t_time_min;                                     // Время для определения начала кипения
+unsigned long b_t_time_delay;                                   // Задержка начала определения кипения
+float alcohol_s;                                                // Спиртуозность, которая была при начале кипения
+volatile uint16_t WFpulseCount = 0;                             // Счетчик для датчика потока
+volatile uint16_t WFflowMilliLitres = 0;                        // Переменная для учета расхода воды
+volatile uint16_t WFtotalMilliLitres = 0;                       // Переменная для учета расхода воды
+volatile float WFflowRate;                                      // Переменная для учета расхода воды
+volatile int WFAlarmCount;                                      // Переменная, считающая, сколько секунд не было подачи воды
+uint16_t acceleration_temp;                                     // Счетчик для определения завершения разгона колонны
+volatile float WthdrwTimeAll;                                   // Оставшееся время отбора
+volatile float WthdrwTime;                                      // Время отбора текущей строки программы
+String WthdrwTimeAllS;                                          // Оставшееся время отбора строкой
+String WthdrwTimeS;                                             // Время отбора текущей строки программы строкой
+String jsonstr;                                                 // Строка, содержащая json ответ для страницы
+String Msg;                                                     // Строка для сообщений в web-интерфейсе
+String LogMsg;                                                  // Строка для вывода лога в javascript console
+uint8_t msg_level;                                              // Уровень сообщения - см. enum MESSAGE_TYPE
+int bk_pwm;                                                     // Значение PWM насоса при работе с БК
+uint32_t chipId = 0;                                            // Идентификатор ESP32
 //String vr;                                                      // Причина перезагрузки ESP32
-static String SessionDescription;                                      // Описание параметров работы в свободном формате для сохранения в облаке
-static volatile float test_num_val;                                    // Тестовое численное значение
-static float pressure_value;                                           // Давление от датчика давления
-static bool use_pressure_sensor;                                       // Использовать датчик давления (по результатам инициализации)
-static String test_str_val;                                            // Тестовое строковое значение
-static String Lua_status;                                              // Статус Lua
-static uint32_t total_byte;                                            // Доступно байт на файловой системе
-static uint32_t used_byte;                                             // Использовано байт на файловой системе
-static uint8_t use_I2C_dev;                                            // Использовать Nano, подключенную по I2C для управления шаговым двигателем мешалки и насосом (основное назначение - пиво)
-static uint16_t water_pump_speed;                                      // Скорость насоса
+String SessionDescription;                                      // Описание параметров работы в свободном формате для сохранения в облаке
+volatile float test_num_val;                                    // Тестовое численное значение
+float pressure_value;                                           // Давление от датчика давления
+bool use_pressure_sensor;                                       // Использовать датчик давления (по результатам инициализации)
+String test_str_val;                                            // Тестовое строковое значение
+String Lua_status;                                              // Статус Lua
+uint32_t total_byte;                                            // Доступно байт на файловой системе
+uint32_t used_byte;                                             // Использовано байт на файловой системе
+uint8_t use_I2C_dev;                                            // Использовать Nano, подключенную по I2C для управления шаговым двигателем мешалки и насосом (основное назначение - пиво)
+uint16_t water_pump_speed;                                      // Скорость насоса
 
-static String current_power_mode;                                      // Режим работы регулятора напряжения
-static volatile float target_power_volt = 0;                           // Заданное напряжение регулятора
-static volatile float current_power_volt = 0;                          // Текущее напряжение регулятора
-static unsigned long alarm_c_min;                                      // Время для ожидания возврата к заданному напряжению-1 Вольт для режима предзахлеба в секундах с момента старта ESP32
-static unsigned long alarm_c_low_min;                                  // Время для ожидания возврата к заданному напряжению-1 Вольт для режима предзахлеба в секундах с момента старта ESP32
+String current_power_mode;                                      // Режим работы регулятора напряжения
+volatile float target_power_volt = 0;                           // Заданное напряжение регулятора
+volatile float current_power_volt = 0;                          // Текущее напряжение регулятора
+unsigned long alarm_c_min;                                      // Время для ожидания возврата к заданному напряжению-1 Вольт для режима предзахлеба в секундах с момента старта ESP32
+unsigned long alarm_c_low_min;                                  // Время для ожидания возврата к заданному напряжению-1 Вольт для режима предзахлеба в секундах с момента старта ESP32
 
 #ifdef SAMOVAR_USE_POWER
-static volatile float prev_target_power_volt;                          // Предыдущее заданное напряжение регулятора
-static volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
-static uint8_t power_err_cnt;                                          // Счетчик ошибок по напряжению/мощности
+volatile float prev_target_power_volt;                          // Предыдущее заданное напряжение регулятора
+volatile uint16_t current_power_p;                              // Расчитанная мощность на регуляторе напряжения
+uint8_t power_err_cnt;                                          // Счетчик ошибок по напряжению/мощности
 #define TIME_C 4                                                // Время ожидания в минутах для программы режима предзахлеба
 #endif
 
 #ifdef USE_WATER_PUMP
-static uint8_t wp_count;                                               // Переменная для расчета времени работы насоса на повышенной мощности при старте
+uint8_t wp_count;                                               // Переменная для расчета времени работы насоса на повышенной мощности при старте
 #endif
 
 #endif
