@@ -170,31 +170,31 @@
         return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
       } else {
         let time = new Date().toLocaleTimeString('ru-RU');
-        let style = null;
+        let cssClass = null;
         switch (lvl) {
           case 0:
-            style = 'message_0';
+            cssClass = 'message_0';
             is_ALARM = true;
             break;
           case 1:
-            style = 'message_1';
+            cssClass = 'message_1';
             break;
           case 2:
-            style = 'message_2';
+            cssClass = 'message_2';
             break;
           default:
-            style = 'message_0';
+            cssClass = 'message_0';
             is_ALARM = true;
             break;
         }
         let lastMsg = `
-            <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
+            <div align="left" class=${cssClass} onclick=removeLastMessage() style="cursor: pointer;">
               ${time}  ${msg}
             </div>`;
-
+        
         let msg4history = `<div align="left" class=${cssClass} style="margin-top: 0"> <span style="text-decoration: underline">${time}</span>  ${msg}</div>`;
         saveHistory(msg4history);
-
+        
         Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
         if (Messages_Array.length > 1) {
           //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
