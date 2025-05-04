@@ -292,6 +292,9 @@ boolean AsyncWiFiManager::autoConnect(char const *apName,
 String AsyncWiFiManager::networkListAsString()
 {
   String pager;
+   if (wifiSSIDs == NULL || wifiSSIDCount == 0) {
+     return pager;
+   }
   // display networks in page
   for (int i = 0; i < wifiSSIDCount; i++)
   {
