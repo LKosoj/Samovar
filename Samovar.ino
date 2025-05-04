@@ -36,6 +36,8 @@
 #include <driver/dac.h>
 #endif
 
+#include "esp_log.h"
+
 #include <Wire.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -665,6 +667,7 @@ void triggerSysTicker(void *parameter) {
 }
 
 void setup() {
+  esp_log_level_set("i2c.master", ESP_LOG_NONE);
   pinMode(0, INPUT);
   vTaskDelay(600 / portTICK_PERIOD_MS);
   if (digitalRead(0) == LOW) {
@@ -721,6 +724,8 @@ void setup() {
 
   Wire.begin(LCD_SDA, LCD_SCL);
   //Wire.begin();
+
+  lcd_found = (check_I2C_device(LCD_ADDRESS) == LCD_ADDRESS);
 
   stepper.disable();
 
