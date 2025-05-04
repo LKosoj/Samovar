@@ -259,7 +259,15 @@ void run_beer_program(uint8_t num) {
     StartAutoTune();
   }
 
-  if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
+  if (ProgramNum > ProgramLen - 1) {
+    num = CAPACITY_NUM * 2;
+    SetScriptOff = 1;
+  }
+
+  //Если предыдущая программа была программой Lua и скрипт запущен - останавливаем скрипт
+  if (ProgramNum > 0 && program[ProgramNum-1].WType == "L" && loop_lua_fl) {
+    SetScriptOff = 1;
+  }
 
   String msg = "Переход к строке программы №" + String((num + 1));
   if (num == CAPACITY_NUM * 2) {
@@ -313,6 +321,7 @@ void beer_finish() {
   SendMsg(("Программа затирания завершена"), NOTIFY_MSG);
   delay(200);
   set_power(false);
+  delay(1000);
   reset_sensor_counter();
 }
 
@@ -350,9 +359,14 @@ void check_alarm_beer() {
   //Обрабатываем программу
 
   //Проверяем, что клапан воды охлаждения не открыт, когда не нужно
-  if (program[ProgramNum].WType != "C" && program[ProgramNum].WType != "F" && valve_status && PowerOn) {
+  if (program[ProgramNum].WType != "C" && program[ProgramNum].WType != "F" && valve_status && PowerOn && program[ProgramNum].WType != "L") {
     //Закрываем клапан воды
     open_valve(false, false);
+  }
+
+  //Если программа - Lua - ждем, ничего не делаем
+  if (program[ProgramNum].WType == "L") {
+    return;
   }
 
   //Если программа - ожидание - ждем, ничего не делаем
