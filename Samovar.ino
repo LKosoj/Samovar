@@ -351,6 +351,7 @@ void triggerGetClock(void *parameter) {
     } else if (SamSetup.tg_chat_id[0] != 0) {
       Serial.println(F("Проблема с покдлючением к интернету."));
     }
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 #endif
 
 #ifdef SAMOVAR_USE_BLYNK
@@ -1676,7 +1677,7 @@ void WriteConsoleLog(String StringLogMsg) {
     LogMsg = LogMsg + "; " + StringLogMsg;
   } else LogMsg = StringLogMsg;
 
-  if (LogMsg.length() > 250) {
+  if (LogMsg.length() > 10000) {
     LogMsg = StringLogMsg;
   }
 
