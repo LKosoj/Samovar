@@ -718,6 +718,8 @@ void setup() {
   xSemaphoreGive(xI2CSemaphore);
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
+  WiFi.disconnect(true);
+  delay(50);
   WiFi.setSleep(false);
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
@@ -854,6 +856,7 @@ void setup() {
   Serial.println(chipId);
 
   String StIP;
+  esp_wifi_set_ps( WIFI_PS_NONE );
 
   if (!wifiAP) {
     //Подключаемся к WI-FI
@@ -877,7 +880,6 @@ void setup() {
       StIP = WiFi.localIP().toString();
     }
 
-    esp_wifi_set_ps( WIFI_PS_NONE );
     if (shouldSaveWiFiConfig) {
       if (strlen(custom_blynk_token.getValue()) == 33) {
         strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
