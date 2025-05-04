@@ -26,6 +26,7 @@ void MqttSendMsg(const String &Str, const char *chart );
 unsigned long lua_timer[10];  //10 таймеров для lua
 String lua_type_script;
 String script1, script2, btn_script;
+void WriteConsoleLog(String StringLogMsg);
 
 SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, String &b) -> int {
   if (a == b) return 0;      // a and b are equal
@@ -970,7 +971,7 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua.Lua_dostring(&(script1));
-        script1 = "";
+        //script1 = "";
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in script.lua: " + sr);
       }
@@ -983,13 +984,15 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua.Lua_dostring(&(script2));
-        script2 = "";
+        //script2 = "";
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       }
       // Принудительно вызываем сборщик мусора
       lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
       lua_finished = true;
+    } else {
+      vTaskDelay(50 / portTICK_PERIOD_MS);
     }
     if (SetScriptOff) {
       loop_lua_fl = false;
