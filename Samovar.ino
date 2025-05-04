@@ -437,7 +437,7 @@ void triggerSysTicker(void *parameter) {
       Serial.println(F("--------------------------------------------"));
 #endif
 #ifdef USE_LUA
-      //если установлена переменная запуска в цикле lua_script, запускаем
+      //если установлена переменная btn_script, запускаем
       if (btn_script.length() > 0) {
         String sr;
         if (show_lua_script) {
@@ -451,6 +451,7 @@ void triggerSysTicker(void *parameter) {
         btn_script = "";
       }
 
+      //если установлена переменная запуска в цикле lua_script, запускаем
       if (loop_lua_fl) {
         start_lua_script();
       }
