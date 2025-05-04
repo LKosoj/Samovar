@@ -420,6 +420,7 @@
           else if (myObj.PrgType === "W") myObj.PrgType = "Ожидание; "
           else if (myObj.PrgType === "F") myObj.PrgType = "Брожение; "
           else if (myObj.PrgType === "A") myObj.PrgType = "Автотюнинг; "
+          else if (myObj.PrgType === "L") myObj.PrgType = "Lua; "
           document.getElementById('Status').innerHTML = myObj.PrgType + myObj.Status;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
@@ -529,7 +530,7 @@
       num.className = "prglabel";
       dl.appendChild(num);
 
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брожение</option><option value="A">Автотюнинг</option></select>');
+      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брожение</option><option value="A">Автотюнинг</option><option value="L">Lua Скрипт</option></select>');
 
       //  var ptype = dl.getElementsByName("ptype");
       //  ptype[0].value = arr[0];
@@ -662,6 +663,8 @@
       else if (t == "P") {color = "background-color: #FFA500;";}
       else if (t == "W") {color = "background-color: #98FB98;";}
       else if (t == "F") {color = "background-color: #DACEFF;";}
+      else if (t == "L") {color = "background-color: #3498DB;";}
+      else if (t == "A") {color = "background-color: #FF2929;";}
       l.setAttribute("style", color);
       var e = l.childNodes;
       for (q = 0; q < e.length; q++) {
@@ -890,7 +893,10 @@
             <p><span>&nbsp;</span></p>
             <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре),</span></p>
             <p><span>B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры),</span></p>
-            <p><span>W - wait (режим ожидания, ничего не делает до смены строки программы), F - ferment (ферментирование, режим браги, поддерживает заданную температуру до сменты строки программы).</span></p>
+            <p><span>W - wait (режим ожидания, ничего не делает до смены строки программы)</span></p>
+            <p><span>F - ferment (ферментирование, режим браги, поддерживает заданную температуру до сменты строки программы)</span></p>
+            <p><span>L - Lua скрипт, управление Самоваром осуществляется через Lua скрипт, скрипт необходимо самостоятельно запустить и, если необходимо, остановить. При переходе на следующую строку программы скрипт останавливается. Никакие параметры строки программы не используются.</span></p>
+            <p><span>A - AutoTune (автотюнинг)</span></p>
             <p><span>&nbsp;</span></p>
             <p><span>Пример программы отбора:</span></p>
             <p><span>M;45.00;0;1^1.00^1^1</span></p>
