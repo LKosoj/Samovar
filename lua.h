@@ -962,6 +962,9 @@ void do_lua_script(void *parameter) {
   sr.reserve(128);
   //String glv;
   while (1) {
+    if (SetScriptOff && loop_lua_fl) {
+      loop_lua_fl = false;
+    }
     if (!lua_finished) {
       //if (script1.length() > 0 || script2.length() > 0) glv = get_global_variables();
       if (script1.length() > 0) {
@@ -994,8 +997,7 @@ void do_lua_script(void *parameter) {
     } else {
       vTaskDelay(50 / portTICK_PERIOD_MS);
     }
-    if (SetScriptOff) {
-      loop_lua_fl = false;
+    if (!loop_lua_fl && SetScriptOff) {
       SetScriptOff = 0;
     }
     vTaskDelay(5 / portTICK_PERIOD_MS);
