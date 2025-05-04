@@ -38,11 +38,22 @@ void set_pump_pwm(float duty) {
     pump_pwm.write(PWM_START_VALUE * 10);
     water_pump_speed = PWM_START_VALUE * 10;
     pump_started = true;
+    pump_pwm.write(duty);
+    if (bk_pwm != PWM_LOW_VALUE * 40) {
+      delay(1000);
+      pump_pwm.write(bk_pwm);
+      water_pump_speed = bk_pwm;
+    }
     return;
   }
-  if (duty > 0 && wp_count < 10) {
-    pump_pwm.write(PWM_START_VALUE * 10);
-    water_pump_speed = PWM_START_VALUE * 10;
+  if (duty > 0 && wp_count < 10 && pump_started) {
+    if (bk_pwm != PWM_LOW_VALUE * 40) {
+      pump_pwm.write(bk_pwm);
+      water_pump_speed = bk_pwm;
+    } else {
+      pump_pwm.write(PWM_START_VALUE * 10);
+      water_pump_speed = PWM_START_VALUE * 10;
+    }
     wp_count++;
     return;
   }
