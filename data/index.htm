@@ -421,9 +421,6 @@
 
     var pressureLabel, pressureValue;
 
-    setInterval(loadDoc, 2000);
-
-
     function loadDoc () {
       var xhttp = new XMLHttpRequest();
       xhttp.timeout = 4000;
@@ -764,6 +761,7 @@
       getProgram();
       setPowerUnit();
       AddLuaButtons();
+      setInterval(loadDoc, 2000);
     };
 
     document.addEventListener('DOMContentLoaded', function() {

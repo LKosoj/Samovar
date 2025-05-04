@@ -27,10 +27,9 @@
           }, 100);
         }
       } else {
-        document.getElementById('connection_indicator').innerHTML = `
-        <img src="Green.png" style="margin: 0 !important; width: 20px">`
+        document.getElementById('connection_indicator').innerHTML = "<img src='Green.png' style='margin: 0 !important; width: 20px'>"
         IsOffline = false;
-        if (OfflineCounter > 3) {
+        if (OfflineCounter >= 3) { //связь вернулась, отключаем звук
           playSound(false);
         }
         OfflineCounter = 0
@@ -128,32 +127,75 @@
       }
     }
 
+    function getHistory(){
+      let history = [];
+      let fromStorage = localStorage.getItem('samovarHistory');
+      try {
+        let parsed = JSON.parse(fromStorage);
+        history = parsed ? parsed : [];
+      } catch (err) {
+        console.log('ERR parsed: ', err)
+        history = []
+      };
+      return history
+    }
+
+    function saveHistory(message){
+      let saved = getHistory();
+      saved.push(message);
+      localStorage.setItem('samovarHistory', JSON.stringify(saved));
+    }
+
+    let historyShown = false;
+    function showHystory() {
+      if (historyShown) {
+        document.getElementById('historyBox').style.display = 'none';
+        historyShown = false
+      } else {
+        let historyArray = getHistory();
+        document.getElementById('historyList').innerHTML = historyArray;
+        document.getElementById('historyBox').style.display = 'block';
+        let queue = document.getElementById('historyBox');
+        queue.scrollTop = queue.scrollHeight;
+        historyShown = true
+      }
+    };
+
+    function clearHystory () {
+      localStorage.setItem('samovarHistory', JSON.stringify([]));
+      showHystory()
+    }
+
     function addMessage (msg, lvl) {
       if (IsOffline) {
         return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
       } else {
         let time = new Date().toLocaleTimeString('ru-RU');
-        let style = null;
+        let cssClass = null;
         switch (lvl) {
           case 0:
-            style = 'message_0';
+            cssClass = 'message_0';
             is_ALARM = true;
             break;
           case 1:
-            style = 'message_1';
+            cssClass = 'message_1';
             break;
           case 2:
-            style = 'message_2';
+            cssClass = 'message_2';
             break;
           default:
-            style = 'message_0';
+            cssClass = 'message_0';
             is_ALARM = true;
             break;
         }
         let lastMsg = `
-            <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
+            <div align="left" class=${cssClass} onclick=removeLastMessage() style="cursor: pointer;">
               ${time}  ${msg}
             </div>`;
+        
+        let msg4history = `<div align="left" class=${cssClass} style="margin-top: 0"> <span style="text-decoration: underline">${time}</span>  ${msg}</div>`;
+        saveHistory(msg4history);
+        
         Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
         if (Messages_Array.length > 1) {
           //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
@@ -227,13 +269,13 @@
 
     function headerClick () {
       this.nextElementSibling.classList.toggle("spoiler-body");
-      var s = this.parentNode.getElementsByClassName("spoiler-sign");
+      let s = this.parentNode.getElementsByClassName("spoiler-sign");
       if (s[0].innerHTML == "[+]") s[0].innerHTML = "[-]";
       else s[0].innerHTML = "[+]";
     }
 
     function openTab (evt, tabName) {
-      var i, tabcontent, tablinks;
+      let i, tabcontent, tablinks;
       tabcontent = document.getElementsByClassName("tabcontent");
       for (i = 0; i < tabcontent.length; i++) {
         tabcontent[i].style.display = "none";
@@ -248,12 +290,12 @@
     }
 
     function check_program (str) {
-      var arrayOfStrings = str.split("\n");
-      var prevcnt = 0;
-      var ret = true;
-      var cnt;
+      let arrayOfStrings = str.split("\n");
+      let prevcnt = 0;
+      let ret = true;
+      let cnt;
       for (i = 0; i < arrayOfStrings.length; i++) {
-        var arrayOfDelim = arrayOfStrings[i].split(";");
+        let arrayOfDelim = arrayOfStrings[i].split(";");
         cnt = arrayOfDelim.length;
         if (cnt == 1 && arrayOfDelim[0] != "" && arrayOfStrings.length == i - 1) ret = false;
         else if (prevcnt > 0 && cnt > 1) {
@@ -269,8 +311,8 @@
         alert("Program error!");
         return;
       }
-      var t = document.getElementsByClassName("prgline");
-      var k, s;
+      let t = document.getElementsByClassName("prgline");
+      let k, s;
       s = "";
       for (i = 1; i < t.length; i++) {
         k = t[i].childNodes;
@@ -285,7 +327,7 @@
 
     function set_program () {
       calc_program();
-      var server = '/program';
+      let server = '/program';
       request = new XMLHttpRequest();
       request.onreadystatechange = function() {
         if (this.readyState == 4 && this.status == 200) {
@@ -310,12 +352,13 @@
         alert("Program error!");
         return;
       }
-      var t = document.getElementsByClassName("prgline");
-      var p = document.getElementById("WProgram");
-      var varr = p.value.split("\n");
-      for (z = 0; z < varr.length; z++) {
+      let k, s;
+      let t = document.getElementsByClassName("prgline");
+      let p = document.getElementById("WProgram");
+      let varr = p.value.split("\n");
+      for (z = 0; z < varr.length-1; z++) {
         k = t[z+1].childNodes;
-        var arr = varr[z].split(";");
+        let arr = varr[z].split(";");
         for (j = 0; j < 5; j++) {
           k[j+2].value = arr[j];
         }
@@ -323,8 +366,8 @@
     }
 
     function sleep (milliseconds) {
-      var start = new Date().getTime();
-      for (var i = 0; i < 1e7; i++) {
+      let start = new Date().getTime();
+      for (let i = 0; i < 1e7; i++) {
         if ((new Date().getTime() - start) > milliseconds) {
           break;
         }
@@ -332,7 +375,7 @@
     };
 
     function setNBKCommand () {
-      var cmd = "startnbk=";
+      let cmd = "startnbk=";
       if (document.getElementById('power').value == "Выключить нагрев") {
         cmd = cmd + "0";
       } else {
@@ -342,7 +385,7 @@
     }
 
     function sendbutton (command) {
-      var server = '/command?' + command;
+      let server = '/command?' + command;
       request = new XMLHttpRequest();
       request.open('GET', server, false);
       request.send();
@@ -354,8 +397,8 @@
     };
 
     function sendwaterpwm () {
-      var num = document.getElementById('PWM').value;
-      var command = 'watert=' + num;
+      let num = document.getElementById('PWM').value;
+      let command = 'watert=' + num;
       sendbutton(command);
       //alert( "Ok! Pump speed set " + num);
       return 0;
@@ -363,26 +406,24 @@
 
     function sendvoltage () {
       document.getElementById('Voltage').value = document.getElementById('Voltage').value.replace(",",".");
-      var num = document.getElementById('Voltage').value;
+      let num = document.getElementById('Voltage').value;
       if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
         alert("Введите значение!");
         return 0;
       }
-      var command = 'voltage=' + num;
+      let command = 'voltage=' + num;
       sendbutton(command);
       alert("Установлено.");
       return 0;
     };
 
-    setInterval(loadDoc, 2000);
-
     function loadDoc () {
-      var xhttp = new XMLHttpRequest();
+      let xhttp = new XMLHttpRequest();
       xhttp.timeout = 4000;
       xhttp.onreadystatechange = function() {
         if (this.readyState == 4 && this.status == 200) {
           ConnectError(false);
-          var myObj = JSON.parse(this.responseText);
+          let myObj = JSON.parse(this.responseText);
           document.getElementById('version').innerHTML = myObj.version;
           document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
           document.getElementById('stm').innerHTML = myObj.stm;
@@ -403,10 +444,7 @@
           document.getElementById('rssi').innerHTML = myObj.rssi;
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
           sound_is_on = !!myObj.UseBBuzzer;
-
-          if (myObj.prvl && myObj.prvl !== "") {
-            document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);
-          }
+          document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);
 
           if (myObj.Lstatus) {
             if (myObj.Lstatus != "") {
@@ -433,8 +471,8 @@
             document.getElementById('add_param').innerHTML = "; ШИМ насоса воды: " + myObj.wp_spd;
           }
 
-          var powerstr;
-          var powerstyle;
+          let powerstr;
+          let powerstyle;
           if (myObj.PowerOn == 1) {
             powerstr = 'Выключить нагрев';
             powerstyle = 'red';
@@ -463,16 +501,22 @@
     };
 
     function run_strlua() {
-      var str = document.getElementById('lua_str_i').value.replace(" ", "^");
+      let str = document.getElementById('lua_str_i').value.replace(" ", "^");
       sendbutton("luastr=" + str);
     };
     
     window.onload = function() {
+      getProgram();
+      setPowerUnit();
+      AddLuaButtons();
+      setInterval(loadDoc, 2000);
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
       });
-      getProgram();
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
           alert("Program error!");
@@ -480,9 +524,7 @@
         }
         getProgram();
       });
-      setPowerUnit();
-      AddLuaButtons();
-    };
+    });
 
 </script>
 </head>
@@ -491,6 +533,15 @@
 <!-- =============================================================================================================== -->
 
 <body>
+
+  <div style="position: absolute; top: 0.3em; left: 0.5em; width: 20%; size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHystory()'>История</div>
+  <div class="history_box" style="display: none;" id="historyBox">
+    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHystory()'>
+      [x] очистить историю
+    </div>
+    <div class="history_array" id="historyList"></div>
+  </div>
+
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
     <div class="tab">
@@ -638,11 +689,11 @@
       
       
 		<div class="prg" id="prg">
-		  <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="width: 252; display: inline-block; text-align: center;">Тип программы</label>&nbsp;&nbsp;&nbsp;<label class="tooltip" style="width: 85; display: inline-block; text-align: center;">Скорость</label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Давление</label>&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip" id="programPwrLabel"></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Температура</label></div>
-		  <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label><label style="width: 252;display: inline-block;color: honeydew;">Прогрев НБК</label><input type="hidden" name="ptype1" value="H"><input type="text" name="pspeed1" onchange="calc_program();" style="background-color: #FF6347;width:85"><input type="text" name="ppressure1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ptemp1" onchange="calc_program();" style="background-color: #FF6347;width:100"></div>
-		  <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label><label style="width: 252;display: inline-block;color: navy;">Настройка НБК</label><input type="hidden" name="ptype2" value="S"><input type="text" name="pspeed2" onchange="calc_program();" style="background-color: #FFFF00;width:85"><input type="text" name="ppressure2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ptemp2" onchange="calc_program();" style="background-color: #FFFF00;width:100"></div>
-		  <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label><label style="width: 252;display: inline-block;color: navy;">Оптимизация</label><input type="hidden" name="ptype3" value="O"><input type="text" name="pspeed3" onchange="calc_program();" style="background-color: #00BFFF;width:85"><input type="text" name="ppressure3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ptemp3" onchange="calc_program();" style="background-color: #00BFFF;width:100"></div>
-		  <div class="prgline" id="prgln4" style="background-color: #98FB98;"><label class="prglabel" style="background-color: #98FB98;">04</label><label style="width: 252;display: inline-block;color: navy;">Рабочий режим</label><input type="hidden" name="ptype4" value="W"><input type="text" name="pspeed4" onchange="calc_program();" style="background-color: #98FB98;width:85"><input type="text" name="ppressure4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #98FB98;width:100"></div>
+		  <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="width: 252; display: inline-block; text-align: center;">Тип программы</label>&nbsp;&nbsp;<label class="tooltip" style="width: 85; display: inline-block; text-align: center;">Скорость</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Давл.</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip" id="programPwrLabel"></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп.</label></div>
+		  <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: honeydew;">Прогрев</label><input type="hidden" name="ptype1" value="H"><input type="text" name="pspeed1" onchange="calc_program();" style="background-color: #FF6347;width:85"><input type="text" name="ppressure1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ptemp1" onchange="calc_program();" style="background-color: #FF6347;width:100"></div>
+		  <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: navy;">Настройка</label><input type="hidden" name="ptype2" value="S"><input type="text" name="pspeed2" onchange="calc_program();" style="background-color: #FFFF00;width:85"><input type="text" name="ppressure2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ptemp2" onchange="calc_program();" style="background-color: #FFFF00;width:100"></div>
+		  <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: navy;">Оптимизация</label><input type="hidden" name="ptype3" value="O"><input type="text" name="pspeed3" onchange="calc_program();" style="background-color: #00BFFF;width:85"><input type="text" name="ppressure3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ptemp3" onchange="calc_program();" style="background-color: #00BFFF;width:100"></div>
+		  <div class="prgline" id="prgln4" style="background-color: #98FB98;"><label class="prglabel" style="background-color: #98FB98;">04</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: navy;">Работа</label><input type="hidden" name="ptype4" value="W"><input type="text" name="pspeed4" onchange="calc_program();" style="background-color: #98FB98;width:85"><input type="text" name="ppressure4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #98FB98;width:100"></div>
 		</div>      
       
       

@@ -29,7 +29,7 @@
         document.getElementById('connection_indicator').innerHTML = `
         <img src="Green.png" style="margin: 0 !important; width: 20px">`
         IsOffline = false;
-        if (OfflineCounter > 3) {
+        if (OfflineCounter >= 3) {
           playSound(false);
         }
         OfflineCounter = 0
@@ -124,6 +124,47 @@
       }
     }
 
+ 
+    function getHistory(){
+      let history = [];
+      let fromStorage = localStorage.getItem('samovarHistory');
+      try {
+        let parsed = JSON.parse(fromStorage);
+        history = parsed ? parsed : [];
+      } catch (err) {
+        console.log('ERR parsed: ', err)
+        history = []
+      };
+      return history
+    }
+
+    function saveHistory(message){
+      let saved = getHistory();
+      saved.push(message);
+      localStorage.setItem('samovarHistory', JSON.stringify(saved));
+    }
+
+    let historyShown = false;
+    function showHistory() {
+      if (historyShown) {
+        document.getElementById('historyBox').style.display = 'none';
+        historyShown = false
+      } else {
+        let historyArray = getHistory();
+        document.getElementById('historyList').innerHTML = historyArray;
+        document.getElementById('historyBox').style.display = 'block';
+        let queue = document.getElementById('historyBox');
+        queue.scrollTop = queue.scrollHeight;
+        historyShown = true
+      }
+    };
+
+    function clearHistory () {
+      localStorage.setItem('samovarHistory', JSON.stringify([]));
+      showHistory()
+    }
+
+
     function addMessage (msg, lvl) {
       if (IsOffline) {
         return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
@@ -150,6 +191,10 @@
             <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
               ${time}  ${msg}
             </div>`;
+
+        let msg4history = `<div align="left" class=${cssClass} style="margin-top: 0"> <span style="text-decoration: underline">${time}</span>  ${msg}</div>`;
+        saveHistory(msg4history);
+
         Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
         if (Messages_Array.length > 1) {
           //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
@@ -281,8 +326,6 @@
       alert("Установлено.");
       return 0;
     };
-
-    setInterval(loadDoc, 2000);
 
     function set_program () {
       document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",", ".");
@@ -541,12 +584,19 @@
     };
     
     window.onload = function() {
+      AddLuaButtons();
+      setPowerUnit();
+      getProgram();
+      setInterval(loadDoc, 2000);
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
       });
 
-      AddLuaButtons();
+      
       document.getElementById("WProgram").addEventListener("change", function(event) {
         var element = document.getElementById("prg");
         while (element.firstChild) {
@@ -554,9 +604,7 @@
         }
         getProgram();
       });
-      setPowerUnit();
-      getProgram();
-    };
+    });
 
   </script>
 </head>
@@ -566,6 +614,14 @@
 
 
 <body>
+  
+  <div style="position: absolute; top: 0.3em; left: 0.5em; width: 20%; size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHistory()'>История</div>
+  <div class="history_box" style="display: none;" id="historyBox">
+    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHistory()'>
+      [x] очистить историю
+    </div>
+    <div class="history_array" id="historyList"></div>
+  </div>
   
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
