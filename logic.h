@@ -514,9 +514,7 @@ void run_program(uint8_t num) {
   WaterSensor.StartProgTemp = WaterSensor.avgTemp;
   TankSensor.StartProgTemp = TankSensor.avgTemp;
 
-  if (SamSetup.ChangeProgramBuzzer) {
-    set_buzzer(true);
-  }
+  String p_s;
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
@@ -545,7 +543,6 @@ void run_program(uint8_t num) {
     vTaskDelay(500 / portTICK_PERIOD_MS);
     if (program[num].WType == "C" && alarm_c_low_min == 0) alarm_c_low_min = millis();
 #endif
-    String p_s;
     p_s = "Программа: старт строки  №" + (String)(num + 1);
     if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
       if (program[num].WType == "H" || program[num].WType == "T") {
@@ -594,8 +591,15 @@ void run_program(uint8_t num) {
       stepper.setCurrent(0);
       stepper.setTarget(0);
     }
+  }
+
+  if (SamSetup.ChangeProgramBuzzer) {
+    set_buzzer(true);
+    SendMsg(p_s, ALARM_MSG);
+  } else {
     SendMsg(p_s, NOTIFY_MSG);
   }
+
   TargetStepps = stepper.getTarget();
 }
 

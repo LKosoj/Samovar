@@ -261,15 +261,11 @@ void run_beer_program(uint8_t num) {
 
   if (ProgramNum > ProgramLen - 1) num = CAPACITY_NUM * 2;
 
-  if (SamSetup.ChangeProgramBuzzer) {
-    set_buzzer(true);
-  }
-
+  String msg = "Переход к строке программы №" + String((num + 1));
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
     beer_finish();
   } else {
-    String msg = "Переход к строке программы №" + String((num + 1));
     if (program[num].WType == "M") {
       msg += "; Нагрев до температуры засыпи солода: " + String(program[num].Temp) + "°";
     } else if (program[num].WType == "P") {
@@ -283,8 +279,15 @@ void run_beer_program(uint8_t num) {
     } else if (program[num].WType == "W") {
       msg += "; Режим ожидания";
     }
+  }
+
+  if (SamSetup.ChangeProgramBuzzer) {
+    set_buzzer(true);
+    SendMsg(msg, ALARM_MSG);
+  } else {
     SendMsg(msg, NOTIFY_MSG);
   }
+
   //сбрасываем переменные для мешалки и насоса
   alarm_c_low_min = 0;  //мешалка вкл
   alarm_c_min = 0;  //мешалка пауза
@@ -357,9 +360,9 @@ void check_alarm_beer() {
     if (begintime == 0) {
       begintime = millis();
       setHeaterPosition(false);
-      set_mixer_state(false, false);
       open_valve(false, false);
     }
+    check_mixer_state(); // Управление мешалкой и насосом по параметрам программы
     return;
   }
 
