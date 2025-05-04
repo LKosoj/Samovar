@@ -720,9 +720,6 @@
     };
 
     window.onload = function() {
-    };
-
-    document.addEventListener('DOMContentLoaded', function() {
       headers = document.querySelectorAll("[data-name='spoiler-title']");
       headers.forEach(function(item) {
         item.addEventListener("click", headerClick);
@@ -738,7 +735,7 @@
       });
       setPowerUnit();
       AddLuaButtons();
-    });
+    };
 
   </script>
 </head>
