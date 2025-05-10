@@ -437,13 +437,8 @@
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
           document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
-          if (myObj.prvl !== -1) {
-            pressureLabel = 'В колонне: ';
-            pressureValue = myObj.prvl.toFixed(1)
-          } else {
-            pressureLabel = 'В начале: ';
-            pressureValue = myObj.start_pressure.toFixed(1)
-          }
+          pressureLabel = 'В начале: ';
+          pressureValue = myObj.start_pressure.toFixed(1)
           document.getElementById('pressureLabel').innerHTML = pressureLabel;
           document.getElementById('pressureValue').innerHTML = pressureValue;
           document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
