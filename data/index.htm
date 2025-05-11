@@ -137,7 +137,7 @@
     }
 
     let historyShown = false;
-    function showHystory() {
+    function showHistory() {
       if (historyShown) {
         document.getElementById('historyBox').style.display = 'none';
         historyShown = false
@@ -151,13 +151,10 @@
       }
     };
 
-    function clearHystory () {
+    function clearHistory () {
       localStorage.setItem('samovarHistory', JSON.stringify([]));
-      showHystory()
+      showHistory()
     }
-
-
-
 
     function addMessage (msg, lvl) {
       if (IsOffline) {
@@ -253,9 +250,7 @@
     }
 
     var pwr_unit = "%pwr_unit%"; 
-
     var _lnIdx = 0;
-
     var headers = document.querySelectorAll("[data-name='spoiler-title']");
 
     function headerClick () {
@@ -436,9 +431,14 @@
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
-          document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
-          pressureLabel = 'В начале: ';
-          pressureValue = myObj.start_pressure.toFixed(1)
+          document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(1);
+          if (myObj.hasOwnProperty('prvl')) {
+            pressureLabel = 'В колонне: ';
+            pressureValue = myObj.prvl.toFixed(1)
+          } else {
+            pressureLabel = 'В начале: ';
+            pressureValue = myObj.start_pressure.toFixed(1)
+          }
           document.getElementById('pressureLabel').innerHTML = pressureLabel;
           document.getElementById('pressureValue').innerHTML = pressureValue;
           document.getElementById('VolumeAll').innerHTML = myObj.VolumeAll;
@@ -552,7 +552,6 @@
       xhttp.open("GET", "/ajax", true);
       xhttp.send();
     };
-
 
 
     function set_num () {
@@ -782,16 +781,13 @@
 
 <body>
 
-  <div style="position: absolute; top: 0.3em; left: 0.5em; width: 20%; size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHystory()'>История</div>
+  <div style="position: absolute; top: 0.3em; left: 0.5em; width: 20%; size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHistory()'>История</div>
   <div class="history_box" style="display: none;" id="historyBox">
-    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHystory()'>
+    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHistory()'>
       [x] очистить историю
     </div>
     <div class="history_array" id="historyList"></div>
   </div>
-
-
-
   
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
