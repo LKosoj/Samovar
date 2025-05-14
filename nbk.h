@@ -269,11 +269,13 @@ void handle_nbk_stage_heatup() {
     run_nbk_program(ProgramNum + 1);
     return;
   }
+#ifdef USE_HEAD_LEVEL_SENSOR
   //Если захлёб (пользователь задал слишком большие М и П), М=0, П=0 (обнуляем нагрев и подачу), 
   //выводим сообщение "Захлёб колонны! Останов программы".
- if (whls.isHolded())
+  if (whls.isHolded())
     handle_overflow(
       "Захлёб колонны уже на прогреве: заданы слишком большие мощность и/или подача! Останов программы.", true, 0); 
+#endif
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
 //2) "Ручная настройка" - определение Ин, Тн, Мо и По вручную (инструкция будет)
