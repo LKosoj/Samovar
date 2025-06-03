@@ -38,6 +38,7 @@ Buffer received - next send in 2 sec
 #include <AsyncTCP.h>
 #include <StreamString.h>
 #include <WiFi.h>
+#include <assert.h>
 
 #include <functional>
 #include <string>

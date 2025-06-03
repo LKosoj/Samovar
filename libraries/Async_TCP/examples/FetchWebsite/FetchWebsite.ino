@@ -59,10 +59,6 @@ void fetchAsync(const char *host, std::function<void(const StreamString *)> onDo
 
   Serial.printf("[%s] Connecting...\n", host);
 
-  client->setRxTimeout(20000);
-  // client->setAckTimeout(10000);
-  client->setNoDelay(true);
-
   if (!client->connect(host, 80)) {
     Serial.printf("[%s] Failed to connect!\n", host);
     delete client;
@@ -87,15 +83,6 @@ void setup() {
 
   // fetch asynchronously 2 websites:
 
-  // equivalent to curl -v --raw http://www.google.com/
-  fetchAsync("www.google.com", [](const StreamString *content) {
-    if (content) {
-      Serial.printf("[www.google.com] Fetched website:\n%s\n", content->c_str());
-    } else {
-      Serial.println("[www.google.com] Failed to fetch website!");
-    }
-  });
-
   // equivalent to curl -v --raw http://www.time.org/
   fetchAsync("www.time.org", [](const StreamString *content) {
     if (content) {
@@ -104,8 +91,17 @@ void setup() {
       Serial.println("[www.time.org] Failed to fetch website!");
     }
   });
+
+  // equivalent to curl -v --raw http://www.google.com/
+  fetchAsync("www.google.com", [](const StreamString *content) {
+    if (content) {
+      Serial.printf("[www.google.com] Fetched website:\n%s\n", content->c_str());
+    } else {
+      Serial.println("[www.google.com] Failed to fetch website!");
+    }
+  });
 }
 
 void loop() {
-  delay(500);
+  delay(100);
 }
