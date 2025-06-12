@@ -781,6 +781,13 @@ void handleSave(AsyncWebServerRequest *request) {
 }
 
 void web_command(AsyncWebServerRequest *request) {
+  // Защита от повторных команд
+  static uint32_t last_command_time = 0;
+  if (millis() - last_command_time < 1500) {
+    request->send(200, "text/plain", "OK");
+    return;
+  }
+  last_command_time = millis();
   /*
     int params = request->params();
     for(int i=0;i<params;i++){
