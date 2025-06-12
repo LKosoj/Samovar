@@ -225,83 +225,137 @@ server.on("/saveAlcToEEPROM", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->redirect("/setup_spk");
     });
 
-    // Настройка датчиков давления
-    server.on("/pressure_setup", HTTP_GET, [](AsyncWebServerRequest *r){
-        String h = FPSTR(PRESSURE_PAGE);
-        for(int i=1;i<=3;i++){
-            h.replace("%S"+String(i)+"%",(Pressure_enable[i]==1)?" checked":"");
-            h.replace("%D"+String(i)+"%",(Pressure_enable[i]==1)?"":" style=display:none");
-        }
-        h.replace("%KT1%",String(KTemp_1,2));
-        h.replace("%BT1%",String(BaseTemp_1,1));
-        h.replace("%BADS%",String(PressureBaseADS));
-        h.replace("%PQ%",String(PressureQ,6));
-        h.replace("%HXM%",String(HX710B_Mult,2));
-        h.replace("%KT3%",String(KTemp_3,2));
-        h.replace("%BT3%",String(BaseTemp_3,1));
-        r->send(200,"text/html",h);
-    });
+// Настройка датчиков давления
+server.on("/pressure_setup", HTTP_GET, [](AsyncWebServerRequest *r){
+    String h = FPSTR(PRESSURE_PAGE);
+    h.replace("%KDD%", String(XGZP6897D_k));
+    for(int i=1;i<=3;i++){
+        h.replace("%S"+String(i)+"%",(Pressure_enable[i]==1)?" checked":"");
+        h.replace("%D"+String(i)+"%",(Pressure_enable[i]==1)?"":" style=display:none");
+        h.replace("%DS"+String(i)+"%",(Pressure_enable[0]==i)?" selected":"");
+    }
+    h.replace("%DS0%",(Pressure_enable[0]==0)?" selected":"");
+    h.replace("%KT1%",String(KTemp_1,2));
+    h.replace("%BT1%",String(BaseTemp_1,1));
+    h.replace("%PQ%",String(PressureQ,6));
+    h.replace("%HXM%",String(HX710B_Mult,2));
+    h.replace("%KT3%",String(KTemp_3,2));
+    h.replace("%BT3%",String(BaseTemp_3,1));
+    h.replace("%O1%",String(dPress_1,2));
+    h.replace("%O2%",String(PressureBaseADS,0));
+    h.replace("%O3%",String(dPress_3,2));
+    r->send(200,"text/html",h);
+});
 
-    // Сохранение настроек давления
-    server.on("/savePressureSettings", HTTP_POST, [](AsyncWebServerRequest *request) {
-        EEPROM.begin(EEPROM_SIZE);
-        
-        for (int i = 1; i <= 3; i++) {
-            String argName = "sensor" + String(i);
-            if (request->hasParam(argName, true)) {
-                bool enabled = request->getParam(argName, true)->value() == "1";
-                pressure_sensors_enabled[i-1] = enabled;
-                Pressure_enable[i] = enabled ? 1 : 0;
-                
-                if (i == 2) {
-                    EEPROM.put(PRESSURE_MPX_ENABLE_ADDR, Pressure_enable[2]);
-                }
+// Сохранение настроек давления
+server.on("/savePressureSettings", HTTP_POST, [](AsyncWebServerRequest *request) {
+    EEPROM.begin(EEPROM_SIZE);
+    
+    if (request->hasParam("defaultSensor", true)) {
+        Pressure_enable[0] = request->getParam("defaultSensor", true)->value().toInt();
+        EEPROM.put(DEFAULT_PRESSURE_ADDR, Pressure_enable[0]);
+    }
+    
+    for (int i = 1; i <= 3; i++) {
+        String argName = "sensor" + String(i);
+        if (request->hasParam(argName, true)) {
+            bool enabled = request->getParam(argName, true)->value() == "1";
+            Pressure_enable[i] = enabled ? 1 : 0;
+            
+            if (i == 2) {
+                EEPROM.put(PRESSURE_MPX_ENABLE_ADDR, Pressure_enable[2]);
+            }
+            if (i == 3) {
+                EEPROM.put(PRESSURE_HX710B_ENABLE_ADDR, Pressure_enable[3]);
+            } 
+        }
+    }
+    if (request->hasParam("kdd", true)) {
+        XGZP6897D_k = request->getParam("kdd", true)->value().toInt();
+        EEPROM.put(XGZP6897D_K_ADDR, XGZP6897D_k);
+    }
+    if (request->hasParam("b1", true)) {
+        BaseTemp_1 = request->getParam("b1", true)->value().toFloat();
+        EEPROM.put(BaseTemp_1_EAdr, BaseTemp_1);
+    }
+    if (request->hasParam("p", true)) {
+        PressureQ = request->getParam("p", true)->value().toFloat();
+        EEPROM.put(PressureQ_EAdr, PressureQ);
+    }
+    if (request->hasParam("h", true)) {
+        HX710B_Mult = request->getParam("h", true)->value().toFloat();
+        EEPROM.put(HX710B_Mult_EAdr, HX710B_Mult);
+    }
+    if (request->hasParam("k3", true)) {
+        KTemp_3 = request->getParam("k3", true)->value().toFloat();
+        EEPROM.put(KTemp_3_EAdr, KTemp_3);
+    }
+    if (request->hasParam("b3", true)) {
+        BaseTemp_3 = request->getParam("b3", true)->value().toFloat();
+        EEPROM.put(BaseTemp_3_EAdr, BaseTemp_3);
+    }
+    
+    for (int i = 1; i <= 3; i++) {
+        String offsetName = "o" + String(i);
+        if (request->hasParam(offsetName, true)) {
+            float offset = request->getParam(offsetName, true)->value().toFloat();
+            switch(i) {
+                case 1: 
+                    dPress_1 = offset;
+                    EEPROM.put(dPress_1_EAdr, offset);
+                    break;
+                case 2:
+                    PressureBaseADS = offset;
+                    EEPROM.put(PressureBaseADS_EAdr, offset);
+                    break;
+                case 3:
+                    dPress_3 = offset;
+                    EEPROM.put(dPress_3_EAdr, offset);
+                    break;
             }
         }
-        
-        if (request->hasParam("ktk1", true)) {
-            KTemp_1 = request->getParam("ktk1", true)->value().toFloat();
-            EEPROM.put(KTemp_1_EAdr, KTemp_1);
-        }
-        if (request->hasParam("baseTemp1", true)) {
-            BaseTemp_1 = request->getParam("baseTemp1", true)->value().toFloat();
-            EEPROM.put(BaseTemp_1_EAdr, BaseTemp_1);
-        }
-        if (request->hasParam("baseADS", true)) {
-            PressureBaseADS = request->getParam("baseADS", true)->value().toInt();
-            EEPROM.put(PressureBaseADS_EAdr, PressureBaseADS);
-        }
-        if (request->hasParam("pressureQ", true)) {
-            PressureQ = request->getParam("pressureQ", true)->value().toFloat();
-            EEPROM.put(PressureQ_EAdr, PressureQ);
-        }
-        if (request->hasParam("hxMult", true)) {
-            HX710B_Mult = request->getParam("hxMult", true)->value().toFloat();
-            EEPROM.put(HX710B_Mult_EAdr, HX710B_Mult);
-        }
-        if (request->hasParam("ktk3", true)) {
-            KTemp_3 = request->getParam("ktk3", true)->value().toFloat();
-            EEPROM.put(KTemp_3_EAdr, KTemp_3);
-        }
-        if (request->hasParam("baseTemp3", true)) {
-            BaseTemp_3 = request->getParam("baseTemp3", true)->value().toFloat();
-            EEPROM.put(BaseTemp_3_EAdr, BaseTemp_3);
-        }
-        
-        EEPROM.commit();
-        EEPROM.end();
-        request->send(200, "text/plain", "Settings saved");
-    });
+    }
+    
+    EEPROM.commit();
+    EEPROM.end();
+    request->send(200, "text/plain", "Settings saved");
+});
 
     // Применение настроек давления без сохранения
     server.on("/applyPressureSettings", HTTP_POST, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("ktk1", true)) KTemp_1 = request->getParam("ktk1", true)->value().toFloat();
-        if (request->hasParam("baseTemp1", true)) BaseTemp_1 = request->getParam("baseTemp1", true)->value().toFloat();
-        if (request->hasParam("baseADS", true)) PressureBaseADS = request->getParam("baseADS", true)->value().toInt();
-        if (request->hasParam("pressureQ", true)) PressureQ = request->getParam("pressureQ", true)->value().toFloat();
-        if (request->hasParam("hxMult", true)) HX710B_Mult = request->getParam("hxMult", true)->value().toFloat();
-        if (request->hasParam("ktk3", true)) KTemp_3 = request->getParam("ktk3", true)->value().toFloat();
-        if (request->hasParam("baseTemp3", true)) BaseTemp_3 = request->getParam("baseTemp3", true)->value().toFloat();
+    if (request->hasParam("defaultSensor", true)) {
+        Pressure_enable[0] = request->getParam("defaultSensor", true)->value().toInt();
+    }
+    for (int i = 1; i <= 3; i++) {
+        String argName = "sensor" + String(i);
+        if (request->hasParam(argName, true)) {
+            bool enabled = request->getParam(argName, true)->value() == "1";
+            Pressure_enable[i] = enabled ? 1 : 0;
+        }
+    }
+    if (request->hasParam("kdd", true)) {XGZP6897D_k = request->getParam("kdd", true)->value().toInt();}
+    if (request->hasParam("b1", true)) { BaseTemp_1 = request->getParam("b1", true)->value().toFloat(); }
+    if (request->hasParam("p", true)) { PressureQ = request->getParam("p", true)->value().toFloat(); }
+    if (request->hasParam("h", true)) { HX710B_Mult = request->getParam("h", true)->value().toFloat(); }
+    if (request->hasParam("k3", true)) {KTemp_3 = request->getParam("k3", true)->value().toFloat(); }
+    if (request->hasParam("b3", true)) { BaseTemp_3 = request->getParam("b3", true)->value().toFloat(); }
+    for (int i = 1; i <= 3; i++) {
+        String offsetName = "o" + String(i);
+        if (request->hasParam(offsetName, true)) {
+            float offset = request->getParam(offsetName, true)->value().toFloat();
+            switch(i) {
+                case 1: 
+                    dPress_1 = offset;
+                    break;
+                case 2:
+                    PressureBaseADS = offset;
+                    break;
+                case 3:
+                    dPress_3 = offset;
+                    break;
+            }
+        }
+    }
         request->redirect("/pressure_setup");
     });
 
@@ -318,46 +372,53 @@ server.on("/saveAlcToEEPROM", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", json);
     });
 
-    // Обнуление датчика давления
-    server.on("/zeroPressureSensor", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (request->hasParam("sensor")) {
-            int sensorNum = request->getParam("sensor")->value().toInt();
-            if (sensorNum >= 1 && sensorNum <= 3) {
-                EEPROM.begin(EEPROM_SIZE);
-                
-                switch(sensorNum) {
-                    case 1: // XGZP6897D
-                        dPress_1 = pressure[1] + dPress_1 + dPt_1;
-                        BaseTemp_1 = temperature[1];
-                        EEPROM.put(dPress_1_EAdr, dPress_1);
-                        EEPROM.put(BaseTemp_1_EAdr, BaseTemp_1);
-                        break;
-                        
-                    case 2: // MPX5010DP
-                        PressureBaseADS = ADSt;
-                        BaseTemp_2 = Temp[6];
-                        EEPROM.put(PressureBaseADS_EAdr, PressureBaseADS);
-                        EEPROM.put(BaseTemp_2_EAdr, BaseTemp_2);
-                        break;
-                        
-                    case 3: // HX710B
-                        dPress_3 = pressure[3] + dPress_3 + dPt_3;
-                        BaseTemp_3 = Temp[6];
-                        EEPROM.put(dPress_3_EAdr, dPress_3);
-                        EEPROM.put(BaseTemp_3_EAdr, BaseTemp_3);
-                        break;
-                }
-                
-                EEPROM.commit();
-                EEPROM.end();
-                request->send(200, "text/plain", "Sensor " + String(sensorNum) + " zeroed");
-            } else {
-                request->send(400, "text/plain", "Invalid sensor number");
+// Обнуление датчика давления
+server.on("/zeroPressureSensor", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (request->hasParam("sensor")) {
+        int sensorNum = request->getParam("sensor")->value().toInt();
+        if (sensorNum >= 1 && sensorNum <= 3) {
+            EEPROM.begin(EEPROM_SIZE);
+            float offset = 0.0;
+            
+            switch(sensorNum) {
+                case 1: // XGZP6897D
+                    dPress_1 = pressure[1] + dPress_1 + dPt_1;
+                    BaseTemp_1 = temperature[1];
+                    offset = dPress_1;
+                    EEPROM.put(dPress_1_EAdr, dPress_1);
+                    EEPROM.put(BaseTemp_1_EAdr, BaseTemp_1);
+                    break;
+                    
+                case 2: // MPX5010DP
+                    PressureBaseADS = (float)readADS(7, 16);// Для MPX5010DP смещение учитывается через PressureBaseADS
+                    BaseTemp_2 = Temp[6];
+                    offset = PressureBaseADS; 
+                    EEPROM.put(PressureBaseADS_EAdr, PressureBaseADS);
+                    EEPROM.put(BaseTemp_2_EAdr, BaseTemp_2);
+                    break;
+                    
+                case 3: // HX710B
+                    dPress_3 = pressure[3] + dPress_3 + dPt_3;
+                    BaseTemp_3 = Temp[6];
+                    offset = dPress_3;
+                    EEPROM.put(dPress_3_EAdr, dPress_3);
+                    EEPROM.put(BaseTemp_3_EAdr, BaseTemp_3);
+                    break;
             }
+            
+            EEPROM.commit();
+            EEPROM.end();
+            
+            // Возвращаем JSON с новым значением смещения
+            String json = "{\"offset\":" + String(offset, 2) + "}";
+            request->send(200, "application/json", json);
         } else {
-            request->send(400, "text/plain", "Missing sensor parameter");
+            request->send(400, "text/plain", "Invalid sensor number");
         }
-    });
+    } else {
+        request->send(400, "text/plain", "Missing sensor parameter");
+    }
+});
 
     // Настройки электронного попугая
 server.on("/setup_alc", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -430,15 +491,12 @@ server.on("/setup_alc", HTTP_GET, [](AsyncWebServerRequest *request) {
     server.on("/debug", HTTP_GET, [](AsyncWebServerRequest *request) {
         String h = FPSTR(DEBUG_PAGE);
         h.replace("%debug_checked%", debug_mode ? "checked" : "");
-        h.replace("%temp0%", String(Temp_debug[0], 1));
+        h.replace("%temp0%", String(Temp_debug[0], 1)); // Давление в Temp[0]
         h.replace("%temp1%", String(Temp_debug[1], 1));
         h.replace("%temp2%", String(Temp_debug[2], 1));
         h.replace("%temp3%", String(Temp_debug[3], 1));
         h.replace("%temp4%", String(Temp_debug[4], 1));
         h.replace("%temp5%", String(Temp_debug[5], 1));
-        h.replace("%temp6%", String(Temp_debug[6], 1));
-        h.replace("%temp7%", String(Temp_debug[7], 1));
-        h.replace("%pressure%", String(Temp_debug[0], 1)); // Давление в Temp[0]
         request->send(200, "text/html", h);
     });
 
@@ -446,17 +504,14 @@ server.on("/setup_alc", HTTP_GET, [](AsyncWebServerRequest *request) {
     server.on("/save_debug", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (request->hasParam("debug_mode", true)) {
             debug_mode = request->getParam("debug_mode", true)->value() == "on";
-        }
+        } else debug_mode = false;
         
         if (request->hasParam("temp0", true)) Temp_debug[0] = request->getParam("temp0", true)->value().toFloat();
         if (request->hasParam("temp1", true)) Temp_debug[1] = request->getParam("temp1", true)->value().toFloat();
         if (request->hasParam("temp2", true)) Temp_debug[2] = request->getParam("temp2", true)->value().toFloat();
         if (request->hasParam("temp3", true)) Temp_debug[3] = request->getParam("temp3", true)->value().toFloat();
         if (request->hasParam("temp4", true)) Temp_debug[4] = request->getParam("temp4", true)->value().toFloat();
-        if (request->hasParam("temp5", true)) Temp_debug[5] = request->getParam("temp5", true)->value().toFloat();
-        if (request->hasParam("temp6", true)) Temp_debug[6] = request->getParam("temp6", true)->value().toFloat();
-        if (request->hasParam("temp7", true)) Temp_debug[7] = request->getParam("temp7", true)->value().toFloat();
-        
+        if (request->hasParam("temp5", true)) Temp_debug[5] = request->getParam("temp5", true)->value().toFloat();        
         request->redirect("/debug");
     });
     // Запуск сервера

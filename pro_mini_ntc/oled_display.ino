@@ -1,14 +1,13 @@
-
 // Инициализация OLED
 void initOLED() {
   #ifdef ENABLE_OLED_DISPLAY
   LD.init();
   //LD.clearDisplay();
   LD.setFont(Font_12x16);
-  LD.printString("          ", 0, 0);
-  LD.printString(" Start... ", 0, 2);
-  LD.printString("          ", 0, 4);
-  LD.printString("          ", 0, 6);
+  LD.printString("           ", 1, 0);
+  LD.printString("          ", 1, 2);
+  LD.printString(" Start... ", 1, 4);
+  LD.printString("          ", 1, 6);
   #endif
 }
 bool EnterPressed(){            
@@ -185,7 +184,7 @@ void disp() {                                                                 //
     if (EnterPressed()) {        // Фиксация нуля текущего датчика давления понажатию BtnEnter без записи в EEPROM
       switch (Pressure_enable[0]) {
       case 1: dPress_1 = pressure[1] + dPress_1; LD.clearDisplay(); break;         // Убираем дрейф нуля датчика давления I2C
-      case 2: dPress_2 = pressure[2] + dPress_2; LD.clearDisplay(); break;         // Убираем дрейф нуля датчика давления на 8 канале АЦП
+      case 2: PressureBaseADS =(float)readADS(7, 16); LD.clearDisplay(); break;         // Убираем дрейф нуля датчика давления на 8 канале АЦП
       case 3: dPress_3 = pressure[3] + dPress_3; LD.clearDisplay(); break;         // Убираем дрейф нуля датчика давления на АЦП HX710B
       }
     }
@@ -241,27 +240,40 @@ void disp() {                                                                 //
   } } break; 
   case 100: {                             // Экран всех измерений для 2.4" дисплеев
     if (Pressure_enable[1]==1)  { LD.printString_6x8("P1  ", 1, 0); dtostrf((float)pressure[1], 6, 2, outstr); LD.printString_6x8(outstr, 26, 0);}
-    if (Pressure_enable[2]==1)  { LD.printString_6x8("P2  ", 64, 0); dtostrf((float)pressure[2], 6, 2, outstr); LD.printString_6x8(outstr, 89, 0);} 
-    if (Pressure_enable[3]==1)  { LD.printString_6x8("P3  ", 1, 1); dtostrf((float)pressure[3], 6, 2, outstr); LD.printString_6x8(outstr, 26, 1);} 
-    LD.printString_6x8(F("--------------------"), 1, 2);
-    PrintTempSmall(1, "Tп= ", 3, 1); 
-    PrintTempSmall(2, "Tц= ", 4, 1);
-    PrintTempSmall(3, "Tк= ", 5, 1);
-    PrintTempSmall(4, "Тв= ", 4, 64);
-    PrintTempSmall(5, "TСА ", 5, 64);
-    LD.printString_6x8(F("--------------------"), 1, 6);
+    if (Pressure_enable[2]==1)  { LD.printString_6x8("P2  ", 1, 1); dtostrf((float)pressure[2], 6, 2, outstr); LD.printString_6x8(outstr, 26, 1);} 
+    if (Pressure_enable[3]==1)  { LD.printString_6x8("P3  ", 64, 0); dtostrf((float)pressure[3], 6, 2, outstr); LD.printString_6x8(outstr, 89, 0);} 
+    //LD.printString_6x8(F("--------------------"), 1, 2);
+    PrintTempSmall(1, "Tп= ", 2, 1); 
+    PrintTempSmall(2, "Tц= ", 3, 1);
+    PrintTempSmall(3, "Tк= ", 4, 1);
+    PrintTempSmall(4, "Тв= ", 3, 64);
+    PrintTempSmall(5, "TСА ", 4, 64);
+    LD.printString_6x8(F("--------------------"), 1, 5);
     if (N_dPressureAlc) {
       if (pressure[N_dPressureAlc]>5) 
        {Alc=(float)G_to_alc((uint16_t)(k_Alc*pressure[N_dPressureAlc]))/10;    // Расчет объемного содержания спирта, %
        Alc_T=Alc+(20-Temp[6])*k_Alc_T;                                         // Простенькая и совсем не точная коррекция по температуре
-       LD.printString_6x8("Alc%", 1,7); dtostrf((float)Alc_T, 5, 1, outstr); LD.printString_6x8(outstr, 26, 7);} 
-       else LD.printString_6x8(F("Alc%  --- "), 1, 7);
+       LD.printString_6x8("Alc%", 1,6); dtostrf((float)Alc_T, 5, 1, outstr); LD.printString_6x8(outstr, 26, 67);} 
+       else LD.printString_6x8(F("Alc%  --- "), 1, 6);
+      #ifdef ENABLE_WIFI
+       if (WiFi.status() == WL_CONNECTED) { // Если подключены к WiFi выводим IP и RSSI
+        LD.printString_6x8( WiFi.localIP().toString().c_str(),1,7); 
+        LD.printString_6x8(("R " + String(WiFi.RSSI())).c_str(),94,7);
+       }
+      #endif
       } 
-      PrintTempSmall(6, "Тep ", 7, 64);    
+      PrintTempSmall(6, "Тep ", 6, 64);    
     if (SelectPressed()) {          // Переключение на экран 0 по кнопке BtnSel
      DispMode=0; 
      LD.clearDisplay();  
      }   
+    if (EnterPressed()) {        // Фиксация нуля текущего датчика давления понажатию BtnEnter без записи в EEPROM
+      switch (Pressure_enable[0]) {
+      case 1: dPress_1 = pressure[1] + dPress_1; LD.clearDisplay(); break;         // Убираем дрейф нуля датчика давления I2C
+      case 2: PressureBaseADS =(float)readADS(7, 16); LD.clearDisplay(); break;         // Убираем дрейф нуля датчика давления на 8 канале АЦП
+      case 3: dPress_3 = pressure[3] + dPress_3; LD.clearDisplay(); break;         // Убираем дрейф нуля датчика давления на АЦП HX710B
+      }
+    }
   } break; 
   case 2: {                             // Экран настройка датчиков давления запрос пропуска
     B25t=B25;

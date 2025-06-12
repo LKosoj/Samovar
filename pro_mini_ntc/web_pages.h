@@ -379,30 +379,50 @@ if(document.getElementById('s'+i).checked){
  setTimeout(u,1e3)
 })}
 function s(){
- let f=new FormData();
- for(let i=1;i<=3;i++) f.append('sensor'+i,document.getElementById('s'+i).checked?'1':'0');
- f.append('k1',document.getElementById('k1').value);
- f.append('b1',document.getElementById('b1').value);
- f.append('a',document.getElementById('a').value);
- f.append('p',document.getElementById('p').value);
- f.append('h',document.getElementById('h').value);
- f.append('k3',document.getElementById('k3').value);
- f.append('b3',document.getElementById('b3').value);
- fetch('/savePressureSettings',{method:'POST',body:f}).then(r=>alert('Сохранено!'))
+  let f = new FormData();
+  f.append('defaultSensor', document.getElementById('defaultSensor').value);
+  for(let i=1;i<=3;i++) f.append('sensor'+i,document.getElementById('s'+i).checked?'1':'0');
+  f.append('k1',document.getElementById('k1').value);
+  f.append('b1',document.getElementById('b1').value);
+  f.append('p',document.getElementById('p').value);
+  f.append('h',document.getElementById('h').value);
+  f.append('k3',document.getElementById('k3').value);
+  f.append('b3',document.getElementById('b3').value);
+  f.append('o1',document.getElementById('o1').value);
+  f.append('o2',document.getElementById('o2').value);
+  f.append('o3',document.getElementById('o3').value);
+  f.append('kdd',document.getElementById('kdd').value);
+
+  fetch('/savePressureSettings',{method:'POST',body:f})
+    .then(r=>r.ok ? alert('Сохранено успешно!') : alert('Ошибка сохранения!'))
+    .catch(e=>alert('Ошибка: '+e));
 }
+
 function a(){
- let f=new FormData();
- for(let i=1;i<=3;i++) f.append('sensor'+i,document.getElementById('s'+i).checked?'1':'0');
- f.append('k1',document.getElementById('k1').value);
- f.append('b1',document.getElementById('b1').value);
- f.append('a',document.getElementById('a').value);
- f.append('p',document.getElementById('p').value);
- f.append('h',document.getElementById('h').value);
- f.append('k3',document.getElementById('k3').value);
- f.append('b3',document.getElementById('b3').value);
- fetch('/applyPressureSettings',{method:'POST',body:f})
+  let f = new FormData();
+  f.append('defaultSensor', document.getElementById('defaultSensor').value);
+  for(let i=1;i<=3;i++) f.append('sensor'+i,document.getElementById('s'+i).checked?'1':'0');
+  f.append('k1',document.getElementById('k1').value);
+  f.append('b1',document.getElementById('b1').value);
+  f.append('p',document.getElementById('p').value);
+  f.append('h',document.getElementById('h').value);
+  f.append('k3',document.getElementById('k3').value);
+  f.append('b3',document.getElementById('b3').value);
+  f.append('o1',document.getElementById('o1').value);
+  f.append('o2',document.getElementById('o2').value);
+  f.append('o3',document.getElementById('o3').value);
+  f.append('kdd',document.getElementById('kdd').value);
+
+  fetch('/applyPressureSettings',{method:'POST',body:f})
+    .then(r=>r.ok ? alert('Применено успешно!') : alert('Ошибка применения!'))
+    .catch(e=>alert('Ошибка: '+e));
 }
-function z(n){fetch('/zeroPressureSensor?sensor='+n).then(r=>alert('Датчик '+n+' обнулен!'))}
+function z(n){
+ fetch('/zeroPressureSensor?sensor='+n).then(r=>r.json()).then(d=>{
+  document.getElementById('o'+n).value = d.offset.toFixed(2);
+  alert('Датчик '+n+' обнулен!');
+ });
+}
 window.onload=function(){
  u();
  for(let i=1;i<=3;i++){
@@ -418,10 +438,23 @@ document.getElementById('ss'+i).style.display=document.getElementById('s'+i).che
 <div class=c>
 <h1>Настройка давления</h1>
 <div class=s>
+ <div class=fg>
+  <label>Активный датчик:</label>
+  <select id=defaultSensor>
+   <option value=0 %DS0%>Нет</option>
+   <option value=1 %DS1%>XGZP6897D</option>
+   <option value=2 %DS2%>MPX5010DP</option>
+   <option value=3 %DS3%>HX710B</option>
+  </select>
+ </div>
+</div>
+<div class=s>
  <div class=fg><input type=checkbox id=s1%S1%><label for=s1>XGZP6897D (I2C)</label></div>
  <div id=ss1%D1%>
+<div class=fg><label>Делитель:</label><input type="number" step="1" id="kdd" value="%KDD%" min="32" max="8192"></div>
 <div class=fg><label>Коэф.термокомп.(Ktk):</label><input type=number step=0.01 id=k1 value=%KT1%></div>
 <div class=fg><label>Базовая t°C:</label><input type=number step=0.1 id=b1 value=%BT1%></div>
+<div class=fg><label>Смещение:</label><input type=number step=0.01 id=o1 value=%O1%></div>
 <div class=v>Давление: <span id=sv1>--</span></div>
 <div class=v>Температура: <span id=st1>--</span></div>
 <button onclick=z(1)>Обнулить</button>
@@ -429,8 +462,8 @@ document.getElementById('ss'+i).style.display=document.getElementById('s'+i).che
 </div>
 <div class=s>
  <div class=fg><input type=checkbox id=s2%S2%><label for=s2>MPX5010DP (ADC)</label></div>
- <div class=fg><label>Базовое АЦП:</label><input type=number id=a value=%BADS%></div>
  <div class=fg><label>Квант давления:</label><input type=number step=0.0001 id=p value=%PQ%></div>
+ <div class=fg><label>Базовое АDS:</label><input type=number step=1 id=o2 value=%O2%></div>
  <div id=ss2%D2%>
 <div class=v>Давление: <span id=sv2>--</span></div>
 <div class=v>Температура: <span id=st2>--</span></div>
@@ -442,6 +475,7 @@ document.getElementById('ss'+i).style.display=document.getElementById('s'+i).che
  <div class=fg><label>Множитель HX710B:</label><input type=number step=0.01 id=h value=%HXM%></div>
  <div class=fg><label>Коэф.термокомп.(Ktk):</label><input type=number step=0.01 id=k3 value=%KT3%></div>
  <div class=fg><label>Базовая t°C:</label><input type=number step=0.1 id=b3 value=%BT3%></div>
+ <div class=fg><label>Смещение:</label><input type=number step=0.01 id=o3 value=%O3%></div>
  <div id=ss3%D3%>
 <div class=v>Давление: <span id=sv3>--</span></div>
 <div class=v>Температура: <span id=st3>--</span></div>
@@ -661,7 +695,7 @@ button { padding: 8px 15px; background: #4CAF50; color: white; border: none; }
 <h1>Эмулятор датчиков</h1>
 <form action="/save_debug" method="POST">
 <div class="form-group">
-<label>Режим отладки:</label>
+<label>Включен:</label>
 <input type="checkbox" name="debug_mode" %debug_checked%>
 </div>
 <div class="form-group">
@@ -687,14 +721,6 @@ button { padding: 8px 15px; background: #4CAF50; color: white; border: none; }
 <div class="form-group">
 <label>Температура ТСА:</label>
 <input type="number" step="0.1" name="temp5" value="%temp5%"> °C
-</div>
-<div class="form-group">
-<label>Температура 6:</label>
-<input type="number" step="0.1" name="temp6" value="%temp6%"> °C
-</div>
-<div class="form-group">
-<label>Температура 7:</label>
-<input type="number" step="0.1" name="temp7" value="%temp7%"> °C
 </div>
 <button type="submit">Применить</button>
 </form>

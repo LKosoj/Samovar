@@ -4,6 +4,7 @@
 #define ENABLE_WEB_SERVER      // Веб-сервер
 #define ENABLE_MQTT            // Управление через MQTT
 #define ENABLE_OLED_DISPLAY
+#define FIRST_DISP 100          // Первый выводимый дисплей 0 - три температуры и давление, 1 - остальные температуры, 99-зуммер, 100 - все Т и Р
 
 // Настройки по умолчанию для WiFi
 #define defaultSSID "" // Ссид и пароль по умолчанию, позволяет использовать два набора, первый можно сохранить в EEPROM 
@@ -34,8 +35,20 @@
 #define pin_onewire 14      // Pin передачи по протоколу 1Ware 
 
 //1 и 3 - TX0/RX0, 4 и 5 I2C. Свободные пины: A0 (0-1В)
-
-
+#define XGZP6897D_K 512 
+/*pressure_range (kPa)   K value
+  131<P≤260               32
+  65<P≤131                64
+  32<P≤65                 128
+  16<P≤32                 256
+  8<P≤16                  512
+  4<P≤8                   1024
+  2≤P≤4                   2048
+  1≤P<2                   4096
+  P<1                     8192*/
+#define PRESSURE_MPX_ENABLE 0 // Наличие подключенного датчика MPX
+#define PRESSURE_HX710B_ENABLE 0 // -||- 40DR
+#define DEFAULT_PRESSURE 0 // Датчик д. по умолчанию 0- нет, XGZP6897D = 1, MPX10DP = 2, HX710B =3
 //EEPROM
 #define EEPROM_SIZE 512
 //----------------------------------------- Работа с EEPROM ---------------------------------------------------------------
@@ -76,6 +89,8 @@
 #define MQTT_RECONNECTION_ADDR 452      // 1 байт (флаг переподключения)
 #define MQTT_TIME_PUBLICATION_ADDR 453  // 4 байта (период публикаций, long)
 #define MQTT_SAVED_FLAG_ADDR 457        // 1 байт (флаг сохранения MQTT)
+#define MQTT_SAVED_FLAG_VALUE 1         // Значение флага, указывающее, что параметры MQTT были сохранены
+
 #define R25_EAdr 458
 #define R100_EAdr  462
 #define Alc_tar_EAdr     466  // Пример адреса, подберите под свою конфигурацию
@@ -83,9 +98,10 @@
 #define spk_max_count_EAdr 474
 #define spk_on_EAdr      478
 #define PRESSURE_MPX_ENABLE_ADDR 482
-
-#define MQTT_SAVED_FLAG_VALUE 1         // Значение флага, указывающее, что параметры MQTT были сохранены
-// Адрес свободной ячейки EEPROM 484
+#define PRESSURE_HX710B_ENABLE_ADDR 484
+#define DEFAULT_PRESSURE_ADDR 485
+#define XGZP6897D_K_ADDR 486
+// Адрес свободной ячейки EEPROM 488
 
 #if defined(ENABLE_WEB_SERVER) || defined(ENABLE_MQTT) || defined(ENABLE_OTA)
 #define ENABLE_WIFI 

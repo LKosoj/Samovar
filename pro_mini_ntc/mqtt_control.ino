@@ -164,8 +164,8 @@ void loopMQTT() {
   #ifdef ENABLE_MQTT
     static unsigned long timeout = millis(); //раз в минуту проверяем соединение с mqtt сервером если включена настройка
   if (millis() - timeout >= 60000) { 
-  if (mqtt_reconnection && !mqttClient.connected()) {
-      if (mqttClient.connect("ESP12E_Measurer", mqtt_user.c_str(), mqtt_password.c_str())) {
+  if (mqtt_reconnection && !mqttClient.connected()&& WiFi.status() == WL_CONNECTED) {
+      if (mqttClient.connect("Measurer", mqtt_user.c_str(), mqtt_password.c_str())) {
       mqttClient.subscribe(mqtt_topic_temp.c_str());
       mqttClient.subscribe(mqtt_topic_press.c_str());
       mqttClient.subscribe(mqtt_topic_alc.c_str());

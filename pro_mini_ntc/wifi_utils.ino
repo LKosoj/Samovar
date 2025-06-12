@@ -28,6 +28,9 @@ void startHotspot() {
 
  void ConnectWIFI(String SSID, String Pass){
   #ifdef ENABLE_WIFI  
+   WiFi.setSleep(false);
+   WiFi.setHostname("Measurer");
+   WiFi.setAutoReconnect(true);
    WiFi.begin(SSID, Pass);
    //Serial.print("Подключение к WiFi "); 
    //Serial.println(SSID); //Serial.println(savedPass);
@@ -92,16 +95,18 @@ void initWiFi() {
       }*/
 #endif // WIFI    
 }
-
+/*
 void loopWIFI(){
   #ifdef ENABLE_WIFI  
   #if defined WIFI_RECONNECT
   if (WiFi.status() != WL_CONNECTED) {
-    WiFi.begin(savedSSID, savedPass);
+      WiFi.disconnect();
+      WiFi.reconnect();
+    //WiFi.begin(savedSSID, savedPass);
     RSSI = 0; 
   } else {
     RSSI = WiFi.RSSI(); 
   }
   #endif
   #endif
-}
+} */

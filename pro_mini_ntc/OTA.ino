@@ -1,8 +1,8 @@
 void initOTA() {
    #ifdef ENABLE_OTA   // Запуск ОТА
-   ArduinoOTA.setHostname("ESP12E");
+   ArduinoOTA.setHostname("Measurer");
    ArduinoOTA.setPassword("admin");
-    ArduinoOTA.onStart([]() { Serial.println("Запуск OTA");});
+    /*ArduinoOTA.onStart([]() { Serial.println("Запуск OTA");});
     ArduinoOTA.onEnd([]() { Serial.println("\nПрошивка передана."); });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
         Serial.printf("Передано: %u%%\r", (progress / (total / 100)));  });
@@ -11,9 +11,9 @@ void initOTA() {
         else if (error == OTA_BEGIN_ERROR) Serial.println("Сбой запуска ОТА");
         else if (error == OTA_CONNECT_ERROR) Serial.println("Сбой подключения ОТА");
         else if (error == OTA_RECEIVE_ERROR) Serial.println("Сбой передачи ОТА");
-        else if (error == OTA_END_ERROR) Serial.println("Сбой окончания ОТА"); });
+        else if (error == OTA_END_ERROR) Serial.println("Сбой окончания ОТА"); });*/
 
     ArduinoOTA.begin();
-    Serial.println("Сервер OTA запущен.");
+   // Serial.println("Сервер OTA запущен.");
    #endif \\ENABLE_OTA 
 }

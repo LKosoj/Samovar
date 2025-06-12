@@ -118,6 +118,9 @@ void EEPROM_Init() {                                                          //
     EEPROM.get(U33_EAdr,U33); EEPROM.get(Uref_EAdr,Uref); EEPROM.get(R62_EAdr,R62); EEPROM.get(R10_EAdr,R10);  EEPROM.get(B25_EAdr,B25); 
     EEPROM.get(m_adc_EAdr,m_adc);
     EEPROM.get(N_dPressAlc_EAdr,N_dPressureAlc); EEPROM.get(k_Alc_T_EAdr,k_Alc_T);  EEPROM.get(k_Alc_EAdr,k_Alc);
+    EEPROM.get(PRESSURE_MPX_ENABLE_ADDR, Pressure_enable[2]); EEPROM.get(PRESSURE_HX710B_ENABLE_ADDR, Pressure_enable[3]);
+    EEPROM.get(DEFAULT_PRESSURE_ADDR, Pressure_enable[0]); Pressure_enable[0]= Pressure_enable[0]<4 ? Pressure_enable[0] : 0;
+    EEPROM.get(XGZP6897D_K_ADDR, XGZP6897D_k); 
    } else {
     EEPROM[0]=EepromKey;
     EEPROM.put(KTemp_2_EAdr,KTemp_2); EEPROM.put(BaseTemp_2_EAdr,BaseTemp_2); EEPROM.put(PressureBaseADS_EAdr,PressureBaseADS); EEPROM.put(PressureQ_EAdr,PressureQ);
@@ -126,6 +129,9 @@ void EEPROM_Init() {                                                          //
     EEPROM.put(U33_EAdr,U33); EEPROM.put(Uref_EAdr,Uref); EEPROM.put(R62_EAdr,R62); EEPROM.put(R10_EAdr,R10);  EEPROM.put(B25_EAdr,B25);
     EEPROM.put(m_adc_EAdr,m_adc);
     EEPROM.put(N_dPressAlc_EAdr,N_dPressureAlc); EEPROM.put(k_Alc_T_EAdr,k_Alc_T); EEPROM.put(k_Alc_EAdr,k_Alc);
+    EEPROM.put(PRESSURE_MPX_ENABLE_ADDR, PRESSURE_MPX_ENABLE); EEPROM.put(PRESSURE_HX710B_ENABLE_ADDR, PRESSURE_HX710B_ENABLE); 
+    EEPROM.put(DEFAULT_PRESSURE_ADDR, DEFAULT_PRESSURE);
+    EEPROM.put(XGZP6897D_K_ADDR, XGZP6897D_k);
     EEPROM.commit();
   }
   EEPROM.end();
@@ -134,7 +140,7 @@ void ReadPressure() {                                                         //
   if (Pressure_enable[1]) {                                  // Чтение датчика давления I2C
     XGZP.readSensor(temperature[1], pressure[1]); 
     dPt_1 = ((float)temperature[1] - BaseTemp_1) * KTemp_1;
-    pressure[1]= (float)pressure[1] * 0.00750063755419211 - dPress_1- dPt_1;
+    pressure[1]= ((float)pressure[1]/XGZP6897D_k) * 0.00750063755419211 - dPress_1- dPt_1;
     if (Pressure_enable[0]==1) Temp[0] =pressure[1];
   }  
   if (Pressure_enable[2]) {                                  // Чтение датчика давления на 8 канале АЦП
@@ -184,22 +190,17 @@ void RotatePSensor() {                                                        //
 
 } 
 void ADS_Init() {
-    if (digitalRead(Pin040DR1) == LOW) {         // Если D7 ардуины замкнут на массу значит подключен датчик 040DR1 или т.п. с АЦП HX710B
-    Pressure_enable[0] = 3;
-    Pressure_enable[3] = 1;
+  
+    if (Pressure_enable[3] == 1) {         // Если включен в настройках датчик 040DR1 или т.п. с АЦП HX710B
     HX710B_Obj.begin(PinDOUT, PinSCLK);
     HX710B_Obj.set_scale(1);
     HX710B_Obj.set_offset(0);
-    Serial.println("HX710B begin.");
+    //Serial.println("HX710B begin.");
   }  
-  /*if (digitalRead(8) == LOW) {         // Если D8 ардуины замкнут на массу значит подключен датчик  MPX50DP или т.п.
-    Pressure_enable[0] = 2;  
-    Pressure_enable[2] = 1;
-  }*/
-  if (XGZP.begin()) {              // Инициализация датчика XGZP6897D
-    Pressure_enable[0] = 1;  
+
+  if (XGZP.begin()) {                // Инициализация датчика XGZP6897D  
     Pressure_enable[1] = 1;
-    Serial.println("XGZP6897D begin.");
+    //Serial.println("XGZP6897D begin.");
   }
   if (Pressure_enable[0]) {            // Добавляем в хаб 1Ware датчик давления
     hub.attach(ds18bP);
