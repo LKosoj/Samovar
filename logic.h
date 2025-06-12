@@ -318,6 +318,26 @@ void set_pump_speed(float pumpspeed, bool continue_process) {
     startService();
 }
 
+// Получить температуру с выбранного датчика для режима пива
+float getBeerCurrentTemp() {
+  if (SamovarStatusInt != 2000) return 0.0;
+  
+  switch (program[ProgramNum].TempSensor) {
+    case 0:
+      return TankSensor.avgTemp;
+    case 1:
+      return WaterSensor.avgTemp;
+    case 2:
+      return PipeSensor.avgTemp;
+    case 3:
+      return SteamSensor.avgTemp;
+    case 4:
+      return ACPSensor.avgTemp;
+    default:
+      return TankSensor.avgTemp;
+  }
+}
+
 // Получить статус Самовара
 String get_Samovar_Status() {
   if (!PowerOn) {
@@ -377,20 +397,29 @@ String get_Samovar_Status() {
     SamovarStatus = "";
 #endif
     if (startval == 2001 && program[ProgramNum].WType == "M") {
+      float currentTemp = getBeerCurrentTemp();
       SamovarStatus = SamovarStatus + "Разогрев до температуры засыпи солода";
+      if (currentTemp < program[ProgramNum].Temp - 0.5) {
+        SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
+      }
     } else if (startval == 2002 && program[ProgramNum].WType == "M") {
       SamovarStatus = SamovarStatus + "Ожидание засыпи солода";
     } else if (program[ProgramNum].WType == "P") {
       if (begintime == 0) {
+        float currentTemp = getBeerCurrentTemp();
         SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Temp) + "°; Разогрев";
-        if (TankSensor.avgTemp < program[ProgramNum].Temp - 0.5) {
-          SamovarStatus += "; Текущая Т: " + String(TankSensor.avgTemp) + "°";
+        if (currentTemp < program[ProgramNum].Temp - 0.5) {
+          SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
         }
       } else {
         SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Temp) + "°";
       }
     } else if (program[ProgramNum].WType == "C") {
+      float currentTemp = getBeerCurrentTemp();
       SamovarStatus = SamovarStatus + "Охлаждение до " + String(program[ProgramNum].Temp);
+      if (currentTemp > program[ProgramNum].Temp + 0.5) {
+        SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
+      }
     } else if (program[ProgramNum].WType == "W") {
       SamovarStatus = SamovarStatus + "Ожидание. Нажмите 'Следующая программа'; ";
     } else if (program[ProgramNum].WType == "A") {
@@ -402,7 +431,9 @@ String get_Samovar_Status() {
         SamovarStatus = SamovarStatus + "Кипячение " + String(program[ProgramNum].Time) + " мин";
       }
     } else if (program[ProgramNum].WType == "F") {
+      float currentTemp = getBeerCurrentTemp();
       SamovarStatus = SamovarStatus + "Ферментация; Поддержание температуры " + String(program[ProgramNum].Temp) + "°";
+      SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
     } else if (!PowerOn) {
       SamovarStatus = "Выключено";
     }
