@@ -629,7 +629,13 @@
      document.getElementById("popup").style.display = "none";
      document.getElementById("overlay").classList.remove("show");
      validateMixerInput(document.getElementById("m_time"));
+     if (document.getElementById("m_time").value > 14400) {
+      document.getElementById("m_time").value = 0;
+     }
      validateMixerInput(document.getElementById("m_pause"));
+     if (document.getElementById("m_pause").value > 14400) {
+      document.getElementById("m_pause").value = 0;
+     }
      document.getElementById("pmixer" + document.getElementById("m_p_id").value).value = document.getElementById("m_type").value + "^" + document.getElementById("m_direction").value + "^" + document.getElementById("m_time").value + "^" + document.getElementById("m_pause").value;
      calc_program();
     }
@@ -953,8 +959,8 @@
         <div style="font-size: 18px; margin-left: 15px;">
           <label>&nbsp;&nbsp;Тип устройства&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
           <label>Направление вращения&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
-          <label>Вкл сек</label>
-          <label>Выкл сек</label>
+          <label class="tooltip">Вкл сек<span class="tooltiptext">Максимальное время - 14400 сек (4 часа)</span></label>
+          <label class="tooltip">Выкл сек<span class="tooltiptext">Максимальное время - 14400 сек (4 часа)</span></label>
         </div>
         <div id="popup_mesh" class="modalline">
           <select id="m_type" style="margin-left: 4px !important;"><option value="0">Выключено</option><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select>
