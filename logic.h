@@ -36,6 +36,7 @@ void stop_self_test(void);
 bool check_boiling();
 float get_alcohol(float t);
 void set_boiling();
+void set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 
 #ifdef SAMOVAR_USE_POWER
 // Проверка ошибок питания
@@ -105,6 +106,8 @@ void set_alarm() {
   set_power(false);
   alarm_event = true;
   open_valve(false, true);
+  stopService();
+  set_stepper_target(0, 0, 0);
 #ifdef USE_WATER_PUMP
   set_pump_pwm(0);
 #endif
