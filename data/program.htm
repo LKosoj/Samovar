@@ -129,6 +129,9 @@ function set_num(){
       e[i].childNodes[2].value = e[i].childNodes[2].value.replace(",",".");
       e[i].childNodes[5].value = e[i].childNodes[5].value.replace(",",".");
 
+      // Получаем номер емкости из селекта
+      var capacitySelect = document.getElementById("pnum" + (i-1));
+      var capacityNum = capacitySelect ? capacitySelect.value : "0";
 
       v = e[i].childNodes[6];
       t = e[i].childNodes[7];
@@ -159,10 +162,10 @@ function set_num(){
         a = v.value / e[i].childNodes[2].value;
 	    prgc = prgc + v.value * 1000;
       }
-      prgc = prgc + ";" + e[i].childNodes[2].value + ";" + e[i].childNodes[1].value + ";0;" + e[i].childNodes[5].value + "\n";
+      prgc = prgc + ";" + e[i].childNodes[2].value + ";" + capacityNum + ";0;" + e[i].childNodes[5].value + "\n";
       t.value = get_time(a);
       sum = sum + Number(a);
-      prgo = prgo + e[i].childNodes[1].value + ";" + e[i].childNodes[2].value + ";" + e[i].childNodes[3].value + ";" + e[i].childNodes[4].value + ";" + e[i].childNodes[5].value + "\n"
+      prgo = prgo + capacityNum + ";" + e[i].childNodes[2].value + ";" + e[i].childNodes[3].value + ";" + e[i].childNodes[4].value + ";" + e[i].childNodes[5].value + "\n"
     }
     document.getElementById("sum").value = get_time(sum);
     var err = ""
