@@ -415,6 +415,24 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "MaxPressureValue") {
     s = SamSetup.MaxPressureValue;
     return s;
+  } else if (var == "NbkIn") {
+    s = SamSetup.NbkIn;
+    return s;
+  } else if (var == "NbkDelta") {
+    s = SamSetup.NbkDelta;
+    return s;
+  } else if (var == "NbkDM") {
+    s = SamSetup.NbkDM;
+    return s;
+  } else if (var == "NbkDP") {
+    s = SamSetup.NbkDP;
+    return s;
+  } else if (var == "NbkSteamT") {
+    s = SamSetup.NbkSteamT;
+    return s;
+  } else if (var == "NbkOwPress") {
+    s = SamSetup.NbkOwPress;
+    return s;
   } else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
     else
@@ -686,6 +704,24 @@ void handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("HeaterR")) {
     SamSetup.HeaterResistant = request->arg("HeaterR").toFloat();
+  }
+  if (request->hasArg("NbkIn")) {
+    SamSetup.NbkIn = request->arg("NbkIn").toFloat();
+  }
+  if (request->hasArg("NbkDelta")) {
+    SamSetup.NbkDelta = request->arg("NbkDelta").toFloat();
+  }
+  if (request->hasArg("NbkDM")) {
+    SamSetup.NbkDM = request->arg("NbkDM").toFloat();
+  }
+  if (request->hasArg("NbkDP")) {
+    SamSetup.NbkDP = request->arg("NbkDP").toFloat();
+  }
+  if (request->hasArg("NbkSteamT")) {
+    SamSetup.NbkSteamT = request->arg("NbkSteamT").toFloat();
+  }
+  if (request->hasArg("NbkOwPress")) {
+    SamSetup.NbkOwPress = request->arg("NbkOwPress").toFloat();
   }
   if (request->hasArg("videourl")) {
     request->arg("videourl").toCharArray(SamSetup.videourl, request->arg("videourl").length() + 1);

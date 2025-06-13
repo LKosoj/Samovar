@@ -134,6 +134,7 @@
       <input type='button' class="tablinks" onclick="openTab(event, 'Temp');" value="Температура">
       <input type='button' class="tablinks" onclick="openTab(event, 'Pump');" value="Насос">
       <input type='button' class="tablinks" onclick="openTab(event, 'Beer');" value="Пиво">
+      <input type='button' class="tablinks" onclick="openTab(event, 'NBK');" value="НБК">
       <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Прочие">
     </div>
     <div id="Main" class="tabcontent" style="display: block;">
@@ -312,6 +313,16 @@
           <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
           <label for='UseST' class="tooltip">Использовать разгонный тэн при кипении<span class="tooltiptext">Если используется разгонный тэн, можно использовать его в режиме кипения</span></label>
         </h2>
+    </div>
+
+    <div id="NBK" class="tabcontent">
+      <h2>Настройки НБК:</h2>
+      <h2>Инерция: <input name='NbkIn' type='text' value='%NbkIn%'></h2>
+      <h2>Дельта: <input name='NbkDelta' type='text' value='%NbkDelta%'></h2>
+      <h2>Шаг мощности: <input name='NbkDM' type='text' value='%NbkDM%'></h2>
+      <h2>Шаг подачи: <input name='NbkDP' type='text' value='%NbkDP%'></h2>
+      <h2>Т пара: <input name='NbkSteamT' type='text' value='%NbkSteamT%'></h2>
+      <h2>Давление захлёба: <input name='NbkOwPress' type='text' value='%NbkOwPress%'></h2>
     </div>
 
     <div id="Other" class="tabcontent">

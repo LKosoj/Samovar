@@ -425,6 +425,12 @@ struct SetupEEPROM {
   float MaxPressureValue;                                      //Максимальное давление, при котором сработает аварийный режим
   char tg_token[50];                                           //Токен Телеграм-бота
   char  tg_chat_id[14];                                        //Идентификатор чата Телеграм
+  float NbkIn;                                                 //Инерция
+  float NbkDelta;                                              //Дельта
+  float NbkDM;                                                 //Шаг мощности
+  float NbkDP;                                                 //Шаг подачи
+  float NbkSteamT;                                             //Т пара
+  float NbkOwPress;                                            //Давление захлёба
   //Serial.println(sizeof(SamSetup));
 };
 
