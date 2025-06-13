@@ -5,6 +5,10 @@
 #include "FS.h"
 #include "sensorinit.h"
 
+extern float nbk_M;
+extern float nbk_Mo;
+extern float nbk_P;
+extern float nbk_Po;
 float i2c_get_speed_from_rate(float volume_per_hour);
 String getValue(String data, char separator, int index);
 void set_current_power(float Volt);
@@ -55,6 +59,8 @@ void stop_self_test(void);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 String http_sync_request_get(String url);
+float fromPower(float value);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 
 #ifdef USE_LUA
 void start_lua_script();
@@ -304,46 +310,46 @@ String setupKeyProcessor(const String &var) {
   static String s;
   s = "";
   if (var == "DeltaSteamTemp") {
-    s = format_float(SamSetup.DeltaSteamTemp, 3);
+    s = format_float(SamSetup.DeltaSteamTemp, 2);
     return s;
   } else if (var == "DeltaPipeTemp") {
-    s = format_float(SamSetup.DeltaPipeTemp, 3);
+    s = format_float(SamSetup.DeltaPipeTemp, 2);
     return s;
   } else if (var == "DeltaWaterTemp") {
-    s = format_float(SamSetup.DeltaWaterTemp, 3);
+    s = format_float(SamSetup.DeltaWaterTemp, 2);
     return s;
   } else if (var == "DeltaTankTemp") {
-    s = format_float(SamSetup.DeltaTankTemp, 3);
+    s = format_float(SamSetup.DeltaTankTemp, 2);
     return s;
   } else if (var == "DeltaACPTemp") {
-    s = format_float(SamSetup.DeltaACPTemp, 3);
+    s = format_float(SamSetup.DeltaACPTemp, 2);
     return s;
   } else if (var == "SetSteamTemp") {
-    s = format_float(SamSetup.SetSteamTemp, 3);
+    s = format_float(SamSetup.SetSteamTemp, 2);
     return s;
   } else if (var == "SetPipeTemp") {
     if (isnan(SamSetup.SetPipeTemp)) {
       SamSetup.SetPipeTemp = 0;
     }
-    s = format_float(SamSetup.SetPipeTemp, 3);
+    s = format_float(SamSetup.SetPipeTemp, 2);
     return s;
   } else if (var == "SetWaterTemp") {
     if (isnan(SamSetup.SetWaterTemp)) {
       SamSetup.SetWaterTemp = 0;
     }
-    s = format_float(SamSetup.SetWaterTemp, 3);
+    s = format_float(SamSetup.SetWaterTemp, 2);
     return s;
   } else if (var == "SetTankTemp") {
     if (isnan(SamSetup.SetTankTemp)) {
       SamSetup.SetTankTemp = 0;
     }
-    s = format_float(SamSetup.SetTankTemp, 3);
+    s = format_float(SamSetup.SetTankTemp, 2);
     return s;
   } else if (var == "SetACPTemp") {
     if (isnan(SamSetup.SetACPTemp)) {
       SamSetup.SetACPTemp = 0;
     }
-    s = format_float(SamSetup.SetACPTemp, 3);
+    s = format_float(SamSetup.SetACPTemp, 2);
     return s;
   } else if (var == "StepperStepMl") {
     s = SamSetup.StepperStepMl;
@@ -459,7 +465,7 @@ String setupKeyProcessor(const String &var) {
     s = SamSetup.autospeed;
     return s;
   } else if (var == "DistTemp") {
-    s = format_float(SamSetup.DistTemp, 3);
+    s = format_float(SamSetup.DistTemp, 2);
     return s;
   } else if (var == "SteamColor") {
     s = SamSetup.SteamColor;
@@ -849,20 +855,26 @@ void web_command(AsyncWebServerRequest *request) {
         set_mixer(false);
       }
     } else if (request->hasArg("pnbk") && PowerOn) {
-      if (request->arg("pnbk").toInt() == 1) {
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 + 0.0001), 0, 2147483640);
+      if (request->arg("pnbk").toInt() == 9000) { //TODO повышаем скорость насоса на один шаг
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) + 0.0001), 0, 2147483640);
         // Serial.println("pnbk inc");
         // Serial.println(get_stepper_speed());
-        // Serial.println(i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00));
+        // Serial.println(i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT)));
         // Serial.println(get_stepper_speed());
         // Serial.println(i2c_get_liquid_rate_by_step(get_stepper_speed()));
-      } else {
-        if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
-          set_stepper_target(0, 0, 0);
-        } else {
-          set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) / 1000.00 - 0.0001), 0, 2147483640);
+        } else if (request->arg("pnbk").toInt() == 8000) { //TODO понижаем скорость насоса на один шаг
+          if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
+            set_stepper_target(0, 0, 0);
+          } else {
+            set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) - 0.0001), 0, 2147483640);
+          }
+        } else if (request->arg("pnbk").toFloat() >= 0 && request->arg("pnbk").toInt() < 8000) { // TODO устанавливаем заказанную скорость насоса
+          set_stepper_target(i2c_get_speed_from_rate(float(request->arg("pnbk").toFloat()) + 0.0001), 0, 2147483640);
         }
-      }
+      } else if (request->hasArg("nbkopt") && PowerOn) { //TODO устанавливаем текущие М и Р как оптимальные Мо и Ро
+        nbk_Mo = nbk_M;
+        nbk_Po = nbk_P;
+        SendMsg("Установлены оптимальные значения: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ",  " + String(nbk_Po,1) + " л/ч", WARNING_MSG);
     } else if (request->hasArg("distiller")) {
       if (request->arg("distiller").toInt() == 1) {
         sam_command_sync = SAMOVAR_DISTILLATION;
