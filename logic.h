@@ -382,15 +382,13 @@ String get_Samovar_Status() {
     if (startval == 4001) {
       SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
       if (program[ProgramNum].WType == "H") {
-        SamovarStatus = SamovarStatus + "Прогрев НБК";
+        SamovarStatus = SamovarStatus + "Прогрев";
       } else if (program[ProgramNum].WType == "S") {
-        SamovarStatus = SamovarStatus + "Стабилизация НБК; Осталось " + ((begintime - millis()) / 1000) + " сек";
-      } else if (program[ProgramNum].WType == "T") {
-        SamovarStatus = SamovarStatus + "Первичная подача браги";
-      } else if (program[ProgramNum].WType == "P") {
-        SamovarStatus = SamovarStatus + "Выход на заданное давление";
+        SamovarStatus = SamovarStatus + "Настройка";
+      } else if (program[ProgramNum].WType == "O") {
+        SamovarStatus = SamovarStatus + "Оптимизация";
       } else if (program[ProgramNum].WType == "W") {
-        SamovarStatus = SamovarStatus + "Рабочий режим";
+        SamovarStatus = SamovarStatus + "Работа";
       }
     }
   } else if (SamovarStatusInt == 2000) {
