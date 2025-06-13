@@ -510,6 +510,8 @@ void reset_sensor_counter(void) {
 
   current_power_volt = 0.0;
   target_power_volt = 0.0;
+  pressure_value = 0.0;
+  old_pressure_value = 0.0;
 
   ProgramNum = 0;
   SteamSensor.BodyTemp = 0;
