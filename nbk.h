@@ -232,11 +232,6 @@ float nbk_Mo_temp = 0,
       nbk_Po_temp = 0; // временное хранилище на случай пропуска оптимизации
 bool manual_overflow = false; // флаг начавшегося захлёба в работе
 bool noDZ_message_sent = false; // флаг сообщения об отсутсвии ДЗ
-#ifdef SAMOVAR_USE_SEM_AVR
-#define PWR_SIGN F("Вт")
-#else
-#define PWR_SIGN F("В") // задаём размерность для сообщения Вт/В
-#endif
 // PWR_MSG - уже ранее заданы "Мощность"/"Напряжение"
 
 //  === Прототипы функций для этапов ===
