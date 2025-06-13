@@ -36,7 +36,7 @@ void stop_self_test(void);
 bool check_boiling();
 float get_alcohol(float t);
 void set_boiling();
-void set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
+bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 
 #ifdef SAMOVAR_USE_POWER
 // Проверка ошибок питания
@@ -49,7 +49,7 @@ bool column_wetting();
 void SendMsg(const String &m, MESSAGE_TYPE msg_type);
 
 //Получить количество разделителей
-uint8_t getDelimCount(String data, char separator) {
+uint8_t getDelimCount(const String& data, char separator) {
   uint8_t cnt = 0;
   for (char c : data) {
     if (c == separator) {
