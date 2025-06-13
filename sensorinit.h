@@ -123,8 +123,12 @@ void pressure_sensor_get() {
     xSemaphoreGive(xI2CSemaphore);
   }
   pressure_value = pressure_value / 133.32; //переводим паскали в мм. рт. столба
+  pressure_value = (old_pressure_value + pressure_value) / 2; //TODO усредняем давление с предыдущим
+  old_pressure_value = pressure_value;
 #elif defined(USE_PRESSURE_MPX)
   pressure_value = (analogRead(LUA_PIN) - 36.7) / 12;
+  pressure_value = (old_pressure_value + pressure_value) / 2; //TODO усредняем давление с предыдущим
+  old_pressure_value = pressure_value;
 #else
   pressure_value = -1;
 #endif
@@ -389,7 +393,7 @@ void sensor_init(void) {
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     set_dist_program("A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n");
   } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    set_nbk_program("H;3;0;3000;0\nS;1;0;500;0\nO;0;0;0;0\nW;0;0;0;0\n");
+    set_nbk_program(NBK_DEFAULT_PROGRAM);
   } else {
     set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
   }
