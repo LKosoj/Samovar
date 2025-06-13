@@ -1,9 +1,10 @@
+<!DOCTYPE html>
 <html>
-
 <head>
+  <link rel="preload" href="style.css" as="style">
   <meta charset='utf-8'>
   <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
@@ -15,7 +16,7 @@
 
     function ConnectError (Type) {
       if (Type) {
-        if (OfflineCounter < 3) { //считаем 3 обрыва подряд
+        if (OfflineCounter < 4) { //считаем 3 обрыва подряд
           OfflineCounter++
         } else {
           document.getElementById('connection_indicator').innerHTML = `
@@ -37,7 +38,7 @@
     };
 
     // ==================== POWER UNIT ===================================================================
-    var programPwrLabel = 'Напр';
+    var programPwrLabel = 'Напряжение';
     function setPowerUnit () {
       let setPowerLabel;
       let setPowerButton;
@@ -50,7 +51,7 @@
         powerCurrent = 'Текущая мощн.: ';
         powerTarget = 'Целевая мощн.: ';
         powerUnit = ' Вт';
-        programPwrLabel = 'Мощн';
+        programPwrLabel = 'Мощность';
         document.getElementById('current_power_line').style = 'visibility: hidden; margin: 0; padding: 0';
       } else if (pwr_unit === 'V') {
         setPowerLabel = 'Напряжение регулятора: ';
@@ -60,8 +61,7 @@
         powerUnit = ' V';
         document.getElementById('current_power_line').style = 'visibility: visible';
       } else {
-        document.getElementById('PWR').style =
-          'visibility: hidden; position: fixed;';
+        document.getElementById('PWR').style = 'visibility: hidden; position: fixed;';
       }
       document.getElementById('set_power_label').innerHTML = setPowerLabel;
       document.getElementById('SetVoltage').value = setPowerButton;
@@ -69,7 +69,9 @@
       document.getElementById('power_target').innerHTML = powerTarget;
       document.getElementById('power_unit_current').innerHTML = powerUnit;
       document.getElementById('power_unit_target').innerHTML = powerUnit;
+      document.getElementById('opt_power_unit').innerHTML = powerUnit;
       document.getElementById('programPwrLabel').innerHTML = programPwrLabel;
+      document.getElementById('opt_PwrLabel').innerHTML = programPwrLabel;
     }
 
     // ==================== LUA BUTTONS ==================================================================
@@ -100,27 +102,16 @@
     var Messages_Array = []; //текущий массив сообщений
     var sound_is_playing = false; //звук сейчас восспроизводится
     var is_ALARM = false; //признак тревоги
-    var sound_play_count = 0; //счетчик воспроизведений сигнала
-    const MAX_SOUND_PLAYS = 2; //максимальное количество воспроизведений
 
     const sound = new Audio('alarm.mp3');
-    sound.loop = false; // Отключаем бесконечное повторение
+    sound.loop = true;
     sound.preload = 'auto';
     sound.autoplay = false;
 
     function playSound (play) {
-      if (!sound_is_playing && play && sound_play_count < MAX_SOUND_PLAYS) {
+      if (!sound_is_playing && play) {
         sound.play();
         sound_is_playing = true;
-        sound_play_count++;
-        
-        // Когда звук закончится
-        sound.onended = function() {
-          sound_is_playing = false;
-          if (sound_play_count < MAX_SOUND_PLAYS && is_ALARM) {
-            setTimeout(() => playSound(true), 2000); // Пауза 2 секунды между повторами
-          }
-        };
       } else if (sound_is_playing && !play) {
         sound.pause();
         sound_is_playing = false;
@@ -306,23 +297,18 @@
       return ret;
     }
 
-    function calc_program () {
-      if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Program error!");
-        return;
-      }
+    function calc_program() {
       let t = document.getElementsByClassName("prgline");
-      let k, s;
-      s = "";
-      for (i = 1; i < t.length; i++) {
-        k = t[i].childNodes;
-        for (j = 2; j < 7; j++) {
-          s = s + k[j].value + ";";
-        }
-        s = s.slice(0, -1);
-        s = s + "\n";
+      let s = "";
+      for (let i = 1; i < t.length; i++) {
+        let inputs = t[i].getElementsByTagName("input");
+        let type = inputs[0].value; // тип программы
+        let speed = inputs[1].value; // скорость
+        let power = inputs[2].value; // мощность
+        s += `${type};${speed};${power}\n`;
       }
-      document.getElementById('WProgram').value = s;
+      document.getElementById('WProgram').value = s.trim();
+      return true;
     }
 
     function set_program () {
@@ -344,26 +330,29 @@
       if (request.status != 200) {
         alert(request.status + ': ' + request.statusText);
       }
-      return 0;
     };
 
-    function getProgram () {
-      if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Program error!");
+    function getProgram() {
+      let programText = document.getElementById("WProgram").value.trim();
+      if (!programText || !check_program(programText)) {
+        alert("Ошибка в программе, проверьте её!");
         return;
       }
-      let k, s;
+      let lines = programText.split("\n");
       let t = document.getElementsByClassName("prgline");
-      let p = document.getElementById("WProgram");
-      let varr = p.value.split("\n");
-      for (z = 0; z < varr.length-1; z++) {
-        k = t[z+1].childNodes;
-        let arr = varr[z].split(";");
-        for (j = 0; j < 5; j++) {
-          k[j+2].value = arr[j];
+      for (let i = 0; i < lines.length; i++) {
+        let parts = lines[i].split(";");
+        if (parts.length !== 3) {
+          alert(`Ошибка формата программы в строке ${i+1}! Ожидается 3 значения, разделенных точкой с запятой.`);
+          return;
         }
+        let inputs = t[i+1].getElementsByTagName("input");
+        inputs[0].value = parts[0]; // Тип программы
+        inputs[1].value = parts[1]; // Скорость
+        inputs[2].value = parts[2]; // Мощность
       }
     }
+
 
     function sleep (milliseconds) {
       let start = new Date().getTime();
@@ -408,12 +397,32 @@
       document.getElementById('Voltage').value = document.getElementById('Voltage').value.replace(",",".");
       let num = document.getElementById('Voltage').value;
       if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
-        alert("Введите значение!");
+        alert(programPwrLabel + ": введите значение!");
         return 0;
       }
       let command = 'voltage=' + num;
       sendbutton(command);
-      alert("Установлено.");
+      alert("Установлено " + num);
+      return 0;
+    };
+
+    function sendSpeed () {
+      document.getElementById('Set_speed').value = document.getElementById('Set_speed').value.replace(",",".");
+      let num = document.getElementById('Set_speed').value;
+      if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
+        alert("Скорость: введите значение!");
+        return 0;
+      }
+      let command = 'pnbk=' + num;
+      sendbutton(command);
+      alert("Установлено " + num + " л/ч");
+      return 0;
+    };
+
+    function setOptimal () {
+      let command = 'nbkopt';
+      sendbutton(command);
+      alert("Параметры установлены.");
       return 0;
     };
 
@@ -427,25 +436,40 @@
           document.getElementById('version').innerHTML = myObj.version;
           document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
           document.getElementById('stm').innerHTML = myObj.stm;
-          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
-          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
-          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
-          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
+          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(1);
+          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(1);
+          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(1);
+          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(1);
           document.getElementById('Status').innerHTML = myObj.Status;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
+          document.getElementById('opt_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
           document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
           document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
-          document.getElementById('ISspd').innerHTML = myObj.ISspd.toFixed(2);
+          document.getElementById('ISspd').innerHTML = myObj.ISspd.toFixed(1);
+          document.getElementById('opt_ISspd').innerHTML = myObj.ISspd.toFixed(1);
           document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
           document.getElementById('heap').innerHTML = myObj.heap;
           document.getElementById('rssi').innerHTML = myObj.rssi;
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
           sound_is_on = !!myObj.UseBBuzzer;
-          document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);
+          // console.log('Pressure: ', myObj.prvl)
+          if (myObj.hasOwnProperty('prvl')) {
+            document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);
+          } else {
+            document.getElementById('Pressure').style = "display: none"
+          }
 
+          if (myObj.hasOwnProperty('PipeTemp') && myObj.PipeTemp !== undefined) {
+            document.getElementById('BragaTemp').innerHTML = myObj.PipeTemp.toFixed(1);
+          } else {
+            document.getElementById('BragaTemp_block').style = "display: none"
+          }
+
+
+          myObj.PipeTemp.toFixed(3)
           if (myObj.Lstatus) {
             if (myObj.Lstatus != "") {
               document.getElementById('Lstatus').innerHTML = myObj.Lstatus;
@@ -519,7 +543,7 @@
       });
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Program error!");
+          alert("Ошибка программы, проверьте её!");
           return;
         }
         getProgram();
@@ -593,6 +617,11 @@
             <span id='TankTemp' style="font-size: xx-large;"></span>
             &#176;C
           </div>
+          <div id='BragaTemp_block' class="text" style="color: %PipeColor%;">
+            Т браги: &nbsp;&nbsp;
+            <span id='BragaTemp' style="font-size: xx-large;"></span>
+            &#176;C
+          </div>
         </div>
 
         <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
@@ -619,8 +648,8 @@
       <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em;">
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
           <div class="flex_row">
-            <span class="text" id='set_power_label'></span>
-            <input name='Voltage' id='Voltage' type='text' value=''>
+            <span class="text" id='set_power_label'></span>&nbsp;&nbsp;
+            <input name='Voltage' id='Voltage' size='4' type='text' value=''>
           </div>
           <div class="flex_row" style="padding-bottom: 0.5em;">
             <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
@@ -650,7 +679,7 @@
 
       <div id="Pressure" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="text">
-          Давление в колонне: &nbsp;
+          Давление в бардоотводчике: &nbsp;
           <span id='pressure_value' style="font-size: 1.5em; font-weight: bold;"></span>
           мм рт.ст.
         </div>
@@ -664,13 +693,16 @@
         </div>
       </div>
 
-      <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
-      </div>
-
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: center; padding-bottom: 8;">
-          <input id='pmpl' type='submit' name='pmpl' value='Насос НБК ++' onclick='sendbutton("pnbk=1");' class="button">
-          <input id='pmmn' type='submit' name='pmmn' class="button" value='Насос НБК --' onclick='sendbutton("pnbk=2");'>
+      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 2em; align-items: center; padding-top: 1em; padding-bottom: 1em;">
+        <div class="container_row" style="justify-content: center; align-items: flex-end;">
+          <input id='pmmn' type='submit' name='pmmn' class="button" value='--' onclick='sendbutton("pnbk=8000");'>
+          <div style="display:flex; flex-direction: column; align-items: center;">
+            <label for="Set_speed" id='set_speed_label' style="font-weight: bold; font-size: 1.1em;">Скорость</label>
+            <input name='Set_speed' id='Set_speed' type='text' size="7" value=''>
+          </div>
+          <input id='pmpl' type='submit' name='pmpl' value='++' onclick='sendbutton("pnbk=9000");' class="button">
+        </div>
+        <input id='Send_speed' type='submit' value='Установить' onclick='sendSpeed();' class="button" style="margin-right: 1em;">  
       </div>
 
       <div class="container_column" style="margin-bottom: 1em;">
@@ -682,72 +714,73 @@
         </div>
       </div>
 
+      <div style="margin-top: 2em; font-style: italic">
+        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
+      </div>
+
     </div>
 
     <div id="Prog" class="tabcontent">
       <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа НБК</div>
       
       
-		<div class="prg" id="prg">
-		  <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="width: 252; display: inline-block; text-align: center;">Тип программы</label>&nbsp;&nbsp;<label class="tooltip" style="width: 85; display: inline-block; text-align: center;">Скорость</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Давл.</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip" id="programPwrLabel"></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп.</label></div>
-		  <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: honeydew;">Прогрев</label><input type="hidden" name="ptype1" value="H"><input type="text" name="pspeed1" onchange="calc_program();" style="background-color: #FF6347;width:85"><input type="text" name="ppressure1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ppower1" onchange="calc_program();" style="background-color: #FF6347;width:100"><input type="text" name="ptemp1" onchange="calc_program();" style="background-color: #FF6347;width:100"></div>
-		  <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: navy;">Настройка</label><input type="hidden" name="ptype2" value="S"><input type="text" name="pspeed2" onchange="calc_program();" style="background-color: #FFFF00;width:85"><input type="text" name="ppressure2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;width:100"><input type="text" name="ptemp2" onchange="calc_program();" style="background-color: #FFFF00;width:100"></div>
-		  <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: navy;">Оптимизация</label><input type="hidden" name="ptype3" value="O"><input type="text" name="pspeed3" onchange="calc_program();" style="background-color: #00BFFF;width:85"><input type="text" name="ppressure3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;width:100"><input type="text" name="ptemp3" onchange="calc_program();" style="background-color: #00BFFF;width:100"></div>
-		  <div class="prgline" id="prgln4" style="background-color: #98FB98;"><label class="prglabel" style="background-color: #98FB98;">04</label>&nbsp;&nbsp;<label style="width: 240;display: inline-block;color: navy;">Работа</label><input type="hidden" name="ptype4" value="W"><input type="text" name="pspeed4" onchange="calc_program();" style="background-color: #98FB98;width:85"><input type="text" name="ppressure4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;width:100"><input type="text" name="ptemp4" onchange="calc_program();" style="background-color: #98FB98;width:100"></div>
-		</div>      
+      <div class="prg" id="prg">
+        <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="display:inline-block;text-align:center;width:190px;">Тип программы</label><span style="display:inline-block;width:120px;">&nbsp;</span><label class="tooltip" style="width:120px;display:inline-block;text-align:center;">Скорость</label><span style="display:inline-block;width:45px;">&nbsp;</span><label class="tooltip" id="programPwrLabel" style="width:140px;display:inline-block;text-align:center;"></label></div>
+        <div class="prgline" id="prgln1" style="background-color: #FF6347;"><label class="prglabel" style="background-color: #FF6347;">01</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:honeydew;">Прогрев</label><input type="hidden" name="ptype1" value="H"><span style="display:inline-block;width:85px;">&nbsp;</span><input type="text" name="pspeed1" onchange="calc_program();" style="background-color:#FF6347;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input type="text"  name="ppower1" onchange="calc_program();" style="background-color:#FF6347;text-align:center;width:80px;"></div>
+        <div class="prgline" id="prgln2" style="background-color: #FFFF00;"><label class="prglabel" style="background-color: #FFFF00;">02</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:navy;">Настройка</label><input type="hidden" name="ptype2" value="S"><span style="display:inline-block;width:85px;">&nbsp;</span><input type="text" name="pspeed2" onchange="calc_program();" style="background-color: #FFFF00;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input type="text" name="ppower2" onchange="calc_program();" style="background-color: #FFFF00;text-align:center;width:80px;"></div>
+        <div class="prgline" id="prgln3" style="background-color: #00BFFF;"><label class="prglabel" style="background-color: #00BFFF;">03</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:navy;">Оптимизация</label><input type="hidden" name="ptype3" value="O"><span style="display:inline-block;width:85px;">&nbsp;</span><input type="text" name="pspeed3" onchange="calc_program();" style="background-color: #00BFFF;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input type="text" name="ppower3" onchange="calc_program();" style="background-color: #00BFFF;text-align:center;width:80px;"></div>
+        <div class="prgline" id="prgln4" style="background-color: #98FB98;"><label class="prglabel" style="background-color: #98FB98;">04</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:navy;">Работа</label><input type="hidden" name="ptype4" value="W"><span style="display:inline-block;width:85px;">&nbsp;</span><input type="text" name="pspeed4" onchange="calc_program();" style="background-color: #98FB98;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input type="text" name="ppower4" onchange="calc_program();" style="background-color: #98FB98;text-align:center;width:80px;"></div>
+      </div>      
       
       
-      <div>
+      <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: #F7F7F7">
 
-        <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: #F7F7F7">
-
-          <div class="list-group">
-            <div class="list-group-item list-header" data-name="spoiler-title">
-              <span class="spoiler-sign">[+]</span>Описание программы НБК в текстовом формате для сохранения в облаке:
-            </div>
-            <div class="list-group-item list-content spoiler-body">
-              <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
-            </div>
+        <div class="list-group">
+          <div class="list-group-item list-header" data-name="spoiler-title">
+            <span class="spoiler-sign">[+] </span>Программа НБК:
           </div>
-
-          <div class="list-group">
-            <div class="list-group-item list-header" data-name="spoiler-title">
-              <span class="spoiler-sign">[+]</span>Программа НБК:
-            </div>
-            <div class="list-group-item list-content spoiler-body">
-              <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
-              <ul>
-                <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
-                  Тип программы
-                  <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 0.7em;">
-                    <div>
-                      <span style="font-weight: bold;"> H </span> - Прогрев НБК
-                    </div>
-                    <div>
-                      <span style="font-weight: bold;"> S </span> - Настройка НБК
-                    </div>
-                    <div>
-                      <span style="font-weight: bold;"> O </span> - Оптимизация
-                    </div>
-                    <div>
-                      <span style="font-weight: bold;"> W </span> - Рабочий режим
-                    </div>
+          <div class="list-group-item list-content spoiler-body">
+            <textarea cols="40" rows="5" id='WProgram' name='WProgram'>%WProgram%</textarea>
+            <ul>
+              <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.3em">
+                Тип программы
+                <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 0.7em;">
+                  <div>
+                    <span style="font-weight: bold;"> H </span> - Прогрев
                   </div>
-                </li>
-              </ul>
-
-              <div style="border: 1px dashed #bbb; padding: 1em; 
-      margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
-      font-size: 1.2em; font-weight: bold; background-color: #f2f2f2">
-                Пример программы НБК:
-                <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
-                  <div>H;3;0;3000;0</div>
-                  <div>S;18;0;2400;0</div>
-                  <div>O;20;0;0;0</div>
-                  <div>W;0;0;0;0</div>
+                  <div>
+                    <span style="font-weight: bold;"> S </span> - Настройка
+                  </div>
+                  <div>
+                    <span style="font-weight: bold;"> O </span> - Оптимизация
+                  </div>
+                  <div>
+                    <span style="font-weight: bold;"> W </span> - Работа
+                  </div>
                 </div>
+              </li>
+            </ul>
+
+            <div style="border: 1px dashed #bbb; padding: 1em; 
+    margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
+    font-size: 1.2em; font-weight: bold; background-color: #f2f2f2">
+              Пример программы НБК:
+              <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
+                <div>H;1;3000</div>
+                <div>S;15;2400</div>
+                <div>O;0;0</div>
+                <div>W;0;0</div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div class="list-group">
+          <div class="list-group-item list-header" data-name="spoiler-title">
+            <span class="spoiler-sign">[+] </span>Описание программы НБК в текстовом формате для сохранения в облаке:
+          </div>
+          <div class="list-group-item list-content spoiler-body">
+            <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
           </div>
         </div>
 
@@ -759,6 +792,13 @@
     </div>
 
     <div id="Other" class="tabcontent">
+      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <div class="container_row" style="margin-bottom: 0.7em; font-size: 1.5em; ">
+          Скорость:&nbsp;<span id="opt_ISspd" style="font-weight: bold;"></span>&nbsp;л/ч&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+          <span id="opt_PwrLabel"></span>:&nbsp;<span id="opt_power_volt" style="font-weight: bold;"></span>&nbsp;<span id='opt_power_unit'></span>
+        </div>
+        <button class="button" onclick="setOptimal()">Установить как оптимальные</button>
+      </div>
       <div class='dvcs' id='flowsensor' style='visibility: hidden;position: fixed;'>
         <span class='dvcs'>Расход воды: <span id='WFtotalMl'></span> мл</span>
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
