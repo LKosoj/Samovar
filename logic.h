@@ -1161,12 +1161,15 @@ void set_boiling() {
     boil_started = true;
     boil_temp = TankSensor.avgTemp;
     alcohol_s = get_alcohol(TankSensor.avgTemp);
+#ifdef USE_WATER_PUMP
+    wp_count = -10;
+#endif
     //    }
   }
 }
 
 bool check_boiling() {
-  if (boil_started || !PowerOn || !valve_status) {
+  if (boil_started || !PowerOn || !valve_status || TankSensor.avgTemp < 70) {
     return false;
   }
 
@@ -1178,21 +1181,23 @@ bool check_boiling() {
     return false;
   }
 
-  //Определяем, что началось кипение - вода охлаждения начала нагреваться
+  //Если минимальная температура воды охлаждения больше текущей, то запоминаем её
   if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
     d_s_temp_prev = WaterSensor.avgTemp;
   }
-  if (WaterSensor.avgTemp - d_s_temp_prev > 10 || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
-#ifdef USE_WATER_PUMP
-    wp_count = -10;
-#endif
+  //Определяем, что началось кипение - вода охлаждения начала нагреваться
+  if (WaterSensor.avgTemp - d_s_temp_prev > 8 || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
     set_boiling();
   }
+  //Если температура воды охлаждения близка к заданной, то кипение началось
   if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3) {
-#ifdef USE_WATER_PUMP
-    //Началось кипение, значит надо времено увеличить подачу воды (на всякий случай)
-    wp_count = -10;
-#endif
+    set_boiling();
+  }
+  //Проверяем, что температура в кубе не менялась более 0.1 градуса в течение 50 секунд, если менялась, то кипение не началось
+  if (TankSensor.avgTemp - b_t_temp_prev > 0.1) {
+    b_t_temp_prev = TankSensor.avgTemp;
+    b_t_time_min = millis();
+  } else if ((millis() - b_t_time_min) > 50 * 1000 && b_t_time_min > 0) {
     set_boiling();
   }
   if (boil_started) {
