@@ -892,17 +892,17 @@ void web_command(AsyncWebServerRequest *request) {
       }
     } else if (request->hasArg("pnbk") && PowerOn) {
       if (request->arg("pnbk").toInt() == 9000) { //TODO повышаем скорость насоса на один шаг
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) + 0.0001), 0, 2147483640);
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001), 0, 2147483640);
         // Serial.println("pnbk inc");
         // Serial.println(get_stepper_speed());
-        // Serial.println(i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT)));
+        // Serial.println(i2c_get_speed_from_rate(float(SamSetup.NbkDP)));
         // Serial.println(get_stepper_speed());
         // Serial.println(i2c_get_liquid_rate_by_step(get_stepper_speed()));
         } else if (request->arg("pnbk").toInt() == 8000) { //TODO понижаем скорость насоса на один шаг
           if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
             set_stepper_target(0, 0, 0);
           } else {
-            set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(NBK_PUMP_INCREMENT) - 0.0001), 0, 2147483640);
+            set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(SamSetup.NbkDP) - 0.0001), 0, 2147483640);
           }
         } else if (request->arg("pnbk").toFloat() >= 0 && request->arg("pnbk").toInt() < 8000) { // TODO устанавливаем заказанную скорость насоса
           set_stepper_target(i2c_get_speed_from_rate(float(request->arg("pnbk").toFloat()) + 0.0001), 0, 2147483640);
