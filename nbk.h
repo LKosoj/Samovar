@@ -295,8 +295,13 @@ float fromPower(float value) { // конвертер из мощности: W =>
  #ifdef SAMOVAR_USE_SEM_AVR
     return value;
  #else
-      float R = SamSetup.HeaterResistant > 1 ? SamSetup.HeaterResistant : 18;
-      return SQRT(value * R);
+      static float prev_V = 0;
+      if (value != prev_V) {
+        prev_V = value;
+        float R = SamSetup.HeaterResistant > 1 && SamSetup.HeaterResistant < 200 ? SamSetup.HeaterResistant : 18;
+        return SQRT(value * R);
+      }
+      return prev_V;
  #endif
   }
 
