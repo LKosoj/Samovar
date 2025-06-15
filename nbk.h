@@ -286,6 +286,7 @@ float SQRT(float num) { // компилируем только по необхо
   do {
     prev_guess = guess;
     guess = (guess + num / guess) / 2;
+    delay(3);
   } while (abs(guess - prev_guess) > 0.001);
   return guess;
 }
