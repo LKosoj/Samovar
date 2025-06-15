@@ -760,7 +760,7 @@ void check_alarm_nbk() {// вызывается из Samovar.ino, надо ра�
    //Устанавливаем ШИМ для насоса в зависимости от температуры воды
    if (valve_status) { // если вода включена
      // Если Т в ТСА больше предела и Т в ТСА больше Т воды (?) - крутим водяной насос усерднее, будто Т воды выше на 3 гр.
-    if (ACPSensor.avgTemp > SamSetup.NbkSteamT && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
+    if (ACPSensor.avgTemp > SamSetup.SetACPTemp && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
     else
       set_pump_speed_pid(WaterSensor.avgTemp); // иначе крутим как обычно
   }
