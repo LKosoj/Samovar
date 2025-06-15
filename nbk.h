@@ -466,7 +466,12 @@ void handle_nbk_stage_optimization() {
         run_nbk_program(ProgramNum + 1);
         return;
       }
-      SendMsg("Оптимизация: Тб >= Тн ("+ String(nbk_Tn + nbk_dD,1) +"), увеличиваем подачу. Итерация " + String(nbk_opt_iter + 1), NOTIFY_MSG);
+      String msg; msg.reserve(128);
+      msg += "Оптимизация: Тб >= Тн (";
+      msg += String(nbk_Tn + nbk_dD, 1);
+      msg += "), увеличиваем подачу. Итерация ";
+      msg += nbk_opt_iter + 1;
+      SendMsg(msg, NOTIFY_MSG);
     } else {
       if ((nbk_M + nbk_dM) > nbk_M_max) {
         SendMsg("Достигнута предельная мощность. (" + String(nbk_M ,0) + "+dM>" + String(nbk_M_max,0)  + " Вт.). Результат: " + String(nbk_Po,1) + " л/ч.", WARNING_MSG);
@@ -476,9 +481,23 @@ void handle_nbk_stage_optimization() {
       nbk_P *= 0.9;
       nbk_M += nbk_dM;
       if (nbk_Tp < nbk_Tp_lim) {
-        SendMsg("Оптимизация: Тп < Тп мин(" + String(nbk_Tp_lim,1) + "), увеличиваем " + String(PWR_MSG) + ". Итерация " + String(nbk_opt_iter + 1), NOTIFY_MSG);
+        String msg; msg.reserve(128);
+        msg += "Оптимизация: Тп < Тп мин(";
+        msg += String(nbk_Tp_lim,1);
+        msg += "), увеличиваем ";
+        msg += PWR_MSG;
+        msg += ". Итерация ";
+        msg += nbk_opt_iter + 1;
+        SendMsg(msg, NOTIFY_MSG);
       } else {
-        SendMsg("Оптимизация: Тб < Тн(" + String(nbk_Tn + nbk_dD,1) + "), увеличиваем " + String(PWR_MSG) + ". Итерация " + String(nbk_opt_iter + 1), NOTIFY_MSG);
+        String msg; msg.reserve(128);
+        msg += "Оптимизация: Тб < Тн(";
+        msg += String(nbk_Tn + nbk_dD,1);
+        msg += "), увеличиваем ";
+        msg += PWR_MSG;
+        msg += ". Итерация ";
+        msg += nbk_opt_iter + 1;
+        SendMsg(msg, NOTIFY_MSG);
       }
     }
     set_current_power(fromPower(nbk_M));
@@ -530,9 +549,25 @@ void handle_nbk_stage_work() {
       SetSpeed(nbk_P);
     }
     if (nbk_Tb < nbk_Tn - nbk_dT + nbk_dD) {
-      SendMsg("Работа: Тб < Тн-dT ("+String(nbk_Tn - nbk_dT + nbk_dD,1)+"), снижаем подачу на " + String(nbk_dP / 10.0,1) + ", до: " + String(nbk_P,1) + " л/ч", NOTIFY_MSG);
+      String msg; msg.reserve(128);
+      msg += "Работа: Тб < Тн-dT (";
+      msg += String(nbk_Tn - nbk_dT + nbk_dD, 1);
+      msg += "), снижаем подачу на ";
+      msg += String(nbk_dP / 10.0, 1);
+      msg += ", до: ";
+      msg += String(nbk_P, 1);
+      msg += " л/ч";
+      SendMsg(msg, NOTIFY_MSG);
     } else if (nbk_Tp < nbk_Tp_lim) { 
-      SendMsg("Работа: Тп ниже предела (" + String(nbk_Tp_lim,1) + "), снижаем подачу на " + String(nbk_dP/10.0,1)+ ", до: " + String(nbk_P,1) + " л/ч" , NOTIFY_MSG); 
+      String msg; msg.reserve(128);
+      msg += "Работа: Тп ниже предела (";
+      msg += String(nbk_Tp_lim, 1);
+      msg += "), снижаем подачу на ";
+      msg += String(nbk_dP / 10.0, 1);
+      msg += ", до: ";
+      msg += String(nbk_P, 1);
+      msg += " л/ч";
+      SendMsg(msg, NOTIFY_MSG);
     }    
     nbk_work_next_time = millis() + nbk_column_inertia * 1000; // задаём следующую проверку через Ин
   }
@@ -555,8 +590,14 @@ void handle_nbk_stage_work() {
       set_current_power(fromPower(nbk_M));
       SetSpeed(nbk_P);
       
-      SendMsg("Работа: возобновление после захлёба, скорректированные параметры: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ", " + 
-      String(nbk_Po,1) + " л/ч", NOTIFY_MSG);
+      String msg; msg.reserve(128);
+      msg += "Работа: возобновление после захлёба, скорректированные параметры: ";
+      msg += String(fromPower(nbk_Mo),0);
+      msg += PWR_SIGN;
+      msg += ", ";
+      msg += String(nbk_Po,1);
+      msg += " л/ч";
+      SendMsg(msg, NOTIFY_MSG);
       nbk_work_pause_stage = 2; // ждём время 2*Ин
       nbk_work_next_time = millis() + 2*(NBK_MULT_PAUSE_OVERFLOW/3) * nbk_column_inertia * 1000;
     } else if (nbk_work_pause_stage == 2) { // после MULT*Ин: продолжаем работу
