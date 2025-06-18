@@ -214,6 +214,7 @@ function calc_program(){
     while (e.firstChild) {
       e.removeChild(e.firstChild);
     }
+      _lnIdx = 0;
 
     e.insertAdjacentHTML("afterbegin", `<div class="flex_row" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
       &nbsp;&nbsp;&nbsp;<label class="tooltip">№<span class="tooltiptext">Номер строки программы</span></label>
@@ -361,7 +362,8 @@ function addLine(obj, s){
   ptype.value = arr[3];
 
   var pnum = document.getElementById("pnum" + _lnIdx);
-  pnum.value = arr[0];
+  pnum.selectedIndex = arr[0];
+  pnum.onchange = set_num;
   
   set_bgcolor(_lnIdx);
   
@@ -399,6 +401,7 @@ window.onload = function() {
     while (element.firstChild) {
       element.removeChild(element.firstChild);
     }
+    _lnIdx = 0;
     getProgram();
   });
 };
