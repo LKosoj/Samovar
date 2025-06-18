@@ -6,7 +6,7 @@
 //
 
 #include <Arduino.h>
-#ifdef ESP32
+#if defined(ESP32) || defined(LIBRETINY)
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -34,7 +34,7 @@ static AsyncCallbackMessagePackWebHandler *handler = new AsyncCallbackMessagePac
 void setup() {
   Serial.begin(115200);
 
-#ifndef CONFIG_IDF_TARGET_ESP32H2
+#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
 #endif

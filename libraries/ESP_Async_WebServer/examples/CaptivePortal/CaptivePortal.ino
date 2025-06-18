@@ -2,7 +2,7 @@
 // Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
 
 #include <DNSServer.h>
-#ifdef ESP32
+#if defined(ESP32) || defined(LIBRETINY)
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -28,7 +28,7 @@ public:
     response->print("<!DOCTYPE html><html><head><title>Captive Portal</title></head><body>");
     response->print("<p>This is our captive portal front page.</p>");
     response->printf("<p>You were trying to reach: http://%s%s</p>", request->host().c_str(), request->url().c_str());
-#ifndef CONFIG_IDF_TARGET_ESP32H2
+#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
     response->printf("<p>Try opening <a href='http://%s'>this link</a> instead</p>", WiFi.softAPIP().toString().c_str());
 #endif
     response->print("</body></html>");
@@ -41,7 +41,7 @@ void setup() {
   Serial.println();
   Serial.println("Configuring access point...");
 
-#ifndef CONFIG_IDF_TARGET_ESP32H2
+#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
   if (!WiFi.softAP("esp-captive")) {
     Serial.println("Soft AP creation failed.");
     while (1);

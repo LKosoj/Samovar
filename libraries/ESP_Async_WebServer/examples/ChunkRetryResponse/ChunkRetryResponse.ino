@@ -6,7 +6,7 @@
 //
 
 #include <Arduino.h>
-#ifdef ESP32
+#if defined(ESP32) || defined(LIBRETINY)
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -96,7 +96,7 @@ static int key = -1;
 void setup() {
   Serial.begin(115200);
 
-#ifndef CONFIG_IDF_TARGET_ESP32H2
+#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
 #endif
@@ -131,9 +131,17 @@ void setup() {
     "/api", HTTP_POST,
     [](AsyncWebServerRequest *request) {
       // request parsing has finished
+      String *data = (String *)request->_tempObject;
+
+      if (!data) {
+        request->send(400);
+        return;
+      }
 
       // no data ?
-      if (!((String *)request->_tempObject)->length()) {
+      if (!data->length()) {
+        delete data;
+        request->_tempObject = nullptr;
         request->send(400);
         return;
       }
@@ -141,10 +149,15 @@ void setup() {
       JsonDocument doc;
 
       // deserialize and check for errors
-      if (deserializeJson(doc, *(String *)request->_tempObject)) {
+      if (deserializeJson(doc, *data)) {
+        delete data;
+        request->_tempObject = nullptr;
         request->send(400);
         return;
       }
+
+      delete data;
+      request->_tempObject = nullptr;
 
       // start UART com: UART will send the data to the Serial console and wait for the key press
       triggerUART = doc["input"].as<const char *>();
