@@ -1,6 +1,9 @@
 #ifndef __SAMOVAR_H_
 #define __SAMOVAR_H_
 
+#define CONFIG_ASYNC_TCP_RUNNING_CORE 1      // force async_tcp task to be on same core as Arduino app (default is any core)
+#define CONFIG_ASYNC_TCP_STACK_SIZE 4096     // reduce the stack size (default is 16K)
+
 #ifndef ESP32
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
