@@ -15,6 +15,9 @@
 
 //#define Serial2 Serial
 
+#define CONFIG_ASYNC_TCP_RUNNING_CORE 1      // force async_tcp task to be on same core as Arduino app (default is any core)
+#define CONFIG_ASYNC_TCP_STACK_SIZE 4096     // reduce the stack size (default is 16K)
+
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
 
