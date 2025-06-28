@@ -65,5 +65,3 @@ flowchart TD
 ](07_configuration_persistence_.md)
 8. [Сеть и внешняя связь
 ](08_network___external_communication_.md)
-
-Переведено с помощью DeepL.com (бесплатная версия)
