@@ -216,7 +216,7 @@ server.on(«/program», HTTP_POST, [](AsyncWebServerRequest *request) {
 
 Вот упрощенная последовательность действий:
 
-``Русалка
+```mermaid
 sequenceDiagram
     User->>LCD/Web: Performs Action (e.g., Click «Start»)
     LCD/Web->>Interface Handler: Detects Action
