@@ -11,6 +11,13 @@ AsyncWebHeader::AsyncWebHeader(const String &data) {
   if (index < 0) {
     return;
   }
+  if (data.indexOf('\r') >= 0 || data.indexOf('\n') >= 0) {
+// Note: do not log as info, warn or error because this could flood the logs without being able to filter this out
+#ifdef ESP32
+    log_v("Invalid character in HTTP header");
+#endif
+    return;  // Invalid header format
+  }
   _name = data.substring(0, index);
   _value = data.substring(index + 2);
 }

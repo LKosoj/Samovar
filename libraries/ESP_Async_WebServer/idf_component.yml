@@ -32,7 +32,7 @@ dependencies:
     version: "^3.4.4"
     require: public
   bblanchon/arduinojson:
-    version: "^7.4.1"
+    version: "^7.4.2"
     require: public
 examples:
   - path: ./idf_component_examples/catchall

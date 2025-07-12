@@ -267,7 +267,6 @@ protected:
   friend class AsyncServer;
 
   tcp_pcb *_pcb;
-  int8_t _closed_slot;
 
   AcConnectHandler _connect_cb;
   void *_connect_cb_arg;
@@ -296,8 +295,6 @@ protected:
   uint16_t _connect_port;
 
   int8_t _close();
-  void _free_closed_slot();
-  bool _allocate_closed_slot();
   int8_t _connected(tcp_pcb *pcb, int8_t err);
   void _error(int8_t err);
   int8_t _poll(tcp_pcb *pcb);
