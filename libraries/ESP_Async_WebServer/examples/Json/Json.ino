@@ -6,7 +6,7 @@
 //
 
 #include <Arduino.h>
-#if defined(ESP32) || defined(LIBRETINY)
+#ifdef ESP32
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -34,7 +34,7 @@ static AsyncCallbackJsonWebHandler *handler = new AsyncCallbackJsonWebHandler("/
 void setup() {
   Serial.begin(115200);
 
-#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
+#ifndef CONFIG_IDF_TARGET_ESP32H2
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
 #endif
@@ -63,27 +63,14 @@ void setup() {
     JsonObject root = doc.to<JsonObject>();
     root["foo"] = "bar";
     serializeJson(root, *response);
-    Serial.println();
     request->send(response);
   });
 
   // curl -v -X POST -H 'Content-Type: application/json' -d '{"name":"You"}' http://192.168.4.1/json2
   // curl -v -X PUT -H 'Content-Type: application/json' -d '{"name":"You"}' http://192.168.4.1/json2
-  //
-  // edge cases:
-  //
-  // curl -v -X POST -H "Content-Type: application/json" -d "1234" -H "Content-Length: 5" http://192.168.4.1/json2 => rx timeout
-  // curl -v -X POST -H "Content-Type: application/json" -d "1234" -H "Content-Length: 2" http://192.168.4.1/json2 => 12
-  // curl -v -X POST -H "Content-Type: application/json" -d "1234" -H "Content-Length: 4" http://192.168.4.1/json2 => 1234
-  // curl -v -X POST -H "Content-Type: application/json" -d "1234" -H "Content-Length: 10" http://192.168.4.1/json2 => rx timeout
-  // curl -v -X POST -H "Content-Type: application/json" -d "12345678" -H "Content-Length: 8" http://192.168.4.1/json2 => 12345678
-  // curl -v -X POST -H "Content-Type: application/json" -d "123456789" -H "Content-Length: 8" http://192.168.4.1/json2 => 12345678
-  // curl -v -X POST -H "Content-Type: application/json" -d "123456789" -H "Content-Length: 9" http://192.168.4.1/json2 => 413: Content length exceeds maximum allowed
-  handler->setMaxContentLength(8);
   handler->setMethod(HTTP_POST | HTTP_PUT);
   handler->onRequest([](AsyncWebServerRequest *request, JsonVariant &json) {
     serializeJson(json, Serial);
-    Serial.println();
     AsyncJsonResponse *response = new AsyncJsonResponse();
     JsonObject root = response->getRoot().to<JsonObject>();
     root["hello"] = json.as<JsonObject>()["name"];

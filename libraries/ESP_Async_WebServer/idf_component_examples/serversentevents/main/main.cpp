@@ -50,7 +50,7 @@ static AsyncEventSource events("/events");
 void setup() {
   Serial.begin(115200);
 
-#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
+#ifndef CONFIG_IDF_TARGET_ESP32H2
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
 #endif

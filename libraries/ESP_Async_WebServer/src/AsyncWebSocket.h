@@ -5,8 +5,7 @@
 #define ASYNCWEBSOCKET_H_
 
 #include <Arduino.h>
-
-#if defined(ESP32) || defined(LIBRETINY)
+#ifdef ESP32
 #include <AsyncTCP.h>
 #include <mutex>
 #ifndef WS_MAX_QUEUED_MESSAGES

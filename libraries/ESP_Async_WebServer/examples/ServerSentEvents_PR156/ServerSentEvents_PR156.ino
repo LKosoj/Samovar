@@ -6,7 +6,7 @@
 //
 
 #include <Arduino.h>
-#if defined(ESP32) || defined(LIBRETINY)
+#ifdef ESP32
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -64,7 +64,7 @@ static constexpr uint32_t timeoutClose = 15000;
 void setup() {
   Serial.begin(115200);
 
-#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
+#ifndef CONFIG_IDF_TARGET_ESP32H2
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
 #endif

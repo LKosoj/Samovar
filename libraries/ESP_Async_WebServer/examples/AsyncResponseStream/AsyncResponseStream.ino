@@ -2,7 +2,7 @@
 // Copyright 2016-2025 Hristo Gochkov, Mathieu Carbou, Emil Muratov
 
 #include <DNSServer.h>
-#if defined(ESP32) || defined(LIBRETINY)
+#ifdef ESP32
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -20,7 +20,7 @@ static AsyncWebServer server(80);
 void setup() {
   Serial.begin(115200);
 
-#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
+#ifndef CONFIG_IDF_TARGET_ESP32H2
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
 #endif
