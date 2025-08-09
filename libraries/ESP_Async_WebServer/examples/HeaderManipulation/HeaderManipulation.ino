@@ -6,7 +6,7 @@
 //
 
 #include <Arduino.h>
-#ifdef ESP32
+#if defined(ESP32) || defined(LIBRETINY)
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -33,7 +33,7 @@ AsyncHeaderFreeMiddleware headerFree;
 void setup() {
   Serial.begin(115200);
 
-#ifndef CONFIG_IDF_TARGET_ESP32H2
+#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
 #endif
@@ -78,6 +78,29 @@ void setup() {
       }
     )
     .addMiddleware(&headerFree);
+
+  // curl -v http://192.168.4.1/
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "Hello, world!");
+    response->addHeader(AsyncWebHeader::parse("X-Test-1: value1"));
+    response->addHeader(AsyncWebHeader::parse("X-Test-2:value2"));
+    response->addHeader(AsyncWebHeader::parse("X-Test-3:"));
+    response->addHeader(AsyncWebHeader::parse("X-Test-4: "));
+    response->addHeader(AsyncWebHeader::parse(""));
+    response->addHeader(AsyncWebHeader::parse(":"));
+    request->send(response);
+    /**
+< HTTP/1.1 200 OK
+< connection: close
+< X-Test-1: value1
+< X-Test-2: value2
+< X-Test-3:
+< X-Test-4:
+< accept-ranges: none
+< content-length: 13
+< content-type: text/plain
+     */
+  });
 
   server.begin();
 }

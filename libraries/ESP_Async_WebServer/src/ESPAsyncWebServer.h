@@ -15,16 +15,13 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef ESP32
+#if defined(ESP32) || defined(LIBRETINY)
 #include <AsyncTCP.h>
-#include <WiFi.h>
 #elif defined(ESP8266)
-#include <ESP8266WiFi.h>
 #include <ESPAsyncTCP.h>
 #elif defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350)
 #include <RPAsyncTCP.h>
 #include <HTTP_Method.h>
-#include <WiFi.h>
 #include <http_parser.h>
 #else
 #error Platform not supported
@@ -138,12 +135,20 @@ private:
   String _value;
 
 public:
+  AsyncWebHeader() {}
   AsyncWebHeader(const AsyncWebHeader &) = default;
+  AsyncWebHeader(AsyncWebHeader &&) = default;
   AsyncWebHeader(const char *name, const char *value) : _name(name), _value(value) {}
   AsyncWebHeader(const String &name, const String &value) : _name(name), _value(value) {}
-  AsyncWebHeader(const String &data);
+
+#ifndef ESP8266
+  [[deprecated("Use AsyncWebHeader::parse(data) instead")]]
+#endif
+  AsyncWebHeader(const String &data)
+    : AsyncWebHeader(parse(data)){};
 
   AsyncWebHeader &operator=(const AsyncWebHeader &) = default;
+  AsyncWebHeader &operator=(AsyncWebHeader &&other) = default;
 
   const String &name() const {
     return _name;
@@ -151,7 +156,18 @@ public:
   const String &value() const {
     return _value;
   }
+
   String toString() const;
+
+  // returns true if the header is valid
+  operator bool() const {
+    return _name.length();
+  }
+
+  static const AsyncWebHeader parse(const String &data) {
+    return parse(data.c_str());
+  }
+  static const AsyncWebHeader parse(const char *data);
 };
 
 /*
@@ -187,6 +203,7 @@ class AsyncWebServerRequest {
   using FS = fs::FS;
   friend class AsyncWebServer;
   friend class AsyncCallbackWebHandler;
+  friend class AsyncFileResponse;
 
 private:
   AsyncClient *_client;
@@ -257,6 +274,8 @@ private:
 
   void _send();
   void _runMiddlewareChain();
+
+  static void _getEtag(uint8_t trailer[4], char *serverETag);
 
 public:
   File _tempFile;
@@ -370,13 +389,7 @@ public:
     send(beginResponse(code, contentType, content, len, callback));
   }
 
-  void send(FS &fs, const String &path, const char *contentType = asyncsrv::empty, bool download = false, AwsTemplateProcessor callback = nullptr) {
-    if (fs.exists(path) || (!download && fs.exists(path + asyncsrv::T__gz))) {
-      send(beginResponse(fs, path, contentType, download, callback));
-    } else {
-      send(404);
-    }
-  }
+  void send(FS &fs, const String &path, const char *contentType = asyncsrv::empty, bool download = false, AwsTemplateProcessor callback = nullptr);
   void send(FS &fs, const String &path, const String &contentType, bool download = false, AwsTemplateProcessor callback = nullptr) {
     send(fs, path, contentType.c_str(), download, callback);
   }
@@ -1041,6 +1054,10 @@ public:
     setContentType(type.c_str());
   }
   void setContentType(const char *type);
+  bool addHeader(AsyncWebHeader &&header, bool replaceExisting = true);
+  bool addHeader(const AsyncWebHeader &header, bool replaceExisting = true) {
+    return header && addHeader(header.name(), header.value(), replaceExisting);
+  }
   bool addHeader(const char *name, const char *value, bool replaceExisting = true);
   bool addHeader(const String &name, const String &value, bool replaceExisting = true) {
     return addHeader(name.c_str(), value.c_str(), replaceExisting);

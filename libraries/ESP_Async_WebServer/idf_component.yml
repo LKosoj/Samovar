@@ -25,11 +25,14 @@ files:
     - "platformio.ini"
     - "pre-commit.requirements.txt"
 dependencies:
+  espressif/arduino-esp32:
+    version: "^3.1.1"
+    require: public
   esp32async/asynctcp:
-    version: "^3.4.0"
+    version: "^3.4.5"
     require: public
   bblanchon/arduinojson:
-    version: "^7.4.1"
+    version: "^7.4.2"
     require: public
 examples:
   - path: ./idf_component_examples/catchall
