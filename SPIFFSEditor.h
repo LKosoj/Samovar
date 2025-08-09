@@ -16,15 +16,11 @@ String IRAM_ATTR getValue(String data, char separator, int index);
 class SPIFFSEditor: public AsyncWebHandler {
   private:
     fs::FS _fs;
-    String _username;
-    String _password;
-    bool _authenticated;
-    uint32_t _startTime;
   public:
 #ifdef ESP32
-    SPIFFSEditor(const fs::FS& fs, const String& username = String(), const String& password = String());
+    SPIFFSEditor(const fs::FS& fs);
 #else
-    SPIFFSEditor(const String& username = String(), const String& password = String(), const fs::FS& fs = SPIFFS);
+    SPIFFSEditor(const fs::FS& fs = SPIFFS);
 #endif
     virtual bool canHandle(AsyncWebServerRequest *request) const override final;
     virtual void handleRequest(AsyncWebServerRequest *request) override final;
@@ -147,15 +143,11 @@ static bool isExcluded(fs::FS &_fs, const char *filename) {
 // WEB HANDLER IMPLEMENTATION
 
 #ifdef ESP32
-SPIFFSEditor::SPIFFSEditor(const fs::FS& fs, const String& username, const String& password)
+SPIFFSEditor::SPIFFSEditor(const fs::FS& fs)
 #else
-SPIFFSEditor::SPIFFSEditor(const String& username, const String& password, const fs::FS& fs)
+SPIFFSEditor::SPIFFSEditor(const fs::FS& fs)
 #endif
   : _fs(fs)
-  , _username(username)
-  , _password(password)
-  , _authenticated(false)
-  , _startTime(0)
 {}
 
 bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
@@ -212,9 +204,6 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
 
 
 void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
-  if (_username.length() && _password.length() && !request->authenticate(_username.c_str(), _password.c_str()))
-    return request->requestAuthentication();
-
   if (request->method() == HTTP_GET) {
     if (request->hasParam("list")) {
       String path = request->getParam("list")->value();
@@ -269,10 +258,16 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
       if (request->header("If-Modified-Since").equals(buildTime)) {
         request->send(304);
       } else {
-        //        AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", edit_htm_gz, edit_htm_gz_len);
-        AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/edit.htm", "text/html");
-        //		    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", get_edit_script());
+      if(request->header("Accept-Encoding").indexOf("gzip") != -1 && SPIFFS.exists("/edit.htm.gz")) {  
+        AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/edit.htm.gz", "text/html");
+        response->addHeader("Content-Encoding", "gzip");
+        response->addHeader("Cache-Control", "max-age=5000");
         request->send(response);
+      } else {
+        AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/edit.htm", "text/html");
+        response->addHeader("Cache-Control", "max-age=5000");
+        request->send(response);
+      }
       }
     }
   } else if (request->method() == HTTP_DELETE) {
@@ -315,29 +310,23 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
 
 void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
   if (!index) {
-    if (!_username.length() || request->authenticate(_username.c_str(), _password.c_str())) {
-      _authenticated = true;
-
       String p = filename;
       if (filename[0] != '/') p = "/" + filename;
-
-      request->_tempFile = _fs.open(p, "w");
-      _startTime = millis();
+      request->_tempFile = _fs.open(p, "w");      
     }
-  }
-  if (_authenticated && request->_tempFile) {
-    if (len) {
-      request->_tempFile.write(data, len);
-    }
-    if (final) {
-      request->_tempFile.close();
+    if (request->_tempFile) {
+        if (len) {
+            request->_tempFile.write(data, len);
+        }
+        if (final) {
+            request->_tempFile.close();
 #ifdef USE_LUA
-      if (getValue(filename, '.', 1) == "lua") {
-        load_lua_script();
-      }
+            if (getValue(filename, '.', 1) == "lua") {
+                load_lua_script();
+            }
 #endif
+        }
     }
-  }
 }
 
 
