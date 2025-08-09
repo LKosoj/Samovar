@@ -147,7 +147,7 @@ void FS_init(void) {
   });
   server.addHandler(&events);
 
-  server.addHandler(new SPIFFSEditor(SPIFFS, http_username, http_password));
+  server.addHandler(new SPIFFSEditor(SPIFFS));
 
   server.onNotFound([](AsyncWebServerRequest * request) {
     Serial.printf("NOT_FOUND: ");
