@@ -253,7 +253,7 @@ static inline lwip_tcp_event_packet_t *_get_async_event() {
   }
 }
 
-static void _remove_events_for_client(AsyncClient *client) {
+static size_t _remove_events_for_client(AsyncClient *client) {
   lwip_tcp_event_packet_t *removed_event_chain;
   {
     queue_mutex_guard guard;
@@ -269,6 +269,7 @@ static void _remove_events_for_client(AsyncClient *client) {
     removed_event_chain = t->next;
     _free_event(t);
   }
+  return count;
 };
 
 void AsyncTCP_detail::handle_async_event(lwip_tcp_event_packet_t *e) {
@@ -484,7 +485,8 @@ void AsyncTCP_detail::tcp_error(void *arg, int8_t err) {
   // ets_printf("+E: 0x%08x\n", arg);
   AsyncClient *client = reinterpret_cast<AsyncClient *>(arg);
   if (client && client->_pcb) {
-    _reset_tcp_callbacks(client->_pcb, client);
+    // The pcb has already been freed by LwIP; do not attempt to clear the callbacks!
+    _remove_events_for_client(client);
     client->_pcb = nullptr;
   }
 
@@ -615,26 +617,35 @@ static esp_err_t _tcp_recved(tcp_pcb **pcb, size_t len) {
 }
 
 static err_t _tcp_close_api(struct tcpip_api_call_data *api_call_msg) {
+  // Unlike the other calls, this is not a direct wrapper of the LwIP function;
+  // we perform the AsyncClient teardown interlocked safely with the LwIP task.
+
+  // As a postcondition, the queue must not have any events referencing
+  // the AsyncClient in api_call_msg->close.  This is because it is possible for
+  // an error event to have been queued, clearing the pcb*, but after the async
+  // thread has committed to closing/destructing the AsyncClient object.
+
   tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
   msg->err = ERR_CONN;
   if (*msg->pcb) {
-    // Unlike the other calls, this is not a direct wrapper of the LwIP function;
-    // we perform the AsyncClient teardown interlocked safely with the LwIP task.
     tcp_pcb *pcb = *msg->pcb;
     _reset_tcp_callbacks(pcb, msg->close);
-    msg->err = tcp_close(pcb);
-    if (msg->err != ERR_OK) {
+    if (tcp_close(pcb) != ERR_OK) {
+      // We do not permit failure here: abandon the pcb anyways.
       tcp_abort(pcb);
     }
+    msg->err = ERR_OK;
     *msg->pcb = nullptr;  // PCB is now the property of LwIP
+  } else {
+    // Ensure there is not an error event queued for this client
+    if (_remove_events_for_client(msg->close)) {
+      msg->err = ERR_OK;  // dispose needs to be run
+    }
   }
   return msg->err;
 }
 
 static esp_err_t _tcp_close(tcp_pcb **pcb, AsyncClient *client) {
-  if (!pcb || !*pcb) {
-    return ERR_CONN;
-  }
   tcp_api_call_t msg;
   msg.pcb = pcb;
   msg.close = client;
@@ -643,21 +654,25 @@ static esp_err_t _tcp_close(tcp_pcb **pcb, AsyncClient *client) {
 }
 
 static err_t _tcp_abort_api(struct tcpip_api_call_data *api_call_msg) {
+  // Like close(), we must ensure that the queue is cleared
   tcp_api_call_t *msg = (tcp_api_call_t *)api_call_msg;
-  msg->err = ERR_CONN;
   if (*msg->pcb) {
     tcp_abort(*msg->pcb);
     *msg->pcb = nullptr;  // PCB is now the property of LwIP
+    msg->err = ERR_ABRT;
+  } else {
+    msg->err = ERR_CONN;
   }
   return msg->err;
 }
 
-static esp_err_t _tcp_abort(tcp_pcb **pcb) {
+static esp_err_t _tcp_abort(tcp_pcb **pcb, AsyncClient *client) {
   if (!pcb || !*pcb) {
     return ERR_CONN;
   }
   tcp_api_call_t msg;
   msg.pcb = pcb;
+  msg.close = client;
   tcpip_api_call(_tcp_abort_api, (struct tcpip_api_call_data *)&msg);
   return msg.err;
 }
@@ -902,11 +917,8 @@ void AsyncClient::close(bool now) {
 }
 
 int8_t AsyncClient::abort() {
-  if (_pcb) {
-    _tcp_abort(&_pcb);
-    // _pcb is now NULL
-  }
-  return ERR_ABRT;
+  return _tcp_abort(&_pcb, this);
+  // _pcb is now NULL
 }
 
 size_t AsyncClient::space() const {
@@ -968,13 +980,11 @@ void AsyncClient::ackPacket(struct pbuf *pb) {
 
 int8_t AsyncClient::_close() {
   // ets_printf("X: 0x%08x\n", (uint32_t)this);
-  int8_t err = ERR_OK;
-  if (_pcb) {
-    _tcp_close(&_pcb, this);
-    // _pcb is now NULL
-    if (_discard_cb) {
-      _discard_cb(_discard_cb_arg, this);
-    }
+  int8_t err = _tcp_close(&_pcb, this);
+  // _pcb is now NULL
+  if ((err == ERR_OK) && _discard_cb) {
+    // _pcb was closed here
+    _discard_cb(_discard_cb_arg, this);
   }
   return err;
 }
