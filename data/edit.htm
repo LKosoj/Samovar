@@ -5,36 +5,37 @@
 <title>ESP Editor</title>
 <style type="text/css" media="screen">
 .cm {
-  z-index: 300;
-  position: absolute;
-  left: 5px;
-  border: 1px solid #444;
-  background-color: #F5F5F5;
-  display: none;
-  box-shadow: 0 0 10px rgba( 0, 0, 0, .4 );
-  font-size: 12px;
-  font-family: sans-serif;
-  font-weight:bold;
+    z-index: 1000;
+    position: fixed;
+    background: #FFF;
+    border: 1px solid #DDD;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    font-family: sans-serif;
 }
 .cm ul {
-  list-style: none;
-  top: 0;
-  left: 0;
-  margin: 0;
-  padding: 0;
+    list-style: none;
+    margin: 0;
+    padding: 5px 0;
+    min-width: 150px;
 }
 .cm li {
-  position: relative;
-  min-width: 60px;
-  cursor: pointer;
+    padding: 6px 15px;
+    cursor: pointer;
+    color: #333;
+}
+.cm li:hover {
+    background: #F0F0F0;
+    color: #000;
+}
+
+.cm li span {
+    color: inherit; /* Наследует цвет от li */
 }
 .cm span {
   color: #444;
   display: inline-block;
   padding: 6px;
 }
-.cm li:hover { background: #444; }
-.cm li:hover span { color: #EEE; }
 .tvu ul, .tvu li {
   padding: 0;
   margin: 0;
@@ -64,6 +65,27 @@
 }
 .tvu span:hover {
   text-decoration: underline;
+}
+.cm {
+    background: #fff;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    min-width: 120px;
+}
+
+.cm ul {
+    padding: 5px 0;
+    margin: 0;
+}
+
+.cm li {
+    padding: 5px 15px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.cm li:hover {
+    background: #f0f0f0;
 }
 @media screen and (-webkit-min-device-pixel-ratio:0){
   .tvu{
@@ -362,26 +384,28 @@ function createTree(element, editor){
     };
   }
 
-  function showContextMenu(event, path, isfile){
-    var divContext = ce("div");
-    var scrollTop = document.body.scrollTop ? document.body.scrollTop : document.documentElement.scrollTop;
-    var scrollLeft = document.body.scrollLeft ? document.body.scrollLeft : document.documentElement.scrollLeft;
-    var left = event.clientX + scrollLeft;
-    var top = event.clientY + scrollTop;
+  function showContextMenu(event, path, isfile) {
+    var oldMenu = document.querySelector('.cm');
+    if (oldMenu) document.body.removeChild(oldMenu);
+    var divContext = document.createElement('div');
     divContext.className = 'cm';
     divContext.style.display = 'block';
-    divContext.style.left = left + 'px';
-    divContext.style.top = top + 'px';
+    divContext.style.position = 'fixed'; // Используем fixed вместо absolute
+    divContext.style.left = event.clientX + 'px';
+    divContext.style.top = event.clientY + 'px';
+    divContext.style.zIndex = '1000';
     fillFileMenu(divContext, path);
     document.body.appendChild(divContext);
-    var width = divContext.offsetWidth;
-    var height = divContext.offsetHeight;
-    divContext.onmouseout = function(e){
-      if(e.clientX < left || e.clientX > (left + width) || e.clientY < top || e.clientY > (top + height)){
-        if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(divContext);
-      }
-    };
-  }
+    document.addEventListener('click', function closeMenu(e) {
+        if (!divContext.contains(e.target)) {
+            document.body.removeChild(divContext);
+            document.removeEventListener('click', closeMenu);
+        }
+    });
+    divContext.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+}
 
   function createTreeLeaf(path, name, size){
     var leaf = ce("li");
