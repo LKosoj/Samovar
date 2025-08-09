@@ -170,57 +170,91 @@ void set_pump_pwm(float duty);
  */
 void reset_sensor_counter(void);
 
-#define TEMP_HISTORY_SIZE 10  // Размер буфера истории температур
-#define BOILING_DETECT_THRESHOLD 0.2  // Порог определения стабилизации температуры
+#define TEMP_HISTORY_SIZE 10  // Размер буфера истории температур (точек)
+#define BOILING_DETECT_THRESHOLD 0.08  // Порог по стандартному отклонению, °C
 #define MIN_BOILING_TEMP 98.0  // Минимальная температура кипения (с учетом погрешности)
+#define STABLE_WINDOWS_REQUIRED 5 // Кол-во стабильных окон подряд для фиксации кипения
+#define MAX_TREND_ABS_PER_SEC 0.02 // Макс. модуль тренда в °C/с для стабильности
 
 struct BoilingDetector {
     float tempHistory[TEMP_HISTORY_SIZE];
     uint8_t historyIndex = 0;
+    uint8_t samplesFilled = 0;
     bool isBoiling = false;
     unsigned long lastUpdateTime = 0;
+    uint8_t stableCount = 0;
 };
 
 BoilingDetector boilingDetector;
 
+static inline void resetBoilingDetector() {
+    boilingDetector.historyIndex = 0;
+    boilingDetector.samplesFilled = 0;
+    boilingDetector.stableCount = 0;
+    boilingDetector.isBoiling = false;
+    boilingDetector.lastUpdateTime = 0;
+    for (int i = 0; i < TEMP_HISTORY_SIZE; i++) boilingDetector.tempHistory[i] = 0;
+}
+
 /**
  * @brief Проверяет, началось ли кипение по истории температур.
+ *        Алгоритм: раз в секунду добавляет измерение, после заполнения окна
+ *        считает среднее, стандартное отклонение и тренд; при малой дисперсии
+ *        и малом тренде фиксирует стабильность, после N стабильных окон — кипение.
  * @param currentTemp Текущая температура
  * @return true, если кипение началось, иначе false
  */
 bool isBoilingStarted(float currentTemp) {
     unsigned long currentTime = millis();
-    
-    // Обновляем историю раз в секунду
-    if (currentTime - boilingDetector.lastUpdateTime >= 1000) {
-        boilingDetector.lastUpdateTime = currentTime;
-        boilingDetector.tempHistory[boilingDetector.historyIndex] = currentTemp;
-        boilingDetector.historyIndex = (boilingDetector.historyIndex + 1) % TEMP_HISTORY_SIZE;
 
-        // Проверяем только когда буфер заполнен
-        if (currentTemp >= MIN_BOILING_TEMP) {
-            float maxDiff = 0;
-            float avgTemp = 0;
-            
-            // Вычисляем среднюю температуру и максимальное отклонение
-            for (int i = 0; i < TEMP_HISTORY_SIZE; i++) {
-                avgTemp += boilingDetector.tempHistory[i];
-            }
-            avgTemp /= TEMP_HISTORY_SIZE;
-            
-            for (int i = 0; i < TEMP_HISTORY_SIZE; i++) {
-                float diff = abs(boilingDetector.tempHistory[i] - avgTemp);
-                if (diff > maxDiff) maxDiff = diff;
-            }
-            
-            // Если температура стабилизировалась около точки кипения
-            if (maxDiff < BOILING_DETECT_THRESHOLD) {
-                boilingDetector.isBoiling = true;
-                return true;
-            }
-        }
+    // Обновляем историю не чаще раза в секунду
+    if (currentTime - boilingDetector.lastUpdateTime < 1000) {
+        return boilingDetector.isBoiling;
     }
-    
+    boilingDetector.lastUpdateTime = currentTime;
+
+    // Добавляем точку в кольцевой буфер
+    boilingDetector.tempHistory[boilingDetector.historyIndex] = currentTemp;
+    if (boilingDetector.samplesFilled < TEMP_HISTORY_SIZE) boilingDetector.samplesFilled++;
+    boilingDetector.historyIndex = (boilingDetector.historyIndex + 1) % TEMP_HISTORY_SIZE;
+
+    // До заполнения окна и/или пока ниже порога кипения — не детектируем
+    if (boilingDetector.samplesFilled < TEMP_HISTORY_SIZE || currentTemp < MIN_BOILING_TEMP) {
+        boilingDetector.stableCount = 0;
+        return false;
+    }
+
+    // Средняя температура окна
+    float sum = 0.0f;
+    for (int i = 0; i < TEMP_HISTORY_SIZE; i++) sum += boilingDetector.tempHistory[i];
+    float avg = sum / TEMP_HISTORY_SIZE;
+
+    // Стандартное отклонение
+    float varSum = 0.0f;
+    for (int i = 0; i < TEMP_HISTORY_SIZE; i++) {
+        float d = boilingDetector.tempHistory[i] - avg;
+        varSum += d * d;
+    }
+    float stddev = sqrtf(varSum / TEMP_HISTORY_SIZE);
+
+    // Тренд: разница между последней и самой старой точкой, сек ~ размер окна-1
+    int lastIdx = (boilingDetector.historyIndex + TEMP_HISTORY_SIZE - 1) % TEMP_HISTORY_SIZE;
+    int firstIdx = boilingDetector.historyIndex; // самая старая точка
+    float slope = (boilingDetector.tempHistory[lastIdx] - boilingDetector.tempHistory[firstIdx]) /
+                  float(TEMP_HISTORY_SIZE - 1);
+
+    bool stableNow = (stddev <= BOILING_DETECT_THRESHOLD) && (fabsf(slope) <= MAX_TREND_ABS_PER_SEC);
+    if (stableNow) {
+        if (boilingDetector.stableCount < 255) boilingDetector.stableCount++;
+    } else {
+        boilingDetector.stableCount = 0;
+    }
+
+    if (boilingDetector.stableCount >= STABLE_WINDOWS_REQUIRED) {
+        boilingDetector.isBoiling = true;
+        return true;
+    }
+
     return boilingDetector.isBoiling;
 }
 
@@ -231,7 +265,8 @@ void beer_proc() {
   if (SamovarStatusInt != 2000) return;
 
   if (startval == 2000 && !PowerOn) {
-    boilingDetector.isBoiling = false;
+    // Сброс детектора кипения при запуске процесса
+    resetBoilingDetector();
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + SessionDescription, "st");
@@ -309,6 +344,8 @@ void beer_finish() {
   if (valve_status) {
     open_valve(false, true);
   }
+  // Сброс детектора кипения при завершении процесса
+  resetBoilingDetector();
   set_mixer_state(false, false);
 #ifdef USE_WATER_PUMP
   set_pump_pwm(0);
