@@ -212,13 +212,8 @@ void FS_init(void) {
 }
 
 bool exists(String path) {
-  static bool yes;
   File file = SPIFFS.open(path, "r");
-  if (!file.isDirectory()) {
-    yes = true;
-  } else {
-    yes = false;
-  }
+  bool yes = file && !file.isDirectory();
   file.close();
   return yes;
 }
