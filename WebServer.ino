@@ -111,7 +111,19 @@ void WebServerInit(void) {
     request->redirect("/index.htm");
   });
   
-  server.serveStatic("/style.css", SPIFFS, "/style.css").setCacheControl("max-age=5000");
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if(request->header("Accept-Encoding").indexOf("gzip") != -1 && SPIFFS.exists("/style.css.gz")) {
+      AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css.gz", "text/css");
+      response->addHeader("Content-Encoding", "gzip");
+      response->addHeader("Cache-Control", "max-age=5000");
+      request->send(response);
+    } else {
+      AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css", "text/css");
+      response->addHeader("Cache-Control", "max-age=5000");
+      request->send(response);
+    }
+  });
+  //server.serveStatic("/style.css", SPIFFS, "/style.css").setCacheControl("max-age=5000");
   server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=604800");
@@ -1053,6 +1065,7 @@ void get_web_interface() {
     s += get_web_file("plus.png", SAVE_FILE_OVERRIDE);
 
     s += get_web_file("style.css", SAVE_FILE_OVERRIDE);
+    s += get_web_file("style.css.gz", SAVE_FILE_OVERRIDE);
 
     s += get_web_file("beer.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("bk.htm", SAVE_FILE_OVERRIDE);
