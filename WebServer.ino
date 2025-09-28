@@ -1086,6 +1086,7 @@ void get_web_interface() {
     s += get_web_file("chart.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("distiller.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
+    s += get_web_file("edit.htm.gz", SAVE_FILE_OVERRIDE);
 
     s += get_web_file("program.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("setup.htm", SAVE_FILE_OVERRIDE);
