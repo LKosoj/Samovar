@@ -181,11 +181,7 @@ void WebServerInit(void) {
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
   //server.serveStatic("/edit", SPIFFS, "/edit.htm");
-  
-  // Обработка edit.htm с поддержкой gzip
-  server.on("/edit.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
-    handleFileWithGzip(request, "/edit.htm", "text/html", "max-age=5000");
-  });
+  // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
 
   //#ifdef USE_LUA
   //  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
