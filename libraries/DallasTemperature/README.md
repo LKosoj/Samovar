@@ -2,12 +2,16 @@
 # 🌡️ Arduino Temperature Control Library
 
 [![Arduino CI](https://github.com/milesburton/Arduino-Temperature-Control-Library/workflows/Arduino%20CI/badge.svg)](https://github.com/marketplace/actions/arduino_ci)
-[![Arduino-lint](https://github.com/milesburton/Arduino-Temperature-Control-Library/actions/workflows/arduino-lint.yml/badge.svg)](https://github.com/RobTillaart/AS5600/actions/workflows/arduino-lint.yml)
-[![JSON check](https://github.com/milesburton/Arduino-Temperature-Control-Library/actions/workflows/jsoncheck.yml/badge.svg)](https://github.com/RobTillaart/AS5600/actions/workflows/jsoncheck.yml)
+[![Arduino-lint](https://github.com/milesburton/Arduino-Temperature-Control-Library/actions/workflows/arduino-lint.yml/badge.svg)](https://github.com/milesburton/Arduino-Temperature-Control-Library/actions/workflows/arduino-lint.yml)
+[![JSON check](https://github.com/milesburton/Arduino-Temperature-Control-Library/actions/workflows/jsoncheck.yml/badge.svg)](https://github.com/milesburton/Arduino-Temperature-Control-Library/actions/workflows/jsoncheck.yml)
+[![GitHub issues](https://img.shields.io/github/issues/milesburton/Arduino-Temperature-Control-Library.svg)](https://github.com/milesburton/Arduino-Temperature-Control-Library/issues)
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/milesburton/Arduino-Temperature-Control-Library/blob/master/LICENSE)
 [![GitHub release](https://img.shields.io/github/release/milesburton/Arduino-Temperature-Control-Library.svg?maxAge=3600)](https://github.com/milesburton/Arduino-Temperature-Control-Library/releases)
+[![Commits since latest](https://img.shields.io/github/commits-since/milesburton/Arduino-Temperature-Control-Library/latest)](https://github.com/milesburton/Arduino-Temperature-Control-Library/commits/master)
 
 A robust and feature-complete Arduino library for Maxim Temperature Integrated Circuits.
+
 
 ## 📌 Supported Devices
 
@@ -36,7 +40,7 @@ A robust and feature-complete Arduino library for Maxim Temperature Integrated C
 ## 📝 Basic Usage
 
 1. **Hardware Setup**
-   - Connect a 4k7 kΩ pull-up resistor between the 1-Wire data line and 5V power. Note this applies to the Arduino platform, for ESP32 and 8266 you'll need to adjust the resistor value accordingly.
+   - Connect a 4k7 Ω pull-up resistor between the 1-Wire data line and 5V power. Note this applies to the Arduino platform, for ESP32 and 8266 you'll need to adjust the resistor value accordingly.
    - For DS18B20: Ground pins 1 and 3 (the centre pin is the data line)
    - For reliable readings, see pull-up requirements in the [DS18B20 datasheet](https://datasheets.maximintegrated.com/en/ds/DS18B20.pdf) (page 7)
 
@@ -113,8 +117,8 @@ The project includes a development container configuration for VS Code that prov
 
 - Original development by Miles Burton <mail@milesburton.com>
 - Multiple sensor support by Tim Newsome <nuisance@casualhacker.net>
-- Address-based temperature reading by Guil Barros [gfbarros@bappos.com]
-- Async mode by Rob Tillaart [rob.tillaart@gmail.com]
+- Address-based temperature reading by Guil Barros gfbarros@bappos.com
+- Async mode by Rob Tillaart rob.tillaart@gmail.com
 
 ## 📄 License
 
