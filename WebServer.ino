@@ -93,6 +93,22 @@ void change_samovar_mode() {
   Samovar_CR_Mode = Samovar_Mode;
 }
 
+// Универсальная функция для обработки файлов с поддержкой gzip
+void handleFileWithGzip(AsyncWebServerRequest *request, const String &path, const String &contentType, const String &cacheControl = "max-age=5000") {
+  if(request->header("Accept-Encoding").indexOf("gzip") != -1 && SPIFFS.exists(path + ".gz")) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path + ".gz", contentType.c_str());
+    response->addHeader("Content-Encoding", "gzip");
+    response->addHeader("Cache-Control", cacheControl.c_str());
+    request->send(response);
+  } else if(SPIFFS.exists(path)) {
+    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path, contentType.c_str());
+    response->addHeader("Cache-Control", cacheControl.c_str());
+    request->send(response);
+  } else {
+    request->send(404, "text/plain", "File not found");
+  }
+}
+
 void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
@@ -111,16 +127,7 @@ void WebServerInit(void) {
   });
   
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if(request->header("Accept-Encoding").indexOf("gzip") != -1 && SPIFFS.exists("/style.css.gz")) {
-      AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css.gz", "text/css");
-      response->addHeader("Content-Encoding", "gzip");
-      response->addHeader("Cache-Control", "max-age=5000");
-      request->send(response);
-    } else {
-      AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/style.css", "text/css");
-      response->addHeader("Cache-Control", "max-age=5000");
-      request->send(response);
-    }
+    handleFileWithGzip(request, "/style.css", "text/css", "max-age=5000");
   });
   //server.serveStatic("/style.css", SPIFFS, "/style.css").setCacheControl("max-age=5000");
   server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -174,6 +181,11 @@ void WebServerInit(void) {
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
   //server.serveStatic("/edit", SPIFFS, "/edit.htm");
+  
+  // Обработка edit.htm с поддержкой gzip
+  server.on("/edit.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    handleFileWithGzip(request, "/edit.htm", "text/html", "max-age=5000");
+  });
 
   //#ifdef USE_LUA
   //  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
