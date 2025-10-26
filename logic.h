@@ -1190,7 +1190,7 @@ bool check_boiling() {
     set_boiling();
   }
   //Если температура воды охлаждения близка к заданной, то кипение началось
-  if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3) {
+  if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2) {
     set_boiling();
   }
   //Проверяем, что температура в кубе не менялась более 0.1 градуса в течение 50 секунд, если менялась, то кипение не началось
