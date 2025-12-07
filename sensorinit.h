@@ -515,6 +515,7 @@ void reset_sensor_counter(void) {
 #endif
   d_s_time_min = 0;
   d_s_temp_finish = 0;
+  wetting_autostart = false;
 
   current_power_volt = 0.0;
   target_power_volt = 0.0;

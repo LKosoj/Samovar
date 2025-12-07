@@ -1,13 +1,13 @@
 <html>
 <head>
   <meta charset='utf-8'>
-  <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+  <meta http-equiv="Cache-Control" content="no-store, max-age=0">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
   <script>
-
+    
     // ==================== CONNECTION STATUS ============================================================
     var IsOffline = false; //признак обрыва связи
     var OfflineCounter = 0;
@@ -602,7 +602,7 @@
         </div>
       </div>
 
-      <div id="Temperatures" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+      <div id="Temperatures" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 0.5em;">
 
         <div class="container_column" style="flex: 1.1; padding-left: 2em;">
           <div class="text" style="color: %SteamColor%;">
@@ -633,18 +633,23 @@
             <span id='ACPTemp' style="font-size: xx-large;"></span>
             &#176;C
           </div>
+          <div class="text">
+            Скорость: &nbsp;&nbsp;
+            <span id='ISspd' style="font-size: xx-large; color:#444"></span>
+            л/ч
+          </div>
         </div>
 
       </div>
 
-      <div id="status_div" class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
+      <div id="status_div" class="container_row" style="margin-top: 0.5em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
         <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
           Статус: <span id='Status'></span>
         </span>
       </div>
 
-      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 1em; margin-bottom: 1em;">
-        <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em;">
+      <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 0.5em; margin-bottom: 0.5em;">
+        <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 0.5em;">
           <div class="flex_row">
             <span class="text" id='set_power_label'></span>&nbsp;&nbsp;
             <input name='Voltage' id='Voltage' size='4' type='text' value=''>
@@ -653,7 +658,7 @@
             <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
           </div>
         </div>
-        <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
+        <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 0.5em;">
           <div class='flex_row'>
             <span id='power_current'></span>&nbsp;&nbsp;
             <span id='current_power_volt' style="font-size: 1.5em; font-weight: bold;"></span>
@@ -675,7 +680,7 @@
         </div>
       </div>
 
-      <div id="Pressure" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+      <div id="Pressure" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 0.5em; justify-content: space-between;">
         <div class="text">
           Давление в бардоотводчике: &nbsp;
           <span id='pressure_value' style="font-size: 1.5em; font-weight: bold;"></span>
@@ -683,15 +688,7 @@
         </div>
       </div>
 
-      <div id="Speed" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-        <div class="text">
-          Скорость подачи браги: &nbsp;
-          <span id='ISspd' style="font-size: 1.5em; font-weight: bold;"></span>
-          л/ч
-        </div>
-      </div>
-
-      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 2em; align-items: center; padding-top: 1em; padding-bottom: 1em;">
+      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 2em; align-items: center; padding-top: 0.5em; padding-bottom: 0.5em;">
         <div class="container_row" style="justify-content: center; align-items: flex-end;">
           <input id='pmmn' type='submit' name='pmmn' class="button" value='--' onclick='sendbutton("pnbk=8000");'>
           <div style="display:flex; flex-direction: column; align-items: center;">

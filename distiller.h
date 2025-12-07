@@ -75,7 +75,13 @@ void updateTimePredictor();
  * @brief Получить расчетное оставшееся время.
  * @return Оставшееся время (минуты)
  */
-float calculateRemainingTime();
+float get_dist_remaining_time();
+
+/**
+ * @brief Получить расчетное общее время.
+ * @return Общее время (минуты)
+ */
+float get_dist_predicted_total_time();
 
 /**
  * @brief Проверить аварийные ситуации дистиллятора.
@@ -195,6 +201,10 @@ struct TimePredictor {
 };
 
 TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};
+// Минимальные пороги, чтобы не делить на ноль и не спамить оценками
+static constexpr float MIN_TEMP_RATE = 0.01f;    // °C/мин
+static constexpr float MIN_ALC_RATE  = 0.001f;   // доля/мин
+static constexpr unsigned long PREDICTOR_UPDATE_MS = 30000; // шаг пересчёта, мс
 
 /**
  * @brief Основной цикл обработки процесса дистилляции.
@@ -479,52 +489,68 @@ void updateTimePredictor() {
     unsigned long currentTime = millis();
     float currentTemp = TankSensor.avgTemp;
     float currentAlcohol = get_alcohol(currentTemp);
-    
-    // Обновляем скорость изменения температуры
-    unsigned long timeDelta = (currentTime - timePredictor.lastUpdateTime) / 1000; // в секундах
-    if (timeDelta >= 60) { // обновляем каждую минуту
-        timePredictor.tempChangeRate = (currentTemp - timePredictor.lastTemp) / (timeDelta / 60.0); // градусов в минуту
-        timePredictor.lastTemp = currentTemp;
-        timePredictor.lastUpdateTime = currentTime;
-        
-        // Прогнозируем общее время на основе текущих данных
-        float remainingAlcoholDelta = 0;
-        float targetTemp = 0;
-        
-        if (program[ProgramNum].WType == "T") {
-            targetTemp = program[ProgramNum].Speed;
-            if (timePredictor.tempChangeRate > 0) {
-                float tempRemaining = targetTemp - currentTemp;
-                timePredictor.remainingTime = tempRemaining / timePredictor.tempChangeRate;
-            }
-        } 
-        else if (program[ProgramNum].WType == "A" || program[ProgramNum].WType == "S") {
-            float targetAlcohol = program[ProgramNum].Speed;
-            if (program[ProgramNum].WType == "S") {
-                targetAlcohol *= get_alcohol(TankSensor.StartProgTemp);
-            }
-            remainingAlcoholDelta = currentAlcohol - targetAlcohol;
-            
-            // Прогнозируем на основе скорости изменения спирта
-            float alcoholChangeRate = (timePredictor.initialAlcohol - currentAlcohol) / 
-                                    ((currentTime - timePredictor.startTime) / 60000.0); // % в минуту
-            
-            if (alcoholChangeRate > 0) {
-                timePredictor.remainingTime = remainingAlcoholDelta / alcoholChangeRate;
-            }
+
+    unsigned long dtMs = currentTime - timePredictor.lastUpdateTime;
+    if (dtMs < PREDICTOR_UPDATE_MS) return; // считаем не чаще, чем нужно
+
+    float dtMin = dtMs / 60000.0f;
+    timePredictor.tempChangeRate = (currentTemp - timePredictor.lastTemp) / dtMin; // °C/мин
+    timePredictor.lastTemp = currentTemp;
+    timePredictor.lastUpdateTime = currentTime;
+
+    // Обновляем прогноз по спирту (используем долю, а не %)
+    float alcoholDelta = timePredictor.initialAlcohol - currentAlcohol;
+    float alcoholChangeRate = (dtMin > 0) ? (alcoholDelta / ((currentTime - timePredictor.startTime) / 60000.0f)) : 0; // доля/мин
+
+    float remaining = 0;
+    String wtype = program[ProgramNum].WType;
+
+    if (wtype == "T") {
+        float targetTemp = program[ProgramNum].Speed;
+        float dT = targetTemp - currentTemp;
+        if (dT <= 0) {
+            remaining = 0;
+        } else if (timePredictor.tempChangeRate > MIN_TEMP_RATE) {
+            remaining = dT / timePredictor.tempChangeRate;
         }
-        
-        // Обновляем общее прогнозируемое время
-        float elapsedMinutes = (currentTime - timePredictor.startTime) / 60000.0;
-        timePredictor.predictedTotalTime = elapsedMinutes + timePredictor.remainingTime;
-        
-        // Отправляем информацию о прогнозе
-        //String msg = "Прогноз: осталось " + String(int(timePredictor.remainingTime)) + 
-        //            " мин. Всего: " + String(int(timePredictor.predictedTotalTime)) + " мин.";
-        //SendMsg(msg, NOTIFY_MSG);
+    } else if (wtype == "A" || wtype == "S") {
+        float targetAlcohol = program[ProgramNum].Speed;
+        if (wtype == "S") {
+            targetAlcohol *= get_alcohol(TankSensor.StartProgTemp);
+        }
+        float dA = currentAlcohol - targetAlcohol;
+        if (dA <= 0) {
+            remaining = 0;
+        } else if (alcoholChangeRate > MIN_ALC_RATE) {
+            remaining = dA / alcoholChangeRate;
+        }
+    } else if (wtype == "P" || wtype == "R") {
+        // Ориентируемся на крепость пара
+        float currentSteamAlcohol = get_steam_alcohol(currentTemp);
+        float target = program[ProgramNum].Speed;
+        if (wtype == "R") {
+            target *= get_steam_alcohol(TankSensor.StartProgTemp);
+        }
+        float dS = currentSteamAlcohol - target;
+        if (dS <= 0) {
+            remaining = 0;
+        } else if (alcoholChangeRate > MIN_ALC_RATE) {
+            remaining = dS / alcoholChangeRate;
+        }
+    } else {
+        // Для прочих шагов оставляем 0 — нет метрики для прогноза
+        remaining = 0;
     }
+
+    timePredictor.remainingTime = max(0.0f, remaining);
+    float elapsedMinutes = (currentTime - timePredictor.startTime) / 60000.0f;
+    timePredictor.predictedTotalTime = elapsedMinutes + timePredictor.remainingTime;
 }
 
-float calculateRemainingTime() {
+float get_dist_remaining_time() {
     return timePredictor.remainingTime;
+}
+
+float get_dist_predicted_total_time() {
+    return timePredictor.predictedTotalTime;
 }

@@ -503,6 +503,7 @@ bool acceleration_heater;                                       // Призна�
 bool send_mqtt;                                                 // Отправлять данные в облако
 bool is_reboot = false;                                         // Признак перезагрузки
 bool lcd_found = false;                                         // Признак наличия дисплея
+bool wetting_autostart = false;                                 // Автостарт голов после смачивания
 
 //volatile float samovar_temp;                                  // Температура ESP32
 volatile float bme_temp;                                        // Температура BME

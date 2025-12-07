@@ -37,6 +37,8 @@ bool check_boiling();
 float get_alcohol(float t);
 void set_boiling();
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
+float get_dist_remaining_time();
+float get_dist_predicted_total_time();
 
 #ifdef SAMOVAR_USE_POWER
 // Проверка ошибок питания
@@ -384,6 +386,8 @@ String get_Samovar_Status() {
     }
   } else if (SamovarStatusInt == 1000) {
     SamovarStatus = F("Режим дистилляции");
+    SamovarStatus += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
+    SamovarStatus += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
   } else if (SamovarStatusInt == 3000) {
     SamovarStatus = F("Режим бражной колонны");
   } else if (SamovarStatusInt == 4000) {
@@ -906,6 +910,11 @@ void check_alarm() {
         //достигли заданной температуры на разгоне и смочили насадку (если используется эта функция), переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
         SamovarStatusInt = 51;
 
+#ifdef COLUMN_WETTING
+        // Помечаем, что после стабилизации нужно автоматически перейти к головам
+        wetting_autostart = (startval == 0);
+#endif
+
         SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
         set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
@@ -935,6 +944,12 @@ void check_alarm() {
         SamovarStatusInt = 52;
         set_buzzer(true);
         SendMsg(("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
+#ifdef COLUMN_WETTING
+        if (wetting_autostart && startval == 0) {
+          wetting_autostart = false;
+          menu_samovar_start();  // Автостарт голов после стабилизации
+        }
+#endif
       }
     } else {
       acceleration_temp = 0;

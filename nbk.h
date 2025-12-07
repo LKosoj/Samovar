@@ -258,11 +258,13 @@ bool overflow(){
 }
 
 void SetSpeed(float Speed) { // Прокладка для подсчета статистики
-  stats.totalVolume += i2c_get_liquid_rate_by_step(get_stepper_speed()) * (millis() - time_speed) / 3600000.0;
+  if (program[ProgramNum].WType != "H") { //Иначе в среднюю скорость попадает 1л/ч прогрева
+    stats.totalVolume += i2c_get_liquid_rate_by_step(get_stepper_speed()) * (millis() - time_speed) / 3600000.0;
+    time_speed = millis();
+  }
   if (Speed == 0) set_stepper_target(0, 0, 0); 
   else
   set_stepper_target(i2c_get_speed_from_rate(Speed), 0, 2147483640);
- time_speed = millis();
 }
 
 float toPower(float value) { // конвертер в мощность ( V | W ) => W
@@ -317,16 +319,7 @@ void nbk_proc() { //главный цикл НБК
   nbk_dP = SamSetup.NbkDP > 0 ? SamSetup.NbkDP : NBK_DP_DEFAULT; 
   nbk_Tp_lim = SamSetup.NbkSteamT > 80 ? SamSetup.NbkSteamT : NBK_TP_DEFAULT;
   nbk_M_max = SamSetup.HeaterResistant > 1 ? (230 * 230 / SamSetup.HeaterResistant) : nbk_M_max; // Максимальная мощность ТЭН-а в режиме НБК
-  // TODO Samovar_ini.h
-  //  1) убрать NBK_TEMPERATURE_DELTA (переехало в сетап)
-  //  2) заменить
-  //  Параметры для НБК
-  // #define NBK_MULT_PAUSE_OVERFLOW 2 // количество инерций в качестве паузы после захлёба 
-  // #define NBK_PUMP_LIMIT 30 // максимальная производительность насоса браги для Оптимизации, л/ч 
-  // #define NBK_DEFAULT_PROGRAM "H;1;0\nS;10;2000\nO;0;0\nW;0;0\n" //программа НБК по-умолчанию (ватты)
-  // //#define NBK_DEFAULT_PROGRAM "H;1;0\nS;10;167\nO;0;0\nW;0;0\n" //программа НБК по-умолчанию (вольты, для ТЭН 14 Ом)
-  // //#define USE_NBK_DELTA_PRESSURE // Включение коррекции температуры барды по давлению в бардоотводчике
-
+  
   String wtype = program[ProgramNum].WType; // Выбор и обработка этапа
 
   if (wtype == "H") {
@@ -344,12 +337,19 @@ void nbk_proc() { //главный цикл НБК
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
+
+
 // === Реализация функций этапов ===
 // =================================
+
 // 1) "Разгон" - разгон парогенератора до Тп > 75°C. 
 void handle_nbk_stage_heatup() {
     nbk_Tp = SteamSensor.avgTemp; // обновляем
-  if (startval == 4000) run_nbk_program(0);   //Запуск программ
+    if (startval == 4000) {
+      startval = 4001;
+      run_nbk_program(0); //Запуск программ
+      SamovarStatusInt = 4000; // Именно в таком порядке
+      }
   //- разгон парогенератора до Тп > 75°C.
   if (nbk_Tp >= 75) {
     run_nbk_program(ProgramNum + 1);
@@ -363,22 +363,26 @@ void handle_nbk_stage_heatup() {
 }
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
+
+
 //2) "Ручная настройка" - определение Ин, Тн, Мо и По вручную (в инструкции)
  //Время не ограничено, переход к следующей строке по кнопке "Следующая программа", 
  //при переходе передаём в Оптимизацию текущие М и П.
-void handle_nbk_stage_manual() { //Если захлёб, выводим сообщение "Захлёб колонны!", М=1/2, П=0 (обнуляем  подачу, половиним мощность).
+void handle_nbk_stage_manual() { //Если захлёб, выводим сообщение "Захлёб колонны!", М=1/2, П=1/3 (оставляем от подачи треть, половиним мощность).
   if (overflow() && !manual_overflow) {
       manual_overflow = true;
-      nbk_P = 0;
+      nbk_P = nbk_P/3;
       nbk_M = toPower(target_power_volt) / 2;
       set_current_power(fromPower(nbk_M));
-      SetSpeed(0);
-      SendMsg(" Подача прекращена, мощность снижаем в 2 раза.", ALARM_MSG); 
+      SetSpeed(nbk_P);
+      SendMsg(" Подача 1/3, мощность 1/2.", ALARM_MSG); 
       vTaskDelay(200 / portTICK_PERIOD_MS);
       return;
   } else if (get_stepper_speed() > 0) manual_overflow = false;
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
+
+
 //3) "Оптимизация" - автоматическое определение Мо и По.
 void handle_nbk_stage_optimization() {
   if (!nbk_opt_in_progress) { // Ждем 30 сек чтобы пользователь успел пропустить Оптимизацию если захочет, 
@@ -513,6 +517,8 @@ void handle_nbk_stage_optimization() {
   }
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
+
+
 //4) "Работа" - основной режим
 void handle_nbk_stage_work() {
  //  4.1) Ждем время Ин - (первая пауза наследована от оптимизации Ин или MULT*Ин если был захлёб)
@@ -521,7 +527,7 @@ void handle_nbk_stage_work() {
   if (!nbk_work_in_pause ) {// если не на паузе по захлёбу
     // 4.2) если захлёб, выводим сообщение "Захлёб колонны!", М=0, П=0, ждём время MULT*Ин. После этого Мо=Мо-dM/10. М=Мо, П=По, ждём время 2*Ин, переход на 4.1)
     if (overflow()) {
-      handle_overflow(" Временное обнуление подачи и снижение нагрева.", false, NBK_MULT_PAUSE_OVERFLOW * nbk_column_inertia * 1000); //выводим сообщение "Захлёб колонны!", М=0, П=0, ждём время MULT*Ин.
+      handle_overflow(" Временное снижение подачи и нагрева.", false, NBK_MULT_PAUSE_OVERFLOW * nbk_column_inertia * 1000); //выводим сообщение "Захлёб колонны!", М=0, П=0, ждём время MULT*Ин.
       return;
     }      
     if (millis() >= nbk_work_next_time)  {// если пауза на инерцию вышла
@@ -609,10 +615,10 @@ void handle_nbk_stage_work() {
   }
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
+
 // Смена программы
 void run_nbk_program(uint8_t num) {
  // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
-   if (startval == 4000) startval = 4001;
    ProgramNum = num;
    t_min = 0;
    alarm_c_min = 0;
@@ -694,12 +700,14 @@ void run_nbk_program(uint8_t num) {
     nbk_work_in_pause = false; // в начале работы паузу после захлёба отключаем
   }
 }
+
+
 // === Проверка критических аварий ===
 bool check_nbk_critical_alarms() { //вызывается циклично из этого модуля
  /*ТЗ: В строках "Оптимизация", "Работа":  
  Тп > 98°C = "Кончилась брага", М=0, П=0, выключить нагрев ИСПРАВИЛ на 98
  В строке "Ручная настройка" это условие не проверяем, т.к. в инструкции будет юстировка датчика Тб по воде*/
-  if (alarm_event) { //TODO если авария - в НБК не делаем ничего
+  if (alarm_event) { //если авария - в НБК не делаем ничего
     return true;
   }
       
@@ -737,22 +745,24 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
 
   return false;
 }
+
+
 // === Тоже Проверка критических аварий === в основном по воде
 void check_alarm_nbk() {// вызывается из Samovar.ino, надо разобраться что оставить, я уже кой чего поубирал
- // Если нагрев выключен и это не самотестирование и вода включена и Т воды на 20 и более гр. ниже уставки
-  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
-    open_valve(false, true); //призыв закрыть воду либо закрытие клапана
- #ifdef USE_WATER_PUMP
-    if (pump_started) set_pump_pwm(0); // стоп водяной насос
- #endif
-  }
-
   if (!PowerOn) { // нет нагрева - больше ничего не проверяем
     return;
   }
+  // Если нагрев выключен и это не самотестирование и вода включена и Т воды на 20 и более гр. ниже уставки
+  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
+    open_valve(false, true); //призыв закрыть воду либо закрытие клапана
+    #ifdef USE_WATER_PUMP
+        if (pump_started) set_pump_pwm(0); // стоп водяной насос
+    #endif
+  }
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
- // Если нагрев включен и вода и температура в кубе больше уставки включения воды
+
+  // Если нагрев включен и вода и температура в бардоотвотчике больше уставки включения воды
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true, true); // призыв включить воду или открытие клапана
   }
@@ -767,7 +777,7 @@ void check_alarm_nbk() {// вызывается из Samovar.ino, надо ра�
       set_pump_speed_pid(WaterSensor.avgTemp); // иначе крутим как обычно
   }
   #endif
-   
+  
  #ifdef USE_WATERSENSOR
   //Проверим, что вода подается
   if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) { //датчик протока сломался уже
@@ -781,10 +791,12 @@ void check_alarm_nbk() {// вызывается из Samovar.ino, надо ра�
   
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
+
+
 // Окончание программы НБК
 void nbk_finish() {
+  SendMsg("Работа НБК завершена", NOTIFY_MSG);
   SetSpeed(0);
-  //delay(1000);
   // Вычислить и отправить статистику
   uint32_t totalTime = (millis() - stats.startTime) / 1000; // в секундах
   if (totalTime > 0) {
@@ -799,20 +811,20 @@ void nbk_finish() {
   summary += "за: " + String(totalTime / 3600.0, 2) + " ч.";
   SendMsg(summary, NOTIFY_MSG);
   delay(1000);
-  
+  set_power(false);
+  reset_sensor_counter();
   if (fileToAppend) {
     fileToAppend.close();
   }
-  
-  stop_process("Работа НБК завершена");
 }
 // === Централизованная обработка захлёба ===
 void handle_overflow(const String& msg, bool finish, uint32_t pause_ms) {
-  nbk_M = 0;
-  nbk_P = 0;
-  SetSpeed(0);
+  nbk_M = nbk_M/2;
+  nbk_P = nbk_P/3;
+  SetSpeed(nbk_P);
   SendMsg(msg, ALARM_MSG);
   if (finish) {
+    SetSpeed(0);
     set_current_power(0);
     run_nbk_program(CAPACITY_NUM * 2);
   } else if (pause_ms > 0) { // Для этапа W: пауза и переход к восстановлению
@@ -822,6 +834,8 @@ void handle_overflow(const String& msg, bool finish, uint32_t pause_ms) {
     nbk_work_next_time = millis() + pause_ms;
   }
 }
+
+
 void set_nbk_program(String WProgram) {
   char c[500] = {0};
   if (WProgram.length() == 0) return;
@@ -844,6 +858,8 @@ void set_nbk_program(String WProgram) {
     }
   }
 }
+
+
 String get_nbk_program() {
   String Str = "";
   int k = CAPACITY_NUM * 2;
@@ -858,17 +874,3 @@ String get_nbk_program() {
   }
   return Str;
 }
-
-// TODO в logic.h (359)
-// if (startval == 4001) {
-//   SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
-//   if (program[ProgramNum].WType == "H") {
-//     SamovarStatus = SamovarStatus + "Прогрев";
-//   } else if (program[ProgramNum].WType == "S") {
-//     SamovarStatus = SamovarStatus + "Настройка";
-//   } else if (program[ProgramNum].WType == "O") {
-//     SamovarStatus = SamovarStatus + "Оптимизация";
-//   } else if (program[ProgramNum].WType == "W") {
-//     SamovarStatus = SamovarStatus + "Работа";
-//   }
-// }
