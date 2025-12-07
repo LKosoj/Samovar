@@ -7,10 +7,6 @@
 #include "AsyncTCPVersion.h"
 #define ASYNCTCP_FORK_ESP32Async
 
-#ifndef LIBRETINY
-#include <esp_idf_version.h>
-#endif
-
 #ifdef ARDUINO
 #include "IPAddress.h"
 #if __has_include(<IPv6Address.h>)
@@ -36,30 +32,28 @@ extern "C" {
 }
 #endif
 
-// If core is not defined, then we are running in Arduino or PIO
-#ifndef CONFIG_ASYNC_TCP_RUNNING_CORE
-#define CONFIG_ASYNC_TCP_RUNNING_CORE -1  // any available core
-#endif
-
-// guard AsyncTCP task with watchdog
-#ifndef CONFIG_ASYNC_TCP_USE_WDT
-#define CONFIG_ASYNC_TCP_USE_WDT 1
-#endif
-
 #ifndef CONFIG_ASYNC_TCP_STACK_SIZE
-#define CONFIG_ASYNC_TCP_STACK_SIZE 8192 * 2
+#define CONFIG_ASYNC_TCP_STACK_SIZE 4096  // Уменьшили с 16384 до 4096
 #endif
 
 #ifndef CONFIG_ASYNC_TCP_PRIORITY
-#define CONFIG_ASYNC_TCP_PRIORITY 10
+#define CONFIG_ASYNC_TCP_PRIORITY 5       // Понизили приоритет
 #endif
 
-#ifndef CONFIG_ASYNC_TCP_QUEUE_SIZE
-#define CONFIG_ASYNC_TCP_QUEUE_SIZE 64
+#ifndef CONFIG_ASYNC_TCP_QUEUE_SIZE  
+#define CONFIG_ASYNC_TCP_QUEUE_SIZE 32    // Уменьшили очередь
 #endif
 
 #ifndef CONFIG_ASYNC_TCP_MAX_ACK_TIME
-#define CONFIG_ASYNC_TCP_MAX_ACK_TIME 5000
+#define CONFIG_ASYNC_TCP_MAX_ACK_TIME 3000  // Уменьшили timeout
+#endif
+
+#ifndef CONFIG_ASYNC_TCP_RUNNING_CORE
+#define CONFIG_ASYNC_TCP_RUNNING_CORE 0   // Фиксируем на ядре 0
+#endif
+
+#ifndef CONFIG_ASYNC_TCP_USE_WDT
+#define CONFIG_ASYNC_TCP_USE_WDT 0        // Отключаем watchdog
 #endif
 
 class AsyncClient;

@@ -5,10 +5,6 @@
 #define ASYNCWEBSERVERHANDLERIMPL_H_
 
 #include <string>
-#ifdef ASYNCWEBSERVER_REGEX
-#include <regex>
-#endif
-
 #include "stddef.h"
 #include <time.h>
 
@@ -58,7 +54,7 @@ public:
 class AsyncCallbackWebHandler : public AsyncWebHandler {
 private:
 protected:
-  String _uri;
+  AsyncURIMatcher _uri;
   WebRequestMethodComposite _method;
   ArRequestHandlerFunction _onRequest;
   ArUploadHandlerFunction _onUpload;
@@ -67,7 +63,7 @@ protected:
 
 public:
   AsyncCallbackWebHandler() : _uri(), _method(HTTP_ANY), _onRequest(NULL), _onUpload(NULL), _onBody(NULL), _isRegex(false) {}
-  void setUri(const String &uri);
+  void setUri(AsyncURIMatcher uri);
   void setMethod(WebRequestMethodComposite method) {
     _method = method;
   }

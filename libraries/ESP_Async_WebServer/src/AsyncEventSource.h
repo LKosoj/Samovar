@@ -141,6 +141,13 @@ private:
   void _runQueue();
 
 public:
+  /**
+   * @brief Construct a new Async Event Source Client object
+   * @note constructor would take the ownership of of AsyncTCP's client pointer from `request` parameter and call delete on it!
+   *
+   * @param request
+   * @param server
+   */
   AsyncEventSourceClient(AsyncWebServerRequest *request, AsyncEventSource *server);
   ~AsyncEventSourceClient();
 
@@ -312,11 +319,16 @@ public:
 class AsyncEventSourceResponse : public AsyncWebServerResponse {
 private:
   AsyncEventSource *_server;
+  AsyncWebServerRequest *_request;
+  // this call back will switch AsyncTCP client to SSE
+  void _switchClient();
 
 public:
   AsyncEventSourceResponse(AsyncEventSource *server);
   void _respond(AsyncWebServerRequest *request);
-  size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time);
+  size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time) override {
+    return 0;
+  };
   bool _sourceValid() const {
     return true;
   }

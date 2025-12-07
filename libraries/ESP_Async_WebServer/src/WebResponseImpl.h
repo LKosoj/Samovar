@@ -14,21 +14,46 @@
 #include <memory>
 #include <vector>
 
+#ifndef CONFIG_LWIP_TCP_MSS
+// as it is defined for ESP32's Arduino LWIP
+#define CONFIG_LWIP_TCP_MSS 1436
+#endif
+
+#define ASYNC_RESPONCE_BUFF_SIZE CONFIG_LWIP_TCP_MSS * 2
 // It is possible to restore these defines, but one can use _min and _max instead. Or std::min, std::max.
 
 class AsyncBasicResponse : public AsyncWebServerResponse {
 private:
   String _content;
+  // buffer to accumulate all response headers
+  String _assembled_headers;
+  // amount of headers buffer writtent to sockbuff
+  size_t _writtenHeadersLength{0};
 
 public:
   explicit AsyncBasicResponse(int code, const char *contentType = asyncsrv::empty, const char *content = asyncsrv::empty);
   AsyncBasicResponse(int code, const String &contentType, const String &content = emptyString)
     : AsyncBasicResponse(code, contentType.c_str(), content.c_str()) {}
   void _respond(AsyncWebServerRequest *request) override final;
-  size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time) override final;
+  size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time) override final {
+    return write_send_buffs(request, len, time);
+  };
   bool _sourceValid() const override final {
     return true;
   }
+
+protected:
+  /**
+   * @brief write next portion of response data to send buffs
+   * this method (re)fills tcp send buffers, it could be called either at will
+   * or from a tcp_recv/tcp_poll callbacks from AsyncTCP
+   *
+   * @param request - used to access client object
+   * @param len - size of acknowledged data from the remote side (TCP window update, not TCP ack!)
+   * @param time - time passed between last sent and received packet
+   * @return size_t amount of response data placed to TCP send buffs for delivery (defined by sdkconfig value CONFIG_LWIP_TCP_SND_BUF_DEFAULT)
+   */
+  size_t write_send_buffs(AsyncWebServerRequest *request, size_t len, uint32_t time);
 };
 
 class AsyncAbstractResponse : public AsyncWebServerResponse {
@@ -39,23 +64,43 @@ private:
   // in-flight queue credits
   size_t _in_flight_credit{2};
 #endif
-  String _head;
+  // buffer to accumulate all response headers
+  String _assembled_headers;
+  // amount of headers buffer writtent to sockbuff
+  size_t _writtenHeadersLength{0};
   // Data is inserted into cache at begin().
   // This is inefficient with vector, but if we use some other container,
   // we won't be able to access it as contiguous array of bytes when reading from it,
   // so by gaining performance in one place, we'll lose it in another.
   std::vector<uint8_t> _cache;
+  // intermediate buffer to copy outbound data to, also it will keep pending data between _send calls
+  std::unique_ptr<std::array<uint8_t, ASYNC_RESPONCE_BUFF_SIZE> > _send_buffer;
+  // buffer data size specifiers
+  size_t _send_buffer_offset{0}, _send_buffer_len{0};
   size_t _readDataFromCacheOrContent(uint8_t *data, const size_t len);
   size_t _fillBufferAndProcessTemplates(uint8_t *buf, size_t maxLen);
 
 protected:
   AwsTemplateProcessor _callback;
+  /**
+   * @brief write next portion of response data to send buffs
+   * this method (re)fills tcp send buffers, it could be called either at will
+   * or from a tcp_recv/tcp_poll callbacks from AsyncTCP
+   *
+   * @param request - used to access client object
+   * @param len - size of acknowledged data from the remote side (TCP window update, not TCP ack!)
+   * @param time - time passed between last sent and received packet
+   * @return size_t amount of response data placed to TCP send buffs for delivery (defined by sdkconfig value CONFIG_LWIP_TCP_SND_BUF_DEFAULT)
+   */
+  size_t write_send_buffs(AsyncWebServerRequest *request, size_t len, uint32_t time);
 
 public:
   AsyncAbstractResponse(AwsTemplateProcessor callback = nullptr);
   virtual ~AsyncAbstractResponse() {}
   void _respond(AsyncWebServerRequest *request) override final;
-  size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time) override final;
+  size_t _ack(AsyncWebServerRequest *request, size_t len, uint32_t time) override final {
+    return write_send_buffs(request, len, time);
+  };
   virtual bool _sourceValid() const {
     return false;
   }
@@ -75,7 +120,6 @@ class AsyncFileResponse : public AsyncAbstractResponse {
 
 private:
   File _content;
-  String _path;
   void _setContentTypeFromPath(const String &path);
 
 public:
@@ -143,7 +187,8 @@ public:
 class AsyncProgmemResponse : public AsyncAbstractResponse {
 private:
   const uint8_t *_content;
-  size_t _readLength;
+  // offset index (how much we've sent already)
+  size_t _index;
 
 public:
   AsyncProgmemResponse(int code, const char *contentType, const uint8_t *content, size_t len, AwsTemplateProcessor callback = nullptr);
