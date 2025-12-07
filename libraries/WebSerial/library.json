@@ -15,14 +15,14 @@
       "maintainer": true
     }
   ],
-  "version": "2.1.1",
+  "version": "2.1.2",
   "frameworks": "arduino",
   "platforms": ["espressif8266", "espressif32", "raspberrypi"],
   "dependencies": [
     {
       "owner": "esp32async",
       "name": "ESPAsyncWebServer",
-      "version": "^3.7.3",
+      "version": "^3.9.0",
       "platforms": ["espressif8266", "espressif32", "raspberrypi"]
     }
   ]

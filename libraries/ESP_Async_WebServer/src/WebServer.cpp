@@ -4,6 +4,9 @@
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
 
+#include <string>
+#include <utility>
+
 #if defined(ESP32) || defined(TARGET_RP2040) || defined(TARGET_RP2350) || defined(PICO_RP2040) || defined(PICO_RP2350) || defined(LIBRETINY)
 #include <WiFi.h>
 #elif defined(ESP8266)
@@ -15,7 +18,7 @@
 using namespace asyncsrv;
 
 bool ON_STA_FILTER(AsyncWebServerRequest *request) {
-#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI || CONFIG_ESP32_WIFI_ENABLED
+#if ASYNCWEBSERVER_WIFI_SUPPORTED
   return WiFi.localIP() == request->client()->localIP();
 #else
   return false;
@@ -23,7 +26,7 @@ bool ON_STA_FILTER(AsyncWebServerRequest *request) {
 }
 
 bool ON_AP_FILTER(AsyncWebServerRequest *request) {
-#if SOC_WIFI_SUPPORTED || CONFIG_ESP_WIFI_REMOTE_ENABLED || LT_ARD_HAS_WIFI || CONFIG_ESP32_WIFI_ENABLED
+#if ASYNCWEBSERVER_WIFI_SUPPORTED
   return WiFi.localIP() != request->client()->localIP();
 #else
   return false;

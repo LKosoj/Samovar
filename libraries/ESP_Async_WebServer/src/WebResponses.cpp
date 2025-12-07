@@ -5,9 +5,17 @@
 #include "WebResponseImpl.h"
 #include "AsyncWebServerLogging.h"
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+
 #ifndef CONFIG_LWIP_TCP_WND_DEFAULT
+#ifdef TCP_WND  // ESP8266
+#define CONFIG_LWIP_TCP_WND_DEFAULT TCP_WND
+#else
 // as it is defined for esp32's LWIP
 #define CONFIG_LWIP_TCP_WND_DEFAULT 5760
+#endif
 #endif
 
 using namespace asyncsrv;
@@ -462,7 +470,8 @@ size_t AsyncAbstractResponse::write_send_buffs(AsyncWebServerRequest *request, s
           }
         }
       } else {
-        size_t const readLen = _fillBufferAndProcessTemplates(_send_buffer->data(), std::min(_send_buffer->size(), tcp_win));
+        size_t const readLen =
+          _fillBufferAndProcessTemplates(_send_buffer->data(), std::min(std::min(_send_buffer->size(), tcp_win), _contentLength - _sentLength));
         if (readLen == 0) {
           // no more data to send
           _state = RESPONSE_END;

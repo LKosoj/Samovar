@@ -4,6 +4,8 @@
 #include "AsyncJson.h"
 #include "AsyncWebServerLogging.h"
 
+#include <utility>
+
 #if ASYNC_JSON_SUPPORT == 1
 
 // Json content type response classes
@@ -59,7 +61,7 @@ size_t AsyncJsonResponse::_fillBuffer(uint8_t *data, size_t len) {
 #else
   serializeJson(_root, dest);
 #endif
-  return len;
+  return dest.written();
 }
 
 #if ARDUINOJSON_VERSION_MAJOR == 6
@@ -87,7 +89,7 @@ size_t PrettyAsyncJsonResponse::_fillBuffer(uint8_t *data, size_t len) {
 #else
   serializeJsonPretty(_root, dest);
 #endif
-  return len;
+  return dest.written();
 }
 
 // MessagePack content type response
@@ -104,7 +106,7 @@ size_t AsyncMessagePackResponse::setLength() {
 size_t AsyncMessagePackResponse::_fillBuffer(uint8_t *data, size_t len) {
   ChunkPrint dest(data, _sentLength, len);
   serializeMsgPack(_root, dest);
-  return len;
+  return dest.written();
 }
 
 #endif

@@ -115,7 +115,7 @@ void WebSerialClass::onMessage(WSLStringMessageHandler callback) {
 }
 
 bool WebSerialClass::getConnectionCount() {
-  return _ws->count();
+  return _ws == nullptr ? 0 : _ws->count();
 }
 
 // Print func
@@ -307,8 +307,9 @@ size_t WebSerialClass::_write_row_packet(uint8_t* dest, const uint8_t *payload, 
     payload_size = UINT16_MAX;
   // Write header
   memmove(dest, WSL_HEAD, WSL_HEAD_LEN);
-  // Message Length (2 bytes)
-  memset(dest + WSL_HEAD_LEN, static_cast<uint16_t>(payload_size), WSL_MSG_SIZE_LEN);
+  // Message Length (2 bytes, little-endian)
+  dest[WSL_HEAD_LEN] = static_cast<uint8_t>(payload_size & 0xFF);        // Low byte
+  dest[WSL_HEAD_LEN + 1] = static_cast<uint8_t>((payload_size >> 8) & 0xFF); // High byte
   // Set Message
   memmove(dest + WSL_HEAD_LEN + WSL_MSG_SIZE_LEN, payload, payload_size);
   // Return total packet size
