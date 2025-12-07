@@ -298,9 +298,8 @@ void distiller_finish() {
 #ifdef SAMOVAR_USE_POWER
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
-  SendMsg(("Дистилляция завершена. Общее время: " + String(int((millis() - timePredictor.startTime) / 60000)) + " мин."), NOTIFY_MSG);
-  set_power(false);
-  reset_sensor_counter();
+  String timeMsg = "Дистилляция завершена. Общее время: " + String(int((millis() - timePredictor.startTime) / 60000)) + " мин.";
+  stop_process(timeMsg);
 }
 
 

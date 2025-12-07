@@ -10,7 +10,7 @@ extern float nbk_Mo;
 extern float nbk_P;
 extern float nbk_Po;
 float i2c_get_speed_from_rate(float volume_per_hour);
-String getValue(String data, char separator, int index);
+String getValue(String& data, char separator, int index);
 void set_current_power(float Volt);
 void menu_reset_wifi();
 uint16_t get_stepper_speed(void);
@@ -60,6 +60,15 @@ String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 float fromPower(float value);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+void distiller_finish();
+void beer_finish();
+void bk_finish();
+void nbk_finish();
+void samovar_reset();
+void set_program(String WProgram);
+void set_beer_program(String WProgram);
+void set_dist_program(String WProgram);
+void set_nbk_program(String WProgram);
 
 #ifdef USE_LUA
 void start_lua_script();
@@ -72,22 +81,29 @@ String run_lua_string(String lstr);
 // filter out specific headers from the incoming request
 AsyncHeaderFilterMiddleware headerFilter;
 
+AsyncStaticWebHandler* indexHandler = nullptr;
+
 void change_samovar_mode() {
+  if (indexHandler) {
+    server.removeHandler(indexHandler);
+    indexHandler = nullptr;
+  }
+
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     //server.serveStatic("/", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");    
-    server.serveStatic("/index.htm", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     //server.serveStatic("/", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    server.serveStatic("/index.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
   } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
     //server.serveStatic("/", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    server.serveStatic("/index.htm", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
   } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
     //server.serveStatic("/", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    server.serveStatic("/index.htm", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
   } else {
     //server.serveStatic("/", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    server.serveStatic("/index.htm", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
   }
   Samovar_CR_Mode = Samovar_Mode;
@@ -771,8 +787,50 @@ void handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("mode")) {
     if (SamSetup.Mode != request->arg("mode").toInt()) {
-      is_reboot = true;
+      // Останавливаем текущий процесс, если он работает
+      if (PowerOn) {
+        if (SamovarStatusInt == 1000) {
+          distiller_finish();
+        } else if (SamovarStatusInt == 2000) {
+          beer_finish();
+        } else if (SamovarStatusInt == 3000) {
+          bk_finish();
+        } else if (SamovarStatusInt == 4000) {
+          nbk_finish();
+        } else {
+          set_power(false);
+        }
+      }
+      
+#ifdef USE_LUA
+      // Останавливаем Lua-скрипт, если он работает
+      if (loop_lua_fl) {
+        SetScriptOff = true;
+        loop_lua_fl = false;
+        // Даем время на корректную остановку скрипта
+        delay(100);
+      }
+#endif
+      
+      // Сбрасываем состояние
+      samovar_reset();
+      
+      // Устанавливаем новый режим
       SamSetup.Mode = request->arg("mode").toInt();
+      Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
+      Samovar_CR_Mode = Samovar_Mode;
+      
+      // Загружаем программу по умолчанию для нового режима
+      load_default_program_for_mode();
+      
+      // Сохраняем настройки
+      save_profile();
+      
+      // Загружаем профиль для нового режима (настройки, но НЕ программу - она уже загружена выше)
+      load_profile();
+      
+      // Обновляем веб-обработчики
+      change_samovar_mode();
     }
   }
   if (request->hasArg("rele1")) {
@@ -832,6 +890,7 @@ void handleSave(AsyncWebServerRequest *request) {
   save_profile();
   read_config();
 
+  get_task_stack_usage();
   AsyncWebServerResponse *response = request->beginResponse(301);
   response->addHeader("Location", "/");
   response->addHeader("Cache-Control", "no-cache");
@@ -1071,7 +1130,7 @@ void get_web_interface() {
     s += get_web_file("minus.png", SAVE_FILE_OVERRIDE);
     s += get_web_file("plus.png", SAVE_FILE_OVERRIDE);
 
-    s += get_web_file("style.css", SAVE_FILE_OVERRIDE);
+    //s += get_web_file("style.css", SAVE_FILE_OVERRIDE);
     s += get_web_file("style.css.gz", SAVE_FILE_OVERRIDE);
 
     s += get_web_file("beer.htm", SAVE_FILE_OVERRIDE);
@@ -1081,7 +1140,7 @@ void get_web_interface() {
     s += get_web_file("calibrate.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("chart.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("distiller.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
+    //s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("edit.htm.gz", SAVE_FILE_OVERRIDE);
 
     s += get_web_file("program.htm", SAVE_FILE_OVERRIDE);
@@ -1112,9 +1171,7 @@ void get_web_interface() {
     s += get_web_file("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("program_shugar.txt", SAVE_FILE_IF_NOT_EXIST);
 
-    if (s.length() == 0) {
-      s = get_web_file("version.txt", SAVE_FILE_OVERRIDE);
-    }
+    s += get_web_file("version.txt", SAVE_FILE_OVERRIDE);
   }
 }
 

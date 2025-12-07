@@ -205,7 +205,5 @@ void check_alarm_bk() {
 }
 
 void bk_finish() {
-  SendMsg(("Работа бражной колонны завершена"), NOTIFY_MSG);
-  set_power(false);
-  reset_sensor_counter();
+  stop_process("Работа бражной колонны завершена");
 }

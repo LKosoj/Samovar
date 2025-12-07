@@ -8,7 +8,7 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.25")
+#define SAMOVAR_VERSION F("6.26")
 
 //#define __SAMOVAR_DEBUG
 
@@ -23,7 +23,6 @@
 #include <GyverButton.h>
 #include <ESPmDNS.h>
 #include <LiquidMenu.h>
-
 
 //определение поддерживаемых плат
 #define DEVKIT 1
@@ -256,9 +255,13 @@ uint8_t CurMin, OldMin;
 TaskHandle_t SysTickerButton = NULL;
 TaskHandle_t SysTickerTask1 = NULL;
 TaskHandle_t GetClockTask1 = NULL;
-TaskHandle_t BuzzerTask = NULL;
 TaskHandle_t GetBMPTask = NULL;
-volatile bool BuzzerTaskFl;
+
+// Переменные для управления пищалкой в основном цикле
+volatile bool buzzer_active = false;     // Флаг активности пищалки
+volatile uint8_t buzzer_beep_count = 0;  // Счетчик пищаний
+volatile unsigned long buzzer_next_time = 0; // Время следующего изменения состояния
+volatile bool buzzer_state = false;      // Текущее состояние пищалки (вкл/выкл)
 
 #ifdef SAMOVAR_USE_POWER
 TaskHandle_t PowerStatusTask = NULL;
@@ -584,5 +587,8 @@ uint8_t power_err_cnt;                                          // Счетчи�
 #ifdef USE_WATER_PUMP
 uint8_t wp_count;                                               // Переменная для расчета времени работы насоса на повышенной мощности при старте
 #endif
+
+// Глобальная функция остановки процесса
+void stop_process(String reason);
 
 #endif

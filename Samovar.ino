@@ -56,6 +56,7 @@
 #include <LiquidMenu.h>
 
 #include <EEPROM.h>
+#include <Preferences.h>
 #include <ESPAsyncWiFiManager.h>
 
 #include <GyverEncoder.h>
@@ -89,7 +90,9 @@
 #include "lua.h"
 #endif
 
-#include <ESPNtpClient.h>
+#include <NTPClient.h>
+WiFiUDP ntpUDP;
+NTPClient NTP(ntpUDP);
 
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
@@ -135,8 +138,8 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #endif
 
 #if defined(SAMOVAR_USE_BLYNK) || defined(USE_TELEGRAM)
-#include <cppQueue.h>
-cppQueue msg_q(200, 4, FIFO);
+#include <simple_queue.h>
+SimpleStringQueue msg_q(4, 512);
 #endif
 
 #ifdef USE_TELEGRAM
@@ -170,6 +173,10 @@ portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 //flag for saving data
 bool shouldSaveWiFiConfig = false;
+
+void load_profile_nvs();
+void migrate_from_eeprom();
+// void reset_migration_flag(); // Только для тестирования миграции
 
 void setupMenu();
 void WebServerInit(void);
@@ -265,13 +272,10 @@ void IRAM_ATTR isrWHLS_TICK() {
 #endif
 
 void IRAM_ATTR isrBTN_TICK() {
-  //  portBASE_TYPE xTaskWoken;
-  // Прерывание по кнопке, отпускаем семафор
-  //  xSemaphoreGiveFromISR( btnSemaphore, &xTaskWoken );
-  xSemaphoreGiveFromISR(btnSemaphore, NULL);
-  //  if ( xTaskWoken == pdTRUE) {
-  //    taskYIELD();
-  //  }
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(btnSemaphore, &xHigherPriorityTaskWoken);
+  // Если семафор разбудил задачу с более высоким приоритетом - переключиться на неё
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 void IRAM_ATTR taskButton(void *pvParameters) {
@@ -343,8 +347,8 @@ void triggerGetClock(void *parameter) {
       if (!msg_q.isEmpty()) {
         vTaskDelay(5 / portTICK_PERIOD_MS);
         if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-          char c[200];
-          msg_q.pop(&c);
+          char c[512];
+          msg_q.pop(c);
           qMsg = c;
           //Serial.println(qMsg);
           http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg));
@@ -436,8 +440,6 @@ void triggerSysTicker(void *parameter) {
       Serial.println(uxTaskGetStackHighWaterMark(SysTickerTask1));
       Serial.print(F("GetClockTask1 = "));
       Serial.println(uxTaskGetStackHighWaterMark(GetClockTask1));
-      Serial.print(F("BuzzerTask = "));
-      Serial.println(uxTaskGetStackHighWaterMark(BuzzerTask));
       Serial.print(F("DoLuaScriptTask = "));
       Serial.println(uxTaskGetStackHighWaterMark(DoLuaScriptTask));
       Serial.println(F("--------------------------------------------"));
@@ -471,9 +473,9 @@ void triggerSysTicker(void *parameter) {
       DS_getvalue();
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
-      Crt = NTP.getTimeDateString(false);
-      StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
-      StrCrt.toCharArray(tst, 20);
+      Crt = NTP.getFormattedDate();
+      //StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
+      StrCrt = NTP.getFormattedTime() + "     " + NTP.getFormattedTime((unsigned long)(millis() / 1000));
 
       if (startval != 0) {
         tcntST++;
@@ -766,7 +768,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     taskButton,       /* Function to implement the task */
     "taskButton",     /* Name of the task */
-    1150,             /* Stack size in words */
+    1450,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerButton, /* Task handle. */
@@ -783,7 +785,21 @@ void setup() {
   }
 #endif
 
+  //Читаем сохраненную конфигурацию
+  
+  // Сначала мигрируем старые настройки из EEPROM (если они есть)
+  //reset_migration_flag(); // ТОЛЬКО ДЛЯ ТЕСТА! Удалить после проверки!
+  migrate_from_eeprom();
+  
+  // Затем загружаем из NVS
+  read_config();
+  
+  Serial.print("NVS: Configuration loaded. Flag = ");
+  Serial.print(SamSetup.flag);
+
+  // Если NVS пустой (flag > 250), инициализируем дефолтными значениями
   if (SamSetup.flag > 250) {
+    Serial.println("NVS is empty. Initializing with default values...");
     SamSetup.flag = 2;
     SamSetup.DeltaSteamTemp = 0.1;
     SamSetup.DeltaPipeTemp = 0.2;
@@ -809,10 +825,8 @@ void setup() {
     SamSetup.videourl[0] = '\0';
     SamSetup.UseWS = 1;
     save_profile();
+    Serial.println("Default values saved to NVS.");
   }
-
-  //Читаем сохраненную конфигурацию
-  read_config();
 
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
@@ -994,7 +1008,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
-    2000,               /* Stack size in words */
+    1800,               /* Stack size in words */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
@@ -1041,7 +1055,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    3000,             /* Stack size in words */
+    3200,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
@@ -1051,7 +1065,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetClock,  /* Function to implement the task */
     "GetClockTicker", /* Name of the task */
-    3200,             /* Stack size in words */
+    2148,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
@@ -1077,8 +1091,11 @@ void setup() {
   //  f1.close();
   //  vr.replace(",",";");
 
-  NTP.setTimeZoneOffset(-SamSetup.TimeZone * 3600, 0);
-  NTP.begin();
+  NTP.setTimeOffset(SamSetup.TimeZone * 3600);
+  NTP.setUpdateInterval(1800000);//30 min
+  NTP.begin(); 
+  delay(100);
+  NTP.update();
 
 #ifdef USE_LUA
   lua_init();
@@ -1088,12 +1105,10 @@ void setup() {
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
   writeString(F("                  "), 3);
   writeString(F("      Started     "), 4);
-  //  Serial.print("CPU Frequency is: ");
-  //  Serial.println(getCpuFrequencyMhz());
+  
+  get_task_stack_usage();
   Serial.println("Samovar ready");
-  //Serial.print("Size = ");
-  //Serial.println(sizeof(SamSetup));
-
+  
   use_I2C_dev = 0;
 
   if (check_I2C_device(1) == 1) {
@@ -1294,7 +1309,7 @@ void loop() {
 
   encoder_getvalue();
 
-  set_buzzer(false);
+  process_buzzer();
   vTaskDelay(5 / portTICK_PERIOD_MS);
 }
 
@@ -1315,7 +1330,7 @@ void getjson(void) {
   jsonstr.concat("\"");
   jsonstr.concat(",");
   jsonstr.concat("\"stm\":\"");
-  jsonstr.concat(NTP.getUptimeString());
+  jsonstr.concat(NTP.getFormattedTime((unsigned long)(millis() / 1000)));
   jsonstr.concat("\"");
   jsonstr.concat(",");
   jsonstr.concat("\"SteamTemp\":");
@@ -1398,16 +1413,15 @@ void getjson(void) {
   jsonstr.concat(",");
   //Системные параметры: totalBytes = 1507328; usedBytes = 278528; Free Heap = 127688; BME t = 27.81; RSSI = -66
 
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-    String pt = "";
-    if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
-      pt = program[ProgramNum].WType;
-    }
-    jsonstr.concat("\"PrgType\":\"");
-    jsonstr.concat(pt);
-    jsonstr.concat("\"");
-    jsonstr.concat(",");
+  String pt = "";
+  if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) &&
+      (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn))) {
+    pt = program[ProgramNum].WType;
   }
+  jsonstr.concat("\"PrgType\":\"");
+  jsonstr.concat(pt);
+  jsonstr.concat("\"");
+  jsonstr.concat(",");
 
   if (Msg.length() > 0) {
     jsonstr.concat("\"Msg\":\"");
@@ -1531,8 +1545,7 @@ void saveConfigCallback() {
 }
 
 void read_config() {
-  EEPROM.begin(sizeof(SamSetup));
-  EEPROM.get(0, SamSetup);
+  load_profile_nvs();
   SteamSensor.SetTemp = SamSetup.SetSteamTemp;
   PipeSensor.SetTemp = SamSetup.SetPipeTemp;
   WaterSensor.SetTemp = SamSetup.SetWaterTemp;

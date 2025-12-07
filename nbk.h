@@ -91,7 +91,7 @@
  * @param index Индекс значения
  * @return Значение (строка)
  */
- String getValue(String data, char separator, int index);
+ String getValue(const String& data, char separator, int index);
 
  /**
  * @brief Перейти к строке программы с номером num, инициализировать этап.
@@ -783,7 +783,6 @@ void check_alarm_nbk() {// вызывается из Samovar.ino, надо ра�
 }
 // Окончание программы НБК
 void nbk_finish() {
-  SendMsg("Работа НБК завершена", NOTIFY_MSG);
   SetSpeed(0);
   //delay(1000);
   // Вычислить и отправить статистику
@@ -800,11 +799,12 @@ void nbk_finish() {
   summary += "за: " + String(totalTime / 3600.0, 2) + " ч.";
   SendMsg(summary, NOTIFY_MSG);
   delay(1000);
-  set_power(false);
-  reset_sensor_counter();
+  
   if (fileToAppend) {
     fileToAppend.close();
   }
+  
+  stop_process("Работа НБК завершена");
 }
 // === Централизованная обработка захлёба ===
 void handle_overflow(const String& msg, bool finish, uint32_t pause_ms) {

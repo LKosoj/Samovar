@@ -50,7 +50,7 @@ void set_body_temp();
 void set_mixer(bool On);
 void set_alarm();
 void pause_withdrawal(bool Pause);
-String getValue(String data, char separator, int index);
+String getValue(const String& data, char separator, int index);
 String get_lua_script(String fn);
 void set_capacity(uint8_t cap);
 float get_alcohol(float t);
@@ -875,7 +875,7 @@ void lua_init() {
   xTaskCreatePinnedToCore(
     do_lua_script,    /* Function to implement the task */
     "do_lua_script",  /* Name of the task */
-    4600,             /* Stack size in words */
+    5300,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask, /* Task handle. */

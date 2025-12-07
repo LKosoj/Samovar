@@ -60,7 +60,7 @@ uint8_t getDelimCount(const String& data, char separator) {
 }
 
 //Получить подстроку через разделитель
-String getValue(String data, char separator, int index) {
+String getValue(const String& data, char separator, int index) {
   int found = 0;
   int strIndex[] = { 0, -1 };
   int maxIndex = data.length() - 1;
@@ -341,11 +341,19 @@ float getBeerCurrentTemp() {
   }
 }
 
+// Остановка любого процесса с общим набором действий
+void stop_process(String reason) {
+  SamovarStatusInt = 0;
+  set_power(false);
+  reset_sensor_counter();
+  SendMsg(reason, NOTIFY_MSG);
+}
+
 // Получить статус Самовара
 String get_Samovar_Status() {
-  if (!PowerOn) {
+  // Если питание выключено и нет активного режима - показываем "Выключено"
+  if (!PowerOn && SamovarStatusInt == 0) {
     SamovarStatus = F("Выключено");
-    SamovarStatusInt = 0;
   } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
     SamovarStatus = "Прг №" + String(ProgramNum + 1);
     SamovarStatusInt = 10;
@@ -432,11 +440,20 @@ String get_Samovar_Status() {
         SamovarStatus = SamovarStatus + "Кипячение " + String(program[ProgramNum].Time) + " мин";
       }
     } else if (program[ProgramNum].WType == "F") {
-      float currentTemp = getBeerCurrentTemp();
-      SamovarStatus = SamovarStatus + "Ферментация; Поддержание температуры " + String(program[ProgramNum].Temp) + "°";
-      SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
-    } else if (!PowerOn) {
-      SamovarStatus = "Выключено";
+      if (PowerOn) {
+        float currentTemp = getBeerCurrentTemp();
+        SamovarStatus = SamovarStatus + "Ферментация; Поддерж. Т=" + String(program[ProgramNum].Temp) + "°";
+        SamovarStatus += "; Тек: " + String(currentTemp) + "°";
+        if (heater_state) {
+          SamovarStatus += " (Нагрев)";
+        } else {
+          SamovarStatus += " (Термостатирование)";
+        }
+      } else {
+        SamovarStatus = SamovarStatus + "Ферментация (остановлена)";
+      }
+    } else if (program[ProgramNum].WType == "L") {
+      SamovarStatus = SamovarStatus + "Выполнение Lua скрипта";
     }
 
     if (PowerOn && (program[ProgramNum].WType == "P" || program[ProgramNum].WType == "B") && begintime > 0) {
@@ -559,8 +576,7 @@ void run_program(uint8_t num) {
     if (fileToAppend) {
       fileToAppend.close();
     }
-    set_power(false);
-    SendMsg(("Выполнение программы завершено."), NOTIFY_MSG);
+    stop_process("Выполнение программы завершено.");
   } else {
 #ifdef SAMOVAR_USE_POWER
 #ifdef SAMOVAR_USE_SEM_AVR
@@ -954,43 +970,52 @@ void open_valve(bool Val, bool msg = true) {
   }
 }
 
-void triggerBuzzerTask(void *parameter) {
-  TickType_t beep = 400 / portTICK_RATE_MS;
-  TickType_t silent = 600 / portTICK_RATE_MS;
-  int tick_buzz = 0;
-
-  while (true) {
-    if (BuzzerTaskFl) {
-      digitalWrite(BZZ_PIN, HIGH);
-      vTaskDelay(beep / portTICK_PERIOD_MS);
+// Обработка пищалки в основном цикле
+void process_buzzer() {
+  if (!buzzer_active) {
+    return;
+  }
+  
+  unsigned long current_time = millis();
+  
+  if (current_time >= buzzer_next_time) {
+    if (buzzer_state) {
+      // Пищалка включена, выключаем её
       digitalWrite(BZZ_PIN, LOW);
-      tick_buzz++;
-      if (tick_buzz > 5) BuzzerTaskFl = false;
+      buzzer_state = false;
+      buzzer_beep_count++;
+      
+      // Проверяем, нужно ли продолжать пищать
+      if (buzzer_beep_count >= 5) {
+        buzzer_active = false;
+        buzzer_beep_count = 0;
+      } else {
+        // Планируем следующее включение через 600 мс
+        buzzer_next_time = current_time + 600;
+      }
+    } else {
+      // Пищалка выключена, включаем её
+      digitalWrite(BZZ_PIN, HIGH);
+      buzzer_state = true;
+      // Планируем выключение через 400 мс
+      buzzer_next_time = current_time + 400;
     }
-    vTaskDelay(silent / portTICK_PERIOD_MS);
   }
 }
 
 void set_buzzer(bool fl) {
   if (fl && SamSetup.UseBuzzer) {
-    if (BuzzerTask == NULL) {
-      BuzzerTaskFl = true;
-      //Запускаем таск для пищалки
-      xTaskCreatePinnedToCore(
-        triggerBuzzerTask, /* Function to implement the task */
-        "BuzzerTask",      /* Name of the task */
-        800,               /* Stack size in words */
-        NULL,              /* Task input parameter */
-        0,                 /* Priority of the task */
-        &BuzzerTask,       /* Task handle. */
-        1);                /* Core where the task should run */
-    }
+    // Активируем пищалку
+    buzzer_active = true;
+    buzzer_beep_count = 0;
+    buzzer_state = false;
+    buzzer_next_time = millis(); // Начинаем сразу
   } else {
-    if (BuzzerTask != NULL && !BuzzerTaskFl) {
-      vTaskDelete(BuzzerTask);
-      BuzzerTask = NULL;
-      digitalWrite(BZZ_PIN, LOW);
-    }
+    // Деактивируем пищалку
+    buzzer_active = false;
+    buzzer_beep_count = 0;
+    buzzer_state = false;
+    digitalWrite(BZZ_PIN, LOW);
   }
 }
 

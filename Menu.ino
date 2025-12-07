@@ -698,7 +698,7 @@ void encoder_getvalue() {
 
   bool updscreen = true;
 
-  encoder.tick();
+  //encoder.tick();
   // Check all the buttons
   if (encoder.isRight()) {
     multiplier = 1;

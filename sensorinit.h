@@ -5,6 +5,22 @@
 #include "Samovar.h"
 #include "pumppwm.h"
 
+#ifdef USE_LUA
+#include "lua.h"
+#endif
+// Функция загрузки программы по умолчанию для текущего режима
+void load_default_program_for_mode() {
+  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
+    set_beer_program("M;45;0;1^-1^2^2;0\nP;45;1;1^-1^2^3;0\nP;60;1;1^-1^2^3;0\nW;0;0;1^-1^2^3;0\nB;0;1;1^-1^2^3;0\nC;30;0;1^-1^2^3;0\n");
+  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    set_dist_program("A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n");
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    set_nbk_program(NBK_DEFAULT_PROGRAM);
+  } else {
+    set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
+  }
+}
+
 #ifdef USE_BME680
 #define BME_STRING "BME680"
 #include <Adafruit_BME680.h>
@@ -123,11 +139,11 @@ void pressure_sensor_get() {
     xSemaphoreGive(xI2CSemaphore);
   }
   pressure_value = pressure_value / 133.32; //переводим паскали в мм. рт. столба
-  pressure_value = (old_pressure_value + pressure_value) / 2; //TODO усредняем давление с предыдущим
+  pressure_value = (old_pressure_value + pressure_value) / 2;
   old_pressure_value = pressure_value;
 #elif defined(USE_PRESSURE_MPX)
   pressure_value = (analogRead(LUA_PIN) - 36.7) / 12;
-  pressure_value = (old_pressure_value + pressure_value) / 2; //TODO усредняем давление с предыдущим
+  pressure_value = (old_pressure_value + pressure_value) / 2;
   old_pressure_value = pressure_value;
 #else
   pressure_value = -1;
@@ -387,16 +403,8 @@ void sensor_init(void) {
   pinMode(WATERSENSOR_PIN, INPUT);
 #endif
 
-  //  set_program("H;3;1;1;0;45\nB;5;2;1;0;45\nH;6;3;1;0;45\n");
-  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-    set_beer_program("M;45;0;1^-1^2^2;0\nP;45;1;1^-1^2^3;0\nP;60;1;1^-1^2^3;0\nW;0;0;1^-1^2^3;0\nB;0;1;1^-1^2^3;0\nC;30;0;1^-1^2^3;0\n");
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    set_dist_program("A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n");
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    set_nbk_program(NBK_DEFAULT_PROGRAM);
-  } else {
-    set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
-  }
+  // Загружаем программу по умолчанию для текущего режима
+  load_default_program_for_mode();
 
 #ifdef SAMOVAR_USE_SEM_AVR
   //Если SEM_AVR иницииурем порт
@@ -566,6 +574,10 @@ void reset_sensor_counter(void) {
 #ifdef SAMOVAR_USE_POWER
   power_err_cnt = 0;
 #endif
+
+#ifdef USE_LUA
+  Lua_status = "";
+#endif
 }
 
 inline String format_float(float v, int d) {
@@ -606,3 +618,28 @@ void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress) {
   }
 }
 #endif
+
+#ifndef GET_TASK_STACK_USAGE_DEFINED
+#define GET_TASK_STACK_USAGE_DEFINED
+
+// Функция для вывода статистики использования стека задачами FreeRTOS
+// Помогает оптимизировать размеры стеков и выявлять проблемы переполнения
+void get_task_stack_usage() {
+
+  // Выводим статистику использования стека задачами
+  Serial.println("=== Task Stack Usage ===");
+  Serial.printf("taskButton:       %u words free (of 1450)\n", uxTaskGetStackHighWaterMark(SysTickerButton));
+  Serial.printf("SysTicker:        %u words free (of 3200)\n", uxTaskGetStackHighWaterMark(SysTickerTask1));
+  Serial.printf("GetClock:         %u words free (of 2148)\n", uxTaskGetStackHighWaterMark(GetClockTask1));
+#ifdef USE_LUA
+  if (DoLuaScriptTask) {
+    Serial.printf("LuaScript:        %u words free (of 5300)\n", uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+  }
+#endif
+#ifdef SAMOVAR_USE_POWER
+  Serial.printf("PowerStatus:      %u words free (of 1800)\n", uxTaskGetStackHighWaterMark(PowerStatusTask));
+#endif
+  Serial.println("========================");
+}
+
+#endif // GET_TASK_STACK_USAGE_DEFINED

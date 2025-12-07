@@ -16,6 +16,7 @@ String get_nbk_program();
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void read_config();
 String get_prf_name();
+void save_profile_nvs();
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
@@ -360,8 +361,9 @@ void save_profile() {
   File file = SPIFFS.open(get_prf_name(), FILE_WRITE);
   file.write((uint8_t *)&SamSetup, sizeof(SamSetup));
   file.close();
-  EEPROM.put(0, SamSetup);
-  EEPROM.commit();
+  //EEPROM.put(0, SamSetup);
+  //EEPROM.commit();
+  save_profile_nvs();
 }
 
 void load_profile() {
@@ -373,11 +375,17 @@ void load_profile() {
     file.read((uint8_t *)&SamSetup, sizeof(SamSetup));
     SamSetup.Mode = Samovar_CR_Mode;
     file.close();
-  } else
+  } else {
+    // Если файла нет, сохраняем текущие настройки (которые могли загрузиться из NVS)
     save_profile();
-  EEPROM.put(0, SamSetup);
-  EEPROM.commit();
-  read_config();
+  }
+  //EEPROM.put(0, SamSetup);
+  //EEPROM.commit();
+  
+  // Сохраняем загруженное из файла в NVS, чтобы синхронизировать их
+  save_profile_nvs();
+  
+  read_config(); // Это теперь вызывает load_profile_nvs, но мы уже обновили NVS выше
 }
 
 String get_prf_name() {

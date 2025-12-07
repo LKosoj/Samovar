@@ -40,42 +40,42 @@
 //**************************************************************************************************************
 #if BOARD == ESP32S3
 //#pragma message ("ESP32S3")
-#define ENC_CLK 21 //S2
-#define ENC_DT 47  //S1
-#define ENC_SW 48  //KEY
+#define ENC_CLK 7 //S2
+#define ENC_DT 6  //S1
+#define ENC_SW 5  //KEY
 
-#define STEPPER_STEP 10
-#define STEPPER_DIR 11
-#define STEPPER_EN 12
+#define STEPPER_STEP 16
+#define STEPPER_DIR 0 // загрузочный
+#define STEPPER_EN 15
 
-#define RELE_CHANNEL1 4             //используется для пускателя, который включает нагреватель
-#define RELE_CHANNEL2 5             //в режиме "Пиво" используется для включения мешалки
-#define RELE_CHANNEL3 6             //используется для клапана, открывающего/закрывающего воду охлаждения
-#define RELE_CHANNEL4 7             //если не используется регулятор с управлением, выход используется для управления разгоном
+#define RELE_CHANNEL1 2             //используется для пускателя, который включает нагреватель
+#define RELE_CHANNEL2 42             //в режиме "Пиво" используется для включения мешалки
+#define RELE_CHANNEL3 41             //используется для клапана, открывающего/закрывающего воду охлаждения
+#define RELE_CHANNEL4 40             //если не используется регулятор с управлением, выход используется для управления разгоном
 
-#define ONE_WIRE_BUS 35
+#define ONE_WIRE_BUS 12
 
-#define SERVO_PIN 15
+#define SERVO_PIN 10
 
-#define BTN_PIN 16
+#define BTN_PIN 47
 
-#define LUA_PIN 1
+#define LUA_PIN 4
 
-#define ALARM_BTN_PIN 2
+#define ALARM_BTN_PIN 48
 
-#define WATERSENSOR_PIN 38
+#define WATERSENSOR_PIN 13
 
-#define WHEAD_LEVEL_SENSOR_PIN 37
+#define WHEAD_LEVEL_SENSOR_PIN 19
 
-#define LCD_SDA 13
-#define LCD_SCL 14
+#define LCD_SDA 8
+#define LCD_SCL 9
 
 #define RXD2 18
 #define TXD2 17
 
-#define WATER_PUMP_PIN 36
+#define WATER_PUMP_PIN 11
 
-#define BZZ_PIN 35
+#define BZZ_PIN 39
 //**************************************************************************************************************
 //**************************************************************************************************************
 //**ESP32S3**

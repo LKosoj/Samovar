@@ -15,7 +15,7 @@ void read_config();
  * @param index Индекс значения
  * @return Значение (строка)
  */
-String getValue(String data, char separator, int index);
+String getValue(const String& data, char separator, int index);
 
 /**
  * @brief Запустить сервисные задачи (например, шаговый двигатель).
@@ -308,6 +308,7 @@ void run_beer_program(uint8_t num) {
   if (num == CAPACITY_NUM * 2) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
     beer_finish();
+    return;
   } else {
     if (program[num].WType == "M") {
       msg += "; Нагрев до температуры засыпи солода: " + String(program[num].Temp) + "°";
@@ -355,11 +356,11 @@ void beer_finish() {
   PowerOn = false;
   heater_state = false;
   startval = 0;
-  SendMsg(("Программа затирания завершена"), NOTIFY_MSG);
+  stop_process("Программа затирания завершена");
   delay(200);
-  set_power(false);
+  //set_power(false); // Вызывается внутри stop_process
   delay(1000);
-  reset_sensor_counter();
+  //reset_sensor_counter(); // Вызывается внутри stop_process
 }
 
 /**
