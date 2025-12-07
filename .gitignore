@@ -18,3 +18,10 @@ libraries/ESP_Async_WebServer/src/.vscode/lua.booster.lint.json
 /.vscode
 /data/.vscode
 /.specstory
+# SpecStory explanation file
+.specstory/.what-is-this.md
+data.zip
+data/style.css.zip
+.cursorindexingignore
+.cursor/rules/myrule.mdc
+.cursorignore
