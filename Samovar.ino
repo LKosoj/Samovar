@@ -795,7 +795,7 @@ void setup() {
   read_config();
   
   Serial.print("NVS: Configuration loaded. Flag = ");
-  Serial.print(SamSetup.flag);
+  Serial.println(SamSetup.flag);
 
   // Если NVS пустой (flag > 250), инициализируем дефолтными значениями
   if (SamSetup.flag > 250) {
@@ -825,7 +825,7 @@ void setup() {
     SamSetup.videourl[0] = '\0';
     SamSetup.UseWS = 1;
     save_profile();
-    Serial.println("Default values saved to NVS.");
+    Serial.println("Default values saved to NVS");
   }
 
   //Инициализируем ноги для реле

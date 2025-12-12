@@ -250,20 +250,22 @@ void distiller_proc() {
     distiller_finish();
   }
 
-  //Обрабатываем программу дистилляции
-  if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed <= TankSensor.avgTemp) {
-    //Если температура куба превысила заданное в программе значение - переходим на следующую строку программы
-    run_dist_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "A" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp)) {
-    //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
-    run_dist_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "S" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp) / get_alcohol(TankSensor.StartProgTemp)) {
-    run_dist_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "P" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp)) {
-    //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
-    run_dist_program(ProgramNum + 1);
-  } else if (program[ProgramNum].WType == "R" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp) / get_steam_alcohol(TankSensor.StartProgTemp)) {
-    run_dist_program(ProgramNum + 1);
+  //Обрабатываем программу дистилляции (только если есть программы для выполнения)
+  if (ProgramNum < ProgramLen && program[ProgramNum].WType.length() > 0) {
+    if (program[ProgramNum].WType == "T" && program[ProgramNum].Speed <= TankSensor.avgTemp) {
+      //Если температура куба превысила заданное в программе значение - переходим на следующую строку программы
+      run_dist_program(ProgramNum + 1);
+    } else if (program[ProgramNum].WType == "A" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp)) {
+      //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
+      run_dist_program(ProgramNum + 1);
+    } else if (program[ProgramNum].WType == "S" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp) / get_alcohol(TankSensor.StartProgTemp)) {
+      run_dist_program(ProgramNum + 1);
+    } else if (program[ProgramNum].WType == "P" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp)) {
+      //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
+      run_dist_program(ProgramNum + 1);
+    } else if (program[ProgramNum].WType == "R" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp) / get_steam_alcohol(TankSensor.StartProgTemp)) {
+      run_dist_program(ProgramNum + 1);
+    }
   }
 
 
@@ -399,15 +401,21 @@ void check_alarm_distiller() {
 }
 
 void run_dist_program(uint8_t num) {
+  // Проверяем, что номер программы не превышает количество программ
+  if (num >= ProgramLen || program[num].WType.length() == 0) {
+    // Программы закончились - не увеличиваем ProgramNum выше допустимого
+    if (ProgramNum < ProgramLen) {
+      ProgramNum = ProgramLen > 0 ? ProgramLen - 1 : 0;
+    }
+    SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
+    return;
+  }
+
   ProgramNum = num;
 
-  if (program[num].WType.length() > 0) {
-    SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
-    // Сбрасываем прогноз при переходе к новой программе
-    resetTimePredictor();
-  } else {
-    SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
-  }
+  SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
+  // Сбрасываем прогноз при переходе к новой программе
+  resetTimePredictor();
 
   //запоминаем текущие значения температур
   SteamSensor.StartProgTemp = SteamSensor.avgTemp;

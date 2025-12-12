@@ -386,8 +386,8 @@ String get_Samovar_Status() {
     }
   } else if (SamovarStatusInt == 1000) {
     SamovarStatus = F("Режим дистилляции");
-    SamovarStatus += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
-    SamovarStatus += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
+    //SamovarStatus += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
+    //SamovarStatus += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
   } else if (SamovarStatusInt == 3000) {
     SamovarStatus = F("Режим бражной колонны");
   } else if (SamovarStatusInt == 4000) {
@@ -1472,6 +1472,7 @@ void set_current_power(float Volt) {
   if (Volt < 100) {
 #endif
     set_power_mode(POWER_SLEEP_MODE);
+    target_power_volt = 0;  // Обнуляем целевое напряжение при переходе в SLEEP режим
     return;
   } else {
     set_power_mode(POWER_WORK_MODE);
@@ -1506,6 +1507,12 @@ void set_current_power(float Volt) {
 void set_power_mode(String Mode) {
   if (current_power_mode == Mode) return;
   current_power_mode = Mode;
+  
+  // Обнуляем целевое напряжение при переходе в SLEEP режим
+  if (Mode == POWER_SLEEP_MODE) {
+    target_power_volt = 0;
+  }
+  
   vTaskDelay(50 / portTICK_PERIOD_MS);
 #ifdef SAMOVAR_USE_RMVK
   if (Mode == POWER_SLEEP_MODE) {

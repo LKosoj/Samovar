@@ -829,6 +829,12 @@ void handleSave(AsyncWebServerRequest *request) {
       // Загружаем профиль для нового режима (настройки, но НЕ программу - она уже загружена выше)
       load_profile();
       
+#ifdef USE_LUA
+      // Обновляем Lua скрипты для нового режима
+      lua_type_script = get_lua_mode_name();
+      load_lua_script();
+#endif
+      
       // Обновляем веб-обработчики
       change_samovar_mode();
     }
