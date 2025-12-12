@@ -747,7 +747,7 @@ void check_alarm() {
 #ifdef SAMOVAR_USE_POWER
       SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt - target_power_volt / 100 * 2);
+      set_current_power(target_power_volt - target_power_volt / 100 * 3);
 #else
       set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
