@@ -35,6 +35,9 @@
  */
  void set_current_power(float Volt);
 
+ #ifndef SAMOVAR_USE_POWER
+ void set_current_power(float Volt){return;};
+#endif
  /**
  * @brief Создать файл с данными текущей сессии.
  */
@@ -309,7 +312,10 @@ float fromPower(float value) { // конвертер из мощности: W =>
   }
 
 void nbk_proc() { //главный цикл НБК
-  if (check_nbk_critical_alarms()) return; // Проверка критических аварий (true — авария, процесс завершён)
+ #ifndef SAMOVAR_USE_POWER
+  SendMsg("Работа НБК невозможна - отсутствует регулятор напряжения.", ALARM_MSG);
+  return;
+ #endif
   // Обновление переменных из настроек (на случай, если пользователь их изменил в процессе)
   nbk_column_inertia =  SamSetup.NbkIn > 1 ? SamSetup.NbkIn : NBK_COLUMN_INERTIA_DEFAULT;
   nbk_dT = SamSetup.NbkDelta > 0 ? SamSetup.NbkDelta : NBK_DT_DEFAULT;
@@ -422,7 +428,9 @@ void handle_nbk_stage_optimization() {
      set_current_power(fromPower(nbk_M));
      SetSpeed(nbk_P);
      nbk_opt_next_time = millis() + nbk_column_inertia * NBK_MULT_PAUSE_OVERFLOW/3 * 1000; // Ждём время Ин (первая пауза)
+#ifdef SAMOVAR_USE_POWER
      SendMsg("Оптимизация начата с: " + String(fromPower(nbk_M),0) + String(PWR_SIGN) + ",  " + String(nbk_P,1) + " л/ч ", NOTIFY_MSG); 
+#endif
   }
 
   // Собственно цикл оптимизации
@@ -437,8 +445,10 @@ void handle_nbk_stage_optimization() {
           // успокоения колонны после захлёба)
           nbk_Po *= NBK_OPERATING_RANGE / 100; // отладочная корректировка после захлёба
           nbk_Mo *= NBK_OPERATING_RANGE / 100;
+#ifdef SAMOVAR_USE_POWER
           SendMsg(" Оптимум: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ",  " + 
           String(nbk_Po,1) + " л/ч", WARNING_MSG);
+#endif
           run_nbk_program(ProgramNum + 1); // Сначала выставляем новую строку, потом пауза по захлёбу
           handle_overflow(
             "Оптимизация завершена.",
@@ -466,7 +476,9 @@ void handle_nbk_stage_optimization() {
       nbk_Mo = nbk_M;
       nbk_P += nbk_dP;
       if (nbk_P > NBK_PUMP_LIMIT) {
+#ifdef SAMOVAR_USE_POWER
         SendMsg("Достигнута предельная подача (" + String(nbk_Tp_lim) + "). Результат: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN), WARNING_MSG);
+#endif
         run_nbk_program(ProgramNum + 1);
         return;
       }
@@ -508,7 +520,9 @@ void handle_nbk_stage_optimization() {
     SetSpeed(nbk_P);
     nbk_opt_iter++;
     if (nbk_opt_iter >= 300) { 
+#ifdef SAMOVAR_USE_POWER
       SendMsg("Достигнут лимит итераций. Результат: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ", " + String(nbk_Po,1) + " л/ч", WARNING_MSG);
+#endif
       run_nbk_program(ProgramNum + 1);
       return;
     }
@@ -599,7 +613,9 @@ void handle_nbk_stage_work() {
       String msg; msg.reserve(128);
       msg += "Работа: возобновление после захлёба, скорректированные параметры: ";
       msg += String(fromPower(nbk_Mo),0);
+#ifdef SAMOVAR_USE_POWER
       msg += PWR_SIGN;
+#endif
       msg += ", ";
       msg += String(nbk_Po,1);
       msg += " л/ч";

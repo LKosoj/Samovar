@@ -988,7 +988,9 @@ void web_command(AsyncWebServerRequest *request) {
       } else if (request->hasArg("nbkopt") && PowerOn) { //TODO устанавливаем текущие М и Р как оптимальные Мо и Ро
         nbk_Mo = nbk_M;
         nbk_Po = nbk_P;
+#ifdef SAMOVAR_USE_POWER
         SendMsg("Установлены оптимальные значения: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ",  " + String(nbk_Po,1) + " л/ч", WARNING_MSG);
+#endif
     } else if (request->hasArg("distiller")) {
       if (request->arg("distiller").toInt() == 1) {
         sam_command_sync = SAMOVAR_DISTILLATION;
