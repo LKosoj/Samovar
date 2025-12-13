@@ -631,7 +631,7 @@ void get_task_stack_usage() {
   Serial.println("=== Task Stack Usage ===");
   Serial.printf("taskButton:       %u words free (of 1450)\n", uxTaskGetStackHighWaterMark(SysTickerButton));
   Serial.printf("SysTicker:        %u words free (of 3200)\n", uxTaskGetStackHighWaterMark(SysTickerTask1));
-  Serial.printf("GetClock:         %u words free (of 2148)\n", uxTaskGetStackHighWaterMark(GetClockTask1));
+  Serial.printf("GetClock:         %u words free (of 2900)\n", uxTaskGetStackHighWaterMark(GetClockTask1));
 #ifdef USE_LUA
   if (DoLuaScriptTask) {
     Serial.printf("LuaScript:        %u words free (of 5300)\n", uxTaskGetStackHighWaterMark(DoLuaScriptTask));
