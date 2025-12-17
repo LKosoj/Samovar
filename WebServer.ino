@@ -1,5 +1,5 @@
 #include <asyncHTTPrequest.h>
-#include <ESPping.h>
+//#include <ESPping.h>
 
 #include "Samovar.h"
 #include "FS.h"
@@ -1105,13 +1105,6 @@ void get_data_log(AsyncWebServerRequest *request, String fn) {
 }
 
 void get_web_interface() {
-
-  bool ret = Ping.ping("web.samovar-tool.ru", 2);
-  if (!ret) {
-    Serial.println(F("Нет покдлючения к интернету. Не удалось проверить обновление интерфейса. Если это первичная установка - необходимо загрузить интерфейс в Самовар в соответствии с инструкцией"));
-    return;
-  }
-
   String version;
   String local_version;
   String s = "";
