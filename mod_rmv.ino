@@ -82,17 +82,29 @@ uint16_t RMVK_get_out_voltge() {
   char cmd[] = "AT+VO?";
   //    char cmd[]="AT+VI?";
   rmvk.VO = RMVK_cmd(cmd, RMVK_INT);
+  if (rmvk.conn) {
+    reg_online = true;
+    last_reg_online = millis();
+  }
   return rmvk.VO;
 }
 
 uint16_t RMVK_get_store_out_voltge() {
   char cmd[] = "AT+VS?";
   rmvk.VS = RMVK_cmd(cmd, RMVK_INT);
+  if (rmvk.conn) {
+    reg_online = true;
+    last_reg_online = millis();
+  }
   return rmvk.VS;
 }
 bool RMVK_get_state() {
   char cmd[] = "AT+ON?";
   rmvk.on = RMVK_cmd(cmd, RMVK_ON) > 0;
+  if (rmvk.conn) {
+    reg_online = true;
+    last_reg_online = millis();
+  }
   return rmvk.on;
 }
 uint16_t RMVK_set_out_voltge(uint16_t voltge) {

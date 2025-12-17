@@ -33,13 +33,17 @@ asyncHTTPrequest::asyncHTTPrequest()
 
 //**************************************************************************************************************
 asyncHTTPrequest::~asyncHTTPrequest(){
-    if(_client) _client->close(true);
+    // ЗАЩИТА: проверяем перед удалением
+    if(_client) {
+        _client->close(true);
+        delete _client;
+        _client = nullptr;
+    }
     delete _URL;
     delete _headers;
     delete _request;
     delete _response;
     delete _chunks;
-    delete[] _connectedHost;
 #ifdef ESP32
     vSemaphoreDelete(threadLock);
 #endif
@@ -363,9 +367,16 @@ bool  asyncHTTPrequest::_parseURL(const char* url){
 //**************************************************************************************************************
 bool  asyncHTTPrequest::_connect(){
     DEBUG_HTTP("_connect()\r\n");
+	    // ++++ ДОБАВЬТЕ ЭТОТ БЛОК ++++
+    DEBUG_HTTP("  > Creating new AsyncClient instance.\r\n");
+    // +++++++++++++++++++++++++++++
     if( ! _client){
         _client = new AsyncClient();
     }
+	    // ++++ ДОБАВЬТЕ ЭТОТ БЛОК ++++
+    DEBUG_HTTP("  > Attempting to connect to %s:%d\r\n", _URL->host, _URL->port);
+    DEBUG_HTTP("  > Local port will be assigned by TCP stack.\r\n");
+    // +++++++++++++++++++++++++++++
     delete[] _connectedHost;	
     _connectedHost = new char[strlen(_URL->host) + 1];
     strcpy(_connectedHost, _URL->host);
@@ -419,6 +430,13 @@ bool   asyncHTTPrequest::_buildRequest(){
 
 //**************************************************************************************************************
 size_t  asyncHTTPrequest::_send(){
+    // ++++ ПРОВЕРКА ++++
+    if( !_client ) {
+        DEBUG_HTTP("*_send(): _client is NULL, aborting.\r\n");
+        return 0;
+    }
+    // ++++++++++++++++++++++++++++++++
+
     if( ! _request) return 0;
     DEBUG_HTTP("_send() %d\r\n", _request->available());
     if( ! _client->connected() || ! _client->canSend()){
@@ -537,9 +555,16 @@ void  asyncHTTPrequest::_onError(AsyncClient* client, int8_t error){
 }
 
 //**************************************************************************************************************
-void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
+void asyncHTTPrequest::_onDisconnect(AsyncClient* client) {
     DEBUG_HTTP("_onDisconnect handler\r\n");
     _seize;
+    
+    // ЗАЩИТА: проверяем, не вызвался ли уже этот метод
+    if (!_client) {
+        _release;
+        return;
+    }
+    
     if(_readyState < readyStateOpened){
         _HTTPcode = HTTPCODE_NOT_CONNECTED;
     }
@@ -547,8 +572,12 @@ void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
             (_readyState < readyStateHdrsRecvd || (_contentRead + _response->available()) < _contentLength)) {
         _HTTPcode = HTTPCODE_CONNECTION_LOST;
     }
-    delete _client;
+    
+    // БЕЗОПАСНОЕ УДАЛЕНИЕ: запоминаем указатель и обнуляем
+    AsyncClient* clientToDelete = _client;
     _client = nullptr;
+    
+    delete clientToDelete;
     delete[] _connectedHost;
     _connectedHost = nullptr;
     _connectedPort = -1;

@@ -667,15 +667,35 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
   String payload;
   //int httpResponseCode;
 
-  request.setTimeout(3);  //Таймаут три секунды
+  const uint32_t timeoutMs = 4000; // общий таймаут на connect/done
+  request.setDebug(false);
+  request.setTimeout(3);  //Таймаут три секунды (внутренний по отсутствию активности)
   vTaskDelay(10 / portTICK_PERIOD_MS);
-  if (n == 1) {
-    request.open("GET", Var.c_str());  //URL
+  if (n != 1 && n != 4) {
+    lua_pushstring(lua_state, "error");
+    return 1;
+  }
+
+  if (n == 1) { // GET(url)
+    if (!request.open("GET", Var.c_str())) {  //URL
+      lua_pushstring(lua_state, "error");
+      return 1;
+    }
+    unsigned long startTime = millis();
     while (request.readyState() < 1) {
+      if (millis() - startTime > timeoutMs) {
+        request.abort();
+        lua_pushstring(lua_state, "error");
+        return 1;
+      }
       vTaskDelay(25 / portTICK_PERIOD_MS);
     }
     vTaskDelay(150 / portTICK_PERIOD_MS);
-    request.send();
+    if (!request.send()) {
+      request.abort();
+      lua_pushstring(lua_state, "error");
+      return 1;
+    }
   } else {
     String ContentType;
     String Body;
@@ -702,22 +722,41 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
     Body = s;
     lua_pop(lua_state, 1);
 
-    request.open(RequestType.c_str(), Var.c_str());  //URL
+    if (!request.open(RequestType.c_str(), Var.c_str())) {  //URL
+      lua_pushstring(lua_state, "error");
+      return 1;
+    }
+    unsigned long startTime = millis();
     while (request.readyState() < 1) {
+      if (millis() - startTime > timeoutMs) {
+        request.abort();
+        lua_pushstring(lua_state, "error");
+        return 1;
+      }
       vTaskDelay(25 / portTICK_PERIOD_MS);
     }
     vTaskDelay(150 / portTICK_PERIOD_MS);
-    String ct = "Content-Type";
-    request.setReqHeader(ct.c_str(), getValue(ContentType, ':', 1).c_str());
-    request.send(Body);
+    String ctVal = getValue(ContentType, ':', 1);
+    request.setReqHeader("Content-Type", ctVal.c_str());
+    if (!request.send(Body)) {
+      request.abort();
+      lua_pushstring(lua_state, "error");
+      return 1;
+    }
   }
 
   vTaskDelay(150 / portTICK_PERIOD_MS);
+  unsigned long doneStartTime = millis();
   while (request.readyState() != 4) {
+    if (millis() - doneStartTime > timeoutMs) {
+      request.abort();
+      lua_pushstring(lua_state, "error");
+      return 1;
+    }
     vTaskDelay(25 / portTICK_PERIOD_MS);
   }
   vTaskDelay(60 / portTICK_PERIOD_MS);
-  if (request.responseHTTPcode() >= 0) {
+  if (request.responseHTTPcode() > 0) {
     payload = request.responseText();
   } else {
     payload = "error";

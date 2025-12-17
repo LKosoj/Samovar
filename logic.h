@@ -1040,6 +1040,11 @@ void set_power(bool On) {
   }
   PowerOn = On;
   if (On) {
+    // Стартуем окно ожидания ответа от регулятора (нужно для CheckPower,
+    // чтобы отсутствие подключенного регулятора тоже детектилось).
+    reg_online = false;
+    last_reg_online = millis();
+
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
     set_menu_screen(2);
     power_text_ptr = (char *)"OFF";
@@ -1068,6 +1073,10 @@ void set_power(bool On) {
     power_text_ptr = (char *)"ON";
     sam_command_sync = SAMOVAR_RESET;
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+
+    // Нагрев выключен — считаем регулятор оффлайн.
+    reg_online = false;
+    last_reg_online = 0;
   }
 }
 
@@ -1289,55 +1298,53 @@ void stop_self_test(void) {
 // SAMOVAR_USE_POWER
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
+
+void clear_serial_in_buff() { // Быстрая очистка буфера (максимум 100 символов)
+  uint8_t cleared = 0;
+  while (Serial2.available() && cleared < 100) {
+      Serial2.read();
+      cleared++;
+  }
+}
+
 #ifndef SAMOVAR_USE_RMVK
 void triggerPowerStatus(void *parameter) {
-  int i;
-  String resp;
+  static String buffer;
   while (true) {
-    //T3EA3E80
-    if (PowerOn) {
-      Serial2.flush();
-      vTaskDelay(300 / portTICK_PERIOD_MS);
-      if (Serial2.available()) {
-        resp = Serial2.readStringUntil('\r');
-        i = resp.indexOf("T");
-        if (i < 0) {
-          vTaskDelay(50 / portTICK_PERIOD_MS);
-          resp = Serial2.readStringUntil('\r');
-        }
-        resp = resp.substring(i, resp.length());
-#ifdef __SAMOVAR_DEBUG
-        WriteConsoleLog("RESP_T =" + resp.substring(0, 1));
-#endif
-        if (resp.substring(0, 1) == "T" && resp.length() == 8 ) {
-#ifdef KVIC_DEBUG
-          String r = resp;
-#endif
-          resp = resp.substring(1, 9);
-#ifdef __SAMOVAR_DEBUG
-          WriteConsoleLog("RESP_F =" + resp.substring(1, 7));
-          WriteConsoleLog("RESP_MODE =" + resp.substring(6, 7));
-#endif
-          int cpv = hexToDec(resp.substring(0, 3));
-          //Если напряжение больше 249 или меньше 10 - не корректно получено значение от регулятора, оставляем старое значение
-          if (cpv > 30 && cpv < 2490) {
-            current_power_volt = cpv / 10.0F;
-            target_power_volt = hexToDec(resp.substring(3, 6)) / 10.0F;
-            current_power_mode = resp.substring(6, 7);
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-          }
-#ifdef KVIC_DEBUG
-            //Serial.println(r);
-            if (cpv < 300 || cpv > 2400)
-            {
-                r+=";" + String(cpv) + ";" + String(target_power_volt) + ";" + String(current_power_mode);
-                SendMsg(("НАПРЯЖЕНИЕ!!!: " + r), NOTIFY_MSG);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+    buffer = "";
+    while (Serial2.available()) {
+        char c = Serial2.read(); // Явно читаем как char
+        buffer += c;
+    }
+    // Если в буфере есть данные
+    if (buffer.length() > 8 ) {
+        // Ищем последние 8 символов перед \r
+        int lastCR = buffer.lastIndexOf('\r');
+        if (lastCR >= 8 ) {
+            // Берем 8 символов перед \_r (формат T1234567)
+            String data = buffer.substring(lastCR - 8, lastCR);
+            Serial.println(data);
+            
+            // Проверяем что первый символ 'T'
+            if (data.charAt(0) == 'T') {
+                String hexData = data.substring(1); // убираем 'T'
+                
+                int cpv = hexToDec(hexData.substring(0, 3));
+                if (cpv > 30 && cpv < 2550) {
+                    current_power_volt = cpv / 10.0F;
+                    target_power_volt = hexToDec(hexData.substring(3, 6)) / 10.0F;
+                    current_power_mode = hexData.substring(6, 7);   
+                }
+              reg_online = true;
+              last_reg_online = millis();  
             }
-#endif
         }
-      }
-    } else {
-      vTaskDelay(400 / portTICK_PERIOD_MS);
+    }
+    // Если давно не было ответа от регулятора — считаем его оффлайн.
+    // Таймаут с запасом, т.к. запросы идут пачкой и с задержками.
+    if (reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 5000UL) {
+      reg_online = false;
     }
   }
 }
@@ -1350,13 +1357,16 @@ void triggerPowerStatus(void *parameter) {
 #ifdef SAMOVAR_USE_SEM_AVR
       if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        Serial2.flush();
+        clear_serial_in_buff();
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.print("АТ+SS?\r");
         for (int i = 0; i < 2; i++) {
           vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
           if (Serial2.available()) {
             current_power_mode = Serial2.readStringUntil('\r');
+            // Есть ответ от регулятора -> связь жива
+            reg_online = true;
+            last_reg_online = millis();
 #ifdef __SAMOVAR_DEBUG
             WriteConsoleLog("CPM=" + current_power_mode);
 #endif
@@ -1368,7 +1378,7 @@ void triggerPowerStatus(void *parameter) {
       vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
       if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        Serial2.flush();
+        clear_serial_in_buff();
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.print("АТ+VO?\r");
         for (int i = 0; i < 2; i++) {
@@ -1379,6 +1389,8 @@ void triggerPowerStatus(void *parameter) {
             WriteConsoleLog("CPV=" + resp);
 #endif
             current_power_volt = resp.toInt();
+            reg_online = true;
+            last_reg_online = millis();
             break;
           }
         }
@@ -1387,7 +1399,6 @@ void triggerPowerStatus(void *parameter) {
       vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
       if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        Serial2.flush();
         vTaskDelay(10 / portTICK_RATE_MS);
         Serial2.print("АТ+VS?\r");
         for (int i = 0; i < 2; i++) {
@@ -1401,6 +1412,8 @@ void triggerPowerStatus(void *parameter) {
             if (v != 0) {
               target_power_volt = v;
             }
+            reg_online = true;
+            last_reg_online = millis();
             break;
           }
         }
@@ -1418,6 +1431,11 @@ void triggerPowerStatus(void *parameter) {
       }
 #endif
     }
+    // Если давно не было ответа от регулятора — считаем его оффлайн.
+    // Таймаут с запасом, т.к. запросы идут пачкой и с задержками.
+    if (reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 5000UL) {
+      reg_online = false;
+    }
     vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
   }
 }
@@ -1425,20 +1443,41 @@ void triggerPowerStatus(void *parameter) {
 
 void check_power_error() {
 #ifndef __SAMOVAR_DEBUG
-  //Проверим, что заданное напряжение/мощность не сильно отличается от реального (наличие связи с регулятором, пробой семистора)
-  if (SamSetup.CheckPower && current_power_mode == POWER_WORK_MODE && current_power_volt > 0 && abs((current_power_volt - target_power_volt) / current_power_volt) > 2) {
-    power_err_cnt++;
-    //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
-    if (power_err_cnt > 6) set_current_power(target_power_volt);
-    if (power_err_cnt > 12) {
-      delay(1000);  //Пауза на всякий случай, чтобы прошли все другие команды
-      set_buzzer(true);
-      set_power(false);
-      SendMsg(("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
+  if (SamSetup.CheckPower && PowerOn) {
+    // 1) Потеря связи с регулятором: отключаем нагрев при длительном отсутствии ответа.
+    // Таймаут здесь должен совпадать с логикой в triggerPowerStatus().
+    if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 5000UL && current_power_mode != POWER_SLEEP_MODE) {
+      power_err_cnt++;
+      if (power_err_cnt == 2) {
+        SendMsg(("Нет связи с регулятором!"), ALARM_MSG);
+      }
+      if (power_err_cnt > 6) {
+        delay(1000);  //Пауза на всякий случай, чтобы прошли все другие команды
+        set_buzzer(true);
+        set_power(false);
+        SendMsg(("Аварийное отключение! Нет связи с регулятором нагрева."), ALARM_MSG);
+      }
+      return;
     }
-  } else
+
+    // 2) Проверим, что заданное напряжение/мощность не сильно отличается от реального
+    // (наличие связи с регулятором, пробой семистора и т.п.)
+    if (current_power_mode == POWER_WORK_MODE && current_power_volt > 0 &&
+        abs((current_power_volt - target_power_volt) / current_power_volt) > 2) {
+      power_err_cnt++;
+      //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
+      if (power_err_cnt > 6) set_current_power(target_power_volt);
+      if (power_err_cnt > 12) {
+        delay(1000);  //Пауза на всякий случай, чтобы прошли все другие команды
+        set_buzzer(true);
+        set_power(false);
+        SendMsg(("Аварийное отключение! Ошибка управления нагревателем."), ALARM_MSG);
+      }
+      return;
+    }
+  }
 #endif
-    power_err_cnt = 0;
+  power_err_cnt = 0;
 }
 
 
@@ -1613,6 +1652,9 @@ bool column_wetting() {
         initial_voltage = target_power_volt;
       } else {
 #ifdef SAMOVAR_USE_SEM_AVR
+#ifndef WETTING_POWER
+#define WETTING_POWER 2200 //мощность (для SEM_AVR) регулятора при смачивании насадки
+#endif
         initial_voltage = WETTING_POWER;
 #else
         initial_voltage = 220;

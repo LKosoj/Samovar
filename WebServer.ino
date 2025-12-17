@@ -1216,25 +1216,35 @@ String get_web_file(String fn, get_web_type type) {
 String http_sync_request_get(String url) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(8); // Таймаут восемь секунд
-  request.open("GET", url.c_str());
+  const uint32_t timeoutMs = 8000;
+  request.setTimeout(8); // Таймаут восемь секунд (внутренний по отсутствию активности)
+  if (!request.open("GET", url.c_str())) {
+    Serial.println("HTTP GET open() failed");
+    return "<ERR>";
+  }
   
   unsigned long startTime = millis();
   while (request.readyState() < 1) {
-    if (millis() - startTime > 8000) { // Общий таймаут 8 секунд
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: readyState never reached 1");
+      request.abort();
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
   }
   vTaskDelay(150 / portTICK_PERIOD_MS);
-  request.send();
+  if (!request.send()) {
+    Serial.println("HTTP GET send() failed");
+    request.abort();
+    return "<ERR>";
+  }
   vTaskDelay(150 / portTICK_PERIOD_MS);
   // Таймаут для ожидания завершения запроса (readyState == 4)
   startTime = millis();
   while (request.readyState() != 4) {
-    if (millis() - startTime > 4000) { // Таймаут 4 секунд
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: request not completed within 4 seconds");
+      request.abort();
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
@@ -1260,27 +1270,37 @@ String http_sync_request_get(String url) {
 String http_sync_request_post(String url, String body, String ContentType) {
   asyncHTTPrequest request;
   request.setDebug(false);
-  request.setTimeout(8);  //Таймаут восемь секунд
+  const uint32_t timeoutMs = 8000;
+  request.setTimeout(8);  //Таймаут восемь секунд (внутренний по отсутствию активности)
 
-  request.open("POST", url.c_str());  //URL
+  if (!request.open("POST", url.c_str())) {  //URL
+    Serial.println("HTTP POST open() failed");
+    return "<ERR>";
+  }
   unsigned long startTime = millis();
   while (request.readyState() < 1) {
-    if (millis() - startTime > 8000) { // Общий таймаут 8 секунд
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: readyState never reached 1");
+      request.abort();
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
   }
   vTaskDelay(150 / portTICK_PERIOD_MS);
   request.setReqHeader("Content-Type", getValue(ContentType, ':', 1).c_str());
-  request.send(body);
+  if (!request.send(body)) {
+    Serial.println("HTTP POST send() failed");
+    request.abort();
+    return "<ERR>";
+  }
 
   vTaskDelay(150 / portTICK_PERIOD_MS);
   // Таймаут для ожидания завершения запроса (readyState == 4)
   startTime = millis();
   while (request.readyState() != 4) {
-    if (millis() - startTime > 4000) { // Таймаут 4 секунд
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: request not completed within 4 seconds");
+      request.abort();
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
