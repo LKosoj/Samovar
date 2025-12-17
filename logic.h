@@ -1358,7 +1358,7 @@ void triggerPowerStatus(void *parameter) {
       if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
         clear_serial_in_buff();
-        vTaskDelay(10 / portTICK_RATE_MS);
+        vTaskDelay(5 / portTICK_RATE_MS);
         Serial2.print("АТ+SS?\r");
         for (int i = 0; i < 2; i++) {
           vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
@@ -1379,7 +1379,7 @@ void triggerPowerStatus(void *parameter) {
       if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
         clear_serial_in_buff();
-        vTaskDelay(10 / portTICK_RATE_MS);
+        vTaskDelay(5 / portTICK_RATE_MS);
         Serial2.print("АТ+VO?\r");
         for (int i = 0; i < 2; i++) {
           vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
@@ -1399,7 +1399,7 @@ void triggerPowerStatus(void *parameter) {
       vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
       if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
         vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        vTaskDelay(10 / portTICK_RATE_MS);
+        vTaskDelay(5 / portTICK_RATE_MS);
         Serial2.print("АТ+VS?\r");
         for (int i = 0; i < 2; i++) {
           vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
