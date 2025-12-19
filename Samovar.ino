@@ -477,6 +477,8 @@ void triggerSysTicker(void *parameter) {
       //StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
       StrCrt = NTP.getFormattedTime() + "     " + NTP.getFormattedTime((unsigned long)(millis() / 1000));
 
+      NTP.getFormattedTime().toCharArray(tst, sizeof(tst));
+
       if (startval != 0) {
         tcntST++;
         if (tcntST >= SamSetup.LogPeriod) {
