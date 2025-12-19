@@ -850,9 +850,9 @@ void FinishAutoTune() {
   SamSetup.Ki = aTune.GetKi();
   SamSetup.Kd = aTune.GetKd();
 
-  WriteConsoleLog("Kp = " + (String)Kp);
-  WriteConsoleLog("Ki = " + (String)Ki);
-  WriteConsoleLog("Kd = " + (String)Kd);
+  WriteConsoleLog("Kp = " + (String)SamSetup.Kp);
+  WriteConsoleLog("Ki = " + (String)SamSetup.Ki);
+  WriteConsoleLog("Kd = " + (String)SamSetup.Kd);
 
   // Re-tune the PID and revert to normal control mode
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
