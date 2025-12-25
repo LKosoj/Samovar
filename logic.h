@@ -169,8 +169,12 @@ void withdrawal(void) {
         //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
         if (SamSetup.useautospeed && setautospeed) {
           setautospeed = false;
-          CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
-          set_pump_speed(CurrrentStepperSpeed, false);
+          int baseSpeed = (int)CurrrentStepperSpeed;
+          if (baseSpeed < 1) baseSpeed = (int)abs((int)stepper.getSpeed());
+          int dec = (int)round((float)baseSpeed / 100.0f * (float)SamSetup.autospeed);
+          int newSpeed = baseSpeed - dec;
+          if (newSpeed < 1) newSpeed = 1;
+          set_pump_speed((float)newSpeed, false);
 #ifdef SAMOVAR_USE_POWER
           if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
 #ifdef SAMOVAR_USE_SEM_AVR
@@ -219,8 +223,12 @@ void withdrawal(void) {
         //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
         if (SamSetup.useautospeed && setautospeed) {
           setautospeed = false;
-          CurrrentStepperSpeed = stepper.getSpeed() - round(stepper.getSpeed() / 100 * SamSetup.autospeed);
-          set_pump_speed(CurrrentStepperSpeed, false);
+          int baseSpeed = (int)CurrrentStepperSpeed;
+          if (baseSpeed < 1) baseSpeed = (int)abs((int)stepper.getSpeed());
+          int dec = (int)round((float)baseSpeed / 100.0f * (float)SamSetup.autospeed);
+          int newSpeed = baseSpeed - dec;
+          if (newSpeed < 1) newSpeed = 1;
+          set_pump_speed((float)newSpeed, false);
 #ifdef SAMOVAR_USE_POWER
           if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
 #ifdef SAMOVAR_USE_SEM_AVR
@@ -287,7 +295,7 @@ void pause_withdrawal(bool Pause) {
   if (Pause) {
     TargetStepps = stepper.getTarget();
     CurrrentStepps = stepper.getCurrent();
-    CurrrentStepperSpeed = stepper.getSpeed();
+    if (CurrrentStepperSpeed < 1) CurrrentStepperSpeed = (uint16_t)max(1, (int)abs((int)stepper.getSpeed()));
     stopService();
     stepper.brake();
     stepper.disable();
@@ -606,7 +614,8 @@ void run_program(uint8_t num) {
       p_s += ", отбор в ёмкость " + (String)program[num].capacity_num;
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
-      stepper.setMaxSpeed(get_speed_from_rate(program[num].Speed));
+      CurrrentStepperSpeed = (uint16_t)get_speed_from_rate(program[num].Speed);
+      stepper.setMaxSpeed(CurrrentStepperSpeed);
       //stepper.setSpeed(get_speed_from_rate(program[num].Speed));
       TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
       stepper.setCurrent(0);
@@ -637,6 +646,7 @@ void run_program(uint8_t num) {
       program_Pause = true;
       stopService();
       stepper.setMaxSpeed(0);
+      CurrrentStepperSpeed = 0;
       //stepper.setSpeed(-1);
       stepper.brake();
       stepper.disable();
@@ -1265,6 +1275,11 @@ void start_self_test(void) {
 #endif
   //включаем шаговый двигатель
   stopService();
+#ifdef USE_STEPPER_ACCELERATION
+  // В самотестировании отключаем плавный разгон/торможение, чтобы мотор сразу крутился
+  // с заданной скоростью (даже если в целом акселерация включена).
+  stepper.setAcceleration(0);
+#endif
   stepper.setMaxSpeed(get_speed_from_rate(1));
   //stepper.setSpeed(get_speed_from_rate(1));
   TargetStepps = 100 * SamSetup.StepperStepMl;
@@ -1290,6 +1305,10 @@ void stop_self_test(void) {
   open_valve(false, true);
   set_capacity(0);
   stopService();
+#ifdef USE_STEPPER_ACCELERATION
+  // Возвращаем ускорение библиотеки по умолчанию, чтобы остальные режимы работали штатно
+  stepper.setAcceleration(200);
+#endif
   is_self_test = false;
   reset_sensor_counter();
 }

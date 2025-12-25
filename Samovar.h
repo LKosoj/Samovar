@@ -227,7 +227,7 @@ void WriteConsoleLog(String StringLogMsg);
 // Переменные для меню
 uint8_t multiplier = 1;
 
-char tst[20] = "00:00:00   00:00:00";
+extern char tst[20];
 char ipst[16] = "000.000.000.000";
 char welcomeStrArr1[20];
 char welcomeStrArr2[20];
@@ -238,7 +238,7 @@ char* welcomeStr2 = (char*)welcomeStrArr2;
 char* welcomeStr3 = (char*)welcomeStrArr3;
 char* welcomeStr4 = (char*)welcomeStrArr4;
 
-char* timestr = (char*)tst;
+extern char* timestr;
 char* ipstr = (char*)ipst;
 char startval_text_val[20];
 char* startval_text = (char*)startval_text_val;

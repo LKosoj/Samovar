@@ -165,6 +165,10 @@ SimpleStringQueue msg_q(4, 512);
 //**************************************************************************************************************
 #include "sensorinit.h"
 
+// Единственные определения буфера времени для LCD (см. extern в Samovar.h)
+char tst[20] = "00:00:00   00:00:00";
+char* timestr = (char*)tst;
+
 void taskButton(void *pvParameters);
 SemaphoreHandle_t btnSemaphore;
 
@@ -476,8 +480,9 @@ void triggerSysTicker(void *parameter) {
       Crt = NTP.getFormattedDate();
       //StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
       StrCrt = NTP.getFormattedTime() + "     " + NTP.getFormattedTime((unsigned long)(millis() / 1000));
-
-      NTP.getFormattedTime().toCharArray(tst, sizeof(tst));
+      snprintf(tst, sizeof(tst), "%s   %s",
+               NTP.getFormattedTime().c_str(),
+               NTP.getFormattedTime((unsigned long)(millis() / 1000)).c_str());
 
       if (startval != 0) {
         tcntST++;

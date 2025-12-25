@@ -182,8 +182,9 @@ void DS_getvalue(void) {
   float ss, ps, ws, ts, acp;
   float correctT = 0;
 
-  //Считаем корректировку температуры от атмосферного давления
-  if (bme_pressure > 0 && PowerOn) {
+  // Считаем корректировку температуры от атмосферного давления.
+  // ВАЖНО: применять только если включена настройка "Учитывать атмосферное давление".
+  if (SamSetup.UsePreccureCorrect && bme_pressure > 0 && PowerOn) {
     correctT = (760 - bme_pressure) * 0.037;
   }
 
