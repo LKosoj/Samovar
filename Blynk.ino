@@ -57,6 +57,10 @@ BLYNK_READ(V1) {
   Blynk.virtualWrite(V1, PipeSensor.avgTemp);
 }
 
+BLYNK_READ(V25) {
+  Blynk.virtualWrite(V25, ACPSensor.avgTemp);
+}
+
 BLYNK_READ(V2) {
   Blynk.virtualWrite(V2, WthdrwlProgress);
 }
