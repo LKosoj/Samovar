@@ -1362,7 +1362,7 @@ void triggerPowerStatus(void *parameter) {
     }
     // Если давно не было ответа от регулятора — считаем его оффлайн.
     // Таймаут с запасом, т.к. запросы идут пачкой и с задержками.
-    if (reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 5000UL) {
+    if (reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL) {
       reg_online = false;
     }
   }
@@ -1465,7 +1465,7 @@ void check_power_error() {
   if (SamSetup.CheckPower && PowerOn) {
     // 1) Потеря связи с регулятором: отключаем нагрев при длительном отсутствии ответа.
     // Таймаут здесь должен совпадать с логикой в triggerPowerStatus().
-    if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 5000UL && current_power_mode != POWER_SLEEP_MODE) {
+    if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL && current_power_mode != POWER_SLEEP_MODE) {
       power_err_cnt++;
       if (power_err_cnt == 2) {
         SendMsg(("Нет связи с регулятором!"), ALARM_MSG);
@@ -1481,8 +1481,8 @@ void check_power_error() {
 
     // 2) Проверим, что заданное напряжение/мощность не сильно отличается от реального
     // (наличие связи с регулятором, пробой семистора и т.п.)
-    if (current_power_mode == POWER_WORK_MODE && current_power_volt > 0 &&
-        abs((current_power_volt - target_power_volt) / current_power_volt) > 2) {
+    if (current_power_mode == POWER_WORK_MODE && current_power_volt > 0 && target_power_volt > 0 &&
+        abs((current_power_volt - target_power_volt) / target_power_volt) > 0.2) {
       power_err_cnt++;
       //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
       if (power_err_cnt > 6) set_current_power(target_power_volt);

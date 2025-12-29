@@ -372,26 +372,26 @@ void triggerGetClock(void *parameter) {
     }
 #endif
 
-    //#ifdef SAMOVAR_USE_BLYNK
-    //    {
-    //      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
-    //        Blynk.connect(BLYNK_TIMEOUT_MS);
-    //        vTaskDelay(50 / portTICK_PERIOD_MS);
-    //      } else {
-    //        if (!msg_q.isEmpty()) {
-    //          if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
-    //            char c[120];
-    //            msg_q.pop(&c);
-    //            qMsg = c;
-    //            //Serial.println(qMsg);
-    //            Blynk.notify(qMsg);
-    ////            Blynk.notify(c);
-    //            xSemaphoreGive(xMsgSemaphore);
-    //          }
-    //        }
-    //      }
-    //    }
-    //#endif
+    #ifdef SAMOVAR_USE_BLYNK
+       {
+         if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
+           Blynk.connect(BLYNK_TIMEOUT_MS);
+           vTaskDelay(50 / portTICK_PERIOD_MS);
+         } else {
+           if (!msg_q.isEmpty()) {
+             if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
+               char c[120];
+               msg_q.pop(c);
+               qMsg = c;
+               //Serial.println(qMsg);
+               Blynk.logEvent("notify", qMsg);
+    //            Blynk.logEvent("notify", c);
+               xSemaphoreGive(xMsgSemaphore);
+             }
+           }
+         }
+       }
+    #endif
 
 #ifdef USE_MQTT
     {

@@ -10,6 +10,10 @@ void set_body_temp();
 int get_liquid_volume();
 String get_Samovar_Status();
 float get_speed_from_rate(float rate);
+String get_beer_program();
+String get_dist_program();
+String get_nbk_program();
+String get_program(uint8_t s);
 
 #ifdef USE_LUA
 String run_lua_string(String lstr);
@@ -97,9 +101,25 @@ BLYNK_READ(V19) {
   Blynk.virtualWrite(V19, SAMOVAR_VERSION);
 }
 
+BLYNK_READ(V20) {
+  Blynk.virtualWrite(V20, Samovar_Mode);
+}
+
+BLYNK_READ(V24) {
+  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
+    Blynk.virtualWrite(V24, get_beer_program());
+  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    Blynk.virtualWrite(V24, get_dist_program());
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    Blynk.virtualWrite(V24, get_nbk_program());
+  } else {
+    Blynk.virtualWrite(V24, get_program(CAPACITY_NUM * 2));
+  }
+}
+
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
-BLYNK_READ(V22) {
-  Blynk.virtualWrite(V22, pressure_value);
+BLYNK_READ(V23) {
+  Blynk.virtualWrite(V23, pressure_value);
 }
 #endif
 
