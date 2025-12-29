@@ -25,3 +25,7 @@ data/style.css.zip
 .cursorindexingignore
 .cursor/rules/myrule.mdc
 .cursorignore
+/SamovarMobile/app/build
+/SamovarMobile/build
+SamovarMobile/app/local.properties
+__pycache__/test_blynk_api.cpython-314.pyc
