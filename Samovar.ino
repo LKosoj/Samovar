@@ -1654,6 +1654,7 @@ void read_config() {
 }
 
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
+  if (m.length() < 5) return;
   String MsgPl;
 #ifdef USE_MQTT
   MsgPl = m;
