@@ -34,6 +34,10 @@ BLYNK_WRITE(V22) {
 #endif
 
 BLYNK_READ(V0) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return; // Предотвращаем рекурсию
+  inReadHandler = true;
+  
   vTaskDelay(2 / portTICK_PERIOD_MS);
   Blynk.virtualWrite(V0, SteamSensor.avgTemp);
   vTaskDelay(2 / portTICK_PERIOD_MS);
@@ -51,65 +55,126 @@ BLYNK_READ(V0) {
   else
     k = 0;
   Blynk.virtualWrite(V13, k);
+  
+  inReadHandler = false;
 }
 
 BLYNK_READ(V1) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V1, PipeSensor.avgTemp);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V25) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V25, ACPSensor.avgTemp);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V2) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V2, WthdrwlProgress);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V5) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V5, bme_pressure);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V6) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V6, WaterSensor.avgTemp);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V7) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V7, TankSensor.avgTemp);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V8) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V8, get_liquid_volume());
+  inReadHandler = false;
 }
 
 BLYNK_READ(V9) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V9, ActualVolumePerHour);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V10) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V10, WthdrwTimeS + "; " + WthdrwTimeAllS);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V11) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V11, StrCrt);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V14) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V14, get_Samovar_Status());
+  inReadHandler = false;
 }
 
 BLYNK_READ(V15) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V15, ipst);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V19) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V19, SAMOVAR_VERSION);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V20) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V20, Samovar_Mode);
+  inReadHandler = false;
 }
 
 BLYNK_READ(V24) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
     Blynk.virtualWrite(V24, get_beer_program());
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
@@ -119,23 +184,36 @@ BLYNK_READ(V24) {
   } else {
     Blynk.virtualWrite(V24, get_program(CAPACITY_NUM * 2));
   }
+  inReadHandler = false;
 }
 
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
 BLYNK_READ(V23) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V23, pressure_value);
+  inReadHandler = false;
 }
 #endif
 
 #ifdef SAMOVAR_USE_POWER
 BLYNK_READ(V21) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String) + target_power_volt);
+  inReadHandler = false;
 }
 #endif
 
 #ifdef SAMOVAR_USE_POWER
 BLYNK_READ(V16) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
   Blynk.virtualWrite(V16, target_power_volt);
+  inReadHandler = false;
 }
 
 BLYNK_WRITE(V16) {
