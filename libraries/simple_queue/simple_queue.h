@@ -101,6 +101,7 @@ class SimpleStringQueue {
 private:
     char** buffer;
     uint8_t capacity;
+    size_t stringSize;
     uint8_t head;
     uint8_t tail;
     uint8_t count;
@@ -108,7 +109,7 @@ private:
 
 public:
     SimpleStringQueue(uint8_t queueCapacity, size_t stringSize) : 
-        capacity(queueCapacity), head(0), tail(0), count(0), initialized(false) {
+        capacity(queueCapacity), stringSize(stringSize), head(0), tail(0), count(0), initialized(false) {
         buffer = new char*[capacity];
         if (buffer != nullptr) {
             for (uint8_t i = 0; i < capacity; i++) {
@@ -137,8 +138,8 @@ public:
     bool push(const char* item) {
         if (!initialized || count >= capacity) return false;
         
-        strncpy(buffer[tail], item, 511);
-        buffer[tail][511] = '\0';
+        strncpy(buffer[tail], item, stringSize - 1);
+        buffer[tail][stringSize - 1] = '\0';
         tail = (tail + 1) % capacity;
         count++;
         return true;
@@ -147,7 +148,7 @@ public:
     bool pop(char* item) {
         if (!initialized || count == 0) return false;
         
-        strncpy(item, buffer[head], 512);
+        strncpy(item, buffer[head], stringSize);
         head = (head + 1) % capacity;
         count--;
         return true;

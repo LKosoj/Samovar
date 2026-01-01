@@ -139,7 +139,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 #if defined(SAMOVAR_USE_BLYNK) || defined(USE_TELEGRAM)
 #include <simple_queue.h>
-SimpleStringQueue msg_q(4, 512);
+SimpleStringQueue msg_q(5, 200);
 #endif
 
 #ifdef USE_TELEGRAM
@@ -339,10 +339,16 @@ void triggerGetClock(void *parameter) {
   String qMsg;
   while (true) {
     {
-      if (WiFi.status() == WL_CONNECTED) {
+      static unsigned long wifiReconnectTimer = 0;
+      if (WiFi.status() != WL_CONNECTED) {
+          // попытки переподключиться к WiFi раз в 20 секунд, если не сработала автоматическая попытка переподключиться
+          if (millis() - wifiReconnectTimer >= 20000) {
+            WriteConsoleLog(F("WiFi.reconnect..."));
+            WiFi.reconnect();
+            wifiReconnectTimer = millis();
+          }
       } else {
-        WiFi.disconnect();
-        WiFi.reconnect();
+        wifiReconnectTimer = millis();
       }
     }
 
@@ -365,7 +371,7 @@ void triggerGetClock(void *parameter) {
     if (!msg_q.isEmpty() && WiFi.status() == WL_CONNECTED) {
       vTaskDelay(5 / portTICK_PERIOD_MS);
       if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-        char c[512];
+        char c[200];
         msg_q.pop(c);
         qMsg = c;
         
@@ -379,7 +385,7 @@ void triggerGetClock(void *parameter) {
         // Отправка в Blynk (если включен, подключен и настроен)
 #ifdef SAMOVAR_USE_BLYNK
         if (Blynk.connected() && SamSetup.blynkauth[0] != 0) {
-          Blynk.logEvent("notify", qMsg);
+          Blynk.virtualWrite(V26, qMsg);
         }
 #endif
 
@@ -401,7 +407,7 @@ void triggerGetClock(void *parameter) {
       vTaskDelay(400 / portTICK_PERIOD_MS);
       pressure_sensor_get();
 #endif
-      vTaskDelay(1000 / portTICK_PERIOD_MS);
+      vTaskDelay(3000 / portTICK_PERIOD_MS);
     }
   }
 }
