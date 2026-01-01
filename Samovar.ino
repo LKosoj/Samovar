@@ -346,59 +346,51 @@ void triggerGetClock(void *parameter) {
       }
     }
 
-#ifdef USE_TELEGRAM
-    if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
-      if (!msg_q.isEmpty()) {
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-        if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-          char c[512];
-          msg_q.pop(c);
-          qMsg = c;
-          //Serial.println(qMsg);
-          http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg));
-          xSemaphoreGive(xMsgSemaphore);
-        }
-      }
-    } else if (SamSetup.tg_chat_id[0] != 0) {
-      Serial.println(F("Проблема с покдлючением к интернету."));
-    }
-    vTaskDelay(5 / portTICK_PERIOD_MS);
-#endif
-
+    // Проверка и переподключение Blynk
 #ifdef SAMOVAR_USE_BLYNK
     if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
       Blynk.connect(BLYNK_TIMEOUT_MS);
-      vTaskDelay(5 / portTICK_PERIOD_MS);
+      vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 #endif
 
-    #ifdef SAMOVAR_USE_BLYNK
-       {
-         if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
-           Blynk.connect(BLYNK_TIMEOUT_MS);
-           vTaskDelay(50 / portTICK_PERIOD_MS);
-         } else {
-           if (!msg_q.isEmpty()) {
-             if ( xSemaphoreTake( xMsgSemaphore, ( TickType_t ) (50 / portTICK_RATE_MS)) == pdTRUE) {
-               char c[120];
-               msg_q.pop(c);
-               qMsg = c;
-               //Serial.println(qMsg);
-               Blynk.logEvent("notify", qMsg);
-    //            Blynk.logEvent("notify", c);
-               xSemaphoreGive(xMsgSemaphore);
-             }
-           }
-         }
-       }
-    #endif
-
+    // Проверка и переподключение MQTT
 #ifdef USE_MQTT
-    {
-      if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
-        connectToMqtt();
+    if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
+      connectToMqtt();
+    }
+#endif
+
+    // Обработка сообщений из очереди: отправка во все включенные сервисы одновременно
+    if (!msg_q.isEmpty() && WiFi.status() == WL_CONNECTED) {
+      vTaskDelay(5 / portTICK_PERIOD_MS);
+      if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
+        char c[512];
+        msg_q.pop(c);
+        qMsg = c;
+        
+        // Отправка в Telegram (если включен и настроен)
+#ifdef USE_TELEGRAM
+        if (SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
+          http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg));
+        }
+#endif
+
+        // Отправка в Blynk (если включен, подключен и настроен)
+#ifdef SAMOVAR_USE_BLYNK
+        if (Blynk.connected() && SamSetup.blynkauth[0] != 0) {
+          Blynk.logEvent("notify", qMsg);
+        }
+#endif
+
+        xSemaphoreGive(xMsgSemaphore);
       }
     }
+#ifdef USE_TELEGRAM
+    else if (SamSetup.tg_chat_id[0] != 0 && WiFi.status() != WL_CONNECTED) {
+      Serial.println(F("Проблема с покдлючением к интернету."));
+    }
+    vTaskDelay(5 / portTICK_PERIOD_MS);
 #endif
     {
       vTaskDelay(500 / portTICK_PERIOD_MS);
