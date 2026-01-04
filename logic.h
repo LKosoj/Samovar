@@ -393,7 +393,7 @@ String get_Samovar_Status() {
       SamovarStatus = F("Стабилизация завершена/Работа на себя");
     }
   } else if (SamovarStatusInt == 1000) {
-    SamovarStatus = F("Режим дистилляции");
+    SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; Режим дистилляции";
     //SamovarStatus += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
     //SamovarStatus += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
   } else if (SamovarStatusInt == 3000) {
