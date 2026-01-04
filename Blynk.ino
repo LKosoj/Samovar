@@ -202,7 +202,7 @@ BLYNK_READ(V21) {
   static bool inReadHandler = false;
   if (inReadHandler) return;
   inReadHandler = true;
-  Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String) + target_power_volt);
+  Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt);
   inReadHandler = false;
 }
 #endif

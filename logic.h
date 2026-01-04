@@ -919,6 +919,9 @@ void check_alarm() {
 
         //достигли заданной температуры на разгоне и смочили насадку (если используется эта функция), переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
         SamovarStatusInt = 51;
+        
+        // Инициализируем переменные для проверки стабилизации
+        acceleration_temp = 0;
 
 #ifdef COLUMN_WETTING
         // Помечаем, что после стабилизации нужно автоматически перейти к головам
@@ -945,13 +948,16 @@ void check_alarm() {
 
   //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
   //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
-  if ((SamovarStatusInt == 51 || SamovarStatusInt == 52) && SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
-    float d = SteamSensor.avgTemp - SteamSensor.PrevTemp;
+  if (SamovarStatusInt == 51 && SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+    static float prev_stable_temp = 0;  // Предыдущая температура для проверки стабилизации
+    float d = SteamSensor.avgTemp - prev_stable_temp;
     d = abs(d);
     if (d < 0.1) {
       acceleration_temp += 1;
       if (acceleration_temp == 60 * 6) {
         SamovarStatusInt = 52;
+        acceleration_temp = 0;  // Сбрасываем счетчик после установки статуса стабилизации
+        prev_stable_temp = 0;  // Сбрасываем предыдущую температуру
         set_buzzer(true);
         SendMsg(("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
 #ifdef COLUMN_WETTING
@@ -963,7 +969,7 @@ void check_alarm() {
       }
     } else {
       acceleration_temp = 0;
-      SteamSensor.PrevTemp = SteamSensor.avgTemp;
+      prev_stable_temp = SteamSensor.avgTemp;  // Обновляем предыдущую температуру только при изменении
     }
   }
 #ifdef USE_WATER_VALVE
