@@ -1224,8 +1224,15 @@ void set_boiling() {
     //d_s_time_min = 0;
     //началось кипение, запоминаем Т кипения
     boil_started = true;
-    boil_temp = TankSensor.avgTemp;
-    alcohol_s = get_alcohol(TankSensor.avgTemp);
+    //Проверяем наличие датчика куба (Т >= 2 означает наличие датчика)
+    if (TankSensor.avgTemp >= 2) {
+      boil_temp = TankSensor.avgTemp;
+      alcohol_s = get_alcohol(TankSensor.avgTemp);
+    } else {
+      //Если датчик куба отсутствует, устанавливаем значения по умолчанию
+      boil_temp = 0;
+      alcohol_s = 0;
+    }
 #ifdef USE_WATER_PUMP
     wp_count = -10;
 #endif
@@ -1234,7 +1241,21 @@ void set_boiling() {
 }
 
 bool check_boiling() {
-  if (boil_started || !PowerOn || !valve_status || TankSensor.avgTemp < 70) {
+  if (boil_started || !PowerOn || !valve_status) {
+    return false;
+  }
+
+  //Определяем наличие датчиков (Т < 2 означает отсутствие датчика)
+  bool has_tank_sensor = TankSensor.avgTemp >= 2;
+  bool has_water_sensor = WaterSensor.avgTemp >= 2;
+
+  //Если оба датчика отсутствуют, не можем определить кипение
+  if (!has_tank_sensor && !has_water_sensor) {
+    return false;
+  }
+
+  //Если есть датчик куба, проверяем минимальную температуру
+  if (has_tank_sensor && TankSensor.avgTemp < 70) {
     return false;
   }
 
@@ -1246,28 +1267,73 @@ bool check_boiling() {
     return false;
   }
 
-  //Если минимальная температура воды охлаждения больше текущей, то запоминаем её
-  if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
-    d_s_temp_prev = WaterSensor.avgTemp;
+  bool boiling_detected = false;
+
+  if (has_tank_sensor && has_water_sensor) {
+    //Оба датчика есть - определяем по совокупности факторов
+    
+    //Если минимальная температура воды охлаждения больше текущей, то запоминаем её
+    if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
+      d_s_temp_prev = WaterSensor.avgTemp;
+    }
+    
+    //Проверяем стабильность температуры в кубе
+    bool tank_stable = false;
+    if (TankSensor.avgTemp - b_t_temp_prev > 0.1) {
+      b_t_temp_prev = TankSensor.avgTemp;
+      b_t_time_min = millis();
+    } else if ((millis() - b_t_time_min) > 50 * 1000 && b_t_time_min > 0) {
+      tank_stable = true;
+    }
+    
+    //Проверяем нагрев воды охлаждения
+    bool water_heating = (WaterSensor.avgTemp - d_s_temp_prev > 8) || 
+                         (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2);
+    
+    //Кипение определяется при одновременном выполнении ОБОИХ условий (куб стабилен И вода нагревается) или при высокой температуре пара
+    if ((tank_stable && water_heating) || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+      boiling_detected = true;
+    }
+  } else if (has_tank_sensor) {
+    //Только датчик куба - определяем по стабильности температуры в кубе
+    if (TankSensor.avgTemp - b_t_temp_prev > 0.1) {
+      b_t_temp_prev = TankSensor.avgTemp;
+      b_t_time_min = millis();
+    } else if ((millis() - b_t_time_min) > 50 * 1000 && b_t_time_min > 0) {
+      boiling_detected = true;
+    }
+    //Также можно использовать температуру пара как дополнительный индикатор
+    if (SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+      boiling_detected = true;
+    }
+  } else if (has_water_sensor) {
+    //Только датчик воды - определяем по нагреву воды охлаждения
+    if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
+      d_s_temp_prev = WaterSensor.avgTemp;
+    }
+    if (WaterSensor.avgTemp - d_s_temp_prev > 8) {
+      boiling_detected = true;
+    }
+    if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2) {
+      boiling_detected = true;
+    }
+    //Также можно использовать температуру пара как дополнительный индикатор
+    if (SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+      boiling_detected = true;
+    }
   }
-  //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  if (WaterSensor.avgTemp - d_s_temp_prev > 8 || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+
+  if (boiling_detected) {
     set_boiling();
+    if (boil_started) {
+      if (has_tank_sensor) {
+        SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
+      } else {
+        SendMsg("Началось кипение в кубе!", WARNING_MSG);
+      }
+    }
   }
-  //Если температура воды охлаждения близка к заданной, то кипение началось
-  if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2) {
-    set_boiling();
-  }
-  //Проверяем, что температура в кубе не менялась более 0.1 градуса в течение 50 секунд, если менялась, то кипение не началось
-  if (TankSensor.avgTemp - b_t_temp_prev > 0.1) {
-    b_t_temp_prev = TankSensor.avgTemp;
-    b_t_time_min = millis();
-  } else if ((millis() - b_t_time_min) > 50 * 1000 && b_t_time_min > 0) {
-    set_boiling();
-  }
-  if (boil_started) {
-    SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
-  }
+
   return boil_started;
 }
 
