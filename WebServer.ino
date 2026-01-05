@@ -1,5 +1,6 @@
 #include <asyncHTTPrequest.h>
 //#include <ESPping.h>
+#include <WiFi.h>
 
 #include "Samovar.h"
 #include "FS.h"
@@ -31,6 +32,8 @@ void change_samovar_mode();
 void WebServerInit(void);
 String indexKeyProcessor(const String &var);
 String setupKeyProcessor(const String &var);
+String wifiKeyProcessor(const String &var);
+String wifiKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 void start_self_test(void);
@@ -140,7 +143,24 @@ void WebServerInit(void) {
 
 
   server.on("/", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
-    request->redirect("/index.htm");
+    // Если нет подключения к WiFi сети - показываем страницу настройки WiFi
+    // Это сработает когда Самовар в режиме AP (точка доступа)
+    if (WiFi.status() != WL_CONNECTED) {
+      // Обрабатываем wifi.htm с template processor (как для /wifi.htm)
+      if (SPIFFS.exists("/wifi.htm")) {
+        request->send(SPIFFS, "/wifi.htm", "text/html", false, wifiKeyProcessor);
+      } else {
+        // Если файл не найден, отправляем простую HTML страницу
+        String html = F("<html><head><meta charset='utf-8'><title>Samovar - WiFi Setup</title></head><body>");
+        html += F("<h2>Настройка WiFi</h2><p>Файл wifi.htm не найден в файловой системе.</p>");
+        html += F("<p>Убедитесь, что файл загружен в SPIFFS.</p>");
+        html += F("</body></html>");
+        request->send(200, "text/html", html);
+      }
+    } else {
+      // Иначе - обычный интерфейс Самовара (перенаправление на index.htm)
+      request->redirect("/index.htm");
+    }
   });
   
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -197,6 +217,40 @@ void WebServerInit(void) {
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
+  server.serveStatic("/wifi.htm", SPIFFS, "/wifi.htm").setTemplateProcessor(wifiKeyProcessor).setCacheControl("max-age=1");
+
+  server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->redirect("/wifi.htm");
+  });
+
+  server.on("/wifi/save", HTTP_POST, [](AsyncWebServerRequest* request) {
+    if (!request) return;
+    if (!request->hasArg("ssid")) {
+      request->send(400, "text/plain", "Missing ssid");
+      return;
+    }
+
+    String ssid = request->arg("ssid");
+    String pass = request->hasArg("pass") ? request->arg("pass") : "";
+    ssid.trim();
+
+    if (ssid.length() == 0) {
+      request->send(400, "text/plain", "Empty ssid");
+      return;
+    }
+
+    save_wifi_credentials(ssid.c_str(), pass.c_str());
+    request->send(200, "text/plain", "OK. Rebooting...");
+    delay(200);
+    ESP.restart();
+  });
+
+  server.on("/wifi/clear", HTTP_POST, [](AsyncWebServerRequest* request) {
+    clear_wifi_credentials();
+    request->send(200, "text/plain", "OK. Rebooting...");
+    delay(200);
+    ESP.restart();
+  });
   //server.serveStatic("/edit", SPIFFS, "/edit.htm");
   // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
 
@@ -612,6 +666,15 @@ String setupKeyProcessor(const String &var) {
     return String(SamSetup.ColHeight, 2);
   else if (var == "PackDens")
     return String(SamSetup.PackDens);
+  return "";
+}
+
+String wifiKeyProcessor(const String &var) {
+  if (var == "wifi_ssid") {
+    String ssid = get_wifi_ssid();
+    if (ssid.length() == 0) return String("-");
+    return ssid;
+  }
   return "";
 }
 

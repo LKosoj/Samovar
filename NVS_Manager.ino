@@ -4,6 +4,58 @@
 
 Preferences prefs;
 
+// -------------------------------------------------------------------------------------------------
+// Wi-Fi креды (замена WiFiManager):
+// Храним отдельно от профиля, в namespace "wifi" (ключи: ssid, pass)
+// -------------------------------------------------------------------------------------------------
+
+bool load_wifi_credentials(char *ssid, size_t ssid_len, char *pass, size_t pass_len) {
+  if (!ssid || !pass || ssid_len == 0 || pass_len == 0) return false;
+  ssid[0] = '\0';
+  pass[0] = '\0';
+
+  if (!prefs.begin("wifi", true)) {
+    return false;
+  }
+
+  prefs.getString("ssid", "").toCharArray(ssid, ssid_len);
+  prefs.getString("pass", "").toCharArray(pass, pass_len);
+  prefs.end();
+
+  return ssid[0] != '\0';
+}
+
+String get_wifi_ssid() {
+  if (!prefs.begin("wifi", true)) {
+    return "";
+  }
+  String ssid = prefs.getString("ssid", "");
+  prefs.end();
+  return ssid;
+}
+
+void save_wifi_credentials(const char *ssid, const char *pass) {
+  if (!ssid) return;
+  if (!prefs.begin("wifi", false)) {
+    Serial.println("NVS: Failed to open wifi namespace for writing!");
+    return;
+  }
+
+  prefs.putString("ssid", String(ssid));
+  if (pass) {
+    prefs.putString("pass", String(pass));
+  }
+
+  prefs.end();
+}
+
+void clear_wifi_credentials() {
+  if (!prefs.begin("wifi", false)) return;
+  prefs.remove("ssid");
+  prefs.remove("pass");
+  prefs.end();
+}
+
 // Хелпер для сохранения строк (char array -> String -> NVS)
 void saveStringIfChanged(const char* key, const char* value) {
   String current = prefs.getString(key, "");

@@ -18,6 +18,47 @@ var glcalcnum = false;
 // ========== КОНФИГУРАЦИЯ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) ==========
 var columnParams = null;
 
+function updateHeadsTailsPercent() {
+  const materialSelect = document.getElementById('loadprogram');
+  const headsInput = document.getElementById('vlhp');
+  const tailsInput = document.getElementById('vltp');
+  
+  if (!materialSelect || !headsInput || !tailsInput) {
+    return; // Элементы не найдены
+  }
+  
+  const rawMaterialType = parseInt(materialSelect.value) || 0;
+  
+  // Рекомендуемые проценты на основе типа сырья (из подсказок в интерфейсе)
+  let headsPercent, tailsPercent;
+  
+  switch(rawMaterialType) {
+    case 0: // Фрукты
+      headsPercent = 8;
+      tailsPercent = 5;
+      break;
+    case 1: // Зерно
+      headsPercent = 8; // Среднее от 6-10%
+      tailsPercent = 6; // Среднее от 5-7%
+      break;
+    case 2: // Сахар
+      headsPercent = 12; // Среднее от 10-15%
+      tailsPercent = 5;
+      break;
+    default:
+      headsPercent = 8;
+      tailsPercent = 5;
+  }
+  
+  headsInput.value = headsPercent;
+  tailsInput.value = tailsPercent;
+  
+  // Пересчитываем программу, если она уже загружена
+  if (typeof set_num === 'function') {
+    set_num();
+  }
+}
+
 function updateColumnParams() {
   const matSelect = document.getElementById("loadprogram");
   const mat = matSelect ? matSelect.value : 2;
@@ -130,6 +171,9 @@ function loadFile(e) {
  if (value == 0) fn = 'program_fruit.txt';
  else if (value == 1) fn = 'program_grain.txt';
  else if (value == 2) fn = 'program_shugar.txt';
+ 
+ // Обновляем проценты голов и хвостов при смене типа сырья
+ updateHeadsTailsPercent();
  
  // Обновляем параметры колонны при смене типа сырья
  updateColumnParams();
@@ -492,6 +536,8 @@ window.onload = function() {
   updateColumnParams();
   const loadProgramSelect = document.getElementById("loadprogram");
   if (loadProgramSelect) {
+    // Устанавливаем начальные проценты голов и хвостов для выбранного типа сырья
+    updateHeadsTailsPercent();
     getProgramFromFile(loadProgramSelect);
   }
   

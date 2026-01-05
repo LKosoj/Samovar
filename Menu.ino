@@ -3,7 +3,6 @@
 #include <LiquidMenu.h>
 #include <Arduino.h>
 #include <EEPROM.h>
-#include <ESPAsyncWiFiManager.h>
 
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
@@ -431,8 +430,7 @@ void menu_program_back() {
 
 void menu_reset_wifi() {
   //Сбрасываем сохраненные настройки WiFi и перегружаем Самовар
-  AsyncWiFiManager wifiManager(&server, &dns);
-  wifiManager.resetSettings();
+  clear_wifi_credentials();
   ESP.restart();
 }
 

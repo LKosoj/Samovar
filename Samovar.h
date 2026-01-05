@@ -290,7 +290,6 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 #endif
 
 #include <GyverStepper2.h>
-#include <DNSServer.h>
 GStepper2< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
 
 iarduino_I2C_connect I2C2;
@@ -358,7 +357,11 @@ LiquidMenu main_menu1(lcd);
 //WebSerialClass WebSerial;
 #endif
 
-DNSServer dns;
+// Wi-Fi креды (легковесная настройка без WiFiManager)
+bool load_wifi_credentials(char *ssid, size_t ssid_len, char *pass, size_t pass_len);
+String get_wifi_ssid();
+void save_wifi_credentials(const char *ssid, const char *pass);
+void clear_wifi_credentials();
 
 enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT};
 volatile SamovarCommands sam_command_sync;                    // переменная для передачи команд между процессами

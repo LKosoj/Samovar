@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Samovar — Wi‑Fi</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 16px; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; }
+    label { display:block; margin-top: 12px; font-weight: 600; }
+    input { width: 800; padding: 10px; font-size: 16px; box-sizing: border-box; }
+    .row { display:flex; gap: 12px; flex-wrap: wrap; }
+    .row > div { flex: 1 1 240px; }
+    button { margin-top: 16px; padding: 12px 14px; font-size: 16px; cursor: pointer; }
+    .muted { color:#666; font-size: 14px; }
+    .warn { color:#8a4b00; font-size: 14px; }
+    code { background:#f6f6f6; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h2>Настройка Wi‑Fi</h2>
+  <div class="card">
+    <p class="muted">Текущий сохранённый SSID: <b>%wifi_ssid%</b></p>
+    <p class="muted">После сохранения устройство перезагрузится.</p>
+    <form method="POST" action="/wifi/save">
+      <div class="row">
+        <div>
+          <label for="ssid">SSID</label>
+          <input id="ssid" name="ssid" type="text" maxlength="63" value="%wifi_ssid%" placeholder="Имя сети (SSID)" required>
+        </div>
+        <div>
+          <label for="pass">Пароль</label>
+          <input id="pass" name="pass" type="password" maxlength="63" placeholder="Пароль (можно пустой для открытой сети)">
+        </div>
+      </div>
+      <button type="submit">Сохранить и перезагрузить</button>
+    </form>
+    <hr>
+    <form method="POST" action="/wifi/clear" id="clearForm">
+      <button type="submit">Стереть Wi‑Fi и перезагрузить</button>
+    </form>
+    <script>
+      document.getElementById('clearForm').addEventListener('submit', function(e) {
+        if (!confirm('Стереть сохранённые Wi‑Fi креды и перезагрузить?')) {
+          e.preventDefault();
+        }
+      });
+    </script>
+    <p class="warn">Подключение к точке доступа Самовара: SSID <code>Samovar</code>, адрес <code>192.168.4.1</code>.</p>
+  </div>
+</body>
+</html>
+
