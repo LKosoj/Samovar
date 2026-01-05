@@ -662,9 +662,45 @@ String setupKeyProcessor(const String &var) {
     return get_DSAddressList(getDSAddress(ACPSensor.Sensor));
   else if (var == "ColDiam")
     return String(SamSetup.ColDiam, 1);
-  else if (var == "ColHeight")
+  else if (var == "ColDiam_1.5") {
+    if (abs(SamSetup.ColDiam - 1.5f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColDiam_2.0") {
+    if (abs(SamSetup.ColDiam - 2.0f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColDiam_3.0") {
+    if (abs(SamSetup.ColDiam - 3.0f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight")
     return String(SamSetup.ColHeight, 2);
-  else if (var == "PackDens")
+  else if (var == "ColHeight_0.50") {
+    if (abs(SamSetup.ColHeight - 0.50f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_0.75") {
+    if (abs(SamSetup.ColHeight - 0.75f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_1.00") {
+    if (abs(SamSetup.ColHeight - 1.00f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_1.25") {
+    if (abs(SamSetup.ColHeight - 1.25f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_1.50") {
+    if (abs(SamSetup.ColHeight - 1.50f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_1.75") {
+    if (abs(SamSetup.ColHeight - 1.75f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_2.00") {
+    if (abs(SamSetup.ColHeight - 2.00f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_2.25") {
+    if (abs(SamSetup.ColHeight - 2.25f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "ColHeight_2.50") {
+    if (abs(SamSetup.ColHeight - 2.50f) < 0.01f) return "selected";
+    else return "";
+  } else if (var == "PackDens")
     return String(SamSetup.PackDens);
   return "";
 }

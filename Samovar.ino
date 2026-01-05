@@ -1169,6 +1169,8 @@ void setup() {
   used_byte = SPIFFS.usedBytes();
   verbose_print_reset_reason();
   //Serial.println(sizeof(SamSetup));
+
+  SamovarStatus.reserve(80);
 }
 
 void loop() {
@@ -1723,6 +1725,7 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
     Msg = m;
     msg_level = msg_type;
   }
+  Msg.clear();
 }
 
 void WriteConsoleLog(String StringLogMsg) {

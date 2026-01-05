@@ -326,6 +326,7 @@ void stop_process(String reason) {
 
 // Получить статус Самовара
 String get_Samovar_Status() {
+  SamovarStatus.clear();
   // Если питание выключено и нет активного режима - показываем "Выключено"
   if (!PowerOn && SamovarStatusInt == 0) {
     SamovarStatus = F("Выключено");

@@ -57,7 +57,7 @@
 
     HTMLElement.prototype.serialize = function() {
       var obj = {};
-      var elements = this.querySelectorAll("input[type='text'], input[type='color'], input[type='checkbox'], select");
+      var elements = this.querySelectorAll("input[type='text'], input[type='color'], input[type='checkbox'], input[type='range'], select");
       for (var i = 0; i < elements.length; ++i) {
         var element = elements[i];
         var name = element.name;
@@ -131,6 +131,15 @@
           this.value = this.value.replace(',', '.');
         });
       });
+      
+      // Обновление отображения плотности насадки при изменении слайдера
+      var packDensSlider = document.getElementById('PackDens');
+      var packDensDisplay = document.getElementById('PackDensDisplay');
+      if (packDensSlider && packDensDisplay) {
+        packDensSlider.addEventListener('input', function() {
+          packDensDisplay.value = this.value;
+        });
+      }
     };
   </script>
 </head>
@@ -175,15 +184,30 @@
         <h2 style="color: #3498db;">⚙️ Параметры оборудования (колонны)</h2>
         <h2>
           Диаметр:
-          <input name="ColDiam" id="ColDiam" type="text" value="%ColDiam%" style="width: 4em;"> дюймов (1.5, 2.0, 3.0 и т.д.)
+          <select name="ColDiam" id="ColDiam">
+            <option value="1.5" %ColDiam_1.5%>1.5</option>
+            <option value="2.0" %ColDiam_2.0%>2.0</option>
+            <option value="3.0" %ColDiam_3.0%>3.0</option>
+          </select> дюймов
         </h2>
         <h2>
           Высота насадки:
-          <input name="ColHeight" id="ColHeight" type="text" value="%ColHeight%" style="width: 4em;"> метров (например, 1.5)
+          <select name="ColHeight" id="ColHeight">
+            <option value="0.50" %ColHeight_0.50%>0.50</option>
+            <option value="0.75" %ColHeight_0.75%>0.75</option>
+            <option value="1.00" %ColHeight_1.00%>1.00</option>
+            <option value="1.25" %ColHeight_1.25%>1.25</option>
+            <option value="1.50" %ColHeight_1.50%>1.50</option>
+            <option value="1.75" %ColHeight_1.75%>1.75</option>
+            <option value="2.00" %ColHeight_2.00%>2.00</option>
+            <option value="2.25" %ColHeight_2.25%>2.25</option>
+            <option value="2.50" %ColHeight_2.50%>2.50</option>
+          </select> метров
         </h2>
         <h2>
           Плотность насадки:
-          <input name="PackDens" id="PackDens" type="text" value="%PackDens%" style="width: 4em;"> &#37; (60-100)
+          <input name="PackDens" id="PackDens" type="range" min="60" max="100" step="5" value="%PackDens%" style="width: 200px; vertical-align: middle;">
+          <input type="text" id="PackDensDisplay" value="%PackDens%" readonly style="width: 3em; text-align: center;"> &#37; (60-100)
         </h2>
       </div>
       <div>
