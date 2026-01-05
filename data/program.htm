@@ -4,381 +4,517 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
 <link rel="stylesheet" href="style.css">
-<title>Самовар - Программа</title>
+<title>Самовар</title>
 
 <script>
   var pwr_unit = "%pwr_unit%"; 
-  var _lnIdx = 0;
-  var phv = 0;
-  var ptv = 0;
-  var pbas = 0;
-  var programerr = false;
-  var glcalcnum = false;
+var _lnIdx = 0;
+var phv = 0;
+var ptv = 0;
+var pbas = 0;
+var programerr;
+var glcalcnum = false;
 
-  // ========== КОНФИГУРАЦИЯ КОЛОННЫ (из NVS) ==========
-  var columnConfig = {
-    diameterInch: parseFloat("%ColDiam%"),
-    heightM: parseFloat("%ColHeight%"),
-    packingDensity: parseInt("%PackDens%"),
-    calculatedParams: null
+// ========== КОНФИГУРАЦИЯ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) ==========
+var columnParams = null;
+
+function updateColumnParams() {
+  const matSelect = document.getElementById("loadprogram");
+  const mat = matSelect ? matSelect.value : 2;
+  
+  fetch("/ajax_col_params?mat=" + mat)
+    .then(r => r.json())
+    .then(data => {
+      console.log("Данные API:", data);
+      if (data) {
+        columnParams = data;
+        displayColumnParams();
+      }
+    })
+    .catch(err => console.error("Ошибка API:", err));
+}
+
+function displayColumnParams() {
+  if (!columnParams) return;
+  const p = columnParams;
+  
+  const setTxt = (id, val, fixed = 0) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = (typeof val === 'number') ? val.toFixed(fixed) : (val || '-');
   };
 
-  // Запрос параметров колонны с бэкенда
-  function updateColumnParams() {
-    const matSelect = document.getElementById("loadprogram");
-    if (!matSelect) return;
-    const mat = matSelect.value;
-    
-    fetch("/ajax_col_params?mat=" + mat)
-      .then(r => r.json())
-      .then(data => {
-        columnConfig.calculatedParams = data;
-        displayColumnParams();
-      })
-      .catch(err => console.error("Ошибка API параметров колонны:", err));
+  setTxt('colFloodPower', p.floodPowerW);
+  setTxt('colWorkingPower', p.workingPowerW);
+  setTxt('colMaxFlow', p.maxFlowMlH);
+  setTxt('colTheoreticalPlates', p.theoreticalPlates, 1);
+  
+  if (document.getElementById('colHeadsSpeed')) document.getElementById('colHeadsSpeed').textContent = (p.headsFlowMlH / 1000).toFixed(3);
+  if (document.getElementById('colBodySpeedMin')) document.getElementById('colBodySpeedMin').textContent = (p.bodyFlowMinMlH / 1000).toFixed(3);
+  if (document.getElementById('colBodySpeedMax')) document.getElementById('colBodySpeedMax').textContent = (p.bodyFlowMaxMlH / 1000).toFixed(3);
+  
+  const heaterMaxPwr = parseFloat(document.getElementById('heaterMaxPower').value) || 3500;
+  const pUnit = (pwr_unit === 'V') ? ' В' : ' Вт';
+  
+  if (pwr_unit === 'V') {
+    const toVolt = (w) => Math.round(220 * Math.sqrt(Math.max(0, w) / heaterMaxPwr));
+    setTxt('colFloodPower', toVolt(p.floodPowerW));
+    setTxt('colWorkingPower', toVolt(p.workingPowerW));
+    const fu = document.getElementById('floodUnit'); if (fu) fu.textContent = ' В';
+    const wu = document.getElementById('workingUnit'); if (wu) wu.textContent = ' В';
   }
 
-  // Отображение параметров, полученных от бэкенда
-  function displayColumnParams() {
-    const p = columnConfig.calculatedParams;
-    if (!p) return;
-    
-    const resultsBlock = document.getElementById('columnParamsResults');
-    if (!resultsBlock) return;
-
-    // Мощность и производительность
-    document.getElementById('colFloodPower').textContent = p.floodPowerW.toFixed(0);
-    document.getElementById('colWorkingPower').textContent = p.workingPowerW.toFixed(0);
-    document.getElementById('colMaxFlow').textContent = p.maxFlowMlH.toFixed(0);
-    document.getElementById('colTheoreticalPlates').textContent = p.theoreticalPlates.toFixed(1);
-    
-    // Рекомендуемые скорости (л/ч)
-    document.getElementById('colHeadsSpeed').textContent = (p.headsFlowMlH / 1000).toFixed(3);
-    document.getElementById('colBodySpeedMin').textContent = (p.bodyFlowMinMlH / 1000).toFixed(3);
-    document.getElementById('colBodySpeedMax').textContent = (p.bodyFlowMaxMlH / 1000).toFixed(3);
-    
-    const heaterMaxPwr = parseFloat(document.getElementById('heaterMaxPower').value) || 3500;
-    const pUnit = (pwr_unit === 'V') ? ' В' : ' Вт';
-    
-    let tailsPwr = p.tailsPowerW;
-    let bodyEndPwr = p.bodyEndPowerW;
-    let workingPwr = p.workingPowerW;
-    let floodPwr = p.floodPowerW;
-    
-    if (pwr_unit === 'V') {
-      tailsPwr = Math.round(220 * Math.sqrt(p.tailsPowerW / heaterMaxPwr));
-      bodyEndPwr = Math.round(220 * Math.sqrt(p.bodyEndPowerW / heaterMaxPwr));
-      workingPwr = Math.round(220 * Math.sqrt(p.workingPowerW / heaterMaxPwr));
-      floodPwr = Math.round(220 * Math.sqrt(p.floodPowerW / heaterMaxPwr));
-      
-      document.getElementById('colFloodPower').textContent = floodPwr;
-      document.getElementById('colWorkingPower').textContent = workingPwr;
-      // Обновляем единицы измерения
-      document.getElementById('floodUnit').textContent = ' В';
-      document.getElementById('workingUnit').textContent = ' В';
-    } else {
-      document.getElementById('floodUnit').textContent = ' Вт';
-      document.getElementById('workingUnit').textContent = ' Вт';
-    }
-
-    document.getElementById('colTailsSpeed').textContent = (p.tailsFlowMlH / 1000).toFixed(3) + ' (при ' + tailsPwr + pUnit + ')';
-
-    // Инфо про конец тела
-    const bodyInfo = document.getElementById('colBodySpeedMax').parentNode;
-    if (bodyInfo) {
-      let endBodyNote = bodyInfo.querySelector('.body-end-note');
-      if (!endBodyNote) {
-        endBodyNote = document.createElement('div');
-        endBodyNote.className = 'body-end-note';
-        endBodyNote.style.fontSize = '0.85em';
-        endBodyNote.style.marginTop = '4px';
-        endBodyNote.style.color = '#666';
-        bodyInfo.appendChild(endBodyNote);
-      }
-      endBodyNote.innerHTML = '👉 Конец тела (<15% ABV): <b>' + (p.bodyEndFlowMlH / 1000).toFixed(3) + '</b> л/ч (при <b>' + bodyEndPwr + pUnit + '</b>)';
-    }
-
-    // Текст стратегии
-    const strategyNote = document.getElementById('strategyNote');
-    if (strategyNote) {
-      const mat = parseInt(document.getElementById("loadprogram").value);
-      if (mat === 0) {
-        strategyNote.innerHTML = '🍎 <b>Стратегия "Фрукты":</b> Плёночный режим (низкое ФЧ) для сохранения аромата.';
-        strategyNote.style.color = '#e67e22';
-      } else if (mat === 1) {
-        strategyNote.innerHTML = '🌾 <b>Стратегия "Зерно":</b> Баланс между очисткой и вкусом.';
-        strategyNote.style.color = '#d35400';
-      } else {
-        strategyNote.innerHTML = '💎 <b>Стратегия "Сахар":</b> Ректификация (высокое ФЧ) для максимальной чистоты.';
-        strategyNote.style.color = '#2980b9';
-      }
-    }
-    
-    resultsBlock.style.display = 'block';
+  const strategyNote = document.getElementById('strategyNote');
+  if (strategyNote) {
+    const mat = parseInt(document.getElementById("loadprogram").value);
+    const notes = [
+      '🍎 <b>Стратегия "Фрукты":</b> Плёночный режим (низкое ФЧ) для сохранения аромата.',
+      '🌾 <b>Стратегия "Зерно":</b> Баланс между очисткой и вкусом.',
+      '💎 <b>Стратегия "Сахар":</b> Ректификация (высокое ФЧ) для максимальной чистоты.'
+    ];
+    strategyNote.innerHTML = notes[mat] || notes[2];
   }
+  
+  const resBlock = document.getElementById('columnParamsResults');
+  if (resBlock) resBlock.style.display = 'block';
+}
 
-  // Применение скоростей и мощности к таблице программы
-  function applyRecommendedSpeeds() {
-    const p = columnConfig.calculatedParams;
-    if (!p) {
-      alert('Сначала дождитесь загрузки параметров колонны');
-      return;
-    }
+function applyRecommendedSpeeds() {
+  if (!columnParams) { alert('Параметры не загружены'); return; }
+  const p = columnParams;
+  const programLines = document.getElementById('prg').childNodes;
+  let appliedCount = 0;
+  
+  for (let i = 1; i < programLines.length; i++) {
+    const line = programLines[i];
+    if (!line || !line.querySelector) continue;
+    const type = line.querySelector('select[name^="ptype"]').value;
+    const speedInput = line.querySelector('input[name^="speed"]');
+    const powerInput = line.querySelector('input[name^="pvolt"]');
     
-    const programLines = document.getElementById('prg').childNodes;
-    let appliedCount = 0;
+    let rSpeed = 0; let rPwr = 0;
+    if (type == 'H') { rSpeed = p.headsFlowMlH; rPwr = p.headsPowerW; }
+    else if (type == 'B' || type == 'C') { rSpeed = p.bodyFlowMaxMlH; rPwr = (type == 'C' ? p.floodPowerW : p.workingPowerW); }
+    else if (type == 'T') { rSpeed = p.tailsFlowMlH; rPwr = p.tailsPowerW; }
     
-    // Поиск строк тела для плавного снижения скорости
-    let bodyLineIndices = [];
-    for (let i = 1; i < programLines.length; i++) {
-      const line = programLines[i];
-      if (!line || !line.childNodes) continue;
-      const typeSelect = line.querySelector('select[name^="ptype"]');
-      if (typeSelect && (typeSelect.value === 'B' || typeSelect.value === 'C')) {
-        bodyLineIndices.push(i);
-      }
-    }
-    
-    for (let i = 1; i < programLines.length; i++) {
-      const line = programLines[i];
-      if (!line || !line.childNodes) continue;
-      
-      const typeSelect = line.querySelector('select[name^="ptype"]');
-      const speedInput = line.querySelector('input[name^="speed"]');
-      const powerInput = line.querySelector('input[name^="pvolt"]');
-      
-      if (!typeSelect || !speedInput) continue;
-      
-      const type = typeSelect.value;
-      let recommendedSpeed = 0;
-      let recommendedPower = 0;
-      
-      switch(type) {
-        case 'H':
-          recommendedSpeed = p.headsFlowMlH;
-          recommendedPower = p.headsPowerW;
-          break;
-        case 'B':
-        case 'C':
-          if (bodyLineIndices.length > 1) {
-            const bodyIdx = bodyLineIndices.indexOf(i);
-            const t = bodyIdx / (bodyLineIndices.length - 1);
-            recommendedSpeed = p.bodyFlowMaxMlH - (p.bodyFlowMaxMlH - p.bodyEndFlowMlH) * t;
-            recommendedPower = (type === 'C') ? p.floodPowerW : (p.workingPowerW + (p.bodyEndPowerW - p.workingPowerW) * t);
-          } else {
-            recommendedSpeed = p.bodyFlowMaxMlH;
-            recommendedPower = (type === 'C') ? p.floodPowerW : p.workingPowerW;
-          }
-          break;
-        case 'T':
-          recommendedSpeed = p.tailsFlowMlH;
-          recommendedPower = p.tailsPowerW;
-          break;
-      }
-      
-      if (recommendedSpeed > 0) {
-        speedInput.value = (recommendedSpeed / 1000).toFixed(3);
-        if (powerInput && recommendedPower > 0) {
-          if (pwr_unit === 'V') {
-            const heaterMaxPwr = parseFloat(document.getElementById('heaterMaxPower').value) || 3500; 
-            powerInput.value = Math.round(220 * Math.sqrt(recommendedPower / heaterMaxPwr));
-          } else {
-            powerInput.value = Math.round(recommendedPower);
-          }
+    if (rSpeed > 0) {
+      speedInput.value = (rSpeed / 1000).toFixed(3);
+      if (powerInput) {
+        if (pwr_unit === 'V') {
+          const heaterMaxPwr = parseFloat(document.getElementById('heaterMaxPower').value) || 3500;
+          powerInput.value = Math.round(220 * Math.sqrt(rPwr / heaterMaxPwr));
+        } else {
+          powerInput.value = Math.round(rPwr);
         }
-        appliedCount++;
       }
+      appliedCount++;
     }
-    
-    set_num();
-    if (appliedCount > 0) alert('✅ Параметры применены к ' + appliedCount + ' строкам');
   }
+  set_num();
+  if (appliedCount > 0) alert('Параметры применены');
+}
 
-  function loadFile(e) {
-    var file = e;
-    var reader = new FileReader();
-    reader.onload = function () {
-      document.getElementById('WProgram1').value = reader.result;
-      glcalcnum = false;
-      calc_program();
-    };
-    reader.readAsText(file, "UTF-8");
-  }
+function loadFile(e) {
+	var file = e;
+	var reader = new FileReader();
+	reader.onload = function () {
+		document.getElementById('WProgram1').value = reader.result;
+		glcalcnum = false;
+		calc_program();
+	};
+	reader.readAsText(file, "UTF-8");
+}
 
-  function getProgramFromFile(selectObject){
-    var value = selectObject.value;
-    var fn = (value == 0) ? 'program_fruit.txt' : (value == 1 ? 'program_grain.txt' : 'program_shugar.txt');
-    
-    updateColumnParams(); 
-    
-    fetch(fn)
-      .then(response => response.text())
-      .then((data) => {
-        document.getElementById('WProgram1').value = data;
-        glcalcnum = false;
-        calc_program();
-      });
-  }
+ function getProgramFromFile(selectObject){
+ var value = selectObject.value;
+ var fn;
+ if (value == 0) fn = 'program_fruit.txt';
+ else if (value == 1) fn = 'program_grain.txt';
+ else if (value == 2) fn = 'program_shugar.txt';
+ 
+ // Обновляем параметры колонны при смене типа сырья
+ updateColumnParams();
+ 
+ fetch(fn)
+  .then(response => response.text())
+  .then((data) => {
+  document.getElementById('WProgram1').value = data
+  glcalcnum = false;
+  calc_program();
+  })
+}
 
-  function SaveProgramToFile() {
-    var filename = 'programbackup.txt';
-    var text = document.getElementById('WProgram1').value;
-    var pom = document.createElement('a');
-    pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-    pom.setAttribute('download', filename);
-    pom.style.display = 'none';
-    document.body.appendChild(pom);
-    pom.click();
-    document.body.removeChild(pom);
-  }
+function SaveProgramToFile() {
+  var filename, text;
+  filename = 'programbackup.txt';
+  text = document.getElementById('WProgram1').value;
 
-  function check_program(str){
-    var arrayOfStrings = str.split("\n");
-    var prevcnt = 0;
-    var ret = true;
-    for (i = 0; i < arrayOfStrings.length; i++){
-      var arrayOfDelim = arrayOfStrings[i].split(";");
-      if (arrayOfDelim.length > 1 && prevcnt > 0 && prevcnt != arrayOfDelim.length) ret = false;
-      prevcnt = arrayOfDelim.length;
+  var pom = document.createElement('a');
+  pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+  pom.setAttribute('download', filename);
+
+  pom.style.display = 'none';
+  document.body.appendChild(pom);
+
+  pom.click();
+
+  document.body.removeChild(pom);
+}
+
+function openTab(evt, tabName) {
+    var i, tabcontent, tablinks;
+    tabcontent = document.getElementsByClassName("tabcontent");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
     }
-    return ret;
-  }
+    tablinks = document.getElementsByClassName("tablinks");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+    }
+    document.getElementById(tabName).style.display = "block";
+    evt.currentTarget.className += " active";
+  return 0;
+}
 
-  function get_time(tm){
-    var h = Math.trunc(tm);
-    var m = Math.trunc((tm - h) * 60);
-    return (h < 10 ? "0" + h : h) + ":" + (m < 10 ? "0" + m : m);
+function check_program(str){
+  var arrayOfStrings = str.split("\n");
+  var prevcnt = 0;
+  var ret = true;
+  var cnt;
+  for (i = 0; i < arrayOfStrings.length; i++){
+  	var arrayOfDelim = arrayOfStrings[i].split(";");
+  	cnt = arrayOfDelim.length;
+  	if (cnt == 1 && arrayOfDelim[0] != "" && arrayOfStrings.length == i - 1) ret = false;
+  	else if (prevcnt > 0 && cnt > 1) {
+  		if (prevcnt != cnt) ret = false;
+  	}
+  	prevcnt = cnt;
   }
+  return ret;
+}
 
-  function set_num(){
+function get_time(tm){
+  var s = "";
+  l = Math.trunc(tm);
+  if (l < 10) s = "0";
+  s = s + l + ":";
+  l = Math.trunc((tm - Math.trunc(tm)) * 60);
+  if (l < 10) s = s + "0";
+  s = s + l;
+  return s;
+}
+
+function set_num(){
     prep_calc();
     programerr = false;
     var e = document.getElementById("prg").childNodes;
-    var sum = 0; var sumh = 0; var sumb = 0;
-    var prgc = ""; var prgo = "";
-    
+    var a;
+    var v;
+    var t;
+    var l;
+    var sum = 0;
+    var sumh = 0;
+    var sumt = 0;
+    var sumb = 0;
+    var prgc = "";
+    var prgo = "";
     for (i=1;i<e.length;i++){
-      var row = e[i];
-      row.childNodes[0].innerText = (i < 10 ? "0" : "") + i;
+      a = e[i].childNodes[0];
+      a.innerText = "";
+      if (i < 10) a.innerText = "0";
+      a.innerText = a.innerText + i;
+      //
+      if (e[i].childNodes[3].value.indexOf(".") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf("."));
+      if (e[i].childNodes[3].value.indexOf(",") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf(","));
       
-      row.childNodes[2].value = row.childNodes[2].value.replace(",",".");
-      row.childNodes[5].value = row.childNodes[5].value.replace(",",".");
-      
-      var capacityNum = document.getElementById("pnum" + (i-1)).value;
-      var type = row.childNodes[4].value;
+      e[i].childNodes[2].value = e[i].childNodes[2].value.replace(",",".");
+      e[i].childNodes[5].value = e[i].childNodes[5].value.replace(",",".");
+
+      // Получаем номер емкости из селекта
+      var capacitySelect = document.getElementById("pnum" + (i-1));
+      var capacityNum = capacitySelect ? capacitySelect.value : "0";
+
+      v = e[i].childNodes[6];
+      t = e[i].childNodes[7];
       var vlc = 1;
-      
-      if (type == "H") { vlc = phv / 100; sumh += Number(row.childNodes[3].value); }
-      else if (type == "T") { vlc = ptv / 100; }
-      else if (type == "B" || type == "C") { vlc = pbas / 100; sumb += Number(row.childNodes[3].value); }
-      
-      var volume = (row.childNodes[3].value * vlc);
-      row.childNodes[6].value = volume.toFixed(3);
-      
-      var time = (type == "P") ? (row.childNodes[2].value / 3600) : (volume / row.childNodes[2].value);
-      row.childNodes[7].value = get_time(time);
-      sum += time;
-      
-      prgc += type + ";" + (type == "P" ? row.childNodes[2].value : volume * 1000) + ";" + row.childNodes[2].value + ";" + capacityNum + ";0;" + row.childNodes[5].value + "\n";
-      prgo += capacityNum + ";" + row.childNodes[2].value + ";" + row.childNodes[3].value + ";" + type + ";" + row.childNodes[5].value + "\n";
+      if (e[i].childNodes[4].value == "H") {
+        vlc = phv / 100;
+        sumh = sumh + Number(e[i].childNodes[3].value);
+      }
+      else if (e[i].childNodes[4].value == "T") {
+        vlc = ptv / 100;
+      }
+      else if (e[i].childNodes[4].value == "P") {
+        vlc = 1;
+      }
+      else if (e[i].childNodes[4].value == "B" || e[i].childNodes[4].value == "C") {
+        vlc = pbas / 100;
+        sumb = sumb + Number(e[i].childNodes[3].value);
+      }
+      ll = (e[i].childNodes[3].value * vlc)
+      prgc = prgc + e[i].childNodes[4].value + ";";
+      if (e[i].childNodes[4].value == "P") {
+	    v.value = e[i].childNodes[2].value;
+	    a = v.value / 3600;
+	    prgc = prgc + v.value;
+      }
+      else {
+        v.value = ll.toFixed(3);
+        a = v.value / e[i].childNodes[2].value;
+	    prgc = prgc + v.value * 1000;
+      }
+      prgc = prgc + ";" + e[i].childNodes[2].value + ";" + capacityNum + ";0;" + e[i].childNodes[5].value + "\n";
+      t.value = get_time(a);
+      sum = sum + Number(a);
+      prgo = prgo + capacityNum + ";" + e[i].childNodes[2].value + ";" + e[i].childNodes[3].value + ";" + e[i].childNodes[4].value + ";" + e[i].childNodes[5].value + "\n"
     }
-    
     document.getElementById("sum").value = get_time(sum);
-    document.getElementById("WProgram1").value = prgo.trim();
-    document.getElementById("WProgram").value = prgc.trim();
-    
-    if (sumh != 100 || sumb != 100) programerr = true;
+    var err = ""
+    programerr = false;
+    if (sumh != 100) err = "Ошибка в программе - объем головных фракций не равен 100 (" + sumh + ")";
+    if (sumb != 100) err = "Ошибка в программе - объем фракции тела не равен 100 (" + sumb + ")";
+    if (err !=""){
+      //alert(err);
+      programerr = true;
+    }
+//    if (!programerr) {
+      prgc = prgc.slice(0, -1);
+      prgo = prgo.slice(0, -1);
+      document.getElementById("WProgram1").value = prgo;
+      document.getElementById("WProgram").value = prgc;
+//    }
     return programerr;
-  }
+}
 
-  function prep_calc(){
-    var vless = document.getElementById('vless').value;
-    var vlssp = document.getElementById('vlssp').value / 100;
-    var vlp = document.getElementById('vlp').value / 100;
-    var vlhp = document.getElementById('vlhp').value / 100;
-    var vltp = document.getElementById('vltp').value / 100;
-    
-    var tas = vless * vlssp;
-    phv = (tas * vlhp) / vlp;
-    ptv = (tas * vltp) / vlp * 2;
-    pbas = (tas - (tas * vlhp) - (tas * vltp)) / vlp;
-    
-    document.getElementById('trest').value = ((vless - phv - pbas) * 0.9).toFixed(2);
-  }
+function prep_calc(){
+    var vless = document.getElementById('vless').value; //A3
+    var vlssp = document.getElementById('vlssp').value / 100; //B3
+    var vlp = document.getElementById('vlp').value / 100; //B5
+    var vlhp = document.getElementById('vlhp').value / 100; //E3
+    var vltp = document.getElementById('vltp').value / 100; //H3
+    var tas = vless * vlssp; //С3
+    var pas = tas / vlp; //С5
+    var thv = tas * vlhp //F3
+    phv = thv / vlp; //F5
+    var ttv = tas * vltp; //I3
+    ptv = ttv / vlp * 2; //I5
+    var tht = ttv + thv; //K3
+    var pht = ptv + phv; //K5
+    var tbas = tas - tht; //M3
+    pbas = tbas / vlp; //M5
+    var ttr = vless - tht - tbas; //Q3
+    var ptr = (vless - pht - pbas) * 0.9; //Q5
+    document.getElementById('trest').value = ptr.toFixed(2);
+}
 
-  function calc_program(){
+function calc_program(){
     prep_calc();
-    let pwrLabel = (pwr_unit == 'P' ? 'Мощн' : 'Напр');
+    let programPwrLabel = pwr_unit == 'P' ? 'Мощн' : 'Напр';   
     var e = document.getElementById("prg");
-    e.innerHTML = `<div class="flex_row" style="font-size:18px; margin: 0.5em 0;" id="hdr">
-      &nbsp;&nbsp;№&nbsp;&nbsp;Ёмкость&nbsp;Скорость&nbsp;Процент&nbsp;&nbsp;&nbsp;Тип&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${pwrLabel}&nbsp;&nbsp;&nbsp;&nbsp;Выход&nbsp;&nbsp;Время</div>`;
     
-    var arr = document.getElementById("WProgram1").value.split("\n");
-    _lnIdx = 0;
-    for (var z=0; z<arr.length; z++) if(arr[z].trim()) addLine(false, arr[z]);
+    while (e.firstChild) {
+      e.removeChild(e.firstChild);
+    }
+      _lnIdx = 0;
+
+    e.insertAdjacentHTML("afterbegin", `<div class="flex_row" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
+      &nbsp;&nbsp;&nbsp;<label class="tooltip">№<span class="tooltiptext">Номер строки программы</span></label>
+      &nbsp;&nbsp;<label class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label>
+      &nbsp;<label class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час. Для строки с типом "Пауза" - время паузы в секундах</span></label>
+      &nbsp;<label class="tooltip">Процент<span class="tooltiptext">Процент от объема фракции данного типа</span></label>&nbsp;&nbsp;&nbsp;
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип<span class="tooltiptext">Тип программы. Для режима Пауза время паузы в секундах задается в поле "Скорость"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">${programPwrLabel}<span class="tooltiptext">Напряжение или мощность на регуляторе (зависит от типа используемого регулятора)</span></label>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Выход<span class="tooltiptext">Объем отбираемой фракции в данной строке программы</span></label>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Время, необходимое на отбор фракции в данной строке программы</span></label></div>`);
+    var p = document.getElementById("WProgram1");
+    var arr = p.value.split("\n");
+    for (z=0;z<arr.length;z++){
+      addLine(false, arr[z]);
+    }
     glcalcnum = true;
     set_num();
+}
+
+function set_program(){
+glcalcnum = false;
+calc_program();
+if (programerr) {
+  alert( "В программе ошибка! Программа не установлена" );
+  return;
+}
+var server = '/program';
+request = new XMLHttpRequest();
+request.onreadystatechange = function() {
+if (this.readyState == 4 && this.status == 200) {
+var myObj = this.responseText;
+if (myObj != "OK") {
+  document.getElementById('WProgram').value = myObj;
+  alert( "Ok" );
+}
+}
+};
+request.open('POST', server, false);
+let formData = new FormData(document.forms.mainform);
+request.send(formData);
+if(request.status != 200) {
+alert( request.status + ': ' + request.statusText );
+}
+return 0;
+};
+
+function sendbutton(command){
+var server = '/command?' + command;
+request = new XMLHttpRequest();
+request.open('GET', server, false);
+request.send();
+if(request.status != 200) {
+alert( request.status + ': ' + request.statusText );
+}
+sleep(1000);
+return 0;
+};
+
+function removeLine(ln){
+  var prg = document.getElementById("prg").childNodes.length;
+  if (prg < 3) return;
+  var prgline = document.getElementById(ln);
+  prgline.remove();
+  set_num();
+}
+
+function addLine(obj, s){
+  var calcnum = false;
+  if (obj && s == "") {
+    var p = document.getElementById(obj).childNodes;
+    var ss = "0";
+    var sp = 1;
+    s = p[1].value + ";" + p[2].value + ";" + ss + ";" + p[4].value + ";0";
+    calcnum = true;
+  }
+  var arr = s.split(";");
+  
+  var dl = document.createElement("div");
+  dl.className = "prgline";
+  dl.id = "prgln" + _lnIdx;
+  
+  var num = document.createElement("label");
+  num.className = "prglabel";
+  dl.appendChild(num);
+  
+  num.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
+  
+  var speed = document.createElement("input");
+  speed.type = "text";
+  speed.name = "speed" + _lnIdx;
+  speed.value = arr[1];
+  speed.setAttribute("onchange", "set_num();");
+  dl.appendChild(speed);
+  
+  var percent = document.createElement("input");
+  percent.type = "text";
+  percent.name = "percent" + _lnIdx;
+  percent.value = arr[2];
+  percent.setAttribute("onchange", "set_num();");
+  dl.appendChild(percent);
+  
+  percent.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
+  
+  var pvolt = document.createElement("input");
+  pvolt.type = "text";
+  pvolt.name = "pvolt" + _lnIdx;
+  pvolt.value = arr[4];
+  pvolt.setAttribute("onchange", "set_num();");
+  dl.appendChild(pvolt);
+  
+  var pvl = document.createElement("input");
+  pvl.type = "text";
+  pvl.name = "pvl" + _lnIdx;
+  pvl.setAttribute("disabled", "");
+  dl.appendChild(pvl);
+
+  var tm = document.createElement("input");
+  tm.type = "text";
+  tm.name = "tm" + _lnIdx;
+  tm.setAttribute("disabled", "");
+  dl.appendChild(tm);
+
+  var plus = document.createElement("img");
+  plus.src = 'plus.png';
+  plus.setAttribute("width", "20");
+  plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','')");
+  dl.appendChild(plus);
+  
+  var minus = document.createElement("img");
+  minus.src = 'minus.png';
+  minus.setAttribute("width", "20");
+  minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
+  dl.appendChild(minus);
+
+  if (!obj){
+    var prg = document.getElementById("prg");
+    prg.appendChild(dl);
+  } else {
+    prg = document.getElementById(obj);
+    prg.after(dl);
   }
 
-  function set_program(){
-    if (set_num()) { alert("Ошибка в программе (голов/тела не 100%)!"); return; }
-    var request = new XMLHttpRequest();
-    request.open('POST', '/program', false);
-    request.send(new FormData(document.forms.mainform));
-    if(request.status == 200) alert("Программа установлена!");
-    else alert("Ошибка: " + request.status);
-  }
+  var p = "ptype" + _lnIdx;
+  var ptype = document.getElementById(p);
+  ptype.value = arr[3];
 
-  function addLine(obj, s){
-    var arr = s ? s.split(";") : ["0","1.0","100","B","0"];
-    var dl = document.createElement("div");
-    dl.className = "prgline"; dl.id = "prgln" + _lnIdx;
-    
-    dl.innerHTML = `<label class="prglabel"></label>
-      <select id="pnum${_lnIdx}" name="pnum${_lnIdx}">${[0,1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}">${n}</option>`).join('')}</select>
-      <input type="text" name="speed${_lnIdx}" value="${arr[1]}" onchange="set_num()">
-      <input type="text" name="percent${_lnIdx}" value="${arr[2]}" onchange="set_num()">
-      <select id="ptype${_lnIdx}" name="ptype${_lnIdx}" onchange="set_bgcolor(${_lnIdx})">
-        <option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option>
-      </select>
-      <input type="text" name="pvolt${_lnIdx}" value="${arr[4]}" onchange="set_num()">
-      <input type="text" name="pvl${_lnIdx}" disabled>
-      <input type="text" name="tm${_lnIdx}" disabled>
-      <img src="plus.png" width="20" onclick="addLine('prgln${_lnIdx}','')">
-      <img src="minus.png" width="20" onclick="removeLine('prgln${_lnIdx}')">`;
-    
-    if (!obj) document.getElementById("prg").appendChild(dl);
-    else document.getElementById(obj).after(dl);
-    
-    document.getElementById("ptype" + _lnIdx).value = arr[3] || "B";
-    document.getElementById("pnum" + _lnIdx).value = arr[0] || "0";
-    set_bgcolor(_lnIdx);
-    _lnIdx++;
-    if (!s) set_num();
-  }
+  var pnum = document.getElementById("pnum" + _lnIdx);
+  pnum.selectedIndex = arr[0];
+  pnum.onchange = set_num;
+  
+  set_bgcolor(_lnIdx);
+  
+  _lnIdx++;
+  
+  if (calcnum) set_num();
+}
 
-  function removeLine(ln){
-    if (document.getElementById("prg").childNodes.length <= 2) return;
-    document.getElementById(ln).remove();
-    set_num();
+function set_bgcolor(obj){
+  var l = document.getElementById("prgln" + obj);
+  var t = document.getElementById("ptype" + obj).value;
+  if (t == "H"){color = "background-color: #80FFFA;";}
+  else if (t == "B"){color = "background-color: #32CD3229;";}
+  else if (t == "C"){color = "background-color: #FFFF0039;";}
+  else if (t == "P"){color = "background-color: #C4C4C4;";}
+  else if (t == "T"){color = "background-color: #8B451334;";}
+  l.setAttribute("style",color);
+  var e = l.childNodes;
+  for(q=0;q<e.length;q++){
+    e[q].setAttribute("style",color);
   }
+  if (glcalcnum) set_num();
+}
 
-  function set_bgcolor(idx){
-    var type = document.getElementById("ptype" + idx).value;
-    var colors = {H:"#80FFFA", B:"#32CD3229", C:"#FFFF0039", P:"#C4C4C4", T:"#8B451334"};
-    document.getElementById("prgln" + idx).style.backgroundColor = colors[type];
-    set_num();
+window.onload = function() {
+  updateColumnParams();
+  const loadProgramSelect = document.getElementById("loadprogram");
+  if (loadProgramSelect) {
+    getProgramFromFile(loadProgramSelect);
   }
+  
+  // Обработчик изменения мощности ТЭНа для пересчета отображения
+  const heaterPowerInput = document.getElementById('heaterMaxPower');
+  if (heaterPowerInput) {
+    heaterPowerInput.addEventListener('input', function() {
+      // Пересчитываем отображение при каждом изменении (для режима вольт)
+      if (columnParams) {
+        displayColumnParams();
+      }
+    });
+  }
+};
 
-  window.onload = function() {
-    updateColumnParams();
-    getProgramFromFile(document.getElementById("loadprogram"));
-  };
 </script>
 </head>
 <body>
 <form action='none' onsubmit='return false' name="mainform" id="mainform">
-<h1>Samovar v. %v%</h1>
+<h1>
+<div class="message-box" style="display: none;" id="message"></div>
+Samovar v. <span id='version'>%v%</span>
+</h1>
 <div class="text">Расчет программы отбора
 <select id="loadprogram" name="loadprogram" onchange="getProgramFromFile(this)">
   <option value="0">Фрукты</option>
@@ -390,63 +526,102 @@
 <!-- БЛОК ПАРАМЕТРОВ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) -->
 <div class="tabcontent" style="display: block; border-top: 1px solid #ccc; padding: 10px;">
   <div style="border: 2px solid #3498db; background: #fafafa; padding: 15px; border-radius: 5px;">
-    <div style="color: #3498db; font-weight: bold; margin-bottom: 10px;">⚙️ ПАРАМЕТРЫ ОБОРУДОВАНИЯ (из настроек)</div>
+    <div style="color: #3498db; font-weight: bold; margin-bottom: 10px;">⚙️ ПАРАМЕТРЫ ОБОРУДОВАНИЯ</div>
     <div style="font-size: 0.9em; margin-bottom: 10px; color: #666;">
-      Диаметр: <b>%ColDiam% дюйм.</b> | Высота: <b>%ColHeight% м</b> | Насадка: <b>%PackDens%%</b>
-      <br><small><i>Изменить можно в меню "Настройки"</i></small>
+      Диаметр: <b>%ColDiam% дюйма</b> | Высота: <b>%ColHeight% м</b> | Насадка: <b>%PackDens%&#37;</b>
     </div>
-    
-    <!-- Скрытая настройка мощности ТЭНа для расчета вольт -->
+
     <div id="heaterPowerBlock" style="display: %pwr_unit_v_only%; margin-bottom: 10px;">
-      Мощность ТЭНа для расчета: <input type="text" id="heaterMaxPower" value="3500" style="width: 50px;"> Вт
+      Мощность ТЭНа для расчета: <input type="text" id="heaterMaxPower" value="%HeaterMaxPower%" onchange="displayColumnParams()" style="width: 70px;"> Вт
     </div>
 
     <div id="columnParamsResults" style="display: none; background: #fff; border: 1px solid #3498db; padding: 10px; border-radius: 4px;">
       <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;">
         <span>Захлёб: <b id="colFloodPower">-</b><span id="floodUnit"> Вт</span></span>
         <span>Рабочая: <b id="colWorkingPower">-</b><span id="workingUnit"> Вт</span></span>
-        <span>Тарелок: <b id="colTheoreticalPlates">-</b></span>
+        <span>Макс.отбор: <b id="colMaxFlow">-</b> мл/ч</span>
       </div>
       <div style="margin-bottom: 10px;">
-        Головы: <b id="colHeadsSpeed">-</b> л/ч | Тело: <b id="colBodySpeedMin">-</b>...<b id="colBodySpeedMax">-</b> л/ч | Хвосты: <b id="colTailsSpeed">-</b> л/ч
+        Головы: <b id="colHeadsSpeed">-</b> л/ч | Тело: <b id="colBodySpeedMin">-</b>...<b id="colBodySpeedMax">-</b> л/ч | Тарелок: <b id="colTheoreticalPlates">-</b>
       </div>
       <div id="strategyNote" style="font-size: 0.85em; margin-bottom: 10px; padding: 5px; background: #eee;"></div>
-      <input type="button" class="button" value="ПРИМЕНИТЬ К ПРОГРАММЕ" onclick="applyRecommendedSpeeds()" style="width: 100%; background: #3498db; color: white;">
+      <input type="button" class="button" value="ПРИМЕНИТЬ РЕКОМЕНДАЦИИ" onclick="applyRecommendedSpeeds()" style="width: 100%; background: #3498db; color: white;">
     </div>
   </div>
 </div>
 
-<div class="tabcontent" style="display: block; border-top: 1px solid #ccc;">
-  <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 10px;">
-    Объем СС: <input id='vless' type='text' value='12.25' style="width:50px" onchange="set_num()"> л |
-    % АС: <input id='vlssp' type='text' value='34' style="width:40px" onchange="set_num()"> % |
-    Выход: <input id='vlp' type='text' value='94' style="width:40px" onchange="set_num()"> %
-    <br>
-    Головы: <input id='vlhp' type='text' value='8' style="width:40px" onchange="set_num()"> % |
-    Хвосты: <input id='vltp' type='text' value='5' style="width:40px" onchange="set_num()"> % |
-    Остаток: <input id='trest' type='text' value='0' style="width:50px" disabled> л
-  </div>
+<div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
 
-  <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-    <div class="prg" id="prg"></div>
-  </div>
-
-  <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 5px;">
-    Итоговое время: <input id='sum' type='text' value='' disabled style="width:100px">
-  </div>
-
-  <div style="text-align: center;">
-    <input type="button" value="Сохранить расчет" onclick="SaveProgramToFile()" class="button">
-    <label for="fileToLoad" class="button">Загрузить расчет</label>
-    <input type="file" id="fileToLoad" style="display:none" onchange="loadFile(this.files[0])">
-    <br><br>
-    <input type="button" value="Установить программу" onclick="set_program()" class="button" style="background:#27ae60; color:white">
-    <input type="button" value="На главную" onclick="location.href='index.htm'" class="button">
-  </div>
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+<div id="Prog">
+<div style="margin-bottom: 10px !important;">
+<label class="tooltip prgline">Объем спирта-сырца</label><input id='vless' name='vless' type='text' value='12.25' onchange="set_num();"><label class="tooltip prgline">л</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Содержание АС в с-с<span class="tooltiptext">Содержание абсолютного спирта в спирте-сырце в &#37;</span></label><input id='vlssp' type='text' value='34' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Выход спирта<span class="tooltiptext">Прогнозируемый выход спирта в &#37;</span></label><input id='vlp' type='text' value='94' onchange="set_num();"><label class="tooltip prgline">&#37;</label>
+</div>
+<div style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">
+<label class="tooltip prgline">Объем голов<span class="tooltiptext">Прогнозируемый выход голов в &#37;</span></label><input id='vlhp' type='text' value='8' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Объем хвостов<span class="tooltiptext">Прогнозируемый выход хвостов в &#37;</span></label><input id='vltp' type='text' value='5' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label class="tooltip prgline">Кубовый остаток<span class="tooltiptext">Прогнозируемый кубовый остаток после завершения перегонки в литрах</span></label><input id='trest' type='text' value='8' disabled><label class="tooltip prgline">л</label>
+</div>
+<label class="tooltip prgline" style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">Информация о параметрах программы отбора
+<span class="tooltiptext">
+При работе с СС из сахарной браги
+<ul>
+<li>Колонна максимальной высоты, плотно набитая насадка</li>
+<li>Отбор - головы в пленочном режиме, тело в режиме максимального разделения (предзахлеб)</li>
+<li>Головы - 10&#37;-15&#37;, хвосты - 5&#37;</li>
+</ul>
+При работе с СС из фруктов
+<ul>
+<li>Колонна метр, разреженная насадка</li>
+<li>Начало отбора в пленочном режиме</li>
+<li>После отбора голов увеличить разделение, но не доводить до предзахлеба</li>
+<li>Головы - 8&#37;, хвосты - 5&#37;</li>
+<li>Выход спирта - 94&#37;</li>
+</ul>
+При работе с СС из зерновых
+<ul>
+<li>Колонна метр, разреженная насадка</li>
+<li>Начало отбора в пленочном режиме</li>
+<li>После отбора голов увеличить разделение, но не доводить до предзахлеба</li>
+<li>Головы - 6-10&#37;, хвосты - 5-7&#37;</li>
+<li>Выход спирта - 94&#37;</li>
+</ul>
+</span></label>
+</div>
 </div>
 
-<textarea id='WProgram1' style="display:none"></textarea>
-<textarea id='WProgram' name='WProgram' style="display:none">%WProgram%</textarea>
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+<div class="prg" id="prg"></div>
+</div>
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+<div>
+<label class="tooltip prgline">Итоговое время отбора<span class="tooltiptext">Время, необходимое для ректификации спирта-сырца с заданными параметрами</span></label><input id='sum' type='text' value='' disabled>
+</div>
+</div>
+
+<div>
+<textarea cols="40" rows="15" id='WProgram1' name='WProgram1' style="visibility: hidden;position: absolute;width: 20;"></textarea>
+<textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20;">%WProgram%</textarea>
+</div>
+
+<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
+<div style="margin: 0 auto; width: 200px;">
+<input id='saveform' type='button' name='saveform' value='Сохранить расчет' onclick='SaveProgramToFile();' class="button">
+</div>
+<div style="margin: 0 auto; width: 200px;">
+<label for="fileToLoad" class="button custom-file-upload">
+    <i class="fa fa-cloud-upload"></i> Загрузить расчет 
+</label>
+<input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button"/>
+</div>
+</div>
+<div style="margin: 0 auto; width: 450px;">
+<input id='setprogram' type='button' name='setprogram' value='Установить программу' onclick='set_program();' class="button">
+<input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="index.htm"' class="button">
+</div>
+</div>
 </form>
 </body>
 </html>

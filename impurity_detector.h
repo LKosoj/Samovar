@@ -141,5 +141,48 @@ void process_impurity_detector() {
   }
 }
 
+/**
+ * Автоматический расчет теплопотерь при нагреве до 70°C (п. 5)
+ */
+void update_heat_loss_calculation() {
+  if (heatLossCalculated || BoilerVolume <= 0 || !PowerOn) return;
+
+  // Инициализация замера при достижении 40°C
+  if (heatStartMillis == 0 && TankSensor.avgTemp >= 40.0) {
+    heatStartMillis = millis();
+    heatStartTemp = TankSensor.avgTemp;
+  }
+
+  // Финальный расчет при достижении 70°C
+  if (heatStartMillis > 0 && TankSensor.avgTemp >= 70.0) {
+    float timeSec = (millis() - heatStartMillis) / 1000.0;
+    if (timeSec > 60) { // Минимум 1 минута замера для точности
+      float deltaT = TankSensor.avgTemp - heatStartTemp;
+      
+      // Энергия на нагрев: Q = m * c * deltaT (c воды = 4187 Дж/(кг*К))
+      // Принимаем плотность сырца за 1 кг/л
+      float energyUsed = BoilerVolume * 4187.0f * deltaT;
+      float powerEffective = energyUsed / timeSec;
+      
+      // Теплопотери = Поданная мощность - Эффективная мощность
+#ifdef SAMOVAR_USE_POWER
+      CurrentHeatLoss = (float)current_power_p - powerEffective;
+#else
+      CurrentHeatLoss = 0; // Если нет датчика мощности, не можем вычислить потери автоматически
+#endif
+      
+      if (CurrentHeatLoss < 0) CurrentHeatLoss = 0;
+      if (CurrentHeatLoss > 1500) CurrentHeatLoss = 1500; // Ограничение здравого смысла
+      
+      heatLossCalculated = true;
+      if (CurrentHeatLoss > 0) {
+        SendMsg("Расчет теплопотерь завершен: " + String(CurrentHeatLoss, 0) + " Вт", NOTIFY_MSG);
+      } else {
+        SendMsg("Теплопотери не определены (проверьте мощность)", WARNING_MSG);
+      }
+    }
+  }
+}
+
 #endif
 

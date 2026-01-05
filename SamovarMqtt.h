@@ -75,14 +75,18 @@ void onMqttPublish(uint16_t packetId) {
   //  Serial.println(packetId);
 }
 
-void MqttSendMsg(const String &Str, const char *chart ) {
+void MqttSendMsg(const String &Str, const char *chart, int version) {
   if (!send_mqtt) return;
   strcpy(mqttstr1, mqttstr);
   strcat(mqttstr1, chart);
   static char payload[PAYLOADSIZE];
 
   //Версия сообщения
-  strcat(mqttstr1, "/3");
+  char vstr[5];
+  itoa(version, vstr, 10);
+  strcat(mqttstr1, "/");
+  strcat(mqttstr1, vstr);
+  
   Str.toCharArray(payload, PAYLOADSIZE);
   uint16_t packetIdPub1 = mqttClient.publish(mqttstr1, 2, true, payload);
   if (packetIdPub1 == 0) {

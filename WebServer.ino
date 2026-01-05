@@ -226,27 +226,33 @@ void WebServerInit(void) {
     getjson();
     request->send(200, "text/html", jsonstr);
   });
-  server.on("/ajax_col_params", HTTP_GET, [](AsyncWebServerRequest *request) {
-    uint8_t mat = 0;
-    if (request->hasParam("mat")) mat = request->getParam("mat")->value().toInt();
-    ColumnResults res = calculate_column_etalon(mat);
-    String json = "{";
-    json += "\"floodPowerW\":" + String(res.floodPowerW, 0) + ",";
-    json += "\"workingPowerW\":" + String(res.workingPowerW, 0) + ",";
-    json += "\"headsFlowMlH\":" + String(res.headsFlowMlH, 0) + ",";
-    json += "\"bodyFlowMaxMlH\":" + String(res.bodyFlowMaxMlH, 0) + ",";
-    json += "\"bodyFlowMinMlH\":" + String(res.bodyFlowMinMlH, 0) + ",";
-    json += "\"bodyEndFlowMlH\":" + String(res.bodyEndFlowMlH, 0) + ",";
-    json += "\"tailsFlowMlH\":" + String(res.tailsFlowMlH, 0) + ",";
-    json += "\"theoreticalPlates\":" + String(res.theoreticalPlates, 1);
-    json += "}";
-    request->send(200, "application/json", json);
-  });
   server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request) {
     web_command(request);
   });
   server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request) {
     web_program(request);
+  });
+  server.on("/ajax_col_params", HTTP_GET, [](AsyncWebServerRequest *request) {
+    uint8_t mat = 2; // По умолчанию сахар
+    if (request->hasParam("mat")) mat = request->getParam("mat")->value().toInt();
+
+    ColumnResults res = calculate_column_etalon(mat);
+
+    String json = "{";
+    json += "\"floodPowerW\":" + String(res.floodPowerW, 0) + ",";
+    json += "\"workingPowerW\":" + String(res.workingPowerW, 0) + ",";
+    json += "\"maxFlowMlH\":" + String(res.maxFlowMlH, 0) + ",";
+    json += "\"theoreticalPlates\":" + String(res.theoreticalPlates, 1) + ",";
+    json += "\"headsFlowMlH\":" + String(res.headsFlowMlH, 0) + ",";
+    json += "\"bodyFlowMinMlH\":" + String(res.bodyFlowMinMlH, 0) + ",";
+    json += "\"bodyFlowMaxMlH\":" + String(res.bodyFlowMaxMlH, 0) + ",";
+    json += "\"bodyEndFlowMlH\":" + String(res.bodyEndFlowMlH, 0) + ",";
+    json += "\"tailsFlowMlH\":" + String(res.tailsFlowMlH, 0) + ",";
+    json += "\"headsPowerW\":" + String(res.headsPowerW, 0) + ",";
+    json += "\"bodyEndPowerW\":" + String(res.bodyEndPowerW, 0) + ",";
+    json += "\"tailsPowerW\":" + String(res.tailsPowerW, 0);
+    json += "}";
+    request->send(200, "application/json", json);
   });
   server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request) {
     calibrate_command(request);
@@ -356,7 +362,19 @@ String indexKeyProcessor(const String &var) {
     if (strlen(SamSetup.videourl) > 0) return "inline";
     else
       return "none";
-  };
+  } else if (var == "ColDiam")
+    return String(SamSetup.ColDiam, 1);
+  else if (var == "ColHeight")
+    return String(SamSetup.ColHeight, 2);
+  else if (var == "PackDens")
+    return String(SamSetup.PackDens);
+  else if (var == "HeaterMaxPower") {
+    // Расчет мощности ТЭНа: P = U²/R
+    float R = SamSetup.HeaterResistant;
+    if (R <= 0) return "3500";
+    float power = (220 * 220) / R;
+    return String((int)power);
+  }
   return "";
 }
 
@@ -501,10 +519,6 @@ String setupKeyProcessor(const String &var) {
              "display: none"
              "");
 #endif
-  } else if (var == "UAPChecked") {
-    if (SamSetup.useautopowerdown) return "checked='true'";
-    else
-      return "";
   } else if (var == "UASChecked") {
     if (SamSetup.useautospeed) return "checked='true'";
     else
@@ -708,11 +722,6 @@ void handleSave(AsyncWebServerRequest *request) {
   SamSetup.UsePreccureCorrect = false;
   if (request->hasArg("usepressure")) {
     SamSetup.UsePreccureCorrect = true;
-  }
-
-  SamSetup.useautopowerdown = false;
-  if (request->hasArg("useautopowerdown")) {
-    SamSetup.useautopowerdown = true;
   }
 
   SamSetup.useautospeed = false;
@@ -1093,6 +1102,12 @@ void web_program(AsyncWebServerRequest *request) {
       set_program(request->arg("WProgram"));
       request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
     }
+  }
+  if (request->hasArg("vless")) {
+    BoilerVolume = request->arg("vless").toFloat();
+    if (BoilerVolume <= 0) BoilerVolume = 30.0f; // Защита: если 0, считаем 30л
+    heatLossCalculated = false; // Сбрасываем расчет при смене объема
+    heatStartMillis = 0;
   }
   if (request->hasArg("Descr")) {
     SessionDescription = request->arg("Descr");

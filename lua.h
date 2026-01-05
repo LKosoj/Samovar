@@ -19,9 +19,6 @@ LuaWrapper lua;
 
 #define EXPANDER_UPDATE_TIMEOUT 500
 
-#ifdef USE_MQTT
-void MqttSendMsg(const String &Str, const char *chart );
-#endif
 
 unsigned long lua_timer[10];  //10 таймеров для lua
 String lua_type_script;

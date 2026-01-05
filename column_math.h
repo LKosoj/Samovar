@@ -7,11 +7,15 @@
 struct ColumnResults {
   float floodPowerW;
   float workingPowerW;
+  float headsPowerW;
+  float bodyEndPowerW;
+  float tailsPowerW;
   float headsFlowMlH;
   float bodyFlowMaxMlH;
   float bodyFlowMinMlH;
   float bodyEndFlowMlH;
   float tailsFlowMlH;
+  float maxFlowMlH; // Паспортный максимум (ФЧ=4 при захлебе)
   float theoreticalPlates;
 };
 
@@ -32,18 +36,22 @@ ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
   float crossSectionMm2 = PI * radiusMm * radiusMm;
   
   // 2. HETP и тарелки
-  // hetpBase = 30, densityImpact = 0.3
-  float hetpFactor = 1.0f - (packingDensity - 0.6f) * (0.3f / 0.4f); 
-  float hetp = 30.0f * hetpFactor;
+  float hetpBase = 30.0f; 
+  float densityImpact = 0.3f;
+  float hetpFactor = 1.0f - (packingDensity - 0.6f) * (densityImpact / 0.4f); 
+  float hetp = hetpBase * hetpFactor;
   res.theoreticalPlates = (hetp > 0) ? ((heightCm * 10.0f) / hetp) : 1.0f;
   
   // 3. Расчет мощности захлеба
-  // basePowerFactor = 1.15
   float pDensityAdj = 1.2f - (packingDensity - 0.6f) * 0.5f;
   float pHeightAdj = pow(heightCm / 50.0f, 0.35f);
   res.floodPowerW = crossSectionMm2 * 1.15f * pDensityAdj * pHeightAdj;
+
+  // 4. Паспортный максимум (для совместимости с логами)
+  // Это потенциал железа при ФЧ=4 на мощности захлеба
+  res.maxFlowMlH = (res.floodPowerW * EVAPORATION_FACTOR) / (4.0f + 1.0f);
   
-  // 4. Рабочие коэффициенты по типу сырья
+  // 5. Рабочие коэффициенты по типу сырья
   float pWorkFactor = 0.75f; // Сахар (default)
   float frMultiplier = 1.2f;
   
@@ -56,10 +64,12 @@ ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
   }
   
   res.workingPowerW = res.floodPowerW * pWorkFactor;
+  res.headsPowerW = res.floodPowerW * (pWorkFactor * 0.9f);
+  res.bodyEndPowerW = res.workingPowerW * 1.05f;
+  res.tailsPowerW = res.workingPowerW * 1.10f;
   
-  // 5. Потоки пара и жидкости (ФЧ)
-  // evaporationFactor = 4.8
-  float workingVaporFlowMlH = res.workingPowerW * 4.8f;
+  // 6. Потоки пара и жидкости (ФЧ)
+  float workingVaporFlowMlH = res.workingPowerW * EVAPORATION_FACTOR;
   float platesRatio = 20.0f / res.theoreticalPlates;
   
   // Головы (ФЧ ~ 250)

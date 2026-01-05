@@ -142,7 +142,6 @@
  * @param Str Строка
  * @param chart Канал/тип
  */
- void MqttSendMsg(const String &Str, const char *chart );
 
  /**
  * @brief Основной цикл обработки этапов НБК. Вызывает обработку текущего этапа и проверку аварий.

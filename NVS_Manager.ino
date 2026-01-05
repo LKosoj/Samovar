@@ -68,7 +68,6 @@ void save_profile_nvs() {
   prefs.putFloat("Kd", SamSetup.Kd);
   prefs.putFloat("StbVolt", SamSetup.StbVoltage);
   prefs.putFloat("BVolt", SamSetup.BVolt);
-  prefs.putBool("AutoPwr", SamSetup.useautopowerdown);
   prefs.putBool("CheckPwr", SamSetup.CheckPower);
   prefs.putBool("UseST", SamSetup.UseST); // Разгонный тэн
 
@@ -165,7 +164,6 @@ void load_profile_nvs() {
   SamSetup.Kd = prefs.getFloat("Kd", 1.4);
   SamSetup.StbVoltage = prefs.getFloat("StbVolt", 100.0);
   SamSetup.BVolt = prefs.getFloat("BVolt", 230.0);
-  SamSetup.useautopowerdown = prefs.getBool("AutoPwr", false);
   SamSetup.CheckPower = prefs.getBool("CheckPwr", false);
   SamSetup.UseST = prefs.getBool("UseST", true);
 

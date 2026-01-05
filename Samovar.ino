@@ -471,6 +471,9 @@ void triggerSysTicker(void *parameter) {
 #ifdef SAMOVAR_USE_POWER
       get_current_power();
 #endif
+      
+      // Авто-расчет теплопотерь при нагреве (п. 5)
+      update_heat_loss_calculation();
 
       DS_getvalue();
       vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -503,8 +506,35 @@ void triggerSysTicker(void *parameter) {
             s += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
             s += ",";
             s += format_float(pressure_value, 2);
+
+            // ПУНКТ 5: Расширенное логирование v.4
+            // Расчет ФЧ (целевого)
+            float vaporSpeed = 0;
+#ifdef SAMOVAR_USE_POWER
+            float netPower = (float)current_power_p - CurrentHeatLoss;
+            if (netPower < 0) netPower = 0;
+            // Скорость испарения мл/час (используем константу из column_math.h)
+            vaporSpeed = netPower * EVAPORATION_FACTOR; 
+#endif
+            if (ActualVolumePerHour > 0.001f) {
+              CalculatedTargetFR = (vaporSpeed / (ActualVolumePerHour * 1000.0f)) - 1.0f;
+            } else {
+              CalculatedTargetFR = 0;
+            }
+            if (CalculatedTargetFR < 0) CalculatedTargetFR = 0;
+
+            s += ","; s += format_float(CalculatedTargetFR, 2); // 14: target_fr
+            s += ","; s += format_float(CalculatedTargetFR, 2); // 15: actual_fr (в данной системе они совпадают)
+            s += ","; s += format_float(impurityDetector.currentTrend, 3); // 16: temp_delta
+            s += ","; s += String(impurityDetector.detectorStatus); // 17: alarm_state
+            s += ","; s += String(prev_ProgramNum != ProgramNum ? 2 : (program_Wait ? 1 : 0)); // 18: event_code
+            s += ","; s += String(SamSetup.PackDens); // 19: packing_density
+            s += ","; s += format_float(SamSetup.ColHeight, 2); // 20: col_height
+            s += ","; s += format_float(SamSetup.ColDiam, 1);   // 21: col_diameter
+            s += ","; s += format_float(CurrentHeatLoss, 0);    // 22: heat_loss
+
 #ifdef USE_MQTT
-            MqttSendMsg(s, "log");
+            MqttSendMsg(s, "log", 4);
 #endif
           }
         }
