@@ -91,7 +91,7 @@
 
 #include <NTPClient.h>
 WiFiUDP ntpUDP;
-NTPClient NTP(ntpUDP);
+NTPClient NTP(ntpUDP, "ru.pool.ntp.org");
 
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
@@ -334,7 +334,13 @@ void IRAM_ATTR taskButton(void *pvParameters) {
 //Запускаем таск для получения точного времени из интернет
 void triggerGetClock(void *parameter) {
   String qMsg;
+  int counter = 0;
   while (true) {
+    counter++;
+    if (counter > 30) {
+      NTP.update();
+      counter = 0;
+    }
     {
       static unsigned long wifiReconnectTimer = 0;
       if (WiFi.status() != WL_CONNECTED) {
@@ -1129,7 +1135,14 @@ void setup() {
   NTP.setUpdateInterval(1800000);//30 min
   NTP.begin(); 
   delay(100);
-  NTP.update();
+  // Принудительная синхронизация при старте с повторными попытками
+  if (WiFi.status() == WL_CONNECTED) {
+    int attempts = 0;
+    while (!NTP.forceUpdate() && attempts < 2) {
+      delay(500);
+      attempts++;
+    }
+  }
 
 #ifdef USE_LUA
   lua_init();
@@ -1180,8 +1193,6 @@ void loop() {
   ArduinoOTA.handle();
 #endif
 
-  //Проверим, что не потеряли коннект с WiFI. Если потеряли - подключаемся. Энкодеру придется подождать.
-  //if (WiFi.status() != WL_CONNECTED) connectWiFi();
 #ifdef SAMOVAR_USE_BLYNK
   if (Blynk.connected()) {
     Blynk.run();
