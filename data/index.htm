@@ -447,6 +447,31 @@
           document.getElementById('CurrrentSpeed').innerHTML = myObj.CurrrentSpeed;
           document.getElementById('CurrrentStepps').innerHTML = myObj.CurrrentStepps;
           document.getElementById('TargetStepps').innerHTML = myObj.TargetStepps;
+
+          // Обновление детектора примесей
+          const detBlock = document.getElementById('detector_block');
+          if (myObj.useautospeed) {
+            detBlock.style.display = 'flex';
+            const detTrend = document.getElementById('detector_trend');
+            const detStatus = document.getElementById('detector_status_text');
+            detTrend.innerHTML = (myObj.DetectorTrend > 0 ? '+' : '') + myObj.DetectorTrend.toFixed(3) + ' °C/мин';
+            
+            if (myObj.DetectorStatus == 0) {
+              detStatus.innerHTML = '✅ Стабильно';
+              detStatus.style.color = 'green';
+              detBlock.style.backgroundColor = '#7cfc001a';
+            } else if (myObj.DetectorStatus == 1) {
+              detStatus.innerHTML = '⚠️ Коррекция';
+              detStatus.style.color = 'orange';
+              detBlock.style.backgroundColor = '#ffa5001a';
+            } else if (myObj.DetectorStatus == 2) {
+              detStatus.innerHTML = '🛑 ПРОСКОК (ПАУЗА)';
+              detStatus.style.color = 'red';
+              detBlock.style.backgroundColor = '#ff00001a';
+            }
+          } else {
+            detBlock.style.display = 'none';
+          }
           if (myObj.PrgType === "P") myObj.PrgType = "Пауза"
           else if (myObj.PrgType === "H") myObj.PrgType = "Головы; "
           else if (myObj.PrgType === "B") myObj.PrgType = "Тело; "
@@ -865,6 +890,17 @@
           </div>
         </div>
 
+      </div>
+
+      <div id="detector_block" class="container_row" style="margin-top: 1em; padding-top: 0.5em; padding-bottom: 0.5em; border: 1px solid #ddd; border-radius: 5px; display: none;">
+        <div style="flex: 1; padding-left: 1em;">
+          <div class="text" style="font-weight: bold;">Детектор примесей:</div>
+          <div id="detector_status_text" style="font-size: 1.2em;">-</div>
+        </div>
+        <div style="flex: 1; text-align: right; padding-right: 1em;">
+          <div class="text">Тренд:</div>
+          <div id="detector_trend" style="font-size: 1.2em; font-weight: bold;">-</div>
+        </div>
       </div>
 
       <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">

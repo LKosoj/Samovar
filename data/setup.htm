@@ -123,6 +123,15 @@
         }
       }
     };
+
+    window.onload = function() {
+      // Защита от запятых
+      document.querySelectorAll('input[type="text"]').forEach(input => {
+        input.addEventListener('input', function() {
+          this.value = this.value.replace(',', '.');
+        });
+      });
+    };
   </script>
 </head>
 
@@ -160,6 +169,21 @@
         <h2>
           <input id='useflevel' type='checkbox' name='useflevel' value='useflevel' %FLChecked%>
           <label for='useflevel' %IgnFL% >Использовать датчик уровня флегмы при ректификации</label>
+        </h2>
+      </div>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em;">
+        <h2 style="color: #3498db;">⚙️ Параметры оборудования (колонны)</h2>
+        <h2>
+          Диаметр:
+          <input name="ColDiam" id="ColDiam" type="text" value="%ColDiam%" style="width: 4em;"> дюймов (1.5, 2.0, 3.0 и т.д.)
+        </h2>
+        <h2>
+          Высота насадки:
+          <input name="ColHeight" id="ColHeight" type="text" value="%ColHeight%" style="width: 4em;"> метров (например, 1.5)
+        </h2>
+        <h2>
+          Плотность насадки:
+          <input name="PackDens" id="PackDens" type="text" value="%PackDens%" style="width: 4em;"> % (60-100)
         </h2>
       </div>
       <div>

@@ -114,6 +114,11 @@ void save_profile_nvs() {
   prefs.putFloat("NbkSteamT", SamSetup.NbkSteamT);
   prefs.putFloat("NbkOwPress", SamSetup.NbkOwPress);
 
+  // --- Параметры колонны ---
+  prefs.putFloat("ColDiam", SamSetup.ColDiam);
+  prefs.putFloat("ColHeight", SamSetup.ColHeight);
+  prefs.putUChar("PackDens", SamSetup.PackDens);
+
   prefs.end();
   //Serial.println("Profile saved to NVS");
 }
@@ -202,6 +207,11 @@ void load_profile_nvs() {
   SamSetup.NbkDP = prefs.getFloat("NbkDP", 0);
   SamSetup.NbkSteamT = prefs.getFloat("NbkSteamT", 0);
   SamSetup.NbkOwPress = prefs.getFloat("NbkOwPress", 0);
+
+  // --- Параметры колонны ---
+  SamSetup.ColDiam = prefs.getFloat("ColDiam", 2.0f);
+  SamSetup.ColHeight = prefs.getFloat("ColHeight", 0.5f);
+  SamSetup.PackDens = prefs.getUChar("PackDens", 80);
 
   prefs.end();
   //Serial.println("Profile loaded from NVS");

@@ -829,6 +829,9 @@ void setup() {
     SamSetup.blynkauth[0] = '\0';
     SamSetup.videourl[0] = '\0';
     SamSetup.UseWS = 1;
+    SamSetup.ColDiam = 2.0f;
+    SamSetup.ColHeight = 0.5f;
+    SamSetup.PackDens = 80;
     save_profile();
     Serial.println("Default values saved to NVS");
   }
@@ -1353,6 +1356,15 @@ void getjson(void) {
   jsonstr.concat("\"ACPTemp\":");
   jsonstr.concat(format_float(ACPSensor.avgTemp, 3));
   jsonstr.concat(",");
+  jsonstr.concat("\"DetectorTrend\":");
+  jsonstr.concat(format_float(impurityDetector.currentTrend, 3));
+  jsonstr.concat(",");
+  jsonstr.concat("\"DetectorStatus\":");
+  jsonstr.concat(impurityDetector.detectorStatus);
+  jsonstr.concat(",");
+  jsonstr.concat("\"useautospeed\":");
+  jsonstr.concat(SamSetup.useautospeed);
+  jsonstr.concat(",");
   jsonstr.concat("\"version\":\"");
   jsonstr.concat(SAMOVAR_VERSION);
   jsonstr.concat("\"");
@@ -1651,6 +1663,8 @@ void read_config() {
   SamSetup.tg_token[0] = '\0';
   SamSetup.tg_chat_id[0] = '\0';
 #endif
+  //Инициализация детектора примесей
+  init_impurity_detector();
 }
 
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {

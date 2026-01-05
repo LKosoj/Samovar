@@ -4,6 +4,7 @@
 #include "Samovar.h"
 #include "FS.h"
 #include "sensorinit.h"
+#include "column_math.h"
 
 extern float nbk_M;
 extern float nbk_Mo;
@@ -225,6 +226,22 @@ void WebServerInit(void) {
     getjson();
     request->send(200, "text/html", jsonstr);
   });
+  server.on("/ajax_col_params", HTTP_GET, [](AsyncWebServerRequest *request) {
+    uint8_t mat = 0;
+    if (request->hasParam("mat")) mat = request->getParam("mat")->value().toInt();
+    ColumnResults res = calculate_column_etalon(mat);
+    String json = "{";
+    json += "\"floodPowerW\":" + String(res.floodPowerW, 0) + ",";
+    json += "\"workingPowerW\":" + String(res.workingPowerW, 0) + ",";
+    json += "\"headsFlowMlH\":" + String(res.headsFlowMlH, 0) + ",";
+    json += "\"bodyFlowMaxMlH\":" + String(res.bodyFlowMaxMlH, 0) + ",";
+    json += "\"bodyFlowMinMlH\":" + String(res.bodyFlowMinMlH, 0) + ",";
+    json += "\"bodyEndFlowMlH\":" + String(res.bodyEndFlowMlH, 0) + ",";
+    json += "\"tailsFlowMlH\":" + String(res.tailsFlowMlH, 0) + ",";
+    json += "\"theoreticalPlates\":" + String(res.theoreticalPlates, 1);
+    json += "}";
+    request->send(200, "application/json", json);
+  });
   server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request) {
     web_command(request);
   });
@@ -329,6 +346,8 @@ String indexKeyProcessor(const String &var) {
     return (String)bk_pwm;
   else if (var == "pwr_unit")
     return PWR_TYPE;
+  else if (var == "pwr_unit_v_only")
+    return (String(PWR_TYPE) == "V") ? "block" : "none";
 #ifdef USE_LUA
   if (var == "btn_list")
     return get_lua_script_list();
@@ -573,6 +592,12 @@ String setupKeyProcessor(const String &var) {
     return get_DSAddressList(getDSAddress(TankSensor.Sensor));
   else if (var == "ACPAddr")
     return get_DSAddressList(getDSAddress(ACPSensor.Sensor));
+  else if (var == "ColDiam")
+    return String(SamSetup.ColDiam, 1);
+  else if (var == "ColHeight")
+    return String(SamSetup.ColHeight, 2);
+  else if (var == "PackDens")
+    return String(SamSetup.PackDens);
   return "";
 }
 
@@ -890,6 +915,16 @@ void handleSave(AsyncWebServerRequest *request) {
       ACPSensor.Sensor[0] = 255;
       ACPSensor.avgTemp = 0;
     }
+  }
+
+  if (request->hasArg("ColDiam")) {
+    SamSetup.ColDiam = request->arg("ColDiam").toFloat();
+  }
+  if (request->hasArg("ColHeight")) {
+    SamSetup.ColHeight = request->arg("ColHeight").toFloat();
+  }
+  if (request->hasArg("PackDens")) {
+    SamSetup.PackDens = request->arg("PackDens").toInt();
   }
 
   // Сохраняем изменения в память.

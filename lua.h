@@ -1097,7 +1097,6 @@ String get_global_variables() {
   Variables += "WthdrwTimeAllS = \"" + WthdrwTimeAllS + "\"\r\n";
   Variables += "WthdrwTimeS = \"" + WthdrwTimeS + "\"\r\n";
   Variables += "pump_started = " + String(pump_started) + "\r\n";
-  Variables += "setautospeed = " + String(setautospeed) + "\r\n";
   Variables += "heater_state = " + String(heater_state) + "\r\n";
   //  Variables += "ofl = \"" + ofl + "\"\r\n";
   Variables += "mixer_status = " + String(mixer_status) + "\r\n";

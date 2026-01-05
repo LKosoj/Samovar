@@ -94,6 +94,8 @@ float get_speed_from_rate(float volume_per_hour) {
   return (v < 1) ? 1 : v;  // Минимальная скорость 1
 }
 
+#include "impurity_detector.h"
+
 // Получить объем жидкости
 int get_liquid_volume() {
   return get_liquid_volume_by_step(stepper.getCurrent());
@@ -118,6 +120,11 @@ void set_alarm() {
 
 // Функция для управления отбором
 void withdrawal(void) {
+  if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
+
+  // ОБРАБОТКА ДЕТЕКТОРА ПРИМЕСЕЙ
+  process_impurity_detector();
+
   //Определяем, что необходимо сменить режим работы
   //По завершению паузы
   if (program_Pause) {
@@ -166,26 +173,6 @@ void withdrawal(void) {
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
       if (!PauseOn && !program_Wait) {
         program_Wait_Type = "(пар)";
-        //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
-        if (SamSetup.useautospeed && setautospeed) {
-          setautospeed = false;
-          int baseSpeed = (int)CurrrentStepperSpeed;
-          if (baseSpeed < 1) baseSpeed = (int)abs((int)stepper.getSpeed());
-          int dec = (int)round((float)baseSpeed / 100.0f * (float)SamSetup.autospeed);
-          int newSpeed = baseSpeed - dec;
-          if (newSpeed < 1) newSpeed = 1;
-          set_pump_speed((float)newSpeed, false);
-#ifdef SAMOVAR_USE_POWER
-          if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
-#ifdef SAMOVAR_USE_SEM_AVR
-            set_current_power(target_power_volt - target_power_volt / 100 * 3);
-#else
-            set_current_power(target_power_volt - 3 * PWR_FACTOR);
-#endif
-          }
-#endif
-          vTaskDelay(10 / portTICK_PERIOD_MS);
-        }
         program_Wait = true;
         pause_withdrawal(true);
         t_min = millis() + SteamSensor.Delay * 1000;
@@ -199,7 +186,6 @@ void withdrawal(void) {
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
-    setautospeed = true;
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
@@ -220,26 +206,6 @@ void withdrawal(void) {
       //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
       if (!PauseOn && !program_Wait) {
         program_Wait_Type = "(царга)";
-        //Если в настройках задан параметр - снижать скорость отбора - снижаем, и напряжение тоже
-        if (SamSetup.useautospeed && setautospeed) {
-          setautospeed = false;
-          int baseSpeed = (int)CurrrentStepperSpeed;
-          if (baseSpeed < 1) baseSpeed = (int)abs((int)stepper.getSpeed());
-          int dec = (int)round((float)baseSpeed / 100.0f * (float)SamSetup.autospeed);
-          int newSpeed = baseSpeed - dec;
-          if (newSpeed < 1) newSpeed = 1;
-          set_pump_speed((float)newSpeed, false);
-#ifdef SAMOVAR_USE_POWER
-          if (program[ProgramNum].WType == "B" && SamSetup.useautopowerdown) {
-#ifdef SAMOVAR_USE_SEM_AVR
-            set_current_power(target_power_volt - target_power_volt / 100 * 3);
-#else
-            set_current_power(target_power_volt - 3 * PWR_FACTOR);
-#endif
-          }
-#endif
-          vTaskDelay(10 / portTICK_PERIOD_MS);
-        }
         program_Wait = true;
         pause_withdrawal(true);
         t_min = millis() + PipeSensor.Delay * 1000;
@@ -253,7 +219,6 @@ void withdrawal(void) {
   } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
-    setautospeed = true;
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
@@ -563,6 +528,8 @@ String get_program(uint8_t s) {
 
 // Запустить программу
 void run_program(uint8_t num) {
+  ProgramNum = num;
+  reset_impurity_detector();
   t_min = 0;
   program_Pause = false;
   program_Wait = false;
@@ -697,6 +664,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 
 // Установить температуру тела
 void set_body_temp() {
+  reset_impurity_detector();
   if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C" || program[ProgramNum].WType == "P") {
     SteamSensor.Start_Pressure = bme_pressure;
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
