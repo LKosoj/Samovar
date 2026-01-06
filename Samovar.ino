@@ -1779,7 +1779,6 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
     Msg = m;
     msg_level = msg_type;
   }
-  Msg.clear();
 }
 
 void WriteConsoleLog(String StringLogMsg) {
