@@ -1,10 +1,13 @@
 #ifndef CRASH_HANDLER_H
 #define CRASH_HANDLER_H
 
-#ifdef USE_CRASH_HANDLER
-
 #include <Arduino.h>
 #include "Samovar.h"
+
+#ifdef USE_CRASH_HANDLER
+
+#pragma message "USE_CRASH_HANDLER is ENABLED"
+
 #include <esp_system.h>
 #include <rom/rtc.h>
 
@@ -23,7 +26,12 @@ String get_reset_reason_string();
 // Проверка и загрузка сохраненного стектрейса при старте
 void check_and_load_crash_log();
 
+// Функция для принудительного сохранения стектрейса (можно вызывать вручную)
+void force_save_stacktrace(const char* reason);
+
 #else // USE_CRASH_HANDLER
+
+#pragma message "USE_CRASH_HANDLER is DISABLED"
 
 // Заглушки для случая, когда функционал отключен
 inline void init_crash_handler() {}
@@ -35,4 +43,3 @@ inline void force_save_stacktrace(const char* reason) {}
 #endif // USE_CRASH_HANDLER
 
 #endif // CRASH_HANDLER_H
-

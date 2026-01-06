@@ -200,8 +200,7 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 
 #define USE_LittleFS
 
-// Флаг для включения обработки сбоев и сохранения стектрейса в LittleFS
-//#define USE_CRASH_HANDLER
+// Флаг USE_CRASH_HANDLER теперь берется из user_config_override.h
 
 #ifdef USE_LittleFS
 //#pragma message ("USE LITTLEFS")

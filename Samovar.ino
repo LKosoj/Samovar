@@ -1205,7 +1205,7 @@ void setup() {
     Serial.println("I2C Stepper as Pump");
   }
   used_byte = SPIFFS.usedBytes();
-  verbose_print_reset_reason();
+  // verbose_print_reset_reason(); // Удалено, так как используется crash_handler
   //Serial.println(sizeof(SamSetup));
 
   SamovarStatus.reserve(80);

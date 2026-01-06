@@ -8,55 +8,23 @@ static bool crash_occurred = false;
 static bool fs_available = false;
 
 // Функция для получения строки с причиной сбоя
+// Основано на официальной документации ESP32: esp_reset_reason_t
 String get_reset_reason_string() {
-  String reason = "";
-  
-  RESET_REASON reason0 = rtc_get_reset_reason(0);
-  RESET_REASON reason1 = rtc_get_reset_reason(1);
-  
-  reason += "Core 0: ";
-  switch (reason0) {
-    case NO_MEAN: reason += "NO_MEAN"; break;
-    case POWERON_RESET: reason += "POWERON_RESET"; break;
-    case SW_RESET: reason += "SW_RESET"; break;
-    case OWDT_RESET: reason += "OWDT_RESET"; break;
-    case DEEPSLEEP_RESET: reason += "DEEPSLEEP_RESET"; break;
-    case SDIO_RESET: reason += "SDIO_RESET"; break;
-    case TG0WDT_SYS_RESET: reason += "TG0WDT_SYS_RESET"; break;
-    case TG1WDT_SYS_RESET: reason += "TG1WDT_SYS_RESET"; break;
-    case RTCWDT_SYS_RESET: reason += "RTCWDT_SYS_RESET"; break;
-    case INTRUSION_RESET: reason += "INTRUSION_RESET"; break;
-    case TGWDT_CPU_RESET: reason += "TGWDT_CPU_RESET"; break;
-    case SW_CPU_RESET: reason += "SW_CPU_RESET"; break;
-    case RTCWDT_CPU_RESET: reason += "RTCWDT_CPU_RESET"; break;
-    case EXT_CPU_RESET: reason += "EXT_CPU_RESET"; break;
-    case RTCWDT_BROWN_OUT_RESET: reason += "RTCWDT_BROWN_OUT_RESET"; break;
-    case RTCWDT_RTC_RESET: reason += "RTCWDT_RTC_RESET"; break;
-    default: reason += "UNKNOWN"; break;
+  esp_reset_reason_t reason = esp_reset_reason();
+  switch (reason) {
+    case ESP_RST_UNKNOWN:   return "Неизвестная причина перезагрузки (0)";
+    case ESP_RST_POWERON:   return "Перезагрузка из-за подачи питания (1)";
+    case ESP_RST_EXT:       return "Внешний сброс через пин RESET (2)";
+    case ESP_RST_SW:        return "Программный сброс, вызванный esp_restart() (3)";
+    case ESP_RST_PANIC:     return "Сброс из-за паники или необработанного исключения (4)";
+    case ESP_RST_INT_WDT:   return "Сброс из-за срабатывания внутреннего сторожевого таймера (5)";
+    case ESP_RST_TASK_WDT:  return "Сброс из-за срабатывания сторожевого таймера задачи (6)";
+    case ESP_RST_WDT:       return "Сброс из-за срабатывания любого из сторожевых таймеров (7)";
+    case ESP_RST_DEEPSLEEP: return "Сброс после выхода из режима глубокого сна (8)";
+    case ESP_RST_BROWNOUT:  return "Сброс из-за детектирования пониженного напряжения питания (9)";
+    case ESP_RST_SDIO:      return "Сброс по причине ошибки SDIO (10)";
+    default:                return "Неизвестный код причины: " + String((int)reason);
   }
-  
-  reason += " | Core 1: ";
-  switch (reason1) {
-    case NO_MEAN: reason += "NO_MEAN"; break;
-    case POWERON_RESET: reason += "POWERON_RESET"; break;
-    case SW_RESET: reason += "SW_RESET"; break;
-    case OWDT_RESET: reason += "OWDT_RESET"; break;
-    case DEEPSLEEP_RESET: reason += "DEEPSLEEP_RESET"; break;
-    case SDIO_RESET: reason += "SDIO_RESET"; break;
-    case TG0WDT_SYS_RESET: reason += "TG0WDT_SYS_RESET"; break;
-    case TG1WDT_SYS_RESET: reason += "TG1WDT_SYS_RESET"; break;
-    case RTCWDT_SYS_RESET: reason += "RTCWDT_SYS_RESET"; break;
-    case INTRUSION_RESET: reason += "INTRUSION_RESET"; break;
-    case TGWDT_CPU_RESET: reason += "TGWDT_CPU_RESET"; break;
-    case SW_CPU_RESET: reason += "SW_CPU_RESET"; break;
-    case RTCWDT_CPU_RESET: reason += "RTCWDT_CPU_RESET"; break;
-    case EXT_CPU_RESET: reason += "EXT_CPU_RESET"; break;
-    case RTCWDT_BROWN_OUT_RESET: reason += "RTCWDT_BROWN_OUT_RESET"; break;
-    case RTCWDT_RTC_RESET: reason += "RTCWDT_RTC_RESET"; break;
-    default: reason += "UNKNOWN"; break;
-  }
-  
-  return reason;
 }
 
 // Функция для сохранения стектрейса в файл
@@ -137,17 +105,12 @@ void shutdown_handler() {
   
   crash_occurred = true;
   
-  // Получаем причину сбоя
-  RESET_REASON reason0 = rtc_get_reset_reason(0);
-  RESET_REASON reason1 = rtc_get_reset_reason(1);
+  esp_reset_reason_t reason = esp_reset_reason();
   
   // Проверяем, был ли это сбой (не обычная перезагрузка)
-  bool is_crash = (reason0 == TG0WDT_SYS_RESET || reason0 == TG1WDT_SYS_RESET || 
-                   reason0 == RTCWDT_SYS_RESET || reason0 == TGWDT_CPU_RESET ||
-                   reason0 == RTCWDT_CPU_RESET || reason0 == RTCWDT_BROWN_OUT_RESET ||
-                   reason1 == TG0WDT_SYS_RESET || reason1 == TG1WDT_SYS_RESET ||
-                   reason1 == RTCWDT_SYS_RESET || reason1 == TGWDT_CPU_RESET ||
-                   reason1 == RTCWDT_CPU_RESET || reason1 == RTCWDT_BROWN_OUT_RESET);
+  bool is_crash = (reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT || 
+                   reason == ESP_RST_TASK_WDT || reason == ESP_RST_WDT || 
+                   reason == ESP_RST_BROWNOUT);
   
   if (is_crash) {
     String crash_info = "System crash detected. Reason: " + get_reset_reason_string();
@@ -155,38 +118,36 @@ void shutdown_handler() {
   }
 }
 
-// Обработчик паники (вызывается при исключении)
-// Примечание: в Arduino framework прямой доступ к обработчику паники может быть ограничен
-// Поэтому мы полагаемся на проверку причины перезагрузки при старте
-
 // Инициализация обработчика сбоев
 void init_crash_handler() {
+  Serial.println("[CRASH] Initializing crash handler...");
+  
   // Проверяем, была ли файловая система уже смонтирована
   fs_available = SPIFFS.begin(false);
+  Serial.print("[CRASH] Filesystem status: ");
+  Serial.println(fs_available ? "OK" : "FAILED");
   
   // Регистрируем обработчик завершения системы
-  // Примечание: esp_register_shutdown_handler вызывается при нормальном завершении,
-  // а не при панике. Для перехвата паники мы проверяем причину перезагрузки при старте.
   esp_register_shutdown_handler(shutdown_handler);
   
-  Serial.println("Crash handler initialized");
+  esp_reset_reason_t reason = esp_reset_reason();
+  String reasonStr = get_reset_reason_string();
   
-  // Проверяем причину перезагрузки при старте
-  RESET_REASON reason0 = rtc_get_reset_reason(0);
-  RESET_REASON reason1 = rtc_get_reset_reason(1);
+  Serial.print("[CRASH] Reset Reason: "); 
+  Serial.println(reasonStr);
   
-  // Проверяем, был ли это сбой
-  bool was_crash = (reason0 == TG0WDT_SYS_RESET || reason0 == TG1WDT_SYS_RESET || 
-                    reason0 == RTCWDT_SYS_RESET || reason0 == TGWDT_CPU_RESET ||
-                    reason0 == RTCWDT_CPU_RESET || reason0 == RTCWDT_BROWN_OUT_RESET ||
-                    reason1 == TG0WDT_SYS_RESET || reason1 == TG1WDT_SYS_RESET ||
-                    reason1 == RTCWDT_SYS_RESET || reason1 == TGWDT_CPU_RESET ||
-                    reason1 == RTCWDT_CPU_RESET || reason1 == RTCWDT_BROWN_OUT_RESET);
+  // Считаем сбоем всё, кроме питания, кнопки, программного рестарта и сна
+  bool was_crash = (reason != ESP_RST_POWERON && reason != ESP_RST_EXT && 
+                    reason != ESP_RST_SW && reason != ESP_RST_DEEPSLEEP && 
+                    reason != ESP_RST_UNKNOWN);
   
   if (was_crash) {
+    Serial.println("[CRASH] Crash detected! Saving log...");
     // Сохраняем информацию о предыдущем сбое
-    String crash_info = "Previous crash detected at startup. Reason: " + get_reset_reason_string();
+    String crash_info = "Previous crash detected at startup. Reason: " + reasonStr;
     save_stacktrace_to_file(crash_info.c_str());
+  } else {
+    Serial.println("[CRASH] Normal boot detected.");
   }
   
   // Проверяем наличие сохраненных логов сбоев при старте
@@ -243,4 +204,3 @@ void force_save_stacktrace(const char* reason) {
 }
 
 #endif // USE_CRASH_HANDLER
-
