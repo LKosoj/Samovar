@@ -350,6 +350,10 @@ void WebServerInit(void) {
   //  DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
   //  DefaultHeaders::Instance().addHeader("Expires", "Thu, 01 Jan 1970 00:00:00 UTC");
   //  DefaultHeaders::Instance().addHeader("Last-Modified", "Mon, 03 Jan 2050 00:00:00 UTC");
+  
+  // Автоматическая раздача всех файлов из SPIFFS
+  server.serveStatic("/", SPIFFS, "/");
+  
   server.begin();
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");
