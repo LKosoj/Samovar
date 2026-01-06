@@ -74,6 +74,7 @@
 #include <iarduino_I2C_connect.h>
 
 #include "Samovar.h"
+#include "crash_handler.h"
 
 #ifndef __SAMOVAR_DEBUG
 #define ARDUINOTRACE_ENABLE 0  // Disable all traces
@@ -1074,6 +1075,11 @@ void setup() {
   samovar_reset();
 
   WebServerInit();
+  
+#ifdef USE_CRASH_HANDLER
+  // Инициализация обработчика сбоев (после инициализации файловой системы)
+  init_crash_handler();
+#endif
 
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора

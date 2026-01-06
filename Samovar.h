@@ -200,6 +200,9 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 
 #define USE_LittleFS
 
+// Флаг для включения обработки сбоев и сохранения стектрейса в LittleFS
+//#define USE_CRASH_HANDLER
+
 #ifdef USE_LittleFS
 //#pragma message ("USE LITTLEFS")
 #ifdef ESP_ARDUINO_VERSION
