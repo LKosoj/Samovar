@@ -336,6 +336,12 @@ void triggerGetClock(void *parameter) {
   String qMsg;
   int counter = 0;
   while (true) {
+    // Пропускаем все активности во время OTA обновления (кроме проверки WiFi)
+    if (ota_running) {
+      vTaskDelay(200 / portTICK_PERIOD_MS);  // Увеличиваем задержку во время OTA
+      continue;
+    }
+    
     counter++;
     if (counter > 30) {
       NTP.update();
@@ -345,7 +351,8 @@ void triggerGetClock(void *parameter) {
       static unsigned long wifiReconnectTimer = 0;
       if (WiFi.status() != WL_CONNECTED) {
           // попытки переподключиться к WiFi раз в 20 секунд, если не сработала автоматическая попытка переподключиться
-          if (millis() - wifiReconnectTimer >= 20000) {
+          // Но не во время OTA обновления
+          if (!ota_running && millis() - wifiReconnectTimer >= 20000) {
             WriteConsoleLog(F("WiFi.reconnect..."));
             WiFi.reconnect();
             wifiReconnectTimer = millis();
@@ -355,23 +362,30 @@ void triggerGetClock(void *parameter) {
       }
     }
 
-    // Проверка и переподключение Blynk
+    // Пропускаем переподключения во время OTA обновления
+    if (!ota_running) {
+      // Проверка и переподключение Blynk
 #ifdef SAMOVAR_USE_BLYNK
-    if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
-      Blynk.connect(BLYNK_TIMEOUT_MS);
-      vTaskDelay(50 / portTICK_PERIOD_MS);
-    }
+      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
+        Blynk.connect(BLYNK_TIMEOUT_MS);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+      }
 #endif
 
-    // Проверка и переподключение MQTT
+      // Проверка и переподключение MQTT
 #ifdef USE_MQTT
-    if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
-      connectToMqtt();
-    }
+      if (!mqttClient.connected() && WiFi.status() == WL_CONNECTED) {
+        connectToMqtt();
+      }
 #endif
+    } else {
+      // Во время OTA увеличиваем задержку для освобождения ресурсов
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
 
     // Обработка сообщений из очереди: отправка во все включенные сервисы одновременно
-    if (!msg_q.isEmpty() && WiFi.status() == WL_CONNECTED) {
+    // Пропускаем отправку сообщений во время OTA для освобождения ресурсов
+    if (!msg_q.isEmpty() && WiFi.status() == WL_CONNECTED && !ota_running) {
       vTaskDelay(5 / portTICK_PERIOD_MS);
       if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
         char c[200];
@@ -915,7 +929,7 @@ void setup() {
   Serial.println(chipId);
 
   String StIP;
-  esp_wifi_set_ps( WIFI_PS_NONE );
+  //esp_wifi_set_ps( WIFI_PS_NONE );
 
   auto start_ap = [&]() {
     WiFi.mode(WIFI_AP);
@@ -1001,6 +1015,7 @@ void setup() {
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
   ArduinoOTA.onStart([]() {
+    ota_running = true;  // Устанавливаем флаг активного OTA обновления
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH)
       type = "Sketch";
@@ -1010,16 +1025,31 @@ void setup() {
     }
     type = type + " update start";
     events.send(type.c_str(), "ota");
+    
+    // Отключаем другие сервисы для освобождения ресурсов
+#ifdef SAMOVAR_USE_BLYNK
+    if (Blynk.connected()) {
+      Blynk.disconnect();
+    }
+#endif
+#ifdef USE_MQTT
+    if (mqttClient.connected()) {
+      mqttClient.disconnect();
+    }
+#endif
   });
   ArduinoOTA.onEnd([]() {
+    ota_running = false;  // Сбрасываем флаг после завершения
     events.send(("Update End"), "ota");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     char p[32];
     sprintf(p, "Progress: %u%%\n", (progress / (total / 100)));
     events.send(p, "ota");
+    yield();  // Даем возможность другим задачам выполниться
   });
   ArduinoOTA.onError([](ota_error_t error) {
+    ota_running = false;  // Сбрасываем флаг при ошибке
     if (error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
     else if (error == OTA_BEGIN_ERROR)
       events.send(("Begin Failed"), "ota");
@@ -1031,6 +1061,8 @@ void setup() {
       events.send(("End Failed"), "ota");
   });
   ArduinoOTA.setHostname(SAMOVAR_HOST);
+  // Увеличиваем таймауты для более стабильной передачи
+  ArduinoOTA.setTimeout(30000);  // 30 секунд на операцию (по умолчанию 10)
   ArduinoOTA.begin();
 #endif
 
@@ -1193,15 +1225,31 @@ void loop() {
 
 #ifdef USE_UPDATE_OTA
   ArduinoOTA.handle();
+  // Во время OTA даем больше времени на обработку и чаще вызываем yield
+  if (ota_running) {
+    yield();
+    delay(1);  // Небольшая задержка для стабильности передачи
+  }
 #endif
 
 #ifdef SAMOVAR_USE_BLYNK
-  if (Blynk.connected()) {
+  // Отключаем Blynk во время OTA для освобождения ресурсов
+  if (!ota_running && Blynk.connected()) {
     Blynk.run();
   }
 #endif
 
-  ::ws.cleanupClients();
+  // Очистка WebSocket клиентов (реже во время OTA)
+  if (!ota_running) {
+    ::ws.cleanupClients();
+  } else {
+    // Во время OTA очищаем реже, чтобы не занимать ресурсы
+    static unsigned long lastCleanup = 0;
+    if (millis() - lastCleanup > 5000) {  // Раз в 5 секунд вместо каждого цикла
+      ::ws.cleanupClients();
+      lastCleanup = millis();
+    }
+  }
 
 #ifdef ALARM_BTN_PIN
   alarm_btn.tick();  // отработка нажатия аварийной кнопки

@@ -998,6 +998,12 @@ void do_lua_script(void *parameter) {
   sr.reserve(128);
   //String glv;
   while (1) {
+    // Приостанавливаем выполнение Lua скриптов во время OTA обновления
+    if (ota_running) {
+      vTaskDelay(500 / portTICK_PERIOD_MS);  // Увеличиваем задержку во время OTA
+      continue;
+    }
+    
     if (SetScriptOff && loop_lua_fl) {
       loop_lua_fl = false;
     }
