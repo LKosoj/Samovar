@@ -6,6 +6,7 @@
 #include "FS.h"
 #include "sensorinit.h"
 #include "column_math.h"
+#include "wifi_htm_gz.h"
 
 extern float nbk_M;
 extern float nbk_Mo;
@@ -129,6 +130,14 @@ void handleFileWithGzip(AsyncWebServerRequest *request, const String &path, cons
   }
 }
 
+// Функция для отправки wifi.htm из памяти (gzip архив)
+void handleWifiHtmFromMemory(AsyncWebServerRequest *request) {
+  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", wifi_htm_gz_data, wifi_htm_gz_data_len);
+  response->addHeader("Content-Encoding", "gzip");
+  response->addHeader("Cache-Control", "max-age=1");
+  request->send(response);
+}
+
 void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
@@ -146,17 +155,8 @@ void WebServerInit(void) {
     // Если нет подключения к WiFi сети - показываем страницу настройки WiFi
     // Это сработает когда Самовар в режиме AP (точка доступа)
     if (WiFi.status() != WL_CONNECTED) {
-      // Обрабатываем wifi.htm с template processor (как для /wifi.htm)
-      if (SPIFFS.exists("/wifi.htm")) {
-        request->send(SPIFFS, "/wifi.htm", "text/html", false, wifiKeyProcessor);
-      } else {
-        // Если файл не найден, отправляем простую HTML страницу
-        String html = F("<html><head><meta charset='utf-8'><title>Samovar - WiFi Setup</title></head><body>");
-        html += F("<h2>Настройка WiFi</h2><p>Файл wifi.htm не найден в файловой системе.</p>");
-        html += F("<p>Убедитесь, что файл загружен в SPIFFS.</p>");
-        html += F("</body></html>");
-        request->send(200, "text/html", html);
-      }
+      // Отправляем wifi.htm из памяти (gzip архив)
+      handleWifiHtmFromMemory(request);
     } else {
       // Иначе - обычный интерфейс Самовара (перенаправление на index.htm)
       request->redirect("/index.htm");
@@ -217,7 +217,10 @@ void WebServerInit(void) {
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
-  server.serveStatic("/wifi.htm", SPIFFS, "/wifi.htm").setTemplateProcessor(wifiKeyProcessor).setCacheControl("max-age=1");
+  // Обработчик для /wifi.htm - отдаем из памяти (gzip архив)
+  server.on("/wifi.htm", HTTP_GET, [](AsyncWebServerRequest* request) {
+    handleWifiHtmFromMemory(request);
+  });
 
   server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->redirect("/wifi.htm");

@@ -1370,34 +1370,61 @@ void clear_serial_in_buff() { // Быстрая очистка буфера (м�
 #ifndef SAMOVAR_USE_RMVK
 void triggerPowerStatus(void *parameter) {
   static String buffer;
+  const uint16_t MAX_BUFFER_SIZE = 50; // Ограничение размера буфера (5 пакетов по 9 символов + запас)
   while (true) {
     vTaskDelay(500 / portTICK_PERIOD_MS);
     buffer = "";
-    while (Serial2.available()) {
-        char c = Serial2.read(); // Явно читаем как char
+    uint16_t readCount = 0;
+    // Читаем данные с ограничением размера буфера
+    while (Serial2.available() && readCount < MAX_BUFFER_SIZE) {
+        char c = Serial2.read();
         buffer += c;
+        readCount++;
     }
+    // Если накопилось больше лимита - оставляем только последние символы
+    if (buffer.length() > MAX_BUFFER_SIZE) {
+        buffer = buffer.substring(buffer.length() - MAX_BUFFER_SIZE);
+    }
+    
     // Если в буфере есть данные
-    if (buffer.length() > 8 ) {
-        // Ищем последние 8 символов перед \r
-        int lastCR = buffer.lastIndexOf('\r');
-        if (lastCR >= 8 ) {
-            // Берем 8 символов перед \_r (формат T1234567)
-            String data = buffer.substring(lastCR - 8, lastCR);
-            Serial.println(data);
-            
-            // Проверяем что первый символ 'T'
-            if (data.charAt(0) == 'T') {
-                String hexData = data.substring(1); // убираем 'T'
+    if (buffer.length() >= 9) { // Минимум 9 символов для полного пакета (T1234567\r)
+        // Находим все позиции \r в буфере
+        int crPositions[5]; // Массив для позиций \r (максимум 5 пакетов)
+        int crCount = 0;
+        for (int i = 0; i < buffer.length() && crCount < 5; i++) {
+            if (buffer.charAt(i) == '\r') {
+                crPositions[crCount] = i;
+                crCount++;
+            }
+        }
+        
+        // Проверяем пакеты от последнего к первому
+        bool packetFound = false;
+        for (int i = crCount - 1; i >= 0 && !packetFound; i--) {
+            int crPos = crPositions[i];
+            // Проверяем, что перед \r есть минимум 8 символов
+            if (crPos >= 8) {
+                // Берем 8 символов перед \r (формат T1234567)
+                String data = buffer.substring(crPos - 8, crPos);
                 
-                int cpv = hexToDec(hexData.substring(0, 3));
-                if (cpv > 30 && cpv < 2550) {
-                    current_power_volt = cpv / 10.0F;
-                    target_power_volt = hexToDec(hexData.substring(3, 6)) / 10.0F;
-                    current_power_mode = hexData.substring(6, 7);   
+                // Проверяем что первый символ 'T'
+                if (data.length() == 8 && data.charAt(0) == 'T') {
+                    String hexData = data.substring(1); // убираем 'T'
+                    
+                    int cpv = hexToDec(hexData.substring(0, 3));
+                    if (cpv > 30 && cpv < 2550) {
+                        current_power_volt = cpv / 10.0F;
+                        target_power_volt = hexToDec(hexData.substring(3, 6)) / 10.0F;
+                        current_power_mode = hexData.substring(6, 7);
+                        
+                        reg_online = true;
+                        last_reg_online = millis();
+                        packetFound = true;
+#ifdef __SAMOVAR_DEBUG
+                        Serial.println("KVIC: " + data);
+#endif
+                    }
                 }
-              reg_online = true;
-              last_reg_online = millis();  
             }
         }
     }
