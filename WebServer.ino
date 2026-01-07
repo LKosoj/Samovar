@@ -1276,6 +1276,7 @@ void get_web_interface() {
   Serial.print(F("Local interface version = "));
   Serial.println(local_version);
   if (version != local_version) {
+    s += get_web_file("wifi.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("index.htm", SAVE_FILE_OVERRIDE);
     s += get_web_file("Green.png", SAVE_FILE_OVERRIDE);
     s += get_web_file("Red_light.gif", SAVE_FILE_OVERRIDE);
