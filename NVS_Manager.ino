@@ -1,12 +1,14 @@
 #include <Preferences.h>
 #include <EEPROM.h>
+#include <WiFi.h>
 #include "Samovar.h"
 
 Preferences prefs;
 
 // -------------------------------------------------------------------------------------------------
-// Wi-Fi креды (замена WiFiManager):
-// Храним отдельно от профиля, в namespace "wifi" (ключи: ssid, pass)
+// Wi-Fi креды (используем стандартный namespace ESP32, как ESPAsyncWiFiManager):
+// ESP32 автоматически сохраняет креденшалы при вызове WiFi.begin(ssid, password) с WiFi.persistent(true)
+// Для чтения используем WiFi.SSID() и WiFi.begin() без параметров
 // -------------------------------------------------------------------------------------------------
 
 bool load_wifi_credentials(char *ssid, size_t ssid_len, char *pass, size_t pass_len) {
@@ -14,46 +16,45 @@ bool load_wifi_credentials(char *ssid, size_t ssid_len, char *pass, size_t pass_
   ssid[0] = '\0';
   pass[0] = '\0';
 
-  if (!prefs.begin("wifi", true)) {
-    return false;
+  // Используем тот же подход, что и ESPAsyncWiFiManager:
+  // WiFi.SSID() возвращает сохраненный SSID из стандартного namespace
+  String saved_ssid = WiFi.SSID();
+  
+  if (saved_ssid.length() > 0) {
+    saved_ssid.toCharArray(ssid, ssid_len);
+    // Пароль нельзя получить через WiFi API без подключения,
+    // но это не проблема - WiFi.begin() без параметров использует сохраненный пароль автоматически
+    return true;
   }
 
-  prefs.getString("ssid", "").toCharArray(ssid, ssid_len);
-  prefs.getString("pass", "").toCharArray(pass, pass_len);
-  prefs.end();
-
-  return ssid[0] != '\0';
+  return false;
 }
 
 String get_wifi_ssid() {
-  if (!prefs.begin("wifi", true)) {
-    return "";
-  }
-  String ssid = prefs.getString("ssid", "");
-  prefs.end();
-  return ssid;
+  // Используем WiFi.SSID() для получения сохраненного SSID (как ESPAsyncWiFiManager)
+  return WiFi.SSID();
 }
 
 void save_wifi_credentials(const char *ssid, const char *pass) {
   if (!ssid) return;
-  if (!prefs.begin("wifi", false)) {
-    Serial.println("NVS: Failed to open wifi namespace for writing!");
-    return;
-  }
-
-  prefs.putString("ssid", String(ssid));
-  if (pass) {
-    prefs.putString("pass", String(pass));
-  }
-
-  prefs.end();
+  
+  // WiFi.persistent(true) включает автоматическое сохранение в стандартный namespace
+  // WiFi.begin(ssid, pass) сохраняет креденшалы автоматически
+  WiFi.persistent(true);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, pass ? pass : "");
+  WiFi.persistent(false);
+  
+  Serial.print(F("WiFi credentials saved. SSID: "));
+  Serial.println(ssid);
 }
 
 void clear_wifi_credentials() {
-  if (!prefs.begin("wifi", false)) return;
-  prefs.remove("ssid");
-  prefs.remove("pass");
-  prefs.end();
+  // Используем WiFi.disconnect(true) для очистки сохраненных креденшалов
+  // true означает, что нужно также очистить сохраненные креденшалы из стандартного namespace
+  WiFi.disconnect(true);
+  
+  Serial.println(F("WiFi credentials cleared from standard namespace"));
 }
 
 // Хелпер для сохранения строк (char array -> String -> NVS)

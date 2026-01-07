@@ -777,7 +777,9 @@ void setup() {
   xSemaphoreGive(xI2CSemaphore);
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
-  WiFi.disconnect(true);
+  // НЕ используем WiFi.disconnect(true) здесь, так как это может очистить сохраненные креденшалы
+  // Вместо этого просто отключаемся без очистки сохраненных данных
+  WiFi.disconnect(false);
   delay(50);
   WiFi.setSleep(false);
   WiFi.setHostname(host);
@@ -940,27 +942,28 @@ void setup() {
   };
 
   if (!wifiAP) {
-    char ssid[64];
-    char pass[64];
-    bool hasCreds = load_wifi_credentials(ssid, sizeof(ssid), pass, sizeof(pass));
+    // пытаемся подключиться через WiFi.begin() без параметров - ESP32 автоматически использует сохраненные креденшалы, если они есть
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(false);  // Отключаемся, но не очищаем сохраненные креденшалы
+    
+    Serial.println(F("Attempting to connect to saved WiFi..."));
+    WiFi.begin();  // Пытаемся подключиться к сохраненной сети
 
-    if (hasCreds) {
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(ssid, pass);
-      Serial.print(F("Connecting to SSID: "));
-      Serial.println(ssid);
-
-      uint32_t startMs = millis();
-      while (WiFi.status() != WL_CONNECTED && (millis() - startMs) < 15000) {
-        delay(250);
-      }
+    uint32_t startMs = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - startMs) < 15000) {
+      delay(250);
+      Serial.print(".");
     }
+    Serial.println();
 
     if (WiFi.status() == WL_CONNECTED) {
       StIP = WiFi.localIP().toString();
       Serial.print(F("Connected to "));
-      Serial.println(WiFi.SSID());
+      Serial.print(WiFi.SSID());
+      Serial.print(F(" - IP: "));
+      Serial.println(StIP);
     } else {
+      Serial.println(F("Failed to connect to saved WiFi. Starting AP mode..."));
       wifiAP = true;
       start_ap();
     }
