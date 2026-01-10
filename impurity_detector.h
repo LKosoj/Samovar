@@ -211,9 +211,19 @@ void process_impurity_detector() {
 
   unsigned long now = millis();
   
+  // Выбор датчика температуры в зависимости от типа программы:
+  // - Для тела (B) и предзахлеба (C) - температура царги (PipeSensor) - более чувствительна к примесям
+  // - Для голов (H) и хвостов (T) - температура пара (SteamSensor) - стандартный контроль
+  float detectorTemp;
+  if (ProgramNum < 30 && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C")) {
+    detectorTemp = PipeSensor.avgTemp;  // Температура царги для тела и предзахлеба
+  } else {
+    detectorTemp = SteamSensor.avgTemp; // Температура пара для голов и хвостов
+  }
+  
   // Сбор данных каждые 2 секунды
   if (now - impurityDetector.lastSampleTime >= 2000) {
-    update_detector_history(PipeSensor.avgTemp);
+    update_detector_history(detectorTemp);
     impurityDetector.currentTrend = calculate_temperature_trend();
     impurityDetector.lastSampleTime = now;
   }

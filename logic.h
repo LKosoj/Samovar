@@ -529,8 +529,53 @@ String get_program(uint8_t s) {
 
 // Запустить программу
 void run_program(uint8_t num) {
+  // Проверяем смену типа программы для сброса детектора
+  // Сбрасываем детектор только при переходе:
+  // - H (головы) -> B/C (тело/предзахлеб)
+  // - B/C (тело/предзахлеб) -> T (хвосты)
+  // НЕ сбрасываем при переходе B <-> C (между телом и предзахлебом)
+  bool needReset = false;
+  
+  if (num < 30 && program[num].WType.length() > 0) {
+    String currentType = program[num].WType;
+    
+    // Проверяем предыдущую программу, если она существует
+    if (num > 0 && program[num - 1].WType.length() > 0) {
+      String prevType = program[num - 1].WType;
+      
+      // Переход с голов на тело/предзахлеб
+      if (prevType == "H" && (currentType == "B" || currentType == "C")) {
+        needReset = true;
+      }
+      // Переход с тела/предзахлеба на хвосты
+      else if ((prevType == "B" || prevType == "C") && currentType == "T") {
+        needReset = true;
+      }
+      // Переход с любого другого типа на тело/предзахлеб (если не было B/C)
+      else if (prevType != "B" && prevType != "C" && (currentType == "B" || currentType == "C")) {
+        needReset = true;
+      }
+      // Переход с тела/предзахлеба на любой другой тип (кроме B/C)
+      else if ((prevType == "B" || prevType == "C") && currentType != "B" && currentType != "C") {
+        needReset = true;
+      }
+      // Переход B <-> C - НЕ сбрасываем (needReset остается false)
+    } else {
+      // Первый запуск или предыдущая программа не определена - всегда сбрасываем
+      needReset = true;
+    }
+  } else {
+    // Если тип текущей программы не определен - сбрасываем
+    needReset = true;
+  }
+  
   ProgramNum = num;
-  reset_impurity_detector();
+  
+  // Сбрасываем детектор только если нужно
+  if (needReset) {
+    reset_impurity_detector();
+  }
+  
   t_min = 0;
   program_Pause = false;
   program_Wait = false;
@@ -1550,7 +1595,7 @@ void check_power_error() {
     // 2) Проверим, что заданное напряжение/мощность не сильно отличается от реального
     // (наличие связи с регулятором, пробой семистора и т.п.)
     if (current_power_mode == POWER_WORK_MODE && current_power_volt > 0 && target_power_volt > 0 &&
-        abs((current_power_volt - target_power_volt) / target_power_volt) > 0.2) {
+        abs((current_power_volt - target_power_volt) / target_power_volt) > 2) {
       power_err_cnt++;
       //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
       if (power_err_cnt > 6) set_current_power(target_power_volt);
