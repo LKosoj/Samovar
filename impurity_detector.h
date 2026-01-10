@@ -190,6 +190,22 @@ void process_impurity_detector() {
     return;
   }
 
+  // Детектор не работает во время программы типа "P" (Пауза)
+  // Во время паузы отбор должен быть полностью остановлен и не возобновляться детектором
+  if (ProgramNum < 30 && program[ProgramNum].WType == "P") {
+    impurityDetector.detectorStatus = 0;
+    // Не меняем correctionFactor, чтобы сохранить состояние на момент паузы
+    return;
+  }
+
+  // Детектор не работает во время ручной паузы пользователя (PauseOn)
+  // Пользователь может поставить на паузу по любой причине, и детектор не должен вмешиваться
+  if (PauseOn) {
+    impurityDetector.detectorStatus = 0;
+    // Не меняем correctionFactor, чтобы сохранить состояние на момент паузы
+    return;
+  }
+
   unsigned long now = millis();
   
   // Сбор данных каждые 2 секунды
@@ -241,7 +257,8 @@ void process_impurity_detector() {
   // Реакция на тренд (только если тренд валидный или критический)
   if (impurityDetector.currentTrend > criticalThreshold) {
     // КРИТИЧЕСКИЙ ПРОСКОК: Ставим на ПАУЗУ (всегда реагируем на критический)
-    if (!program_Wait) {
+    // Но только если нет ручной паузы пользователя
+    if (!program_Wait && !PauseOn) {
       impurityDetector.detectorStatus = 2; // Breakthrough
       program_Wait = true;
       program_Wait_Type = "(Детектор)";
@@ -254,27 +271,32 @@ void process_impurity_detector() {
     }
   } else if (isValidTrend && impurityDetector.currentTrend > correctionThreshold) {
     // ПРЕДУПРЕЖДЕНИЕ: Постепенно снижаем скорость
-    impurityDetector.detectorStatus = 1; // Correction
-    if (now - impurityDetector.lastCorrectionTime > 25000) { // Корректируем не чаще раза в 25 сек (увеличено с 15)
-      impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
-      if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
-      impurityDetector.lastCorrectionTime = now;
-      
-      // Применяем новую скорость
-      float baseSpeedRate = program[ProgramNum].Speed;
-      if (baseSpeedRate > 0) {
-        float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-        set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
+    // Но только если нет ручной паузы пользователя
+    if (!PauseOn) {
+      impurityDetector.detectorStatus = 1; // Correction
+      if (now - impurityDetector.lastCorrectionTime > 25000) { // Корректируем не чаще раза в 25 сек (увеличено с 15)
+        impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
+        if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
+        impurityDetector.lastCorrectionTime = now;
+        
+        // Применяем новую скорость
+        float baseSpeedRate = program[ProgramNum].Speed;
+        if (baseSpeedRate > 0) {
+          float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
+          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
+        }
+        
+        SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) + 
+                ", порог: " + String(warningThreshold, 3) + ", variance: " + 
+                String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);
       }
-      
-      SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) + 
-              ", порог: " + String(warningThreshold, 3) + ", variance: " + 
-              String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);
     }
   } else if (impurityDetector.currentTrend < recoveryThreshold) {
     // СТАБИЛЬНО: Плавное восстановление скорости (используется гистерезис вместо порога/2)
     impurityDetector.detectorStatus = 0; // Stable
-    if (impurityDetector.correctionFactor < 1.0f) {
+    // Восстанавливаем скорость только если нет паузы (ни ручной, ни автоматической от детектора)
+    // Если пользователь поставил на паузу вручную, или есть автоматическая пауза - не возобновляем
+    if (impurityDetector.correctionFactor < 1.0f && !PauseOn && !program_Wait) {
       if (now - impurityDetector.lastCorrectionTime > 30000) { // Восстанавливаем медленно, раз в 30 сек
         impurityDetector.correctionFactor += 0.02f;
         if (impurityDetector.correctionFactor > 1.0f) impurityDetector.correctionFactor = 1.0f;
