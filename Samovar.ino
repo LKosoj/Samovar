@@ -545,11 +545,24 @@ void triggerSysTicker(void *parameter) {
             s += ","; s += format_float(CalculatedTargetFR, 2); // 15: actual_fr (в данной системе они совпадают)
             s += ","; s += format_float(impurityDetector.currentTrend, 3); // 16: temp_delta
             s += ","; s += String(impurityDetector.detectorStatus); // 17: alarm_state
-            s += ","; s += String(prev_ProgramNum != ProgramNum ? 2 : (program_Wait ? 1 : 0)); // 18: event_code
+            // event_code: 0=норм, 1=пауза
+            // event_code используется только для критических событий
+            uint8_t eventCode = program_Wait ? 1 : 0;
+            s += ","; s += String(eventCode); // 18: event_code
             s += ","; s += String(SamSetup.PackDens); // 19: packing_density
             s += ","; s += format_float(SamSetup.ColHeight, 2); // 20: col_height
             s += ","; s += format_float(SamSetup.ColDiam, 1);   // 21: col_diameter
             s += ","; s += format_float(CurrentHeatLoss, 0);    // 22: heat_loss
+            
+            // Тип программы: H=головы, B=тело, C=предзахлеб, T=хвосты, P=пауза, пусто=нет программы
+            String programType = "";
+            if (ProgramNum < 30 && program[ProgramNum].WType.length() > 0) {
+              programType = program[ProgramNum].WType.substring(0, 1); // Берем первый символ
+            }
+            s += ","; s += programType; // 23: program_type
+            
+            // Режим работы: 0=ректификация, 1=дистилляция, 2=пиво, 3=БК, 4=НБК, 5=сувид, 6=Lua
+            s += ","; s += String((int)Samovar_Mode); // 24: mode
 
 #ifdef USE_MQTT
             MqttSendMsg(s, "log", 4);

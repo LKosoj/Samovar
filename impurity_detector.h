@@ -2,7 +2,6 @@
 #define IMPURITY_DETECTOR_H
 
 #include <Arduino.h>
-#include <math.h>
 #include "Samovar.h"
 
 /**
@@ -38,9 +37,11 @@ void reset_impurity_detector() {
 }
 
 /**
- * Расчет стандартного отклонения температуры за период (фильтрация выбросов)
+ * Расчет дисперсии температуры за период (фильтрация выбросов)
+ * Используется дисперсия
+ * Значение дисперсии пропорционально stdDev^2
  */
-float calculate_temperature_stddev() {
+float calculate_temperature_variance() {
   uint8_t n = impurityDetector.historySize;
   if (n < 5) return 0.0f; // Нужно минимум 5 точек для расчета
 
@@ -61,8 +62,9 @@ float calculate_temperature_stddev() {
   }
   variance /= n;
 
-  // Стандартное отклонение
-  return sqrt(variance);
+  // Возвращаем дисперсию
+  // Для сравнения используем порог в квадрате: если stdDev > 0.1, то variance > 0.01
+  return variance;
 }
 
 /**
@@ -92,9 +94,15 @@ void update_detector_history(float columnTemp) {
   impurityDetector.historyIndex = (impurityDetector.historyIndex + 1) % 30;
   if (impurityDetector.historySize < 30) impurityDetector.historySize++;
   
-  // Пересчитываем стандартное отклонение
+  // Пересчитываем дисперсию (реже, чем каждое обновление - для оптимизации)
+  // Вычисляем раз в 10 секунд (каждые 5 обновлений при обновлении раз в 2 сек)
+  static uint8_t varianceUpdateCounter = 0;
   if (impurityDetector.historySize >= 5) {
-    impurityDetector.tempStdDev = calculate_temperature_stddev();
+    varianceUpdateCounter++;
+    if (varianceUpdateCounter >= 5) { // Каждые 10 секунд
+      impurityDetector.tempStdDev = calculate_temperature_variance(); // Храним variance, не stdDev
+      varianceUpdateCounter = 0;
+    }
   }
 }
 
@@ -127,17 +135,21 @@ float calculate_temperature_trend() {
 
 /**
  * Получить адаптивный порог с учетом дисперсии, скорости отбора и фазы процесса
+ * @param variance - дисперсия температуры
+ *                   Порог сравнения: variance > 0.01 соответствует stdDev > 0.1°C
  */
-float get_adaptive_threshold(float baseThreshold, float stdDev, float volumePerHour, String processPhase) {
+float get_adaptive_threshold(float baseThreshold, float variance, float volumePerHour, String processPhase) {
   float adaptiveThreshold = baseThreshold;
   
   // 1. Корректировка на основе дисперсии (стандартного отклонения)
   // Если дисперсия высокая, увеличиваем порог пропорционально
-  // Для stdDev > 0.1°C увеличиваем порог на 20-50%
-  if (stdDev > 0.1f) {
-    float stdDevFactor = 1.0f + (stdDev - 0.1f) * 2.0f; // До 2.0x при stdDev = 0.6
-    if (stdDevFactor > 2.0f) stdDevFactor = 2.0f; // Максимум удвоение
-    adaptiveThreshold *= stdDevFactor;
+  // variance > 0.01 соответствует stdDev > 0.1°C (0.1^2 = 0.01)
+  // variance > 0.36 соответствует stdDev > 0.6°C (0.6^2 = 0.36)
+  if (variance > 0.01f) {
+    // Линейная аппроксимация: при variance = 0.01 -> фактор 1.0, при variance = 0.36 -> фактор 2.0
+    float varianceFactor = 1.0f + (variance - 0.01f) * (1.0f / 0.35f); // (2.0-1.0)/(0.36-0.01)
+    if (varianceFactor > 2.0f) varianceFactor = 2.0f; // Максимум удвоение
+    adaptiveThreshold *= varianceFactor;
   }
   
   // 2. Корректировка на основе скорости отбора
@@ -237,8 +249,8 @@ void process_impurity_detector() {
       t_min = now + PipeSensor.Delay * 1000;
       set_buzzer(true);
       SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " + 
-              String(impurityDetector.currentTrend, 3) + ", stdDev: " + 
-              String(impurityDetector.tempStdDev, 3) + ")", ALARM_MSG);
+              String(impurityDetector.currentTrend, 3) + ", variance: " + 
+              String(impurityDetector.tempStdDev, 4) + ")", ALARM_MSG);
     }
   } else if (isValidTrend && impurityDetector.currentTrend > correctionThreshold) {
     // ПРЕДУПРЕЖДЕНИЕ: Постепенно снижаем скорость
@@ -256,8 +268,8 @@ void process_impurity_detector() {
       }
       
       SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) + 
-              ", порог: " + String(warningThreshold, 3) + ", stdDev: " + 
-              String(impurityDetector.tempStdDev, 3) + ")", NOTIFY_MSG);
+              ", порог: " + String(warningThreshold, 3) + ", variance: " + 
+              String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);
     }
   } else if (impurityDetector.currentTrend < recoveryThreshold) {
     // СТАБИЛЬНО: Плавное восстановление скорости (используется гистерезис вместо порога/2)
