@@ -25,8 +25,11 @@ void init_impurity_detector() {
  * Полный сброс состояния (вызывается при смене программы или ручной установке Т тела)
  */
 void reset_impurity_detector() {
+  // Очищаем историю температур полностью
+  memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
   impurityDetector.historySize = 0;
   impurityDetector.historyIndex = 0;
+  impurityDetector.lastSampleTime = 0; // Сбрасываем время последней выборки для немедленного начала сбора данных
   impurityDetector.currentTrend = 0;
   impurityDetector.detectorStatus = 0;
   impurityDetector.correctionFactor = 1.0f;
