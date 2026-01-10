@@ -456,6 +456,9 @@ struct ImpurityDetector {
   uint8_t detectorStatus;       // Статус: 0=Stable, 1=Correction, 2=Breakthrough
   float correctionFactor;       // Коэффициент коррекции скорости (0.7-1.0)
   unsigned long lastCorrectionTime; // Время последней корректировки
+  float tempStdDev;             // Стандартное отклонение температуры за период
+  uint8_t consecutiveRises;     // Счетчик последовательных повышений температуры
+  float lastTemp;               // Предыдущее значение температуры для отслеживания последовательных повышений
 };
 
 struct DSSensor {

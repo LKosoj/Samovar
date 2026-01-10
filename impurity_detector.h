@@ -2,6 +2,7 @@
 #define IMPURITY_DETECTOR_H
 
 #include <Arduino.h>
+#include <math.h>
 #include "Samovar.h"
 
 /**
@@ -16,6 +17,9 @@ void init_impurity_detector() {
   impurityDetector.detectorStatus = 0;
   impurityDetector.correctionFactor = 1.0f;
   impurityDetector.lastCorrectionTime = 0;
+  impurityDetector.tempStdDev = 0.0f;
+  impurityDetector.consecutiveRises = 0;
+  impurityDetector.lastTemp = 0.0f;
 }
 
 /**
@@ -28,15 +32,70 @@ void reset_impurity_detector() {
   impurityDetector.detectorStatus = 0;
   impurityDetector.correctionFactor = 1.0f;
   impurityDetector.lastCorrectionTime = millis();
+  impurityDetector.tempStdDev = 0.0f;
+  impurityDetector.consecutiveRises = 0;
+  impurityDetector.lastTemp = 0.0f;
+}
+
+/**
+ * Расчет стандартного отклонения температуры за период (фильтрация выбросов)
+ */
+float calculate_temperature_stddev() {
+  uint8_t n = impurityDetector.historySize;
+  if (n < 5) return 0.0f; // Нужно минимум 5 точек для расчета
+
+  // Вычисляем среднее значение
+  float mean = 0.0f;
+  for (uint8_t i = 0; i < n; i++) {
+    uint8_t idx = (impurityDetector.historyIndex - n + i + 30) % 30;
+    mean += impurityDetector.tempHistory[idx];
+  }
+  mean /= n;
+
+  // Вычисляем дисперсию
+  float variance = 0.0f;
+  for (uint8_t i = 0; i < n; i++) {
+    uint8_t idx = (impurityDetector.historyIndex - n + i + 30) % 30;
+    float diff = impurityDetector.tempHistory[idx] - mean;
+    variance += diff * diff;
+  }
+  variance /= n;
+
+  // Стандартное отклонение
+  return sqrt(variance);
+}
+
+/**
+ * Проверка на последовательные повышения температуры (фильтрация выбросов)
+ * Возвращает количество последовательных повышений (>= 0.02°C)
+ */
+uint8_t check_consecutive_rises(float currentTemp) {
+  if (impurityDetector.lastTemp > 0.0f && currentTemp > impurityDetector.lastTemp + 0.02f) {
+    // Температура повысилась на более чем 0.02°C
+    impurityDetector.consecutiveRises++;
+  } else {
+    // Температура не повысилась или повысилась недостаточно
+    impurityDetector.consecutiveRises = 0;
+  }
+  impurityDetector.lastTemp = currentTemp;
+  return impurityDetector.consecutiveRises;
 }
 
 /**
  * Добавление температуры в историю
  */
 void update_detector_history(float columnTemp) {
+  // Проверяем последовательные повышения для фильтрации выбросов
+  check_consecutive_rises(columnTemp);
+  
   impurityDetector.tempHistory[impurityDetector.historyIndex] = columnTemp;
   impurityDetector.historyIndex = (impurityDetector.historyIndex + 1) % 30;
   if (impurityDetector.historySize < 30) impurityDetector.historySize++;
+  
+  // Пересчитываем стандартное отклонение
+  if (impurityDetector.historySize >= 5) {
+    impurityDetector.tempStdDev = calculate_temperature_stddev();
+  }
 }
 
 /**
@@ -67,6 +126,48 @@ float calculate_temperature_trend() {
 }
 
 /**
+ * Получить адаптивный порог с учетом дисперсии, скорости отбора и фазы процесса
+ */
+float get_adaptive_threshold(float baseThreshold, float stdDev, float volumePerHour, String processPhase) {
+  float adaptiveThreshold = baseThreshold;
+  
+  // 1. Корректировка на основе дисперсии (стандартного отклонения)
+  // Если дисперсия высокая, увеличиваем порог пропорционально
+  // Для stdDev > 0.1°C увеличиваем порог на 20-50%
+  if (stdDev > 0.1f) {
+    float stdDevFactor = 1.0f + (stdDev - 0.1f) * 2.0f; // До 2.0x при stdDev = 0.6
+    if (stdDevFactor > 2.0f) stdDevFactor = 2.0f; // Максимум удвоение
+    adaptiveThreshold *= stdDevFactor;
+  }
+  
+  // 2. Корректировка на основе скорости отбора
+  // При высокой скорости отбора (> 0.5 л/ч) порог должен быть выше
+  // При низкой скорости (< 0.1 л/ч) порог может быть ниже
+  if (volumePerHour > 0.1f) {
+    if (volumePerHour > 0.5f) {
+      // Высокая скорость - увеличиваем порог на 30%
+      adaptiveThreshold *= 1.3f;
+    } else if (volumePerHour < 0.2f) {
+      // Низкая скорость - уменьшаем порог на 15%
+      adaptiveThreshold *= 0.85f;
+    }
+  }
+  
+  // 3. Корректировка на основе фазы процесса
+  // Головы: более чувствительный (порог * 0.9)
+  // Тело: стандартный порог
+  // Хвосты: менее чувствительный (порог * 1.2)
+  if (processPhase == "H") {
+    adaptiveThreshold *= 0.9f; // Головы - более чувствительный
+  } else if (processPhase == "T") {
+    adaptiveThreshold *= 1.2f; // Хвосты - менее чувствительный (больше примесей ожидается)
+  }
+  // "B" (тело) и "C" (предзахлеб) - без изменений
+  
+  return adaptiveThreshold;
+}
+
+/**
  * Основная логика работы детектора
  */
 void process_impurity_detector() {
@@ -86,15 +187,48 @@ void process_impurity_detector() {
     impurityDetector.lastSampleTime = now;
   }
 
-  // Адаптивные пороги на основе плотности насадки (PackDens)
+  // Базовый порог на основе плотности насадки (PackDens)
   // Для плотной насадки (100%) порог ниже, для разреженной (60%) выше.
-  // Базовый порог предупреждения: 0.02 °C/мин
-  float warningThreshold = 0.02f + (100 - SamSetup.PackDens) * 0.0005f;
+  float baseWarningThreshold = 0.03f + (100 - SamSetup.PackDens) * 0.0005f;
+  
+  // Получаем текущие параметры процесса
+  float currentVolumePerHour = (ProgramNum < 30 && program[ProgramNum].Speed > 0) 
+                                ? program[ProgramNum].Speed 
+                                : 0.24f; // Дефолтное значение
+  String processPhase = (ProgramNum < 30 && program[ProgramNum].WType.length() > 0) 
+                         ? program[ProgramNum].WType 
+                         : "B"; // По умолчанию тело
+  
+  // Адаптивный порог с учетом дисперсии, скорости отбора и фазы процесса
+  float warningThreshold = get_adaptive_threshold(
+    baseWarningThreshold, 
+    impurityDetector.tempStdDev, 
+    currentVolumePerHour, 
+    processPhase
+  );
+  
   float criticalThreshold = warningThreshold * 2.5f;
+  
+  // Гистерезис для предотвращения частых переключений (15% от адаптивного порога)
+  float hysteresis = warningThreshold * 0.15f;
+  float correctionThreshold = warningThreshold + hysteresis;  // Порог для снижения скорости
+  float recoveryThreshold = warningThreshold - hysteresis;    // Порог для восстановления скорости
+  
+  // Фильтрация выбросов: учитываем только устойчивые тренды
+  // Игнорируем единичные всплески, если нет 3+ последовательных повышений
+  bool isValidTrend = true;
+  if (impurityDetector.consecutiveRises < 3 && impurityDetector.currentTrend > correctionThreshold) {
+    // Тренд есть, но нет устойчивой последовательности повышений
+    // Снижаем чувствительность на 30% для таких случаев
+    correctionThreshold *= 1.3f;
+    if (impurityDetector.currentTrend < correctionThreshold) {
+      isValidTrend = false; // Игнорируем этот тренд как выброс
+    }
+  }
 
-  // Реакция на тренд
+  // Реакция на тренд (только если тренд валидный или критический)
   if (impurityDetector.currentTrend > criticalThreshold) {
-    // КРИТИЧЕСКИЙ ПРОСКОК: Ставим на ПАУЗУ
+    // КРИТИЧЕСКИЙ ПРОСКОК: Ставим на ПАУЗУ (всегда реагируем на критический)
     if (!program_Wait) {
       impurityDetector.detectorStatus = 2; // Breakthrough
       program_Wait = true;
@@ -102,12 +236,14 @@ void process_impurity_detector() {
       pause_withdrawal(true);
       t_min = now + PipeSensor.Delay * 1000;
       set_buzzer(true);
-      SendMsg("Детектор: Критический тренд! Пауза отбора.", ALARM_MSG);
+      SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " + 
+              String(impurityDetector.currentTrend, 3) + ", stdDev: " + 
+              String(impurityDetector.tempStdDev, 3) + ")", ALARM_MSG);
     }
-  } else if (impurityDetector.currentTrend > warningThreshold) {
+  } else if (isValidTrend && impurityDetector.currentTrend > correctionThreshold) {
     // ПРЕДУПРЕЖДЕНИЕ: Постепенно снижаем скорость
     impurityDetector.detectorStatus = 1; // Correction
-    if (now - impurityDetector.lastCorrectionTime > 15000) { // Корректируем не чаще раза в 15 сек
+    if (now - impurityDetector.lastCorrectionTime > 25000) { // Корректируем не чаще раза в 25 сек (увеличено с 15)
       impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
       if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
       impurityDetector.lastCorrectionTime = now;
@@ -119,10 +255,12 @@ void process_impurity_detector() {
         set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
       }
       
-      SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) + ")", NOTIFY_MSG);
+      SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) + 
+              ", порог: " + String(warningThreshold, 3) + ", stdDev: " + 
+              String(impurityDetector.tempStdDev, 3) + ")", NOTIFY_MSG);
     }
-  } else if (impurityDetector.currentTrend < (warningThreshold / 2.0f)) {
-    // СТАБИЛЬНО: Плавное восстановление скорости
+  } else if (impurityDetector.currentTrend < recoveryThreshold) {
+    // СТАБИЛЬНО: Плавное восстановление скорости (используется гистерезис вместо порога/2)
     impurityDetector.detectorStatus = 0; // Stable
     if (impurityDetector.correctionFactor < 1.0f) {
       if (now - impurityDetector.lastCorrectionTime > 30000) { // Восстанавливаем медленно, раз в 30 сек
@@ -139,6 +277,7 @@ void process_impurity_detector() {
       }
     }
   }
+  // Зона между recoveryThreshold и correctionThreshold - зона нечувствительности (гистерезис)
 }
 
 /**
