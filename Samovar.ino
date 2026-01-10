@@ -521,7 +521,8 @@ void triggerSysTicker(void *parameter) {
             s += ",";
             s += format_float(get_alcohol(TankSensor.avgTemp), 2);
             s += ",";
-            s += format_float(get_steam_alcohol(TankSensor.avgTemp), 2);
+            // Для ректификации используем температуру пара, для дистилляции - температуру куба
+            s += format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2);
             s += ",";
             s += format_float(pressure_value, 2);
 
@@ -1625,7 +1626,8 @@ void getjson(void) {
     jsonstr.concat(format_float(get_alcohol(TankSensor.avgTemp), 2));
     jsonstr.concat(",");
     jsonstr.concat("\"stm_alc\":");
-    jsonstr.concat(format_float(get_steam_alcohol(TankSensor.avgTemp), 2));
+    // Для ректификации используем температуру пара, для дистилляции - температуру куба
+    jsonstr.concat(format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2));
     jsonstr.concat(",");
   }
 
