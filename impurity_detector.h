@@ -249,7 +249,7 @@ void process_impurity_detector() {
   );
   
   float criticalThreshold = warningThreshold * 2.5f;
-  
+
   // Гистерезис для предотвращения частых переключений (15% от адаптивного порога)
   float hysteresis = warningThreshold * 0.15f;
   float correctionThreshold = warningThreshold + hysteresis;  // Порог для снижения скорости
@@ -271,6 +271,7 @@ void process_impurity_detector() {
   if (impurityDetector.currentTrend > criticalThreshold) {
     // КРИТИЧЕСКИЙ ПРОСКОК: Ставим на ПАУЗУ (всегда реагируем на критический)
     // Но только если нет ручной паузы пользователя
+    bool isDetectorPause = (program_Wait && program_Wait_Type == "(Детектор)");
     if (!program_Wait && !PauseOn) {
       impurityDetector.detectorStatus = 2; // Breakthrough
       program_Wait = true;
@@ -281,24 +282,42 @@ void process_impurity_detector() {
       SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " + 
               String(impurityDetector.currentTrend, 3) + ", variance: " + 
               String(impurityDetector.tempStdDev, 4) + ")", ALARM_MSG);
+    } else if (isDetectorPause && impurityDetector.detectorStatus != 2) {
+      // Пауза уже установлена детектором, но статус почему-то не 2 - восстанавливаем
+      impurityDetector.detectorStatus = 2; // Breakthrough
     }
   } else if (isValidTrend && impurityDetector.currentTrend > correctionThreshold) {
     // ПРЕДУПРЕЖДЕНИЕ: Постепенно снижаем скорость
     // Но только если нет ручной паузы пользователя
-    if (!PauseOn) {
-      impurityDetector.detectorStatus = 1; // Correction
-      if (now - impurityDetector.lastCorrectionTime > 25000) { // Корректируем не чаще раза в 25 сек (увеличено с 15)
-        impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
-        if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
-        impurityDetector.lastCorrectionTime = now;
-        
-        // Применяем новую скорость
-        float baseSpeedRate = program[ProgramNum].Speed;
-        if (baseSpeedRate > 0) {
-          float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
-        }
-        
+    // И не устанавливаем статус "коррекция", если пауза уже установлена детектором
+    bool isDetectorPause = (program_Wait && program_Wait_Type == "(Детектор)");
+    if (!PauseOn && !isDetectorPause) {
+    impurityDetector.detectorStatus = 1; // Correction
+      
+      // Адаптивный интервал коррекции: при быстром росте температуры корректируем чаще
+      // Базовый интервал: 25 сек
+      // При приближении к критическому порогу (60% от criticalThreshold): 10 сек
+      // При очень быстром росте (>90% от criticalThreshold): 5 сек
+      unsigned long correctionInterval = 25000; // Базовый интервал 25 сек
+      float trendRatio = impurityDetector.currentTrend / criticalThreshold;
+      if (trendRatio > 0.8f) {
+        correctionInterval = 5000;  // Очень быстрый рост - каждые 5 сек
+      } else if (trendRatio > 0.6f) {
+        correctionInterval = 10000; // Быстрый рост - каждые 10 сек
+      }
+      
+      if (now - impurityDetector.lastCorrectionTime > correctionInterval) {
+      impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
+      if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
+      impurityDetector.lastCorrectionTime = now;
+      
+      // Применяем новую скорость
+      float baseSpeedRate = program[ProgramNum].Speed;
+      if (baseSpeedRate > 0) {
+        float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
+        set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
+      }
+      
         SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) + 
                 ", порог: " + String(warningThreshold, 3) + ", variance: " + 
                 String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);
@@ -306,7 +325,12 @@ void process_impurity_detector() {
     }
   } else if (impurityDetector.currentTrend < recoveryThreshold) {
     // СТАБИЛЬНО: Плавное восстановление скорости (используется гистерезис)
-    impurityDetector.detectorStatus = 0; // Stable
+    // НЕ сбрасываем detectorStatus в 0, если пауза была установлена детектором
+    // Статус должен оставаться 2 (критический проскок), пока пауза активна
+    bool isDetectorPause = (program_Wait && program_Wait_Type == "(Детектор)");
+    if (!isDetectorPause) {
+      impurityDetector.detectorStatus = 0; // Stable - только если пауза НЕ от детектора
+    }
     // Восстанавливаем скорость только если нет паузы (ни ручной, ни автоматической от детектора)
     // Если пользователь поставил на паузу вручную, или есть автоматическая пауза - не возобновляем
     if (impurityDetector.correctionFactor < 1.0f && !PauseOn && !program_Wait) {

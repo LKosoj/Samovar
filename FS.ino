@@ -339,6 +339,7 @@ String append_data() {
     fileToAppend.println(str);
 
     {
+      static bool memory_warning_sent = false;
       used_byte = SPIFFS.usedBytes();
       if (total_byte - used_byte < 400) {
         //Кончилось место, удалим старый файл. Надо было сохранять раньше
@@ -348,7 +349,13 @@ String append_data() {
       }
       vTaskDelay(10 / portTICK_PERIOD_MS);
       if (total_byte - used_byte < 50) {
-        SendMsg("Заканчивается память! Всего: " + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
+        if (!memory_warning_sent) {
+          SendMsg("Заканчивается память! Всего: " + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
+          memory_warning_sent = true;
+        }
+      } else {
+        // Сбрасываем флаг, если память освободилась
+        memory_warning_sent = false;
       }
     }
 

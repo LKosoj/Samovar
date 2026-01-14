@@ -403,9 +403,9 @@ void check_alarm_distiller() {
 void run_dist_program(uint8_t num) {
   // Проверяем, что номер программы не превышает количество программ
   if (num >= ProgramLen || program[num].WType.length() == 0) {
-    // Программы закончились - не увеличиваем ProgramNum выше допустимого
+    // Программы закончились - устанавливаем ProgramNum = ProgramLen, чтобы условие ProgramNum < ProgramLen стало ложным
     if (ProgramNum < ProgramLen) {
-      ProgramNum = ProgramLen > 0 ? ProgramLen - 1 : 0;
+      ProgramNum = ProgramLen;
     }
     SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
     return;
@@ -509,6 +509,14 @@ void updateTimePredictor() {
     // Обновляем прогноз по спирту (используем долю, а не %)
     float alcoholDelta = timePredictor.initialAlcohol - currentAlcohol;
     float alcoholChangeRate = (dtMin > 0) ? (alcoholDelta / ((currentTime - timePredictor.startTime) / 60000.0f)) : 0; // доля/мин
+
+    // Если программы закончились, не делаем прогноз
+    if (ProgramNum >= ProgramLen || program[ProgramNum].WType.length() == 0) {
+        timePredictor.remainingTime = 0;
+        float elapsedMinutes = (currentTime - timePredictor.startTime) / 60000.0f;
+        timePredictor.predictedTotalTime = elapsedMinutes;
+        return;
+    }
 
     float remaining = 0;
     String wtype = program[ProgramNum].WType;
