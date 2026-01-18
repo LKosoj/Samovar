@@ -911,7 +911,7 @@ void lua_init() {
   xTaskCreatePinnedToCore(
     do_lua_script,    /* Function to implement the task */
     "do_lua_script",  /* Name of the task */
-    5300,             /* Stack size in words */
+    5900,             /* Stack size in words */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask, /* Task handle. */

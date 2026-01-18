@@ -4,6 +4,13 @@
 #include <Arduino.h>
 #include "Samovar.h"
 
+float get_speed_from_rate(float volume_per_hour);
+void set_pump_speed(float pumpspeed, bool continue_process);
+void set_body_temp();
+void set_buzzer(bool fl);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+void pause_withdrawal(bool Pause);
+
 /**
  * Инициализация детектора
  */
@@ -183,6 +190,42 @@ float get_adaptive_threshold(float baseThreshold, float variance, float volumePe
 }
 
 /**
+ * Проверка, является ли текущая программа первой программой отбора тела (B/C) после голов (H)
+ * Учитывает возможность наличия программ паузы (P) между H и B/C
+ * @return true если текущая программа - первая B/C после H, false иначе
+ */
+bool is_first_body_program_after_heads() {
+  // Текущая программа должна быть B или C
+  if (ProgramNum >= 30 || (program[ProgramNum].WType != "B" && program[ProgramNum].WType != "C")) {
+    return false;
+  }
+  
+  // Проверяем предыдущие программы, пропуская P
+  for (int i = ProgramNum - 1; i >= 0; i--) {
+    if (program[i].WType.length() == 0) {
+      break; // Конец списка программ
+    }
+    
+    // Пропускаем программы паузы
+    if (program[i].WType == "P") {
+      continue;
+    }
+    
+    // Если нашли программу отбора голов - это первая программа тела
+    if (program[i].WType == "H") {
+      return true;
+    }
+    
+    // Если нашли другую программу (не H и не P), то это не первая программа тела
+    // Например, если между предыдущей B/C и текущей был другой тип
+    return false;
+  }
+  
+  // Если не нашли H в предыдущих программах - это не первая программа тела после голов
+  return false;
+}
+
+/**
  * Основная логика работы детектора
  */
 void process_impurity_detector() {
@@ -206,6 +249,13 @@ void process_impurity_detector() {
   if (PauseOn) {
     impurityDetector.detectorStatus = 0;
     // Не меняем correctionFactor, чтобы сохранить состояние на момент паузы
+    return;
+  }
+
+  // Детектор не работает во время паузы по царге или пару (автоматическая пауза из-за превышения температуры)
+  // При такой паузе детектор был сброшен при её установке, и должен оставаться неактивным
+  if (program_Wait && (program_Wait_Type == "(царга)" || program_Wait_Type == "(пар)")) {
+    impurityDetector.detectorStatus = 0;
     return;
   }
 
@@ -292,12 +342,28 @@ void process_impurity_detector() {
     // И не устанавливаем статус "коррекция", если пауза уже установлена детектором
     bool isDetectorPause = (program_Wait && program_Wait_Type == "(Детектор)");
     if (!PauseOn && !isDetectorPause) {
-    impurityDetector.detectorStatus = 1; // Correction
+      impurityDetector.detectorStatus = 1; // Correction
       
+      // Для первой программы отбора тела после голов: вместо снижения скорости
+      // устанавливаем новую температуру тела
+      bool isFirstBodyProgram = is_first_body_program_after_heads();
+      
+      if (isFirstBodyProgram) {
+        // Это первая программа тела - всегда устанавливаем новую Т тела вместо снижения скорости
+        set_body_temp();
+        SendMsg("Детектор: Установка новой Т тела (первая программа тела, тренд " + 
+                String(impurityDetector.currentTrend, 3) + ", variance: " + 
+                String(impurityDetector.tempStdDev, 4) + ")", WARNING_MSG);
+        // Не снижаем скорость сразу, дадим детектору время адаптироваться к новой Т тела
+        impurityDetector.lastCorrectionTime = now;
+        return; // Выходим, чтобы не применять снижение скорости в этом цикле
+      }
+      
+      // Обычная логика снижения скорости (для не первой программы тела)
       // Адаптивный интервал коррекции: при быстром росте температуры корректируем чаще
       // Базовый интервал: 25 сек
       // При приближении к критическому порогу (60% от criticalThreshold): 10 сек
-      // При очень быстром росте (>90% от criticalThreshold): 5 сек
+      // При очень быстром росте (>80% от criticalThreshold): 5 сек
       unsigned long correctionInterval = 25000; // Базовый интервал 25 сек
       float trendRatio = impurityDetector.currentTrend / criticalThreshold;
       if (trendRatio > 0.8f) {
@@ -307,17 +373,17 @@ void process_impurity_detector() {
       }
       
       if (now - impurityDetector.lastCorrectionTime > correctionInterval) {
-      impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
-      if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
-      impurityDetector.lastCorrectionTime = now;
-      
-      // Применяем новую скорость
-      float baseSpeedRate = program[ProgramNum].Speed;
-      if (baseSpeedRate > 0) {
-        float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-        set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
-      }
-      
+        impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
+        if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
+        impurityDetector.lastCorrectionTime = now;
+        
+        // Применяем новую скорость
+        float baseSpeedRate = program[ProgramNum].Speed;
+        if (baseSpeedRate > 0) {
+          float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
+          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
+        }
+        
         SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) + 
                 ", порог: " + String(warningThreshold, 3) + ", variance: " + 
                 String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);

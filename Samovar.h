@@ -254,7 +254,6 @@ uint8_t CurMin, OldMin;
 //**************************************************************************************************************
 
 /** Task handle for the  value read task */
-TaskHandle_t SysTickerButton = NULL;
 TaskHandle_t SysTickerTask1 = NULL;
 TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t GetBMPTask = NULL;

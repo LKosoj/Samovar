@@ -169,9 +169,6 @@ SimpleStringQueue msg_q(5, 200);
 char tst[20] = "00:00:00   00:00:00";
 char* timestr = (char*)tst;
 
-void taskButton(void *pvParameters);
-SemaphoreHandle_t btnSemaphore;
-
 hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -272,65 +269,6 @@ void IRAM_ATTR isrWHLS_TICK() {
   whls.tick();
 }
 #endif
-
-void IRAM_ATTR isrBTN_TICK() {
-  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-  xSemaphoreGiveFromISR(btnSemaphore, &xHigherPriorityTaskWoken);
-  // Если семафор разбудил задачу с более высоким приоритетом - переключиться на неё
-  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-}
-
-void IRAM_ATTR taskButton(void *pvParameters) {
-  // Создаем семафор
-  btnSemaphore = xSemaphoreCreateBinary();
-  // Сразу "берем" семафор чтобы не было первого ложного срабатывания кнопки
-  xSemaphoreTake(btnSemaphore, 100);
-#ifdef BTN_PIN
-  btn.setType(LOW_PULL);
-  btn.setTickMode(MANUAL);
-  btn.setDebounce(30);
-  attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
-#endif
-
-#ifdef ALARM_BTN_PIN
-  alarm_btn.setType(HIGH_PULL);
-  alarm_btn.setTickMode(MANUAL);
-  alarm_btn.setDebounce(30);
-  attachInterrupt(ALARM_BTN_PIN, isrBTN_TICK, CHANGE);
-#endif
-
-  //  //вешаем прерывание на изменения по ногам энкодера
-  attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
-  attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
-  attachInterrupt(ENC_SW, isrBTN_TICK, CHANGE);
-
-  while (true) {
-    xSemaphoreTake(btnSemaphore, portMAX_DELAY);
-    // Отключаем прерывание для устранения повторного срабатывания прерывания во время обработки
-#ifdef BTN_PIN
-    detachInterrupt(BTN_PIN);
-#endif
-#ifdef ALARM_BTN_PIN
-    detachInterrupt(ALARM_BTN_PIN);
-#endif
-    detachInterrupt(ENC_CLK);
-    detachInterrupt(ENC_DT);
-    detachInterrupt(ENC_SW);
-    encoder.tick();
-#ifdef BTN_PIN
-    btn.tick();
-    attachInterrupt(BTN_PIN, isrBTN_TICK, CHANGE);
-#endif
-#ifdef ALARM_BTN_PIN
-    alarm_btn.tick();
-    attachInterrupt(ALARM_BTN_PIN, isrBTN_TICK, CHANGE);
-#endif
-    attachInterrupt(ENC_CLK, isrBTN_TICK, CHANGE);
-    attachInterrupt(ENC_DT, isrBTN_TICK, CHANGE);
-    attachInterrupt(ENC_SW, isrBTN_TICK, CHANGE);
-    //vTaskDelay(100/portTICK_PERIOD_MS);
-  }
-}
 
 //Запускаем таск для получения точного времени из интернет
 void triggerGetClock(void *parameter) {
@@ -452,8 +390,6 @@ void triggerSysTicker(void *parameter) {
     if (OldMinST != CurMinST) {
 #ifdef __SAMOVAR_DEBUG1
       Serial.println(F("--------------------------------------------"));
-      Serial.print(F("SysTickerButton = "));
-      Serial.println(uxTaskGetStackHighWaterMark(SysTickerButton));
       Serial.print(F("PowerStatusTask = "));
       Serial.println(uxTaskGetStackHighWaterMark(PowerStatusTask));
       Serial.print(F("SysTickerTask1 = "));
@@ -833,16 +769,18 @@ void setup() {
   //Читаем сохраненную конфигурацию
   //read_config();
 
-  //Запускаем таск для обработки нажатия кнопки и энкодера
-  xTaskCreatePinnedToCore(
-    taskButton,       /* Function to implement the task */
-    "taskButton",     /* Name of the task */
-    1450,             /* Stack size in words */
-    NULL,             /* Task input parameter */
-    1,                /* Priority of the task */
-    &SysTickerButton, /* Task handle. */
-    1);               /* Core where the task should run */
+  // Инициализация кнопок и энкодера (обработка в loop())
+#ifdef BTN_PIN
+  btn.setType(LOW_PULL);
+  btn.setTickMode(AUTO);
+  btn.setDebounce(30);
+#endif
 
+#ifdef ALARM_BTN_PIN
+  alarm_btn.setType(HIGH_PULL);
+  alarm_btn.setTickMode(AUTO);
+  alarm_btn.setDebounce(30);
+#endif
 
   //Если при старте нажата кнопка - Самовар запустится в режиме AP
   bool wifiAP = false;
@@ -1274,6 +1212,7 @@ void loop() {
     }
   }
 
+  // Обработка кнопок и энкодера
 #ifdef ALARM_BTN_PIN
   alarm_btn.tick();  // отработка нажатия аварийной кнопки
   if (alarm_btn.isPress()) {
@@ -1425,6 +1364,8 @@ void loop() {
     beer_proc();  //функция для проведения затирания
   }
 
+  // Обработка энкодера
+  encoder.tick();
   encoder_getvalue();
 
   process_buzzer();

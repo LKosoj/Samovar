@@ -75,16 +75,38 @@ void save_stacktrace_to_file(const char* info) {
   }
   
   if (fs_was_mounted) {
-    // Генерируем имя файла с временной меткой
-    String filename = "/crash_";
-    filename += String(millis());
-    filename += ".txt";
+    const char* crash_file = "/crash.txt";
+    const char* crash_old_file = "/crash_old.txt";
     
-    File file = SPIFFS.open(filename, FILE_WRITE);
+    // Если существует crash.txt - переименовываем его в crash_old.txt
+    if (SPIFFS.exists(crash_file)) {
+      // Удаляем старый crash_old.txt если он есть
+      if (SPIFFS.exists(crash_old_file)) {
+        SPIFFS.remove(crash_old_file);
+      }
+      // Переименовываем crash.txt в crash_old.txt
+      File old_file = SPIFFS.open(crash_file, FILE_READ);
+      if (old_file) {
+        File new_file = SPIFFS.open(crash_old_file, FILE_WRITE);
+        if (new_file) {
+          // Копируем содержимое
+          while (old_file.available()) {
+            new_file.write(old_file.read());
+          }
+          new_file.close();
+        }
+        old_file.close();
+        // Удаляем старый файл
+        SPIFFS.remove(crash_file);
+      }
+    }
+    
+    // Записываем новый crash.txt
+    File file = SPIFFS.open(crash_file, FILE_WRITE);
     if (file) {
       file.print(crash_log);
       file.close();
-      Serial.println("Crash log saved to: " + filename);
+      Serial.println("Crash log saved to: " + String(crash_file));
     } else {
       Serial.println("Failed to open crash log file");
       // Выводим в Serial как резервный вариант
@@ -160,21 +182,16 @@ void check_and_load_crash_log() {
     return;
   }
   
-  // Ищем файлы с префиксом /crash_
-  File root = SPIFFS.open("/");
-  if (!root || !root.isDirectory()) {
-    return;
-  }
-  
-  File file = root.openNextFile();
+  const char* crash_file = "/crash.txt";
   bool found_crash = false;
   
-  while (file) {
-    String filename = file.name();
-    if (filename.startsWith("/crash_")) {
+  // Проверяем наличие crash.txt
+  if (SPIFFS.exists(crash_file)) {
+    File file = SPIFFS.open(crash_file, FILE_READ);
+    if (file) {
       found_crash = true;
       Serial.println("\n=== FOUND CRASH LOG ===");
-      Serial.println("File: " + filename);
+      Serial.println("File: " + String(crash_file));
       Serial.println("Size: " + String(file.size()) + " bytes");
       Serial.println("Content:");
       Serial.println("-------------------");
@@ -186,12 +203,8 @@ void check_and_load_crash_log() {
       Serial.println("\n-------------------\n");
       
       file.close();
-      break; // Показываем только последний файл
     }
-    file = root.openNextFile();
   }
-  
-  root.close();
   
   if (!found_crash) {
     Serial.println("No crash logs found");

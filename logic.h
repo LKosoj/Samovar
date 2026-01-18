@@ -174,6 +174,8 @@ void withdrawal(void) {
       if (!PauseOn && !program_Wait) {
         program_Wait_Type = "(пар)";
         program_Wait = true;
+        // Сбрасываем детектор при постановке на паузу - после снятия с паузы сохраненная скорость станет новой базовой
+        reset_impurity_detector();
         pause_withdrawal(true);
         t_min = millis() + SteamSensor.Delay * 1000;
         set_buzzer(true);
@@ -207,6 +209,8 @@ void withdrawal(void) {
       if (!PauseOn && !program_Wait) {
         program_Wait_Type = "(царга)";
         program_Wait = true;
+        // Сбрасываем детектор при постановке на паузу - после снятия с паузы сохраненная скорость станет новой базовой
+        reset_impurity_detector();
         pause_withdrawal(true);
         t_min = millis() + PipeSensor.Delay * 1000;
         set_buzzer(true);
