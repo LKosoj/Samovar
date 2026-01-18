@@ -45,6 +45,10 @@
 
 #include "user_config_override.h"
 
+#ifndef USE_BODY_TEMP_AUTOSET
+#define USE_BODY_TEMP_AUTOSET
+#endif
+
 #if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
 //https://esp32.jgarrettcorbin.com/
 //Если используется SDK >= 3 версии, отключаем использование OTA
