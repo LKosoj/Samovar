@@ -191,6 +191,20 @@ void withdrawal(void) {
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
+    // После возобновления с паузы устанавливаем сохраненную скорость как базовую для детектора
+    // Вычисляем скорость в л/ч из сохраненной скорости шагов и временно корректируем program[ProgramNum].Speed
+    if (SamSetup.useautospeed && ProgramNum < 30 && CurrrentStepperSpeed > 0) {
+      float actualRate = get_liquid_rate_by_step(CurrrentStepperSpeed);
+      if (actualRate > 0) {
+        // Временно корректируем скорость программы на текущую скорость насоса
+        // Это позволяет детектору считать текущую скорость базовой (correctionFactor = 1.0)
+        program[ProgramNum].Speed = actualRate;
+        impurityDetector.correctionFactor = 1.0f;
+        impurityDetector.lastCorrectionTime = millis();
+        // Устанавливаем скорость явно через set_pump_speed для синхронизации
+        set_pump_speed(CurrrentStepperSpeed, true);
+      }
+    }
   }
 
   c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
@@ -226,6 +240,20 @@ void withdrawal(void) {
     t_min = 0;
     program_Wait = false;
     pause_withdrawal(false);
+    // После возобновления с паузы устанавливаем сохраненную скорость как базовую для детектора
+    // Вычисляем скорость в л/ч из сохраненной скорости шагов и временно корректируем program[ProgramNum].Speed
+    if (SamSetup.useautospeed && ProgramNum < 30 && CurrrentStepperSpeed > 0) {
+      float actualRate = get_liquid_rate_by_step(CurrrentStepperSpeed);
+      if (actualRate > 0) {
+        // Временно корректируем скорость программы на текущую скорость насоса
+        // Это позволяет детектору считать текущую скорость базовой (correctionFactor = 1.0)
+        program[ProgramNum].Speed = actualRate;
+        impurityDetector.correctionFactor = 1.0f;
+        impurityDetector.lastCorrectionTime = millis();
+        // Устанавливаем скорость явно через set_pump_speed для синхронизации
+        set_pump_speed(CurrrentStepperSpeed, true);
+      }
+    }
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
