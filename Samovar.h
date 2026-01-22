@@ -40,7 +40,6 @@
 
 #define WRITE_PROGNUM_IN_LOG                 // писать в лог номер текущей строки программы
 
-
 #include "Samovar_ini.h"
 
 #include "user_config_override.h"
