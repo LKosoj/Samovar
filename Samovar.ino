@@ -1308,6 +1308,7 @@ void loop() {
         pause_withdrawal(false);
         t_min = 0;
         program_Wait = false;
+        detector_on_manual_resume();
         break;
       case SAMOVAR_SETBODYTEMP:
         set_body_temp();

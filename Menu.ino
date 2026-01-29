@@ -29,6 +29,7 @@ void set_capacity(uint8_t cap);
 void set_program(String WProgram);
 String get_program(uint8_t s);
 void create_data();
+void detector_on_manual_resume();
 
 const char str_BACK[] PROGMEM = "<BACK";
 const char str_Steam_T[] PROGMEM = "Steam T: ";
@@ -486,6 +487,7 @@ void menu_pause() {
     pause_text_ptr = (char *)"Pause";
     t_min = 0;
     program_Wait = false;
+    detector_on_manual_resume();
   }
 }
 void menu_calibrate() {

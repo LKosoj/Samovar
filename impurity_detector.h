@@ -46,6 +46,38 @@ void reset_impurity_detector() {
   impurityDetector.lastTemp = 0.0f;
 }
 
+// Грейс-период после старта строки/ручного продолжения (мс)
+static unsigned long detector_grace_until = 0;
+// Окно блокировки детектора после ручного продолжения (мс)
+static unsigned long detector_manual_override_until = 0;
+// Минимальное число точек истории для критического тренда
+static const uint8_t DETECTOR_MIN_HISTORY_CRITICAL = 10;
+
+// Вызывается при старте новой строки программы
+void detector_on_program_start(const String& wtype) {
+  reset_impurity_detector();
+  if (wtype == "H") {
+    detector_grace_until = millis() + 60000UL; // 60 сек для голов
+  } else {
+    detector_grace_until = millis() + 30000UL; // общий грейс-период
+  }
+  detector_manual_override_until = 0;
+}
+
+// Вызывается при ручном продолжении отбора
+void detector_on_manual_resume() {
+  reset_impurity_detector();
+  detector_manual_override_until = millis() + 60000UL;
+  detector_grace_until = detector_manual_override_until;
+}
+
+// Вызывается при авто-продолжении после детекторной паузы
+void detector_on_auto_resume() {
+  reset_impurity_detector();
+  detector_grace_until = millis() + 30000UL;
+  detector_manual_override_until = 0;
+}
+
 /**
  * Расчет дисперсии температуры за период (фильтрация выбросов)
  * Используется дисперсия
@@ -260,6 +292,10 @@ void process_impurity_detector() {
   }
 
   unsigned long now = millis();
+  if (detector_manual_override_until > now) {
+    impurityDetector.detectorStatus = 0;
+    return;
+  }
   
   // Выбор датчика температуры в зависимости от типа программы:
   // - Для тела (B) и предзахлеба (C) - температура царги (PipeSensor) - более чувствительна к примесям
@@ -276,6 +312,12 @@ void process_impurity_detector() {
     update_detector_history(detectorTemp);
     impurityDetector.currentTrend = calculate_temperature_trend();
     impurityDetector.lastSampleTime = now;
+  }
+
+  // Грейс-период после старта строки/продолжения: не реагируем
+  if (detector_grace_until > now) {
+    impurityDetector.detectorStatus = 0;
+    return;
   }
 
   // Базовый порог на основе плотности насадки (PackDens)
@@ -318,7 +360,13 @@ void process_impurity_detector() {
   }
 
   // Реакция на тренд (только если тренд валидный или критический)
-  if (impurityDetector.currentTrend > criticalThreshold) {
+  bool allowCriticalPause = true;
+  if (ProgramNum < 30 && program[ProgramNum].WType == "H") {
+    allowCriticalPause = false; // На головах только коррекция скорости, без критической паузы
+  }
+
+  bool hasCriticalHistory = (impurityDetector.historySize >= DETECTOR_MIN_HISTORY_CRITICAL);
+  if (allowCriticalPause && hasCriticalHistory && impurityDetector.currentTrend > criticalThreshold) {
     // КРИТИЧЕСКИЙ ПРОСКОК: Ставим на ПАУЗУ (всегда реагируем на критический)
     // Но только если нет ручной паузы пользователя
     bool isDetectorPause = (program_Wait && program_Wait_Type == "(Детектор)");
@@ -327,7 +375,11 @@ void process_impurity_detector() {
       program_Wait = true;
       program_Wait_Type = "(Детектор)";
       pause_withdrawal(true);
-      t_min = now + PipeSensor.Delay * 1000;
+      uint16_t delaySec = PipeSensor.Delay;
+      if (ProgramNum < 30 && (program[ProgramNum].WType == "H" || program[ProgramNum].WType == "T")) {
+        delaySec = SteamSensor.Delay;
+      }
+      t_min = now + delaySec * 1000;
       set_buzzer(true);
       SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " + 
               String(impurityDetector.currentTrend, 3) + ", variance: " + 
@@ -461,4 +513,3 @@ void update_heat_loss_calculation() {
 }
 
 #endif
-

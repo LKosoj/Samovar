@@ -18,7 +18,6 @@ libraries/ESP_Async_WebServer/src/.vscode/lua.booster.lint.json
 /.vscode
 /data/.vscode
 /.specstory
-# SpecStory explanation file
 .specstory/.what-is-this.md
 data.zip
 data/style.css.zip
@@ -29,3 +28,4 @@ data/style.css.zip
 /SamovarMobile/build
 SamovarMobile/app/local.properties
 __pycache__/test_blynk_api.cpython-314.pyc
+AGENTS.md

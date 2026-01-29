@@ -39,6 +39,9 @@ void set_boiling();
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 float get_dist_remaining_time();
 float get_dist_predicted_total_time();
+void detector_on_program_start(const String& wtype);
+void detector_on_auto_resume();
+void detector_on_manual_resume();
 
 #ifdef SAMOVAR_USE_POWER
 // Проверка ошибок питания
@@ -254,6 +257,15 @@ void withdrawal(void) {
         set_pump_speed(CurrrentStepperSpeed, true);
       }
     }
+  }
+
+  // Пауза детектора: после истечения таймера возобновляем отбор
+  if (program_Wait && program_Wait_Type == "(Детектор)" && t_min > 0 && millis() >= t_min) {
+    SendMsg(("Детектор: Продолжаем отбор после паузы"), NOTIFY_MSG);
+    t_min = 0;
+    program_Wait = false;
+    pause_withdrawal(false);
+    detector_on_auto_resume();
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
@@ -602,6 +614,9 @@ void run_program(uint8_t num) {
   }
   
   ProgramNum = num;
+  if (ProgramNum < 30 && program[ProgramNum].WType.length() > 0) {
+    detector_on_program_start(program[ProgramNum].WType);
+  }
   
   // Сбрасываем детектор только если нужно
   if (needReset) {
