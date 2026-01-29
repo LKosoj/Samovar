@@ -8,7 +8,7 @@
 //#define STEPPER_I2C_MAX_SPEED 1200
 
 #ifndef I2CStepperStepMl
-#define I2CStepperStepMl 16000  //количество шагов на мл для I2CStepper
+#define I2CStepperStepMl I2C_STEPPER_STEP_ML_DEFAULT  //количество шагов на мл для I2CStepper
 #endif
 
 #include <Arduino.h>
@@ -51,7 +51,8 @@ float i2c_get_liquid_volume_by_step(int StepCount) {
   if (!use_I2C_dev) {
     return get_liquid_volume_by_step(StepCount);
   }
-  return (I2CStepperStepMl > 0) ? static_cast<float>(StepCount) / I2CStepperStepMl : 0;
+  uint16_t stepsPerMl = SamSetup.StepperStepMlI2C > 0 ? SamSetup.StepperStepMlI2C : I2CStepperStepMl;
+  return (stepsPerMl > 0) ? static_cast<float>(StepCount) / stepsPerMl : 0;
 }
 
 //Получаем скорость отбора
@@ -66,7 +67,8 @@ float i2c_get_speed_from_rate(float volume_per_hour) {
   if (!use_I2C_dev) {
     return get_speed_from_rate(volume_per_hour);
   }
-  float v = round(I2CStepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.0;
+  uint16_t stepsPerMl = SamSetup.StepperStepMlI2C > 0 ? SamSetup.StepperStepMlI2C : I2CStepperStepMl;
+  float v = round(stepsPerMl * volume_per_hour * 1000 / 3.6) / 1000.0;
   return (v < 1) ? 1 : v;
 }
 

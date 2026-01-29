@@ -6,13 +6,31 @@
 <title>Самовар</title>
 
 <script>
+const stepperStepMlLocal = %StepperStepMl%;
+const stepperStepMlI2C = %StepperStepMlI2C%;
+
+function getPumpType(){
+  var sel = document.getElementById('pump_type');
+  if (sel && sel.style.display !== 'none') return sel.value;
+  return 'local';
+}
+
+function onPumpTypeChange(){
+  var t = getPumpType();
+  if (t === 'i2c') {
+    document.getElementById('stepperstepml').value = stepperStepMlI2C;
+  } else {
+    document.getElementById('stepperstepml').value = stepperStepMlLocal;
+  }
+}
+
 function calibrate(){
 if (document.getElementById('calibrateid').value == 'Начать калибровку'){
   document.getElementById('calibrateid').value = 'Зафиксировать 100 мл';
-  command='stpstep=' + document.getElementById('kstepperspd').value + '&start';
+  command='stpstep=' + document.getElementById('kstepperspd').value + '&pump=' + getPumpType() + '&start';
 } else {
   document.getElementById('calibrateid').value = 'Начать калибровку';
-  command='finish';
+  command='pump=' + getPumpType() + '&finish';
 }
 var server = '/calibrate?' + command + '=1';
 request = new XMLHttpRequest();
@@ -29,6 +47,10 @@ alert( request.status + ': ' + request.statusText );
 }
 return 0;
 };
+
+window.onload = function() {
+  onPumpTypeChange();
+};
 </script>
 </head>
 
@@ -36,6 +58,13 @@ return 0;
 <form action='/save' method="post" name="setupform">
 <h1>Калибровка шагового двигателя</h1>
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
+<h2>Насос: 
+  <select id='pump_type' onchange='onPumpTypeChange();' style="display: %I2CPumpTab%;">
+    <option value="local" selected>Встроенный</option>
+    <option value="i2c">Внешний (I2C)</option>
+  </select>
+  <span style="display: %I2CPumpTab%;">(I2C)</span>
+</h2>
 <h2>Объем жидкости : <span id='start_pressure'>100</span> мл.</h2>
 <h2>Скорость шагового двигателя : <input id='kstepperspd' name='kstepperspd' type='text' value='%StepperStep%' style="width: 6em;"> шагов/сек.</h2>
 <h2>Шагов на 100 мл: <input id='stepperstepml' name='stepperstepml' type='text' value='%StepperStepMl%' style="width: 6em;"></h2>

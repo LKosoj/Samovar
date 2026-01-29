@@ -12,6 +12,11 @@
 
 //#define __SAMOVAR_DEBUG
 
+// Дефолтное значение для I2C шагов/мл (внешний насос)
+#ifndef I2C_STEPPER_STEP_ML_DEFAULT
+#define I2C_STEPPER_STEP_ML_DEFAULT 16000
+#endif
+
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <ESPAsyncWebServer.h>
@@ -446,6 +451,7 @@ struct SetupEEPROM {
   float ColDiam;                                               //Внутренний диаметр колонны в дюймах
   float ColHeight;                                             //Высота насадки в метрах
   uint8_t PackDens;                                            //Плотность насадки в процентах
+  uint16_t StepperStepMlI2C;                                   //Количество шагов I2C шагового двигателя на мл. жидкости
   //Serial.println(sizeof(SamSetup));
 };
 
@@ -554,6 +560,10 @@ volatile unsigned long prev_time_ms;                            // Предыд�
 volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
 volatile uint16_t CurrrentStepperSpeed;                         // Скорость шагового двигателя
 volatile uint16_t I2CStepperSpeed;                              // Скорость шагового двигателя
+volatile uint16_t I2CPumpCmdSpeed;                               // Скорость внешнего I2C насоса (шаг/сек)
+volatile uint32_t I2CPumpTargetSteps;                            // Целевые шаги внешнего I2C насоса
+volatile float I2CPumpTargetMl;                                  // Целевой объем внешнего I2C насоса, мл
+volatile bool I2CPumpCalibrating;                                // Флаг калибровки внешнего I2C насоса
 volatile unsigned int CurrrentStepps;                           // Количество пройденных степпером шагов
 volatile unsigned int TargetStepps;                             // Количество шагов до нужного объема
 String program_Wait_Type;                                       // Тип ожидания

@@ -327,6 +327,22 @@
       return 0;
     };
 
+    function sendI2CPump () {
+      var speed = document.getElementById('i2c_speed').value.replace(",", ".");
+      var volume = document.getElementById('i2c_volume').value.replace(",", ".");
+      var server = '/i2cpump?speed=' + speed + '&volume=' + volume;
+      request = new XMLHttpRequest();
+      request.open('GET', server, true);
+      request.send();
+    }
+
+    function stopI2CPump () {
+      var server = '/i2cpump?stop=1';
+      request = new XMLHttpRequest();
+      request.open('GET', server, true);
+      request.send();
+    }
+
     function set_program () {
       document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",", ".");
       var server = '/program';
@@ -550,6 +566,12 @@
             document.getElementById('add_param').innerHTML = "; ШИМ насоса воды: " + myObj.wp_spd;
           }
 
+          if (myObj.i2c_pump_present == 1) {
+            document.getElementById('i2c_status').innerHTML = (myObj.i2c_pump_running == 1) ? "Работает" : "Остановлен";
+            document.getElementById('i2c_remaining').innerHTML = myObj.i2c_pump_remaining_ml;
+            document.getElementById('i2c_speed_cur').innerHTML = myObj.i2c_pump_speed;
+          }
+
           var powerstr;
           var powerstyle;
           if (myObj.PowerOn == 1) {
@@ -629,6 +651,7 @@
       <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Дистилляция">
       <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
       <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
+      <input type='button' class="tablinks" onclick="openTab(event, 'I2CPump');" value="Внешний насос" style="display: %I2CPumpTab%;">
     </div>
 
     <div id="Main" class="tabcontent" style="display: block;">
@@ -886,6 +909,21 @@
             <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="I2CPump" class="tabcontent">
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <h2>Внешний I2C насос</h2>
+        <h2>Скорость отбора (л/ч): <input id='i2c_speed' type='text' value='0' style="width: 6em;"></h2>
+        <h2>Объем (мл): <input id='i2c_volume' type='text' value='0' style="width: 6em;"></h2>
+        <div style="display: flex; gap: 1em; flex-wrap: wrap;">
+          <input type='button' class="button" value="Отправить" onclick='sendI2CPump();'>
+          <input type='button' class="button" value="Стоп" onclick='stopI2CPump();'>
+        </div>
+        <h2>Статус: <span id='i2c_status'>-</span></h2>
+        <h2>Текущая скорость (шаг/сек): <span id='i2c_speed_cur'>-</span></h2>
+        <h2>Осталось: <span id='i2c_remaining'>-</span> мл</h2>
       </div>
     </div>
 

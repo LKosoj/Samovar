@@ -544,6 +544,10 @@ void reset_sensor_counter(void) {
   SteamSensor.Start_Pressure = 0;
   WthdrwlProgress = 0;
   TargetStepps = 0;
+  I2CPumpTargetSteps = 0;
+  I2CPumpTargetMl = 0;
+  I2CPumpCmdSpeed = 0;
+  I2CPumpCalibrating = false;
 
   begintime = 0;
 

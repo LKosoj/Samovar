@@ -819,6 +819,7 @@ void setup() {
     SamSetup.SetTankTemp = 0;
     SamSetup.SetACPTemp = 0;
     SamSetup.StepperStepMl = STEPPER_STEP_ML;
+    SamSetup.StepperStepMlI2C = I2C_STEPPER_STEP_ML_DEFAULT;
     SamSetup.UsePreccureCorrect = true;
     SamSetup.SteamDelay = 20;
     SamSetup.PipeDelay = 20;
@@ -1469,6 +1470,30 @@ void getjson(void) {
   jsonstr.concat("\"ISspd\":");
   jsonstr.concat(format_float(i2c_get_liquid_rate_by_step(get_stepper_speed()), 3));
   jsonstr.concat(",");
+  jsonstr.concat("\"i2c_pump_present\":");
+  jsonstr.concat((use_I2C_dev == 2) ? 1 : 0);
+  jsonstr.concat(",");
+  if (use_I2C_dev == 2) {
+    uint32_t i2cRemaining = get_stepper_status();
+    float i2cRemainingMl = i2c_get_liquid_volume_by_step(i2cRemaining);
+    jsonstr.concat("\"i2c_pump_speed\":");
+    jsonstr.concat(get_stepper_speed());
+    jsonstr.concat(",");
+    jsonstr.concat("\"i2c_pump_target_ml\":");
+    jsonstr.concat(format_float(I2CPumpTargetMl, 1));
+    jsonstr.concat(",");
+    jsonstr.concat("\"i2c_pump_remaining_ml\":");
+    jsonstr.concat(format_float(i2cRemainingMl, 1));
+    jsonstr.concat(",");
+    jsonstr.concat("\"i2c_pump_running\":");
+    jsonstr.concat((get_stepper_speed() > 0 && i2cRemaining > 0) ? 1 : 0);
+    jsonstr.concat(",");
+  } else {
+    jsonstr.concat("\"i2c_pump_speed\":0,");
+    jsonstr.concat("\"i2c_pump_target_ml\":0,");
+    jsonstr.concat("\"i2c_pump_remaining_ml\":0,");
+    jsonstr.concat("\"i2c_pump_running\":0,");
+  }
 
 
   jsonstr.concat("\"heap\":");

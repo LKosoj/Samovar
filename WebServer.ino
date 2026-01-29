@@ -17,6 +17,7 @@ String getValue(String& data, char separator, int index);
 void set_current_power(float Volt);
 void menu_reset_wifi();
 uint16_t get_stepper_speed(void);
+uint32_t get_stepper_status(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 String get_program(uint8_t s);
 String get_beer_program();
@@ -314,6 +315,34 @@ void WebServerInit(void) {
   server.on("/calibrate", HTTP_GET, [](AsyncWebServerRequest *request) {
     calibrate_command(request);
   });
+  server.on("/i2cpump", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (use_I2C_dev != 2) {
+      request->send(400, "text/plain", "I2C pump not available");
+      return;
+    }
+    if (request->hasArg("stop")) {
+      set_stepper_target(0, 0, 0);
+      I2CPumpTargetSteps = 0;
+      I2CPumpTargetMl = 0;
+      I2CPumpCmdSpeed = 0;
+      request->send(200, "text/plain", "OK");
+      return;
+    }
+    float speedRate = request->hasArg("speed") ? request->arg("speed").toFloat() : 0.0f;
+    float volumeMl = request->hasArg("volume") ? request->arg("volume").toFloat() : 0.0f;
+    if (speedRate <= 0 || volumeMl <= 0) {
+      request->send(400, "text/plain", "Invalid params");
+      return;
+    }
+    uint16_t stepsPerMl = SamSetup.StepperStepMlI2C > 0 ? SamSetup.StepperStepMlI2C : I2C_STEPPER_STEP_ML_DEFAULT;
+    uint32_t targetSteps = (uint32_t)(volumeMl * stepsPerMl);
+    uint16_t speedSteps = (uint16_t)i2c_get_speed_from_rate(speedRate);
+    I2CPumpCmdSpeed = speedSteps;
+    I2CPumpTargetSteps = targetSteps;
+    I2CPumpTargetMl = volumeMl;
+    set_stepper_target(speedSteps, 0, targetSteps);
+    request->send(200, "text/plain", "OK");
+  });
   server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_data_log(request, "data.csv");
   });
@@ -429,6 +458,8 @@ String indexKeyProcessor(const String &var) {
     return String(SamSetup.ColHeight, 2);
   else if (var == "PackDens")
     return String(SamSetup.PackDens);
+  else if (var == "I2CPumpTab")
+    return (use_I2C_dev == 2) ? "inline-block" : "none";
   else if (var == "HeaterMaxPower") {
     // Расчет мощности ТЭНа: P = U²/R
     float R = SamSetup.HeaterResistant;
@@ -486,6 +517,9 @@ String setupKeyProcessor(const String &var) {
     return s;
   } else if (var == "StepperStepMl") {
     s = SamSetup.StepperStepMl;
+    return s;
+  } else if (var == "StepperStepMlI2C") {
+    s = SamSetup.StepperStepMlI2C;
     return s;
   } else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
@@ -709,6 +743,8 @@ String setupKeyProcessor(const String &var) {
     else return "";
   } else if (var == "PackDens")
     return String(SamSetup.PackDens);
+  else if (var == "I2CPumpTab")
+    return (use_I2C_dev == 2) ? "inline-block" : "none";
   return "";
 }
 
@@ -725,6 +761,10 @@ String calibrateKeyProcessor(const String &var) {
   if (var == "StepperStep") return (String)STEPPER_MAX_SPEED;
   else if (var == "StepperStepMl")
     return (String)(SamSetup.StepperStepMl * 100);
+  else if (var == "StepperStepMlI2C")
+    return (String)(SamSetup.StepperStepMlI2C * 100);
+  else if (var == "I2CPumpTab")
+    return (use_I2C_dev == 2) ? "inline-block" : "none";
 
   return String();
 }
@@ -810,6 +850,9 @@ void handleSave(AsyncWebServerRequest *request) {
   }
   if (request && request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
+  }
+  if (request && request->hasArg("StepperStepMlI2C")) {
+    SamSetup.StepperStepMlI2C = request->arg("StepperStepMlI2C").toInt();
   }
   if (request && request->hasArg("stepperstepml")) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
@@ -1223,21 +1266,52 @@ void web_program(AsyncWebServerRequest *request) {
 
 void calibrate_command(AsyncWebServerRequest *request) {
   bool cl = false;
+  bool isI2C = false;
+  if (request->hasArg("pump")) {
+    String pump = request->arg("pump");
+    pump.toLowerCase();
+    if (pump == "i2c") isI2C = true;
+  }
   if (request->params() >= 1) {
     if (request->hasArg("stpstep")) {
       CurrrentStepperSpeed = request->arg("stpstep").toInt();
     }
-    if (request->hasArg("start") && startval == 0) {
-      sam_command_sync = CALIBRATE_START;
-    }
-    if (request->hasArg("finish") && startval == 100) {
-      sam_command_sync = CALIBRATE_STOP;
-      cl = true;
+    if (!isI2C) {
+      if (request->hasArg("start") && startval == 0) {
+        sam_command_sync = CALIBRATE_START;
+      }
+      if (request->hasArg("finish") && startval == 100) {
+        sam_command_sync = CALIBRATE_STOP;
+        cl = true;
+      }
+    } else if (use_I2C_dev == 2) {
+      if (request->hasArg("start") && !I2CPumpCalibrating) {
+        I2CPumpTargetSteps = 2147483640UL;
+        I2CPumpTargetMl = 0;
+        I2CPumpCmdSpeed = CurrrentStepperSpeed;
+        I2CPumpCalibrating = true;
+        set_stepper_target(CurrrentStepperSpeed, 0, I2CPumpTargetSteps);
+      }
+      if (request->hasArg("finish") && I2CPumpCalibrating) {
+        set_stepper_target(0, 0, 0);
+        uint32_t remaining = get_stepper_status();
+        uint32_t done = (I2CPumpTargetSteps > remaining) ? (I2CPumpTargetSteps - remaining) : 0;
+        SamSetup.StepperStepMlI2C = (uint16_t)round((float)done / 100.0f);
+        I2CPumpCalibrating = false;
+        save_profile();
+        read_config();
+        cl = true;
+      }
     }
   }
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (cl) {
-    int s = round((float)stepper.getCurrent() / 100) * 100;
+    int s = 0;
+    if (!isI2C) {
+      s = round((float)stepper.getCurrent() / 100) * 100;
+    } else {
+      s = SamSetup.StepperStepMlI2C * 100;
+    }
     request->send(200, "text/plain", (String)s);
   } else
     request->send(200, "text/plain", "OK");

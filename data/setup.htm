@@ -336,6 +336,9 @@
 
     <div id="Pump" class="tabcontent">
       <h2>Количество шагов шагового двигателя: <input name='StepperStepMl' type='text' value='%StepperStepMl%' style="width: 6em;"> /мл.</h2>
+      <div style="display: %I2CPumpTab%;">
+        <h2>Количество шагов I2C насоса: <input name='StepperStepMlI2C' type='text' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
+      </div>
       <div style="margin: 0 auto; width: 200px;">
         <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="calibrate.htm"' class="button">
       </div>

@@ -111,6 +111,7 @@ void save_profile_nvs() {
 
   // --- Шаговик и настройки насоса ---
   prefs.putUShort("StepMl", SamSetup.StepperStepMl);
+  prefs.putUShort("StepMlI2C", SamSetup.StepperStepMlI2C);
   prefs.putBool("AutoSpeed", SamSetup.useautospeed);
   prefs.putUChar("SpeedPerc", SamSetup.autospeed);
   prefs.putBool("UseWS", SamSetup.UseWS); // Датчик воды
@@ -208,6 +209,7 @@ void load_profile_nvs() {
   SamSetup.ACPDelay = prefs.getUShort("ACPDelay", 0);
 
   SamSetup.StepperStepMl = prefs.getUShort("StepMl", STEPPER_STEP_ML);
+  SamSetup.StepperStepMlI2C = prefs.getUShort("StepMlI2C", I2C_STEPPER_STEP_ML_DEFAULT);
   SamSetup.useautospeed = prefs.getBool("AutoSpeed", false);
   SamSetup.autospeed = prefs.getUChar("SpeedPerc", 0);
   SamSetup.UseWS = prefs.getBool("UseWS", true);
@@ -324,4 +326,3 @@ void migrate_from_eeprom() {
   }
   EEPROM.end();
 }
-
