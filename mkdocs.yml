@@ -1,0 +1,71 @@
+site_name: Samovar
+docs_dir: .ai-docs
+site_dir: ai_docs_site
+plugins:
+- search
+- mermaid2
+markdown_extensions:
+- tables
+- sane_lists
+- attr_list
+- def_list
+- footnotes
+- admonition
+- fenced_code
+- pymdownx.superfences
+nav:
+- Главная: index.md
+- Архитектура: architecture.md
+- Запуск: runtime.md
+- Зависимости: dependencies.md
+- Соглашения: conventions.md
+- Глоссарий: glossary.md
+- Модули:
+  - Обзор: modules/index.md
+  - data:
+    - beer__htm: modules/data/beer__htm.md
+    - bk__htm: modules/data/bk__htm.md
+    - brewxml__htm: modules/data/brewxml__htm.md
+    - calibrate__htm: modules/data/calibrate__htm.md
+    - chart__htm: modules/data/chart__htm.md
+    - distiller__htm: modules/data/distiller__htm.md
+    - edit__htm: modules/data/edit__htm.md
+    - index__htm: modules/data/index__htm.md
+    - nbk__htm: modules/data/nbk__htm.md
+    - program__htm: modules/data/program__htm.md
+    - setup__htm: modules/data/setup__htm.md
+    - style__css: modules/data/style__css.md
+    - wifi__htm: modules/data/wifi__htm.md
+  - beer__h: modules/beer__h.md
+  - BK__h: modules/BK__h.md
+  - Blynk__ino: modules/Blynk__ino.md
+  - column_math__h: modules/column_math__h.md
+  - crash_handler__h: modules/crash_handler__h.md
+  - crash_handler__ino: modules/crash_handler__ino.md
+  - distiller__h: modules/distiller__h.md
+  - font__h: modules/font__h.md
+  - FS__ino: modules/FS__ino.md
+  - I2CStepper__h: modules/I2CStepper__h.md
+  - impurity_detector__h: modules/impurity_detector__h.md
+  - logic__h: modules/logic__h.md
+  - lua__h: modules/lua__h.md
+  - Menu__ino: modules/Menu__ino.md
+  - mod_rmv__ino: modules/mod_rmv__ino.md
+  - mod_rmvk__h: modules/mod_rmvk__h.md
+  - nbk__h: modules/nbk__h.md
+  - NVS_Manager__ino: modules/NVS_Manager__ino.md
+  - partition_manager__py: modules/partition_manager__py.md
+  - pumppwm__h: modules/pumppwm__h.md
+  - quality__h: modules/quality__h.md
+  - Samovar__h: modules/Samovar__h.md
+  - Samovar__ino: modules/Samovar__ino.md
+  - Samovar_ini__h: modules/Samovar_ini__h.md
+  - Samovar_pin__h: modules/Samovar_pin__h.md
+  - SamovarMqtt__h: modules/SamovarMqtt__h.md
+  - sensorinit__h: modules/sensorinit__h.md
+  - SPIFFSEditor__h: modules/SPIFFSEditor__h.md
+  - WebServer__ino: modules/WebServer__ino.md
+  - wifi_htm_gz__h: modules/wifi_htm_gz__h.md
+- Изменения: changes.md
+site_url: ''
+use_directory_urls: false

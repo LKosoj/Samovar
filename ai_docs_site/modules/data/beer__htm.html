@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>beer__htm - Samovar</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../../css/brands.min.css" rel="stylesheet">
+        <link href="../../css/solid.min.css" rel="stylesheet">
+        <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../../index.html">Samovar</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">data</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="beer__htm.html" class="dropdown-item active" aria-current="page">beer__htm</a>
+</li>
+            
+<li>
+    <a href="bk__htm.html" class="dropdown-item">bk__htm</a>
+</li>
+            
+<li>
+    <a href="brewxml__htm.html" class="dropdown-item">brewxml__htm</a>
+</li>
+            
+<li>
+    <a href="calibrate__htm.html" class="dropdown-item">calibrate__htm</a>
+</li>
+            
+<li>
+    <a href="chart__htm.html" class="dropdown-item">chart__htm</a>
+</li>
+            
+<li>
+    <a href="distiller__htm.html" class="dropdown-item">distiller__htm</a>
+</li>
+            
+<li>
+    <a href="edit__htm.html" class="dropdown-item">edit__htm</a>
+</li>
+            
+<li>
+    <a href="index__htm.html" class="dropdown-item">index__htm</a>
+</li>
+            
+<li>
+    <a href="nbk__htm.html" class="dropdown-item">nbk__htm</a>
+</li>
+            
+<li>
+    <a href="program__htm.html" class="dropdown-item">program__htm</a>
+</li>
+            
+<li>
+    <a href="setup__htm.html" class="dropdown-item">setup__htm</a>
+</li>
+            
+<li>
+    <a href="style__css.html" class="dropdown-item">style__css</a>
+</li>
+            
+<li>
+    <a href="wifi__htm.html" class="dropdown-item">wifi__htm</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="../beer__h.html" class="dropdown-item">beer__h</a>
+</li>
+                                    
+<li>
+    <a href="../BK__h.html" class="dropdown-item">BK__h</a>
+</li>
+                                    
+<li>
+    <a href="../Blynk__ino.html" class="dropdown-item">Blynk__ino</a>
+</li>
+                                    
+<li>
+    <a href="../column_math__h.html" class="dropdown-item">column_math__h</a>
+</li>
+                                    
+<li>
+    <a href="../crash_handler__h.html" class="dropdown-item">crash_handler__h</a>
+</li>
+                                    
+<li>
+    <a href="../crash_handler__ino.html" class="dropdown-item">crash_handler__ino</a>
+</li>
+                                    
+<li>
+    <a href="../distiller__h.html" class="dropdown-item">distiller__h</a>
+</li>
+                                    
+<li>
+    <a href="../font__h.html" class="dropdown-item">font__h</a>
+</li>
+                                    
+<li>
+    <a href="../FS__ino.html" class="dropdown-item">FS__ino</a>
+</li>
+                                    
+<li>
+    <a href="../I2CStepper__h.html" class="dropdown-item">I2CStepper__h</a>
+</li>
+                                    
+<li>
+    <a href="../impurity_detector__h.html" class="dropdown-item">impurity_detector__h</a>
+</li>
+                                    
+<li>
+    <a href="../logic__h.html" class="dropdown-item">logic__h</a>
+</li>
+                                    
+<li>
+    <a href="../lua__h.html" class="dropdown-item">lua__h</a>
+</li>
+                                    
+<li>
+    <a href="../Menu__ino.html" class="dropdown-item">Menu__ino</a>
+</li>
+                                    
+<li>
+    <a href="../mod_rmv__ino.html" class="dropdown-item">mod_rmv__ino</a>
+</li>
+                                    
+<li>
+    <a href="../mod_rmvk__h.html" class="dropdown-item">mod_rmvk__h</a>
+</li>
+                                    
+<li>
+    <a href="../nbk__h.html" class="dropdown-item">nbk__h</a>
+</li>
+                                    
+<li>
+    <a href="../NVS_Manager__ino.html" class="dropdown-item">NVS_Manager__ino</a>
+</li>
+                                    
+<li>
+    <a href="../partition_manager__py.html" class="dropdown-item">partition_manager__py</a>
+</li>
+                                    
+<li>
+    <a href="../pumppwm__h.html" class="dropdown-item">pumppwm__h</a>
+</li>
+                                    
+<li>
+    <a href="../quality__h.html" class="dropdown-item">quality__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar__h.html" class="dropdown-item">Samovar__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar__ino.html" class="dropdown-item">Samovar__ino</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar_ini__h.html" class="dropdown-item">Samovar_ini__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar_pin__h.html" class="dropdown-item">Samovar_pin__h</a>
+</li>
+                                    
+<li>
+    <a href="../SamovarMqtt__h.html" class="dropdown-item">SamovarMqtt__h</a>
+</li>
+                                    
+<li>
+    <a href="../sensorinit__h.html" class="dropdown-item">sensorinit__h</a>
+</li>
+                                    
+<li>
+    <a href="../SPIFFSEditor__h.html" class="dropdown-item">SPIFFSEditor__h</a>
+</li>
+                                    
+<li>
+    <a href="../WebServer__ino.html" class="dropdown-item">WebServer__ino</a>
+</li>
+                                    
+<li>
+    <a href="../wifi_htm_gz__h.html" class="dropdown-item">wifi_htm_gz__h</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../index.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="bk__htm.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#databeer" class="nav-link">data/beer</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="databeer">data/beer</h1>
+<p>Модуль реализует клиентскую часть веб-интерфейса системы управления "Самовар", обеспечивая отображение состояния соединения, управление мощностью, обработку пользовательских сообщений, воспроизведение звуковых оповещений и работу с историей сообщений. Поддерживает динамическое формирование интерфейса на основе конфигурации, включая добавление пользовательских кнопок через LUA-скрипты. Обеспечивает уведомления о потерях связи и критических состояниях. Работает в реальном времени, взаимодействуя с сервером через AJAX (не показан в коде).</p>
+<p>Ключевые структуры данных<br />
+Messages_Array — массив текущих отображаемых сообщений с поддержкой динамического удаления последнего элемента<br />
+sound — объект Audio для воспроизведения циклического звукового сигнала тревоги</p>
+<p>ConnectError(Type)<br />
+Устанавливает статус соединения и отображает индикатор связи в зависимости от состояния<br />
+Аргументы<br />
+Type — булево значение: true означает ошибку соединения, false — восстановление связи<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>setPowerUnit()<br />
+Настраивает отображение элементов управления мощностью в зависимости от единиц измерения (Вт или Вольт)<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>AddLuaButtons()<br />
+Добавляет на страницу пользовательские кнопки, определённые в строке %btn_list%, с привязкой к вызову LUA-скриптов<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>playSound(play)<br />
+Запускает или останавливает циклическое воспроизведение звукового сигнала тревоги<br />
+Аргументы<br />
+play — булево значение: true для запуска звука, false для остановки<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>getHistory()<br />
+Возвращает массив сохранённых сообщений из localStorage<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Массив строк в формате HTML, представляющих историю сообщений<br />
+Исключения<br />
+Может выбрасывать исключение при повреждённых данных в localStorage, обрабатывается внутри функции</p>
+<hr />
+<p>saveHistory(message)<br />
+Сохраняет новое сообщение в историю в localStorage<br />
+Аргументы<br />
+message — строка в формате HTML, представляющая сообщение для сохранения<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>showHistory()<br />
+Переключает видимость блока с историей сообщений; при открытии обновляет содержимое из localStorage<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>clearHistory()<br />
+Очищает всю историю сообщений в localStorage и обновляет отображение<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>addMessage(msg, lvl)<br />
+Добавляет новое сообщение в очередь отображаемых сообщений, присваивает стиль по уровню важности, сохраняет в историю<br />
+Аргументы<br />
+msg — текст сообщения<br />
+lvl — уровень важности: 0 — тревога (красный), 1 — предупреждение (жёлтый), 2 — информационное (зелёный)<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>removeLastMessage()<br />
+Удаляет последнее сообщение из очереди отображения и обновляет флаги состояния тревоги и паузы<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>showMessages()<br />
+Обновляет отображение текущих сообщений в интерфейсе на основе Messages_Array<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>Модуль реализует клиентскую логику веб-интерфейса управления устройством, включая отображение сообщений, обработку программ, взаимодействие с сервером через HTTP-запросы, управление элементами интерфейса (вкладки, спойлеры), загрузку и сохранение файлов, а также отправку команд и данных. Основное внимание уделено обновлению состояния интерфейса в реальном времени, валидации ввода и аудиооповещению при тревогах. Модуль работает с глобальным массивом сообщений и взаимодействует с DOM-элементами по их ID.</p>
+<p>Ключевые структуры данных<br />
+Messages_Array — глобальный массив строк, содержащих HTML-представления сообщений, отображаемых в интерфейсе<br />
+is_ALARM — флаг, указывающий на наличие в списке сообщений хотя бы одного с признаком тревоги (класс message_0)<br />
+pwr_unit — строка, содержащая единицу измерения мощности, подставляемую из сервера<br />
+request — глобальный объект XMLHttpRequest, используемый для синхронных и асинхронных запросов</p>
+<hr />
+<p>showMessages()<br />
+Обновляет отображение списка сообщений и управляет звуковым оповещением<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>clearMessages()<br />
+Очищает массив сообщений и обновляет их отображение<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>pwr_unit<br />
+Единица измерения мощности, подставляемая из сервера при генерации страницы</p>
+<hr />
+<p>_lnIdx<br />
+Счётчик строк, используется для внутренней нумерации (назначение не полностью очевидно из кода)</p>
+<hr />
+<p>headers<br />
+Коллекция DOM-элементов заголовков спойлеров, переключающих видимость содержимого</p>
+<hr />
+<p>headerClick()<br />
+Переключает видимость скрытого содержимого спойлера и меняет индикатор [+] / [-]<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>loadFile(e)<br />
+Загружает текстовый файл в поле программы<br />
+Аргументы<br />
+e — объект File, выбранный пользователем<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>SaveProgramToFile()<br />
+Сохраняет содержимое поля программы в локальный файл<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>openTab(evt, tabName)<br />
+Активирует вкладку с указанным именем и скрывает остальные<br />
+Аргументы<br />
+evt — событие, вызвавшее переключение (используется для выделения активной кнопки)<br />
+tabName — строка с ID вкладки, которую нужно отобразить<br />
+Возвращает<br />
+0 — признак успешного завершения<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>check_program(str)<br />
+Проверяет корректность формата программы по разделителям<br />
+Аргументы<br />
+str — строка с текстом программы, разбитая на строки<br />
+Возвращает<br />
+true — если структура программы корректна; false — при несоответствии количества разделителей<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>set_program()<br />
+Отправляет программу на сервер для сохранения, предварительно проверяя её формат<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+0 — признак завершения (даже при ошибке)<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sleep(milliseconds)<br />
+Выполняет синхронную задержку выполнения (блокирует интерфейс)<br />
+Аргументы<br />
+milliseconds — количество миллисекунд задержки<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sendbutton(command)<br />
+Отправляет GET-запрос с командой на сервер<br />
+Аргументы<br />
+command — строка с параметрами команды (например, "voltage=12.5")<br />
+Возвращает<br />
+0 — признак завершения<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sendvoltage()<br />
+Считывает значение напряжения из поля, валидирует и отправляет на сервер<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+0 — если ввод неверен; иначе — неявно undefined<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sendpumpspeed()<br />
+Считывает значение скорости насоса, валидирует и отправляет команду<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+0 — если ввод неверен; иначе — неявно undefined<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sendI2CPump()<br />
+Отправляет асинхронный запрос для запуска I2C-насоса с заданной скоростью и объёмом<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>stopI2CPump()<br />
+Отправляет асинхронный запрос на остановку I2C-насоса<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>loadDoc()<br />
+Выполняет периодический опрос сервера для получения текущих данных состояния<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>Модуль реализует клиентскую логику управления и отображения состояния устройства для веб-интерфейса системы контроля технологических процессов (например, пивоварения). Основные функции включают обновление интерфейса по данным с сервера, обработку программ управления, валидацию и форматирование строк программы, а также динамическое управление элементами интерфейса. Взаимодействие с сервером осуществляется через асинхронные HTTP-запросы.</p>
+<p>Ключевые структуры данных<br />
+myObj — объект, содержащий данные состояния устройства, полученные от сервера (температуры, статусы, мощность, настройки и т.д.)</p>
+<hr />
+<p>updateStatus()<br />
+Обновляет отображаемые значения интерфейса на основе данных от сервера<br />
+Аргументы<br />
+Отсутствуют<br />
+Возвращает<br />
+Отсутствует<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>calc_program()<br />
+Валидирует и форматирует текст программы, введённой пользователем, в единый структурированный формат<br />
+Аргументы<br />
+Отсутствуют<br />
+Возвращает<br />
+Отсутствует<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>set_num()<br />
+Обновляет нумерацию строк программы в интерфейсе<br />
+Аргументы<br />
+Отсутствуют<br />
+Возвращает<br />
+Отсутствует<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>removeLine(ln)<br />
+Удаляет строку программы из интерфейса, если количество строк больше минимального<br />
+Аргументы<br />
+ln — идентификатор удаляемой строки программы<br />
+Возвращает<br />
+Отсутствует<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>addLine(obj, s)<br />
+Добавляет новую строку программы в интерфейс с заданными параметрами<br />
+Аргументы<br />
+obj — идентификатор строки, после которой будет вставлена новая (если null — добавляется в конец)<br />
+s — строка с параметрами новой строки в формате "тип;температура;время;миксер;датчик"<br />
+Возвращает<br />
+Отсутствует<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>Модуль предоставляет функциональность для управления и визуализации программы технологического процесса, связанного с контролем температуры, мешалки и других параметров. Основные функции включают загрузку и разбор программы, валидацию входных данных, отображение модальных окон для редактирования параметров и обновление интерфейса в реальном времени. Модуль также обеспечивает взаимодействие с серверной частью через отправку команд.</p>
+<p>Ключевые структуры данных<br />
+arr — временный массив данных, полученных из строки параметров, разделённой символом "^"</p>
+<hr />
+<p>popup_modal(idx)<br />
+Открывает модальное окно для редактирования параметров мешалки по заданному индексу<br />
+Аргументы<br />
+idx — индекс строки программы, определяющий, какие данные будут загружены в модальное окно<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>validateMixerInput(inputElement)<br />
+Валидирует и корректирует значение поля ввода, оставляя только числовые данные в допустимом диапазоне<br />
+Аргументы<br />
+inputElement — DOM-элемент поля ввода, значение которого подлежит валидации<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>popup_ok()<br />
+Сохраняет изменения из модального окна в соответствующее поле программы и закрывает окно<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>popup_cancel()<br />
+Закрывает модальное окно без сохранения изменений<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>getProgram()<br />
+Разбирает текст программы из элемента WProgram, создаёт HTML-представление строк программы и вставляет его в DOM<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>set_bgcolor(obj)<br />
+Устанавливает цвет фона строки программы в зависимости от типа операции (значение поля ptype)<br />
+Аргументы<br />
+obj — индекс строки программы, для которой устанавливается цвет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>run_lua(num)<br />
+Отправляет команду выполнения Lua-скрипта с указанным номером на сервер<br />
+Аргументы<br />
+num — номер Lua-скрипта для выполнения<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>run_strlua()<br />
+Отправляет строку Lua-команды на сервер, заменяя пробелы на символ "^"<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sendwaterpwm()<br />
+Отправляет команду установки значения ШИМ для управления насосом<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+0 — всегда возвращает 0 после выполнения<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sliderChange()<br />
+Синхронизирует текстовое поле PWMt со значением ползунка PWM и вызывает отправку команды ШИМ<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>changetxtpwm()<br />
+Обновляет значение ползунка PWM на основе ввода в текстовое поле PWMt и вызывает изменение ШИМ<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+0 — в случае ошибки ввода, иначе не возвращает явно<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>char_count(str, ch)<br />
+Подсчитывает количество вхождений символа ch в строке str<br />
+Аргументы<br />
+str — строка, в которой выполняется подсчёт<br />
+ch — символ, количество вхождений которого нужно подсчитать<br />
+Возвращает<br />
+Число — количество вхождений символа в строке<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>class window.onload<br />
+Инициализирует интерфейс при загрузке страницы: устанавливает единицы мощности, добавляет кнопки Lua, загружает программу и запускает периодическое обновление<br />
+Методы<br />
+window.onload — функция, выполняемая при полной загрузке страницы</p>
+<hr />
+<p>class document.addEventListener('DOMContentLoaded')<br />
+Настраивает обработчики событий: клики по заголовкам-спойлерам и изменение текста программы<br />
+Методы<br />
+document.addEventListener — добавляет реакцию на изменение программы и клики по элементам с атрибутом data-name='spoiler-title'</p>
+<hr />
+<p>Модуль представляет собой веб-интерфейс для управления процессом затирания в самогонном аппарате. Он отображает текущие температуры в различных точках системы, статус работы, прогресс процесса и позволяет управлять нагревом и программами. Интерфейс поддерживает переключение между вкладками, динамическое обновление данных и взаимодействие с микроконтроллером через HTTP-запросы. Основные параметры (цвета, видимость элементов) настраиваются через замену плейсхолдеров на сервере.</p>
+<p>Ключевые структуры данных<br />
+crnt_tm — скрытый элемент для хранения текущего времени (используется как триггер обновления)<br />
+messagesBox — контейнер для отображения системных сообщений пользователя</p>
+<hr />
+<p>document.getElementById('PipeTemp')<br />
+Получает элемент отображения температуры в царге<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения температуры</p>
+<hr />
+<p>document.getElementById('SteamTemp')<br />
+Получает элемент отображения температуры пара<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения температуры</p>
+<hr />
+<p>document.getElementById('WaterTemp')<br />
+Получает элемент отображения температуры воды<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения температуры</p>
+<hr />
+<p>document.getElementById('TankTemp')<br />
+Получает элемент отображения температуры в кубе<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения температуры</p>
+<hr />
+<p>document.getElementById('ACPTemp')<br />
+Получает элемент отображения температуры в теплообменнике (ТСА)<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения температуры</p>
+<hr />
+<p>document.getElementById('Status')<br />
+Получает элемент отображения текущего статуса процесса<br />
+Возвращает<br />
+Объект HTMLElement для обновления текста статуса</p>
+<hr />
+<p>document.getElementById('WthdrwlProgress')<br />
+Получает элемент отображения прогресса затирания<br />
+Возвращает<br />
+Объект HTMLElement для обновления процентного значения прогресса</p>
+<hr />
+<p>document.getElementById('current_power_p')<br />
+Получает элемент отображения текущей мощности в ваттах<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения мощности</p>
+<hr />
+<p>document.getElementById('version')<br />
+Получает элемент отображения версии прошивки<br />
+Возвращает<br />
+Объект HTMLElement для обновления номера версии</p>
+<hr />
+<p>document.getElementById('stm')<br />
+Получает элемент отображения времени работы системы<br />
+Возвращает<br />
+Объект HTMLElement для обновления времени в формате HH:MM:SS</p>
+<hr />
+<p>document.getElementById('heap')<br />
+Получает элемент отображения объёма свободной памяти (Heap)<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения памяти</p>
+<hr />
+<p>document.getElementById('bme_temp')<br />
+Получает элемент отображения температуры с датчика BME<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения температуры</p>
+<hr />
+<p>document.getElementById('rssi')<br />
+Получает элемент отображения уровня сигнала Wi-Fi (RSSI)<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения RSSI</p>
+<hr />
+<p>document.getElementById('fr_bt')<br />
+Получает элемент отображения объёма свободного места во Flash<br />
+Возвращает<br />
+Объект HTMLElement для обновления значения памяти</p>
+<hr />
+<p>openTab(event, tabName)<br />
+Переключает активную вкладку интерфейса (Затирание, Программа, Дополнительно, Внешний насос)<br />
+Аргументы<br />
+event — объект события клика по вкладке<br />
+tabName — имя вкладки для отображения (строка)<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sendbutton(command)<br />
+Отправляет команду управления на сервер через HTTP-запрос<br />
+Аргументы<br />
+command — строка с параметром команды (например, "power=1")<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Может выбросить ошибку сети при недоступности сервера</p>
+<hr />
+<p>sendvoltage()<br />
+Отправляет значение напряжения, введённое пользователем, на сервер<br />
+Аргументы<br />
+Нет (считывает значение из поля #Voltage)<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Может выбросить ошибку сети при недоступности сервера</p>
+<hr />
+<p>clearMessages()<br />
+Очищает содержимое блока сообщений на интерфейсе<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>class messagesBox<br />
+Контейнер для отображения и управления системными сообщениями<br />
+Поля<br />
+messages — элемент с массивом сообщений (id='messages')<br />
+Методы<br />
+clearMessages() — очищает список сообщений</p>
+<hr />
+<p>Модуль предназначен для управления программой затирания в пивоваренной системе. Он позволяет задавать и редактировать последовательность технологических этапов, таких как нагрев, пауза, кипячение, охлаждение, ферментация и выполнение Lua-скриптов. Каждый этап характеризуется типом, температурой, временем и параметрами работы мешалки или насоса. Программа может сохраняться в текстовом виде, загружаться из файлов, а также устанавливаться в устройство для выполнения.</p>
+<p>Ключевые структуры данных<br />
+WProgram — строка, содержащая многострочную программу затирания, где каждая строка описывает один этап в формате: Тип;Температура;Время;Режим_мешалки<br />
+Descr — текстовое описание программы, предназначенное для сохранения в облаке и последующей идентификации</p>
+<hr />
+<p>SaveProgramToFile()<br />
+Сохраняет текущую программу затирания и её описание в локальный файл<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>loadFile(File file)<br />
+Загружает программу затирания из выбранного пользователем файла<br />
+Аргументы<br />
+file — объект файла, выбранный через интерфейс загрузки<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>set_program()<br />
+Передаёт текущую программу затирания в управляющее устройство (например, контроллер Самовар)<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>validateMixerInput(HTMLInputElement* input)<br />
+Проверяет корректность введённых значений времени включения и выключения мешалки<br />
+Аргументы<br />
+input — ссылка на HTML-элемент ввода (поле "Вкл сек" или "Выкл сек")<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>class popup<br />
+Модальное окно для редактирования параметров работы мешалки и насоса<br />
+Поля<br />
+m_type — тип устройства: 0 — выключено, 1 — мешалка, 2 — насос, 3 — мешалка и насос<br />
+m_direction — направление вращения: -1 — реверс после паузы, 0 — прямое, 1 — обратное<br />
+m_time — время включения в секундах (до 14400)<br />
+m_pause — время выключения (паузы) в секундах (до 14400)<br />
+Методы<br />
+открытие — отображает модальное окно при редактировании строки программы с мешалкой<br />
+применение параметров — формирует строку режима мешалки вида "1^-1.00^2^3" и вставляет в программу</p>
+<hr />
+<p>Модуль предоставляет интерфейс для управления оборудованием дистилляции, включая настройку параметров насосов, выполнение Lua-скриптов и взаимодействие с внешними I2C-устройствами. Основные функции включают регулировку скорости насоса через ШИМ, отправку команд на I2C-насос и выполнение пользовательских скриптов. Интерфейс реализован в виде вкладок с формами и элементами ввода, обрабатываемыми через JavaScript.</p>
+<p>Ключевые структуры данных<br />
+PWM — ШИМ-сигнал для управления скоростью насоса, диапазон значений от %PWM_LV% до 1023<br />
+i2c_speed — целевая скорость отбора для I2C-насоса в литрах в час<br />
+i2c_volume — объем жидкости для отбора через I2C-насос в миллилитрах</p>
+<hr />
+<p>validateMixerInput(element)<br />
+Проверяет и валидирует введённое значение в поле ввода миксера<br />
+Аргументы<br />
+element — DOM-элемент поля ввода, значение которого подлежит проверке<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>popup_cancel()<br />
+Закрывает всплывающее окно без сохранения изменений<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>popup_ok()<br />
+Подтверждает изменения в всплывающем окне и применяет их<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sliderChange()<br />
+Обновляет текстовое поле PWMt при изменении положения ползунка ШИМ<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>changetxtpwm()<br />
+Синхронизирует значение текстового поля PWMt с ползунком PWM<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>run_strlua()<br />
+Выполняет Lua-скрипт, введённый пользователем в поле lua_str_i<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>sendI2CPump()<br />
+Отправляет команду на запуск I2C-насоса с заданными скоростью и объёмом<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>stopI2CPump()<br />
+Останавливает работу I2C-насоса, отправляя команду остановки<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js"></script>
+        <script src="../../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

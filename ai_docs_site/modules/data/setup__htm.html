@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>setup__htm - Samovar</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../../css/brands.min.css" rel="stylesheet">
+        <link href="../../css/solid.min.css" rel="stylesheet">
+        <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../../index.html">Samovar</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">data</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="beer__htm.html" class="dropdown-item">beer__htm</a>
+</li>
+            
+<li>
+    <a href="bk__htm.html" class="dropdown-item">bk__htm</a>
+</li>
+            
+<li>
+    <a href="brewxml__htm.html" class="dropdown-item">brewxml__htm</a>
+</li>
+            
+<li>
+    <a href="calibrate__htm.html" class="dropdown-item">calibrate__htm</a>
+</li>
+            
+<li>
+    <a href="chart__htm.html" class="dropdown-item">chart__htm</a>
+</li>
+            
+<li>
+    <a href="distiller__htm.html" class="dropdown-item">distiller__htm</a>
+</li>
+            
+<li>
+    <a href="edit__htm.html" class="dropdown-item">edit__htm</a>
+</li>
+            
+<li>
+    <a href="index__htm.html" class="dropdown-item">index__htm</a>
+</li>
+            
+<li>
+    <a href="nbk__htm.html" class="dropdown-item">nbk__htm</a>
+</li>
+            
+<li>
+    <a href="program__htm.html" class="dropdown-item">program__htm</a>
+</li>
+            
+<li>
+    <a href="setup__htm.html" class="dropdown-item active" aria-current="page">setup__htm</a>
+</li>
+            
+<li>
+    <a href="style__css.html" class="dropdown-item">style__css</a>
+</li>
+            
+<li>
+    <a href="wifi__htm.html" class="dropdown-item">wifi__htm</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="../beer__h.html" class="dropdown-item">beer__h</a>
+</li>
+                                    
+<li>
+    <a href="../BK__h.html" class="dropdown-item">BK__h</a>
+</li>
+                                    
+<li>
+    <a href="../Blynk__ino.html" class="dropdown-item">Blynk__ino</a>
+</li>
+                                    
+<li>
+    <a href="../column_math__h.html" class="dropdown-item">column_math__h</a>
+</li>
+                                    
+<li>
+    <a href="../crash_handler__h.html" class="dropdown-item">crash_handler__h</a>
+</li>
+                                    
+<li>
+    <a href="../crash_handler__ino.html" class="dropdown-item">crash_handler__ino</a>
+</li>
+                                    
+<li>
+    <a href="../distiller__h.html" class="dropdown-item">distiller__h</a>
+</li>
+                                    
+<li>
+    <a href="../font__h.html" class="dropdown-item">font__h</a>
+</li>
+                                    
+<li>
+    <a href="../FS__ino.html" class="dropdown-item">FS__ino</a>
+</li>
+                                    
+<li>
+    <a href="../I2CStepper__h.html" class="dropdown-item">I2CStepper__h</a>
+</li>
+                                    
+<li>
+    <a href="../impurity_detector__h.html" class="dropdown-item">impurity_detector__h</a>
+</li>
+                                    
+<li>
+    <a href="../logic__h.html" class="dropdown-item">logic__h</a>
+</li>
+                                    
+<li>
+    <a href="../lua__h.html" class="dropdown-item">lua__h</a>
+</li>
+                                    
+<li>
+    <a href="../Menu__ino.html" class="dropdown-item">Menu__ino</a>
+</li>
+                                    
+<li>
+    <a href="../mod_rmv__ino.html" class="dropdown-item">mod_rmv__ino</a>
+</li>
+                                    
+<li>
+    <a href="../mod_rmvk__h.html" class="dropdown-item">mod_rmvk__h</a>
+</li>
+                                    
+<li>
+    <a href="../nbk__h.html" class="dropdown-item">nbk__h</a>
+</li>
+                                    
+<li>
+    <a href="../NVS_Manager__ino.html" class="dropdown-item">NVS_Manager__ino</a>
+</li>
+                                    
+<li>
+    <a href="../partition_manager__py.html" class="dropdown-item">partition_manager__py</a>
+</li>
+                                    
+<li>
+    <a href="../pumppwm__h.html" class="dropdown-item">pumppwm__h</a>
+</li>
+                                    
+<li>
+    <a href="../quality__h.html" class="dropdown-item">quality__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar__h.html" class="dropdown-item">Samovar__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar__ino.html" class="dropdown-item">Samovar__ino</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar_ini__h.html" class="dropdown-item">Samovar_ini__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar_pin__h.html" class="dropdown-item">Samovar_pin__h</a>
+</li>
+                                    
+<li>
+    <a href="../SamovarMqtt__h.html" class="dropdown-item">SamovarMqtt__h</a>
+</li>
+                                    
+<li>
+    <a href="../sensorinit__h.html" class="dropdown-item">sensorinit__h</a>
+</li>
+                                    
+<li>
+    <a href="../SPIFFSEditor__h.html" class="dropdown-item">SPIFFSEditor__h</a>
+</li>
+                                    
+<li>
+    <a href="../WebServer__ino.html" class="dropdown-item">WebServer__ino</a>
+</li>
+                                    
+<li>
+    <a href="../wifi_htm_gz__h.html" class="dropdown-item">wifi_htm_gz__h</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="program__htm.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="style__css.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#datasetup" class="nav-link">data/setup</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="datasetup">data/setup</h1>
+<p>Модуль предоставляет функциональность для управления и настройки процессов дистилляции и ректификации в системе "Самовар" через веб-интерфейс. Он включает в себя обработку пользовательских действий, взаимодействие с сервером, сериализацию форм, загрузку и сохранение конфигураций, а также валидацию ввода. Основное назначение — обеспечение удобного и надёжного интерфейса для настройки режимов работы, параметров температуры, насоса, НБК и других компонентов.</p>
+<p>Ключевые структуры данных<br />
+FormData — объект, содержащий данные формы для отправки на сервер<br />
+XMLHttpRequest — объект для выполнения HTTP-запросов к серверу устройства</p>
+<p>void openTab(evt, tabName)<br />
+Активирует вкладку с указанным именем и скрывает остальные<br />
+Аргументы<br />
+evt — событие, вызвавшее переключение вкладки<br />
+tabName — имя вкладки для отображения<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void sendbutton(command)<br />
+Отправляет GET-запрос на сервер с указанным командным параметром<br />
+Аргументы<br />
+command — строка с командой, добавляемой к URL <code>/command?</code><br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>int set_program()<br />
+Отправляет данные формы на сервер по адресу <code>/program</code> методом POST<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+0<br />
+Исключения<br />
+Показывает alert в случае ошибки HTTP-запроса</p>
+<hr />
+<p>string HTMLElement.prototype.serialize()<br />
+Сериализует элемент формы в JSON-строку, включая текстовые поля, чекбоксы, цвета, слайдеры и select<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+JSON-строка с именами и значениями полей формы<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void loadFile(e)<br />
+Читает файл в формате JSON и передаёт данные для заполнения формы<br />
+Аргументы<br />
+e — объект File, представляющий загружаемый файл<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void mapJson(data)<br />
+Заполняет поля формы значениями из JSON-объекта<br />
+Аргументы<br />
+data — объект JSON с параметрами для установки в поля формы<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void SaveFormToFile(form)<br />
+Сохраняет данные формы в локальный файл в формате текста<br />
+Аргументы<br />
+form — элемент формы, данные которой нужно сохранить<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void sleep(milliseconds)<br />
+Выполняет блокирующую задержку выполнения кода на указанное количество миллисекунд<br />
+Аргументы<br />
+milliseconds — количество миллисекунд для задержки<br />
+Возвращает<br />
+Ничего<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>Модуль отвечает за конфигурацию параметров оборудования и настройки температурных датчиков в системе управления ректификационной установкой. Предоставляет интерфейс для выбора физических характеристик колонны, управления аварийными срабатываниями, настройки уведомлений и калибровки датчиков. Включает элементы управления через HTML-формы с динамической подстановкой значений (шаблонизация).</p>
+<p>Ключевые структуры данных<br />
+ColDiam — Диаметр колонны в дюймах (1.5, 2.0, 3.0)<br />
+ColHeight — Высота насадки колонны в метрах (от 0.50 до 2.50)<br />
+PackDens — Плотность упаковки насадки в процентах (60–100%)</p>
+<p>float ColDiam(value)<br />
+Выбор диаметра ректификационной колонны<br />
+Аргументы<br />
+value — Значение диаметра в дюймах (1.5, 2.0, 3.0)<br />
+Возвращает<br />
+Выбранное значение диаметра колонны<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float ColHeight(value)<br />
+Выбор высоты насадки ректификационной колонны<br />
+Аргументы<br />
+value — Значение высоты в метрах (от 0.50 до 2.50 с шагом 0.25)<br />
+Возвращает<br />
+Выбранное значение высоты насадки<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>int PackDens(value)<br />
+Установка плотности упаковки насадки<br />
+Аргументы<br />
+value — Процент плотности упаковки (60–100%)<br />
+Возвращает<br />
+Текущее значение плотности насадки<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool useautospeed(checked)<br />
+Включение корректировки скорости насоса при превышении температуры пара<br />
+Аргументы<br />
+checked — Флаг включения (true/false)<br />
+Возвращает<br />
+Состояние чекбокса (включено/выключено)<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool useDetectorOnHeads(checked)<br />
+Использование детектора на головах при ректификации<br />
+Аргументы<br />
+checked — Флаг активации детектора<br />
+Возвращает<br />
+Состояние использования детектора<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float MaxPressureValue(value)<br />
+Установка порога давления для аварийного режима<br />
+Аргументы<br />
+value — Значение давления в мм рт. ст.<br />
+Возвращает<br />
+Пороговое значение давления, при котором сработает авария<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool UseBuzzer(checked)<br />
+Включение зуммера для системных уведомлений<br />
+Аргументы<br />
+checked — Флаг включения физического зуммера<br />
+Возвращает<br />
+Состояние использования зуммера<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool UseBBuzzer(checked)<br />
+Включение зуммера в браузере<br />
+Аргументы<br />
+checked — Флаг включения звуковых уведомлений в веб-интерфейсе<br />
+Возвращает<br />
+Состояние использования браузерного зуммера<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool ChangeProgramBuzzer(checked)<br />
+Включение зуммера при смене программы<br />
+Аргументы<br />
+checked — Флаг активации звукового оповещения<br />
+Возвращает<br />
+Состояние оповещения при смене программы<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void selftest(onclick)<br />
+Запуск процедуры самотестирования оборудования<br />
+Аргументы<br />
+onclick — Событие клика, вызывает sendbutton("startst")<br />
+Возвращает<br />
+Запускает тест насоса, клапана, перистальтического насоса и сервопривода<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>string SteamAddr(value)<br />
+Выбор адреса датчика температуры пара перед дефлегматором<br />
+Аргументы<br />
+value — Адрес датчика (подставляется через шаблон %SteamAddr%)<br />
+Возвращает<br />
+Выбранный адрес датчика температуры<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float DeltaSteamTemp(value)<br />
+Корректировка показаний датчика температуры пара<br />
+Аргументы<br />
+value — Значение коррекции в °C<br />
+Возвращает<br />
+Скорректированное значение температуры<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float SetSteamTemp(value)<br />
+Уставка срабатывания по температуре пара<br />
+Аргументы<br />
+value — Пороговое значение температуры в °C<br />
+Возвращает<br />
+Температурную уставку для срабатывания<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>int SteamDelay(value)<br />
+Задержка отбора при превышении температуры пара<br />
+Аргументы<br />
+value — Время задержки в секундах<br />
+Возвращает<br />
+Время задержки перед возобновлением отбора<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>Модуль отвечает за конфигурацию и управление параметрами температурных датчиков, насосов и PID-регулятора в системе контроля брожения и нагрева. Предоставляет интерфейс для настройки уставок, коррекций температуры, задержек срабатывания и калибровки оборудования. Поддерживает взаимодействие с датчиками по адресам, настройку шаговых двигателей и параметров нагрева в зависимости от режима.</p>
+<p>Ключевые структуры данных<br />
+SensorConfig — Хранит параметры датчика: адрес, коррекцию, уставку и задержку срабатывания<br />
+PumpCalibration — Определяет калибровочные коэффициенты насоса (шаги на миллилитр)<br />
+PIDSettings — Содержит коэффициенты Kp, Ki, Kd и напряжения для режимов поддержания и кипения</p>
+<p>void saveConfig()<br />
+Сохраняет текущие настройки в энергонезависимую память устройства<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void loadConfig()<br />
+Загружает сохранённые настройки из энергонезависимой памяти<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void scanSensors()<br />
+Инициирует сканирование шины (например, One-Wire) для обнаружения подключённых датчиков температуры<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float readTemperature(uint8_t address)<br />
+Считывает текущее значение температуры с датчика по заданному адресу<br />
+Аргументы<br />
+address — Адрес датчика на шине<br />
+Возвращает<br />
+Текущая температура в градусах Цельсия<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>class SensorConfig<br />
+Хранит конфигурацию одного температурного датчика<br />
+Поля<br />
+address — Адрес датчика в сети (например, One-Wire)<br />
+delta — Корректировка показаний датчика, °C<br />
+setpoint — Уставка срабатывания, °C<br />
+delay — Задержка срабатывания, сек</p>
+<hr />
+<p>class PumpCalibration<br />
+Определяет калибровочные параметры дозирующего насоса<br />
+Поля<br />
+stepsPerMl — Количество шагов двигателя, соответствующее одному миллилитру<br />
+stepsPerMlI2C — Количество шагов I2C-насоса на миллилитр (если используется)</p>
+<hr />
+<p>class PIDSettings<br />
+Хранит параметры PID-регулятора и выходной мощности<br />
+Поля<br />
+Kp — Пропорциональный коэффициент<br />
+Ki — Интегральный коэффициент<br />
+Kd — Дифференциальный коэффициент<br />
+stbVoltage — Напряжение в режиме поддержания температуры<br />
+boilVoltage — Напряжение в режиме кипения<br />
+useBoostElement — Флаг использования дополнительного ТЭНа при кипении</p>
+<hr />
+<p>Модуль отвечает за веб-интерфейс конфигурации устройства "Самовар", предоставляя пользователю формы для настройки параметров работы, подключения к внешним сервисам, управления реле и восстановления/сохранения конфигурации. Интерфейс разделён на вкладки, каждая из которых отвечает за определённую группу параметров. Данные передаются и подставляются в шаблон через теги вида <code>%KEY%</code>, обрабатываемые на стороне сервера.</p>
+<p>Ключевые структуры данных<br />
+ConfigData — Структура, содержащая все параметры конфигурации устройства, такие как токены, настройки датчиков, реле и интервалы логирования.</p>
+<p>void saveform(this)<br />
+Сохраняет текущие настройки формы в файл конфигурации на устройстве<br />
+Аргументы<br />
+this — ссылка на элемент кнопки, вызывающий функцию<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void resetwifi()<br />
+Сбрасывает настройки Wi-Fi на устройстве, возвращая к заводским по умолчанию<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void reboot()<br />
+Инициирует перезагрузку устройства "Самовар"<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void loadFile(file)<br />
+Загружает и обрабатывает файл конфигурации, выбранный пользователем<br />
+Аргументы<br />
+file — объект File, выбранный через input[type="file"]<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Может выбросить ошибку при чтении файла или при неверном формате</p>
+<hr />
+<p>void sendbutton(command)<br />
+Отправляет команду на сервер устройства через HTTP-запрос<br />
+Аргументы<br />
+command — строка с командой (например, "reboot" или "resetwifi=1")<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Может выбросить исключение при ошибке сети или недоступности сервера</p>
+<hr />
+<p>void SaveFormToFile(button)<br />
+Сохраняет данные всех полей формы в конфигурационный файл, отправляя их на сервер<br />
+Аргументы<br />
+button — ссылка на элемент кнопки, инициирующий сохранение<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Может выбросить исключение при ошибках отправки данных</p>
+<hr />
+<p>class tooltip<br />
+Обеспечивает отображение всплывающей подсказки при наведении на элемент<br />
+Поля<br />
+tooltiptext — текст подсказки, отображаемый внутри span с классом "tooltiptext"</p>
+<hr />
+<p>Модуль предоставляет веб-интерфейс для сохранения данных и навигации между страницами. Основные элементы — кнопки действий, реализованные как элементы формы и кнопки с JavaScript-обработчиками. Интерфейс предназначен для простого взаимодействия пользователя с системой через стандартные действия: сохранение, возврат на главную страницу и переход в редактор.</p>
+<p>Ключевые структуры данных<br />
+HTMLElement — Элементы управления интерфейсом, такие как кнопки формы и навигации</p>
+<p>void <input id='save' type='submit' name='save' value='Сохранить' class="button"><br />
+Отправляет форму для сохранения данных<br />
+Аргументы<br />
+id — Уникальный идентификатор элемента<br />
+name — Имя поля формы, передаваемое при отправке<br />
+value — Отображаемый текст кнопки<br />
+class — CSS-класс для стилизации<br />
+Возвращает<br />
+Данные формы, отправленные на сервер<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="index.htm"' class="button"><br />
+Переходит на главную страницу<br />
+Аргументы<br />
+id — Уникальный идентификатор элемента<br />
+name — Имя кнопки<br />
+value — Отображаемый текст кнопки<br />
+onclick — Обработчик события, выполняющий переход по URL<br />
+class — CSS-класс для стилизации<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void <input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"' class="button"><br />
+Переходит в редактор конфигурации<br />
+Аргументы<br />
+id — Уникальный идентификатор элемента<br />
+name — Имя кнопки<br />
+value — Отображаемый текст кнопки<br />
+onclick — Обработчик события, выполняющий переход на страницу редактирования<br />
+class — CSS-класс для стилизации<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js"></script>
+        <script src="../../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

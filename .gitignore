@@ -29,3 +29,4 @@ data/style.css.zip
 SamovarMobile/app/local.properties
 __pycache__/test_blynk_api.cpython-314.pyc
 AGENTS.md
+/.ai_docs_cache

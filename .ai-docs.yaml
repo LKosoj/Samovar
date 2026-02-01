@@ -1,0 +1,72 @@
+code_extensions:
+  .py: Python
+  .pyi: Python (типизация)
+  .pyx: Cython
+  .js: JavaScript
+  .jsx: JavaScript (JSX)
+  .ts: TypeScript
+  .tsx: TypeScript (TSX)
+  .go: Go
+  .java: Java
+  .c: C
+  .cc: C++
+  .cpp: C++
+  .h: C/C++ Header
+  .hpp: C++ Header
+  .rs: Rust
+  .rb: Ruby
+  .php: PHP
+  .cs: C#
+  .kt: Kotlin
+  .kts: Kotlin (Script)
+  .swift: Swift
+  .m: Objective-C
+  .mm: Objective-C++
+  .vb: Visual Basic
+  .bas: BASIC
+  .sql: SQL
+  .pas: Pascal
+  .dpr: Delphi/Pascal
+  .pp: Pascal
+  .r: R
+  .pl: Perl
+  .pm: Perl Module
+  .f: Fortran
+  .for: Fortran
+  .f90: Fortran
+  .f95: Fortran
+  .f03: Fortran
+  .f08: Fortran
+  .sb3: Scratch
+  .adb: Ada
+  .ads: Ada (Spec)
+  .asm: Assembly
+  .s: Assembly
+  .ino: Arduino
+  .htm: HTML
+  .html: HTML
+  .css: CSS
+doc_extensions:
+  .md: Markdown
+  .rst: reStructuredText
+  .adoc: AsciiDoc
+  .txt: Text
+config_extensions:
+  .yml: YAML
+  .yaml: YAML
+  .json: JSON
+  .toml: TOML
+  .ini: INI
+  .cfg: Config
+  .conf: Config
+  .env: Environment
+  .properties: Properties
+exclude:
+  - "3D/**"
+  - "doc/**"
+  - "Fritzing scheme/**"
+  - "libraries/**"
+  - "Lua_UART/**"
+  - "pro_mini_ntc/**"
+  - "Stab-avr/**"
+  - "tools/**"

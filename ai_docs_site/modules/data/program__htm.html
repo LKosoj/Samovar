@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>program__htm - Samovar</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../../css/brands.min.css" rel="stylesheet">
+        <link href="../../css/solid.min.css" rel="stylesheet">
+        <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../../index.html">Samovar</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">data</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="beer__htm.html" class="dropdown-item">beer__htm</a>
+</li>
+            
+<li>
+    <a href="bk__htm.html" class="dropdown-item">bk__htm</a>
+</li>
+            
+<li>
+    <a href="brewxml__htm.html" class="dropdown-item">brewxml__htm</a>
+</li>
+            
+<li>
+    <a href="calibrate__htm.html" class="dropdown-item">calibrate__htm</a>
+</li>
+            
+<li>
+    <a href="chart__htm.html" class="dropdown-item">chart__htm</a>
+</li>
+            
+<li>
+    <a href="distiller__htm.html" class="dropdown-item">distiller__htm</a>
+</li>
+            
+<li>
+    <a href="edit__htm.html" class="dropdown-item">edit__htm</a>
+</li>
+            
+<li>
+    <a href="index__htm.html" class="dropdown-item">index__htm</a>
+</li>
+            
+<li>
+    <a href="nbk__htm.html" class="dropdown-item">nbk__htm</a>
+</li>
+            
+<li>
+    <a href="program__htm.html" class="dropdown-item active" aria-current="page">program__htm</a>
+</li>
+            
+<li>
+    <a href="setup__htm.html" class="dropdown-item">setup__htm</a>
+</li>
+            
+<li>
+    <a href="style__css.html" class="dropdown-item">style__css</a>
+</li>
+            
+<li>
+    <a href="wifi__htm.html" class="dropdown-item">wifi__htm</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="../beer__h.html" class="dropdown-item">beer__h</a>
+</li>
+                                    
+<li>
+    <a href="../BK__h.html" class="dropdown-item">BK__h</a>
+</li>
+                                    
+<li>
+    <a href="../Blynk__ino.html" class="dropdown-item">Blynk__ino</a>
+</li>
+                                    
+<li>
+    <a href="../column_math__h.html" class="dropdown-item">column_math__h</a>
+</li>
+                                    
+<li>
+    <a href="../crash_handler__h.html" class="dropdown-item">crash_handler__h</a>
+</li>
+                                    
+<li>
+    <a href="../crash_handler__ino.html" class="dropdown-item">crash_handler__ino</a>
+</li>
+                                    
+<li>
+    <a href="../distiller__h.html" class="dropdown-item">distiller__h</a>
+</li>
+                                    
+<li>
+    <a href="../font__h.html" class="dropdown-item">font__h</a>
+</li>
+                                    
+<li>
+    <a href="../FS__ino.html" class="dropdown-item">FS__ino</a>
+</li>
+                                    
+<li>
+    <a href="../I2CStepper__h.html" class="dropdown-item">I2CStepper__h</a>
+</li>
+                                    
+<li>
+    <a href="../impurity_detector__h.html" class="dropdown-item">impurity_detector__h</a>
+</li>
+                                    
+<li>
+    <a href="../logic__h.html" class="dropdown-item">logic__h</a>
+</li>
+                                    
+<li>
+    <a href="../lua__h.html" class="dropdown-item">lua__h</a>
+</li>
+                                    
+<li>
+    <a href="../Menu__ino.html" class="dropdown-item">Menu__ino</a>
+</li>
+                                    
+<li>
+    <a href="../mod_rmv__ino.html" class="dropdown-item">mod_rmv__ino</a>
+</li>
+                                    
+<li>
+    <a href="../mod_rmvk__h.html" class="dropdown-item">mod_rmvk__h</a>
+</li>
+                                    
+<li>
+    <a href="../nbk__h.html" class="dropdown-item">nbk__h</a>
+</li>
+                                    
+<li>
+    <a href="../NVS_Manager__ino.html" class="dropdown-item">NVS_Manager__ino</a>
+</li>
+                                    
+<li>
+    <a href="../partition_manager__py.html" class="dropdown-item">partition_manager__py</a>
+</li>
+                                    
+<li>
+    <a href="../pumppwm__h.html" class="dropdown-item">pumppwm__h</a>
+</li>
+                                    
+<li>
+    <a href="../quality__h.html" class="dropdown-item">quality__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar__h.html" class="dropdown-item">Samovar__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar__ino.html" class="dropdown-item">Samovar__ino</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar_ini__h.html" class="dropdown-item">Samovar_ini__h</a>
+</li>
+                                    
+<li>
+    <a href="../Samovar_pin__h.html" class="dropdown-item">Samovar_pin__h</a>
+</li>
+                                    
+<li>
+    <a href="../SamovarMqtt__h.html" class="dropdown-item">SamovarMqtt__h</a>
+</li>
+                                    
+<li>
+    <a href="../sensorinit__h.html" class="dropdown-item">sensorinit__h</a>
+</li>
+                                    
+<li>
+    <a href="../SPIFFSEditor__h.html" class="dropdown-item">SPIFFSEditor__h</a>
+</li>
+                                    
+<li>
+    <a href="../WebServer__ino.html" class="dropdown-item">WebServer__ino</a>
+</li>
+                                    
+<li>
+    <a href="../wifi_htm_gz__h.html" class="dropdown-item">wifi_htm_gz__h</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="nbk__htm.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="setup__htm.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#dataprogram" class="nav-link">data/program</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="dataprogram">data/program</h1>
+<p>Модуль отвечает за управление параметрами программы перегонки, включая расчёт объёмов фракций, времени процесса, валидацию данных и обработку пользовательского ввода. Предоставляет функции для обновления параметров колонны, сохранения и загрузки программ, переключения вкладок интерфейса, а также форматирования и проверки данных программы. Все операции синхронизированы с DOM и реагируют на изменения ввода, обеспечивая корректность расчётов при смене типа сырья или параметров режима.</p>
+<p>Ключевые структуры данных<br />
+glcalcnum — флаг, указывающий, требуется ли пересчёт программы при изменении параметров<br />
+programerr — флаг ошибки в программе, устанавливается при неверных суммарных объёмах фракций<br />
+pwr_unit — единица измерения мощности (например, 'P' для относительных единиц)</p>
+<hr />
+<p>updateColumnParams()<br />
+обновляет параметры колонны при смене типа сырья<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>fetch(fn).then(response =&gt; response.text()).then((data) =&gt; { document.getElementById('WProgram1').value = data; glcalcnum = false; calc_program(); })<br />
+загружает текст программы из внешнего источника и инициирует её пересчёт<br />
+Аргументы<br />
+fn — URL или путь к файлу с программой<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>SaveProgramToFile()<br />
+сохраняет текущую программу в локальный файл с именем programbackup.txt<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>openTab(evt, tabName)<br />
+активирует указанную вкладку интерфейса и скрывает остальные<br />
+Аргументы<br />
+evt — событие клика по вкладке<br />
+tabName — имя вкладки (идентификатор элемента)<br />
+Возвращает<br />
+0<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>check_program(str)<br />
+проверяет корректность формата программы по разделителям и структуре строк<br />
+Аргументы<br />
+str — строка с текстом программы, разделённой переносами и точкой с запятой<br />
+Возвращает<br />
+true, если структура программы корректна; иначе false<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>get_time(tm)<br />
+преобразует время в десятичных часах в строку формата "ЧЧ:ММ"<br />
+Аргументы<br />
+tm — время в часах (число с плавающей точкой)<br />
+Возвращает<br />
+строку в формате "ЧЧ:ММ"<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>set_num()<br />
+выполняет расчёт объёмов, времени и формирование строк программы на основе текущих данных в таблице<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+значение флага programerr (true при ошибках, иначе false)<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>prep_calc()<br />
+выполняет предварительный расчёт объёмов и коэффициентов для фракций на основе входных параметров<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>calc_program()<br />
+инициирует полный пересчёт программы с учётом текущих параметров и единиц измерения<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>init_program()<br />
+Инициализирует интерфейс редактирования программы: очищает текущие строки, создаёт заголовок и заполняет содержимое на основе текстового поля.<br />
+Аргументы<br />
+Нет аргументов<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>set_program()<br />
+Выполняет валидацию программы, отправляет её на сервер и обрабатывает ответ.<br />
+Аргументы<br />
+Нет аргументов<br />
+Возвращает<br />
+0 — в случае успешной отправки или ошибки; при успешной отправке может отобразить текущую программу из ответа сервера.<br />
+Исключения<br />
+Вызывает alert при ошибках валидации или HTTP-ошибках.</p>
+<hr />
+<p>sendbutton(command)<br />
+Отправляет GET-запрос на сервер с указанным командным параметром.<br />
+Аргументы<br />
+command — строка с параметрами команды, добавляемая к URL.<br />
+Возвращает<br />
+0 — после завершения выполнения (включая задержку).<br />
+Исключения<br />
+Вызывает alert при HTTP-ошибках.</p>
+<hr />
+<p>removeLine(ln)<br />
+Удаляет строку программы по её идентификатору, если количество строк больше минимального.<br />
+Аргументы<br />
+ln — строковый идентификатор удаляемой строки (например, "prgln2").<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>addLine(obj, s)<br />
+Добавляет новую строку программы в интерфейс на основе переданных данных или копирует значения из существующей строки.<br />
+Аргументы<br />
+obj — идентификатор родительского элемента, после которого нужно вставить строку; если false, добавляется в конец.<br />
+s — строка данных программы в формате "ёмкость;скорость;процент;тип;мощность", или пустая строка для создания новой.<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>set_bgcolor(obj)<br />
+Устанавливает цвет фона строки программы в зависимости от выбранного типа фракции.<br />
+Аргументы<br />
+obj — индекс строки программы (число), по которому определяется элемент и его тип.<br />
+Возвращает<br />
+void<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>displayColumnParams()<br />
+Пересчитывает и отображает параметры производительности колонны (захлёб, рабочая мощность, скорость отбора).<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>getProgramFromFile(selectElement)<br />
+Загружает параметры программы перегонки из файла в зависимости от выбранного типа сырья.<br />
+Аргументы<br />
+selectElement — HTML-элемент <select>, содержащий выбранный тип сырья<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>updateHeadsTailsPercent()<br />
+Устанавливает начальные значения процентов голов и хвостов в зависимости от выбранного типа сырья.<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>applyRecommendedSpeeds()<br />
+Применяет рекомендованные скорости отбора (головы, тело, хвосты) в интерфейсе на основе расчётов.<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>highlight(obj)<br />
+Подсвечивает элемент и его дочерние узлы цветом, соответствующим типу продукта (головы, тело, промежуточный, хвосты и т.д.).<br />
+Аргументы<br />
+obj — идентификатор элемента, определяющего тип продукта (например, "H" для голов)<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>window.onload = function()<br />
+Инициализирует интерфейс при загрузке страницы: обновляет параметры колонны, загружает программу и устанавливает обработчики событий.<br />
+Аргументы<br />
+нет<br />
+Возвращает<br />
+нет<br />
+Исключения<br />
+нет</p>
+<hr />
+<p>class tooltip<br />
+Отображает всплывающую подсказку с информацией о параметрах отбора<br />
+Поля<br />
+tooltiptext — текст подсказки с детальными параметрами для разных типов сырья<br />
+Методы<br />
+нет</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js"></script>
+        <script src="../../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

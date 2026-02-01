@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Samovar_ini__h - Samovar</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">Samovar</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">data</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="data/beer__htm.html" class="dropdown-item">beer__htm</a>
+</li>
+            
+<li>
+    <a href="data/bk__htm.html" class="dropdown-item">bk__htm</a>
+</li>
+            
+<li>
+    <a href="data/brewxml__htm.html" class="dropdown-item">brewxml__htm</a>
+</li>
+            
+<li>
+    <a href="data/calibrate__htm.html" class="dropdown-item">calibrate__htm</a>
+</li>
+            
+<li>
+    <a href="data/chart__htm.html" class="dropdown-item">chart__htm</a>
+</li>
+            
+<li>
+    <a href="data/distiller__htm.html" class="dropdown-item">distiller__htm</a>
+</li>
+            
+<li>
+    <a href="data/edit__htm.html" class="dropdown-item">edit__htm</a>
+</li>
+            
+<li>
+    <a href="data/index__htm.html" class="dropdown-item">index__htm</a>
+</li>
+            
+<li>
+    <a href="data/nbk__htm.html" class="dropdown-item">nbk__htm</a>
+</li>
+            
+<li>
+    <a href="data/program__htm.html" class="dropdown-item">program__htm</a>
+</li>
+            
+<li>
+    <a href="data/setup__htm.html" class="dropdown-item">setup__htm</a>
+</li>
+            
+<li>
+    <a href="data/style__css.html" class="dropdown-item">style__css</a>
+</li>
+            
+<li>
+    <a href="data/wifi__htm.html" class="dropdown-item">wifi__htm</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="beer__h.html" class="dropdown-item">beer__h</a>
+</li>
+                                    
+<li>
+    <a href="BK__h.html" class="dropdown-item">BK__h</a>
+</li>
+                                    
+<li>
+    <a href="Blynk__ino.html" class="dropdown-item">Blynk__ino</a>
+</li>
+                                    
+<li>
+    <a href="column_math__h.html" class="dropdown-item">column_math__h</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler__h.html" class="dropdown-item">crash_handler__h</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler__ino.html" class="dropdown-item">crash_handler__ino</a>
+</li>
+                                    
+<li>
+    <a href="distiller__h.html" class="dropdown-item">distiller__h</a>
+</li>
+                                    
+<li>
+    <a href="font__h.html" class="dropdown-item">font__h</a>
+</li>
+                                    
+<li>
+    <a href="FS__ino.html" class="dropdown-item">FS__ino</a>
+</li>
+                                    
+<li>
+    <a href="I2CStepper__h.html" class="dropdown-item">I2CStepper__h</a>
+</li>
+                                    
+<li>
+    <a href="impurity_detector__h.html" class="dropdown-item">impurity_detector__h</a>
+</li>
+                                    
+<li>
+    <a href="logic__h.html" class="dropdown-item">logic__h</a>
+</li>
+                                    
+<li>
+    <a href="lua__h.html" class="dropdown-item">lua__h</a>
+</li>
+                                    
+<li>
+    <a href="Menu__ino.html" class="dropdown-item">Menu__ino</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmv__ino.html" class="dropdown-item">mod_rmv__ino</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmvk__h.html" class="dropdown-item">mod_rmvk__h</a>
+</li>
+                                    
+<li>
+    <a href="nbk__h.html" class="dropdown-item">nbk__h</a>
+</li>
+                                    
+<li>
+    <a href="NVS_Manager__ino.html" class="dropdown-item">NVS_Manager__ino</a>
+</li>
+                                    
+<li>
+    <a href="partition_manager__py.html" class="dropdown-item">partition_manager__py</a>
+</li>
+                                    
+<li>
+    <a href="pumppwm__h.html" class="dropdown-item">pumppwm__h</a>
+</li>
+                                    
+<li>
+    <a href="quality__h.html" class="dropdown-item">quality__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar__h.html" class="dropdown-item">Samovar__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar__ino.html" class="dropdown-item">Samovar__ino</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_ini__h.html" class="dropdown-item active" aria-current="page">Samovar_ini__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_pin__h.html" class="dropdown-item">Samovar_pin__h</a>
+</li>
+                                    
+<li>
+    <a href="SamovarMqtt__h.html" class="dropdown-item">SamovarMqtt__h</a>
+</li>
+                                    
+<li>
+    <a href="sensorinit__h.html" class="dropdown-item">sensorinit__h</a>
+</li>
+                                    
+<li>
+    <a href="SPIFFSEditor__h.html" class="dropdown-item">SPIFFSEditor__h</a>
+</li>
+                                    
+<li>
+    <a href="WebServer__ino.html" class="dropdown-item">WebServer__ino</a>
+</li>
+                                    
+<li>
+    <a href="wifi_htm_gz__h.html" class="dropdown-item">wifi_htm_gz__h</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="Samovar__ino.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="Samovar_pin__h.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#samovar_ini" class="nav-link">Samovar_ini</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-samovar_host-samovar" class="nav-link">define SAMOVAR_HOST "samovar"</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-alarm_water_temp-70" class="nav-link">define ALARM_WATER_TEMP 70</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-max_water_temp-75" class="nav-link">define MAX_WATER_TEMP 75</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-max_steam_temp-988" class="nav-link">define MAX_STEAM_TEMP 98.8</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-max_acp_temp-75" class="nav-link">define MAX_ACP_TEMP 75</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-change_power_mode_steam_temp-39" class="nav-link">define CHANGE_POWER_MODE_STEAM_TEMP 39</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-open_valve_tank_temp-77" class="nav-link">define OPEN_VALVE_TANK_TEMP 77</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-delta_t_close_valve-20" class="nav-link">define DELTA_T_CLOSE_VALVE 20</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-pwm_low_value-10" class="nav-link">define PWM_LOW_VALUE 10</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-pwm_start_value-40" class="nav-link">define PWM_START_VALUE 40</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-heat_delta-1" class="nav-link">define HEAT_DELTA 1</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-acceleration_heater_delta-4" class="nav-link">define ACCELERATION_HEATER_DELTA 4</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-boiling_temp-989" class="nav-link">define BOILING_TEMP 98.9</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-samovar_use_blynk" class="nav-link">define SAMOVAR_USE_BLYNK</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-blynk_samovar_tool-samovar-toolru" class="nav-link">define BLYNK_SAMOVAR_TOOL "samovar-tool.ru"</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-samovar_use_power" class="nav-link">define SAMOVAR_USE_POWER</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-kvic_use_9600" class="nav-link">define KVIC_USE_9600</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-samovar_use_rmvk" class="nav-link">define SAMOVAR_USE_RMVK</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-samovar_use_sem_avr" class="nav-link">define SAMOVAR_USE_SEM_AVR</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-nbk_mult_pause_overflow-2" class="nav-link">define NBK_MULT_PAUSE_OVERFLOW 2</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-nbk_pump_limit-30" class="nav-link">define NBK_PUMP_LIMIT 30</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-nbk_default_program-h10ns102000no00nw00n" class="nav-link">define NBK_DEFAULT_PROGRAM "H;1;0\nS;10;2000\nO;0;0\nW;0;0\n"</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-samovar_use_power_start_time-2000" class="nav-link">define SAMOVAR_USE_POWER_START_TIME 2000</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_watersensor" class="nav-link">define USE_WATERSENSOR</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-wf_calibration-98" class="nav-link">define WF_CALIBRATION 98</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_head_level_sensor" class="nav-link">define USE_HEAD_LEVEL_SENSOR</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-ignore_head_level_sensor_setting" class="nav-link">define IGNORE_HEAD_LEVEL_SENSOR_SETTING</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-whls_high_pull" class="nav-link">define WHLS_HIGH_PULL</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_water_pump" class="nav-link">define USE_WATER_PUMP</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_water_valve-low" class="nav-link">define USE_WATER_VALVE LOW</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_alarm_btn" class="nav-link">define USE_ALARM_BTN</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_body_temp_autoset" class="nav-link">define USE_BODY_TEMP_AUTOSET</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_bme680" class="nav-link">define USE_BME680</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_btn" class="nav-link">define USE_BTN</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_update_ota" class="nav-link">define USE_UPDATE_OTA</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_telegram" class="nav-link">define USE_TELEGRAM</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-not_use_interface_update" class="nav-link">define NOT_USE_INTERFACE_UPDATE</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-kvic_debug" class="nav-link">define KVIC_DEBUG</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_pressure_xgz-32" class="nav-link">define USE_PRESSURE_XGZ 32</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_pressure_1wire" class="nav-link">define USE_PRESSURE_1WIRE</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_pressure_mpx" class="nav-link">define USE_PRESSURE_MPX</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-use_stepper_acceleration" class="nav-link">define USE_STEPPER_ACCELERATION</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-stepper_reverse" class="nav-link">define STEPPER_REVERSE</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-i2cstepperstepml-16000" class="nav-link">define I2CStepperStepMl 16000</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-column_wetting" class="nav-link">define COLUMN_WETTING</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            
+            <li class="nav-item" data-bs-level="1"><a href="#define-wetting_power-220" class="nav-link">define WETTING_POWER 220</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="samovar_ini">Samovar_ini</h1>
+<p>/*<em>
+ * @file samovar_i.h
+ * @brief Конфигурационный заголовочный файл для системы управления дистилляционной установкой "Самовар".
+ *
+ * Модуль содержит определения констант, параметров и настроек, используемых в системе управления
+ * дистилляцией и ректификацией. Включает пороги температур, настройки автоматики, параметры ШИМ,
+ * конфигурации подключаемых устройств (регуляторы мощности, датчики, насосы) и флаги активации подсистем.
+ * Предназначен для централизованной настройки поведения устройства под различные аппаратные конфигурации.
+ *
+ * Ключевые структуры данных
+ * servoDelta — массив коррекции угла поворота сервопривода для 11 позиций, компенсирующий механические погрешности
+ * Config — Глобальная структура хранения настроек устройства, инициализируемая на основе макросов
+ * SensorData — Структура для хранения текущих показаний датчиков температуры, давления, уровня и влажности
+ </em>/</p>
+<hr />
+<h1 id="define-samovar_host-samovar">define SAMOVAR_HOST "samovar"</h1>
+<p>// Имя хоста устройства в сети. Используется для идентификации в Wi-Fi и сетевых сервисах.</p>
+<hr />
+<h1 id="define-alarm_water_temp-70">define ALARM_WATER_TEMP 70</h1>
+<p>// Температура воды, при достижении которой формируется предупреждение оператору.</p>
+<hr />
+<h1 id="define-max_water_temp-75">define MAX_WATER_TEMP 75</h1>
+<p>// Максимальная температура воды, при превышении которой отключается питание нагрева.</p>
+<hr />
+<h1 id="define-max_steam_temp-988">define MAX_STEAM_TEMP 98.8</h1>
+<p>// Максимальная температура пара, при превышении которой отключается питание нагрева.</p>
+<hr />
+<h1 id="define-max_acp_temp-75">define MAX_ACP_TEMP 75</h1>
+<p>// Максимальная температура в термостойкой части аппарата (ТСА), при превышении которой отключается питание.</p>
+<hr />
+<h1 id="define-change_power_mode_steam_temp-39">define CHANGE_POWER_MODE_STEAM_TEMP 39</h1>
+<p>// Температура пара, при достижении которой колонна переходит из режима разгона в рабочий режим.</p>
+<hr />
+<h1 id="define-open_valve_tank_temp-77">define OPEN_VALVE_TANK_TEMP 77</h1>
+<p>// Температура в кубе, при достижении которой открывается клапан и включается насос подачи воды.</p>
+<hr />
+<h1 id="define-delta_t_close_valve-20">define DELTA_T_CLOSE_VALVE 20</h1>
+<p>// Разница между целевой и текущей температурой охлаждающей воды, при которой насос продолжает работать после завершения перегонки.</p>
+<hr />
+<h1 id="define-pwm_low_value-10">define PWM_LOW_VALUE 10</h1>
+<p>// Минимальное значение ШИМ (в процентах) для поддержания потока воды насосом.</p>
+<hr />
+<h1 id="define-pwm_start_value-40">define PWM_START_VALUE 40</h1>
+<p>// Начальное значение ШИМ (в процентах), обеспечивающее надежный запуск насоса.</p>
+<hr />
+<h1 id="define-heat_delta-1">define HEAT_DELTA 1</h1>
+<p>// Порог разницы между целевой и текущей температурой, при котором нагрев ведется на полную мощность (режим разгона для пиво/су-вид).</p>
+<hr />
+<h1 id="define-acceleration_heater_delta-4">define ACCELERATION_HEATER_DELTA 4</h1>
+<p>// Порог разницы температур, при превышении которого включается разгонный ТЭН через реле4 при использовании UART-регулятора.</p>
+<hr />
+<h1 id="define-boiling_temp-989">define BOILING_TEMP 98.9</h1>
+<p>// Температура кипения в режиме "пиво", используемая как эталон для контроля процесса.</p>
+<hr />
+<h1 id="define-samovar_use_blynk">define SAMOVAR_USE_BLYNK</h1>
+<p>// Макрос включения поддержки Blynk — платформы визуализации и удалённого управления.</p>
+<hr />
+<h1 id="define-blynk_samovar_tool-samovar-toolru">define BLYNK_SAMOVAR_TOOL "samovar-tool.ru"</h1>
+<p>// Адрес локального сервера Blynk, используемого вместо облачного сервиса.</p>
+<hr />
+<h1 id="define-samovar_use_power">define SAMOVAR_USE_POWER</h1>
+<p>// Включение поддержки регулятора напряжения (например, KVIC, РМВК, SEM_AVR) для управления мощностью нагрева.</p>
+<hr />
+<h1 id="define-kvic_use_9600">define KVIC_USE_9600</h1>
+<p>// Использование скорости UART 9600 для регулятора KVIC (новые версии); иначе — 38400.</p>
+<hr />
+<h1 id="define-samovar_use_rmvk">define SAMOVAR_USE_RMVK</h1>
+<p>// Активация поддержки регулятора РМВК с управлением по UART.</p>
+<hr />
+<h1 id="define-samovar_use_sem_avr">define SAMOVAR_USE_SEM_AVR</h1>
+<p>// Активация поддержки регулятора мощности SEM_AVR с управлением по UART.</p>
+<hr />
+<h1 id="define-nbk_mult_pause_overflow-2">define NBK_MULT_PAUSE_OVERFLOW 2</h1>
+<p>// Множитель инерции, определяющий длительность паузы после захлёба в системе НБК.</p>
+<hr />
+<h1 id="define-nbk_pump_limit-30">define NBK_PUMP_LIMIT 30</h1>
+<p>// Максимальная производительность насоса браги (в л/ч) для оптимизации работы НБК.</p>
+<hr />
+<h1 id="define-nbk_default_program-h10ns102000no00nw00n">define NBK_DEFAULT_PROGRAM "H;1;0\nS;10;2000\nO;0;0\nW;0;0\n"</h1>
+<p>// Программа по умолчанию для НБК. Значения зависят от типа регулятора (вольты или ватты).</p>
+<hr />
+<h1 id="define-samovar_use_power_start_time-2000">define SAMOVAR_USE_POWER_START_TIME 2000</h1>
+<p>// Задержка (в мс) перед отправкой команды разгона регулятору, чтобы обеспечить его полную инициализацию.</p>
+<hr />
+<h1 id="define-use_watersensor">define USE_WATERSENSOR</h1>
+<p>// Включение контроля потока охлаждающей воды. При отсутствии потока в течение заданного времени нагрев отключается.</p>
+<hr />
+<h1 id="define-wf_calibration-98">define WF_CALIBRATION 98</h1>
+<p>// Коэффициент калибровки датчика потока: F = 98 * Q (л/мин). Используется для перевода импульсов в расход.</p>
+<hr />
+<h1 id="define-use_head_level_sensor">define USE_HEAD_LEVEL_SENSOR</h1>
+<p>// Включение датчика уровня флегмы в головке колонны (типа P-N-P) для контроля захлёбывания.</p>
+<hr />
+<h1 id="define-ignore_head_level_sensor_setting">define IGNORE_HEAD_LEVEL_SENSOR_SETTING</h1>
+<p>// Отключает проверку датчика уровня флегмы при старте системы.</p>
+<hr />
+<h1 id="define-whls_high_pull">define WHLS_HIGH_PULL</h1>
+<p>// Включает подтягивающий резистор для датчика уровня флегмы.</p>
+<hr />
+<h1 id="define-use_water_pump">define USE_WATER_PUMP</h1>
+<p>// Активирует управление насосом охлаждения через ШИМ.</p>
+<hr />
+<h1 id="define-use_water_valve-low">define USE_WATER_VALVE LOW</h1>
+<p>// Определяет логический уровень для открытия электромагнитного клапана подачи воды.</p>
+<hr />
+<h1 id="define-use_alarm_btn">define USE_ALARM_BTN</h1>
+<p>// Включает обработку сигнала с аварийной кнопки.</p>
+<hr />
+<h1 id="define-use_body_temp_autoset">define USE_BODY_TEMP_AUTOSET</h1>
+<p>// Активирует автоматическую подстройку температуры тела при отборе фракций.</p>
+<hr />
+<h1 id="define-use_bme680">define USE_BME680</h1>
+<p>// Подключает датчик BME680 для измерения давления, температуры и влажности.</p>
+<hr />
+<h1 id="define-use_btn">define USE_BTN</h1>
+<p>// Включает поддержку кнопки управления на передней панели.</p>
+<hr />
+<h1 id="define-use_update_ota">define USE_UPDATE_OTA</h1>
+<p>// Активирует возможность обновления прошивки по Wi-Fi (OTA).</p>
+<hr />
+<h1 id="define-use_telegram">define USE_TELEGRAM</h1>
+<p>// Включает отправку уведомлений через Telegram-бота.</p>
+<hr />
+<h1 id="define-not_use_interface_update">define NOT_USE_INTERFACE_UPDATE</h1>
+<p>// Отключает обновление интерфейса в режиме реального времени (для экономии ресурсов).</p>
+<hr />
+<h1 id="define-kvic_debug">define KVIC_DEBUG</h1>
+<p>// Включает режим отладки для регулятора KVIC (вывод UART-логов).</p>
+<hr />
+<h1 id="define-use_pressure_xgz-32">define USE_PRESSURE_XGZ 32</h1>
+<p>// Активирует датчик давления XGZP6897D с адресом 0x32 по I2C.</p>
+<hr />
+<h1 0x22_="0x22," 0x55="0x55" id="define-use_pressure_1wire">define USE_PRESSURE_1WIRE</h1>
+<p>// Указывает ROM-адрес 1-Wire датчика давления.</p>
+<hr />
+<h1 id="define-use_pressure_mpx">define USE_PRESSURE_MPX</h1>
+<p>// Подключает аналоговый датчик давления MPX5010D.</p>
+<hr />
+<h1 id="define-use_stepper_acceleration">define USE_STEPPER_ACCELERATION</h1>
+<p>// Включает плавное ускорение и торможение шагового двигателя.</p>
+<hr />
+<h1 id="define-stepper_reverse">define STEPPER_REVERSE</h1>
+<p>// Инвертирует направление вращения шагового двигателя.</p>
+<hr />
+<h1 id="define-i2cstepperstepml-16000">define I2CStepperStepMl 16000</h1>
+<p>// Количество шагов I2C-степпера на миллилитр дистиллята.</p>
+<hr />
+<h1 id="define-column_wetting">define COLUMN_WETTING</h1>
+<p>// Активирует режим предварительного смачивания насадки колонны.</p>
+<hr />
+<h1 id="define-wetting_power-220">define WETTING_POWER 220</h1>
+<p>// Мощность нагрева (в ваттах) при смачивании насадки.</p>
+<hr />
+<p>void reduceVoltageOnSensorTrigger()
+// Снижает выходное напряжение на 3 вольта при срабатывании датчика уровня флегмы
+Аргументы
+Отсутствуют
+Возвращает
+void
+Исключения
+Отсутствуют</p>
+<hr />
+<p>class PressureSensor
+// Абстракция датчика давления с поддержкой нескольких типов (BME680, XGZP6897D, 1-Wire, MPX5010D)
+Поля
+sensorType — Тип подключенного датчика давления, определяемый через макрос
+address — Адрес датчика на шине (для I2C или 1-Wire)
+Методы
+readPressure() — Возвращает текущее значение давления в кПа
+init() — Инициализирует датчик в соответствии с выбранным типом</p>
+<hr />
+<p>class WaterPumpController
+// Управляет работой водяного насоса через ШИМ-сигнал и клапаном при необходимости
+Поля
+pwmPin — Пин управления ШИМ насоса
+valvePin — Пин управления электромагнитным клапаном (если используется)
+dutyCycle — Уровень ШИМ (0–255), регулирующий напор
+Методы
+startPump(uint8_t power) — Запускает насос с заданной мощностью
+stopPump() — Останавливает насос
+openValve() — Открывает клапан подачи воды
+closeValve() — Закрывает клапан</p>
+<hr />
+<p>class AlarmButton
+// Обрабатывает сигнал с аварийной кнопки или датчиков протечки
+Поля
+pin — Номер пина, к которому подключена кнопка/датчик
+isActive — Флаг активного состояния (LOW или HIGH)
+Методы
+check() — Проверяет состояние кнопки и при срабатывании останавливает систему
+trigger() — Принудительно активирует аварийное отключение</p>
+<hr />
+<p>class TemperatureController
+// Реализует автоматическую коррекцию температуры тела при отборе фракций
+Поля
+currentTemp — Текущая температура в кубе
+targetTemp — Целевая температура для текущего этапа
+autoSetEnabled — Флаг включения автоматической подстройки
+Методы
+adjustBodyTemp() — Корректирует мощность нагрева на основе анализа температурного графика
+setTarget(float temp) — Устанавливает целевую температуру</p>
+<hr />
+<p>class OTAUpdater
+// Обеспечивает возможность обновления прошивки по Wi-Fi
+Методы
+init(const char<em> ssid, const char</em> password) — Инициализирует OTA-сервер
+handle() — Обрабатывает входящие соединения для обновления
+Возвращает
+true при успешном обновлении, иначе false</p>
+<hr />
+<p>class TelegramNotifier
+// Отправляет уведомления пользователю через Telegram-бота
+Поля
+botToken — Токен Telegram-бота
+chatId — Идентификатор получателя
+Методы
+sendMessage(String message) — Отправляет текстовое сообщение в Telegram
+notifyAlert(String alert) — Отправляет аварийное уведомление</p>
+<hr />
+<p>class StepperMotor
+// Управляет шаговым двигателем с поддержкой ускорения и реверса
+Поля
+stepsPerMl — Количество шагов на миллилитр дистиллята
+reverseDirection — Флаг реверса направления вращения
+accelerationEnabled — Включено ли плавное ускорение
+Методы
+moveToVolume(float ml) — Перемещает двигатель к указанному объему
+enableAcceleration() — Включает плавный старт и торможение
+reverse() — Изменяет направление вращения</p>
+<hr />
+<p>class ColumnWetting
+// Обеспечивает смачивание насадки колонны перед началом ректификации
+Поля
+wettingPower — Мощность нагрева при смачивании (по умолчанию 220)
+targetLevel — Целевой уровень флегмы для завершения смачивания
+Методы
+startWetting() — Запускает процесс смачивания насадки
+isComplete() — Возвращает true, если колонна достаточно увлажнена</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

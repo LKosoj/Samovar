@@ -1,138 +1,120 @@
 # Запуск и окружение
 
-```markdown
-# Запуск и окружение
-
 ## Требования к окружению
 
-### Аппаратные требования
-- **Микроконтроллер**: ESP32 (рекомендуется WROOM или WROVER).
-- **Память**: минимум 4 МБ Flash, 520 КБ RAM.
-- **Интерфейсы**: Wi-Fi 2.4 ГГц, UART, I2C, OneWire, ШИМ.
-- **Периферия**:
-  - Датчики температуры: DS18B20 (1-Wire).
-  - Датчики давления: BMP280/BME280, MPX5010D, XGZP6897D.
-  - Исполнительные устройства: реле, шаговый двигатель, сервопривод, насос.
-  - Дисплей: I2C LCD (16x2, 20x4) или OLED.
-  - Кнопки, энкодер, зуммер.
+Для сборки и запуска прошивки "Самовар" требуется:
 
-### Программные требования
+- **Платформа**: ESP32 (поддерживаются модели: DEVKIT, LILYGO T-RELAY, ESP32S3).
 - **Среда разработки**: PlatformIO (рекомендуется) или Arduino IDE.
-- **Фреймворк**: Arduino для ESP32.
-- **Библиотеки** (указаны в `platformio.ini`):
-  - `ESPAsyncWebServer`, `AsyncTCP`
-  - `ArduinoJson`
-  - `DallasTemperature`, `OneWire`
-  - `LiquidCrystal_I2C`
-  - `GyverPID`
-  - `LittleFS`
-  - `ESPmDNS`
+- **Фреймворк**: Arduino Core для ESP32.
+- **Файловая система**: LittleFS или SPIFFS (настраивается через `USE_LittleFS`).
+- **Память**: Минимум 4 МБ Flash, из которых до 1.6 МБ выделяется под прошивку (настраивается в `partitions/samovar.csv`).
 
-## Сборка и прошивка
+## Конфигурация сборки
 
-### PlatformIO
-1. Установите [PlatformIO IDE](https://platformio.org/install).
-2. Откройте проект в VS Code.
-3. Убедитесь, что `platformio.ini` содержит:
-   ```ini
-   [env:doit-devkit-v1]
-   platform = espressif32
-   board = doit-devkit-v1
-   framework = arduino
-   ```
-4. Выполните сборку и загрузку:
-   ```bash
-   pio run -t upload
-   ```
+Основная конфигурация задаётся в `platformio.ini`:
 
-### Arduino IDE
-1. Установите ESP32 в Менеджере плат.
-2. Откройте скетч `Samovar.ino`.
-3. Выберите плату: **ESP32 Dev Module**.
-4. Загрузите прошивку.
-
-## Конфигурация платы
-
-Выбор платы осуществляется в `samovar_pin.h`:
-- `ESP32S3` — для плат с полной периферией.
-- `LILYGO T-RELAY` — для T-RELAY 4.
-- `ESP32 DEVKIT` — базовая конфигурация.
-
-Если плата не определяется автоматически, задайте вручную:
-```cpp
-#define BOARD ESP32S3
-```
-
-## Файловая система (LittleFS)
-
-1. Соберите веб-интерфейс и скрипты.
-2. Загрузите файлы в LittleFS:
-   ```bash
-   pio run -t uploadfs
-   ```
-   Или в Arduino IDE: **Инструменты → Загрузить файловую систему**.
-
-Обязательные файлы:
-- `/index.htm` — веб-интерфейс.
-- `/init.lua` — стартовый Lua-скрипт.
-- `/.exclude.files` — маски скрытых файлов.
-
-## Настройка Wi-Fi
-
-При первом запуске устройство создаёт точку доступа `Samovar-XXXX` (пароль `12345678`). Подключитесь и откройте `http://192.168.4.1`.
-
-Настройте:
-- Сеть Wi-Fi (SSID/пароль).
-- Имя устройства (`SAMOVAR_HOST`).
-- Часовой пояс (`TimeZone`).
-
-## Запуск системы
-
-1. Подайте питание.
-2. Устройство:
-   - Инициализирует датчики.
-   - Подключится к Wi-Fi.
-   - Запустит веб-сервер (порт 80).
-   - Загрузит `init.lua` (если `USE_LUA`).
-3. Доступ к интерфейсу: `http://samovar.local` или по IP.
-
-## Отладка
-
-### Последовательный порт
-- Скорость: 115200 бод.
-- Используйте монитор порта для просмотра логов.
-
-### Условная компиляция
-Для включения отладки добавьте в `platformio.ini`:
 ```ini
-build_flags = -D__SAMOVAR_DEBUG
+[env:Samovar]
+platform = espressif32
+board = doit-devkit-v1
+framework = arduino
+build_type = release
+build_flags = -Os -ffunction-sections -fdata-sections -Wl,--gc-sections
+board_build.f_cpu = 240000000L
+board_build.f_flash = 80000000L
+board_build.flash_mode = dio
+monitor_speed = 115200
+lib_ignore = *
+lib_deps = ...
 ```
 
-### GDB-отладка
-1. Подключите JTAG (например, ESP-Prog).
-2. Запустите OpenOCD:
-   ```bash
-   openocd -f board/esp32-wrover-kit-3.3v.cfg
-   ```
-3. Подключитесь через GDB:
-   ```bash
-   xtensa-esp32-elf-gdb .pio/build/doit-devkit-v1/firmware.elf
-   ```
+Ключевые параметры:
+- `build_type = release` — сборка с оптимизацией размера.
+- `board_build.f_cpu = 240000000L` — частота CPU 240 МГц.
+- `monitor_speed = 115200` — скорость отладочного порта.
+- `lib_ignore = *` — игнорирование стандартных библиотек, подключение только указанных.
 
-## Обновление прошивки (OTA)
+## Аппаратная конфигурация
 
-1. В веб-интерфейсе перейдите в **Настройки → Обновление**.
-2. Загрузите `.bin`-файл прошивки.
-3. Или используйте `platformio.ini`:
-   ```ini
-   upload_protocol = espota
-   upload_port = 192.168.1.100
-   ```
+Распиновка задаётся в `samovar_pin.h`. Автоматически определяется тип платы по макросам Arduino. Поддерживаются:
+- `ESP32S3`
+- `LILYGO T-RELAY`
+- `ESP32 DEVKIT` (по умолчанию)
 
-## Восстановление после сбоя
-
-Если устройство не запускается:
-1. Удерживайте кнопку **ALARM_BTN** при включении.
-2. Система сбросит настройки и перейдёт в режим AP.
-3. Перенастройте через веб-интерфейс.
+Пример конфигурации для DEVKIT:
+```c
+#define ONE_WIRE_BUS 15
+#define STEPPER_STEP 26
+#define STEPPER_DIR 27
+#define STEPPER_EN 14
+#define RELE_CHANNEL1 2
+#define RELE_CHANNEL2 4
+#define RELE_CHANNEL3 16
+#define RELE_CHANNEL4 17
+#define ENC_CLK 34
+#define ENC_DT 35
+#define ENC_SW 32
+#define LCD_SDA 21
+#define LCD_SCL 22
+#define LCD_ADDRESS 0x27
 ```
+
+## Условная компиляция
+
+Функциональность включается через макросы в `Samovar_ini.h` и `user_config_override.h`:
+
+| Макрос | Назначение |
+|-------|-----------|
+| `USE_LUA` | Включение интерпретатора Lua |
+| `USE_MQTT` | Поддержка MQTT-клиента |
+| `USE_TELEGRAM` | Интеграция с Telegram |
+| `USE_WEB_SERIAL` | Включение WebSerial |
+| `SAMOVAR_USE_BLYNK` | Поддержка Blynk |
+| `USE_WATER_PUMP` | Управление водяным насосом |
+| `USE_STEPPER_ACCELERATION` | Ускорение шагового двигателя |
+| `USE_CRASH_HANDLER` | Обработчик сбоев и стектрейсов |
+| `USE_UPDATE_OTA` | OTA-обновления |
+
+## Инициализация системы
+
+При старте выполняется:
+1. **Миграция данных**: Перенос настроек из EEPROM в NVS (если флаг миграции ≤ 250).
+2. **Загрузка конфигурации**: Чтение `SamSetup` из NVS, применение значений по умолчанию при отсутствии.
+3. **Инициализация периферии**:
+   - Датчики температуры (DS18B20), давления (BME, XGZ).
+   - Дисплей (LiquidCrystal_I2C), энкодер (GyverEncoder).
+   - Реле, шаговый двигатель, сервопривод.
+4. **Подключение к Wi-Fi**: В режиме STA или AP (если нет сохранённых данных).
+5. **Запуск сервисов**:
+   - mDNS (`samovar.local`).
+   - AsyncWebServer.
+   - MQTT, Blynk, Telegram (если включено).
+   - Lua-интерпретатор (если `USE_LUA`).
+   - NTP-синхронизация времени.
+
+## Запуск прошивки
+
+1. Соберите проект в PlatformIO.
+2. Прошейте устройство через USB.
+3. При первом запуске:
+   - Устройство создаст AP `Samovar-XXXX` с паролем `admin`.
+   - Подключитесь к AP и откройте `http://192.168.4.1`.
+   - Настройте Wi-Fi в разделе `/wifi.htm`.
+4. После подключения к сети — доступ по `http://samovar.local` или IP-адресу.
+
+## Отладка и мониторинг
+
+- **Серийный порт**: Вывод отладочных сообщений на скорости 115200 бод.
+- **WebSerial**: Доступен при `USE_WEB_SERIAL`.
+- **Веб-интерфейс**: Мониторинг через `/` (автоматическое определение режима).
+- **Логи**: Запись в `data.csv` на SPIFFS/LittleFS.
+- **Сбои**: При `USE_CRASH_HANDLER` — сохранение стектрейса в `/crash.txt`.
+
+## Обновление прошивки
+
+Поддерживается OTA-обновление:
+- Адрес: `http://samovar.local/update`.
+- Файл: `firmware.bin`.
+- Во время обновления отключаются Blynk, MQTT и Lua для снижения нагрузки.
+- Таймаут: 30 секунд.

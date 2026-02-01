@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>logic__h - Samovar</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">Samovar</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">data</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="data/beer__htm.html" class="dropdown-item">beer__htm</a>
+</li>
+            
+<li>
+    <a href="data/bk__htm.html" class="dropdown-item">bk__htm</a>
+</li>
+            
+<li>
+    <a href="data/brewxml__htm.html" class="dropdown-item">brewxml__htm</a>
+</li>
+            
+<li>
+    <a href="data/calibrate__htm.html" class="dropdown-item">calibrate__htm</a>
+</li>
+            
+<li>
+    <a href="data/chart__htm.html" class="dropdown-item">chart__htm</a>
+</li>
+            
+<li>
+    <a href="data/distiller__htm.html" class="dropdown-item">distiller__htm</a>
+</li>
+            
+<li>
+    <a href="data/edit__htm.html" class="dropdown-item">edit__htm</a>
+</li>
+            
+<li>
+    <a href="data/index__htm.html" class="dropdown-item">index__htm</a>
+</li>
+            
+<li>
+    <a href="data/nbk__htm.html" class="dropdown-item">nbk__htm</a>
+</li>
+            
+<li>
+    <a href="data/program__htm.html" class="dropdown-item">program__htm</a>
+</li>
+            
+<li>
+    <a href="data/setup__htm.html" class="dropdown-item">setup__htm</a>
+</li>
+            
+<li>
+    <a href="data/style__css.html" class="dropdown-item">style__css</a>
+</li>
+            
+<li>
+    <a href="data/wifi__htm.html" class="dropdown-item">wifi__htm</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="beer__h.html" class="dropdown-item">beer__h</a>
+</li>
+                                    
+<li>
+    <a href="BK__h.html" class="dropdown-item">BK__h</a>
+</li>
+                                    
+<li>
+    <a href="Blynk__ino.html" class="dropdown-item">Blynk__ino</a>
+</li>
+                                    
+<li>
+    <a href="column_math__h.html" class="dropdown-item">column_math__h</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler__h.html" class="dropdown-item">crash_handler__h</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler__ino.html" class="dropdown-item">crash_handler__ino</a>
+</li>
+                                    
+<li>
+    <a href="distiller__h.html" class="dropdown-item">distiller__h</a>
+</li>
+                                    
+<li>
+    <a href="font__h.html" class="dropdown-item">font__h</a>
+</li>
+                                    
+<li>
+    <a href="FS__ino.html" class="dropdown-item">FS__ino</a>
+</li>
+                                    
+<li>
+    <a href="I2CStepper__h.html" class="dropdown-item">I2CStepper__h</a>
+</li>
+                                    
+<li>
+    <a href="impurity_detector__h.html" class="dropdown-item">impurity_detector__h</a>
+</li>
+                                    
+<li>
+    <a href="logic__h.html" class="dropdown-item active" aria-current="page">logic__h</a>
+</li>
+                                    
+<li>
+    <a href="lua__h.html" class="dropdown-item">lua__h</a>
+</li>
+                                    
+<li>
+    <a href="Menu__ino.html" class="dropdown-item">Menu__ino</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmv__ino.html" class="dropdown-item">mod_rmv__ino</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmvk__h.html" class="dropdown-item">mod_rmvk__h</a>
+</li>
+                                    
+<li>
+    <a href="nbk__h.html" class="dropdown-item">nbk__h</a>
+</li>
+                                    
+<li>
+    <a href="NVS_Manager__ino.html" class="dropdown-item">NVS_Manager__ino</a>
+</li>
+                                    
+<li>
+    <a href="partition_manager__py.html" class="dropdown-item">partition_manager__py</a>
+</li>
+                                    
+<li>
+    <a href="pumppwm__h.html" class="dropdown-item">pumppwm__h</a>
+</li>
+                                    
+<li>
+    <a href="quality__h.html" class="dropdown-item">quality__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar__h.html" class="dropdown-item">Samovar__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar__ino.html" class="dropdown-item">Samovar__ino</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_ini__h.html" class="dropdown-item">Samovar_ini__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_pin__h.html" class="dropdown-item">Samovar_pin__h</a>
+</li>
+                                    
+<li>
+    <a href="SamovarMqtt__h.html" class="dropdown-item">SamovarMqtt__h</a>
+</li>
+                                    
+<li>
+    <a href="sensorinit__h.html" class="dropdown-item">sensorinit__h</a>
+</li>
+                                    
+<li>
+    <a href="SPIFFSEditor__h.html" class="dropdown-item">SPIFFSEditor__h</a>
+</li>
+                                    
+<li>
+    <a href="WebServer__ino.html" class="dropdown-item">WebServer__ino</a>
+</li>
+                                    
+<li>
+    <a href="wifi_htm_gz__h.html" class="dropdown-item">wifi_htm_gz__h</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="impurity_detector__h.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="lua__h.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#logic" class="nav-link">logic</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="logic">logic</h1>
+<p>Модуль управления логикой работы самоварной установки с поддержкой дистанционного мониторинга, автоматического отбора фракций и защиты по температуре/давлению.<br />
+Модуль реализует основную логику управления процессом дистилляции: автоматический отбор фракций, контроль температуры и давления, обработку программ отбора, взаимодействие с шаговым двигателем, насосом и датчиками. Поддерживает интеграцию с Blynk (опционально) и детектирование примесей. Обеспечивает аварийное отключение при критических отклонениях параметров.</p>
+<p>Ключевые структуры данных<br />
+SamSetup — Глобальная структура настроек самовара (шаги на мл, режимы работы и т.д.)<br />
+SteamSensor — Структура данных датчика пара (температура, давление, стартовые значения)<br />
+program — Массив программных шагов отбора с указанием типа фракции, температуры и объема<br />
+stepper — Объект управления шаговым двигателем (позиция, скорость, цель)</p>
+<hr />
+<p>void save_profile()<br />
+Сохраняет текущий профиль настроек в энергонезависимую память.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void menu_samovar_start()<br />
+Инициирует переход к следующему этапу программы отбора или останавливает процесс.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_menu_screen(uint8_t param)<br />
+Устанавливает активный экран интерфейса в зависимости от переданного параметра.<br />
+Аргументы<br />
+param — Код экрана для отображения<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void samovar_reset()<br />
+Выполняет полный сброс состояния самовара: останавливает все процессы, сбрасывает флаги, обнуляет счётчики.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void create_data()<br />
+Формирует и обновляет данные для отображения и передачи (температура, объём, статус и т.п.).<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void pause_withdrawal(bool Pause)<br />
+Приостанавливает или возобновляет процесс отбора с сохранением состояния.<br />
+Аргументы<br />
+Pause — true для паузы, false для возобновления<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void read_config()<br />
+Считывает конфигурацию самовара из энергонезависимой памяти и применяет настройки.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>String format_float(float v, int d)<br />
+Форматирует число с плавающей точкой до заданного количества знаков после запятой.<br />
+Аргументы<br />
+v — Значение для форматирования<br />
+d — Количество знаков после запятой<br />
+Возвращает<br />
+Отформатированная строка с числом<br />
+Исключения</p>
+<hr />
+<p>float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure)<br />
+Корректирует температуру кипения с учетом изменения атмосферного давления.<br />
+Аргументы<br />
+start_pressure — Начальное давление (в гПа)<br />
+start_temp — Начальная температура кипения (в °C)<br />
+current_pressure — Текущее давление (в гПа)<br />
+Возвращает<br />
+Скорректированная температура кипения при текущем давлении<br />
+Исключения</p>
+<hr />
+<p>unsigned int hexToDec(String hexString)<br />
+Преобразует шестнадцатеричную строку в десятичное целое число.<br />
+Аргументы<br />
+hexString — Строка в шестнадцатеричном формате<br />
+Возвращает<br />
+Десятичное значение<br />
+Исключения</p>
+<hr />
+<p>void set_current_power(float Volt)<br />
+Устанавливает текущее напряжение питания и регулирует мощность нагрева.<br />
+Аргументы<br />
+Volt — Напряжение в вольтах<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_power_mode(String Mode)<br />
+Переключает режим управления мощностью (например, "PID", "PWM", "ручной").<br />
+Аргументы<br />
+Mode — Строка, определяющая режим работы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void open_valve(bool Val, bool msg)<br />
+Открывает или закрывает клапан отбора, при необходимости отправляя уведомление.<br />
+Аргументы<br />
+Val — true для открытия, false для закрытия<br />
+msg — true для отправки сообщения о действии<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void stopService(void)<br />
+Останавливает все активные сервисы: насос, клапан, шаговик, нагрев.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void startService(void)<br />
+Возобновляет работу сервисов после остановки (например, после паузы).<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void reset_sensor_counter(void)<br />
+Сбрасывает счётчики импульсов датчиков (например, шагов шагового двигателя).<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_pump_speed(float pumpspeed, bool continue_process)<br />
+Устанавливает скорость насоса в мл/час и запускает процесс отбора.<br />
+Аргументы<br />
+pumpspeed — Скорость подачи в мл/час<br />
+continue_process — Флаг продолжения технологического процесса<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_pump_pwm(float duty)<br />
+Устанавливает скважность ШИМ для управления скоростью насоса напрямую.<br />
+Аргументы<br />
+duty — Значение скважности от 0 до 255<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_pump_speed_pid(float temp)<br />
+Регулирует скорость насоса по алгоритму PID на основе текущей температуры.<br />
+Аргументы<br />
+temp — Текущая температура пара<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_power(bool On)<br />
+Включает или выключает подачу мощности на нагревательный элемент.<br />
+Аргументы<br />
+On — true для включения, false для выключения<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_body_temp()<br />
+Корректирует установленную температуру отбора тела на основе текущих данных с датчиков.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void set_buzzer(bool fl)<br />
+Включает или выключает звуковой сигнал (пищалку).<br />
+Аргументы<br />
+fl — true для включения, false для выключения<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void start_self_test(void)<br />
+Запускает процедуру самодиагностики всех подключенных узлов и датчиков.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void stop_self_test(void)<br />
+Прерывает выполнение самодиагностики.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>bool check_boiling()<br />
+Проверяет, начался ли процесс кипения по скорости роста температуры.<br />
+Аргументы<br />
+Возвращает<br />
+true, если кипение обнаружено, иначе false<br />
+Исключения</p>
+<hr />
+<p>float get_alcohol(float t)<br />
+Оценивает крепость дистиллята по температуре пара (приближённая модель).<br />
+Аргументы<br />
+t — Температура пара в °C<br />
+Возвращает<br />
+Оценка крепости в % об.<br />
+Исключения</p>
+<hr />
+<p>void set_boiling()<br />
+Фиксирует момент начала кипения и инициализирует связанные параметры (давление, температуру старта).<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target)<br />
+Устанавливает целевую позицию и скорость для шагового двигателя.<br />
+Аргументы<br />
+spd — Скорость движения в шагах в секунду<br />
+direction — Направление (0 — обратно, 1 — вперёд)<br />
+target — Целевое количество шагов<br />
+Возвращает<br />
+true при успешной установке цели, иначе false<br />
+Исключения</p>
+<hr />
+<p>float get_dist_remaining_time()<br />
+Рассчитывает оставшееся время отбора текущей фракции в минутах.<br />
+Аргументы<br />
+Возвращает<br />
+Оставшееся время в минутах<br />
+Исключения</p>
+<hr />
+<p>float get_dist_predicted_total_time()<br />
+Прогнозирует общее время завершения текущей программы отбора.<br />
+Аргументы<br />
+Возвращает<br />
+Прогнозируемое время в минутах<br />
+Исключения</p>
+<hr />
+<p>void detector_on_program_start(const String&amp; wtype)<br />
+Инициализирует детектор примесей при старте программы отбора заданной фракции.<br />
+Аргументы<br />
+wtype — Тип фракции ("H", "B", "C", "P" и т.д.)<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void detector_on_auto_resume()<br />
+Обрабатывает возобновление отбора после автоматической паузы (например, при перегреве).<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void detector_on_manual_resume()<br />
+Обрабатывает возобновление отбора вручную после паузы.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void check_power_error()<br />
+Проверяет наличие ошибок в цепи питания (напряжение, ток, перегрузка).<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>bool column_wetting()<br />
+Выполняет процедуру смачивания колонны перед началом ректификации.<br />
+Аргументы<br />
+Возвращает<br />
+true при успешном завершении, иначе false<br />
+Исключения</p>
+<hr />
+<p>void SendMsg(const String &amp;m, MESSAGE_TYPE msg_type)<br />
+Отправляет сообщение указанного типа на дисплей и/или в удалённый интерфейс (Blynk).<br />
+Аргументы<br />
+m — Текст сообщения<br />
+msg_type — Тип сообщения (ALARM_MSG, INFO_MSG и др.)<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>uint8_t getDelimCount(const String&amp; data, char separator)<br />
+Подсчитывает количество вхождений указанного разделителя в строке.<br />
+Аргументы<br />
+data — Входная строка<br />
+separator — Символ-разделитель<br />
+Возвращает<br />
+Количество найденных разделителей<br />
+Исключения</p>
+<hr />
+<p>String getValue(const String&amp; data, char separator, int index)<br />
+Извлекает подстроку по индексу, используя указанный разделитель.<br />
+Аргументы<br />
+data — Исходная строка<br />
+separator — Символ-разделитель<br />
+index — Индекс требуемой части<br />
+Возвращает<br />
+Извлеченная подстрока<br />
+Исключения</p>
+<hr />
+<p>float get_liquid_volume_by_step(float StepCount)<br />
+Переводит количество шагов шагового двигателя в объём жидкости в мл.<br />
+Аргументы<br />
+StepCount — Количество шагов<br />
+Возвращает<br />
+Объём жидкости в мл<br />
+Исключения</p>
+<hr />
+<p>float get_liquid_rate_by_step(int StepperSpeed)<br />
+Преобразует скорость шаговика в расход жидкости в мл/час.<br />
+Аргументы<br />
+StepperSpeed — Скорость шагового двигателя в шагах/сек<br />
+Возвращает<br />
+Расход в мл/час<br />
+Исключения</p>
+<hr />
+<p>float get_speed_from_rate(float volume_per_hour)<br />
+Переводит требуемый расход (мл/час) в скорость шаговика (шаги/сек).<br />
+Аргументы<br />
+volume_per_hour — Требуемый расход в мл/час<br />
+Возвращает<br />
+Скорость шаговика в шагах/сек (не менее 1)<br />
+Исключения</p>
+<hr />
+<p>int get_liquid_volume()<br />
+Возвращает текущий объём отобранной жидкости в мл.<br />
+Аргументы<br />
+Возвращает<br />
+Объём в мл<br />
+Исключения</p>
+<hr />
+<p>void set_alarm()<br />
+Активирует аварийное отключение: останавливает нагрев, насос, клапан, отправляет тревогу.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void withdrawal(void)<br />
+Основная функция управления процессом отбора: контроль температуры, фракций, пауз, детектора.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void vTaskControl(void *pvParameters)<br />
+Управляет автоматическими паузами отбора по температуре паров, царги и детектору примесей.<br />
+Аргументы<br />
+pvParameters — параметры задачи FreeRTOS (не используются)<br />
+Возвращает<br />
+Ничего не возвращает, работает как бесконечный цикл в фоновом потоке<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void pump_calibrate(int stpspeed)<br />
+Выполняет калибровку шагового насоса по заданной скорости и измеренному объему.<br />
+Аргументы<br />
+stpspeed — скорость шагов двигателя, при которой проводится калибровка<br />
+Возвращает<br />
+Ничего не возвращает<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void start_process()<br />
+Запускает процесс отбора или разогрева в зависимости от текущего режима и состояния системы.<br />
+Аргументы<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>float getBeerCurrentTemp()<br />
+Возвращает текущую температуру с выбранного датчика в режиме пивоварения.<br />
+Аргументы<br />
+Возвращает<br />
+Текущая температура с датчика, указанного в программе, или 0, если режим не активен<br />
+Исключения</p>
+<hr />
+<p>void stop_process(String reason)<br />
+Останавливает текущий процесс, отключает питание и отправляет уведомление с указанием причины.<br />
+Аргументы<br />
+reason — текстовое описание причины остановки<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>String get_Samovar_Status()<br />
+Формирует строковое описание текущего статуса устройства для внешнего отображения.<br />
+Аргументы<br />
+Возвращает<br />
+Строка с описанием текущего состояния Самовара<br />
+Исключения</p>
+<hr />
+<p>String get_samovar_status()<br />
+Формирует строку статуса самовара с учётом текущего режима, температуры, прогресса и других параметров.<br />
+Аргументы<br />
+Возвращает<br />
+Строка с описанием текущего состояния системы<br />
+Исключения</p>
+<hr />
+<p>void set_capacity(uint8_t cap)<br />
+Устанавливает текущую ёмкость и, при наличии сервопривода, поворачивает его в соответствующее положение.<br />
+Аргументы<br />
+cap — номер ёмкости (0..CAPACITY_NUM-1)<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void next_capacity(void)<br />
+Переключается на следующую по номеру ёмкость с учётом цикличности.<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения</p>
+<hr />
+<p>void set_program(String WProgram)<br />
+Разбирает строку с программой и заполняет массив этапов (program), вычисляя время выполнения каждого этапа.<br />
+Аргументы<br />
+WProgram — строка формата "Тип;Объём;Скорость;Ёмкость;Температура;Мощность", разделённая точкой с запятой<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>String get_program(uint8_t s)<br />
+Возвращает строковое представление одного или всех этапов программы в формате, пригодном для передачи.<br />
+Аргументы<br />
+s — начальный индекс этапа (0..CAPACITY_NUM<em>2); если равно CAPACITY_NUM</em>2 — возвращает все этапы<br />
+Возвращает<br />
+Строка с данными программы, разделёнными символами перевода строки и точкой с запятой<br />
+Исключения</p>
+<hr />
+<p>void run_program(uint8_t num)<br />
+Запускает выполнение программы с заданным номером, с проверкой необходимости сброса детектора при смене типа этапа.<br />
+Аргументы<br />
+num — номер этапа программы (0..29)<br />
+Возвращает<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>class SteamSensor<br />
+Хранит параметры датчика пара: температуру тела, начальное давление и рассчитывает температуру по давлению.<br />
+Поля<br />
+BodyTemp — температура тела датчика пара (°C)<br />
+Start_Pressure — начальное давление (Па)<br />
+Методы</p>
+<hr />
+<p>class PipeSensor<br />
+Хранит параметры датчика царги: температуру тела.<br />
+Поля<br />
+BodyTemp — температура тела датчика царги (°C)<br />
+Методы</p>
+<hr />
+<p>float get_temp_by_pressure(float start_pressure, float body_temp, float current_pressure)<br />
+Рассчитывает температуру пара по текущему давлению с использованием эмпирической модели.<br />
+Аргументы<br />
+start_pressure — начальное давление при калибровке (Па)<br />
+body_temp — температура датчика (°C)<br />
+current_pressure — текущее измеренное давление (Па)<br />
+Возвращает<br />
+Рассчитанная температура пара (°C)<br />
+Исключения</p>
+<hr />
+<p>String format_float(float value, int decimals)<br />
+Форматирует число с плавающей точкой в строку с заданным количеством знаков после запятой.<br />
+Аргументы<br />
+value — число для форматирования<br />
+decimals — количество знаков после запятой<br />
+Возвращает<br />
+Строка с отформатированным числом<br />
+Исключения</p>
+<hr />
+<p>void start_program(uint8_t num)<br />
+Запускает программу отбора по заданному индексу с проверкой необходимости сброса детектора и инициализацией параметров.<br />
+Аргументы<br />
+num — индекс программы в массиве program; если равен CAPACITY_NUM * 2, процесс завершается.<br />
+Возвращает<br />
+Ничего не возвращает.<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void reset_impurity_detector()<br />
+Сбрасывает состояние детектора примесей, инициализируя его заново для корректной работы на новом этапе отбора.<br />
+Аргументы<br />
+Нет аргументов.<br />
+Возвращает<br />
+Ничего не возвращает.<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void detector_on_program_start(String wtype)<br />
+Активирует детектор примесей в зависимости от типа текущей программы отбора (например, для "B" или "C").<br />
+Аргументы<br />
+wtype — строка, указывающая тип программы ("B", "C" и т.д.).<br />
+Возвращает<br />
+Ничего не возвращает.<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float get_boiling_temperature(float start_temp, float start_pressure, float i_temp)<br />
+Возвращает скорректированную температуру кипения с учётом давления и поправок.<br />
+Аргументы<br />
+start_temp — начальная температура, °C<br />
+start_pressure — начальное давление, гПа<br />
+i_temp — текущая измеренная температура, °C<br />
+Возвращает<br />
+Скорректированная температура кипения, °C<br />
+Исключения</p>
+<hr />
+<p>void check_alarm()<br />
+Основная функция мониторинга и реакции на аварийные ситуации: захлёб, перегрев, уровень воды, управление нагревом и клапанами.<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения</p>
+<hr />
+<p>void set_pump_speed_pid(float target_temp)<br />
+Устанавливает скорость насоса охлаждения по алгоритму PID в зависимости от целевой температуры.<br />
+Аргументы<br />
+target_temp — целевая температура воды для регулирования<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void process_buzzer()<br />
+Обрабатывает циклическое включение и выключение пищалки по расписанию.<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Ничего не возвращает<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float get_steam_alcohol(float t)<br />
+Рассчитывает концентрацию алкоголя в паре на основе текущей температуры и давления.<br />
+Аргументы<br />
+t — текущая температура в градусах Цельсия<br />
+Возвращает<br />
+Концентрацию алкоголя в процентах (0–100) или 100, если кипение не начато<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float get_temp_by_pressure(int sensor_id, float t, float p)<br />
+Возвращает температуру, скорректированную по давлению.<br />
+Аргументы<br />
+sensor_id — идентификатор датчика (не используется в текущей реализации)<br />
+t — измеренная температура, °C<br />
+p — текущее атмосферное давление, гПа<br />
+Возвращает<br />
+Скорректированная температура кипения с учётом давления, °C<br />
+Исключения</p>
+<hr />
+<p>void triggerPowerStatus(void *parameter)<br />
+Фоновая задача FreeRTOS: опрашивает регулятор мощности через Serial2 и обновляет данные о напряжении и режиме.<br />
+Аргументы<br />
+parameter — указатель на параметры задачи (не используется)<br />
+Возвращает<br />
+Исключения</p>
+<hr />
+<p>void get_current_power()<br />
+Вычисляет текущую мощность нагревателя на основе измеренного напряжения и сопротивления, указанного в настройках.<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения</p>
+<hr />
+<p>bool handle_wetting_process()<br />
+Проверяет состояние датчика и управляет выполнением процесса смачивания.<br />
+Аргументы<br />
+Отсутствуют<br />
+Возвращает<br />
+true — если процесс смачивания завершён или невозможен; false — если процесс продолжается<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>void reset_wetting_state()<br />
+Сбрасывает текущее состояние процесса смачивания в начальное или безопасное значение.<br />
+Аргументы<br />
+Отсутствуют<br />
+Возвращает<br />
+Отсутствует<br />
+Исключения<br />
+Отсутствуют</p>
+<hr />
+<p>void SendMsg(const char* message, uint8_t msg_type)<br />
+Отправляет сообщение в систему логирования или интерфейс пользователя.<br />
+Аргументы<br />
+message — текст сообщения для вывода<br />
+msg_type — тип сообщения (например, WARNING_MSG, INFO_MSG)<br />
+Возвращает<br />
+Отсутствует<br />
+Исключения<br />
+Отсутствуют</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

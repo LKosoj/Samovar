@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>sensorinit__h - Samovar</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">Samovar</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+  <li class="dropdown-submenu">
+    <a href="#" class="dropdown-item">data</a>
+    <ul class="dropdown-menu">
+            
+<li>
+    <a href="data/beer__htm.html" class="dropdown-item">beer__htm</a>
+</li>
+            
+<li>
+    <a href="data/bk__htm.html" class="dropdown-item">bk__htm</a>
+</li>
+            
+<li>
+    <a href="data/brewxml__htm.html" class="dropdown-item">brewxml__htm</a>
+</li>
+            
+<li>
+    <a href="data/calibrate__htm.html" class="dropdown-item">calibrate__htm</a>
+</li>
+            
+<li>
+    <a href="data/chart__htm.html" class="dropdown-item">chart__htm</a>
+</li>
+            
+<li>
+    <a href="data/distiller__htm.html" class="dropdown-item">distiller__htm</a>
+</li>
+            
+<li>
+    <a href="data/edit__htm.html" class="dropdown-item">edit__htm</a>
+</li>
+            
+<li>
+    <a href="data/index__htm.html" class="dropdown-item">index__htm</a>
+</li>
+            
+<li>
+    <a href="data/nbk__htm.html" class="dropdown-item">nbk__htm</a>
+</li>
+            
+<li>
+    <a href="data/program__htm.html" class="dropdown-item">program__htm</a>
+</li>
+            
+<li>
+    <a href="data/setup__htm.html" class="dropdown-item">setup__htm</a>
+</li>
+            
+<li>
+    <a href="data/style__css.html" class="dropdown-item">style__css</a>
+</li>
+            
+<li>
+    <a href="data/wifi__htm.html" class="dropdown-item">wifi__htm</a>
+</li>
+    </ul>
+  </li>
+                                    
+<li>
+    <a href="beer__h.html" class="dropdown-item">beer__h</a>
+</li>
+                                    
+<li>
+    <a href="BK__h.html" class="dropdown-item">BK__h</a>
+</li>
+                                    
+<li>
+    <a href="Blynk__ino.html" class="dropdown-item">Blynk__ino</a>
+</li>
+                                    
+<li>
+    <a href="column_math__h.html" class="dropdown-item">column_math__h</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler__h.html" class="dropdown-item">crash_handler__h</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler__ino.html" class="dropdown-item">crash_handler__ino</a>
+</li>
+                                    
+<li>
+    <a href="distiller__h.html" class="dropdown-item">distiller__h</a>
+</li>
+                                    
+<li>
+    <a href="font__h.html" class="dropdown-item">font__h</a>
+</li>
+                                    
+<li>
+    <a href="FS__ino.html" class="dropdown-item">FS__ino</a>
+</li>
+                                    
+<li>
+    <a href="I2CStepper__h.html" class="dropdown-item">I2CStepper__h</a>
+</li>
+                                    
+<li>
+    <a href="impurity_detector__h.html" class="dropdown-item">impurity_detector__h</a>
+</li>
+                                    
+<li>
+    <a href="logic__h.html" class="dropdown-item">logic__h</a>
+</li>
+                                    
+<li>
+    <a href="lua__h.html" class="dropdown-item">lua__h</a>
+</li>
+                                    
+<li>
+    <a href="Menu__ino.html" class="dropdown-item">Menu__ino</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmv__ino.html" class="dropdown-item">mod_rmv__ino</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmvk__h.html" class="dropdown-item">mod_rmvk__h</a>
+</li>
+                                    
+<li>
+    <a href="nbk__h.html" class="dropdown-item">nbk__h</a>
+</li>
+                                    
+<li>
+    <a href="NVS_Manager__ino.html" class="dropdown-item">NVS_Manager__ino</a>
+</li>
+                                    
+<li>
+    <a href="partition_manager__py.html" class="dropdown-item">partition_manager__py</a>
+</li>
+                                    
+<li>
+    <a href="pumppwm__h.html" class="dropdown-item">pumppwm__h</a>
+</li>
+                                    
+<li>
+    <a href="quality__h.html" class="dropdown-item">quality__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar__h.html" class="dropdown-item">Samovar__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar__ino.html" class="dropdown-item">Samovar__ino</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_ini__h.html" class="dropdown-item">Samovar_ini__h</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_pin__h.html" class="dropdown-item">Samovar_pin__h</a>
+</li>
+                                    
+<li>
+    <a href="SamovarMqtt__h.html" class="dropdown-item">SamovarMqtt__h</a>
+</li>
+                                    
+<li>
+    <a href="sensorinit__h.html" class="dropdown-item active" aria-current="page">sensorinit__h</a>
+</li>
+                                    
+<li>
+    <a href="SPIFFSEditor__h.html" class="dropdown-item">SPIFFSEditor__h</a>
+</li>
+                                    
+<li>
+    <a href="WebServer__ino.html" class="dropdown-item">WebServer__ino</a>
+</li>
+                                    
+<li>
+    <a href="wifi_htm_gz__h.html" class="dropdown-item">wifi_htm_gz__h</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="SamovarMqtt__h.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="SPIFFSEditor__h.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#sensorinit" class="nav-link">sensorinit</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="sensorinit">sensorinit</h1>
+<p>Модуль <code>Samovar_S_I</code> предоставляет функциональность для управления самоваром, включая загрузку программ в зависимости от режима работы, обработку данных с датчиков температуры, давления и окружающей среды. Модуль поддерживает взаимодействие с датчиками DS18B20, BME680, BMP180, BMP280, BME280, XGZP6897D, MPX5010D через шины OneWire и I2C, реализует коррекцию температуры по атмосферному давлению и поддерживает режимы пивоварения, сувид, дистилляции и НБК. Также обеспечивается интеграция с Lua-скриптами и управление насосом через ШИМ.</p>
+<p>Ключевые структуры данных<br />
+DeviceAddress — массив из 8 байт, используемый для хранения уникального адреса датчика DS18B20<br />
+Samovar_Mode — глобальная переменная, определяющая текущий режим работы устройства (пиво, сувид, дистилляция и др.)</p>
+<hr />
+<p>void load_default_program_for_mode()
+Загружает программу по умолчанию в зависимости от текущего режима работы самовара
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>String get_Samovar_Status()
+Возвращает строку с текущим статусом самовара в формате JSON
+Аргументы
+Возвращает
+Строка JSON с информацией о состоянии системы
+Исключения</p>
+<hr />
+<p>void set_power(bool On)
+Включает или выключает подачу питания на нагреватель
+Аргументы
+On — true для включения, false для выключения
+Возвращает
+Исключения</p>
+<hr />
+<p>void clok()
+Обновляет внутренние таймеры и состояние системы (используется в основном цикле)
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>void clok1()
+Выполняет фоновые задачи с низким приоритетом (например, логирование)
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>void getjson(void)
+Обрабатывает входящие JSON-команды от интерфейса управления
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>String append_data()
+Формирует строку с текущими показаниями датчиков для логирования
+Аргументы
+Возвращает
+Строка с данными датчиков в формате, пригодном для записи в лог
+Исключения</p>
+<hr />
+<p>void stopService(void)
+Останавливает все активные процессы и сервисы самовара
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>void startService(void)
+Запускает основные сервисы самовара (нагрев, контроль датчиков и т.д.)
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>void CopyDSAddress(const uint8_t<em> DevSAddress, uint8_t</em> DevTAddress)
+Копирует адрес датчика DS18B20 из источника в назначение
+Аргументы
+DevSAddress — указатель на исходный адрес датчика<br />
+DevTAddress — указатель на целевой буфер для копирования
+Возвращает
+Исключения</p>
+<hr />
+<p>void set_beer_program(String WProgram)
+Устанавливает программу для режима пивоварения или сувид
+Аргументы
+WProgram — строка с описанием программы в специальном формате
+Возвращает
+Исключения</p>
+<hr />
+<p>void set_program(String WProgram)
+Устанавливает общую программу управления самоваром
+Аргументы
+WProgram — строка с программой в формате команд
+Возвращает
+Исключения</p>
+<hr />
+<p>void set_dist_program(String WProgram)
+Устанавливает программу для режима дистилляции
+Аргументы
+WProgram — строка с параметрами дистилляции
+Возвращает
+Исключения</p>
+<hr />
+<p>void set_nbk_program(String WProgram)
+Устанавливает программу для режима НБК
+Аргументы
+WProgram — строка с программой НБК
+Возвращает
+Исключения</p>
+<hr />
+<p>String getDSAddress(DeviceAddress deviceAddress)
+Преобразует адрес датчика DS18B20 в строку шестнадцатеричного представления
+Аргументы
+deviceAddress — адрес датчика DS18B20
+Возвращает
+Строка с HEX-представлением адреса
+Исключения</p>
+<hr />
+<p>void setupOpenLog(void)
+Инициализирует систему логирования в файл на SD-карте
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>void createFile(char* fileName)
+Создаёт новый файл для логирования с указанным именем
+Аргументы
+fileName — имя создаваемого файла
+Возвращает
+Исключения</p>
+<hr />
+<p>void set_capacity(uint8_t cap)
+Устанавливает объём ёмкости самовара (в литрах)
+Аргументы
+cap — объём в литрах
+Возвращает
+Исключения</p>
+<hr />
+<p>void init_pump_pwm(uint8_t pin, int freq)
+Инициализирует ШИМ-управление насосом на указанном пине с заданной частотой
+Аргументы
+pin — номер пина для ШИМ<br />
+freq — частота ШИМ в Гц
+Возвращает
+Исключения</p>
+<hr />
+<p>void set_pump_pwm(float duty)
+Устанавливает скважность ШИМ для управления скоростью насоса
+Аргументы
+duty — значение от 0.0 до 1.0 (0–100%)
+Возвращает
+Исключения</p>
+<hr />
+<p>void printAddress(DeviceAddress deviceAddress)
+Выводит адрес датчика DS18B20 в последовательный порт в читаемом виде
+Аргументы
+deviceAddress — адрес датчика
+Возвращает
+Исключения</p>
+<hr />
+<p>void reset_sensor_counter(void)
+Сбрасывает счётчики обнаруженных датчиков DS18B20
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>void BME_getvalue(bool fl)
+Считывает данные с датчика атмосферного давления и температуры (BME680/BMP180/BMP280/BME280)
+Аргументы
+fl — флаг, не используемый в текущей реализации
+Возвращает
+Исключения</p>
+<hr />
+<p>void pressure_sensor_get()
+Считывает значение давления с датчика XGZP6897D или MPX5010D с фильтрацией
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>void DS_getvalue(void)
+Считывает температуру с датчиков DS18B20 с коррекцией по атмосферному давлению
+Аргументы
+Возвращает
+Исключения</p>
+<hr />
+<p>float sensors_get_temperature()
+Возвращает температуру с датчика 1 (SteamSensor).
+Аргументы
+Отсутствуют
+Возвращает
+Температура в градусах Цельсия с датчика SteamSensor с учётом коррекции DeltaSteamTemp. При ошибке чтения возвращает значение ниже -10.
+Исключения</p>
+<hr />
+<p>void scan_ds_adress()
+Инициализирует шину 1-Wire и сканирует подключённые датчики DS18B20, определяя их адреса и устанавливая разрешение измерений.
+Аргументы
+Отсутствуют
+Возвращает
+Отсутствует
+Исключения</p>
+<hr />
+<p>void sensor_init()
+Инициализирует датчик давления/влажности (BME680, BMP280 или BMP180) по I2C с проверкой наличия и настройкой параметров измерений.
+Аргументы
+Отсутствуют
+Возвращает
+Отсутствует
+Исключения</p>
+<hr />
+<p>class SteamSensor
+Хранит и обновляет данные температурного датчика пара.
+Поля
+avgTemp — средняя температура, обновляется при успешном чтении<br />
+PrevTemp — предыдущее корректное значение температуры<br />
+ErrCount — счётчик ошибок чтения датчика
+Методы</p>
+<hr />
+<p>class PipeSensor
+Хранит и обновляет данные температурного датчика трубопровода.
+Поля
+avgTemp — средняя температура, обновляется при успешном чтении<br />
+PrevTemp — предыдущее корректное значение температуры<br />
+ErrCount — счётчик ошибок чтения датчика
+Методы</p>
+<hr />
+<p>class WaterSensor
+Хранит и обновляет данные температурного датчика воды.
+Поля
+avgTemp — средняя температура, обновляется при успешном чтении<br />
+PrevTemp — предыдущее корректное значение температуры<br />
+ErrCount — счётчик ошибок чтения датчика
+Методы</p>
+<hr />
+<p>class TankSensor
+Хранит и обновляет данные температурного датчика бака.
+Поля
+avgTemp — средняя температура, обновляется при успешном чтении<br />
+PrevTemp — предыдущее корректное значение температуры<br />
+ErrCount — счётчик ошибок чтения датчика
+Методы</p>
+<hr />
+<p>class ACPSensor
+Хранит и обновляет данные температурного датчика АЦП.
+Поля
+avgTemp — средняя температура, обновляется при успешном чтении<br />
+PrevTemp — предыдущее корректное значение температуры<br />
+ErrCount — счётчик ошибок чтения датчика
+Методы</p>
+<hr />
+<p>void setup_hardware(void)
+Инициализирует все аппаратные компоненты системы в соответствии с определёнными макросами конфигурации.
+Аргументы
+Нет
+Возвращает
+Нет
+Исключения</p>
+<hr />
+<p>inline String format_float(float v, int d)
+Форматирует число с плавающей точкой в строку с заданным количеством знаков после запятой.
+Аргументы
+v — значение типа float для форматирования<br />
+d — количество знаков после запятой
+Возвращает
+Отформатированная строка
+Исключения</p>
+<hr />
+<p>String get_DSAddressList(String Address)
+Генерирует HTML-строку с выпадающим списком адресов датчиков DS18B20, выделяя выбранный.
+Аргументы
+Address — строка с адресом, который должен быть отмечен как выбранный
+Возвращает
+HTML-код элемента <select> с опциями адресов
+Исключения</p>
+<hr />
+<p>String generateDSOptions()
+Генерирует HTML-строку с опциями выпадающего списка адресов устройств, выделяя текущий выбранный адрес.
+Аргументы
+Возвращает
+HTML-строка с тегами <option> для каждого адреса устройств, с атрибутом selected для текущего адреса.
+Исключения</p>
+<hr />
+<p>void get_task_stack_usage()
+Выводит в последовательный порт статистику использования стека задачами FreeRTOS (высоту водного уровня).
+Аргументы
+Возвращает
+Исключения</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
