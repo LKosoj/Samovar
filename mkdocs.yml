@@ -28,7 +28,7 @@ nav:
   - platformio.ini: configs/files/platformio__ini.md
 - Модули:
   - Обзор: modules/index.md
-  - data:
+  - /data:
     - beer.htm: modules/data/beer__htm.md
     - bk.htm: modules/data/bk__htm.md
     - brewxml.htm: modules/data/brewxml__htm.md
