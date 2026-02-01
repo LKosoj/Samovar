@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>nbk - Samovar_doc</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">Samovar_doc</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="BK.html" class="dropdown-item">BK</a>
+</li>
+                                    
+<li>
+    <a href="I2CStepper.html" class="dropdown-item">I2CStepper</a>
+</li>
+                                    
+<li>
+    <a href="SPIFFSEditor.html" class="dropdown-item">SPIFFSEditor</a>
+</li>
+                                    
+<li>
+    <a href="Samovar.html" class="dropdown-item">Samovar</a>
+</li>
+                                    
+<li>
+    <a href="SamovarMqtt.html" class="dropdown-item">SamovarMqtt</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_ini.html" class="dropdown-item">Samovar_ini</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_pin.html" class="dropdown-item">Samovar_pin</a>
+</li>
+                                    
+<li>
+    <a href="beer.html" class="dropdown-item">beer</a>
+</li>
+                                    
+<li>
+    <a href="column_math.html" class="dropdown-item">column_math</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler.html" class="dropdown-item">crash_handler</a>
+</li>
+                                    
+<li>
+    <a href="distiller.html" class="dropdown-item">distiller</a>
+</li>
+                                    
+<li>
+    <a href="font.html" class="dropdown-item">font</a>
+</li>
+                                    
+<li>
+    <a href="impurity_detector.html" class="dropdown-item">impurity_detector</a>
+</li>
+                                    
+<li>
+    <a href="logic.html" class="dropdown-item">logic</a>
+</li>
+                                    
+<li>
+    <a href="lua.html" class="dropdown-item">lua</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmvk.html" class="dropdown-item">mod_rmvk</a>
+</li>
+                                    
+<li>
+    <a href="nbk.html" class="dropdown-item active" aria-current="page">nbk</a>
+</li>
+                                    
+<li>
+    <a href="partition_manager.html" class="dropdown-item">partition_manager</a>
+</li>
+                                    
+<li>
+    <a href="pumppwm.html" class="dropdown-item">pumppwm</a>
+</li>
+                                    
+<li>
+    <a href="quality.html" class="dropdown-item">quality</a>
+</li>
+                                    
+<li>
+    <a href="sensorinit.html" class="dropdown-item">sensorinit</a>
+</li>
+                                    
+<li>
+    <a href="wifi_htm_gz.html" class="dropdown-item">wifi_htm_gz</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="mod_rmvk.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="partition_manager.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#nbk" class="nav-link">nbk</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="nbk">nbk</h1>
+<p>Модуль управления процессом НБК (непрерывная барботажная колонна) обеспечивает автоматизированное выполнение технологического цикла: контроль температуры, подачи и мощности нагрева, обработку аварийных ситуаций (включая захлёб и перегрев), сбор статистики и взаимодействие с пользователем. Управление реализовано в виде конечного автомата, проходящего этапы — разгон, ручной режим, оптимизация и рабочий режим.</p>
+<p>Ключевые структуры данных<br />
+stats — Структура для хранения статистики текущей сессии НБК</p>
+<p>struct stats<br />
+Структура для хранения статистики текущей сессии НБК<br />
+Поля<br />
+avgSpeed — Средняя скорость подачи (л/ч)<br />
+totalVolume — Суммарный объём перегоняемой жидкости (л)<br />
+startTime — Время начала сессии (мс)<br />
+lastVolumeUpdate — Время последнего обновления объёма (мс)</p>
+<hr />
+<p>void reset_sensor_counter(void)<br />
+Сбросить счётчик импульсов датчиков потока<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void nbk_finish()<br />
+Завершить работу НБК: остановить нагрев и подачу, отправить финальную статистику<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void check_power_error()<br />
+Проверить наличие ошибок питания и выполнить соответствующие действия (остановка, предупреждение)<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_power_mode(String Mode)<br />
+Установить режим управления питанием<br />
+Аргументы<br />
+Mode — Режим питания в виде строки ("manual", "auto" и т.п.)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_power(bool On)<br />
+Включить или выключить питание нагревателя<br />
+Аргументы<br />
+On — true для включения, false для выключения<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_current_power(float Volt)<br />
+Установить текущую мощность нагрева в ваттах<br />
+Аргументы<br />
+Volt — Мощность в ваттах<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void create_data()<br />
+Создать файл для записи данных текущей сессии (температура, подача, объём и т.д.)<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void open_valve(bool Val, bool msg)<br />
+Открыть или закрыть клапан подачи<br />
+Аргументы<br />
+Val — true для открытия, false для закрытия<br />
+msg — true, чтобы отправить сообщение о действии<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_pump_pwm(float duty)<br />
+Установить значение ШИМ для управления насосом<br />
+Аргументы<br />
+duty — Значение ШИМ (0.0 – 100.0 %)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_pump_speed_pid(float temp)<br />
+Установить скорость насоса на основе ПИД-регулирования по целевой температуре<br />
+Аргументы<br />
+temp — Целевая температура воды (°C)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void SendMsg(const String&amp; m, MESSAGE_TYPE msg_type)<br />
+Отправить сообщение пользователю через доступные интерфейсы (MQTT, Serial, экран)<br />
+Аргументы<br />
+m — Текст сообщения<br />
+msg_type — Тип сообщения (информационное, ошибка, предупреждение и т.д.)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool check_boiling()<br />
+Проверить, достигнут ли режим кипячения (по температуре пара и другим критериям)<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+true, если идёт кипячение, иначе false<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_buzzer(bool fl)<br />
+Включить или выключить звуковой сигнал (бuzzer)<br />
+Аргументы<br />
+fl — true для включения, false для выключения<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_water_temp(float duty)<br />
+Установить целевую температуру воды в контуре охлаждения<br />
+Аргументы<br />
+duty — Целевая температура (°C)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>String getValue(const String&amp; data, char separator, int index)<br />
+Извлечь подстроку по индексу из строки, разделённой заданным символом<br />
+Аргументы<br />
+data — Исходная строка<br />
+separator — Разделитель (например, ',')<br />
+index — Индекс требуемого значения (начиная с 0)<br />
+Возвращает<br />
+Значение как строка, или пустая строка, если индекс вне диапазона<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void run_nbk_program(uint8_t num)<br />
+Запустить выполнение строки программы НБК с указанным номером<br />
+Аргументы<br />
+num — Номер строки программы (этапа)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target)<br />
+Установить целевую позицию и параметры движения шагового двигателя<br />
+Аргументы<br />
+spd — Скорость движения (шаги/с)<br />
+direction — Направление (0 — обратно, 1 — вперёд)<br />
+target — Целевое количество шагов<br />
+Возвращает<br />
+true, если команда принята, иначе false<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float i2c_get_liquid_rate_by_step(int StepperSpeed)<br />
+Рассчитать расход жидкости (л/ч) по текущей скорости шагового двигателя<br />
+Аргументы<br />
+StepperSpeed — Скорость шагового двигателя (шаги/с)<br />
+Возвращает<br />
+Расход жидкости в литрах в час<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float i2c_get_speed_from_rate(float volume_per_hour)<br />
+Рассчитать требуемую скорость шагового двигателя по заданному расходу<br />
+Аргументы<br />
+volume_per_hour — Желаемый расход (л/ч)<br />
+Возвращает<br />
+Скорость шагового двигателя (шаги/с)<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float i2c_get_liquid_volume()<br />
+Получить текущий суммарный объём перекачанной жидкости<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Объём в литрах<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>uint16_t get_stepper_speed(void)<br />
+Получить текущую скорость шагового двигателя<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Текущая скорость (шаги/с)<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void send_mqtt(const String&amp; Str, const String&amp; chart)<br />
+Отправить данные в MQTT-брокер<br />
+Аргументы<br />
+Str — Передаваемая строка данных<br />
+chart — Канал или тип данных (например, "temp", "power")<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void nbk_proc()<br />
+Основной цикл обработки НБК: управление этапами и проверка критических аварий<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void handle_nbk_stage_heatup()<br />
+Обработать этап разгона (H): нагрев до рабочих температур, контроль перехода к следующему этапу<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void handle_nbk_stage_manual()<br />
+Обработать этап ручной настройки (S): контроль параметров, защита от захлёба, ожидание подтверждения<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void handle_nbk_stage_optimization()<br />
+Обработать этап оптимизации (O): автоматическая подстройка параметров подачи и мощности<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void handle_nbk_stage_work()<br />
+Обработать рабочий этап (W): стабилизация процесса, ПИД-регулирование, контроль захлёба<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool check_nbk_critical_alarms()<br />
+Проверить критические аварии: перегрев, недостаток охлаждения, высокое давление<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+true, если сработала авария и процесс был остановлен<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void handle_overflow(const String&amp; msg, bool finish, uint32_t pause_ms)<br />
+Централизованная обработка события захлёба<br />
+Аргументы<br />
+msg — Сообщение для пользователя<br />
+finish — true для завершения процесса, false — для временной паузы<br />
+pause_ms — Длительность паузы в миллисекундах (если используется)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>String get_nbk_program()<br />
+Получить текущую программу НБК в виде строки (например, "H100,S50,O,W")<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Текстовое представление программы<br />
+Исключения<br />
+Нет</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

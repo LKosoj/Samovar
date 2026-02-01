@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>lua - Samovar_doc</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">Samovar_doc</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="BK.html" class="dropdown-item">BK</a>
+</li>
+                                    
+<li>
+    <a href="I2CStepper.html" class="dropdown-item">I2CStepper</a>
+</li>
+                                    
+<li>
+    <a href="SPIFFSEditor.html" class="dropdown-item">SPIFFSEditor</a>
+</li>
+                                    
+<li>
+    <a href="Samovar.html" class="dropdown-item">Samovar</a>
+</li>
+                                    
+<li>
+    <a href="SamovarMqtt.html" class="dropdown-item">SamovarMqtt</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_ini.html" class="dropdown-item">Samovar_ini</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_pin.html" class="dropdown-item">Samovar_pin</a>
+</li>
+                                    
+<li>
+    <a href="beer.html" class="dropdown-item">beer</a>
+</li>
+                                    
+<li>
+    <a href="column_math.html" class="dropdown-item">column_math</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler.html" class="dropdown-item">crash_handler</a>
+</li>
+                                    
+<li>
+    <a href="distiller.html" class="dropdown-item">distiller</a>
+</li>
+                                    
+<li>
+    <a href="font.html" class="dropdown-item">font</a>
+</li>
+                                    
+<li>
+    <a href="impurity_detector.html" class="dropdown-item">impurity_detector</a>
+</li>
+                                    
+<li>
+    <a href="logic.html" class="dropdown-item">logic</a>
+</li>
+                                    
+<li>
+    <a href="lua.html" class="dropdown-item active" aria-current="page">lua</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmvk.html" class="dropdown-item">mod_rmvk</a>
+</li>
+                                    
+<li>
+    <a href="nbk.html" class="dropdown-item">nbk</a>
+</li>
+                                    
+<li>
+    <a href="partition_manager.html" class="dropdown-item">partition_manager</a>
+</li>
+                                    
+<li>
+    <a href="pumppwm.html" class="dropdown-item">pumppwm</a>
+</li>
+                                    
+<li>
+    <a href="quality.html" class="dropdown-item">quality</a>
+</li>
+                                    
+<li>
+    <a href="sensorinit.html" class="dropdown-item">sensorinit</a>
+</li>
+                                    
+<li>
+    <a href="wifi_htm_gz.html" class="dropdown-item">wifi_htm_gz</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="logic.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="mod_rmvk.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#lua" class="nav-link">lua</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="lua">lua</h1>
+<p>Модуль обеспечивает выполнение скриптов Lua для управления устройством Самовар, включая управление GPIO, расширителями I2C, насосами, шаговыми двигателями и другими периферийными компонентами. Скрипты Lua используются для реализации пользовательской логики работы устройства в различных режимах. Модуль интегрируется с основной системой через задачу FreeRTOS и предоставляет безопасные обёртки для вызова аппаратных функций из Lua-скриптов.</p>
+<p>Ключевые структуры данных<br />
+luaObj — карта для хранения пользовательских переменных Lua в формате ключ-значение<br />
+SAMOVAR_MODE — перечисление, определяющее текущий режим работы самовара (дистилляция, ректификация, пиво и т.д.)<br />
+SamovarStatusInt — целочисленное представление текущего состояния самовара, доступное из Lua<br />
+program — массив структур, содержащих параметры программ (объём, скорость, температура и т.д.)<br />
+SamSetup — структура настроек устройства, включая часовой пояс<br />
+lua_timer — массив временных меток для отслеживания таймеров (9 доступных слотов)<br />
+asyncHTTPrequest — Класс для выполнения асинхронных HTTP-запросов с таймаутами и обработкой ответов<br />
+lua_State — контекст выполнения Lua-машины, используемый для обмена данными между C и Lua</p>
+<hr />
+<p>lua_wrapper_pinMode(lua_State *lua_state)<br />
+Обёртка для функции pinMode(), доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает два аргумента: номер пина и режим (INPUT/OUTPUT)<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)</p>
+<hr />
+<p>lua_wrapper_digitalWrite(lua_State *lua_state)<br />
+Обёртка для функции digitalWrite(), доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает два аргумента: номер пина и значение (HIGH/LOW)<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)</p>
+<hr />
+<p>lua_wrapper_digitalRead(lua_State *lua_state)<br />
+Обёртка для функции digitalRead(), доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: номер пина<br />
+Возвращает<br />
+1 — возвращает значение пина (0 или 1) в стек Lua</p>
+<hr />
+<p>lua_wrapper_analogRead(lua_State *lua_state)<br />
+Обёртка для функции analogRead(), доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: номер пина<br />
+Возвращает<br />
+1 — возвращает аналоговое значение пина в стек Lua</p>
+<hr />
+<p>lua_wrapper_exp_pinMode(lua_State *lua_state)<br />
+Обёртка для pinMode() на I2C-расширителе, доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает два аргумента: номер пина расширителя и режим<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)<br />
+Исключения<br />
+Функция ничего не возвращает при таймауте семафора I2C</p>
+<hr />
+<p>lua_wrapper_exp_digitalWrite(lua_State *lua_state)<br />
+Обёртка для digitalWrite() на I2C-расширителе, доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает два аргумента: номер пина и значение<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)<br />
+Исключения<br />
+Функция ничего не делает при таймауте семафора I2C</p>
+<hr />
+<p>lua_wrapper_exp_digitalRead(lua_State *lua_state)<br />
+Обёртка для digitalRead() на I2C-расширителе, доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: номер пина<br />
+Возвращает<br />
+1 — возвращает значение пина (0 или 1) в стек Lua<br />
+Исключения<br />
+Функция возвращает 0 при таймауте семафора I2C</p>
+<hr />
+<p>lua_wrapper_exp_analogWrite(lua_State *lua_state)<br />
+Обёртка для analogWrite() на аналоговом I2C-расширителе, доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: значение ШИМ<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)<br />
+Исключения<br />
+Функция ничего не делает при таймауте семафора I2C</p>
+<hr />
+<p>lua_wrapper_exp_analogRead(lua_State *lua_state)<br />
+Обёртка для analogRead() на аналоговом I2C-расширителе, доступная в Lua-скриптах.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: номер канала<br />
+Возвращает<br />
+1 — возвращает аналоговое значение канала в стек Lua<br />
+Исключения<br />
+Функция возвращает 0 при таймауте семафора I2C</p>
+<hr />
+<p>lua_wrapper_delay(lua_State *lua_state)<br />
+Обёртка для vTaskDelay(), обеспечивает задержку в миллисекундах из Lua-скрипта.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: время задержки в мс<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)</p>
+<hr />
+<p>lua_wrapper_millis(lua_State *lua_state)<br />
+Обёртка для функции millis(), возвращает время с момента запуска системы.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+1 — возвращает текущее время в миллисекундах в стек Lua</p>
+<hr />
+<p>lua_wrapper_set_pause_withdrawal(lua_State *lua_state)<br />
+Обёртка для приостановки отбора дистиллята из Lua-скрипта.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: 1 — приостановить, 0 — возобновить<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)</p>
+<hr />
+<p>lua_wrapper_set_power(lua_State *lua_state)<br />
+Обёртка для включения/выключения нагрева с синхронизацией команд.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua; ожидает один аргумент: 1 — включить, 0 — выключить<br />
+Возвращает<br />
+0 — всегда возвращает 0 (ничего не возвращает в Lua)</p>
+<hr />
+<p>int lua_wrapper_set_samovar_mode(lua_State *lua_state)<br />
+Устанавливает режим работы самовара на основе переданного значения из Lua.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, содержит аргументы вызова<br />
+Возвращает<br />
+0 — всегда возвращает 0, соответствует количеству возвращаемых значений в Lua</p>
+<hr />
+<p>int lua_wrapper_set_mixer(lua_State *lua_state)<br />
+Управляет положением смесителя, устанавливая его в заданное положение.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, первый аргумент — целое число (позиция смесителя)<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_open_valve(lua_State *lua_state)<br />
+Открывает или закрывает клапан в зависимости от переданного значения.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, первый аргумент — булево значение (true — открыть, false — закрыть)<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_set_current_power(lua_State *lua_state)<br />
+Устанавливает текущую мощность нагрева (доступно только при определённой конфигурации).<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, первый аргумент — число с плавающей точкой (мощность в долях от максимума)<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_set_alarm(lua_State *lua_state)<br />
+Активирует сигнал тревоги или предупреждения.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_set_body_temp(lua_State *lua_state)<br />
+Инициирует установку температуры корпуса (используется в алгоритмах контроля).<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_set_next_program(lua_State *lua_state)<br />
+Переходит к следующему этапу программы в зависимости от текущего режима самовара.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_get_state(lua_State *lua_state)<br />
+Возвращает текущее состояние самовара в виде целого числа.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+1 — количество возвращаемых значений (текущее состояние SamovarStatusInt)</p>
+<hr />
+<p>int lua_wrapper_send_msg(lua_State *lua_state)<br />
+Отправляет сообщение в лог или внешнюю систему оповещения.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, первый аргумент — сообщение (любой тип), второй — тип сообщения (MESSAGE_TYPE)<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_set_num_variable(lua_State *lua_state)<br />
+Устанавливает значение числовой переменной по её имени из Lua-скрипта.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, первый аргумент — имя переменной, второй — значение (число)<br />
+Возвращает<br />
+0 — всегда возвращает 0</p>
+<hr />
+<p>int lua_wrapper_get_num_variable(lua_State *lua_state)<br />
+Получает значение числовой переменной по её имени и возвращает в Lua.<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, первый аргумент — имя переменной<br />
+Возвращает<br />
+1 — количество возвращаемых значений (числовое значение переменной)</p>
+<hr />
+<p>int lua_wrapper_get_numeric_variable(lua_State *lua_state)<br />
+Возвращает числовое значение системной переменной по её имени из Lua<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержащее имя переменной в стеке<br />
+Возвращает<br />
+Количество возвращаемых значений в стеке Lua (всегда 1 — числовое значение)<br />
+Исключения<br />
+Логирует предупреждение при обращении к неизвестной переменной</p>
+<hr />
+<p>int lua_wrapper_set_str_variable(lua_State *lua_state)<br />
+Устанавливает значение строковой системной переменной из Lua<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины с именем и значением переменной в стеке<br />
+Исключения<br />
+Логирует предупреждение при попытке установить неизвестную или только для чтения переменную</p>
+<hr />
+<p>int lua_wrapper_set_object(lua_State *lua_state)<br />
+Сохраняет строковое значение в пользовательский объект хранения luaObj<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержит имя и значение в стеке<br />
+Возвращает<br />
+0 — количество возвращаемых значений в стеке Lua</p>
+<hr />
+<p>int lua_wrapper_get_object(lua_State *lua_state)<br />
+Возвращает строковое значение из пользовательского объекта luaObj по ключу<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержит ключ и опциональный тип<br />
+Возвращает<br />
+1 — количество возвращаемых значений (строка из объекта или "0" для NUMERIC при пустом значении)</p>
+<hr />
+<p>int lua_wrapper_set_lua_status(lua_State *lua_state)<br />
+Устанавливает глобальный статус Lua-скрипта<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержит новое значение статуса<br />
+Возвращает<br />
+0 — количество возвращаемых значений в стеке Lua</p>
+<hr />
+<p>int lua_wrapper_set_capacity(lua_State *lua_state)<br />
+Устанавливает текущую ёмкость системы<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержит числовое значение ёмкости<br />
+Возвращает<br />
+0 — количество возвращаемых значений в стеке Lua</p>
+<hr />
+<p>int lua_wrapper_set_pump_pwm(lua_State *lua_state)<br />
+Устанавливает ШИМ-сигнал для водяного насоса (доступно при определении USE_WATER_PUMP)<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержит значение ШИМ (0–255)<br />
+Возвращает<br />
+0 — количество возвращаемых значений в стеке Lua</p>
+<hr />
+<p>int lua_wrapper_set_timer(lua_State *lua_state)<br />
+Запускает таймер с задержкой в секундах<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержит номер таймера (1–9) и время в секундах<br />
+Возвращает<br />
+0 — количество возвращаемых значений в стеке Lua (если номер таймера неверен — без действия)</p>
+<hr />
+<p>int lua_wrapper_get_timer(lua_State *lua_state)<br />
+Возвращает оставшееся время указанного таймера в миллисекундах<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua-машины, содержит номер таймера (1–9)<br />
+Возвращает<br />
+1 — количество возвращаемых значений (оставшееся время в мс или 0, если таймер неактивен)</p>
+<hr />
+<p>int lua_wrapper_get_free_heap(lua_State *lua_state)<br />
+Возвращает объём свободной кучи в килобайтах.<br />
+Возвращает<br />
+Объём свободной памяти в килобайтах (lua_Number)</p>
+<hr />
+<p>int lua_wrapper_get_str_variable(lua_State *lua_state)<br />
+Получает значение строковой переменной по её имени из глобального контекста.<br />
+Аргументы<br />
+1 — Имя переменной (строка), поддерживает: "Msg", "SamovarStatus", "test_str_val", "program_type"<br />
+Возвращает<br />
+Значение переменной как строка; при неизвестной переменной — логирование и возврат пустого результата</p>
+<hr />
+<p>int lua_wrapper_http_request(lua_State *lua_state)<br />
+Выполняет HTTP-запрос (GET или произвольный метод) с таймаутами и возвращает ответ.<br />
+Аргументы<br />
+1 — URL (строка)<br />
+2 — Тип запроса (опционально, строка, например "POST")<br />
+3 — Заголовок Content-Type (опционально)<br />
+4 — Тело запроса (опционально, строка)<br />
+Возвращает<br />
+Текст ответа или "error" при таймауте, ошибке соединения или некорректном количестве аргументов</p>
+<hr />
+<p>int lua_wrapper_set_stepper_by_time(lua_State *lua_state)<br />
+Устанавливает работу шагового двигателя на заданное время.<br />
+Аргументы<br />
+1 — Скорость (шаги в секунду, uint16_t)<br />
+2 — Направление (0 или 1, uint8_t)<br />
+3 — Время работы в миллисекундах (uint16_t)<br />
+Возвращает<br />
+Результат вызова set_stepper_by_time (lua_Number, 1 при успехе, 0 при ошибке)</p>
+<hr />
+<p>int lua_wrapper_set_stepper_target(lua_State *lua_state)<br />
+Устанавливает целевое положение шагового двигателя.<br />
+Аргументы<br />
+1 — Скорость (шаги в секунду, uint16_t)<br />
+2 — Направление (0 или 1, uint8_t)<br />
+3 — Целевое количество шагов (uint32_t)<br />
+Возвращает<br />
+Результат вызова set_stepper_target (lua_Number)</p>
+<hr />
+<p>int lua_wrapper_get_stepper_status(lua_State *lua_state)<br />
+Получает текущий статус шагового двигателя.<br />
+Возвращает<br />
+Текущий статус двигателя (0 — остановлен, 1 — движение, lua_Number)</p>
+<hr />
+<p>int lua_wrapper_i2cpump_start(lua_State *lua_state)<br />
+Запускает I2C-насос на заданную скорость и объём.<br />
+Аргументы<br />
+1 — Скорость подачи (float, относительная величина 0.0–1.0)<br />
+2 — Объём в мл (float, должен быть больше 0)<br />
+Возвращает<br />
+Результат вызова set_stepper_target (lua_Number, 1 при успехе, 0 при ошибке или отсутствии I2C-устройства)</p>
+<hr />
+<p>int lua_wrapper_i2cpump_stop(lua_State *lua_state)<br />
+Останавливает I2C-насос и сбрасывает целевые параметры.<br />
+Возвращает<br />
+0, если устройство не является I2C-насосом; иначе — результат остановки (неявно через set_stepper_target)</p>
+<hr />
+<p>int lua_wrapper_i2cpump_get_speed(lua_State *lua_state)<br />
+Возвращает текущую скорость I2C-насоса в шагах в секунду<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+Текущая скорость насоса (число); 0, если I2C-устройство не активно<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_i2cpump_get_target_ml(lua_State *lua_state)<br />
+Возвращает целевой объём дозирования в миллилитрах<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+Целевой объём в мл (число); 0, если I2C-устройство не активно<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_i2cpump_get_remaining_ml(lua_State *lua_state)<br />
+Возвращает оставшийся объём жидкости для дозирования в миллилитрах<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+Оставшийся объём в мл (число); 0, если I2C-устройство не активно<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_i2cpump_get_running(lua_State *lua_state)<br />
+Проверяет, работает ли насос в данный момент<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+1, если насос работает (скорость &gt; 0 и остаток шагов &gt; 0); иначе 0<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_set_mixer_pump_target(lua_State *lua_state)<br />
+Устанавливает целевое положение миксерного насоса<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, содержит целевое значение (целое число)<br />
+Возвращает<br />
+Установленное значение (число)<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_get_mixer_pump_status(lua_State *lua_state)<br />
+Возвращает текущее состояние миксерного насоса<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+Возвращает<br />
+Текущее состояние насоса (число)<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_check_I2C_device(lua_State *lua_state)<br />
+Проверяет наличие I2C-устройства по заданному адресу<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, содержит адрес устройства (целое число)<br />
+Возвращает<br />
+1, если устройство отвечает; 0 в противном случае<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_set_i2c_rele_state(lua_State *lua_state)<br />
+Устанавливает состояние реле на I2C-расширителе<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua<br />
+a — номер реле (целое число)<br />
+b — желаемое состояние (0 — выключено, 1 — включено)<br />
+Возвращает<br />
+Результат операции (число)<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>int lua_wrapper_get_i2c_rele_state(lua_State *lua_state)<br />
+Возвращает текущее состояние указанного реле на I2C-расширителе<br />
+Аргументы<br />
+lua_state — указатель на состояние Lua, содержит номер реле<br />
+Возвращает<br />
+Текущее состояние реле (0 или 1); 0, если операция не удалась<br />
+Исключения<br />
+— функция не генерирует исключения</p>
+<hr />
+<p>String get_lua_script_list()<br />
+Возвращает список доступных скриптов для кнопок, отфильтрованных по текущему режиму<br />
+Возвращает<br />
+Строка в формате "имя_файла|отображаемое_имя,..." для всех файлов, начинающихся с "btn_" и соответствующих текущему режиму</p>
+<hr />
+<p>String get_lua_script(String fn)<br />
+Загружает содержимое Lua-скрипта из файла в SPIFFS<br />
+Аргументы<br />
+fn — Имя файла (с или без ведущего '/')<br />
+Возвращает<br />
+Содержимое файла как строку; пустая строка, если файл не найден</p>
+<hr />
+<p>void run_lua_script(String fn)<br />
+Подготавливает скрипт для выполнения, добавляя глобальные переменные<br />
+Аргументы<br />
+fn — Имя файла скрипта, который нужно запустить<br />
+Побочный эффект<br />
+Сохраняет подготовленный скрипт в глобальную переменную btn_script</p>
+<hr />
+<p>String run_lua_string(String lstr)<br />
+Выполняет переданный Lua-код как строку<br />
+Аргументы<br />
+lstr — Lua-код в виде строки<br />
+Возвращает<br />
+Сообщение об ошибке, если выполнение завершилось неудачно; иначе пустая строка<br />
+Исключения<br />
+Записывает ошибку в лог через WriteConsoleLog при возникновении</p>
+<hr />
+<p>void load_lua_script()<br />
+Загружает основные скрипты script.lua и скрипт, соответствующий текущему режиму<br />
+Побочный эффект<br />
+Сохраняет содержимое в глобальные переменные script1 и script2</p>
+<hr />
+<p>void do_lua_script(void *parameter)<br />
+Фоновая задача FreeRTOS для выполнения Lua-скриптов<br />
+Аргументы<br />
+parameter — Не используется (должен быть NULL)<br />
+Побочный эффект<br />
+Выполняет script1 и script2, если lua_finished == false; вызывает сборку мусора Lua</p>
+<hr />
+<p>void start_lua_script()<br />
+Инициирует выполнение основных скриптов, снимая флаг завершения<br />
+Побочный эффект<br />
+Устанавливает lua_finished = false, что активирует do_lua_script</p>
+<hr />
+<p>String get_global_variables()<br />
+Формирует строку с определениями глобальных переменных для передачи в Lua-скрипты<br />
+Возвращает<br />
+Строка с Lua-кодом, определяющим переменные (например, bme_pressure = 1013.25)<br />
+Побочный эффект<br />
+В текущей реализации возвращает пустую строку (часть кода закомментирована)</p>
+<hr />
+<p>String getVariablesString()<br />
+Формирует строку с текущими значениями переменных состояния устройства<br />
+Возвращает<br />
+Строка в формате "имя=значение\r\n", содержащая ключевые переменные состояния: флаги, времена, объёмы, температуры, статусы и настройки программ<br />
+Исключения<br />
+Функция не выбрасывает исключения</p>
+<hr />
+<p>String get_lua_mode_name(bool filename)<br />
+Возвращает имя режима или имя файла Lua-скрипта в зависимости от текущего режима работы<br />
+Аргументы<br />
+filename — Если true, возвращает полное имя файла с расширением .lua; иначе — краткое имя режима<br />
+Возвращает<br />
+Строка с именем режима ("beer", "dist", "bk", "nbk", "rect") или соответствующим именем файла (например, "/dist1.lua")<br />
+Исключения<br />
+Функция не выбрасывает исключения</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

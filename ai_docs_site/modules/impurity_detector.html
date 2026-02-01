@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>impurity_detector - Samovar_doc</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../index.html">Samovar_doc</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../runtime.html" class="nav-link">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="BK.html" class="dropdown-item">BK</a>
+</li>
+                                    
+<li>
+    <a href="I2CStepper.html" class="dropdown-item">I2CStepper</a>
+</li>
+                                    
+<li>
+    <a href="SPIFFSEditor.html" class="dropdown-item">SPIFFSEditor</a>
+</li>
+                                    
+<li>
+    <a href="Samovar.html" class="dropdown-item">Samovar</a>
+</li>
+                                    
+<li>
+    <a href="SamovarMqtt.html" class="dropdown-item">SamovarMqtt</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_ini.html" class="dropdown-item">Samovar_ini</a>
+</li>
+                                    
+<li>
+    <a href="Samovar_pin.html" class="dropdown-item">Samovar_pin</a>
+</li>
+                                    
+<li>
+    <a href="beer.html" class="dropdown-item">beer</a>
+</li>
+                                    
+<li>
+    <a href="column_math.html" class="dropdown-item">column_math</a>
+</li>
+                                    
+<li>
+    <a href="crash_handler.html" class="dropdown-item">crash_handler</a>
+</li>
+                                    
+<li>
+    <a href="distiller.html" class="dropdown-item">distiller</a>
+</li>
+                                    
+<li>
+    <a href="font.html" class="dropdown-item">font</a>
+</li>
+                                    
+<li>
+    <a href="impurity_detector.html" class="dropdown-item active" aria-current="page">impurity_detector</a>
+</li>
+                                    
+<li>
+    <a href="logic.html" class="dropdown-item">logic</a>
+</li>
+                                    
+<li>
+    <a href="lua.html" class="dropdown-item">lua</a>
+</li>
+                                    
+<li>
+    <a href="mod_rmvk.html" class="dropdown-item">mod_rmvk</a>
+</li>
+                                    
+<li>
+    <a href="nbk.html" class="dropdown-item">nbk</a>
+</li>
+                                    
+<li>
+    <a href="partition_manager.html" class="dropdown-item">partition_manager</a>
+</li>
+                                    
+<li>
+    <a href="pumppwm.html" class="dropdown-item">pumppwm</a>
+</li>
+                                    
+<li>
+    <a href="quality.html" class="dropdown-item">quality</a>
+</li>
+                                    
+<li>
+    <a href="sensorinit.html" class="dropdown-item">sensorinit</a>
+</li>
+                                    
+<li>
+    <a href="wifi_htm_gz.html" class="dropdown-item">wifi_htm_gz</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="font.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="logic.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#impurity_detector" class="nav-link">impurity_detector</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="impurity_detector">impurity_detector</h1>
+<p>Модуль <code>impurity_detector</code> предназначен для автоматического обнаружения примесей в процессе дистилляции на основе анализа температурного тренда в колонне. Он отслеживает изменения температуры, вычисляет тренд методом линейной регрессии и дисперсию для фильтрации шума, а также управляет логикой пауз отбора при обнаружении критических изменений. Модуль интегрируется с системой управления самогонным аппаратом и реагирует на события старта программы, ручного и автоматического продолжения отбора.</p>
+<p>Ключевые структуры данных<br />
+impurityDetector — глобальная структура, хранящая историю температур, текущее состояние детектора и параметры коррекции<br />
+program — массив программ отбора, содержащий типы программ (H, B, C, P и др.)<br />
+SamSetup — настройки системы, включая флаг использования авто-коррекции<br />
+SamovarStatusInt — текущий статус аппарата (режим отбора, пауза и т.д.)<br />
+PauseOn — флаг ручной паузы, управляемой пользователем<br />
+ProgramNum — текущий индекс активной программы</p>
+<p>float get_speed_from_rate(float volume_per_hour)<br />
+Преобразует объёмную скорость в единицах объёма в час в значение скорости насоса<br />
+Аргументы<br />
+volume_per_hour — объём жидкости, перекачиваемой за час (мл/ч)<br />
+Возвращает<br />
+Значение скорости насоса в диапазоне 0–255<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_pump_speed(float pumpspeed, bool continue_process)<br />
+Устанавливает скорость насоса и, при необходимости, продолжает процесс отбора<br />
+Аргументы<br />
+pumpspeed — значение скорости насоса (обычно 0–255)<br />
+continue_process — флаг, указывающий, следует ли возобновить отбор<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_body_temp()<br />
+Обновляет целевую температуру тела самогонного аппарата на основе текущего режима<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void set_buzzer(bool fl)<br />
+Включает или выключает звуковой сигнал (бuzzer)<br />
+Аргументы<br />
+fl — true для включения, false для выключения<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void SendMsg(const String&amp; m, MESSAGE_TYPE msg_type)<br />
+Отправляет сообщение в систему логирования или пользовательский интерфейс<br />
+Аргументы<br />
+m — текст сообщения<br />
+msg_type — тип сообщения (например, информационное, предупреждение, ошибка)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void pause_withdrawal(bool Pause)<br />
+Приостанавливает или возобновляет отбор продукта<br />
+Аргументы<br />
+Pause — true для паузы, false для возобновления отбора<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void init_impurity_detector()<br />
+Инициализирует детектор примесей, сбрасывая все внутренние состояния и историю температур<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void reset_impurity_detector()<br />
+Полностью сбрасывает состояние детектора, включая историю, тренды и флаги, при смене режима или ручной корректировке<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void detector_on_program_start(const String&amp; wtype)<br />
+Вызывается при старте новой программы отбора, устанавливает грейс-период в зависимости от типа отбора<br />
+Аргументы<br />
+wtype — тип отбора ("H" для голов, иной — для общего режима)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void detector_on_manual_resume()<br />
+Сбрасывает детектор и устанавливает защитный интервал после ручного возобновления отбора<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void detector_on_auto_resume()<br />
+Сбрасывает детектор и устанавливает короткий грейс-период после автоматического возобновления отбора после паузы<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float calculate_temperature_variance()<br />
+Вычисляет дисперсию температуры по накопленной истории для оценки стабильности процесса<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Значение дисперсии температуры (в °C²), используется вместо стандартного отклонения<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>uint8_t check_consecutive_rises(float currentTemp)<br />
+Проверяет, сколько раз подряд температура повышалась более чем на 0.02 °C<br />
+Аргументы<br />
+currentTemp — текущее значение температуры колонны<br />
+Возвращает<br />
+Количество последовательных повышений температуры<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void update_detector_history(float columnTemp)<br />
+Добавляет новое значение температуры в кольцевой буфер и обновляет статистику<br />
+Аргументы<br />
+columnTemp — текущая температура в колонне (°C)<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float calculate_temperature_trend()<br />
+Вычисляет текущий температурный тренд методом линейной регрессии по истории значений<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Темп роста температуры в °C/мин, положительное значение — рост, отрицательное — падение<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float calculate_temperature_slope(uint8_t n)<br />
+Расчёт скорости изменения температуры за последние n точек (в °C/мин)<br />
+Аргументы<br />
+n — количество последних точек для анализа (максимум 30)<br />
+Возвращает<br />
+Скорость изменения температуры в °C/мин. Возвращает 0.0f при делении на ноль.<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>float get_adaptive_threshold(float baseThreshold, float variance, float volumePerHour, String processPhase)<br />
+Вычисление адаптивного порога с учётом дисперсии, скорости отбора и фазы процесса<br />
+Аргументы<br />
+baseThreshold — базовый порог срабатывания детектора<br />
+variance — дисперсия температуры за период (в °C²)<br />
+volumePerHour — текущая скорость отбора в литрах в час<br />
+processPhase — фаза процесса ("H", "B", "C", "T")<br />
+Возвращает<br />
+Адаптированное значение порога срабатывания<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>bool is_first_body_program_after_heads()<br />
+Проверка, является ли текущая программа первой программой тела (B или C) после отбора голов (H)<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+true, если текущая программа — первая B/C после H; иначе false<br />
+Исключения<br />
+Нет</p>
+<hr />
+<p>void process_impurity_detector()<br />
+Основная логика работы детектора примесей: анализ температуры, принятие решений по коррекции скорости отбора<br />
+Аргументы<br />
+Нет<br />
+Возвращает<br />
+Нет<br />
+Исключения<br />
+Нет</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

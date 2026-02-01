@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="img/favicon.ico">
+        <title>Запуск - Samovar_doc</title>
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <link href="css/fontawesome.min.css" rel="stylesheet">
+        <link href="css/brands.min.css" rel="stylesheet">
+        <link href="css/solid.min.css" rel="stylesheet">
+        <link href="css/v4-font-face.min.css" rel="stylesheet">
+        <link href="css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="index.html">Samovar_doc</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="index.html" class="nav-link">Главная</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="architecture.html" class="nav-link">Архитектура</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="runtime.html" class="nav-link active" aria-current="page">Запуск</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="dependencies.html" class="nav-link">Зависимости</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="conventions.html" class="nav-link">Соглашения</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="glossary.html" class="nav-link">Глоссарий</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Модули</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="modules/index.html" class="dropdown-item">Обзор</a>
+</li>
+                                    
+<li>
+    <a href="modules/BK.html" class="dropdown-item">BK</a>
+</li>
+                                    
+<li>
+    <a href="modules/I2CStepper.html" class="dropdown-item">I2CStepper</a>
+</li>
+                                    
+<li>
+    <a href="modules/SPIFFSEditor.html" class="dropdown-item">SPIFFSEditor</a>
+</li>
+                                    
+<li>
+    <a href="modules/Samovar.html" class="dropdown-item">Samovar</a>
+</li>
+                                    
+<li>
+    <a href="modules/SamovarMqtt.html" class="dropdown-item">SamovarMqtt</a>
+</li>
+                                    
+<li>
+    <a href="modules/Samovar_ini.html" class="dropdown-item">Samovar_ini</a>
+</li>
+                                    
+<li>
+    <a href="modules/Samovar_pin.html" class="dropdown-item">Samovar_pin</a>
+</li>
+                                    
+<li>
+    <a href="modules/beer.html" class="dropdown-item">beer</a>
+</li>
+                                    
+<li>
+    <a href="modules/column_math.html" class="dropdown-item">column_math</a>
+</li>
+                                    
+<li>
+    <a href="modules/crash_handler.html" class="dropdown-item">crash_handler</a>
+</li>
+                                    
+<li>
+    <a href="modules/distiller.html" class="dropdown-item">distiller</a>
+</li>
+                                    
+<li>
+    <a href="modules/font.html" class="dropdown-item">font</a>
+</li>
+                                    
+<li>
+    <a href="modules/impurity_detector.html" class="dropdown-item">impurity_detector</a>
+</li>
+                                    
+<li>
+    <a href="modules/logic.html" class="dropdown-item">logic</a>
+</li>
+                                    
+<li>
+    <a href="modules/lua.html" class="dropdown-item">lua</a>
+</li>
+                                    
+<li>
+    <a href="modules/mod_rmvk.html" class="dropdown-item">mod_rmvk</a>
+</li>
+                                    
+<li>
+    <a href="modules/nbk.html" class="dropdown-item">nbk</a>
+</li>
+                                    
+<li>
+    <a href="modules/partition_manager.html" class="dropdown-item">partition_manager</a>
+</li>
+                                    
+<li>
+    <a href="modules/pumppwm.html" class="dropdown-item">pumppwm</a>
+</li>
+                                    
+<li>
+    <a href="modules/quality.html" class="dropdown-item">quality</a>
+</li>
+                                    
+<li>
+    <a href="modules/sensorinit.html" class="dropdown-item">sensorinit</a>
+</li>
+                                    
+<li>
+    <a href="modules/wifi_htm_gz.html" class="dropdown-item">wifi_htm_gz</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="changes.html" class="nav-link">Изменения</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="architecture.html" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="dependencies.html" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#_1" class="nav-link">Запуск и окружение</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#littlefs" class="nav-link">Файловая система (LittleFS)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#wi-fi" class="nav-link">Настройка Wi-Fi</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_2" class="nav-link">Запуск системы</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_3" class="nav-link">Отладка</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#ota" class="nav-link">Обновление прошивки (OTA)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#_6" class="nav-link">Восстановление после сбоя</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="_1">Запуск и окружение</h1>
+<pre class="highlight"><code class="language-markdown"># Запуск и окружение
+
+## Требования к окружению
+
+### Аппаратные требования
+- **Микроконтроллер**: ESP32 (рекомендуется WROOM или WROVER).
+- **Память**: минимум 4 МБ Flash, 520 КБ RAM.
+- **Интерфейсы**: Wi-Fi 2.4 ГГц, UART, I2C, OneWire, ШИМ.
+- **Периферия**:
+  - Датчики температуры: DS18B20 (1-Wire).
+  - Датчики давления: BMP280/BME280, MPX5010D, XGZP6897D.
+  - Исполнительные устройства: реле, шаговый двигатель, сервопривод, насос.
+  - Дисплей: I2C LCD (16x2, 20x4) или OLED.
+  - Кнопки, энкодер, зуммер.
+
+### Программные требования
+- **Среда разработки**: PlatformIO (рекомендуется) или Arduino IDE.
+- **Фреймворк**: Arduino для ESP32.
+- **Библиотеки** (указаны в `platformio.ini`):
+  - `ESPAsyncWebServer`, `AsyncTCP`
+  - `ArduinoJson`
+  - `DallasTemperature`, `OneWire`
+  - `LiquidCrystal_I2C`
+  - `GyverPID`
+  - `LittleFS`
+  - `ESPmDNS`
+
+## Сборка и прошивка
+
+### PlatformIO
+1. Установите [PlatformIO IDE](https://platformio.org/install).
+2. Откройте проект в VS Code.
+3. Убедитесь, что `platformio.ini` содержит:
+   ```ini
+   [env:doit-devkit-v1]
+   platform = espressif32
+   board = doit-devkit-v1
+   framework = arduino
+   ```
+4. Выполните сборку и загрузку:
+   ```bash
+   pio run -t upload
+   ```
+
+### Arduino IDE
+1. Установите ESP32 в Менеджере плат.
+2. Откройте скетч `Samovar.ino`.
+3. Выберите плату: **ESP32 Dev Module**.
+4. Загрузите прошивку.
+
+## Конфигурация платы
+
+Выбор платы осуществляется в `samovar_pin.h`:
+- `ESP32S3` — для плат с полной периферией.
+- `LILYGO T-RELAY` — для T-RELAY 4.
+- `ESP32 DEVKIT` — базовая конфигурация.
+
+Если плата не определяется автоматически, задайте вручную:
+```cpp
+#define BOARD ESP32S3</code></pre>
+<h2 id="littlefs">Файловая система (LittleFS)</h2>
+<ol>
+<li>Соберите веб-интерфейс и скрипты.</li>
+<li>Загрузите файлы в LittleFS:
+   <pre class="highlight"><code class="language-bash">pio run -t uploadfs</code></pre>
+   Или в Arduino IDE: <strong>Инструменты → Загрузить файловую систему</strong>.</li>
+</ol>
+<p>Обязательные файлы:
+- <code>/index.htm</code> — веб-интерфейс.
+- <code>/init.lua</code> — стартовый Lua-скрипт.
+- <code>/.exclude.files</code> — маски скрытых файлов.</p>
+<h2 id="wi-fi">Настройка Wi-Fi</h2>
+<p>При первом запуске устройство создаёт точку доступа <code>Samovar-XXXX</code> (пароль <code>12345678</code>). Подключитесь и откройте <code>http://192.168.4.1</code>.</p>
+<p>Настройте:
+- Сеть Wi-Fi (SSID/пароль).
+- Имя устройства (<code>SAMOVAR_HOST</code>).
+- Часовой пояс (<code>TimeZone</code>).</p>
+<h2 id="_2">Запуск системы</h2>
+<ol>
+<li>Подайте питание.</li>
+<li>Устройство:</li>
+<li>Инициализирует датчики.</li>
+<li>Подключится к Wi-Fi.</li>
+<li>Запустит веб-сервер (порт 80).</li>
+<li>Загрузит <code>init.lua</code> (если <code>USE_LUA</code>).</li>
+<li>Доступ к интерфейсу: <code>http://samovar.local</code> или по IP.</li>
+</ol>
+<h2 id="_3">Отладка</h2>
+<h3 id="_4">Последовательный порт</h3>
+<ul>
+<li>Скорость: 115200 бод.</li>
+<li>Используйте монитор порта для просмотра логов.</li>
+</ul>
+<h3 id="_5">Условная компиляция</h3>
+<p>Для включения отладки добавьте в <code>platformio.ini</code>:
+<pre class="highlight"><code class="language-ini">build_flags = -D__SAMOVAR_DEBUG</code></pre></p>
+<h3 id="gdb-">GDB-отладка</h3>
+<ol>
+<li>Подключите JTAG (например, ESP-Prog).</li>
+<li>Запустите OpenOCD:
+   <pre class="highlight"><code class="language-bash">openocd -f board/esp32-wrover-kit-3.3v.cfg</code></pre></li>
+<li>Подключитесь через GDB:
+   <pre class="highlight"><code class="language-bash">xtensa-esp32-elf-gdb .pio/build/doit-devkit-v1/firmware.elf</code></pre></li>
+</ol>
+<h2 id="ota">Обновление прошивки (OTA)</h2>
+<ol>
+<li>В веб-интерфейсе перейдите в <strong>Настройки → Обновление</strong>.</li>
+<li>Загрузите <code>.bin</code>-файл прошивки.</li>
+<li>Или используйте <code>platformio.ini</code>:
+   <pre class="highlight"><code class="language-ini">upload_protocol = espota
+upload_port = 192.168.1.100</code></pre></li>
+</ol>
+<h2 id="_6">Восстановление после сбоя</h2>
+<p>Если устройство не запускается:
+1. Удерживайте кнопку <strong>ALARM_BTN</strong> при включении.
+2. Система сбросит настройки и перейдёт в режим AP.
+3. Перенастройте через веб-интерфейс.
+```</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = ".",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="js/base.js"></script>
+        <script src="search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
