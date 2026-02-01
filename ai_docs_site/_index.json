@@ -1,10 +1,12 @@
 {
-  "generated_at": "2026-02-01T15:13:48.140354Z",
+  "generated_at": "2026-02-01T18:41:17.308967Z",
   "docs_dir": ".ai-docs",
   "rules": {
     "priority": [
       "modules/index.md",
       "modules/*",
+      "configs/index.md",
+      "configs/files/*",
       "index.md",
       "architecture.md",
       "conventions.md"
@@ -29,6 +31,11 @@
       "path": "dependencies.md"
     },
     {
+      "id": "testing",
+      "title": "Тестирование",
+      "path": "testing.md"
+    },
+    {
       "id": "conventions",
       "title": "Соглашения",
       "path": "conventions.md"
@@ -37,6 +44,11 @@
       "id": "glossary",
       "title": "Глоссарий",
       "path": "glossary.md"
+    },
+    {
+      "id": "configs",
+      "title": "Конфигурация проекта",
+      "path": "configs/index.md"
     }
   ],
   "modules": [
@@ -299,10 +311,34 @@
       "summary": "Модуль обработки пивоваренных рецептов в формате BeerXML и генерации управляющих программ для оборудования. Реализует логику загрузки, парсинга и обработки пивоваренных рецептов в формате BeerXML. Извлекает данные о затирании, кипячении и брожении, формирует последовательность температурных шагов и генерирует управляющую программу для оборудования (например, пивоварни \"Самовар\"). Результат представляет собой текстовый скрипт, соответствующий протоколу управления устройством."
     }
   ],
+  "configs": [
+    {
+      "name": "debug_custom.json",
+      "path": "configs/files/debug_custom__json.md",
+      "source_path": "debug_custom.json",
+      "summary": "Конфигурационный файл определяет параметры отладки для проекта на базе платформы Arduino, работающего на микроконтроллере ESP32. Он задаёт инструментарий для отладки, путь к файлу описания периферии (SVD), а также команды, выполняемые при подключении и перезапуске отладки. Файл используется, например, в средах с поддержкой OpenOCD или J-Link для настройки корректного взаимодействия с целевым устройством."
+    },
+    {
+      "name": "debug.cfg",
+      "path": "configs/files/debug__cfg.md",
+      "source_path": "debug.cfg",
+      "summary": "Конфигурационный файл предназначен для настройки OpenOCD при отладке платы ESP32-WROVER-KIT. Он определяет интерфейс подключения JTAG, используемый адаптер, напряжение питания флеш-памяти и загружает конфигурацию целевого устройства ESP32. Файл используется при запуске OpenOCD и обеспечивает корректное взаимодействие с отладочным оборудованием."
+    },
+    {
+      "name": "platformio.ini",
+      "path": "configs/files/platformio__ini.md",
+      "source_path": "platformio.ini",
+      "summary": "Файл `platformio.ini` — это конфигурационный файл проекта PlatformIO, определяющий параметры сборки, загрузки, платформы и окружения для встраиваемых приложений. Он позволяет настраивать платформу, плату, фреймворк, фильтры исходных файлов, параметры компиляции и другие опции. В данном случае конфигурация предназначена для сборки проекта под ESP32 с использованием фреймворка Arduino и оптимизацией размера прошивки."
+    }
+  ],
   "files": [
     "_index.json",
     "architecture.md",
     "changes.md",
+    "configs/files/debug__cfg.md",
+    "configs/files/debug_custom__json.md",
+    "configs/files/platformio__ini.md",
+    "configs/index.md",
     "conventions.md",
     "dependencies.md",
     "glossary.md",
@@ -352,6 +388,7 @@
     "modules/quality__h.md",
     "modules/sensorinit__h.md",
     "modules/wifi_htm_gz__h.md",
-    "runtime.md"
+    "runtime.md",
+    "testing.md"
   ]
 }

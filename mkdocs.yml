@@ -18,8 +18,14 @@ nav:
 - Архитектура: architecture.md
 - Запуск: runtime.md
 - Зависимости: dependencies.md
+- Тестирование: testing.md
 - Соглашения: conventions.md
 - Глоссарий: glossary.md
+- Конфигурация проекта:
+  - Обзор: configs/index.md
+  - debug.cfg: configs/files/debug__cfg.md
+  - debug_custom.json: configs/files/debug_custom__json.md
+  - platformio.ini: configs/files/platformio__ini.md
 - Модули:
   - Обзор: modules/index.md
   - data:
