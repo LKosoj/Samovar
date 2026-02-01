@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "Samovar.h"
+#include <math.h>
 
 float get_speed_from_rate(float volume_per_hour);
 void set_pump_speed(float pumpspeed, bool continue_process);
@@ -10,6 +11,19 @@ void set_body_temp();
 void set_buzzer(bool fl);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void pause_withdrawal(bool Pause);
+
+// Грейс-период после старта строки/ручного продолжения (мс)
+static unsigned long detector_grace_until = 0;
+// Окно блокировки детектора после ручного продолжения (мс)
+static unsigned long detector_manual_override_until = 0;
+// Стабилизация пара перед стартом детектора
+static unsigned long detector_steam_stable_since = 0;
+static float detector_steam_stable_ref = 0.0f;
+// Минимальное число точек истории для критического тренда
+static const uint8_t DETECTOR_MIN_HISTORY_CRITICAL = 10;
+// Порог стабильности пара и окно стабилизации
+static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
+static const unsigned long DETECTOR_STEAM_STABLE_MS = 600000UL; // 10 минут
 
 /**
  * Инициализация детектора
@@ -26,6 +40,8 @@ void init_impurity_detector() {
   impurityDetector.tempStdDev = 0.0f;
   impurityDetector.consecutiveRises = 0;
   impurityDetector.lastTemp = 0.0f;
+  detector_steam_stable_since = 0;
+  detector_steam_stable_ref = 0.0f;
 }
 
 /**
@@ -44,14 +60,9 @@ void reset_impurity_detector() {
   impurityDetector.tempStdDev = 0.0f;
   impurityDetector.consecutiveRises = 0;
   impurityDetector.lastTemp = 0.0f;
+  detector_steam_stable_since = 0;
+  detector_steam_stable_ref = 0.0f;
 }
-
-// Грейс-период после старта строки/ручного продолжения (мс)
-static unsigned long detector_grace_until = 0;
-// Окно блокировки детектора после ручного продолжения (мс)
-static unsigned long detector_manual_override_until = 0;
-// Минимальное число точек истории для критического тренда
-static const uint8_t DETECTOR_MIN_HISTORY_CRITICAL = 10;
 
 // Вызывается при старте новой строки программы
 void detector_on_program_start(const String& wtype) {
@@ -62,6 +73,8 @@ void detector_on_program_start(const String& wtype) {
     detector_grace_until = millis() + 30000UL; // общий грейс-период
   }
   detector_manual_override_until = 0;
+  detector_steam_stable_since = 0;
+  detector_steam_stable_ref = 0.0f;
 }
 
 // Вызывается при ручном продолжении отбора
@@ -76,6 +89,29 @@ void detector_on_auto_resume() {
   reset_impurity_detector();
   detector_grace_until = millis() + 30000UL;
   detector_manual_override_until = 0;
+}
+
+/**
+ * Проверка стабилизации температуры пара (ΔT <= 0.05°C в течение 10 минут)
+ */
+bool is_steam_stable(float steamTemp) {
+  unsigned long now = millis();
+  if (detector_steam_stable_ref <= 0.0f) {
+    detector_steam_stable_ref = steamTemp;
+    detector_steam_stable_since = 0;
+    return false;
+  }
+
+  if (fabsf(steamTemp - detector_steam_stable_ref) <= DETECTOR_STEAM_STABLE_DELTA) {
+    if (detector_steam_stable_since == 0) {
+      detector_steam_stable_since = now;
+    }
+    return (now - detector_steam_stable_since) >= DETECTOR_STEAM_STABLE_MS;
+  }
+
+  detector_steam_stable_ref = steamTemp;
+  detector_steam_stable_since = 0;
+  return false;
 }
 
 /**
@@ -268,6 +304,12 @@ void process_impurity_detector() {
     return;
   }
 
+  // Детектор работает только в режиме ректификации
+  if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) {
+    impurityDetector.detectorStatus = 0;
+    return;
+  }
+
   // Детектор не работает во время программы типа "P" (Пауза)
   // Во время паузы отбор должен быть полностью остановлен и не возобновляться детектором
   if (ProgramNum < 30 && program[ProgramNum].WType == "P") {
@@ -296,16 +338,18 @@ void process_impurity_detector() {
     impurityDetector.detectorStatus = 0;
     return;
   }
-  
-  // Выбор датчика температуры в зависимости от типа программы:
-  // - Для тела (B) и предзахлеба (C) - температура царги (PipeSensor) - более чувствительна к примесям
-  // - Для голов (H) и хвостов (T) - температура пара (SteamSensor) - стандартный контроль
-  float detectorTemp;
-  if (ProgramNum < 30 && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C")) {
-    detectorTemp = PipeSensor.avgTemp;  // Температура царги для тела и предзахлеба
-  } else {
-    detectorTemp = SteamSensor.avgTemp; // Температура пара для голов и хвостов
+
+  // Детектор на головах отключен по умолчанию
+  if (ProgramNum < 30 && program[ProgramNum].WType == "H" && !SamSetup.useDetectorOnHeads) {
+    impurityDetector.detectorStatus = 0;
+    return;
   }
+  
+  // Выбор датчика температуры в зависимости от фазы:
+  // - До 92°C в кубе: контроль по пару
+  // - После 92°C в кубе: контроль по царге до конца
+  bool usePipeSensor = (TankSensor.avgTemp >= 92.0f);
+  float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
   
   // Сбор данных каждые 2 секунды
   if (now - impurityDetector.lastSampleTime >= 2000) {
@@ -318,6 +362,14 @@ void process_impurity_detector() {
   if (detector_grace_until > now) {
     impurityDetector.detectorStatus = 0;
     return;
+  }
+
+  // Для первой программы тела/предзахлеба после голов: ждать стабилизацию пара 10 минут
+  if (!usePipeSensor && is_first_body_program_after_heads()) {
+    if (!is_steam_stable(SteamSensor.avgTemp)) {
+      impurityDetector.detectorStatus = 0;
+      return;
+    }
   }
 
   // Базовый порог на основе плотности насадки (PackDens)
@@ -375,10 +427,7 @@ void process_impurity_detector() {
       program_Wait = true;
       program_Wait_Type = "(Детектор)";
       pause_withdrawal(true);
-      uint16_t delaySec = PipeSensor.Delay;
-      if (ProgramNum < 30 && (program[ProgramNum].WType == "H" || program[ProgramNum].WType == "T")) {
-        delaySec = SteamSensor.Delay;
-      }
+      uint16_t delaySec = usePipeSensor ? PipeSensor.Delay : SteamSensor.Delay;
       t_min = now + delaySec * 1000;
       set_buzzer(true);
       SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " + 

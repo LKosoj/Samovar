@@ -618,6 +618,10 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.useautospeed) return "checked='true'";
     else
       return "";
+  } else if (var == "UASHeadsChecked") {
+    if (SamSetup.useDetectorOnHeads) return "checked='true'";
+    else
+      return "";
   } else if (var == "CPBuzz") {
     if (SamSetup.ChangeProgramBuzzer) return "checked='true'";
     else
@@ -876,6 +880,11 @@ void handleSave(AsyncWebServerRequest *request) {
   SamSetup.useautospeed = false;
   if (request->hasArg("useautospeed")) {
     SamSetup.useautospeed = true;
+  }
+
+  SamSetup.useDetectorOnHeads = false;
+  if (request->hasArg("useDetectorOnHeads")) {
+    SamSetup.useDetectorOnHeads = true;
   }
 
   SamSetup.ChangeProgramBuzzer = false;

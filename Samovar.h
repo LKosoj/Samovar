@@ -416,6 +416,7 @@ struct SetupEEPROM {
   uint8_t WaterAdress[8];
   uint8_t TankAdress[8];
   bool useautospeed;                                           //Настройка для использования автокорректировки скорости
+  bool useDetectorOnHeads;                                     //Разрешить детектор на головах (по умолчанию выкл)
   uint8_t autospeed;                                           //Процент изменения скорости
   char blynkauth[33];
   char videourl[120];                                          //URL для потокового видео с камеры
