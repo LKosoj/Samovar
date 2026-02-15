@@ -28,7 +28,10 @@ uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res) {
     //Serial.println(cmd);
     if ( xSemaphoreTake( xSemaphore, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
     {
-      sprintf(cmd_buf, "%s\r", cmd);
+      size_t copyLen = strnlen(cmd, sizeof(cmd_buf) - 2);
+      memcpy(cmd_buf, cmd, copyLen);
+      cmd_buf[copyLen] = '\r';
+      cmd_buf[copyLen + 1] = '\0';
       uart_flush(RMVK_UART);
       cmd_len = uart_write_bytes(RMVK_UART, pc, strlen(pc));
       len = uart_read_bytes(RMVK_UART, buf, sizeof(buf), RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
@@ -112,7 +115,7 @@ uint16_t RMVK_set_out_voltge(uint16_t voltge) {
   char cmd[20];
   if (!rmvk.on)RMVK_set_on(1);
   if (voltge > MAX_VOLTAGE)voltge = MAX_VOLTAGE;
-  sprintf(cmd, "AT+VS=%03d", voltge);
+  snprintf(cmd, sizeof(cmd), "AT+VS=%03d", voltge);
   ret = RMVK_cmd(cmd, RMVK_INT);
   return ret;
 }
@@ -127,14 +130,14 @@ uint16_t RMVK_set_on(uint16_t state) {
   char cmd[20];
   if (state > 0)state = 1;
   else state = 0;
-  sprintf(cmd, "AT+ON=%d", state);
+  snprintf(cmd, sizeof(cmd), "AT+ON=%d", state);
   ret = RMVK_cmd(cmd, RMVK_ON);
   return ret;
 }
 uint16_t RMVK_select_mem(uint16_t sm) {
   int ret;
   char cmd[20];
-  sprintf(cmd, "AT+SM=%d", sm);
+  snprintf(cmd, sizeof(cmd), "AT+SM=%d", sm);
   ret = RMVK_cmd(cmd, RMVK_OK);
   return ret;
 }

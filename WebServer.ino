@@ -45,6 +45,7 @@ void get_web_interface();
 String http_sync_request_get(String url);
 void set_water_temp(float temp);
 void set_body_temp();
+void send_ajax_json(AsyncWebServerRequest *request);
 void set_power(bool On);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
@@ -280,9 +281,7 @@ void WebServerInit(void) {
     request->send(SPIFFS, "/data.csv", String());
   });
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
-    //TempStr = temp;
-    getjson();
-    request->send(200, "text/html", jsonstr);
+    send_ajax_json(request);
   });
   server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request) {
     web_command(request);
@@ -774,6 +773,9 @@ String calibrateKeyProcessor(const String &var) {
 }
 
 void handleSave(AsyncWebServerRequest *request) {
+  if (!request) {
+    return;
+  }
   /*
        int params = request->params();
         for(int i=0;i<params;i++){
@@ -785,83 +787,83 @@ void handleSave(AsyncWebServerRequest *request) {
         //return;
   */
 
-  if (request && request->hasArg("SteamDelay")) {
+  if (request->hasArg("SteamDelay")) {
     SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
   }
-  if (request && request->hasArg("PipeDelay")) {
+  if (request->hasArg("PipeDelay")) {
     SamSetup.PipeDelay = request->arg("PipeDelay").toInt();
   }
-  if (request && request->hasArg("WaterDelay")) {
+  if (request->hasArg("WaterDelay")) {
     SamSetup.WaterDelay = request->arg("WaterDelay").toInt();
   }
-  if (request && request->hasArg("TankDelay")) {
+  if (request->hasArg("TankDelay")) {
     SamSetup.TankDelay = request->arg("TankDelay").toInt();
   }
-  if (request && request->hasArg("ACPDelay")) {
+  if (request->hasArg("ACPDelay")) {
     SamSetup.ACPDelay = request->arg("ACPDelay").toInt();
   }
 
-  if (request && request->hasArg("DeltaSteamTemp")) {
+  if (request->hasArg("DeltaSteamTemp")) {
     SamSetup.DeltaSteamTemp = request->arg("DeltaSteamTemp").toFloat();
   }
-  if (request && request->hasArg("DeltaPipeTemp")) {
+  if (request->hasArg("DeltaPipeTemp")) {
     SamSetup.DeltaPipeTemp = request->arg("DeltaPipeTemp").toFloat();
   }
-  if (request && request->hasArg("DeltaWaterTemp")) {
+  if (request->hasArg("DeltaWaterTemp")) {
     SamSetup.DeltaWaterTemp = request->arg("DeltaWaterTemp").toFloat();
   }
-  if (request && request->hasArg("DeltaTankTemp")) {
+  if (request->hasArg("DeltaTankTemp")) {
     SamSetup.DeltaTankTemp = request->arg("DeltaTankTemp").toFloat();
   }
-  if (request && request->hasArg("DeltaACPTemp")) {
+  if (request->hasArg("DeltaACPTemp")) {
     SamSetup.DeltaACPTemp = request->arg("DeltaACPTemp").toFloat();
   }
-  if (request && request->hasArg("SetSteamTemp")) {
+  if (request->hasArg("SetSteamTemp")) {
     SamSetup.SetSteamTemp = request->arg("SetSteamTemp").toFloat();
   }
-  if (request && request->hasArg("SetPipeTemp")) {
+  if (request->hasArg("SetPipeTemp")) {
     SamSetup.SetPipeTemp = request->arg("SetPipeTemp").toFloat();
   }
-  if (request && request->hasArg("SetWaterTemp")) {
+  if (request->hasArg("SetWaterTemp")) {
     SamSetup.SetWaterTemp = request->arg("SetWaterTemp").toFloat();
   }
-  if (request && request->hasArg("SetTankTemp")) {
+  if (request->hasArg("SetTankTemp")) {
     SamSetup.SetTankTemp = request->arg("SetTankTemp").toFloat();
   }
-  if (request && request->hasArg("SetACPTemp")) {
+  if (request->hasArg("SetACPTemp")) {
     SamSetup.SetACPTemp = request->arg("SetACPTemp").toFloat();
   }
-  if (request && request->hasArg("Kp")) {
+  if (request->hasArg("Kp")) {
     SamSetup.Kp = request->arg("Kp").toFloat();
   }
-  if (request && request->hasArg("Ki")) {
+  if (request->hasArg("Ki")) {
     SamSetup.Ki = request->arg("Ki").toFloat();
   }
-  if (request && request->hasArg("Kd")) {
+  if (request->hasArg("Kd")) {
     SamSetup.Kd = request->arg("Kd").toFloat();
   }
-  if (request && request->hasArg("StbVoltage")) {
+  if (request->hasArg("StbVoltage")) {
     SamSetup.StbVoltage = request->arg("StbVoltage").toFloat();
   }
-  if (request && request->hasArg("BVolt")) {
+  if (request->hasArg("BVolt")) {
     SamSetup.BVolt = request->arg("BVolt").toFloat();
   }
-  if (request && request->hasArg("DistTimeF")) {
+  if (request->hasArg("DistTimeF")) {
     SamSetup.DistTimeF = request->arg("DistTimeF").toInt();
   }
-  if (request && request->hasArg("MaxPressureValue")) {
+  if (request->hasArg("MaxPressureValue")) {
     SamSetup.MaxPressureValue = request->arg("MaxPressureValue").toFloat();
   }
-  if (request && request->hasArg("StepperStepMl")) {
+  if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
-  if (request && request->hasArg("StepperStepMlI2C")) {
+  if (request->hasArg("StepperStepMlI2C")) {
     SamSetup.StepperStepMlI2C = request->arg("StepperStepMlI2C").toInt();
   }
-  if (request && request->hasArg("stepperstepml")) {
+  if (request->hasArg("stepperstepml")) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
   }
-  if (request && request->hasArg("WProgram")) {
+  if (request->hasArg("WProgram")) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
     else
       set_program(request->arg("WProgram"));
@@ -951,31 +953,31 @@ void handleSave(AsyncWebServerRequest *request) {
     SamSetup.NbkOwPress = request->arg("NbkOwPress").toFloat();
   }
   if (request->hasArg("videourl")) {
-    request->arg("videourl").toCharArray(SamSetup.videourl, request->arg("videourl").length() + 1);
+    copyStringSafe(SamSetup.videourl, request->arg("videourl"));
   }
   if (request->hasArg("blynkauth")) {
-    request->arg("blynkauth").toCharArray(SamSetup.blynkauth, 33);
+    copyStringSafe(SamSetup.blynkauth, request->arg("blynkauth"));
   }
   if (request->hasArg("tgtoken")) {
-    request->arg("tgtoken").toCharArray(SamSetup.tg_token, request->arg("tgtoken").length() + 1);
+    copyStringSafe(SamSetup.tg_token, request->arg("tgtoken"));
   }
   if (request->hasArg("tgchatid")) {
-    request->arg("tgchatid").toCharArray(SamSetup.tg_chat_id, request->arg("tgchatid").length() + 1);
+    copyStringSafe(SamSetup.tg_chat_id, request->arg("tgchatid"));
   }
   if (request->hasArg("SteamColor")) {
-    request->arg("SteamColor").toCharArray(SamSetup.SteamColor, request->arg("SteamColor").length() + 1);
+    copyStringSafe(SamSetup.SteamColor, request->arg("SteamColor"));
   }
   if (request->hasArg("PipeColor")) {
-    request->arg("PipeColor").toCharArray(SamSetup.PipeColor, request->arg("PipeColor").length() + 1);
+    copyStringSafe(SamSetup.PipeColor, request->arg("PipeColor"));
   }
   if (request->hasArg("WaterColor")) {
-    request->arg("WaterColor").toCharArray(SamSetup.WaterColor, request->arg("WaterColor").length() + 1);
+    copyStringSafe(SamSetup.WaterColor, request->arg("WaterColor"));
   }
   if (request->hasArg("TankColor")) {
-    request->arg("TankColor").toCharArray(SamSetup.TankColor, request->arg("TankColor").length() + 1);
+    copyStringSafe(SamSetup.TankColor, request->arg("TankColor"));
   }
   if (request->hasArg("ACPColor")) {
-    request->arg("ACPColor").toCharArray(SamSetup.ACPColor, request->arg("ACPColor").length() + 1);
+    copyStringSafe(SamSetup.ACPColor, request->arg("ACPColor"));
   }
   if (request->hasArg("mode")) {
     if (SamSetup.Mode != request->arg("mode").toInt()) {

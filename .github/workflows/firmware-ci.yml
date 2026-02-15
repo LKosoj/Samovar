@@ -1,0 +1,95 @@
+name: Firmware CI
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+
+jobs:
+  build:
+    name: Build (PlatformIO)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env_name: [Samovar, Samovar_s3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio==6.1.19
+
+      - name: Build firmware (${{ matrix.env_name }})
+        run: pio run -e ${{ matrix.env_name }}
+
+  static-analysis:
+    name: Static Analysis (cppcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,performance,portability \
+            --std=c++11 \
+            --inline-suppr \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            --language=c++ \
+            Samovar.ino WebServer.ino FS.ino NVS_Manager.ino Menu.ino \
+            logic.h beer.h distiller.h nbk.h sensorinit.h Samovar.h
+
+  static-analysis-force:
+    name: Static Analysis (cppcheck --force, extended)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck (force, all configurations)
+        run: |
+          cppcheck \
+            --force \
+            --enable=warning,performance,portability,information \
+            --std=c++11 \
+            --inline-suppr \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            --language=c++ \
+            Samovar.ino WebServer.ino FS.ino NVS_Manager.ino Menu.ino \
+            logic.h beer.h distiller.h nbk.h sensorinit.h Samovar.h
+
+  smoke-api:
+    name: Smoke API Routes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: API smoke check
+        run: python tools/smoke_api_routes.py

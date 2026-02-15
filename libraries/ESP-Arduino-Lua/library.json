@@ -1,0 +1,11 @@
+{
+  "name": "ESP-Arduino-Lua",
+  "version": "0.0.50",
+  "build": {
+    "srcFilter": [
+      "+<*>",
+      "-<lua/lua.c>",
+      "-<lua/luac.c>"
+    ]
+  }
+}

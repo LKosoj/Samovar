@@ -335,16 +335,16 @@ void setup_go_back() {
 void writeString(String Str, uint8_t num) {
   switch (num) {
     case 1:
-      Str.toCharArray(welcomeStrArr1, 20);
+      copyStringSafe(welcomeStrArr1, Str);
       break;
     case 2:
-      Str.toCharArray(welcomeStrArr2, 20);
+      copyStringSafe(welcomeStrArr2, Str);
       break;
     case 3:
-      Str.toCharArray(welcomeStrArr3, 20);
+      copyStringSafe(welcomeStrArr3, Str);
       break;
     case 4:
-      Str.toCharArray(welcomeStrArr4, 20);
+      copyStringSafe(welcomeStrArr4, Str);
       break;
     case 0:
       menu_update();
@@ -551,7 +551,7 @@ void menu_samovar_start() {
     run_program(CAPACITY_NUM * 2);
     reset_sensor_counter();
   }
-  Str.toCharArray(startval_text_val, 20);
+  copyStringSafe(startval_text_val, Str);
   reset_focus();
   menu_update();
 }

@@ -789,34 +789,97 @@ String get_beer_program() {
  * @param WProgram Строка с описанием программы
  */
 void set_beer_program(String WProgram) {
-  //M - malt application temp, P - pause, B - boil, C - cool
-  char c[500] = {0};
-  WProgram.toCharArray(c, 500);
-  char *pair = strtok(c, ";");
-  //String MeshTemplate;
+  // M - malt application temp, P - pause, B - boil, C - cool
+  for (int j = 0; j < CAPACITY_NUM * 2; j++) {
+    program[j].WType = "";
+  }
+  ProgramLen = 0;
+
+  if (WProgram.length() == 0) return;
+  if (WProgram.length() > MAX_PROGRAM_INPUT_LEN) {
+    SendMsg("Ошибка программы: слишком длинная строка (beer)", ALARM_MSG);
+    return;
+  }
+
+  char input[MAX_PROGRAM_INPUT_LEN + 1] = {0};
+  copyStringSafe(input, WProgram);
+
   int i = 0;
-  while (pair != NULL && i < CAPACITY_NUM * 2) {
-    program[i].WType = pair;
-    pair = strtok(NULL, ";");
-    program[i].Temp = atof(pair);
-    pair = strtok(NULL, ";");
-    program[i].Time = atof(pair);
-    pair = strtok(NULL, ";");
-    //разберем шаблон для насоса/мешалки по частям
-    program[i].capacity_num = getValue(pair, '^', 0).toInt();  //Тип устройства - 1 - мешалка, 2 - насос, 3 - мешалка и насос одновременно
-    program[i].Speed = getValue(pair, '^', 1).toInt();         //Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения
-    program[i].Volume = getValue(pair, '^', 2).toInt();        //Время включения в секундах
-    program[i].Power = getValue(pair, '^', 3).toInt();         //Время выключения в секундах
-    pair = strtok(NULL, "\n");
-    program[i].TempSensor = atoi(pair);
+  char* saveLine = nullptr;
+  char* line = strtok_r(input, "\n", &saveLine);
+  while (line && i < CAPACITY_NUM * 2) {
+    size_t lineLen = strlen(line);
+    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
+      line[--lineLen] = '\0';
+    }
+    if (lineLen == 0) {
+      line = strtok_r(NULL, "\n", &saveLine);
+      continue;
+    }
+
+    char* saveTok = nullptr;
+    char* tokType = strtok_r(line, ";", &saveTok);
+    char* tokTemp = strtok_r(NULL, ";", &saveTok);
+    char* tokTime = strtok_r(NULL, ";", &saveTok);
+    char* tokDevice = strtok_r(NULL, ";", &saveTok);
+    char* tokSensor = strtok_r(NULL, ";", &saveTok);
+    char* tokExtra = strtok_r(NULL, ";", &saveTok);
+
+    float temp = 0.0f;
+    float timeMin = 0.0f;
+    long sensor = 0;
+    bool ok = tokType && tokType[0] != '\0' &&
+              tokTemp && tokTime && tokDevice && tokSensor &&
+              !tokExtra &&
+              parseFloatSafe(tokTemp, temp) &&
+              parseFloatSafe(tokTime, timeMin) &&
+              parseLongSafe(tokSensor, sensor) &&
+              sensor >= 0 && sensor <= 5 &&
+              timeMin >= 0.0f;
+
+    if (!ok) {
+      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
+      ProgramLen = 0;
+      SendMsg("Ошибка программы: неверный формат строки beer", ALARM_MSG);
+      return;
+    }
+
+    String device = tokDevice;
+    long devType = 0;
+    long speed = 0;
+    long onTime = 0;
+    long offTime = 0;
+    ok = parseLongSafe(getValue(device, '^', 0).c_str(), devType) &&
+         parseLongSafe(getValue(device, '^', 1).c_str(), speed) &&
+         parseLongSafe(getValue(device, '^', 2).c_str(), onTime) &&
+         parseLongSafe(getValue(device, '^', 3).c_str(), offTime) &&
+         devType >= 0 && devType <= 255 &&
+         onTime >= 0 && onTime <= 65535 &&
+         offTime >= 0 && offTime <= 65535;
+
+    if (!ok) {
+      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
+      ProgramLen = 0;
+      SendMsg("Ошибка программы: неверный шаблон устройства beer", ALARM_MSG);
+      return;
+    }
+
+    program[i].WType = tokType;
+    program[i].Temp = temp;
+    program[i].Time = timeMin;
+    program[i].capacity_num = (uint8_t)devType;
+    program[i].Speed = (float)speed;
+    program[i].Volume = (uint16_t)onTime;
+    program[i].Power = (uint16_t)offTime;
+    program[i].TempSensor = (uint8_t)sensor;
 
     i++;
     ProgramLen = i;
-    pair = strtok(NULL, ";");
-    if ((!pair || pair == NULL || pair[0] == 13) && i < CAPACITY_NUM * 2) {
-      program[i].WType = "";
-      break;
-    }
+    line = strtok_r(NULL, "\n", &saveLine);
+  }
+
+  if (i < CAPACITY_NUM * 2) {
+    program[i].WType = "";
   }
 }
 

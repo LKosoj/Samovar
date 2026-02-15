@@ -854,25 +854,65 @@ void handle_overflow(const String& msg, bool finish, uint32_t pause_ms) {
 
 
 void set_nbk_program(String WProgram) {
-  char c[500] = {0};
+  for (int j = 0; j < CAPACITY_NUM * 2; j++) {
+    program[j].WType = "";
+  }
+  ProgramLen = 0;
+
   if (WProgram.length() == 0) return;
-  WProgram.toCharArray(c, 500);
-  char* pair = strtok(c, ";");
-  //String MeshTemplate;
+  if (WProgram.length() > MAX_PROGRAM_INPUT_LEN) {
+    SendMsg("Ошибка программы: слишком длинная строка (nbk)", ALARM_MSG);
+    return;
+  }
+
+  char input[MAX_PROGRAM_INPUT_LEN + 1] = {0};
+  copyStringSafe(input, WProgram);
+
   int i = 0;
-  while (pair != NULL and i < CAPACITY_NUM * 2) {
-    program[i].WType = pair;  // Тип программы
-    pair = strtok(NULL, ";");
-    program[i].Speed = atof(pair);  //Скорость отбора
-    pair = strtok(NULL, "\n");
-    program[i].Power = atof(pair);  // Коррекция мощности
+  char* saveLine = nullptr;
+  char* line = strtok_r(input, "\n", &saveLine);
+  while (line && i < CAPACITY_NUM * 2) {
+    size_t lineLen = strlen(line);
+    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
+      line[--lineLen] = '\0';
+    }
+    if (lineLen == 0) {
+      line = strtok_r(NULL, "\n", &saveLine);
+      continue;
+    }
+
+    char* saveTok = nullptr;
+    char* tokType = strtok_r(line, ";", &saveTok);
+    char* tokSpeed = strtok_r(NULL, ";", &saveTok);
+    char* tokPower = strtok_r(NULL, ";", &saveTok);
+    char* tokExtra = strtok_r(NULL, ";", &saveTok);
+
+    float speed = 0;
+    float power = 0;
+    bool ok = tokType && tokType[0] != '\0' &&
+              tokSpeed && tokPower &&
+              !tokExtra &&
+              parseFloatSafe(tokSpeed, speed) &&
+              parseFloatSafe(tokPower, power);
+
+    if (!ok) {
+      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
+      ProgramLen = 0;
+      SendMsg("Ошибка программы: неверный формат строки nbk", ALARM_MSG);
+      return;
+    }
+
+    program[i].WType = tokType;
+    program[i].Speed = speed;
+    program[i].Power = power;
+
     i++;
     ProgramLen = i;
-    pair = strtok(NULL, ";");
-    if ((!pair || pair == NULL || pair[0] == 13) and i < CAPACITY_NUM * 2) {
-      program[i].WType = "";
-      break;
-    }
+    line = strtok_r(NULL, "\n", &saveLine);
+  }
+
+  if (i < CAPACITY_NUM * 2) {
+    program[i].WType = "";
   }
 }
 

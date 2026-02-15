@@ -21,7 +21,10 @@ bool load_wifi_credentials(char *ssid, size_t ssid_len, char *pass, size_t pass_
   String saved_ssid = WiFi.SSID();
   
   if (saved_ssid.length() > 0) {
-    saved_ssid.toCharArray(ssid, ssid_len);
+    size_t n = saved_ssid.length();
+    if (n >= ssid_len) n = ssid_len - 1;
+    if (n > 0) memcpy(ssid, saved_ssid.c_str(), n);
+    ssid[n] = '\0';
     // Пароль нельзя получить через WiFi API без подключения,
     // но это не проблема - WiFi.begin() без параметров использует сохраненный пароль автоматически
     return true;
@@ -237,16 +240,16 @@ void load_profile_nvs() {
   prefs.getBytes("ACPAddr", SamSetup.ACPAdress, 8);
 
   // Чтение строк (в буферы структуры)
-  prefs.getString("SteamCol", "").toCharArray(SamSetup.SteamColor, 20);
-  prefs.getString("PipeCol", "").toCharArray(SamSetup.PipeColor, 20);
-  prefs.getString("WaterCol", "").toCharArray(SamSetup.WaterColor, 20);
-  prefs.getString("TankCol", "").toCharArray(SamSetup.TankColor, 20);
-  prefs.getString("ACPCol", "").toCharArray(SamSetup.ACPColor, 20);
+  copyStringSafe(SamSetup.SteamColor, prefs.getString("SteamCol", ""));
+  copyStringSafe(SamSetup.PipeColor, prefs.getString("PipeCol", ""));
+  copyStringSafe(SamSetup.WaterColor, prefs.getString("WaterCol", ""));
+  copyStringSafe(SamSetup.TankColor, prefs.getString("TankCol", ""));
+  copyStringSafe(SamSetup.ACPColor, prefs.getString("ACPCol", ""));
   
-  prefs.getString("blynk", "").toCharArray(SamSetup.blynkauth, 33);
-  prefs.getString("video", "").toCharArray(SamSetup.videourl, 120);
-  prefs.getString("tg_tok", "").toCharArray(SamSetup.tg_token, 50);
-  prefs.getString("tg_id", "").toCharArray(SamSetup.tg_chat_id, 14);
+  copyStringSafe(SamSetup.blynkauth, prefs.getString("blynk", ""));
+  copyStringSafe(SamSetup.videourl, prefs.getString("video", ""));
+  copyStringSafe(SamSetup.tg_token, prefs.getString("tg_tok", ""));
+  copyStringSafe(SamSetup.tg_chat_id, prefs.getString("tg_id", ""));
 
   SamSetup.UsePreccureCorrect = prefs.getBool("Preccure", true);
   SamSetup.ChangeProgramBuzzer = prefs.getBool("PrgBuzz", false);

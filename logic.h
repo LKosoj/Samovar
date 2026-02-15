@@ -165,7 +165,7 @@ void withdrawal(void) {
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
     //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
-    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3) && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
+    if ((ProgramNum < ProgramLen - 3) && program[ProgramNum].WType == "C" && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
@@ -214,7 +214,7 @@ void withdrawal(void) {
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
-    if (program[ProgramNum].WType == "C" && (ProgramNum < ProgramLen - 3) && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
+    if ((ProgramNum < ProgramLen - 3) && program[ProgramNum].WType == "C" && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
       set_body_temp();
     }
     //Если это первая строка с телом - корректируем Т тела
@@ -514,36 +514,88 @@ void next_capacity(void) {
 
 // Установить программу
 void set_program(String WProgram) {
-  //  WProgram.trim();
-  //  if (WProgram.length() == 0) return;
-  char c[500] = {0};
-  WProgram.toCharArray(c, 500);
-  char *pair = strtok(c, ";");
+  for (int j = 0; j < CAPACITY_NUM * 2; j++) {
+    program[j].WType = "";
+  }
+  ProgramLen = 0;
+
+  if (WProgram.length() == 0) return;
+  if (WProgram.length() > MAX_PROGRAM_INPUT_LEN) {
+    SendMsg("Ошибка программы: слишком длинная строка (rect)", ALARM_MSG);
+    return;
+  }
+
+  char input[MAX_PROGRAM_INPUT_LEN + 1] = {0};
+  copyStringSafe(input, WProgram);
+
   int i = 0;
-  while (pair != NULL && i < CAPACITY_NUM * 2) {
-    program[i].WType = pair;
-    pair = strtok(NULL, ";");
-    program[i].Volume = atoi(pair);
-    pair = strtok(NULL, ";");
-    program[i].Speed = atof(pair);
-    pair = strtok(NULL, ";");
-    program[i].capacity_num = atoi(pair);
-    pair = strtok(NULL, ";");
-    program[i].Temp = atof(pair);
-    pair = strtok(NULL, "\n");
-    program[i].Power = atof(pair);
-    if (program[i].WType == "P") {
-      program[i].Time = program[i].Volume / 60 / (float)60;
-    } else {
-      program[i].Time = program[i].Volume / program[i].Speed / 1000;
+  char* saveLine = nullptr;
+  char* line = strtok_r(input, "\n", &saveLine);
+  while (line && i < CAPACITY_NUM * 2) {
+    size_t lineLen = strlen(line);
+    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
+      line[--lineLen] = '\0';
     }
+    if (lineLen == 0) {
+      line = strtok_r(NULL, "\n", &saveLine);
+      continue;
+    }
+
+    char* saveTok = nullptr;
+    char* tokType = strtok_r(line, ";", &saveTok);
+    char* tokVolume = strtok_r(NULL, ";", &saveTok);
+    char* tokSpeed = strtok_r(NULL, ";", &saveTok);
+    char* tokCap = strtok_r(NULL, ";", &saveTok);
+    char* tokTemp = strtok_r(NULL, ";", &saveTok);
+    char* tokPower = strtok_r(NULL, ";", &saveTok);
+    char* tokExtra = strtok_r(NULL, ";", &saveTok);
+
+    long volume = 0;
+    long cap = 0;
+    float speed = 0;
+    float temp = 0;
+    float power = 0;
+    bool ok = tokType && tokType[0] != '\0' &&
+              tokVolume && tokSpeed && tokCap && tokTemp && tokPower &&
+              !tokExtra &&
+              parseLongSafe(tokVolume, volume) &&
+              parseFloatSafe(tokSpeed, speed) &&
+              parseLongSafe(tokCap, cap) &&
+              parseFloatSafe(tokTemp, temp) &&
+              parseFloatSafe(tokPower, power) &&
+              volume >= 0 && volume <= 65535 &&
+              cap >= 0 && cap <= CAPACITY_NUM;
+
+    if (ok && strcmp(tokType, "P") != 0 && speed <= 0.0f) {
+      ok = false;
+    }
+
+    if (!ok) {
+      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
+      ProgramLen = 0;
+      SendMsg("Ошибка программы: неверный формат строки rect", ALARM_MSG);
+      return;
+    }
+
+    program[i].WType = tokType;
+    program[i].Volume = (uint16_t)volume;
+    program[i].Speed = speed;
+    program[i].capacity_num = (uint8_t)cap;
+    program[i].Temp = temp;
+    program[i].Power = power;
+    if (program[i].WType == "P") {
+      program[i].Time = program[i].Volume / 60.0f / 60.0f;
+    } else {
+      program[i].Time = program[i].Volume / program[i].Speed / 1000.0f;
+    }
+
     i++;
     ProgramLen = i;
-    pair = strtok(NULL, ";");
-    if ((!pair || pair == NULL || pair[0] == 13) && i < CAPACITY_NUM * 2) {
-      program[i].WType = "";
-      break;
-    }
+    line = strtok_r(NULL, "\n", &saveLine);
+  }
+
+  if (i < CAPACITY_NUM * 2) {
+    program[i].WType = "";
   }
 }
 
