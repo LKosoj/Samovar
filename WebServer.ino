@@ -35,7 +35,6 @@ void WebServerInit(void);
 String indexKeyProcessor(const String &var);
 String setupKeyProcessor(const String &var);
 String wifiKeyProcessor(const String &var);
-String wifiKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 void start_self_test(void);

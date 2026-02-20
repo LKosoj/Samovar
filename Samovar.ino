@@ -1899,10 +1899,6 @@ void read_config() {
   if (isnan(SamSetup.DistTimeF)) {
     SamSetup.DistTimeF = 16;
   }
-
-  if (isnan(SamSetup.DistTimeF)) {
-    SamSetup.DistTimeF = 16;
-  }
   if (isnan(SamSetup.MaxPressureValue)) {
     SamSetup.MaxPressureValue = 0;
   }
