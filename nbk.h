@@ -260,10 +260,14 @@ bool overflow(){
 }
 
 void SetSpeed(float Speed) { // Прокладка для подсчета статистики
-  if (program[ProgramNum].WType != "H") { //Иначе в среднюю скорость попадает 1л/ч прогрева
-    stats.totalVolume += i2c_get_liquid_rate_by_step(get_stepper_speed()) * (millis() - time_speed) / 3600000.0;
-    time_speed = millis();
+  uint32_t now = millis();
+  if (time_speed == 0) {
+    time_speed = now;
   }
+  if (program[ProgramNum].WType != "H") { //Иначе в среднюю скорость попадает 1л/ч прогрева
+    stats.totalVolume += i2c_get_liquid_rate_by_step(get_stepper_speed()) * (now - time_speed) / 3600000.0;
+  }
+  time_speed = now;
   if (Speed == 0) set_stepper_target(0, 0, 0); 
   else
   set_stepper_target(i2c_get_speed_from_rate(Speed), 0, 2147483640);
@@ -312,7 +316,11 @@ float fromPower(float value) { // конвертер из мощности: W =>
 
 void nbk_proc() { //главный цикл НБК
  #ifndef SAMOVAR_USE_POWER
-  SendMsg("Работа НБК невозможна - отсутствует регулятор напряжения.", ALARM_MSG);
+  static bool noPowerAlarmSent = false;
+  if (!noPowerAlarmSent) {
+    SendMsg("Работа НБК невозможна - отсутствует регулятор напряжения.", ALARM_MSG);
+    noPowerAlarmSent = true;
+  }
   return;
  #endif
   // Обновление переменных из настроек (на случай, если пользователь их изменил в процессе)
@@ -642,7 +650,7 @@ void run_nbk_program(uint8_t num) {
  // Сообщение о переходе между этапами
   if (ProgramNum == 0) {
     //PowerOn=true;//TODO костыль 2 от незапуска по кнопке Включить нагрев 
-    time_speed = 0;
+    time_speed = millis();
     stats.startTime = millis();
     stats.avgSpeed = 0;
     stats.totalVolume = 0;
@@ -804,7 +812,11 @@ void check_alarm_nbk() {// вызывается из Samovar.ino, надо ра�
     SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
   }
  #endif
+  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
+    set_buzzer(true);
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
     alarm_t_min = millis() + 60000;
+  }
   
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }

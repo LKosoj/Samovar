@@ -1142,8 +1142,7 @@ void web_command(AsyncWebServerRequest *request) {
     }
     //return;
   */
-  if (request->params() == 1) {
-    if (request->hasArg("start") && PowerOn) {
+  if (request->hasArg("start") && PowerOn) {
       if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         sam_command_sync = SAMOVAR_BEER_NEXT;
       } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
@@ -1258,7 +1257,6 @@ void web_command(AsyncWebServerRequest *request) {
       run_lua_string(lstr);
     }
 #endif
-  }
   request->send(200, "text/plain", "OK");
 }
 void web_program(AsyncWebServerRequest *request) {

@@ -227,7 +227,7 @@ function check_program(str){
   for (i = 0; i < arrayOfStrings.length; i++){
   	var arrayOfDelim = arrayOfStrings[i].split(";");
   	cnt = arrayOfDelim.length;
-  	if (cnt == 1 && arrayOfDelim[0] != "" && arrayOfStrings.length == i - 1) ret = false;
+  	if (cnt == 1 && arrayOfDelim[0] != "" && i == arrayOfStrings.length - 1) ret = false;
   	else if (prevcnt > 0 && cnt > 1) {
   		if (prevcnt != cnt) ret = false;
   	}

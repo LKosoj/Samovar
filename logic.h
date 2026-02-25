@@ -1694,7 +1694,7 @@ void check_power_error() {
     // 2) Проверим, что заданное напряжение/мощность не сильно отличается от реального
     // (наличие связи с регулятором, пробой семистора и т.п.)
     if (current_power_mode == POWER_WORK_MODE && current_power_volt > 0 && target_power_volt > 0 &&
-        abs((current_power_volt - target_power_volt) / target_power_volt) > 2) {
+        abs((current_power_volt - target_power_volt) / target_power_volt) > 0.2f) {
       power_err_cnt++;
       //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
       if (power_err_cnt > 6) set_current_power(target_power_volt);

@@ -49,7 +49,6 @@ String get_Samovar_Status();
 void set_power(bool On);
 void clok();
 void clok1();
-void getjson(void);
 String append_data();
 void stopService(void);
 void startService(void);
