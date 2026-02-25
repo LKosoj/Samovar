@@ -5,6 +5,53 @@
 
 Preferences prefs;
 
+static const char* profile_namespace_by_mode(int mode) {
+  switch (mode) {
+    case SAMOVAR_BEER_MODE: return "sam_beer";
+    case SAMOVAR_DISTILLATION_MODE: return "sam_dist";
+    case SAMOVAR_BK_MODE: return "sam_bk";
+    case SAMOVAR_NBK_MODE: return "sam_nbk";
+    case SAMOVAR_SUVID_MODE: return "sam_suvid";
+    case SAMOVAR_LUA_MODE: return "sam_lua";
+    case SAMOVAR_RECTIFICATION_MODE:
+    default:
+      return "sam_rect";
+  }
+}
+
+static const char* current_profile_namespace() {
+  int mode = (int)Samovar_CR_Mode;
+  if (mode < SAMOVAR_RECTIFICATION_MODE || mode > SAMOVAR_LUA_MODE) {
+    mode = SAMOVAR_RECTIFICATION_MODE;
+  }
+  return profile_namespace_by_mode(mode);
+}
+
+static uint8_t read_last_mode_meta() {
+  Preferences meta;
+  if (!meta.begin("sam_meta", true)) {
+    return (uint8_t)SAMOVAR_RECTIFICATION_MODE;
+  }
+  uint8_t lastMode = meta.getUChar("last_mode", (uint8_t)SAMOVAR_RECTIFICATION_MODE);
+  meta.end();
+  if (lastMode > (uint8_t)SAMOVAR_LUA_MODE) {
+    lastMode = (uint8_t)SAMOVAR_RECTIFICATION_MODE;
+  }
+  return lastMode;
+}
+
+static void write_last_mode_meta(uint8_t mode) {
+  if (mode > (uint8_t)SAMOVAR_LUA_MODE) {
+    mode = (uint8_t)SAMOVAR_RECTIFICATION_MODE;
+  }
+  Preferences meta;
+  if (!meta.begin("sam_meta", false)) {
+    return;
+  }
+  meta.putUChar("last_mode", mode);
+  meta.end();
+}
+
 // -------------------------------------------------------------------------------------------------
 // Wi-Fi креды (используем стандартный namespace ESP32, как ESPAsyncWiFiManager):
 // ESP32 автоматически сохраняет креденшалы при вызове WiFi.begin(ssid, password) с WiFi.persistent(true)
@@ -78,7 +125,7 @@ void saveBytesIfChanged(const char* key, const void* value, size_t len) {
 }
 
 void save_profile_nvs() {
-  if (!prefs.begin("sam", false)) {
+  if (!prefs.begin(current_profile_namespace(), false)) {
     Serial.println("NVS: Failed to open namespace for writing!");
     return;
   }
@@ -177,11 +224,15 @@ void save_profile_nvs() {
   prefs.putUChar("PackDens", SamSetup.PackDens);
 
   prefs.end();
+  write_last_mode_meta((uint8_t)SamSetup.Mode);
   //Serial.println("Profile saved to NVS");
 }
 
 void load_profile_nvs() {
-  if (!prefs.begin("sam", true)) { // Read-only
+  uint8_t lastMode = read_last_mode_meta();
+  Samovar_CR_Mode = (SAMOVAR_MODE)lastMode;
+
+  if (!prefs.begin(current_profile_namespace(), true)) { // Read-only
     Serial.println("NVS: Failed to open namespace for reading!");
     return;
   }
@@ -272,12 +323,13 @@ void load_profile_nvs() {
   SamSetup.PackDens = prefs.getUChar("PackDens", 80);
 
   prefs.end();
+  SamSetup.Mode = lastMode;
   //Serial.println("Profile loaded from NVS");
 }
 
 // Функция для сброса флага миграции (для тестирования)
 void reset_migration_flag() {
-  prefs.begin("sam", false);
+  prefs.begin("sam_meta", false);
   prefs.remove("migrated");
   prefs.end();
   Serial.println("NVS: Migration flag reset. Reboot to test migration again.");
@@ -285,7 +337,7 @@ void reset_migration_flag() {
 
 void migrate_from_eeprom() {
   // Проверяем, была ли миграция
-  prefs.begin("sam", true);
+  prefs.begin("sam_meta", true);
   bool migrated = prefs.getBool("migrated", false);
   prefs.end();
 
@@ -309,14 +361,20 @@ void migrate_from_eeprom() {
     
     // Копируем во временную глобальную переменную, чтобы использовать функцию сохранения
     SetupEEPROM backup = SamSetup; // Сохраняем текущее состояние (на всякий случай)
+    SAMOVAR_MODE backupMode = Samovar_CR_Mode;
     SamSetup = temp;               // Подменяем на данные из EEPROM
+    if (SamSetup.Mode > SAMOVAR_LUA_MODE) {
+      SamSetup.Mode = SAMOVAR_RECTIFICATION_MODE;
+    }
+    Samovar_CR_Mode = (SAMOVAR_MODE)SamSetup.Mode;
     
     save_profile_nvs();            // Сохраняем в NVS
     
     SamSetup = backup;             // Возвращаем как было (хотя дальше все равно будет load)
+    Samovar_CR_Mode = backupMode;
     
     // Ставим флаг миграции
-    prefs.begin("sam", false);
+    prefs.begin("sam_meta", false);
     prefs.putBool("migrated", true);
     prefs.end();
     Serial.println("NVS: Migration completed successfully!");
@@ -325,7 +383,7 @@ void migrate_from_eeprom() {
     Serial.print(temp.flag);
     Serial.println("). Skipping migration.");
     // Если EEPROM пустой, просто ставим флаг, чтобы не проверять каждый раз
-    prefs.begin("sam", false);
+    prefs.begin("sam_meta", false);
     prefs.putBool("migrated", true);
     prefs.end();
   }

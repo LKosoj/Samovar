@@ -362,14 +362,18 @@ void WebServerInit(void) {
   server.onFileUpload([](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
     if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
-    Serial.printf("%s", (const char *)data);
+    if (len) {
+      Serial.write(data, len);
+    }
     if (final)
       Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
   server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!index)
       Serial.printf("BodyStart: %u\n", total);
-    Serial.printf("%s", (const char *)data);
+    if (len) {
+      Serial.write(data, len);
+    }
     if (index + len == total)
       Serial.printf("BodyEnd: %u\n", total);
   });
@@ -676,6 +680,8 @@ String setupKeyProcessor(const String &var) {
   else if (var == "NBK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_NBK_MODE)
     return "selected";
   else if (var == "SUVID" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_SUVID_MODE)
+    return "selected";
+  else if (var == "LUA_MODE" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_LUA_MODE)
     return "selected";
   else if (var == "RAL" && !SamSetup.rele1)
     return "selected";
@@ -1044,8 +1050,13 @@ void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("rele4")) {
     SamSetup.rele4 = request->arg("rele4").toInt();
   }
+  const int dsAddrMax = (int)(sizeof(DSAddr) / sizeof(DSAddr[0]));
+  auto isValidDsIndex = [&](int idx) -> bool {
+    return idx >= 0 && idx < DScnt && idx < dsAddrMax;
+  };
   if (request->hasArg("SteamAddr")) {
-    if (request->arg("SteamAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("SteamAddr").toInt()], SamSetup.SteamAdress);
+    int idx = request->arg("SteamAddr").toInt();
+    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.SteamAdress);
     else {
       SamSetup.SteamAdress[0] = 255;
       SteamSensor.Sensor[0] = 255;
@@ -1053,7 +1064,8 @@ void handleSave(AsyncWebServerRequest *request) {
     }
   }
   if (request->hasArg("PipeAddr")) {
-    if (request->arg("PipeAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("PipeAddr").toInt()], SamSetup.PipeAdress);
+    int idx = request->arg("PipeAddr").toInt();
+    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.PipeAdress);
     else {
       SamSetup.PipeAdress[0] = 255;
       PipeSensor.Sensor[0] = 255;
@@ -1061,7 +1073,8 @@ void handleSave(AsyncWebServerRequest *request) {
     }
   }
   if (request->hasArg("WaterAddr")) {
-    if (request->arg("WaterAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("WaterAddr").toInt()], SamSetup.WaterAdress);
+    int idx = request->arg("WaterAddr").toInt();
+    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.WaterAdress);
     else {
       SamSetup.WaterAdress[0] = 255;
       WaterSensor.Sensor[0] = 255;
@@ -1069,7 +1082,8 @@ void handleSave(AsyncWebServerRequest *request) {
     }
   }
   if (request->hasArg("TankAddr")) {
-    if (request->arg("TankAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("TankAddr").toInt()], SamSetup.TankAdress);
+    int idx = request->arg("TankAddr").toInt();
+    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.TankAdress);
     else {
       SamSetup.TankAdress[0] = 255;
       TankSensor.Sensor[0] = 255;
@@ -1077,7 +1091,8 @@ void handleSave(AsyncWebServerRequest *request) {
     }
   }
   if (request->hasArg("ACPAddr")) {
-    if (request->arg("ACPAddr").toInt() >= 0) CopyDSAddress(DSAddr[request->arg("ACPAddr").toInt()], SamSetup.ACPAdress);
+    int idx = request->arg("ACPAddr").toInt();
+    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.ACPAdress);
     else {
       SamSetup.ACPAdress[0] = 255;
       ACPSensor.Sensor[0] = 255;

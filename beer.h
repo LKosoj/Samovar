@@ -286,7 +286,23 @@ void beer_proc() {
 void run_beer_program(uint8_t num) {
   if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
   if (startval == 2000) startval = 2001;
-  ProgramNum = num;
+
+  uint8_t targetProgram = num;
+  if (ProgramLen == 0 || targetProgram >= ProgramLen || targetProgram >= CAPACITY_NUM * 2) {
+    targetProgram = CAPACITY_NUM * 2;
+    SetScriptOff = 1;
+  }
+
+  if (targetProgram > 0 && targetProgram <= CAPACITY_NUM * 2 && program[targetProgram - 1].WType == "L" && loop_lua_fl) {
+    SetScriptOff = 1;
+  }
+
+  if (targetProgram == CAPACITY_NUM * 2) {
+    beer_finish();
+    return;
+  }
+
+  ProgramNum = targetProgram;
   begintime = 0;
   msgfl = true;
 
@@ -294,35 +310,19 @@ void run_beer_program(uint8_t num) {
     StartAutoTune();
   }
 
-  if (ProgramNum > ProgramLen - 1) {
-    num = CAPACITY_NUM * 2;
-    SetScriptOff = 1;
-  }
-
-  //Если предыдущая программа была программой Lua и скрипт запущен - останавливаем скрипт
-  if (ProgramNum > 0 && program[ProgramNum-1].WType == "L" && loop_lua_fl) {
-    SetScriptOff = 1;
-  }
-
-  String msg = "Переход к строке программы №" + String((num + 1));
-  if (num == CAPACITY_NUM * 2) {
-    //если num = CAPACITY_NUM * 2 значит мы достигли финала (или процесс сброшен принудительно), завершаем работу
-    beer_finish();
-    return;
-  } else {
-    if (program[num].WType == "M") {
-      msg += "; Нагрев до температуры засыпи солода: " + String(program[num].Temp) + "°";
-    } else if (program[num].WType == "P") {
-      msg += "; Температурная пауза: " + String(program[num].Temp) + "°, время: " + String(program[num].Time) + " мин";
-    } else if (program[num].WType == "B") {
-      msg += "; Кипячение, время: " + String(program[num].Time) + " мин";
-    } else if (program[num].WType == "C") {
-      msg += "; Охлаждение до температуры: " + String(program[num].Temp) + "°";
-    } else if (program[num].WType == "F") {
-      msg += "; Ферментация, поддержание температуры: " + String(program[num].Temp) + "°";
-    } else if (program[num].WType == "W") {
-      msg += "; Режим ожидания";
-    }
+  String msg = "Переход к строке программы №" + String((ProgramNum + 1));
+  if (program[ProgramNum].WType == "M") {
+    msg += "; Нагрев до температуры засыпи солода: " + String(program[ProgramNum].Temp) + "°";
+  } else if (program[ProgramNum].WType == "P") {
+    msg += "; Температурная пауза: " + String(program[ProgramNum].Temp) + "°, время: " + String(program[ProgramNum].Time) + " мин";
+  } else if (program[ProgramNum].WType == "B") {
+    msg += "; Кипячение, время: " + String(program[ProgramNum].Time) + " мин";
+  } else if (program[ProgramNum].WType == "C") {
+    msg += "; Охлаждение до температуры: " + String(program[ProgramNum].Temp) + "°";
+  } else if (program[ProgramNum].WType == "F") {
+    msg += "; Ферментация, поддержание температуры: " + String(program[ProgramNum].Temp) + "°";
+  } else if (program[ProgramNum].WType == "W") {
+    msg += "; Режим ожидания";
   }
 
   if (SamSetup.ChangeProgramBuzzer) {
@@ -370,28 +370,33 @@ void check_alarm_beer() {
 
   if (startval <= 2000) return;
 
-  // Если процесс запущен, обеспечиваем корректное состояние флага PowerOn
-  if (!PowerOn && startval > 2000) {
-    PowerOn = true;
-  }
-
   float temp = 0;
+  float tempDelta = 0;
   switch (program[ProgramNum].TempSensor) {
     case 0:
       temp = TankSensor.avgTemp;
+      tempDelta = TankSensor.SetTemp;
       break;
     case 1:
       temp = WaterSensor.avgTemp;
+      tempDelta = WaterSensor.SetTemp;
       break;
     case 2:
       temp = PipeSensor.avgTemp;
+      tempDelta = PipeSensor.SetTemp;
       break;
     case 3:
       temp = SteamSensor.avgTemp;
+      tempDelta = SteamSensor.SetTemp;
       break;
     case 4:
       temp = ACPSensor.avgTemp;
+      tempDelta = ACPSensor.SetTemp;
       break;
+    default:
+      SendMsg("Ошибка программы: неверный датчик температуры в режиме Пиво", ALARM_MSG);
+      beer_finish();
+      return;
   }
 
   //Обрабатываем программу
@@ -435,14 +440,14 @@ void check_alarm_beer() {
   //Если режим Брага
   if (program[ProgramNum].WType == "F") {
     //Если температура меньше целевой - греем, иначе охлаждаем.
-    if (temp < program[ProgramNum].Temp - TankSensor.SetTemp) {
+    if (temp < program[ProgramNum].Temp - tempDelta) {
       if (valve_status) {
         //Закрываем клапан воды
         open_valve(false, false);
       }
       //Поддерживаем целевую температуру
       set_heater_state(program[ProgramNum].Temp, temp);
-    } else if (temp > program[ProgramNum].Temp + TankSensor.SetTemp) {
+    } else if (temp > program[ProgramNum].Temp + tempDelta) {
       {
         if (!valve_status) {
           //Отключаем нагреватель
@@ -456,13 +461,13 @@ void check_alarm_beer() {
       //Отключаем нагреватель
       setHeaterPosition(false);
       //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
-      if ((temp < program[ProgramNum].Temp + TankSensor.SetTemp - 0.1) && valve_status && PowerOn) {
+      if ((temp < program[ProgramNum].Temp + tempDelta - 0.1) && valve_status && PowerOn) {
         open_valve(false, false);
       }
     }
   }
 
-  if (program[ProgramNum].WType == "M" && temp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
+  if (program[ProgramNum].WType == "M" && temp >= program[ProgramNum].Temp - tempDelta) {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer(true);
@@ -471,7 +476,7 @@ void check_alarm_beer() {
     startval = 2002;
   }
 
-  if (program[ProgramNum].WType == "P" && temp >= program[ProgramNum].Temp - TankSensor.SetTemp) {
+  if (program[ProgramNum].WType == "P" && temp >= program[ProgramNum].Temp - tempDelta) {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
@@ -834,7 +839,7 @@ void set_beer_program(String WProgram) {
               parseFloatSafe(tokTemp, temp) &&
               parseFloatSafe(tokTime, timeMin) &&
               parseLongSafe(tokSensor, sensor) &&
-              sensor >= 0 && sensor <= 5 &&
+              sensor >= 0 && sensor <= 4 &&
               timeMin >= 0.0f;
 
     if (!ok) {

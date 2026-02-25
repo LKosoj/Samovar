@@ -171,6 +171,7 @@ char* timestr = (char*)tst;
 
 hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
 
 // WiFiManager отключен: флагов сохранения через портал больше нет
 
@@ -260,7 +261,9 @@ void IRAM_ATTR StepperTicker(void) {
 
 #ifdef USE_WATERSENSOR
 void IRAM_ATTR WFpulseCounter() {
+  portENTER_CRITICAL_ISR(&waterPulseMux);
   WFpulseCount++;
+  portEXIT_CRITICAL_ISR(&waterPulseMux);
 }
 #endif
 
@@ -631,18 +634,23 @@ void triggerSysTicker(void *parameter) {
 
 #ifdef USE_WATERSENSOR
 
-      if (WFpulseCount < 3) WFpulseCount = 0;
-      WFflowRate = ((1000.0 / (millis() - oldTime)) * WFpulseCount) / WF_CALIBRATION;
+      uint16_t waterPulses = 0;
+      portENTER_CRITICAL(&waterPulseMux);
+      waterPulses = WFpulseCount;
+      WFpulseCount = 0;
+      portEXIT_CRITICAL(&waterPulseMux);
+
+      if (waterPulses < 3) waterPulses = 0;
+      WFflowRate = ((1000.0 / (millis() - oldTime)) * waterPulses) / WF_CALIBRATION;
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
 
-      if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && WFpulseCount == 0 && !SamSetup.UseWS) {
+      if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && waterPulses == 0 && !SamSetup.UseWS) {
         WFAlarmCount++;
       } else {
         WFAlarmCount = 0;
       }
 
-      WFpulseCount = 0;
       oldTime = millis();
       vTaskDelay(5 / portTICK_PERIOD_MS);
 #endif
@@ -1863,7 +1871,7 @@ void read_config() {
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
   CopyDSAddress(SamSetup.ACPAdress, ACPSensor.Sensor);
 
-  if (SamSetup.Mode > 4) SamSetup.Mode = 0;
+  if (SamSetup.Mode > SAMOVAR_LUA_MODE) SamSetup.Mode = 0;
   Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
 
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';

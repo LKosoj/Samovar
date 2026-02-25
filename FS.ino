@@ -293,34 +293,11 @@ String append_data() {
 }
 
 void save_profile() {
-  File file = SPIFFS.open(get_prf_name(), FILE_WRITE);
-  file.write((uint8_t *)&SamSetup, sizeof(SamSetup));
-  file.close();
-  //EEPROM.put(0, SamSetup);
-  //EEPROM.commit();
   save_profile_nvs();
 }
 
 void load_profile() {
-  String f;
-  f = get_prf_name();
-  if (SPIFFS.exists(f)) {
-    File file = SPIFFS.open(f, FILE_READ);
-    file.setTimeout(0);
-    file.read((uint8_t *)&SamSetup, sizeof(SamSetup));
-    SamSetup.Mode = Samovar_CR_Mode;
-    file.close();
-  } else {
-    // Если файла нет, сохраняем текущие настройки (которые могли загрузиться из NVS)
-    save_profile();
-  }
-  //EEPROM.put(0, SamSetup);
-  //EEPROM.commit();
-  
-  // Сохраняем загруженное из файла в NVS, чтобы синхронизировать их
-  save_profile_nvs();
-  
-  read_config(); // Это теперь вызывает load_profile_nvs, но мы уже обновили NVS выше
+  read_config();
 }
 
 String get_prf_name() {
