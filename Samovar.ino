@@ -446,6 +446,7 @@ String http_sync_request_get(String url);
 
 #include "app/messages.h"
 #include "app/config_apply.h"
+#include "app/loop_dispatch.h"
 #include "app/runtime_tasks.h"
 #include "ui/web/ajax_snapshot.h"
 
@@ -1077,98 +1078,8 @@ void loop() {
   }
 #endif
 
-  if (sam_command_sync != SAMOVAR_NONE) {
-    switch (sam_command_sync) {
-      case SAMOVAR_START:
-        Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-        menu_samovar_start();
-        break;
-      case SAMOVAR_POWER:
-        if (SamovarStatusInt == 1000) distiller_finish();
-        else if (SamovarStatusInt == 2000)
-          beer_finish();
-        else if (SamovarStatusInt == 3000)
-          bk_finish();
-        else if (SamovarStatusInt == 4000)
-          nbk_finish();
-        else
-          set_power(!PowerOn);
-        if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-          SamovarStatusInt = 50;
-        }
-        break;
-      case SAMOVAR_RESET:
-        samovar_reset();
-        break;
-      case CALIBRATE_START:
-        pump_calibrate(CurrrentStepperSpeed);
-        break;
-      case CALIBRATE_STOP:
-        pump_calibrate(0);
-        break;
-      case SAMOVAR_PAUSE:
-        pause_withdrawal(true);
-        break;
-      case SAMOVAR_CONTINUE:
-        pause_withdrawal(false);
-        t_min = 0;
-        program_Wait = false;
-        detector_on_manual_resume();
-        break;
-      case SAMOVAR_SETBODYTEMP:
-        set_body_temp();
-        break;
-      case SAMOVAR_DISTILLATION:
-        Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
-        SamovarStatusInt = 1000;
-        startval = 1000;
-        break;
-      case SAMOVAR_BEER:
-        Samovar_Mode = SAMOVAR_BEER_MODE;
-        SamovarStatusInt = 2000;
-        startval = 2000;
-        break;
-      case SAMOVAR_BEER_NEXT:
-        run_beer_program(ProgramNum + 1);
-        break;
-      case SAMOVAR_DIST_NEXT:
-        run_dist_program(ProgramNum + 1);
-        break;
-      case SAMOVAR_BK:
-        Samovar_Mode = SAMOVAR_BK_MODE;
-        SamovarStatusInt = 3000;
-        startval = 3000;
-        break;
-      case SAMOVAR_NBK:
-        Samovar_Mode = SAMOVAR_NBK_MODE;
-        SamovarStatusInt = 4000;
-        startval = 4000;
-        break;
-      case SAMOVAR_NBK_NEXT:
-        run_nbk_program(ProgramNum + 1);
-        break;
-      case SAMOVAR_SELF_TEST:
-        start_self_test();
-        break;
-      case SAMOVAR_NONE:
-        break;
-    }
-    if (sam_command_sync != SAMOVAR_RESET) {
-      sam_command_sync = SAMOVAR_NONE;
-    }
-  }
-
-  if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {
-    withdrawal();  //функция расчета отбора
-  } else if (SamovarStatusInt == 1000) {
-    distiller_proc();  //функция для проведения дистилляции
-  } else if (SamovarStatusInt == 3000) {
-    bk_proc();  //функция для работы с БК
-  } else if (SamovarStatusInt == 4000) {
-    nbk_proc();  //функция для работы с НБК
-  } else if (SamovarStatusInt == 2000 && startval == 2000) {
-    beer_proc();  //функция для проведения затирания
-  }
+  process_sam_command_sync();
+  dispatch_samovar_mode_runtime();
 
   // Обработка энкодера
   encoder.tick();
