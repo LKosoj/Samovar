@@ -6,6 +6,7 @@ import unittest
 GLOBALS_HEADER = Path("state/globals.h")
 SAMOVAR_SOURCE = Path("Samovar.ino")
 LOGIC_HEADER = Path("logic.h")
+STATUS_TEXT_HEADER = Path("app/status_text.h")
 DISTILLER_HEADER = Path("distiller.h")
 BEER_HEADER = Path("beer.h")
 NBK_HEADER = Path("nbk.h")
@@ -55,7 +56,7 @@ class StateInvariantTest(unittest.TestCase):
 
     def test_status_accessor_keeps_reading_runtime_globals(self) -> None:
         body = extract_function_body(
-            LOGIC_HEADER.read_text(encoding="utf-8"),
+            STATUS_TEXT_HEADER.read_text(encoding="utf-8"),
             "String get_Samovar_Status()",
         )
         self.assertIn("SamovarStatus.clear();", body)

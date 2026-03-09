@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
+#include "app/status_text.h"
 #include "state/globals.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
@@ -48,7 +49,6 @@ Adafruit_BMP280 bme;  // I2C
 Adafruit_BME280 bme;  // I2C
 #endif
 
-String get_Samovar_Status();
 void clok();
 void clok1();
 String append_data();

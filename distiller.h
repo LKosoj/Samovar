@@ -88,12 +88,6 @@ void set_body_temp();
 int get_liquid_volume();
 
 /**
- * @brief Получить статус самовара в виде строки.
- * @return Статус (строка)
- */
-String get_Samovar_Status();
-
-/**
  * @brief Получить скорость по расходу.
  * @param rate Расход
  * @return Скорость

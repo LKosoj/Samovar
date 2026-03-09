@@ -72,6 +72,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "app/status_text.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"

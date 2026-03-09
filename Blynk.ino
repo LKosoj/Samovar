@@ -1,4 +1,5 @@
 #include "Samovar.h"
+#include "app/status_text.h"
 #include "state/globals.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
@@ -10,7 +11,6 @@ void menu_samovar_start();
 void pause_withdrawal(bool PauseOn);
 void set_body_temp();
 int get_liquid_volume();
-String get_Samovar_Status();
 float get_speed_from_rate(float rate);
 String get_beer_program();
 String get_dist_program();
