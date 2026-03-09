@@ -3,10 +3,10 @@
 
 #include <Arduino.h>
 
+#include "modes/beer/beer_support.h"
 #include "state/globals.h"
 #include "support/process_math.h"
 
-float getBeerCurrentTemp();
 inline String format_float(float v, int d);
 
 inline String get_Samovar_Status() {

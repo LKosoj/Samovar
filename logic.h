@@ -214,26 +214,6 @@ void pause_withdrawal(bool Pause) {
   }
 }
 
-// Получить температуру с выбранного датчика для режима пива
-float getBeerCurrentTemp() {
-  if (SamovarStatusInt != 2000) return 0.0;
-  
-  switch (program[ProgramNum].TempSensor) {
-    case 0:
-      return TankSensor.avgTemp;
-    case 1:
-      return WaterSensor.avgTemp;
-    case 2:
-      return PipeSensor.avgTemp;
-    case 3:
-      return SteamSensor.avgTemp;
-    case 4:
-      return ACPSensor.avgTemp;
-    default:
-      return TankSensor.avgTemp;
-  }
-}
-
 // Установить программу
 void set_program(String WProgram) {
   for (int j = 0; j < CAPACITY_NUM * 2; j++) {
