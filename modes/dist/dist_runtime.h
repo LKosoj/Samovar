@@ -6,9 +6,11 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "app/messages.h"
 #include "app/process_common.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "modes/dist/dist_program_codec.h"
 #include "support/process_math.h"
 
 #ifdef USE_MQTT
@@ -18,8 +20,6 @@
 void create_data();
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-String get_dist_program();
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 
 struct TimePredictor {
   unsigned long startTime;

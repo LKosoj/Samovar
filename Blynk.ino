@@ -1,4 +1,5 @@
 #include "Samovar.h"
+#include "modes/dist/dist_program_codec.h"
 #include "modes/rect/rect_program_codec.h"
 #include "modes/rect/rect_runtime.h"
 #include "app/status_text.h"
@@ -13,7 +14,6 @@ void menu_samovar_start();
 int get_liquid_volume();
 float get_speed_from_rate(float rate);
 String get_beer_program();
-String get_dist_program();
 String get_nbk_program();
 
 #ifdef USE_LUA
