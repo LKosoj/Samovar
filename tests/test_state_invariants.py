@@ -10,6 +10,7 @@ RECT_PROGRAM_CODEC_HEADER = Path("modes/rect/rect_program_codec.h")
 DIST_PROGRAM_CODEC_HEADER = Path("modes/dist/dist_program_codec.h")
 BEER_PROGRAM_CODEC_HEADER = Path("modes/beer/beer_program_codec.h")
 NBK_HEADER = Path("nbk.h")
+NBK_PROGRAM_CODEC_HEADER = Path("modes/nbk/nbk_program_codec.h")
 
 
 def extract_function_body(text: str, signature: str) -> str:
@@ -73,7 +74,7 @@ class StateInvariantTest(unittest.TestCase):
             ),
             (DIST_PROGRAM_CODEC_HEADER, "String get_dist_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
             (BEER_PROGRAM_CODEC_HEADER, "String get_beer_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
-            (NBK_HEADER, "String get_nbk_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
+            (NBK_PROGRAM_CODEC_HEADER, "String get_nbk_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
         ]
 
         for header, signature, markers in expectations:

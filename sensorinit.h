@@ -5,6 +5,7 @@
 #include "Samovar.h"
 #include "modes/beer/beer_program_codec.h"
 #include "modes/dist/dist_program_codec.h"
+#include "modes/nbk/nbk_program_codec.h"
 #include "modes/rect/rect_program_codec.h"
 #include "app/status_text.h"
 #include "state/globals.h"
@@ -58,7 +59,6 @@ String append_data();
 void stopService(void);
 void startService(void);
 void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
-void set_nbk_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
 void setupOpenLog(void);
 void createFile(char* fileName);

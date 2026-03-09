@@ -157,7 +157,7 @@ SimpleStringQueue msg_q(5, 200);
 #include "modes/beer/beer_runtime.h"
 #include "modes/bk/bk_runtime.h"
 #include "modes/dist/dist_time_predictor.h"
-#include "nbk.h"
+#include "modes/nbk/nbk_state.h"
 #include "SPIFFSEditor.h"
 
 #include "I2CStepper.h"
@@ -290,6 +290,35 @@ DSSensor ACPSensor;
 WProgram program[30];
 TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};
 BoilingDetector boilingDetector;
+NbkStats stats = {0, 0, 0, 0};
+uint16_t nbk_column_inertia = NBK_COLUMN_INERTIA_DEFAULT;
+float nbk_overflow_pressure = NBK_OVERFLOW_PRESSURE_DEFAULT;
+float nbk_M = 0;
+float nbk_M_max = 3200;
+float nbk_Mo = 0;
+float nbk_dM = NBK_DM_DEFAULT;
+float nbk_P = 0;
+float nbk_Po = 0;
+float nbk_dP = 0;
+float nbk_Tb = 0;
+float nbk_Tn = NBK_TN_DEFAULT;
+float nbk_Tp = 0;
+float nbk_Tvody = 0;
+float nbk_dD = 0;
+float nbk_dT = NBK_DT_DEFAULT;
+float nbk_Tp_lim = NBK_TP_DEFAULT;
+uint8_t nbk_opt_iter = 0;
+uint32_t nbk_opt_next_time = 0;
+uint32_t time_speed = 0;
+bool nbk_opt_in_progress = false;
+uint32_t nbk_work_next_time = 0;
+bool nbk_work_in_pause = false;
+bool workrun = true;
+uint8_t nbk_work_pause_stage = 0;
+float nbk_Mo_temp = 0;
+float nbk_Po_temp = 0;
+bool manual_overflow = false;
+bool noDZ_message_sent = false;
 
 const char* host = SAMOVAR_HOST;
 const float EVAPORATION_FACTOR = 4.8f;

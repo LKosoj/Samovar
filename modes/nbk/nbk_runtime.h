@@ -3,8 +3,19 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
+#include "modes/nbk/nbk_finish.h"
+#include "modes/nbk/nbk_flow_control.h"
 #include "modes/nbk/nbk_math.h"
-#include "nbk.h"
+#include "modes/nbk/nbk_program_codec.h"
+#include "modes/nbk/nbk_state.h"
+
+void create_data();
+inline void handle_nbk_stage_heatup();
+inline void handle_nbk_stage_manual();
+inline void handle_nbk_stage_optimization();
+inline void handle_nbk_stage_work();
+inline void run_nbk_program(uint8_t num);
+inline void handle_overflow(const String& msg, bool finish, uint32_t pause_ms);
 
 inline void nbk_proc() { //главный цикл НБК
  #ifndef SAMOVAR_USE_POWER

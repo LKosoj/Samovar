@@ -3,7 +3,6 @@ import unittest
 
 
 NBK_RUNTIME_HEADER = Path("modes/nbk/nbk_runtime.h")
-NBK_HEADER = Path("nbk.h")
 DIRECT_INCLUDE_USERS = (
     Path("app/loop_dispatch.h"),
 )
@@ -34,20 +33,8 @@ class NbkRuntimeExtractionTest(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "modes/nbk/nbk_runtime.h"', text)
 
-    def test_legacy_nbk_header_no_longer_contains_runtime_definitions(self) -> None:
-        text = NBK_HEADER.read_text(encoding="utf-8")
-        for signature in [
-            "void nbk_proc() {",
-            "void handle_nbk_stage_heatup() {",
-            "void handle_nbk_stage_manual() {",
-            "void handle_nbk_stage_optimization() {",
-            "void handle_nbk_stage_work() {",
-            "void run_nbk_program(uint8_t num) {",
-            "bool check_nbk_critical_alarms() {",
-            "void handle_overflow(const String& msg, bool finish, uint32_t pause_ms) {",
-        ]:
-            with self.subTest(signature=signature):
-                self.assertNotIn(signature, text)
+    def test_legacy_nbk_header_removed(self) -> None:
+        self.assertFalse(Path("nbk.h").exists())
 
 
 if __name__ == "__main__":

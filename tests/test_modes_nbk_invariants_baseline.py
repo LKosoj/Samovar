@@ -61,7 +61,7 @@ class NbkBaselineParityTest(unittest.TestCase):
     def test_current_nbk_modules_exist(self) -> None:
         for path in CURRENT_NBK_FILES.values():
             self.assertTrue(path.exists(), f"{path} must exist")
-        self.assertTrue(Path("nbk.h").exists())
+        self.assertFalse(Path("nbk.h").exists())
 
     def test_nbk_math_matches_pre_split_baseline(self) -> None:
         signatures = [

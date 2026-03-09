@@ -4,6 +4,7 @@
 #include "Samovar.h"
 #include "modes/beer/beer_program_codec.h"
 #include "modes/dist/dist_program_codec.h"
+#include "modes/nbk/nbk_program_codec.h"
 #include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
 #include "support/process_math.h"
@@ -14,7 +15,6 @@ const char *http_password = "admin";
 
 int get_liquid_volume();
 inline String format_float(float v, int d);
-String get_nbk_program();
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void read_config();
 String get_prf_name();

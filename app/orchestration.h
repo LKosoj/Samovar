@@ -12,6 +12,7 @@
 #include "modes/beer/beer_runtime.h"
 #include "modes/bk/bk_finish.h"
 #include "modes/dist/dist_runtime.h"
+#include "modes/nbk/nbk_finish.h"
 #include "modes/rect/rect_runtime.h"
 
 void migrate_from_eeprom();
@@ -32,8 +33,6 @@ void initMqtt();
 void init_crash_handler();
 void lua_init();
 void recvMsg(uint8_t *data, size_t len);
-void nbk_finish();
-
 inline void samovar_app_setup() {
   esp_log_level_set("i2c.master", ESP_LOG_NONE);
   pinMode(0, INPUT);

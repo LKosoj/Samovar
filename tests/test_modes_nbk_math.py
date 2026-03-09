@@ -5,7 +5,6 @@ import unittest
 NBK_MATH_HEADER = Path("modes/nbk/nbk_math.h")
 NBK_RUNTIME_HEADER = Path("modes/nbk/nbk_runtime.h")
 WEBSERVER_FILE = Path("WebServer.ino")
-NBK_HEADER = Path("nbk.h")
 
 
 class NbkMathExtractionTest(unittest.TestCase):
@@ -28,15 +27,8 @@ class NbkMathExtractionTest(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "modes/nbk/nbk_math.h"', text)
 
-    def test_legacy_nbk_header_no_longer_contains_math_definitions(self) -> None:
-        text = NBK_HEADER.read_text(encoding="utf-8")
-        for signature in [
-            "float toPower(float value) {",
-            "float SQRT(float num) {",
-            "float fromPower(float value) {",
-        ]:
-            with self.subTest(signature=signature):
-                self.assertNotIn(signature, text)
+    def test_legacy_nbk_header_removed(self) -> None:
+        self.assertFalse(Path("nbk.h").exists())
 
     def test_webserver_no_longer_uses_manual_frompower_declaration(self) -> None:
         text = WEBSERVER_FILE.read_text(encoding="utf-8")

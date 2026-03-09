@@ -3,7 +3,6 @@ import unittest
 
 
 NBK_ALARM_HEADER = Path("modes/nbk/nbk_alarm.h")
-NBK_HEADER = Path("nbk.h")
 DIRECT_INCLUDE_USERS = (
     Path("app/runtime_tasks.h"),
 )
@@ -23,9 +22,8 @@ class NbkAlarmExtractionTest(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "modes/nbk/nbk_alarm.h"', text)
 
-    def test_legacy_nbk_header_no_longer_contains_alarm_definition(self) -> None:
-        text = NBK_HEADER.read_text(encoding="utf-8")
-        self.assertNotIn("void check_alarm_nbk() {", text)
+    def test_legacy_nbk_header_removed(self) -> None:
+        self.assertFalse(Path("nbk.h").exists())
 
 
 if __name__ == "__main__":
