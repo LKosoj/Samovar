@@ -19,8 +19,6 @@ class BeerHeaterStructureTest(unittest.TestCase):
             "inline void set_heater_state(float setpoint, float temp)",
             "inline void set_heater(double dutyCycle)",
             "inline void setHeaterPosition(bool state)",
-            "inline void StartAutoTune()",
-            "inline void FinishAutoTune()",
         ]:
             with self.subTest(signature=signature):
                 self.assertIn(signature, text)
@@ -37,8 +35,6 @@ class BeerHeaterStructureTest(unittest.TestCase):
             "inline void set_heater_state(float setpoint, float temp)",
             "inline void set_heater(double dutyCycle)",
             "inline void setHeaterPosition(bool state)",
-            "inline void StartAutoTune()",
-            "inline void FinishAutoTune()",
         ]:
             with self.subTest(signature=signature):
                 self.assertNotIn(signature, text)

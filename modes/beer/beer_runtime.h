@@ -12,6 +12,7 @@
 #include "app/process_common.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "modes/beer/beer_autotune.h"
 #include "modes/beer/beer_heater.h"
 #include "modes/beer/beer_mixer.h"
 #include "modes/beer/beer_program_codec.h"
