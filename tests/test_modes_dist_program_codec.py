@@ -3,14 +3,12 @@ import unittest
 
 
 DIST_PROGRAM_CODEC_HEADER = Path("modes/dist/dist_program_codec.h")
-DISTILLER_HEADER = Path("distiller.h")
 DIRECT_INCLUDE_USERS = (
     Path("modes/dist/dist_runtime.h"),
     Path("Blynk.ino"),
     Path("FS.ino"),
     Path("WebServer.ino"),
     Path("sensorinit.h"),
-    Path("distiller.h"),
 )
 
 
@@ -33,11 +31,8 @@ class DistProgramCodecExtractionTest(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "modes/dist/dist_program_codec.h"', text)
 
-    def test_distiller_header_keeps_only_runtime_state(self) -> None:
-        text = DISTILLER_HEADER.read_text(encoding="utf-8")
-        self.assertIn("TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};", text)
-        self.assertNotIn("void set_dist_program(String WProgram) {", text)
-        self.assertNotIn("String get_dist_program() {", text)
+    def test_distiller_header_deleted(self) -> None:
+        self.assertFalse(Path("distiller.h").exists())
 
 
 if __name__ == "__main__":

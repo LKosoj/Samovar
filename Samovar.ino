@@ -154,7 +154,7 @@ SimpleStringQueue msg_q(5, 200);
 #include "pumppwm.h"
 #endif
 
-#include "distiller.h"
+#include "modes/dist/dist_time_predictor.h"
 #include "beer.h"
 #include "BK.h"
 #include "nbk.h"
@@ -288,6 +288,7 @@ DSSensor TankSensor;
 DSSensor ACPSensor;
 
 WProgram program[30];
+TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};
 
 const char* host = SAMOVAR_HOST;
 const float EVAPORATION_FACTOR = 4.8f;

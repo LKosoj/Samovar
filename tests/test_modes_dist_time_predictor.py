@@ -7,7 +7,7 @@ DIST_RUNTIME_HEADER = Path("modes/dist/dist_runtime.h")
 DIRECT_INCLUDE_USERS = (
     Path("modes/dist/dist_runtime.h"),
     Path("ui/web/ajax_snapshot.h"),
-    Path("distiller.h"),
+    Path("Samovar.ino"),
 )
 
 
@@ -33,6 +33,13 @@ class DistTimePredictorExtractionTest(unittest.TestCase):
             with self.subTest(path=path.as_posix()):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "modes/dist/dist_time_predictor.h"', text)
+
+    def test_time_predictor_state_has_single_definition_in_samovar(self) -> None:
+        text = Path("Samovar.ino").read_text(encoding="utf-8")
+        self.assertEqual(
+            text.count("TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};"),
+            1,
+        )
 
     def test_dist_runtime_header_no_longer_defines_predictor_logic(self) -> None:
         text = DIST_RUNTIME_HEADER.read_text(encoding="utf-8")

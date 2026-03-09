@@ -7,7 +7,6 @@ PROCESS_COMMON_USERS = [
     Path("Samovar.ino"),
     Path("WebServer.ino"),
     Path("beer.h"),
-    Path("distiller.h"),
     Path("BK.h"),
 ]
 

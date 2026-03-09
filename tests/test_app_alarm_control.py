@@ -9,7 +9,6 @@ ALARM_CONTROL_USERS = [
     Path("Menu.ino"),
     Path("lua.h"),
     Path("BK.h"),
-    Path("distiller.h"),
     Path("nbk.h"),
     Path("impurity_detector.h"),
 ]

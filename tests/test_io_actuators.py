@@ -10,7 +10,6 @@ ACTUATORS_USERS = [
     Path("WebServer.ino"),
     Path("Menu.ino"),
     Path("beer.h"),
-    Path("distiller.h"),
     Path("BK.h"),
     Path("nbk.h"),
     Path("lua.h"),

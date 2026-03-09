@@ -96,6 +96,7 @@ class DistillerBaselineParityTest(unittest.TestCase):
     def test_current_dist_modules_exist(self) -> None:
         for path in CURRENT_DIST_FILES.values():
             self.assertTrue(path.exists(), f"{path} must exist")
+        self.assertFalse(Path("distiller.h").exists())
 
     def test_distiller_runtime_matches_pre_split_baseline(self) -> None:
         current_runtime_signatures = {

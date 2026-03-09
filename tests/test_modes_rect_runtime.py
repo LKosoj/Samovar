@@ -12,7 +12,6 @@ DIRECT_INCLUDE_USERS = (
 )
 LEGACY_DECLARATION_ONLY_USERS = (
     Path("WebServer.ino"),
-    Path("distiller.h"),
 )
 
 
