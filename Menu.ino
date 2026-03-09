@@ -1,5 +1,6 @@
 #include "Samovar.h"
 #include "modes/rect/rect_program_codec.h"
+#include "modes/rect/rect_runtime.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "io/actuators.h"
@@ -16,16 +17,14 @@
 #endif
 
 void read_config();
-void run_program(uint8_t num);
 void set_menu_screen(uint8_t param);
 void save_profile();
+void samovar_reset();
 float get_speed_from_rate(float rate);
-void pause_withdrawal(bool Pause);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 float get_alcohol(float t);
 void reset_sensor_counter();
-bool column_wetting();
 void create_data();
 void detector_on_manual_resume();
 

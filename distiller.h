@@ -76,10 +76,6 @@ float get_dist_predicted_total_time();
  */
 void check_alarm_distiller();
 
-/**
- * @brief Установить температуру тела колонны.
- */
-void set_body_temp();
 
 /**
  * @brief Получить объем жидкости.

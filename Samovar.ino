@@ -75,6 +75,7 @@
 #include "app/status_text.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "modes/rect/rect_runtime.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "crash_handler.h"
@@ -431,10 +432,10 @@ void setupMenu();
 void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
-void set_body_temp();
 void distiller_finish();
 void beer_finish();
 void change_samovar_mode();
+void samovar_reset();
 // WiFiManager отключен
 void verbose_print_reset_reason();
 void menu_switch_focus();

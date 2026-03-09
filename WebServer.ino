@@ -45,7 +45,6 @@ String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 String http_sync_request_get(String url);
 void set_water_temp(float temp);
-void set_body_temp();
 void send_ajax_json(AsyncWebServerRequest *request);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);

@@ -6,13 +6,12 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "io/actuators.h"
+#include "modes/rect/rect_runtime.h"
 #include "support/process_math.h"
 #include <math.h>
 
 float get_speed_from_rate(float volume_per_hour);
-void set_body_temp();
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-void pause_withdrawal(bool Pause);
 
 // Грейс-период после старта строки/ручного продолжения (мс)
 static unsigned long detector_grace_until = 0;

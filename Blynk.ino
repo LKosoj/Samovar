@@ -1,5 +1,6 @@
 #include "Samovar.h"
 #include "modes/rect/rect_program_codec.h"
+#include "modes/rect/rect_runtime.h"
 #include "app/status_text.h"
 #include "state/globals.h"
 #include "io/actuators.h"
@@ -9,8 +10,6 @@
 #include <BlynkSimpleEsp32.h>
 
 void menu_samovar_start();
-void pause_withdrawal(bool PauseOn);
-void set_body_temp();
 int get_liquid_volume();
 float get_speed_from_rate(float rate);
 String get_beer_program();
