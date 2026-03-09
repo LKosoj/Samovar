@@ -155,8 +155,8 @@ SimpleStringQueue msg_q(5, 200);
 #endif
 
 #include "modes/beer/beer_runtime.h"
+#include "modes/bk/bk_runtime.h"
 #include "modes/dist/dist_time_predictor.h"
-#include "BK.h"
 #include "nbk.h"
 #include "SPIFFSEditor.h"
 

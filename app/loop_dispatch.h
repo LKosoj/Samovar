@@ -6,16 +6,16 @@
 #include "app/process_common.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "BK.h"
 #include "modes/beer/beer_runtime.h"
+#include "modes/bk/bk_runtime.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_runtime.h"
 
 void menu_samovar_start();
 void detector_on_manual_resume();
 void samovar_reset();
-void bk_finish();
 void nbk_finish();
-void bk_proc();
 void nbk_proc();
 void run_nbk_program(uint8_t num);
 

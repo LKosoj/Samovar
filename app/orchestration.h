@@ -3,6 +3,7 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
+#include "BK.h"
 #include "app/alarm_control.h"
 #include "app/config_apply.h"
 #include "app/loop_dispatch.h"
@@ -31,7 +32,6 @@ void initMqtt();
 void init_crash_handler();
 void lua_init();
 void recvMsg(uint8_t *data, size_t len);
-void bk_finish();
 void nbk_finish();
 
 inline void samovar_app_setup() {

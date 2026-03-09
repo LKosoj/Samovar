@@ -17,6 +17,7 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "mod_rmv.ino",
     "WebServer.ino",
     "Blynk.ino",
+    "modes/bk/bk_runtime.h",
     "modes/beer/beer_program_codec.h",
     "modes/beer/beer_autotune.h",
     "modes/beer/beer_heater.h",

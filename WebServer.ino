@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "Samovar.h"
+#include "BK.h"
 #include "modes/beer/beer_program_codec.h"
 #include "modes/beer/beer_mixer.h"
 #include "modes/beer/beer_runtime.h"
@@ -47,7 +48,6 @@ String get_DSAddressList(String Address);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 String http_sync_request_get(String url);
-void set_water_temp(float temp);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void web_command(AsyncWebServerRequest *request);
@@ -63,7 +63,6 @@ String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 float fromPower(float value);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-void bk_finish();
 void nbk_finish();
 void samovar_reset();
 void set_nbk_program(String WProgram);

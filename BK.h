@@ -1,3 +1,6 @@
+#ifndef __SAMOVAR_BK_H_
+#define __SAMOVAR_BK_H_
+
 #include <Arduino.h>
 #include "Samovar.h"
 #include "state/globals.h"
@@ -10,10 +13,6 @@
 #include "pumppwm.h"
 #endif
 
-#ifdef USE_MQTT
-#include "SamovarMqtt.h"
-#endif
-
 /**
  * @brief Завершить работу бражной колонны, отправить уведомление, выключить нагрев и сбросить счетчики.
  */
@@ -23,11 +22,6 @@ void bk_finish();
  * @brief Сбросить счетчик датчиков.
  */
 void reset_sensor_counter();
-
-/**
- * @brief Создать файл с данными текущей сессии.
- */
-void create_data();
 
 /**
  * @brief Установить ШИМ для насоса.
@@ -62,35 +56,6 @@ void set_water_temp(float duty) {
 #else
   SendMsg(("Управление насосом не поддерживается вашим оборудованием"), NOTIFY_MSG);
 #endif
-}
-
-/**
- * @brief Основной цикл работы бражной колонны. Запускает нагрев, проверяет условия завершения.
- */
-void bk_proc() {
-
-  if (!PowerOn) {
-#ifdef USE_MQTT
-    SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + ",BK," + SessionDescription, "st");
-#endif
-    set_power(true);
-#ifdef SAMOVAR_USE_POWER
-    delay(1000);
-    set_power_mode(POWER_SPEED_MODE);
-#else
-    current_power_mode = POWER_SPEED_MODE;
-    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
-#endif
-    create_data();  //создаем файл с данными
-    SteamSensor.Start_Pressure = bme_pressure;
-    SendMsg(("Включен нагрев бражной колонны"), NOTIFY_MSG);
-  }
-
-  if (TankSensor.avgTemp >= SamSetup.DistTemp) {
-    bk_finish();
-  }
-  vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 /**
@@ -170,3 +135,5 @@ void check_alarm_bk() {
 void bk_finish() {
   stop_process("Работа бражной колонны завершена");
 }
+
+#endif
