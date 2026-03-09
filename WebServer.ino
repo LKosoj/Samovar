@@ -6,6 +6,7 @@
 #include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
 #include "app/process_common.h"
+#include "ui/web/ajax_snapshot.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"
@@ -45,7 +46,6 @@ String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 String http_sync_request_get(String url);
 void set_water_temp(float temp);
-void send_ajax_json(AsyncWebServerRequest *request);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void web_command(AsyncWebServerRequest *request);
