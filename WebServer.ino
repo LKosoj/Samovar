@@ -3,10 +3,11 @@
 #include <WiFi.h>
 
 #include "Samovar.h"
-#include "BK.h"
 #include "modes/beer/beer_program_codec.h"
 #include "modes/beer/beer_mixer.h"
 #include "modes/beer/beer_runtime.h"
+#include "modes/bk/bk_finish.h"
+#include "modes/bk/bk_water_control.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_program_codec.h"

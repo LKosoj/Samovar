@@ -8,7 +8,7 @@ POWER_CONTROL_USERS = [
     Path("WebServer.ino"),
     Path("Menu.ino"),
     Path("modes/beer/beer_runtime.h"),
-    Path("BK.h"),
+    Path("modes/bk/bk_alarm.h"),
     Path("nbk.h"),
     Path("lua.h"),
     Path("Blynk.ino"),

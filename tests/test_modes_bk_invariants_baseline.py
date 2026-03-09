@@ -58,6 +58,7 @@ class BkBaselineParityTest(unittest.TestCase):
         cls.baseline_text = _read_git_file(BASELINE_BK_COMMIT, "BK.h")
 
     def test_current_bk_modules_exist(self) -> None:
+        self.assertFalse(Path("BK.h").exists())
         for path in CURRENT_BK_FILES.values():
             self.assertTrue(path.exists(), f"{path} must exist")
 

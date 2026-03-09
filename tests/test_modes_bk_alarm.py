@@ -3,7 +3,6 @@ import unittest
 
 
 BK_ALARM_HEADER = Path("modes/bk/bk_alarm.h")
-BK_HEADER = Path("BK.h")
 DIRECT_INCLUDE_USERS = (
     Path("app/runtime_tasks.h"),
 )
@@ -23,9 +22,8 @@ class BkAlarmExtractionTest(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "modes/bk/bk_alarm.h"', text)
 
-    def test_bk_header_no_longer_contains_alarm(self) -> None:
-        text = BK_HEADER.read_text(encoding="utf-8")
-        self.assertNotIn("void check_alarm_bk() {", text)
+    def test_legacy_bk_header_deleted(self) -> None:
+        self.assertFalse(Path("BK.h").exists())
 
 
 if __name__ == "__main__":

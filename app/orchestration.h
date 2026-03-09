@@ -3,7 +3,6 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
-#include "BK.h"
 #include "app/alarm_control.h"
 #include "app/config_apply.h"
 #include "app/loop_dispatch.h"
@@ -11,6 +10,7 @@
 #include "app/runtime_tasks.h"
 #include "io/power_control.h"
 #include "modes/beer/beer_runtime.h"
+#include "modes/bk/bk_finish.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_runtime.h"
 

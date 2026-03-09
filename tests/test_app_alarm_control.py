@@ -8,7 +8,7 @@ ALARM_CONTROL_USERS = [
     Path("modes/beer/beer_runtime.h"),
     Path("Menu.ino"),
     Path("lua.h"),
-    Path("BK.h"),
+    Path("modes/bk/bk_alarm.h"),
     Path("nbk.h"),
     Path("impurity_detector.h"),
 ]
