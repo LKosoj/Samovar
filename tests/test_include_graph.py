@@ -25,6 +25,7 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "modes/beer/beer_heater.h",
     "modes/beer/beer_mixer.h",
     "modes/beer/beer_runtime.h",
+    "modes/nbk/nbk_runtime.h",
     "pumppwm.h",
     "Samovar.ino",
     "Menu.ino",

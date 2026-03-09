@@ -10,14 +10,13 @@
 #include "modes/bk/bk_finish.h"
 #include "modes/bk/bk_runtime.h"
 #include "modes/dist/dist_runtime.h"
+#include "modes/nbk/nbk_runtime.h"
 #include "modes/rect/rect_runtime.h"
 
 void menu_samovar_start();
 void detector_on_manual_resume();
 void samovar_reset();
 void nbk_finish();
-void nbk_proc();
-void run_nbk_program(uint8_t num);
 
 inline void process_sam_command_sync() {
   if (sam_command_sync == SAMOVAR_NONE) return;
