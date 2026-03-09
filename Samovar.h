@@ -220,6 +220,7 @@ uint8_t temprature_sens_read();
 
 #include "state/config_types.h"
 #include "state/runtime_types.h"
+#include "support/safe_parse.h"
 
 void writeString(String Str, uint8_t num);
 void WriteConsoleLog(String StringLogMsg);
@@ -228,36 +229,6 @@ void WriteConsoleLog(String StringLogMsg);
 #ifndef MAX_PROGRAM_INPUT_LEN
 #define MAX_PROGRAM_INPUT_LEN 1024
 #endif
-
-template <size_t N>
-inline void copyStringSafe(char (&dst)[N], const String& src) {
-  size_t n = src.length();
-  if (n >= N) n = N - 1;
-  if (n > 0) {
-    memcpy(dst, src.c_str(), n);
-  }
-  dst[n] = '\0';
-}
-
-inline bool parseLongSafe(const char* token, long& out) {
-  if (!token || token[0] == '\0') return false;
-  errno = 0;
-  char* end = nullptr;
-  long value = strtol(token, &end, 10);
-  if (errno != 0 || end == token || *end != '\0') return false;
-  out = value;
-  return true;
-}
-
-inline bool parseFloatSafe(const char* token, float& out) {
-  if (!token || token[0] == '\0') return false;
-  errno = 0;
-  char* end = nullptr;
-  float value = strtof(token, &end);
-  if (errno != 0 || end == token || *end != '\0') return false;
-  out = value;
-  return true;
-}
 
 //**************************************************************************************************************
 // Описание переменных
