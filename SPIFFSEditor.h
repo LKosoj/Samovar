@@ -5,6 +5,7 @@
 #include <ESPAsyncWebServer.h>
 #include "Samovar.h"
 #include "state/globals.h"
+#include "support/process_math.h"
 
 String get_edit_script();
 

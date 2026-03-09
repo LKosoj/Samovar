@@ -3,6 +3,7 @@
  #include "Samovar.h"
  #include "state/globals.h"
  #include "support/safe_parse.h"
+ #include "support/process_math.h"
 // Новые веянья, platformio вестимо, сворачиваем
  /**
  * @brief Сбросить счетчик датчиков.

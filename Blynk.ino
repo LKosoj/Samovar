@@ -1,5 +1,6 @@
 #include "Samovar.h"
 #include "state/globals.h"
+#include "support/process_math.h"
 #ifdef SAMOVAR_USE_BLYNK
 #include <BlynkSimpleEsp32.h>
 

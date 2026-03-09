@@ -3,6 +3,7 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
+#include "support/process_math.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"

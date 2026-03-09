@@ -71,6 +71,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "support/safe_parse.h"
+#include "support/process_math.h"
 #include "crash_handler.h"
 
 #ifndef __SAMOVAR_DEBUG

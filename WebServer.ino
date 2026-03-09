@@ -5,6 +5,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "support/safe_parse.h"
+#include "support/process_math.h"
 #include "FS.h"
 #include "sensorinit.h"
 #include "column_math.h"

@@ -1,6 +1,7 @@
 #include "HardwareSerial.h"
 #ifndef __SAMOVAR_I2CSTEPPER_H_
 #define __SAMOVAR_I2CSTEPPER_H_
+#include "support/process_math.h"
 
 // Настройки для шагового двигателя
 #define STEPPER_I2C_MS 2
