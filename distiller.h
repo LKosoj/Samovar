@@ -2,6 +2,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "app/process_common.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "quality.h"

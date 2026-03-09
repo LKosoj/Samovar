@@ -2,6 +2,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "app/process_common.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 
@@ -32,8 +33,6 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void set_power(bool On);
 void set_body_temp();
-void start_self_test(void);
-void stop_self_test(void);
 bool check_boiling();
 void set_boiling();
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
@@ -292,14 +291,6 @@ float getBeerCurrentTemp() {
     default:
       return TankSensor.avgTemp;
   }
-}
-
-// Остановка любого процесса с общим набором действий
-void stop_process(String reason) {
-  SamovarStatusInt = 0;
-  set_power(false);
-  reset_sensor_counter();
-  SendMsg(reason, NOTIFY_MSG);
 }
 
 // Получить статус Самовара
@@ -1187,54 +1178,6 @@ bool check_boiling() {
   }
 
   return boil_started;
-}
-
-void start_self_test(void) {
-  is_self_test = true;
-  SendMsg(("Запуск самотестирования."), NOTIFY_MSG);
-  open_valve(true, true);
-#ifdef USE_WATER_PUMP
-  //включаем насос воды
-  set_pump_pwm((PWM_START_VALUE + 20) * 10);
-#endif
-  //включаем шаговый двигатель
-  stopService();
-#ifdef USE_STEPPER_ACCELERATION
-  // В самотестировании отключаем плавный разгон/торможение, чтобы мотор сразу крутился
-  // с заданной скоростью (даже если в целом акселерация включена).
-  stepper.setAcceleration(0);
-#endif
-  stepper.setMaxSpeed(get_speed_from_rate(1));
-  //stepper.setSpeed(get_speed_from_rate(1));
-  TargetStepps = 100 * SamSetup.StepperStepMl;
-  stepper.setCurrent(0);
-  stepper.setTarget(TargetStepps);
-  startService();
-  //включаем сервопривод
-  set_capacity(1);
-  while (capacity_num != 0 && capacity_num < 5) {
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
-    next_capacity();
-  }
-  vTaskDelay(15000 / portTICK_PERIOD_MS);
-  stop_self_test();
-  SendMsg(("Самотестирование закончено."), NOTIFY_MSG);
-}
-
-void stop_self_test(void) {
-#ifdef USE_WATER_PUMP
-  //выключаем насос воды
-  set_pump_pwm(0);
-#endif
-  open_valve(false, true);
-  set_capacity(0);
-  stopService();
-#ifdef USE_STEPPER_ACCELERATION
-  // Возвращаем ускорение библиотеки по умолчанию, чтобы остальные режимы работали штатно
-  stepper.setAcceleration(200);
-#endif
-  is_self_test = false;
-  reset_sensor_counter();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////

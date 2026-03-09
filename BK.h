@@ -2,6 +2,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "app/process_common.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"

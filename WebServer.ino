@@ -4,6 +4,7 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
+#include "app/process_common.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "FS.h"
@@ -40,8 +41,6 @@ String setupKeyProcessor(const String &var);
 String wifiKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
-void start_self_test(void);
-void stop_self_test(void);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 String http_sync_request_get(String url);
@@ -63,8 +62,6 @@ void calibrate_command(AsyncWebServerRequest *request);
 String setupKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
-void start_self_test(void);
-void stop_self_test(void);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 float fromPower(float value);
