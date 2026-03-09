@@ -25,7 +25,6 @@ class DistRuntimeExtractionTest(unittest.TestCase):
             "extern TimePredictor timePredictor;",
             "inline void distiller_proc()",
             "inline void distiller_finish()",
-            "inline void check_alarm_distiller()",
             "inline void run_dist_program(uint8_t num)",
             "inline void resetTimePredictor()",
             "inline void updateTimePredictor()",
@@ -51,7 +50,6 @@ class DistRuntimeExtractionTest(unittest.TestCase):
         for signature in [
             "void distiller_proc() {",
             "void distiller_finish() {",
-            "void check_alarm_distiller() {",
             "void run_dist_program(uint8_t num) {",
             "void resetTimePredictor() {",
             "void updateTimePredictor() {",

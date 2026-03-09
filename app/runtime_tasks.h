@@ -1,6 +1,7 @@
 #ifndef __SAMOVAR_RUNTIME_TASKS_H_
 #define __SAMOVAR_RUNTIME_TASKS_H_
 
+#include "modes/dist/dist_alarm.h"
 #include "modes/dist/dist_runtime.h"
 
 void stopService(void) {
