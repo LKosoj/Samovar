@@ -1,8 +1,3 @@
-//TODO
-//
-//Проверить на С подъем напряжения
-//Перейти на GyverPID
-
 // copy to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.x.x/tools/partitions/samovar.csv
 // add to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.x.x/boards.txt
 // esp32.menu.PartitionScheme.samovar=Samovar
@@ -160,6 +155,251 @@ SimpleStringQueue msg_q(5, 200);
 
 //#include <HTTPClient.h>
 //HTTPClient client;
+
+SemaphoreHandle_t xSemaphore = NULL;
+SemaphoreHandle_t xMsgSemaphore = NULL;
+StaticSemaphore_t xMsgSemaphoreBuffer;
+
+SemaphoreHandle_t xI2CSemaphore = NULL;
+StaticSemaphore_t xI2CSemaphoreBuffer;
+
+#ifdef SAMOVAR_USE_SEM_AVR
+SemaphoreHandle_t xSemaphoreAVR = NULL;
+StaticSemaphore_t xSemaphoreBufferAVR;
+#endif
+
+uint8_t multiplier = 1;
+
+char ipst[16] = "000.000.000.000";
+char welcomeStrArr1[20];
+char welcomeStrArr2[20];
+char welcomeStrArr3[20];
+char welcomeStrArr4[20];
+char* welcomeStr1 = (char*)welcomeStrArr1;
+char* welcomeStr2 = (char*)welcomeStrArr2;
+char* welcomeStr3 = (char*)welcomeStrArr3;
+char* welcomeStr4 = (char*)welcomeStrArr4;
+
+char* ipstr = (char*)ipst;
+char startval_text_val[20];
+char* startval_text = (char*)startval_text_val;
+char* power_text_ptr = (char*)"ON";
+char* calibrate_text_ptr = (char*)"Start";
+char* pause_text_ptr = (char*)"Pause";
+String StrCrt;
+String Crt;
+uint8_t CurMin, OldMin;
+
+TaskHandle_t SysTickerTask1 = NULL;
+TaskHandle_t GetClockTask1 = NULL;
+TaskHandle_t GetBMPTask = NULL;
+
+volatile bool buzzer_active = false;
+volatile uint8_t buzzer_beep_count = 0;
+volatile unsigned long buzzer_next_time = 0;
+volatile bool buzzer_state = false;
+
+#ifdef SAMOVAR_USE_POWER
+TaskHandle_t PowerStatusTask = NULL;
+#endif
+
+AsyncWebServer server(80);
+AsyncEventSource events("/events");
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+DeviceAddress DSAddr[6];
+
+LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
+
+Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
+
+GStepper2< STEPPER2WIRE> stepper(STEPPER_STEPS, STEPPER_STEP, STEPPER_DIR, STEPPER_EN);
+
+iarduino_I2C_connect I2C2;
+
+File fileToAppend;
+
+#ifdef SERVO_PIN
+Servo servo;
+#endif
+
+#ifdef BTN_PIN
+GButton btn(BTN_PIN);
+#endif
+
+#ifdef ALARM_BTN_PIN
+GButton alarm_btn(ALARM_BTN_PIN);
+#endif
+
+#ifdef USE_EXPANDER
+PCF8575 expander(&Wire, USE_EXPANDER, LCD_SDA, LCD_SCL);
+#endif
+
+#ifdef USE_ANALOG_EXPANDER
+PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
+#endif
+
+double Input, Output, Setpoint;
+double Kp, Ki, Kd;
+
+PID heaterPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
+int periodInSeconds = 6;
+
+uint8_t ATuneModeRemember = 2;
+double aTuneStep = 50;
+double aTuneNoise = 1;
+unsigned int aTuneLookBack = 9;
+boolean tuning = false;
+
+PID_ATune aTune(&Input, &Output);
+
+#ifdef USE_HEAD_LEVEL_SENSOR
+GButton whls(WHEAD_LEVEL_SENSOR_PIN);
+#endif
+
+GButton nbkls(LUA_PIN);
+
+LiquidMenu main_menu1(lcd);
+
+volatile SamovarCommands sam_command_sync;
+
+volatile SAMOVAR_MODE Samovar_Mode;
+volatile SAMOVAR_MODE Samovar_CR_Mode;
+
+volatile MESSAGE_TYPE msg_type;
+
+SetupEEPROM SamSetup;
+ImpurityDetector impurityDetector;
+
+DSSensor SteamSensor;
+DSSensor PipeSensor;
+DSSensor WaterSensor;
+DSSensor TankSensor;
+DSSensor ACPSensor;
+
+WProgram program[30];
+
+const char* host = SAMOVAR_HOST;
+const float EVAPORATION_FACTOR = 4.8f;
+
+uint8_t DScnt = 0;
+uint8_t STcnt = 0;
+bool bmefound = true;
+volatile bool PowerOn = false;
+volatile bool PauseOn = false;
+volatile bool StepperMoving = false;
+volatile bool program_Pause;
+volatile bool program_Wait;
+volatile bool heater_state;
+volatile bool loop_lua_fl = false;
+volatile bool show_lua_script = false;
+volatile bool is_self_test;
+volatile bool SetScriptOff;
+bool boil_started;
+bool valve_status;
+bool pump_started;
+bool msgfl;
+bool mixer_status;
+bool alarm_event;
+bool acceleration_heater;
+bool send_mqtt;
+bool is_reboot = false;
+bool lcd_found = false;
+bool wetting_autostart = false;
+bool reg_online = false;
+volatile bool ota_running = false;
+unsigned long last_reg_online = 0;
+
+volatile float bme_temp;
+volatile float start_pressure;
+volatile float bme_pressure;
+volatile float bme_prev_pressure;
+String SamovarStatus;
+volatile int16_t SamovarStatusInt;
+volatile uint8_t capacity_num;
+
+volatile uint8_t prev_ProgramNum;
+volatile uint8_t ProgramNum;
+volatile uint8_t ProgramLen;
+volatile uint8_t WthdrwlProgress;
+volatile int16_t startval = 0;
+volatile int currentstepcnt = 0;
+volatile unsigned long prev_time_ms;
+volatile float ActualVolumePerHour;
+volatile uint16_t CurrrentStepperSpeed;
+volatile uint16_t I2CStepperSpeed;
+volatile uint16_t I2CPumpCmdSpeed;
+volatile uint32_t I2CPumpTargetSteps;
+volatile float I2CPumpTargetMl;
+volatile bool I2CPumpCalibrating;
+volatile unsigned int CurrrentStepps;
+volatile unsigned int TargetStepps;
+String program_Wait_Type;
+unsigned long begintime;
+unsigned long t_min;
+unsigned long alarm_t_min;
+unsigned long alarm_h_min;
+float d_s_temp_prev;
+float d_s_temp_finish;
+unsigned long d_s_time_min;
+float boil_temp;
+float b_t_temp_prev;
+unsigned long b_t_time_min;
+unsigned long b_t_time_delay;
+float alcohol_s;
+volatile uint16_t WFpulseCount = 0;
+volatile uint16_t WFflowMilliLitres = 0;
+volatile uint32_t WFtotalMilliLitres = 0;
+volatile float WFflowRate;
+volatile int WFAlarmCount;
+uint16_t acceleration_temp;
+volatile float WthdrwTimeAll;
+volatile float WthdrwTime;
+String WthdrwTimeAllS;
+String WthdrwTimeS;
+String jsonstr;
+String Msg;
+String LogMsg;
+uint8_t msg_level;
+int bk_pwm;
+uint32_t chipId = 0;
+String SessionDescription;
+volatile float test_num_val;
+float pressure_value;
+float old_pressure_value;
+bool use_pressure_sensor;
+
+volatile float BoilerVolume = 30.0f;
+volatile float CurrentHeatLoss = 0;
+volatile float CalculatedTargetFR = 0;
+unsigned long heatStartMillis = 0;
+float heatStartTemp = 0;
+bool heatLossCalculated = false;
+
+String test_str_val;
+String Lua_status;
+uint32_t total_byte;
+uint32_t used_byte;
+uint8_t use_I2C_dev;
+uint16_t water_pump_speed;
+
+String current_power_mode;
+volatile float target_power_volt = 0;
+volatile float current_power_volt = 0;
+unsigned long alarm_c_min;
+unsigned long alarm_c_low_min;
+
+#ifdef SAMOVAR_USE_POWER
+volatile float prev_target_power_volt;
+volatile uint16_t current_power_p;
+uint8_t power_err_cnt;
+#endif
+
+#ifdef USE_WATER_PUMP
+uint8_t wp_count;
+#endif
+
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
 //**************************************************************************************************************
