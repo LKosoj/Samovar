@@ -1,7 +1,7 @@
 #ifndef __SAMOVAR_RUNTIME_TASKS_H_
 #define __SAMOVAR_RUNTIME_TASKS_H_
 
-#include "BK.h"
+#include "modes/bk/bk_alarm.h"
 #include "modes/beer/beer_runtime.h"
 #include "modes/dist/dist_alarm.h"
 #include "modes/dist/dist_runtime.h"

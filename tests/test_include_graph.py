@@ -10,6 +10,7 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "crash_handler.h",
     "FS.ino",
     "BK.h",
+    "modes/bk/bk_alarm.h",
     "column_math.h",
     "impurity_detector.h",
     "lua.h",
