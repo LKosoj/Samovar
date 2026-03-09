@@ -57,7 +57,6 @@ void handleSaveWifiSettings(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request, String fn);
 String calibrateKeyProcessor(const String &var);
 String indexKeyProcessor(const String &var);
-void web_program(AsyncWebServerRequest *request);
 void calibrate_command(AsyncWebServerRequest *request);
 String setupKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
@@ -389,34 +388,6 @@ void handleSave(AsyncWebServerRequest *request) {
   }
 }
 
-void web_program(AsyncWebServerRequest *request) {
-  if (request->hasArg("WProgram")) {
-    if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      set_beer_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_beer_program());
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      set_dist_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_dist_program());
-    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      set_nbk_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_nbk_program());
-    } else {
-      set_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
-    }
-  }
-  if (request->hasArg("vless")) {
-    BoilerVolume = request->arg("vless").toFloat();
-    if (BoilerVolume <= 0) BoilerVolume = 30.0f; // Защита: если 0, считаем 30л
-    heatLossCalculated = false; // Сбрасываем расчет при смене объема
-    heatStartMillis = 0;
-  }
-  if (request->hasArg("Descr")) {
-    SessionDescription = request->arg("Descr");
-    SessionDescription.replace("%", "&#37;");
-  }
-}
-
 void calibrate_command(AsyncWebServerRequest *request) {
   bool cl = false;
   bool isI2C = false;
@@ -691,6 +662,7 @@ String http_sync_request_post(String url, String body, String ContentType) {
 }
 #include "ui/web/template_keys.h"
 #include "ui/web/routes_command.h"
+#include "ui/web/routes_program.h"
 #include "ui/web/routes_setup_wifi.h"
 #include "ui/web/routes_setup_process.h"
 #include "ui/web/server_init.h"
