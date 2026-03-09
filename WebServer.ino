@@ -52,6 +52,8 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
+void handleSaveProcessSettings(AsyncWebServerRequest *request);
+void handleSaveWifiSettings(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request, String fn);
 String calibrateKeyProcessor(const String &var);
 String indexKeyProcessor(const String &var);
@@ -284,18 +286,7 @@ void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("NbkOwPress")) {
     SamSetup.NbkOwPress = request->arg("NbkOwPress").toFloat();
   }
-  if (request->hasArg("videourl")) {
-    copyStringSafe(SamSetup.videourl, request->arg("videourl"));
-  }
-  if (request->hasArg("blynkauth")) {
-    copyStringSafe(SamSetup.blynkauth, request->arg("blynkauth"));
-  }
-  if (request->hasArg("tgtoken")) {
-    copyStringSafe(SamSetup.tg_token, request->arg("tgtoken"));
-  }
-  if (request->hasArg("tgchatid")) {
-    copyStringSafe(SamSetup.tg_chat_id, request->arg("tgchatid"));
-  }
+  handleSaveWifiSettings(request);
   if (request->hasArg("SteamColor")) {
     copyStringSafe(SamSetup.SteamColor, request->arg("SteamColor"));
   }
@@ -311,60 +302,7 @@ void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("ACPColor")) {
     copyStringSafe(SamSetup.ACPColor, request->arg("ACPColor"));
   }
-  if (request->hasArg("mode")) {
-    if (SamSetup.Mode != request->arg("mode").toInt()) {
-      // Останавливаем текущий процесс, если он работает
-      if (PowerOn) {
-        if (SamovarStatusInt == 1000) {
-          distiller_finish();
-        } else if (SamovarStatusInt == 2000) {
-          beer_finish();
-        } else if (SamovarStatusInt == 3000) {
-          bk_finish();
-        } else if (SamovarStatusInt == 4000) {
-          nbk_finish();
-        } else {
-          set_power(false);
-        }
-      }
-      
-#ifdef USE_LUA
-      // Останавливаем Lua-скрипт, если он работает
-      if (loop_lua_fl) {
-        SetScriptOff = true;
-        loop_lua_fl = false;
-        // Даем время на корректную остановку скрипта
-        delay(100);
-      }
-#endif
-      
-      // Сбрасываем состояние
-      samovar_reset();
-      
-      // Устанавливаем новый режим
-      SamSetup.Mode = request->arg("mode").toInt();
-      Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
-      Samovar_CR_Mode = Samovar_Mode;
-      
-      // Загружаем программу по умолчанию для нового режима
-      load_default_program_for_mode();
-      
-      // Сохраняем настройки
-      save_profile();
-      
-      // Загружаем профиль для нового режима (настройки, но НЕ программу - она уже загружена выше)
-      load_profile();
-      
-#ifdef USE_LUA
-      // Обновляем Lua скрипты для нового режима
-      lua_type_script = get_lua_mode_name();
-      load_lua_script();
-#endif
-      
-      // Обновляем веб-обработчики
-      change_samovar_mode();
-    }
-  }
+  handleSaveProcessSettings(request);
   if (request->hasArg("rele1")) {
     SamSetup.rele1 = request->arg("rele1").toInt();
   }
@@ -887,4 +825,6 @@ String http_sync_request_post(String url, String body, String ContentType) {
   }
 }
 #include "ui/web/template_keys.h"
+#include "ui/web/routes_setup_wifi.h"
+#include "ui/web/routes_setup_process.h"
 #include "ui/web/server_init.h"
