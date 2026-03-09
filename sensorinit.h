@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
+#include "modes/rect/rect_program_codec.h"
 #include "app/status_text.h"
 #include "state/globals.h"
 #include "io/actuators.h"
@@ -56,7 +57,6 @@ void stopService(void);
 void startService(void);
 void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
 void set_beer_program(String WProgram);
-void set_program(String WProgram);
 void set_dist_program(String WProgram);
 void set_nbk_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);

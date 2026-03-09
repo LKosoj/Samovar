@@ -1,4 +1,5 @@
 #include "Samovar.h"
+#include "modes/rect/rect_program_codec.h"
 #include "app/status_text.h"
 #include "state/globals.h"
 #include "io/actuators.h"
@@ -15,7 +16,6 @@ float get_speed_from_rate(float rate);
 String get_beer_program();
 String get_dist_program();
 String get_nbk_program();
-String get_program(uint8_t s);
 
 #ifdef USE_LUA
 String run_lua_string(String lstr);

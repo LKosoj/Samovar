@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "Samovar.h"
+#include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
 #include "app/process_common.h"
 #include "io/actuators.h"
@@ -24,7 +25,6 @@ void menu_reset_wifi();
 uint16_t get_stepper_speed(void);
 uint32_t get_stepper_status(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
-String get_program(uint8_t s);
 String get_beer_program();
 String get_dist_program();
 String get_nbk_program();
@@ -67,7 +67,6 @@ void beer_finish();
 void bk_finish();
 void nbk_finish();
 void samovar_reset();
-void set_program(String WProgram);
 void set_beer_program(String WProgram);
 void set_dist_program(String WProgram);
 void set_nbk_program(String WProgram);

@@ -1,4 +1,5 @@
 #include "Samovar.h"
+#include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "io/actuators.h"
@@ -23,10 +24,8 @@ void pause_withdrawal(bool Pause);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 float get_alcohol(float t);
-bool column_wetting();
 void reset_sensor_counter();
-void set_program(String WProgram);
-String get_program(uint8_t s);
+bool column_wetting();
 void create_data();
 void detector_on_manual_resume();
 

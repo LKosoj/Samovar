@@ -7,6 +7,7 @@ GLOBALS_HEADER = Path("state/globals.h")
 SAMOVAR_SOURCE = Path("Samovar.ino")
 LOGIC_HEADER = Path("logic.h")
 STATUS_TEXT_HEADER = Path("app/status_text.h")
+RECT_PROGRAM_CODEC_HEADER = Path("modes/rect/rect_program_codec.h")
 DISTILLER_HEADER = Path("distiller.h")
 BEER_HEADER = Path("beer.h")
 NBK_HEADER = Path("nbk.h")
@@ -66,7 +67,11 @@ class StateInvariantTest(unittest.TestCase):
 
     def test_program_accessors_keep_reading_program_storage(self) -> None:
         expectations = [
-            (LOGIC_HEADER, "String get_program(uint8_t s)", ["program[i]", "Str +=", "CAPACITY_NUM"]),
+            (
+                RECT_PROGRAM_CODEC_HEADER,
+                "String get_program(uint8_t s)",
+                ["program[i]", "Str +=", "CAPACITY_NUM"],
+            ),
             (DISTILLER_HEADER, "String get_dist_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
             (BEER_HEADER, "String get_beer_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
             (NBK_HEADER, "String get_nbk_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
