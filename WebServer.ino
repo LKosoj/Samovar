@@ -8,6 +8,7 @@
 #include "modes/beer/beer_runtime.h"
 #include "modes/bk/bk_finish.h"
 #include "modes/bk/bk_water_control.h"
+#include "modes/nbk/nbk_math.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_program_codec.h"
@@ -62,7 +63,6 @@ String setupKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
-float fromPower(float value);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void nbk_finish();
 void samovar_reset();

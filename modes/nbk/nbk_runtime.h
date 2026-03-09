@@ -3,6 +3,7 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
+#include "modes/nbk/nbk_math.h"
 #include "nbk.h"
 
 inline void nbk_proc() { //главный цикл НБК

@@ -240,48 +240,6 @@ void SetSpeed(float Speed) { // Прокладка для подсчета ст�
   set_stepper_target(i2c_get_speed_from_rate(Speed), 0, 2147483640);
 }
 
-float toPower(float value) { // конвертер в мощность ( V | W ) => W
- #ifdef SAMOVAR_USE_SEM_AVR
-    return value; // если нечто иное возвращаем неизменным
- #else
-      float R = SamSetup.HeaterResistant > 1 ? SamSetup.HeaterResistant : 18;
-      return value * value / R; //если от kvic или RVMK пересчитываем в P
- #endif
-  }
- #ifndef SAMOVAR_USE_SEM_AVR
-float SQRT(float num) { // компилируем только по необходимости
-  if (num < 0) {
-    return -1.0f;
-  }
-  if (num == 0) {
-      return 0.0f;
-  }
-  float guess = num;
-  float prev_guess;
-  do {
-    prev_guess = guess;
-    guess = (guess + num / guess) / 2;
-    delay(3);
-  } while (abs(guess - prev_guess) > 0.001);
-  return guess;
-}
- #endif
-float fromPower(float value) { // конвертер из мощности: W => ( V | W )
- #ifdef SAMOVAR_USE_SEM_AVR
-    return value;
- #else
-      static float prev_W = 0.0f;
-      static float prev_V = 0.0f;
-      if (value != prev_W) {
-          prev_W = value;
-          float R = SamSetup.HeaterResistant > 1 && SamSetup.HeaterResistant < 200 ? SamSetup.HeaterResistant : 18;
-          prev_V = SQRT(value * R);
-      }
-      return prev_V;
- #endif
-  }
-
-
 // === Тоже Проверка критических аварий === в основном по воде
 void check_alarm_nbk() {// вызывается из Samovar.ino, надо разобраться что оставить, я уже кой чего поубирал
   // Если нагрев выключен и это не самотестирование и вода включена и Т воды на 20 и более гр. ниже уставки
