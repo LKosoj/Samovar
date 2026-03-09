@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Samovar.h"
 #include "state/globals.h"
+#include "app/alarm_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "SamovarMqtt.h"
@@ -155,12 +156,6 @@ bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
  * @brief Совершить шаг шаговым двигателем для засыпи хмеля.
  */
 void HopStepperStep();
-
-/**
- * @brief Включить или выключить буззер.
- * @param fl true — включить, false — выключить
- */
-void set_buzzer(bool fl);
 
 /**
  * @brief Установить ШИМ для насоса.

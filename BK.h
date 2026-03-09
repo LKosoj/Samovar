@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Samovar.h"
 #include "state/globals.h"
+#include "app/alarm_control.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"
@@ -26,12 +27,6 @@ void set_power_mode(String Mode);
  * @param power Мощность (Вт)
  */
 void set_current_power(float power);
-
-/**
- * @brief Включить или выключить буззер.
- * @param On true — включить, false — выключить
- */
-void set_buzzer(bool On);
 
 /**
  * @brief Сбросить счетчик датчиков.

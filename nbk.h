@@ -2,6 +2,7 @@
  #include <Arduino.h>
  #include "Samovar.h"
  #include "state/globals.h"
+ #include "app/alarm_control.h"
  #include "support/safe_parse.h"
  #include "support/process_math.h"
 // Новые веянья, platformio вестимо, сворачиваем
@@ -77,12 +78,6 @@
  * @return true если кипит, иначе false
  */
  bool check_boiling();
-
- /**
- * @brief Включить или выключить буззер.
- * @param fl true — включить, false — выключить
- */
- void set_buzzer(bool fl);
 
  /**
  * @brief Установить температуру воды.

@@ -70,6 +70,7 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
+#include "app/alarm_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "crash_handler.h"
@@ -432,7 +433,6 @@ void beer_finish();
 void change_samovar_mode();
 // WiFiManager отключен
 void verbose_print_reset_reason();
-void set_alarm();
 void menu_switch_focus();
 float get_steam_alcohol(float t);
 float get_alcohol(float t);

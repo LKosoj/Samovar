@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "Samovar.h"
 #include "state/globals.h"
+#include "app/alarm_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "quality.h"
@@ -90,12 +91,6 @@ float get_dist_predicted_total_time();
  * @brief Проверить аварийные ситуации дистиллятора.
  */
 void check_alarm_distiller();
-
-/**
- * @brief Включить или выключить буззер.
- * @param On true — включить, false — выключить
- */
-void set_buzzer(bool On);
 
 /**
  * @brief Установить текущую мощность.
