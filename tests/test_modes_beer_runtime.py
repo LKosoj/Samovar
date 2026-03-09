@@ -30,11 +30,6 @@ class BeerRuntimeExtractionTest(unittest.TestCase):
             "inline void check_alarm_beer()",
             "inline void check_mixer_state()",
             "inline void set_mixer_state(bool state, bool dir)",
-            "inline void set_heater_state(float setpoint, float temp)",
-            "inline void set_heater(double dutyCycle)",
-            "inline void setHeaterPosition(bool state)",
-            "inline void StartAutoTune()",
-            "inline void FinishAutoTune()",
             "inline void set_mixer(bool On)",
             "inline void HopStepperStep()",
         ]:
@@ -57,11 +52,6 @@ class BeerRuntimeExtractionTest(unittest.TestCase):
             "void check_alarm_beer() {",
             "void check_mixer_state() {",
             "void set_mixer_state(bool state, bool dir) {",
-            "void set_heater_state(float setpoint, float temp) {",
-            "void set_heater(double dutyCycle) {",
-            "void setHeaterPosition(bool state) {",
-            "void StartAutoTune() {",
-            "void FinishAutoTune() {",
             "void set_mixer(bool On) {",
             "void HopStepperStep() {",
         ]:

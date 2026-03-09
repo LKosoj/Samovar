@@ -18,6 +18,7 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "WebServer.ino",
     "Blynk.ino",
     "modes/beer/beer_program_codec.h",
+    "modes/beer/beer_heater.h",
     "modes/beer/beer_runtime.h",
     "pumppwm.h",
     "Samovar.ino",
