@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "Samovar.h"
+#include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
 #include "app/process_common.h"
@@ -61,7 +62,6 @@ String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 float fromPower(float value);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-void distiller_finish();
 void beer_finish();
 void bk_finish();
 void nbk_finish();

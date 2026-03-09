@@ -9,6 +9,7 @@
 #include "app/messages.h"
 #include "app/runtime_tasks.h"
 #include "io/power_control.h"
+#include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_runtime.h"
 
 void migrate_from_eeprom();
@@ -16,7 +17,6 @@ void setupMenu();
 void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
-void distiller_finish();
 void change_samovar_mode();
 void samovar_reset();
 void menu_switch_focus();

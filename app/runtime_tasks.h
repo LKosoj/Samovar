@@ -1,6 +1,8 @@
 #ifndef __SAMOVAR_RUNTIME_TASKS_H_
 #define __SAMOVAR_RUNTIME_TASKS_H_
 
+#include "modes/dist/dist_runtime.h"
+
 void stopService(void) {
 #if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))
   //timerEnd(timer);

@@ -9,6 +9,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/status_text.h"
+#include "modes/dist/dist_runtime.h"
 #include "support/process_math.h"
 
 String format_float(float v, int d);
@@ -16,8 +17,6 @@ uint16_t get_stepper_speed(void);
 uint32_t get_stepper_status(void);
 float i2c_get_liquid_rate_by_step(int StepperSpeed);
 float i2c_get_liquid_volume_by_step(int StepCount);
-float get_dist_remaining_time();
-float get_dist_predicted_total_time();
 
 extern NTPClient NTP;
 

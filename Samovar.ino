@@ -432,7 +432,6 @@ void setupMenu();
 void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
-void distiller_finish();
 void beer_finish();
 void change_samovar_mode();
 void samovar_reset();
