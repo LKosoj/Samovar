@@ -18,6 +18,7 @@
 #include "state/globals.h"
 #include "app/process_common.h"
 #include "ui/web/ajax_snapshot.h"
+#include "ui/web/page_assets.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"
@@ -25,7 +26,6 @@
 #include "FS.h"
 #include "sensorinit.h"
 #include "column_math.h"
-#include "wifi_htm_gz.h"
 
 float i2c_get_speed_from_rate(float volume_per_hour);
 String getValue(String& data, char separator, int index);
@@ -103,31 +103,6 @@ void change_samovar_mode() {
   Samovar_CR_Mode = Samovar_Mode;
 }
 
-// Универсальная функция для обработки файлов с поддержкой gzip
-void handleFileWithGzip(AsyncWebServerRequest *request, const String &path, const String &contentType, const String &cacheControl = "max-age=5000") {
-  if(request->header("Accept-Encoding").indexOf("gzip") != -1 && SPIFFS.exists(path + ".gz")) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path + ".gz", contentType.c_str());
-    response->addHeader("Content-Encoding", "gzip");
-    response->addHeader("Cache-Control", cacheControl.c_str());
-    request->send(response);
-  } else if(SPIFFS.exists(path)) {
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path, contentType.c_str());
-    response->addHeader("Cache-Control", cacheControl.c_str());
-    request->send(response);
-  } else {
-    request->send(404, "text/plain", "File not found");
-  }
-}
-
-// Функция для отправки wifi.htm из памяти (gzip архив)
-void handleWifiHtmFromMemory(AsyncWebServerRequest *request) {
-  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", wifi_htm_gz_data, wifi_htm_gz_data_len);
-  response->addHeader("Content-Encoding", "gzip");
-  response->addHeader("Cache-Control", "max-age=1");
-  request->send(response);
-}
-
-#include "ui/web/server_init.h"
 
 String indexKeyProcessor(const String &var) {
   if (var == "SteamColor") return (String)SamSetup.SteamColor;
@@ -1290,3 +1265,4 @@ String http_sync_request_post(String url, String body, String ContentType) {
     return "<ERR>";
   }
 }
+#include "ui/web/server_init.h"
