@@ -3,6 +3,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 
 #ifdef USE_WATER_PUMP
@@ -29,13 +30,6 @@ void reset_sensor_counter();
 void create_data();
 
 /**
- * @brief Открыть или закрыть клапан.
- * @param Val true — открыть, false — закрыть
- * @param msg true — отправить сообщение
- */
-void open_valve(bool Val, bool msg);
-
-/**
  * @brief Установить ШИМ для насоса.
  * @param duty Значение ШИМ
  */
@@ -53,12 +47,6 @@ void set_pump_speed_pid(float temp);
  * @param msg_type Тип сообщения
  */
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-
-/**
- * @brief Проверить, идет ли кипячение.
- * @return true если кипит, иначе false
- */
-bool check_boiling();
 
 /**
  * @brief Установить температуру воды (ШИМ).

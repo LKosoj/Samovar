@@ -3,6 +3,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
@@ -17,13 +18,6 @@ void distiller_finish();
  * @brief Создать файл с данными текущей сессии дистилляции.
  */
 void create_data();
-
-/**
- * @brief Открыть или закрыть клапан.
- * @param Val true — открыть, false — закрыть
- * @param msg true — отправить сообщение
- */
-void open_valve(bool Val, bool msg);
 
 /**
  * @brief Установить ШИМ для насоса.
@@ -83,13 +77,6 @@ float get_dist_predicted_total_time();
 void check_alarm_distiller();
 
 /**
- * @brief Установить скорость насоса.
- * @param speed Скорость
- * @param msg true — отправить сообщение
- */
-void set_pump_speed(float speed, bool msg);
-
-/**
  * @brief Установить температуру тела колонны.
  */
 void set_body_temp();
@@ -128,32 +115,15 @@ float get_alcohol(float t);
 float get_steam_alcohol(float t);
 
 /**
- * @brief Установить емкость.
- * @param cap Номер емкости
- */
-void set_capacity(uint8_t cap);
-
-/**
  * @brief Сбросить счетчик датчиков.
  */
 void reset_sensor_counter();
-
-/**
- * @brief Установить емкость (дублирующая функция).
- * @param cap Номер емкости
- */
-void set_capacity(uint8_t cap);
 
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
 #endif
 
 #ifdef USE_WATER_PUMP
-/**
- * @brief Проверить, идет ли кипячение.
- * @return true если кипит, иначе false
- */
-bool check_boiling();
 #endif
 
 /**

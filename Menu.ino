@@ -1,6 +1,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
@@ -17,17 +18,13 @@ void read_config();
 void run_program(uint8_t num);
 void set_menu_screen(uint8_t param);
 void save_profile();
-void set_pump_speed(float speed, bool continue_process);
 float get_speed_from_rate(float rate);
-void pump_calibrate(int stpspeed);
 void pause_withdrawal(bool Pause);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-bool check_boiling();
 float get_alcohol(float t);
 bool column_wetting();
 void reset_sensor_counter();
-void set_capacity(uint8_t cap);
 void set_program(String WProgram);
 String get_program(uint8_t s);
 void create_data();

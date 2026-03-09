@@ -3,10 +3,10 @@
 
 #include <Arduino.h>
 
+#include "io/actuators.h"
 #include "state/globals.h"
 
 void set_power(bool On);
-void open_valve(bool Val, bool msg);
 void stopService(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);

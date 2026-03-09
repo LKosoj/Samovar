@@ -4,17 +4,15 @@
 #include <Arduino.h>
 
 #include "Samovar_ini.h"
+#include "io/actuators.h"
 #include "state/globals.h"
 #include "support/process_math.h"
 
 void set_power(bool On);
 void reset_sensor_counter(void);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-void open_valve(bool Val, bool msg);
 void stopService(void);
 void startService(void);
-void set_capacity(uint8_t cap);
-void next_capacity();
 
 #ifdef USE_WATER_PUMP
 void set_pump_pwm(float duty);

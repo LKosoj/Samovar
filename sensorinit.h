@@ -4,6 +4,7 @@
 #include <DallasTemperature.h>
 #include "Samovar.h"
 #include "state/globals.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 #include "pumppwm.h"
 
@@ -61,7 +62,6 @@ void set_nbk_program(String WProgram);
 String getDSAddress(DeviceAddress deviceAddress);
 void setupOpenLog(void);
 void createFile(char* fileName);
-void set_capacity(uint8_t cap);
 void init_pump_pwm(uint8_t pin, int freq);
 void set_pump_pwm(float duty);
 

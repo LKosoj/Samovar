@@ -3,6 +3,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
@@ -82,13 +83,6 @@ void FinishAutoTune();
  * @brief Создать файл с данными текущей сессии.
  */
 void create_data();
-
-/**
- * @brief Открыть или закрыть клапан.
- * @param Val true — открыть, false — закрыть
- * @param msg true — отправить сообщение
- */
-void open_valve(bool Val, bool msg);
 
 /**
  * @brief Отправить сообщение пользователю.

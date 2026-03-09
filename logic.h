@@ -3,6 +3,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
@@ -23,16 +24,12 @@ void create_data();
 void pause_withdrawal(bool Pause);
 void read_config();
 inline String format_float(float v, int d);
-void open_valve(bool Val, bool msg);
 void stopService(void);
 void startService(void);
 void reset_sensor_counter(void);
-void set_pump_speed(float pumpspeed, bool continue_process);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void set_body_temp();
-bool check_boiling();
-void set_boiling();
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
 float get_dist_remaining_time();
 float get_dist_predicted_total_time();
@@ -196,32 +193,6 @@ void withdrawal(void) {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
-// Калибровка насоса
-void pump_calibrate(int stpspeed) {
-  if (startval != 0 && startval != 100) {
-    return;
-  }
-
-  if (stpspeed == 0) {
-    startval = 0;
-    //Сохраняем полученное значение калибровки
-    SamSetup.StepperStepMl = round((float)stepper.getCurrent() / 100);
-    stopService();
-    stepper.brake();
-    stepper.disable();
-    save_profile();
-    read_config();
-  } else {
-    startval = 100;
-    //крутим двигатель, пока не остановят
-    if (!stepper.getState()) stepper.setCurrent(0);
-    stepper.setMaxSpeed(stpspeed);
-    //stepper.setSpeed(stpspeed);
-    stepper.setTarget(999999999);
-    startService();
-  }
-}
-
 // Пауза отбора
 void pause_withdrawal(bool Pause) {
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
@@ -241,29 +212,6 @@ void pause_withdrawal(bool Pause) {
     stepper.setTarget(TargetStepps);
     startService();
   }
-}
-
-// Установить скорость насоса
-void set_pump_speed(float pumpspeed, bool continue_process) {
-  if (pumpspeed < 1) return;
-  if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
-
-  bool cp = continue_process;
-  if (!stepper.getState()) cp = false;
-
-  CurrrentStepperSpeed = pumpspeed;
-  ActualVolumePerHour = get_liquid_rate_by_step(CurrrentStepperSpeed);
-
-  stopService();
-  stepper.setMaxSpeed(CurrrentStepperSpeed);
-  stepper.setTarget(stepper.getTarget());
-  //stepper.setSpeed(CurrrentStepperSpeed);
-  //Пересчитываем время отбора этой строки программы на текущую скорость
-  if (ActualVolumePerHour == 0) program[ProgramNum].Time = 65535;
-  else
-    program[ProgramNum].Time = program[ProgramNum].Volume / ActualVolumePerHour / 1000;
-  if (cp)
-    startService();
 }
 
 // Получить температуру с выбранного датчика для режима пива
@@ -411,23 +359,6 @@ String get_Samovar_Status() {
   }
 
   return SamovarStatus;
-}
-
-// Установить емкость
-void set_capacity(uint8_t cap) {
-  capacity_num = cap;
-
-#ifdef SERVO_PIN
-  int p = ((int)cap * SERVO_ANGLE) / (int)CAPACITY_NUM + servoDelta[cap];
-  servo.write(p);
-#elif USER_SERVO
-  user_set_capacity(cap);
-#endif
-}
-
-// Переход к следующей емкости
-void next_capacity(void) {
-  set_capacity(capacity_num + 1);
 }
 
 // Установить программу
@@ -980,151 +911,6 @@ void check_alarm() {
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
-}
-
-void open_valve(bool Val, bool msg = true) {
-  if (Val && !alarm_event) {
-    valve_status = true;
-    if (msg) {
-      SendMsg(("Откройте подачу воды!"), WARNING_MSG);
-    } else {
-      SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
-    }
-    digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
-  } else {
-    valve_status = false;
-    if (msg) {
-      SendMsg(("Закройте подачу воды!"), WARNING_MSG);
-    } else {
-      SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
-    }
-    digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
-  }
-}
-
-void set_boiling() {
-  //Учитываем задержку измерения Т кипения
-  if (!boil_started) {
-    //    if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
-    //      b_t_temp_prev = TankSensor.avgTemp;
-    //      b_t_time_min = millis();
-    //    } else if ((millis() - b_t_time_min) > 6 * 1000) {
-    //6 секунд не было изменения температуры куба
-    //d_s_temp_finish = 0;
-    //d_s_time_min = 0;
-    //началось кипение, запоминаем Т кипения
-    boil_started = true;
-    //Проверяем наличие датчика куба (Т >= 2 означает наличие датчика)
-    if (TankSensor.avgTemp >= 2) {
-      boil_temp = TankSensor.avgTemp;
-      alcohol_s = get_alcohol(TankSensor.avgTemp);
-    } else {
-      //Если датчик куба отсутствует, устанавливаем значения по умолчанию
-      boil_temp = 0;
-      alcohol_s = 0;
-    }
-#ifdef USE_WATER_PUMP
-    wp_count = -10;
-#endif
-    //    }
-  }
-}
-
-bool check_boiling() {
-  if (boil_started || !PowerOn || !valve_status) {
-    return false;
-  }
-
-  //Определяем наличие датчиков (Т < 2 означает отсутствие датчика)
-  bool has_tank_sensor = TankSensor.avgTemp >= 2;
-  bool has_water_sensor = WaterSensor.avgTemp >= 2;
-
-  //Если оба датчика отсутствуют, не можем определить кипение
-  if (!has_tank_sensor && !has_water_sensor) {
-    return false;
-  }
-
-  //Если есть датчик куба, проверяем минимальную температуру
-  if (has_tank_sensor && TankSensor.avgTemp < 70) {
-    return false;
-  }
-
-  //учтем задержку в 60 секунд до начала процесса определения кипения, чтобы датчик температуры воды успел остыть, если он нагрелся
-  if (b_t_time_delay == 0 || (b_t_time_delay + 60 * 1000 > millis())) {
-    if (b_t_time_delay == 0) {
-      b_t_time_delay = millis();
-    }
-    return false;
-  }
-
-  bool boiling_detected = false;
-
-  if (has_tank_sensor && has_water_sensor) {
-    //Оба датчика есть - определяем по совокупности факторов
-    
-    //Если минимальная температура воды охлаждения больше текущей, то запоминаем её
-    if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
-      d_s_temp_prev = WaterSensor.avgTemp;
-    }
-    
-    //Проверяем стабильность температуры в кубе
-    bool tank_stable = false;
-    if (TankSensor.avgTemp - b_t_temp_prev > 0.1) {
-      b_t_temp_prev = TankSensor.avgTemp;
-      b_t_time_min = millis();
-    } else if ((millis() - b_t_time_min) > 50 * 1000 && b_t_time_min > 0) {
-      tank_stable = true;
-    }
-    
-    //Проверяем нагрев воды охлаждения
-    bool water_heating = (WaterSensor.avgTemp - d_s_temp_prev > 8) || 
-                         (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2);
-    
-    //Кипение определяется при одновременном выполнении ОБОИХ условий (куб стабилен И вода нагревается) или при высокой температуре пара
-    if ((tank_stable && water_heating) || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
-      boiling_detected = true;
-    }
-  } else if (has_tank_sensor) {
-    //Только датчик куба - определяем по стабильности температуры в кубе
-    if (TankSensor.avgTemp - b_t_temp_prev > 0.1) {
-      b_t_temp_prev = TankSensor.avgTemp;
-      b_t_time_min = millis();
-    } else if ((millis() - b_t_time_min) > 50 * 1000 && b_t_time_min > 0) {
-      boiling_detected = true;
-    }
-    //Также можно использовать температуру пара как дополнительный индикатор
-    if (SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
-      boiling_detected = true;
-    }
-  } else if (has_water_sensor) {
-    //Только датчик воды - определяем по нагреву воды охлаждения
-    if (d_s_temp_prev > WaterSensor.avgTemp || d_s_temp_prev == 0) {
-      d_s_temp_prev = WaterSensor.avgTemp;
-    }
-    if (WaterSensor.avgTemp - d_s_temp_prev > 8) {
-      boiling_detected = true;
-    }
-    if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2) {
-      boiling_detected = true;
-    }
-    //Также можно использовать температуру пара как дополнительный индикатор
-    if (SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
-      boiling_detected = true;
-    }
-  }
-
-  if (boiling_detected) {
-    set_boiling();
-    if (boil_started) {
-      if (has_tank_sensor) {
-        SendMsg("Началось кипение в кубе! Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
-      } else {
-        SendMsg("Началось кипение в кубе!", WARNING_MSG);
-      }
-    }
-  }
-
-  return boil_started;
 }
 
 #ifdef COLUMN_WETTING

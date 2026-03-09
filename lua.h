@@ -4,6 +4,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/process_math.h"
 
@@ -44,13 +45,11 @@ void load_lua_script();
 
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 String get_global_variables();
-void open_valve(bool Val, bool msg);
 void set_body_temp();
 void set_mixer(bool On);
 void pause_withdrawal(bool Pause);
 String getValue(const String& data, char separator, int index);
 String get_lua_script(String fn);
-void set_capacity(uint8_t cap);
 float get_alcohol(float t);
 float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
 bool set_mixer_pump_target(uint8_t on);

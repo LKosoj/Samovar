@@ -5,6 +5,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/process_common.h"
+#include "io/actuators.h"
 #include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
@@ -40,7 +41,6 @@ String indexKeyProcessor(const String &var);
 String setupKeyProcessor(const String &var);
 String wifiKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
-void set_pump_speed(float pumpspeed, bool continue_process);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 String http_sync_request_get(String url);
@@ -49,7 +49,6 @@ void set_body_temp();
 void send_ajax_json(AsyncWebServerRequest *request);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void set_capacity(uint8_t cap);
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request, String fn);
@@ -59,7 +58,6 @@ void web_program(AsyncWebServerRequest *request);
 void calibrate_command(AsyncWebServerRequest *request);
 String setupKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
-void set_pump_speed(float pumpspeed, bool continue_process);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 float fromPower(float value);
