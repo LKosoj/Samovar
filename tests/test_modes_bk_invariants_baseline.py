@@ -8,6 +8,8 @@ BASELINE_BK_COMMIT = "43e22996"
 CURRENT_BK_FILES = {
     "runtime": Path("modes/bk/bk_runtime.h"),
     "alarm": Path("modes/bk/bk_alarm.h"),
+    "finish": Path("modes/bk/bk_finish.h"),
+    "water_control": Path("modes/bk/bk_water_control.h"),
 }
 
 
@@ -92,6 +94,36 @@ class BkBaselineParityTest(unittest.TestCase):
         )
         self.assertEqual(current_body, baseline_body)
 
+    def test_bk_finish_matches_pre_split_baseline(self) -> None:
+        current_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["finish"],
+                "void bk_finish()",
+            )
+        )
+        baseline_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.baseline_text,
+                "void bk_finish()",
+            )
+        )
+        self.assertEqual(current_body, baseline_body)
+
+    def test_bk_water_control_matches_pre_split_baseline(self) -> None:
+        current_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["water_control"],
+                "void set_water_temp(float duty)",
+            )
+        )
+        baseline_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.baseline_text,
+                "void set_water_temp(float duty)",
+            )
+        )
+        self.assertEqual(current_body, baseline_body)
+
     def test_bk_runtime_keeps_heat_and_finish_transitions(self) -> None:
         normalized = _normalize_cpp_body(
             _extract_function_body(
@@ -144,6 +176,34 @@ class BkBaselineParityTest(unittest.TestCase):
         )
         self.assertIn(
             "set_current_power(target_power_volt-5);",
+            normalized,
+        )
+
+    def test_bk_finish_keeps_expected_shutdown_transition(self) -> None:
+        normalized = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["finish"],
+                "void bk_finish()",
+            )
+        )
+
+        self.assertIn(
+            'stop_process("Работабражнойколоннызавершена");',
+            normalized,
+        )
+
+    def test_bk_water_control_keeps_expected_pump_and_notify_paths(self) -> None:
+        normalized = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["water_control"],
+                "void set_water_temp(float duty)",
+            )
+        )
+
+        self.assertIn("bk_pwm=duty;", normalized)
+        self.assertIn("if(pump_started){pump_pwm.write(bk_pwm);water_pump_speed=bk_pwm;}", normalized)
+        self.assertIn(
+            'SendMsg(("Управлениенасосомнеподдерживаетсявашимоборудованием"),NOTIFY_MSG);',
             normalized,
         )
 

@@ -237,6 +237,71 @@ class BeerBaselineParityTest(unittest.TestCase):
         self.assertEqual(current_body, baseline_body)
         self.assertIn('if(program[ProgramNum].WType=="A"){StartAutoTune();}', current_body)
 
+    def test_beer_proc_matches_pre_split_baseline(self) -> None:
+        current_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["runtime"],
+                "void beer_proc()",
+            )
+        )
+        baseline_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.baseline_text,
+                "void beer_proc()",
+            )
+        )
+        self.assertEqual(current_body, baseline_body)
+
+    def test_beer_finish_matches_pre_split_baseline(self) -> None:
+        current_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["runtime"],
+                "void beer_finish()",
+            )
+        )
+        baseline_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.baseline_text,
+                "void beer_finish()",
+            )
+        )
+        self.assertEqual(current_body, baseline_body)
+
+    def test_check_alarm_beer_matches_pre_split_baseline(self) -> None:
+        current_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["runtime"],
+                "void check_alarm_beer()",
+            )
+        )
+        baseline_body = _normalize_cpp_body(
+            _extract_function_body(
+                self.baseline_text,
+                "void check_alarm_beer()",
+            )
+        )
+
+        expected_fragments = [
+            'if(program[ProgramNum].WType!="C"&&program[ProgramNum].WType!="F"&&valve_status&&PowerOn&&program[ProgramNum].WType!="L"){open_valve(false,false);}',
+            'if(program[ProgramNum].WType=="L"){return;}',
+            'if(program[ProgramNum].WType=="W"){if(begintime==0){begintime=millis();setHeaterPosition(false);open_valve(false,false);}check_mixer_state();return;}',
+            'if(program[ProgramNum].WType=="A"){if(tuning){set_heater_state(program[ProgramNum].Temp,temp);}else{beer_finish();}}',
+            'if(program[ProgramNum].WType=="M"||program[ProgramNum].WType=="P"){set_heater_state(program[ProgramNum].Temp,temp);}',
+            'if(program[ProgramNum].WType=="F"){if(temp<program[ProgramNum].Temp-tempDelta){if(valve_status){open_valve(false,false);}set_heater_state(program[ProgramNum].Temp,temp);}',
+            'elseif(temp>program[ProgramNum].Temp+tempDelta)',
+            'if(program[ProgramNum].WType=="M"&&temp>=program[ProgramNum].Temp-tempDelta){',
+            'if(program[ProgramNum].WType=="P"&&temp>=program[ProgramNum].Temp-tempDelta){',
+            'if(program[ProgramNum].WType=="C"){if(begintime==0){begintime=millis();setHeaterPosition(false);open_valve(true,false);',
+            'if(program[ProgramNum].WType=="B"){',
+            'if(begintime>0&&(program[ProgramNum].WType=="B"||program[ProgramNum].WType=="P")&&((millis()-begintime)/1000/60>=program[ProgramNum].Time)){run_beer_program(ProgramNum+1);}',
+            'check_mixer_state();',
+            'vTaskDelay(10/portTICK_PERIOD_MS);',
+        ]
+
+        for fragment in expected_fragments:
+            self.assertIn(fragment, current_body)
+            self.assertIn(fragment, baseline_body)
+
     def test_autotune_initialization_keeps_expected_state_changes(self) -> None:
         body = _normalize_cpp_body(
             _extract_function_body(
@@ -252,6 +317,41 @@ class BeerBaselineParityTest(unittest.TestCase):
         self.assertIn("aTune.SetOutputStep(aTuneStep);", body)
         self.assertIn("aTune.SetLookbackSec((int)aTuneLookBack);", body)
         self.assertIn("tuning=true;", body)
+
+    def test_beer_proc_keeps_mode_start_transition(self) -> None:
+        normalized = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["runtime"],
+                "void beer_proc()",
+            )
+        )
+
+        self.assertIn("if(SamovarStatusInt!=2000)return;", normalized)
+        self.assertIn("if(startval==2000&&!PowerOn){", normalized)
+        self.assertIn("resetBoilingDetector();", normalized)
+        self.assertIn("create_data();", normalized)
+        self.assertIn("PowerOn=true;", normalized)
+        self.assertIn("set_power(true);", normalized)
+        self.assertIn("run_beer_program(0);", normalized)
+
+    def test_beer_finish_keeps_mode_shutdown_transition(self) -> None:
+        normalized = _normalize_cpp_body(
+            _extract_function_body(
+                self.current_texts["runtime"],
+                "void beer_finish()",
+            )
+        )
+
+        self.assertIn("resetBoilingDetector();", normalized)
+        self.assertIn("set_mixer_state(false,false);", normalized)
+        self.assertIn("setHeaterPosition(false);", normalized)
+        self.assertIn("PowerOn=false;", normalized)
+        self.assertIn("heater_state=false;", normalized)
+        self.assertIn("startval=0;", normalized)
+        self.assertIn(
+            'stop_process("Программазатираниязавершена");',
+            normalized,
+        )
 
 
 if __name__ == "__main__":
