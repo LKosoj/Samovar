@@ -3,6 +3,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "SamovarMqtt.h"
@@ -31,23 +32,6 @@ void startService(void);
  * @brief Остановить сервисные задачи.
  */
 void stopService(void);
-
-/**
- * @brief Установить режим питания.
- * @param Mode Режим (строка)
- */
-void set_power_mode(String Mode);
-
-/**
- * @brief Проверить ошибки питания и обработать их.
- */
-void check_power_error();
-
-/**
- * @brief Установить текущую мощность.
- * @param Volt Мощность (Вольт)
- */
-void set_current_power(float Volt);
 
 /**
  * @brief Сохранить текущий профиль настроек.
@@ -93,12 +77,6 @@ void StartAutoTune();
  * @brief Завершить автотюнинг ПИД-регулятора и применить параметры.
  */
 void FinishAutoTune();
-
-/**
- * @brief Включить или выключить питание.
- * @param On true — включить, false — выключить
- */
-void set_power(bool On);
 
 /**
  * @brief Создать файл с данными текущей сессии.

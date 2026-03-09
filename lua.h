@@ -4,6 +4,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "io/power_control.h"
 #include "support/process_math.h"
 
 #ifdef USE_WATER_PUMP
@@ -41,11 +42,9 @@ void do_lua_script(void *parameter);
 String get_lua_mode_name(bool filename = true);
 void load_lua_script();
 
-void set_power(bool On);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 String get_global_variables();
 void open_valve(bool Val, bool msg);
-void set_current_power(float Volt);
 void set_body_temp();
 void set_mixer(bool On);
 void pause_withdrawal(bool Pause);

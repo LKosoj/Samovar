@@ -1,12 +1,12 @@
 #include "Samovar.h"
 #include "state/globals.h"
+#include "io/power_control.h"
 #include "support/process_math.h"
 #ifdef SAMOVAR_USE_BLYNK
 #include <BlynkSimpleEsp32.h>
 
 void menu_samovar_start();
 void pause_withdrawal(bool PauseOn);
-void set_current_power(float power);
 void set_pump_speed(float speed, bool msg);
 void set_body_temp();
 int get_liquid_volume();

@@ -4,6 +4,7 @@
 #include <DallasTemperature.h>
 #include "Samovar.h"
 #include "state/globals.h"
+#include "io/power_control.h"
 #include "pumppwm.h"
 
 #ifdef USE_LUA
@@ -47,7 +48,6 @@ Adafruit_BME280 bme;  // I2C
 #endif
 
 String get_Samovar_Status();
-void set_power(bool On);
 void clok();
 void clok1();
 String append_data();

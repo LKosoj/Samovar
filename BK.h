@@ -3,6 +3,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "io/power_control.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"
@@ -18,32 +19,9 @@
 void bk_finish();
 
 /**
- * @brief Установить режим питания.
- * @param Mode Режим (строка)
- */
-void set_power_mode(String Mode);
-
-/**
- * @brief Установить текущую мощность.
- * @param power Мощность (Вт)
- */
-void set_current_power(float power);
-
-/**
  * @brief Сбросить счетчик датчиков.
  */
 void reset_sensor_counter();
-
-/**
- * @brief Проверить ошибки питания и обработать их.
- */
-void check_power_error();
-
-/**
- * @brief Включить или выключить питание.
- * @param On true — включить, false — выключить
- */
-void set_power(bool On);
 
 /**
  * @brief Создать файл с данными текущей сессии.

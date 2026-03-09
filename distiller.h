@@ -3,6 +3,7 @@
 #include "state/globals.h"
 #include "app/alarm_control.h"
 #include "app/process_common.h"
+#include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "quality.h"
@@ -11,18 +12,6 @@
  * @brief Завершить процесс дистилляции, выключить нагрев и сбросить счетчики.
  */
 void distiller_finish();
-
-/**
- * @brief Установить режим питания.
- * @param Mode Режим (строка)
- */
-void set_power_mode(String Mode);
-
-/**
- * @brief Включить или выключить питание.
- * @param On true — включить, false — выключить
- */
-void set_power(bool On);
 
 /**
  * @brief Создать файл с данными текущей сессии дистилляции.
@@ -94,12 +83,6 @@ float get_dist_predicted_total_time();
 void check_alarm_distiller();
 
 /**
- * @brief Установить текущую мощность.
- * @param power Мощность (Ватт)
- */
-void set_current_power(float power);
-
-/**
  * @brief Установить скорость насоса.
  * @param speed Скорость
  * @param msg true — отправить сообщение
@@ -154,11 +137,6 @@ void set_capacity(uint8_t cap);
  * @brief Сбросить счетчик датчиков.
  */
 void reset_sensor_counter();
-
-/**
- * @brief Проверить ошибки питания и обработать их.
- */
-void check_power_error();
 
 /**
  * @brief Установить емкость (дублирующая функция).

@@ -3,6 +3,7 @@
  #include "Samovar.h"
  #include "state/globals.h"
  #include "app/alarm_control.h"
+ #include "io/power_control.h"
  #include "support/safe_parse.h"
  #include "support/process_math.h"
 // Новые веянья, platformio вестимо, сворачиваем
@@ -15,29 +16,6 @@
  * @brief Завершить работу НБК, отправить статистику, выключить нагрев и подачу.
  */
  void nbk_finish();
-
- /**
- * @brief Проверить ошибки питания и обработать их.
- */
- void check_power_error();
-
- /**
- * @brief Установить режим питания.
- * @param Mode Режим (строка)
- */
- void set_power_mode(String Mode);
-
- /**
- * @brief Включить или выключить питание.
- * @param On true — включить, false — выключить
- */
- void set_power(bool On);
-
- /**
- * @brief Установить текущую мощность.
- * @param Volt Мощность (Ватт)
- */
- void set_current_power(float Volt);
 
  #ifndef SAMOVAR_USE_POWER
  void set_current_power(float Volt){return;};

@@ -1,6 +1,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/alarm_control.h"
+#include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include <LiquidCrystal_I2C.h>
@@ -22,10 +23,8 @@ void pump_calibrate(int stpspeed);
 void pause_withdrawal(bool Pause);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void set_power(bool On);
 bool check_boiling();
 float get_alcohol(float t);
-void check_power_error();
 bool column_wetting();
 void reset_sensor_counter();
 void set_capacity(uint8_t cap);

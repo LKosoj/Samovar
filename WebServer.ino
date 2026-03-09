@@ -5,6 +5,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/process_common.h"
+#include "io/power_control.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "FS.h"
@@ -18,7 +19,6 @@ extern float nbk_P;
 extern float nbk_Po;
 float i2c_get_speed_from_rate(float volume_per_hour);
 String getValue(String& data, char separator, int index);
-void set_current_power(float Volt);
 void menu_reset_wifi();
 uint16_t get_stepper_speed(void);
 uint32_t get_stepper_status(void);
@@ -47,10 +47,8 @@ String http_sync_request_get(String url);
 void set_water_temp(float temp);
 void set_body_temp();
 void send_ajax_json(AsyncWebServerRequest *request);
-void set_power(bool On);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void set_power_mode(String Mode);
 void set_capacity(uint8_t cap);
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
