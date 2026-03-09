@@ -3,9 +3,7 @@ import unittest
 
 
 ACTUATORS_HEADER = Path("io/actuators.h")
-LOGIC_HEADER = Path("logic.h")
 ACTUATORS_USERS = [
-    Path("logic.h"),
     Path("app/process_common.h"),
     Path("app/alarm_control.h"),
     Path("Samovar.ino"),
@@ -37,22 +35,8 @@ class ActuatorsStructureTest(unittest.TestCase):
         self.assertIn("inline void set_boiling()", text)
         self.assertIn("inline bool check_boiling()", text)
 
-    def test_logic_header_includes_actuators_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertIn('#include "io/actuators.h"', text)
-
-    def test_actuators_definitions_removed_from_logic_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertNotIn("void pump_calibrate(int stpspeed) {", text)
-        self.assertNotIn(
-            "void set_pump_speed(float pumpspeed, bool continue_process) {",
-            text,
-        )
-        self.assertNotIn("void set_capacity(uint8_t cap) {", text)
-        self.assertNotIn("void next_capacity(void) {", text)
-        self.assertNotIn("void open_valve(bool Val, bool msg = true) {", text)
-        self.assertNotIn("void set_boiling() {", text)
-        self.assertNotIn("bool check_boiling() {", text)
+    def test_logic_header_deleted(self) -> None:
+        self.assertFalse(Path("logic.h").exists())
 
     def test_actuators_users_include_header_directly(self) -> None:
         for path in ACTUATORS_USERS:

@@ -3,7 +3,6 @@ import unittest
 
 
 PROCESS_MATH_HEADER = Path("support/process_math.h")
-LOGIC_HEADER = Path("logic.h")
 PROCESS_MATH_USERS = [
     Path("I2CStepper.h"),
     Path("SPIFFSEditor.h"),
@@ -32,19 +31,8 @@ class ProcessMathStructureTest(unittest.TestCase):
         self.assertIn("inline float get_alcohol", text)
         self.assertIn("inline unsigned int hexToDec", text)
 
-    def test_logic_header_includes_process_math_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertIn('#include "support/process_math.h"', text)
-
-    def test_process_math_definitions_removed_from_logic_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertNotIn("uint8_t getDelimCount(const String& data, char separator)", text)
-        self.assertNotIn("String getValue(const String& data, char separator, int index)", text)
-        self.assertNotIn("float get_liquid_volume_by_step(float StepCount)", text)
-        self.assertNotIn("float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure)", text)
-        self.assertNotIn("float get_steam_alcohol(float t)", text)
-        self.assertNotIn("float get_alcohol(float t)", text)
-        self.assertNotIn("unsigned int hexToDec(String hexString)", text)
+    def test_logic_header_deleted(self) -> None:
+        self.assertFalse(Path("logic.h").exists())
 
     def test_process_math_users_include_header_directly(self) -> None:
         for path in PROCESS_MATH_USERS:

@@ -3,7 +3,6 @@ import unittest
 
 
 RECT_RUNTIME_HEADER = Path("modes/rect/rect_runtime.h")
-LOGIC_HEADER = Path("logic.h")
 DIRECT_INCLUDE_USERS = (
     Path("Samovar.ino"),
     Path("Menu.ino"),
@@ -30,18 +29,8 @@ class RectRuntimeExtractionTest(unittest.TestCase):
         self.assertIn("inline void check_alarm()", text)
         self.assertIn("inline bool column_wetting()", text)
 
-    def test_logic_header_includes_rect_runtime_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertIn('#include "modes/rect/rect_runtime.h"', text)
-
-    def test_rect_runtime_definitions_removed_from_logic_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertNotIn("void withdrawal(void) {", text)
-        self.assertNotIn("void pause_withdrawal(bool Pause) {", text)
-        self.assertNotIn("void run_program(uint8_t num) {", text)
-        self.assertNotIn("void set_body_temp() {", text)
-        self.assertNotIn("void check_alarm() {", text)
-        self.assertNotIn("bool column_wetting() {", text)
+    def test_logic_header_deleted(self) -> None:
+        self.assertFalse(Path("logic.h").exists())
 
     def test_direct_users_include_rect_runtime_header(self) -> None:
         for path in DIRECT_INCLUDE_USERS:

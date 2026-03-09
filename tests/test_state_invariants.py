@@ -5,7 +5,6 @@ import unittest
 
 GLOBALS_HEADER = Path("state/globals.h")
 SAMOVAR_SOURCE = Path("Samovar.ino")
-LOGIC_HEADER = Path("logic.h")
 STATUS_TEXT_HEADER = Path("app/status_text.h")
 RECT_PROGRAM_CODEC_HEADER = Path("modes/rect/rect_program_codec.h")
 DISTILLER_HEADER = Path("distiller.h")

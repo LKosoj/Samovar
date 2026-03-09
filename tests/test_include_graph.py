@@ -13,7 +13,6 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "column_math.h",
     "impurity_detector.h",
     "lua.h",
-    "logic.h",
     "quality.h",
     "mod_rmv.ino",
     "WebServer.ino",
@@ -29,7 +28,6 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
 
 SAFE_PARSE_DIRECT_INCLUDE_FILES = [
     "NVS_Manager.ino",
-    "logic.h",
     "distiller.h",
     "beer.h",
     "nbk.h",

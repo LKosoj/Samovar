@@ -3,9 +3,7 @@ import unittest
 
 
 PROCESS_COMMON_HEADER = Path("app/process_common.h")
-LOGIC_HEADER = Path("logic.h")
 PROCESS_COMMON_USERS = [
-    Path("logic.h"),
     Path("Samovar.ino"),
     Path("WebServer.ino"),
     Path("beer.h"),
@@ -22,15 +20,8 @@ class ProcessCommonStructureTest(unittest.TestCase):
         self.assertIn("inline void start_self_test(void)", text)
         self.assertIn("inline void stop_self_test(void)", text)
 
-    def test_logic_header_includes_process_common_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertIn('#include "app/process_common.h"', text)
-
-    def test_process_common_definitions_removed_from_logic_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertNotIn("void stop_process(String reason) {", text)
-        self.assertNotIn("void start_self_test(void) {", text)
-        self.assertNotIn("void stop_self_test(void) {", text)
+    def test_logic_header_deleted(self) -> None:
+        self.assertFalse(Path("logic.h").exists())
 
     def test_process_common_users_include_header_directly(self) -> None:
         for path in PROCESS_COMMON_USERS:

@@ -3,7 +3,6 @@ import unittest
 
 
 STATUS_TEXT_HEADER = Path("app/status_text.h")
-LOGIC_HEADER = Path("logic.h")
 STATUS_TEXT_USERS = [
     Path("Samovar.ino"),
     Path("sensorinit.h"),
@@ -17,9 +16,8 @@ class StatusTextStructureTest(unittest.TestCase):
         text = STATUS_TEXT_HEADER.read_text(encoding="utf-8")
         self.assertIn("inline String get_Samovar_Status()", text)
 
-    def test_status_function_removed_from_logic_header(self) -> None:
-        text = LOGIC_HEADER.read_text(encoding="utf-8")
-        self.assertNotIn("String get_Samovar_Status() {", text)
+    def test_logic_header_deleted(self) -> None:
+        self.assertFalse(Path("logic.h").exists())
 
     def test_status_text_users_include_header_directly(self) -> None:
         for path in STATUS_TEXT_USERS:

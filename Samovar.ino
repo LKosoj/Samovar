@@ -76,6 +76,7 @@
 #include "io/actuators.h"
 #include "io/power_control.h"
 #include "modes/rect/rect_runtime.h"
+#include "impurity_detector.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "crash_handler.h"
@@ -126,7 +127,6 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #include "mod_rmvk.h"
 
 //#include "font.h"
-#include "logic.h"
 
 #ifdef USE_UPDATE_OTA
 #include <ArduinoOTA.h>
