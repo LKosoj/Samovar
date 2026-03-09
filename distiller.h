@@ -7,6 +7,7 @@
 #include "io/power_control.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/dist/dist_runtime.h"
+#include "modes/dist/dist_time_predictor.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 

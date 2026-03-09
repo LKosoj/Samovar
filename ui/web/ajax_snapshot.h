@@ -9,6 +9,7 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/status_text.h"
+#include "modes/dist/dist_time_predictor.h"
 #include "modes/dist/dist_runtime.h"
 #include "support/process_math.h"
 

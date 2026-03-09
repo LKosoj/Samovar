@@ -21,15 +21,9 @@ class DistRuntimeExtractionTest(unittest.TestCase):
     def test_dist_runtime_header_contains_extracted_runtime(self) -> None:
         text = DIST_RUNTIME_HEADER.read_text(encoding="utf-8")
         for signature in [
-            "struct TimePredictor {",
-            "extern TimePredictor timePredictor;",
             "inline void distiller_proc()",
             "inline void distiller_finish()",
             "inline void run_dist_program(uint8_t num)",
-            "inline void resetTimePredictor()",
-            "inline void updateTimePredictor()",
-            "inline float get_dist_remaining_time()",
-            "inline float get_dist_predicted_total_time()",
         ]:
             with self.subTest(signature=signature):
                 self.assertIn(signature, text)
