@@ -3,6 +3,8 @@
 #include <WiFi.h>
 
 #include "Samovar.h"
+#include "beer.h"
+#include "modes/beer/beer_runtime.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_program_codec.h"
@@ -28,11 +30,9 @@ void menu_reset_wifi();
 uint16_t get_stepper_speed(void);
 uint32_t get_stepper_status(void);
 bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
-String get_beer_program();
 String get_nbk_program();
 float get_speed_from_rate(float rate);
 float get_alcohol(float t);
-void set_mixer(bool On);
 void FS_init(void);
 void save_profile();
 void read_config();
@@ -62,11 +62,9 @@ String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 float fromPower(float value);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-void beer_finish();
 void bk_finish();
 void nbk_finish();
 void samovar_reset();
-void set_beer_program(String WProgram);
 void set_nbk_program(String WProgram);
 
 #ifdef USE_LUA

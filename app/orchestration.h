@@ -9,6 +9,7 @@
 #include "app/messages.h"
 #include "app/runtime_tasks.h"
 #include "io/power_control.h"
+#include "modes/beer/beer_runtime.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/rect/rect_runtime.h"
 
@@ -32,7 +33,6 @@ void lua_init();
 void recvMsg(uint8_t *data, size_t len);
 void bk_finish();
 void nbk_finish();
-void run_beer_program(uint8_t num);
 
 inline void samovar_app_setup() {
   esp_log_level_set("i2c.master", ESP_LOG_NONE);

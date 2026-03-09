@@ -5,7 +5,7 @@ import unittest
 ALARM_CONTROL_HEADER = Path("app/alarm_control.h")
 ALARM_CONTROL_USERS = [
     Path("Samovar.ino"),
-    Path("beer.h"),
+    Path("modes/beer/beer_runtime.h"),
     Path("Menu.ino"),
     Path("lua.h"),
     Path("BK.h"),

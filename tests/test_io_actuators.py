@@ -9,7 +9,7 @@ ACTUATORS_USERS = [
     Path("Samovar.ino"),
     Path("WebServer.ino"),
     Path("Menu.ino"),
-    Path("beer.h"),
+    Path("modes/beer/beer_runtime.h"),
     Path("BK.h"),
     Path("nbk.h"),
     Path("lua.h"),

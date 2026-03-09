@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 
 #include "Samovar.h"
+#include "beer.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
@@ -13,7 +14,6 @@ const char *http_password = "admin";
 
 int get_liquid_volume();
 inline String format_float(float v, int d);
-String get_beer_program();
 String get_nbk_program();
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void read_config();

@@ -154,8 +154,8 @@ SimpleStringQueue msg_q(5, 200);
 #include "pumppwm.h"
 #endif
 
+#include "modes/beer/beer_runtime.h"
 #include "modes/dist/dist_time_predictor.h"
-#include "beer.h"
 #include "BK.h"
 #include "nbk.h"
 #include "SPIFFSEditor.h"
@@ -289,6 +289,7 @@ DSSensor ACPSensor;
 
 WProgram program[30];
 TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};
+BoilingDetector boilingDetector;
 
 const char* host = SAMOVAR_HOST;
 const float EVAPORATION_FACTOR = 4.8f;
@@ -433,7 +434,6 @@ void setupMenu();
 void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
-void beer_finish();
 void change_samovar_mode();
 void samovar_reset();
 // WiFiManager отключен

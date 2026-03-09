@@ -6,7 +6,7 @@ PROCESS_COMMON_HEADER = Path("app/process_common.h")
 PROCESS_COMMON_USERS = [
     Path("Samovar.ino"),
     Path("WebServer.ino"),
-    Path("beer.h"),
+    Path("modes/beer/beer_runtime.h"),
     Path("BK.h"),
 ]
 

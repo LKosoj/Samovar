@@ -6,6 +6,7 @@
 #include "app/alarm_control.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "modes/beer/beer_runtime.h"
 #include "modes/rect/rect_runtime.h"
 #include "support/process_math.h"
 
@@ -46,7 +47,6 @@ void load_lua_script();
 
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 String get_global_variables();
-void set_mixer(bool On);
 String getValue(const String& data, char separator, int index);
 String get_lua_script(String fn);
 float get_alcohol(float t);
