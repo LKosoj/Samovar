@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 
 #include "Samovar.h"
+#include "state/globals.h"
 #include "SPIFFSEditor.h"
 
 const char *http_username = "admin";

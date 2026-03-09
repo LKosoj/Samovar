@@ -1,4 +1,6 @@
 #include "Samovar.h"
+#include "state/globals.h"
+#include "support/safe_parse.h"
 #include <LiquidCrystal_I2C.h>
 #include <LiquidMenu.h>
 #include <Arduino.h>

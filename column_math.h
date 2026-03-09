@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "Samovar.h"
+#include "state/globals.h"
 
 struct ColumnResults {
   float floodPowerW;
@@ -102,4 +103,3 @@ ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
 }
 
 #endif
-

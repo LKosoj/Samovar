@@ -4,6 +4,7 @@
 #include <FS.h>
 #include <ESPAsyncWebServer.h>
 #include "Samovar.h"
+#include "state/globals.h"
 
 String get_edit_script();
 

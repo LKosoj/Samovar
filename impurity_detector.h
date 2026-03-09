@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "Samovar.h"
+#include "state/globals.h"
 #include <math.h>
 
 float get_speed_from_rate(float volume_per_hour);

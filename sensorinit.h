@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
+#include "state/globals.h"
 #include "pumppwm.h"
 
 #ifdef USE_LUA

@@ -7,6 +7,7 @@
 //#include "driver/gpio.h"
 #include "mod_rmvk.h"
 #include "Samovar.h"
+#include "state/globals.h"
 
 #define BUF_SIZE (1024)
 #define RD_BUF_SIZE (BUF_SIZE)

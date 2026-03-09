@@ -3,6 +3,8 @@
 
 #include <AsyncMqttClient.h>
 #include "Samovar.h"
+#include "state/globals.h"
+#include "support/safe_parse.h"
 
 #define PAYLOADSIZE 800
 

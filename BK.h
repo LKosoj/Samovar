@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "Samovar.h"
+#include "state/globals.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"

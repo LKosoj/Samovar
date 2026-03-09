@@ -14,6 +14,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "Samovar.h"
+#include "state/globals.h"
 
 void stopService(void);
 void startService(void);

@@ -2,6 +2,7 @@
 #define QUALITY_H
 
 #include "Samovar.h"
+#include "state/globals.h"
 
 // Структура для хранения параметров качества
 struct QualityParams {

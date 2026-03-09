@@ -1,5 +1,6 @@
 #pragma once
 #include "Samovar.h"
+#include "state/globals.h"
 #ifdef USE_WATER_PUMP
 #include <Arduino.h>
 //#define PID_OPTIMIZED_I

@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include "Samovar.h"
+#include "state/globals.h"
+#include "support/safe_parse.h"
 #include "quality.h"
 
 /**

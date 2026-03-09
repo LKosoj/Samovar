@@ -1,6 +1,8 @@
 // Отформатировано так, чтоб сворачивать блоки для меньшего пользования скроллом
  #include <Arduino.h>
  #include "Samovar.h"
+ #include "state/globals.h"
+ #include "support/safe_parse.h"
 // Новые веянья, platformio вестимо, сворачиваем
  /**
  * @brief Сбросить счетчик датчиков.
@@ -566,7 +568,7 @@ void handle_nbk_stage_work() {
      // чем выше Т, тем ниже % спирта, нам надо снижать %, значит Т поднимать.
                                // 60% это примерно 81 гр.Ц., 50% - 84,4 гр.Ц., 40% - 87.7 гр.Ц 
     if ((nbk_Tb < nbk_Tn - nbk_dT + nbk_dD) || (nbk_Tp < nbk_Tp_lim)) { 
-        if ((nbk_P > nbk_Po-0.1) && (nbk_P < nbk_Po+0.1) && (nbk_M > nbk_Mo-5) && (nbk_M < nbk_Mo+5)) {// если небыло вмешательств TODO теперь из-за преобразований мощность-напряжение-мощность придётся и по мощности сравнение делать с допустимым отклонением
+        if ((nbk_P > nbk_Po-0.1) && (nbk_P < nbk_Po+0.1) && (nbk_M > nbk_Mo-5) && (nbk_M < nbk_Mo+5)) {// если небыло вмешательств, теперь из-за преобразований мощность-напряжение-мощность придётся и по мощности сравнение делать с допустимым отклонением
           nbk_Po -= nbk_dP / 10.0;
         }
       nbk_P = nbk_Po; 
@@ -649,7 +651,7 @@ void run_nbk_program(uint8_t num) {
    if (ProgramNum > 3) ProgramNum = CAPACITY_NUM * 2; //отключаем излишнее число строк программ
  // Сообщение о переходе между этапами
   if (ProgramNum == 0) {
-    //PowerOn=true;//TODO костыль 2 от незапуска по кнопке Включить нагрев 
+    //PowerOn=true;// костыль 2 от незапуска по кнопке Включить нагрев
     time_speed = millis();
     stats.startTime = millis();
     stats.avgSpeed = 0;
@@ -671,7 +673,7 @@ void run_nbk_program(uint8_t num) {
    workrun = false; // сброс флага необходимости снижения мощности в Работе после захлёба
    begintime = 0;
    set_power(true);   // Если М и П не заданы в строке, то умолчания:М = разгонная П = 1 л/ч 
-   delay(2500);//TODO Ждем включения нагрева для корректного запуска
+   delay(2500);// Ждем включения нагрева для корректного запуска
    if (program[ProgramNum].Power > 0) {
     nbk_M = toPower(program[ProgramNum].Power);
     set_current_power(fromPower(nbk_M));
@@ -719,7 +721,7 @@ void run_nbk_program(uint8_t num) {
     nbk_Mo = nbk_M; nbk_Po=nbk_P;// уравниваем на случай чтения из программы и дефолтов
     set_current_power(fromPower(nbk_M));
     SetSpeed(nbk_P);
-    SendMsg("Работа: М= " + String(nbk_M,0) + " Вт, П=" + String(nbk_P,1) + " л/ч", NOTIFY_MSG); //TODO Здесь мощность будем писать.
+    SendMsg("Работа: М= " + String(nbk_M,0) + " Вт, П=" + String(nbk_P,1) + " л/ч", NOTIFY_MSG); // Здесь мощность будем писать.
     nbk_work_in_pause = false; // в начале работы паузу после захлёба отключаем
   }
 }

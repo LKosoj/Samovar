@@ -2,6 +2,8 @@
 #include <EEPROM.h>
 #include <WiFi.h>
 #include "Samovar.h"
+#include "state/globals.h"
+#include "support/safe_parse.h"
 
 Preferences prefs;
 
