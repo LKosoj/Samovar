@@ -1,0 +1,82 @@
+Metadata-Version: 2.1
+Name: cppcheck
+Version: 1.5.1
+Summary: Package cppcheck as a python wheel.
+Author-Email: "l.feng" <msclock@126.com>
+License: Apache-2.0
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Scientific/Engineering
+Classifier: Typing :: Typed
+Project-URL: Homepage, https://github.com/msclock/cppcheck-wheel
+Project-URL: Bug Tracker, https://github.com/msclock/cppcheck-wheel/issues
+Project-URL: Discussions, https://github.com/msclock/cppcheck-wheel/discussions
+Project-URL: Changelog, https://github.com/msclock/cppcheck-wheel/releases
+Requires-Python: >=3.7
+Requires-Dist: typing-extensions>=3.10.0; python_version < "3.9"
+Requires-Dist: importlib_metadata>=1.4
+Provides-Extra: test
+Requires-Dist: pytest>=6; extra == "test"
+Requires-Dist: pytest-cov>=3; extra == "test"
+Provides-Extra: dev
+Requires-Dist: pytest>=6; extra == "dev"
+Requires-Dist: pytest-cov>=3; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=7.0; extra == "docs"
+Requires-Dist: myst_parser>=0.13; extra == "docs"
+Requires-Dist: sphinx_copybutton; extra == "docs"
+Requires-Dist: sphinx_autodoc_typehints; extra == "docs"
+Requires-Dist: furo>=2023.08.17; extra == "docs"
+Description-Content-Type: text/markdown
+
+# Cppcheck Wheel
+
+<!-- SPHINX-START -->
+
+Package cppcheck as a python wheel.
+
+[![Documentation](https://img.shields.io/badge/Documentation-sphinx-blue)](https://msclock.github.io/cppcheck-wheel)
+[![License](https://img.shields.io/github/license/msclock/cppcheck-wheel)](https://github.com/msclock/cppcheck-wheel/blob/master/LICENSE)
+[![SS Badge](https://img.shields.io/badge/Serious%20Scaffold-pybind11-blue)](https://github.com/serious-scaffold/ss-pybind11)
+
+[![CI](https://github.com/msclock/cppcheck-wheel/actions/workflows/ci.yml/badge.svg)](https://github.com/msclock/cppcheck-wheel/actions/workflows/ci.yml)
+[![CD](https://github.com/msclock/cppcheck-wheel/actions/workflows/cd.yml/badge.svg)](https://github.com/msclock/cppcheck-wheel/actions/workflows/cd.yml)
+[![Renovate](https://github.com/msclock/cppcheck-wheel/actions/workflows/renovate.yml/badge.svg)](https://github.com/msclock/cppcheck-wheel/actions/workflows/renovate.yml)
+[![Semantic Release](https://github.com/msclock/cppcheck-wheel/actions/workflows/semantic-release.yml/badge.svg)](https://github.com/msclock/cppcheck-wheel/actions/workflows/semantic-release.yml)
+[![codecov](https://codecov.io/gh/msclock/cppcheck-wheel/branch/master/graph/badge.svg?token=123456789)](https://codecov.io/gh/msclock/cppcheck-wheel)
+
+[![Release](https://img.shields.io/github/v/release/msclock/cppcheck-wheel)](https://github.com/msclock/cppcheck-wheel/releases)
+[![PyPI](https://img.shields.io/pypi/v/cppcheck)](https://pypi.org/project/cppcheck/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cppcheck)](https://pypi.org/project/cppcheck/)
+
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
+[![cmake-format](https://img.shields.io/badge/cmake--format-enabled-blue)](https://github.com/cheshirekow/cmake-format-precommit)
+[![codespell](https://img.shields.io/badge/codespell-enabled-blue)](https://github.com/codespell-project/codespell)
+[![markdownlint](https://img.shields.io/badge/markdownlint-enabled-blue)](https://github.com/igorshubovych/markdownlint-cli)
+[![shellcheck](https://img.shields.io/badge/shellcheck-enabled-blue)](https://github.com/shellcheck-py/shellcheck-py)
+
+<!-- writes more things here -->
+
+## Install
+
+Package-built has uploaded to pypi and just install with the command:
+
+```bash
+pip install cppcheck
+```
+
+## License
+
+Apache Software License, for more details, see the [LICENSE](https://github.com/msclock/cppcheck-wheel/blob/master/LICENSE) file.

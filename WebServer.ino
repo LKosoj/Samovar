@@ -4,6 +4,7 @@
 
 #include "Samovar.h"
 #include "modes/beer/beer_program_codec.h"
+#include "modes/beer/beer_mixer.h"
 #include "modes/beer/beer_runtime.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/dist/dist_runtime.h"

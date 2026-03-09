@@ -6,7 +6,7 @@
 #include "app/alarm_control.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
-#include "modes/beer/beer_runtime.h"
+#include "modes/beer/beer_mixer.h"
 #include "modes/rect/rect_runtime.h"
 #include "support/process_math.h"
 

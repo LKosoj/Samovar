@@ -11,7 +11,6 @@ DIRECT_INCLUDE_USERS = (
     Path("app/loop_dispatch.h"),
     Path("app/orchestration.h"),
     Path("WebServer.ino"),
-    Path("lua.h"),
 )
 
 
@@ -28,10 +27,6 @@ class BeerRuntimeExtractionTest(unittest.TestCase):
             "inline void run_beer_program(uint8_t num)",
             "inline void beer_finish()",
             "inline void check_alarm_beer()",
-            "inline void check_mixer_state()",
-            "inline void set_mixer_state(bool state, bool dir)",
-            "inline void set_mixer(bool On)",
-            "inline void HopStepperStep()",
         ]:
             with self.subTest(signature=signature):
                 self.assertIn(signature, text)
