@@ -12,13 +12,13 @@
 #include "app/process_common.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "modes/beer/beer_program_codec.h"
 #include "pumppwm.h"
 #include "I2CStepper.h"
 #include "app/config_apply.h"
 
 void create_data();
 void save_profile();
-String get_beer_program();
 
 #define TEMP_HISTORY_SIZE 10
 #define BOILING_DETECT_THRESHOLD 0.08

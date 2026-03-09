@@ -11,7 +11,7 @@ PROCESS_MATH_USERS = [
     Path("impurity_detector.h"),
     Path("lua.h"),
     Path("Blynk.ino"),
-    Path("beer.h"),
+    Path("modes/beer/beer_program_codec.h"),
     Path("Samovar.ino"),
     Path("Menu.ino"),
     Path("WebServer.ino"),

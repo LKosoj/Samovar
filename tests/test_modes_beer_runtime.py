@@ -3,7 +3,8 @@ import unittest
 
 
 BEER_RUNTIME_HEADER = Path("modes/beer/beer_runtime.h")
-BEER_CODEC_HEADER = Path("beer.h")
+BEER_CODEC_HEADER = Path("modes/beer/beer_program_codec.h")
+LEGACY_BEER_HEADER = Path("beer.h")
 DIRECT_INCLUDE_USERS = (
     Path("Samovar.ino"),
     Path("app/runtime_tasks.h"),
@@ -66,6 +67,9 @@ class BeerRuntimeExtractionTest(unittest.TestCase):
         ]:
             with self.subTest(signature=signature):
                 self.assertNotIn(signature, text)
+
+    def test_legacy_beer_header_deleted(self) -> None:
+        self.assertFalse(LEGACY_BEER_HEADER.exists())
 
 
 if __name__ == "__main__":

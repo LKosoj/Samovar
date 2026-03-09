@@ -17,7 +17,7 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "mod_rmv.ino",
     "WebServer.ino",
     "Blynk.ino",
-    "beer.h",
+    "modes/beer/beer_program_codec.h",
     "modes/beer/beer_runtime.h",
     "pumppwm.h",
     "Samovar.ino",
@@ -28,7 +28,7 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
 
 SAFE_PARSE_DIRECT_INCLUDE_FILES = [
     "NVS_Manager.ino",
-    "beer.h",
+    "modes/beer/beer_program_codec.h",
     "nbk.h",
     "Samovar.ino",
     "Menu.ino",

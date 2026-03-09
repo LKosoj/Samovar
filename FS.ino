@@ -2,7 +2,7 @@
 #include <EEPROM.h>
 
 #include "Samovar.h"
-#include "beer.h"
+#include "modes/beer/beer_program_codec.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"

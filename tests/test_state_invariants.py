@@ -8,7 +8,7 @@ SAMOVAR_SOURCE = Path("Samovar.ino")
 STATUS_TEXT_HEADER = Path("app/status_text.h")
 RECT_PROGRAM_CODEC_HEADER = Path("modes/rect/rect_program_codec.h")
 DIST_PROGRAM_CODEC_HEADER = Path("modes/dist/dist_program_codec.h")
-BEER_HEADER = Path("beer.h")
+BEER_PROGRAM_CODEC_HEADER = Path("modes/beer/beer_program_codec.h")
 NBK_HEADER = Path("nbk.h")
 
 
@@ -72,7 +72,7 @@ class StateInvariantTest(unittest.TestCase):
                 ["program[i]", "Str +=", "CAPACITY_NUM"],
             ),
             (DIST_PROGRAM_CODEC_HEADER, "String get_dist_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
-            (BEER_HEADER, "String get_beer_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
+            (BEER_PROGRAM_CODEC_HEADER, "String get_beer_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
             (NBK_HEADER, "String get_nbk_program()", ["program[i]", "Str +=", "CAPACITY_NUM"]),
         ]
 
