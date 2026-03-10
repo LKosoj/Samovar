@@ -49,18 +49,18 @@ class WebServerInitModuleTests(unittest.TestCase):
         for module in required_modules:
             self.assertIn(module, self.server_init_text)
 
+    def test_server_init_includes_FS_h(self):
+        # Проверяем, что FS.h включён для доступа к функциям файловой системы
+        self.assertIn('#include "FS.h"', self.server_init_text)
+
+    def test_server_init_includes_storage_web_assets_sync_h(self):
+        # Проверяем, что storage/web_assets_sync.h включён для доступа к функциям синхронизации
+        self.assertIn('#include "storage/web_assets_sync.h"', self.server_init_text)
+
     def test_server_init_has_forward_declarations(self):
-        # Проверяем, что есть необходимые forward declarations
-        required_decls = [
-            'void FS_init(void);',
-            'void change_samovar_mode();',
-            'void save_profile();',
-            'void read_config();',
-            'void load_profile();',
-            'void get_web_interface();',
-        ]
-        for decl in required_decls:
-            self.assertIn(decl, self.server_init_text)
+        # Проверяем, что есть необходимая forward declaration для change_samovar_mode
+        # (остальные функции FS.ino доступны через Samovar.h и storage/web_assets_sync.h)
+        self.assertIn('void change_samovar_mode();', self.server_init_text)
 
     def test_change_samovar_mode_defined(self):
         # Проверяем, что функция change_samovar_mode определена

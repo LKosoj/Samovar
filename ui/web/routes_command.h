@@ -8,9 +8,6 @@
 #include "state/globals.h"
 #include "modes/bk/bk_water_control.h"
 #include "io/actuators.h"
-
-// Forward declaration для set_water_temp (inline функция)
-void set_water_temp(float duty);
 #include "io/power_control.h"
 #include "modes/nbk/nbk_math.h"
 #include "modes/nbk/nbk_state.h"
