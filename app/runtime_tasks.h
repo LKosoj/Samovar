@@ -6,6 +6,7 @@
 #include "modes/dist/dist_alarm.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/nbk/nbk_alarm.h"
+#include "storage/web_assets_sync.h"
 
 void stopService(void) {
 #if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))

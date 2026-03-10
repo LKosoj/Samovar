@@ -14,10 +14,11 @@
 #include "modes/dist/dist_runtime.h"
 #include "modes/nbk/nbk_finish.h"
 #include "modes/rect/rect_runtime.h"
+#include "ui/web/server_init.h"
+#include "storage/web_assets_sync.h"
 
 void migrate_from_eeprom();
 void setupMenu();
-void WebServerInit(void);
 void encoder_getvalue();
 void menu_calibrate();
 void change_samovar_mode();

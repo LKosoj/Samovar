@@ -1,6 +1,42 @@
 #ifndef __SAMOVAR_UI_WEB_SERVER_INIT_H__
 #define __SAMOVAR_UI_WEB_SERVER_INIT_H__
 
+#include <Arduino.h>
+#include <WiFi.h>
+#include <SPIFFS.h>
+#include <ESPAsyncWebServer.h>
+
+#include "Samovar.h"
+#include "state/globals.h"
+#include "ui/web/ajax_snapshot.h"
+#include "ui/web/page_assets.h"
+#include "ui/web/template_keys.h"
+#include "ui/web/routes_command.h"
+#include "ui/web/routes_program.h"
+#include "ui/web/routes_save.h"
+#include "ui/web/routes_service.h"
+#include "storage/web_assets_sync.h"
+#include "FS.h"
+#include "sensorinit.h"
+#include "column_math.h"
+
+void change_samovar_mode();
+void save_profile();
+void read_config();
+void load_profile();
+String getValue(String& data, char separator, int index);
+void menu_reset_wifi();
+String get_DSAddressList(String Address);
+void set_program(String WProgram);
+void set_beer_program(String WProgram);
+void get_task_stack_usage();
+extern bool is_reboot;
+
+// Фильтр для заголовков
+AsyncHeaderFilterMiddleware headerFilter;
+
+AsyncStaticWebHandler* indexHandler = nullptr;
+
 void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
@@ -259,6 +295,32 @@ void WebServerInit(void) {
 #ifndef NOT_USE_INTERFACE_UPDATE
   get_web_interface();
 #endif
+}
+
+void change_samovar_mode() {
+  if (indexHandler) {
+    server.removeHandler(indexHandler);
+    indexHandler = nullptr;
+  }
+
+  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+    //server.serveStatic("/", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
+  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    //server.serveStatic("/", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
+  } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+    //server.serveStatic("/", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
+  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    //server.serveStatic("/", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
+  } else {
+    //server.serveStatic("/", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
+    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
+    Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+  }
+  Samovar_CR_Mode = Samovar_Mode;
 }
 
 #endif
