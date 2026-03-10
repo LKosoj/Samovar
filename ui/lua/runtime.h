@@ -5,6 +5,7 @@
 #include "ui/lua/bindings_gpio.h"
 #include "ui/lua/bindings_process.h"
 #include "ui/lua/bindings_io.h"
+#include "ui/lua/bindings_http.h"
 
 inline void lua_init() {
   lua.Lua_register("pinMode", (const lua_CFunction)&lua_wrapper_pinMode);
