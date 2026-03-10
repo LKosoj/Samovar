@@ -20,7 +20,10 @@
 #include "sensorinit.h"
 #include "column_math.h"
 
+// Forward declarations для функций из FS.ino
+void FS_init(void);
 void change_samovar_mode();
+void get_web_interface();
 void save_profile();
 void read_config();
 void load_profile();

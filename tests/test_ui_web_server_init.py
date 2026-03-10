@@ -6,8 +6,8 @@ class WebServerInitModuleTests(unittest.TestCase):
     def setUp(self):
         self.server_init_path = Path("ui/web/server_init.h")
         self.server_init_text = self.server_init_path.read_text(encoding="utf-8")
-        self.webserver_path = Path("WebServer.ino")
-        self.webserver_text = self.webserver_path.read_text(encoding="utf-8")
+        self.orchestration_path = Path("app/orchestration.h")
+        self.orchestration_text = self.orchestration_path.read_text(encoding="utf-8")
 
     def test_server_init_module_exists_with_route_registration(self):
         self.assertTrue(self.server_init_path.exists(), "ui/web/server_init.h must exist")
@@ -30,11 +30,42 @@ class WebServerInitModuleTests(unittest.TestCase):
         for snippet in expected_snippets:
             self.assertIn(snippet, self.server_init_text)
 
-    def test_webserver_ino_includes_new_server_init_module(self):
-        self.assertIn('#include "ui/web/server_init.h"', self.webserver_text)
+    def test_orchestration_includes_server_init_module(self):
+        # Проверяем, что orchestration.h включает server_init.h
+        self.assertIn('#include "ui/web/server_init.h"', self.orchestration_text)
 
-    def test_webserver_ino_no_longer_defines_webserverinit_locally(self):
-        self.assertNotIn("void WebServerInit(void) {", self.webserver_text)
+    def test_server_init_includes_all_required_modules(self):
+        # Проверяем, что server_init.h включает все необходимые модули
+        required_modules = [
+            '#include "ui/web/ajax_snapshot.h"',
+            '#include "ui/web/page_assets.h"',
+            '#include "ui/web/template_keys.h"',
+            '#include "ui/web/routes_command.h"',
+            '#include "ui/web/routes_program.h"',
+            '#include "ui/web/routes_save.h"',
+            '#include "ui/web/routes_service.h"',
+            '#include "storage/web_assets_sync.h"',
+        ]
+        for module in required_modules:
+            self.assertIn(module, self.server_init_text)
+
+    def test_server_init_has_forward_declarations(self):
+        # Проверяем, что есть необходимые forward declarations
+        required_decls = [
+            'void FS_init(void);',
+            'void change_samovar_mode();',
+            'void save_profile();',
+            'void read_config();',
+            'void load_profile();',
+            'void get_web_interface();',
+        ]
+        for decl in required_decls:
+            self.assertIn(decl, self.server_init_text)
+
+    def test_change_samovar_mode_defined(self):
+        # Проверяем, что функция change_samovar_mode определена
+        self.assertIn("void change_samovar_mode() {", self.server_init_text)
+        self.assertIn('server.serveStatic("/index.htm", SPIFFS, "/beer.htm")', self.server_init_text)
 
 
 if __name__ == "__main__":

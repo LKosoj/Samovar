@@ -6,8 +6,8 @@ class WebRoutesServiceModuleTests(unittest.TestCase):
     def setUp(self):
         self.routes_service_path = Path("ui/web/routes_service.h")
         self.routes_service_text = self.routes_service_path.read_text(encoding="utf-8")
-        self.webserver_path = Path("WebServer.ino")
-        self.webserver_text = self.webserver_path.read_text(encoding="utf-8")
+        self.server_init_path = Path("ui/web/server_init.h")
+        self.server_init_text = self.server_init_path.read_text(encoding="utf-8")
 
     def test_routes_service_module_exists_with_service_handlers(self):
         self.assertTrue(self.routes_service_path.exists(), "ui/web/routes_service.h must exist")
@@ -26,19 +26,15 @@ class WebRoutesServiceModuleTests(unittest.TestCase):
         for snippet in expected_snippets:
             self.assertIn(snippet, self.routes_service_text)
 
-    def test_webserver_includes_routes_service_module_before_server_init(self):
+    def test_server_init_includes_routes_service_module(self):
         include = '#include "ui/web/routes_service.h"'
-        server_init_include = '#include "ui/web/server_init.h"'
-        self.assertIn(include, self.webserver_text)
-        self.assertIn(server_init_include, self.webserver_text)
-        self.assertLess(
-            self.webserver_text.index(include),
-            self.webserver_text.index(server_init_include),
-        )
+        self.assertIn(include, self.server_init_text)
 
-    def test_webserver_no_longer_defines_service_handlers_locally(self):
-        self.assertNotIn("void calibrate_command(AsyncWebServerRequest *request) {", self.webserver_text)
-        self.assertNotIn("void get_data_log(AsyncWebServerRequest *request, String fn) {", self.webserver_text)
+    def test_server_init_calls_service_handlers(self):
+        # Проверяем, что server_init.h вызывает сервисные обработчики
+        self.assertIn('calibrate_command(request)', self.server_init_text)
+        self.assertIn('get_data_log(request, "data.csv")', self.server_init_text)
+        self.assertIn('get_data_log(request, "data_old.csv")', self.server_init_text)
 
 
 if __name__ == "__main__":

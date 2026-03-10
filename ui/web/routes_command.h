@@ -1,6 +1,39 @@
 #ifndef __SAMOVAR_UI_WEB_ROUTES_COMMAND_H__
 #define __SAMOVAR_UI_WEB_ROUTES_COMMAND_H__
 
+#include <Arduino.h>
+#include <ESPAsyncWebServer.h>
+
+#include "Samovar.h"
+#include "state/globals.h"
+#include "modes/bk/bk_water_control.h"
+#include "io/actuators.h"
+
+// Forward declaration для set_water_temp (inline функция)
+void set_water_temp(float duty);
+#include "io/power_control.h"
+#include "modes/nbk/nbk_math.h"
+#include "modes/nbk/nbk_state.h"
+
+#ifdef USE_LUA
+void run_lua_script(String fn);
+void run_lua_string(String lstr);
+#endif
+void menu_reset_wifi();
+void scan_ds_adress();
+void set_mixer(bool On);
+uint16_t get_stepper_speed(void);
+uint32_t get_stepper_status(void);
+bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
+float i2c_get_speed_from_rate(float volume_per_hour);
+float get_speed_from_rate(float rate);
+void set_pump_speed(float pumpspeed, bool continue_process);
+void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+void stop_self_test();
+#ifdef SAMOVAR_USE_POWER
+void set_current_power(float Volt);
+#endif
+
 inline void web_command(AsyncWebServerRequest *request) {
   // Защита от повторных команд
   static uint32_t last_command_time = 0;

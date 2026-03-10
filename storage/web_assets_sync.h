@@ -4,15 +4,11 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
+#include <asyncHTTPrequest.h>
 
 #include "Samovar.h"
 #include "state/globals.h"
-
-enum get_web_type {
-  GET_CONTENT,
-  SAVE_FILE_OVERRIDE,
-  SAVE_FILE_IF_NOT_EXIST
-};
+#include "state/runtime_types.h"
 
 // Синхронный HTTP GET-запрос
 String http_sync_request_get(String url) {

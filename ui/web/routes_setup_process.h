@@ -1,6 +1,29 @@
 #ifndef __SAMOVAR_UI_WEB_ROUTES_SETUP_PROCESS_H__
 #define __SAMOVAR_UI_WEB_ROUTES_SETUP_PROCESS_H__
 
+#include <Arduino.h>
+#include <ESPAsyncWebServer.h>
+
+#include "Samovar.h"
+#include "state/globals.h"
+#include "io/power_control.h"
+#include "modes/bk/bk_finish.h"
+#include "modes/beer/beer_runtime.h"
+#include "modes/dist/dist_runtime.h"
+#include "modes/nbk/nbk_finish.h"
+
+void distiller_finish();
+void beer_finish();
+void samovar_reset();
+void load_default_program_for_mode();
+void save_profile();
+void load_profile();
+void change_samovar_mode();
+#ifdef USE_LUA
+String get_lua_mode_name();
+void load_lua_script();
+#endif
+
 inline void handleSaveProcessSettings(AsyncWebServerRequest *request) {
   if (!request->hasArg("mode")) {
     return;
