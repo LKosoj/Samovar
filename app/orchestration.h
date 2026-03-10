@@ -16,6 +16,9 @@
 #include "modes/rect/rect_runtime.h"
 #include "ui/web/server_init.h"
 #include "storage/web_assets_sync.h"
+#ifdef USE_LUA
+#include "ui/lua/runtime.h"
+#endif
 
 void migrate_from_eeprom();
 void setupMenu();
@@ -32,7 +35,6 @@ void get_task_stack_usage();
 uint8_t check_I2C_device(uint8_t address);
 void initMqtt();
 void init_crash_handler();
-void lua_init();
 void recvMsg(uint8_t *data, size_t len);
 inline void samovar_app_setup() {
   esp_log_level_set("i2c.master", ESP_LOG_NONE);
