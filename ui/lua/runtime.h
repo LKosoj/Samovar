@@ -3,6 +3,7 @@
 
 #include "lua.h"
 #include "ui/lua/bindings_gpio.h"
+#include "ui/lua/bindings_process.h"
 
 inline void lua_init() {
   lua.Lua_register("pinMode", (const lua_CFunction)&lua_wrapper_pinMode);
