@@ -2,6 +2,7 @@
 #define __SAMOVAR_UI_LUA_RUNTIME_H_
 
 #include "lua.h"
+#include "ui/lua/bindings_gpio.h"
 
 inline void lua_init() {
   lua.Lua_register("pinMode", (const lua_CFunction)&lua_wrapper_pinMode);
