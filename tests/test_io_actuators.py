@@ -7,15 +7,15 @@ ACTUATORS_USERS = [
     Path("app/process_common.h"),
     Path("app/alarm_control.h"),
     Path("Samovar.ino"),
-    Path("WebServer.ino"),
     Path("Menu.ino"),
     Path("modes/beer/beer_runtime.h"),
     Path("modes/bk/bk_alarm.h"),
-    Path("nbk.h"),
+    Path("modes/nbk/nbk_alarm.h"),
     Path("lua.h"),
     Path("Blynk.ino"),
     Path("sensorinit.h"),
     Path("impurity_detector.h"),
+    Path("ui/web/routes_command.h"),
 ]
 
 

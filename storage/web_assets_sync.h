@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <SPIFFS.h>
 #include <asyncHTTPrequest.h>
 
 #include "Samovar.h"

@@ -5,7 +5,7 @@ import unittest
 
 
 BASELINE_SETUP_SAVE_COMMIT = "64506d0d"
-WEBSERVER_PATH = Path("WebServer.ino")
+ROUTES_SAVE_PATH = Path("ui/web/routes_save.h")
 SETUP_WIFI_PATH = Path("ui/web/routes_setup_wifi.h")
 SETUP_PROCESS_PATH = Path("ui/web/routes_setup_process.h")
 
@@ -79,7 +79,7 @@ def _assert_markers_are_ordered(test_case: unittest.TestCase, text: str, markers
 class SetupSaveBaselineParityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.current_webserver = WEBSERVER_PATH.read_text(encoding="utf-8")
+        cls.current_routes_save = ROUTES_SAVE_PATH.read_text(encoding="utf-8")
         cls.current_wifi = SETUP_WIFI_PATH.read_text(encoding="utf-8")
         cls.current_process = SETUP_PROCESS_PATH.read_text(encoding="utf-8")
         cls.baseline_webserver = _read_git_file(
@@ -100,9 +100,9 @@ class SetupSaveBaselineParityTest(unittest.TestCase):
         self.assertEqual(_normalize_cpp(current_body), _normalize_cpp(baseline_block))
 
     def test_handle_save_keeps_wifi_updates_before_process_switch(self) -> None:
-        current_wifi_call = self.current_webserver.find("handleSaveWifiSettings(request);")
-        current_process_call = self.current_webserver.find("handleSaveProcessSettings(request);")
-        current_rele1 = self.current_webserver.find('if (request->hasArg("rele1")) {')
+        current_wifi_call = self.current_routes_save.find("handleSaveWifiSettings(request);")
+        current_process_call = self.current_routes_save.find("handleSaveProcessSettings(request);")
+        current_rele1 = self.current_routes_save.find('if (request->hasArg("rele1")) {')
 
         self.assertNotEqual(current_wifi_call, -1)
         self.assertNotEqual(current_process_call, -1)
@@ -191,6 +191,9 @@ class SetupSaveBaselineParityTest(unittest.TestCase):
                 "change_samovar_mode();",
             ],
         )
+
+    def test_legacy_webserver_file_removed(self) -> None:
+        self.assertFalse(Path("WebServer.ino").exists())
 
 
 if __name__ == "__main__":

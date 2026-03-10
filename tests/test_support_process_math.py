@@ -7,14 +7,13 @@ PROCESS_MATH_USERS = [
     Path("I2CStepper.h"),
     Path("SPIFFSEditor.h"),
     Path("FS.ino"),
-    Path("nbk.h"),
     Path("impurity_detector.h"),
     Path("lua.h"),
     Path("Blynk.ino"),
     Path("modes/beer/beer_program_codec.h"),
     Path("Samovar.ino"),
     Path("Menu.ino"),
-    Path("WebServer.ino"),
+    Path("ui/web/ajax_snapshot.h"),
 ]
 
 

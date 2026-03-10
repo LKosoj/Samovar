@@ -17,7 +17,11 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "lua.h",
     "quality.h",
     "mod_rmv.ino",
-    "WebServer.ino",
+    "ui/web/ajax_snapshot.h",
+    "ui/web/routes_command.h",
+    "ui/web/routes_save.h",
+    "ui/web/routes_setup_process.h",
+    "ui/web/server_init.h",
     "Blynk.ino",
     "modes/bk/bk_runtime.h",
     "modes/beer/beer_program_codec.h",
@@ -45,7 +49,6 @@ SAFE_PARSE_DIRECT_INCLUDE_FILES = [
     "Samovar.ino",
     "Menu.ino",
     "SamovarMqtt.h",
-    "WebServer.ino",
 ]
 
 

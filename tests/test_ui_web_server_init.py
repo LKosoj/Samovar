@@ -34,6 +34,9 @@ class WebServerInitModuleTests(unittest.TestCase):
         # Проверяем, что orchestration.h включает server_init.h
         self.assertIn('#include "ui/web/server_init.h"', self.orchestration_text)
 
+    def test_legacy_webserver_file_removed(self):
+        self.assertFalse(Path("WebServer.ino").exists())
+
     def test_server_init_includes_all_required_modules(self):
         # Проверяем, что server_init.h включает все необходимые модули
         required_modules = [

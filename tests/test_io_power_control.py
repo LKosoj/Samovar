@@ -5,14 +5,15 @@ import unittest
 POWER_CONTROL_HEADER = Path("io/power_control.h")
 POWER_CONTROL_USERS = [
     Path("Samovar.ino"),
-    Path("WebServer.ino"),
     Path("Menu.ino"),
     Path("modes/beer/beer_runtime.h"),
     Path("modes/bk/bk_alarm.h"),
-    Path("nbk.h"),
+    Path("modes/bk/bk_runtime.h"),
     Path("lua.h"),
     Path("Blynk.ino"),
     Path("sensorinit.h"),
+    Path("ui/web/routes_command.h"),
+    Path("ui/web/routes_setup_process.h"),
 ]
 
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 AJAX_SNAPSHOT_HEADER = Path("ui/web/ajax_snapshot.h")
 SAMOVAR_INO = Path("Samovar.ino")
-WEBSERVER_INO = Path("WebServer.ino")
+SERVER_INIT = Path("ui/web/server_init.h")
 
 
 class AjaxSnapshotHeaderTest(unittest.TestCase):
@@ -24,8 +24,8 @@ class AjaxSnapshotHeaderTest(unittest.TestCase):
         text = SAMOVAR_INO.read_text(encoding="utf-8")
         self.assertIn('#include "ui/web/ajax_snapshot.h"', text)
 
-    def test_webserver_includes_ajax_snapshot_header(self) -> None:
-        text = WEBSERVER_INO.read_text(encoding="utf-8")
+    def test_server_init_includes_ajax_snapshot_header(self) -> None:
+        text = SERVER_INIT.read_text(encoding="utf-8")
         self.assertIn('#include "ui/web/ajax_snapshot.h"', text)
 
     def test_samovar_no_longer_defines_ajax_snapshot_functions(self) -> None:
@@ -37,9 +37,8 @@ class AjaxSnapshotHeaderTest(unittest.TestCase):
         ]:
             self.assertNotIn(signature, text)
 
-    def test_webserver_no_longer_declares_send_ajax_json_manually(self) -> None:
-        text = WEBSERVER_INO.read_text(encoding="utf-8")
-        self.assertNotIn("void send_ajax_json(AsyncWebServerRequest *request);", text)
+    def test_legacy_webserver_file_removed(self) -> None:
+        self.assertFalse(Path("WebServer.ino").exists())
 
 
 if __name__ == "__main__":

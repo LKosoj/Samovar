@@ -7,7 +7,7 @@ DIRECT_INCLUDE_USERS = (
     Path("FS.ino"),
     Path("Blynk.ino"),
     Path("sensorinit.h"),
-    Path("WebServer.ino"),
+    Path("ui/web/routes_save.h"),
     Path("modes/nbk/nbk_runtime.h"),
 )
 

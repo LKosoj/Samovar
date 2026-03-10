@@ -8,7 +8,6 @@ RECT_PROGRAM_CODEC_USERS = [
     Path("FS.ino"),
     Path("sensorinit.h"),
     Path("Blynk.ino"),
-    Path("WebServer.ino"),
 ]
 
 

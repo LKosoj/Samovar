@@ -17,6 +17,7 @@ void beer_finish();
 void samovar_reset();
 void load_default_program_for_mode();
 void save_profile();
+void load_profile();
 void change_samovar_mode();
 #ifdef USE_LUA
 String get_lua_mode_name();

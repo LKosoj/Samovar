@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <SPIFFS.h>
 #include <ESPAsyncWebServer.h>
 
 #include "Samovar.h"
@@ -25,6 +24,7 @@ void change_samovar_mode();
 void save_profile();
 void read_config();
 void load_profile();
+void FS_init(void);
 String getValue(String& data, char separator, int index);
 void menu_reset_wifi();
 String get_DSAddressList(String Address);

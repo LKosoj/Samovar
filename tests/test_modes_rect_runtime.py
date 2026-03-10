@@ -11,7 +11,7 @@ DIRECT_INCLUDE_USERS = (
     Path("impurity_detector.h"),
 )
 LEGACY_DECLARATION_ONLY_USERS = (
-    Path("WebServer.ino"),
+    Path("ui/web/routes_program.h"),
 )
 
 
@@ -42,6 +42,9 @@ class RectRuntimeExtractionTest(unittest.TestCase):
             with self.subTest(path=str(path)):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotIn("void set_body_temp();", text)
+
+    def test_legacy_webserver_file_removed(self) -> None:
+        self.assertFalse(Path("WebServer.ino").exists())
 
 
 if __name__ == "__main__":

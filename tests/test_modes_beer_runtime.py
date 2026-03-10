@@ -10,7 +10,7 @@ DIRECT_INCLUDE_USERS = (
     Path("app/runtime_tasks.h"),
     Path("app/loop_dispatch.h"),
     Path("app/orchestration.h"),
-    Path("WebServer.ino"),
+    Path("ui/web/routes_setup_process.h"),
 )
 
 

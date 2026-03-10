@@ -4,7 +4,7 @@ import unittest
 
 NBK_MATH_HEADER = Path("modes/nbk/nbk_math.h")
 NBK_RUNTIME_HEADER = Path("modes/nbk/nbk_runtime.h")
-WEBSERVER_FILE = Path("WebServer.ino")
+ROUTES_COMMAND_FILE = Path("ui/web/routes_command.h")
 
 
 class NbkMathExtractionTest(unittest.TestCase):
@@ -22,7 +22,7 @@ class NbkMathExtractionTest(unittest.TestCase):
                 self.assertIn(signature, text)
 
     def test_direct_users_include_nbk_math_header(self) -> None:
-        for path in (NBK_RUNTIME_HEADER, WEBSERVER_FILE):
+        for path in (NBK_RUNTIME_HEADER, ROUTES_COMMAND_FILE):
             with self.subTest(path=path.as_posix()):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "modes/nbk/nbk_math.h"', text)
@@ -30,8 +30,8 @@ class NbkMathExtractionTest(unittest.TestCase):
     def test_legacy_nbk_header_removed(self) -> None:
         self.assertFalse(Path("nbk.h").exists())
 
-    def test_webserver_no_longer_uses_manual_frompower_declaration(self) -> None:
-        text = WEBSERVER_FILE.read_text(encoding="utf-8")
+    def test_routes_command_no_longer_uses_manual_frompower_declaration(self) -> None:
+        text = ROUTES_COMMAND_FILE.read_text(encoding="utf-8")
         self.assertNotIn("float fromPower(float value);", text)
 
 
