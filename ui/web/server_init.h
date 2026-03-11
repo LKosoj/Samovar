@@ -14,6 +14,7 @@
 #include "ui/web/routes_program.h"
 #include "ui/web/routes_save.h"
 #include "ui/web/routes_service.h"
+#include "storage/fs_init.h"
 #include "storage/web_assets_sync.h"
 #include "FS.h"
 #include "sensorinit.h"
@@ -24,7 +25,6 @@ void change_samovar_mode();
 void save_profile();
 void read_config();
 void load_profile();
-void FS_init(void);
 String getValue(String& data, char separator, int index);
 void menu_reset_wifi();
 String get_DSAddressList(String Address);
