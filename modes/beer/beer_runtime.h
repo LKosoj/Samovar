@@ -16,9 +16,8 @@
 #include "modes/beer/beer_heater.h"
 #include "modes/beer/beer_mixer.h"
 #include "modes/beer/beer_program_codec.h"
+#include "storage/session_logs.h"
 #include "pumppwm.h"
-
-void create_data();
 
 #define TEMP_HISTORY_SIZE 10
 #define BOILING_DETECT_THRESHOLD 0.08

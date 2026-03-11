@@ -8,8 +8,7 @@
 #include "modes/nbk/nbk_math.h"
 #include "modes/nbk/nbk_program_codec.h"
 #include "modes/nbk/nbk_state.h"
-
-void create_data();
+#include "storage/session_logs.h"
 inline void handle_nbk_stage_heatup();
 inline void handle_nbk_stage_manual();
 inline void handle_nbk_stage_optimization();

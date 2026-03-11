@@ -7,12 +7,12 @@
 #include "state/globals.h"
 #include "io/power_control.h"
 #include "modes/bk/bk_finish.h"
+#include "storage/session_logs.h"
 
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
 #endif
 
-void create_data();
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 
 inline void bk_proc() {

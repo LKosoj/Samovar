@@ -12,13 +12,13 @@
 #include "io/power_control.h"
 #include "modes/dist/dist_program_codec.h"
 #include "modes/dist/dist_time_predictor.h"
+#include "storage/session_logs.h"
 #include "support/process_math.h"
 
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
 #endif
 
-void create_data();
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 

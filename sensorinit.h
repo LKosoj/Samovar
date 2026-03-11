@@ -55,7 +55,6 @@ Adafruit_BME280 bme;  // I2C
 
 void clok();
 void clok1();
-String append_data();
 void stopService(void);
 void startService(void);
 void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);

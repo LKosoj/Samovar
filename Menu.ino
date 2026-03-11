@@ -5,6 +5,7 @@
 #include "app/alarm_control.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "storage/session_logs.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include <LiquidCrystal_I2C.h>
@@ -25,7 +26,6 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 float get_alcohol(float t);
 void reset_sensor_counter();
-void create_data();
 void detector_on_manual_resume();
 
 const char str_BACK[] PROGMEM = "<BACK";
