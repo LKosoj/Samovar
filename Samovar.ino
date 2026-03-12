@@ -103,26 +103,6 @@ NTPClient NTP(ntpUDP, "ru.pool.ntp.org");
 #include "SamovarMqtt.h"
 #endif
 
-#ifdef USE_BME680
-#include <Adafruit_BME680.h>
-#endif
-
-#ifdef USE_BMP180
-#include <Adafruit_BMP085_U.h>
-#endif
-
-#ifdef USE_BMP280
-#include <Adafruit_BMP280.h>
-#endif
-#ifdef USE_BME280
-#include <Adafruit_BME280.h>
-#endif
-
-#ifdef USE_PRESSURE_XGZ
-#include <XGZP6897D.h>
-XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
-#endif
-
 
 #include "mod_rmvk.h"
 

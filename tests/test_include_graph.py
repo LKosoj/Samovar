@@ -55,6 +55,11 @@ SENSORS_DIRECT_INCLUDE_FILES = [
     "ui/web/template_keys.h",
 ]
 
+PRESSURE_DIRECT_INCLUDE_FILES = [
+    "sensorinit.h",
+    "app/runtime_tasks.h",
+]
+
 
 class IncludeGraphTest(unittest.TestCase):
     def test_globals_consumers_include_globals_header_directly(self) -> None:
@@ -74,6 +79,12 @@ class IncludeGraphTest(unittest.TestCase):
             with self.subTest(path=relative_path):
                 text = Path(relative_path).read_text(encoding="utf-8")
                 self.assertIn('#include "io/sensors.h"', text)
+
+    def test_pressure_consumers_include_pressure_header_directly(self) -> None:
+        for relative_path in PRESSURE_DIRECT_INCLUDE_FILES:
+            with self.subTest(path=relative_path):
+                text = Path(relative_path).read_text(encoding="utf-8")
+                self.assertIn('#include "io/pressure.h"', text)
 
 
 if __name__ == "__main__":
