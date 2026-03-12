@@ -5,9 +5,9 @@
 
 #include "Samovar_ini.h"
 #include "state/globals.h"
+#include "storage/nvs_profiles.h"
 #include "support/process_math.h"
 
-void save_profile_nvs();
 void read_config();
 void stopService(void);
 void startService(void);

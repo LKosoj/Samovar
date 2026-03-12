@@ -1,6 +1,8 @@
 #ifndef __SAMOVAR_UI_WEB_ROUTES_SERVICE_H__
 #define __SAMOVAR_UI_WEB_ROUTES_SERVICE_H__
 
+#include "storage/nvs_profiles.h"
+
 inline void calibrate_command(AsyncWebServerRequest *request) {
   bool cl = false;
   bool isI2C = false;

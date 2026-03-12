@@ -15,6 +15,7 @@
 #include "ui/web/routes_save.h"
 #include "ui/web/routes_service.h"
 #include "storage/fs_init.h"
+#include "storage/nvs_profiles.h"
 #include "storage/web_assets_sync.h"
 #include "FS.h"
 #include "sensorinit.h"
@@ -22,9 +23,7 @@
 
 // Forward declarations для функций
 void change_samovar_mode();
-void save_profile_nvs();
 void read_config();
-void load_profile_nvs();
 String getValue(String& data, char separator, int index);
 void menu_reset_wifi();
 String get_DSAddressList(String Address);

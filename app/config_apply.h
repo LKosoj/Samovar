@@ -3,8 +3,8 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
+#include "storage/nvs_profiles.h"
 
-void load_profile_nvs();
 void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
 void init_impurity_detector();
 

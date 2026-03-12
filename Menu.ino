@@ -6,6 +6,7 @@
 #include "io/actuators.h"
 #include "io/power_control.h"
 #include "storage/session_logs.h"
+#include "storage/nvs_profiles.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include <LiquidCrystal_I2C.h>
@@ -19,7 +20,6 @@
 
 void read_config();
 void set_menu_screen(uint8_t param);
-void save_profile_nvs();
 void samovar_reset();
 float get_speed_from_rate(float rate);
 void set_pump_pwm(float duty);

@@ -13,6 +13,7 @@
 #include "modes/dist/dist_program_codec.h"
 #include "modes/nbk/nbk_program_codec.h"
 #include "modes/bk/bk_water_control.h"
+#include "storage/nvs_profiles.h"
 #include "sensorinit.h"
 #include "column_math.h"
 

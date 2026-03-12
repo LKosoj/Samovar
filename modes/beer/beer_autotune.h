@@ -8,8 +8,8 @@
 #include "app/messages.h"
 #include "app/config_apply.h"
 #include "modes/beer/beer_heater.h"
+#include "storage/nvs_profiles.h"
 
-void save_profile_nvs();
 inline void StartAutoTune();
 inline void FinishAutoTune();
 

@@ -5,6 +5,7 @@ import unittest
 
 FS_LEGACY_FILE = Path("FS.ino")
 NVS_MANAGER_FILE = Path("NVS_Manager.ino")
+NVS_PROFILES_HEADER = Path("storage/nvs_profiles.h")
 
 PRODUCTION_SOURCE_EXTENSIONS = {".ino", ".h", ".hpp", ".c", ".cc", ".cpp"}
 EXCLUDED_TOP_LEVEL_DIRS = {
@@ -50,10 +51,25 @@ class StorageFsLegacyRemovalTests(unittest.TestCase):
             f"Legacy FS proxy API must be removed from production sources: {offenders}",
         )
 
-    def test_nvs_manager_provides_canonical_profile_api(self) -> None:
-        text = NVS_MANAGER_FILE.read_text(encoding="utf-8")
-        self.assertIn("void save_profile_nvs()", text)
-        self.assertIn("void load_profile_nvs()", text)
+    def test_nvs_profiles_module_owns_canonical_profile_api(self) -> None:
+        self.assertTrue(NVS_PROFILES_HEADER.exists(), "storage/nvs_profiles.h must exist")
+
+        header_text = NVS_PROFILES_HEADER.read_text(encoding="utf-8")
+        for snippet in [
+            "inline void save_profile_nvs()",
+            "inline void load_profile_nvs()",
+            "inline void migrate_from_eeprom()",
+            'return "sam_rect";',
+            'meta.begin("sam_meta", true)',
+        ]:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, header_text)
+
+        manager_text = NVS_MANAGER_FILE.read_text(encoding="utf-8")
+        self.assertIn('#include "storage/nvs_profiles.h"', manager_text)
+        self.assertNotIn("void save_profile_nvs()", manager_text)
+        self.assertNotIn("void load_profile_nvs()", manager_text)
+        self.assertNotIn("void migrate_from_eeprom()", manager_text)
 
 
 if __name__ == "__main__":

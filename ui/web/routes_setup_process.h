@@ -11,13 +11,12 @@
 #include "modes/beer/beer_runtime.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/nbk/nbk_finish.h"
+#include "storage/nvs_profiles.h"
 
 void distiller_finish();
 void beer_finish();
 void samovar_reset();
 void load_default_program_for_mode();
-void save_profile_nvs();
-void load_profile_nvs();
 void change_samovar_mode();
 #ifdef USE_LUA
 String get_lua_mode_name();

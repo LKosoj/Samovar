@@ -455,8 +455,6 @@ portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
 
 // WiFiManager отключен: флагов сохранения через портал больше нет
 
-void load_profile_nvs();
-void migrate_from_eeprom();
 // void reset_migration_flag(); // Только для тестирования миграции
 
 void setupMenu();

@@ -14,13 +14,13 @@
 #include "modes/dist/dist_runtime.h"
 #include "modes/nbk/nbk_finish.h"
 #include "modes/rect/rect_runtime.h"
+#include "storage/nvs_profiles.h"
 #include "ui/web/server_init.h"
 #include "storage/web_assets_sync.h"
 #ifdef USE_LUA
 #include "ui/lua/runtime.h"
 #endif
 
-void migrate_from_eeprom();
 void setupMenu();
 void encoder_getvalue();
 void menu_calibrate();
@@ -28,7 +28,6 @@ void change_samovar_mode();
 void samovar_reset();
 void menu_switch_focus();
 String http_sync_request_get(String url);
-void save_profile_nvs();
 void writeString(String Str, uint8_t num);
 void sensor_init(void);
 void get_task_stack_usage();
