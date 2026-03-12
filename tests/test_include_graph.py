@@ -78,6 +78,11 @@ FORMAT_UTILS_DIRECT_INCLUDE_FILES = [
     "modes/rect/rect_runtime.h",
 ]
 
+DEFAULT_PROGRAMS_DIRECT_INCLUDE_FILES = [
+    "io/sensor_scan.h",
+    "ui/web/routes_setup_process.h",
+]
+
 
 class IncludeGraphTest(unittest.TestCase):
     def test_globals_consumers_include_globals_header_directly(self) -> None:
@@ -115,6 +120,12 @@ class IncludeGraphTest(unittest.TestCase):
             with self.subTest(path=relative_path):
                 text = Path(relative_path).read_text(encoding="utf-8")
                 self.assertIn('#include "support/format_utils.h"', text)
+
+    def test_default_program_consumers_include_default_programs_header_directly(self) -> None:
+        for relative_path in DEFAULT_PROGRAMS_DIRECT_INCLUDE_FILES:
+            with self.subTest(path=relative_path):
+                text = Path(relative_path).read_text(encoding="utf-8")
+                self.assertIn('#include "app/default_programs.h"', text)
 
 
 if __name__ == "__main__":

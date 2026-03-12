@@ -34,8 +34,8 @@ class TestUiWebRoutesSetupSave(unittest.TestCase):
             'set_power(false);',
             'samovar_reset();',
             'load_default_program_for_mode();',
-            'save_profile();',
-            'load_profile();',
+            'save_profile_nvs();',
+            'load_profile_nvs();',
             'change_samovar_mode();',
         ]:
             self.assertIn(expected, text)
@@ -61,7 +61,7 @@ class TestUiWebRoutesSetupSave(unittest.TestCase):
             'request->hasArg("rele1")',
             'handleSaveWifiSettings(request);',
             'handleSaveProcessSettings(request);',
-            'save_profile();',
+            'save_profile_nvs();',
             'read_config();',
         ]:
             self.assertIn(expected, text)

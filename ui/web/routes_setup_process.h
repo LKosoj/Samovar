@@ -5,6 +5,7 @@
 #include <ESPAsyncWebServer.h>
 
 #include "Samovar.h"
+#include "app/default_programs.h"
 #include "state/globals.h"
 #include "io/power_control.h"
 #include "modes/bk/bk_finish.h"
@@ -16,7 +17,6 @@
 void distiller_finish();
 void beer_finish();
 void samovar_reset();
-void load_default_program_for_mode();
 void change_samovar_mode();
 #ifdef USE_LUA
 String get_lua_mode_name();

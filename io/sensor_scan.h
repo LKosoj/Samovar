@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 #include "Samovar.h"
+#include "app/default_programs.h"
 #include "state/globals.h"
 #include "app/status_text.h"
 #include "io/actuators.h"
@@ -13,7 +14,6 @@
 #include "mod_rmvk.h"
 #include "pumppwm.h"
 
-void load_default_program_for_mode();
 void stopService(void);
 void writeString(String Str, uint8_t num);
 inline void reset_sensor_counter(void);
