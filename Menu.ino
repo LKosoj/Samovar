@@ -8,6 +8,7 @@
 #include "storage/session_logs.h"
 #include "storage/nvs_profiles.h"
 #include "storage/nvs_wifi.h"
+#include "io/sensor_scan.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include <LiquidCrystal_I2C.h>
@@ -26,7 +27,6 @@ float get_speed_from_rate(float rate);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 float get_alcohol(float t);
-void reset_sensor_counter();
 void detector_on_manual_resume();
 
 const char str_BACK[] PROGMEM = "<BACK";

@@ -8,6 +8,7 @@
 #include "app/loop_dispatch.h"
 #include "app/messages.h"
 #include "app/runtime_tasks.h"
+#include "io/sensor_scan.h"
 #include "io/power_control.h"
 #include "modes/beer/beer_runtime.h"
 #include "modes/bk/bk_finish.h"
@@ -29,7 +30,6 @@ void samovar_reset();
 void menu_switch_focus();
 String http_sync_request_get(String url);
 void writeString(String Str, uint8_t num);
-void sensor_init(void);
 void get_task_stack_usage();
 uint8_t check_I2C_device(uint8_t address);
 void initMqtt();

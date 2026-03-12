@@ -4,12 +4,12 @@
 #include <Arduino.h>
 
 #include "Samovar_ini.h"
+#include "io/sensor_scan.h"
 #include "io/actuators.h"
 #include "state/globals.h"
 #include "support/process_math.h"
 
 void set_power(bool On);
-void reset_sensor_counter(void);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void stopService(void);
 void startService(void);

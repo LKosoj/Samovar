@@ -6,10 +6,9 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "app/messages.h"
+#include "io/sensor_scan.h"
 #include "io/power_control.h"
 #include "modes/nbk/nbk_flow_control.h"
-
-void reset_sensor_counter(void);
 
 inline void nbk_finish() {
   SendMsg("Работа НБК завершена", NOTIFY_MSG);
