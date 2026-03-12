@@ -274,12 +274,6 @@ void WriteConsoleLog(String StringLogMsg);
 //WebSerialClass WebSerial;
 #endif
 
-// Wi-Fi креды (легковесная настройка без WiFiManager)
-bool load_wifi_credentials(char *ssid, size_t ssid_len, char *pass, size_t pass_len);
-String get_wifi_ssid();
-void save_wifi_credentials(const char *ssid, const char *pass);
-void clear_wifi_credentials();
-
 // Глобальная функция остановки процесса
 void stop_process(String reason);
 

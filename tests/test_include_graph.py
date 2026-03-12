@@ -5,7 +5,6 @@ import unittest
 GLOBALS_DIRECT_INCLUDE_FILES = [
     "I2CStepper.h",
     "sensorinit.h",
-    "NVS_Manager.ino",
     "SPIFFSEditor.h",
     "crash_handler.h",
     "modes/bk/bk_finish.h",
@@ -41,7 +40,6 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
 ]
 
 SAFE_PARSE_DIRECT_INCLUDE_FILES = [
-    "NVS_Manager.ino",
     "modes/beer/beer_program_codec.h",
     "modes/nbk/nbk_program_codec.h",
     "Samovar.ino",

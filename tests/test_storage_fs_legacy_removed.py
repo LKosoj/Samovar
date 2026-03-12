@@ -6,6 +6,7 @@ import unittest
 FS_LEGACY_FILE = Path("FS.ino")
 NVS_MANAGER_FILE = Path("NVS_Manager.ino")
 NVS_PROFILES_HEADER = Path("storage/nvs_profiles.h")
+NVS_WIFI_HEADER = Path("storage/nvs_wifi.h")
 
 PRODUCTION_SOURCE_EXTENSIONS = {".ino", ".h", ".hpp", ".c", ".cc", ".cpp"}
 EXCLUDED_TOP_LEVEL_DIRS = {
@@ -34,6 +35,9 @@ class StorageFsLegacyRemovalTests(unittest.TestCase):
     def test_fs_legacy_file_is_removed(self) -> None:
         self.assertFalse(FS_LEGACY_FILE.exists(), "FS.ino must be removed from the tree")
 
+    def test_nvs_manager_legacy_file_is_removed(self) -> None:
+        self.assertFalse(NVS_MANAGER_FILE.exists(), "NVS_Manager.ino must be removed from the tree")
+
     def test_legacy_profile_proxy_api_is_absent_from_production_sources(self) -> None:
         legacy_patterns = [
             re.compile(r"\bsave_profile\s*\("),
@@ -56,6 +60,7 @@ class StorageFsLegacyRemovalTests(unittest.TestCase):
 
         header_text = NVS_PROFILES_HEADER.read_text(encoding="utf-8")
         for snippet in [
+            "inline Preferences& nvs_preferences()",
             "inline void save_profile_nvs()",
             "inline void load_profile_nvs()",
             "inline void migrate_from_eeprom()",
@@ -65,11 +70,20 @@ class StorageFsLegacyRemovalTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, header_text)
 
-        manager_text = NVS_MANAGER_FILE.read_text(encoding="utf-8")
-        self.assertIn('#include "storage/nvs_profiles.h"', manager_text)
-        self.assertNotIn("void save_profile_nvs()", manager_text)
-        self.assertNotIn("void load_profile_nvs()", manager_text)
-        self.assertNotIn("void migrate_from_eeprom()", manager_text)
+    def test_nvs_wifi_module_owns_canonical_wifi_api(self) -> None:
+        self.assertTrue(NVS_WIFI_HEADER.exists(), "storage/nvs_wifi.h must exist")
+
+        header_text = NVS_WIFI_HEADER.read_text(encoding="utf-8")
+        for snippet in [
+            "inline bool load_wifi_credentials(",
+            "inline String get_wifi_ssid()",
+            "inline void save_wifi_credentials(",
+            "inline void clear_wifi_credentials()",
+            "WiFi.disconnect(true);",
+            "WiFi.begin(ssid, pass ? pass : \"\");",
+        ]:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, header_text)
 
 
 if __name__ == "__main__":

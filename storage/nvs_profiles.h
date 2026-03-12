@@ -9,7 +9,10 @@
 #include "state/globals.h"
 #include "support/safe_parse.h"
 
-extern Preferences prefs;
+inline Preferences& nvs_preferences() {
+  static Preferences prefs;
+  return prefs;
+}
 
 inline const char* profile_namespace_by_mode(int mode) {
   switch (mode) {
@@ -59,6 +62,7 @@ inline void write_last_mode_meta(uint8_t mode) {
 }
 
 inline void saveStringIfChanged(const char* key, const char* value) {
+  Preferences& prefs = nvs_preferences();
   String current = prefs.getString(key, "");
   if (current != String(value)) {
     prefs.putString(key, String(value));
@@ -66,6 +70,7 @@ inline void saveStringIfChanged(const char* key, const char* value) {
 }
 
 inline void saveBytesIfChanged(const char* key, const void* value, size_t len) {
+  Preferences& prefs = nvs_preferences();
   uint8_t buf[len];
   size_t readLen = prefs.getBytes(key, buf, len);
   if (readLen != len || memcmp(buf, value, len) != 0) {
@@ -74,6 +79,7 @@ inline void saveBytesIfChanged(const char* key, const void* value, size_t len) {
 }
 
 inline void save_profile_nvs() {
+  Preferences& prefs = nvs_preferences();
   if (!prefs.begin(current_profile_namespace(), false)) {
     Serial.println("NVS: Failed to open namespace for writing!");
     return;
@@ -178,6 +184,7 @@ inline void save_profile_nvs() {
 }
 
 inline void load_profile_nvs() {
+  Preferences& prefs = nvs_preferences();
   uint8_t lastMode = read_last_mode_meta();
   Samovar_CR_Mode = (SAMOVAR_MODE)lastMode;
 
@@ -274,6 +281,7 @@ inline void load_profile_nvs() {
 }
 
 inline void reset_migration_flag() {
+  Preferences& prefs = nvs_preferences();
   prefs.begin("sam_meta", false);
   prefs.remove("migrated");
   prefs.end();
@@ -281,6 +289,7 @@ inline void reset_migration_flag() {
 }
 
 inline void migrate_from_eeprom() {
+  Preferences& prefs = nvs_preferences();
   prefs.begin("sam_meta", true);
   bool migrated = prefs.getBool("migrated", false);
   prefs.end();

@@ -1,6 +1,8 @@
 #ifndef __SAMOVAR_UI_WEB_TEMPLATE_KEYS_H__
 #define __SAMOVAR_UI_WEB_TEMPLATE_KEYS_H__
 
+#include "storage/nvs_wifi.h"
+
 String indexKeyProcessor(const String &var) {
   if (var == "SteamColor") return (String)SamSetup.SteamColor;
   else if (var == "v")

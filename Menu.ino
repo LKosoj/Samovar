@@ -7,6 +7,7 @@
 #include "io/power_control.h"
 #include "storage/session_logs.h"
 #include "storage/nvs_profiles.h"
+#include "storage/nvs_wifi.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include <LiquidCrystal_I2C.h>

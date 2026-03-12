@@ -16,6 +16,7 @@
 #include "ui/web/routes_service.h"
 #include "storage/fs_init.h"
 #include "storage/nvs_profiles.h"
+#include "storage/nvs_wifi.h"
 #include "storage/web_assets_sync.h"
 #include "FS.h"
 #include "sensorinit.h"
