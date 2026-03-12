@@ -5,7 +5,6 @@ import unittest
 STATUS_TEXT_HEADER = Path("app/status_text.h")
 STATUS_TEXT_USERS = [
     Path("Samovar.ino"),
-    Path("sensorinit.h"),
     Path("Blynk.ino"),
 ]
 

@@ -43,9 +43,8 @@ class StorageSessionLogsModuleTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertIn('#include "storage/session_logs.h"', text, str(path))
 
-    def test_sensorinit_no_longer_carries_legacy_append_data_declaration(self) -> None:
-        text = SENSORINIT_FILE.read_text(encoding="utf-8")
-        self.assertNotIn("String append_data();", text)
+    def test_sensorinit_legacy_file_is_removed(self) -> None:
+        self.assertFalse(SENSORINIT_FILE.exists(), "sensorinit.h must be removed")
 
 
 if __name__ == "__main__":

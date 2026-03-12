@@ -5,11 +5,10 @@ import unittest
 BEER_PROGRAM_CODEC_HEADER = Path("modes/beer/beer_program_codec.h")
 LEGACY_BEER_HEADER = Path("beer.h")
 DIRECT_INCLUDE_USERS = (
-    Path("sensorinit.h"),
-    Path("FS.ino"),
     Path("Blynk.ino"),
     Path("ui/web/routes_save.h"),
     Path("modes/beer/beer_runtime.h"),
+    Path("app/default_programs.h"),
 )
 
 

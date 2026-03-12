@@ -29,21 +29,8 @@ class IoPressureExtractionTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, header_text)
 
-    def test_sensorinit_includes_io_pressure_and_has_no_local_pressure_duplicates(self) -> None:
-        sensorinit_text = SENSORINIT_FILE.read_text(encoding="utf-8")
-
-        self.assertIn('#include "io/pressure.h"', sensorinit_text)
-        for snippet in [
-            "void BME_getvalue(bool fl) {",
-            "void pressure_sensor_get() {",
-            "void pressure_sensor_init()",
-            "Adafruit_BME680 bme;",
-            "Adafruit_BMP085_Unified bme;",
-            "Adafruit_BMP280 bme;",
-            "Adafruit_BME280 bme;",
-        ]:
-            with self.subTest(snippet=snippet):
-                self.assertNotIn(snippet, sensorinit_text)
+    def test_sensorinit_legacy_file_is_removed(self) -> None:
+        self.assertFalse(SENSORINIT_FILE.exists(), "sensorinit.h must be removed")
 
     def test_samovar_no_longer_owns_pressure_sensor_object(self) -> None:
         samovar_text = SAMOVAR_INO_FILE.read_text(encoding="utf-8")

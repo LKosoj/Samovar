@@ -4,11 +4,10 @@ import unittest
 
 NBK_PROGRAM_CODEC_HEADER = Path("modes/nbk/nbk_program_codec.h")
 DIRECT_INCLUDE_USERS = (
-    Path("FS.ino"),
     Path("Blynk.ino"),
-    Path("sensorinit.h"),
     Path("ui/web/routes_save.h"),
     Path("modes/nbk/nbk_runtime.h"),
+    Path("app/default_programs.h"),
 )
 
 

@@ -6,9 +6,8 @@ DIST_PROGRAM_CODEC_HEADER = Path("modes/dist/dist_program_codec.h")
 DIRECT_INCLUDE_USERS = (
     Path("modes/dist/dist_runtime.h"),
     Path("Blynk.ino"),
-    Path("FS.ino"),
     Path("ui/web/routes_save.h"),
-    Path("sensorinit.h"),
+    Path("app/default_programs.h"),
 )
 
 

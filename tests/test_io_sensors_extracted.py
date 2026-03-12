@@ -26,19 +26,8 @@ class IoSensorsExtractionTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, header_text)
 
-    def test_sensorinit_includes_io_sensors_and_has_no_local_ds18b20_duplicates(self) -> None:
-        sensorinit_text = SENSORINIT_FILE.read_text(encoding="utf-8")
-
-        self.assertIn('#include "io/sensors.h"', sensorinit_text)
-        for snippet in [
-            "void DS_getvalue(void) {",
-            "void scan_ds_adress() {",
-            "String getDSAddress(DeviceAddress deviceAddress) {",
-            "String get_DSAddressList(String Address) {",
-            "void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress) {",
-        ]:
-            with self.subTest(snippet=snippet):
-                self.assertNotIn(snippet, sensorinit_text)
+    def test_sensorinit_legacy_file_is_removed(self) -> None:
+        self.assertFalse(SENSORINIT_FILE.exists(), "sensorinit.h must be removed")
 
 
 if __name__ == "__main__":

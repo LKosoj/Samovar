@@ -15,13 +15,13 @@
 #include "modes/bk/bk_water_control.h"
 #include "io/sensors.h"
 #include "storage/nvs_profiles.h"
+#include "support/task_stack_usage.h"
 #include "column_math.h"
 
 // Forward declarations для функций, не доступных через заголовки
 String getValue(String& data, char separator, int index);
 void set_program(String WProgram);
 void set_beer_program(String WProgram);
-void get_task_stack_usage();
 extern bool is_reboot;
 
 // Обработчик сохранения настроек (объединяет WiFi и процессные настройки)

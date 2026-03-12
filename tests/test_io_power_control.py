@@ -9,9 +9,7 @@ POWER_CONTROL_USERS = [
     Path("modes/beer/beer_runtime.h"),
     Path("modes/bk/bk_alarm.h"),
     Path("modes/bk/bk_runtime.h"),
-    Path("lua.h"),
     Path("Blynk.ino"),
-    Path("sensorinit.h"),
     Path("ui/web/routes_command.h"),
     Path("ui/web/routes_setup_process.h"),
 ]

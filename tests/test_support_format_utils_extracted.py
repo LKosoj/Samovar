@@ -28,9 +28,8 @@ class FormatUtilsExtractionTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, header_text)
 
-    def test_sensorinit_no_longer_owns_format_float(self) -> None:
-        sensorinit_text = SENSORINIT_FILE.read_text(encoding="utf-8")
-        self.assertNotIn("inline String format_float(float v, int d)", sensorinit_text)
+    def test_sensorinit_legacy_file_is_removed(self) -> None:
+        self.assertFalse(SENSORINIT_FILE.exists(), "sensorinit.h must be removed")
 
     def test_former_consumers_no_longer_keep_local_declarations(self) -> None:
         for path in FORMER_DECLARATION_FILES:

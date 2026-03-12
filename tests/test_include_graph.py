@@ -4,7 +4,6 @@ import unittest
 
 GLOBALS_DIRECT_INCLUDE_FILES = [
     "I2CStepper.h",
-    "sensorinit.h",
     "SPIFFSEditor.h",
     "crash_handler.h",
     "modes/bk/bk_finish.h",
@@ -48,7 +47,6 @@ SAFE_PARSE_DIRECT_INCLUDE_FILES = [
 ]
 
 SENSORS_DIRECT_INCLUDE_FILES = [
-    "sensorinit.h",
     "app/runtime_tasks.h",
     "ui/web/routes_command.h",
     "ui/web/routes_save.h",
@@ -56,12 +54,10 @@ SENSORS_DIRECT_INCLUDE_FILES = [
 ]
 
 PRESSURE_DIRECT_INCLUDE_FILES = [
-    "sensorinit.h",
     "app/runtime_tasks.h",
 ]
 
 SENSOR_SCAN_DIRECT_INCLUDE_FILES = [
-    "sensorinit.h",
     "app/orchestration.h",
     "app/process_common.h",
     "Menu.ino",
@@ -81,6 +77,11 @@ FORMAT_UTILS_DIRECT_INCLUDE_FILES = [
 DEFAULT_PROGRAMS_DIRECT_INCLUDE_FILES = [
     "io/sensor_scan.h",
     "ui/web/routes_setup_process.h",
+]
+
+TASK_STACK_USAGE_DIRECT_INCLUDE_FILES = [
+    "app/orchestration.h",
+    "ui/web/routes_save.h",
 ]
 
 
@@ -126,6 +127,12 @@ class IncludeGraphTest(unittest.TestCase):
             with self.subTest(path=relative_path):
                 text = Path(relative_path).read_text(encoding="utf-8")
                 self.assertIn('#include "app/default_programs.h"', text)
+
+    def test_task_stack_usage_consumers_include_task_stack_usage_header_directly(self) -> None:
+        for relative_path in TASK_STACK_USAGE_DIRECT_INCLUDE_FILES:
+            with self.subTest(path=relative_path):
+                text = Path(relative_path).read_text(encoding="utf-8")
+                self.assertIn('#include "support/task_stack_usage.h"', text)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,6 @@
 #include "storage/nvs_wifi.h"
 #include "storage/web_assets_sync.h"
 #include "FS.h"
-#include "sensorinit.h"
 #include "column_math.h"
 
 // Forward declarations для функций
@@ -30,7 +29,6 @@ void menu_reset_wifi();
 String get_DSAddressList(String Address);
 void set_program(String WProgram);
 void set_beer_program(String WProgram);
-void get_task_stack_usage();
 extern bool is_reboot;
 
 // Фильтр для заголовков

@@ -11,9 +11,7 @@ ACTUATORS_USERS = [
     Path("modes/beer/beer_runtime.h"),
     Path("modes/bk/bk_alarm.h"),
     Path("modes/nbk/nbk_alarm.h"),
-    Path("lua.h"),
     Path("Blynk.ino"),
-    Path("sensorinit.h"),
     Path("impurity_detector.h"),
     Path("ui/web/routes_command.h"),
 ]

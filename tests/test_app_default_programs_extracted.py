@@ -54,10 +54,8 @@ class DefaultProgramsExtractionTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, header_text)
 
-    def test_sensorinit_no_longer_owns_default_program_loader(self) -> None:
-        sensorinit_text = SENSORINIT_FILE.read_text(encoding="utf-8")
-        self.assertNotIn("void load_default_program_for_mode()", sensorinit_text)
-        self.assertNotIn("inline void load_default_program_for_mode()", sensorinit_text)
+    def test_sensorinit_legacy_file_is_removed(self) -> None:
+        self.assertFalse(SENSORINIT_FILE.exists(), "sensorinit.h must be removed")
 
     def test_consumers_no_longer_keep_local_forward_declarations(self) -> None:
         for path in CONSUMER_FILES:

@@ -30,16 +30,8 @@ class IoSensorScanExtractionTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, header_text)
 
-    def test_sensorinit_includes_io_sensor_scan_and_has_no_local_duplicates(self) -> None:
-        sensorinit_text = SENSORINIT_FILE.read_text(encoding="utf-8")
-
-        self.assertIn('#include "io/sensor_scan.h"', sensorinit_text)
-        for snippet in [
-            "void sensor_init(void) {",
-            "void reset_sensor_counter(void) {",
-        ]:
-            with self.subTest(snippet=snippet):
-                self.assertNotIn(snippet, sensorinit_text)
+    def test_sensorinit_legacy_file_is_removed(self) -> None:
+        self.assertFalse(SENSORINIT_FILE.exists(), "sensorinit.h must be removed")
 
 
 if __name__ == "__main__":
