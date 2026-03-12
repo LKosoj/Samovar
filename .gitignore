@@ -36,3 +36,7 @@ __pycache__/
 *.pyc
 MANAGER_PLAN.json
 .cli-proxy/
+AGENTS.md 
+GEMINI.md
+CLAUDE.md
+QWEN.md
