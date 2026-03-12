@@ -40,6 +40,7 @@ class WebRoutesCommandModuleTests(unittest.TestCase):
             '#include "state/globals.h"',
             '#include "modes/bk/bk_water_control.h"',
             '#include "io/actuators.h"',
+            '#include "io/sensors.h"',
         ]
         for header in required_headers:
             self.assertIn(header, self.routes_command_text)
@@ -48,7 +49,6 @@ class WebRoutesCommandModuleTests(unittest.TestCase):
         # Проверяем, что есть forward declarations для функций
         required_declarations = [
             "void menu_reset_wifi();",
-            "void scan_ds_adress();",
             "void set_mixer(bool On);",
             "uint16_t get_stepper_speed(void);",
             "uint32_t get_stepper_status(void);",
@@ -58,6 +58,8 @@ class WebRoutesCommandModuleTests(unittest.TestCase):
         ]
         for decl in required_declarations:
             self.assertIn(decl, self.routes_command_text)
+
+        self.assertNotIn("void scan_ds_adress();", self.routes_command_text)
 
     def test_routes_command_calls_web_command_from_server_init(self):
         # Проверяем, что server_init.h вызывает web_command

@@ -1,6 +1,7 @@
 #ifndef __SAMOVAR_UI_WEB_TEMPLATE_KEYS_H__
 #define __SAMOVAR_UI_WEB_TEMPLATE_KEYS_H__
 
+#include "io/sensors.h"
 #include "storage/nvs_wifi.h"
 
 String indexKeyProcessor(const String &var) {

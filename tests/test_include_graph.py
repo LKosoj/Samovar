@@ -47,6 +47,14 @@ SAFE_PARSE_DIRECT_INCLUDE_FILES = [
     "SamovarMqtt.h",
 ]
 
+SENSORS_DIRECT_INCLUDE_FILES = [
+    "sensorinit.h",
+    "app/runtime_tasks.h",
+    "ui/web/routes_command.h",
+    "ui/web/routes_save.h",
+    "ui/web/template_keys.h",
+]
+
 
 class IncludeGraphTest(unittest.TestCase):
     def test_globals_consumers_include_globals_header_directly(self) -> None:
@@ -60,6 +68,12 @@ class IncludeGraphTest(unittest.TestCase):
             with self.subTest(path=relative_path):
                 text = Path(relative_path).read_text(encoding="utf-8")
                 self.assertIn('#include "support/safe_parse.h"', text)
+
+    def test_sensor_consumers_include_sensors_header_directly(self) -> None:
+        for relative_path in SENSORS_DIRECT_INCLUDE_FILES:
+            with self.subTest(path=relative_path):
+                text = Path(relative_path).read_text(encoding="utf-8")
+                self.assertIn('#include "io/sensors.h"', text)
 
 
 if __name__ == "__main__":

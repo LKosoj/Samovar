@@ -9,6 +9,7 @@
 #include "modes/bk/bk_water_control.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "io/sensors.h"
 #include "modes/nbk/nbk_math.h"
 #include "modes/nbk/nbk_state.h"
 
@@ -17,7 +18,6 @@ void run_lua_script(String fn);
 void run_lua_string(String lstr);
 #endif
 void menu_reset_wifi();
-void scan_ds_adress();
 void set_mixer(bool On);
 uint16_t get_stepper_speed(void);
 uint32_t get_stepper_status(void);
