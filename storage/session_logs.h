@@ -10,10 +10,10 @@
 #include "modes/nbk/nbk_program_codec.h"
 #include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
+#include "support/format_utils.h"
 #include "support/process_math.h"
 
 int get_liquid_volume();
-inline String format_float(float v, int d);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 inline String append_data();
 

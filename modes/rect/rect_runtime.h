@@ -9,10 +9,10 @@
 #include "app/process_common.h"
 #include "io/actuators.h"
 #include "io/power_control.h"
+#include "support/format_utils.h"
 #include "support/process_math.h"
 
 void menu_samovar_start();
-inline String format_float(float v, int d);
 void stopService(void);
 void startService(void);
 void set_pump_pwm(float duty);

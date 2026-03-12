@@ -40,16 +40,6 @@ void createFile(char* fileName);
 void init_pump_pwm(uint8_t pin, int freq);
 void set_pump_pwm(float duty);
 
-//**************************************************************************************************************
-// Функции для работы с сенсорами
-//**************************************************************************************************************
-
-inline String format_float(float v, int d) {
-  char outstr[15];
-  dtostrf(v, 1, d, outstr);
-  return outstr;
-}
-
 #endif
 
 #ifndef GET_TASK_STACK_USAGE_DEFINED

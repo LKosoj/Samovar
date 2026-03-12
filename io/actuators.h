@@ -6,13 +6,13 @@
 #include "Samovar_ini.h"
 #include "state/globals.h"
 #include "storage/nvs_profiles.h"
+#include "support/format_utils.h"
 #include "support/process_math.h"
 
 void read_config();
 void stopService(void);
 void startService(void);
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-inline String format_float(float v, int d);
 
 #ifdef USER_SERVO
 void user_set_capacity(uint8_t cap);

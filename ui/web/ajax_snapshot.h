@@ -11,9 +11,8 @@
 #include "app/status_text.h"
 #include "modes/dist/dist_time_predictor.h"
 #include "modes/dist/dist_runtime.h"
+#include "support/format_utils.h"
 #include "support/process_math.h"
-
-String format_float(float v, int d);
 uint16_t get_stepper_speed(void);
 uint32_t get_stepper_status(void);
 float i2c_get_liquid_rate_by_step(int StepperSpeed);

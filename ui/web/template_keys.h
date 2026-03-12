@@ -3,6 +3,7 @@
 
 #include "io/sensors.h"
 #include "storage/nvs_wifi.h"
+#include "support/format_utils.h"
 
 String indexKeyProcessor(const String &var) {
   if (var == "SteamColor") return (String)SamSetup.SteamColor;

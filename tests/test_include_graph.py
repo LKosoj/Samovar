@@ -68,6 +68,16 @@ SENSOR_SCAN_DIRECT_INCLUDE_FILES = [
     "modes/nbk/nbk_finish.h",
 ]
 
+FORMAT_UTILS_DIRECT_INCLUDE_FILES = [
+    "app/status_text.h",
+    "storage/session_logs.h",
+    "io/actuators.h",
+    "app/runtime_tasks.h",
+    "ui/web/template_keys.h",
+    "ui/web/ajax_snapshot.h",
+    "modes/rect/rect_runtime.h",
+]
+
 
 class IncludeGraphTest(unittest.TestCase):
     def test_globals_consumers_include_globals_header_directly(self) -> None:
@@ -99,6 +109,12 @@ class IncludeGraphTest(unittest.TestCase):
             with self.subTest(path=relative_path):
                 text = Path(relative_path).read_text(encoding="utf-8")
                 self.assertIn('#include "io/sensor_scan.h"', text)
+
+    def test_format_utils_consumers_include_format_utils_header_directly(self) -> None:
+        for relative_path in FORMAT_UTILS_DIRECT_INCLUDE_FILES:
+            with self.subTest(path=relative_path):
+                text = Path(relative_path).read_text(encoding="utf-8")
+                self.assertIn('#include "support/format_utils.h"', text)
 
 
 if __name__ == "__main__":
