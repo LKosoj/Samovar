@@ -28,7 +28,7 @@ void change_samovar_mode();
 void samovar_reset();
 void menu_switch_focus();
 String http_sync_request_get(String url);
-void save_profile();
+void save_profile_nvs();
 void writeString(String Str, uint8_t num);
 void sensor_init(void);
 void get_task_stack_usage();
@@ -169,7 +169,7 @@ inline void samovar_app_setup() {
     SamSetup.ColDiam = 2.0f;
     SamSetup.ColHeight = 0.5f;
     SamSetup.PackDens = 80;
-    save_profile();
+    save_profile_nvs();
     Serial.println("Default values saved to NVS");
   }
 

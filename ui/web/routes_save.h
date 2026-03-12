@@ -326,7 +326,7 @@ inline void handleSave(AsyncWebServerRequest *request) {
   }
 
   // Сохраняем изменения в память.
-  save_profile();
+  save_profile_nvs();
   read_config();
 
   get_task_stack_usage();

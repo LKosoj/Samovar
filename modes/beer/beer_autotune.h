@@ -9,7 +9,7 @@
 #include "app/config_apply.h"
 #include "modes/beer/beer_heater.h"
 
-void save_profile();
+void save_profile_nvs();
 inline void StartAutoTune();
 inline void FinishAutoTune();
 
@@ -40,7 +40,7 @@ inline void FinishAutoTune() {
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
   heaterPID.SetMode(ATuneModeRemember);
 
-  save_profile();
+  save_profile_nvs();
   read_config();
 
   set_heater_state(0, 50);

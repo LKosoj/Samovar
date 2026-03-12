@@ -7,7 +7,7 @@
 #include "state/globals.h"
 #include "support/process_math.h"
 
-void save_profile();
+void save_profile_nvs();
 void read_config();
 void stopService(void);
 void startService(void);
@@ -29,7 +29,7 @@ inline void pump_calibrate(int stpspeed) {
     stopService();
     stepper.brake();
     stepper.disable();
-    save_profile();
+    save_profile_nvs();
     read_config();
   } else {
     startval = 100;

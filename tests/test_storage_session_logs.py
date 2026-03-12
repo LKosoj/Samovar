@@ -35,10 +35,8 @@ class StorageSessionLogsModuleTests(unittest.TestCase):
         for snippet in expected_snippets:
             self.assertIn(snippet, text)
 
-    def test_legacy_fs_file_no_longer_defines_session_logs_functions(self) -> None:
-        text = FS_LEGACY_FILE.read_text(encoding="utf-8")
-        self.assertNotIn("void create_data() {", text)
-        self.assertNotIn("String append_data() {", text)
+    def test_legacy_fs_file_is_removed(self) -> None:
+        self.assertFalse(FS_LEGACY_FILE.exists(), "FS.ino must be removed")
 
     def test_direct_users_include_session_logs_module(self) -> None:
         for path in DIRECT_USERS:

@@ -26,9 +26,8 @@ class StorageFsInitModuleTests(unittest.TestCase):
         for snippet in expected_snippets:
             self.assertIn(snippet, text)
 
-    def test_legacy_fs_file_no_longer_defines_fs_init(self) -> None:
-        text = FS_LEGACY_FILE.read_text(encoding="utf-8")
-        self.assertNotIn("void FS_init(void) {", text)
+    def test_legacy_fs_file_is_removed(self) -> None:
+        self.assertFalse(FS_LEGACY_FILE.exists(), "FS.ino must be removed")
 
     def test_server_init_includes_fs_init_module_and_keeps_call(self) -> None:
         text = SERVER_INIT_HEADER.read_text(encoding="utf-8")

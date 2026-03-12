@@ -35,7 +35,7 @@ inline void calibrate_command(AsyncWebServerRequest *request) {
         uint32_t done = (I2CPumpTargetSteps > remaining) ? (I2CPumpTargetSteps - remaining) : 0;
         SamSetup.StepperStepMlI2C = (uint16_t)round((float)done / 100.0f);
         I2CPumpCalibrating = false;
-        save_profile();
+        save_profile_nvs();
         read_config();
         cl = true;
       }

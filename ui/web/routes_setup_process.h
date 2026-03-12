@@ -16,8 +16,8 @@ void distiller_finish();
 void beer_finish();
 void samovar_reset();
 void load_default_program_for_mode();
-void save_profile();
-void load_profile();
+void save_profile_nvs();
+void load_profile_nvs();
 void change_samovar_mode();
 #ifdef USE_LUA
 String get_lua_mode_name();
@@ -63,8 +63,8 @@ inline void handleSaveProcessSettings(AsyncWebServerRequest *request) {
   Samovar_CR_Mode = Samovar_Mode;
 
   load_default_program_for_mode();
-  save_profile();
-  load_profile();
+  save_profile_nvs();
+  load_profile_nvs();
 
 #ifdef USE_LUA
   lua_type_script = get_lua_mode_name();

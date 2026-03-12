@@ -22,9 +22,9 @@
 
 // Forward declarations для функций
 void change_samovar_mode();
-void save_profile();
+void save_profile_nvs();
 void read_config();
-void load_profile();
+void load_profile_nvs();
 String getValue(String& data, char separator, int index);
 void menu_reset_wifi();
 String get_DSAddressList(String Address);
@@ -167,7 +167,7 @@ void WebServerInit(void) {
 
   change_samovar_mode();
 
-  load_profile();
+  load_profile_nvs();
 
 
 

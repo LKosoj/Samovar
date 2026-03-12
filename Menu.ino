@@ -19,7 +19,7 @@
 
 void read_config();
 void set_menu_screen(uint8_t param);
-void save_profile();
+void save_profile_nvs();
 void samovar_reset();
 float get_speed_from_rate(float rate);
 void set_pump_pwm(float duty);
@@ -323,7 +323,7 @@ void setup_go_back() {
   set_menu_screen(2);
 
   // Сохраняем изменения в память.
-  save_profile();
+  save_profile_nvs();
   read_config();
   // Данная функция ссылается на необходимое меню.
   //main_menu1.change_menu(main_menu);
