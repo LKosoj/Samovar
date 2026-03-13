@@ -3,6 +3,7 @@ import unittest
 
 
 MENU_SCREENS_HEADER = Path("ui/menu/screens.h")
+MENU_INPUT_HEADER = Path("ui/menu/input.h")
 MENU_SOURCE = Path("Menu.ino")
 
 EXPECTED_SCREEN_DEFINITIONS = [
@@ -52,11 +53,13 @@ class MenuScreensStructureTest(unittest.TestCase):
                 self.assertIn(snippet, text)
 
     def test_menu_source_includes_screen_module_and_uses_helpers(self) -> None:
-        text = MENU_SOURCE.read_text(encoding="utf-8")
-        self.assertIn('#include "ui/menu/screens.h"', text)
-        self.assertIn("setup_menu_screen_decimal_places();", text)
-        self.assertIn("setup_menu_screen_progmem();", text)
-        self.assertIn("register_menu_screens();", text)
+        source_text = MENU_SOURCE.read_text(encoding="utf-8")
+        input_text = MENU_INPUT_HEADER.read_text(encoding="utf-8")
+
+        self.assertIn('#include "ui/menu/screens.h"', source_text)
+        self.assertIn("setup_menu_screen_decimal_places();", input_text)
+        self.assertIn("setup_menu_screen_progmem();", input_text)
+        self.assertIn("register_menu_screens();", input_text)
 
     def test_menu_source_no_longer_keeps_inline_screen_definitions(self) -> None:
         text = MENU_SOURCE.read_text(encoding="utf-8")

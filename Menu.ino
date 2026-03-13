@@ -13,6 +13,7 @@
 #include "support/process_math.h"
 #include "ui/menu/strings.h"
 #include "ui/menu/screens.h"
+#include "ui/menu/input.h"
 #include <LiquidCrystal_I2C.h>
 #include <LiquidMenu.h>
 #include <Arduino.h>
@@ -23,8 +24,6 @@
 #endif
 
 void read_config();
-void set_menu_screen(uint8_t param);
-void samovar_reset();
 float get_speed_from_rate(float rate);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
@@ -35,8 +34,6 @@ void detector_on_manual_resume();
 
 
 //LiquidSystem menu(main_menu, setup_menu, 1);
-
-#define LCD_UPDATE_TIMEOUT 200
 
 const char* get_power_text(){
   return power_text_ptr;
@@ -76,140 +73,6 @@ const char* get_welcomeStr3(){
 
 const char* get_welcomeStr4(){
   return welcomeStr4;
-}
-
-void reset_focus() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    //return;
-    do {
-      main_menu1.switch_focus();
-    } while (main_menu1.is_callable(1));
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void change_screen(LiquidScreen* screen) {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.change_screen(screen);
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void menu_update() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.update();
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void menu_softUpdate() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.softUpdate();
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void menu_previous_screen() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.previous_screen();
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void menu_next_screen() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.next_screen();
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void menu_switch_focus() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.switch_focus();
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void menu_reset_lcd() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    lcd.begin(20, 4);
-    lcd.init();
-    xSemaphoreGive(xI2CSemaphore);
-  }
-}
-
-void set_menu_screen(uint8_t param) {
-  switch (param) {
-    case 1:  //меню установок
-      setup_temp_screen.hide(false);
-      setup_set_temp_screen.hide(false);
-      setup_stepper_settings.hide(false);
-      setup_back_screen.hide(false);
-      main_screen.hide(true);
-      main_screen1.hide(true);
-      main_screen2.hide(true);
-      main_screen4.hide(true);
-      main_screen5.hide(true);
-      setup_program_settings.hide(true);
-      setup_program_back.hide(true);
-      //main_menu1.switch_focus();
-      change_screen(&setup_temp_screen);
-      break;
-    case 2:  //основное меню после включения колонны
-      setup_set_temp_screen.hide(true);
-      setup_temp_screen.hide(true);
-      setup_stepper_settings.hide(true);
-      setup_back_screen.hide(true);
-      setup_program_settings.hide(true);
-      setup_program_back.hide(true);
-      main_screen.hide(false);
-      main_screen1.hide(false);
-      main_screen2.hide(false);
-      main_screen4.hide(false);
-      main_screen5.hide(true);
-      //main_menu1.switch_focus();
-      change_screen(&main_screen);
-      break;
-    case 3:  //основное меню до включения колонны
-      setup_set_temp_screen.hide(true);
-      setup_temp_screen.hide(true);
-      setup_stepper_settings.hide(true);
-      setup_back_screen.hide(true);
-      setup_program_settings.hide(true);
-      setup_program_back.hide(true);
-      main_screen.hide(false);
-      main_screen1.hide(false);
-      main_screen2.hide(true);
-      main_screen4.hide(false);
-      main_screen5.hide(true);
-      //main_menu1.switch_focus();
-      change_screen(&main_screen);
-      break;
-    case 4:  //меню установки программ
-      setup_set_temp_screen.hide(true);
-      setup_temp_screen.hide(true);
-      setup_stepper_settings.hide(true);
-      setup_back_screen.hide(true);
-      main_screen.hide(true);
-      main_screen1.hide(true);
-      main_screen2.hide(true);
-      main_screen4.hide(true);
-      main_screen5.hide(true);
-      setup_program_settings.hide(false);
-      setup_program_back.hide(false);
-      //main_menu1.switch_focus();
-      change_screen(&setup_program_settings);
-      break;
-  }
-  /*
-      if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      main_screen.hide(true);
-      main_screen1.hide(true);
-      main_screen2.hide(true);
-      main_screen5.hide(false);
-      change_screen(&main_screen5);
-    }
-  */
 }
 
 void menu_setup() {
@@ -463,156 +326,4 @@ void samovar_reset() {
   set_menu_screen(3);
   reset_sensor_counter();
   sam_command_sync = SAMOVAR_NONE;
-}
-
-void setupMenu() {
-
-  lcd.init();
-  lcd.begin(LCD_COLUMNS, LCD_ROWS);
-  lcd.backlight();
-  lcd.clear();
-
-  //  setup_program_settings.add_line(lql_setup_program_Temp);
-  //  setup_program_settings.add_line(lql_setup_program_Power);
-  //  setup_program_settings.set_displayLineCount(6);
-
-  //setup_temp_screen.set_displayLineCount(4);
-  setup_menu_screen_decimal_places();
-
-  // Function to attach functions to LiquidLine objects.
-  lql_start.attach_function(1, menu_samovar_start);
-  lql_start.attach_function(2, menu_samovar_start);
-  lql_reset.attach_function(1, samovar_reset);
-  lql_reset.attach_function(2, samovar_reset);
-
-  lql_pump_speed.attach_function(1, menu_pump_speed_up);
-  lql_pump_speed.attach_function(2, menu_pump_speed_down);
-
-  lql_setup.attach_function(1, menu_setup);
-  lql_setup.attach_function(2, menu_setup);
-
-  lql_setup_steam_temp.attach_function(1, set_delta_steam_temp_up);
-  lql_setup_steam_temp.attach_function(2, set_delta_steam_temp_down);
-  lql_setup_pipe_temp.attach_function(1, set_delta_pipe_temp_up);
-  lql_setup_pipe_temp.attach_function(2, set_delta_pipe_temp_down);
-  lql_setup_water_temp.attach_function(1, set_delta_water_temp_up);
-  lql_setup_water_temp.attach_function(2, set_delta_water_temp_down);
-  lql_setup_tank_temp.attach_function(1, set_delta_tank_temp_up);
-  lql_setup_tank_temp.attach_function(2, set_delta_tank_temp_down);
-
-  lql_setup_set_steam_temp.attach_function(1, set_delta_set_steam_temp_up);
-  lql_setup_set_steam_temp.attach_function(2, set_delta_set_steam_temp_down);
-  lql_setup_set_pipe_temp.attach_function(1, set_delta_set_pipe_temp_up);
-  lql_setup_set_pipe_temp.attach_function(2, set_delta_set_pipe_temp_down);
-  lql_setup_set_water_temp.attach_function(1, set_delta_set_water_temp_up);
-  lql_setup_set_water_temp.attach_function(2, set_delta_set_water_temp_down);
-  lql_setup_set_tank_temp.attach_function(1, set_delta_set_tank_temp_up);
-  lql_setup_set_tank_temp.attach_function(2, set_delta_set_tank_temp_down);
-
-  lql_setup_stepper_stepper_step_ml.attach_function(1, stepper_step_ml_up);
-  lql_setup_stepper_stepper_step_ml.attach_function(2, stepper_step_ml_down);
-  lql_setup_stepper_calibrate.attach_function(1, menu_calibrate);
-  lql_setup_stepper_calibrate.attach_function(2, menu_calibrate_down);
-  lql_setup_stepper_program.attach_function(1, menu_program);
-  lql_setup_stepper_program.attach_function(2, menu_program);
-  lql_setup_program_back_line.attach_function(1, menu_program_back);
-  lql_setup_program_back_line.attach_function(2, menu_program_back);
-  lql_setup_program_reset_wifi.attach_function(1, menu_reset_wifi);
-  lql_setup_program_reset_wifi.attach_function(2, menu_reset_wifi);
-
-  lql_back_line.attach_function(1, setup_go_back);
-  lql_back_line.attach_function(2, setup_go_back);
-
-  lql_get_power.attach_function(1, menu_get_power);
-  lql_get_power.attach_function(2, menu_get_power);
-
-  lql_pause.attach_function(1, menu_pause);
-  lql_pause.attach_function(2, menu_pause);
-
-
-
-  setup_menu_screen_progmem();
-  register_menu_screens();
-
-  set_menu_screen(3);
-  change_screen(&welcome_screen);
-
-  menu_update();
-  welcome_screen.hide(true);
-}
-
-void encoder_getvalue() {
-
-  bool updscreen = true;
-
-  //encoder.tick();
-  // Check all the buttons
-  if (encoder.isRight()) {
-    multiplier = 1;
-    //Если калибровка - энкодером регулируем скорость шагового двигателя
-    if (startval == 100) {
-      menu_calibrate();
-      //updscreen = false;
-      return;
-    }
-    if (!main_menu1.is_callable(1)) {
-      updscreen = false;
-      menu_next_screen();
-    } else {
-      updscreen = false;
-      main_menu1.call_function(1);
-      vTaskDelay(5 / portTICK_PERIOD_MS);
-    }
-  } else if (encoder.isLeft()) {
-    multiplier = 1;
-    //Если калибровка - энкодером регулируем скорость шагового двигателя
-    if (startval == 100) {
-      //updscreen = false;
-      menu_calibrate_down();
-      return;
-    }
-    if (!main_menu1.is_callable(2)) {
-      updscreen = false;
-      menu_previous_screen();
-    } else {
-      updscreen = false;
-      main_menu1.call_function(2);
-      vTaskDelay(5 / portTICK_PERIOD_MS);
-    }
-  } else if (encoder.isRightH()) {
-    multiplier = 10;
-    updscreen = false;
-    main_menu1.call_function(1);
-  } else if (encoder.isLeftH()) {
-    multiplier = 10;
-    updscreen = false;
-    main_menu1.call_function(2);
-  } else if (encoder.isClick()) {
-    //Выход из режима калибровки - нажатие на кнопку.
-    if (startval == 100) {
-      startval = 0;
-      menu_calibrate();
-    }
-    updscreen = false;
-    menu_switch_focus();
-  }
-
-  CurMin = (millis() / 1000);
-  if (OldMin != CurMin) {
-    //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
-    if (CurMin == 120) {
-      menu_reset_lcd();
-    }
-
-
-    //    tcnt++;
-    //    if (tcnt == 3) {
-    //      tcnt = 0;
-    //      BME_getvalue(false);
-    //    }
-
-    if (updscreen) menu_softUpdate();
-
-    OldMin = CurMin;
-  }
 }
