@@ -3,43 +3,12 @@
 
 #include <Arduino.h>
 
+#include "ui/menu/actions.h"
 #include "ui/menu/screens.h"
 
 #ifndef LCD_UPDATE_TIMEOUT
 #define LCD_UPDATE_TIMEOUT 200
 #endif
-
-void samovar_reset();
-void menu_samovar_start();
-void menu_pump_speed_up();
-void menu_pump_speed_down();
-void menu_setup();
-void set_delta_steam_temp_up();
-void set_delta_steam_temp_down();
-void set_delta_pipe_temp_up();
-void set_delta_pipe_temp_down();
-void set_delta_water_temp_up();
-void set_delta_water_temp_down();
-void set_delta_tank_temp_up();
-void set_delta_tank_temp_down();
-void set_delta_set_steam_temp_up();
-void set_delta_set_steam_temp_down();
-void set_delta_set_pipe_temp_up();
-void set_delta_set_pipe_temp_down();
-void set_delta_set_water_temp_up();
-void set_delta_set_water_temp_down();
-void set_delta_set_tank_temp_up();
-void set_delta_set_tank_temp_down();
-void stepper_step_ml_up();
-void stepper_step_ml_down();
-void menu_calibrate();
-void menu_calibrate_down();
-void menu_program();
-void menu_program_back();
-void menu_reset_wifi();
-void setup_go_back();
-void menu_get_power();
-void menu_pause();
 
 inline void reset_focus() {
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
