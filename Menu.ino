@@ -11,6 +11,7 @@
 #include "io/sensor_scan.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
+#include "ui/menu/strings.h"
 #include <LiquidCrystal_I2C.h>
 #include <LiquidMenu.h>
 #include <Arduino.h>
@@ -28,34 +29,6 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 float get_alcohol(float t);
 void detector_on_manual_resume();
-
-const char str_BACK[] PROGMEM = "<BACK";
-const char str_Steam_T[] PROGMEM = "Steam T: ";
-const char str_Pipe_T[] PROGMEM = "Pipe T: ";
-const char str_Water_T[] PROGMEM = "Water T: ";
-const char str_Tank_T[] PROGMEM = "Tank T: ";
-const char str_Pressure[] PROGMEM = "Atm: ";
-const char str_Progress[] PROGMEM = "Progress: ";
-const char str_Start[] PROGMEM = ">Start: ";
-const char str_Speed[] PROGMEM = ">Speed l/h: ";
-const char str_Pause[] PROGMEM = ">Pause: ";
-const char str_Reset_W[] PROGMEM = ">Reset withdrawal: ";
-const char str_Get_Power[] PROGMEM = ">Get power ";
-const char str_Setup[] PROGMEM = "/Setup";
-const char str_IP[] PROGMEM = "IP: ";
-const char str_Set_Steam_T[] PROGMEM = "Set Steam T: ";
-const char str_Set_Pipe_T[] PROGMEM = "Set Pipe T: ";
-const char str_Set_Water_T[] PROGMEM = "Set Water T: ";
-const char str_Set_Tank_T[] PROGMEM = "Set Tank T: ";
-const char str_Step_Ml[] PROGMEM = "^Step/ml: ";
-const char str_Calibrate[] PROGMEM = ">Calibrate: ";
-const char str_Program[] PROGMEM = "Prog>";
-const char str_Type[] PROGMEM = "^Type: ";
-const char str_Volume[] PROGMEM = "^Volume: ";
-const char str_Capacity[] PROGMEM = "^Capacity: ";
-const char str_Temp[] PROGMEM = "^Temp: ";
-const char str_Power[] PROGMEM = "^Power: ";
-const char str_Reset_WiFi[] PROGMEM = ">Reset WiFi";
 
 const char* get_calibrate_text();
 const char* get_startval_text();
@@ -480,9 +453,9 @@ void menu_get_power() {
 
 void menu_pause() {
   pause_withdrawal(!PauseOn);
-  if (PauseOn) pause_text_ptr = (char *)"Continue";
+  if (PauseOn) pause_text_ptr = (char *)menu_text_continue;
   else {
-    pause_text_ptr = (char *)"Pause";
+    pause_text_ptr = (char *)menu_text_pause;
     t_min = 0;
     program_Wait = false;
     detector_on_manual_resume();
@@ -498,11 +471,11 @@ void menu_calibrate() {
     return;
   }
   if (StepperMoving) {
-    calibrate_text_ptr = (char *)"Stop";
+    calibrate_text_ptr = (char *)menu_text_stop;
     stpspeed = 0;
   } else {
     startval = 100;
-    calibrate_text_ptr = (char *)"Start";
+    calibrate_text_ptr = (char *)menu_text_start;
     stpspeed = STEPPER_MAX_SPEED;
   }
   pump_calibrate(stpspeed);
@@ -533,19 +506,19 @@ void menu_samovar_start() {
     delay(200);
 #endif
     startval = 1;
-    Str = "Prg No 1";
+    Str = menu_text_program_number_first;
     run_program(0);
     ProgramNum = 0;
     create_data();  //создаем файл с данными
   } else if (startval == 1) {
     ProgramNum++;
-    Str = "Prg No " + (String)(ProgramNum + 1);
+    Str = String(menu_text_program_number_prefix) + (String)(ProgramNum + 1);
     run_program(ProgramNum);
   } else if (startval == 2) {
-    Str = "Prg finish";
+    Str = menu_text_program_finish;
     run_program(CAPACITY_NUM * 2);
   } else {
-    Str = "Stoped";
+    Str = menu_text_stopped;
     run_program(CAPACITY_NUM * 2);
     reset_sensor_counter();
   }
@@ -555,9 +528,10 @@ void menu_samovar_start() {
 }
 
 void samovar_reset() {
-  char str[20] = "Stoped             ";
+  char str[20];
+  memcpy(str, menu_text_stopped_padded, sizeof(str));
   memcpy(str, startval_text_val, 20);
-  power_text_ptr = (char *)"ON";
+  power_text_ptr = (char *)menu_text_power_on;
   reset_focus();
   set_menu_screen(3);
   reset_sensor_counter();

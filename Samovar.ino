@@ -79,6 +79,7 @@
 #include "impurity_detector.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
+#include "ui/menu/strings.h"
 #include "crash_handler.h"
 
 #ifndef __SAMOVAR_DEBUG
@@ -172,9 +173,9 @@ char* welcomeStr4 = (char*)welcomeStrArr4;
 char* ipstr = (char*)ipst;
 char startval_text_val[20];
 char* startval_text = (char*)startval_text_val;
-char* power_text_ptr = (char*)"ON";
-char* calibrate_text_ptr = (char*)"Start";
-char* pause_text_ptr = (char*)"Pause";
+char* power_text_ptr = (char*)menu_text_power_on;
+char* calibrate_text_ptr = (char*)menu_text_start;
+char* pause_text_ptr = (char*)menu_text_pause;
 String StrCrt;
 String Crt;
 uint8_t CurMin, OldMin;
