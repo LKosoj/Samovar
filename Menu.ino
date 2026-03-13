@@ -12,6 +12,7 @@
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "ui/menu/strings.h"
+#include "ui/menu/screens.h"
 #include <LiquidCrystal_I2C.h>
 #include <LiquidMenu.h>
 #include <Arduino.h>
@@ -29,80 +30,6 @@ void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 float get_alcohol(float t);
 void detector_on_manual_resume();
-
-const char* get_calibrate_text();
-const char* get_startval_text();
-const char* get_timestr();
-const char* get_welcomeStr1();
-const char* get_welcomeStr2();
-const char* get_welcomeStr3();
-const char* get_welcomeStr4();
-const char* get_pause_text();
-const char* get_power_text();
-const char* get_ipstr();
-
-LiquidLine lql_back_line(0, 10, str_BACK);
-LiquidLine lql_time(0, 10, get_timestr);
-
-LiquidLine welcome_line1(0, 0, get_welcomeStr1);
-LiquidLine welcome_line2(0, 1, get_welcomeStr2);
-LiquidLine welcome_line3(0, 2, get_welcomeStr3);
-LiquidLine welcome_line4(0, 3, get_welcomeStr4);
-LiquidScreen welcome_screen(welcome_line1, welcome_line2, welcome_line3, welcome_line4);
-
-LiquidLine lql_steam_temp(0, 0, str_Steam_T, SteamSensor.avgTemp);
-LiquidLine lql_pipe_temp(0, 1, str_Pipe_T, PipeSensor.avgTemp);
-LiquidLine lql_water_temp(0, 2, str_Water_T, WaterSensor.avgTemp);
-LiquidScreen main_screen(lql_steam_temp, lql_pipe_temp, lql_water_temp, lql_time);
-
-LiquidLine lql_tank_temp(0, 0, str_Tank_T, TankSensor.avgTemp);
-LiquidLine lql_atm(0, 1, str_Pressure, bme_pressure);
-LiquidLine lql_w_progress(0, 2, str_Progress, WthdrwlProgress);
-LiquidScreen main_screen1(lql_tank_temp, lql_atm, lql_w_progress, lql_time);
-
-LiquidLine lql_start(0, 0, str_Start, get_startval_text);
-LiquidLine lql_pump_speed(0, 1, str_Speed, ActualVolumePerHour);
-LiquidLine lql_pause(0, 2, str_Pause, get_pause_text);
-LiquidLine lql_reset(0, 3, str_Reset_W);
-LiquidScreen main_screen2(lql_start, lql_pump_speed, lql_pause, lql_reset);
-
-LiquidLine lql_get_power(0, 0, str_Get_Power, get_power_text);
-LiquidLine lql_setup(0, 1, str_Setup);
-LiquidLine lql_ip(0, 2, str_IP, get_ipstr);
-LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
-
-LiquidScreen main_screen5(lql_tank_temp, lql_atm, lql_water_temp, lql_time);
-
-LiquidLine lql_setup_steam_temp(0, 0, str_Steam_T, SamSetup.DeltaSteamTemp);
-LiquidLine lql_setup_pipe_temp(0, 1, str_Pipe_T, SamSetup.DeltaPipeTemp);
-LiquidLine lql_setup_water_temp(0, 2, str_Water_T, SamSetup.DeltaWaterTemp);
-LiquidLine lql_setup_tank_temp(0, 3, str_Tank_T, SamSetup.DeltaTankTemp);
-LiquidScreen setup_temp_screen(lql_setup_steam_temp, lql_setup_pipe_temp, lql_setup_water_temp, lql_setup_tank_temp);
-
-LiquidLine lql_setup_set_steam_temp(0, 0, str_Set_Steam_T, SamSetup.SetSteamTemp);
-LiquidLine lql_setup_set_pipe_temp(0, 1, str_Set_Pipe_T, SamSetup.SetPipeTemp);
-LiquidLine lql_setup_set_water_temp(0, 2, str_Set_Water_T, SamSetup.SetWaterTemp);
-LiquidLine lql_setup_set_tank_temp(0, 3, str_Set_Tank_T, SamSetup.SetTankTemp);
-LiquidScreen setup_set_temp_screen(lql_setup_set_steam_temp, lql_setup_set_pipe_temp, lql_setup_set_water_temp, lql_setup_set_tank_temp);
-
-LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, str_Step_Ml, SamSetup.StepperStepMl);
-LiquidLine lql_setup_stepper_calibrate(0, 1, str_Calibrate, get_calibrate_text);
-LiquidLine lql_setup_stepper_program(0, 2, str_Program);
-LiquidScreen setup_stepper_settings(lql_setup_stepper_stepper_step_ml, lql_setup_stepper_calibrate, lql_setup_stepper_program, lql_time);
-
-LiquidLine lql_setup_program_WType(0, 0, str_Type, program[0].WType);
-LiquidLine lql_setup_program_Volume(0, 1, str_Volume, program[0].Volume);
-LiquidLine lql_setup_program_Speed(0, 2, str_Speed, program[0].Speed);
-LiquidLine lql_setup_program_capacity_num(0, 3, str_Capacity, program[0].capacity_num);
-LiquidLine lql_setup_program_Temp(0, 4, str_Temp, program[0].Temp);
-LiquidLine lql_setup_program_Power(0, 5, str_Power, program[0].Power);
-LiquidScreen setup_program_settings(lql_setup_program_WType, lql_setup_program_Volume, lql_setup_program_Speed, lql_setup_program_capacity_num);
-
-LiquidLine lql_setup_program_reset_wifi(0, 0, str_Reset_WiFi);
-LiquidLine lql_setup_program_back_line(0, 1, str_BACK);
-LiquidScreen setup_program_back(lql_setup_program_reset_wifi, lql_setup_program_back_line, lql_time);
-
-LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
 //LiquidMenu setup_menu(lcd);
 
@@ -550,11 +477,7 @@ void setupMenu() {
   //  setup_program_settings.set_displayLineCount(6);
 
   //setup_temp_screen.set_displayLineCount(4);
-  lql_steam_temp.set_decimalPlaces(2);
-  lql_setup_pipe_temp.set_decimalPlaces(2);
-  lql_setup_water_temp.set_decimalPlaces(2);
-  lql_setup_tank_temp.set_decimalPlaces(2);
-  lql_pump_speed.set_decimalPlaces(2);
+  setup_menu_screen_decimal_places();
 
   // Function to attach functions to LiquidLine objects.
   lql_start.attach_function(1, menu_samovar_start);
@@ -608,56 +531,8 @@ void setupMenu() {
 
 
 
-  lql_steam_temp.set_asProgmem(1);
-  lql_pipe_temp.set_asProgmem(1);
-  lql_water_temp.set_asProgmem(1);
-  lql_tank_temp.set_asProgmem(1);
-  lql_atm.set_asProgmem(1);
-  lql_w_progress.set_asProgmem(1);
-  lql_start.set_asProgmem(1);
-  lql_pump_speed.set_asProgmem(1);
-  lql_pause.set_asProgmem(1);
-  lql_reset.set_asProgmem(1);
-  lql_get_power.set_asProgmem(1);
-  lql_setup.set_asProgmem(1);
-  lql_ip.set_asProgmem(1);
-  lql_setup_steam_temp.set_asProgmem(1);
-  lql_setup_pipe_temp.set_asProgmem(1);
-  lql_setup_water_temp.set_asProgmem(1);
-  lql_setup_tank_temp.set_asProgmem(1);
-  lql_setup_set_steam_temp.set_asProgmem(1);
-  lql_setup_set_pipe_temp.set_asProgmem(1);
-  lql_setup_set_water_temp.set_asProgmem(1);
-  lql_setup_set_tank_temp.set_asProgmem(1);
-  lql_setup_stepper_stepper_step_ml.set_asProgmem(1);
-  lql_setup_stepper_calibrate.set_asProgmem(1);
-  lql_setup_stepper_program.set_asProgmem(1);
-  lql_setup_program_WType.set_asProgmem(1);
-  lql_setup_program_Volume.set_asProgmem(1);
-  lql_setup_program_Speed.set_asProgmem(1);
-  lql_setup_program_capacity_num.set_asProgmem(1);
-  lql_setup_program_Temp.set_asProgmem(1);
-  lql_setup_program_Power.set_asProgmem(1);
-  lql_setup_program_reset_wifi.set_asProgmem(1);
-  lql_setup_program_back_line.set_asProgmem(1);
-
-
-  main_menu1.add_screen(welcome_screen);
-  main_menu1.add_screen(main_screen);
-  main_menu1.add_screen(main_screen1);
-  main_menu1.add_screen(main_screen2);
-  main_menu1.add_screen(main_screen4);
-  main_menu1.add_screen(main_screen5);
-
-  //setup_menu.add_screen(setup_temp_screen);
-  //setup_menu.add_screen(setup_stepper_settings);
-  //setup_menu.add_screen(setup_back_screen);
-  main_menu1.add_screen(setup_temp_screen);
-  main_menu1.add_screen(setup_set_temp_screen);
-  main_menu1.add_screen(setup_stepper_settings);
-  main_menu1.add_screen(setup_back_screen);
-  main_menu1.add_screen(setup_program_settings);
-  main_menu1.add_screen(setup_program_back);
+  setup_menu_screen_progmem();
+  register_menu_screens();
 
   set_menu_screen(3);
   change_screen(&welcome_screen);
