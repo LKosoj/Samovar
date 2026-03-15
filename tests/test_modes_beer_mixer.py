@@ -6,7 +6,6 @@ BEER_MIXER_HEADER = Path("modes/beer/beer_mixer.h")
 BEER_RUNTIME_HEADER = Path("modes/beer/beer_runtime.h")
 DIRECT_INCLUDE_USERS = (
     Path("modes/beer/beer_runtime.h"),
-    Path("lua.h"),
 )
 
 

@@ -2,7 +2,6 @@ from pathlib import Path
 import unittest
 
 
-LUA_HEADER = Path("lua.h")
 RUNTIME_HEADER = Path("ui/lua/runtime.h")
 HTTP_HEADER = Path("ui/lua/bindings_http.h")
 
@@ -22,8 +21,8 @@ class LuaBindingsHttpHeaderTest(unittest.TestCase):
         self.assertIn('#include "ui/lua/bindings_http.h"', text)
         self.assertIn('lua.Lua_register("http_request"', text)
 
-    def test_lua_header_no_longer_defines_http_wrapper(self) -> None:
-        text = LUA_HEADER.read_text(encoding="utf-8")
+    def test_runtime_header_does_not_inline_http_wrapper(self) -> None:
+        text = RUNTIME_HEADER.read_text(encoding="utf-8")
         self.assertNotIn("static int lua_wrapper_http_request(", text)
 
 

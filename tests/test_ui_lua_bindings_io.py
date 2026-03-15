@@ -2,7 +2,6 @@ from pathlib import Path
 import unittest
 
 
-LUA_HEADER = Path("lua.h")
 RUNTIME_HEADER = Path("ui/lua/runtime.h")
 IO_HEADER = Path("ui/lua/bindings_io.h")
 
@@ -28,8 +27,8 @@ class LuaBindingsIoHeaderTest(unittest.TestCase):
         self.assertIn('lua.Lua_register("i2cpump_start"', text)
         self.assertIn('lua.Lua_register("set_i2c_rele_state"', text)
 
-    def test_lua_header_no_longer_defines_io_wrappers(self) -> None:
-        text = LUA_HEADER.read_text(encoding="utf-8")
+    def test_runtime_header_does_not_inline_io_wrappers(self) -> None:
+        text = RUNTIME_HEADER.read_text(encoding="utf-8")
         self.assertNotIn("static int lua_wrapper_set_mixer(", text)
         self.assertNotIn("static int lua_wrapper_open_valve(", text)
         self.assertNotIn("static int lua_wrapper_set_capacity(", text)

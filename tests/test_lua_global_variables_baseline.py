@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 BASELINE_COMMIT = "94f6b3eb"
-LUA_HEADER = Path("lua.h")
+RUNTIME_HEADER = Path("ui/lua/runtime.h")
 
 
 def git_show(pathspec: str) -> str:
@@ -19,7 +19,7 @@ def git_show(pathspec: str) -> str:
 
 
 def extract_function_body(text: str, signature: str) -> str:
-    pattern = re.compile(re.escape(signature) + r"\s*\{", re.MULTILINE)
+    pattern = re.compile(r"(?:inline\s+)?" + re.escape(signature) + r"\s*\{", re.MULTILINE)
     match = pattern.search(text)
     if not match:
         raise AssertionError(f"Function definition not found: {signature}")
@@ -46,17 +46,20 @@ def normalize_cpp(text: str) -> str:
 
 
 class LuaGlobalVariablesBaselineTest(unittest.TestCase):
-    def test_get_global_variables_matches_pre_orchestration_baseline(self) -> None:
+    def test_get_global_variables_matches_phase0_baseline_body(self) -> None:
         baseline_text = git_show(f"{BASELINE_COMMIT}:lua.h")
-        current_text = LUA_HEADER.read_text(encoding="utf-8")
+        current_text = RUNTIME_HEADER.read_text(encoding="utf-8")
 
         baseline_body = extract_function_body(baseline_text, "String get_global_variables()")
         current_body = extract_function_body(current_text, "String get_global_variables()")
 
         self.assertEqual(normalize_cpp(current_body), normalize_cpp(baseline_body))
 
-    def test_get_global_variables_keeps_early_return_and_expected_globals(self) -> None:
-        body = extract_function_body(LUA_HEADER.read_text(encoding="utf-8"), "String get_global_variables()")
+    def test_get_global_variables_keeps_phase0_markers(self) -> None:
+        body = extract_function_body(
+            RUNTIME_HEADER.read_text(encoding="utf-8"),
+            "String get_global_variables()",
+        )
 
         self.assertIn('return "";', body)
         for marker in [

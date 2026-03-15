@@ -2,7 +2,6 @@ from pathlib import Path
 import unittest
 
 
-LUA_HEADER = Path("lua.h")
 RUNTIME_HEADER = Path("ui/lua/runtime.h")
 PROCESS_HEADER = Path("ui/lua/bindings_process.h")
 
@@ -27,8 +26,8 @@ class LuaBindingsProcessHeaderTest(unittest.TestCase):
         self.assertIn('lua.Lua_register("sendMsg"', text)
         self.assertIn('lua.Lua_register("getState"', text)
 
-    def test_lua_header_no_longer_defines_process_wrappers(self) -> None:
-        text = LUA_HEADER.read_text(encoding="utf-8")
+    def test_runtime_header_does_not_inline_process_wrappers(self) -> None:
+        text = RUNTIME_HEADER.read_text(encoding="utf-8")
         self.assertNotIn("static int lua_wrapper_set_pause_withdrawal(", text)
         self.assertNotIn("static int lua_wrapper_set_power(", text)
         self.assertNotIn("static int lua_wrapper_set_alarm(", text)
