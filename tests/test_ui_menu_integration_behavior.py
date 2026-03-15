@@ -315,6 +315,12 @@ class MenuIntegrationBehaviorTest(unittest.TestCase):
                   SAMOVAR_BK = 4,
                   SAMOVAR_NBK = 5,
                 };
+
+                static constexpr int SAMOVAR_STARTVAL_RECT_IDLE = 0;
+                static constexpr int SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING = 1;
+                static constexpr int SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE = 2;
+                static constexpr int SAMOVAR_STARTVAL_RECT_STOPPED = 3;
+                static constexpr int SAMOVAR_STARTVAL_CALIBRATION = 100;
                 """,
             )
 

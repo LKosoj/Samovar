@@ -3,9 +3,8 @@
 
 #include <Arduino.h>
 #include <OneWire.h>
+#include "src/core/state/mode_codes.h"
 #include "src/core/state/status_codes.h"
-
-enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
 
 enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100};
 

@@ -14,6 +14,7 @@ STATE_CODES_DOC = DELIVERY_DIR / "state_codes_inventory.md"
 GREP_LOG_DOC = DELIVERY_DIR / "state_inventory_grep_log.md"
 RUNTIME_TYPES = ROOT / "state" / "runtime_types.h"
 STATUS_CODES = ROOT / "src" / "core" / "state" / "status_codes.h"
+MODE_CODES = ROOT / "src" / "core" / "state" / "mode_codes.h"
 
 SOURCE_SUFFIXES = {".h", ".cpp", ".ino"}
 KEY_VARIABLES = (
@@ -113,6 +114,7 @@ NUMERIC_PATTERN_TEMPLATE = r"\b{variable}\b\s*(==|!=|<=|>=|=|<|>)\s*(-?\d+)"
 REVERSED_NUMERIC_PATTERN_TEMPLATE = r"(-?\d+)\s*(==|!=|<=|>=|<|>)\s*\b{variable}\b"
 ENUM_PATTERN_TEMPLATE = r"enum\s+{name}\s*\{{(?P<body>.*?)\}};"
 STATUS_CODE_PATTERN = re.compile(r"static constexpr int16_t (SAMOVAR_STATUS_[A-Z0-9_]+) = (-?\d+);")
+STARTVAL_CODE_PATTERN = re.compile(r"static constexpr int16_t (SAMOVAR_STARTVAL_[A-Z0-9_]+) = (-?\d+);")
 
 
 @dataclass(frozen=True)
@@ -248,7 +250,7 @@ def collect_numeric_matches(files: list[Path], variable: str) -> tuple[dict[int,
 def parse_enum(enum_name: str) -> dict[str, int]:
     body = None
     source = None
-    for path in (STATUS_CODES, RUNTIME_TYPES):
+    for path in (STATUS_CODES, MODE_CODES, RUNTIME_TYPES):
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8")
@@ -258,7 +260,7 @@ def parse_enum(enum_name: str) -> dict[str, int]:
             source = path
             break
     if body is None or source is None:
-        raise ValueError(f"Enum {enum_name} not found in {STATUS_CODES} or {RUNTIME_TYPES}")
+        raise ValueError(f"Enum {enum_name} not found in {STATUS_CODES}, {MODE_CODES} or {RUNTIME_TYPES}")
     values: dict[str, int] = {}
     next_value = 0
     for raw_item in body.split(","):
@@ -283,6 +285,14 @@ def parse_status_codes() -> dict[str, int]:
     values = {name: int(raw_value) for name, raw_value in STATUS_CODE_PATTERN.findall(text)}
     if not values:
         raise ValueError(f"Status codes not found in {STATUS_CODES}")
+    return values
+
+
+def parse_startval_codes() -> dict[str, int]:
+    text = MODE_CODES.read_text(encoding="utf-8")
+    values = {name: int(raw_value) for name, raw_value in STARTVAL_CODE_PATTERN.findall(text)}
+    if not values:
+        raise ValueError(f"Startval codes not found in {MODE_CODES}")
     return values
 
 
@@ -421,12 +431,17 @@ def render_grep_section(title: str, occurrences: list[Occurrence]) -> str:
 def build_inventory() -> dict[str, object]:
     files = tracked_source_files()
     status_tokens = parse_status_codes()
+    start_tokens = parse_startval_codes()
     status_values = defaultdict(list)
     for token, value in status_tokens.items():
         status_values[value].extend(find_occurrences(files, token))
     status_values = dict(sorted(status_values.items()))
     _, status_ranges = collect_numeric_matches(files, "SamovarStatusInt")
-    start_values, start_ranges = collect_numeric_matches(files, "startval")
+    start_values = defaultdict(list)
+    for token, value in start_tokens.items():
+        start_values[value].extend(find_occurrences(files, token))
+    start_values = dict(sorted(start_values.items()))
+    _, start_ranges = collect_numeric_matches(files, "startval")
     command_enum = parse_enum("SamovarCommands")
     mode_enum = parse_enum("SAMOVAR_MODE")
 
@@ -480,7 +495,8 @@ def render_state_codes_inventory(inventory: dict[str, object]) -> str:
         "## Scope",
         "",
         f"- Просканировано `*.h/*.cpp/*.ino`: `{len(files)}` файлов из git-дерева.",
-        "- Source of truth для enum-команд и enum-режимов: `state/runtime_types.h`.",
+        "- Source of truth для status/command: `src/core/state/status_codes.h`.",
+        "- Source of truth для mode/startval: `src/core/state/mode_codes.h`.",
         "- Source of truth для runtime-диспетча и входа в режимы: `app/loop_dispatch.h`, `app/orchestration.h`.",
         "- Source of truth для текстовой интерпретации статусов: `app/status_text.h`.",
         "",
@@ -530,7 +546,7 @@ def render_state_codes_inventory(inventory: dict[str, object]) -> str:
         "",
         "## Примечания по baseline",
         "",
-        "- `50/51/52` существуют только в rect-runtime и появляются не отдельной командой, а через сочетание `PowerOn`, `startval == 0`, `stepper.getState()`, температур и стабилизации.",
+        "- `50/51/52` существуют только в rect-runtime и появляются не отдельной командой, а через сочетание `PowerOn`, `startval == SAMOVAR_STARTVAL_RECT_IDLE`, `stepper.getState()`, температур и стабилизации.",
         "- `2000/2001/2002` описывают lifecycle режима пива: вход в режим -> разогрев до засыпи -> ожидание засыпи.",
         "- `4000/4001` описывают lifecycle НБК: вход в режим -> запуск первой программы; при этом `SamovarStatusInt` остаётся `4000`, а деталь фазы хранится в `startval`.",
     ]

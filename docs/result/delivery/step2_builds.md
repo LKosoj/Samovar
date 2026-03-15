@@ -53,3 +53,25 @@ Samovar        SUCCESS   00:00:23.129
 
 ========================= 1 succeeded in 00:00:23.129 =========================
 ```
+
+## Подзадача 2.2b
+
+- Дата: `2026-03-15`
+- Команда: `pio run -e Samovar`
+- Результат: `SUCCESS`
+- Длительность: `00:00:59.340`
+- RAM: `18.3% (59904 / 327680 bytes)`
+- Flash: `70.1% (1148721 / 1638400 bytes)`
+- Контекст: введение именованных mode/startval constants (`src/core/state/mode_codes.h`, `mode_codes_grep_log.md`)
+
+### Raw build excerpt
+
+```text
+========================= [SUCCESS] Took 59.34 seconds =========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+Samovar        SUCCESS   00:00:59.340
+
+========================= 1 succeeded in 00:00:59.340 =========================
+```

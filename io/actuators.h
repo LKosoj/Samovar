@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 #include "Samovar_ini.h"
+#include "src/core/state/mode_codes.h"
 #include "src/core/state/status_codes.h"
 #include "state/globals.h"
 #include "storage/nvs_profiles.h"
@@ -20,12 +21,12 @@ void user_set_capacity(uint8_t cap);
 #endif
 
 inline void pump_calibrate(int stpspeed) {
-  if (startval != 0 && startval != 100) {
+  if (startval != SAMOVAR_STARTVAL_RECT_IDLE && startval != SAMOVAR_STARTVAL_CALIBRATION) {
     return;
   }
 
   if (stpspeed == 0) {
-    startval = 0;
+    startval = SAMOVAR_STARTVAL_RECT_IDLE;
     SamSetup.StepperStepMl = round((float)stepper.getCurrent() / 100);
     stopService();
     stepper.brake();
@@ -33,7 +34,7 @@ inline void pump_calibrate(int stpspeed) {
     save_profile_nvs();
     read_config();
   } else {
-    startval = 100;
+    startval = SAMOVAR_STARTVAL_CALIBRATION;
     if (!stepper.getState()) stepper.setCurrent(0);
     stepper.setMaxSpeed(stpspeed);
     stepper.setTarget(999999999);

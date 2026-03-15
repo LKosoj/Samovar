@@ -187,7 +187,7 @@ inline void encoder_getvalue() {
 
   if (encoder.isRight()) {
     multiplier = 1;
-    if (startval == 100) {
+    if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
       menu_calibrate();
       return;
     }
@@ -201,7 +201,7 @@ inline void encoder_getvalue() {
     }
   } else if (encoder.isLeft()) {
     multiplier = 1;
-    if (startval == 100) {
+    if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
       menu_calibrate_down();
       return;
     }
@@ -222,8 +222,8 @@ inline void encoder_getvalue() {
     updscreen = false;
     main_menu1.call_function(2);
   } else if (encoder.isClick()) {
-    if (startval == 100) {
-      startval = 0;
+    if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
+      startval = SAMOVAR_STARTVAL_RECT_IDLE;
       menu_calibrate();
     }
     updscreen = false;

@@ -7,6 +7,7 @@ import unittest
 BASELINE_LOGIC_COMMIT = "43e22996"
 STATUS_TEXT_HEADER = Path("app/status_text.h")
 STATUS_CODES_HEADER = Path("src/core/state/status_codes.h")
+MODE_CODES_HEADER = Path("src/core/state/mode_codes.h")
 
 
 def _read_git_file(commit: str, path: str) -> str:
@@ -57,6 +58,17 @@ def _expand_status_constants(text: str) -> str:
     return text
 
 
+def _expand_startval_constants(text: str) -> str:
+    constants_text = MODE_CODES_HEADER.read_text(encoding="utf-8")
+    matches = re.findall(
+        r"static constexpr int16_t (SAMOVAR_STARTVAL_[A-Z0-9_]+) = (-?\d+);",
+        constants_text,
+    )
+    for name, value in sorted(matches, key=lambda item: len(item[0]), reverse=True):
+        text = text.replace(name, value)
+    return text
+
+
 class StatusTextBaselineParityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -68,8 +80,10 @@ class StatusTextBaselineParityTest(unittest.TestCase):
 
     def test_status_text_matches_pre_extraction_baseline(self) -> None:
         current_body = _normalize_cpp_body(
-            _expand_status_constants(
-                _extract_function_body(self.current_text, "String get_Samovar_Status()")
+            _expand_startval_constants(
+                _expand_status_constants(
+                    _extract_function_body(self.current_text, "String get_Samovar_Status()")
+                )
             )
         )
         baseline_body = _normalize_cpp_body(

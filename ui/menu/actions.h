@@ -196,12 +196,12 @@ inline void menu_pause() {
 }
 
 inline void menu_calibrate() {
-  if (startval > 0 && startval != 100) {
+  if (startval > SAMOVAR_STARTVAL_RECT_IDLE && startval != SAMOVAR_STARTVAL_CALIBRATION) {
     return;
   }
 
   int stpspeed = stepper.getSpeed();
-  if (startval == 100) {
+  if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
     stpspeed = stpspeed + stpspeed / 10;
     pump_calibrate(stpspeed);
     return;
@@ -210,7 +210,7 @@ inline void menu_calibrate() {
     calibrate_text_ptr = (char *)menu_text_stop;
     stpspeed = 0;
   } else {
-    startval = 100;
+    startval = SAMOVAR_STARTVAL_CALIBRATION;
     calibrate_text_ptr = (char *)menu_text_start;
     stpspeed = STEPPER_MAX_SPEED;
   }
@@ -218,7 +218,7 @@ inline void menu_calibrate() {
 }
 
 inline void menu_calibrate_down() {
-  if (startval == 100) {
+  if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
     int stpspeed = stepper.getSpeed();
     stpspeed = stpspeed - stpspeed / 10;
     if (stpspeed > 0) {
@@ -235,28 +235,28 @@ inline void menu_samovar_start() {
   }
   String Str;
 
-  if (startval == 2) {
-    startval = 3;
-  } else if (ProgramNum >= ProgramLen - 1 && startval != 0) {
-    startval = 2;
+  if (startval == SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE) {
+    startval = SAMOVAR_STARTVAL_RECT_STOPPED;
+  } else if (ProgramNum >= ProgramLen - 1 && startval != SAMOVAR_STARTVAL_RECT_IDLE) {
+    startval = SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE;
   }
 
-  if (startval == 0) {
+  if (startval == SAMOVAR_STARTVAL_RECT_IDLE) {
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
     delay(200);
 #endif
-    startval = 1;
+    startval = SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING;
     Str = menu_text_program_number_first;
     run_program(0);
     ProgramNum = 0;
     create_data();
-  } else if (startval == 1) {
+  } else if (startval == SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING) {
     ProgramNum++;
     Str = String(menu_text_program_number_prefix) + (String)(ProgramNum + 1);
     run_program(ProgramNum);
-  } else if (startval == 2) {
+  } else if (startval == SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE) {
     Str = menu_text_program_finish;
     run_program(CAPACITY_NUM * 2);
   } else {

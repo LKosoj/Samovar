@@ -74,6 +74,8 @@ class MenuInputBehaviorTest(unittest.TestCase):
             static constexpr int pdTRUE = 1;
             static constexpr int portTICK_RATE_MS = 1;
             static constexpr int portTICK_PERIOD_MS = 1;
+            static constexpr int SAMOVAR_STARTVAL_RECT_IDLE = 0;
+            static constexpr int SAMOVAR_STARTVAL_CALIBRATION = 100;
 
             struct LiquidScreen {{
               std::string name;
@@ -214,7 +216,7 @@ class MenuInputBehaviorTest(unittest.TestCase):
             static int delay_ticks = 0;
             static unsigned long fake_millis = 0;
             static int multiplier = 0;
-            static int startval = 0;
+            static int startval = SAMOVAR_STARTVAL_RECT_IDLE;
             static unsigned long CurMin = 0;
             static unsigned long OldMin = 0;
             static int menu_calibrate_calls = 0;
@@ -336,7 +338,7 @@ class MenuInputBehaviorTest(unittest.TestCase):
               delay_ticks = 0;
               fake_millis = 0;
               multiplier = 0;
-              startval = 0;
+              startval = SAMOVAR_STARTVAL_RECT_IDLE;
               CurMin = 0;
               OldMin = 0;
               menu_calibrate_calls = 0;
@@ -411,7 +413,7 @@ class MenuInputBehaviorTest(unittest.TestCase):
 
               reset_state();
               encoder.click = true;
-              startval = 100;
+              startval = SAMOVAR_STARTVAL_CALIBRATION;
               fake_millis = 1000;
               encoder_getvalue();
               std::cout << "click_calibrate|" << startval << "|" << menu_calibrate_calls << "|"

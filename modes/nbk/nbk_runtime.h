@@ -59,8 +59,8 @@ inline void nbk_proc() { //главный цикл НБК
 // 1) "Разгон" - разгон парогенератора до Тп > 75°C.
 inline void handle_nbk_stage_heatup() {
     nbk_Tp = SteamSensor.avgTemp; // обновляем
-    if (startval == 4000) {
-      startval = 4001;
+    if (startval == SAMOVAR_STARTVAL_NBK_ENTRY) {
+      startval = SAMOVAR_STARTVAL_NBK_PROGRAM_RUNNING;
       run_nbk_program(0); //Запуск программ
       SamovarStatusInt = SAMOVAR_STATUS_NBK; // Именно в таком порядке
       }

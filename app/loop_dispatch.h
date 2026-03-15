@@ -63,12 +63,12 @@ inline void process_sam_command_sync() {
     case SAMOVAR_DISTILLATION:
       Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
       SamovarStatusInt = SAMOVAR_STATUS_DISTILLATION;
-      startval = 1000;
+      startval = SAMOVAR_STARTVAL_DISTILLATION_ENTRY;
       break;
     case SAMOVAR_BEER:
       Samovar_Mode = SAMOVAR_BEER_MODE;
       SamovarStatusInt = SAMOVAR_STATUS_BEER;
-      startval = 2000;
+      startval = SAMOVAR_STARTVAL_BEER_ENTRY;
       break;
     case SAMOVAR_BEER_NEXT:
       run_beer_program(ProgramNum + 1);
@@ -79,12 +79,12 @@ inline void process_sam_command_sync() {
     case SAMOVAR_BK:
       Samovar_Mode = SAMOVAR_BK_MODE;
       SamovarStatusInt = SAMOVAR_STATUS_BK;
-      startval = 3000;
+      startval = SAMOVAR_STARTVAL_BK_ENTRY;
       break;
     case SAMOVAR_NBK:
       Samovar_Mode = SAMOVAR_NBK_MODE;
       SamovarStatusInt = SAMOVAR_STATUS_NBK;
-      startval = 4000;
+      startval = SAMOVAR_STARTVAL_NBK_ENTRY;
       break;
     case SAMOVAR_NBK_NEXT:
       run_nbk_program(ProgramNum + 1);
@@ -109,7 +109,7 @@ inline void dispatch_samovar_mode_runtime() {
     bk_proc();
   } else if (SamovarStatusInt == SAMOVAR_STATUS_NBK) {
     nbk_proc();
-  } else if (SamovarStatusInt == SAMOVAR_STATUS_BEER && startval == 2000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_BEER && startval == SAMOVAR_STARTVAL_BEER_ENTRY) {
     beer_proc();
   }
 }

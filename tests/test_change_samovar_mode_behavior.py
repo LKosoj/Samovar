@@ -116,6 +116,12 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
             static constexpr int SAMOVAR_DISTILLATION_MODE = 2;
             static constexpr int SAMOVAR_BK_MODE = 3;
             static constexpr int SAMOVAR_NBK_MODE = 4;
+            static constexpr int SAMOVAR_STARTVAL_RECT_IDLE = 0;
+            static constexpr int SAMOVAR_STATUS_OFF = 0;
+            static constexpr int SAMOVAR_STATUS_DISTILLATION = 1000;
+            static constexpr int SAMOVAR_STATUS_BEER = 2000;
+            static constexpr int SAMOVAR_STATUS_BK = 3000;
+            static constexpr int SAMOVAR_STATUS_NBK = 4000;
 
             static constexpr int SAMOVAR_NONE = 0;
             static constexpr int SAMOVAR_BUSY = 77;
@@ -258,7 +264,7 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
 
             int sam_command_sync = SAMOVAR_NONE;
             int SamovarStatusInt = 0;
-            int startval = 0;
+            int startval = SAMOVAR_STARTVAL_RECT_IDLE;
             int ProgramNum = 0;
             int WthdrwlProgress = 0;
             int TargetStepps = 0;
@@ -532,7 +538,7 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
                 std::cerr << scenario << ": mode sync mismatch" << std::endl;
                 return false;
               }}
-              if (SamovarStatusInt != 0 || startval != 0 || PauseOn || program_Wait) {{
+              if (SamovarStatusInt != 0 || startval != SAMOVAR_STARTVAL_RECT_IDLE || PauseOn || program_Wait) {{
                 std::cerr << scenario << ": status flags were not reset" << std::endl;
                 return false;
               }}

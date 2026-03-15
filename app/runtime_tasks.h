@@ -219,7 +219,7 @@ void triggerSysTicker(void *parameter) {
                NTP.getFormattedTime().c_str(),
                NTP.getFormattedTime((unsigned long)(millis() / 1000)).c_str());
 
-      if (startval != 0) {
+      if (startval != SAMOVAR_STARTVAL_RECT_IDLE) {
         tcntST++;
         if (tcntST >= SamSetup.LogPeriod) {
           tcntST = 0;

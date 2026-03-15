@@ -13,6 +13,7 @@ from tools import state_inventory  # noqa: E402
 
 
 STATUS_CODES_HEADER = ROOT / "src" / "core" / "state" / "status_codes.h"
+MODE_CODES_HEADER = ROOT / "src" / "core" / "state" / "mode_codes.h"
 EXPECTED_STATUS_CODES = {
     "SAMOVAR_STATUS_OFF": 0,
     "SAMOVAR_STATUS_RECTIFICATION_RUN": 10,
@@ -28,7 +29,20 @@ EXPECTED_STATUS_CODES = {
     "SAMOVAR_STATUS_BK": 3000,
     "SAMOVAR_STATUS_NBK": 4000,
 }
-EXPECTED_START_VALUES = [0, 1, 2, 3, 100, 1000, 2000, 2001, 2002, 3000, 4000, 4001]
+EXPECTED_START_VALUES = {
+    "SAMOVAR_STARTVAL_RECT_IDLE": 0,
+    "SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING": 1,
+    "SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE": 2,
+    "SAMOVAR_STARTVAL_RECT_STOPPED": 3,
+    "SAMOVAR_STARTVAL_CALIBRATION": 100,
+    "SAMOVAR_STARTVAL_DISTILLATION_ENTRY": 1000,
+    "SAMOVAR_STARTVAL_BEER_ENTRY": 2000,
+    "SAMOVAR_STARTVAL_BEER_MALT_HEATING": 2001,
+    "SAMOVAR_STARTVAL_BEER_MALT_WAIT": 2002,
+    "SAMOVAR_STARTVAL_BK_ENTRY": 3000,
+    "SAMOVAR_STARTVAL_NBK_ENTRY": 4000,
+    "SAMOVAR_STARTVAL_NBK_PROGRAM_RUNNING": 4001,
+}
 EXPECTED_COMMAND_ENUM = {
     "SAMOVAR_NONE": 0,
     "SAMOVAR_START": 1,
@@ -73,12 +87,19 @@ def parse_status_codes() -> dict[str, int]:
     return values
 
 
+def parse_startval_codes() -> dict[str, int]:
+    text = MODE_CODES_HEADER.read_text(encoding="utf-8")
+    pattern = re.compile(r"static constexpr int16_t (SAMOVAR_STARTVAL_[A-Z0-9_]+) = (-?\d+);")
+    values = {name: int(raw_value) for name, raw_value in pattern.findall(text)}
+    if not values:
+        raise AssertionError(f"No startval codes found in {MODE_CODES_HEADER}")
+    return values
+
+
 def main() -> None:
     print("=" * 72)
     print("State contracts baseline test")
     print("=" * 72)
-
-    inventory = state_inventory.build_inventory()
 
     print("\n[1] Verifying SamovarStatusInt exact numeric baseline...")
     actual_status_codes = parse_status_codes()
@@ -86,7 +107,7 @@ def main() -> None:
     print(f"    ✓ SamovarStatusInt={actual_status_codes}")
 
     print("\n[2] Verifying startval exact numeric baseline...")
-    actual_start_values = list(inventory["start_values"])
+    actual_start_values = parse_startval_codes()
     require_equal("startval", actual_start_values, EXPECTED_START_VALUES)
     print(f"    ✓ startval={actual_start_values}")
 

@@ -50,7 +50,9 @@ inline void withdrawal(void) {
   //По достижению шаговика цели
   CurrrentStepps = stepper.getCurrent();
 
-  if (TargetStepps == CurrrentStepps && TargetStepps != 0 && (startval == 1 || startval == 2)) {
+  if (TargetStepps == CurrrentStepps && TargetStepps != 0 &&
+      (startval == SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING ||
+       startval == SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE)) {
     menu_samovar_start();
   }
 
@@ -585,7 +587,7 @@ inline void check_alarm() {
 
 #ifdef COLUMN_WETTING
         // Помечаем, что после стабилизации нужно автоматически перейти к головам
-        wetting_autostart = (startval == 0);
+        wetting_autostart = (startval == SAMOVAR_STARTVAL_RECT_IDLE);
 #endif
 
         SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
@@ -622,7 +624,7 @@ inline void check_alarm() {
         set_buzzer(true);
         SendMsg(("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
 #ifdef COLUMN_WETTING
-        if (wetting_autostart && startval == 0) {
+        if (wetting_autostart && startval == SAMOVAR_STARTVAL_RECT_IDLE) {
           wetting_autostart = false;
           menu_samovar_start();  // Автостарт голов после стабилизации
         }

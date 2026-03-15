@@ -5,6 +5,7 @@ import unittest
 
 LOOP_DISPATCH_PATH = Path("app/loop_dispatch.h")
 STATUS_CODES_HEADER = Path("src/core/state/status_codes.h")
+MODE_CODES_HEADER = Path("src/core/state/mode_codes.h")
 
 
 def _extract_function_body(text: str, signature: str) -> str:
@@ -39,6 +40,13 @@ def _normalize_cpp_body(body: str) -> str:
         constants_text,
     )
     for name, value in sorted(matches, key=lambda item: len(item[0]), reverse=True):
+        body = body.replace(name, value)
+    mode_constants_text = MODE_CODES_HEADER.read_text(encoding="utf-8")
+    startval_matches = re.findall(
+        r"static constexpr int16_t (SAMOVAR_STARTVAL_[A-Z0-9_]+) = (-?\d+);",
+        mode_constants_text,
+    )
+    for name, value in sorted(startval_matches, key=lambda item: len(item[0]), reverse=True):
         body = body.replace(name, value)
     body = body.replace("SAMOVAR_COMMAND_NONE", "SAMOVAR_NONE")
     body = body.replace("SAMOVAR_COMMAND_RESET", "SAMOVAR_RESET")

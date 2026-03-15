@@ -220,6 +220,7 @@ uint8_t temprature_sens_read();
 
 #include "state/config_types.h"
 #include "state/runtime_types.h"
+#include "src/core/state/mode_codes.h"
 #include "src/core/state/status_codes.h"
 #include "support/safe_parse.h"
 

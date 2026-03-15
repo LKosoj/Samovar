@@ -44,7 +44,7 @@ BLYNK_READ(V0) {
   Blynk.virtualWrite(V4, PowerOn);
   int i;
   int k;
-  if (startval > 0 && startval < 5)
+  if (startval > SAMOVAR_STARTVAL_RECT_IDLE && startval <= SAMOVAR_STARTVAL_RECT_STOPPED)
     i = 1;
   else
     i = 0;

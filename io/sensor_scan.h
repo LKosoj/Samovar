@@ -151,7 +151,7 @@ inline void reset_sensor_counter(void) {
 
   ActualVolumePerHour = 0;
   SamovarStatusInt = SAMOVAR_STATUS_OFF;
-  startval = 0;
+  startval = SAMOVAR_STARTVAL_RECT_IDLE;
   PauseOn = false;
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;

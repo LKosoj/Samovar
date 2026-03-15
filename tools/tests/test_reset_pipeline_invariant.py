@@ -148,7 +148,7 @@ def check_static_pipeline() -> None:
         "stepper.setTarget(0);",
         "set_capacity(0);",
         "SamovarStatusInt = SAMOVAR_STATUS_OFF;",
-        "startval = 0;",
+        "startval = SAMOVAR_STARTVAL_RECT_IDLE;",
         "PauseOn = false;",
         "program_Wait = false;",
         "TargetStepps = 0;",
@@ -172,7 +172,7 @@ def check_static_pipeline() -> None:
             "stepper.setMaxSpeed(0);",
             "set_capacity(0);",
             "SamovarStatusInt = SAMOVAR_STATUS_OFF;",
-            "startval = 0;",
+            "startval = SAMOVAR_STARTVAL_RECT_IDLE;",
             "TargetStepps = 0;",
             "I2CPumpTargetSteps = 0;",
             "I2CPumpTargetMl = 0;",
@@ -232,6 +232,7 @@ def check_static_pipeline() -> None:
 def build_harness() -> str:
     mode_enum = state_inventory.parse_enum("SAMOVAR_MODE")
     command_enum = state_inventory.parse_enum("SamovarCommands")
+    startval_codes = state_inventory.parse_startval_codes()
 
     reset_sensor_counter = extract_function(
         read_text(SENSOR_SCAN_HEADER),
@@ -299,6 +300,7 @@ def build_harness() -> str:
         static constexpr int SAMOVAR_BEER_MODE = {mode_enum["SAMOVAR_BEER_MODE"]};
         static constexpr int SAMOVAR_BK_MODE = {mode_enum["SAMOVAR_BK_MODE"]};
         static constexpr int SAMOVAR_NBK_MODE = {mode_enum["SAMOVAR_NBK_MODE"]};
+        static constexpr int SAMOVAR_STARTVAL_RECT_IDLE = {startval_codes["SAMOVAR_STARTVAL_RECT_IDLE"]};
         static constexpr int SAMOVAR_NONE = {command_enum["SAMOVAR_NONE"]};
         static constexpr int SAMOVAR_COMMAND_NONE = {command_enum["SAMOVAR_NONE"]};
         static constexpr int SAMOVAR_COMMAND_RESET = {command_enum["SAMOVAR_RESET"]};
@@ -452,7 +454,7 @@ def build_harness() -> str:
 
         int sam_command_sync = SAMOVAR_NONE;
         int SamovarStatusInt = 0;
-        int startval = 0;
+        int startval = SAMOVAR_STARTVAL_RECT_IDLE;
         int ProgramNum = 0;
         int WthdrwlProgress = 0;
         int TargetStepps = 0;
@@ -724,7 +726,7 @@ def build_harness() -> str:
             std::cerr << scenario << ": mode sync mismatch" << std::endl;
             return false;
           }}
-          if (SamovarStatusInt != 0 || startval != 0 || PauseOn || program_Wait) {{
+          if (SamovarStatusInt != 0 || startval != SAMOVAR_STARTVAL_RECT_IDLE || PauseOn || program_Wait) {{
             std::cerr << scenario << ": status flags were not reset" << std::endl;
             return false;
           }}

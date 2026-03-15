@@ -341,7 +341,7 @@ volatile uint8_t prev_ProgramNum;
 volatile uint8_t ProgramNum;
 volatile uint8_t ProgramLen;
 volatile uint8_t WthdrwlProgress;
-volatile int16_t startval = 0;
+volatile int16_t startval = SAMOVAR_STARTVAL_RECT_IDLE;
 volatile int currentstepcnt = 0;
 volatile unsigned long prev_time_ms;
 volatile float ActualVolumePerHour;

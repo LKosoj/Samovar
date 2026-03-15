@@ -118,6 +118,12 @@ class MenuActionsBehaviorTest(unittest.TestCase):
               SAMOVAR_NBK = 5,
             }};
 
+            static constexpr int SAMOVAR_STARTVAL_RECT_IDLE = 0;
+            static constexpr int SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING = 1;
+            static constexpr int SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE = 2;
+            static constexpr int SAMOVAR_STARTVAL_RECT_STOPPED = 3;
+            static constexpr int SAMOVAR_STARTVAL_CALIBRATION = 100;
+
             static const char menu_text_continue[] = "Continue";
             static const char menu_text_pause[] = "Pause";
             static const char menu_text_stop[] = "Stop";
@@ -172,7 +178,7 @@ class MenuActionsBehaviorTest(unittest.TestCase):
             int t_min = 7;
             int ProgramNum = 0;
             int ProgramLen = 4;
-            int startval = 0;
+            int startval = SAMOVAR_STARTVAL_RECT_IDLE;
             float multiplier = 1.0f;
             float ActualVolumePerHour = 1.23f;
             bool PowerOn = false;
@@ -286,7 +292,7 @@ class MenuActionsBehaviorTest(unittest.TestCase):
               t_min = 7;
               ProgramNum = 0;
               ProgramLen = 4;
-              startval = 0;
+              startval = SAMOVAR_STARTVAL_RECT_IDLE;
               multiplier = 1.0f;
               ActualVolumePerHour = 1.23f;
               PowerOn = false;
@@ -379,7 +385,7 @@ class MenuActionsBehaviorTest(unittest.TestCase):
                         << last_pump_calibrate_speed << "|" << pump_calibrate_calls << "\\n";
 
               reset_state();
-              startval = 100;
+              startval = SAMOVAR_STARTVAL_CALIBRATION;
               menu_calibrate_down();
               std::cout << "calibrate_down|" << stepper.speed << "|" << last_pump_calibrate_speed << "|"
                         << pump_calibrate_calls << "\\n";

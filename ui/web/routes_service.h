@@ -16,10 +16,10 @@ inline void calibrate_command(AsyncWebServerRequest *request) {
       CurrrentStepperSpeed = request->arg("stpstep").toInt();
     }
     if (!isI2C) {
-      if (request->hasArg("start") && startval == 0) {
+      if (request->hasArg("start") && startval == SAMOVAR_STARTVAL_RECT_IDLE) {
         sam_command_sync = CALIBRATE_START;
       }
-      if (request->hasArg("finish") && startval == 100) {
+      if (request->hasArg("finish") && startval == SAMOVAR_STARTVAL_CALIBRATION) {
         sam_command_sync = CALIBRATE_STOP;
         cl = true;
       }

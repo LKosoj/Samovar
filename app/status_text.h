@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 
+#include "src/core/state/mode_codes.h"
 #include "src/core/state/status_codes.h"
 #include "modes/beer/beer_support.h"
 #include "state/globals.h"
@@ -14,26 +15,26 @@ inline String get_Samovar_Status() {
   // Если питание выключено и нет активного режима - показываем "Выключено"
   if (!PowerOn && SamovarStatusInt == SAMOVAR_STATUS_OFF) {
     SamovarStatus = F("Выключено");
-  } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING && !PauseOn && !program_Wait) {
     SamovarStatus = "Прг №" + String(ProgramNum + 1);
     SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_RUN;
-  } else if (PowerOn && startval == 1 && program_Wait) {
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING && program_Wait) {
     int s = 0;
     if (t_min > (millis() + 10)) {
       s = (t_min - millis()) / 1000;
     }
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + " пауза " + program_Wait_Type + ". Продолжение через " + (String)s + " сек.";
     SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_WAIT;
-  } else if (PowerOn && startval == 2) {
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE) {
     SamovarStatus = F("Выполнение программы завершено");
     SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_COMPLETE;
-  } else if (PowerOn && startval == 100) {
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_CALIBRATION) {
     SamovarStatus = F("Калибровка");
     SamovarStatusInt = SAMOVAR_STATUS_CALIBRATION;
   } else if (PauseOn) {
     SamovarStatus = F("Пауза");
     SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_PAUSE;
-  } else if (PowerOn && startval == 0 && !stepper.getState()) {
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_IDLE && !stepper.getState()) {
     if (SamovarStatusInt != SAMOVAR_STATUS_RECTIFICATION_STABILIZING &&
         SamovarStatusInt != SAMOVAR_STATUS_RECTIFICATION_STABILIZED) {
       SamovarStatus = F("Разгон колонны");
@@ -50,7 +51,7 @@ inline String get_Samovar_Status() {
   } else if (SamovarStatusInt == SAMOVAR_STATUS_BK) {
     SamovarStatus = F("Режим бражной колонны");
   } else if (SamovarStatusInt == SAMOVAR_STATUS_NBK) {
-    if (startval == 4001) {
+    if (startval == SAMOVAR_STARTVAL_NBK_PROGRAM_RUNNING) {
       SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
       if (program[ProgramNum].WType == "H") {
         SamovarStatus = SamovarStatus + "Прогрев";
@@ -68,13 +69,13 @@ inline String get_Samovar_Status() {
 #else
     SamovarStatus = "";
 #endif
-    if (startval == 2001 && program[ProgramNum].WType == "M") {
+    if (startval == SAMOVAR_STARTVAL_BEER_MALT_HEATING && program[ProgramNum].WType == "M") {
       float currentTemp = getBeerCurrentTemp();
       SamovarStatus = SamovarStatus + "Разогрев до температуры засыпи солода";
       if (currentTemp < program[ProgramNum].Temp - 0.5) {
         SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
       }
-    } else if (startval == 2002 && program[ProgramNum].WType == "M") {
+    } else if (startval == SAMOVAR_STARTVAL_BEER_MALT_WAIT && program[ProgramNum].WType == "M") {
       SamovarStatus = SamovarStatus + "Ожидание засыпи солода";
     } else if (program[ProgramNum].WType == "P") {
       if (begintime == 0) {

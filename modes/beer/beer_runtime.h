@@ -99,7 +99,7 @@ inline bool isBoilingStarted(float currentTemp) {
 inline void beer_proc() {
   if (SamovarStatusInt != SAMOVAR_STATUS_BEER) return;
 
-  if (startval == 2000 && !PowerOn) {
+  if (startval == SAMOVAR_STARTVAL_BEER_ENTRY && !PowerOn) {
     resetBoilingDetector();
 #ifdef USE_MQTT
     SessionDescription.replace(",", ";");
@@ -115,7 +115,7 @@ inline void beer_proc() {
 
 inline void run_beer_program(uint8_t num) {
   if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
-  if (startval == 2000) startval = 2001;
+  if (startval == SAMOVAR_STARTVAL_BEER_ENTRY) startval = SAMOVAR_STARTVAL_BEER_MALT_HEATING;
 
   uint8_t targetProgram = num;
   if (ProgramLen == 0 || targetProgram >= ProgramLen || targetProgram >= CAPACITY_NUM * 2) {
@@ -180,14 +180,14 @@ inline void beer_finish() {
   setHeaterPosition(false);
   PowerOn = false;
   heater_state = false;
-  startval = 0;
+  startval = SAMOVAR_STARTVAL_RECT_IDLE;
   stop_process("Программа затирания завершена");
   delay(200);
   delay(1000);
 }
 
 inline void check_alarm_beer() {
-  if (startval <= 2000) return;
+  if (startval <= SAMOVAR_STARTVAL_BEER_ENTRY) return;
 
   float temp = 0;
   float tempDelta = 0;
@@ -268,11 +268,11 @@ inline void check_alarm_beer() {
   }
 
   if (program[ProgramNum].WType == "M" && temp >= program[ProgramNum].Temp - tempDelta) {
-    if (startval == 2001) {
+    if (startval == SAMOVAR_STARTVAL_BEER_MALT_HEATING) {
       set_buzzer(true);
       SendMsg(("Достигнута температура засыпи солода!"), NOTIFY_MSG);
     }
-    startval = 2002;
+    startval = SAMOVAR_STARTVAL_BEER_MALT_WAIT;
   }
 
   if (program[ProgramNum].WType == "P" && temp >= program[ProgramNum].Temp - tempDelta) {
