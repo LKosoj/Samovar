@@ -44,9 +44,7 @@ inline void pump_calibrate(int stpspeed) {
 
 inline void set_pump_speed(float pumpspeed, bool continue_process) {
   if (pumpspeed < 1) return;
-  if (!(SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN ||
-        SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT ||
-        SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_PAUSE)) return;
+  if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
 
   bool cp = continue_process;
   if (!stepper.getState()) cp = false;

@@ -34,6 +34,10 @@ def _extract_function_body(text: str, signature: str) -> str:
 def _normalize_cpp_body(body: str) -> str:
     body = re.sub(r"//.*", "", body)
     body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    body = body.replace(
+        "samovar_status_is_rectification(SamovarStatusInt)",
+        "SamovarStatusInt > SAMOVAR_STATUS_OFF && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION",
+    )
     constants_text = STATUS_CODES_HEADER.read_text(encoding="utf-8")
     matches = re.findall(
         r"static constexpr int16_t (SAMOVAR_STATUS_[A-Z0-9_]+) = (-?\d+);",

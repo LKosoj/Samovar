@@ -328,15 +328,19 @@ def render_variable_value_table(
     variable: str,
     meanings: dict[int, str],
     values_to_occurrences: dict[int, list[Occurrence]],
+    tokens_by_value: dict[int, str],
 ) -> str:
     lines = [
-        "| Значение | Смысл | Владельцы | Где используется |",
-        "| --- | --- | --- | --- |",
+        "| Число | Токен | Смысл | Владельцы | Где используется |",
+        "| --- | --- | --- | --- | --- |",
     ]
     for value in meanings:
         occurrences = values_to_occurrences.get(value, [])
+        token = tokens_by_value.get(value)
+        if token is None:
+            raise ValueError(f"{variable}: missing token for value {value}")
         lines.append(
-            f"| `{value}` | {meanings[value]} | {format_owners(occurrences)} | {format_refs(occurrences)} |"
+            f"| `{value}` | `{token}` | {meanings[value]} | {format_owners(occurrences)} | {format_refs(occurrences)} |"
         )
     missing = [value for value in values_to_occurrences if value not in meanings]
     if missing:
@@ -345,6 +349,8 @@ def render_variable_value_table(
 
 
 def render_range_table(range_occurrences: list[RangeOccurrence]) -> str:
+    if not range_occurrences:
+        return "_Raw numeric range-comparisons по этой переменной не найдены; оставшаяся семантика вынесена в именованные helper-предикаты в state headers._"
     lines = [
         "| Граница | Оператор | Владельцы | Где используется |",
         "| --- | --- | --- | --- |",
@@ -463,8 +469,10 @@ def build_inventory() -> dict[str, object]:
     return {
         "files": [path.relative_to(ROOT).as_posix() for path in files],
         "all_occurrences": all_occurrences,
+        "status_tokens": status_tokens,
         "status_values": status_values,
         "status_ranges": status_ranges,
+        "start_tokens": start_tokens,
         "start_values": start_values,
         "start_ranges": start_ranges,
         "command_enum": command_enum,
@@ -488,6 +496,8 @@ def render_state_codes_inventory(inventory: dict[str, object]) -> str:
     all_occurrences = inventory["all_occurrences"]
     status_ranges = inventory["status_ranges"]
     start_ranges = inventory["start_ranges"]
+    status_tokens_by_value = {value: token for token, value in inventory["status_tokens"].items()}
+    start_tokens_by_value = {value: token for token, value in inventory["start_tokens"].items()}
 
     parts = [
         "# Шаг 2.1. Инвентаризация state-кодов Samovar",
@@ -506,7 +516,7 @@ def render_state_codes_inventory(inventory: dict[str, object]) -> str:
         "",
         "## SamovarStatusInt",
         "",
-        render_variable_value_table("SamovarStatusInt", STATUS_MEANINGS, status_values),
+        render_variable_value_table("SamovarStatusInt", STATUS_MEANINGS, status_values, status_tokens_by_value),
         "",
         "### SamovarStatusInt: диапазонные и compound-предикаты",
         "",
@@ -514,7 +524,7 @@ def render_state_codes_inventory(inventory: dict[str, object]) -> str:
         "",
         "## startval",
         "",
-        render_variable_value_table("startval", STARTVAL_MEANINGS, start_values),
+        render_variable_value_table("startval", STARTVAL_MEANINGS, start_values, start_tokens_by_value),
         "",
         "### startval: диапазонные и compound-предикаты",
         "",
@@ -543,6 +553,15 @@ def render_state_codes_inventory(inventory: dict[str, object]) -> str:
         "## Связанные флаги",
         "",
         render_flag_table(flag_occurrences),
+        "",
+        "## Helper-предикаты state semantics",
+        "",
+        "- `samovar_status_is_rectification(status)` — именует rect-family диапазон `status > OFF && status < DISTILLATION` для runtime dispatch и menu/orchestration.",
+        "- `samovar_status_allows_rectification_withdrawal(status)` — заменяет повторяющиеся проверки статусов `RUN/WAIT/PAUSE` в rect runtime и UI snapshot/status text.",
+        "- `samovar_status_has_rectification_program_progress(status)` — именует более узкую rect-semantics `RUN/WAIT` там, где pause не должна считаться активным прогрессом программы.",
+        "- `startval_is_rect_program_state(value)` — именует rect program-state диапазон `1..3` для внешнего контроля/Blynk.",
+        "- `startval_is_active_non_calibration(value)` — именует запрет калибровки во всех активных state, кроме отдельного calibration-state.",
+        "- `startval_is_beer_program_started(value)` — именует границу между beer entry и уже идущими beer steps.",
         "",
         "## Примечания по baseline",
         "",

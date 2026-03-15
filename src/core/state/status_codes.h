@@ -17,6 +17,21 @@ static constexpr int16_t SAMOVAR_STATUS_BEER = 2000;
 static constexpr int16_t SAMOVAR_STATUS_BK = 3000;
 static constexpr int16_t SAMOVAR_STATUS_NBK = 4000;
 
+inline bool samovar_status_is_rectification(int16_t status) {
+  return status > SAMOVAR_STATUS_OFF && status < SAMOVAR_STATUS_DISTILLATION;
+}
+
+inline bool samovar_status_allows_rectification_withdrawal(int16_t status) {
+  return status == SAMOVAR_STATUS_RECTIFICATION_RUN ||
+         status == SAMOVAR_STATUS_RECTIFICATION_WAIT ||
+         status == SAMOVAR_STATUS_RECTIFICATION_PAUSE;
+}
+
+inline bool samovar_status_has_rectification_program_progress(int16_t status) {
+  return status == SAMOVAR_STATUS_RECTIFICATION_RUN ||
+         status == SAMOVAR_STATUS_RECTIFICATION_WAIT;
+}
+
 enum SamovarCommands {
   SAMOVAR_NONE,
   SAMOVAR_START,

@@ -497,11 +497,11 @@ inline void samovar_app_loop() {
     if (mode_is_rect_runtime(Samovar_Mode)) {
       if (!PowerOn) {
         set_power(true);
-      } else if (startval == SAMOVAR_STARTVAL_RECT_IDLE && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
+      } else if (startval == SAMOVAR_STARTVAL_RECT_IDLE && samovar_status_is_rectification(SamovarStatusInt)) {
         menu_samovar_start();
-      } else if (startval != SAMOVAR_STARTVAL_RECT_IDLE && !program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
+      } else if (startval != SAMOVAR_STARTVAL_RECT_IDLE && !program_Pause && samovar_status_is_rectification(SamovarStatusInt)) {
         pause_withdrawal(!PauseOn);
-      } else if (startval != SAMOVAR_STARTVAL_RECT_IDLE && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
+      } else if (startval != SAMOVAR_STARTVAL_RECT_IDLE && program_Pause && samovar_status_is_rectification(SamovarStatusInt)) {
         menu_samovar_start();
       }
       if (startval == SAMOVAR_STARTVAL_CALIBRATION) {

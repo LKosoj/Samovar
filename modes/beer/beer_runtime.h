@@ -187,7 +187,7 @@ inline void beer_finish() {
 }
 
 inline void check_alarm_beer() {
-  if (startval <= SAMOVAR_STARTVAL_BEER_ENTRY) return;
+  if (!startval_is_beer_program_started(startval)) return;
 
   float temp = 0;
   float tempDelta = 0;

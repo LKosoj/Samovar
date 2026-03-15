@@ -269,3 +269,71 @@ Command: `python3 -m ruff check tools/tests/test_mode_switching_behavior.py tool
 ```text
 All checks passed!
 ```
+
+========================================================================
+Step 2.5 magic number cleanup verification
+========================================================================
+Date: 2026-03-16
+Context: финальная зачистка magic numbers в state-логике и обновление финального inventory
+
+Command: `python3 tools/tests/test_state_contracts_baseline.py`
+
+```text
+========================================================================
+State contracts baseline test
+========================================================================
+
+[1] Verifying SamovarStatusInt exact numeric baseline...
+    ✓ SamovarStatusInt={'SAMOVAR_STATUS_OFF': 0, 'SAMOVAR_STATUS_RECTIFICATION_RUN': 10, 'SAMOVAR_STATUS_RECTIFICATION_WAIT': 15, 'SAMOVAR_STATUS_RECTIFICATION_COMPLETE': 20, 'SAMOVAR_STATUS_CALIBRATION': 30, 'SAMOVAR_STATUS_RECTIFICATION_PAUSE': 40, 'SAMOVAR_STATUS_RECTIFICATION_WARMUP': 50, 'SAMOVAR_STATUS_RECTIFICATION_STABILIZING': 51, 'SAMOVAR_STATUS_RECTIFICATION_STABILIZED': 52, 'SAMOVAR_STATUS_DISTILLATION': 1000, 'SAMOVAR_STATUS_BEER': 2000, 'SAMOVAR_STATUS_BK': 3000, 'SAMOVAR_STATUS_NBK': 4000}
+
+[2] Verifying startval exact numeric baseline...
+    ✓ startval={'SAMOVAR_STARTVAL_RECT_IDLE': 0, 'SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING': 1, 'SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE': 2, 'SAMOVAR_STARTVAL_RECT_STOPPED': 3, 'SAMOVAR_STARTVAL_CALIBRATION': 100, 'SAMOVAR_STARTVAL_DISTILLATION_ENTRY': 1000, 'SAMOVAR_STARTVAL_BEER_ENTRY': 2000, 'SAMOVAR_STARTVAL_BEER_MALT_HEATING': 2001, 'SAMOVAR_STARTVAL_BEER_MALT_WAIT': 2002, 'SAMOVAR_STARTVAL_BK_ENTRY': 3000, 'SAMOVAR_STARTVAL_NBK_ENTRY': 4000, 'SAMOVAR_STARTVAL_NBK_PROGRAM_RUNNING': 4001}
+
+[3] Verifying sam_command_sync exact numeric baseline...
+    ✓ sam_command_sync={'SAMOVAR_NONE': 0, 'SAMOVAR_START': 1, 'SAMOVAR_POWER': 2, 'SAMOVAR_RESET': 3, 'CALIBRATE_START': 4, 'CALIBRATE_STOP': 5, 'SAMOVAR_PAUSE': 6, 'SAMOVAR_CONTINUE': 7, 'SAMOVAR_SETBODYTEMP': 8, 'SAMOVAR_DISTILLATION': 9, 'SAMOVAR_BEER': 10, 'SAMOVAR_BEER_NEXT': 11, 'SAMOVAR_BK': 12, 'SAMOVAR_NBK': 13, 'SAMOVAR_SELF_TEST': 14, 'SAMOVAR_DIST_NEXT': 15, 'SAMOVAR_NBK_NEXT': 16}
+
+[4] Verifying Samovar_Mode exact numeric baseline...
+    ✓ Samovar_Mode={'SAMOVAR_RECTIFICATION_MODE': 0, 'SAMOVAR_DISTILLATION_MODE': 1, 'SAMOVAR_BEER_MODE': 2, 'SAMOVAR_BK_MODE': 3, 'SAMOVAR_NBK_MODE': 4, 'SAMOVAR_SUVID_MODE': 5, 'SAMOVAR_LUA_MODE': 6}
+
+========================================================================
+State contracts baseline: PASS
+========================================================================
+```
+
+Command: `python3 -m unittest tests.test_state_magic_cleanup tests.test_state_code_inventory_baseline tests.test_status_code_constants tests.test_mode_code_constants tests.test_app_status_text_baseline tests.test_modes_integration_dispatch tests.test_app_orchestration tests.test_change_samovar_mode_behavior tests.test_mode_ownership_mapping`
+
+```text
+.....................................
+----------------------------------------------------------------------
+Ran 37 tests in 24.939s
+
+OK
+```
+
+Command: `python3 -m unittest tests.test_state_runtime_types`
+
+```text
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+```
+
+Command: `python3 tools/tests/test_mode_switching_behavior.py`
+
+```text
+Mode switching behavior: PASS
+```
+
+Command: `python3 tools/tests/test_reset_pipeline_invariant.py`
+
+```text
+Reset pipeline invariant: PASS
+```
+
+Command: `python3 -m ruff check tools/state_inventory.py tools/state_magic_cleanup.py tools/tests/test_state_contracts_baseline.py tools/tests/test_mode_switching_behavior.py tools/tests/test_reset_pipeline_invariant.py tests/test_state_code_inventory_baseline.py tests/test_status_code_constants.py tests/test_mode_code_constants.py tests/test_state_magic_cleanup.py tests/test_app_status_text_baseline.py tests/test_modes_integration_dispatch.py tests/test_app_orchestration.py tests/test_change_samovar_mode_behavior.py tests/test_mode_ownership_mapping.py`
+
+```text
+All checks passed!
+```

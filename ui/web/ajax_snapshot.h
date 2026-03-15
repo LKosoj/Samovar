@@ -152,8 +152,7 @@ void send_ajax_json(AsyncWebServerRequest *request) {
 
   String pt = "";
   if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) &&
-      (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN ||
-       SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT ||
+      (samovar_status_has_rectification_program_progress(SamovarStatusInt) ||
        (SamovarStatusInt == SAMOVAR_STATUS_BEER && PowerOn))) {
     pt = program[ProgramNum].WType;
   }

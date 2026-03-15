@@ -58,6 +58,20 @@ def _expand_status_constants(text: str) -> str:
     return text
 
 
+def _expand_status_helpers(text: str) -> str:
+    text = text.replace(
+        "samovar_status_allows_rectification_withdrawal(SamovarStatusInt)",
+        "SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN || "
+        "SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT || "
+        "SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_PAUSE"
+    )
+    return text.replace(
+        "samovar_status_has_rectification_program_progress(SamovarStatusInt)",
+        "SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN || "
+        "SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT",
+    )
+
+
 def _expand_startval_constants(text: str) -> str:
     constants_text = MODE_CODES_HEADER.read_text(encoding="utf-8")
     matches = re.findall(
@@ -82,7 +96,9 @@ class StatusTextBaselineParityTest(unittest.TestCase):
         current_body = _normalize_cpp_body(
             _expand_startval_constants(
                 _expand_status_constants(
-                    _extract_function_body(self.current_text, "String get_Samovar_Status()")
+                    _expand_status_helpers(
+                        _extract_function_body(self.current_text, "String get_Samovar_Status()")
+                    )
                 )
             )
         )

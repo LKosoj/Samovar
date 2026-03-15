@@ -196,7 +196,7 @@ inline void menu_pause() {
 }
 
 inline void menu_calibrate() {
-  if (startval > SAMOVAR_STARTVAL_RECT_IDLE && startval != SAMOVAR_STARTVAL_CALIBRATION) {
+  if (startval_is_active_non_calibration(startval)) {
     return;
   }
 

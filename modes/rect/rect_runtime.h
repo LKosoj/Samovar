@@ -30,9 +30,7 @@ bool column_wetting();
 #endif
 
 inline void withdrawal(void) {
-  if (!(SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN ||
-        SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT ||
-        SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_PAUSE)) return;
+  if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
 
   // ОБРАБОТКА ДЕТЕКТОРА ПРИМЕСЕЙ
   process_impurity_detector();

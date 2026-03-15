@@ -26,4 +26,16 @@ static constexpr int16_t SAMOVAR_STARTVAL_BK_ENTRY = 3000;
 static constexpr int16_t SAMOVAR_STARTVAL_NBK_ENTRY = 4000;
 static constexpr int16_t SAMOVAR_STARTVAL_NBK_PROGRAM_RUNNING = 4001;
 
+inline bool startval_is_rect_program_state(int16_t value) {
+  return value > SAMOVAR_STARTVAL_RECT_IDLE && value <= SAMOVAR_STARTVAL_RECT_STOPPED;
+}
+
+inline bool startval_is_active_non_calibration(int16_t value) {
+  return value > SAMOVAR_STARTVAL_RECT_IDLE && value != SAMOVAR_STARTVAL_CALIBRATION;
+}
+
+inline bool startval_is_beer_program_started(int16_t value) {
+  return value > SAMOVAR_STARTVAL_BEER_ENTRY;
+}
+
 #endif

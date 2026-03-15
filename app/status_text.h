@@ -127,8 +127,7 @@ inline String get_Samovar_Status() {
     }
   }
 
-  if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN ||
-      SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT ||
+  if (samovar_status_has_rectification_program_progress(SamovarStatusInt) ||
       (SamovarStatusInt == SAMOVAR_STATUS_BEER && PowerOn)) {
     SamovarStatus += "; Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }

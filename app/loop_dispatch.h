@@ -101,7 +101,7 @@ inline void process_sam_command_sync() {
 }
 
 inline void dispatch_samovar_mode_runtime() {
-  if (SamovarStatusInt > SAMOVAR_STATUS_OFF && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
+  if (samovar_status_is_rectification(SamovarStatusInt)) {
     withdrawal();
   } else if (SamovarStatusInt == SAMOVAR_STATUS_DISTILLATION) {
     distiller_proc();
