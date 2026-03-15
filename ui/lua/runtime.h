@@ -329,16 +329,25 @@ inline void start_lua_script() {
 
 inline String get_lua_mode_name(bool filename) {
   String fl;
-  if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
-    fl = filename ? "/beer" + String(LUA_BEER) + ".lua" : "beer";
-  } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
-    fl = filename ? "/dist" + String(LUA_DIST) + ".lua" : "dist";
-  } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
-    fl = filename ? "/bk" + String(LUA_BK) + ".lua" : "bk";
-  } else if (Samovar_CR_Mode == SAMOVAR_NBK_MODE) {
-    fl = filename ? "/nbk" + String(LUA_NBK) + ".lua" : "nbk";
-  } else {
-    fl = filename ? "/rectificat" + String(LUA_RECT) + ".lua" : "rect";
+  switch (mode_lua_owner(Samovar_CR_Mode)) {
+    case SAMOVAR_BEER_MODE:
+      fl = filename ? "/beer" + String(LUA_BEER) + ".lua" : "beer";
+      break;
+    case SAMOVAR_DISTILLATION_MODE:
+      fl = filename ? "/dist" + String(LUA_DIST) + ".lua" : "dist";
+      break;
+    case SAMOVAR_BK_MODE:
+      fl = filename ? "/bk" + String(LUA_BK) + ".lua" : "bk";
+      break;
+    case SAMOVAR_NBK_MODE:
+      fl = filename ? "/nbk" + String(LUA_NBK) + ".lua" : "nbk";
+      break;
+    case SAMOVAR_RECTIFICATION_MODE:
+    case SAMOVAR_SUVID_MODE:
+    case SAMOVAR_LUA_MODE:
+    default:
+      fl = filename ? "/rectificat" + String(LUA_RECT) + ".lua" : "rect";
+      break;
   }
   return fl;
 }

@@ -36,7 +36,11 @@ class AppOrchestrationHeaderTest(unittest.TestCase):
     def test_loop_helper_keeps_mode_switching_and_runtime_dispatch(self) -> None:
         text = ORCHESTRATION_HEADER.read_text(encoding="utf-8")
         for marker in [
-            "if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE)",
+            "if (mode_is_rect_runtime(Samovar_Mode))",
+            "mode_is_distillation_runtime(Samovar_Mode)",
+            "mode_is_bk_runtime(Samovar_Mode)",
+            "mode_is_nbk_runtime(Samovar_Mode)",
+            "mode_is_beer_runtime(Samovar_Mode)",
             "sam_command_sync = SAMOVAR_DISTILLATION;",
             "sam_command_sync = SAMOVAR_BK;",
             "sam_command_sync = SAMOVAR_NBK;",

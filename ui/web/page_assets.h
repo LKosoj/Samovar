@@ -41,18 +41,9 @@ inline void change_samovar_mode() {
     indexHandler = nullptr;
   }
 
-  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else {
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-    Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-  }
+  const char* activePage = mode_active_page(Samovar_Mode);
+  Samovar_Mode = mode_runtime_owner(Samovar_Mode);
+  indexHandler = &server.serveStatic("/index.htm", SPIFFS, activePage).setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
   Samovar_CR_Mode = Samovar_Mode;
 }
 

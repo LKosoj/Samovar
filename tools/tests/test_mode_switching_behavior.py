@@ -23,6 +23,7 @@ MENU_ACTIONS_HEADER = ROOT / "ui" / "menu" / "actions.h"
 DEFAULT_PROGRAMS_HEADER = ROOT / "app" / "default_programs.h"
 LUA_RUNTIME_HEADER = ROOT / "ui" / "lua" / "runtime.h"
 NVS_PROFILES_HEADER = ROOT / "storage" / "nvs_profiles.h"
+MODE_OWNERSHIP_HEADER = ROOT / "src" / "core" / "state" / "mode_ownership.h"
 
 
 def require(condition: bool, message: str) -> None:
@@ -114,44 +115,37 @@ def check_static_contracts() -> None:
 
     assert_contains(
         load_default_program,
-        "if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE)",
+        "switch (mode_program_owner(Samovar_Mode))",
         "load_default_program_for_mode",
     )
     for fragment in [
+        "case SAMOVAR_BEER_MODE:",
         'set_beer_program("',
-        "Samovar_Mode == SAMOVAR_DISTILLATION_MODE",
+        "case SAMOVAR_DISTILLATION_MODE:",
         'set_dist_program("',
-        "Samovar_Mode == SAMOVAR_NBK_MODE",
+        "case SAMOVAR_NBK_MODE:",
         "set_nbk_program(NBK_DEFAULT_PROGRAM);",
+        "case SAMOVAR_RECTIFICATION_MODE:",
         'set_program("',
     ]:
         assert_contains(load_default_program, fragment, "load_default_program_for_mode")
     print("    ✓ load_default_program_for_mode selects beer/suvid, dist, nbk and rect families")
 
     for fragment in [
-        "if (Samovar_Mode == SAMOVAR_BEER_MODE)",
-        '"/beer.htm"',
-        "Samovar_Mode == SAMOVAR_DISTILLATION_MODE",
-        '"/distiller.htm"',
-        "Samovar_Mode == SAMOVAR_BK_MODE",
-        '"/bk.htm"',
-        "Samovar_Mode == SAMOVAR_NBK_MODE",
-        '"/nbk.htm"',
-        "Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;",
+        "mode_active_page(Samovar_Mode)",
+        "mode_runtime_owner(Samovar_Mode)",
+        'server.serveStatic("/index.htm", SPIFFS, activePage)',
     ]:
         assert_contains(change_mode, fragment, "change_samovar_mode")
     print("    ✓ change_samovar_mode exposes dedicated pages and rect fallback runtime")
 
     for fragment in [
-        "Samovar_CR_Mode == SAMOVAR_BEER_MODE",
-        '"/beer"',
-        "Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE",
-        '"/dist"',
-        "Samovar_CR_Mode == SAMOVAR_BK_MODE",
-        '"/bk"',
-        "Samovar_CR_Mode == SAMOVAR_NBK_MODE",
-        '"/nbk"',
-        '"/rectificat"',
+        "switch (mode_lua_owner(Samovar_CR_Mode))",
+        "case SAMOVAR_BEER_MODE:",
+        "case SAMOVAR_DISTILLATION_MODE:",
+        "case SAMOVAR_BK_MODE:",
+        "case SAMOVAR_NBK_MODE:",
+        "case SAMOVAR_RECTIFICATION_MODE:",
     ]:
         assert_contains(get_lua_mode_name, fragment, "get_lua_mode_name")
     print("    ✓ get_lua_mode_name keeps beer/dist/bk/nbk branches and rect fallback")
@@ -180,6 +174,26 @@ def build_harness() -> str:
     get_lua_mode_name = extract_function(
         read_text(LUA_RUNTIME_HEADER),
         "String get_lua_mode_name(bool filename)",
+    )
+    mode_runtime_owner = extract_function(
+        read_text(MODE_OWNERSHIP_HEADER),
+        "SAMOVAR_MODE mode_runtime_owner(SAMOVAR_MODE mode)",
+    )
+    mode_program_owner = extract_function(
+        read_text(MODE_OWNERSHIP_HEADER),
+        "SAMOVAR_MODE mode_program_owner(SAMOVAR_MODE mode)",
+    )
+    mode_lua_owner = extract_function(
+        read_text(MODE_OWNERSHIP_HEADER),
+        "SAMOVAR_MODE mode_lua_owner(SAMOVAR_MODE mode)",
+    )
+    mode_active_page = extract_function(
+        read_text(MODE_OWNERSHIP_HEADER),
+        "const char* mode_active_page(SAMOVAR_MODE mode)",
+    )
+    mode_profile_namespace = extract_function(
+        read_text(MODE_OWNERSHIP_HEADER),
+        "const char* mode_profile_namespace(SAMOVAR_MODE mode)",
     )
     profile_namespace_by_mode = extract_function(
         read_text(NVS_PROFILES_HEADER),
@@ -600,6 +614,16 @@ def build_harness() -> str:
           last_program_family = "nbk";
           last_program_payload = value == nullptr ? "" : value;
         }}
+
+        {mode_runtime_owner}
+
+        {mode_program_owner}
+
+        {mode_lua_owner}
+
+        {mode_active_page}
+
+        {mode_profile_namespace}
 
         {profile_namespace_by_mode}
 

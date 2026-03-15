@@ -22,6 +22,7 @@ SENSOR_SCAN_HEADER = ROOT / "io" / "sensor_scan.h"
 MENU_ACTIONS_HEADER = ROOT / "ui" / "menu" / "actions.h"
 CONFIG_APPLY_HEADER = ROOT / "app" / "config_apply.h"
 NVS_PROFILES_HEADER = ROOT / "storage" / "nvs_profiles.h"
+MODE_OWNERSHIP_HEADER = ROOT / "src" / "core" / "state" / "mode_ownership.h"
 
 
 def require(condition: bool, message: str) -> None:
@@ -194,12 +195,13 @@ def check_static_pipeline() -> None:
             "if (indexHandler) {",
             "server.removeHandler(indexHandler);",
             "indexHandler = nullptr;",
-            'server.serveStatic("/index.htm", SPIFFS, "/',
+            "const char* activePage = mode_active_page(Samovar_Mode);",
+            "Samovar_Mode = mode_runtime_owner(Samovar_Mode);",
+            'server.serveStatic("/index.htm", SPIFFS, activePage)',
             "Samovar_CR_Mode = Samovar_Mode;",
         ],
         "change_samovar_mode",
     )
-    assert_contains(change_mode, "Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;", "change_samovar_mode")
     assert_ordered(
         save_profile,
         [
@@ -243,6 +245,14 @@ def build_harness() -> str:
     handle_save_process = extract_function(
         read_text(ROUTES_SETUP_HEADER),
         "void handleSaveProcessSettings(AsyncWebServerRequest *request)",
+    )
+    mode_runtime_owner = extract_function(
+        read_text(MODE_OWNERSHIP_HEADER),
+        "SAMOVAR_MODE mode_runtime_owner(SAMOVAR_MODE mode)",
+    )
+    mode_active_page = extract_function(
+        read_text(MODE_OWNERSHIP_HEADER),
+        "const char* mode_active_page(SAMOVAR_MODE mode)",
     )
 
     return textwrap.dedent(
@@ -300,6 +310,8 @@ def build_harness() -> str:
         static constexpr int SAMOVAR_BEER_MODE = {mode_enum["SAMOVAR_BEER_MODE"]};
         static constexpr int SAMOVAR_BK_MODE = {mode_enum["SAMOVAR_BK_MODE"]};
         static constexpr int SAMOVAR_NBK_MODE = {mode_enum["SAMOVAR_NBK_MODE"]};
+        static constexpr int SAMOVAR_SUVID_MODE = {mode_enum["SAMOVAR_SUVID_MODE"]};
+        static constexpr int SAMOVAR_LUA_MODE = {mode_enum["SAMOVAR_LUA_MODE"]};
         static constexpr int SAMOVAR_STARTVAL_RECT_IDLE = {startval_codes["SAMOVAR_STARTVAL_RECT_IDLE"]};
         static constexpr int SAMOVAR_NONE = {command_enum["SAMOVAR_NONE"]};
         static constexpr int SAMOVAR_COMMAND_NONE = {command_enum["SAMOVAR_NONE"]};
@@ -437,6 +449,10 @@ def build_harness() -> str:
         String indexKeyProcessor(const String& key) {{
           return key;
         }}
+
+        {mode_runtime_owner}
+
+        {mode_active_page}
 
         SamSetupStruct SamSetup;
         volatile SAMOVAR_MODE Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;

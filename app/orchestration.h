@@ -494,7 +494,7 @@ inline void samovar_app_loop() {
 #ifdef BTN_PIN
   btn.tick();
   if (btn.isPress()) {
-    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+    if (mode_is_rect_runtime(Samovar_Mode)) {
       if (!PowerOn) {
         set_power(true);
       } else if (startval == SAMOVAR_STARTVAL_RECT_IDLE && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
@@ -509,22 +509,22 @@ inline void samovar_app_loop() {
         menu_calibrate();
         menu_switch_focus();
       }
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+    } else if (mode_is_distillation_runtime(Samovar_Mode)) {
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_DISTILLATION;
       } else
         distiller_finish();
-    } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+    } else if (mode_is_bk_runtime(Samovar_Mode)) {
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_BK;
       } else
         bk_finish();
-    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+    } else if (mode_is_nbk_runtime(Samovar_Mode)) {
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_NBK;
       } else
         nbk_finish();
-    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+    } else if (mode_is_beer_runtime(Samovar_Mode)) {
       if (!PowerOn) {
         sam_command_sync = SAMOVAR_BEER;
       } else

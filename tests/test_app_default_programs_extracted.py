@@ -8,6 +8,7 @@ import unittest
 
 
 DEFAULT_PROGRAMS_HEADER = Path("app/default_programs.h")
+MODE_OWNERSHIP_HEADER = Path("src/core/state/mode_ownership.h")
 SENSORINIT_FILE = Path("sensorinit.h")
 CONSUMER_FILES = [
     Path("io/sensor_scan.h"),
@@ -45,10 +46,14 @@ class DefaultProgramsExtractionTests(unittest.TestCase):
         header_text = DEFAULT_PROGRAMS_HEADER.read_text(encoding="utf-8")
         for snippet in [
             "inline void load_default_program_for_mode()",
-            "Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE",
+            "switch (mode_program_owner(Samovar_Mode))",
+            "case SAMOVAR_BEER_MODE:",
             'set_beer_program("M;45;0;0^-1^2^2;0\\nP;45;1;0^-1^2^3;0\\nP;60;1;0^-1^2^3;0\\nW;0;0;0^-1^2^3;0\\nB;0;1;0^-1^2^3;0\\nC;30;0;0^-1^2^3;0\\n");',
+            "case SAMOVAR_DISTILLATION_MODE:",
             'set_dist_program("A;80.00;1;0\\nS;0.50;2;0\\nS;0.30;3;0\\n");',
+            "case SAMOVAR_NBK_MODE:",
             "set_nbk_program(NBK_DEFAULT_PROGRAM);",
+            "case SAMOVAR_RECTIFICATION_MODE:",
             'set_program("H;450;0.1;1;0;45\\nB;450;1;1;0;45\\nH;450;0.1;1;0;45\\n");',
         ]:
             with self.subTest(snippet=snippet):
@@ -71,6 +76,10 @@ class DefaultProgramsExtractionTests(unittest.TestCase):
             DEFAULT_PROGRAMS_HEADER.read_text(encoding="utf-8"),
             "void load_default_program_for_mode()",
         )
+        ownership_text = _extract_function(
+            MODE_OWNERSHIP_HEADER.read_text(encoding="utf-8"),
+            "SAMOVAR_MODE mode_program_owner(SAMOVAR_MODE mode)",
+        )
 
         harness = textwrap.dedent(
             f"""
@@ -80,13 +89,13 @@ class DefaultProgramsExtractionTests(unittest.TestCase):
             using String = std::string;
 
             enum SAMOVAR_MODE {{
-              SAMOVAR_RECTIFICATION_MODE,
-              SAMOVAR_DISTILLATION_MODE,
-              SAMOVAR_BEER_MODE,
-              SAMOVAR_BK_MODE,
-              SAMOVAR_NBK_MODE,
-              SAMOVAR_SUVID_MODE,
-              SAMOVAR_LUA_MODE
+              SAMOVAR_RECTIFICATION_MODE = 0,
+              SAMOVAR_DISTILLATION_MODE = 1,
+              SAMOVAR_BEER_MODE = 2,
+              SAMOVAR_BK_MODE = 3,
+              SAMOVAR_NBK_MODE = 4,
+              SAMOVAR_SUVID_MODE = 5,
+              SAMOVAR_LUA_MODE = 6
             }};
 
             volatile SAMOVAR_MODE Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
@@ -100,6 +109,8 @@ class DefaultProgramsExtractionTests(unittest.TestCase):
             void set_program(String WProgram) {{ last_kind = "rect"; last_value = WProgram; }}
 
             #define NBK_DEFAULT_PROGRAM "NBK_DEFAULT_PROGRAM_SENTINEL"
+
+            {ownership_text}
 
             {function_text}
 

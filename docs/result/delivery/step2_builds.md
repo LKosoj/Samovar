@@ -75,3 +75,25 @@ Samovar        SUCCESS   00:00:59.340
 
 ========================= 1 succeeded in 00:00:59.340 =========================
 ```
+
+## Подзадача 2.3
+
+- Дата: `2026-03-16`
+- Команда: `pio run -e Samovar`
+- Результат: `SUCCESS`
+- Длительность: `00:00:49.720`
+- RAM: `18.3% (59904 / 327680 bytes)`
+- Flash: `70.1% (1148561 / 1638400 bytes)`
+- Контекст: явное описание mode ownership и runtime routing (`mode_ownership_mapping.md`, `src/core/state/mode_ownership.h`)
+
+### Raw build excerpt
+
+```text
+========================= [SUCCESS] Took 49.72 seconds =========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+Samovar        SUCCESS   00:00:49.720
+
+========================= 1 succeeded in 00:00:49.720 =========================
+```

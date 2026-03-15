@@ -14,17 +14,7 @@ inline Preferences& nvs_preferences() {
 }
 
 inline const char* profile_namespace_by_mode(int mode) {
-  switch (mode) {
-    case SAMOVAR_BEER_MODE: return "sam_beer";
-    case SAMOVAR_DISTILLATION_MODE: return "sam_dist";
-    case SAMOVAR_BK_MODE: return "sam_bk";
-    case SAMOVAR_NBK_MODE: return "sam_nbk";
-    case SAMOVAR_SUVID_MODE: return "sam_suvid";
-    case SAMOVAR_LUA_MODE: return "sam_lua";
-    case SAMOVAR_RECTIFICATION_MODE:
-    default:
-      return "sam_rect";
-  }
+  return mode_profile_namespace((SAMOVAR_MODE)mode);
 }
 
 inline const char* current_profile_namespace() {

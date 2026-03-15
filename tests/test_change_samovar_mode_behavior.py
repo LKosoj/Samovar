@@ -11,6 +11,7 @@ ROUTES_SETUP_HEADER = Path("ui/web/routes_setup.h")
 PAGE_ASSETS_HEADER = Path("ui/web/page_assets.h")
 SENSOR_SCAN_HEADER = Path("io/sensor_scan.h")
 MENU_ACTIONS_HEADER = Path("ui/menu/actions.h")
+MODE_OWNERSHIP_HEADER = Path("src/core/state/mode_ownership.h")
 
 
 def _extract_function(text: str, signature: str) -> str:
@@ -55,6 +56,14 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
         change_mode = _extract_function(
             PAGE_ASSETS_HEADER.read_text(encoding="utf-8"),
             "void change_samovar_mode()",
+        )
+        mode_runtime_owner = _extract_function(
+            MODE_OWNERSHIP_HEADER.read_text(encoding="utf-8"),
+            "SAMOVAR_MODE mode_runtime_owner(SAMOVAR_MODE mode)",
+        )
+        mode_active_page = _extract_function(
+            MODE_OWNERSHIP_HEADER.read_text(encoding="utf-8"),
+            "const char* mode_active_page(SAMOVAR_MODE mode)",
         )
         handle_save_process = _extract_function(
             ROUTES_SETUP_HEADER.read_text(encoding="utf-8"),
@@ -116,6 +125,8 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
             static constexpr int SAMOVAR_DISTILLATION_MODE = 2;
             static constexpr int SAMOVAR_BK_MODE = 3;
             static constexpr int SAMOVAR_NBK_MODE = 4;
+            static constexpr int SAMOVAR_SUVID_MODE = 5;
+            static constexpr int SAMOVAR_LUA_MODE = 6;
             static constexpr int SAMOVAR_STARTVAL_RECT_IDLE = 0;
             static constexpr int SAMOVAR_STATUS_OFF = 0;
             static constexpr int SAMOVAR_STATUS_DISTILLATION = 1000;
@@ -247,6 +258,10 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
             String indexKeyProcessor(const String& key) {{
               return key;
             }}
+
+            {mode_runtime_owner}
+
+            {mode_active_page}
 
             SamSetupStruct SamSetup;
             volatile SAMOVAR_MODE Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;

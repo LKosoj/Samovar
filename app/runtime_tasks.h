@@ -289,15 +289,15 @@ void triggerSysTicker(void *parameter) {
       }
 
       //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
-      if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+      if (mode_is_rect_runtime(Samovar_Mode)) {
         check_alarm();
-      } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+      } else if (mode_is_distillation_runtime(Samovar_Mode)) {
         check_alarm_distiller();
-      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+      } else if (mode_is_bk_runtime(Samovar_Mode)) {
         check_alarm_bk();
-      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+      } else if (mode_is_nbk_runtime(Samovar_Mode)) {
         check_alarm_nbk();
-      } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      } else if (mode_is_beer_runtime(Samovar_Mode)) {
         check_alarm_beer();
         WFpulseCount = 100;
       }
@@ -305,7 +305,7 @@ void triggerSysTicker(void *parameter) {
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
       //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
-      if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+      if (mode_is_beer_runtime(Samovar_Mode)) {
         float wp;
         if (program[ProgramNum].Time > 0 && begintime > 0) {
           wp = float(millis() - begintime) / 1000 / 60 / program[ProgramNum].Time;
@@ -346,13 +346,13 @@ void triggerSysTicker(void *parameter) {
         m += (String)mi;
         WthdrwTimeAllS = h + ":" + m;
 
-      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+      } else if (mode_is_bk_runtime(Samovar_Mode)) {
 
-      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+      } else if (mode_is_nbk_runtime(Samovar_Mode)) {
 
       }
       //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
-      else if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE && (TargetStepps > 0 || program[ProgramNum].WType == "P")) {
+      else if (mode_is_rect_runtime(Samovar_Mode) && (TargetStepps > 0 || program[ProgramNum].WType == "P")) {
         //считаем прогресс
         float wp;
 

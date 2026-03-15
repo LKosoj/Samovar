@@ -235,3 +235,37 @@ Command: `python3 -m ruff check tools/tests/test_mode_switching_behavior.py`
 ```text
 All checks passed!
 ```
+
+========================================================================
+Step 2.3 mode ownership verification
+========================================================================
+Date: 2026-03-16
+Context: Явное описание mode ownership и runtime routing
+
+Command: `python3 -m unittest tests.test_mode_ownership_mapping tests.test_app_default_programs_extracted tests.test_app_orchestration tests.test_change_samovar_mode_behavior`
+
+```text
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 1.678s
+
+OK
+```
+
+Command: `python3 tools/tests/test_mode_switching_behavior.py`
+
+```text
+Mode switching behavior: PASS
+```
+
+Command: `python3 tools/tests/test_reset_pipeline_invariant.py`
+
+```text
+Reset pipeline invariant: PASS
+```
+
+Command: `python3 -m ruff check tools/tests/test_mode_switching_behavior.py tools/tests/test_reset_pipeline_invariant.py tests/test_app_default_programs_extracted.py tests/test_app_orchestration.py tests/test_change_samovar_mode_behavior.py tests/test_mode_ownership_mapping.py`
+
+```text
+All checks passed!
+```
