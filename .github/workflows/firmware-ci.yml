@@ -93,3 +93,6 @@ jobs:
 
       - name: API smoke check
         run: python tools/smoke_api_routes.py
+
+      - name: State contracts baseline
+        run: python tools/tests/test_state_contracts_baseline.py
