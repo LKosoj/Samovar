@@ -7,6 +7,9 @@
 #include "app/config_apply.h"
 #include "app/loop_dispatch.h"
 #include "app/messages.h"
+#ifdef USE_LUA
+#include "ui/lua/runtime.h"
+#endif
 #include "app/runtime_tasks.h"
 #include "io/sensor_scan.h"
 #include "io/power_control.h"
@@ -15,13 +18,11 @@
 #include "modes/dist/dist_runtime.h"
 #include "modes/nbk/nbk_finish.h"
 #include "modes/rect/rect_runtime.h"
+#include "storage/nvs_migration.h"
 #include "storage/nvs_profiles.h"
 #include "support/task_stack_usage.h"
 #include "ui/web/server_init.h"
 #include "storage/web_assets_sync.h"
-#ifdef USE_LUA
-#include "ui/lua/runtime.h"
-#endif
 
 void setupMenu();
 void encoder_getvalue();

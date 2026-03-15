@@ -1,11 +1,21 @@
 #ifndef __SAMOVAR_UI_LUA_RUNTIME_H_
 #define __SAMOVAR_UI_LUA_RUNTIME_H_
 
-#include "lua.h"
+#include <LuaWrapper.h>
 #include "ui/lua/bindings_gpio.h"
+#include "ui/lua/bindings_variables.h"
 #include "ui/lua/bindings_process.h"
 #include "ui/lua/bindings_io.h"
 #include "ui/lua/bindings_http.h"
+
+inline String get_lua_script_list();
+inline String get_lua_script(String fn);
+inline void run_lua_script(String fn);
+inline String run_lua_string(String lstr);
+inline void load_lua_script();
+inline void do_lua_script(void *parameter);
+inline void start_lua_script();
+inline String get_lua_mode_name(bool filename = true);
 
 inline String get_global_variables() {
   return "";
@@ -186,6 +196,151 @@ inline void lua_init() {
     1,
     &DoLuaScriptTask,
     1);
+}
+
+inline String get_lua_script_list() {
+  String s, fn;
+  uint8_t i = 1;
+  File root = SPIFFS.open("/");
+  File file = root.openNextFile();
+  while (file) {
+    if (!file.isDirectory()) {
+      fn = file.name();
+      if (fn.substring(0, 4) == "btn_" && getValue(fn, '_', 1) == get_lua_mode_name(false)) {
+        String str;
+        s = s + fn;
+        if (fn[0] != '/') fn = "/" + fn;
+        File f = SPIFFS.open(fn);
+        str = f.readStringUntil('^');
+        str = getValue(str, '|', 1);
+        if (str.length() == 0) str = "LUA" + (String)i;
+        i++;
+        s = s + "|" + str + ",";
+      }
+    }
+    file = root.openNextFile();
+  }
+  s = s.substring(0, s.length() - 1);
+  return s;
+}
+
+inline String get_lua_script(String fn) {
+  String s = "";
+  File f;
+  if (fn[0] != '/') fn = "/" + fn;
+  f = SPIFFS.open(fn);
+  if (f) {
+    s = f.readString();
+    s.trim();
+    f.close();
+  }
+  return s;
+}
+
+inline void run_lua_script(String fn) {
+  btn_script = get_lua_script(fn);
+  if (btn_script.length() > 0) btn_script = get_global_variables() + btn_script;
+}
+
+inline String run_lua_string(String lstr) {
+  String sr = "";
+  if (lstr.length() > 0) {
+    if (show_lua_script) {
+      WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+      WriteConsoleLog(lstr);
+      WriteConsoleLog(F("--END LUA SCRIPT--"));
+    }
+#ifdef USE_MQTT
+    String MsgPl = lstr;
+    MsgPl.replace(",", ";");
+    MqttSendMsg(MsgPl + "," + NOTIFY_MSG, "msg");
+#endif
+    sr = lua.Lua_dostring(&lstr);
+    sr.trim();
+    if (sr.length() > 0) {
+      WriteConsoleLog("ERR in lua: " + sr);
+    } else {
+      WriteConsoleLog(F("Lua run complete"));
+    }
+  }
+  return sr;
+}
+
+inline void load_lua_script() {
+  script1 = get_lua_script("script.lua");
+  script2 = get_lua_script(lua_type_script);
+}
+
+inline void do_lua_script(void *parameter) {
+  String sr;
+  sr.reserve(128);
+  while (1) {
+    if (ota_running) {
+      vTaskDelay(500 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    if (SetScriptOff && loop_lua_fl) {
+      loop_lua_fl = false;
+    }
+    if (!lua_finished) {
+      if (script1.length() > 0) {
+        if (show_lua_script) {
+          WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+          WriteConsoleLog(script1);
+          WriteConsoleLog(F("--END LUA SCRIPT--"));
+        }
+        sr = lua.Lua_dostring(&(script1));
+        sr.trim();
+        if (sr.length() > 0) WriteConsoleLog("ERR in script.lua: " + sr);
+      }
+      vTaskDelay(5 / portTICK_PERIOD_MS);
+
+      if (script2.length() > 0) {
+        if (show_lua_script) {
+          WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+          WriteConsoleLog(script2);
+          WriteConsoleLog(F("--END LUA SCRIPT--"));
+        }
+        sr = lua.Lua_dostring(&(script2));
+        sr.trim();
+        if (sr.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
+      }
+      lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
+      lua_finished = true;
+    } else {
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+    }
+    if (!loop_lua_fl && SetScriptOff) {
+      SetScriptOff = 0;
+    }
+    vTaskDelay(5 / portTICK_PERIOD_MS);
+  }
+}
+
+inline void start_lua_script() {
+  if (!lua_finished) {
+    WriteConsoleLog("lua runing");
+    return;
+  }
+
+  lua_finished = false;
+}
+
+inline String get_lua_mode_name(bool filename) {
+  String fl;
+  if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
+    fl = filename ? "/beer" + String(LUA_BEER) + ".lua" : "beer";
+  } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
+    fl = filename ? "/dist" + String(LUA_DIST) + ".lua" : "dist";
+  } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
+    fl = filename ? "/bk" + String(LUA_BK) + ".lua" : "bk";
+  } else if (Samovar_CR_Mode == SAMOVAR_NBK_MODE) {
+    fl = filename ? "/nbk" + String(LUA_NBK) + ".lua" : "nbk";
+  } else {
+    fl = filename ? "/rectificat" + String(LUA_RECT) + ".lua" : "rect";
+  }
+  return fl;
 }
 
 #endif

@@ -8,7 +8,7 @@ DIRECT_INCLUDE_USERS = (
     Path("app/loop_dispatch.h"),
     Path("app/orchestration.h"),
     Path("ui/web/ajax_snapshot.h"),
-    Path("ui/web/routes_setup_process.h"),
+    Path("ui/web/routes_setup.h"),
 )
 
 

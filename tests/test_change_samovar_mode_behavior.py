@@ -7,8 +7,8 @@ import textwrap
 import unittest
 
 
-ROUTES_SETUP_PROCESS_HEADER = Path("ui/web/routes_setup_process.h")
-SERVER_INIT_HEADER = Path("ui/web/server_init.h")
+ROUTES_SETUP_HEADER = Path("ui/web/routes_setup.h")
+PAGE_ASSETS_HEADER = Path("ui/web/page_assets.h")
 SENSOR_SCAN_HEADER = Path("io/sensor_scan.h")
 MENU_ACTIONS_HEADER = Path("ui/menu/actions.h")
 
@@ -53,11 +53,11 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
             "void samovar_reset()",
         )
         change_mode = _extract_function(
-            SERVER_INIT_HEADER.read_text(encoding="utf-8"),
+            PAGE_ASSETS_HEADER.read_text(encoding="utf-8"),
             "void change_samovar_mode()",
         )
         handle_save_process = _extract_function(
-            ROUTES_SETUP_PROCESS_HEADER.read_text(encoding="utf-8"),
+            ROUTES_SETUP_HEADER.read_text(encoding="utf-8"),
             "void handleSaveProcessSettings(AsyncWebServerRequest *request)",
         )
 
@@ -154,6 +154,8 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
                 return *this;
               }}
             }};
+
+            using AsyncStaticWebHandler = MockHandler;
 
             struct MockServer {{
               std::deque<MockHandler> handlers;
@@ -396,7 +398,8 @@ class ChangeSamovarModeBehaviorTest(unittest.TestCase):
               load_profile_calls++;
             }}
 
-            String get_lua_mode_name() {{
+            String get_lua_mode_name(bool filename = true) {{
+              (void)filename;
               get_lua_mode_name_calls++;
               switch (Samovar_CR_Mode) {{
                 case SAMOVAR_BEER_MODE:

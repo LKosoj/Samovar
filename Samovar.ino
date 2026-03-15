@@ -93,10 +93,6 @@
 #include <esp_task_wdt.h>
 #endif
 
-#ifdef USE_LUA
-#include "lua.h"
-#endif
-
 #include <NTPClient.h>
 WiFiUDP ntpUDP;
 NTPClient NTP(ntpUDP, "ru.pool.ntp.org");
@@ -420,6 +416,22 @@ uint8_t power_err_cnt;
 
 #ifdef USE_WATER_PUMP
 uint8_t wp_count;
+#endif
+
+#ifdef USE_LUA
+LuaWrapper lua;
+unsigned long lua_timer[10];
+String lua_type_script;
+String script1;
+String script2;
+String btn_script;
+SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, String &b) -> int {
+  if (a == b) return 0;
+  if (a > b) return 1;
+  return -1;
+});
+TaskHandle_t DoLuaScriptTask = NULL;
+volatile bool lua_finished = false;
 #endif
 
 // Единственные определения буфера времени для LCD (см. extern в Samovar.h)

@@ -1,6 +1,11 @@
 #ifndef __SAMOVAR_GLOBALS_H_
 #define __SAMOVAR_GLOBALS_H_
 
+#ifdef USE_LUA
+#include <LuaWrapper.h>
+#include <SimpleMap.h>
+#endif
+
 extern SemaphoreHandle_t xSemaphore;
 extern SemaphoreHandle_t xMsgSemaphore;
 extern StaticSemaphore_t xMsgSemaphoreBuffer;
@@ -250,6 +255,18 @@ extern uint8_t power_err_cnt;
 
 #ifdef USE_WATER_PUMP
 extern uint8_t wp_count;
+#endif
+
+#ifdef USE_LUA
+extern LuaWrapper lua;
+extern unsigned long lua_timer[10];
+extern String lua_type_script;
+extern String script1;
+extern String script2;
+extern String btn_script;
+extern SimpleMap<String, String> *luaObj;
+extern TaskHandle_t DoLuaScriptTask;
+extern volatile bool lua_finished;
 #endif
 
 #endif

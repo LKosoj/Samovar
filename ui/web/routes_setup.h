@@ -1,36 +1,40 @@
-#ifndef __SAMOVAR_UI_WEB_ROUTES_SAVE_H__
-#define __SAMOVAR_UI_WEB_ROUTES_SAVE_H__
+#ifndef __SAMOVAR_UI_WEB_ROUTES_SETUP_H__
+#define __SAMOVAR_UI_WEB_ROUTES_SETUP_H__
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 
 #include "Samovar.h"
-#include "state/globals.h"
-#include "ui/web/routes_setup_wifi.h"
-#include "ui/web/routes_setup_process.h"
+#include "app/default_programs.h"
+#include "io/power_control.h"
+#include "io/sensors.h"
 #include "modes/beer/beer_program_codec.h"
 #include "modes/beer/beer_runtime.h"
-#include "modes/dist/dist_program_codec.h"
-#include "modes/nbk/nbk_program_codec.h"
+#include "modes/bk/bk_finish.h"
 #include "modes/bk/bk_water_control.h"
-#include "io/sensors.h"
+#include "modes/dist/dist_program_codec.h"
+#include "modes/dist/dist_runtime.h"
+#include "modes/nbk/nbk_finish.h"
+#include "modes/nbk/nbk_program_codec.h"
+#include "state/globals.h"
 #include "storage/nvs_profiles.h"
 #include "support/task_stack_usage.h"
+#include "ui/web/page_assets.h"
 #include "column_math.h"
 
-// Forward declarations для функций, не доступных через заголовки
 String getValue(String& data, char separator, int index);
 void set_program(String WProgram);
 void set_beer_program(String WProgram);
+void samovar_reset();
+void read_config();
 extern bool is_reboot;
 
-// Обработчик сохранения настроек (объединяет WiFi и процессные настройки)
-inline void handleSave(AsyncWebServerRequest *request) {
-  if (!request) {
-    return;
-  }
+#ifdef USE_LUA
+String get_lua_mode_name(bool filename);
+void load_lua_script();
+#endif
 
-  // WiFi настройки
+inline void handleSaveWifiSettings(AsyncWebServerRequest *request) {
   if (request->hasArg("videourl")) {
     copyStringSafe(SamSetup.videourl, request->arg("videourl"));
   }
@@ -43,8 +47,63 @@ inline void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("tgchatid")) {
     copyStringSafe(SamSetup.tg_chat_id, request->arg("tgchatid"));
   }
+}
 
-  // Температурные задержки
+inline void handleSaveProcessSettings(AsyncWebServerRequest *request) {
+  if (!request->hasArg("mode")) {
+    return;
+  }
+
+  int nextMode = request->arg("mode").toInt();
+  if (SamSetup.Mode == nextMode) {
+    return;
+  }
+
+  if (PowerOn) {
+    if (SamovarStatusInt == 1000) {
+      distiller_finish();
+    } else if (SamovarStatusInt == 2000) {
+      beer_finish();
+    } else if (SamovarStatusInt == 3000) {
+      bk_finish();
+    } else if (SamovarStatusInt == 4000) {
+      nbk_finish();
+    } else {
+      set_power(false);
+    }
+  }
+
+#ifdef USE_LUA
+  if (loop_lua_fl) {
+    SetScriptOff = true;
+    loop_lua_fl = false;
+    delay(100);
+  }
+#endif
+
+  samovar_reset();
+
+  SamSetup.Mode = nextMode;
+  Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
+  Samovar_CR_Mode = Samovar_Mode;
+
+  load_default_program_for_mode();
+  save_profile_nvs();
+  load_profile_nvs();
+
+#ifdef USE_LUA
+  lua_type_script = get_lua_mode_name(true);
+  load_lua_script();
+#endif
+
+  change_samovar_mode();
+}
+
+inline void handleSave(AsyncWebServerRequest *request) {
+  if (!request) {
+    return;
+  }
+
   if (request->hasArg("SteamDelay")) {
     SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
   }
@@ -61,7 +120,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.ACPDelay = request->arg("ACPDelay").toInt();
   }
 
-  // Температурные дельты
   if (request->hasArg("DeltaSteamTemp")) {
     SamSetup.DeltaSteamTemp = request->arg("DeltaSteamTemp").toFloat();
   }
@@ -78,7 +136,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.DeltaACPTemp = request->arg("DeltaACPTemp").toFloat();
   }
 
-  // Уставки температур
   if (request->hasArg("SetSteamTemp")) {
     SamSetup.SetSteamTemp = request->arg("SetSteamTemp").toFloat();
   }
@@ -95,7 +152,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.SetACPTemp = request->arg("SetACPTemp").toFloat();
   }
 
-  // PID параметры
   if (request->hasArg("Kp")) {
     SamSetup.Kp = request->arg("Kp").toFloat();
   }
@@ -106,7 +162,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.Kd = request->arg("Kd").toFloat();
   }
 
-  // Напряжения
   if (request->hasArg("StbVoltage")) {
     SamSetup.StbVoltage = request->arg("StbVoltage").toFloat();
   }
@@ -114,7 +169,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.BVolt = request->arg("BVolt").toFloat();
   }
 
-  // Дистилляция параметры
   if (request->hasArg("DistTimeF")) {
     SamSetup.DistTimeF = request->arg("DistTimeF").toInt();
   }
@@ -122,7 +176,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.MaxPressureValue = request->arg("MaxPressureValue").toFloat();
   }
 
-  // Шаговый двигатель
   if (request->hasArg("StepperStepMl")) {
     SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
   }
@@ -133,63 +186,22 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
   }
 
-  // Программа
   if (request->hasArg("WProgram")) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
     else
       set_program(request->arg("WProgram"));
   }
 
-  // Флаги
-  SamSetup.UseHLS = false;
-  if (request->hasArg("useflevel")) {
-    SamSetup.UseHLS = true;
-  }
-
-  SamSetup.UsePreccureCorrect = false;
-  if (request->hasArg("usepressure")) {
-    SamSetup.UsePreccureCorrect = true;
-  }
-
-  SamSetup.useautospeed = false;
-  if (request->hasArg("useautospeed")) {
-    SamSetup.useautospeed = true;
-  }
-
-  SamSetup.useDetectorOnHeads = false;
-  if (request->hasArg("useDetectorOnHeads")) {
-    SamSetup.useDetectorOnHeads = true;
-  }
-
-  SamSetup.ChangeProgramBuzzer = false;
-  if (request->hasArg("ChangeProgramBuzzer")) {
-    SamSetup.ChangeProgramBuzzer = true;
-  }
-
-  SamSetup.UseBuzzer = false;
-  if (request->hasArg("UseBuzzer")) {
-    SamSetup.UseBuzzer = true;
-  }
-
-  SamSetup.UseBBuzzer = false;
-  if (request->hasArg("UseBBuzzer")) {
-    SamSetup.UseBBuzzer = true;
-  }
-
-  SamSetup.UseWS = false;
-  if (request->hasArg("UseWS")) {
-    SamSetup.UseWS = true;
-  }
-
-  SamSetup.UseST = false;
-  if (request->hasArg("UseST")) {
-    SamSetup.UseST = true;
-  }
-
-  SamSetup.CheckPower = false;
-  if (request->hasArg("CheckPower")) {
-    SamSetup.CheckPower = true;
-  }
+  SamSetup.UseHLS = request->hasArg("useflevel");
+  SamSetup.UsePreccureCorrect = request->hasArg("usepressure");
+  SamSetup.useautospeed = request->hasArg("useautospeed");
+  SamSetup.useDetectorOnHeads = request->hasArg("useDetectorOnHeads");
+  SamSetup.ChangeProgramBuzzer = request->hasArg("ChangeProgramBuzzer");
+  SamSetup.UseBuzzer = request->hasArg("UseBuzzer");
+  SamSetup.UseBBuzzer = request->hasArg("UseBBuzzer");
+  SamSetup.UseWS = request->hasArg("UseWS");
+  SamSetup.UseST = request->hasArg("UseST");
+  SamSetup.CheckPower = request->hasArg("CheckPower");
 
   if (request->hasArg("autospeed")) {
     SamSetup.autospeed = request->arg("autospeed").toInt();
@@ -207,7 +219,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.HeaterResistant = request->arg("HeaterR").toFloat();
   }
 
-  // НБК параметры
   if (request->hasArg("NbkIn")) {
     SamSetup.NbkIn = request->arg("NbkIn").toFloat();
   }
@@ -227,10 +238,8 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.NbkOwPress = request->arg("NbkOwPress").toFloat();
   }
 
-  // Вызываем обработчики WiFi настроек
   handleSaveWifiSettings(request);
 
-  // Цвета
   if (request->hasArg("SteamColor")) {
     copyStringSafe(SamSetup.SteamColor, request->arg("SteamColor"));
   }
@@ -247,10 +256,8 @@ inline void handleSave(AsyncWebServerRequest *request) {
     copyStringSafe(SamSetup.ACPColor, request->arg("ACPColor"));
   }
 
-  // Вызываем обработчик процессных настроек
   handleSaveProcessSettings(request);
 
-  // Реле
   if (request->hasArg("rele1")) {
     SamSetup.rele1 = request->arg("rele1").toInt();
   }
@@ -264,7 +271,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.rele4 = request->arg("rele4").toInt();
   }
 
-  // Адреса датчиков
   const int dsAddrMax = (int)(sizeof(DSAddr) / sizeof(DSAddr[0]));
   auto isValidDsIndex = [&](int idx) -> bool {
     return idx >= 0 && idx < DScnt && idx < dsAddrMax;
@@ -315,7 +321,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     }
   }
 
-  // Параметры колонны
   if (request->hasArg("ColDiam")) {
     SamSetup.ColDiam = request->arg("ColDiam").toFloat();
   }
@@ -326,7 +331,6 @@ inline void handleSave(AsyncWebServerRequest *request) {
     SamSetup.PackDens = request->arg("PackDens").toInt();
   }
 
-  // Сохраняем изменения в память.
   save_profile_nvs();
   read_config();
 

@@ -1,6 +1,10 @@
 #ifndef __SAMOVAR_UI_LUA_BINDINGS_GPIO_H_
 #define __SAMOVAR_UI_LUA_BINDINGS_GPIO_H_
 
+#ifndef EXPANDER_UPDATE_TIMEOUT
+#define EXPANDER_UPDATE_TIMEOUT 500
+#endif
+
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);

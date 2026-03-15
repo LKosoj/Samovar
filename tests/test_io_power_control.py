@@ -10,7 +10,7 @@ POWER_CONTROL_USERS = [
     Path("modes/bk/bk_runtime.h"),
     Path("Blynk.ino"),
     Path("ui/web/routes_command.h"),
-    Path("ui/web/routes_setup_process.h"),
+    Path("ui/web/routes_setup.h"),
 ]
 
 

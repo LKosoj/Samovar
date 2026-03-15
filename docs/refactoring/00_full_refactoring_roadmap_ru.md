@@ -45,6 +45,9 @@ Gate перехода к шагу 2:
 - убрать магические числа и неявные связи между `SamovarStatusInt`, `startval`, `Samovar_Mode`, `Samovar_CR_Mode`;
 - сделать state-модель читаемой без изменения значений и логики переходов.
 
+Детальный документ:
+- [02_state_normalization_plan_ru.md](/srv/git_projects/Samovar/docs/refactoring/02_state_normalization_plan_ru.md)
+
 Что входит:
 - именованные константы или enum для status codes и command codes;
 - явная таблица соответствий "статус -> смысл";

@@ -15,7 +15,7 @@
 
 #ifdef USE_LUA
 void run_lua_script(String fn);
-void run_lua_string(String lstr);
+String run_lua_string(String lstr);
 #endif
 void menu_reset_wifi();
 void set_mixer(bool On);

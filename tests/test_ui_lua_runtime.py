@@ -17,7 +17,7 @@ class LuaRuntimeHeaderTest(unittest.TestCase):
 
     def test_runtime_header_keeps_lua_api_dependency_local(self) -> None:
         text = RUNTIME_HEADER.read_text(encoding="utf-8")
-        self.assertIn('#include "lua.h"', text)
+        self.assertIn("#include <LuaWrapper.h>", text)
         self.assertIn('script = get_global_variables();', text)
 
     def test_orchestration_includes_runtime_header(self) -> None:

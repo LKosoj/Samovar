@@ -7,6 +7,7 @@ FS_LEGACY_FILE = Path("FS.ino")
 NVS_MANAGER_FILE = Path("NVS_Manager.ino")
 NVS_PROFILES_HEADER = Path("storage/nvs_profiles.h")
 NVS_WIFI_HEADER = Path("storage/nvs_wifi.h")
+NVS_MIGRATION_HEADER = Path("storage/nvs_migration.h")
 
 PRODUCTION_SOURCE_EXTENSIONS = {".ino", ".h", ".hpp", ".c", ".cc", ".cpp"}
 EXCLUDED_TOP_LEVEL_DIRS = {
@@ -63,9 +64,21 @@ class StorageFsLegacyRemovalTests(unittest.TestCase):
             "inline Preferences& nvs_preferences()",
             "inline void save_profile_nvs()",
             "inline void load_profile_nvs()",
-            "inline void migrate_from_eeprom()",
             'return "sam_rect";',
             'meta.begin("sam_meta", true)',
+        ]:
+            with self.subTest(snippet=snippet):
+                self.assertIn(snippet, header_text)
+
+    def test_nvs_migration_module_owns_eeprom_cutover(self) -> None:
+        self.assertTrue(NVS_MIGRATION_HEADER.exists(), "storage/nvs_migration.h must exist")
+
+        header_text = NVS_MIGRATION_HEADER.read_text(encoding="utf-8")
+        for snippet in [
+            "inline void migrate_from_eeprom()",
+            "inline void reset_migration_flag()",
+            "EEPROM.begin(sizeof(SetupEEPROM));",
+            'prefs.putBool("migrated", true);',
         ]:
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, header_text)

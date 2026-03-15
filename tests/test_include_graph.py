@@ -15,8 +15,7 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "mod_rmv.ino",
     "ui/web/ajax_snapshot.h",
     "ui/web/routes_command.h",
-    "ui/web/routes_save.h",
-    "ui/web/routes_setup_process.h",
+    "ui/web/routes_setup.h",
     "ui/web/server_init.h",
     "Blynk.ino",
     "modes/bk/bk_runtime.h",
@@ -52,7 +51,7 @@ SAFE_PARSE_DIRECT_INCLUDE_FILES = [
 SENSORS_DIRECT_INCLUDE_FILES = [
     "app/runtime_tasks.h",
     "ui/web/routes_command.h",
-    "ui/web/routes_save.h",
+    "ui/web/routes_setup.h",
     "ui/web/template_keys.h",
 ]
 
@@ -79,12 +78,12 @@ FORMAT_UTILS_DIRECT_INCLUDE_FILES = [
 
 DEFAULT_PROGRAMS_DIRECT_INCLUDE_FILES = [
     "io/sensor_scan.h",
-    "ui/web/routes_setup_process.h",
+    "ui/web/routes_setup.h",
 ]
 
 TASK_STACK_USAGE_DIRECT_INCLUDE_FILES = [
     "app/orchestration.h",
-    "ui/web/routes_save.h",
+    "ui/web/routes_setup.h",
 ]
 
 

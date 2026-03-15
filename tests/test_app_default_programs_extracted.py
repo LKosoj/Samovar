@@ -11,7 +11,7 @@ DEFAULT_PROGRAMS_HEADER = Path("app/default_programs.h")
 SENSORINIT_FILE = Path("sensorinit.h")
 CONSUMER_FILES = [
     Path("io/sensor_scan.h"),
-    Path("ui/web/routes_setup_process.h"),
+    Path("ui/web/routes_setup.h"),
 ]
 
 

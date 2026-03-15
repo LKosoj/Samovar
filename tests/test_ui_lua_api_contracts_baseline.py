@@ -12,7 +12,8 @@ IO_HEADER = Path("ui/lua/bindings_io.h")
 HTTP_HEADER = Path("ui/lua/bindings_http.h")
 SERVER_INIT_HEADER = Path("ui/web/server_init.h")
 ROUTES_COMMAND_HEADER = Path("ui/web/routes_command.h")
-ROUTES_SETUP_PROCESS_HEADER = Path("ui/web/routes_setup_process.h")
+ROUTES_SETUP_HEADER = Path("ui/web/routes_setup.h")
+SETUP_LUA_MODE_MARKER = "lua_type_script = get_lua_mode_name(true);"
 
 
 def git_show(pathspec: str) -> str:
@@ -152,7 +153,7 @@ class LuaApiContractsBaselineTest(unittest.TestCase):
         runtime_text = RUNTIME_HEADER.read_text(encoding="utf-8")
         routes_command_text = ROUTES_COMMAND_HEADER.read_text(encoding="utf-8")
         server_init_text = SERVER_INIT_HEADER.read_text(encoding="utf-8")
-        routes_setup_process_text = ROUTES_SETUP_PROCESS_HEADER.read_text(encoding="utf-8")
+        routes_setup_text = ROUTES_SETUP_HEADER.read_text(encoding="utf-8")
 
         for marker in [
             'SPIFFS.open("/init.lua")',
@@ -168,14 +169,14 @@ class LuaApiContractsBaselineTest(unittest.TestCase):
             "run_lua_string(lstr);",
             'server.on("/lua", HTTP_GET',
             "start_lua_script();",
-            "lua_type_script = get_lua_mode_name();",
+            SETUP_LUA_MODE_MARKER,
             "load_lua_script();",
         ]:
             with self.subTest(marker=marker):
                 self.assertTrue(
                     marker in routes_command_text
                     or marker in server_init_text
-                    or marker in routes_setup_process_text
+                    or marker in routes_setup_text
                 )
 
 

@@ -12,7 +12,7 @@
 #include "ui/web/template_keys.h"
 #include "ui/web/routes_command.h"
 #include "ui/web/routes_program.h"
-#include "ui/web/routes_save.h"
+#include "ui/web/routes_setup.h"
 #include "ui/web/routes_service.h"
 #include "storage/fs_init.h"
 #include "storage/nvs_profiles.h"
@@ -22,7 +22,6 @@
 #include "column_math.h"
 
 // Forward declarations для функций
-void change_samovar_mode();
 void read_config();
 String getValue(String& data, char separator, int index);
 void menu_reset_wifi();
@@ -33,7 +32,6 @@ extern bool is_reboot;
 
 // Фильтр для заголовков
 AsyncHeaderFilterMiddleware headerFilter;
-
 AsyncStaticWebHandler* indexHandler = nullptr;
 
 void WebServerInit(void) {
@@ -294,32 +292,6 @@ void WebServerInit(void) {
 #ifndef NOT_USE_INTERFACE_UPDATE
   get_web_interface();
 #endif
-}
-
-void change_samovar_mode() {
-  if (indexHandler) {
-    server.removeHandler(indexHandler);
-    indexHandler = nullptr;
-  }
-
-  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    //server.serveStatic("/", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    //server.serveStatic("/", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-    //server.serveStatic("/", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    //server.serveStatic("/", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else {
-    //server.serveStatic("/", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-    Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-  }
-  Samovar_CR_Mode = Samovar_Mode;
 }
 
 #endif

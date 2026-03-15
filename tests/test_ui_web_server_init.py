@@ -6,6 +6,8 @@ class WebServerInitModuleTests(unittest.TestCase):
     def setUp(self):
         self.server_init_path = Path("ui/web/server_init.h")
         self.server_init_text = self.server_init_path.read_text(encoding="utf-8")
+        self.page_assets_path = Path("ui/web/page_assets.h")
+        self.page_assets_text = self.page_assets_path.read_text(encoding="utf-8")
         self.orchestration_path = Path("app/orchestration.h")
         self.orchestration_text = self.orchestration_path.read_text(encoding="utf-8")
 
@@ -45,7 +47,7 @@ class WebServerInitModuleTests(unittest.TestCase):
             '#include "ui/web/template_keys.h"',
             '#include "ui/web/routes_command.h"',
             '#include "ui/web/routes_program.h"',
-            '#include "ui/web/routes_save.h"',
+            '#include "ui/web/routes_setup.h"',
             '#include "ui/web/routes_service.h"',
             '#include "storage/web_assets_sync.h"',
         ]
@@ -60,15 +62,10 @@ class WebServerInitModuleTests(unittest.TestCase):
         # Проверяем, что storage/web_assets_sync.h включён для доступа к функциям синхронизации
         self.assertIn('#include "storage/web_assets_sync.h"', self.server_init_text)
 
-    def test_server_init_has_forward_declarations(self):
-        # Проверяем, что есть необходимая forward declaration для change_samovar_mode
-        # (остальные функции FS.ino доступны через Samovar.h и storage/web_assets_sync.h)
-        self.assertIn('void change_samovar_mode();', self.server_init_text)
-
-    def test_change_samovar_mode_defined(self):
-        # Проверяем, что функция change_samovar_mode определена
-        self.assertIn("void change_samovar_mode() {", self.server_init_text)
-        self.assertIn('server.serveStatic("/index.htm", SPIFFS, "/beer.htm")', self.server_init_text)
+    def test_change_samovar_mode_defined_in_page_assets(self):
+        self.assertIn("void change_samovar_mode()", self.page_assets_text)
+        self.assertIn('server.serveStatic("/index.htm", SPIFFS, "/beer.htm")', self.page_assets_text)
+        self.assertNotIn("void change_samovar_mode() {", self.server_init_text)
 
 
 if __name__ == "__main__":

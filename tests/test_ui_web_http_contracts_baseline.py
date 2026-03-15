@@ -6,6 +6,7 @@ import unittest
 
 BASELINE_WEB_COMMIT = "a0197e27"
 SERVER_INIT_PATH = Path("ui/web/server_init.h")
+PAGE_ASSETS_PATH = Path("ui/web/page_assets.h")
 AJAX_SNAPSHOT_PATH = Path("ui/web/ajax_snapshot.h")
 CONTRACTS_DOC_PATH = Path("docs/refactoring/contracts.md")
 
@@ -127,6 +128,7 @@ class WebHttpContractsBaselineTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.server_init_text = SERVER_INIT_PATH.read_text(encoding="utf-8")
+        cls.page_assets_text = PAGE_ASSETS_PATH.read_text(encoding="utf-8")
         cls.ajax_snapshot_text = AJAX_SNAPSHOT_PATH.read_text(encoding="utf-8")
         cls.contracts_doc_text = CONTRACTS_DOC_PATH.read_text(encoding="utf-8")
         cls.baseline_webserver_text = _read_git_file(
@@ -145,7 +147,7 @@ class WebHttpContractsBaselineTest(unittest.TestCase):
         self.assertEqual(current_routes, baseline_routes)
 
     def test_serve_static_paths_match_pre_removal_baseline(self) -> None:
-        current_paths = _extract_serve_static_paths(self.server_init_text)
+        current_paths = _extract_serve_static_paths(self.server_init_text) | _extract_serve_static_paths(self.page_assets_text)
         baseline_paths = _extract_serve_static_paths(self.baseline_webserver_text)
         self.assertEqual(current_paths, baseline_paths)
 

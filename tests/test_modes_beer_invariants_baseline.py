@@ -46,6 +46,8 @@ def _extract_function_body(text: str, signature: str) -> str:
 def _normalize_cpp_body(body: str) -> str:
     body = re.sub(r"//.*", "", body)
     body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    body = body.replace("save_profile();", "save_profile_nvs();")
+    body = body.replace("load_profile();", "load_profile_nvs();")
     body = re.sub(r"\s+", "", body)
     return body
 

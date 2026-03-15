@@ -5,9 +5,8 @@ import unittest
 
 
 BASELINE_SETUP_SAVE_COMMIT = "64506d0d"
-ROUTES_SAVE_PATH = Path("ui/web/routes_save.h")
-SETUP_WIFI_PATH = Path("ui/web/routes_setup_wifi.h")
-SETUP_PROCESS_PATH = Path("ui/web/routes_setup_process.h")
+ROUTES_SETUP_PATH = Path("ui/web/routes_setup.h")
+CURRENT_LUA_MODE_MARKER = "lua_type_script = get_lua_mode_name(true);"
 
 
 def _read_git_file(commit: str, path: str) -> str:
@@ -79,9 +78,7 @@ def _assert_markers_are_ordered(test_case: unittest.TestCase, text: str, markers
 class SetupSaveBaselineParityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.current_routes_save = ROUTES_SAVE_PATH.read_text(encoding="utf-8")
-        cls.current_wifi = SETUP_WIFI_PATH.read_text(encoding="utf-8")
-        cls.current_process = SETUP_PROCESS_PATH.read_text(encoding="utf-8")
+        cls.current_routes_setup = ROUTES_SETUP_PATH.read_text(encoding="utf-8")
         cls.baseline_webserver = _read_git_file(
             BASELINE_SETUP_SAVE_COMMIT,
             "WebServer.ino",
@@ -94,15 +91,15 @@ class SetupSaveBaselineParityTest(unittest.TestCase):
             'if (request->hasArg("SteamColor")) {',
         )
         current_body = _extract_function_body(
-            self.current_wifi,
+            self.current_routes_setup,
             "void handleSaveWifiSettings(AsyncWebServerRequest *request)",
         )
         self.assertEqual(_normalize_cpp(current_body), _normalize_cpp(baseline_block))
 
     def test_handle_save_keeps_wifi_updates_before_process_switch(self) -> None:
-        current_wifi_call = self.current_routes_save.find("handleSaveWifiSettings(request);")
-        current_process_call = self.current_routes_save.find("handleSaveProcessSettings(request);")
-        current_rele1 = self.current_routes_save.find('if (request->hasArg("rele1")) {')
+        current_wifi_call = self.current_routes_setup.find("handleSaveWifiSettings(request);")
+        current_process_call = self.current_routes_setup.find("handleSaveProcessSettings(request);")
+        current_rele1 = self.current_routes_setup.find('if (request->hasArg("rele1")) {')
 
         self.assertNotEqual(current_wifi_call, -1)
         self.assertNotEqual(current_process_call, -1)
@@ -127,7 +124,7 @@ class SetupSaveBaselineParityTest(unittest.TestCase):
             'if (request->hasArg("rele1")) {',
         )
         current_body = _extract_function_body(
-            self.current_process,
+            self.current_routes_setup,
             "void handleSaveProcessSettings(AsyncWebServerRequest *request)",
         )
         baseline_markers = [
@@ -166,7 +163,7 @@ class SetupSaveBaselineParityTest(unittest.TestCase):
             "load_default_program_for_mode();",
             "save_profile_nvs();",
             "load_profile_nvs();",
-            "lua_type_script = get_lua_mode_name();",
+            CURRENT_LUA_MODE_MARKER,
             "load_lua_script();",
             "change_samovar_mode();",
         ]
@@ -176,7 +173,7 @@ class SetupSaveBaselineParityTest(unittest.TestCase):
 
     def test_process_helper_keeps_persist_before_reload_sequence(self) -> None:
         current_body = _extract_function_body(
-            self.current_process,
+            self.current_routes_setup,
             "void handleSaveProcessSettings(AsyncWebServerRequest *request)",
         )
         _assert_markers_are_ordered(
@@ -186,7 +183,7 @@ class SetupSaveBaselineParityTest(unittest.TestCase):
                 "load_default_program_for_mode();",
                 "save_profile_nvs();",
                 "load_profile_nvs();",
-                "lua_type_script = get_lua_mode_name();",
+                CURRENT_LUA_MODE_MARKER,
                 "load_lua_script();",
                 "change_samovar_mode();",
             ],
