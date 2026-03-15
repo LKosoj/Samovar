@@ -23,7 +23,7 @@ class WebServerInitModuleTests(unittest.TestCase):
             "handleSave(request);",
             'server.on("/wifi/save", HTTP_POST',
             'change_samovar_mode();',
-            'load_profile();',
+            'load_profile_nvs();',
             'DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");',
             'server.begin();',
         ]
