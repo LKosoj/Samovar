@@ -26,17 +26,6 @@
       return 0;
     }
 
-    function sendbutton (command) {
-      var server = '/command?' + command;
-      request = new XMLHttpRequest();
-      request.open('GET', server, false);
-      request.send();
-      if (request.status != 200) {
-        alert(request.status + ': ' + request.statusText);
-      }
-      return 0;
-    };
-
     function set_program () {
       var server = '/program';
       request = new XMLHttpRequest();
