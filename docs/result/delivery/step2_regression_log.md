@@ -159,3 +159,79 @@ Command: `python3 -m ruff check tools/state_inventory.py tools/tests/test_state_
 ```text
 All checks passed!
 ```
+
+========================================================================
+Behavioral mode-switch harness verification
+========================================================================
+Date: 2026-03-15
+Context: Behavioral harness test for switching between RECT, DIST, BEER, BK, NBK, SUVID, LUA
+
+Command: `python3 tools/tests/test_mode_switching_behavior.py`
+
+```text
+========================================================================
+Mode switching behavior harness
+========================================================================
+
+[1] Verifying static mode-switch contract...
+    ✓ handleSaveProcessSettings resets runtime, reloads defaults and rebinds routes
+    ✓ load_default_program_for_mode selects beer/suvid, dist, nbk and rect families
+    ✓ change_samovar_mode exposes dedicated pages and rect fallback runtime
+    ✓ get_lua_mode_name keeps beer/dist/bk/nbk branches and rect fallback
+
+[2] Compiling and running mode-switch matrix harness...
+    ✓ Harness compiled
+    rect_to_dist|ok|saved=1|runtime=1|route=/distiller.htm|program=dist|lua=/dist.lua|ns=sam_dist
+    rect_to_beer|ok|saved=2|runtime=2|route=/beer.htm|program=beer|lua=/beer.lua|ns=sam_beer
+    rect_to_bk|ok|saved=3|runtime=3|route=/bk.htm|program=rect|lua=/bk.lua|ns=sam_bk
+    rect_to_nbk|ok|saved=4|runtime=4|route=/nbk.htm|program=nbk|lua=/nbk.lua|ns=sam_nbk
+    rect_to_suvid|ok|saved=5|runtime=0|route=/index.htm|program=beer|lua=/rectificat.lua|ns=sam_suvid
+    rect_to_lua|ok|saved=6|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_lua
+    dist_to_rect|ok|saved=0|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_rect
+    dist_to_beer|ok|saved=2|runtime=2|route=/beer.htm|program=beer|lua=/beer.lua|ns=sam_beer
+    dist_to_bk|ok|saved=3|runtime=3|route=/bk.htm|program=rect|lua=/bk.lua|ns=sam_bk
+    dist_to_nbk|ok|saved=4|runtime=4|route=/nbk.htm|program=nbk|lua=/nbk.lua|ns=sam_nbk
+    dist_to_suvid|ok|saved=5|runtime=0|route=/index.htm|program=beer|lua=/rectificat.lua|ns=sam_suvid
+    dist_to_lua|ok|saved=6|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_lua
+    beer_to_rect|ok|saved=0|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_rect
+    beer_to_dist|ok|saved=1|runtime=1|route=/distiller.htm|program=dist|lua=/dist.lua|ns=sam_dist
+    beer_to_bk|ok|saved=3|runtime=3|route=/bk.htm|program=rect|lua=/bk.lua|ns=sam_bk
+    beer_to_nbk|ok|saved=4|runtime=4|route=/nbk.htm|program=nbk|lua=/nbk.lua|ns=sam_nbk
+    beer_to_suvid|ok|saved=5|runtime=0|route=/index.htm|program=beer|lua=/rectificat.lua|ns=sam_suvid
+    beer_to_lua|ok|saved=6|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_lua
+    bk_to_rect|ok|saved=0|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_rect
+    bk_to_dist|ok|saved=1|runtime=1|route=/distiller.htm|program=dist|lua=/dist.lua|ns=sam_dist
+    bk_to_beer|ok|saved=2|runtime=2|route=/beer.htm|program=beer|lua=/beer.lua|ns=sam_beer
+    bk_to_nbk|ok|saved=4|runtime=4|route=/nbk.htm|program=nbk|lua=/nbk.lua|ns=sam_nbk
+    bk_to_suvid|ok|saved=5|runtime=0|route=/index.htm|program=beer|lua=/rectificat.lua|ns=sam_suvid
+    bk_to_lua|ok|saved=6|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_lua
+    nbk_to_rect|ok|saved=0|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_rect
+    nbk_to_dist|ok|saved=1|runtime=1|route=/distiller.htm|program=dist|lua=/dist.lua|ns=sam_dist
+    nbk_to_beer|ok|saved=2|runtime=2|route=/beer.htm|program=beer|lua=/beer.lua|ns=sam_beer
+    nbk_to_bk|ok|saved=3|runtime=3|route=/bk.htm|program=rect|lua=/bk.lua|ns=sam_bk
+    nbk_to_suvid|ok|saved=5|runtime=0|route=/index.htm|program=beer|lua=/rectificat.lua|ns=sam_suvid
+    nbk_to_lua|ok|saved=6|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_lua
+    suvid_to_rect|ok|saved=0|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_rect
+    suvid_to_dist|ok|saved=1|runtime=1|route=/distiller.htm|program=dist|lua=/dist.lua|ns=sam_dist
+    suvid_to_beer|ok|saved=2|runtime=2|route=/beer.htm|program=beer|lua=/beer.lua|ns=sam_beer
+    suvid_to_bk|ok|saved=3|runtime=3|route=/bk.htm|program=rect|lua=/bk.lua|ns=sam_bk
+    suvid_to_nbk|ok|saved=4|runtime=4|route=/nbk.htm|program=nbk|lua=/nbk.lua|ns=sam_nbk
+    suvid_to_lua|ok|saved=6|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_lua
+    lua_to_rect|ok|saved=0|runtime=0|route=/index.htm|program=rect|lua=/rectificat.lua|ns=sam_rect
+    lua_to_dist|ok|saved=1|runtime=1|route=/distiller.htm|program=dist|lua=/dist.lua|ns=sam_dist
+    lua_to_beer|ok|saved=2|runtime=2|route=/beer.htm|program=beer|lua=/beer.lua|ns=sam_beer
+    lua_to_bk|ok|saved=3|runtime=3|route=/bk.htm|program=rect|lua=/bk.lua|ns=sam_bk
+    lua_to_nbk|ok|saved=4|runtime=4|route=/nbk.htm|program=nbk|lua=/nbk.lua|ns=sam_nbk
+    lua_to_suvid|ok|saved=5|runtime=0|route=/index.htm|program=beer|lua=/rectificat.lua|ns=sam_suvid
+    mode_switching_behavior|ok
+
+========================================================================
+Mode switching behavior: PASS
+========================================================================
+```
+
+Command: `python3 -m ruff check tools/tests/test_mode_switching_behavior.py`
+
+```text
+All checks passed!
+```
