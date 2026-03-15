@@ -7,7 +7,7 @@ ACTUATORS_USERS = [
     Path("app/process_common.h"),
     Path("app/alarm_control.h"),
     Path("Samovar.ino"),
-    Path("Menu.ino"),
+    Path("ui/menu/actions.h"),
     Path("modes/beer/beer_runtime.h"),
     Path("modes/bk/bk_alarm.h"),
     Path("modes/nbk/nbk_alarm.h"),

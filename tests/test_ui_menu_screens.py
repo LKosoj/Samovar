@@ -4,7 +4,8 @@ import unittest
 
 MENU_SCREENS_HEADER = Path("ui/menu/screens.h")
 MENU_INPUT_HEADER = Path("ui/menu/input.h")
-MENU_SOURCE = Path("Menu.ino")
+MENU_BOOTSTRAP_SOURCE = Path("Samovar.ino")
+MENU_LEGACY_FILE = Path("Menu.ino")
 
 EXPECTED_SCREEN_DEFINITIONS = [
     "static LiquidLine lql_back_line(0, 10, str_BACK);",
@@ -24,6 +25,11 @@ EXPECTED_SCREEN_DEFINITIONS = [
 ]
 
 EXPECTED_SCREEN_HELPERS = [
+    "inline const char* get_power_text() {",
+    "inline const char* get_welcomeStr4() {",
+    "inline void writeString(String Str, uint8_t num) {",
+    "copyStringSafe(welcomeStrArr1, Str);",
+    "menu_softUpdate();",
     "inline void setup_menu_screen_decimal_places() {",
     "inline void setup_menu_screen_progmem() {",
     "inline void register_menu_screens() {",
@@ -31,17 +37,6 @@ EXPECTED_SCREEN_HELPERS = [
     "lql_setup_program_back_line.set_asProgmem(1);",
     "main_menu1.add_screen(setup_program_back);",
 ]
-
-MOVED_MENU_SCREEN_SNIPPETS = [
-    "LiquidLine lql_back_line(",
-    "LiquidScreen welcome_screen(",
-    "LiquidScreen setup_program_settings(",
-    "LiquidScreen setup_program_back(",
-    "lql_steam_temp.set_decimalPlaces(2);",
-    "lql_setup_program_back_line.set_asProgmem(1);",
-    "main_menu1.add_screen(welcome_screen);",
-]
-
 
 class MenuScreensStructureTest(unittest.TestCase):
     def test_menu_screens_header_exists_with_baseline_screens(self) -> None:
@@ -52,20 +47,18 @@ class MenuScreensStructureTest(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, text)
 
-    def test_menu_source_includes_screen_module_and_uses_helpers(self) -> None:
-        source_text = MENU_SOURCE.read_text(encoding="utf-8")
+    def test_menu_bootstrap_includes_input_module_and_uses_screen_helpers(self) -> None:
+        source_text = MENU_BOOTSTRAP_SOURCE.read_text(encoding="utf-8")
         input_text = MENU_INPUT_HEADER.read_text(encoding="utf-8")
 
-        self.assertIn('#include "ui/menu/screens.h"', source_text)
+        self.assertIn('#include "ui/menu/input.h"', source_text)
+        self.assertIn('#include "ui/menu/screens.h"', input_text)
         self.assertIn("setup_menu_screen_decimal_places();", input_text)
         self.assertIn("setup_menu_screen_progmem();", input_text)
         self.assertIn("register_menu_screens();", input_text)
 
-    def test_menu_source_no_longer_keeps_inline_screen_definitions(self) -> None:
-        text = MENU_SOURCE.read_text(encoding="utf-8")
-        for snippet in MOVED_MENU_SCREEN_SNIPPETS:
-            with self.subTest(snippet=snippet):
-                self.assertNotIn(snippet, text)
+    def test_legacy_menu_file_is_removed(self) -> None:
+        self.assertFalse(MENU_LEGACY_FILE.exists(), "Menu.ino must be removed")
 
 
 if __name__ == "__main__":

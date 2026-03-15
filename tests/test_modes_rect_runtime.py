@@ -5,9 +5,8 @@ import unittest
 RECT_RUNTIME_HEADER = Path("modes/rect/rect_runtime.h")
 DIRECT_INCLUDE_USERS = (
     Path("Samovar.ino"),
-    Path("Menu.ino"),
+    Path("ui/menu/actions.h"),
     Path("Blynk.ino"),
-    Path("lua.h"),
     Path("impurity_detector.h"),
 )
 LEGACY_DECLARATION_ONLY_USERS = (

@@ -4,18 +4,72 @@
 #include <LiquidMenu.h>
 
 #include "state/globals.h"
+#include "support/safe_parse.h"
 #include "ui/menu/strings.h"
 
-const char* get_calibrate_text();
-const char* get_startval_text();
-const char* get_timestr();
-const char* get_welcomeStr1();
-const char* get_welcomeStr2();
-const char* get_welcomeStr3();
-const char* get_welcomeStr4();
-const char* get_pause_text();
-const char* get_power_text();
-const char* get_ipstr();
+void menu_update();
+void menu_softUpdate();
+
+inline const char* get_calibrate_text() {
+  return calibrate_text_ptr;
+}
+
+inline const char* get_startval_text() {
+  return startval_text_val;
+}
+
+inline const char* get_timestr() {
+  return timestr;
+}
+
+inline const char* get_welcomeStr1() {
+  return welcomeStr1;
+}
+
+inline const char* get_welcomeStr2() {
+  return welcomeStr2;
+}
+
+inline const char* get_welcomeStr3() {
+  return welcomeStr3;
+}
+
+inline const char* get_welcomeStr4() {
+  return welcomeStr4;
+}
+
+inline const char* get_pause_text() {
+  return pause_text_ptr;
+}
+
+inline const char* get_power_text() {
+  return power_text_ptr;
+}
+
+inline const char* get_ipstr() {
+  return ipstr;
+}
+
+inline void writeString(String Str, uint8_t num) {
+  switch (num) {
+    case 1:
+      copyStringSafe(welcomeStrArr1, Str);
+      break;
+    case 2:
+      copyStringSafe(welcomeStrArr2, Str);
+      break;
+    case 3:
+      copyStringSafe(welcomeStrArr3, Str);
+      break;
+    case 4:
+      copyStringSafe(welcomeStrArr4, Str);
+      break;
+    case 0:
+      menu_update();
+      break;
+  }
+  menu_softUpdate();
+}
 
 static LiquidLine lql_back_line(0, 10, str_BACK);
 static LiquidLine lql_time(0, 10, get_timestr);

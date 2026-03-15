@@ -3,7 +3,8 @@ import unittest
 
 
 MENU_INPUT_HEADER = Path("ui/menu/input.h")
-MENU_SOURCE = Path("Menu.ino")
+MENU_BOOTSTRAP_SOURCE = Path("Samovar.ino")
+MENU_LEGACY_FILE = Path("Menu.ino")
 
 EXPECTED_INPUT_HELPERS = [
     "inline void reset_focus() {",
@@ -44,45 +45,27 @@ EXPECTED_INPUT_BASELINE = [
     "change_screen(&welcome_screen);",
 ]
 
-MOVED_MENU_INPUT_SNIPPETS = [
-    "void reset_focus() {",
-    "void menu_previous_screen() {",
-    "void menu_next_screen() {",
-    "void menu_switch_focus() {",
-    "void menu_reset_lcd() {",
-    "void change_screen(LiquidScreen* screen) {",
-    "void menu_update() {",
-    "void menu_softUpdate() {",
-    "void set_menu_screen(uint8_t param) {",
-    "void encoder_getvalue() {",
-    "void setupMenu() {",
-    "lql_start.attach_function(1, menu_samovar_start);",
-]
-
-
 class MenuInputStructureTest(unittest.TestCase):
     def test_menu_input_header_exists_with_baseline_logic(self) -> None:
         self.assertTrue(MENU_INPUT_HEADER.exists(), "ui/menu/input.h must exist")
         text = MENU_INPUT_HEADER.read_text(encoding="utf-8")
 
         self.assertIn("#include <Arduino.h>", text)
+        self.assertIn('#include "state/globals.h"', text)
 
         for snippet in EXPECTED_INPUT_HELPERS + EXPECTED_INPUT_BASELINE:
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, text)
 
-    def test_menu_source_includes_input_module_and_uses_binding_helper(self) -> None:
-        source_text = MENU_SOURCE.read_text(encoding="utf-8")
+    def test_menu_bootstrap_includes_input_module_and_uses_binding_helper(self) -> None:
+        source_text = MENU_BOOTSTRAP_SOURCE.read_text(encoding="utf-8")
         header_text = MENU_INPUT_HEADER.read_text(encoding="utf-8")
 
         self.assertIn('#include "ui/menu/input.h"', source_text)
         self.assertIn("bind_menu_input_handlers();", header_text)
 
-    def test_menu_source_no_longer_keeps_inline_input_logic(self) -> None:
-        text = MENU_SOURCE.read_text(encoding="utf-8")
-        for snippet in MOVED_MENU_INPUT_SNIPPETS:
-            with self.subTest(snippet=snippet):
-                self.assertNotIn(snippet, text)
+    def test_legacy_menu_file_is_removed(self) -> None:
+        self.assertFalse(MENU_LEGACY_FILE.exists(), "Menu.ino must be removed")
 
 
 if __name__ == "__main__":

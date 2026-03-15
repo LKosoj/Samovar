@@ -34,7 +34,9 @@ GLOBALS_DIRECT_INCLUDE_FILES = [
     "modes/nbk/nbk_state.h",
     "pumppwm.h",
     "Samovar.ino",
-    "Menu.ino",
+    "ui/menu/actions.h",
+    "ui/menu/input.h",
+    "ui/menu/screens.h",
     "SamovarMqtt.h",
 ]
 
@@ -42,7 +44,8 @@ SAFE_PARSE_DIRECT_INCLUDE_FILES = [
     "modes/beer/beer_program_codec.h",
     "modes/nbk/nbk_program_codec.h",
     "Samovar.ino",
-    "Menu.ino",
+    "ui/menu/actions.h",
+    "ui/menu/screens.h",
     "SamovarMqtt.h",
 ]
 
@@ -60,7 +63,7 @@ PRESSURE_DIRECT_INCLUDE_FILES = [
 SENSOR_SCAN_DIRECT_INCLUDE_FILES = [
     "app/orchestration.h",
     "app/process_common.h",
-    "Menu.ino",
+    "ui/menu/actions.h",
     "modes/nbk/nbk_finish.h",
 ]
 

@@ -8,7 +8,7 @@ SENSORINIT_FILE = Path("sensorinit.h")
 
 DIRECT_USERS = [
     Path("app/runtime_tasks.h"),
-    Path("Menu.ino"),
+    Path("ui/menu/actions.h"),
     Path("modes/dist/dist_runtime.h"),
     Path("modes/beer/beer_runtime.h"),
     Path("modes/bk/bk_runtime.h"),

@@ -3,10 +3,12 @@ import unittest
 
 
 MENU_STRINGS_HEADER = Path("ui/menu/strings.h")
-MENU_SOURCE = Path("Menu.ino")
+MENU_BOOTSTRAP_SOURCE = Path("Samovar.ino")
+MENU_LEGACY_FILE = Path("Menu.ino")
 MENU_STRING_USERS = [
-    Path("Menu.ino"),
     Path("Samovar.ino"),
+    Path("ui/menu/screens.h"),
+    Path("ui/menu/actions.h"),
 ]
 
 EXPECTED_PROGMEM_STRINGS = {
@@ -52,20 +54,6 @@ EXPECTED_RUNTIME_STRINGS = {
     "menu_text_power_on": "ON",
 }
 
-MOVED_MENU_LITERALS = [
-    '"Continue"',
-    '"Pause"',
-    '"Stop"',
-    '"Start"',
-    '"Prg No 1"',
-    '"Prg No "',
-    '"Prg finish"',
-    '"Stoped"',
-    '"Stoped             "',
-    '"ON"',
-]
-
-
 class MenuStringsStructureTest(unittest.TestCase):
     def test_menu_strings_header_exists_with_baseline_texts(self) -> None:
         self.assertTrue(MENU_STRINGS_HEADER.exists(), "ui/menu/strings.h must exist")
@@ -85,13 +73,11 @@ class MenuStringsStructureTest(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn('#include "ui/menu/strings.h"', text)
 
-    def test_menu_source_no_longer_keeps_inline_menu_literals(self) -> None:
-        text = MENU_SOURCE.read_text(encoding="utf-8")
+    def test_menu_bootstrap_uses_string_module_and_legacy_file_is_removed(self) -> None:
+        text = MENU_BOOTSTRAP_SOURCE.read_text(encoding="utf-8")
 
-        self.assertNotIn("const char str_BACK[] PROGMEM", text)
-        for literal in MOVED_MENU_LITERALS:
-            with self.subTest(literal=literal):
-                self.assertNotIn(literal, text)
+        self.assertIn('#include "ui/menu/strings.h"', text)
+        self.assertFalse(MENU_LEGACY_FILE.exists(), "Menu.ino must be removed")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,6 @@ import unittest
 POWER_CONTROL_HEADER = Path("io/power_control.h")
 POWER_CONTROL_USERS = [
     Path("Samovar.ino"),
-    Path("Menu.ino"),
     Path("modes/beer/beer_runtime.h"),
     Path("modes/bk/bk_alarm.h"),
     Path("modes/bk/bk_runtime.h"),

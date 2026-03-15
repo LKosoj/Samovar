@@ -4,7 +4,8 @@ import unittest
 
 MENU_ACTIONS_HEADER = Path("ui/menu/actions.h")
 MENU_INPUT_HEADER = Path("ui/menu/input.h")
-MENU_SOURCE = Path("Menu.ino")
+MENU_BOOTSTRAP_SOURCE = Path("Samovar.ino")
+MENU_LEGACY_FILE = Path("Menu.ino")
 
 EXPECTED_ACTION_HELPERS = [
     "inline void menu_setup() {",
@@ -56,25 +57,6 @@ EXPECTED_ACTION_BASELINE = [
     "sam_command_sync = SAMOVAR_NONE;",
 ]
 
-MOVED_MENU_ACTION_SNIPPETS = [
-    "void menu_setup() {",
-    "void setup_go_back() {",
-    "void menu_pump_speed_up() {",
-    "void menu_pump_speed_down() {",
-    "void set_delta_steam_temp_up() {",
-    "void set_delta_set_tank_temp_down() {",
-    "void stepper_step_ml_down() {",
-    "void menu_program() {",
-    "void menu_program_back() {",
-    "void menu_reset_wifi() {",
-    "void menu_get_power() {",
-    "void menu_pause() {",
-    "void menu_calibrate() {",
-    "void menu_calibrate_down() {",
-    "void menu_samovar_start() {",
-    "void samovar_reset() {",
-]
-
 LEGACY_INPUT_DECLARATIONS = [
     "void samovar_reset();",
     "void menu_samovar_start();",
@@ -109,13 +91,11 @@ class MenuActionsStructureTest(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertNotIn(snippet, input_text)
 
-    def test_menu_source_includes_actions_module_and_no_longer_keeps_inline_logic(self) -> None:
-        source_text = MENU_SOURCE.read_text(encoding="utf-8")
+    def test_menu_bootstrap_uses_input_module_and_legacy_file_is_removed(self) -> None:
+        source_text = MENU_BOOTSTRAP_SOURCE.read_text(encoding="utf-8")
 
-        self.assertIn('#include "ui/menu/actions.h"', source_text)
-        for snippet in MOVED_MENU_ACTION_SNIPPETS:
-            with self.subTest(snippet=snippet):
-                self.assertNotIn(snippet, source_text)
+        self.assertIn('#include "ui/menu/input.h"', source_text)
+        self.assertFalse(MENU_LEGACY_FILE.exists(), "Menu.ino must be removed")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ SENSORINIT_FILE = Path("sensorinit.h")
 TASK_STACK_USAGE_HEADER = Path("support/task_stack_usage.h")
 SEARCH_ROOTS = [
     Path("Samovar.ino"),
-    Path("Menu.ino"),
     Path("Blynk.ino"),
     Path("Samovar.h"),
     Path("app"),

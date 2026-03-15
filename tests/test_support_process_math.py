@@ -6,13 +6,11 @@ PROCESS_MATH_HEADER = Path("support/process_math.h")
 PROCESS_MATH_USERS = [
     Path("I2CStepper.h"),
     Path("SPIFFSEditor.h"),
-    Path("FS.ino"),
     Path("impurity_detector.h"),
-    Path("lua.h"),
     Path("Blynk.ino"),
     Path("modes/beer/beer_program_codec.h"),
     Path("Samovar.ino"),
-    Path("Menu.ino"),
+    Path("ui/menu/actions.h"),
     Path("ui/web/ajax_snapshot.h"),
 ]
 

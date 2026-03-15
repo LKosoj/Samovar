@@ -4,7 +4,7 @@ import unittest
 
 RECT_PROGRAM_CODEC_HEADER = Path("modes/rect/rect_program_codec.h")
 RECT_PROGRAM_CODEC_USERS = [
-    Path("Menu.ino"),
+    Path("ui/menu/actions.h"),
     Path("Blynk.ino"),
     Path("app/default_programs.h"),
 ]

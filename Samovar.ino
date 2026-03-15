@@ -80,6 +80,7 @@
 #include "support/safe_parse.h"
 #include "support/process_math.h"
 #include "ui/menu/strings.h"
+#include "ui/menu/input.h"
 #include "crash_handler.h"
 
 #ifndef __SAMOVAR_DEBUG
@@ -433,15 +434,10 @@ portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
 
 // void reset_migration_flag(); // Только для тестирования миграции
 
-void setupMenu();
 void WebServerInit(void);
-void encoder_getvalue();
-void menu_calibrate();
 void change_samovar_mode();
-void samovar_reset();
 // WiFiManager отключен
 void verbose_print_reset_reason();
-void menu_switch_focus();
 float get_steam_alcohol(float t);
 float get_alcohol(float t);
 void startService(void);

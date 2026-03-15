@@ -6,10 +6,8 @@ ALARM_CONTROL_HEADER = Path("app/alarm_control.h")
 ALARM_CONTROL_USERS = [
     Path("Samovar.ino"),
     Path("modes/beer/beer_runtime.h"),
-    Path("Menu.ino"),
-    Path("lua.h"),
     Path("modes/bk/bk_alarm.h"),
-    Path("nbk.h"),
+    Path("modes/nbk/nbk_alarm.h"),
     Path("impurity_detector.h"),
 ]
 

@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 
+#include "state/globals.h"
 #include "ui/menu/actions.h"
 #include "ui/menu/screens.h"
 

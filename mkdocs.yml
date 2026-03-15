@@ -55,7 +55,6 @@ nav:
   - impurity_detector.h: modules/impurity_detector__h.md
   - logic.h: modules/logic__h.md
   - lua.h: modules/lua__h.md
-  - Menu.ino: modules/Menu__ino.md
   - mod_rmv.ino: modules/mod_rmv__ino.md
   - mod_rmvk.h: modules/mod_rmvk__h.md
   - nbk.h: modules/nbk__h.md
