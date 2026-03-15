@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 
+#include "src/core/state/status_codes.h"
 #include "modes/beer/beer_support.h"
 #include "state/globals.h"
 #include "support/format_utils.h"
@@ -11,43 +12,44 @@
 inline String get_Samovar_Status() {
   SamovarStatus.clear();
   // Если питание выключено и нет активного режима - показываем "Выключено"
-  if (!PowerOn && SamovarStatusInt == 0) {
+  if (!PowerOn && SamovarStatusInt == SAMOVAR_STATUS_OFF) {
     SamovarStatus = F("Выключено");
   } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
     SamovarStatus = "Прг №" + String(ProgramNum + 1);
-    SamovarStatusInt = 10;
+    SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_RUN;
   } else if (PowerOn && startval == 1 && program_Wait) {
     int s = 0;
     if (t_min > (millis() + 10)) {
       s = (t_min - millis()) / 1000;
     }
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + " пауза " + program_Wait_Type + ". Продолжение через " + (String)s + " сек.";
-    SamovarStatusInt = 15;
+    SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_WAIT;
   } else if (PowerOn && startval == 2) {
     SamovarStatus = F("Выполнение программы завершено");
-    SamovarStatusInt = 20;
+    SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_COMPLETE;
   } else if (PowerOn && startval == 100) {
     SamovarStatus = F("Калибровка");
-    SamovarStatusInt = 30;
+    SamovarStatusInt = SAMOVAR_STATUS_CALIBRATION;
   } else if (PauseOn) {
     SamovarStatus = F("Пауза");
-    SamovarStatusInt = 40;
+    SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_PAUSE;
   } else if (PowerOn && startval == 0 && !stepper.getState()) {
-    if (SamovarStatusInt != 51 && SamovarStatusInt != 52) {
+    if (SamovarStatusInt != SAMOVAR_STATUS_RECTIFICATION_STABILIZING &&
+        SamovarStatusInt != SAMOVAR_STATUS_RECTIFICATION_STABILIZED) {
       SamovarStatus = F("Разгон колонны");
-      SamovarStatusInt = 50;
-    } else if (SamovarStatusInt == 51) {
+      SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_WARMUP;
+    } else if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING) {
       SamovarStatus = F("Разгон завершен. Стабилизация/Работа на себя");
-    } else if (SamovarStatusInt == 52) {
+    } else if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZED) {
       SamovarStatus = F("Стабилизация завершена/Работа на себя");
     }
-  } else if (SamovarStatusInt == 1000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_DISTILLATION) {
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; Режим дистилляции";
     //SamovarStatus += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
     //SamovarStatus += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
-  } else if (SamovarStatusInt == 3000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_BK) {
     SamovarStatus = F("Режим бражной колонны");
-  } else if (SamovarStatusInt == 4000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_NBK) {
     if (startval == 4001) {
       SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
       if (program[ProgramNum].WType == "H") {
@@ -60,7 +62,7 @@ inline String get_Samovar_Status() {
         SamovarStatus = SamovarStatus + "Работа";
       }
     }
-  } else if (SamovarStatusInt == 2000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_BEER) {
 #ifdef SAM_BEER_PRG
     SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
 #else
@@ -124,7 +126,9 @@ inline String get_Samovar_Status() {
     }
   }
 
-  if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN ||
+      SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT ||
+      (SamovarStatusInt == SAMOVAR_STATUS_BEER && PowerOn)) {
     SamovarStatus += "; Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }
   if (SteamSensor.BodyTemp > 0) {

@@ -30,7 +30,7 @@ inline void distiller_proc() {
 //            ", Режим: " + String(Samovar_Mode) +
 //            ", PowerOn: " + String(PowerOn), NOTIFY_MSG);
 
-  if (SamovarStatusInt != 1000) return;
+  if (SamovarStatusInt != SAMOVAR_STATUS_DISTILLATION) return;
 
   if (!PowerOn) {
 #ifdef USE_MQTT

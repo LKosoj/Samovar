@@ -6,6 +6,7 @@
 #include "Samovar_ini.h"
 #include "io/sensor_scan.h"
 #include "io/actuators.h"
+#include "src/core/state/status_codes.h"
 #include "state/globals.h"
 #include "support/process_math.h"
 
@@ -19,7 +20,7 @@ void set_pump_pwm(float duty);
 #endif
 
 inline void stop_process(String reason) {
-  SamovarStatusInt = 0;
+  SamovarStatusInt = SAMOVAR_STATUS_OFF;
   set_power(false);
   reset_sensor_counter();
   SendMsg(reason, NOTIFY_MSG);

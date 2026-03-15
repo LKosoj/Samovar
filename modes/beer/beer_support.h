@@ -3,10 +3,11 @@
 
 #include <Arduino.h>
 
+#include "src/core/state/status_codes.h"
 #include "state/globals.h"
 
 inline float getBeerCurrentTemp() {
-  if (SamovarStatusInt != 2000) return 0.0;
+  if (SamovarStatusInt != SAMOVAR_STATUS_BEER) return 0.0;
 
   switch (program[ProgramNum].TempSensor) {
     case 0:

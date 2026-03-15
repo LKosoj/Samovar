@@ -497,11 +497,11 @@ inline void samovar_app_loop() {
     if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
       if (!PowerOn) {
         set_power(true);
-      } else if (startval == 0 && SamovarStatusInt < 1000) {
+      } else if (startval == 0 && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         menu_samovar_start();
-      } else if (startval != 0 && !program_Pause && SamovarStatusInt < 1000) {
+      } else if (startval != 0 && !program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         pause_withdrawal(!PauseOn);
-      } else if (startval != 0 && program_Pause && SamovarStatusInt < 1000) {
+      } else if (startval != 0 && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         menu_samovar_start();
       }
       if (startval == 100) {

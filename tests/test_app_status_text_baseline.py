@@ -6,6 +6,7 @@ import unittest
 
 BASELINE_LOGIC_COMMIT = "43e22996"
 STATUS_TEXT_HEADER = Path("app/status_text.h")
+STATUS_CODES_HEADER = Path("src/core/state/status_codes.h")
 
 
 def _read_git_file(commit: str, path: str) -> str:
@@ -45,6 +46,17 @@ def _normalize_cpp_body(body: str) -> str:
     return body
 
 
+def _expand_status_constants(text: str) -> str:
+    constants_text = STATUS_CODES_HEADER.read_text(encoding="utf-8")
+    matches = re.findall(
+        r"static constexpr int16_t (SAMOVAR_STATUS_[A-Z0-9_]+) = (-?\d+);",
+        constants_text,
+    )
+    for name, value in sorted(matches, key=lambda item: len(item[0]), reverse=True):
+        text = text.replace(name, value)
+    return text
+
+
 class StatusTextBaselineParityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -56,7 +68,9 @@ class StatusTextBaselineParityTest(unittest.TestCase):
 
     def test_status_text_matches_pre_extraction_baseline(self) -> None:
         current_body = _normalize_cpp_body(
-            _extract_function_body(self.current_text, "String get_Samovar_Status()")
+            _expand_status_constants(
+                _extract_function_body(self.current_text, "String get_Samovar_Status()")
+            )
         )
         baseline_body = _normalize_cpp_body(
             _extract_function_body(self.baseline_text, "String get_Samovar_Status()")
@@ -65,12 +79,12 @@ class StatusTextBaselineParityTest(unittest.TestCase):
 
     def test_status_text_keeps_updating_runtime_status_code(self) -> None:
         body = _extract_function_body(self.current_text, "String get_Samovar_Status()")
-        self.assertIn("SamovarStatusInt = 10;", body)
-        self.assertIn("SamovarStatusInt = 15;", body)
-        self.assertIn("SamovarStatusInt = 20;", body)
-        self.assertIn("SamovarStatusInt = 30;", body)
-        self.assertIn("SamovarStatusInt = 40;", body)
-        self.assertIn("SamovarStatusInt = 50;", body)
+        self.assertIn("SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_RUN;", body)
+        self.assertIn("SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_WAIT;", body)
+        self.assertIn("SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_COMPLETE;", body)
+        self.assertIn("SamovarStatusInt = SAMOVAR_STATUS_CALIBRATION;", body)
+        self.assertIn("SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_PAUSE;", body)
+        self.assertIn("SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_WARMUP;", body)
 
 
 if __name__ == "__main__":

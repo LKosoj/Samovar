@@ -30,7 +30,9 @@ bool column_wetting();
 #endif
 
 inline void withdrawal(void) {
-  if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
+  if (!(SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_RUN ||
+        SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WAIT ||
+        SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_PAUSE)) return;
 
   // ОБРАБОТКА ДЕТЕКТОРА ПРИМЕСЕЙ
   process_impurity_detector();
@@ -371,7 +373,9 @@ inline void check_alarm() {
 
 #ifdef SAMOVAR_USE_POWER
   //управляем разгонным тэном
-  if (SamovarStatusInt == 50 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
+      TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP &&
+      PowerOn) {
     if (!acceleration_heater) {
       //включаем разгонный тэн
       digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
@@ -558,7 +562,8 @@ inline void check_alarm() {
     alarm_t_min = millis() + 1000 * 30;
   }
 
-  if (SamovarStatusInt == 50 && SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
+      SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
 #ifdef USE_WATER_PUMP
     //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
     wp_count = -5;
@@ -573,7 +578,7 @@ inline void check_alarm() {
     if (column_wetting_result) {
 
         //достигли заданной температуры на разгоне и смочили насадку (если используется эта функция), переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
-        SamovarStatusInt = 51;
+        SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZING;
 
         // Инициализируем переменные для проверки стабилизации
         acceleration_temp = 0;
@@ -594,7 +599,7 @@ inline void check_alarm() {
     }
   }
 
-  if (SamovarStatusInt == 51 && !boil_started) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING && !boil_started) {
     set_boiling();
     if (boil_started) {
       SendMsg("Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
@@ -603,14 +608,15 @@ inline void check_alarm() {
 
   //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
   //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
-  if (SamovarStatusInt == 51 && SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING &&
+      SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
     static float prev_stable_temp = 0;  // Предыдущая температура для проверки стабилизации
     float d = SteamSensor.avgTemp - prev_stable_temp;
     d = abs(d);
     if (d < 0.1) {
       acceleration_temp += 1;
       if (acceleration_temp == 60 * 6) {
-        SamovarStatusInt = 52;
+        SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZED;
         acceleration_temp = 0;  // Сбрасываем счетчик после установки статуса стабилизации
         prev_stable_temp = 0;  // Сбрасываем предыдущую температуру
         set_buzzer(true);

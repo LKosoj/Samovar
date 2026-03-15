@@ -150,7 +150,7 @@ inline void reset_sensor_counter(void) {
 
 
   ActualVolumePerHour = 0;
-  SamovarStatusInt = 0;
+  SamovarStatusInt = SAMOVAR_STATUS_OFF;
   startval = 0;
   PauseOn = false;
   program_Wait = false;

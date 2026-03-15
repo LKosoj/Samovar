@@ -1,0 +1,58 @@
+#ifndef __SAMOVAR_STATUS_CODES_H_
+#define __SAMOVAR_STATUS_CODES_H_
+
+#include <stdint.h>
+
+static constexpr int16_t SAMOVAR_STATUS_OFF = 0;
+static constexpr int16_t SAMOVAR_STATUS_RECTIFICATION_RUN = 10;
+static constexpr int16_t SAMOVAR_STATUS_RECTIFICATION_WAIT = 15;
+static constexpr int16_t SAMOVAR_STATUS_RECTIFICATION_COMPLETE = 20;
+static constexpr int16_t SAMOVAR_STATUS_CALIBRATION = 30;
+static constexpr int16_t SAMOVAR_STATUS_RECTIFICATION_PAUSE = 40;
+static constexpr int16_t SAMOVAR_STATUS_RECTIFICATION_WARMUP = 50;
+static constexpr int16_t SAMOVAR_STATUS_RECTIFICATION_STABILIZING = 51;
+static constexpr int16_t SAMOVAR_STATUS_RECTIFICATION_STABILIZED = 52;
+static constexpr int16_t SAMOVAR_STATUS_DISTILLATION = 1000;
+static constexpr int16_t SAMOVAR_STATUS_BEER = 2000;
+static constexpr int16_t SAMOVAR_STATUS_BK = 3000;
+static constexpr int16_t SAMOVAR_STATUS_NBK = 4000;
+
+enum SamovarCommands {
+  SAMOVAR_NONE,
+  SAMOVAR_START,
+  SAMOVAR_POWER,
+  SAMOVAR_RESET,
+  CALIBRATE_START,
+  CALIBRATE_STOP,
+  SAMOVAR_PAUSE,
+  SAMOVAR_CONTINUE,
+  SAMOVAR_SETBODYTEMP,
+  SAMOVAR_DISTILLATION,
+  SAMOVAR_BEER,
+  SAMOVAR_BEER_NEXT,
+  SAMOVAR_BK,
+  SAMOVAR_NBK,
+  SAMOVAR_SELF_TEST,
+  SAMOVAR_DIST_NEXT,
+  SAMOVAR_NBK_NEXT
+};
+
+static constexpr SamovarCommands SAMOVAR_COMMAND_NONE = SAMOVAR_NONE;
+static constexpr SamovarCommands SAMOVAR_COMMAND_START = SAMOVAR_START;
+static constexpr SamovarCommands SAMOVAR_COMMAND_POWER = SAMOVAR_POWER;
+static constexpr SamovarCommands SAMOVAR_COMMAND_RESET = SAMOVAR_RESET;
+static constexpr SamovarCommands SAMOVAR_COMMAND_CALIBRATE_START = CALIBRATE_START;
+static constexpr SamovarCommands SAMOVAR_COMMAND_CALIBRATE_STOP = CALIBRATE_STOP;
+static constexpr SamovarCommands SAMOVAR_COMMAND_PAUSE = SAMOVAR_PAUSE;
+static constexpr SamovarCommands SAMOVAR_COMMAND_CONTINUE = SAMOVAR_CONTINUE;
+static constexpr SamovarCommands SAMOVAR_COMMAND_SETBODYTEMP = SAMOVAR_SETBODYTEMP;
+static constexpr SamovarCommands SAMOVAR_COMMAND_DISTILLATION = SAMOVAR_DISTILLATION;
+static constexpr SamovarCommands SAMOVAR_COMMAND_BEER = SAMOVAR_BEER;
+static constexpr SamovarCommands SAMOVAR_COMMAND_BEER_NEXT = SAMOVAR_BEER_NEXT;
+static constexpr SamovarCommands SAMOVAR_COMMAND_BK = SAMOVAR_BK;
+static constexpr SamovarCommands SAMOVAR_COMMAND_NBK = SAMOVAR_NBK;
+static constexpr SamovarCommands SAMOVAR_COMMAND_SELF_TEST = SAMOVAR_SELF_TEST;
+static constexpr SamovarCommands SAMOVAR_COMMAND_DIST_NEXT = SAMOVAR_DIST_NEXT;
+static constexpr SamovarCommands SAMOVAR_COMMAND_NBK_NEXT = SAMOVAR_NBK_NEXT;
+
+#endif

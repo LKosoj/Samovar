@@ -60,13 +60,13 @@ inline void handleSaveProcessSettings(AsyncWebServerRequest *request) {
   }
 
   if (PowerOn) {
-    if (SamovarStatusInt == 1000) {
+    if (SamovarStatusInt == SAMOVAR_STATUS_DISTILLATION) {
       distiller_finish();
-    } else if (SamovarStatusInt == 2000) {
+    } else if (SamovarStatusInt == SAMOVAR_STATUS_BEER) {
       beer_finish();
-    } else if (SamovarStatusInt == 3000) {
+    } else if (SamovarStatusInt == SAMOVAR_STATUS_BK) {
       bk_finish();
-    } else if (SamovarStatusInt == 4000) {
+    } else if (SamovarStatusInt == SAMOVAR_STATUS_NBK) {
       nbk_finish();
     } else {
       set_power(false);

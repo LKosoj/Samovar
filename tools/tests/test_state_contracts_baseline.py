@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
+import re
 import sys
 
 
@@ -11,7 +12,22 @@ if str(ROOT) not in sys.path:
 from tools import state_inventory  # noqa: E402
 
 
-EXPECTED_STATUS_VALUES = [0, 10, 15, 20, 30, 40, 50, 51, 52, 1000, 2000, 3000, 4000]
+STATUS_CODES_HEADER = ROOT / "src" / "core" / "state" / "status_codes.h"
+EXPECTED_STATUS_CODES = {
+    "SAMOVAR_STATUS_OFF": 0,
+    "SAMOVAR_STATUS_RECTIFICATION_RUN": 10,
+    "SAMOVAR_STATUS_RECTIFICATION_WAIT": 15,
+    "SAMOVAR_STATUS_RECTIFICATION_COMPLETE": 20,
+    "SAMOVAR_STATUS_CALIBRATION": 30,
+    "SAMOVAR_STATUS_RECTIFICATION_PAUSE": 40,
+    "SAMOVAR_STATUS_RECTIFICATION_WARMUP": 50,
+    "SAMOVAR_STATUS_RECTIFICATION_STABILIZING": 51,
+    "SAMOVAR_STATUS_RECTIFICATION_STABILIZED": 52,
+    "SAMOVAR_STATUS_DISTILLATION": 1000,
+    "SAMOVAR_STATUS_BEER": 2000,
+    "SAMOVAR_STATUS_BK": 3000,
+    "SAMOVAR_STATUS_NBK": 4000,
+}
 EXPECTED_START_VALUES = [0, 1, 2, 3, 100, 1000, 2000, 2001, 2002, 3000, 4000, 4001]
 EXPECTED_COMMAND_ENUM = {
     "SAMOVAR_NONE": 0,
@@ -48,6 +64,15 @@ def require_equal(label: str, actual: object, expected: object) -> None:
         raise AssertionError(f"{label}: expected {expected!r}, got {actual!r}")
 
 
+def parse_status_codes() -> dict[str, int]:
+    text = STATUS_CODES_HEADER.read_text(encoding="utf-8")
+    pattern = re.compile(r"static constexpr int16_t (SAMOVAR_STATUS_[A-Z0-9_]+) = (-?\d+);")
+    values = {name: int(raw_value) for name, raw_value in pattern.findall(text)}
+    if not values:
+        raise AssertionError(f"No status codes found in {STATUS_CODES_HEADER}")
+    return values
+
+
 def main() -> None:
     print("=" * 72)
     print("State contracts baseline test")
@@ -56,9 +81,9 @@ def main() -> None:
     inventory = state_inventory.build_inventory()
 
     print("\n[1] Verifying SamovarStatusInt exact numeric baseline...")
-    actual_status_values = list(inventory["status_values"])
-    require_equal("SamovarStatusInt", actual_status_values, EXPECTED_STATUS_VALUES)
-    print(f"    ✓ SamovarStatusInt={actual_status_values}")
+    actual_status_codes = parse_status_codes()
+    require_equal("SamovarStatusInt", actual_status_codes, EXPECTED_STATUS_CODES)
+    print(f"    ✓ SamovarStatusInt={actual_status_codes}")
 
     print("\n[2] Verifying startval exact numeric baseline...")
     actual_start_values = list(inventory["start_values"])

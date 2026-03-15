@@ -3,14 +3,15 @@ import unittest
 
 
 RUNTIME_TYPES = Path("state/runtime_types.h")
+STATUS_CODES = Path("src/core/state/status_codes.h")
 SAMOVAR_HEADER = Path("Samovar.h")
 
 
 class RuntimeTypesStructureTest(unittest.TestCase):
-    def test_runtime_types_header_exists_and_defines_runtime_types(self) -> None:
+    def test_runtime_types_header_exists_and_includes_status_codes(self) -> None:
         self.assertTrue(RUNTIME_TYPES.exists(), "state/runtime_types.h must exist")
         text = RUNTIME_TYPES.read_text(encoding="utf-8")
-        self.assertIn("enum SamovarCommands", text)
+        self.assertIn('#include "src/core/state/status_codes.h"', text)
         self.assertIn("enum SAMOVAR_MODE", text)
         self.assertIn("enum MESSAGE_TYPE", text)
         self.assertIn("enum get_web_type", text)
@@ -18,8 +19,17 @@ class RuntimeTypesStructureTest(unittest.TestCase):
         self.assertIn("struct DSSensor", text)
         self.assertIn("struct WProgram", text)
 
-    def test_samovar_header_includes_runtime_types(self) -> None:
+    def test_status_codes_header_exists_and_defines_status_and_commands(self) -> None:
+        self.assertTrue(STATUS_CODES.exists(), "src/core/state/status_codes.h must exist")
+        text = STATUS_CODES.read_text(encoding="utf-8")
+        self.assertIn("enum SamovarCommands", text)
+        self.assertIn("SAMOVAR_STATUS_RECTIFICATION_RUN = 10", text)
+        self.assertIn("SAMOVAR_STATUS_RECTIFICATION_STABILIZED = 52", text)
+        self.assertIn("SAMOVAR_STATUS_NBK = 4000", text)
+
+    def test_samovar_header_includes_runtime_types_and_status_codes(self) -> None:
         text = SAMOVAR_HEADER.read_text(encoding="utf-8")
+        self.assertIn('#include "src/core/state/status_codes.h"', text)
         self.assertIn('#include "state/runtime_types.h"', text)
 
     def test_runtime_type_definitions_removed_from_samovar_header(self) -> None:

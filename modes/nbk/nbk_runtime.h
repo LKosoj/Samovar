@@ -62,7 +62,7 @@ inline void handle_nbk_stage_heatup() {
     if (startval == 4000) {
       startval = 4001;
       run_nbk_program(0); //Запуск программ
-      SamovarStatusInt = 4000; // Именно в таком порядке
+      SamovarStatusInt = SAMOVAR_STATUS_NBK; // Именно в таком порядке
       }
   //- разгон парогенератора до Тп > 75°C.
   if (nbk_Tp >= 75) {

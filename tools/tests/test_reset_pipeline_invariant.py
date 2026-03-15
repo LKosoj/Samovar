@@ -147,7 +147,7 @@ def check_static_pipeline() -> None:
         "stepper.setCurrent(0);",
         "stepper.setTarget(0);",
         "set_capacity(0);",
-        "SamovarStatusInt = 0;",
+        "SamovarStatusInt = SAMOVAR_STATUS_OFF;",
         "startval = 0;",
         "PauseOn = false;",
         "program_Wait = false;",
@@ -171,7 +171,7 @@ def check_static_pipeline() -> None:
             "stopService();",
             "stepper.setMaxSpeed(0);",
             "set_capacity(0);",
-            "SamovarStatusInt = 0;",
+            "SamovarStatusInt = SAMOVAR_STATUS_OFF;",
             "startval = 0;",
             "TargetStepps = 0;",
             "I2CPumpTargetSteps = 0;",
@@ -300,6 +300,13 @@ def build_harness() -> str:
         static constexpr int SAMOVAR_BK_MODE = {mode_enum["SAMOVAR_BK_MODE"]};
         static constexpr int SAMOVAR_NBK_MODE = {mode_enum["SAMOVAR_NBK_MODE"]};
         static constexpr int SAMOVAR_NONE = {command_enum["SAMOVAR_NONE"]};
+        static constexpr int SAMOVAR_COMMAND_NONE = {command_enum["SAMOVAR_NONE"]};
+        static constexpr int SAMOVAR_COMMAND_RESET = {command_enum["SAMOVAR_RESET"]};
+        static constexpr int SAMOVAR_STATUS_OFF = 0;
+        static constexpr int SAMOVAR_STATUS_DISTILLATION = 1000;
+        static constexpr int SAMOVAR_STATUS_BEER = 2000;
+        static constexpr int SAMOVAR_STATUS_BK = 3000;
+        static constexpr int SAMOVAR_STATUS_NBK = 4000;
         static constexpr int SAMOVAR_BUSY = 77;
         static constexpr int PWM_LOW_VALUE = 1;
 

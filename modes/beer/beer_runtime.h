@@ -97,7 +97,7 @@ inline bool isBoilingStarted(float currentTemp) {
 }
 
 inline void beer_proc() {
-  if (SamovarStatusInt != 2000) return;
+  if (SamovarStatusInt != SAMOVAR_STATUS_BEER) return;
 
   if (startval == 2000 && !PowerOn) {
     resetBoilingDetector();

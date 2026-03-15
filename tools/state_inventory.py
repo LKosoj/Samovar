@@ -13,6 +13,7 @@ DELIVERY_DIR = ROOT / "docs" / "result" / "delivery"
 STATE_CODES_DOC = DELIVERY_DIR / "state_codes_inventory.md"
 GREP_LOG_DOC = DELIVERY_DIR / "state_inventory_grep_log.md"
 RUNTIME_TYPES = ROOT / "state" / "runtime_types.h"
+STATUS_CODES = ROOT / "src" / "core" / "state" / "status_codes.h"
 
 SOURCE_SUFFIXES = {".h", ".cpp", ".ino"}
 KEY_VARIABLES = (
@@ -111,6 +112,7 @@ DIRECT_OPERATORS = {"=", "==", "!="}
 NUMERIC_PATTERN_TEMPLATE = r"\b{variable}\b\s*(==|!=|<=|>=|=|<|>)\s*(-?\d+)"
 REVERSED_NUMERIC_PATTERN_TEMPLATE = r"(-?\d+)\s*(==|!=|<=|>=|<|>)\s*\b{variable}\b"
 ENUM_PATTERN_TEMPLATE = r"enum\s+{name}\s*\{{(?P<body>.*?)\}};"
+STATUS_CODE_PATTERN = re.compile(r"static constexpr int16_t (SAMOVAR_STATUS_[A-Z0-9_]+) = (-?\d+);")
 
 
 @dataclass(frozen=True)
@@ -244,11 +246,19 @@ def collect_numeric_matches(files: list[Path], variable: str) -> tuple[dict[int,
 
 
 def parse_enum(enum_name: str) -> dict[str, int]:
-    text = RUNTIME_TYPES.read_text(encoding="utf-8")
-    match = re.search(ENUM_PATTERN_TEMPLATE.format(name=re.escape(enum_name)), text, re.DOTALL)
-    if match is None:
-        raise ValueError(f"Enum {enum_name} not found in {RUNTIME_TYPES}")
-    body = match.group("body")
+    body = None
+    source = None
+    for path in (STATUS_CODES, RUNTIME_TYPES):
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        match = re.search(ENUM_PATTERN_TEMPLATE.format(name=re.escape(enum_name)), text, re.DOTALL)
+        if match is not None:
+            body = match.group("body")
+            source = path
+            break
+    if body is None or source is None:
+        raise ValueError(f"Enum {enum_name} not found in {STATUS_CODES} or {RUNTIME_TYPES}")
     values: dict[str, int] = {}
     next_value = 0
     for raw_item in body.split(","):
@@ -265,6 +275,14 @@ def parse_enum(enum_name: str) -> dict[str, int]:
             name = item
         values[name] = next_value
         next_value += 1
+    return values
+
+
+def parse_status_codes() -> dict[str, int]:
+    text = STATUS_CODES.read_text(encoding="utf-8")
+    values = {name: int(raw_value) for name, raw_value in STATUS_CODE_PATTERN.findall(text)}
+    if not values:
+        raise ValueError(f"Status codes not found in {STATUS_CODES}")
     return values
 
 
@@ -402,7 +420,12 @@ def render_grep_section(title: str, occurrences: list[Occurrence]) -> str:
 
 def build_inventory() -> dict[str, object]:
     files = tracked_source_files()
-    status_values, status_ranges = collect_numeric_matches(files, "SamovarStatusInt")
+    status_tokens = parse_status_codes()
+    status_values = defaultdict(list)
+    for token, value in status_tokens.items():
+        status_values[value].extend(find_occurrences(files, token))
+    status_values = dict(sorted(status_values.items()))
+    _, status_ranges = collect_numeric_matches(files, "SamovarStatusInt")
     start_values, start_ranges = collect_numeric_matches(files, "startval")
     command_enum = parse_enum("SamovarCommands")
     mode_enum = parse_enum("SAMOVAR_MODE")

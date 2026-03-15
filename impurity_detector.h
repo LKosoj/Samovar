@@ -298,8 +298,8 @@ bool is_first_body_program_after_heads() {
  * Основная логика работы детектора
  */
 void process_impurity_detector() {
-  // Детектор работает только при включенной авто-коррекции и в режиме отбора (SamovarStatusInt == 10)
-  if (!SamSetup.useautospeed || SamovarStatusInt != 10) {
+  // Детектор работает только при включенной авто-коррекции и в режиме отбора.
+  if (!SamSetup.useautospeed || SamovarStatusInt != SAMOVAR_STATUS_RECTIFICATION_RUN) {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
     return;

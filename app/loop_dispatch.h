@@ -26,17 +26,17 @@ inline void process_sam_command_sync() {
       menu_samovar_start();
       break;
     case SAMOVAR_POWER:
-      if (SamovarStatusInt == 1000) distiller_finish();
-      else if (SamovarStatusInt == 2000)
+      if (SamovarStatusInt == SAMOVAR_STATUS_DISTILLATION) distiller_finish();
+      else if (SamovarStatusInt == SAMOVAR_STATUS_BEER)
         beer_finish();
-      else if (SamovarStatusInt == 3000)
+      else if (SamovarStatusInt == SAMOVAR_STATUS_BK)
         bk_finish();
-      else if (SamovarStatusInt == 4000)
+      else if (SamovarStatusInt == SAMOVAR_STATUS_NBK)
         nbk_finish();
       else
         set_power(!PowerOn);
       if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-        SamovarStatusInt = 50;
+        SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_WARMUP;
       }
       break;
     case SAMOVAR_RESET:
@@ -62,12 +62,12 @@ inline void process_sam_command_sync() {
       break;
     case SAMOVAR_DISTILLATION:
       Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
-      SamovarStatusInt = 1000;
+      SamovarStatusInt = SAMOVAR_STATUS_DISTILLATION;
       startval = 1000;
       break;
     case SAMOVAR_BEER:
       Samovar_Mode = SAMOVAR_BEER_MODE;
-      SamovarStatusInt = 2000;
+      SamovarStatusInt = SAMOVAR_STATUS_BEER;
       startval = 2000;
       break;
     case SAMOVAR_BEER_NEXT:
@@ -78,12 +78,12 @@ inline void process_sam_command_sync() {
       break;
     case SAMOVAR_BK:
       Samovar_Mode = SAMOVAR_BK_MODE;
-      SamovarStatusInt = 3000;
+      SamovarStatusInt = SAMOVAR_STATUS_BK;
       startval = 3000;
       break;
     case SAMOVAR_NBK:
       Samovar_Mode = SAMOVAR_NBK_MODE;
-      SamovarStatusInt = 4000;
+      SamovarStatusInt = SAMOVAR_STATUS_NBK;
       startval = 4000;
       break;
     case SAMOVAR_NBK_NEXT:
@@ -101,15 +101,15 @@ inline void process_sam_command_sync() {
 }
 
 inline void dispatch_samovar_mode_runtime() {
-  if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) {
+  if (SamovarStatusInt > SAMOVAR_STATUS_OFF && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
     withdrawal();
-  } else if (SamovarStatusInt == 1000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_DISTILLATION) {
     distiller_proc();
-  } else if (SamovarStatusInt == 3000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_BK) {
     bk_proc();
-  } else if (SamovarStatusInt == 4000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_NBK) {
     nbk_proc();
-  } else if (SamovarStatusInt == 2000 && startval == 2000) {
+  } else if (SamovarStatusInt == SAMOVAR_STATUS_BEER && startval == 2000) {
     beer_proc();
   }
 }
