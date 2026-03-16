@@ -291,6 +291,8 @@ class MenuIntegrationBehaviorTest(unittest.TestCase):
                 """
                 #pragma once
 
+                #include <cstdint>
+
                 static constexpr int LCD_COLUMNS = 20;
                 static constexpr int LCD_ROWS = 4;
                 static constexpr int STEPPER_MAX_SPEED = 120;
@@ -321,6 +323,10 @@ class MenuIntegrationBehaviorTest(unittest.TestCase):
                 static constexpr int SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE = 2;
                 static constexpr int SAMOVAR_STARTVAL_RECT_STOPPED = 3;
                 static constexpr int SAMOVAR_STARTVAL_CALIBRATION = 100;
+
+                inline bool startval_is_active_non_calibration(int16_t value) {
+                  return value > SAMOVAR_STARTVAL_RECT_IDLE && value != SAMOVAR_STARTVAL_CALIBRATION;
+                }
                 """,
             )
 

@@ -8,6 +8,7 @@ import unittest
 
 
 MENU_ACTIONS_HEADER = Path("ui/menu/actions.h")
+MODE_CODES_HEADER = Path("src/core/state/mode_codes.h")
 
 
 def _extract_function(text: str, signature: str) -> str:
@@ -39,6 +40,13 @@ class MenuActionsBehaviorTest(unittest.TestCase):
         self.assertIsNotNone(compiler, "C++ compiler is required for menu actions harness test")
 
         header_text = MENU_ACTIONS_HEADER.read_text(encoding="utf-8")
+        mode_codes_text = MODE_CODES_HEADER.read_text(encoding="utf-8")
+        extracted_helpers = "\n\n".join(
+            _extract_function(mode_codes_text, signature)
+            for signature in [
+                "bool startval_is_active_non_calibration(int16_t value)",
+            ]
+        )
         extracted_functions = "\n\n".join(
             _extract_function(header_text, signature)
             for signature in [
@@ -274,6 +282,8 @@ class MenuActionsBehaviorTest(unittest.TestCase):
             void clear_wifi_credentials() {{
               clear_wifi_credentials_calls++;
             }}
+
+            {extracted_helpers}
 
             {extracted_functions}
 
