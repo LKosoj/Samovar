@@ -457,3 +457,44 @@ Command: `python3 -m ruff check tools/tests/test_web_mode_integration.py tools/t
 ```text
 All checks passed!
 ```
+
+========================================================================
+Lua runtime mode-selection integration
+========================================================================
+Date: 2026-03-16
+Context: Lua runtime mode-selection, USE_LUA state transitions, Lua-visible mode values
+
+$ python3 tools/tests/test_lua_mode_selection.py
+========================================================================
+Lua mode selection integration
+========================================================================
+
+[1] Verifying static Lua mode-selection contract...
+    ✓ get_lua_mode_name maps every runtime mode to an explicit Lua family
+    ✓ Lua numeric bindings expose SamSetup_Mode, Samovar_Mode and Samovar_CR_Mode
+    ✓ setup/save mode switching reloads Lua under USE_LUA before route rebinding
+    ✓ USE_LUA guards isolate runtime include and globals from non-Lua builds
+
+[2] Running existing Lua unit suites...
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.002s
+
+OK
+    ✓ existing Lua runtime/bindings suites passed
+
+[3] Running extracted C++ harness...
+Lua runtime mode-selection matrix
+SAMOVAR_RECTIFICATION_MODE|ok|numeric=0|family=rect|filename=/rectificat.lua|samovar_mode=0|samovar_cr_mode=0|setup_mode=0
+SAMOVAR_DISTILLATION_MODE|ok|numeric=1|family=dist|filename=/dist.lua|samovar_mode=1|samovar_cr_mode=1|setup_mode=1
+SAMOVAR_BEER_MODE|ok|numeric=2|family=beer|filename=/beer.lua|samovar_mode=2|samovar_cr_mode=2|setup_mode=2
+SAMOVAR_BK_MODE|ok|numeric=3|family=bk|filename=/bk.lua|samovar_mode=3|samovar_cr_mode=3|setup_mode=3
+SAMOVAR_NBK_MODE|ok|numeric=4|family=nbk|filename=/nbk.lua|samovar_mode=4|samovar_cr_mode=4|setup_mode=4
+SAMOVAR_SUVID_MODE|ok|numeric=5|family=rect|filename=/rectificat.lua|samovar_mode=5|samovar_cr_mode=5|setup_mode=5
+SAMOVAR_LUA_MODE|ok|numeric=6|family=rect|filename=/rectificat.lua|samovar_mode=6|samovar_cr_mode=6|setup_mode=6
+lua_mode_selection|ok
+
+Lua mode selection: PASS
+
+$ python3 -m ruff check tools/tests/test_lua_mode_selection.py
+All checks passed!
