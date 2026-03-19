@@ -80,6 +80,10 @@ def _extract_function_body_by_boundaries(
 def _normalize_cpp_body(body: str) -> str:
     body = re.sub(r"//.*", "", body)
     body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    # Step 2 named constants → numeric values for baseline parity comparison
+    body = body.replace("SAMOVAR_STARTVAL_DISTILLATION_ENTRY", "1000")
+    body = body.replace("SAMOVAR_STARTVAL_RECT_IDLE", "0")
+    body = body.replace("SAMOVAR_STATUS_DISTILLATION", "1000")
     body = re.sub(r"\s+", "", body)
     return body
 

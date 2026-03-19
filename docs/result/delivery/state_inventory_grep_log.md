@@ -61,24 +61,24 @@ ui/lua/bindings_process.h:60: lua_pushnumber(lua_state, (lua_Number)SamovarStatu
 ui/lua/runtime.h:30: Variables += "SamovarStatusInt = " + String(SamovarStatusInt) + "\r\n";
 ui/web/ajax_snapshot.h:155: (samovar_status_has_rectification_program_progress(SamovarStatusInt) ||
 ui/web/ajax_snapshot.h:156: (SamovarStatusInt == SAMOVAR_STATUS_BEER && PowerOn))) {
-ui/web/routes_setup.h:63: if (SamovarStatusInt == SAMOVAR_STATUS_DISTILLATION) {
-ui/web/routes_setup.h:65: } else if (SamovarStatusInt == SAMOVAR_STATUS_BEER) {
-ui/web/routes_setup.h:67: } else if (SamovarStatusInt == SAMOVAR_STATUS_BK) {
-ui/web/routes_setup.h:69: } else if (SamovarStatusInt == SAMOVAR_STATUS_NBK) {
+ui/web/routes_setup.h:58: if (SamovarStatusInt == SAMOVAR_STATUS_DISTILLATION) {
+ui/web/routes_setup.h:60: } else if (SamovarStatusInt == SAMOVAR_STATUS_BEER) {
+ui/web/routes_setup.h:62: } else if (SamovarStatusInt == SAMOVAR_STATUS_BK) {
+ui/web/routes_setup.h:64: } else if (SamovarStatusInt == SAMOVAR_STATUS_NBK) {
 ```
 
 ## sam_command_sync
 
 ```text
-Blynk.ino:239: sam_command_sync = SAMOVAR_BEER_NEXT;
-Blynk.ino:241: sam_command_sync = SAMOVAR_DIST_NEXT;
-Blynk.ino:243: sam_command_sync = SAMOVAR_START;
-Blynk.ino:258: sam_command_sync = SAMOVAR_RESET;
-Blynk.ino:263: sam_command_sync = SAMOVAR_BEER;
-Blynk.ino:265: sam_command_sync = SAMOVAR_BK;
-Blynk.ino:267: sam_command_sync = SAMOVAR_NBK;
-Blynk.ino:269: sam_command_sync = SAMOVAR_DISTILLATION;
-Blynk.ino:271: sam_command_sync = SAMOVAR_POWER;
+Blynk.ino:228: sam_command_sync = SAMOVAR_BEER_NEXT;
+Blynk.ino:230: sam_command_sync = SAMOVAR_DIST_NEXT;
+Blynk.ino:232: sam_command_sync = SAMOVAR_START;
+Blynk.ino:247: sam_command_sync = SAMOVAR_RESET;
+Blynk.ino:252: sam_command_sync = SAMOVAR_BEER;
+Blynk.ino:254: sam_command_sync = SAMOVAR_BK;
+Blynk.ino:256: sam_command_sync = SAMOVAR_NBK;
+Blynk.ino:258: sam_command_sync = SAMOVAR_DISTILLATION;
+Blynk.ino:260: sam_command_sync = SAMOVAR_POWER;
 Samovar.ino:252: volatile SamovarCommands sam_command_sync;
 app/alarm_control.h:20: sam_command_sync = SAMOVAR_POWER;
 app/loop_dispatch.h:21: if (sam_command_sync == SAMOVAR_NONE) return;
@@ -144,19 +144,17 @@ ui/web/routes_service.h:23: sam_command_sync = CALIBRATE_STOP;
 ## Samovar_Mode
 
 ```text
-Blynk.ino:170: Blynk.virtualWrite(V20, Samovar_Mode);
-Blynk.ino:178: if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-Blynk.ino:180: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-Blynk.ino:182: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-Blynk.ino:238: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-Blynk.ino:240: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-Blynk.ino:262: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-Blynk.ino:264: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-Blynk.ino:266: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
-Blynk.ino:268: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
+Blynk.ino:167: Blynk.virtualWrite(V20, Samovar_Mode);
+Blynk.ino:175: Blynk.virtualWrite(V24, get_program_for_mode(Samovar_Mode));
+Blynk.ino:227: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+Blynk.ino:229: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+Blynk.ino:251: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
+Blynk.ino:253: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
+Blynk.ino:255: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
+Blynk.ino:257: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
 Samovar.ino:254: volatile SAMOVAR_MODE Samovar_Mode;
 app/config_apply.h:33: Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
-app/default_programs.h:13: switch (mode_program_owner(Samovar_Mode)) {
+app/default_programs.h:31: switch (mode_program_owner(Samovar_Mode)) {
 app/loop_dispatch.h:25: Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 app/loop_dispatch.h:38: if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
 app/loop_dispatch.h:64: Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
@@ -185,14 +183,11 @@ modes/dist/dist_runtime.h:30: //            ", Режим: " + String(Samovar_Mo
 modes/nbk/nbk_runtime.h:345: // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
 modes/rect/rect_runtime.h:183: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
 state/globals.h:124: extern volatile SAMOVAR_MODE Samovar_Mode;
-storage/session_logs.h:26: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-storage/session_logs.h:28: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-storage/session_logs.h:31: } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-storage/session_logs.h:34: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-storage/session_logs.h:37: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-storage/session_logs.h:82: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
-storage/session_logs.h:85: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-storage/session_logs.h:87: } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+storage/session_logs.h:22: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
+storage/session_logs.h:24: String prg = get_program_for_mode(Samovar_Mode);
+storage/session_logs.h:68: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
+storage/session_logs.h:71: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+storage/session_logs.h:73: } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
 ui/lua/bindings_process.h:17: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
 ui/lua/bindings_process.h:19: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
 ui/lua/bindings_process.h:21: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
@@ -223,16 +218,13 @@ ui/web/routes_command.h:63: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
 ui/web/routes_command.h:67: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
 ui/web/routes_command.h:71: } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
 ui/web/routes_command.h:75: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-ui/web/routes_program.h:6: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-ui/web/routes_program.h:9: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-ui/web/routes_program.h:12: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-ui/web/routes_setup.h:87: Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
-ui/web/routes_setup.h:88: Samovar_CR_Mode = Samovar_Mode;
-ui/web/routes_setup.h:190: if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
-ui/web/template_keys.h:39: if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
-ui/web/template_keys.h:40: else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return get_dist_program();
-ui/web/template_keys.h:41: else if (Samovar_Mode == SAMOVAR_NBK_MODE) return get_nbk_program();
-ui/web/template_keys.h:133: if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
+ui/web/routes_program.h:18: set_program_for_mode(Samovar_Mode, request->arg("WProgram"));
+ui/web/routes_program.h:20: request->send(200, "text/plain", get_program_for_mode(Samovar_Mode));
+ui/web/routes_setup.h:82: Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
+ui/web/routes_setup.h:83: Samovar_CR_Mode = Samovar_Mode;
+ui/web/routes_setup.h:185: set_program_for_mode(Samovar_Mode, request->arg("WProgram"));
+ui/web/template_keys.h:40: return get_program_for_mode(Samovar_Mode);
+ui/web/template_keys.h:130: return get_program_for_mode(Samovar_Mode);
 ```
 
 ## Samovar_CR_Mode
@@ -251,13 +243,13 @@ ui/lua/bindings_variables.h:111: } else if (Var == "Samovar_CR_Mode") {
 ui/lua/bindings_variables.h:112: a = Samovar_CR_Mode;
 ui/lua/runtime.h:332: switch (mode_lua_owner(Samovar_CR_Mode)) {
 ui/web/page_assets.h:47: Samovar_CR_Mode = Samovar_Mode;
-ui/web/routes_setup.h:88: Samovar_CR_Mode = Samovar_Mode;
+ui/web/routes_setup.h:83: Samovar_CR_Mode = Samovar_Mode;
 ```
 
 ## startval
 
 ```text
-Blynk.ino:47: if (startval_is_rect_program_state(startval))
+Blynk.ino:44: if (startval_is_rect_program_state(startval))
 Samovar.ino:344: volatile int16_t startval = SAMOVAR_STARTVAL_RECT_IDLE;
 app/loop_dispatch.h:66: startval = SAMOVAR_STARTVAL_DISTILLATION_ENTRY;
 app/loop_dispatch.h:71: startval = SAMOVAR_STARTVAL_BEER_ENTRY;
@@ -322,13 +314,13 @@ ui/web/routes_service.h:22: if (request->hasArg("finish") && startval == SAMOVAR
 ## PowerOn
 
 ```text
-Blynk.ino:44: Blynk.virtualWrite(V4, PowerOn);
-Blynk.ino:235: if (!PowerOn) return;
-Blynk.ino:256: if (Value3 == 1 && PowerOn) menu_samovar_start();
-Blynk.ino:262: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-Blynk.ino:264: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-Blynk.ino:266: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
-Blynk.ino:268: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
+Blynk.ino:41: Blynk.virtualWrite(V4, PowerOn);
+Blynk.ino:224: if (!PowerOn) return;
+Blynk.ino:245: if (Value3 == 1 && PowerOn) menu_samovar_start();
+Blynk.ino:251: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
+Blynk.ino:253: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
+Blynk.ino:255: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
+Blynk.ino:257: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
 Samovar.ino:307: volatile bool PowerOn = false;
 app/alarm_control.h:19: if (PowerOn) {
 app/loop_dispatch.h:37: set_power(!PowerOn);
@@ -418,14 +410,14 @@ ui/web/routes_command.h:72: if (!PowerOn) sam_command_sync = SAMOVAR_BK;
 ui/web/routes_command.h:76: if (!PowerOn) sam_command_sync = SAMOVAR_NBK;
 ui/web/routes_command.h:101: } else if (request->hasArg("pnbk") && PowerOn) {
 ui/web/routes_command.h:118: } else if (request->hasArg("nbkopt") && PowerOn) { // устанавливаем текущие М и Р как оптимальные Мо и Ро
-ui/web/routes_setup.h:62: if (PowerOn) {
+ui/web/routes_setup.h:57: if (PowerOn) {
 ```
 
 ## PauseOn
 
 ```text
-Blynk.ino:53: if (PauseOn)
-Blynk.ino:249: pause_withdrawal(!PauseOn);
+Blynk.ino:50: if (PauseOn)
+Blynk.ino:238: pause_withdrawal(!PauseOn);
 Samovar.ino:308: volatile bool PauseOn = false;
 app/orchestration.h:503: pause_withdrawal(!PauseOn);
 app/status_text.h:18: } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING && !PauseOn && !program_Wait) {
@@ -455,7 +447,7 @@ ui/web/routes_command.h:147: if (PauseOn) {
 ## program_Wait
 
 ```text
-Blynk.ino:251: program_Wait = false;
+Blynk.ino:240: program_Wait = false;
 Samovar.ino:311: volatile bool program_Wait;
 app/loop_dispatch.h:57: program_Wait = false;
 app/runtime_tasks.h:267: uint8_t eventCode = program_Wait ? 1 : 0;
@@ -559,7 +551,7 @@ ui/menu/actions.h:280: sam_command_sync = SAMOVAR_NONE;
 ## SAMOVAR_START
 
 ```text
-Blynk.ino:243: sam_command_sync = SAMOVAR_START;
+Blynk.ino:232: sam_command_sync = SAMOVAR_START;
 app/loop_dispatch.h:24: case SAMOVAR_START:
 src/core/state/status_codes.h:37: SAMOVAR_START,
 src/core/state/status_codes.h:56: static constexpr SamovarCommands SAMOVAR_COMMAND_START = SAMOVAR_START;
@@ -570,7 +562,7 @@ ui/web/routes_command.h:60: sam_command_sync = SAMOVAR_START;
 ## SAMOVAR_POWER
 
 ```text
-Blynk.ino:271: sam_command_sync = SAMOVAR_POWER;
+Blynk.ino:260: sam_command_sync = SAMOVAR_POWER;
 app/alarm_control.h:20: sam_command_sync = SAMOVAR_POWER;
 app/loop_dispatch.h:28: case SAMOVAR_POWER:
 modes/bk/bk_alarm.h:63: sam_command_sync = SAMOVAR_POWER;
@@ -595,7 +587,7 @@ ui/web/routes_command.h:140: sam_command_sync = SAMOVAR_POWER;
 ## SAMOVAR_RESET
 
 ```text
-Blynk.ino:258: sam_command_sync = SAMOVAR_RESET;
+Blynk.ino:247: sam_command_sync = SAMOVAR_RESET;
 app/loop_dispatch.h:42: case SAMOVAR_RESET:
 app/loop_dispatch.h:98: if (sam_command_sync != SAMOVAR_RESET) {
 io/power_control.h:53: sam_command_sync = SAMOVAR_RESET;
@@ -652,7 +644,7 @@ ui/web/routes_command.h:82: sam_command_sync = SAMOVAR_SETBODYTEMP;
 ## SAMOVAR_DISTILLATION
 
 ```text
-Blynk.ino:269: sam_command_sync = SAMOVAR_DISTILLATION;
+Blynk.ino:258: sam_command_sync = SAMOVAR_DISTILLATION;
 app/loop_dispatch.h:63: case SAMOVAR_DISTILLATION:
 app/orchestration.h:514: sam_command_sync = SAMOVAR_DISTILLATION;
 src/core/state/status_codes.h:45: SAMOVAR_DISTILLATION,
@@ -666,7 +658,7 @@ ui/web/routes_command.h:126: sam_command_sync = SAMOVAR_DISTILLATION;
 ## SAMOVAR_BEER
 
 ```text
-Blynk.ino:263: sam_command_sync = SAMOVAR_BEER;
+Blynk.ino:252: sam_command_sync = SAMOVAR_BEER;
 app/loop_dispatch.h:68: case SAMOVAR_BEER:
 app/orchestration.h:529: sam_command_sync = SAMOVAR_BEER;
 src/core/state/status_codes.h:46: SAMOVAR_BEER,
@@ -679,7 +671,7 @@ ui/web/routes_command.h:64: if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
 ## SAMOVAR_BEER_NEXT
 
 ```text
-Blynk.ino:239: sam_command_sync = SAMOVAR_BEER_NEXT;
+Blynk.ino:228: sam_command_sync = SAMOVAR_BEER_NEXT;
 app/loop_dispatch.h:73: case SAMOVAR_BEER_NEXT:
 src/core/state/status_codes.h:47: SAMOVAR_BEER_NEXT,
 src/core/state/status_codes.h:66: static constexpr SamovarCommands SAMOVAR_COMMAND_BEER_NEXT = SAMOVAR_BEER_NEXT;
@@ -690,7 +682,7 @@ ui/web/routes_command.h:54: sam_command_sync = SAMOVAR_BEER_NEXT;
 ## SAMOVAR_BK
 
 ```text
-Blynk.ino:265: sam_command_sync = SAMOVAR_BK;
+Blynk.ino:254: sam_command_sync = SAMOVAR_BK;
 app/loop_dispatch.h:79: case SAMOVAR_BK:
 app/orchestration.h:519: sam_command_sync = SAMOVAR_BK;
 src/core/state/status_codes.h:48: SAMOVAR_BK,
@@ -704,7 +696,7 @@ ui/web/routes_command.h:132: sam_command_sync = SAMOVAR_BK;
 ## SAMOVAR_NBK
 
 ```text
-Blynk.ino:267: sam_command_sync = SAMOVAR_NBK;
+Blynk.ino:256: sam_command_sync = SAMOVAR_NBK;
 app/loop_dispatch.h:84: case SAMOVAR_NBK:
 app/orchestration.h:524: sam_command_sync = SAMOVAR_NBK;
 src/core/state/status_codes.h:49: SAMOVAR_NBK,
@@ -727,7 +719,7 @@ ui/web/routes_command.h:90: sam_command_sync = SAMOVAR_SELF_TEST;
 ## SAMOVAR_DIST_NEXT
 
 ```text
-Blynk.ino:241: sam_command_sync = SAMOVAR_DIST_NEXT;
+Blynk.ino:230: sam_command_sync = SAMOVAR_DIST_NEXT;
 app/loop_dispatch.h:76: case SAMOVAR_DIST_NEXT:
 src/core/state/status_codes.h:51: SAMOVAR_DIST_NEXT,
 src/core/state/status_codes.h:70: static constexpr SamovarCommands SAMOVAR_COMMAND_DIST_NEXT = SAMOVAR_DIST_NEXT;
@@ -747,7 +739,7 @@ ui/web/routes_command.h:58: sam_command_sync = SAMOVAR_NBK_NEXT;
 ## SAMOVAR_RECTIFICATION_MODE
 
 ```text
-app/default_programs.h:23: case SAMOVAR_RECTIFICATION_MODE:
+app/default_programs.h:41: case SAMOVAR_RECTIFICATION_MODE:
 app/loop_dispatch.h:25: Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 app/loop_dispatch.h:38: if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
 app/runtime_tasks.h:241: s += format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2);
@@ -770,26 +762,26 @@ storage/nvs_profiles.h:31: return (uint8_t)SAMOVAR_RECTIFICATION_MODE;
 storage/nvs_profiles.h:33: uint8_t lastMode = meta.getUChar("last_mode", (uint8_t)SAMOVAR_RECTIFICATION_MODE);
 storage/nvs_profiles.h:36: lastMode = (uint8_t)SAMOVAR_RECTIFICATION_MODE;
 storage/nvs_profiles.h:43: mode = (uint8_t)SAMOVAR_RECTIFICATION_MODE;
-storage/session_logs.h:26: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-storage/session_logs.h:28: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-storage/session_logs.h:82: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
-storage/session_logs.h:85: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
+storage/session_logs.h:22: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
+storage/session_logs.h:68: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
+storage/session_logs.h:71: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
 ui/lua/bindings_process.h:48: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
 ui/lua/runtime.h:345: case SAMOVAR_RECTIFICATION_MODE:
 ui/menu/actions.h:233: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE || !PowerOn) {
 ui/web/ajax_snapshot.h:154: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) &&
 ui/web/ajax_snapshot.h:223: if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
 ui/web/ajax_snapshot.h:227: out.print(format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2));
-ui/web/template_keys.h:278: } else if (var == "RECT" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE)
+ui/web/template_keys.h:273: } else if (var == "RECT" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE)
 ```
 
 ## SAMOVAR_DISTILLATION_MODE
 
 ```text
-Blynk.ino:180: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-Blynk.ino:240: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-Blynk.ino:268: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
-app/default_programs.h:17: case SAMOVAR_DISTILLATION_MODE:
+Blynk.ino:229: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+Blynk.ino:257: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
+app/default_programs.h:15: case SAMOVAR_DISTILLATION_MODE: return get_dist_program();
+app/default_programs.h:24: case SAMOVAR_DISTILLATION_MODE: set_dist_program(WProgram); break;
+app/default_programs.h:35: case SAMOVAR_DISTILLATION_MODE:
 app/loop_dispatch.h:64: Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
 src/core/state/mode_codes.h:8: SAMOVAR_DISTILLATION_MODE = 1,
 src/core/state/mode_ownership.h:10: case SAMOVAR_DISTILLATION_MODE:
@@ -801,9 +793,8 @@ src/core/state/mode_ownership.h:46: return SAMOVAR_DISTILLATION_MODE;
 src/core/state/mode_ownership.h:63: case SAMOVAR_DISTILLATION_MODE:
 src/core/state/mode_ownership.h:79: case SAMOVAR_DISTILLATION_MODE:
 src/core/state/mode_ownership.h:100: return mode_runtime_owner(mode) == SAMOVAR_DISTILLATION_MODE;
-storage/session_logs.h:26: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-storage/session_logs.h:34: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-storage/session_logs.h:82: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
+storage/session_logs.h:22: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
+storage/session_logs.h:68: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
 ui/lua/bindings_process.h:23: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
 ui/lua/bindings_process.h:52: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
 ui/lua/runtime.h:336: case SAMOVAR_DISTILLATION_MODE:
@@ -813,18 +804,17 @@ ui/web/ajax_snapshot.h:223: if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Sam
 ui/web/ajax_snapshot.h:230: if (PowerOn && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
 ui/web/routes_command.h:55: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
 ui/web/routes_command.h:67: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-ui/web/routes_program.h:9: } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-ui/web/template_keys.h:40: else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return get_dist_program();
-ui/web/template_keys.h:280: else if (var == "DIST" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_DISTILLATION_MODE)
+ui/web/template_keys.h:275: else if (var == "DIST" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_DISTILLATION_MODE)
 ```
 
 ## SAMOVAR_BEER_MODE
 
 ```text
-Blynk.ino:178: if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-Blynk.ino:238: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-Blynk.ino:262: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-app/default_programs.h:14: case SAMOVAR_BEER_MODE:
+Blynk.ino:227: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+Blynk.ino:251: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
+app/default_programs.h:14: case SAMOVAR_BEER_MODE:       return get_beer_program();
+app/default_programs.h:23: case SAMOVAR_BEER_MODE:       set_beer_program(WProgram); break;
+app/default_programs.h:32: case SAMOVAR_BEER_MODE:
 app/loop_dispatch.h:69: Samovar_Mode = SAMOVAR_BEER_MODE;
 modes/beer/beer_runtime.h:117: if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
 src/core/state/mode_codes.h:9: SAMOVAR_BEER_MODE = 2,
@@ -837,10 +827,9 @@ src/core/state/mode_ownership.h:44: return SAMOVAR_BEER_MODE;
 src/core/state/mode_ownership.h:61: case SAMOVAR_BEER_MODE:
 src/core/state/mode_ownership.h:77: case SAMOVAR_BEER_MODE:
 src/core/state/mode_ownership.h:104: return mode_runtime_owner(mode) == SAMOVAR_BEER_MODE;
-storage/session_logs.h:26: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-storage/session_logs.h:31: } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-storage/session_logs.h:82: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
-storage/session_logs.h:87: } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+storage/session_logs.h:22: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
+storage/session_logs.h:68: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
+storage/session_logs.h:73: } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
 ui/lua/bindings_process.h:17: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
 ui/lua/bindings_process.h:50: } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
 ui/lua/runtime.h:333: case SAMOVAR_BEER_MODE:
@@ -848,18 +837,14 @@ ui/menu/actions.h:143: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
 ui/web/ajax_snapshot.h:154: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) &&
 ui/web/routes_command.h:53: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
 ui/web/routes_command.h:63: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-ui/web/routes_program.h:6: if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-ui/web/routes_setup.h:190: if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
-ui/web/template_keys.h:39: if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
-ui/web/template_keys.h:133: if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
-ui/web/template_keys.h:282: else if (var == "BEER" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BEER_MODE)
+ui/web/template_keys.h:277: else if (var == "BEER" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BEER_MODE)
 ```
 
 ## SAMOVAR_BK_MODE
 
 ```text
-Blynk.ino:264: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-app/default_programs.h:24: case SAMOVAR_BK_MODE:
+Blynk.ino:253: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
+app/default_programs.h:42: case SAMOVAR_BK_MODE:
 app/loop_dispatch.h:80: Samovar_Mode = SAMOVAR_BK_MODE;
 src/core/state/mode_codes.h:10: SAMOVAR_BK_MODE = 3,
 src/core/state/mode_ownership.h:12: case SAMOVAR_BK_MODE:
@@ -875,15 +860,16 @@ ui/lua/runtime.h:339: case SAMOVAR_BK_MODE:
 ui/menu/actions.h:159: } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
 ui/web/ajax_snapshot.h:223: if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
 ui/web/routes_command.h:71: } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-ui/web/template_keys.h:284: else if (var == "BK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BK_MODE)
+ui/web/template_keys.h:279: else if (var == "BK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BK_MODE)
 ```
 
 ## SAMOVAR_NBK_MODE
 
 ```text
-Blynk.ino:182: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-Blynk.ino:266: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
-app/default_programs.h:20: case SAMOVAR_NBK_MODE:
+Blynk.ino:255: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
+app/default_programs.h:16: case SAMOVAR_NBK_MODE:        return get_nbk_program();
+app/default_programs.h:25: case SAMOVAR_NBK_MODE:        set_nbk_program(WProgram); break;
+app/default_programs.h:38: case SAMOVAR_NBK_MODE:
 app/loop_dispatch.h:85: Samovar_Mode = SAMOVAR_NBK_MODE;
 modes/nbk/nbk_runtime.h:345: // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
 src/core/state/mode_codes.h:11: SAMOVAR_NBK_MODE = 4,
@@ -896,9 +882,8 @@ src/core/state/mode_ownership.h:50: return SAMOVAR_NBK_MODE;
 src/core/state/mode_ownership.h:67: case SAMOVAR_NBK_MODE:
 src/core/state/mode_ownership.h:83: case SAMOVAR_NBK_MODE:
 src/core/state/mode_ownership.h:112: return mode_runtime_owner(mode) == SAMOVAR_NBK_MODE;
-storage/session_logs.h:26: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
-storage/session_logs.h:37: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-storage/session_logs.h:82: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
+storage/session_logs.h:22: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
+storage/session_logs.h:68: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
 ui/lua/bindings_process.h:21: } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
 ui/lua/runtime.h:342: case SAMOVAR_NBK_MODE:
 ui/menu/actions.h:167: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
@@ -906,30 +891,27 @@ ui/web/ajax_snapshot.h:154: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || S
 ui/web/ajax_snapshot.h:223: if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
 ui/web/routes_command.h:57: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
 ui/web/routes_command.h:75: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-ui/web/routes_program.h:12: } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-ui/web/template_keys.h:41: else if (Samovar_Mode == SAMOVAR_NBK_MODE) return get_nbk_program();
-ui/web/template_keys.h:286: else if (var == "NBK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_NBK_MODE)
+ui/web/template_keys.h:281: else if (var == "NBK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_NBK_MODE)
 ```
 
 ## SAMOVAR_SUVID_MODE
 
 ```text
-Blynk.ino:178: if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-app/default_programs.h:26: case SAMOVAR_SUVID_MODE:
+app/default_programs.h:44: case SAMOVAR_SUVID_MODE:
 src/core/state/mode_codes.h:12: SAMOVAR_SUVID_MODE = 5,
 src/core/state/mode_ownership.h:17: case SAMOVAR_SUVID_MODE:
 src/core/state/mode_ownership.h:27: case SAMOVAR_SUVID_MODE:
 src/core/state/mode_ownership.h:52: case SAMOVAR_SUVID_MODE:
 src/core/state/mode_ownership.h:85: case SAMOVAR_SUVID_MODE:
 ui/lua/runtime.h:346: case SAMOVAR_SUVID_MODE:
-ui/web/template_keys.h:288: else if (var == "SUVID" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_SUVID_MODE)
+ui/web/template_keys.h:283: else if (var == "SUVID" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_SUVID_MODE)
 ```
 
 ## SAMOVAR_LUA_MODE
 
 ```text
 app/config_apply.h:32: if (SamSetup.Mode > SAMOVAR_LUA_MODE) SamSetup.Mode = 0;
-app/default_programs.h:25: case SAMOVAR_LUA_MODE:
+app/default_programs.h:43: case SAMOVAR_LUA_MODE:
 src/core/state/mode_codes.h:13: SAMOVAR_LUA_MODE = 6
 src/core/state/mode_ownership.h:18: case SAMOVAR_LUA_MODE:
 src/core/state/mode_ownership.h:35: case SAMOVAR_LUA_MODE:
@@ -940,5 +922,5 @@ storage/nvs_profiles.h:22: if (mode < SAMOVAR_RECTIFICATION_MODE || mode > SAMOV
 storage/nvs_profiles.h:35: if (lastMode > (uint8_t)SAMOVAR_LUA_MODE) {
 storage/nvs_profiles.h:42: if (mode > (uint8_t)SAMOVAR_LUA_MODE) {
 ui/lua/runtime.h:347: case SAMOVAR_LUA_MODE:
-ui/web/template_keys.h:290: else if (var == "LUA_MODE" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_LUA_MODE)
+ui/web/template_keys.h:285: else if (var == "LUA_MODE" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_LUA_MODE)
 ```

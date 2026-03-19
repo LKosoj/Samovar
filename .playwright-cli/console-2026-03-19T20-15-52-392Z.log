@@ -1,0 +1,6 @@
+[    2067ms] TypeError: Cannot set properties of null (setting 'innerHTML')
+    at ConnectError (http://localhost:8033/common.js:39:63)
+    at xhttp.onreadystatechange (http://localhost:8033/nbk.htm:50:11)
+[    4068ms] TypeError: Cannot set properties of null (setting 'innerHTML')
+    at ConnectError (http://localhost:8033/common.js:39:63)
+    at xhttp.onreadystatechange (http://localhost:8033/nbk.htm:50:11)

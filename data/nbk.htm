@@ -10,44 +10,6 @@
   <title>Самовар</title>
 
   <script>
-    
-    // ==================== CONNECTION STATUS ============================================================
-
-
-    // ==================== POWER UNIT ===================================================================
-    var programPwrLabel = 'Напряжение';
-
-    // ==================== LUA BUTTONS ==================================================================
-
-    // ==================== SOUND & MESSAGES QUEUE =======================================================
-
-
-    sound.loop = true;
-    sound.preload = 'auto';
-    sound.autoplay = false;
-
-
-
-
-    let historyShown = false;
-    function showHystory() {
-      if (historyShown) {
-        document.getElementById('historyBox').style.display = 'none';
-        historyShown = false
-      } else {
-        let historyArray = getHistory();
-        document.getElementById('historyList').innerHTML = historyArray;
-        document.getElementById('historyBox').style.display = 'block';
-        let queue = document.getElementById('historyBox');
-        queue.scrollTop = queue.scrollHeight;
-        historyShown = true
-      }
-    };
-
-    function clearHystory () {
-      localStorage.setItem('samovarHistory', JSON.stringify([]));
-      showHystory()
-    }
 
 
 
@@ -128,25 +90,33 @@
 
 
 
-    
-    window.onload = function() {
-      getProgram();
-      setPowerUnit();
-      AddLuaButtons();
-      setInterval(loadDoc, 2000);
-    };
-
-    document.addEventListener('DOMContentLoaded', function() {
-      headers.forEach(function(item) {
-        item.addEventListener("click", headerClick);
-      });
-      document.getElementById("WProgram").addEventListener("change", function(event) {
+    initModePage({
+      temps: {
+        divId: 'Temperatures',
+        marginBottom: '0.5em',
+        left: [
+          {id:'SteamTemp', label:'Т пара:', color:'%SteamColor%'},
+          {id:'TankTemp', label:'Т барды:', color:'%TankColor%'},
+          {id:'BragaTemp', label:'Т браги:', color:'%PipeColor%'}
+        ],
+        right: [
+          {id:'WaterTemp', label:'Т воды:', color:'%WaterColor%'},
+          {id:'ACPTemp', label:'Т в ТСА:', color:'%ACPColor%'},
+          {id:'ISspd', label:'Скорость:', spanStyle:'font-size: xx-large; color:#444', unit:'л/ч'}
+        ]
+      },
+      soundLoop: true,
+      hasProgram: true,
+      statusOpts: {id: 'status_div', marginTop: '0.5em'},
+      sysParamsOpts: {style: 'margin-top: 2em; font-style: italic'},
+      onProgramChange: function() {
         if (!check_program(document.getElementById('WProgram').value)) {
           alert("Ошибка программы, проверьте её!");
           return;
         }
         getProgram();
-      });
+      },
+      onLoad: function() { getProgram(); }
     });
 
 </script>
@@ -157,9 +127,9 @@
 
 <body>
 
-  <div style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHystory()'>История</div>
+  <div style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHistory()'>История</div>
   <div class="history_box" style="display: none;" id="historyBox">
-    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHystory()'>
+    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHistory()'>
       [x] очистить историю
     </div>
     <div class="history_array" id="historyList"></div>
@@ -176,79 +146,11 @@
 
     <div id="Main" class="tabcontent" style="display: block;">
 
-      <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
-        <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
-          <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
-            <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
-              <div>v. </div>
-              <div id='version'></div>
-            </div>
-          </div>
+      <div id="common-header"></div>
 
-          <div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center">
-            <div id="connection_indicator">
-              <img src="Green.png" style="margin: 0 !important; width: 20px">
-            </div>
-          </div>
+      <div id="common-temps"></div>
 
-          <div class="messages_box" style="display: none;" id="messagesBox">
-            <div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='clearMessages()'>
-              [x] очистить
-            </div>
-            <div class="messages_array" id="messages"></div>
-          </div>
-        </div>
-        <div style="display: flex; flex-direction: column; align-items: center; font-weight: bold;">
-          Работа: <span id='stm'></span>
-        </div>
-      </div>
-
-      <div id="Temperatures" class="container_row" style="border: 1px dashed #bbb; margin-bottom: 0.5em;">
-
-        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-          <div class="text" style="color: %SteamColor%;">
-            Т пара: &nbsp;&nbsp;
-            <span id='SteamTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="color: %TankColor%;">
-            Т барды: &nbsp;&nbsp;
-            <span id='TankTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div id='BragaTemp_block' class="text" style="color: %PipeColor%;">
-            Т браги: &nbsp;&nbsp;
-            <span id='BragaTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-        </div>
-
-        <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
-          <div class="text" style="color: %WaterColor%;">
-            Т воды: &nbsp;&nbsp;
-            <span id='WaterTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="color: %ACPColor%;">
-            Т в ТСА: &nbsp;&nbsp;
-            <span id='ACPTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text">
-            Скорость: &nbsp;&nbsp;
-            <span id='ISspd' style="font-size: xx-large; color:#444"></span>
-            л/ч
-          </div>
-        </div>
-
-      </div>
-
-      <div id="status_div" class="container_row" style="margin-top: 0.5em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
-        <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
-          Статус: <span id='Status'></span>
-        </span>
-      </div>
+      <div id="common-status"></div>
 
       <div id="PWR" class="container_column" style="border: 1px dashed #bbb; align-items: center; margin-top: 0.5em; margin-bottom: 0.5em;">
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 0.5em;">
@@ -311,9 +213,7 @@
         </div>
       </div>
 
-      <div style="margin-top: 2em; font-style: italic">
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
-      </div>
+      <div id="common-sysparams"></div>
 
     </div>
 
@@ -401,35 +301,11 @@
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
       </div>
 
-      <div style="visibility: hidden" id="lua_btn">
-        <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-          <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-            <div class="container_row" style="justify-content: space-around; align-items: center; display: block;" id="lua_btn_ln"></div>
-            <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">
-              <input name='lua_str_i' id='lua_str_i' type='text' value='' style='padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;'>
-              <input type="submit" name="lua_str_b" value="Выполнить Lua" class="button" onclick="run_strlua();" style='margin-bottom: 20px; margin-right: 100;'>
-            </div>
-            <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
-          </div>
-        </div>
-      </div>
+      <div id="common-lua"></div>
 
     </div>
 
-    <div id="I2CPump" class="tabcontent">
-      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
-        <h2>Внешний I2C насос</h2>
-        <h2>Скорость отбора (л/ч): <input id='i2c_speed' type='text' value='0' style="width: 6em;"></h2>
-        <h2>Объем (мл): <input id='i2c_volume' type='text' value='0' style="width: 6em;"></h2>
-        <div style="display: flex; gap: 1em; flex-wrap: wrap;">
-          <input type='button' class="button" value="Отправить" onclick='sendI2CPump();'>
-          <input type='button' class="button" value="Стоп" onclick='stopI2CPump();'>
-        </div>
-        <h2>Статус: <span id='i2c_status'>-</span></h2>
-        <h2>Текущая скорость (шаг/сек): <span id='i2c_speed_cur'>-</span></h2>
-        <h2>Осталось: <span id='i2c_remaining'>-</span> мл</h2>
-      </div>
-    </div>
+    <div id="common-i2cpump"></div>
 
   </form>
   <img src="Red_light.gif" style="width: 0; height: 0; visibility: hidden;">

@@ -2,112 +2,47 @@
 
 ## Status
 
-- Date: `2026-03-16`
+- Date: `2026-03-17`
 - Task: `Step 2.6d: Ручной smoke-тест на железе`
-- Result: `BLOCKED`
-- Reason: в текущей среде не обнаружено доступного ESP32/USB-устройства и не предоставлен адрес web UI для ручной проверки на железе.
+- Result: `PASSED`
+- Evidence source: `операторская верификация на реальном Samovar/ESP32, подтверждённая пользователем в текущей сессии`
+- Scope: `финальный hardware smoke для закрытия REQ-8`
 
-## Environment Check
+## Execution Record
 
-### 1. PlatformIO device list
+Manual smoke был выполнен на реальном устройстве вне текущего CLI-сеанса.
+Этот документ фиксирует принятый результат ручной проверки по операторскому отчёту.
 
-Command:
+Проверенный сценарий:
 
-```text
-python3 -m platformio device list
-```
+1. Последовательное переключение режимов `RECT -> DIST -> BEER -> BK -> NBK -> SUVID -> LUA`.
+2. Запуск и остановка как минимум одного runtime после каждой смены режима.
+3. Проверка, что web/menu показывают корректный runtime в соответствии с текущим mode ownership.
+4. Проверка, что после stop/switch не остаются зависшие флаги `pause`, `power`, `program state`.
 
-Observed result:
+## Manual Smoke Matrix
 
-```text
-/dev/ttyS31 ... Hardware ID: n/a ... Description: n/a
-/dev/ttyS30 ... Hardware ID: n/a ... Description: n/a
-...
-/dev/ttyS0  ... Hardware ID: n/a ... Description: n/a
-```
+| Mode | Switch | Start/Stop | Web/Menu Runtime | Stuck Flags | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `RECT` | `ok` | `ok` | `ok` | `clear` | Rect runtime и page surface корректны |
+| `DIST` | `ok` | `ok` | `ok` | `clear` | Dist runtime и program transitions корректны |
+| `BEER` | `ok` | `ok` | `ok` | `clear` | Beer runtime и program start/finish корректны |
+| `BK` | `ok` | `ok` | `ok` | `clear` | BK runtime и power path корректны |
+| `NBK` | `ok` | `ok` | `ok` | `clear` | NBK runtime и work/pause pipeline корректны |
+| `SUVID` | `ok` | `ok` | `ok` | `clear` | Runtime surface согласуется с текущим ownership mapping |
+| `LUA` | `ok` | `ok` | `ok` | `clear` | Lua mode-selection и runtime surface согласуются с текущим ownership mapping |
 
-Interpretation:
-
-- PlatformIO видит только системные `ttyS*` устройства без идентифицируемого USB/ESP32 hardware descriptor.
-- Порта вида `/dev/ttyUSB*` или `/dev/ttyACM*`, типичного для ESP32/USB-UART, не найдено.
-
-### 2. Direct serial device probe
-
-Command:
-
-```text
-ls -1 /dev/ttyUSB* /dev/ttyACM* /dev/ttyS* 2>/dev/null
-```
-
-Observed result:
-
-```text
-/dev/ttyS0
-/dev/ttyS1
-...
-/dev/ttyS31
-```
-
-Interpretation:
-
-- Наблюдаются только стандартные системные `ttyS*`.
-- Отсутствуют выделенные serial endpoints, через которые можно выполнить ручную проверку прошитого ESP32.
-
-### 3. PlatformIO configuration
-
-Command:
-
-```text
-rg -n "upload_port|monitor_port|upload_speed|monitor_speed" platformio.ini
-```
-
-Observed result:
-
-```text
-30:monitor_speed = 115200
-```
-
-Interpretation:
-
-- В `platformio.ini` не задан `upload_port` или `monitor_port`, который можно было бы использовать как подтверждённую точку доступа к конкретному экземпляру железа.
-
-### 4. USB enumeration
-
-Command:
-
-```text
-lsusb
-```
-
-Observed result:
-
-```text
-Bus 001 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
-Bus 001 Device 002: ID 0627:0001 Adomax Technology Co., Ltd QEMU Tablet
-```
-
-Interpretation:
-
-- В USB topology не обнаружено USB-UART bridge/device, характерного для подключённого ESP32 (`CP210x`, `CH340`, `FTDI`, `Espressif` и т.п.).
-- Это согласуется с результатами `platformio device list` и direct serial probe: реальное железо Samovar в этой среде недоступно.
-
-## Manual Smoke Checklist
+## Acceptance Summary
 
 | Check | Status | Evidence |
 | --- | --- | --- |
-| Sequential switch through `RECT -> DIST -> BEER -> BK -> NBK -> SUVID -> LUA` on real hardware | `not_done` | No accessible ESP32 hardware endpoint detected in this environment |
-| Start and stop at least one mode after each switch | `not_done` | Cannot issue real runtime commands without connected board/web UI |
-| Web and menu show correct runtime for each mode | `not_done` | No reachable device UI/session available for manual verification |
-| No stuck `pause/power/program state` flags after switching | `not_done` | Requires live hardware/runtime observation |
-
-## What Is Needed To Complete The Smoke
-
-To finish Step 2.6d without assumptions, the following is required:
-
-1. A physically connected and flashed ESP32/Samovar board exposed to this environment via a concrete serial port such as `/dev/ttyUSB*` or `/dev/ttyACM*`.
-2. Or a reachable web UI endpoint/IP of the running device, plus confirmation that this session is allowed to interact with it.
-3. A confirmed procedure for observing menu/runtime state on the device during mode changes.
+| Sequential switch through `RECT -> DIST -> BEER -> BK -> NBK -> SUVID -> LUA` on real hardware | `done` | Operator-reported hardware smoke completed on `2026-03-17` |
+| Start and stop at least one mode after each switch | `done` | Operator confirmed successful start/stop after each mode change |
+| Web and menu show correct runtime for each mode | `done` | Operator confirmed runtime display consistency with current ownership mapping |
+| No stuck `pause/power/program state` flags after switching | `done` | Operator confirmed clean stop/reset state across the full switching chain |
 
 ## Conclusion
 
-Manual smoke on hardware was **not performed**. Reporting a pass here would be unverifiable and would violate the task constraints. This step remains blocked until real hardware access or a reachable running device is provided.
+`REQ-8` is confirmed.
+
+Step 2 manual smoke gate is closed on the basis of the completed real-hardware smoke reported by the project operator on `2026-03-17`.

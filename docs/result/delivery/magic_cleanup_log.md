@@ -60,7 +60,7 @@ ui/web/ajax_snapshot.h:155: (samovar_status_has_rectification_program_progress(S
 ## startval_is_rect_program_state
 
 ```text
-Blynk.ino:47: if (startval_is_rect_program_state(startval))
+Blynk.ino:44: if (startval_is_rect_program_state(startval))
 src/core/state/mode_codes.h:29: inline bool startval_is_rect_program_state(int16_t value) {
 ```
 

@@ -38,15 +38,6 @@ void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
 
-//  HeaderFreeMiddleware spiffsHeaderFree;
-//  spiffsHeaderFree.keep("If-Modified-Since");
-//  spiffsHeaderFree.keep("Host");
-//  // Add any other headers you need to keep
-//
-//  // Then either add it globally
-//  server.addMiddleware(&spiffsHeaderFree);
-
-
   server.on("/", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
     // Если нет подключения к WiFi сети - показываем страницу настройки WiFi
     // Это сработает когда Самовар в режиме AP (точка доступа)
@@ -62,7 +53,6 @@ void WebServerInit(void) {
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
     handleFileWithGzip(request, "/style.css", "text/css", "max-age=5000");
   });
-  //server.serveStatic("/style.css", SPIFFS, "/style.css").setCacheControl("max-age=5000");
   server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=604800");
@@ -89,13 +79,6 @@ void WebServerInit(void) {
     response->addHeader("Cache-Control", "max-age=644800");
     request->send(response);
   });
-
-  //  server.serveStatic("/style.css", SPIFFS, "/style.css");
-  //  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
-  //  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
-  //  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
-  //  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
-  //  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
 
   server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css").setCacheControl("max-age=1");
@@ -150,16 +133,6 @@ void WebServerInit(void) {
     delay(200);
     ESP.restart();
   });
-  //server.serveStatic("/edit", SPIFFS, "/edit.htm");
-  // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
-
-  //#ifdef USE_LUA
-  //  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
-  //  server.serveStatic("/btn_button2.lua", SPIFFS, "/btn_button2.lua");
-  //  server.serveStatic("/btn_button3.lua", SPIFFS, "/btn_button3.lua");
-  //  server.serveStatic("/btn_button4.lua", SPIFFS, "/btn_button4.lua");
-  //  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
-  //#endif
 
   change_samovar_mode();
 

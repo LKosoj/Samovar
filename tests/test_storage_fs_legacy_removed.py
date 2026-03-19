@@ -64,7 +64,7 @@ class StorageFsLegacyRemovalTests(unittest.TestCase):
             "inline Preferences& nvs_preferences()",
             "inline void save_profile_nvs()",
             "inline void load_profile_nvs()",
-            'return "sam_rect";',
+            "mode_profile_namespace((SAMOVAR_MODE)mode)",
             'meta.begin("sam_meta", true)',
         ]:
             with self.subTest(snippet=snippet):

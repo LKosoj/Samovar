@@ -9,6 +9,24 @@
 #include "modes/rect/rect_program_codec.h"
 #include "state/globals.h"
 
+inline String get_program_for_mode(SAMOVAR_MODE mode) {
+  switch (mode_program_owner(mode)) {
+    case SAMOVAR_BEER_MODE:       return get_beer_program();
+    case SAMOVAR_DISTILLATION_MODE: return get_dist_program();
+    case SAMOVAR_NBK_MODE:        return get_nbk_program();
+    default:                      return get_program(CAPACITY_NUM * 2);
+  }
+}
+
+inline void set_program_for_mode(SAMOVAR_MODE mode, String WProgram) {
+  switch (mode_program_owner(mode)) {
+    case SAMOVAR_BEER_MODE:       set_beer_program(WProgram); break;
+    case SAMOVAR_DISTILLATION_MODE: set_dist_program(WProgram); break;
+    case SAMOVAR_NBK_MODE:        set_nbk_program(WProgram); break;
+    default:                      set_program(WProgram); break;
+  }
+}
+
 inline void load_default_program_for_mode() {
   switch (mode_program_owner(Samovar_Mode)) {
     case SAMOVAR_BEER_MODE:

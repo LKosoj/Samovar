@@ -11,27 +11,6 @@
   <title>Самовар</title>
 
   <script>
-        // ==================== CONNECTION STATUS ============================================================
-
-
-    // ==================== POWER UNIT ===================================================================
-
-    // ==================== LUA BUTTONS ==================================================================
-
-    // ==================== SOUND & MESSAGES QUEUE =======================================================
-
-    var sound_play_count = 0; //счетчик воспроизведений сигнала
-    const MAX_SOUND_PLAYS = 2; //максимальное количество воспроизведений
-
-    sound.loop = false; // Отключаем бесконечное повторение
-    sound.preload = 'auto';
-    sound.autoplay = false;
-
-
- 
-
-
-    let historyShown = false;
 
 
 
@@ -81,29 +60,30 @@
     }
 
     function addLine (obj, s) {
-      //var s = "B;100;0.1;5;0.00;120";
       var arr = s.split(";");
 
       var dl = document.createElement("div");
       dl.className = "prgline";
+      dl.id = "prgln" + _lnIdx;
 
       var num = document.createElement("label");
       num.className = "prglabel";
       dl.appendChild(num);
 
-
-      //  var ptype = dl.getElementsByName("ptype");
-      //  ptype[0].value = arr[0];
+      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option></select>');
 
       var ptemp = document.createElement("input");
       ptemp.type = "text";
+      ptemp.name = "ptemp" + _lnIdx;
       ptemp.value = arr[1];
       ptemp.setAttribute("onchange", "calc_program();");
       dl.appendChild(ptemp);
 
+      ptemp.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
 
       var ppower = document.createElement("input");
       ppower.type = "text";
+      ppower.name = "ppower" + _lnIdx;
       ppower.value = arr[3];
       ppower.setAttribute("onchange", "calc_program();");
       dl.appendChild(ppower);
@@ -111,11 +91,13 @@
       var plus = document.createElement("img");
       plus.src = 'plus.png';
       plus.setAttribute("width", "20");
+      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','T;100;0;0')");
       dl.appendChild(plus);
 
       var minus = document.createElement("img");
       minus.src = 'minus.png';
       minus.setAttribute("width", "20");
+      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
       dl.appendChild(minus);
 
       if (!obj) {
@@ -126,12 +108,16 @@
         prg.after(dl);
       }
 
+      var pnum = document.getElementById("pnum" + _lnIdx);
       pnum.value = arr[2];
 
+      var p = "ptype" + _lnIdx;
       var ptype = document.getElementById(p);
       ptype.value = arr[0];
 
+      set_bgcolor(_lnIdx);
 
+      _lnIdx++;
       calc_program();
     }
 
@@ -172,27 +158,29 @@
 
 
 
-    
-    window.onload = function() {
-      AddLuaButtons();
-      setPowerUnit();
-      getProgram();
-      setInterval(loadDoc, 2000);
-    };
-
-    document.addEventListener('DOMContentLoaded', function() {
-      headers.forEach(function(item) {
-        item.addEventListener("click", headerClick);
-      });
-
-      
-      document.getElementById("WProgram").addEventListener("change", function(event) {
+    initModePage({
+      temps: {
+        left: [
+          {id:'PipeTemp', label:'Т в царге:', color:'%PipeColor%'},
+          {id:'SteamTemp', label:'Т пара:', color:'%SteamColor%'}
+        ],
+        right: [
+          {id:'WaterTemp', label:'Т воды:', color:'%WaterColor%'},
+          {id:'TankTemp', label:'Т в кубе:', color:'%TankColor%'},
+          {id:'ACPTemp', label:'Т в ТСА:', color:'%ACPColor%'}
+        ]
+      },
+      soundLoop: false,
+      soundMaxPlays: 2,
+      hasProgram: true,
+      onProgramChange: function() {
         var element = document.getElementById("prg");
         while (element.firstChild) {
           element.removeChild(element.firstChild);
         }
         getProgram();
-      });
+      },
+      onLoad: function() { getProgram(); }
     });
 
   </script>
@@ -223,69 +211,10 @@
 
     <div id="Main" class="tabcontent" style="display: block;">
 
-      <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
-        <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
-          <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
-            <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
-              <div>v. </div>
-              <div id='version'></div>
-            </div>
-          </div>
-
-          <div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center">
-            <div id="connection_indicator">
-              <img src="Green.png" style="margin: 0 !important; width: 20px">
-            </div>
-          </div>
-
-          <div class="messages_box" style="display: none;" id="messagesBox">
-            <div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='clearMessages()'>
-              [x] очистить
-            </div>
-            <div class="messages_array" id="messages"></div>
-          </div>
-        </div>
-        <div style="display: flex; flex-direction: column; align-items: center; font-weight: bold;">
-          Работа: <span id='stm'></span>
-        </div>
-      </div>
+      <div id="common-header"></div>
 
 
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-
-        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-          <div class="text" style="color: %PipeColor%;">
-            Т в царге: &nbsp;&nbsp;
-            <span id='PipeTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="color: %SteamColor%;">
-            Т пара: &nbsp;&nbsp;
-            <span id='SteamTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-        </div>
-
-        <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
-          <div class="text" style="color: %WaterColor%;">
-            Т воды: &nbsp;&nbsp;
-            <span id='WaterTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="color: %TankColor%;">
-            Т в кубе: &nbsp;&nbsp;
-            <span id='TankTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="color: %ACPColor%;">
-            Т в ТСА: &nbsp;&nbsp;
-            <span id='ACPTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-        </div>
-
-      </div>
+      <div id="common-temps"></div>
 
  
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
@@ -298,11 +227,7 @@
         </div>
         </div>
 
-      <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
-        <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
-          Статус: <span id='Status'></span>
-        </span>
-      </div>
+      <div id="common-status"></div>
 
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="container_column" style="flex: 1.1; padding-left: 2em;">
@@ -371,9 +296,7 @@
         </div>
       </div>
 
-      <div>
-        <span class='dvcs'>Системные параметры: Heap=<span id='heap'></span>; BME temp=<span id='bme_temp'></span>; RSSI = <span id='rssi'></span>; Свободно: <span id='fr_bt'></span><span id='add_param'></span></span>
-      </div>
+      <div id="common-sysparams"></div>
 
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
@@ -465,34 +388,10 @@
     </div>
 
     <div id="Other" class="tabcontent">
-      <div style="visibility: hidden" id="lua_btn">
-        <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-          <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-            <div class="container_row" style="justify-content: space-around; align-items: center; display: block;" id="lua_btn_ln"></div>
-            <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">
-              <input name='lua_str_i' id='lua_str_i' type='text' value='' style='padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;'>
-              <input type="submit" name="lua_str_b" value="Выполнить Lua" class="button" onclick="run_strlua();" style='margin-bottom: 20px; margin-right: 100;'>
-            </div>
-            <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
-          </div>
-        </div>
-      </div>
+      <div id="common-lua"></div>
     </div>
 
-    <div id="I2CPump" class="tabcontent">
-      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
-        <h2>Внешний I2C насос</h2>
-        <h2>Скорость отбора (л/ч): <input id='i2c_speed' type='text' value='0' style="width: 6em;"></h2>
-        <h2>Объем (мл): <input id='i2c_volume' type='text' value='0' style="width: 6em;"></h2>
-        <div style="display: flex; gap: 1em; flex-wrap: wrap;">
-          <input type='button' class="button" value="Отправить" onclick='sendI2CPump();'>
-          <input type='button' class="button" value="Стоп" onclick='stopI2CPump();'>
-        </div>
-        <h2>Статус: <span id='i2c_status'>-</span></h2>
-        <h2>Текущая скорость (шаг/сек): <span id='i2c_speed_cur'>-</span></h2>
-        <h2>Осталось: <span id='i2c_remaining'>-</span> мл</h2>
-      </div>
-    </div>
+    <div id="common-i2cpump"></div>
 
   </form>
   <img src="Red_light.gif" style="width: 0; height: 0; visibility: hidden;">

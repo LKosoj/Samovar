@@ -148,6 +148,19 @@ sound.preload = 'auto';
 sound.autoplay = false;
 
 /**
+ * @brief Настройка звука тревоги для конкретной страницы
+ * @param {boolean} loop Зацикливать звук (true для beer/nbk, false для dist/bk)
+ * @param {number} maxPlays Макс. число воспроизведений (0 = без ограничения)
+ */
+function initSound(loop, maxPlays) {
+  sound.loop = loop;
+  if (maxPlays > 0) {
+    window.sound_play_count = 0;
+    window.MAX_SOUND_PLAYS = maxPlays;
+  }
+}
+
+/**
  * @brief Воспроизведение/пауза звука тревоги
  * @param {boolean} play true = играть, false = пауза
  */
@@ -203,7 +216,7 @@ function showHistory() {
   } else {
     let historyArray = getHistory();
     if (document.getElementById('historyList')) {
-      document.getElementById('historyList').innerHTML = historyArray;
+      document.getElementById('historyList').innerHTML = historyArray.join('');
     }
     if (document.getElementById('historyBox')) {
       document.getElementById('historyBox').style.display = 'block';
@@ -622,12 +635,62 @@ function sendvoltage() {
   
   if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
     alert("Введите значение!");
-    return 0;
+    return 1;
   }
   
   let command = 'voltage=' + num;
   sendbutton(command);
   return 0;
+}
+
+/**
+ * @brief Инициализация mode-страницы: sound, polling, power unit, lua
+ * @param {Object} config Конфигурация страницы
+ * @param {boolean} [config.soundLoop=true] Зацикливать звук
+ * @param {number} [config.soundMaxPlays=0] Макс. воспроизведений (0=без ограничения)
+ * @param {boolean} [config.hasProgram=false] Есть textarea WProgram
+ * @param {Function} [config.onProgramChange] Callback при изменении программы
+ * @param {Function} [config.onLoad] Доп. инициализация при onload
+ */
+function initModePage(config) {
+  config = config || {};
+  var soundLoop = config.soundLoop !== undefined ? config.soundLoop : true;
+  var soundMaxPlays = config.soundMaxPlays || 0;
+
+  initSound(soundLoop, soundMaxPlays);
+
+  window.onload = function() {
+    setPowerUnit();
+    AddLuaButtons();
+    if (config.onLoad) config.onLoad();
+    setInterval(loadDoc, 2000);
+  };
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Рендер общих UI-блоков
+    renderHeader();
+    renderStatusLine(config.statusOpts);
+    renderSystemParams(config.sysParamsOpts);
+    if (config.temps) renderTemperatures(config.temps);
+    renderI2CPump();
+    if (config.hasLua !== false) renderLuaControls();
+
+    var headers = document.querySelectorAll("[data-name='spoiler-title']");
+    headers.forEach(function(item) {
+      item.addEventListener("click", headerClick);
+    });
+
+    if (config.hasProgram) {
+      var wpEl = document.getElementById("WProgram");
+      if (wpEl) {
+        wpEl.addEventListener("change", function() {
+          if (config.onProgramChange) {
+            config.onProgramChange();
+          }
+        });
+      }
+    }
+  });
 }
 
 /**
@@ -666,6 +729,165 @@ function run_lua(num) {
  */
 function run_strlua() {
   // Реализация зависит от конкретной страницы
+}
+
+// ==================== COMMON UI BLOCKS ===========================================================
+
+/**
+ * @brief Рендер header блока (version, connection indicator, messages)
+ * Вставляет в элемент с id="common-header"
+ */
+function renderHeader() {
+  var el = document.getElementById('common-header');
+  if (!el) return;
+  el.innerHTML =
+    '<div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">' +
+      '<div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">' +
+        '<div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">' +
+          '<div>Samovar</div> <span id="crnt_tm" style="height: 0; visibility: hidden"></span>' +
+          '<div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">' +
+            '<div>v. </div>' +
+            '<div id="version"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center">' +
+          '<div id="connection_indicator">' +
+            '<img src="Green.png" style="margin: 0 !important; width: 20px">' +
+          '</div>' +
+        '</div>' +
+        '<div class="messages_box" style="display: none;" id="messagesBox">' +
+          '<div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick="clearMessages()">' +
+            '[x] очистить' +
+          '</div>' +
+          '<div class="messages_array" id="messages"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display: flex; flex-direction: column; align-items: center; font-weight: bold;">' +
+        'Работа: <span id="stm"></span>' +
+      '</div>' +
+    '</div>';
+}
+
+/**
+ * @brief Рендер строки статуса
+ * @param {Object} [opts] Опции
+ * @param {string} [opts.id] id для div (напр. "status_div" для nbk)
+ * @param {string} [opts.marginTop] margin-top значение (по умолчанию "1em")
+ * Вставляет в элемент с id="common-status"
+ */
+function renderStatusLine(opts) {
+  var el = document.getElementById('common-status');
+  if (!el) return;
+  opts = opts || {};
+  var mt = opts.marginTop || '1em';
+  var idAttr = opts.id ? ' id="' + opts.id + '"' : '';
+  el.innerHTML =
+    '<div' + idAttr + ' class="container_row" style="margin-top: ' + mt + '; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">' +
+      '<span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">' +
+        'Статус: <span id="Status"></span>' +
+      '</span>' +
+    '</div>';
+}
+
+/**
+ * @brief Рендер блока системных параметров
+ * @param {Object} [opts] Опции
+ * @param {string} [opts.style] inline style для outer div
+ * Вставляет в элемент с id="common-sysparams"
+ */
+function renderSystemParams(opts) {
+  var el = document.getElementById('common-sysparams');
+  if (!el) return;
+  opts = opts || {};
+  var style = opts.style ? ' style="' + opts.style + '"' : '';
+  el.innerHTML =
+    '<div' + style + '>' +
+      '<span class="dvcs">Системные параметры: Heap=<span id="heap"></span>; BME temp=<span id="bme_temp"></span>; RSSI = <span id="rssi"></span>; Свободно: <span id="fr_bt"></span><span id="add_param"></span></span>' +
+    '</div>';
+}
+
+/**
+ * @brief Рендер блока температур
+ * @param {Object} config Конфигурация датчиков
+ * @param {Array} config.left Датчики левого столбца [{id, label, color}]
+ * @param {Array} config.right Датчики правого столбца [{id, label, color, unit}]
+ * @param {string} [config.divId] id для внешнего div
+ * @param {string} [config.marginBottom] margin-bottom (по умолчанию "1em")
+ * Вставляет в элемент с id="common-temps"
+ */
+function renderTemperatures(config) {
+  var el = document.getElementById('common-temps');
+  if (!el) return;
+  config = config || {};
+  var mb = config.marginBottom || '1em';
+  var divId = config.divId ? ' id="' + config.divId + '"' : '';
+
+  function sensorRow(s) {
+    var unit = s.unit || '&#176;C';
+    var colorAttr = s.color ? ' style="color: ' + s.color + ';"' : '';
+    var spanStyle = s.spanStyle || 'font-size: xx-large;';
+    return '<div class="text"' + colorAttr + '>' +
+      s.label + ' &nbsp;&nbsp;' +
+      '<span id="' + s.id + '" style="' + spanStyle + '"></span> ' +
+      unit + '</div>';
+  }
+
+  var leftHtml = '';
+  (config.left || []).forEach(function(s) { leftHtml += sensorRow(s); });
+  var rightHtml = '';
+  (config.right || []).forEach(function(s) { rightHtml += sensorRow(s); });
+
+  el.innerHTML =
+    '<div' + divId + ' class="container_row" style="border: 1px dashed #bbb; margin-bottom: ' + mb + ';">' +
+      '<div class="container_column" style="flex: 1.1; padding-left: 2em;">' + leftHtml + '</div>' +
+      '<div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">' + rightHtml + '</div>' +
+    '</div>';
+}
+
+/**
+ * @brief Рендер блока I2C насоса
+ * Вставляет в элемент с id="common-i2cpump"
+ */
+function renderI2CPump() {
+  var el = document.getElementById('common-i2cpump');
+  if (!el) return;
+  el.innerHTML =
+    '<div id="I2CPump" class="tabcontent">' +
+      '<div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">' +
+        '<h2>Внешний I2C насос</h2>' +
+        '<h2>Скорость отбора (л/ч): <input id="i2c_speed" type="text" value="0" style="width: 6em;"></h2>' +
+        '<h2>Объем (мл): <input id="i2c_volume" type="text" value="0" style="width: 6em;"></h2>' +
+        '<div style="display: flex; gap: 1em; flex-wrap: wrap;">' +
+          '<input type="button" class="button" value="Отправить" onclick="sendI2CPump();">' +
+          '<input type="button" class="button" value="Стоп" onclick="stopI2CPump();">' +
+        '</div>' +
+        '<h2>Статус: <span id="i2c_status">-</span></h2>' +
+        '<h2>Текущая скорость (шаг/сек): <span id="i2c_speed_cur">-</span></h2>' +
+        '<h2>Осталось: <span id="i2c_remaining">-</span> мл</h2>' +
+      '</div>' +
+    '</div>';
+}
+
+/**
+ * @brief Рендер блока Lua controls
+ * Вставляет в элемент с id="common-lua"
+ */
+function renderLuaControls() {
+  var el = document.getElementById('common-lua');
+  if (!el) return;
+  el.innerHTML =
+    '<div style="visibility: hidden" id="lua_btn">' +
+      '<div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">' +
+        '<div class="container_column" style="flex: 1.1; padding-left: 2em;">' +
+          '<div class="container_row" style="justify-content: space-around; align-items: center; display: block;" id="lua_btn_ln"></div>' +
+          '<div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">' +
+            '<input name="lua_str_i" id="lua_str_i" type="text" value="" style="padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;">' +
+            '<input type="submit" name="lua_str_b" value="Выполнить Lua" class="button" onclick="run_strlua();" style="margin-bottom: 20px; margin-right: 100;">' +
+          '</div>' +
+          '<div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
 }
 
 // ==================== INITIALIZATION =============================================================

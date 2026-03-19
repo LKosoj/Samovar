@@ -14,10 +14,8 @@ class WebRoutesProgramModuleTests(unittest.TestCase):
         expected_snippets = [
             "inline void web_program(AsyncWebServerRequest *request)",
             'request->hasArg("WProgram")',
-            'set_beer_program(request->arg("WProgram"));',
-            'set_dist_program(request->arg("WProgram"));',
-            'set_nbk_program(request->arg("WProgram"));',
-            'set_program(request->arg("WProgram"));',
+            'set_program_for_mode(Samovar_Mode, request->arg("WProgram"));',
+            'get_program_for_mode(Samovar_Mode)',
             'BoilerVolume = request->arg("vless").toFloat();',
             "if (BoilerVolume <= 0) BoilerVolume = 30.0f;",
             "heatLossCalculated = false;",

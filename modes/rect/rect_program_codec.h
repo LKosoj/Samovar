@@ -7,14 +7,10 @@
 #include "Samovar.h"
 #include "state/globals.h"
 #include "support/safe_parse.h"
-
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
+#include "support/program_parse_helpers.h"
 
 inline void set_program(String WProgram) {
-  for (int j = 0; j < CAPACITY_NUM * 2; j++) {
-    program[j].WType = "";
-  }
-  ProgramLen = 0;
+  program_clear();
 
   if (WProgram.length() == 0) return;
   if (WProgram.length() > MAX_PROGRAM_INPUT_LEN) {
@@ -29,10 +25,7 @@ inline void set_program(String WProgram) {
   char* saveLine = nullptr;
   char* line = strtok_r(input, "\n", &saveLine);
   while (line && i < CAPACITY_NUM * 2) {
-    size_t lineLen = strlen(line);
-    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
-      line[--lineLen] = '\0';
-    }
+    size_t lineLen = trim_line_end(line);
     if (lineLen == 0) {
       line = strtok_r(NULL, "\n", &saveLine);
       continue;
@@ -68,9 +61,7 @@ inline void set_program(String WProgram) {
     }
 
     if (!ok) {
-      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
-      ProgramLen = 0;
-      SendMsg("Ошибка программы: неверный формат строки rect", ALARM_MSG);
+      program_fail("Ошибка программы: неверный формат строки rect");
       return;
     }
 

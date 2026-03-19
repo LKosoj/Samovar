@@ -5,9 +5,9 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
-#include "app/messages.h"
 #include "support/safe_parse.h"
 #include "support/process_math.h"
+#include "support/program_parse_helpers.h"
 
 String get_beer_program() {
   String Str = "";
@@ -27,10 +27,7 @@ String get_beer_program() {
 }
 
 void set_beer_program(String WProgram) {
-  for (int j = 0; j < CAPACITY_NUM * 2; j++) {
-    program[j].WType = "";
-  }
-  ProgramLen = 0;
+  program_clear();
 
   if (WProgram.length() == 0) return;
   if (WProgram.length() > MAX_PROGRAM_INPUT_LEN) {
@@ -45,10 +42,7 @@ void set_beer_program(String WProgram) {
   char* saveLine = nullptr;
   char* line = strtok_r(input, "\n", &saveLine);
   while (line && i < CAPACITY_NUM * 2) {
-    size_t lineLen = strlen(line);
-    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
-      line[--lineLen] = '\0';
-    }
+    size_t lineLen = trim_line_end(line);
     if (lineLen == 0) {
       line = strtok_r(NULL, "\n", &saveLine);
       continue;
@@ -75,9 +69,7 @@ void set_beer_program(String WProgram) {
               timeMin >= 0.0f;
 
     if (!ok) {
-      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
-      ProgramLen = 0;
-      SendMsg("Ошибка программы: неверный формат строки beer", ALARM_MSG);
+      program_fail("Ошибка программы: неверный формат строки beer");
       return;
     }
 
@@ -95,9 +87,7 @@ void set_beer_program(String WProgram) {
          offTime >= 0 && offTime <= 65535;
 
     if (!ok) {
-      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
-      ProgramLen = 0;
-      SendMsg("Ошибка программы: неверный шаблон устройства beer", ALARM_MSG);
+      program_fail("Ошибка программы: неверный шаблон устройства beer");
       return;
     }
 

@@ -64,7 +64,7 @@ class WebServerInitModuleTests(unittest.TestCase):
 
     def test_change_samovar_mode_defined_in_page_assets(self):
         self.assertIn("void change_samovar_mode()", self.page_assets_text)
-        self.assertIn('server.serveStatic("/index.htm", SPIFFS, "/beer.htm")', self.page_assets_text)
+        self.assertIn('mode_active_page(Samovar_Mode)', self.page_assets_text)
         self.assertNotIn("void change_samovar_mode() {", self.server_init_text)
 
 

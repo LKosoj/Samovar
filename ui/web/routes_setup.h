@@ -8,14 +8,11 @@
 #include "app/default_programs.h"
 #include "io/power_control.h"
 #include "io/sensors.h"
-#include "modes/beer/beer_program_codec.h"
 #include "modes/beer/beer_runtime.h"
 #include "modes/bk/bk_finish.h"
 #include "modes/bk/bk_water_control.h"
-#include "modes/dist/dist_program_codec.h"
 #include "modes/dist/dist_runtime.h"
 #include "modes/nbk/nbk_finish.h"
-#include "modes/nbk/nbk_program_codec.h"
 #include "state/globals.h"
 #include "storage/nvs_profiles.h"
 #include "support/task_stack_usage.h"
@@ -23,8 +20,6 @@
 #include "column_math.h"
 
 String getValue(String& data, char separator, int index);
-void set_program(String WProgram);
-void set_beer_program(String WProgram);
 void samovar_reset();
 void read_config();
 extern bool is_reboot;
@@ -187,9 +182,7 @@ inline void handleSave(AsyncWebServerRequest *request) {
   }
 
   if (request->hasArg("WProgram")) {
-    if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
-    else
-      set_program(request->arg("WProgram"));
+    set_program_for_mode(Samovar_Mode, request->arg("WProgram"));
   }
 
   SamSetup.UseHLS = request->hasArg("useflevel");

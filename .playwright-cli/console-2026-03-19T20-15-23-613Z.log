@@ -1,0 +1,6 @@
+[    2081ms] TypeError: Cannot set properties of null (setting 'innerHTML')
+    at ConnectError (http://localhost:8033/common.js:39:63)
+    at xhttp.onreadystatechange (http://localhost:8033/beer.htm:50:11)
+[    4079ms] TypeError: Cannot set properties of null (setting 'innerHTML')
+    at ConnectError (http://localhost:8033/common.js:39:63)
+    at xhttp.onreadystatechange (http://localhost:8033/beer.htm:50:11)

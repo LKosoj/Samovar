@@ -48,6 +48,12 @@ def _normalize_cpp_body(body: str) -> str:
     body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
     body = body.replace("save_profile();", "save_profile_nvs();")
     body = body.replace("load_profile();", "load_profile_nvs();")
+    # Step 2 named constants → numeric values for baseline parity comparison
+    body = body.replace("SAMOVAR_STARTVAL_BEER_MALT_HEATING", "2001")
+    body = body.replace("SAMOVAR_STARTVAL_BEER_MALT_WAIT", "2002")
+    body = body.replace("SAMOVAR_STARTVAL_BEER_ENTRY", "2000")
+    body = body.replace("SAMOVAR_STARTVAL_RECT_IDLE", "0")
+    body = body.replace("SAMOVAR_STATUS_BEER", "2000")
     body = re.sub(r"\s+", "", body)
     return body
 

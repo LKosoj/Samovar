@@ -68,6 +68,9 @@ Gate перехода к шагу 3:
 Цель:
 - сделать внутреннюю модель программ читаемой и обслуживаемой, сохранив внешние текстовые форматы.
 
+Детальный документ:
+- [03_program_codec_normalization_plan_ru.md](/srv/git_projects/Samovar/docs/refactoring/03_program_codec_normalization_plan_ru.md)
+
 Что входит:
 - финальная зачистка mode-specific codec modules;
 - единый набор validate helpers;

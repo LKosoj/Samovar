@@ -5,16 +5,12 @@
 
 #include "Samovar.h"
 #include "SPIFFSEditor.h"
-#include "modes/beer/beer_program_codec.h"
-#include "modes/dist/dist_program_codec.h"
-#include "modes/nbk/nbk_program_codec.h"
-#include "modes/rect/rect_program_codec.h"
+#include "app/default_programs.h"
 #include "state/globals.h"
 #include "support/format_utils.h"
 #include "support/process_math.h"
 
 int get_liquid_volume();
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 inline String append_data();
 
 inline void create_data() {
@@ -25,19 +21,9 @@ inline void create_data() {
   //Если режим ректификация, запишем в файл текущую программу отбора
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
     File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
-    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-      filePrg.println(get_program(CAPACITY_NUM * 2));
-      Serial.println(get_program(CAPACITY_NUM * 2));
-    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      filePrg.println(get_beer_program());
-      Serial.println(get_beer_program());
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      filePrg.println(get_dist_program());
-      Serial.println(get_dist_program());
-    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      filePrg.println(get_nbk_program());
-      Serial.println(get_nbk_program());
-    }
+    String prg = get_program_for_mode(Samovar_Mode);
+    filePrg.println(prg);
+    Serial.println(prg);
     filePrg.close();
   }
 

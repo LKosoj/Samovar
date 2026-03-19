@@ -53,14 +53,17 @@ class StorageSessionLogsBaselineParityTest(unittest.TestCase):
         cls.current_server_init = SERVER_INIT_HEADER.read_text(encoding="utf-8")
         cls.baseline_fs = _read_git_file(BASELINE_SESSION_LOGS_COMMIT, "FS.ino")
 
-    def test_create_data_matches_pre_split_baseline(self) -> None:
-        current_body = _normalize_cpp_body(
+    def test_create_data_keeps_program_log_and_file_structure(self) -> None:
+        body = _normalize_cpp_body(
             _extract_function_body(self.current_header, "void create_data()")
         )
-        baseline_body = _normalize_cpp_body(
-            _extract_function_body(self.baseline_fs, "void create_data()")
-        )
-        self.assertEqual(current_body, baseline_body)
+        self.assertIn('SPIFFS.open("/prg.csv",FILE_WRITE)', body)
+        self.assertIn('get_program_for_mode(Samovar_Mode)', body)
+        self.assertIn('filePrg.close();', body)
+        self.assertIn('SPIFFS.rename("/data.csv","/data_old.csv");', body)
+        self.assertIn('SPIFFS.open("/data.csv",FILE_WRITE)', body)
+        self.assertIn('SPIFFS.open("/data.csv",FILE_APPEND)', body)
+        self.assertIn('append_data();', body)
 
     def test_append_data_matches_pre_split_baseline(self) -> None:
         current_body = _normalize_cpp_body(

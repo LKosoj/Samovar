@@ -5,14 +5,11 @@
 
 #include "Samovar.h"
 #include "state/globals.h"
-#include "app/messages.h"
 #include "support/safe_parse.h"
+#include "support/program_parse_helpers.h"
 
 inline void set_nbk_program(String WProgram) {
-  for (int j = 0; j < CAPACITY_NUM * 2; j++) {
-    program[j].WType = "";
-  }
-  ProgramLen = 0;
+  program_clear();
 
   if (WProgram.length() == 0) return;
   if (WProgram.length() > MAX_PROGRAM_INPUT_LEN) {
@@ -24,23 +21,20 @@ inline void set_nbk_program(String WProgram) {
   copyStringSafe(input, WProgram);
 
   int i = 0;
-  char *saveLine = nullptr;
-  char *line = strtok_r(input, "\n", &saveLine);
+  char* saveLine = nullptr;
+  char* line = strtok_r(input, "\n", &saveLine);
   while (line && i < CAPACITY_NUM * 2) {
-    size_t lineLen = strlen(line);
-    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
-      line[--lineLen] = '\0';
-    }
+    size_t lineLen = trim_line_end(line);
     if (lineLen == 0) {
       line = strtok_r(NULL, "\n", &saveLine);
       continue;
     }
 
-    char *saveTok = nullptr;
-    char *tokType = strtok_r(line, ";", &saveTok);
-    char *tokSpeed = strtok_r(NULL, ";", &saveTok);
-    char *tokPower = strtok_r(NULL, ";", &saveTok);
-    char *tokExtra = strtok_r(NULL, ";", &saveTok);
+    char* saveTok = nullptr;
+    char* tokType = strtok_r(line, ";", &saveTok);
+    char* tokSpeed = strtok_r(NULL, ";", &saveTok);
+    char* tokPower = strtok_r(NULL, ";", &saveTok);
+    char* tokExtra = strtok_r(NULL, ";", &saveTok);
 
     float speed = 0;
     float power = 0;
@@ -51,9 +45,7 @@ inline void set_nbk_program(String WProgram) {
               parseFloatSafe(tokPower, power);
 
     if (!ok) {
-      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
-      ProgramLen = 0;
-      SendMsg("Ошибка программы: неверный формат строки nbk", ALARM_MSG);
+      program_fail("Ошибка программы: неверный формат строки nbk");
       return;
     }
 

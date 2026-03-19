@@ -1,6 +1,7 @@
 #ifndef __SAMOVAR_UI_WEB_TEMPLATE_KEYS_H__
 #define __SAMOVAR_UI_WEB_TEMPLATE_KEYS_H__
 
+#include "app/default_programs.h"
 #include "io/sensors.h"
 #include "storage/nvs_wifi.h"
 #include "support/format_utils.h"
@@ -36,11 +37,7 @@ String indexKeyProcessor(const String &var) {
     if (ProgramNum > 0) return "false";
     else return "true";
   } else if (var == "WProgram") {
-    if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
-    else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return get_dist_program();
-    else if (Samovar_Mode == SAMOVAR_NBK_MODE) return get_nbk_program();
-    else
-      return get_program(CAPACITY_NUM * 2);
+    return get_program_for_mode(Samovar_Mode);
   } else if (var == "Descr") {
     return SessionDescription;
   } else if (var == "videourl")
@@ -130,9 +127,7 @@ String setupKeyProcessor(const String &var) {
     s = SamSetup.StepperStepMlI2C;
     return s;
   } else if (var == "WProgram") {
-    if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
-    else
-      return get_program(CAPACITY_NUM * 2);
+    return get_program_for_mode(Samovar_Mode);
   } else if (var == "Kp") {
     s = format_float(SamSetup.Kp, 3);
     return s;

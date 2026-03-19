@@ -42,6 +42,20 @@ def _normalize_cpp_body(body: str) -> str:
     body = re.sub(r"//.*", "", body)
     body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
     body = re.sub(r"\s+", "", body)
+    # Step 3: expand shared helpers to baseline inline form
+    body = body.replace(
+        "program_clear();",
+        'for(intj=0;j<CAPACITY_NUM*2;j++){program[j].WType="";}ProgramLen=0;',
+    )
+    body = body.replace(
+        "trim_line_end(line);",
+        "strlen(line);while(lineLen>0&&(line[lineLen-1]=='\\r'||line[lineLen-1]==''||line[lineLen-1]=='\\t')){line[--lineLen]='\\0';}",
+    )
+    body = re.sub(
+        r'program_fail\("([^"]+)"\);',
+        r'for(intj=0;j<CAPACITY_NUM*2;j++)program[j].WType="";ProgramLen=0;SendMsg("\1",ALARM_MSG);',
+        body,
+    )
     return body
 
 

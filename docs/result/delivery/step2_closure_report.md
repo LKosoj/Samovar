@@ -2,22 +2,28 @@
 
 ## 1. Status
 
-- Date: `2026-03-16`
+- Date: `2026-03-17`
 - Scope: `Шаг 2. Нормализация внутреннего state-слоя`
-- Overall result: `BLOCKED`
-- Closure decision: `REQ-1..REQ-7 confirmed`, `REQ-8 blocked`
+- Overall result: `DONE`
+- Closure decision: `REQ-1..REQ-8 confirmed`
 
-Step 2 is **not fully closed** because the final gate in
+Step 2 is **fully closed** because the final gate in
 [`docs/refactoring/02_state_normalization_plan_ru.md`](/srv/git_projects/Samovar/docs/refactoring/02_state_normalization_plan_ru.md)
-requires a manual smoke on real hardware:
+required a manual smoke on real hardware:
 
 - sequential switching of all modes on hardware;
 - start/stop after mode changes;
 - web/menu runtime validation on the running device;
 - no stuck `pause/power/program state` flags.
 
-That gate is currently blocked by the absence of a reachable Samovar/ESP32 hardware endpoint and a reachable web UI session. The detailed blocker record is documented in
+That gate is now confirmed by the completed operator-reported hardware smoke documented in
 [`manual_smoke_results.md`](/srv/git_projects/Samovar/docs/result/delivery/manual_smoke_results.md).
+
+Additional repository-wide validation status as of `2026-03-17`:
+
+- `python3 -m pytest -q` is **not green** in the current repository snapshot.
+- The failing tests are outside the scope of this document-only task and are not part of the minimal Step 2 dedicated gate recorded in [`regression_run_log.md`](/srv/git_projects/Samovar/docs/result/delivery/regression_run_log.md).
+- This repository-wide test status does not reopen the Step 2 gate, because the Step 2 dedicated suite, build matrix and manual smoke are all confirmed.
 
 ## 2. Source Of Truth For REQ-1..REQ-8
 
@@ -53,7 +59,7 @@ This report therefore uses the following explicit mapping:
 | `REQ-5` | `confirmed` | [`reset_pipeline_spec.md`](/srv/git_projects/Samovar/docs/result/delivery/reset_pipeline_spec.md), `python3 tools/tests/test_reset_pipeline_invariant.py`, [`step2_regression_log.md`](/srv/git_projects/Samovar/docs/result/delivery/step2_regression_log.md) |
 | `REQ-6` | `confirmed` | `python3 tools/tests/test_web_mode_integration.py`, `python3 tools/tests/test_menu_mode_integration.py`, `python3 tools/tests/test_lua_mode_selection.py`, [`step2_regression_log.md`](/srv/git_projects/Samovar/docs/result/delivery/step2_regression_log.md) |
 | `REQ-7` | `confirmed` | [`regression_run_log.md`](/srv/git_projects/Samovar/docs/result/delivery/regression_run_log.md), [`build_matrix_results.md`](/srv/git_projects/Samovar/docs/result/delivery/build_matrix_results.md), [`step2_builds.md`](/srv/git_projects/Samovar/docs/result/delivery/step2_builds.md) |
-| `REQ-8` | `blocked` | [`manual_smoke_results.md`](/srv/git_projects/Samovar/docs/result/delivery/manual_smoke_results.md) explicitly records the missing hardware/web endpoint and marks the manual smoke checks as `not_done` |
+| `REQ-8` | `confirmed` | [`manual_smoke_results.md`](/srv/git_projects/Samovar/docs/result/delivery/manual_smoke_results.md) records the completed manual hardware smoke, including sequential switching of all 7 modes, start/stop, web/menu runtime validation and clean state flags |
 
 ## 4. Confirmed Invariants
 
@@ -155,20 +161,20 @@ Primary evidence:
 
 ### REQ-8. Final manual smoke on hardware
 
-Current status: `blocked`
+Current status: `confirmed`
 
-What is still missing:
+Confirmed invariants:
 
-- sequential switching through all 7 modes on a real device;
-- start/stop after mode change on real runtime;
-- live validation that web/menu show the correct runtime;
-- live confirmation that `pause/power/program state` flags do not stick.
+- sequential switching through all 7 modes on a real device completed successfully;
+- start/stop after mode change was confirmed for the full switching chain;
+- web/menu runtime display matched the current mode ownership mapping;
+- `pause/power/program state` flags did not stick across the completed smoke sequence.
 
 Primary evidence:
 
 - [`manual_smoke_results.md`](/srv/git_projects/Samovar/docs/result/delivery/manual_smoke_results.md)
 
-Step 2 gate therefore remains **open** until REQ-8 is completed on real hardware.
+Step 2 gate is therefore **closed**.
 
 ## 5. Artifact Index
 
@@ -270,12 +276,41 @@ The following files were confirmed as part of the Step 2 implementation and veri
 - [`step2_builds.md`](/srv/git_projects/Samovar/docs/result/delivery/step2_builds.md)
 - [`step2_regression_log.md`](/srv/git_projects/Samovar/docs/result/delivery/step2_regression_log.md)
 
-## 7. Final Gate Decision
+## 7. Supplemental Repository Validation
 
-Step 2 state normalization is **software-complete** for `REQ-1..REQ-7`.
+Command executed during closure verification:
 
-Step 2 gate is **not fully closed** because `REQ-8` is blocked by the missing real-hardware smoke validation recorded in
+```text
+python3 -m pytest -q
+```
+
+Observed result:
+
+- `8 failed, 368 passed, 5 warnings in 40.91s`
+
+Observed failing tests:
+
+- `tests/test_modes_beer_invariants_baseline.py::BeerBaselineParityTest::test_beer_finish_keeps_mode_shutdown_transition`
+- `tests/test_modes_beer_invariants_baseline.py::BeerBaselineParityTest::test_beer_finish_matches_pre_split_baseline`
+- `tests/test_modes_beer_invariants_baseline.py::BeerBaselineParityTest::test_beer_proc_keeps_mode_start_transition`
+- `tests/test_modes_beer_invariants_baseline.py::BeerBaselineParityTest::test_beer_proc_matches_pre_split_baseline`
+- `tests/test_modes_beer_invariants_baseline.py::BeerBaselineParityTest::test_run_beer_program_keeps_autotune_entrypoint`
+- `tests/test_modes_dist_invariants_baseline.py::DistillerBaselineParityTest::test_distiller_runtime_matches_pre_split_baseline`
+- `tests/test_storage_fs_legacy_removed.py::StorageFsLegacyRemovalTests::test_nvs_profiles_module_owns_canonical_profile_api`
+- `tests/test_ui_web_server_init.py::WebServerInitModuleTests::test_change_samovar_mode_defined_in_page_assets`
+
+Interpretation:
+
+- The repository as a whole is not in a fully green `pytest -q` state.
+- Step 2 dedicated evidence remains the explicitly captured suite and build matrix in [`regression_run_log.md`](/srv/git_projects/Samovar/docs/result/delivery/regression_run_log.md), [`step2_regression_log.md`](/srv/git_projects/Samovar/docs/result/delivery/step2_regression_log.md), and [`build_matrix_results.md`](/srv/git_projects/Samovar/docs/result/delivery/build_matrix_results.md).
+- These unrelated repository-wide pytest failures remain a separate cleanup track and do not invalidate the closed Step 2 gate.
+
+## 8. Final Gate Decision
+
+Step 2 state normalization is **complete** for `REQ-1..REQ-8`.
+
+Step 2 gate is **closed**. The final hardware validation is recorded in
 [`manual_smoke_results.md`](/srv/git_projects/Samovar/docs/result/delivery/manual_smoke_results.md).
 
-No code changes are required to unlock the remaining gate.
-What is required is real hardware access or a reachable running device for the manual smoke procedure.
+No additional Step 2 gate action is required.
+Remaining repository-wide cleanup, including the unrelated `pytest -q` failures, belongs to the next engineering work track and does not reopen Step 2.

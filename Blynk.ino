@@ -1,8 +1,5 @@
 #include "Samovar.h"
-#include "modes/beer/beer_program_codec.h"
-#include "modes/dist/dist_program_codec.h"
-#include "modes/nbk/nbk_program_codec.h"
-#include "modes/rect/rect_program_codec.h"
+#include "app/default_programs.h"
 #include "modes/rect/rect_runtime.h"
 #include "app/status_text.h"
 #include "state/globals.h"
@@ -175,15 +172,7 @@ BLYNK_READ(V24) {
   static bool inReadHandler = false;
   if (inReadHandler) return;
   inReadHandler = true;
-  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-    Blynk.virtualWrite(V24, get_beer_program());
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    Blynk.virtualWrite(V24, get_dist_program());
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    Blynk.virtualWrite(V24, get_nbk_program());
-  } else {
-    Blynk.virtualWrite(V24, get_program(CAPACITY_NUM * 2));
-  }
+  Blynk.virtualWrite(V24, get_program_for_mode(Samovar_Mode));
   inReadHandler = false;
 }
 
