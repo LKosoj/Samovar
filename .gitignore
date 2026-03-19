@@ -36,6 +36,7 @@ __pycache__/
 *.pyc
 MANAGER_PLAN.json
 .cli-proxy/
+.playwright-cli/
 AGENTS.md 
 GEMINI.md
 CLAUDE.md
