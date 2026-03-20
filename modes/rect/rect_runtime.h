@@ -29,6 +29,74 @@ void set_body_temp();
 bool column_wetting();
 #endif
 
+// Именованные задержки и пороги для ректификации (в миллисекундах если не указано иное)
+#define HLS_REACTION_DELAY_MS      (1000UL * 40)   // Задержка реакции датчика захлёба (40 сек, процесс инерционный)
+#define ALARM_WATER_REACTION_MS    (1000UL * 30)   // Задержка реакции на критическую Т воды (30 сек)
+#define EMERGENCY_COMMAND_DELAY_MS 1000             // Пауза перед аварийным отключением
+#define STABILIZATION_TICKS        (60 * 6)         // Тиков стабильности для завершения стабилизации (6 минут при 1 тик/сек)
+#define STABILIZATION_THRESHOLD    0.1f             // Максимальное отклонение Т пара для стабильности (°C)
+#define RELATIVE_TEMP_THRESHOLD    20.0f            // Порог: Temp < 20 → относительная от StartProgTemp
+#define PRECHOKE_TIMER_MS          (1000UL * 60 * TIME_C)       // Таймер предзахлёба (TIME_C минут)
+#define PRECHOKE_FAST_TIMER_MS     (PRECHOKE_TIMER_MS / 5)      // Ускоренный таймер возврата напряжения
+
+// Rect program type helpers
+// H=головы, B=тело, C=предзахлёб, T=хвосты, P=пауза
+inline bool is_body_or_prechoke(const String& wtype) { return wtype == "B" || wtype == "C"; }
+inline bool is_active_withdrawal(const String& wtype) { return wtype == "H" || wtype == "B" || wtype == "T" || wtype == "C"; }
+inline bool is_heads_or_tails(const String& wtype) { return wtype == "H" || wtype == "T"; }
+
+// Проверка температуры сенсора и управление паузой отбора.
+// Общая логика для SteamSensor и PipeSensor — отличаются только сенсор и текст сообщения.
+inline void check_sensor_temp_pause(DSSensor& sensor, const char* wait_type, const char* pause_msg) {
+  if (!is_body_or_prechoke(program[ProgramNum].WType)) return;
+
+  float c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, sensor.BodyTemp, bme_pressure);
+
+  //Возвращаем колонну в стабильное состояние, если температура вышла за пределы или корректируем пределы
+  if (sensor.avgTemp >= c_temp + sensor.SetTemp && sensor.BodyTemp > 0) {
+#ifdef USE_BODY_TEMP_AUTOSET
+    //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
+    if ((ProgramNum < ProgramLen - 3) && program[ProgramNum].WType == "C" && (is_body_or_prechoke(program[ProgramNum + 1].WType) || program[ProgramNum + 1].WType == "P") && is_body_or_prechoke(program[ProgramNum + 2].WType)) {
+      set_body_temp();
+    }
+    //Если это первая строка с телом - корректируем Т тела
+    else if ((ProgramNum > 0) && is_body_or_prechoke(program[ProgramNum].WType) && program[ProgramNum - 1].WType == "H") {
+      set_body_temp();
+    } else
+#endif
+      //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
+      if (!PauseOn && !program_Wait) {
+        program_Wait_Type = wait_type;
+        program_Wait = true;
+        reset_impurity_detector();
+        pause_withdrawal(true);
+        t_min = millis() + sensor.Delay * 1000;
+        set_buzzer(true);
+        SendMsg(pause_msg, WARNING_MSG);
+      }
+    // если время вышло, еще раз пытаемся дождаться
+    if (millis() >= t_min && sensor.avgTemp >= c_temp + sensor.SetTemp) {
+      t_min = millis() + sensor.Delay * 1000;
+    }
+  } else if (sensor.avgTemp < sensor.BodyTemp + sensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+    //продолжаем отбор
+    SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
+    t_min = 0;
+    program_Wait = false;
+    pause_withdrawal(false);
+    // После возобновления: сохраненная скорость становится базовой для детектора
+    if (SamSetup.useautospeed && ProgramNum < 30 && CurrrentStepperSpeed > 0) {
+      float actualRate = get_liquid_rate_by_step(CurrrentStepperSpeed);
+      if (actualRate > 0) {
+        program[ProgramNum].Speed = actualRate;
+        impurityDetector.correctionFactor = 1.0f;
+        impurityDetector.lastCorrectionTime = millis();
+        set_pump_speed(CurrrentStepperSpeed, true);
+      }
+    }
+  }
+}
+
 inline void withdrawal(void) {
   if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
 
@@ -56,7 +124,7 @@ inline void withdrawal(void) {
 
   //По превышению температуры в программе
   if (program[ProgramNum].Temp != 0) {
-    if (program[ProgramNum].Temp > 0 && program[ProgramNum].Temp < 20) {
+    if (program[ProgramNum].Temp > 0 && program[ProgramNum].Temp < RELATIVE_TEMP_THRESHOLD) {
       if (SteamSensor.avgTemp > (program[ProgramNum].Temp + SteamSensor.StartProgTemp)) {
         menu_samovar_start();
       }
@@ -67,106 +135,8 @@ inline void withdrawal(void) {
     }
   }
 
-  float c_temp;  //стартовая температура отбора тела с учетом корректировки от давления или без
-  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
-
-  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы или корректируем пределы
-  if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
-#ifdef USE_BODY_TEMP_AUTOSET
-    //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
-    if ((ProgramNum < ProgramLen - 3) && program[ProgramNum].WType == "C" && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
-      set_body_temp();
-    }
-    //Если это первая строка с телом - корректируем Т тела
-    else if ((ProgramNum > 0) && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
-      set_body_temp();
-    } else
-#endif
-      //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-      if (!PauseOn && !program_Wait) {
-        program_Wait_Type = "(пар)";
-        program_Wait = true;
-        // Сбрасываем детектор при постановке на паузу - после снятия с паузы сохраненная скорость станет новой базовой
-        reset_impurity_detector();
-        pause_withdrawal(true);
-        t_min = millis() + SteamSensor.Delay * 1000;
-        set_buzzer(true);
-        SendMsg(("Пауза по Т пара"), WARNING_MSG);
-      }
-    // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
-      t_min = millis() + SteamSensor.Delay * 1000;
-    }
-  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
-    //продолжаем отбор
-    SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
-    t_min = 0;
-    program_Wait = false;
-    pause_withdrawal(false);
-    // После возобновления с паузы устанавливаем сохраненную скорость как базовую для детектора
-    // Вычисляем скорость в л/ч из сохраненной скорости шагов и временно корректируем program[ProgramNum].Speed
-    if (SamSetup.useautospeed && ProgramNum < 30 && CurrrentStepperSpeed > 0) {
-      float actualRate = get_liquid_rate_by_step(CurrrentStepperSpeed);
-      if (actualRate > 0) {
-        // Временно корректируем скорость программы на текущую скорость насоса
-        // Это позволяет детектору считать текущую скорость базовой (correctionFactor = 1.0)
-        program[ProgramNum].Speed = actualRate;
-        impurityDetector.correctionFactor = 1.0f;
-        impurityDetector.lastCorrectionTime = millis();
-        // Устанавливаем скорость явно через set_pump_speed для синхронизации
-        set_pump_speed(CurrrentStepperSpeed, true);
-      }
-    }
-  }
-
-  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
-  //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы или корректируем пределы
-  if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
-#ifdef USE_BODY_TEMP_AUTOSET
-    if ((ProgramNum < ProgramLen - 3) && program[ProgramNum].WType == "C" && (program[ProgramNum + 1].WType == "B" || program[ProgramNum + 1].WType == "C" || program[ProgramNum + 1].WType == "P") && (program[ProgramNum + 2].WType == "B" || program[ProgramNum + 2].WType == "C")) {
-      set_body_temp();
-    }
-    //Если это первая строка с телом - корректируем Т тела
-    else if ((ProgramNum > 0) && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && program[ProgramNum - 1].WType == "H") {
-      set_body_temp();
-    } else
-#endif
-      //ставим отбор на паузу, если еще не стоит, и задаем время ожидания
-      if (!PauseOn && !program_Wait) {
-        program_Wait_Type = "(царга)";
-        program_Wait = true;
-        // Сбрасываем детектор при постановке на паузу - после снятия с паузы сохраненная скорость станет новой базовой
-        reset_impurity_detector();
-        pause_withdrawal(true);
-        t_min = millis() + PipeSensor.Delay * 1000;
-        set_buzzer(true);
-        SendMsg(("Пауза по Т царги"), WARNING_MSG);
-      }
-    // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min && PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) {
-      t_min = millis() + PipeSensor.Delay * 1000;
-    }
-  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
-    //продолжаем отбор
-    SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
-    t_min = 0;
-    program_Wait = false;
-    pause_withdrawal(false);
-    // После возобновления с паузы устанавливаем сохраненную скорость как базовую для детектора
-    // Вычисляем скорость в л/ч из сохраненной скорости шагов и временно корректируем program[ProgramNum].Speed
-    if (SamSetup.useautospeed && ProgramNum < 30 && CurrrentStepperSpeed > 0) {
-      float actualRate = get_liquid_rate_by_step(CurrrentStepperSpeed);
-      if (actualRate > 0) {
-        // Временно корректируем скорость программы на текущую скорость насоса
-        // Это позволяет детектору считать текущую скорость базовой (correctionFactor = 1.0)
-        program[ProgramNum].Speed = actualRate;
-        impurityDetector.correctionFactor = 1.0f;
-        impurityDetector.lastCorrectionTime = millis();
-        // Устанавливаем скорость явно через set_pump_speed для синхронизации
-        set_pump_speed(CurrrentStepperSpeed, true);
-      }
-    }
-  }
+  check_sensor_temp_pause(SteamSensor, "(пар)", "Пауза по Т пара");
+  check_sensor_temp_pause(PipeSensor, "(царга)", "Пауза по Т царги");
 
   // Пауза детектора: после истечения таймера возобновляем отбор
   if (program_Wait && program_Wait_Type == "(Детектор)" && t_min > 0 && millis() >= t_min) {
@@ -214,23 +184,17 @@ inline void run_program(uint8_t num) {
     if (num > 0 && program[num - 1].WType.length() > 0) {
       String prevType = program[num - 1].WType;
 
-      // Переход с голов на тело/предзахлеб
-      if (prevType == "H" && (currentType == "B" || currentType == "C")) {
+      // Сброс при смене семейства типов (B<->C не считается сменой)
+      if (prevType == "H" && is_body_or_prechoke(currentType)) {
+        needReset = true;
+      } else if (is_body_or_prechoke(prevType) && currentType == "T") {
+        needReset = true;
+      } else if (!is_body_or_prechoke(prevType) && is_body_or_prechoke(currentType)) {
+        needReset = true;
+      } else if (is_body_or_prechoke(prevType) && !is_body_or_prechoke(currentType)) {
         needReset = true;
       }
-      // Переход с тела/предзахлеба на хвосты
-      else if ((prevType == "B" || prevType == "C") && currentType == "T") {
-        needReset = true;
-      }
-      // Переход с любого другого типа на тело/предзахлеб (если не было B/C)
-      else if (prevType != "B" && prevType != "C" && (currentType == "B" || currentType == "C")) {
-        needReset = true;
-      }
-      // Переход с тела/предзахлеба на любой другой тип (кроме B/C)
-      else if ((prevType == "B" || prevType == "C") && currentType != "B" && currentType != "C") {
-        needReset = true;
-      }
-      // Переход B <-> C - НЕ сбрасываем (needReset остается false)
+      // Переход B <-> C — НЕ сбрасываем (needReset остается false)
     } else {
       // Первый запуск или предыдущая программа не определена - всегда сбрасываем
       needReset = true;
@@ -291,8 +255,8 @@ inline void run_program(uint8_t num) {
     if (program[num].WType == "C" && alarm_c_low_min == 0) alarm_c_low_min = millis();
 #endif
     p_s = "Программа: старт строки  №" + (String)(num + 1);
-    if (program[num].WType == "H" || program[num].WType == "B" || program[num].WType == "T" || program[num].WType == "C") {
-      if (program[num].WType == "H" || program[num].WType == "T") {
+    if (is_active_withdrawal(program[num].WType)) {
+      if (is_heads_or_tails(program[num].WType)) {
         SteamSensor.BodyTemp = 0;
         PipeSensor.BodyTemp = 0;
         WaterSensor.BodyTemp = 0;
@@ -309,7 +273,7 @@ inline void run_program(uint8_t num) {
       stepper.setTarget(TargetStepps);
       startService();
       ActualVolumePerHour = program[num].Speed;
-      if ((program[num].WType == "B" || program[num].WType == "C") && program[num].Temp > 0) {
+      if (is_body_or_prechoke(program[num].WType) && program[num].Temp > 0) {
         SteamSensor.BodyTemp = program[num].Temp;
       }
 
@@ -317,7 +281,7 @@ inline void run_program(uint8_t num) {
       //Считаем, что колонна стабильна
       //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
       //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
-      if ((program[num].WType == "B" || program[num].WType == "C") && SteamSensor.BodyTemp == 0) {
+      if (is_body_or_prechoke(program[num].WType) && SteamSensor.BodyTemp == 0) {
         set_body_temp();
       }
     } else if (program[num].WType == "P") {
@@ -354,7 +318,7 @@ inline void run_program(uint8_t num) {
 
 inline void set_body_temp() {
   reset_impurity_detector();
-  if (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C" || program[ProgramNum].WType == "P") {
+  if (is_body_or_prechoke(program[ProgramNum].WType) || program[ProgramNum].WType == "P") {
     SteamSensor.Start_Pressure = bme_pressure;
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
@@ -366,115 +330,105 @@ inline void set_body_temp() {
   }
 }
 
-inline void check_alarm() {
-  static bool close_valve_message_sent = false;
-  //сбросим паузу события безопасности
-  if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
+// --- Подфункции check_alarm() ---
 
 #ifdef SAMOVAR_USE_POWER
-  //управляем разгонным тэном
+inline void check_acceleration_heater() {
   if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
       TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP &&
       PowerOn) {
     if (!acceleration_heater) {
-      //включаем разгонный тэн
       digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
       acceleration_heater = true;
     }
   } else {
     if (acceleration_heater) {
-      //выключаем разгонный тэн
       digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
       acceleration_heater = false;
     }
   }
+}
 #endif
 
-  //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
-  if (SamSetup.UseHLS && PowerOn) {
-    whls.tick();
-    if (whls.isHolded() && alarm_h_min == 0) {
-      whls.resetStates();
-      if (program[ProgramNum].WType != "C") {
-        set_buzzer(true);
-        SendMsg(("Сработал датчик захлёба!"), ALARM_MSG);
-#ifdef SAMOVAR_USE_POWER
-        alarm_c_min = 0;
-        alarm_c_low_min = 0;
-        prev_target_power_volt = 0;
-#endif
-      } else {
-#ifdef SAMOVAR_USE_POWER
-        //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
-        alarm_c_min = millis() + 1000 * 60 * TIME_C / 5;
-        //счетчик для повышения напряжения сбрасываем
-        alarm_c_low_min = 0;
-        if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
-#endif
-      }
-#ifdef SAMOVAR_USE_POWER
-      SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
-#ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt - target_power_volt / 100 * 3);
-#else
-      set_current_power(target_power_volt - 1 * PWR_FACTOR);
-#endif
-#endif
-      //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
-      alarm_h_min = millis() + 1000 * 40;
-    }
+inline void check_head_level_sensor() {
+  if (!SamSetup.UseHLS || !PowerOn) return;
 
-    if (alarm_h_min > 0 && alarm_h_min <= millis()) {
-      whls.resetStates();
-      alarm_h_min = 0;
-    }
+  whls.tick();
+  if (whls.isHolded() && alarm_h_min == 0) {
+    whls.resetStates();
+    if (program[ProgramNum].WType != "C") {
+      set_buzzer(true);
+      SendMsg(("Сработал датчик захлёба!"), ALARM_MSG);
 #ifdef SAMOVAR_USE_POWER
-    //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
-    if (alarm_c_min > 0 && alarm_c_min <= millis()) {
-      if (program[ProgramNum].WType == "C") {
-        if (prev_target_power_volt == 0) {
-#ifdef SAMOVAR_USE_SEM_AVR
-          prev_target_power_volt = target_power_volt + target_power_volt / 100 * 4;
-#else
-          prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
-#endif
-        }
-#ifdef SAMOVAR_USE_SEM_AVR
-        set_current_power(prev_target_power_volt - target_power_volt / 100 * 3);
-#else
-        set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
-#endif
-        SendMsg((String)PWR_MSG + " повышаем до " + (String)target_power_volt, NOTIFY_MSG);
-        prev_target_power_volt = 0;
-        //запускаем счетчик - TIME_C минут, нужен для повышения текущего напряжения чтобы поймать предзахлеб
-        alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
-      }
       alarm_c_min = 0;
+      alarm_c_low_min = 0;
+      prev_target_power_volt = 0;
+#endif
+    } else {
+#ifdef SAMOVAR_USE_POWER
+      alarm_c_min = millis() + PRECHOKE_FAST_TIMER_MS;
+      alarm_c_low_min = 0;
+      if (prev_target_power_volt == 0) prev_target_power_volt = target_power_volt;
+#endif
     }
-    //Если программа предзахлеб и давно не было срабатывания датчика - повышаем напряжение
-    if (program[ProgramNum].WType == "C") {
-      if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
+#ifdef SAMOVAR_USE_POWER
+    SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
 #ifdef SAMOVAR_USE_SEM_AVR
-        set_current_power(target_power_volt + target_power_volt / 100 * 1);
+    set_current_power(target_power_volt - target_power_volt / 100 * 3);
 #else
-        set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
+    set_current_power(target_power_volt - 1 * PWR_FACTOR);
 #endif
-        alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
-      } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
-        alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
-      }
-    } else alarm_c_low_min = 0;
-
 #endif
+    alarm_h_min = millis() + HLS_REACTION_DELAY_MS;
   }
-  //Если используется датчик уровня флегмы в голове
-#endif
 
+  if (alarm_h_min > 0 && alarm_h_min <= millis()) {
+    whls.resetStates();
+    alarm_h_min = 0;
+  }
 
 #ifdef SAMOVAR_USE_POWER
-  check_power_error();
+  // Возврат напряжения после срабатывания датчика в режиме предзахлёба
+  if (alarm_c_min > 0 && alarm_c_min <= millis()) {
+    if (program[ProgramNum].WType == "C") {
+      if (prev_target_power_volt == 0) {
+#ifdef SAMOVAR_USE_SEM_AVR
+        prev_target_power_volt = target_power_volt + target_power_volt / 100 * 4;
+#else
+        prev_target_power_volt = target_power_volt + 2 * PWR_FACTOR;
 #endif
+      }
+#ifdef SAMOVAR_USE_SEM_AVR
+      set_current_power(prev_target_power_volt - target_power_volt / 100 * 3);
+#else
+      set_current_power(prev_target_power_volt - 1 * PWR_FACTOR);
+#endif
+      SendMsg((String)PWR_MSG + " повышаем до " + (String)target_power_volt, NOTIFY_MSG);
+      prev_target_power_volt = 0;
+      alarm_c_low_min = millis() + PRECHOKE_TIMER_MS;
+    }
+    alarm_c_min = 0;
+  }
+  // Повышение напряжения при отсутствии срабатываний датчика в режиме предзахлёба
+  if (program[ProgramNum].WType == "C") {
+    if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
+#ifdef SAMOVAR_USE_SEM_AVR
+      set_current_power(target_power_volt + target_power_volt / 100 * 1);
+#else
+      set_current_power(target_power_volt + 0.5 * PWR_FACTOR);
+#endif
+      alarm_c_low_min = millis() + PRECHOKE_TIMER_MS;
+    } else if (alarm_c_low_min == 0 && alarm_c_min == 0) {
+      alarm_c_low_min = millis() + PRECHOKE_TIMER_MS;
+    }
+  } else alarm_c_low_min = 0;
+#endif
+}
+#endif
+
+inline void check_valve_and_cooling() {
+  static bool close_valve_message_sent = false;
 
   if (!valve_status) {
     if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) {
@@ -500,11 +454,7 @@ inline void check_alarm() {
     close_valve_message_sent = false;
   }
 
-  //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  //check_boiling();
-
 #ifdef USE_WATER_PUMP
-  //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   if (valve_status) {
     if (ACPSensor.avgTemp > 39 && ACPSensor.avgTemp > WaterSensor.avgTemp) set_pump_speed_pid(SamSetup.SetWaterTemp + 3);
     else
@@ -512,10 +462,18 @@ inline void check_alarm() {
   }
 #endif
 
-  //Проверяем, что температурные параметры не вышли за предельные значения
+#ifdef USE_WATER_VALVE
+  if (WaterSensor.avgTemp >= SamSetup.SetWaterTemp + 1) {
+    digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
+  } else if (WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 1) {
+    digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
+  }
+#endif
+}
+
+inline void check_temperature_limits() {
   if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
-    //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
-    delay(1000);  //Пауза на всякий случай, чтобы прошли все другие команды
+    delay(EMERGENCY_COMMAND_DELAY_MS);
     set_buzzer(true);
     set_power(false);
     String s = "";
@@ -526,17 +484,14 @@ inline void check_alarm() {
       s = s + " ТСА";
 
     if (TankSensor.avgTemp >= SamSetup.DistTemp) {
-      //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
       SendMsg(("Лимит максимальной температуры куба. Программа завершена."), NOTIFY_MSG);
     } else
       SendMsg("Аварийное отключение! Превышена максимальная температура" + s, ALARM_MSG);
   }
 
 #ifdef USE_WATERSENSOR
-  //Проверим, что вода подается
   if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
     set_buzzer(true);
-    //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
     sam_command_sync = SAMOVAR_POWER;
     SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
   }
@@ -544,14 +499,11 @@ inline void check_alarm() {
 
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true);
-    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
     SendMsg(("Критическая температура воды!"), WARNING_MSG);
-
 #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
       SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
-      //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
 #ifdef SAMOVAR_USE_SEM_AVR
       set_current_power(target_power_volt - target_power_volt / 100 * 8);
 #else
@@ -559,42 +511,35 @@ inline void check_alarm() {
 #endif
     }
 #endif
-    alarm_t_min = millis() + 1000 * 30;
+    alarm_t_min = millis() + ALARM_WATER_REACTION_MS;
   }
+}
 
+inline void check_warmup_and_stabilization() {
   if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
       SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
 #ifdef USE_WATER_PUMP
-    //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
     wp_count = -5;
 #endif
 
     bool column_wetting_result = true;
 #ifdef COLUMN_WETTING
-    // Смачивание насадки колонны
     column_wetting_result = column_wetting();
 #endif
 
     if (column_wetting_result) {
-
-        //достигли заданной температуры на разгоне и смочили насадку (если используется эта функция), переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
-        SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZING;
-
-        // Инициализируем переменные для проверки стабилизации
-        acceleration_temp = 0;
-
+      SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZING;
+      acceleration_temp = 0;
 #ifdef COLUMN_WETTING
-        // Помечаем, что после стабилизации нужно автоматически перейти к головам
-        wetting_autostart = (startval == SAMOVAR_STARTVAL_RECT_IDLE);
+      wetting_autostart = (startval == SAMOVAR_STARTVAL_RECT_IDLE);
 #endif
-
-        SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
-        set_buzzer(true);
+      SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
+      set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
-        set_current_power(program[0].Power);
+      set_current_power(program[0].Power);
 #else
-        current_power_mode = POWER_WORK_MODE;
-        digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+      current_power_mode = POWER_WORK_MODE;
+      digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
     }
   }
@@ -606,40 +551,51 @@ inline void check_alarm() {
     }
   }
 
-  //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
-  //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
+  // Стабилизация: 6 минут Т пара не меняется больше, чем на 0.1°C
   if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING &&
       SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
-    static float prev_stable_temp = 0;  // Предыдущая температура для проверки стабилизации
+    static float prev_stable_temp = 0;
     float d = SteamSensor.avgTemp - prev_stable_temp;
     d = abs(d);
-    if (d < 0.1) {
+    if (d < STABILIZATION_THRESHOLD) {
       acceleration_temp += 1;
-      if (acceleration_temp == 60 * 6) {
+      if (acceleration_temp == STABILIZATION_TICKS) {
         SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZED;
-        acceleration_temp = 0;  // Сбрасываем счетчик после установки статуса стабилизации
-        prev_stable_temp = 0;  // Сбрасываем предыдущую температуру
+        acceleration_temp = 0;
+        prev_stable_temp = 0;
         set_buzzer(true);
         SendMsg(("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
 #ifdef COLUMN_WETTING
         if (wetting_autostart && startval == SAMOVAR_STARTVAL_RECT_IDLE) {
           wetting_autostart = false;
-          menu_samovar_start();  // Автостарт голов после стабилизации
+          menu_samovar_start();
         }
 #endif
       }
     } else {
       acceleration_temp = 0;
-      prev_stable_temp = SteamSensor.avgTemp;  // Обновляем предыдущую температуру только при изменении
+      prev_stable_temp = SteamSensor.avgTemp;
     }
   }
-#ifdef USE_WATER_VALVE
-  if (WaterSensor.avgTemp >= SamSetup.SetWaterTemp + 1) {
-    digitalWrite(WATER_PUMP_PIN, USE_WATER_VALVE);
-  } else if (WaterSensor.avgTemp <= SamSetup.SetWaterTemp - 1) {
-    digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
-  }
+}
+
+// --- Главная функция проверки алармов ---
+
+inline void check_alarm() {
+  if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
+
+#ifdef SAMOVAR_USE_POWER
+  check_acceleration_heater();
 #endif
+#ifdef USE_HEAD_LEVEL_SENSOR
+  check_head_level_sensor();
+#endif
+#ifdef SAMOVAR_USE_POWER
+  check_power_error();
+#endif
+  check_valve_and_cooling();
+  check_temperature_limits();
+  check_warmup_and_stabilization();
 }
 
 #ifdef COLUMN_WETTING

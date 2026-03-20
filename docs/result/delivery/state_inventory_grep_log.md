@@ -49,14 +49,14 @@ modes/beer/beer_support.h:10: if (SamovarStatusInt != SAMOVAR_STATUS_BEER) retur
 modes/dist/dist_runtime.h:29: //    SendMsg("Статус: " + String(SamovarStatusInt) +
 modes/dist/dist_runtime.h:33: if (SamovarStatusInt != SAMOVAR_STATUS_DISTILLATION) return;
 modes/nbk/nbk_runtime.h:65: SamovarStatusInt = SAMOVAR_STATUS_NBK; // Именно в таком порядке
-modes/rect/rect_runtime.h:33: if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
-modes/rect/rect_runtime.h:376: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
-modes/rect/rect_runtime.h:565: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
-modes/rect/rect_runtime.h:581: SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZING;
-modes/rect/rect_runtime.h:602: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING && !boil_started) {
-modes/rect/rect_runtime.h:611: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING &&
-modes/rect/rect_runtime.h:619: SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZED;
-state/globals.h:176: extern volatile int16_t SamovarStatusInt;
+modes/rect/rect_runtime.h:101: if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
+modes/rect/rect_runtime.h:337: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
+modes/rect/rect_runtime.h:519: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_WARMUP &&
+modes/rect/rect_runtime.h:531: SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZING;
+modes/rect/rect_runtime.h:547: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING && !boil_started) {
+modes/rect/rect_runtime.h:555: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING &&
+modes/rect/rect_runtime.h:563: SamovarStatusInt = SAMOVAR_STATUS_RECTIFICATION_STABILIZED;
+state/globals.h:93: extern volatile int16_t SamovarStatusInt;
 ui/lua/bindings_process.h:60: lua_pushnumber(lua_state, (lua_Number)SamovarStatusInt);
 ui/lua/runtime.h:30: Variables += "SamovarStatusInt = " + String(SamovarStatusInt) + "\r\n";
 ui/web/ajax_snapshot.h:155: (samovar_status_has_rectification_program_progress(SamovarStatusInt) ||
@@ -95,8 +95,8 @@ io/sensor_scan.h:188: sam_command_sync = SAMOVAR_NONE;
 modes/bk/bk_alarm.h:63: sam_command_sync = SAMOVAR_POWER;
 modes/dist/dist_alarm.h:59: sam_command_sync = SAMOVAR_POWER;
 modes/nbk/nbk_alarm.h:48: sam_command_sync = SAMOVAR_POWER;
-modes/rect/rect_runtime.h:540: sam_command_sync = SAMOVAR_POWER;
-state/globals.h:122: extern volatile SamovarCommands sam_command_sync;
+modes/rect/rect_runtime.h:495: sam_command_sync = SAMOVAR_POWER;
+state/globals.h:90: extern volatile SamovarCommands sam_command_sync;
 ui/lua/bindings_process.h:18: sam_command_sync = SAMOVAR_BEER;
 ui/lua/bindings_process.h:20: sam_command_sync = SAMOVAR_BK;
 ui/lua/bindings_process.h:22: sam_command_sync = SAMOVAR_NBK;
@@ -181,8 +181,8 @@ impurity_detector.h:309: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) {
 modes/beer/beer_runtime.h:117: if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
 modes/dist/dist_runtime.h:30: //            ", Режим: " + String(Samovar_Mode) +
 modes/nbk/nbk_runtime.h:345: // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
-modes/rect/rect_runtime.h:183: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
-state/globals.h:124: extern volatile SAMOVAR_MODE Samovar_Mode;
+modes/rect/rect_runtime.h:153: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
+state/globals.h:91: extern volatile SAMOVAR_MODE Samovar_Mode;
 storage/session_logs.h:22: if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
 storage/session_logs.h:24: String prg = get_program_for_mode(Samovar_Mode);
 storage/session_logs.h:68: if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
@@ -231,7 +231,7 @@ ui/web/template_keys.h:130: return get_program_for_mode(Samovar_Mode);
 
 ```text
 Samovar.ino:255: volatile SAMOVAR_MODE Samovar_CR_Mode;
-state/globals.h:125: extern volatile SAMOVAR_MODE Samovar_CR_Mode;
+state/globals.h:92: extern volatile SAMOVAR_MODE Samovar_CR_Mode;
 storage/nvs_migration.h:41: SAMOVAR_MODE backupMode = Samovar_CR_Mode;
 storage/nvs_migration.h:46: Samovar_CR_Mode = (SAMOVAR_MODE)SamSetup.Mode;
 storage/nvs_migration.h:51: Samovar_CR_Mode = backupMode;
@@ -282,11 +282,11 @@ modes/beer/beer_runtime.h:271: if (startval == SAMOVAR_STARTVAL_BEER_MALT_HEATIN
 modes/beer/beer_runtime.h:275: startval = SAMOVAR_STARTVAL_BEER_MALT_WAIT;
 modes/nbk/nbk_runtime.h:62: if (startval == SAMOVAR_STARTVAL_NBK_ENTRY) {
 modes/nbk/nbk_runtime.h:63: startval = SAMOVAR_STARTVAL_NBK_PROGRAM_RUNNING;
-modes/rect/rect_runtime.h:52: (startval == SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING ||
-modes/rect/rect_runtime.h:53: startval == SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE)) {
-modes/rect/rect_runtime.h:588: wetting_autostart = (startval == SAMOVAR_STARTVAL_RECT_IDLE);
-modes/rect/rect_runtime.h:625: if (wetting_autostart && startval == SAMOVAR_STARTVAL_RECT_IDLE) {
-state/globals.h:183: extern volatile int16_t startval;
+modes/rect/rect_runtime.h:120: (startval == SAMOVAR_STARTVAL_RECT_PROGRAM_RUNNING ||
+modes/rect/rect_runtime.h:121: startval == SAMOVAR_STARTVAL_RECT_PROGRAM_COMPLETE)) {
+modes/rect/rect_runtime.h:534: wetting_autostart = (startval == SAMOVAR_STARTVAL_RECT_IDLE);
+modes/rect/rect_runtime.h:569: if (wetting_autostart && startval == SAMOVAR_STARTVAL_RECT_IDLE) {
+state/globals.h:95: extern volatile int16_t startval;
 ui/lua/runtime.h:34: //  Variables += "startval = " + String(startval) + "\r\n";
 ui/menu/actions.h:199: if (startval_is_active_non_calibration(startval)) {
 ui/menu/actions.h:204: if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
@@ -376,14 +376,14 @@ modes/nbk/nbk_alarm.h:53: if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && P
 modes/nbk/nbk_flow_control.h:17: if (PowerOn) {
 modes/nbk/nbk_runtime.h:345: // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
 modes/nbk/nbk_runtime.h:353: //PowerOn=true;// костыль 2 от незапуска по кнопке Включить нагрев
-modes/rect/rect_runtime.h:378: PowerOn) {
-modes/rect/rect_runtime.h:395: if (SamSetup.UseHLS && PowerOn) {
-modes/rect/rect_runtime.h:483: } else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
-modes/rect/rect_runtime.h:489: if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
-modes/rect/rect_runtime.h:516: if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
-modes/rect/rect_runtime.h:537: if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
-modes/rect/rect_runtime.h:545: if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
-state/globals.h:146: extern volatile bool PowerOn;
+modes/rect/rect_runtime.h:339: PowerOn) {
+modes/rect/rect_runtime.h:355: if (!SamSetup.UseHLS || !PowerOn) return;
+modes/rect/rect_runtime.h:437: } else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
+modes/rect/rect_runtime.h:443: if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE && ACPSensor.avgTemp <= MAX_ACP_TEMP - 10) {
+modes/rect/rect_runtime.h:475: if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || WaterSensor.avgTemp >= MAX_WATER_TEMP || TankSensor.avgTemp >= SamSetup.DistTemp || ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
+modes/rect/rect_runtime.h:493: if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
+modes/rect/rect_runtime.h:500: if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
+state/globals.h:154: extern volatile bool PowerOn;
 ui/lua/bindings_process.h:16: if (a && !PowerOn) {
 ui/lua/bindings_process.h:17: if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
 ui/lua/bindings_process.h:19: } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
@@ -428,12 +428,11 @@ impurity_detector.h:426: if (!program_Wait && !PauseOn) {
 impurity_detector.h:446: if (!PauseOn && !isDetectorPause) {
 impurity_detector.h:504: if (impurityDetector.correctionFactor < 1.0f && !PauseOn && !program_Wait) {
 io/sensor_scan.h:155: PauseOn = false;
-modes/rect/rect_runtime.h:86: if (!PauseOn && !program_Wait) {
-modes/rect/rect_runtime.h:135: if (!PauseOn && !program_Wait) {
-modes/rect/rect_runtime.h:184: if (!stepper.getState() && !PauseOn) return;
-modes/rect/rect_runtime.h:185: PauseOn = Pause;
-modes/rect/rect_runtime.h:256: PauseOn = false;
-state/globals.h:147: extern volatile bool PauseOn;
+modes/rect/rect_runtime.h:68: if (!PauseOn && !program_Wait) {
+modes/rect/rect_runtime.h:154: if (!stepper.getState() && !PauseOn) return;
+modes/rect/rect_runtime.h:155: PauseOn = Pause;
+modes/rect/rect_runtime.h:220: PauseOn = false;
+state/globals.h:237: extern volatile bool PauseOn;
 ui/lua/bindings_variables.h:167: } else if (Var == "PauseOn") {
 ui/lua/bindings_variables.h:168: a = PauseOn;
 ui/lua/runtime.h:43: Variables += "PauseOn = " + String(PauseOn) + "\r\n";
@@ -461,18 +460,14 @@ impurity_detector.h:445: bool isDetectorPause = (program_Wait && program_Wait_Ty
 impurity_detector.h:498: bool isDetectorPause = (program_Wait && program_Wait_Type == "(Детектор)");
 impurity_detector.h:504: if (impurityDetector.correctionFactor < 1.0f && !PauseOn && !program_Wait) {
 io/sensor_scan.h:156: program_Wait = false;
-modes/rect/rect_runtime.h:86: if (!PauseOn && !program_Wait) {
-modes/rect/rect_runtime.h:88: program_Wait = true;
-modes/rect/rect_runtime.h:100: } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
-modes/rect/rect_runtime.h:104: program_Wait = false;
-modes/rect/rect_runtime.h:135: if (!PauseOn && !program_Wait) {
-modes/rect/rect_runtime.h:137: program_Wait = true;
-modes/rect/rect_runtime.h:149: } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
-modes/rect/rect_runtime.h:153: program_Wait = false;
-modes/rect/rect_runtime.h:172: if (program_Wait && program_Wait_Type == "(Детектор)" && t_min > 0 && millis() >= t_min) {
-modes/rect/rect_runtime.h:175: program_Wait = false;
-modes/rect/rect_runtime.h:255: program_Wait = false;
-state/globals.h:150: extern volatile bool program_Wait;
+modes/rect/rect_runtime.h:68: if (!PauseOn && !program_Wait) {
+modes/rect/rect_runtime.h:70: program_Wait = true;
+modes/rect/rect_runtime.h:81: } else if (sensor.avgTemp < sensor.BodyTemp + sensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+modes/rect/rect_runtime.h:85: program_Wait = false;
+modes/rect/rect_runtime.h:142: if (program_Wait && program_Wait_Type == "(Детектор)" && t_min > 0 && millis() >= t_min) {
+modes/rect/rect_runtime.h:145: program_Wait = false;
+modes/rect/rect_runtime.h:219: program_Wait = false;
+state/globals.h:239: extern volatile bool program_Wait;
 ui/lua/bindings_variables.h:169: } else if (Var == "program_Wait") {
 ui/lua/bindings_variables.h:170: a = program_Wait;
 ui/lua/runtime.h:46: Variables += "program_Wait = " + String(program_Wait) + "\r\n";
@@ -485,10 +480,10 @@ ui/menu/actions.h:193: program_Wait = false;
 Samovar.ino:310: volatile bool program_Pause;
 app/orchestration.h:502: } else if (startval != SAMOVAR_STARTVAL_RECT_IDLE && !program_Pause && samovar_status_is_rectification(SamovarStatusInt)) {
 app/orchestration.h:504: } else if (startval != SAMOVAR_STARTVAL_RECT_IDLE && program_Pause && samovar_status_is_rectification(SamovarStatusInt)) {
-modes/rect/rect_runtime.h:40: if (program_Pause) {
-modes/rect/rect_runtime.h:254: program_Pause = false;
-modes/rect/rect_runtime.h:333: program_Pause = true;
-state/globals.h:149: extern volatile bool program_Pause;
+modes/rect/rect_runtime.h:108: if (program_Pause) {
+modes/rect/rect_runtime.h:218: program_Pause = false;
+modes/rect/rect_runtime.h:297: program_Pause = true;
+state/globals.h:238: extern volatile bool program_Pause;
 ui/lua/runtime.h:45: Variables += "program_Pause = " + String(program_Pause) + "\r\n";
 ```
 
@@ -498,7 +493,7 @@ ui/lua/runtime.h:45: Variables += "program_Pause = " + String(program_Pause) + "
 app/status_text.h:37: } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_IDLE && !stepper.getState()) {
 io/actuators.h:38: if (!stepper.getState()) stepper.setCurrent(0);
 io/actuators.h:50: if (!stepper.getState()) cp = false;
-modes/rect/rect_runtime.h:184: if (!stepper.getState() && !PauseOn) return;
+modes/rect/rect_runtime.h:154: if (!stepper.getState() && !PauseOn) return;
 ui/web/ajax_snapshot.h:108: out.print(round(stepper.getSpeed() * (uint8_t)stepper.getState()));
 ```
 
@@ -507,10 +502,10 @@ ui/web/ajax_snapshot.h:108: out.print(round(stepper.getSpeed() * (uint8_t)steppe
 ```text
 Samovar.ino:327: bool wetting_autostart = false;
 io/sensor_scan.h:132: wetting_autostart = false;
-modes/rect/rect_runtime.h:588: wetting_autostart = (startval == SAMOVAR_STARTVAL_RECT_IDLE);
-modes/rect/rect_runtime.h:625: if (wetting_autostart && startval == SAMOVAR_STARTVAL_RECT_IDLE) {
-modes/rect/rect_runtime.h:626: wetting_autostart = false;
-state/globals.h:166: extern bool wetting_autostart;
+modes/rect/rect_runtime.h:534: wetting_autostart = (startval == SAMOVAR_STARTVAL_RECT_IDLE);
+modes/rect/rect_runtime.h:569: if (wetting_autostart && startval == SAMOVAR_STARTVAL_RECT_IDLE) {
+modes/rect/rect_runtime.h:570: wetting_autostart = false;
+state/globals.h:241: extern bool wetting_autostart;
 ```
 
 ## boil_started
@@ -525,9 +520,9 @@ io/actuators.h:199: return boil_started;
 io/sensor_scan.h:177: boil_started = false;
 io/sensors.h:52: //    if (!boil_started)SteamSensor.avgTemp += 1;
 io/sensors.h:57: //    if (!boil_started)TankSensor.avgTemp += 0.2;
-modes/rect/rect_runtime.h:602: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING && !boil_started) {
-modes/rect/rect_runtime.h:604: if (boil_started) {
-state/globals.h:156: extern bool boil_started;
+modes/rect/rect_runtime.h:547: if (SamovarStatusInt == SAMOVAR_STATUS_RECTIFICATION_STABILIZING && !boil_started) {
+modes/rect/rect_runtime.h:549: if (boil_started) {
+state/globals.h:216: extern bool boil_started;
 support/process_math.h:80: if (!boil_started) return 100;
 support/process_math.h:177: if (!boil_started) return 100;
 ```
@@ -568,7 +563,7 @@ app/loop_dispatch.h:28: case SAMOVAR_POWER:
 modes/bk/bk_alarm.h:63: sam_command_sync = SAMOVAR_POWER;
 modes/dist/dist_alarm.h:59: sam_command_sync = SAMOVAR_POWER;
 modes/nbk/nbk_alarm.h:48: sam_command_sync = SAMOVAR_POWER;
-modes/rect/rect_runtime.h:540: sam_command_sync = SAMOVAR_POWER;
+modes/rect/rect_runtime.h:495: sam_command_sync = SAMOVAR_POWER;
 src/core/state/status_codes.h:38: SAMOVAR_POWER,
 src/core/state/status_codes.h:57: static constexpr SamovarCommands SAMOVAR_COMMAND_POWER = SAMOVAR_POWER;
 ui/lua/bindings_process.h:26: sam_command_sync = SAMOVAR_POWER;
@@ -744,7 +739,7 @@ app/loop_dispatch.h:25: Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 app/loop_dispatch.h:38: if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
 app/runtime_tasks.h:241: s += format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2);
 impurity_detector.h:309: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) {
-modes/rect/rect_runtime.h:183: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
+modes/rect/rect_runtime.h:153: if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
 src/core/state/mode_codes.h:7: SAMOVAR_RECTIFICATION_MODE = 0,
 src/core/state/mode_ownership.h:16: case SAMOVAR_RECTIFICATION_MODE:
 src/core/state/mode_ownership.h:20: return SAMOVAR_RECTIFICATION_MODE;

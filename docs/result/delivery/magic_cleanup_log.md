@@ -45,7 +45,7 @@ src/core/state/status_codes.h:20: inline bool samovar_status_is_rectification(in
 
 ```text
 io/actuators.h:47: if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
-modes/rect/rect_runtime.h:33: if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
+modes/rect/rect_runtime.h:101: if (!samovar_status_allows_rectification_withdrawal(SamovarStatusInt)) return;
 src/core/state/status_codes.h:24: inline bool samovar_status_allows_rectification_withdrawal(int16_t status) {
 ```
 
