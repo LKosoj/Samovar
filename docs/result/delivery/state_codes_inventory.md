@@ -2,7 +2,7 @@
 
 ## Scope
 
-- Просканировано `*.h/*.cpp/*.ino`: `1014` файлов из git-дерева.
+- Просканировано `*.h/*.cpp/*.ino`: `1015` файлов из git-дерева.
 - Source of truth для status/command: `src/core/state/status_codes.h`.
 - Source of truth для mode/startval: `src/core/state/mode_codes.h`.
 - Source of truth для runtime-диспетча и входа в режимы: `app/loop_dispatch.h`, `app/orchestration.h`.

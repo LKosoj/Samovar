@@ -76,96 +76,22 @@
 
 
 
-    function set_num () {
-      var e = document.getElementById("prg").childNodes;
-      var a;
-      for (i = 1; i < e.length; i++) {
-        a = e[i].childNodes[0];
-        a.innerText = "";
-        if (i < 10) a.innerText = "0";
-        a.innerText = a.innerText + i;
-      }
-    }
-
-    function removeLine (ln) {
-      var prg = document.getElementById("prg").childNodes.length;
-      if (prg < 3) return;
-      var prgline = document.getElementById(ln);
-      prgline.remove();
-      calc_program();
-    }
-
-    function addLine (obj, s) {
-      var arr = s.split(";");
-
-      var dl = document.createElement("div");
-      dl.className = "prgline";
-      dl.id = "prgln" + _lnIdx;
-
-      var num = document.createElement("label");
-      num.className = "prglabel";
-      dl.appendChild(num);
-
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брожение</option><option value="A">Автотюнинг</option><option value="L">Lua Скрипт</option></select>');
-
-      var ptemp = document.createElement("input");
-      ptemp.type = "text";
-      ptemp.name = "ptemp" + _lnIdx;
-      ptemp.value = arr[1];
-      ptemp.setAttribute("onchange", "calc_program();");
-      dl.appendChild(ptemp);
-
-      var ptime = document.createElement("input");
-      ptime.type = "text";
-      ptime.name = "ptime" + _lnIdx;
-      ptime.value = arr[2];
-      ptime.setAttribute("onchange", "calc_program();");
-      dl.appendChild(ptime);
-
-      var pmixer = document.createElement("input");
-      pmixer.type = "text";
-      pmixer.id = "pmixer" + _lnIdx;
-      pmixer.name = "pmixer" + _lnIdx;
-      pmixer.value = arr[3];
-      pmixer.setAttribute("width", "70");
-      pmixer.setAttribute("onfocus", "popup_modal(" + _lnIdx + ");");
-      dl.appendChild(pmixer);
-
-      pmixer.insertAdjacentHTML("afterend", '<select id="dt' + _lnIdx + '" name="dt' + _lnIdx + '" onchange="calc_program()"><option value="0">Куб</option><option value="1">Вода</option><option value="2">Царга</option><option value="3">Пар</option><option value="4">ТСА</option></select>');
-
-      var plus = document.createElement("img");
-      plus.src = 'plus.png';
-      plus.setAttribute("width", "20");
-      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','W;0;0;;0')");
-      dl.appendChild(plus);
-
-      var minus = document.createElement("img");
-      minus.src = 'minus.png';
-      minus.setAttribute("width", "20");
-      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
-      dl.appendChild(minus);
-
-      if (!obj) {
-        var prg = document.getElementById("prg");
-        prg.appendChild(dl);
-      } else {
-        prg = document.getElementById(obj);
-        prg.after(dl);
-      }
-
-      var p = "ptype" + _lnIdx;
-      var ptype = document.getElementById(p);
-      ptype.value = arr[0];
-
-      p = "dt" + _lnIdx;
-      ptype = document.getElementById(p);
-      ptype.value = arr[4];
-
-      set_bgcolor(_lnIdx);
-
-      _lnIdx++;
-      calc_program();
-    }
+    window._prgEditorConfig = {
+      numStart: 1,
+      minLines: 2,
+      defaultLine: 'W;0;0;;0',
+      headerHtml: '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>',
+      colors: { M: '#FFFF00', B: '#FF6347', C: '#00BFFF', P: '#FFA500', W: '#98FB98', F: '#DACEFF', L: '#3498DB', A: '#FF2929' },
+      fields: [
+        { tag: 'select', prefix: 'ptype', arr: 0, trigger: 'bgcolor',
+          options: '<option value="P">Пауза</option><option value="M">Темп. закладки солода&nbsp;&nbsp;</option><option value="B">Кипячение</option><option value="C">Охлаждение</option><option value="W">Ожидание</option><option value="F">Брожение</option><option value="A">Автотюнинг</option><option value="L">Lua Скрипт</option>' },
+        { tag: 'input', prefix: 'ptemp', arr: 1 },
+        { tag: 'input', prefix: 'ptime', arr: 2 },
+        { tag: 'input', prefix: 'pmixer', arr: 3, hasId: true, width: 70, onfocus: 'popup_modal({idx});' },
+        { tag: 'select', prefix: 'dt', arr: 4,
+          options: '<option value="0">Куб</option><option value="1">Вода</option><option value="2">Царга</option><option value="3">Пар</option><option value="4">ТСА</option>' }
+      ]
+    };
 
     function popup_modal(idx){
       var arr = document.getElementById("pmixer" + idx).value.split("^");
@@ -218,39 +144,6 @@
      document.getElementById("overlay").classList.remove("show");
     }
 
-    function getProgram () {
-      if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Program error!");
-        return;
-      }
-      var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;<label class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>');
-      var p = document.getElementById("WProgram");
-      var varr = p.value.split("\n");
-      for (z = 0; z < varr.length; z++) {
-        if (varr[z] != "") addLine(false, varr[z]);
-      }
-    }
-
-    function set_bgcolor (obj) {
-      var l = document.getElementById("prgln" + obj);
-      var t = document.getElementById("ptype" + obj).value;
-      let color = 'black';
-      if (t == "M") {color = "background-color: #FFFF00;";}
-      else if (t == "B") {color = "background-color: #FF6347;";}
-      else if (t == "C") {color = "background-color: #00BFFF;";}
-      else if (t == "P") {color = "background-color: #FFA500;";}
-      else if (t == "W") {color = "background-color: #98FB98;";}
-      else if (t == "F") {color = "background-color: #DACEFF;";}
-      else if (t == "L") {color = "background-color: #3498DB;";}
-      else if (t == "A") {color = "background-color: #FF2929;";}
-      l.setAttribute("style", color);
-      var e = l.childNodes;
-      for (q = 0; q < e.length; q++) {
-		e[q].setAttribute("style", color);
-      }
-      calc_program();
-    }
 
 
     
@@ -299,17 +192,7 @@
       },
       soundLoop: true,
       hasProgram: true,
-      onProgramChange: function() {
-        if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Program error!");
-          return;
-        }
-        var element = document.getElementById("prg");
-        while (element.firstChild) {
-          element.removeChild(element.firstChild);
-        }
-        getProgram();
-      },
+      onProgramChange: function() { getProgram(); },
       onLoad: function() { getProgram(); }
     });
 

@@ -40,120 +40,21 @@
 
 
 
-    function set_num () {
-      var e = document.getElementById("prg").childNodes;
-      var a;
-      for (i = 1; i < e.length; i++) {
-        a = e[i].childNodes[0];
-        a.innerText = "";
-        if (i < 10) a.innerText = "0";
-        a.innerText = a.innerText + i;
-      }
-    }
-
-    function removeLine (ln) {
-      var prg = document.getElementById("prg").childNodes.length;
-      if (prg < 3) return;
-      var prgline = document.getElementById(ln);
-      prgline.remove();
-      calc_program();
-    }
-
-    function addLine (obj, s) {
-      var arr = s.split(";");
-
-      var dl = document.createElement("div");
-      dl.className = "prgline";
-      dl.id = "prgln" + _lnIdx;
-
-      var num = document.createElement("label");
-      num.className = "prglabel";
-      dl.appendChild(num);
-
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ')"><option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option></select>');
-
-      var ptemp = document.createElement("input");
-      ptemp.type = "text";
-      ptemp.name = "ptemp" + _lnIdx;
-      ptemp.value = arr[1];
-      ptemp.setAttribute("onchange", "calc_program();");
-      dl.appendChild(ptemp);
-
-      ptemp.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
-
-      var ppower = document.createElement("input");
-      ppower.type = "text";
-      ppower.name = "ppower" + _lnIdx;
-      ppower.value = arr[3];
-      ppower.setAttribute("onchange", "calc_program();");
-      dl.appendChild(ppower);
-
-      var plus = document.createElement("img");
-      plus.src = 'plus.png';
-      plus.setAttribute("width", "20");
-      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','T;100;0;0')");
-      dl.appendChild(plus);
-
-      var minus = document.createElement("img");
-      minus.src = 'minus.png';
-      minus.setAttribute("width", "20");
-      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
-      dl.appendChild(minus);
-
-      if (!obj) {
-        var prg = document.getElementById("prg");
-        prg.appendChild(dl);
-      } else {
-        prg = document.getElementById(obj);
-        prg.after(dl);
-      }
-
-      var pnum = document.getElementById("pnum" + _lnIdx);
-      pnum.value = arr[2];
-
-      var p = "ptype" + _lnIdx;
-      var ptype = document.getElementById(p);
-      ptype.value = arr[0];
-
-      set_bgcolor(_lnIdx);
-
-      _lnIdx++;
-      calc_program();
-    }
-
-    function getProgram () {
-      var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Значение<span class="tooltiptext">Тип значения зависит от типа программы. Температура, абсолютное или относительное значение спиртуозности</span></label>&nbsp;<label class="tooltip">№ емкости</label><label class="tooltip">Напряжение</label></div>');
-      var p = document.getElementById("WProgram");
-      var varr = p.value.split("\n");
-      for (z = 0; z < varr.length; z++) {
-        if (varr[z] != "") addLine(false, varr[z]);
-      }
-    }
-
-    function set_bgcolor (obj) {
-      var l = document.getElementById("prgln" + obj);
-      var t = document.getElementById("ptype" + obj).value;
-      let color = 'black';
-      if (t == "T") {color = "background-color: #FFFF00;";}
-      else if (t == "S") {color = "background-color: #FF6347;";}
-      else if (t == "A") {color = "background-color: #00BFFF;";}
-      else if (t == "R") {color = "background-color: #FFA500;";}
-      else if (t == "P") {color = "background-color: #98FB98;";}
-      l.setAttribute("style", color);
-      var e = l.childNodes;
-      for (q = 0; q < e.length; q++) {
-        if (q == 2) {
-          e[q].setAttribute("style", color + "width:85");
-        } else if (q == 3) {
-          e[q].setAttribute("style", color + "width:90");
-        } else if (q == 4) {
-          e[q].setAttribute("style", color + "width:100");
-        }
-        else e[q].setAttribute("style", color);
-      }
-      calc_program();
-    }
+    window._prgEditorConfig = {
+      numStart: 1,
+      minLines: 2,
+      defaultLine: 'T;100;0;0',
+      headerHtml: '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label class="tooltip">Значение<span class="tooltiptext">Тип значения зависит от типа программы. Температура, абсолютное или относительное значение спиртуозности</span></label>&nbsp;<label class="tooltip">№ емкости</label><label class="tooltip">Напряжение</label></div>',
+      colors: { T: '#FFFF00', S: '#FF6347', A: '#00BFFF', R: '#FFA500', P: '#98FB98' },
+      fields: [
+        { tag: 'select', prefix: 'ptype', arr: 0, trigger: 'bgcolor',
+          options: '<option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option>' },
+        { tag: 'input', prefix: 'ptemp', arr: 1 },
+        { tag: 'select', prefix: 'pnum', arr: 2,
+          options: '<option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>' },
+        { tag: 'input', prefix: 'ppower', arr: 3 }
+      ]
+    };
 
 
 
@@ -173,13 +74,7 @@
       soundLoop: false,
       soundMaxPlays: 2,
       hasProgram: true,
-      onProgramChange: function() {
-        var element = document.getElementById("prg");
-        while (element.firstChild) {
-          element.removeChild(element.firstChild);
-        }
-        getProgram();
-      },
+      onProgramChange: function() { getProgram(); },
       onLoad: function() { getProgram(); }
     });
 

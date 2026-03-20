@@ -547,6 +547,141 @@ function calc_time() {
   }
 }
 
+// ==================== PROGRAM EDITOR (generic) ===================================================
+
+function set_num() {
+  var cfg = window._prgEditorConfig;
+  var offset = cfg ? (cfg.numStart || 0) : 0;
+  var e = document.getElementById("prg").childNodes;
+  for (var i = 1; i < e.length; i++) {
+    var a = e[i].childNodes[0];
+    if (!a) continue;
+    var num = i - 1 + offset;
+    a.innerText = (num < 10 ? "0" : "") + num;
+  }
+}
+
+function removeLine(ln) {
+  var cfg = window._prgEditorConfig;
+  var minChildren = cfg ? (cfg.minLines || 2) + 1 : 3;
+  if (document.getElementById("prg").childNodes.length < minChildren) return;
+  document.getElementById(ln).remove();
+  calc_program();
+}
+
+function addLine(obj, s) {
+  var cfg = window._prgEditorConfig;
+  if (!cfg) return;
+  var arr = s.split(";");
+
+  var dl = document.createElement("div");
+  dl.className = "prgline";
+  dl.id = "prgln" + _lnIdx;
+
+  var num = document.createElement("label");
+  num.className = "prglabel";
+  dl.appendChild(num);
+
+  var selectsToSet = [];
+  for (var f = 0; f < cfg.fields.length; f++) {
+    var field = cfg.fields[f];
+    var el;
+    if (field.tag === 'select') {
+      el = document.createElement("select");
+      el.id = field.prefix + _lnIdx;
+      el.name = field.prefix + _lnIdx;
+      el.innerHTML = field.options;
+      el.setAttribute("onchange", (field.trigger === 'bgcolor' ? "set_bgcolor(" + _lnIdx + ");" : "") + "calc_program();");
+      if (field.style) el.style.cssText = field.style;
+      selectsToSet.push({ el: el, arrIdx: field.arr });
+    } else if (field.tag === 'input') {
+      el = document.createElement("input");
+      el.type = "text";
+      el.name = field.prefix + _lnIdx;
+      if (field.hasId) el.id = field.prefix + _lnIdx;
+      el.value = arr[field.arr] || '';
+      el.setAttribute("onchange", "calc_program();");
+      if (field.onfocus) el.setAttribute("onfocus", field.onfocus.replace(/\{idx\}/g, String(_lnIdx)));
+      if (field.width) el.setAttribute("width", String(field.width));
+      if (field.style) el.style.cssText = field.style;
+    } else if (field.tag === 'span') {
+      el = document.createElement("span");
+      el.name = field.prefix + _lnIdx;
+      el.value = arr[field.arr] || '';
+      if (field.style) el.style.cssText = field.style;
+    }
+    dl.appendChild(el);
+  }
+
+  if (cfg.afterFields) cfg.afterFields(dl, arr, _lnIdx);
+
+  var plus = document.createElement("img");
+  plus.src = 'plus.png';
+  plus.setAttribute("width", "20");
+  if (cfg.plusStyle) plus.style.cssText = cfg.plusStyle;
+  plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','" + cfg.defaultLine + "')");
+  dl.appendChild(plus);
+
+  var minus = document.createElement("img");
+  minus.src = 'minus.png';
+  minus.setAttribute("width", "20");
+  minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
+  dl.appendChild(minus);
+
+  if (!obj) {
+    document.getElementById("prg").appendChild(dl);
+  } else {
+    document.getElementById(obj).after(dl);
+  }
+
+  for (var i = 0; i < selectsToSet.length; i++) {
+    if (arr[selectsToSet[i].arrIdx] !== undefined) {
+      selectsToSet[i].el.value = arr[selectsToSet[i].arrIdx];
+    }
+  }
+
+  set_bgcolor(_lnIdx);
+  _lnIdx++;
+  calc_program();
+}
+
+function getProgram() {
+  var cfg = window._prgEditorConfig;
+  if (!cfg) return;
+  _lnIdx = 0;
+  var wpEl = document.getElementById('WProgram');
+  if (!wpEl) return;
+  if (!check_program(wpEl.value)) {
+    alert("Program error!");
+    return;
+  }
+  var e = document.getElementById("prg");
+  while (e.firstChild) e.removeChild(e.firstChild);
+  var hdr = typeof cfg.headerHtml === 'function' ? cfg.headerHtml() : cfg.headerHtml;
+  e.insertAdjacentHTML("afterbegin", hdr);
+  var varr = wpEl.value.split("\n");
+  for (var z = 0; z < varr.length; z++) {
+    if (varr[z] != "") addLine(false, varr[z]);
+  }
+  if (cfg.afterGetProgram) cfg.afterGetProgram();
+}
+
+function set_bgcolor(idx) {
+  var cfg = window._prgEditorConfig;
+  if (!cfg || !cfg.colors) return;
+  var l = document.getElementById("prgln" + idx);
+  if (!l) return;
+  var t = document.getElementById("ptype" + idx);
+  if (!t) return;
+  var color = cfg.colors[t.value] || '';
+  l.style.backgroundColor = color;
+  var children = l.childNodes;
+  for (var q = 0; q < children.length; q++) {
+    if (children[q].style) children[q].style.backgroundColor = color;
+  }
+  if (cfg.afterSetBgColor) cfg.afterSetBgColor(l, idx, children);
+}
+
 /**
  * @brief Установка программы на сервер
  * @returns {number} 0

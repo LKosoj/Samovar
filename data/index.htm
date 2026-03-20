@@ -211,134 +211,14 @@
     };
 
 
-    function set_num () {
-      var e = document.getElementById("prg").childNodes;
-      var a;
-      for (i = 1; i < e.length; i++) {
-        a = e[i].childNodes[0];
-        a.innerText = "";
-        if (i < 11) a.innerText = "0";
-        a.innerText = a.innerText + (i - 1);
-      }
-    }
-
-    function removeLine (ln) {
-      var prg = document.getElementById("prg").childNodes.length;
-      if (prg < 4) return;
-      var prgline = document.getElementById(ln);
-      prgline.remove();
-      calc_program();
-    }
-
-    function addLine (obj, s) {
-      //var s = "B;100;0.1;5;0.00;120";
-      var arr = s.split(";");
-
-      var dl = document.createElement("div");
-      dl.className = "prgline";
-      dl.id = "prgln" + _lnIdx;
-
-      var num = document.createElement("label");
-      num.className = "prglabel";
-      dl.appendChild(num);
-
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" onchange="set_bgcolor(' + _lnIdx + ');calc_program();"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
-
-      var pvolume = document.createElement("input");
-      pvolume.type = "text";
-      pvolume.name = "pvolume" + _lnIdx;
-      pvolume.value = arr[1];
-      pvolume.style = 'margin-left: 2em !important';
-      pvolume.setAttribute("onchange", "calc_program();");
-      dl.appendChild(pvolume);
-
-      var pspeed = document.createElement("input");
-      pspeed.type = "text";
-      pspeed.name = "pspeed" + _lnIdx;
-      pspeed.value = arr[2];
-      pspeed.style = 'margin-left: 2em !important';
-      pspeed.setAttribute("onchange", "calc_program();");
-      dl.appendChild(pspeed);
-
-      pspeed.insertAdjacentHTML("afterend", '<select style="margin-left: 2em !important" id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
-
-      var ptemp = document.createElement("span");
-      // var ptemp = document.createElement("input");
-      // ptemp.type = "text";
-      ptemp.name = "ptemp" + _lnIdx;
-      ptemp.value = arr[4];
-      // ptemp.setAttribute("onchange", "calc_program();");
-      ptemp.style = 'width: 0px; visibility: hidden';
-      dl.appendChild(ptemp);
-
-      var pvolt = document.createElement("input");
-      pvolt.type = "text";
-      pvolt.name = "pvolt" + _lnIdx;
-      pvolt.value = arr[5];
-      pvolt.style = 'margin-left: 2em !important';
-      pvolt.setAttribute("onchange", "calc_program();");
-      dl.appendChild(pvolt);
-      
-      let timeBlock = document.createElement("span");
-      timeBlock.className = 'prgTime';
-      let stringTime = 0;
-      if (arr[0] === 'P') {
-        stringTime = arr[1] / 3600;
-      } else {
-        stringTime = arr[1] / 1000 / arr[2];
-        totalTime = totalTime + stringTime;
-      }
-      timeBlock.textContent = get_time(stringTime);
-      timeBlock.style = 'margin-left: 2em !important';
-      dl.appendChild(timeBlock);
-
-      var plus = document.createElement("img");
-      plus.src = 'plus.png';
-      plus.setAttribute("width", "20");
-      plus.style = 'margin-left: 2em !important';
-      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','H;0;0;0;0;0')");
-      dl.appendChild(plus);
-
-      var minus = document.createElement("img");
-      minus.src = 'minus.png';
-      minus.setAttribute("width", "20");
-      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
-      dl.appendChild(minus);
-
-      if (!obj) {
-        var prg = document.getElementById("prg");
-        prg.appendChild(dl);
-      } else {
-        prg = document.getElementById(obj);
-        prg.after(dl);
-      }
-
-      var p = "ptype" + _lnIdx;
-      var ptype = document.getElementById(p);
-      ptype.value = arr[0];
-
-      var pnum = document.getElementById("pnum" + _lnIdx);
-      pnum.value = arr[3];
-
-      set_bgcolor(_lnIdx);
-
-      _lnIdx++;
-      calc_program();
-    };
-
-    function getProgram () {
-      _lnIdx = 0;
-      if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Program error!");
-        return;
-      }
-      var e = document.getElementById("prg");
-      while (e.firstChild) {
-        e.removeChild(e.firstChild);
-      }
-      let programPwrLabel = pwr_unit == 'P' ? 'Мощн' : 'Напр';
-      e.insertAdjacentHTML("afterbegin", `
-      <div class="flex_row program_header" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
+    window._prgEditorConfig = {
+      numStart: 0,
+      minLines: 3,
+      defaultLine: 'H;0;0;0;0;0',
+      plusStyle: 'margin-left: 2em !important',
+      headerHtml: function() {
+        let programPwrLabel = pwr_unit == 'P' ? 'Мощн' : 'Напр';
+        return `<div class="flex_row program_header" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
         <div class="flex_row_center"><label class="tooltip">№</label></div>
         <div class="flex_row_center"><label class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label></div>
         <div class="flex_row_center"><label class="tooltip">Выход<span class="tooltiptext">Объем в мл</span></label></div>
@@ -346,47 +226,50 @@
         <div class="flex_row_center"><label class="tooltip">Тара<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label></div>
         <div class="flex_row_center"><label class="tooltip">${programPwrLabel}</label></div>
         <div class="flex_row_center"><label class="tooltip">Время</label></div>
-      </div>`);
-      var p = document.getElementById("WProgram");
-      var varr = p.value.split("\n");
-      for (z = 0; z < varr.length; z++) {
-        if (varr[z] != "") addLine(false, varr[z]);
-      }
-      document.getElementById('totalTime').textContent = get_time(totalTime);
-    };
-
-    function set_bgcolor (indx) {
-        var l = document.getElementById("prgln" + indx);
-        var t = document.getElementById("ptype" + indx).value;
-        let bckg = "#FFF;";
-        if (t == "H") {bckg = "#80FFFA";}
-        else if (t == "B") {bckg = "#32CD3229";}
-        else if (t == "C") {bckg = "#FFFF0039";}
-        else if (t == "P") {bckg = "#C4C4C4";}
-        else if (t == "T") {bckg = "#8B451334";}
-        l.style.backgroundColor = bckg;
-        if (indx + 1 < current_progNum) {
+      </div>`;
+      },
+      colors: { H: '#80FFFA', B: '#32CD3229', C: '#FFFF0039', P: '#C4C4C4', T: '#8B451334' },
+      fields: [
+        { tag: 'select', prefix: 'ptype', arr: 0, trigger: 'bgcolor',
+          options: '<option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option>' },
+        { tag: 'input', prefix: 'pvolume', arr: 1, style: 'margin-left: 2em !important' },
+        { tag: 'input', prefix: 'pspeed', arr: 2, style: 'margin-left: 2em !important' },
+        { tag: 'select', prefix: 'pnum', arr: 3, style: 'margin-left: 2em !important',
+          options: '<option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>' },
+        { tag: 'span', prefix: 'ptemp', arr: 4, style: 'width: 0px; visibility: hidden' },
+        { tag: 'input', prefix: 'pvolt', arr: 5, style: 'margin-left: 2em !important' }
+      ],
+      afterFields: function(dl) {
+        var timeBlock = document.createElement("span");
+        timeBlock.className = 'prgTime';
+        timeBlock.style.cssText = 'margin-left: 2em !important';
+        dl.appendChild(timeBlock);
+      },
+      afterGetProgram: function() {
+        calc_time();
+      },
+      afterSetBgColor: function(l, idx, children) {
+        if (idx + 1 < current_progNum) {
           l.style.fontStyle = 'italic';
         }
-        if (indx + 1 == current_progNum) {
+        if (idx + 1 == current_progNum) {
           l.style.color = 'red';
           l.style.fontStyle = 'italic';
         }
-        var e = l.childNodes;
-        for (q = 0; q < e.length; q++) {
-          e[q].style.backgroundColor = bckg;
-          if (current_progNum === indx + 1) {
-            e[q].style.color = 'red';
-            e[q].style.fontStyle = 'italic';
+        for (var q = 0; q < children.length; q++) {
+          if (current_progNum === idx + 1) {
+            children[q].style.color = 'red';
+            children[q].style.fontStyle = 'italic';
           }
-          if (indx + 1 < current_progNum) {
-            e[q].style.fontStyle = 'italic';
-            e[q].style.cursor = 'not-allowed';
-            e[q].onclick = null;
-            e[q].disabled = true;
+          if (idx + 1 < current_progNum) {
+            children[q].style.fontStyle = 'italic';
+            children[q].style.cursor = 'not-allowed';
+            children[q].onclick = null;
+            children[q].disabled = true;
           }
         }
-      };
+      }
+    };
 
     function run_lua (num) {
       sendbutton("lua=" + num);
@@ -397,17 +280,6 @@
       sendbutton("luastr=" + str);
     };
     
-    function get_time (tm) {
-      let s = "";
-      l = Math.trunc(tm);
-      if (l < 10) s = "0";
-      s = s + l + ":";
-      l = Math.trunc((tm - Math.trunc(tm)) * 60);
-      if (l < 10) s = s + "0";
-      s = s + l;
-      return s;
-    };
-
     initModePage({
       temps: {
         left: [
@@ -424,13 +296,7 @@
       soundLoop: true,
       hasProgram: true,
       sysParamsOpts: {style: 'margin-top: 1em'},
-      onProgramChange: function() {
-        if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Program error!");
-          return;
-        }
-        getProgram();
-      },
+      onProgramChange: function() { getProgram(); },
       onLoad: function() { getProgram(); }
     });
 
