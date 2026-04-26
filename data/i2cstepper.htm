@@ -1,0 +1,234 @@
+<html>
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv="Cache-Control" content="no-store, max-age=0">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css">
+  <title>Самовар - I2CStepper</title>
+  <script>
+    const FLAG_REVERSE = 1;
+    const FLAG_SMOOTH = 2;
+    const SENSOR_ACTIVE_HIGH = 1;
+    const SENSOR_STOP = 2;
+    const SENSOR_PUMP_PAUSE = 4;
+
+    function bitValue(id, bit) {
+      return document.getElementById(id).checked ? bit : 0;
+    }
+
+    function setChecked(id, mask, bit) {
+      document.getElementById(id).checked = (mask & bit) !== 0;
+    }
+
+    function requestJson(url, done) {
+      var request = new XMLHttpRequest();
+      request.onreadystatechange = function() {
+        if (this.readyState === 4) {
+          if (this.status === 200) done(JSON.parse(this.responseText));
+          else alert(this.status + ': ' + this.statusText);
+        }
+      };
+      request.open('GET', url, true);
+      request.send();
+    }
+
+    function q(id) {
+      return encodeURIComponent(document.getElementById(id).value);
+    }
+
+    function loadDevice(device) {
+      requestJson('/i2cstepper?device=' + device, function(data) {
+        renderDevice(device, data);
+      });
+    }
+
+    function renderDevice(device, data) {
+      var panel = document.getElementById(device + '_panel');
+      var missing = document.getElementById(device + '_missing');
+      if (data.present !== 1) {
+        panel.style.display = 'none';
+        missing.style.display = 'block';
+        return;
+      }
+      panel.style.display = 'block';
+      missing.style.display = 'none';
+      document.getElementById(device + '_status').innerHTML = statusText(data.status, data.error);
+      document.getElementById(device + '_remaining').innerHTML = data.remaining;
+      document.getElementById(device + '_speed').innerHTML = data.currentSpeed;
+      document.getElementById(device + '_relayMask').value = data.relayMask;
+
+      if (device === 'mixer') {
+        document.getElementById('mixerRpm').value = data.mixerRpm;
+        document.getElementById('mixerRunSec').value = data.mixerRunSec;
+        document.getElementById('mixerPauseSec').value = data.mixerPauseSec;
+        setChecked('mixerReverse', data.optionFlags, FLAG_REVERSE);
+        setChecked('mixerSmooth', data.optionFlags, FLAG_SMOOTH);
+        setChecked('mixerSensorHigh', data.sensorFlags, SENSOR_ACTIVE_HIGH);
+        setChecked('mixerSensorStop', data.sensorFlags, SENSOR_STOP);
+      } else {
+        document.getElementById('pumpMode').value = data.mode;
+        document.getElementById('pumpMlHour').value = data.pumpMlHour;
+        document.getElementById('pumpPauseSec').value = data.pumpPauseSec;
+        document.getElementById('fillingMl').value = data.fillingMl;
+        document.getElementById('fillingMlHour').value = data.fillingMlHour;
+        document.getElementById('stepsPerMl').value = data.stepsPerMl;
+        setChecked('pumpSmooth', data.optionFlags, FLAG_SMOOTH);
+        setChecked('pumpSensorHigh', data.sensorFlags, SENSOR_ACTIVE_HIGH);
+        setChecked('pumpSensorStop', data.sensorFlags, SENSOR_STOP);
+        setChecked('pumpSensorPause', data.sensorFlags, SENSOR_PUMP_PAUSE);
+      }
+    }
+
+    function statusText(status, error) {
+      var parts = [];
+      if (status & 1) parts.push('работает');
+      if (status & 2) parts.push('пауза');
+      if (status & 4) parts.push('датчик');
+      if (status & 8) parts.push('калибровка');
+      if (status & 128) parts.push('ошибка ' + error);
+      return parts.length ? parts.join(', ') : 'остановлен';
+    }
+
+    function mixerUrl(cmd) {
+      var flags = bitValue('mixerReverse', FLAG_REVERSE) | bitValue('mixerSmooth', FLAG_SMOOTH);
+      var sensor = bitValue('mixerSensorHigh', SENSOR_ACTIVE_HIGH) | bitValue('mixerSensorStop', SENSOR_STOP);
+      return '/i2cstepper?device=mixer&cmd=' + cmd +
+        '&mode=1&mixerRpm=' + q('mixerRpm') +
+        '&mixerRunSec=' + q('mixerRunSec') +
+        '&mixerPauseSec=' + q('mixerPauseSec') +
+        '&optionFlags=' + flags +
+        '&sensorFlags=' + sensor +
+        '&relayMask=' + q('mixer_relayMask');
+    }
+
+    function pumpUrl(cmd) {
+      var flags = bitValue('pumpSmooth', FLAG_SMOOTH);
+      var sensor = bitValue('pumpSensorHigh', SENSOR_ACTIVE_HIGH) |
+        bitValue('pumpSensorStop', SENSOR_STOP) |
+        bitValue('pumpSensorPause', SENSOR_PUMP_PAUSE);
+      return '/i2cstepper?device=pump&cmd=' + cmd +
+        '&mode=' + q('pumpMode') +
+        '&pumpMlHour=' + q('pumpMlHour') +
+        '&pumpPauseSec=' + q('pumpPauseSec') +
+        '&fillingMl=' + q('fillingMl') +
+        '&fillingMlHour=' + q('fillingMlHour') +
+        '&stepsPerMl=' + q('stepsPerMl') +
+        '&optionFlags=' + flags +
+        '&sensorFlags=' + sensor +
+        '&relayMask=' + q('pump_relayMask');
+    }
+
+    function sendDevice(device, cmd) {
+      var url = device === 'mixer' ? mixerUrl(cmd) : pumpUrl(cmd);
+      requestJson(url, function(data) { renderDevice(device, data); });
+    }
+
+    function relay(device, relayNum, state) {
+      var maskInput = document.getElementById(device + '_relayMask');
+      var mask = parseInt(maskInput.value || '0', 10);
+      if (state) mask = mask | (1 << (relayNum - 1));
+      else mask = mask & ~(1 << (relayNum - 1));
+      maskInput.value = mask;
+      requestJson('/i2cstepper?device=' + device + '&cmd=relay&relayMask=' + mask, function(data) {
+        renderDevice(device, data);
+      });
+    }
+
+    window.onload = function() {
+      loadDevice('mixer');
+      loadDevice('pump');
+      setInterval(function() {
+        loadDevice('mixer');
+        loadDevice('pump');
+      }, 2000);
+    };
+  </script>
+</head>
+<body>
+  <h1>I2CStepper</h1>
+  <div class="tab">
+    <input type='button' class="tablinks" onclick='location.href="/index.htm";' value="Назад">
+    <input type='button' class="tablinks active" value="I2CStepper">
+  </div>
+
+  <div id="mixer_missing" class="tabcontent" style="display:none;">
+    <h2>Мешалка I2CStepper не подключена.</h2>
+  </div>
+
+  <div id="mixer_panel" class="tabcontent" style="display:block;">
+    <h2>Мешалка (Mixer)</h2>
+    <h2>Статус: <span id="mixer_status">-</span></h2>
+    <h2>Осталось: <span id="mixer_remaining">-</span> сек; скорость: <span id="mixer_speed">-</span> шаг/с</h2>
+    <h2>RPM: <input id="mixerRpm" type="text" value="0" style="width:6em;"></h2>
+    <h2>Работа, сек: <input id="mixerRunSec" type="text" value="0" style="width:6em;"></h2>
+    <h2>Пауза, сек: <input id="mixerPauseSec" type="text" value="0" style="width:6em;"></h2>
+    <h2><input id="mixerReverse" type="checkbox"> Реверс после паузы</h2>
+    <h2><input id="mixerSmooth" type="checkbox"> Плавный старт</h2>
+    <h2><input id="mixerSensorHigh" type="checkbox"> Датчик активен уровнем 1</h2>
+    <h2><input id="mixerSensorStop" type="checkbox"> Стоп по внешнему датчику</h2>
+    <input id="mixer_relayMask" type="hidden" value="0">
+    <div>
+      <input type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
+      <input type="button" class="button" value="Пуск" onclick="sendDevice('mixer','start');">
+      <input type="button" class="button" value="Стоп" onclick="sendDevice('mixer','stop');">
+      <input type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
+    </div>
+    <h2>Реле</h2>
+    <div>
+      <input type="button" class="button" value="R1 on" onclick="relay('mixer',1,1);">
+      <input type="button" class="button" value="R1 off" onclick="relay('mixer',1,0);">
+      <input type="button" class="button" value="R2 on" onclick="relay('mixer',2,1);">
+      <input type="button" class="button" value="R2 off" onclick="relay('mixer',2,0);">
+      <input type="button" class="button" value="R3 on" onclick="relay('mixer',3,1);">
+      <input type="button" class="button" value="R3 off" onclick="relay('mixer',3,0);">
+      <input type="button" class="button" value="R4 on" onclick="relay('mixer',4,1);">
+      <input type="button" class="button" value="R4 off" onclick="relay('mixer',4,0);">
+    </div>
+  </div>
+
+  <div id="pump_missing" class="tabcontent" style="display:none;">
+    <h2>Насос I2CStepper не подключен.</h2>
+  </div>
+
+  <div id="pump_panel" class="tabcontent" style="display:block;">
+    <h2>Насос / Наполнение</h2>
+    <h2>Статус: <span id="pump_status">-</span></h2>
+    <h2>Осталось: <span id="pump_remaining">-</span> мл; скорость: <span id="pump_speed">-</span> шаг/с</h2>
+    <h2>Режим:
+      <select id="pumpMode">
+        <option value="2">Прокачка</option>
+        <option value="3">Наполнение</option>
+      </select>
+    </h2>
+    <h2>Прокачка, мл/час: <input id="pumpMlHour" type="text" value="0" style="width:6em;"></h2>
+    <h2>Пауза насоса, сек: <input id="pumpPauseSec" type="text" value="0" style="width:6em;"></h2>
+    <h2>Наполнение, мл: <input id="fillingMl" type="text" value="0" style="width:6em;"></h2>
+    <h2>Скорость наполнения, мл/час: <input id="fillingMlHour" type="text" value="0" style="width:6em;"></h2>
+    <h2>Шагов на 1 мл: <input id="stepsPerMl" type="text" value="0" style="width:6em;"></h2>
+    <h2><input id="pumpSmooth" type="checkbox"> Плавный старт</h2>
+    <h2><input id="pumpSensorHigh" type="checkbox"> Датчик активен уровнем 1</h2>
+    <h2><input id="pumpSensorStop" type="checkbox"> Стоп по внешнему датчику</h2>
+    <h2><input id="pumpSensorPause" type="checkbox"> Пауза по датчику с обнулением таймера</h2>
+    <input id="pump_relayMask" type="hidden" value="0">
+    <div>
+      <input type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
+      <input type="button" class="button" value="Пуск" onclick="sendDevice('pump','start');">
+      <input type="button" class="button" value="Стоп" onclick="sendDevice('pump','stop');">
+      <input type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
+      <input type="button" class="button" value="Калибровка старт" onclick="sendDevice('pump','calstart');">
+      <input type="button" class="button" value="100 мл стоп" onclick="sendDevice('pump','calfinish');">
+    </div>
+    <h2>Реле</h2>
+    <div>
+      <input type="button" class="button" value="R1 on" onclick="relay('pump',1,1);">
+      <input type="button" class="button" value="R1 off" onclick="relay('pump',1,0);">
+      <input type="button" class="button" value="R2 on" onclick="relay('pump',2,1);">
+      <input type="button" class="button" value="R2 off" onclick="relay('pump',2,0);">
+      <input type="button" class="button" value="R3 on" onclick="relay('pump',3,1);">
+      <input type="button" class="button" value="R3 off" onclick="relay('pump',3,0);">
+      <input type="button" class="button" value="R4 on" onclick="relay('pump',4,1);">
+      <input type="button" class="button" value="R4 off" onclick="relay('pump',4,0);">
+    </div>
+  </div>
+</body>
+</html>

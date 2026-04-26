@@ -84,6 +84,64 @@ void run_lua_script(String fn);
 String run_lua_string(String lstr);
 #endif
 
+I2CStepperDevice* select_i2c_stepper_device(AsyncWebServerRequest *request) {
+  String device = request->hasArg("device") ? request->arg("device") : "pump";
+  device.toLowerCase();
+  if (device == "mixer") return &i2cStepperMixer;
+  if (device == "pump") return &i2cStepperPump;
+  return nullptr;
+}
+
+void apply_i2c_stepper_args(AsyncWebServerRequest *request, I2CStepperDevice& dev) {
+  if (request->hasArg("mode")) dev.mode = request->arg("mode").toInt();
+  if (request->hasArg("relayMask")) dev.relayMask = request->arg("relayMask").toInt() & 0x0F;
+  if (request->hasArg("sensorFlags")) dev.sensorFlags = request->arg("sensorFlags").toInt();
+  if (request->hasArg("optionFlags")) dev.optionFlags = request->arg("optionFlags").toInt();
+  if (request->hasArg("mixerRpm")) dev.mixerRpm = request->arg("mixerRpm").toInt();
+  if (request->hasArg("mixerRunSec")) dev.mixerRunSec = request->arg("mixerRunSec").toInt();
+  if (request->hasArg("mixerPauseSec")) dev.mixerPauseSec = request->arg("mixerPauseSec").toInt();
+  if (request->hasArg("pumpMlHour")) dev.pumpMlHour = request->arg("pumpMlHour").toInt();
+  if (request->hasArg("pumpPauseSec")) dev.pumpPauseSec = request->arg("pumpPauseSec").toInt();
+  if (request->hasArg("fillingMl")) dev.fillingMl = request->arg("fillingMl").toInt();
+  if (request->hasArg("fillingMlHour")) dev.fillingMlHour = request->arg("fillingMlHour").toInt();
+  if (request->hasArg("stepsPerMl")) dev.stepsPerMl = request->arg("stepsPerMl").toInt();
+  if (request->hasArg("relay") && request->hasArg("state")) {
+    uint8_t relay = request->arg("relay").toInt();
+    bool state = request->arg("state").toInt();
+    if (relay >= 1 && relay <= 4) {
+      if (state) dev.relayMask |= (1 << (relay - 1));
+      else dev.relayMask &= ~(1 << (relay - 1));
+    }
+  }
+}
+
+void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev) {
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  response->print('{');
+  response->print("\"present\":"); response->print(dev.present ? 1 : 0);
+  response->print(",\"address\":"); response->print(dev.address);
+  response->print(",\"role\":"); response->print(dev.role);
+  response->print(",\"mode\":"); response->print(dev.mode);
+  response->print(",\"caps\":"); response->print(dev.caps);
+  response->print(",\"status\":"); response->print(dev.status);
+  response->print(",\"error\":"); response->print(dev.error);
+  response->print(",\"relayMask\":"); response->print(dev.relayMask);
+  response->print(",\"sensorFlags\":"); response->print(dev.sensorFlags);
+  response->print(",\"optionFlags\":"); response->print(dev.optionFlags);
+  response->print(",\"mixerRpm\":"); response->print(dev.mixerRpm);
+  response->print(",\"mixerRunSec\":"); response->print(dev.mixerRunSec);
+  response->print(",\"mixerPauseSec\":"); response->print(dev.mixerPauseSec);
+  response->print(",\"pumpMlHour\":"); response->print(dev.pumpMlHour);
+  response->print(",\"pumpPauseSec\":"); response->print(dev.pumpPauseSec);
+  response->print(",\"fillingMl\":"); response->print(dev.fillingMl);
+  response->print(",\"fillingMlHour\":"); response->print(dev.fillingMlHour);
+  response->print(",\"stepsPerMl\":"); response->print(dev.stepsPerMl);
+  response->print(",\"remaining\":"); response->print(dev.remaining);
+  response->print(",\"currentSpeed\":"); response->print(dev.currentSpeed);
+  response->print('}');
+  request->send(response);
+}
+
 // filter out specific headers from the incoming request
 AsyncHeaderFilterMiddleware headerFilter;
 
@@ -210,6 +268,7 @@ void WebServerInit(void) {
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor).setCacheControl("max-age=800");
+  server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm").setCacheControl("max-age=800");
   server.serveStatic("/pong.htm", SPIFFS, "/alarm.mp3");
   server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt").setCacheControl("max-age=1");
@@ -314,13 +373,12 @@ void WebServerInit(void) {
     calibrate_command(request);
   });
   server.on("/i2cpump", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (use_I2C_dev != 2) {
+    if (!i2c_stepper_pump_present()) {
       request->send(400, "text/plain", "I2C pump not available");
       return;
     }
     if (request->hasArg("stop")) {
-      set_stepper_target(0, 0, 0);
-      I2CPumpTargetSteps = 0;
+      i2c_stepper_stop(i2cStepperPump);
       I2CPumpTargetMl = 0;
       I2CPumpCmdSpeed = 0;
       request->send(200, "text/plain", "OK");
@@ -335,11 +393,51 @@ void WebServerInit(void) {
     uint16_t stepsPerMl = SamSetup.StepperStepMlI2C > 0 ? SamSetup.StepperStepMlI2C : I2C_STEPPER_STEP_ML_DEFAULT;
     uint32_t targetSteps = (uint32_t)(volumeMl * stepsPerMl);
     uint16_t speedSteps = (uint16_t)i2c_get_speed_from_rate(speedRate);
+    uint16_t speedMlHour = i2c_stepper_mlh_from_step_speed(speedSteps);
     I2CPumpCmdSpeed = speedSteps;
     I2CPumpTargetSteps = targetSteps;
     I2CPumpTargetMl = volumeMl;
-    set_stepper_target(speedSteps, 0, targetSteps);
+    i2cStepperPump.mode = I2CSTEP_MODE_FILLING;
+    i2cStepperPump.fillingMl = (uint16_t)volumeMl;
+    i2cStepperPump.fillingMlHour = speedMlHour;
+    i2cStepperPump.stepsPerMl = stepsPerMl;
+    if (!i2c_stepper_start(i2cStepperPump)) {
+      request->send(500, "text/plain", "I2C command failed");
+      return;
+    }
     request->send(200, "text/plain", "OK");
+  });
+  server.on("/i2cstepper", HTTP_GET, [](AsyncWebServerRequest *request) {
+    I2CStepperDevice* dev = select_i2c_stepper_device(request);
+    if (!dev) {
+      request->send(400, "application/json", "{\"error\":\"bad device\"}");
+      return;
+    }
+    i2c_stepper_refresh(*dev);
+    if (!dev->present) {
+      request->send(404, "application/json", "{\"present\":0}");
+      return;
+    }
+
+    apply_i2c_stepper_args(request, *dev);
+    String cmd = request->hasArg("cmd") ? request->arg("cmd") : "status";
+    cmd.toLowerCase();
+    bool ok = true;
+    if (cmd == "apply") ok = i2c_stepper_apply(*dev);
+    else if (cmd == "save") ok = i2c_stepper_save(*dev);
+    else if (cmd == "start") ok = i2c_stepper_start(*dev);
+    else if (cmd == "stop") ok = i2c_stepper_stop(*dev);
+    else if (cmd == "calstart") ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_START);
+    else if (cmd == "calfinish") ok = i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_FINISH);
+    else if (cmd == "relay") ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
+    else i2c_stepper_refresh(*dev);
+
+    if (!ok) {
+      request->send(500, "application/json", "{\"error\":\"I2C command failed\"}");
+      return;
+    }
+    i2c_stepper_refresh(*dev);
+    send_i2c_stepper_json(request, *dev);
   });
   server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     get_data_log(request, "data.csv");
@@ -460,8 +558,10 @@ String indexKeyProcessor(const String &var) {
     return String(SamSetup.ColHeight, 2);
   else if (var == "PackDens")
     return String(SamSetup.PackDens);
+  else if (var == "I2CStepperTab")
+    return (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) ? "inline-block" : "none";
   else if (var == "I2CPumpTab")
-    return (use_I2C_dev == 2) ? "inline-block" : "none";
+    return i2c_stepper_pump_present() ? "inline-block" : "none";
   else if (var == "HeaterMaxPower") {
     // Расчет мощности ТЭНа: P = U²/R
     float R = SamSetup.HeaterResistant;
@@ -751,8 +851,10 @@ String setupKeyProcessor(const String &var) {
     else return "";
   } else if (var == "PackDens")
     return String(SamSetup.PackDens);
+  else if (var == "I2CStepperTab")
+    return (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) ? "inline-block" : "none";
   else if (var == "I2CPumpTab")
-    return (use_I2C_dev == 2) ? "inline-block" : "none";
+    return i2c_stepper_pump_present() ? "inline-block" : "none";
   return "";
 }
 
@@ -772,7 +874,7 @@ String calibrateKeyProcessor(const String &var) {
   else if (var == "StepperStepMlI2C")
     return (String)(SamSetup.StepperStepMlI2C * 100);
   else if (var == "I2CPumpTab")
-    return (use_I2C_dev == 2) ? "inline-block" : "none";
+    return i2c_stepper_pump_present() ? "inline-block" : "none";
 
   return String();
 }
@@ -1307,19 +1409,20 @@ void calibrate_command(AsyncWebServerRequest *request) {
         sam_command_sync = CALIBRATE_STOP;
         cl = true;
       }
-    } else if (use_I2C_dev == 2) {
+    } else if (i2c_stepper_pump_present()) {
       if (request->hasArg("start") && !I2CPumpCalibrating) {
-        I2CPumpTargetSteps = 2147483640UL;
         I2CPumpTargetMl = 0;
         I2CPumpCmdSpeed = CurrrentStepperSpeed;
         I2CPumpCalibrating = true;
-        set_stepper_target(CurrrentStepperSpeed, 0, I2CPumpTargetSteps);
+        i2cStepperPump.pumpMlHour = i2c_stepper_mlh_from_step_speed(CurrrentStepperSpeed);
+        i2cStepperPump.stepsPerMl = i2c_stepper_steps_per_ml();
+        i2c_stepper_write_config(i2cStepperPump);
+        i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_START);
       }
       if (request->hasArg("finish") && I2CPumpCalibrating) {
-        set_stepper_target(0, 0, 0);
-        uint32_t remaining = get_stepper_status();
-        uint32_t done = (I2CPumpTargetSteps > remaining) ? (I2CPumpTargetSteps - remaining) : 0;
-        SamSetup.StepperStepMlI2C = (uint16_t)round((float)done / 100.0f);
+        i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_FINISH);
+        i2c_stepper_refresh(i2cStepperPump);
+        SamSetup.StepperStepMlI2C = i2cStepperPump.stepsPerMl;
         I2CPumpCalibrating = false;
         save_profile();
         read_config();

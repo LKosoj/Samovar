@@ -628,7 +628,7 @@ void set_mixer_state(bool state, bool dir) {
       //включаем реле 2
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
       //включаем I2CStepper шаговик
-      if (use_I2C_dev == 1) {
+      if (i2c_stepper_mixer_present()) {
         int tm = abs(program[ProgramNum].Volume);
         if (tm == 0) tm = 10;
         bool b = set_stepper_by_time(20, dir, tm);
@@ -640,7 +640,7 @@ void set_mixer_state(bool state, bool dir) {
       set_pump_pwm(1023);
 #endif
       //включаем I2CStepper реле 1
-      if (use_I2C_dev == 1 || use_I2C_dev == 2) {
+      if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
         bool b = set_mixer_pump_target(1);
       }
     }
@@ -652,11 +652,11 @@ void set_mixer_state(bool state, bool dir) {
     set_pump_pwm(0);
 #endif
     //выключаем I2CStepper шаговик
-    if (use_I2C_dev == 1) {
+    if (i2c_stepper_mixer_present()) {
       bool b = set_stepper_by_time(0, 0, 0);
     }
     //выключаем I2CStepper реле 1
-    if (use_I2C_dev == 1 || use_I2C_dev == 2) {
+    if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
       bool b = set_mixer_pump_target(0);
     }
   }

@@ -151,13 +151,12 @@ SimpleStringQueue msg_q(5, 200);
 #include "pumppwm.h"
 #endif
 
+#include "I2CStepper.h"
 #include "distiller.h"
 #include "beer.h"
 #include "BK.h"
 #include "nbk.h"
 #include "SPIFFSEditor.h"
-
-#include "I2CStepper.h"
 
 //#include <HTTPClient.h>
 //HTTPClient client;
@@ -1168,15 +1167,12 @@ void setup() {
   get_task_stack_usage();
   Serial.println("Samovar ready");
   
-  use_I2C_dev = 0;
-
-  if (check_I2C_device(1) == 1) {
-    use_I2C_dev = 1;
-    Serial.println("I2C Stepper as Mixer");
+  detect_i2c_steppers();
+  if (i2cStepperMixer.present) {
+    Serial.println("I2C Stepper Mixer v2");
   }
-  if (check_I2C_device(2) == 2) {
-    use_I2C_dev = 2;
-    Serial.println("I2C Stepper as Pump");
+  if (i2cStepperPump.present) {
+    Serial.println("I2C Stepper Pump/Filling v2");
   }
   used_byte = SPIFFS.usedBytes();
   // verbose_print_reset_reason(); // Удалено, так как используется crash_handler
@@ -1478,20 +1474,22 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   out.print(mixer_status);
   jsonAddKey(out, first, "ISspd");
   out.print(format_float(i2c_get_liquid_rate_by_step(get_stepper_speed()), 3));
+  jsonAddKey(out, first, "i2c_stepper_present");
+  out.print((i2c_stepper_mixer_present() || i2c_stepper_pump_present()) ? 1 : 0);
+  jsonAddKey(out, first, "i2c_mixer_present");
+  out.print(i2c_stepper_mixer_present() ? 1 : 0);
   jsonAddKey(out, first, "i2c_pump_present");
-  out.print((use_I2C_dev == 2) ? 1 : 0);
+  out.print(i2c_stepper_pump_present() ? 1 : 0);
 
-  if (use_I2C_dev == 2) {
-    uint32_t i2cRemaining = get_stepper_status();
-    float i2cRemainingMl = i2c_get_liquid_volume_by_step(i2cRemaining);
+  if (i2c_stepper_pump_present()) {
     jsonAddKey(out, first, "i2c_pump_speed");
-    out.print(get_stepper_speed());
+    out.print(i2cStepperPump.currentSpeed);
     jsonAddKey(out, first, "i2c_pump_target_ml");
     out.print(format_float(I2CPumpTargetMl, 1));
     jsonAddKey(out, first, "i2c_pump_remaining_ml");
-    out.print(format_float(i2cRemainingMl, 1));
+    out.print(format_float(i2cStepperPump.remaining, 1));
     jsonAddKey(out, first, "i2c_pump_running");
-    out.print((get_stepper_speed() > 0 && i2cRemaining > 0) ? 1 : 0);
+    out.print((i2cStepperPump.status & I2CSTEPPER_STATUS_RUNNING) ? 1 : 0);
   } else {
     jsonAddKey(out, first, "i2c_pump_speed");
     out.print(0);
