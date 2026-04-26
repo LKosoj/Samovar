@@ -1,1 +1,1 @@
-Смотри в @AGENTS.md
+@AGENTS.md
