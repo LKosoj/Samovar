@@ -39,6 +39,7 @@ void set_pump_pwm(float duty) {
     water_pump_speed = PWM_START_VALUE * 10;
     pump_started = true;
     pump_pwm.write(duty);
+    water_pump_speed = duty;
     if (bk_pwm != PWM_LOW_VALUE * 40) {
       delay(1000);
       pump_pwm.write(bk_pwm);

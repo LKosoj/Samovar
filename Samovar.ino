@@ -75,6 +75,7 @@
 
 #include "Samovar.h"
 #include "crash_handler.h"
+#include "time_utils.h"
 
 #ifndef __SAMOVAR_DEBUG
 #define ARDUINOTRACE_ENABLE 0  // Disable all traces
@@ -166,7 +167,7 @@ SimpleStringQueue msg_q(5, 200);
 #include "sensorinit.h"
 
 // Единственные определения буфера времени для LCD (см. extern в Samovar.h)
-char tst[20] = "00:00:00   00:00:00";
+char tst[32] = "00:00:00   00:00:00";
 char* timestr = (char*)tst;
 
 hw_timer_t *timer = NULL;
@@ -437,10 +438,11 @@ void triggerSysTicker(void *parameter) {
 
       Crt = NTP.getFormattedDate();
       //StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
-      StrCrt = NTP.getFormattedTime() + "     " + NTP.getFormattedTime((unsigned long)(millis() / 1000));
+      String uptime = format_uptime((unsigned long)(millis() / 1000UL));
+      StrCrt = NTP.getFormattedTime() + "     " + uptime;
       snprintf(tst, sizeof(tst), "%s   %s",
                NTP.getFormattedTime().c_str(),
-               NTP.getFormattedTime((unsigned long)(millis() / 1000)).c_str());
+               uptime.c_str());
 
       if (startval != 0) {
         tcntST++;
@@ -790,14 +792,19 @@ void setup() {
   alarm_btn.setDebounce(30);
 #endif
 
-  //Если при старте нажата кнопка - Самовар запустится в режиме AP
+  // Если при старте кнопка удерживается 2 секунды - Самовар запустится в режиме AP
   bool wifiAP = false;
 #ifdef BTN_PIN
-  btn.tick();  // отработка нажатия
-  if (btn.isPress()) {
-    wifiAP = true;
-    vTaskDelay(2000);
+  btn.resetStates();
+  vTaskDelay(35 / portTICK_PERIOD_MS);
+  if (btn.state()) {
+    uint32_t buttonHoldStart = millis();
+    while (btn.state() && millis() - buttonHoldStart < 2000) {
+      vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+    wifiAP = btn.state();
   }
+  btn.resetStates();
 #endif
 
   //Читаем сохраненную конфигурацию
@@ -1419,7 +1426,7 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   out.print('\"');
   jsonAddKey(out, first, "stm");
   out.print('\"');
-  jsonPrintEscaped(out, NTP.getFormattedTime((unsigned long)(millis() / 1000)));
+  jsonPrintEscaped(out, format_uptime((unsigned long)(millis() / 1000UL)));
   out.print('\"');
   jsonAddKey(out, first, "SteamTemp");
   out.print(format_float(SteamSensor.avgTemp, 3));
@@ -1643,6 +1650,8 @@ void read_config() {
     SamSetup.Kd = 1.4;
   }
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
+  heaterPID.SetOutputLimits(0, 100);
+  heaterPID.SetSampleTime(1000);
   if (isnan(SamSetup.StbVoltage)) {
     SamSetup.StbVoltage = 100;
   }

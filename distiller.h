@@ -406,8 +406,8 @@ void run_dist_program(uint8_t num) {
     // Программы закончились - устанавливаем ProgramNum = ProgramLen, чтобы условие ProgramNum < ProgramLen стало ложным
     if (ProgramNum < ProgramLen) {
       ProgramNum = ProgramLen;
+      SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
     }
-    SendMsg("Выполнение программ закончилось, продолжение отбора", NOTIFY_MSG);
     return;
   }
 

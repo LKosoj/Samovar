@@ -67,6 +67,14 @@ void set_heater_state(float setpoint, float temp);
  */
 void set_heater(double dutyCycle);
 
+#ifdef SAMOVAR_USE_POWER
+/**
+ * @brief Установить уставку UART-регулятора по выходу PID.
+ * @param dutyCycle Доля мощности (0.0 - 1.0)
+ */
+inline void set_heater_regulator(double dutyCycle);
+#endif
+
 /**
  * @brief Включить или выключить нагреватель.
  * @param state true — включить, false — выключить
@@ -629,7 +637,7 @@ void set_mixer_state(bool state, bool dir) {
     if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
 #ifdef USE_WATER_PUMP
       //включаем SSD реле
-      pump_pwm.write(1023);
+      set_pump_pwm(1023);
 #endif
       //включаем I2CStepper реле 1
       if (use_I2C_dev == 1 || use_I2C_dev == 2) {
@@ -641,7 +649,7 @@ void set_mixer_state(bool state, bool dir) {
     digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 #ifdef USE_WATER_PUMP
     //выключаем SSD реле
-    pump_pwm.write(0);
+    set_pump_pwm(0);
 #endif
     //выключаем I2CStepper шаговик
     if (use_I2C_dev == 1) {
@@ -701,9 +709,43 @@ void set_heater_state(float setpoint, float temp) {
     {
       heaterPID.Compute();
     }
-    set_heater(Output / 100);
+    double dutyCycle = constrain(Output / 100.0, 0.0, 1.0);
+#ifdef SAMOVAR_USE_POWER
+    set_heater_regulator(dutyCycle);
+#else
+    set_heater(dutyCycle);
+#endif
   }
 }
+
+#ifdef SAMOVAR_USE_POWER
+/**
+ * @brief Управляет UART-регулятором по доле мощности PID без медленного on/off ШИМ.
+ * @param dutyCycle Доля мощности (0.0 - 1.0)
+ */
+inline void set_heater_regulator(double dutyCycle) {
+  dutyCycle = constrain(dutyCycle, 0.0, 1.0);
+  if (dutyCycle <= 0.0 || SamSetup.StbVoltage <= 0) {
+    setHeaterPosition(false);
+    return;
+  }
+
+#ifdef SAMOVAR_USE_SEM_AVR
+  float regulatorTarget = SamSetup.StbVoltage * dutyCycle;
+#else
+  // PID задает долю мощности; для регулятора напряжения P ~= V^2 / R.
+  float regulatorTarget = SamSetup.StbVoltage * sqrtf((float)dutyCycle);
+#endif
+
+  heater_state = true;
+  set_current_power(regulatorTarget);
+  if (current_power_mode == POWER_SLEEP_MODE) {
+    heater_state = false;
+    return;
+  }
+  check_power_error();
+}
+#endif
 
 /**
  * @brief Устанавливает скважность ШИМ для нагревателя.
@@ -924,6 +966,8 @@ void FinishAutoTune() {
 
   // Re-tune the PID and revert to normal control mode
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
+  heaterPID.SetOutputLimits(0, 100);
+  heaterPID.SetSampleTime(1000);
   heaterPID.SetMode(ATuneModeRemember);
 
   save_profile();

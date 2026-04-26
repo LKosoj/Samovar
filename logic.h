@@ -1721,6 +1721,12 @@ void get_current_power() {
     current_power_p = 0;
     return;
   }
+  if (current_power_mode == POWER_SLEEP_MODE) {
+    current_power_volt = 0;
+    target_power_volt = 0;
+    current_power_p = 0;
+    return;
+  }
 #ifndef SAMOVAR_USE_SEM_AVR
   //Считаем мощность V*V*K/R, K = 0,98~1
   current_power_p = current_power_volt * current_power_volt / SamSetup.HeaterResistant;
@@ -1778,9 +1784,11 @@ void set_power_mode(String Mode) {
   if (current_power_mode == Mode) return;
   current_power_mode = Mode;
   
-  // Обнуляем целевое напряжение при переходе в SLEEP режим
+  // Обнуляем показатели питания при переходе в SLEEP режим
   if (Mode == POWER_SLEEP_MODE) {
     target_power_volt = 0;
+    current_power_volt = 0;
+    current_power_p = 0;
   }
   
   vTaskDelay(50 / portTICK_PERIOD_MS);
