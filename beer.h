@@ -541,7 +541,7 @@ void check_alarm_beer() {
       //Устанавливаем заданное напряжение
       set_current_power(SamSetup.BVolt);
 #else
-      current_power_mode = POWER_WORK_MODE;
+      set_current_power_mode_value(POWER_WORK_MODE);
       digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
 #endif
       if (SamSetup.UseST) {
@@ -690,7 +690,7 @@ void set_heater_state(float setpoint, float temp) {
     //set_power_mode(POWER_SPEED_MODE);
     set_current_power(SamSetup.BVolt);
 #else
-    current_power_mode = POWER_WORK_MODE;
+    set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
@@ -739,7 +739,7 @@ inline void set_heater_regulator(double dutyCycle) {
 
   heater_state = true;
   set_current_power(regulatorTarget);
-  if (current_power_mode == POWER_SLEEP_MODE) {
+  if (current_power_mode_is(POWER_SLEEP_MODE)) {
     heater_state = false;
     return;
   }
@@ -789,21 +789,21 @@ void setHeaterPosition(bool state) {
 
     check_power_error();
 #else
-    current_power_mode = POWER_WORK_MODE;
+    set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
     digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
     vTaskDelay(50 / portTICK_PERIOD_MS);
 #endif
   } else {
 #ifdef SAMOVAR_USE_POWER
-    if (current_power_mode != POWER_SLEEP_MODE) {
+    if (!current_power_mode_is(POWER_SLEEP_MODE)) {
       //delay(200); 5.13
       set_power_mode(POWER_SLEEP_MODE);
     }
     //Устанавливаем заданное напряжение
     //set_current_power(0);
 #else
-    current_power_mode = POWER_WORK_MODE;
+    set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
@@ -989,13 +989,12 @@ void set_mixer(bool On) {
  */
 void HopStepperStep() {
   stopService();
-  stepper.brake();
-  stepper.disable();
-  stepper.setMaxSpeed(200); //скорость движения шагового двигателя
+  stepper_safe_stop();
+  stepper_safe_set_max_speed(200); //скорость движения шагового двигателя
   //stepper.setSpeed(200);    //скорость движения шагового двигателя, должна быть равна предыдущей
   TargetStepps = 360 / 1.8 * 16 / 20;  //16 - множитель на драйвере двигателя. 20 - количество отверстий по целому кругу (если бы они занимали всю окружность)
-  stepper.setCurrent(0);
-  stepper.setTarget(TargetStepps);
+  stepper_safe_set_current(0);
+  stepper_safe_set_target(TargetStepps);
   stepper.enable();
   startService();
 }

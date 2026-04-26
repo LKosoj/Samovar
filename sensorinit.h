@@ -84,10 +84,12 @@ void BME_getvalue(bool fl) {
 #ifdef USE_BME680
     // Tell BME680 to begin measurement.
     if (bme.beginReading() == 0) {
+      xSemaphoreGive(xI2CSemaphore);
       return;
     }
 
     if (!bme.endReading()) {
+      xSemaphoreGive(xI2CSemaphore);
       return;
     }
 
@@ -134,12 +136,15 @@ void pressure_sensor_get() {
   float t;
 #ifdef USE_PRESSURE_XGZ
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(30 / portTICK_RATE_MS)) == pdTRUE) {
-    pressure_sensor.readSensor(t, pressure_value);
+    float raw_pressure_value;
+    bool pressure_read = pressure_sensor.readSensor(t, raw_pressure_value);
     xSemaphoreGive(xI2CSemaphore);
+    if (pressure_read) {
+      pressure_value = raw_pressure_value / 133.32; //переводим паскали в мм. рт. столба
+      pressure_value = (old_pressure_value + pressure_value) / 2;
+      old_pressure_value = pressure_value;
+    }
   }
-  pressure_value = pressure_value / 133.32; //переводим паскали в мм. рт. столба
-  pressure_value = (old_pressure_value + pressure_value) / 2;
-  old_pressure_value = pressure_value;
 #elif defined(USE_PRESSURE_MPX)
   pressure_value = (analogRead(LUA_PIN) - 36.7) / 12;
   pressure_value = (old_pressure_value + pressure_value) / 2;
@@ -495,12 +500,9 @@ void sensor_init(void) {
 void reset_sensor_counter(void) {
   sam_command_sync = SAMOVAR_NONE;
   stopService();
-  stepper.setMaxSpeed(0);
+  stepper_safe_set_max_speed(0);
   //stepper.setSpeed(0);
-  stepper.brake();
-  stepper.disable();
-  stepper.setCurrent(0);
-  stepper.setTarget(0);
+  stepper_safe_stop_reset();
   set_capacity(0);
   alarm_h_min = 0;
   alarm_t_min = 0;

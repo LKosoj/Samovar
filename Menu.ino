@@ -493,7 +493,7 @@ void menu_pause() {
 void menu_calibrate() {
   if (startval > 0 && startval != 100) return;
 
-  int stpspeed = stepper.getSpeed();
+  int stpspeed = stepper_safe_get_speed();
   if (startval == 100) {
     stpspeed = stpspeed + stpspeed / 10;
     pump_calibrate(stpspeed);
@@ -512,7 +512,7 @@ void menu_calibrate() {
 
 void menu_calibrate_down() {
   if (startval == 100) {
-    int stpspeed = stepper.getSpeed();
+    int stpspeed = stepper_safe_get_speed();
     stpspeed = stpspeed - stpspeed / 10;
     if (stpspeed > 0) pump_calibrate(stpspeed);
     return;
@@ -537,12 +537,14 @@ void menu_samovar_start() {
     startval = 1;
     Str = "Prg No 1";
     run_program(0);
+    SamovarStatusInt = 10;
     ProgramNum = 0;
     create_data();  //создаем файл с данными
   } else if (startval == 1) {
     ProgramNum++;
     Str = "Prg No " + (String)(ProgramNum + 1);
     run_program(ProgramNum);
+    SamovarStatusInt = 10;
   } else if (startval == 2) {
     Str = "Prg finish";
     run_program(CAPACITY_NUM * 2);

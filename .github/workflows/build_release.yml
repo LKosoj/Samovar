@@ -3,16 +3,16 @@ on:
     tags:
       - '*'
   pull_request:
-    branches: [main]
+    branches: [master]
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set up python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
           architecture: 'x64'
@@ -21,10 +21,10 @@ jobs:
       - name: Build firmwares
         run: FIRMWARE_VERSION=${{github.ref_name}} platformio run
       - name: Archive
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware
-          path: .pio/build/*/firmware_*.bin
+          path: .pio/build/*/firmware*.bin
           retention-days: 1
   release:
     name: Release
@@ -35,9 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo for CHANGELOG
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: firmware
           path: firmware
@@ -46,5 +46,4 @@ jobs:
       - name: release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "firmware/*/firmware_*.bin"
-          bodyFile: "CHANGELOG.md"
+          artifacts: "firmware/**/*.bin"

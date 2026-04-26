@@ -245,9 +245,7 @@ bool check_nbk_critical_alarms();
 bool overflow(){
   if (PowerOn) {
    #ifdef USE_HEAD_LEVEL_SENSOR
-      whls.tick(); 
-      if (whls.isHolded()) {
-        whls.resetStates();  
+      if (head_level_sensor_holded()) {
         SendMsg("Захлёб по ДЗ", WARNING_MSG);
         return (true);
       }
@@ -382,16 +380,17 @@ void handle_nbk_stage_heatup() {
  //Время не ограничено, переход к следующей строке по кнопке "Следующая программа", 
  //при переходе передаём в Оптимизацию текущие М и П.
 void handle_nbk_stage_manual() { //Если захлёб, выводим сообщение "Захлёб колонны!", М=1/2, П=1/3 (оставляем от подачи треть, половиним мощность).
-  if (overflow() && !manual_overflow) {
+  bool hasOverflow = overflow();
+  if (hasOverflow && !manual_overflow) {
       manual_overflow = true;
       nbk_P = nbk_P/3;
       nbk_M = toPower(target_power_volt) / 2;
       set_current_power(fromPower(nbk_M));
       SetSpeed(nbk_P);
-      SendMsg(" Подача 1/3, мощность 1/2.", ALARM_MSG); 
+      SendMsg(" Подача 1/3, мощность 1/2.", ALARM_MSG);
       vTaskDelay(200 / portTICK_PERIOD_MS);
       return;
-  } else if (get_stepper_speed() > 0) manual_overflow = false;
+  } else if (!hasOverflow) manual_overflow = false;
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
 
@@ -434,7 +433,7 @@ void handle_nbk_stage_optimization() {
       nbk_P = program[ProgramNum].Speed > 0 ? program[ProgramNum].Speed : nbk_P;
      set_current_power(fromPower(nbk_M));
      SetSpeed(nbk_P);
-     nbk_opt_next_time = millis() + nbk_column_inertia * NBK_MULT_PAUSE_OVERFLOW/3 * 1000; // Ждём время Ин (первая пауза)
+     nbk_opt_next_time = millis() + nbk_column_inertia * NBK_MULT_PAUSE_OVERFLOW / 3.0f * 1000; // Ждём время Ин (первая пауза)
 #ifdef SAMOVAR_USE_POWER
      SendMsg("Оптимизация начата с: " + String(fromPower(nbk_M),0) + String(PWR_SIGN) + ",  " + String(nbk_P,1) + " л/ч ", NOTIFY_MSG); 
 #endif
@@ -628,7 +627,7 @@ void handle_nbk_stage_work() {
       msg += " л/ч";
       SendMsg(msg, NOTIFY_MSG);
       nbk_work_pause_stage = 2; // ждём время 2*Ин
-      nbk_work_next_time = millis() + 2*(NBK_MULT_PAUSE_OVERFLOW/3) * nbk_column_inertia * 1000;
+      nbk_work_next_time = millis() + 2.0f * NBK_MULT_PAUSE_OVERFLOW / 3.0f * nbk_column_inertia * 1000;
     } else if (nbk_work_pause_stage == 2) { // после MULT*Ин: продолжаем работу
       nbk_work_in_pause = false;
       nbk_work_pause_stage = 0;
@@ -727,9 +726,12 @@ void run_nbk_program(uint8_t num) {
 
 // === Проверка критических аварий ===
 bool check_nbk_critical_alarms() { //вызывается циклично из этого модуля
- /*ТЗ: В строках "Оптимизация", "Работа":  
+ /*ТЗ: В строках "Оптимизация", "Работа":
  Тп > 98°C = "Кончилась брага", М=0, П=0, выключить нагрев ИСПРАВИЛ на 98
  В строке "Ручная настройка" это условие не проверяем, т.к. в инструкции будет юстировка датчика Тб по воде*/
+  if (SamovarStatusInt != 4000 || !PowerOn || startval < 4001) {
+    return false;
+  }
   if (alarm_event) { //если авария - в НБК не делаем ничего
     return true;
   }
@@ -938,7 +940,7 @@ String get_nbk_program() {
     } else {
       Str += program[i].WType + ";";
       Str += (String)program[i].Speed + ";";
-      Str += (String)(int)program[i].Power + "\n";
+      Str += (String)program[i].Power + "\n";
     }
   }
   return Str;

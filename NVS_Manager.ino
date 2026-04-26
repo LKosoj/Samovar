@@ -5,6 +5,8 @@
 
 Preferences prefs;
 
+static void write_last_mode_meta(uint8_t mode);
+
 static const char* profile_namespace_by_mode(int mode) {
   switch (mode) {
     case SAMOVAR_BEER_MODE: return "sam_beer";
@@ -25,6 +27,29 @@ static const char* current_profile_namespace() {
     mode = SAMOVAR_RECTIFICATION_MODE;
   }
   return profile_namespace_by_mode(mode);
+}
+
+bool profile_exists_for_mode(SAMOVAR_MODE mode) {
+  int modeValue = (int)mode;
+  if (modeValue < SAMOVAR_RECTIFICATION_MODE || modeValue > SAMOVAR_LUA_MODE) {
+    return false;
+  }
+  Preferences profilePrefs;
+  if (!profilePrefs.begin(profile_namespace_by_mode(modeValue), true)) {
+    return false;
+  }
+  uint8_t flag = profilePrefs.getUChar("flag", 255);
+  profilePrefs.end();
+  return flag <= 250;
+}
+
+void set_current_profile_mode(SAMOVAR_MODE mode) {
+  int modeValue = (int)mode;
+  if (modeValue < SAMOVAR_RECTIFICATION_MODE || modeValue > SAMOVAR_LUA_MODE) {
+    modeValue = SAMOVAR_RECTIFICATION_MODE;
+  }
+  Samovar_CR_Mode = (SAMOVAR_MODE)modeValue;
+  write_last_mode_meta((uint8_t)modeValue);
 }
 
 static uint8_t read_last_mode_meta() {
@@ -249,7 +274,7 @@ void load_profile_nvs() {
   SamSetup.SetWaterTemp = prefs.getFloat("SetWater", 0);
   SamSetup.SetTankTemp = prefs.getFloat("SetTank", 0);
   SamSetup.SetACPTemp = prefs.getFloat("SetACP", 0);
-  SamSetup.DistTemp = prefs.getFloat("DistTemp", 0);
+  SamSetup.DistTemp = prefs.getFloat("DistTemp", DEFAULT_DIST_TEMP);
 
   SamSetup.DeltaSteamTemp = prefs.getFloat("DeltaSteam", 0);
   SamSetup.DeltaPipeTemp = prefs.getFloat("DeltaPipe", 0);

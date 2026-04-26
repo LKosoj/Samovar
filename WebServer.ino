@@ -30,6 +30,8 @@ void FS_init(void);
 void save_profile();
 void read_config();
 void load_profile();
+bool profile_exists_for_mode(SAMOVAR_MODE mode);
+void set_current_profile_mode(SAMOVAR_MODE mode);
 void change_samovar_mode();
 void WebServerInit(void);
 String indexKeyProcessor(const String &var);
@@ -415,7 +417,7 @@ void WebServerInit(void) {
     }
     i2c_stepper_refresh(*dev);
     if (!dev->present) {
-      request->send(404, "application/json", "{\"present\":0}");
+      send_i2c_stepper_json(request, *dev);
       return;
     }
 
@@ -1117,18 +1119,24 @@ void handleSave(AsyncWebServerRequest *request) {
       samovar_reset();
       
       // Устанавливаем новый режим
-      SamSetup.Mode = request->arg("mode").toInt();
-      Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
-      Samovar_CR_Mode = Samovar_Mode;
+      SAMOVAR_MODE requestedMode = (SAMOVAR_MODE)request->arg("mode").toInt();
+      bool targetProfileExists = profile_exists_for_mode(requestedMode);
+      SamSetup.Mode = (uint16_t)requestedMode;
+      Samovar_Mode = requestedMode;
+      set_current_profile_mode(requestedMode);
       
       // Загружаем программу по умолчанию для нового режима
       load_default_program_for_mode();
-      
-      // Сохраняем настройки
-      save_profile();
-      
-      // Загружаем профиль для нового режима (настройки, но НЕ программу - она уже загружена выше)
-      load_profile();
+
+      if (targetProfileExists) {
+        // Загружаем профиль нового режима (настройки, но НЕ программу - она уже загружена выше)
+        load_profile();
+      } else {
+        SamSetup.flag = 2;
+      }
+      SamSetup.Mode = (uint16_t)requestedMode;
+      Samovar_Mode = requestedMode;
+      Samovar_CR_Mode = requestedMode;
       
 #ifdef USE_LUA
       // Обновляем Lua скрипты для нового режима
@@ -1302,10 +1310,13 @@ void web_command(AsyncWebServerRequest *request) {
         // Serial.println(get_stepper_speed());
         // Serial.println(i2c_get_liquid_rate_by_step(get_stepper_speed()));
         } else if (request->arg("pnbk").toInt() == 8000) { //TODO понижаем скорость насоса на один шаг
-          if (get_stepper_speed() - i2c_get_speed_from_rate(0.0499) < 0) {
+          uint16_t currentSpeed = get_stepper_speed();
+          float deltaRate = float(SamSetup.NbkDP) - 0.0001f;
+          uint16_t deltaSpeed = deltaRate > 0 ? (uint16_t)i2c_get_speed_from_rate(deltaRate) : 0;
+          if (deltaSpeed >= currentSpeed) {
             set_stepper_target(0, 0, 0);
           } else {
-            set_stepper_target(get_stepper_speed() - i2c_get_speed_from_rate(float(SamSetup.NbkDP) - 0.0001), 0, 2147483640);
+            set_stepper_target(currentSpeed - deltaSpeed, 0, 2147483640);
           }
         } else if (request->arg("pnbk").toFloat() >= 0 && request->arg("pnbk").toInt() < 8000) { // TODO устанавливаем заказанную скорость насоса
           set_stepper_target(i2c_get_speed_from_rate(float(request->arg("pnbk").toFloat()) + 0.0001), 0, 2147483640);
@@ -1362,19 +1373,20 @@ void web_command(AsyncWebServerRequest *request) {
   request->send(200, "text/plain", "OK");
 }
 void web_program(AsyncWebServerRequest *request) {
+  String response = "OK";
   if (request->hasArg("WProgram")) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       set_beer_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_beer_program());
+      response = get_beer_program();
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
       set_dist_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_dist_program());
+      response = get_dist_program();
     } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
       set_nbk_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_nbk_program());
+      response = get_nbk_program();
     } else {
       set_program(request->arg("WProgram"));
-      request->send(200, "text/plain", get_program(CAPACITY_NUM * 2));
+      response = get_program(CAPACITY_NUM * 2);
     }
   }
   if (request->hasArg("vless")) {
@@ -1387,6 +1399,7 @@ void web_program(AsyncWebServerRequest *request) {
     SessionDescription = request->arg("Descr");
     SessionDescription.replace("%", "&#37;");
   }
+  request->send(200, "text/plain", response);
 }
 
 void calibrate_command(AsyncWebServerRequest *request) {
@@ -1434,7 +1447,7 @@ void calibrate_command(AsyncWebServerRequest *request) {
   if (cl) {
     int s = 0;
     if (!isI2C) {
-      s = round((float)stepper.getCurrent() / 100) * 100;
+      s = round((float)stepper_safe_get_current() / 100) * 100;
     } else {
       s = SamSetup.StepperStepMlI2C * 100;
     }

@@ -96,7 +96,7 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
 static int lua_wrapper_digitalRead(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = luaL_checkinteger(lua_state, 1);
-  if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == WATER_PUMP_PIN) lua_pushnumber(lua_state, (lua_Number)digitalRead(a));
+  lua_pushnumber(lua_state, (lua_Number)digitalRead(a));
   return 1;
 }
 
@@ -135,6 +135,8 @@ static int lua_wrapper_exp_digitalRead(lua_State *lua_state) {
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     lua_pushnumber(lua_state, (lua_Number)expander.digitalRead(a));
     xSemaphoreGive(xI2CSemaphore);
+  } else {
+    return luaL_error(lua_state, "I2C expander read timeout");
   }
   return 1;
 }
@@ -157,6 +159,8 @@ static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
     lua_pushnumber(lua_state, (lua_Number)analog_expander.analogRead(a));
     xSemaphoreGive(xI2CSemaphore);
+  } else {
+    return luaL_error(lua_state, "I2C analog expander read timeout");
   }
   return 1;
 }
@@ -588,8 +592,8 @@ static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
 static int lua_wrapper_set_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   uint8_t a = luaL_checknumber(lua_state, 1);
+  if (a < 1 || a > 10) return 0;
   a--;
-  if (a <= 0 || a > 9) return 0;
   uint16_t b = luaL_checknumber(lua_state, 2);
   lua_timer[a] = millis() + b * 1000;
   return 0;
@@ -599,9 +603,9 @@ static int lua_wrapper_get_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   uint8_t a = luaL_checknumber(lua_state, 1);
   uint16_t b;
-  a--;
-  if (a <= 0 || a > 9) b = 0;
+  if (a < 1 || a > 10) b = 0;
   else {
+    a--;
     if (lua_timer[a] == 0) b = 0;
     else {
       long l;
@@ -1205,7 +1209,7 @@ String get_global_variables() {
   Variables += "TankTemp = " + String(TankSensor.avgTemp) + "\r\n";
   Variables += "ACPTemp = " + String(ACPSensor.avgTemp) + "\r\n";
 
-  Variables += "current_power_mode = \"" + current_power_mode + "\"\r\n";
+  Variables += "current_power_mode = \"" + get_current_power_mode_value() + "\"\r\n";
   Variables += "target_power_volt = " + String(target_power_volt) + "\r\n";
 
 #ifdef USE_WATER_PUMP

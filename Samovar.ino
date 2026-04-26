@@ -76,6 +76,7 @@
 #include "Samovar.h"
 #include "crash_handler.h"
 #include "time_utils.h"
+#include "runtime_helpers.h"
 
 #ifndef __SAMOVAR_DEBUG
 #define ARDUINOTRACE_ENABLE 0  // Disable all traces
@@ -264,12 +265,6 @@ void IRAM_ATTR WFpulseCounter() {
   portENTER_CRITICAL_ISR(&waterPulseMux);
   WFpulseCount++;
   portEXIT_CRITICAL_ISR(&waterPulseMux);
-}
-#endif
-
-#ifdef USE_HEAD_LEVEL_SENSOR
-void IRAM_ATTR isrWHLS_TICK() {
-  whls.tick();
 }
 #endif
 
@@ -520,7 +515,7 @@ void triggerSysTicker(void *parameter) {
       } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
         check_alarm_bk();
       } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-        check_alarm_nbk();
+        if (!check_nbk_critical_alarms()) check_alarm_nbk();
       } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
         check_alarm_beer();
         WFpulseCount = 100;
@@ -646,7 +641,7 @@ void triggerSysTicker(void *parameter) {
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
 
-      if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && waterPulses == 0 && !SamSetup.UseWS) {
+      if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && waterPulses == 0 && SamSetup.UseWS) {
         WFAlarmCount++;
       } else {
         WFAlarmCount = 0;
@@ -731,6 +726,9 @@ void setup() {
 
   xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
   xSemaphoreGive(xMsgSemaphore);
+
+  xRuntimeStateSemaphore = xSemaphoreCreateBinaryStatic(&xRuntimeStateSemaphoreBuffer);
+  xSemaphoreGive(xRuntimeStateSemaphore);
 
   xI2CSemaphore = xSemaphoreCreateBinaryStatic(&xI2CSemaphoreBuffer);
   xSemaphoreGive(xI2CSemaphore);
@@ -832,6 +830,7 @@ void setup() {
     SamSetup.SetWaterTemp = 0;
     SamSetup.SetTankTemp = 0;
     SamSetup.SetACPTemp = 0;
+    SamSetup.DistTemp = DEFAULT_DIST_TEMP;
     SamSetup.StepperStepMl = STEPPER_STEP_ML;
     SamSetup.StepperStepMlI2C = I2C_STEPPER_STEP_ML_DEFAULT;
     SamSetup.UsePreccureCorrect = true;
@@ -1089,8 +1088,6 @@ void setup() {
   whls.setDebounce(50);  //игнорируем дребезг
   whls.setTickMode(MANUAL);
   whls.setTimeout(WHLS_ALARM_TIME * 1000);  //время, через которое сработает тревога по уровню флегмы
-  //вешаем прерывание на изменение датчика уровня флегмы
-  attachInterrupt(WHEAD_LEVEL_SENSOR_PIN, isrWHLS_TICK, CHANGE);
 #endif
 
 #ifdef USE_MQTT
@@ -1372,6 +1369,10 @@ void loop() {
   encoder.tick();
   encoder_getvalue();
 
+#ifdef USE_HEAD_LEVEL_SENSOR
+  head_level_sensor_tick();
+#endif
+
   process_buzzer();
   vTaskDelay(5 / portTICK_PERIOD_MS);
 }
@@ -1455,21 +1456,21 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   jsonAddKey(out, first, "WthdrwlProgress");
   out.print(WthdrwlProgress);
   jsonAddKey(out, first, "TargetStepps");
-  out.print(stepper.getTarget());
+  out.print(stepper_safe_get_target());
   jsonAddKey(out, first, "CurrrentStepps");
-  out.print(stepper.getCurrent());
+  out.print(stepper_safe_get_current());
   jsonAddKey(out, first, "WthdrwlStatus");
   out.print(startval);
   jsonAddKey(out, first, "CurrrentSpeed");
-  out.print(round(stepper.getSpeed() * (uint8_t)stepper.getState()));
+  out.print(round(stepper_safe_get_speed() * (uint8_t)stepper_safe_get_state()));
   jsonAddKey(out, first, "UseBBuzzer");
   out.print(SamSetup.UseBBuzzer);
   jsonAddKey(out, first, "StepperStepMl");
   out.print(SamSetup.StepperStepMl);
   jsonAddKey(out, first, "BodyTemp_Steam");
-  out.print(format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3));
+  out.print(format_float(SteamSensor.BodyTemp, 3));
   jsonAddKey(out, first, "BodyTemp_Pipe");
-  out.print(format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3));
+  out.print(format_float(PipeSensor.BodyTemp, 3));
   jsonAddKey(out, first, "mixer");
   out.print(mixer_status);
   jsonAddKey(out, first, "ISspd");
@@ -1518,22 +1519,22 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   jsonPrintEscaped(out, pt);
   out.print('\"');
 
-  if (Msg.length() > 0) {
+  String msgCopy;
+  uint8_t msgLevel = NONE_MSG;
+  if (consume_web_message(msgCopy, msgLevel)) {
     jsonAddKey(out, first, "Msg");
     out.print('\"');
-    jsonPrintEscaped(out, Msg);
+    jsonPrintEscaped(out, msgCopy);
     out.print('\"');
     jsonAddKey(out, first, "msglvl");
-    out.print(msg_level);
-    Msg = "";
-    msg_level = NONE_MSG;
+    out.print(msgLevel);
   }
-  if (LogMsg.length() > 0) {
+  String logCopy;
+  if (consume_console_log(logCopy)) {
     jsonAddKey(out, first, "LogMsg");
     out.print('\"');
-    jsonPrintEscaped(out, LogMsg);
+    jsonPrintEscaped(out, logCopy);
     out.print('\"');
-    LogMsg = "";
   }
 
 #ifdef SAMOVAR_USE_POWER
@@ -1543,7 +1544,8 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   out.print(format_float(target_power_volt, 1));
   jsonAddKey(out, first, "current_power_mode");
   out.print('\"');
-  jsonPrintEscaped(out, current_power_mode);
+  String powerMode = get_current_power_mode_value();
+  jsonPrintEscaped(out, powerMode);
   out.print('\"');
   jsonAddKey(out, first, "current_power_p");
   out.print(current_power_p);
@@ -1662,6 +1664,7 @@ void read_config() {
 
   if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;
   if (isnan(SamSetup.SetACPTemp) || SamSetup.SetACPTemp == 0) SamSetup.SetACPTemp = 43;
+  if (isnan(SamSetup.DistTemp) || SamSetup.DistTemp <= 0) SamSetup.DistTemp = DEFAULT_DIST_TEMP;
   if (isnan(SamSetup.DistTimeF)) {
     SamSetup.DistTimeF = 16;
   }
@@ -1724,17 +1727,7 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   }
 #endif
 
-  if (Msg.length() > 0) {
-    Msg += "; ";
-    if (msg_level > msg_type) msg_level = msg_type;
-  } else msg_level = msg_type;
-
-  Msg += m;
-
-  if (Msg.length() > 250) {
-    Msg = m;
-    msg_level = msg_type;
-  }
+  append_web_message(m, msg_type);
 }
 
 void WriteConsoleLog(String StringLogMsg) {
@@ -1744,13 +1737,7 @@ void WriteConsoleLog(String StringLogMsg) {
     else if (StringLogMsg[i] == '\r') StringLogMsg[i] = '^';
     else if (StringLogMsg[i] == '\n') StringLogMsg[i] = ' ';
   }
-  if (LogMsg.length() > 0) {
-    LogMsg = LogMsg + "; " + StringLogMsg;
-  } else LogMsg = StringLogMsg;
-
-  if (LogMsg.length() > 10000) {
-    LogMsg = StringLogMsg;
-  }
+  append_console_log(StringLogMsg);
 
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);

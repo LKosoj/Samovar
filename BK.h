@@ -116,7 +116,7 @@ void bk_proc() {
     delay(1000);
     set_power_mode(POWER_SPEED_MODE);
 #else
-    current_power_mode = POWER_SPEED_MODE;
+    set_current_power_mode_value(POWER_SPEED_MODE);
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
     create_data();  //создаем файл с данными
@@ -137,6 +137,10 @@ void check_alarm_bk() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
+#ifdef SAMOVAR_USE_POWER
+  check_power_error();
+#endif
+
   if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
     open_valve(true, true);
 #ifdef USE_WATER_PUMP
@@ -145,7 +149,7 @@ void check_alarm_bk() {
   }
 
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  if (current_power_mode == POWER_SPEED_MODE && (check_boiling() || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
+  if (current_power_mode_is(POWER_SPEED_MODE) && (check_boiling() || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
 #ifdef SAMOVAR_USE_POWER
 #ifndef SAMOVAR_USE_SEM_AVR
     set_current_power(45);
@@ -153,7 +157,7 @@ void check_alarm_bk() {
     set_current_power(200);
 #endif
 #else
-    current_power_mode = POWER_WORK_MODE;
+    set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
   }
@@ -188,8 +192,6 @@ void check_alarm_bk() {
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
 
 #ifdef SAMOVAR_USE_POWER
-
-    check_power_error();
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
       SendMsg("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);

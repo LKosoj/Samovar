@@ -40,6 +40,27 @@ typedef struct ExcludeListS {
 
 static ExcludeList *excludes = NULL;
 
+static String spiffsEditorJsonEscape(const String& value) {
+  String escaped;
+  escaped.reserve(value.length());
+  for (size_t i = 0; i < value.length(); i++) {
+    char c = value[i];
+    if (c == '"' || c == '\\') {
+      escaped += '\\';
+      escaped += c;
+    } else if (c == '\n') {
+      escaped += "\\n";
+    } else if (c == '\r') {
+      escaped += "\\r";
+    } else if (c == '\t') {
+      escaped += "\\t";
+    } else {
+      escaped += c;
+    }
+  }
+  return escaped;
+}
+
 static bool matchWild(const char *pattern, const char *testee) {
   const char *nxPat = NULL, *nxTst = NULL;
 
@@ -231,7 +252,7 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
         output += "{\"type\":\"";
         output += "file";
         output += "\",\"name\":\"";
-        output += String(entry.name());
+        output += spiffsEditorJsonEscape(String(entry.name()));
         output += "\",\"size\":";
         output += String(entry.size());
         output += "}";

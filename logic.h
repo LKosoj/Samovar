@@ -101,7 +101,7 @@ float get_speed_from_rate(float volume_per_hour) {
 
 // Получить объем жидкости
 int get_liquid_volume() {
-  return get_liquid_volume_by_step(stepper.getCurrent());
+  return get_liquid_volume_by_step(stepper_safe_get_current());
 }
 
 // Установить сигнализацию
@@ -139,7 +139,7 @@ void withdrawal(void) {
   }
 
   //По достижению шаговика цели
-  CurrrentStepps = stepper.getCurrent();
+  CurrrentStepps = stepper_safe_get_current();
 
   if (TargetStepps == CurrrentStepps && TargetStepps != 0 && (startval == 1 || startval == 2)) {
     menu_samovar_start();
@@ -158,8 +158,8 @@ void withdrawal(void) {
     }
   }
 
-  float c_temp;  //стартовая температура отбора тела с учетом корректировки от давления или без
-  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure);
+  float c_temp;  // датчики уже приведены к шкале с учетом настройки коррекции давления
+  c_temp = SteamSensor.BodyTemp;
 
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура пара вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) && SteamSensor.BodyTemp > 0) {
@@ -188,7 +188,7 @@ void withdrawal(void) {
     if (millis() >= t_min && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
       t_min = millis() + SteamSensor.Delay * 1000;
     }
-  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < SteamSensor.BodyTemp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < c_temp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     t_min = 0;
@@ -210,7 +210,7 @@ void withdrawal(void) {
     }
   }
 
-  c_temp = get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure);
+  c_temp = PipeSensor.BodyTemp;
   //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура в колонне вышла за пределы или корректируем пределы
   if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && (PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) && PipeSensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
@@ -237,7 +237,7 @@ void withdrawal(void) {
     if (millis() >= t_min && PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) {
       t_min = millis() + PipeSensor.Delay * 1000;
     }
-  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < PipeSensor.BodyTemp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < c_temp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     t_min = 0;
@@ -279,19 +279,18 @@ void pump_calibrate(int stpspeed) {
   if (stpspeed == 0) {
     startval = 0;
     //Сохраняем полученное значение калибровки
-    SamSetup.StepperStepMl = round((float)stepper.getCurrent() / 100);
+    SamSetup.StepperStepMl = round((float)stepper_safe_get_current() / 100);
     stopService();
-    stepper.brake();
-    stepper.disable();
+    stepper_safe_stop();
     save_profile();
     read_config();
   } else {
     startval = 100;
     //крутим двигатель, пока не остановят
-    if (!stepper.getState()) stepper.setCurrent(0);
-    stepper.setMaxSpeed(stpspeed);
+    if (!stepper_safe_get_state()) stepper_safe_set_current(0);
+    stepper_safe_set_max_speed(stpspeed);
     //stepper.setSpeed(stpspeed);
-    stepper.setTarget(999999999);
+    stepper_safe_set_target(999999999);
     startService();
   }
 }
@@ -299,20 +298,19 @@ void pump_calibrate(int stpspeed) {
 // Пауза отбора
 void pause_withdrawal(bool Pause) {
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
-  if (!stepper.getState() && !PauseOn) return;
+  if (!stepper_safe_get_state() && !PauseOn) return;
   PauseOn = Pause;
   if (Pause) {
-    TargetStepps = stepper.getTarget();
-    CurrrentStepps = stepper.getCurrent();
-    if (CurrrentStepperSpeed < 1) CurrrentStepperSpeed = (uint16_t)max(1, (int)abs((int)stepper.getSpeed()));
+    TargetStepps = stepper_safe_get_target();
+    CurrrentStepps = stepper_safe_get_current();
+    if (CurrrentStepperSpeed < 1) CurrrentStepperSpeed = (uint16_t)max(1, (int)abs((int)stepper_safe_get_speed()));
     stopService();
-    stepper.brake();
-    stepper.disable();
+    stepper_safe_stop();
   } else {
-    stepper.setMaxSpeed(CurrrentStepperSpeed);
+    stepper_safe_set_max_speed(CurrrentStepperSpeed);
     //stepper.setSpeed(CurrrentStepperSpeed);
-    stepper.setCurrent(CurrrentStepps);
-    stepper.setTarget(TargetStepps);
+    stepper_safe_set_current(CurrrentStepps);
+    stepper_safe_set_target(TargetStepps);
     startService();
   }
 }
@@ -323,14 +321,14 @@ void set_pump_speed(float pumpspeed, bool continue_process) {
   if (!(SamovarStatusInt == 10 || SamovarStatusInt == 15 || SamovarStatusInt == 40)) return;
 
   bool cp = continue_process;
-  if (!stepper.getState()) cp = false;
+  if (!stepper_safe_get_state()) cp = false;
 
   CurrrentStepperSpeed = pumpspeed;
   ActualVolumePerHour = get_liquid_rate_by_step(CurrrentStepperSpeed);
 
   stopService();
-  stepper.setMaxSpeed(CurrrentStepperSpeed);
-  stepper.setTarget(stepper.getTarget());
+  stepper_safe_set_max_speed(CurrrentStepperSpeed);
+  stepper_safe_set_target(stepper_safe_get_target());
   //stepper.setSpeed(CurrrentStepperSpeed);
   //Пересчитываем время отбора этой строки программы на текущую скорость
   if (ActualVolumePerHour == 0) program[ProgramNum].Time = 65535;
@@ -393,7 +391,7 @@ String get_Samovar_Status() {
   } else if (PauseOn) {
     SamovarStatus = F("Пауза");
     SamovarStatusInt = 40;
-  } else if (PowerOn && startval == 0 && !stepper.getState()) {
+  } else if (PowerOn && startval == 0 && !stepper_safe_get_state()) {
     if (SamovarStatusInt != 51 && SamovarStatusInt != 52) {
       SamovarStatus = F("Разгон колонны");
       SamovarStatusInt = 50;
@@ -489,7 +487,7 @@ String get_Samovar_Status() {
     SamovarStatus += "; Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
   }
   if (SteamSensor.BodyTemp > 0) {
-    SamovarStatus += ";Т тела пар:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, SteamSensor.BodyTemp, bme_pressure), 3) + ";Т тела царга:" + format_float(get_temp_by_pressure(SteamSensor.Start_Pressure, PipeSensor.BodyTemp, bme_pressure), 3);
+    SamovarStatus += ";Т тела пар:" + format_float(SteamSensor.BodyTemp, 3) + ";Т тела царга:" + format_float(PipeSensor.BodyTemp, 3);
   }
 
   return SamovarStatus;
@@ -692,10 +690,7 @@ void run_program(uint8_t num) {
     //если num = CAPACITY_NUM * 2 значит мы достигли финала (или отбор сброшен принудительно), завершаем отбор
     ProgramNum = 0;
     stopService();
-    stepper.brake();
-    stepper.disable();
-    stepper.setCurrent(0);
-    stepper.setTarget(0);
+    stepper_safe_stop_reset();
     set_capacity(0);
     if (fileToAppend) {
       fileToAppend.close();
@@ -727,11 +722,11 @@ void run_program(uint8_t num) {
       //устанавливаем параметры для текущей программы отбора
       set_capacity(program[num].capacity_num);
       CurrrentStepperSpeed = (uint16_t)get_speed_from_rate(program[num].Speed);
-      stepper.setMaxSpeed(CurrrentStepperSpeed);
+      stepper_safe_set_max_speed(CurrrentStepperSpeed);
       //stepper.setSpeed(get_speed_from_rate(program[num].Speed));
       TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
-      stepper.setCurrent(0);
-      stepper.setTarget(TargetStepps);
+      stepper_safe_set_current(0);
+      stepper_safe_set_target(TargetStepps);
       startService();
       ActualVolumePerHour = program[num].Speed;
       if ((program[num].WType == "B" || program[num].WType == "C") && program[num].Temp > 0) {
@@ -757,13 +752,10 @@ void run_program(uint8_t num) {
       t_min = millis() + program[num].Volume * 1000;
       program_Pause = true;
       stopService();
-      stepper.setMaxSpeed(0);
+      stepper_safe_set_max_speed(0);
       CurrrentStepperSpeed = 0;
       //stepper.setSpeed(-1);
-      stepper.brake();
-      stepper.disable();
-      stepper.setCurrent(0);
-      stepper.setTarget(0);
+      stepper_safe_stop_reset();
     }
   }
 
@@ -774,7 +766,7 @@ void run_program(uint8_t num) {
     SendMsg(p_s, NOTIFY_MSG);
   }
 
-  TargetStepps = stepper.getTarget();
+  TargetStepps = stepper_safe_get_target();
 }
 
 //функция корректировки температуры кипения спирта в зависимости от давления
@@ -847,9 +839,7 @@ void check_alarm() {
   //Если используется датчик уровня флегмы в голове
 #ifdef USE_HEAD_LEVEL_SENSOR
   if (SamSetup.UseHLS && PowerOn) {
-    whls.tick();
-    if (whls.isHolded() && alarm_h_min == 0) {
-      whls.resetStates();
+    if (head_level_sensor_holded() && alarm_h_min == 0) {
       if (program[ProgramNum].WType != "C") {
         set_buzzer(true);
         SendMsg(("Сработал датчик захлёба!"), ALARM_MSG);
@@ -880,7 +870,6 @@ void check_alarm() {
     }
 
     if (alarm_h_min > 0 && alarm_h_min <= millis()) {
-      whls.resetStates();
       alarm_h_min = 0;
     }
 #ifdef SAMOVAR_USE_POWER
@@ -1046,7 +1035,7 @@ void check_alarm() {
 #ifdef SAMOVAR_USE_POWER
         set_current_power(program[0].Power);
 #else
-        current_power_mode = POWER_WORK_MODE;
+        set_current_power_mode_value(POWER_WORK_MODE);
         digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 #endif
     }
@@ -1186,7 +1175,7 @@ void set_power(bool On) {
     vTaskDelay(SAMOVAR_USE_POWER_START_TIME / portTICK_PERIOD_MS);
     set_power_mode(POWER_SPEED_MODE);
 #else
-    current_power_mode = POWER_SPEED_MODE;
+    set_current_power_mode_value(POWER_SPEED_MODE);
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
   } else {
@@ -1197,7 +1186,7 @@ void set_power(bool On) {
     set_power_mode(POWER_SLEEP_MODE);
     vTaskDelay(200 / portTICK_PERIOD_MS);
 #else
-    current_power_mode = POWER_SLEEP_MODE;
+    set_current_power_mode_value(POWER_SLEEP_MODE);
 #endif
     power_text_ptr = (char *)"ON";
     sam_command_sync = SAMOVAR_RESET;
@@ -1463,13 +1452,15 @@ void start_self_test(void) {
 #ifdef USE_STEPPER_ACCELERATION
   // В самотестировании отключаем плавный разгон/торможение, чтобы мотор сразу крутился
   // с заданной скоростью (даже если в целом акселерация включена).
+  portENTER_CRITICAL(&timerMux);
   stepper.setAcceleration(0);
+  portEXIT_CRITICAL(&timerMux);
 #endif
-  stepper.setMaxSpeed(get_speed_from_rate(1));
+  stepper_safe_set_max_speed(get_speed_from_rate(1));
   //stepper.setSpeed(get_speed_from_rate(1));
   TargetStepps = 100 * SamSetup.StepperStepMl;
-  stepper.setCurrent(0);
-  stepper.setTarget(TargetStepps);
+  stepper_safe_set_current(0);
+  stepper_safe_set_target(TargetStepps);
   startService();
   //включаем сервопривод
   set_capacity(1);
@@ -1492,7 +1483,9 @@ void stop_self_test(void) {
   stopService();
 #ifdef USE_STEPPER_ACCELERATION
   // Возвращаем ускорение библиотеки по умолчанию, чтобы остальные режимы работали штатно
+  portENTER_CRITICAL(&timerMux);
   stepper.setAcceleration(200);
+  portEXIT_CRITICAL(&timerMux);
 #endif
   is_self_test = false;
   reset_sensor_counter();
@@ -1559,7 +1552,7 @@ void triggerPowerStatus(void *parameter) {
                     if (cpv > 30 && cpv < 2550) {
                         current_power_volt = cpv / 10.0F;
                         target_power_volt = hexToDec(hexData.substring(3, 6)) / 10.0F;
-                        current_power_mode = hexData.substring(6, 7);
+                        set_current_power_mode_value(hexData.substring(6, 7));
                         
                         reg_online = true;
                         last_reg_online = millis();
@@ -1594,12 +1587,12 @@ void triggerPowerStatus(void *parameter) {
         for (int i = 0; i < 2; i++) {
           vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
           if (Serial2.available()) {
-            current_power_mode = Serial2.readStringUntil('\r');
+            set_current_power_mode_value(Serial2.readStringUntil('\r'));
             // Есть ответ от регулятора -> связь жива
             reg_online = true;
             last_reg_online = millis();
 #ifdef __SAMOVAR_DEBUG
-            WriteConsoleLog("CPM=" + current_power_mode);
+            WriteConsoleLog("CPM=" + get_current_power_mode_value());
 #endif
             break;
           }
@@ -1677,7 +1670,7 @@ void check_power_error() {
   if (SamSetup.CheckPower && PowerOn) {
     // 1) Потеря связи с регулятором: отключаем нагрев при длительном отсутствии ответа.
     // Таймаут здесь должен совпадать с логикой в triggerPowerStatus().
-    if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL && current_power_mode != POWER_SLEEP_MODE) {
+    if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL && !current_power_mode_is(POWER_SLEEP_MODE)) {
       power_err_cnt++;
       if (power_err_cnt == 2) {
         SendMsg(("Нет связи с регулятором!"), ALARM_MSG);
@@ -1693,7 +1686,7 @@ void check_power_error() {
 
     // 2) Проверим, что заданное напряжение/мощность не сильно отличается от реального
     // (наличие связи с регулятором, пробой семистора и т.п.)
-    if (current_power_mode == POWER_WORK_MODE && current_power_volt > 0 && target_power_volt > 0 &&
+    if (current_power_mode_is(POWER_WORK_MODE) && current_power_volt > 0 && target_power_volt > 0 &&
         abs((current_power_volt - target_power_volt) / target_power_volt) > 0.2f) {
       power_err_cnt++;
       //if (power_err_cnt == 2) SendMsg(("Ошибка регулятора!"), ALARM_MSG);
@@ -1717,11 +1710,11 @@ void get_current_power() {
   if (!PowerOn) {
     current_power_volt = 0;
     target_power_volt = 0;
-    current_power_mode = "N";
+    set_current_power_mode_value("N");
     current_power_p = 0;
     return;
   }
-  if (current_power_mode == POWER_SLEEP_MODE) {
+  if (current_power_mode_is(POWER_SLEEP_MODE)) {
     current_power_volt = 0;
     target_power_volt = 0;
     current_power_p = 0;
@@ -1781,8 +1774,8 @@ void set_current_power(float Volt) {
 }
 
 void set_power_mode(String Mode) {
-  if (current_power_mode == Mode) return;
-  current_power_mode = Mode;
+  if (current_power_mode_is(Mode)) return;
+  set_current_power_mode_value(Mode);
   
   // Обнуляем показатели питания при переходе в SLEEP режим
   if (Mode == POWER_SLEEP_MODE) {
@@ -1915,7 +1908,7 @@ bool column_wetting() {
     // Проверяем условия завершения
     
     // 1. Датчик сработал - смачивание успешно завершено
-    if (whls.isHolded()) {
+    if (head_level_sensor_holded()) {
       SendMsg(("Насадка колонны успешно смочена!"), NOTIFY_MSG);
       reset_wetting_state();
       return true;

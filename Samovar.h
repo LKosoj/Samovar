@@ -105,6 +105,9 @@ SemaphoreHandle_t xSemaphore = NULL;
 SemaphoreHandle_t xMsgSemaphore = NULL;
 StaticSemaphore_t xMsgSemaphoreBuffer;
 
+SemaphoreHandle_t xRuntimeStateSemaphore = NULL;
+StaticSemaphore_t xRuntimeStateSemaphoreBuffer;
+
 SemaphoreHandle_t xI2CSemaphore = NULL;
 StaticSemaphore_t xI2CSemaphoreBuffer;
 
@@ -488,7 +491,7 @@ struct WProgram {
   float Speed;                                                 //скорость отбора в л/ч
   uint8_t capacity_num;                                        //номер емкости для отбора
   float Temp;                                                  //температура, при которой отбирается эта часть погона. 0 - определяется автоматически
-  uint16_t Power;                                              //напряжение, при которой отбирается эта часть погона.
+  float Power;                                                 //напряжение, при которой отбирается эта часть погона.
   uint8_t TempSensor;                                          //температурный сенсор, используемый в программе Пиво для контроля нагрева
   float Time;                                                  //время, необходимое для отбора программы
 };

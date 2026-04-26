@@ -310,15 +310,10 @@ inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target)
     CurrrentStepperSpeed = spd;
     stopService();
     if (spd > 0) {
-      stepper.setMaxSpeed(spd);
-      stepper.setCurrent(0);
-      stepper.setTarget(target);
+      stepper_safe_set_motion(spd, 0, target);
       startService();
     } else {
-      stepper.brake();
-      stepper.disable();
-      stepper.setCurrent(0);
-      stepper.setTarget(0);
+      stepper_safe_stop_reset();
     }
     return true;
   }
@@ -356,7 +351,7 @@ inline uint16_t get_stepper_speed(void) {
 
 inline uint32_t get_stepper_status(void) {
   if (i2c_stepper_refresh(i2cStepperPump)) return (uint32_t)i2cStepperPump.remaining * i2c_stepper_steps_per_ml();
-  return stepper.getTarget();
+  return stepper_safe_get_target();
 }
 
 inline bool set_mixer_pump_target(uint8_t on) {
@@ -407,7 +402,9 @@ inline float i2c_get_speed_from_rate(float volume_per_hour) {
   if (!i2c_stepper_refresh(i2cStepperPump)) return get_speed_from_rate(volume_per_hour);
   uint16_t stepsPerMl = i2c_stepper_steps_per_ml();
   float v = round(stepsPerMl * volume_per_hour * 1000 / 3.6) / 1000.0;
-  return (v < 1) ? 1 : v;
+  if (v < 1) return 1;
+  if (v > 65535) return 65535;
+  return v;
 }
 
 inline float i2c_get_liquid_volume() {

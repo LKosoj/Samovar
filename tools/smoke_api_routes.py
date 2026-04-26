@@ -40,7 +40,14 @@ for path, method in required.items():
         errors.append(f"route {path} missing method {method}; found {sorted(routes[path])}")
 
 # Streaming JSON contract for /ajax
-if "send_ajax_json(request);" not in text:
+ajax_handler_re = re.compile(
+    r'server\.on\("/ajax"\s*,\s*HTTP_GET\s*,\s*\[\]\(AsyncWebServerRequest \*request\)\s*\{(?P<body>.*?)\n\s*\}\);',
+    re.S,
+)
+ajax_handler = ajax_handler_re.search(text)
+if not ajax_handler:
+    errors.append("/ajax handler not found")
+elif "send_ajax_json(request);" not in ajax_handler.group("body"):
     errors.append("/ajax handler does not use send_ajax_json(request)")
 
 # Keep CORS presence visible for security review (not a hard failure)

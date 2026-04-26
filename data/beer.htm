@@ -706,7 +706,7 @@
     };
 
     function run_strlua() {
-      var str = document.getElementById('lua_str_i').value.replace(" ", "^");
+      var str = encodeURIComponent(document.getElementById('lua_str_i').value);
       sendbutton("luastr=" + str);
     };
     

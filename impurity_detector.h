@@ -66,7 +66,6 @@ void reset_impurity_detector() {
 
 // Вызывается при старте новой строки программы
 void detector_on_program_start(const String& wtype) {
-  reset_impurity_detector();
   if (wtype == "H") {
     detector_grace_until = millis() + 60000UL; // 60 сек для голов
   } else {

@@ -34,7 +34,8 @@ uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res) {
       cmd_buf[copyLen + 1] = '\0';
       uart_flush(RMVK_UART);
       cmd_len = uart_write_bytes(RMVK_UART, pc, strlen(pc));
-      len = uart_read_bytes(RMVK_UART, buf, sizeof(buf), RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
+      len = uart_read_bytes(RMVK_UART, buf, sizeof(buf) - 1, RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
+      if (len < 0) len = 0;
       buf[len] = '\0';
       //Serial.print("buf = ");
       //Serial.println((const char *)&buf);

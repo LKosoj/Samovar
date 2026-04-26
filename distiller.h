@@ -228,7 +228,7 @@ void distiller_proc() {
     delay(1000);
     set_power_mode(POWER_SPEED_MODE);
 #else
-    current_power_mode = POWER_SPEED_MODE;
+    set_current_power_mode_value(POWER_SPEED_MODE);
     digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
 #endif
     create_data();  //создаем файл с данными
@@ -319,6 +319,10 @@ void check_alarm_distiller() {
   //сбросим паузу события безопасности
   if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
 
+#ifdef SAMOVAR_USE_POWER
+  check_power_error();
+#endif
+
   if (!valve_status) {
     if (ACPSensor.avgTemp >= MAX_ACP_TEMP - 5) {
       set_buzzer(true);
@@ -379,7 +383,6 @@ void check_alarm_distiller() {
     SendMsg(("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
-    check_power_error();
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
       SendMsg("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);

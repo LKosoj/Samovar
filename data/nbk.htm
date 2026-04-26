@@ -545,7 +545,7 @@
     };
 
     function run_strlua() {
-      let str = document.getElementById('lua_str_i').value.replace(" ", "^");
+      let str = encodeURIComponent(document.getElementById('lua_str_i').value);
       sendbutton("luastr=" + str);
     };
     

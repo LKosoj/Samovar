@@ -24,12 +24,16 @@ struct ColumnResults {
  * @param rawMaterial: 0=Фрукты, 1=Зерно, 2=Сахар
  */
 ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
-  ColumnResults res;
+  ColumnResults res = {};
   
   // 1. Конфигурация из SamSetup
   float diamMm = SamSetup.ColDiam * 25.4f;
   float heightCm = SamSetup.ColHeight * 100.0f;
   float packingDensity = (float)SamSetup.PackDens / 100.0f;
+  if (isnan(diamMm) || isnan(heightCm) || isnan(packingDensity) ||
+      diamMm <= 0 || heightCm <= 0 || packingDensity <= 0) {
+    return res;
+  }
   
   // Площадь сечения (мм2)
   float radiusMm = diamMm / 2.0f;
@@ -41,6 +45,7 @@ ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
   float hetpFactor = 1.0f - (packingDensity - 0.6f) * (densityImpact / 0.4f); 
   float hetp = hetpBase * hetpFactor;
   res.theoreticalPlates = (hetp > 0) ? ((heightCm * 10.0f) / hetp) : 1.0f;
+  if (res.theoreticalPlates < 1.0f) res.theoreticalPlates = 1.0f;
   
   // 3. Расчет мощности захлеба
   float pDensityAdj = 1.2f - (packingDensity - 0.6f) * 0.5f;
@@ -102,4 +107,3 @@ ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
 }
 
 #endif
-

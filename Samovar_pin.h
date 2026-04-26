@@ -45,7 +45,7 @@
 #define ENC_SW 5  //KEY
 
 #define STEPPER_STEP 16
-#define STEPPER_DIR 0 // загрузочный
+#define STEPPER_DIR 14
 #define STEPPER_EN 15
 
 #define RELE_CHANNEL1 2             //используется для пускателя, который включает нагреватель
