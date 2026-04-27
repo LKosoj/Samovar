@@ -134,7 +134,44 @@
       });
     }
 
+    function applyTheme (theme) {
+      if (theme === 'dark' || theme === 'light') {
+        document.documentElement.dataset.theme = theme;
+      } else {
+        delete document.documentElement.dataset.theme;
+      }
+      var btn = document.getElementById('themeToggle');
+      if (btn) {
+        var dark = (theme === 'dark') ||
+          (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        btn.textContent = dark ? '☼' : '☾';
+        btn.title = dark ? 'Светлая тема' : 'Тёмная тема';
+      }
+    }
+
+    function toggleTheme () {
+      var cur = document.documentElement.dataset.theme;
+      var next;
+      if (!cur) {
+        var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        next = sysDark ? 'light' : 'dark';
+      } else {
+        next = (cur === 'dark') ? 'light' : 'dark';
+      }
+      try { localStorage.setItem('theme', next); } catch (e) {}
+      applyTheme(next);
+    }
+
+    (function initTheme () {
+      try {
+        var saved = localStorage.getItem('theme');
+        if (saved === 'dark' || saved === 'light') applyTheme(saved);
+        else applyTheme(null);
+      } catch (e) { applyTheme(null); }
+    })();
+
     window.onload = function() {
+      applyTheme(document.documentElement.dataset.theme || null);
       loadDevice('mixer');
       loadDevice('pump');
       setInterval(function() {
@@ -145,90 +182,107 @@
   </script>
 </head>
 <body>
-  <h1>I2CStepper</h1>
-  <div class="tab">
-    <input type='button' class="tablinks" onclick='location.href="/index.htm";' value="Назад">
-    <input type='button' class="tablinks active" value="I2CStepper">
-  </div>
-
-  <div id="mixer_missing" class="tabcontent" style="display:none;">
-    <h2>Мешалка I2CStepper не подключена.</h2>
-  </div>
-
-  <div id="mixer_panel" class="tabcontent" style="display:block;">
-    <h2>Мешалка (Mixer)</h2>
-    <h2>Статус: <span id="mixer_status">-</span></h2>
-    <h2>Осталось: <span id="mixer_remaining">-</span> сек; скорость: <span id="mixer_speed">-</span> шаг/с</h2>
-    <h2>RPM: <input id="mixerRpm" type="text" value="0" style="width:6em;"></h2>
-    <h2>Работа, сек: <input id="mixerRunSec" type="text" value="0" style="width:6em;"></h2>
-    <h2>Пауза, сек: <input id="mixerPauseSec" type="text" value="0" style="width:6em;"></h2>
-    <h2><input id="mixerReverse" type="checkbox"> Реверс после паузы</h2>
-    <h2><input id="mixerSmooth" type="checkbox"> Плавный старт</h2>
-    <h2><input id="mixerSensorHigh" type="checkbox"> Датчик активен уровнем 1</h2>
-    <h2><input id="mixerSensorStop" type="checkbox"> Стоп по внешнему датчику</h2>
-    <input id="mixer_relayMask" type="hidden" value="0">
-    <div>
-      <input type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
-      <input type="button" class="button" value="Пуск" onclick="sendDevice('mixer','start');">
-      <input type="button" class="button" value="Стоп" onclick="sendDevice('mixer','stop');">
-      <input type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☾</button>
+  <form action='none' onsubmit='return false' name="i2cstepperform" id="i2cstepperform">
+    <h1>I2CStepper</h1>
+    <div class="tab">
+      <input type='button' class="tablinks" onclick='location.href="/index.htm";' value="Назад">
+      <input type='button' class="tablinks active" value="I2CStepper">
     </div>
-    <h2>Реле</h2>
-    <div>
-      <input type="button" class="button" value="R1 on" onclick="relay('mixer',1,1);">
-      <input type="button" class="button" value="R1 off" onclick="relay('mixer',1,0);">
-      <input type="button" class="button" value="R2 on" onclick="relay('mixer',2,1);">
-      <input type="button" class="button" value="R2 off" onclick="relay('mixer',2,0);">
-      <input type="button" class="button" value="R3 on" onclick="relay('mixer',3,1);">
-      <input type="button" class="button" value="R3 off" onclick="relay('mixer',3,0);">
-      <input type="button" class="button" value="R4 on" onclick="relay('mixer',4,1);">
-      <input type="button" class="button" value="R4 off" onclick="relay('mixer',4,0);">
-    </div>
-  </div>
 
-  <div id="pump_missing" class="tabcontent" style="display:none;">
-    <h2>Насос I2CStepper не подключен.</h2>
-  </div>
+    <div class="tabcontent" style="display:block;">
+      <div id="mixer_missing" class="container_column" style="display:none; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <h2>Мешалка I2CStepper не подключена.</h2>
+      </div>
 
-  <div id="pump_panel" class="tabcontent" style="display:block;">
-    <h2>Насос / Наполнение</h2>
-    <h2>Статус: <span id="pump_status">-</span></h2>
-    <h2>Осталось: <span id="pump_remaining">-</span> мл; скорость: <span id="pump_speed">-</span> шаг/с</h2>
-    <h2>Режим:
-      <select id="pumpMode">
-        <option value="2">Прокачка</option>
-        <option value="3">Наполнение</option>
-      </select>
-    </h2>
-    <h2>Прокачка, мл/час: <input id="pumpMlHour" type="text" value="0" style="width:6em;"></h2>
-    <h2>Пауза насоса, сек: <input id="pumpPauseSec" type="text" value="0" style="width:6em;"></h2>
-    <h2>Наполнение, мл: <input id="fillingMl" type="text" value="0" style="width:6em;"></h2>
-    <h2>Скорость наполнения, мл/час: <input id="fillingMlHour" type="text" value="0" style="width:6em;"></h2>
-    <h2>Шагов на 1 мл: <input id="stepsPerMl" type="text" value="0" style="width:6em;"></h2>
-    <h2><input id="pumpSmooth" type="checkbox"> Плавный старт</h2>
-    <h2><input id="pumpSensorHigh" type="checkbox"> Датчик активен уровнем 1</h2>
-    <h2><input id="pumpSensorStop" type="checkbox"> Стоп по внешнему датчику</h2>
-    <h2><input id="pumpSensorPause" type="checkbox"> Пауза по датчику с обнулением таймера</h2>
-    <input id="pump_relayMask" type="hidden" value="0">
-    <div>
-      <input type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
-      <input type="button" class="button" value="Пуск" onclick="sendDevice('pump','start');">
-      <input type="button" class="button" value="Стоп" onclick="sendDevice('pump','stop');">
-      <input type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
-      <input type="button" class="button" value="Калибровка старт" onclick="sendDevice('pump','calstart');">
-      <input type="button" class="button" value="100 мл стоп" onclick="sendDevice('pump','calfinish');">
+      <div id="mixer_panel" class="container_column" style="display:block; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <h2>Мешалка (Mixer)</h2>
+        <div class="container_row" style="justify-content: space-between;">
+          <div class="text">Статус: <span id="mixer_status">-</span></div>
+          <div class="text">Осталось: <span id="mixer_remaining">-</span> сек</div>
+          <div class="text">Скорость: <span id="mixer_speed">-</span> шаг/с</div>
+        </div>
+        <div class="container_row" style="justify-content: space-between;">
+          <h2>RPM: <input id="mixerRpm" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2>Работа, сек: <input id="mixerRunSec" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2>Пауза, сек: <input id="mixerPauseSec" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        </div>
+        <h2><input id="mixerReverse" type="checkbox"><label for="mixerReverse">Реверс после паузы</label></h2>
+        <h2><input id="mixerSmooth" type="checkbox"><label for="mixerSmooth">Плавный старт</label></h2>
+        <h2><input id="mixerSensorHigh" type="checkbox"><label for="mixerSensorHigh">Датчик активен уровнем 1</label></h2>
+        <h2><input id="mixerSensorStop" type="checkbox"><label for="mixerSensorStop">Стоп по внешнему датчику</label></h2>
+        <input id="mixer_relayMask" type="hidden" value="0">
+        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
+          <input type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
+          <input type="button" class="button" value="Пуск" onclick="sendDevice('mixer','start');">
+          <input type="button" class="button" value="Стоп" onclick="sendDevice('mixer','stop');">
+          <input type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
+        </div>
+        <h2>Реле</h2>
+        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
+          <input type="button" class="button" value="R1 вкл" onclick="relay('mixer',1,1);">
+          <input type="button" class="button" value="R1 выкл" onclick="relay('mixer',1,0);">
+          <input type="button" class="button" value="R2 вкл" onclick="relay('mixer',2,1);">
+          <input type="button" class="button" value="R2 выкл" onclick="relay('mixer',2,0);">
+          <input type="button" class="button" value="R3 вкл" onclick="relay('mixer',3,1);">
+          <input type="button" class="button" value="R3 выкл" onclick="relay('mixer',3,0);">
+          <input type="button" class="button" value="R4 вкл" onclick="relay('mixer',4,1);">
+          <input type="button" class="button" value="R4 выкл" onclick="relay('mixer',4,0);">
+        </div>
+      </div>
+
+      <div id="pump_missing" class="container_column" style="display:none; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <h2>Насос I2CStepper не подключен.</h2>
+      </div>
+
+      <div id="pump_panel" class="container_column" style="display:block; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <h2>Насос / Наполнение</h2>
+        <div class="container_row" style="justify-content: space-between;">
+          <div class="text">Статус: <span id="pump_status">-</span></div>
+          <div class="text">Осталось: <span id="pump_remaining">-</span> мл</div>
+          <div class="text">Скорость: <span id="pump_speed">-</span> шаг/с</div>
+        </div>
+        <h2>Режим:
+          <select id="pumpMode">
+            <option value="2">Прокачка</option>
+            <option value="3">Наполнение</option>
+          </select>
+        </h2>
+        <div class="container_row" style="justify-content: space-between;">
+          <h2>Прокачка, мл/час: <input id="pumpMlHour" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2>Пауза насоса, сек: <input id="pumpPauseSec" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        </div>
+        <div class="container_row" style="justify-content: space-between;">
+          <h2>Наполнение, мл: <input id="fillingMl" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2>Скорость наполнения, мл/час: <input id="fillingMlHour" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        </div>
+        <h2>Шагов на 1 мл: <input id="stepsPerMl" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        <h2><input id="pumpSmooth" type="checkbox"><label for="pumpSmooth">Плавный старт</label></h2>
+        <h2><input id="pumpSensorHigh" type="checkbox"><label for="pumpSensorHigh">Датчик активен уровнем 1</label></h2>
+        <h2><input id="pumpSensorStop" type="checkbox"><label for="pumpSensorStop">Стоп по внешнему датчику</label></h2>
+        <h2><input id="pumpSensorPause" type="checkbox"><label for="pumpSensorPause">Пауза по датчику с обнулением таймера</label></h2>
+        <input id="pump_relayMask" type="hidden" value="0">
+        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
+          <input type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
+          <input type="button" class="button" value="Пуск" onclick="sendDevice('pump','start');">
+          <input type="button" class="button" value="Стоп" onclick="sendDevice('pump','stop');">
+          <input type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
+          <input type="button" class="button" value="Калибровка старт" onclick="sendDevice('pump','calstart');">
+          <input type="button" class="button" value="100 мл стоп" onclick="sendDevice('pump','calfinish');">
+        </div>
+        <h2>Реле</h2>
+        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
+          <input type="button" class="button" value="R1 вкл" onclick="relay('pump',1,1);">
+          <input type="button" class="button" value="R1 выкл" onclick="relay('pump',1,0);">
+          <input type="button" class="button" value="R2 вкл" onclick="relay('pump',2,1);">
+          <input type="button" class="button" value="R2 выкл" onclick="relay('pump',2,0);">
+          <input type="button" class="button" value="R3 вкл" onclick="relay('pump',3,1);">
+          <input type="button" class="button" value="R3 выкл" onclick="relay('pump',3,0);">
+          <input type="button" class="button" value="R4 вкл" onclick="relay('pump',4,1);">
+          <input type="button" class="button" value="R4 выкл" onclick="relay('pump',4,0);">
+        </div>
+      </div>
     </div>
-    <h2>Реле</h2>
-    <div>
-      <input type="button" class="button" value="R1 on" onclick="relay('pump',1,1);">
-      <input type="button" class="button" value="R1 off" onclick="relay('pump',1,0);">
-      <input type="button" class="button" value="R2 on" onclick="relay('pump',2,1);">
-      <input type="button" class="button" value="R2 off" onclick="relay('pump',2,0);">
-      <input type="button" class="button" value="R3 on" onclick="relay('pump',3,1);">
-      <input type="button" class="button" value="R3 off" onclick="relay('pump',3,0);">
-      <input type="button" class="button" value="R4 on" onclick="relay('pump',4,1);">
-      <input type="button" class="button" value="R4 off" onclick="relay('pump',4,0);">
-    </div>
-  </div>
+  </form>
 </body>
 </html>
