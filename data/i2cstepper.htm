@@ -5,12 +5,47 @@
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="style.css">
   <title>Самовар - I2CStepper</title>
+  <style>
+    #i2cstepperContent {
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    .i2c-panel {
+      border: 1px dashed var(--border-dashed);
+      box-sizing: border-box;
+      display: none;
+      margin-bottom: 1em;
+      padding: 1em;
+      width: 100%;
+    }
+
+    .i2c-actions {
+      flex-wrap: wrap;
+      gap: 0.6em;
+      justify-content: space-around;
+    }
+
+    .state-button.state-on {
+      background-color: #27ae60;
+    }
+
+    .state-button.state-on:hover {
+      background-color: #229954;
+      color: var(--text-on-accent);
+    }
+
+    .state-button.state-off {
+      background-color: var(--accent);
+    }
+  </style>
   <script>
     const FLAG_REVERSE = 1;
     const FLAG_SMOOTH = 2;
     const SENSOR_ACTIVE_HIGH = 1;
     const SENSOR_STOP = 2;
     const SENSOR_PUMP_PAUSE = 4;
+    const STATUS_RUNNING = 1;
 
     function bitValue(id, bit) {
       return document.getElementById(id).checked ? bit : 0;
@@ -52,10 +87,14 @@
       }
       panel.style.display = 'block';
       missing.style.display = 'none';
+      panel.dataset.status = data.status;
       document.getElementById(device + '_status').innerHTML = statusText(data.status, data.error);
       document.getElementById(device + '_remaining').innerHTML = data.remaining;
       document.getElementById(device + '_speed').innerHTML = data.currentSpeed;
-      document.getElementById(device + '_relayMask').value = data.relayMask;
+      var relayMask = parseInt(data.relayMask || '0', 10);
+      document.getElementById(device + '_relayMask').value = relayMask;
+      updateRunButton(device, data.status);
+      updateRelayButtons(device, relayMask);
 
       if (device === 'mixer') {
         document.getElementById('mixerRpm').value = data.mixerRpm;
@@ -87,6 +126,26 @@
       if (status & 8) parts.push('калибровка');
       if (status & 128) parts.push('ошибка ' + error);
       return parts.length ? parts.join(', ') : 'остановлен';
+    }
+
+    function setStateButton(id, active, onText, offText) {
+      var button = document.getElementById(id);
+      button.value = active ? onText : offText;
+      button.classList.toggle('state-on', active);
+      button.classList.toggle('state-off', !active);
+    }
+
+    function updateRunButton(device, status) {
+      var running = (status & STATUS_RUNNING) !== 0;
+      var name = device === 'mixer' ? 'мешалку' : 'насос';
+      setStateButton(device + '_run_toggle', running, 'Работает - остановить', 'Запустить ' + name);
+    }
+
+    function updateRelayButtons(device, relayMask) {
+      for (var i = 1; i <= 4; i++) {
+        var active = (relayMask & (1 << (i - 1))) !== 0;
+        setStateButton(device + 'Relay' + i, active, 'R' + i + ': включено', 'R' + i + ': выключено');
+      }
     }
 
     function mixerUrl(cmd) {
@@ -123,13 +182,17 @@
       requestJson(url, function(data) { renderDevice(device, data); });
     }
 
-    function relay(device, relayNum, state) {
+    function toggleDevice(device) {
+      var panel = document.getElementById(device + '_panel');
+      var status = parseInt(panel.dataset.status || '0', 10);
+      sendDevice(device, (status & STATUS_RUNNING) ? 'stop' : 'start');
+    }
+
+    function toggleRelay(device, relayNum) {
       var maskInput = document.getElementById(device + '_relayMask');
       var mask = parseInt(maskInput.value || '0', 10);
-      if (state) mask = mask | (1 << (relayNum - 1));
-      else mask = mask & ~(1 << (relayNum - 1));
-      maskInput.value = mask;
-      requestJson('/i2cstepper?device=' + device + '&cmd=relay&relayMask=' + mask, function(data) {
+      var state = (mask & (1 << (relayNum - 1))) ? 0 : 1;
+      requestJson('/i2cstepper?device=' + device + '&cmd=relay&relay=' + relayNum + '&state=' + state, function(data) {
         renderDevice(device, data);
       });
     }
@@ -190,12 +253,12 @@
       <input type='button' class="tablinks active" value="I2CStepper">
     </div>
 
-    <div class="tabcontent" style="display:block;">
-      <div id="mixer_missing" class="container_column" style="display:none; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+    <div id="i2cstepperContent" class="tabcontent" style="display:block;">
+      <div id="mixer_missing" class="container_column i2c-panel">
         <h2>Мешалка I2CStepper не подключена.</h2>
       </div>
 
-      <div id="mixer_panel" class="container_column" style="display:block; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+      <div id="mixer_panel" class="container_column i2c-panel">
         <h2>Мешалка (Mixer)</h2>
         <div class="container_row" style="justify-content: space-between;">
           <div class="text">Статус: <span id="mixer_status">-</span></div>
@@ -212,30 +275,25 @@
         <h2><input id="mixerSensorHigh" type="checkbox"><label for="mixerSensorHigh">Датчик активен уровнем 1</label></h2>
         <h2><input id="mixerSensorStop" type="checkbox"><label for="mixerSensorStop">Стоп по внешнему датчику</label></h2>
         <input id="mixer_relayMask" type="hidden" value="0">
-        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
+        <div class="container_row i2c-actions">
           <input type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
-          <input type="button" class="button" value="Пуск" onclick="sendDevice('mixer','start');">
-          <input type="button" class="button" value="Стоп" onclick="sendDevice('mixer','stop');">
+          <input id="mixer_run_toggle" type="button" class="button state-button state-off" value="Запустить мешалку" onclick="toggleDevice('mixer');">
           <input type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
         </div>
         <h2>Реле</h2>
-        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
-          <input type="button" class="button" value="R1 вкл" onclick="relay('mixer',1,1);">
-          <input type="button" class="button" value="R1 выкл" onclick="relay('mixer',1,0);">
-          <input type="button" class="button" value="R2 вкл" onclick="relay('mixer',2,1);">
-          <input type="button" class="button" value="R2 выкл" onclick="relay('mixer',2,0);">
-          <input type="button" class="button" value="R3 вкл" onclick="relay('mixer',3,1);">
-          <input type="button" class="button" value="R3 выкл" onclick="relay('mixer',3,0);">
-          <input type="button" class="button" value="R4 вкл" onclick="relay('mixer',4,1);">
-          <input type="button" class="button" value="R4 выкл" onclick="relay('mixer',4,0);">
+        <div class="container_row i2c-actions">
+          <input id="mixerRelay1" type="button" class="button state-button state-off" value="R1: выключено" onclick="toggleRelay('mixer',1);">
+          <input id="mixerRelay2" type="button" class="button state-button state-off" value="R2: выключено" onclick="toggleRelay('mixer',2);">
+          <input id="mixerRelay3" type="button" class="button state-button state-off" value="R3: выключено" onclick="toggleRelay('mixer',3);">
+          <input id="mixerRelay4" type="button" class="button state-button state-off" value="R4: выключено" onclick="toggleRelay('mixer',4);">
         </div>
       </div>
 
-      <div id="pump_missing" class="container_column" style="display:none; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+      <div id="pump_missing" class="container_column i2c-panel">
         <h2>Насос I2CStepper не подключен.</h2>
       </div>
 
-      <div id="pump_panel" class="container_column" style="display:block; border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+      <div id="pump_panel" class="container_column i2c-panel">
         <h2>Насос / Наполнение</h2>
         <div class="container_row" style="justify-content: space-between;">
           <div class="text">Статус: <span id="pump_status">-</span></div>
@@ -262,24 +320,19 @@
         <h2><input id="pumpSensorStop" type="checkbox"><label for="pumpSensorStop">Стоп по внешнему датчику</label></h2>
         <h2><input id="pumpSensorPause" type="checkbox"><label for="pumpSensorPause">Пауза по датчику с обнулением таймера</label></h2>
         <input id="pump_relayMask" type="hidden" value="0">
-        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
+        <div class="container_row i2c-actions">
           <input type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
-          <input type="button" class="button" value="Пуск" onclick="sendDevice('pump','start');">
-          <input type="button" class="button" value="Стоп" onclick="sendDevice('pump','stop');">
+          <input id="pump_run_toggle" type="button" class="button state-button state-off" value="Запустить насос" onclick="toggleDevice('pump');">
           <input type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
           <input type="button" class="button" value="Калибровка старт" onclick="sendDevice('pump','calstart');">
           <input type="button" class="button" value="100 мл стоп" onclick="sendDevice('pump','calfinish');">
         </div>
         <h2>Реле</h2>
-        <div class="container_row" style="justify-content: space-around; flex-wrap: wrap;">
-          <input type="button" class="button" value="R1 вкл" onclick="relay('pump',1,1);">
-          <input type="button" class="button" value="R1 выкл" onclick="relay('pump',1,0);">
-          <input type="button" class="button" value="R2 вкл" onclick="relay('pump',2,1);">
-          <input type="button" class="button" value="R2 выкл" onclick="relay('pump',2,0);">
-          <input type="button" class="button" value="R3 вкл" onclick="relay('pump',3,1);">
-          <input type="button" class="button" value="R3 выкл" onclick="relay('pump',3,0);">
-          <input type="button" class="button" value="R4 вкл" onclick="relay('pump',4,1);">
-          <input type="button" class="button" value="R4 выкл" onclick="relay('pump',4,0);">
+        <div class="container_row i2c-actions">
+          <input id="pumpRelay1" type="button" class="button state-button state-off" value="R1: выключено" onclick="toggleRelay('pump',1);">
+          <input id="pumpRelay2" type="button" class="button state-button state-off" value="R2: выключено" onclick="toggleRelay('pump',2);">
+          <input id="pumpRelay3" type="button" class="button state-button state-off" value="R3: выключено" onclick="toggleRelay('pump',3);">
+          <input id="pumpRelay4" type="button" class="button state-button state-off" value="R4: выключено" onclick="toggleRelay('pump',4);">
         </div>
       </div>
     </div>
