@@ -47,6 +47,24 @@
     const SENSOR_PUMP_PAUSE = 4;
     const STATUS_RUNNING = 1;
 
+    var OfflineCounter = 0;
+
+    function ConnectError (type) {
+      var indicator = document.getElementById('connection_indicator');
+      if (!indicator) return;
+      if (type) {
+        if (OfflineCounter < 3) {
+          OfflineCounter++;
+        } else {
+          indicator.innerHTML = '<img src="Red_light.gif" style="margin: 0!important; width: 20px">';
+          OfflineCounter++;
+        }
+      } else {
+        indicator.innerHTML = '<img src="Green.png" style="margin: 0 !important; width: 20px">';
+        OfflineCounter = 0;
+      }
+    }
+
     function bitValue(id, bit) {
       return document.getElementById(id).checked ? bit : 0;
     }
@@ -55,16 +73,24 @@
       document.getElementById(id).checked = (mask & bit) !== 0;
     }
 
-    function requestJson(url, done) {
-      var request = new XMLHttpRequest();
-      request.onreadystatechange = function() {
-        if (this.readyState === 4) {
-          if (this.status === 200) done(JSON.parse(this.responseText));
-          else alert(this.status + ': ' + this.statusText);
+    async function requestJson(url, done, showAlert) {
+      try {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function() { ctrl.abort(); }, 4000);
+        var resp = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!resp.ok) {
+          ConnectError(true);
+          if (showAlert) alert(resp.status + ': ' + resp.statusText);
+          return;
         }
-      };
-      request.open('GET', url, true);
-      request.send();
+        var data = await resp.json();
+        ConnectError(false);
+        done(data);
+      } catch (e) {
+        ConnectError(true);
+        if (showAlert) alert('I2CStepper ERROR! ' + e);
+      }
     }
 
     function q(id) {
@@ -72,9 +98,9 @@
     }
 
     function loadDevice(device) {
-      requestJson('/i2cstepper?device=' + device, function(data) {
+      return requestJson('/i2cstepper?device=' + device, function(data) {
         renderDevice(device, data);
-      });
+      }, false);
     }
 
     function renderDevice(device, data) {
@@ -179,7 +205,7 @@
 
     function sendDevice(device, cmd) {
       var url = device === 'mixer' ? mixerUrl(cmd) : pumpUrl(cmd);
-      requestJson(url, function(data) { renderDevice(device, data); });
+      requestJson(url, function(data) { renderDevice(device, data); }, true);
     }
 
     function toggleDevice(device) {
@@ -194,7 +220,7 @@
       var state = (mask & (1 << (relayNum - 1))) ? 0 : 1;
       requestJson('/i2cstepper?device=' + device + '&cmd=relay&relay=' + relayNum + '&state=' + state, function(data) {
         renderDevice(device, data);
-      });
+      }, true);
     }
 
     function applyTheme (theme) {
@@ -233,21 +259,26 @@
       } catch (e) { applyTheme(null); }
     })();
 
+    async function pollDevices () {
+      await Promise.all([loadDevice('mixer'), loadDevice('pump')]);
+      setTimeout(pollDevices, 2000);
+    }
+
     window.onload = function() {
       applyTheme(document.documentElement.dataset.theme || null);
-      loadDevice('mixer');
-      loadDevice('pump');
-      setInterval(function() {
-        loadDevice('mixer');
-        loadDevice('pump');
-      }, 2000);
+      pollDevices();
     };
   </script>
 </head>
 <body>
   <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☾</button>
   <form action='none' onsubmit='return false' name="i2cstepperform" id="i2cstepperform">
-    <h1>I2CStepper</h1>
+    <div class="container_row" style="justify-content: center; align-items: center;">
+      <h1>I2CStepper</h1>
+      <div id="connection_indicator" style="width: 21px; margin-left: 0.5em;">
+        <img src="Green.png" style="margin: 0 !important; width: 20px">
+      </div>
+    </div>
     <div class="tab">
       <input type='button' class="tablinks" onclick='location.href="/index.htm";' value="Назад">
       <input type='button' class="tablinks active" value="I2CStepper">
