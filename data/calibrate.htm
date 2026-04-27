@@ -24,28 +24,23 @@ function onPumpTypeChange(){
   }
 }
 
-function calibrate(){
-if (document.getElementById('calibrateid').value == 'Начать калибровку'){
-  document.getElementById('calibrateid').value = 'Зафиксировать 100 мл';
-  command='stpstep=' + document.getElementById('kstepperspd').value + '&pump=' + getPumpType() + '&start';
-} else {
-  document.getElementById('calibrateid').value = 'Начать калибровку';
-  command='pump=' + getPumpType() + '&finish';
-}
-var server = '/calibrate?' + command + '=1';
-request = new XMLHttpRequest();
-request.onreadystatechange = function() {
-if (this.readyState == 4 && this.status == 200) {
-var myObj = this.responseText;
-if (myObj != "OK") document.getElementById('stepperstepml').value = myObj;
-}
-};
-request.open('GET', server, false);
-request.send();
-if(request.status != 200) {
-alert( request.status + ': ' + request.statusText );
-}
-return 0;
+async function calibrate(){
+  let command;
+  if (document.getElementById('calibrateid').value == 'Начать калибровку'){
+    document.getElementById('calibrateid').value = 'Зафиксировать 100 мл';
+    command = 'stpstep=' + document.getElementById('kstepperspd').value + '&pump=' + getPumpType() + '&start';
+  } else {
+    document.getElementById('calibrateid').value = 'Начать калибровку';
+    command = 'pump=' + getPumpType() + '&finish';
+  }
+  try {
+    let resp = await fetch('/calibrate?' + command + '=1');
+    if (!resp.ok) { alert(resp.status + ': ' + resp.statusText); return; }
+    let text = await resp.text();
+    if (text !== "OK") document.getElementById('stepperstepml').value = text;
+  } catch (e) {
+    alert('Ошибка сети: ' + e);
+  }
 };
 
 window.onload = function() {

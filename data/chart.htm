@@ -142,9 +142,11 @@ function addMessage(msg, lvl) {
         is_ALARM = true;
         break;
     }
+    let safeMsg = escapeHtml(msg);
+    let safeTime = escapeHtml(time);
     let lastMsg = `
-            <div align="left" class=${style} onclick=removeLastMessage() style="cursor: pointer">
-              ${time}  ${msg}
+            <div align="left" class="${style}" onclick="removeLastMessage()" style="cursor: pointer">
+              ${safeTime}  ${safeMsg}
             </div>`;
     Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
     if (Messages_Array.length > 1) {
@@ -193,7 +195,7 @@ function showMessages() {
       return item === true;
     }
     is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
-    if (sound_is_on & is_ALARM) {
+    if (sound_is_on && is_ALARM) {
       //играем звук тревоги, если включён
       playSound(true);
     } else {
@@ -211,18 +213,33 @@ function clearMessages() {
   showMessages();
 }
 
-    var chart;
-    setInterval(loadDoc, 2000);
+    function escapeHtml (s) {
+      if (s === undefined || s === null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
 
-    function loadDoc () {
-      var xhttp = new XMLHttpRequest();
-      xhttp.timeout = 4000;
-      xhttp.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-          ConnectError(false);
-          var myObj = JSON.parse(this.responseText);
-          document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
-          document.getElementById('stm').innerHTML = myObj.stm;
+    var chart;
+    function startPolling () {
+      (async function pollLoop () {
+        await loadDoc();
+        setTimeout(pollLoop, 2000);
+      })();
+    }
+
+    async function loadDoc () {
+      try {
+        let ctrl = new AbortController();
+        let timer = setTimeout(() => ctrl.abort(), 4000);
+        let resp = await fetch('/ajax', { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!resp.ok) { ConnectError(true); return; }
+        let myObj = await resp.json();
+        ConnectError(false);
+        {
+          document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
+          document.getElementById('stm').textContent = myObj.stm;
           document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
           document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
@@ -239,7 +256,7 @@ function clearMessages() {
             else if (myObj.PrgType === "T") myObj.PrgType = "Хвосты"
           } else myObj.PrgType = "";
           
-          document.getElementById('Status').innerHTML = myObj.Status + "; " + myObj.PrgType;
+          document.getElementById('Status').textContent = myObj.Status + "; " + myObj.PrgType;
           document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
           document.getElementById('heap').innerHTML = myObj.heap;
           document.getElementById('rssi').innerHTML = myObj.rssi;
@@ -260,17 +277,11 @@ function clearMessages() {
           if (myObj.Msg && myObj.Msg !== "") {
             addMessage(myObj.Msg, myObj.msglvl);
           }
-          
+
         }
-      };
-      xhttp.onerror = function() {
+      } catch (e) {
         ConnectError(true);
-      };
-      xhttp.ontimeout = function() {
-        ConnectError(true);
-      };
-      xhttp.open("GET", "/ajax", true);
-      xhttp.send();
+      }
     };
 
     am4core.ready(function() {
@@ -396,6 +407,45 @@ function clearMessages() {
       else chart.dataSource.reloadFrequency = 15000;
       chart.dataSource.load();
     };
+
+    // ==================== THEME TOGGLE =================================================================
+    function applyTheme (theme) {
+      if (theme === 'dark' || theme === 'light') {
+        document.documentElement.dataset.theme = theme;
+      } else {
+        delete document.documentElement.dataset.theme;
+      }
+      var btn = document.getElementById('themeToggle');
+      if (btn) {
+        var dark = (theme === 'dark') ||
+          (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        btn.textContent = dark ? '☼' : '☾';
+        btn.title = dark ? 'Светлая тема' : 'Тёмная тема';
+      }
+    }
+    function toggleTheme () {
+      var cur = document.documentElement.dataset.theme;
+      var next;
+      if (!cur) {
+        var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        next = sysDark ? 'light' : 'dark';
+      } else {
+        next = (cur === 'dark') ? 'light' : 'dark';
+      }
+      try { localStorage.setItem('theme', next); } catch (e) {}
+      applyTheme(next);
+    }
+    (function initTheme () {
+      try {
+        var saved = localStorage.getItem('theme');
+        if (saved === 'dark' || saved === 'light') applyTheme(saved);
+        else applyTheme(null);
+      } catch (e) { applyTheme(null); }
+    })();
+    document.addEventListener('DOMContentLoaded', function () {
+      applyTheme(document.documentElement.dataset.theme || null);
+      startPolling();
+    });
   </script>
 </head>
 
@@ -403,7 +453,7 @@ function clearMessages() {
 <!-- ===================================================================================================================== -->
 
 <body>
-  
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☾</button>
   <div style='position: absolute; top: 1em; left: 200px; width: 600px;'>
     <div class="messages_box" style="display: none;" id="messagesBox">
       <div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='clearMessages()'>

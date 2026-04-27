@@ -23,36 +23,31 @@
       return 0;
     }
 
-    function sendbutton (command) {
-      var server = '/command?' + command;
-      request = new XMLHttpRequest();
-      request.open('GET', server, false);
-      request.send();
-      if (request.status != 200) {
-        alert(request.status + ': ' + request.statusText);
+    async function sendbutton (command) {
+      try {
+        let resp = await fetch('/command?' + command);
+        if (!resp.ok) alert(resp.status + ': ' + resp.statusText);
+      } catch (e) {
+        alert('Ошибка сети: ' + e);
       }
-      return 0;
     };
 
-    function set_program () {
-      var server = '/program';
-      request = new XMLHttpRequest();
-      request.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-          var myObj = this.responseText;
-          if (myObj != "OK") {
-            document.getElementById('WProgram').value = myObj;
-            alert("Ok");
-          }
+    async function set_program () {
+      try {
+        let formData = new FormData(document.forms.setupform);
+        let resp = await fetch('/program', { method: 'POST', body: formData });
+        if (!resp.ok) {
+          alert(resp.status + ': ' + resp.statusText);
+          return;
         }
-      };
-      request.open('POST', server, false);
-      let formData = new FormData(document.forms.setupform);
-      request.send(formData);
-      if (request.status != 200) {
-        alert(request.status + ': ' + request.statusText);
+        let text = await resp.text();
+        if (text !== "OK") {
+          document.getElementById('WProgram').value = text;
+          alert("Ok");
+        }
+      } catch (e) {
+        alert('Ошибка сети: ' + e);
       }
-      return 0;
     };
 
     HTMLElement.prototype.serialize = function() {
@@ -115,14 +110,10 @@
       document.body.removeChild(pom);
     }
 
-    function sleep (milliseconds) {
-      var start = new Date().getTime();
-      for (var i = 0; i < 1e7; i++) {
-        if ((new Date().getTime() - start) > milliseconds) {
-          break;
-        }
-      }
-    };
+    async function rescanSensors () {
+      await sendbutton('rescands');
+      setTimeout(() => location.reload(), 1000);
+    }
 
     window.onload = function() {
       // Защита от запятых
@@ -140,11 +131,48 @@
           packDensDisplay.value = this.value;
         });
       }
+      applyTheme(document.documentElement.dataset.theme || null);
     };
+
+    // ==================== THEME TOGGLE =================================================================
+    function applyTheme (theme) {
+      if (theme === 'dark' || theme === 'light') {
+        document.documentElement.dataset.theme = theme;
+      } else {
+        delete document.documentElement.dataset.theme;
+      }
+      var btn = document.getElementById('themeToggle');
+      if (btn) {
+        var dark = (theme === 'dark') ||
+          (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        btn.textContent = dark ? '☼' : '☾';
+        btn.title = dark ? 'Светлая тема' : 'Тёмная тема';
+      }
+    }
+    function toggleTheme () {
+      var cur = document.documentElement.dataset.theme;
+      var next;
+      if (!cur) {
+        var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        next = sysDark ? 'light' : 'dark';
+      } else {
+        next = (cur === 'dark') ? 'light' : 'dark';
+      }
+      try { localStorage.setItem('theme', next); } catch (e) {}
+      applyTheme(next);
+    }
+    (function initTheme () {
+      try {
+        var saved = localStorage.getItem('theme');
+        if (saved === 'dark' || saved === 'light') applyTheme(saved);
+        else applyTheme(null);
+      } catch (e) { applyTheme(null); }
+    })();
   </script>
 </head>
 
 <body>
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☾</button>
   <form action='/save' method="post" name="setupform" id="setupform" style="min-width: 1024;">
     <h1>Настройки</h1>
     <div class="tab">
@@ -171,8 +199,8 @@
             </select>
           </div>
         </h2>
-        <h2>Ректификация и дистилляция до температуры в кубе: <input name='DistTemp' type='text' value='%DistTemp%'>&#176;C</h2>
-        <h2  class="tooltip">Время для контроля завершения процесса дистилляции: <input name='DistTimeF' type='text' value='%DistTimeF%'> мин<span class="tooltiptext">Время в минутах для прекращению дистилляции, при условии, что значение датчика куба не меняется. Не более 255 минут. 0 - не учитывать</span></h2>
+        <h2>Ректификация и дистилляция до температуры в кубе: <input name='DistTemp' type='text' inputmode='decimal' value='%DistTemp%'>&#176;C</h2>
+        <h2  class="tooltip">Время для контроля завершения процесса дистилляции: <input name='DistTimeF' type='text' inputmode='decimal' value='%DistTimeF%'> мин<span class="tooltiptext">Время в минутах для прекращению дистилляции, при условии, что значение датчика куба не меняется. Не более 255 минут. 0 - не учитывать</span></h2>
         <h2>
           <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
           <label for='usepressure'>Использовать корректировку давления</label>
@@ -227,7 +255,7 @@
         </div>
 
         <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
-          <h2><span class="tooltip">Давление, при котором включится авария:<span class="tooltiptext">При достижении этого давления Самовар перейдет в аварийный режим</span></span><input name='MaxPressureValue' type='text' value='%MaxPressureValue%'>мм. Рт. ст.</h2>
+          <h2><span class="tooltip">Давление, при котором включится авария:<span class="tooltiptext">При достижении этого давления Самовар перейдет в аварийный режим</span></span><input name='MaxPressureValue' type='text' inputmode='decimal' value='%MaxPressureValue%'>мм. Рт. ст.</h2>
         </div>
 
         <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -266,9 +294,9 @@
               </select>
             </div>
           </h2>
-          <h2>Корректировка датчика пара перед дефлегматором: <input name='DeltaSteamTemp' type='text' value='%DeltaSteamTemp%'>&#176;C</h2>
-          <h2>Вылет за уставку датчика пара перед дефлегматором: <input name='SetSteamTemp' type='text' value='%SetSteamTemp%'>&#176;C</h2>
-          <h2>Задержка отбора при выходе Т пара за уставку: <input name='SteamDelay' type='text' value='%SteamDelay%'> сек</h2>
+          <h2>Корректировка датчика пара перед дефлегматором: <input name='DeltaSteamTemp' type='text' inputmode='decimal' value='%DeltaSteamTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика пара перед дефлегматором: <input name='SetSteamTemp' type='text' inputmode='decimal' value='%SetSteamTemp%'>&#176;C</h2>
+          <h2>Задержка отбора при выходе Т пара за уставку: <input name='SteamDelay' type='text' inputmode='decimal' value='%SteamDelay%'> сек</h2>
         </div>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -281,9 +309,9 @@
               </select>
             </div>
           </h2>
-          <h2>Корректировка датчика в царге на 2/3 колонны: <input name='DeltaPipeTemp' type='text' value='%DeltaPipeTemp%'>&#176;C</h2>
-          <h2>Вылет за уставку датчика в царге на 2/3 колонны: <input name='SetPipeTemp' type='text' value='%SetPipeTemp%'>&#176;C</h2>
-          <h2>Задержка отбора при выходе Т в царге за уставку: <input name='PipeDelay' type='text' value='%PipeDelay%'> сек</h2>
+          <h2>Корректировка датчика в царге на 2/3 колонны: <input name='DeltaPipeTemp' type='text' inputmode='decimal' value='%DeltaPipeTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика в царге на 2/3 колонны: <input name='SetPipeTemp' type='text' inputmode='decimal' value='%SetPipeTemp%'>&#176;C</h2>
+          <h2>Задержка отбора при выходе Т в царге за уставку: <input name='PipeDelay' type='text' inputmode='decimal' value='%PipeDelay%'> сек</h2>
         </div>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -296,9 +324,9 @@
               </select>
             </div>
           </h2>
-          <h2>Корректировка датчика воды: <input name='DeltaWaterTemp' type='text' value='%DeltaWaterTemp%'>&#176;C</h2>
-          <h2>Уставка датчика воды: <input name='SetWaterTemp' type='text' value='%SetWaterTemp%'>&#176;C</h2>
-          <h2>Задержка срабатывания при выходе Т воды за уставку: <input name='WaterDelay' type='text' value='%WaterDelay%'> сек</h2>
+          <h2>Корректировка датчика воды: <input name='DeltaWaterTemp' type='text' inputmode='decimal' value='%DeltaWaterTemp%'>&#176;C</h2>
+          <h2>Уставка датчика воды: <input name='SetWaterTemp' type='text' inputmode='decimal' value='%SetWaterTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т воды за уставку: <input name='WaterDelay' type='text' inputmode='decimal' value='%WaterDelay%'> сек</h2>
         </div>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -311,9 +339,9 @@
               </select>
             </div>
           </h2>
-          <h2>Корректировка датчика в кубе: <input name='DeltaTankTemp' type='text' value='%DeltaTankTemp%'>&#176;C</h2>
-          <h2>Вылет за уставку датчика в кубе: <input name='SetTankTemp' type='text' value='%SetTankTemp%'>&#176;C</h2>
-          <h2>Задержка срабатывания при выходе Т в кубе за уставку: <input name='TankDelay' type='text' value='%TankDelay%'> сек</h2>
+          <h2>Корректировка датчика в кубе: <input name='DeltaTankTemp' type='text' inputmode='decimal' value='%DeltaTankTemp%'>&#176;C</h2>
+          <h2>Вылет за уставку датчика в кубе: <input name='SetTankTemp' type='text' inputmode='decimal' value='%SetTankTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т в кубе за уставку: <input name='TankDelay' type='text' inputmode='decimal' value='%TankDelay%'> сек</h2>
         </div>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -326,24 +354,24 @@
               </select>
             </div>
           </h2>
-          <h2>Корректировка датчика в ТСА <input name='DeltaACPTemp' type='text' value='%DeltaACPTemp%'>&#176;C</h2>
-          <h2>Уставка датчика в ТСА: <input name='SetACPTemp' type='text' value='%SetACPTemp%'>&#176;C</h2>
-          <h2>Задержка срабатывания при выходе Т в ТСА за уставку: <input name='ACPDelay' type='text' value='%ACPDelay%'> сек</h2>
+          <h2>Корректировка датчика в ТСА <input name='DeltaACPTemp' type='text' inputmode='decimal' value='%DeltaACPTemp%'>&#176;C</h2>
+          <h2>Уставка датчика в ТСА: <input name='SetACPTemp' type='text' inputmode='decimal' value='%SetACPTemp%'>&#176;C</h2>
+          <h2>Задержка срабатывания при выходе Т в ТСА за уставку: <input name='ACPDelay' type='text' inputmode='decimal' value='%ACPDelay%'> сек</h2>
         </div>
       </div>
       <div 
         style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
         >
-        <input id='selftest' type='button' name='selftest' value='Сканировать датчики' onclick='sendbutton("rescands"); sleep(1000); location.reload();' class="button"
+        <input id='selftest' type='button' name='selftest' value='Сканировать датчики' onclick='rescanSensors();' class="button"
           title="Прочитать адреса подключенных датчиков температуры"
         >
       </div>
     </div>
 
     <div id="Pump" class="tabcontent">
-      <h2>Количество шагов шагового двигателя: <input name='StepperStepMl' type='text' value='%StepperStepMl%' style="width: 6em;"> /мл.</h2>
+      <h2>Количество шагов шагового двигателя: <input name='StepperStepMl' type='text' inputmode='decimal' value='%StepperStepMl%' style="width: 6em;"> /мл.</h2>
       <div style="display: %I2CPumpTab%;">
-        <h2>Количество шагов I2C насоса: <input name='StepperStepMlI2C' type='text' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
+        <h2>Количество шагов I2C насоса: <input name='StepperStepMlI2C' type='text' inputmode='decimal' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
       </div>
       <div style="margin: 0 auto; width: 200px;">
         <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="calibrate.htm"' class="button">
@@ -352,14 +380,14 @@
 
     <div id="Beer" class="tabcontent">
       <h2>Коэффициенты для PID регулятора нагрева:</h2>
-      <h2>Kp: <input name='Kp' type='text' value='%Kp%'></h2>
-      <h2>Ki: <input name='Ki' type='text' value='%Ki%'></h2>
-      <h2>Kd: <input name='Kd' type='text' value='%Kd%'></h2>
+      <h2>Kp: <input name='Kp' type='text' inputmode='decimal' value='%Kp%'></h2>
+      <h2>Ki: <input name='Ki' type='text' inputmode='decimal' value='%Ki%'></h2>
+      <h2>Kd: <input name='Kd' type='text' inputmode='decimal' value='%Kd%'></h2>
       <div id='VoltH2' style=''>
-        <h2>Напр./мощность регулятора в режиме поддержания темп.: <input name='StbVoltage' id='StbVoltage' type='text' value='%StbVoltage%'> V</h2>
+        <h2>Напр./мощность регулятора в режиме поддержания темп.: <input name='StbVoltage' id='StbVoltage' type='text' inputmode='decimal' value='%StbVoltage%'> V</h2>
       </div>
       <div id='VoltBoil' style=''>
-        <h2>Напр./мощность регулятора в режиме нагрева и кипения: <input name='BVolt' id='BVolt' type='text' value='%BVolt%'> V</h2>
+        <h2>Напр./мощность регулятора в режиме нагрева и кипения: <input name='BVolt' id='BVolt' type='text' inputmode='decimal' value='%BVolt%'> V</h2>
       </div>
         <h2>
           <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
@@ -369,12 +397,12 @@
 
     <div id="NBK" class="tabcontent">
       <h2>Настройки НБК:</h2>
-      <h2>Инерция: <input name='NbkIn' type='text' value='%NbkIn%'></h2>
-      <h2>Дельта: <input name='NbkDelta' type='text' value='%NbkDelta%'></h2>
-      <h2>Шаг мощности: <input name='NbkDM' type='text' value='%NbkDM%'></h2>
-      <h2>Шаг подачи: <input name='NbkDP' type='text' value='%NbkDP%'></h2>
-      <h2>Т пара: <input name='NbkSteamT' type='text' value='%NbkSteamT%'></h2>
-      <h2>Давление захлёба: <input name='NbkOwPress' type='text' value='%NbkOwPress%'></h2>
+      <h2>Инерция: <input name='NbkIn' type='text' inputmode='decimal' value='%NbkIn%'></h2>
+      <h2>Дельта: <input name='NbkDelta' type='text' inputmode='decimal' value='%NbkDelta%'></h2>
+      <h2>Шаг мощности: <input name='NbkDM' type='text' inputmode='decimal' value='%NbkDM%'></h2>
+      <h2>Шаг подачи: <input name='NbkDP' type='text' inputmode='decimal' value='%NbkDP%'></h2>
+      <h2>Т пара: <input name='NbkSteamT' type='text' inputmode='decimal' value='%NbkSteamT%'></h2>
+      <h2>Давление захлёба: <input name='NbkOwPress' type='text' inputmode='decimal' value='%NbkOwPress%'></h2>
     </div>
 
     <div id="Other" class="tabcontent">
@@ -385,13 +413,13 @@
         <h2>URL видео камеры: <input name='videourl' type='text' size="32" style="width: 30em;" value='%videourl%'></h2>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
-        <h2>Часовой пояс: <input name='TimeZone' type='text' value='%TimeZone%'></h2>
+        <h2>Часовой пояс: <input name='TimeZone' type='text' inputmode='decimal' value='%TimeZone%'></h2>
         <h2>
           <input id='CheckPower' type='checkbox' name='CheckPower' value='CheckPower' %ChckPwr%>
           <label for='CheckPower' class="tooltip">Использовать проверку подключения регулятора<span class="tooltiptext">Если используется регулятор, при отсутствии связи с ним Самовар выключит питание</span></label>
         </h2>
-        <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' value='%HeaterR%'> Ом</h2>
-        <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' value='%LogPeriod%'> сек</h2>
+        <h2>Сопротивление тэна для расчета мощности: <input name='HeaterR' type='text' inputmode='decimal' value='%HeaterR%'> Ом</h2>
+        <h2>Периодичность записи данных в лог: <input name='LogPeriod' type='text' inputmode='decimal' value='%LogPeriod%'> сек</h2>
         <h2>
           <input id='UseWS' type='checkbox' name='UseWS' value='UseWS' %UseWS%>
           <label for='UseWS' class="tooltip">Использовать контроль потока воды<span class="tooltiptext">При наличии подключенного датчика потока воды при отключенной опции можно не учитывать его показания</span></label>

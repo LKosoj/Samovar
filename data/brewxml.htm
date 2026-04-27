@@ -448,32 +448,25 @@ function get_recipe(recipe){
     is_program = true;
 }
 
-function set_program(){
-if (!is_program) {
-  alert("Error");
-  return;
-}
-alert(program);
-document.getElementById("WProgram").value = program;
-
-var server = '/program';
-request = new XMLHttpRequest();
-request.onreadystatechange = function() {
-if (this.readyState == 4 && this.status == 200) {
-var myObj = this.responseText;
-if (myObj != "OK") {
-  document.getElementById('WProgram').value = myObj;
-  alert( "Ok" );
-}
-}
-};
-request.open('POST', server, false);
-let formData = new FormData(document.forms.mainform);
-request.send(formData);
-if(request.status != 200) {
-alert( request.status + ': ' + request.statusText );
-}
-return 0;
+async function set_program(){
+  if (!is_program) {
+    alert("Error");
+    return;
+  }
+  alert(program);
+  document.getElementById("WProgram").value = program;
+  try {
+    let formData = new FormData(document.forms.mainform);
+    let resp = await fetch('/program', { method: 'POST', body: formData });
+    if (!resp.ok) { alert(resp.status + ': ' + resp.statusText); return; }
+    let text = await resp.text();
+    if (text !== "OK") {
+      document.getElementById('WProgram').value = text;
+      alert("Ok");
+    }
+  } catch (e) {
+    alert('Ошибка сети: ' + e);
+  }
 };
 
 </script>

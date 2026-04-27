@@ -174,12 +174,14 @@
             is_ALARM = true;
             break;
         }
+        let safeMsg = escapeHtml(msg);
+        let safeTime = escapeHtml(time);
         let lastMsg = `
-            <div align="left" class=${cssClass} onclick=removeLastMessage() style="cursor: pointer;">
-              ${time}  ${msg}
+            <div align="left" class="${cssClass}" onclick="removeLastMessage()" style="cursor: pointer;">
+              ${safeTime}  ${safeMsg}
             </div>`;
-        
-        let msg4history = `<div align="left" class=${cssClass} style="margin-top: 0"> <span style="text-decoration: underline">${time}</span>  ${msg}</div>`;
+
+        let msg4history = `<div align="left" class="${cssClass}" style="margin-top: 0"> <span style="text-decoration: underline">${safeTime}</span>  ${safeMsg}</div>`;
         saveHistory(msg4history);
         
         Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
@@ -229,7 +231,7 @@
           return item === true;
         }
         is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
-        if (sound_is_on & is_ALARM) {
+        if (sound_is_on && is_ALARM) {
           //играем звук тревоги, если включён
           playSound(true);
         } else {
@@ -248,17 +250,42 @@
     }
 
     var pwr_unit = "%pwr_unit%";
-
     var _lnIdx = 0;
 
-    var headers = document.querySelectorAll("[data-name='spoiler-title']");
-
-    function headerClick () {
-      this.nextElementSibling.classList.toggle("spoiler-body");
-      var s = this.parentNode.getElementsByClassName("spoiler-sign");
-      if (s[0].innerHTML == "[+]") s[0].innerHTML = "[-]";
-      else s[0].innerHTML = "[+]";
+    // ==================== THEME TOGGLE =================================================================
+    function applyTheme (theme) {
+      if (theme === 'dark' || theme === 'light') {
+        document.documentElement.dataset.theme = theme;
+      } else {
+        delete document.documentElement.dataset.theme;
+      }
+      var btn = document.getElementById('themeToggle');
+      if (btn) {
+        var dark = (theme === 'dark') ||
+          (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        btn.textContent = dark ? '☼' : '☾';
+        btn.title = dark ? 'Светлая тема' : 'Тёмная тема';
+      }
     }
+    function toggleTheme () {
+      var cur = document.documentElement.dataset.theme;
+      var next;
+      if (!cur) {
+        var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        next = sysDark ? 'light' : 'dark';
+      } else {
+        next = (cur === 'dark') ? 'light' : 'dark';
+      }
+      try { localStorage.setItem('theme', next); } catch (e) {}
+      applyTheme(next);
+    }
+    (function initTheme () {
+      try {
+        var saved = localStorage.getItem('theme');
+        if (saved === 'dark' || saved === 'light') applyTheme(saved);
+        else applyTheme(null);
+      } catch (e) { applyTheme(null); }
+    })();
 
     function loadFile (e) {
       var file = e;
@@ -325,104 +352,86 @@
       return ret;
     }
 
-    function set_program () {
+    function escapeHtml (s) {
+      if (s === undefined || s === null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    async function set_program () {
       document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",", ".");
       if (!check_program(document.getElementById('WProgram').value)) {
         alert("Program error!");
         return;
       }
-      var server = '/program';
-      request = new XMLHttpRequest();
-      request.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-          var myObj = this.responseText;
-          if (myObj != "OK") {
-            document.getElementById('WProgram').value = myObj;
-            alert("Ok");
-          }
+      try {
+        let formData = new FormData(document.forms.mainform);
+        let resp = await fetch('/program', { method: 'POST', body: formData });
+        if (!resp.ok) { alert(resp.status + ': ' + resp.statusText); return; }
+        let text = await resp.text();
+        if (text !== "OK") {
+          document.getElementById('WProgram').value = text;
+          alert("Ok");
         }
-      };
-      request.open('POST', server, false);
-      let formData = new FormData(document.forms.mainform);
-      request.send(formData);
-      if (request.status != 200) {
-        alert(request.status + ': ' + request.statusText);
-      }
-      return 0;
-    };
-
-    function sleep (milliseconds) {
-      var start = new Date().getTime();
-      for (var i = 0; i < 1e7; i++) {
-        if ((new Date().getTime() - start) > milliseconds) {
-          break;
-        }
+      } catch (e) {
+        alert('Ошибка сети: ' + e);
       }
     };
 
-    function sendbutton (command) {
-      var server = '/command?' + command;
-      request = new XMLHttpRequest();
-      request.open('GET', server, false);
-      request.send();
-      if (request.status != 200) {
-        alert("sendbutton ERROR! " + request.status + ': ' + request.statusText);
+    async function sendbutton (command) {
+      try {
+        let resp = await fetch('/command?' + command);
+        if (!resp.ok) alert("sendbutton ERROR! " + resp.status + ': ' + resp.statusText);
+      } catch (e) {
+        alert("sendbutton ERROR! " + e);
       }
-      sleep(1000);
-      return 0;
     };
 
-    function sendvoltage () {
+    async function sendvoltage () {
       document.getElementById('Voltage').value = document.getElementById('Voltage').value.replace(",",".");
       var num = document.getElementById('Voltage').value;
       if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
         alert("Введите напряжение!");
-        return 0;
+        return;
       }
-      var command = 'voltage=' + num;
-      sendbutton(command);
+      await sendbutton('voltage=' + num);
       alert("Установлено.");
-      return 0;
     };
 
-    function sendpumpspeed () {
+    async function sendpumpspeed () {
       var num = document.getElementById('pumpspeed').value;
       if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
         alert("Введите скорость!");
-        return 0;
+        return;
       }
-      var command = 'pumpspeed=' + num;
-      sendbutton(command);
+      await sendbutton('pumpspeed=' + num);
       alert("Ok");
-      return 0;
     };
 
     function sendI2CPump () {
       var speed = document.getElementById('i2c_speed').value.replace(",", ".");
       var volume = document.getElementById('i2c_volume').value.replace(",", ".");
-      var server = '/i2cpump?speed=' + speed + '&volume=' + volume;
-      request = new XMLHttpRequest();
-      request.open('GET', server, true);
-      request.send();
+      fetch('/i2cpump?speed=' + speed + '&volume=' + volume).catch(() => {});
     }
 
     function stopI2CPump () {
-      var server = '/i2cpump?stop=1';
-      request = new XMLHttpRequest();
-      request.open('GET', server, true);
-      request.send();
+      fetch('/i2cpump?stop=1').catch(() => {});
     }
 
-    function loadDoc () {
-      var xhttp = new XMLHttpRequest();
-      xhttp.timeout = 4000;
-      xhttp.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-          ConnectError(false);
-          var myObj = JSON.parse(this.responseText);
-          document.getElementById('version').innerHTML = myObj.version;
-          document.getElementById('crnt_tm').innerHTML = myObj.crnt_tm;
-          document.getElementById('stm').innerHTML = myObj.stm;
+    async function loadDoc () {
+      try {
+        let ctrl = new AbortController();
+        let timer = setTimeout(() => ctrl.abort(), 4000);
+        let resp = await fetch('/ajax', { signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!resp.ok) { ConnectError(true); return; }
+        let myObj = await resp.json();
+        ConnectError(false);
+        {
+          document.getElementById('version').textContent = myObj.version;
+          document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
+          document.getElementById('stm').textContent = myObj.stm;
           document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
           document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
@@ -437,7 +446,7 @@
           else if (myObj.PrgType === "F") myObj.PrgType = "Брожение; "
           else if (myObj.PrgType === "A") myObj.PrgType = "Автотюнинг; "
           else if (myObj.PrgType === "L") myObj.PrgType = "Lua; "
-          document.getElementById('Status').innerHTML = myObj.PrgType + myObj.Status;
+          document.getElementById('Status').textContent = myObj.PrgType + myObj.Status;
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
@@ -461,7 +470,7 @@
 
           if (myObj.Lstatus) {
             if (myObj.Lstatus != "") {
-              document.getElementById('Lstatus').innerHTML = myObj.Lstatus;
+              document.getElementById('Lstatus').textContent = myObj.Lstatus;
             }
           }
 
@@ -486,15 +495,9 @@
           document.getElementById('power').style.backgroundColor = powerstyle;
 
         }
-      };
-      xhttp.onerror = function() {
+      } catch (e) {
         ConnectError(true);
-      };
-      xhttp.ontimeout = function() {
-        ConnectError(true);
-      };
-      xhttp.open("GET", "/ajax", true);
-      xhttp.send();
+      }
     };
 
     function calc_program () {
@@ -745,14 +748,14 @@
       setPowerUnit();
       AddLuaButtons();
       getProgram();
-      setInterval(loadDoc, 2000);
+      (async function pollLoop () {
+        await loadDoc();
+        setTimeout(pollLoop, 2000);
+      })();
     };
 
     document.addEventListener('DOMContentLoaded', function() {
-      headers = document.querySelectorAll("[data-name='spoiler-title']");
-      headers.forEach(function(item) {
-        item.addEventListener("click", headerClick);
-      });
+      applyTheme(document.documentElement.dataset.theme || null);
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
           alert("Program error!");
@@ -770,7 +773,7 @@
 </head>
 
 <body>
-
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☾</button>
   <div style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHistory()'>История</div>
   <div class="history_box" style="display: none;" id="historyBox">
     <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHistory()'>
@@ -870,7 +873,7 @@
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 1em; visibility: hidden; position: absolute;">
           <div class="flex_row">
             <span class="text" id='set_power_label'></span>
-            <input name='Voltage' id='Voltage' type='text' value=''>
+            <input name='Voltage' id='Voltage' type='text' inputmode='decimal' value=''>
           </div>
           <div class="flex_row" style="padding-bottom: 0.5em;">
             <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
@@ -911,11 +914,9 @@
     <div id="Prog" class="tabcontent">
       <div class="text">Программа затирки:</div>
       <div class="prg" id="prg"></div>
-      <div class="list-group">
-        <div class="list-group-item list-header" data-name="spoiler-title">
-          <span class="spoiler-sign">[+]</span>Описание программы затирки:
-        </div>
-        <div class="list-group-item list-content spoiler-body">
+      <details class="spoiler">
+        <summary>Описание программы затирки:</summary>
+        <div class="spoiler-content">
           <textarea cols="40" rows="7" id='WProgram' name='WProgram'>%WProgram%</textarea>
           <div class='dvcs'>
             <p><span>Параметры программы затирания: Тип программы;Температура;Время;Режим работы мешалки</span></p>
@@ -942,15 +943,13 @@
             <p><span>3 - Время выключения в секундах</span></p>
           </div>
         </div>
-      </div>
-      <div class="list-group">
-        <div class="list-group-item list-header" data-name="spoiler-title">
-          <span class="spoiler-sign">[+]</span>Описание программы затирки в текстовом формате для сохранения в облаке:
-        </div>
-        <div class="list-group-item list-content spoiler-body">
+      </details>
+      <details class="spoiler">
+        <summary>Описание программы затирки в текстовом формате для сохранения в облаке:</summary>
+        <div class="spoiler-content">
           <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
         </div>
-      </div>
+      </details>
       <hr style="margin-bottom: 20px !important; margin-top: 20px !important;">
       <div style="margin: 0 auto; width: 200px;">
         <input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();' class="button">
@@ -1023,7 +1022,7 @@
                 <option value="1023">
               </datalist>
             </div>
-            <input id='PWMt' type='text' name='PWMt' value='' onchange='changetxtpwm();'>
+            <input id='PWMt' type='text' inputmode='decimal' name='PWMt' value='' onchange='changetxtpwm();'>
           </div>
         </div>
 
@@ -1046,8 +1045,8 @@
     <div id="I2CPump" class="tabcontent">
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
         <h2>Внешний I2C насос</h2>
-        <h2>Скорость отбора (л/ч): <input id='i2c_speed' type='text' value='0' style="width: 6em;"></h2>
-        <h2>Объем (мл): <input id='i2c_volume' type='text' value='0' style="width: 6em;"></h2>
+        <h2>Скорость отбора (л/ч): <input id='i2c_speed' type='text' inputmode='decimal' value='0' style="width: 6em;"></h2>
+        <h2>Объем (мл): <input id='i2c_volume' type='text' inputmode='decimal' value='0' style="width: 6em;"></h2>
         <div style="display: flex; gap: 1em; flex-wrap: wrap;">
           <input type='button' class="button" value="Отправить" onclick='sendI2CPump();'>
           <input type='button' class="button" value="Стоп" onclick='stopI2CPump();'>

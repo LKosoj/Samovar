@@ -1,18 +1,91 @@
+/* ==================== Дизайн-токены (CSS-переменные) ==================== */
+:root {
+  --accent: #3498db;
+  --accent-hover: #3498db97;
+  --bg-page: #3498db;
+  --bg-form: #fafafa;
+  --bg-tab: #f1f1f1;
+  --bg-tab-inactive: #dddddd;
+  --bg-input: #fafafa;
+  --bg-card-alt: rgb(225, 226, 226);
+  --bg-messages: #d0d0d0;
+  --bg-history: rgba(200, 200, 200, 0.8);
+  --text-main: #777;
+  --text-strong: #000;
+  --text-on-accent: #fff;
+  --border-input: #a9a9a9;
+  --border-soft: #ccc;
+  --border-dashed: #bbb;
+  --border-card: rgba(0, 0, 0, 0.125);
+  --shadow-soft: 1px 1px 3px 0 rgba(0, 0, 0, 0.2),
+                 1px 1px 3px 0 rgba(0, 0, 0, 0.19);
+  --shadow-tab: 2px -1px 9px 0 rgba(34, 60, 80, 0.16);
+  --radius-sm: 0.2em;
+  --radius-md: 0.4em;
+  --radius-lg: 0.5em;
+  --msg-alarm: red;
+  --msg-warn: #ff0;
+  --msg-ok: #00ff00c4;
+}
+
+/* Тёмная тема: применяется при системном dark-mode либо при <html data-theme="dark"> */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-page: #1a2733;
+    --bg-form: #21303d;
+    --bg-tab: #2b3a47;
+    --bg-tab-inactive: #354655;
+    --bg-input: #1a2733;
+    --bg-card-alt: #2b3a47;
+    --bg-messages: #2b3a47;
+    --bg-history: rgba(30, 40, 50, 0.92);
+    --text-main: #cfd8e3;
+    --text-strong: #f3f6f9;
+    --border-input: #4a5b6c;
+    --border-soft: #3a4a5a;
+    --border-dashed: #4a5b6c;
+    --border-card: rgba(255, 255, 255, 0.12);
+  }
+}
+:root[data-theme="dark"] {
+  --bg-page: #1a2733;
+  --bg-form: #21303d;
+  --bg-tab: #2b3a47;
+  --bg-tab-inactive: #354655;
+  --bg-input: #1a2733;
+  --bg-card-alt: #2b3a47;
+  --bg-messages: #2b3a47;
+  --bg-history: rgba(30, 40, 50, 0.92);
+  --text-main: #cfd8e3;
+  --text-strong: #f3f6f9;
+  --border-input: #4a5b6c;
+  --border-soft: #3a4a5a;
+  --border-dashed: #4a5b6c;
+  --border-card: rgba(255, 255, 255, 0.12);
+}
+
+/* ==================== Базовые элементы ==================== */
+body {
+  background: var(--bg-page);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-size: 14px;
+  color: var(--text-main);
+}
+
 #chartdiv {
   width: 100%;
   height: 500px;
-  background: #fff;
+  background: var(--bg-form);
 }
 
 textarea {
-  font-size: 14;
+  font-size: 14px;
   width: 80%;
   margin-left: 10%;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  background: var(--bg-input);
+  color: var(--text-strong);
+  border: 1px solid var(--border-input);
 }
 
 input[type="range"] {
@@ -31,39 +104,44 @@ input {
 input[type="file"] {
   display: none;
 }
+
 .custom-file-upload {
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-soft);
   display: inline-block;
   padding: 6px 12px;
   cursor: pointer;
   width: 177px;
   border-radius: 4px;
-  margin: 10 10 0 10;
+  margin: 10px 10px 0 10px;
   font-size: 15px;
 }
 
 #file-input,
 input[type="button"],
 input[type="submit"] {
-  width: 200;
+  width: 200px;
   height: 34px;
   border-radius: 4px;
-  margin: 10 10 0 10;
+  margin: 10px 10px 0 10px;
   font-size: 15px;
 }
+
 input {
-  background: #f1f1f1;
+  background: var(--bg-tab);
   border: 0;
   padding: 0 15px;
+  color: var(--text-strong);
 }
 
-input[type="text"] {
-  background: #fafafa;
+input[type="text"],
+input[type="password"] {
+  background: var(--bg-input);
   padding: 10px;
-  width: 66;
+  width: 66px;
   margin: 0;
   font-size: medium;
-  border: 1px solid #a9a9a9;
+  border: 1px solid var(--border-input);
+  color: var(--text-strong);
 }
 
 #file-input {
@@ -75,37 +153,32 @@ input[type="text"] {
   cursor: pointer;
 }
 
-body {
-  background: #3498db;
-  font-family: sans-serif;
-  font-size: 14px;
-  color: #777;
-}
-
 #bar,
 #prgbar {
-  background-color: #f1f1f1;
+  background-color: var(--bg-tab);
   border-radius: 10px;
 }
 #bar {
-  background-color: #3498db;
+  background-color: var(--accent);
   width: 0;
   height: 10px;
 }
 
 form {
-  background: #fafafa;
+  background: var(--bg-form);
   max-width: 800px;
   margin: 25px auto;
   padding: 30px;
   border-radius: 5px;
   text-align: left;
+  color: var(--text-main);
 }
 
 h1 {
   text-align: center;
   margin-top: 0 !important;
   margin-bottom: 20px !important;
+  color: var(--text-strong);
 }
 
 p {
@@ -113,27 +186,25 @@ p {
 }
 
 .btn {
-  background: #3498db;
-  color: #fff;
+  background: var(--accent);
+  color: var(--text-on-accent);
   cursor: pointer;
 }
 
 .dvcs {
-  padding: 10;
-  margin: 10;
+  padding: 10px;
+  margin: 10px;
 }
 
+/* ==================== Сообщения ==================== */
 .messages_box {
   position: relative;
   max-height: calc(100vh * 0.4);
-  background: #d0d0d0;
+  background: var(--bg-messages);
   padding: 0.5em;
   z-index: 50000;
   overflow: auto;
-  border-radius: 0.5em;
-  -webkit-transition: all 0.2s ease;
-  -moz-transition: all 0.2s ease;
-  -o-transition: all 0.2s ease;
+  border-radius: var(--radius-lg);
   transition: all 0.2s ease;
 }
 
@@ -144,52 +215,33 @@ p {
   align-items: flex-start;
 }
 
-.message_0 {
-  background: red;
-  color: white;
-  font-size: 1.4em;
-  width: 100%;
-  margin-top: 0.4em;
-  border: 1px solid gray;
-  border-radius: 0.2em;
-}
-
-.message_1 {
-  background: #ff0;
-  color: black;
-  font-size: 1.4em;
-  width: 100%;
-  margin-top: 0.4em;
-  border: 1px solid gray;
-  border-radius: 0.2em;
-}
-
+.message_0,
+.message_1,
 .message_2 {
-  background: #00ff00c4;
-  color: black;
   font-size: 1.4em;
   width: 100%;
   margin-top: 0.4em;
   border: 1px solid gray;
-  border-radius: 0.2em;
+  border-radius: var(--radius-sm);
 }
+.message_0 { background: var(--msg-alarm); color: white; }
+.message_1 { background: var(--msg-warn); color: black; }
+.message_2 { background: var(--msg-ok); color: black; }
 
-
+/* ==================== История ==================== */
 .history_box {
   position: absolute;
   top: 2em;
   max-height: calc(100vh * 0.90);
   width: calc(100vw * 0.7);
-  background: rgba(200, 200, 200, 0.8);
+  background: var(--bg-history);
   padding: 0.7em;
   z-index: 70000;
   overflow: auto;
   border: 2px solid #555;
-  border-radius: 0.5em;
-  -webkit-transition: all 0.2s ease;
-  -moz-transition: all 0.2s ease;
-  -o-transition: all 0.2s ease;
+  border-radius: var(--radius-lg);
   transition: all 0.2s ease;
+  color: var(--text-strong);
 }
 
 .history_array {
@@ -200,16 +252,14 @@ p {
   align-items: flex-start;
 }
 
-
-.column {
-  width: 42%;
-}
+.column { width: 42%; }
 
 .text {
   font-size: 1.5em;
   font-weight: bold;
   display: inline-block;
-  margin: 10 15 10 15;
+  margin: 10px 15px 10px 15px;
+  color: var(--text-strong);
 }
 
 .container {
@@ -233,7 +283,24 @@ p {
   width: 100%;
 }
 
-/* Style the tab */
+/* ==================== Утилитарные классы для замены inline-стилей ==================== */
+.card-bordered {
+  border: 1px dashed var(--border-dashed);
+  margin-bottom: 1em;
+}
+.card-padded {
+  padding: 0.5em 2em;
+}
+.row-between {
+  justify-content: space-between;
+}
+.row-around {
+  justify-content: space-around;
+}
+.text-center { text-align: center; }
+.bold { font-weight: bold; }
+
+/* ==================== Табы ==================== */
 .tab {
   width: 100%;
   height: 4em;
@@ -241,12 +308,10 @@ p {
   flex-direction: row;
   justify-content: space-around;
   align-items: flex-end;
-  background-color: #f1f1f1;
+  background-color: var(--bg-tab);
   padding-bottom: 0;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-soft);
 }
-
-/* Style the buttons inside the tab */
 
 .tab input {
   display: inline-flex;
@@ -257,52 +322,44 @@ p {
   top: 1px;
   border: 1px solid #a7a7a7;
   border-radius: 0;
-  background-color: #dddddd;
+  background-color: var(--bg-tab-inactive);
   font-size: 1.5em;
   min-height: 2em;
   font-weight: bold;
-  padding: 0.3em;
-  padding-left: 0.8em;
-  padding-right: 0.8em;
-  margin-left: 0.7em;
-  margin-right: 0.7em;
+  padding: 0.3em 0.8em;
+  margin: 0 0.7em;
+  color: var(--text-strong);
 }
 
-/* Change background color of buttons on hover */
 .tab input:hover {
   position: relative;
   top: 1px;
   cursor: pointer;
-  background-color: #ffffff;
-  -webkit-box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16);
-  -moz-box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16);
-  box-shadow: 2px -1px 9px 0 rgba(34, 60, 80, 0.16);
+  background-color: var(--bg-form);
+  box-shadow: var(--shadow-tab);
 }
 
-/* Create an active/current tablink class */
 .tab input.active {
   position: relative;
   top: 1px;
-  background-color: #fff;
+  background-color: var(--bg-form);
   border-bottom: 0;
 }
 
+/* ==================== Кнопки ==================== */
 .button {
   display: inline-flex;
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  background-color: #3498db;
+  background-color: var(--accent);
   font-size: 1em;
-  color: #fff;
+  color: var(--text-on-accent);
   min-height: 1.6em;
   font-weight: normal;
-  padding: 0.5em;
-  padding-left: 0.8em;
-  padding-right: 0.8em;
-  margin-left: 0.7em;
-  margin-right: 0.7em;
-  border-radius: 0.4em;
+  padding: 0.5em 0.8em;
+  margin: 0 0.7em;
+  border-radius: var(--radius-md);
   border: 0.1em solid #dfdfdf;
 }
 
@@ -311,36 +368,37 @@ p {
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  background-color: #3498db;
+  background-color: var(--accent);
   min-height: 1em;
   font-size: 1em;
   font-weight: normal;
-  padding: 0.3em;
-  padding-left: 0.4em;
-  padding-right: 0.4em;
-  margin-left: 0.5em;
-  margin-right: 0.5em;
+  padding: 0.3em 0.4em;
+  margin: 0 0.5em;
   border-radius: 0.3em;
   border: 1px solid #dfdfdf;
+  color: var(--text-on-accent);
 }
 
 .button:hover {
   position: relative;
   cursor: pointer;
-  background-color: #3498db97;
-  color: #000;
-  box-shadow: 1px 1px 3px 0 rgba(0, 0, 0, 0.2),
-    1px 1px 3px 0 rgba(0, 0, 0, 0.19);
+  background-color: var(--accent-hover);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-soft);
   top: 1px;
 }
 
 .button:active {
   position: relative;
   cursor: progress;
-  color: #000;
+  color: var(--text-strong);
   top: 0.3em;
-  box-shadow: 1px 1px 3px 0 rgba(0, 0, 0, 0.2),
-    1px 1px 3px 0 rgba(0, 0, 0, 0.19);
+  box-shadow: var(--shadow-soft);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .button_img {
@@ -349,11 +407,11 @@ p {
   margin-right: 0.5em;
 }
 
-/* Style the tab content */
+/* ==================== Контент табов ==================== */
 .tabcontent {
   display: none;
   padding: 6px 12px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-soft);
   border-top: none;
 }
 
@@ -363,6 +421,7 @@ p {
   margin-top: 0;
 }
 
+/* ==================== Чекбоксы и радио ==================== */
 input[type="checkbox"]:checked,
 input[type="checkbox"]:not(:checked),
 input[type="radio"]:checked,
@@ -405,9 +464,6 @@ input[type="radio"]:checked + label:after,
 input[type="radio"]:not(:checked) + label:after {
   content: "";
   position: absolute;
-  -webkit-transition: all 0.2s ease;
-  -moz-transition: all 0.2s ease;
-  -o-transition: all 0.2s ease;
   transition: all 0.2s ease;
 }
 
@@ -418,12 +474,8 @@ input[type="checkbox"]:not(:checked) + label:after {
   width: 10px;
   height: 5px;
   border-radius: 1px;
-  border-left: 4px solid #3498db;
-  border-bottom: 4px solid #3498db;
-  -webkit-transform: rotate(-45deg);
-  -moz-transform: rotate(-45deg);
-  -o-transform: rotate(-45deg);
-  -ms-transform: rotate(-45deg);
+  border-left: 4px solid var(--accent);
+  border-bottom: 4px solid var(--accent);
   transform: rotate(-45deg);
 }
 
@@ -434,7 +486,7 @@ input[type="radio"]:not(:checked) + label:after {
   width: 10px;
   height: 10px;
   border-radius: 100%;
-  background-color: #3498db;
+  background-color: var(--accent);
 }
 input[type="checkbox"]:not(:checked) + label:after,
 input[type="radio"]:not(:checked) + label:after {
@@ -446,24 +498,28 @@ input[type="radio"]:checked + label:after {
   opacity: 1;
 }
 
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ==================== Подсказки ==================== */
 .tooltip {
   position: relative;
   display: inline-block;
-  border-bottom: 1px dotted black;
+  border-bottom: 1px dotted currentColor;
 }
 
 .tooltip .tooltiptext {
   visibility: hidden;
   width: auto;
   min-width: 20em;
-  background-color: #3498db;
+  background-color: var(--accent);
   font-size: small;
   color: #f1f1f1;
   text-align: center;
   border-radius: 6px;
   padding: 5px 0;
-
-  /* Position the tooltip */
   position: absolute;
   z-index: 1;
   top: 100%;
@@ -471,13 +527,15 @@ input[type="radio"]:checked + label:after {
   margin-left: -60px;
 }
 
-.tooltip:hover .tooltiptext {
+.tooltip:hover .tooltiptext,
+.tooltip:focus-within .tooltiptext {
   visibility: visible;
 }
 
+/* ==================== Программа отбора ==================== */
 .prgline input {
   font-size: 18px !important;
-  padding: 4 !important;
+  padding: 4px !important;
 }
 
 .prgline input,
@@ -496,16 +554,15 @@ select {
 select {
   -webkit-appearance: none;
   appearance: none;
-  -webkit-border-radius: 0;
   border-radius: 0;
   background-image: url("data:image/svg+xml;utf8,<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='24' height='24' viewBox='0 0 24 24'><path fill='%23444' d='M7.406 7.828l4.594 4.594 4.594-4.594 1.406 1.406-6 6-6-6z'></path></svg>");
   background-position: 100% 50%;
   background-repeat: no-repeat;
-  background-color: #fafafa;
+  background-color: var(--bg-input);
+  color: var(--text-strong);
   font-size: 18px !important;
-  padding: 4 !important;
-  padding-right: 22px !important;
-  border: 1px solid #a9a9a9;
+  padding: 4px 22px 4px 4px !important;
+  border: 1px solid var(--border-input);
 }
 
 .prgline input {
@@ -538,13 +595,13 @@ select {
 
 .ingredients {
   margin: 15px !important;
-  width: 780;
+  width: 780px;
   font-size: 18px;
 }
 
 .ingType {
   margin: 0 auto;
-  width: 150;
+  width: 150px;
   float: left;
   text-align: center;
   position: relative;
@@ -552,7 +609,7 @@ select {
 
 .ingName {
   margin: 0 auto;
-  width: 380;
+  width: 380px;
   float: left;
   text-align: left;
   position: relative;
@@ -560,7 +617,7 @@ select {
 
 .ingAmount {
   margin: 0 auto;
-  width: 250;
+  width: 250px;
   float: left;
   text-align: center;
   position: relative;
@@ -568,7 +625,7 @@ select {
 
 .mashName {
   margin: 0 auto;
-  width: 230;
+  width: 230px;
   float: left;
   text-align: left;
   position: relative;
@@ -576,7 +633,7 @@ select {
 
 .mashDescription {
   margin: 0 auto;
-  width: 250;
+  width: 250px;
   float: left;
   text-align: center;
   position: relative;
@@ -584,7 +641,7 @@ select {
 
 .mashTemp {
   margin: 0 auto;
-  width: 130;
+  width: 130px;
   float: left;
   text-align: center;
   position: relative;
@@ -592,7 +649,7 @@ select {
 
 .mashType {
   margin: 0 auto;
-  width: 250;
+  width: 250px;
   float: left;
   text-align: center;
   position: relative;
@@ -600,7 +657,7 @@ select {
 
 .mashTime {
   margin: 0 auto;
-  width: 130;
+  width: 130px;
   float: left;
   text-align: center;
   position: relative;
@@ -610,37 +667,38 @@ select {
   cursor: pointer;
   margin-left: auto;
   margin-right: auto;
-  width: 400;
+  width: 400px;
 }
 
-.list-group {
+/* ==================== Спойлеры (<details>) ==================== */
+details.spoiler {
   display: flex;
   flex-direction: column;
-}
-
-.list-group-item {
-  position: relative;
-  display: block;
-  padding: 0.75rem 1.25rem;
   margin-bottom: -1px;
-  background-color: rgb(225, 226, 226);
-  border: 1px solid rgba(0, 0, 0, 0.125);
+  border: 1px solid var(--border-card);
+  background-color: var(--bg-card-alt);
+  color: var(--text-strong);
 }
-
-.list-header {
-  font-weight: 700;
+details.spoiler > summary {
+  list-style: none;
   cursor: pointer;
+  padding: 0.75rem 1.25rem;
+  font-weight: 700;
+  position: relative;
+  user-select: none;
 }
-
-.spoiler-body {
-  display: none;
+details.spoiler > summary::-webkit-details-marker { display: none; }
+details.spoiler > summary::before {
+  content: "[+]";
+  margin-right: 0.5em;
+  font-family: monospace;
 }
-
-@media only screen and (max-width: 520px) {
-  #tab {
-    flex-direction: column;
-    border: 1px solid red;
-  }
+details.spoiler[open] > summary::before {
+  content: "[\2212]";
+}
+details.spoiler > .spoiler-content {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border-card);
 }
 
 .infotext {
@@ -648,6 +706,7 @@ select {
   margin-left: 1em !important;
 }
 
+/* ==================== Попапы ==================== */
 .popup {
   position: fixed;
   width: 800px;
@@ -656,7 +715,7 @@ select {
   transform: translate(-50%, -50%);
   padding: 20px;
   border-radius: 5px;
-  background-color: #fff;
+  background-color: var(--bg-form);
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
   z-index: 9999;
   display: none;
@@ -673,6 +732,7 @@ select {
   font-size: 18px;
   font-weight: 600;
   text-align: center;
+  color: var(--text-strong);
 }
 
 .popup__button {
@@ -719,3 +779,102 @@ select {
 .program_header>div:nth-of-type(2) { width: 21%; }
 .program_header>div:nth-of-type(4) { width: 15%; }
 .program_header>div:nth-of-type(5) { width: 10%; }
+
+/* ==================== Переключатель темы ==================== */
+.theme-toggle {
+  position: absolute;
+  top: 0.3em;
+  right: 0.5em;
+  background: transparent;
+  border: 1px solid var(--text-on-accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-on-accent);
+  padding: 0.1em 0.5em;
+  font-size: 0.95em;
+  cursor: pointer;
+  z-index: 70001;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* ==================== Адаптив ==================== */
+@media (max-width: 900px) {
+  form {
+    margin: 0;
+    padding: 14px;
+    max-width: 100%;
+    border-radius: 0;
+  }
+  .tab { height: auto; flex-wrap: wrap; }
+  .tab input { font-size: 1.1em; min-height: 1.8em; margin: 0.2em; }
+  .text { font-size: 1.2em; }
+  .ingredients { width: 100%; }
+  .pointer { width: 100%; }
+  .popup { width: 92vw; }
+}
+
+@media (max-width: 600px) {
+  body { font-size: 13px; }
+  form { padding: 8px; }
+  .tab { flex-direction: column; align-items: stretch; }
+  .tab input { margin: 0.15em 0; width: 100%; min-height: 2.2em; }
+  .container_row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .row-between, .row-around {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  input[type="text"],
+  input[type="password"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    font-size: 16px; /* предотвращает зум на iOS */
+  }
+  textarea {
+    width: 100%;
+    margin-left: 0;
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+  input[type="range"] { width: 100%; box-sizing: border-box; }
+  .button, .tabcontent input[type="button"], input[type="submit"] {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0.3em 0;
+    min-height: 2.4em;
+  }
+  .messages_box { max-height: calc(100vh * 0.5); }
+  .history_box {
+    width: calc(100vw - 1em);
+    left: 0.5em;
+    right: 0.5em;
+  }
+  .prgline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+  }
+  .prgline input,
+  .prgline select {
+    margin-left: 0 !important;
+    flex: 1 1 30%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .prglabel { width: auto !important; }
+  .ingType, .ingName, .ingAmount,
+  .mashName, .mashDescription, .mashTemp, .mashType, .mashTime {
+    width: 100%;
+    float: none;
+  }
+  #chartdiv { height: 60vh; }
+  .tooltip .tooltiptext {
+    min-width: auto;
+    width: max-content;
+    max-width: 90vw;
+    left: 0;
+    margin-left: 0;
+  }
+}

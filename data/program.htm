@@ -378,43 +378,34 @@ function calc_program(){
     set_num();
 }
 
-function set_program(){
-glcalcnum = false;
-calc_program();
-if (programerr) {
-  alert( "В программе ошибка! Программа не установлена" );
-  return;
-}
-var server = '/program';
-request = new XMLHttpRequest();
-request.onreadystatechange = function() {
-if (this.readyState == 4 && this.status == 200) {
-var myObj = this.responseText;
-if (myObj != "OK") {
-  document.getElementById('WProgram').value = myObj;
-  alert( "Ok" );
-}
-}
-};
-request.open('POST', server, false);
-let formData = new FormData(document.forms.mainform);
-request.send(formData);
-if(request.status != 200) {
-alert( request.status + ': ' + request.statusText );
-}
-return 0;
+async function set_program(){
+  glcalcnum = false;
+  calc_program();
+  if (programerr) {
+    alert("В программе ошибка! Программа не установлена");
+    return;
+  }
+  try {
+    let formData = new FormData(document.forms.mainform);
+    let resp = await fetch('/program', { method: 'POST', body: formData });
+    if (!resp.ok) { alert(resp.status + ': ' + resp.statusText); return; }
+    let text = await resp.text();
+    if (text !== "OK") {
+      document.getElementById('WProgram').value = text;
+      alert("Ok");
+    }
+  } catch (e) {
+    alert('Ошибка сети: ' + e);
+  }
 };
 
-function sendbutton(command){
-var server = '/command?' + command;
-request = new XMLHttpRequest();
-request.open('GET', server, false);
-request.send();
-if(request.status != 200) {
-alert( request.status + ': ' + request.statusText );
-}
-sleep(1000);
-return 0;
+async function sendbutton(command){
+  try {
+    let resp = await fetch('/command?' + command);
+    if (!resp.ok) alert(resp.status + ': ' + resp.statusText);
+  } catch (e) {
+    alert('Ошибка сети: ' + e);
+  }
 };
 
 function removeLine(ln){
