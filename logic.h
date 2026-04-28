@@ -567,6 +567,9 @@ void set_program(String WProgram) {
     if (ok && strcmp(tokType, "P") != 0 && speed <= 0.0f) {
       ok = false;
     }
+    if (ok && strcmp(tokType, "P") == 0 && volume <= 0) {
+      ok = false;
+    }
 
     if (!ok) {
       for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
@@ -724,7 +727,7 @@ void run_program(uint8_t num) {
       CurrrentStepperSpeed = (uint16_t)get_speed_from_rate(program[num].Speed);
       stepper_safe_set_max_speed(CurrrentStepperSpeed);
       //stepper.setSpeed(get_speed_from_rate(program[num].Speed));
-      TargetStepps = program[num].Volume * SamSetup.StepperStepMl;
+      TargetStepps = (uint32_t)program[num].Volume * (uint32_t)SamSetup.StepperStepMl;
       stepper_safe_set_current(0);
       stepper_safe_set_target(TargetStepps);
       startService();
@@ -1733,6 +1736,12 @@ void set_current_power(float Volt) {
   if (!PowerOn) return;
 #ifdef __SAMOVAR_DEBUG
   WriteConsoleLog("Set current power =" + (String)Volt);
+#endif
+#ifdef SAMOVAR_USE_SEM_AVR
+  float maxPower = SamSetup.HeaterResistant > 1 ? (230.0f * 230.0f / SamSetup.HeaterResistant) : 4000.0f;
+  if (Volt > maxPower) Volt = maxPower;
+#else
+  if (Volt > 230.0f) Volt = 230.0f;
 #endif
   //vTaskDelay(100 / portTICK_PERIOD_MS); 5.13
 #ifndef SAMOVAR_USE_SEM_AVR

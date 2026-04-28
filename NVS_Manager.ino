@@ -7,6 +7,17 @@ Preferences prefs;
 
 static void write_last_mode_meta(uint8_t mode);
 
+static void loadBytesOrInvalid(const char* key, uint8_t* dst, size_t len) {
+  if (prefs.getBytes(key, dst, len) != len) {
+    memset(dst, 255, len);
+  }
+}
+
+static String getColorOrDefault(const char* key, const char* defaultColor) {
+  String color = prefs.getString(key, defaultColor);
+  return color.length() > 0 ? color : String(defaultColor);
+}
+
 static const char* profile_namespace_by_mode(int mode) {
   switch (mode) {
     case SAMOVAR_BEER_MODE: return "sam_beer";
@@ -266,7 +277,7 @@ void load_profile_nvs() {
   SamSetup.flag = prefs.getUChar("flag", 255);
   SamSetup.Mode = prefs.getUShort("Mode", 0);
   SamSetup.TimeZone = prefs.getUChar("TimeZone", 3);
-  SamSetup.HeaterResistant = prefs.getFloat("HeaterR", 10.0);
+  SamSetup.HeaterResistant = prefs.getFloat("HeaterR", 15.2);
   SamSetup.LogPeriod = prefs.getUChar("LogPeriod", 3);
 
   SamSetup.SetSteamTemp = prefs.getFloat("SetSteam", 0);
@@ -276,17 +287,17 @@ void load_profile_nvs() {
   SamSetup.SetACPTemp = prefs.getFloat("SetACP", 0);
   SamSetup.DistTemp = prefs.getFloat("DistTemp", DEFAULT_DIST_TEMP);
 
-  SamSetup.DeltaSteamTemp = prefs.getFloat("DeltaSteam", 0);
-  SamSetup.DeltaPipeTemp = prefs.getFloat("DeltaPipe", 0);
+  SamSetup.DeltaSteamTemp = prefs.getFloat("DeltaSteam", 0.1);
+  SamSetup.DeltaPipeTemp = prefs.getFloat("DeltaPipe", 0.2);
   SamSetup.DeltaWaterTemp = prefs.getFloat("DeltaWater", 0);
   SamSetup.DeltaTankTemp = prefs.getFloat("DeltaTank", 0);
   SamSetup.DeltaACPTemp = prefs.getFloat("DeltaACP", 0);
 
-  SamSetup.SteamDelay = prefs.getUShort("SteamDelay", 0);
-  SamSetup.PipeDelay = prefs.getUShort("PipeDelay", 0);
-  SamSetup.WaterDelay = prefs.getUShort("WaterDelay", 0);
-  SamSetup.TankDelay = prefs.getUShort("TankDelay", 0);
-  SamSetup.ACPDelay = prefs.getUShort("ACPDelay", 0);
+  SamSetup.SteamDelay = prefs.getUShort("SteamDelay", 20);
+  SamSetup.PipeDelay = prefs.getUShort("PipeDelay", 20);
+  SamSetup.WaterDelay = prefs.getUShort("WaterDelay", 20);
+  SamSetup.TankDelay = prefs.getUShort("TankDelay", 20);
+  SamSetup.ACPDelay = prefs.getUShort("ACPDelay", 20);
 
   SamSetup.StepperStepMl = prefs.getUShort("StepMl", STEPPER_STEP_ML);
   SamSetup.StepperStepMlI2C = prefs.getUShort("StepMlI2C", I2C_STEPPER_STEP_ML_DEFAULT);
@@ -309,18 +320,18 @@ void load_profile_nvs() {
   SamSetup.rele4 = prefs.getBool("rele4", false);
 
   // Чтение массивов
-  prefs.getBytes("SteamAddr", SamSetup.SteamAdress, 8);
-  prefs.getBytes("PipeAddr", SamSetup.PipeAdress, 8);
-  prefs.getBytes("WaterAddr", SamSetup.WaterAdress, 8);
-  prefs.getBytes("TankAddr", SamSetup.TankAdress, 8);
-  prefs.getBytes("ACPAddr", SamSetup.ACPAdress, 8);
+  loadBytesOrInvalid("SteamAddr", SamSetup.SteamAdress, 8);
+  loadBytesOrInvalid("PipeAddr", SamSetup.PipeAdress, 8);
+  loadBytesOrInvalid("WaterAddr", SamSetup.WaterAdress, 8);
+  loadBytesOrInvalid("TankAddr", SamSetup.TankAdress, 8);
+  loadBytesOrInvalid("ACPAddr", SamSetup.ACPAdress, 8);
 
   // Чтение строк (в буферы структуры)
-  copyStringSafe(SamSetup.SteamColor, prefs.getString("SteamCol", ""));
-  copyStringSafe(SamSetup.PipeColor, prefs.getString("PipeCol", ""));
-  copyStringSafe(SamSetup.WaterColor, prefs.getString("WaterCol", ""));
-  copyStringSafe(SamSetup.TankColor, prefs.getString("TankCol", ""));
-  copyStringSafe(SamSetup.ACPColor, prefs.getString("ACPCol", ""));
+  copyStringSafe(SamSetup.SteamColor, getColorOrDefault("SteamCol", "#ff0000"));
+  copyStringSafe(SamSetup.PipeColor, getColorOrDefault("PipeCol", "#0000ff"));
+  copyStringSafe(SamSetup.WaterColor, getColorOrDefault("WaterCol", "#00bfff"));
+  copyStringSafe(SamSetup.TankColor, getColorOrDefault("TankCol", "#008000"));
+  copyStringSafe(SamSetup.ACPColor, getColorOrDefault("ACPCol", "#800080"));
   
   copyStringSafe(SamSetup.blynkauth, prefs.getString("blynk", ""));
   copyStringSafe(SamSetup.videourl, prefs.getString("video", ""));

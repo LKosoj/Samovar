@@ -258,13 +258,19 @@ void distiller_proc() {
     } else if (program[ProgramNum].WType == "A" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp)) {
       //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
       run_dist_program(ProgramNum + 1);
-    } else if (program[ProgramNum].WType == "S" && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp) / get_alcohol(TankSensor.StartProgTemp)) {
-      run_dist_program(ProgramNum + 1);
+    } else if (program[ProgramNum].WType == "S") {
+      float startAlcohol = get_alcohol(TankSensor.StartProgTemp);
+      if (startAlcohol > 0 && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp) / startAlcohol) {
+        run_dist_program(ProgramNum + 1);
+      }
     } else if (program[ProgramNum].WType == "P" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp)) {
       //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
       run_dist_program(ProgramNum + 1);
-    } else if (program[ProgramNum].WType == "R" && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp) / get_steam_alcohol(TankSensor.StartProgTemp)) {
-      run_dist_program(ProgramNum + 1);
+    } else if (program[ProgramNum].WType == "R") {
+      float startSteamAlcohol = get_steam_alcohol(TankSensor.StartProgTemp);
+      if (startSteamAlcohol > 0 && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp) / startSteamAlcohol) {
+        run_dist_program(ProgramNum + 1);
+      }
     }
   }
 

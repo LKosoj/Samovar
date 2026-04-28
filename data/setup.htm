@@ -174,6 +174,7 @@
 <body>
   <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☾</button>
   <form action='/save' method="post" name="setupform" id="setupform" style="min-width: 1024;">
+    <input type="hidden" name="fullsetup" value="1">
     <h1>Настройки</h1>
     <div class="tab">
       <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Основные">

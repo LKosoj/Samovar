@@ -6,7 +6,7 @@
 #include "FS.h"
 #include "sensorinit.h"
 #include "column_math.h"
-#include "wifi_htm_gz.h"
+#include "string_utils.h"
 
 extern float nbk_M;
 extern float nbk_Mo;
@@ -117,6 +117,22 @@ void apply_i2c_stepper_args(AsyncWebServerRequest *request, I2CStepperDevice& de
   }
 }
 
+bool i2c_stepper_mode_supported(const I2CStepperDevice& dev) {
+  if (dev.mode == I2CSTEP_MODE_MIXER) return (dev.caps & I2CSTEPPER_CAP_MIXER) != 0;
+  if (dev.mode == I2CSTEP_MODE_PUMP) return (dev.caps & I2CSTEPPER_CAP_PUMP) != 0;
+  if (dev.mode == I2CSTEP_MODE_FILLING) return (dev.caps & I2CSTEPPER_CAP_FILLING) != 0;
+  return false;
+}
+
+bool i2c_stepper_command_supported(const I2CStepperDevice& dev, const String& cmd) {
+  if (cmd == "status") return true;
+  if (cmd == "relay") return (dev.caps & I2CSTEPPER_CAP_RELAY) != 0;
+  if (cmd == "calstart" || cmd == "calfinish") return (dev.caps & I2CSTEPPER_CAP_FILLING) != 0;
+  if (cmd == "apply" || cmd == "save" || cmd == "start") return i2c_stepper_mode_supported(dev);
+  if (cmd == "stop") return (dev.caps & (I2CSTEPPER_CAP_MIXER | I2CSTEPPER_CAP_PUMP | I2CSTEPPER_CAP_FILLING)) != 0;
+  return false;
+}
+
 void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev) {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
   response->print('{');
@@ -147,32 +163,26 @@ void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev
 // filter out specific headers from the incoming request
 AsyncHeaderFilterMiddleware headerFilter;
 
-AsyncStaticWebHandler* indexHandler = nullptr;
-
 void change_samovar_mode() {
-  if (indexHandler) {
-    server.removeHandler(indexHandler);
-    indexHandler = nullptr;
-  }
-
-  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    //server.serveStatic("/", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");    
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/beer.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    //server.serveStatic("/", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/distiller.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-    //server.serveStatic("/", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/bk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    //server.serveStatic("/", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/nbk.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
-  } else {
-    //server.serveStatic("/", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=800");
-    indexHandler = &server.serveStatic("/index.htm", SPIFFS, "/index.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-cache, no-store, must-revalidate");
+  if (Samovar_Mode < SAMOVAR_RECTIFICATION_MODE || Samovar_Mode > SAMOVAR_LUA_MODE) {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
   }
   Samovar_CR_Mode = Samovar_Mode;
+}
+
+const char* get_index_page_path() {
+  if (Samovar_Mode == SAMOVAR_BEER_MODE) return "/beer.htm";
+  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return "/distiller.htm";
+  if (Samovar_Mode == SAMOVAR_BK_MODE) return "/bk.htm";
+  if (Samovar_Mode == SAMOVAR_NBK_MODE) return "/nbk.htm";
+  return "/index.htm";
+}
+
+void send_index_page(AsyncWebServerRequest *request) {
+  change_samovar_mode();
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, get_index_page_path(), "text/html", false, indexKeyProcessor);
+  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  request->send(response);
 }
 
 // Универсальная функция для обработки файлов с поддержкой gzip
@@ -191,10 +201,9 @@ void handleFileWithGzip(AsyncWebServerRequest *request, const String &path, cons
   }
 }
 
-// Функция для отправки wifi.htm из памяти (gzip архив)
-void handleWifiHtmFromMemory(AsyncWebServerRequest *request) {
-  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", wifi_htm_gz_data, wifi_htm_gz_data_len);
-  response->addHeader("Content-Encoding", "gzip");
+// Функция для отправки wifi.htm с подстановкой текущего SSID
+void handleWifiHtm(AsyncWebServerRequest *request) {
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/wifi.htm", "text/html", false, wifiKeyProcessor);
   response->addHeader("Cache-Control", "max-age=1");
   request->send(response);
 }
@@ -216,8 +225,8 @@ void WebServerInit(void) {
     // Если нет подключения к WiFi сети - показываем страницу настройки WiFi
     // Это сработает когда Самовар в режиме AP (точка доступа)
     if (WiFi.status() != WL_CONNECTED) {
-      // Отправляем wifi.htm из памяти (gzip архив)
-      handleWifiHtmFromMemory(request);
+      // Отправляем wifi.htm с подстановкой текущего SSID
+      handleWifiHtm(request);
     } else {
       // Иначе - обычный интерфейс Самовара (перенаправление на index.htm)
       request->redirect("/index.htm");
@@ -279,9 +288,9 @@ void WebServerInit(void) {
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
-  // Обработчик для /wifi.htm - отдаем из памяти (gzip архив)
+  // Обработчик для /wifi.htm с template processor
   server.on("/wifi.htm", HTTP_GET, [](AsyncWebServerRequest* request) {
-    handleWifiHtmFromMemory(request);
+    handleWifiHtm(request);
   });
 
   server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -327,9 +336,13 @@ void WebServerInit(void) {
   //  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
   //#endif
 
+  server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    send_index_page(request);
+  });
   change_samovar_mode();
 
   load_profile();
+  change_samovar_mode();
 
 
   server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -386,6 +399,10 @@ void WebServerInit(void) {
       request->send(200, "text/plain", "OK");
       return;
     }
+    if ((i2cStepperPump.caps & I2CSTEPPER_CAP_FILLING) == 0) {
+      request->send(400, "text/plain", "I2C filling mode not available");
+      return;
+    }
     float speedRate = request->hasArg("speed") ? request->arg("speed").toFloat() : 0.0f;
     float volumeMl = request->hasArg("volume") ? request->arg("volume").toFloat() : 0.0f;
     if (speedRate <= 0 || volumeMl <= 0) {
@@ -415,15 +432,23 @@ void WebServerInit(void) {
       request->send(400, "application/json", "{\"error\":\"bad device\"}");
       return;
     }
+    String cmd = request->hasArg("cmd") ? request->arg("cmd") : "status";
+    cmd.toLowerCase();
     i2c_stepper_refresh(*dev);
     if (!dev->present) {
+      if (cmd != "status") {
+        request->send(404, "application/json", "{\"error\":\"I2C device not available\"}");
+        return;
+      }
       send_i2c_stepper_json(request, *dev);
       return;
     }
 
-    apply_i2c_stepper_args(request, *dev);
-    String cmd = request->hasArg("cmd") ? request->arg("cmd") : "status";
-    cmd.toLowerCase();
+    if (cmd != "status") apply_i2c_stepper_args(request, *dev);
+    if (!i2c_stepper_command_supported(*dev, cmd)) {
+      request->send(400, "application/json", "{\"error\":\"unsupported I2CStepper command\"}");
+      return;
+    }
     bool ok = true;
     if (cmd == "apply") ok = i2c_stepper_apply(*dev);
     else if (cmd == "save") ok = i2c_stepper_save(*dev);
@@ -432,7 +457,7 @@ void WebServerInit(void) {
     else if (cmd == "calstart") ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_START);
     else if (cmd == "calfinish") ok = i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_FINISH);
     else if (cmd == "relay") ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
-    else i2c_stepper_refresh(*dev);
+    else if (cmd == "status") i2c_stepper_refresh(*dev);
 
     if (!ok) {
       request->send(500, "application/json", "{\"error\":\"I2C command failed\"}");
@@ -881,6 +906,65 @@ String calibrateKeyProcessor(const String &var) {
   return String();
 }
 
+bool is_valid_samovar_mode(long mode) {
+  return mode >= SAMOVAR_RECTIFICATION_MODE && mode <= SAMOVAR_LUA_MODE;
+}
+
+void stop_active_process_for_mode() {
+  if (!PowerOn) return;
+  if (SamovarStatusInt == 1000) {
+    distiller_finish();
+  } else if (SamovarStatusInt == 2000) {
+    beer_finish();
+  } else if (SamovarStatusInt == 3000) {
+    bk_finish();
+  } else if (SamovarStatusInt == 4000) {
+    nbk_finish();
+  } else {
+    set_power(false);
+  }
+}
+
+void switch_samovar_mode(SAMOVAR_MODE requestedMode) {
+  stop_active_process_for_mode();
+
+#ifdef USE_LUA
+  if (loop_lua_fl) {
+    SetScriptOff = true;
+    loop_lua_fl = false;
+    delay(100);
+  }
+#endif
+
+  samovar_reset();
+
+  bool targetProfileExists = profile_exists_for_mode(requestedMode);
+  SamSetup.Mode = (uint16_t)requestedMode;
+  Samovar_Mode = requestedMode;
+  set_current_profile_mode(requestedMode);
+  load_default_program_for_mode();
+
+  if (targetProfileExists) {
+    load_profile();
+  } else {
+    SamSetup.flag = 2;
+  }
+  SamSetup.Mode = (uint16_t)requestedMode;
+  Samovar_Mode = requestedMode;
+  Samovar_CR_Mode = requestedMode;
+
+#ifdef USE_LUA
+  lua_type_script = get_lua_mode_name();
+  load_lua_script();
+#endif
+
+  change_samovar_mode();
+}
+
+void update_checkbox_arg(AsyncWebServerRequest *request, const char* name, bool& value, bool fullSetupForm) {
+  if (fullSetupForm || request->hasArg(name)) value = request->hasArg(name);
+}
+
 void handleSave(AsyncWebServerRequest *request) {
   if (!request) {
     return;
@@ -895,6 +979,20 @@ void handleSave(AsyncWebServerRequest *request) {
         }
         //return;
   */
+
+  if (request->hasArg("mode")) {
+    String modeArg = request->arg("mode");
+    long requestedModeValue = 0;
+    if (!parseLongSafe(modeArg.c_str(), requestedModeValue) || !is_valid_samovar_mode(requestedModeValue)) {
+      request->send(400, "text/plain", "Invalid mode");
+      return;
+    }
+    if (SamSetup.Mode != (uint16_t)requestedModeValue) {
+      switch_samovar_mode((SAMOVAR_MODE)requestedModeValue);
+    }
+  }
+
+  bool fullSetupForm = request->hasArg("fullsetup");
 
   if (request->hasArg("SteamDelay")) {
     SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
@@ -978,55 +1076,16 @@ void handleSave(AsyncWebServerRequest *request) {
       set_program(request->arg("WProgram"));
   }
 
-  SamSetup.UseHLS = false;
-  if (request->hasArg("useflevel")) {
-    SamSetup.UseHLS = true;
-  }
-
-  SamSetup.UsePreccureCorrect = false;
-  if (request->hasArg("usepressure")) {
-    SamSetup.UsePreccureCorrect = true;
-  }
-
-  SamSetup.useautospeed = false;
-  if (request->hasArg("useautospeed")) {
-    SamSetup.useautospeed = true;
-  }
-
-  SamSetup.useDetectorOnHeads = false;
-  if (request->hasArg("useDetectorOnHeads")) {
-    SamSetup.useDetectorOnHeads = true;
-  }
-
-  SamSetup.ChangeProgramBuzzer = false;
-  if (request->hasArg("ChangeProgramBuzzer")) {
-    SamSetup.ChangeProgramBuzzer = true;
-  }
-
-  SamSetup.UseBuzzer = false;
-  if (request->hasArg("UseBuzzer")) {
-    SamSetup.UseBuzzer = true;
-  }
-
-  SamSetup.UseBBuzzer = false;
-  if (request->hasArg("UseBBuzzer")) {
-    SamSetup.UseBBuzzer = true;
-  }
-
-  SamSetup.UseWS = false;
-  if (request->hasArg("UseWS")) {
-    SamSetup.UseWS = true;
-  }
-
-  SamSetup.UseST = false;
-  if (request->hasArg("UseST")) {
-    SamSetup.UseST = true;
-  }
-
-  SamSetup.CheckPower = false;
-  if (request->hasArg("CheckPower")) {
-    SamSetup.CheckPower = true;
-  }
+  update_checkbox_arg(request, "useflevel", SamSetup.UseHLS, fullSetupForm);
+  update_checkbox_arg(request, "usepressure", SamSetup.UsePreccureCorrect, fullSetupForm);
+  update_checkbox_arg(request, "useautospeed", SamSetup.useautospeed, fullSetupForm);
+  update_checkbox_arg(request, "useDetectorOnHeads", SamSetup.useDetectorOnHeads, fullSetupForm);
+  update_checkbox_arg(request, "ChangeProgramBuzzer", SamSetup.ChangeProgramBuzzer, fullSetupForm);
+  update_checkbox_arg(request, "UseBuzzer", SamSetup.UseBuzzer, fullSetupForm);
+  update_checkbox_arg(request, "UseBBuzzer", SamSetup.UseBBuzzer, fullSetupForm);
+  update_checkbox_arg(request, "UseWS", SamSetup.UseWS, fullSetupForm);
+  update_checkbox_arg(request, "UseST", SamSetup.UseST, fullSetupForm);
+  update_checkbox_arg(request, "CheckPower", SamSetup.CheckPower, fullSetupForm);
 
   if (request->hasArg("autospeed")) {
     SamSetup.autospeed = request->arg("autospeed").toInt();
@@ -1087,66 +1146,6 @@ void handleSave(AsyncWebServerRequest *request) {
   }
   if (request->hasArg("ACPColor")) {
     copyStringSafe(SamSetup.ACPColor, request->arg("ACPColor"));
-  }
-  if (request->hasArg("mode")) {
-    if (SamSetup.Mode != request->arg("mode").toInt()) {
-      // Останавливаем текущий процесс, если он работает
-      if (PowerOn) {
-        if (SamovarStatusInt == 1000) {
-          distiller_finish();
-        } else if (SamovarStatusInt == 2000) {
-          beer_finish();
-        } else if (SamovarStatusInt == 3000) {
-          bk_finish();
-        } else if (SamovarStatusInt == 4000) {
-          nbk_finish();
-        } else {
-          set_power(false);
-        }
-      }
-      
-#ifdef USE_LUA
-      // Останавливаем Lua-скрипт, если он работает
-      if (loop_lua_fl) {
-        SetScriptOff = true;
-        loop_lua_fl = false;
-        // Даем время на корректную остановку скрипта
-        delay(100);
-      }
-#endif
-      
-      // Сбрасываем состояние
-      samovar_reset();
-      
-      // Устанавливаем новый режим
-      SAMOVAR_MODE requestedMode = (SAMOVAR_MODE)request->arg("mode").toInt();
-      bool targetProfileExists = profile_exists_for_mode(requestedMode);
-      SamSetup.Mode = (uint16_t)requestedMode;
-      Samovar_Mode = requestedMode;
-      set_current_profile_mode(requestedMode);
-      
-      // Загружаем программу по умолчанию для нового режима
-      load_default_program_for_mode();
-
-      if (targetProfileExists) {
-        // Загружаем профиль нового режима (настройки, но НЕ программу - она уже загружена выше)
-        load_profile();
-      } else {
-        SamSetup.flag = 2;
-      }
-      SamSetup.Mode = (uint16_t)requestedMode;
-      Samovar_Mode = requestedMode;
-      Samovar_CR_Mode = requestedMode;
-      
-#ifdef USE_LUA
-      // Обновляем Lua скрипты для нового режима
-      lua_type_script = get_lua_mode_name();
-      load_lua_script();
-#endif
-      
-      // Обновляем веб-обработчики
-      change_samovar_mode();
-    }
   }
   if (request->hasArg("rele1")) {
     SamSetup.rele1 = request->arg("rele1").toInt();

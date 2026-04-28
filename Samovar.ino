@@ -577,9 +577,14 @@ void triggerSysTicker(void *parameter) {
 
         //считаем время для текущей строки программы
         if (program[ProgramNum].WType == "P") {
-          WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
-          if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
-          wp = 1 - (WthdrwTime / program[ProgramNum].Time);
+          if (program[ProgramNum].Time > 0) {
+            WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
+            if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
+            wp = 1 - (WthdrwTime / program[ProgramNum].Time);
+          } else {
+            WthdrwTime = 0;
+            wp = 0;
+          }
         } else {
           wp = (float)CurrrentStepps / (float)TargetStepps;
           WthdrwTime = program[ProgramNum].Time * (1 - wp);

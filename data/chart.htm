@@ -186,7 +186,7 @@ function showMessages() {
     document.getElementById('messages').innerHTML = '';
     Messages_Array.forEach(message => {
       document.getElementById('messages').innerHTML += message;
-      alarm_is_there.push(message.includes('class=message_0'));
+      alarm_is_there.push(message.includes('class="message_0"'));
     });
     document.getElementById('messagesBox').style.display = 'block';
     let queue = document.getElementById('messagesBox');

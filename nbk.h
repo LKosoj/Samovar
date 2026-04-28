@@ -641,11 +641,21 @@ void handle_nbk_stage_work() {
 // Смена программы
 void run_nbk_program(uint8_t num) {
  // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
-   ProgramNum = num;
-   t_min = 0;
-   alarm_c_min = 0;
-   msgfl = true;
-   if (ProgramNum > 3) ProgramNum = CAPACITY_NUM * 2; //отключаем излишнее число строк программ
+  ProgramNum = num;
+  t_min = 0;
+  alarm_c_min = 0;
+  msgfl = true;
+  if (ProgramNum == CAPACITY_NUM * 2 || ProgramNum > 3) {
+    ProgramNum = CAPACITY_NUM * 2; //отключаем излишнее число строк программ
+    nbk_finish();
+    return;
+  }
+  if (ProgramNum >= ProgramLen || program[ProgramNum].WType.length() == 0) {
+    ProgramNum = CAPACITY_NUM * 2;
+    SendMsg("Ошибка программы НБК: строка не задана", ALARM_MSG);
+    nbk_finish();
+    return;
+  }
  // Сообщение о переходе между этапами
   if (ProgramNum == 0) {
     //PowerOn=true;//TODO костыль 2 от незапуска по кнопке Включить нагрев 
@@ -659,12 +669,9 @@ void run_nbk_program(uint8_t num) {
     MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_nbk_program() + "," + SessionDescription, "st");
     #endif
     create_data();  //создаем файл с данными
-  } else if (ProgramNum == CAPACITY_NUM * 2) {
-    nbk_finish();
-    return;
   } else {
     SendMsg("Переход к строке №" + (String)(num + 1) + ". Тип: " + program[num].WType, NOTIFY_MSG);
- }
+  }
   // при переходе на Разгон
   if (program[ProgramNum].WType == "H") { 
    workrun = false; // сброс флага необходимости снижения мощности в Работе после захлёба
@@ -883,9 +890,10 @@ void set_nbk_program(String WProgram) {
   copyStringSafe(input, WProgram);
 
   int i = 0;
+  const char* expectedTypes[4] = {"H", "S", "O", "W"};
   char* saveLine = nullptr;
   char* line = strtok_r(input, "\n", &saveLine);
-  while (line && i < CAPACITY_NUM * 2) {
+  while (line && i < 4) {
     size_t lineLen = strlen(line);
     while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
       line[--lineLen] = '\0';
@@ -906,6 +914,7 @@ void set_nbk_program(String WProgram) {
     bool ok = tokType && tokType[0] != '\0' &&
               tokSpeed && tokPower &&
               !tokExtra &&
+              strcmp(tokType, expectedTypes[i]) == 0 &&
               parseFloatSafe(tokSpeed, speed) &&
               parseFloatSafe(tokPower, power);
 
@@ -923,6 +932,13 @@ void set_nbk_program(String WProgram) {
     i++;
     ProgramLen = i;
     line = strtok_r(NULL, "\n", &saveLine);
+  }
+
+  if (i != 4) {
+    for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
+    ProgramLen = 0;
+    SendMsg("Ошибка программы: НБК должна содержать 4 строки H/S/O/W", ALARM_MSG);
+    return;
   }
 
   if (i < CAPACITY_NUM * 2) {

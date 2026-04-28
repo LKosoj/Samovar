@@ -280,8 +280,8 @@ void beer_proc() {
     MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + SessionDescription, "st");
 #endif
     create_data();  //создаем файл с данными
-    PowerOn = true;
     set_power(true);
+    if (!PowerOn) return;
     run_beer_program(0);
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -462,6 +462,10 @@ void check_alarm_beer() {
           setHeaterPosition(false);
           //Открываем клапан воды
           open_valve(true, false);
+#ifdef USE_WATER_PUMP
+          set_pump_pwm(1023);
+          pump_started = true;
+#endif
         }
       }
     } else {
@@ -471,6 +475,10 @@ void check_alarm_beer() {
       //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
       if ((temp < program[ProgramNum].Temp + tempDelta - 0.1) && valve_status && PowerOn) {
         open_valve(false, false);
+#ifdef USE_WATER_PUMP
+        set_pump_pwm(0);
+        pump_started = false;
+#endif
       }
     }
   }
