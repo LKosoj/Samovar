@@ -1,12 +1,14 @@
 #include <asyncHTTPrequest.h>
 //#include <ESPping.h>
 #include <WiFi.h>
+#include <UrlEncode.h>
 
 #include "Samovar.h"
 #include "FS.h"
 #include "sensorinit.h"
 #include "column_math.h"
 #include "string_utils.h"
+#include "wifi_htm_gz.h"
 
 extern float nbk_M;
 extern float nbk_Mo;
@@ -201,9 +203,25 @@ void handleFileWithGzip(AsyncWebServerRequest *request, const String &path, cons
   }
 }
 
-// Функция для отправки wifi.htm с подстановкой текущего SSID
-void handleWifiHtm(AsyncWebServerRequest *request) {
-  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/wifi.htm", "text/html", false, wifiKeyProcessor);
+String getWifiHtmUrl() {
+  String ssid = get_wifi_ssid();
+  ssid.trim();
+  if (ssid.length() == 0) return "/wifi.htm";
+  return "/wifi.htm?ssid=" + urlEncode(ssid);
+}
+
+// Функция для отправки wifi.htm из памяти (gzip архив)
+void handleWifiHtmFromMemory(AsyncWebServerRequest *request) {
+  if (!request->hasArg("ssid")) {
+    String wifiUrl = getWifiHtmUrl();
+    if (wifiUrl != "/wifi.htm") {
+      request->redirect(wifiUrl);
+      return;
+    }
+  }
+
+  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", wifi_htm_gz_data, wifi_htm_gz_data_len);
+  response->addHeader("Content-Encoding", "gzip");
   response->addHeader("Cache-Control", "max-age=1");
   request->send(response);
 }
@@ -225,8 +243,8 @@ void WebServerInit(void) {
     // Если нет подключения к WiFi сети - показываем страницу настройки WiFi
     // Это сработает когда Самовар в режиме AP (точка доступа)
     if (WiFi.status() != WL_CONNECTED) {
-      // Отправляем wifi.htm с подстановкой текущего SSID
-      handleWifiHtm(request);
+      // Отправляем wifi.htm из памяти (gzip архив)
+      handleWifiHtmFromMemory(request);
     } else {
       // Иначе - обычный интерфейс Самовара (перенаправление на index.htm)
       request->redirect("/index.htm");
@@ -288,13 +306,13 @@ void WebServerInit(void) {
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
-  // Обработчик для /wifi.htm с template processor
+  // Обработчик для /wifi.htm из памяти (gzip архив)
   server.on("/wifi.htm", HTTP_GET, [](AsyncWebServerRequest* request) {
-    handleWifiHtm(request);
+    handleWifiHtmFromMemory(request);
   });
 
   server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->redirect("/wifi.htm");
+    request->redirect(getWifiHtmUrl());
   });
 
   server.on("/wifi/save", HTTP_POST, [](AsyncWebServerRequest* request) {

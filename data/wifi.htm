@@ -19,7 +19,7 @@
 <body>
   <h2>Настройка Wi‑Fi</h2>
   <div class="card">
-    <p class="muted">Текущий сохранённый SSID: <b>%wifi_ssid%</b></p>
+    <p class="muted">Текущий сохранённый SSID: <b id="currentSsid">-</b></p>
     <p class="muted">После сохранения устройство перезагрузится.</p>
     <form method="POST" action="/wifi/save">
       <div class="row">
@@ -39,6 +39,13 @@
       <button type="submit">Стереть Wi‑Fi и перезагрузить</button>
     </form>
     <script>
+      (function() {
+        var match = /[?&]ssid=([^&]*)/.exec(window.location.search);
+        if (match) {
+          document.getElementById('currentSsid').textContent = decodeURIComponent(match[1].replace(/\+/g, ' '));
+        }
+      })();
+
       document.getElementById('clearForm').addEventListener('submit', function(e) {
         if (!confirm('Стереть сохранённые Wi‑Fi креды и перезагрузить?')) {
           e.preventDefault();
