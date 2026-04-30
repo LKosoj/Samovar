@@ -1593,11 +1593,12 @@ String get_web_file(String fn, get_web_type type) {
   return "";
 }
 
-static void abort_http_request(asyncHTTPrequest& request) {
-  request.abort();
+static void abort_http_request(void* requestPtr) {
+  asyncHTTPrequest* request = static_cast<asyncHTTPrequest*>(requestPtr);
+  request->abort();
 
   uint32_t abortStartTime = millis();
-  while (request.readyState() != 4 && millis() - abortStartTime < 1000) {
+  while (request->readyState() != 4 && millis() - abortStartTime < 1000) {
     vTaskDelay(25 / portTICK_PERIOD_MS);
   }
 }
@@ -1616,7 +1617,7 @@ String http_sync_request_get(String url) {
   while (request.readyState() < 1) {
     if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: readyState never reached 1");
-      abort_http_request(request);
+      abort_http_request(&request);
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
@@ -1624,7 +1625,7 @@ String http_sync_request_get(String url) {
   vTaskDelay(150 / portTICK_PERIOD_MS);
   if (!request.send()) {
     Serial.println("HTTP GET send() failed");
-    abort_http_request(request);
+    abort_http_request(&request);
     return "<ERR>";
   }
   vTaskDelay(150 / portTICK_PERIOD_MS);
@@ -1633,7 +1634,7 @@ String http_sync_request_get(String url) {
   while (request.readyState() != 4) {
     if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: request not completed within 8 seconds");
-      abort_http_request(request);
+      abort_http_request(&request);
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
@@ -1670,7 +1671,7 @@ String http_sync_request_post(String url, String body, String ContentType) {
   while (request.readyState() < 1) {
     if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: readyState never reached 1");
-      abort_http_request(request);
+      abort_http_request(&request);
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
@@ -1679,7 +1680,7 @@ String http_sync_request_post(String url, String body, String ContentType) {
   request.setReqHeader("Content-Type", getValue(ContentType, ':', 1).c_str());
   if (!request.send(body)) {
     Serial.println("HTTP POST send() failed");
-    abort_http_request(request);
+    abort_http_request(&request);
     return "<ERR>";
   }
 
@@ -1689,7 +1690,7 @@ String http_sync_request_post(String url, String body, String ContentType) {
   while (request.readyState() != 4) {
     if (millis() - startTime > timeoutMs) { // Общий таймаут
       Serial.println("Timeout: request not completed within 8 seconds");
-      abort_http_request(request);
+      abort_http_request(&request);
       return "<ERR>";
     }
     vTaskDelay(25 / portTICK_PERIOD_MS);
