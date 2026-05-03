@@ -38,3 +38,49 @@ inline bool parseFloatSafe(const char* token, float& out) {
   out = value;
   return true;
 }
+
+/** JSON-строка (включая внешние кавычки) для вставки в <script type="application/json"> или JSON.parse. */
+inline String toJsonString(const String& s) {
+  String out;
+  out.reserve(s.length() + 8);
+  out += '"';
+  for (unsigned int i = 0; i < s.length(); i++) {
+    char c = s.charAt(i);
+    switch (c) {
+      case '\\':
+        out += "\\\\";
+        break;
+      case '"':
+        out += "\\\"";
+        break;
+      case '\b':
+        out += "\\b";
+        break;
+      case '\f':
+        out += "\\f";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      case '<':
+        // В HTML внутри <script> последовательность "</script>" закрывает тег и ломает разбор страницы.
+        out += "\\u003c";
+        break;
+      default:
+        if ((unsigned char)c < 0x20u) {
+          out += ' ';
+        } else {
+          out += c;
+        }
+        break;
+    }
+  }
+  out += '"';
+  return out;
+}

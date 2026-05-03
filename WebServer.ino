@@ -31,10 +31,12 @@ void set_mixer(bool On);
 void FS_init(void);
 void save_profile();
 void read_config();
+void apply_config_runtime();
 void load_profile();
 bool profile_exists_for_mode(SAMOVAR_MODE mode);
 void set_current_profile_mode(SAMOVAR_MODE mode);
 void change_samovar_mode();
+void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode);
 void WebServerInit(void);
 String indexKeyProcessor(const String &var);
 String setupKeyProcessor(const String &var);
@@ -181,8 +183,34 @@ const char* get_index_page_path() {
 }
 
 void send_index_page(AsyncWebServerRequest *request) {
+  // Главная страница должна соответствовать сохранённому режиму (SamSetup.Mode).
+  // Samovar_Mode может временно расходиться (например, после web_command без обновления SamSetup).
+  {
+    uint16_t cfgMode = SamSetup.Mode;
+    if (cfgMode > (uint16_t)SAMOVAR_LUA_MODE) {
+      cfgMode = (uint16_t)SAMOVAR_RECTIFICATION_MODE;
+    }
+    Samovar_Mode = (SAMOVAR_MODE)cfgMode;
+  }
   change_samovar_mode();
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, get_index_page_path(), "text/html", false, indexKeyProcessor);
+  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  request->send(response);
+}
+
+// Прямой GET /distiller.htm|beer.htm|… иначе отдаётся через serveStatic без шаблонизатора — %WProgram% не подставляется, в UI «тип программы» пустой.
+void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode) {
+  uint16_t m = SamSetup.Mode;
+  if (m > (uint16_t)SAMOVAR_LUA_MODE) {
+    m = (uint16_t)SAMOVAR_RECTIFICATION_MODE;
+  }
+  if (m != (uint16_t)requiredMode) {
+    request->redirect("/index.htm");
+    return;
+  }
+  Samovar_Mode = (SAMOVAR_MODE)m;
+  change_samovar_mode();
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, spiffsPath, "text/html", false, indexKeyProcessor);
   response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   request->send(response);
 }
@@ -357,19 +385,25 @@ void WebServerInit(void) {
   server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_index_page(request);
   });
-  change_samovar_mode();
-
-  load_profile();
-  change_samovar_mode();
-
 
   server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/resetreason.css", String());
   });
-  server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (fileToAppend && fileToAppend.available())
+  // GET|HEAD: AmCharts и браузеры могут запрашивать HEAD; только GET давал 501 «Handler did not handle».
+  // Если лога ещё нет — beginResponse(nullptr) → тот же 501; отдаём пустой CSV с заголовком как в FS.ino.
+  server.on("/data.csv", (WebRequestMethodComposite)(HTTP_GET | HTTP_HEAD), [](AsyncWebServerRequest *request) {
+    if (fileToAppend && fileToAppend.available()) {
       fileToAppend.flush();
-    request->send(SPIFFS, "/data.csv", String());
+    }
+    if (!SPIFFS.exists("/data.csv")) {
+#ifdef WRITE_PROGNUM_IN_LOG
+      request->send(200, "text/csv; charset=utf-8", "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum\r\n");
+#else
+      request->send(200, "text/csv; charset=utf-8", "Date,Steam,Pipe,Water,Tank,Pressure\r\n");
+#endif
+      return;
+    }
+    request->send(SPIFFS, "/data.csv", "text/csv; charset=utf-8");
   });
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_ajax_json(request);
@@ -528,6 +562,19 @@ void WebServerInit(void) {
   //  DefaultHeaders::Instance().addHeader("Expires", "Thu, 01 Jan 1970 00:00:00 UTC");
   //  DefaultHeaders::Instance().addHeader("Last-Modified", "Mon, 03 Jan 2050 00:00:00 UTC");
   
+  server.on("/distiller.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    send_mode_specific_htm(request, "/distiller.htm", SAMOVAR_DISTILLATION_MODE);
+  });
+  server.on("/beer.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    send_mode_specific_htm(request, "/beer.htm", SAMOVAR_BEER_MODE);
+  });
+  server.on("/bk.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    send_mode_specific_htm(request, "/bk.htm", SAMOVAR_BK_MODE);
+  });
+  server.on("/nbk.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    send_mode_specific_htm(request, "/nbk.htm", SAMOVAR_NBK_MODE);
+  });
+
   // Автоматическая раздача всех файлов из SPIFFS
   server.serveStatic("/", SPIFFS, "/");
   
@@ -589,11 +636,13 @@ String indexKeyProcessor(const String &var) {
     return PWR_TYPE;
   else if (var == "pwr_unit_v_only")
     return (String(PWR_TYPE) == "V") ? "block" : "none";
+  else if (var == "btn_list") {
 #ifdef USE_LUA
-  if (var == "btn_list")
-    return get_lua_script_list();
+    return toJsonString(get_lua_script_list());
+#else
+    return toJsonString(String());
 #endif
-  else if (var == "showvideo") {
+  } else if (var == "showvideo") {
     if (strlen(SamSetup.videourl) > 0) return "inline";
     else
       return "none";
@@ -912,6 +961,13 @@ String wifiKeyProcessor(const String &var) {
   return "";
 }
 
+const AsyncWebParameter* get_request_param(AsyncWebServerRequest *request, const char *name) {
+  if (!request || !name) return nullptr;
+  const AsyncWebParameter *param = request->getParam(name, true);
+  if (param) return param;
+  return request->getParam(name, false);
+}
+
 String calibrateKeyProcessor(const String &var) {
   if (var == "StepperStep") return (String)STEPPER_MAX_SPEED;
   else if (var == "StepperStepMl")
@@ -998,19 +1054,27 @@ void handleSave(AsyncWebServerRequest *request) {
         //return;
   */
 
-  if (request->hasArg("mode")) {
-    String modeArg = request->arg("mode");
-    long requestedModeValue = 0;
-    if (!parseLongSafe(modeArg.c_str(), requestedModeValue) || !is_valid_samovar_mode(requestedModeValue)) {
-      request->send(400, "text/plain", "Invalid mode");
-      return;
-    }
-    if (SamSetup.Mode != (uint16_t)requestedModeValue) {
-      switch_samovar_mode((SAMOVAR_MODE)requestedModeValue);
+  bool fullSetupForm = request->hasArg("fullsetup");
+  bool modeRequested = false;
+  SAMOVAR_MODE requestedMode = Samovar_Mode;
+  {
+    const AsyncWebParameter *modeParam = get_request_param(request, "mode");
+    if (modeParam) {
+      String modeArg = modeParam->value();
+      long requestedModeValue = 0;
+      if (!parseLongSafe(modeArg.c_str(), requestedModeValue) || !is_valid_samovar_mode(requestedModeValue)) {
+        request->send(400, "text/plain", "Invalid mode");
+        return;
+      }
+      modeRequested = true;
+      requestedMode = (SAMOVAR_MODE)requestedModeValue;
+      // Переключать, если отличается сохранённый режим ИЛИ текущий Samovar_Mode (иначе пропускали бы смену при рассинхроне).
+      if (SamSetup.Mode != (uint16_t)requestedModeValue ||
+          Samovar_Mode != (SAMOVAR_MODE)requestedModeValue) {
+        switch_samovar_mode(requestedMode);
+      }
     }
   }
-
-  bool fullSetupForm = request->hasArg("fullsetup");
 
   if (request->hasArg("SteamDelay")) {
     SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
@@ -1088,10 +1152,11 @@ void handleSave(AsyncWebServerRequest *request) {
   if (request->hasArg("stepperstepml")) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
   }
-  if (request->hasArg("WProgram")) {
-    if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(request->arg("WProgram"));
+  if (const AsyncWebParameter *wProgramParam = get_request_param(request, "WProgram")) {
+    String wProgram = wProgramParam->value();
+    if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(wProgram);
     else
-      set_program(request->arg("WProgram"));
+      set_program(wProgram);
   }
 
   update_checkbox_arg(request, "useflevel", SamSetup.UseHLS, fullSetupForm);
@@ -1237,9 +1302,22 @@ void handleSave(AsyncWebServerRequest *request) {
     SamSetup.PackDens = request->arg("PackDens").toInt();
   }
 
+  if (modeRequested) {
+    SamSetup.Mode = (uint16_t)requestedMode;
+    Samovar_Mode = requestedMode;
+    Samovar_CR_Mode = requestedMode;
+    set_current_profile_mode(requestedMode);
+  }
+
   // Сохраняем изменения в память.
   save_profile();
-  read_config();
+  if (modeRequested) {
+    // Финально фиксируем активный режим после записи всего профиля:
+    // save_profile() тоже пишет last_mode из SamSetup.Mode, поэтому последним
+    // источником истины должен быть mode, пришедший из полной формы настроек.
+    set_current_profile_mode(requestedMode);
+  }
+  apply_config_runtime();
 
   get_task_stack_usage();
   AsyncWebServerResponse *response = request->beginResponse(301);
@@ -1391,18 +1469,20 @@ void web_command(AsyncWebServerRequest *request) {
 }
 void web_program(AsyncWebServerRequest *request) {
   String response = "OK";
-  if (request->hasArg("WProgram")) {
+  const AsyncWebParameter *wProgramParam = get_request_param(request, "WProgram");
+  if (wProgramParam) {
+    String wProgram = wProgramParam->value();
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      set_beer_program(request->arg("WProgram"));
+      set_beer_program(wProgram);
       response = get_beer_program();
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      set_dist_program(request->arg("WProgram"));
+      set_dist_program(wProgram);
       response = get_dist_program();
     } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      set_nbk_program(request->arg("WProgram"));
+      set_nbk_program(wProgram);
       response = get_nbk_program();
     } else {
-      set_program(request->arg("WProgram"));
+      set_program(wProgram);
       response = get_program(CAPACITY_NUM * 2);
     }
   }
@@ -1490,6 +1570,13 @@ void get_data_log(AsyncWebServerRequest *request, String fn) {
   request->send(response);
 }
 
+// Сравнение версии веб-интерфейса: без нормализации сервер часто отдаёт CRLF, в SPIFFS после записи
+// readStringUntil('\n') оставляет '\r' в локальной строке — условие «не совпадает» выполняется при каждой загрузке.
+static void normalize_web_if_version_string(String& v) {
+  v.trim();
+  v.replace("\r", "");
+}
+
 void get_web_interface() {
   String version;
   String local_version;
@@ -1497,14 +1584,16 @@ void get_web_interface() {
 
   version = get_web_file("version.txt", GET_CONTENT);
   if (version == "<ERR>") return;
+  normalize_web_if_version_string(version);
 
   Serial.print(F("WEB interface version = "));
   Serial.println(version);
 
   File fn = SPIFFS.open("/version.txt", FILE_READ);
   if (fn) {
-    local_version = fn.readStringUntil('\n');
+    local_version = fn.readString();
     fn.close();
+    normalize_web_if_version_string(local_version);
   }
   Serial.print(F("Local interface version = "));
   Serial.println(local_version);
@@ -1559,7 +1648,15 @@ void get_web_interface() {
     s += get_web_file("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);
     s += get_web_file("program_shugar.txt", SAVE_FILE_IF_NOT_EXIST);
 
-    s += get_web_file("version.txt", SAVE_FILE_OVERRIDE);
+    // Версию уже скачали в начале функции — записываем нормализованную строку, без повторного HTTP.
+    {
+      File wf = SPIFFS.open("/version.txt", FILE_WRITE);
+      if (wf) {
+        wf.print(version);
+        wf.print('\n');
+        wf.close();
+      }
+    }
   }
 }
 

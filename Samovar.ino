@@ -857,6 +857,10 @@ void setup() {
     Serial.println("Default values saved to NVS");
   }
 
+  // Программа хранится в общем runtime-буфере program[]; после загрузки режима из NVS
+  // нужно заполнить его дефолтом именно текущего режима.
+  load_default_program_for_mode();
+
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
   digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
@@ -1613,8 +1617,7 @@ void send_ajax_json(AsyncWebServerRequest *request) {
 
 // WiFiManager отключен: configModeCallback/saveConfigCallback больше не используются
 
-void read_config() {
-  load_profile_nvs();
+void apply_config_runtime() {
   SteamSensor.SetTemp = SamSetup.SetSteamTemp;
   PipeSensor.SetTemp = SamSetup.SetPipeTemp;
   WaterSensor.SetTemp = SamSetup.SetWaterTemp;
@@ -1708,6 +1711,11 @@ void read_config() {
 #endif
   //Инициализация детектора примесей
   init_impurity_detector();
+}
+
+void read_config() {
+  load_profile_nvs();
+  apply_config_runtime();
 }
 
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {

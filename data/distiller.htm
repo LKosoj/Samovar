@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
+  <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
   <script>
         // ==================== CONNECTION STATUS ============================================================
     var IsOffline = false; //признак обрыва связи
@@ -71,7 +72,16 @@
 
     // ==================== LUA BUTTONS ==================================================================
     function AddLuaButtons () {
-      let btn_list = '%btn_list%';
+      var btn_list = '';
+      var _luaBtnEl = document.getElementById('samovar_lua_btn_list');
+      if (_luaBtnEl) {
+        try {
+          var _parsed = JSON.parse(_luaBtnEl.textContent || '""');
+          if (typeof _parsed === 'string') btn_list = _parsed;
+        } catch (_e) {
+          btn_list = '';
+        }
+      }
       if (btn_list !== '') {
         let btn_arr = btn_list.split(',');
         for (z = 0; z < btn_arr.length; z++) {
@@ -412,7 +422,8 @@
     }
 
     function addLine (obj, s) {
-      //var s = "B;100;0.1;5;0.00;120";
+      s = (s == null || s === undefined) ? "" : String(s).trim();
+      if (!s) return;
       var arr = s.split(";");
 
       var dl = document.createElement("div");
@@ -469,7 +480,8 @@
 
       var p = "ptype" + _lnIdx;
       var ptype = document.getElementById(p);
-      ptype.value = arr[0];
+      var typeCode = (arr[0] == null || arr[0] === undefined) ? "" : String(arr[0]).trim();
+      ptype.value = typeCode;
 
       set_bgcolor(_lnIdx);
 
@@ -483,7 +495,8 @@
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
       for (z = 0; z < varr.length; z++) {
-        if (varr[z] != "") addLine(false, varr[z]);
+        var line = (varr[z] == null || varr[z] === undefined) ? "" : String(varr[z]).trim();
+        if (line !== "") addLine(false, line);
       }
     }
 

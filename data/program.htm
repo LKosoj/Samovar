@@ -64,22 +64,23 @@ function updateColumnParams() {
   const mat = matSelect ? matSelect.value : 2;
   
   fetch("/ajax_col_params?mat=" + mat)
-    .then(r => r.json())
-    .then(data => {
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
       console.log("Данные API:", data);
       if (data) {
         columnParams = data;
         displayColumnParams();
       }
     })
-    .catch(err => console.error("Ошибка API:", err));
+    .catch(function (err) { console.error("Ошибка API:", err); });
 }
 
 function displayColumnParams() {
   if (!columnParams) return;
   const p = columnParams;
   
-  const setTxt = (id, val, fixed = 0) => {
+  function setTxt(id, val, fixed) {
+    if (fixed === undefined) fixed = 0;
     const el = document.getElementById(id);
     if (el) el.textContent = (typeof val === 'number') ? val.toFixed(fixed) : (val || '-');
   };
@@ -97,7 +98,7 @@ function displayColumnParams() {
   const pUnit = (pwr_unit === 'V') ? ' В' : ' Вт';
   
   if (pwr_unit === 'V') {
-    const toVolt = (w) => Math.round(220 * Math.sqrt(Math.max(0, w) / heaterMaxPwr));
+    function toVolt(w) { return Math.round(220 * Math.sqrt(Math.max(0, w) / heaterMaxPwr)); }
     setTxt('colFloodPower', toVolt(p.floodPowerW));
     setTxt('colWorkingPower', toVolt(p.workingPowerW));
     const fu = document.getElementById('floodUnit'); if (fu) fu.textContent = ' В';
@@ -179,8 +180,8 @@ function loadFile(e) {
  updateColumnParams();
  
  fetch(fn)
-  .then(response => response.text())
-  .then((data) => {
+  .then(function (response) { return response.text(); })
+  .then(function (data) {
   document.getElementById('WProgram1').value = data
   glcalcnum = false;
   calc_program();

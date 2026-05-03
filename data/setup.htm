@@ -23,31 +23,35 @@
       return 0;
     }
 
-    async function sendbutton (command) {
-      try {
-        let resp = await fetch('/command?' + command);
-        if (!resp.ok) alert(resp.status + ': ' + resp.statusText);
-      } catch (e) {
-        alert('Ошибка сети: ' + e);
-      }
+    function sendbutton (command) {
+      return fetch('/command?' + command)
+        .then(function (resp) {
+          if (!resp.ok) alert(resp.status + ': ' + resp.statusText);
+        })
+        .catch(function (e) {
+          alert('Ошибка сети: ' + e);
+        });
     };
 
-    async function set_program () {
-      try {
-        let formData = new FormData(document.forms.setupform);
-        let resp = await fetch('/program', { method: 'POST', body: formData });
-        if (!resp.ok) {
-          alert(resp.status + ': ' + resp.statusText);
-          return;
-        }
-        let text = await resp.text();
-        if (text !== "OK") {
-          document.getElementById('WProgram').value = text;
-          alert("Ok");
-        }
-      } catch (e) {
-        alert('Ошибка сети: ' + e);
-      }
+    function set_program () {
+      var formData = new FormData(document.forms.setupform);
+      return fetch('/program', { method: 'POST', body: formData })
+        .then(function (resp) {
+          if (!resp.ok) {
+            alert(resp.status + ': ' + resp.statusText);
+            return null;
+          }
+          return resp.text();
+        })
+        .then(function (text) {
+          if (text && text !== "OK") {
+            document.getElementById('WProgram').value = text;
+            alert("Ok");
+          }
+        })
+        .catch(function (e) {
+          alert('Ошибка сети: ' + e);
+        });
     };
 
     HTMLElement.prototype.serialize = function() {
@@ -110,14 +114,15 @@
       document.body.removeChild(pom);
     }
 
-    async function rescanSensors () {
-      await sendbutton('rescands');
-      setTimeout(() => location.reload(), 1000);
+    function rescanSensors () {
+      sendbutton('rescands').then(function () {
+        setTimeout(function () { location.reload(); }, 1000);
+      });
     }
 
     window.onload = function() {
       // Защита от запятых
-      document.querySelectorAll('input[type="text"]').forEach(input => {
+      document.querySelectorAll('input[type="text"]').forEach(function (input) {
         input.addEventListener('input', function() {
           this.value = this.value.replace(',', '.');
         });

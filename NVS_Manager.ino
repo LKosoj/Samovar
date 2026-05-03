@@ -82,10 +82,33 @@ static void write_last_mode_meta(uint8_t mode) {
   }
   Preferences meta;
   if (!meta.begin("sam_meta", false)) {
+    Serial.println(F("NVS: Failed to open sam_meta for writing last_mode"));
     return;
   }
-  meta.putUChar("last_mode", mode);
+  bool migrated = meta.getBool("migrated", false);
+  if (meta.getUChar("last_mode", 255) == mode) {
+    meta.end();
+    return;
+  }
+  size_t written = meta.putUChar("last_mode", mode);
+  uint8_t savedMode = meta.getUChar("last_mode", 255);
+  if (written != 0 && savedMode == mode) {
+    meta.end();
+    return;
+  }
+
+  Serial.print(F("NVS: Repairing sam_meta, failed to write last_mode = "));
+  Serial.println(mode);
+  meta.clear();
+  meta.putBool("migrated", migrated);
+  written = meta.putUChar("last_mode", mode);
+  savedMode = meta.getUChar("last_mode", 255);
   meta.end();
+
+  if (written == 0 || savedMode != mode) {
+    Serial.print(F("NVS: Failed to repair last_mode = "));
+    Serial.println(mode);
+  }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -160,6 +183,30 @@ void saveBytesIfChanged(const char* key, const void* value, size_t len) {
   }
 }
 
+void saveUCharIfChanged(const char* key, uint8_t value) {
+  if (!prefs.isKey(key) || prefs.getUChar(key, 0) != value) {
+    prefs.putUChar(key, value);
+  }
+}
+
+void saveUShortIfChanged(const char* key, uint16_t value) {
+  if (!prefs.isKey(key) || prefs.getUShort(key, 0) != value) {
+    prefs.putUShort(key, value);
+  }
+}
+
+void saveFloatIfChanged(const char* key, float value) {
+  if (!prefs.isKey(key) || prefs.getFloat(key, 0.0f) != value) {
+    prefs.putFloat(key, value);
+  }
+}
+
+void saveBoolIfChanged(const char* key, bool value) {
+  if (!prefs.isKey(key) || prefs.getBool(key, !value) != value) {
+    prefs.putBool(key, value);
+  }
+}
+
 void save_profile_nvs() {
   if (!prefs.begin(current_profile_namespace(), false)) {
     Serial.println("NVS: Failed to open namespace for writing!");
@@ -167,56 +214,56 @@ void save_profile_nvs() {
   }
 
   // --- Основные настройки ---
-  prefs.putUChar("flag", SamSetup.flag);
-  prefs.putUShort("Mode", SamSetup.Mode);
-  prefs.putUChar("TimeZone", SamSetup.TimeZone);
-  prefs.putFloat("HeaterR", SamSetup.HeaterResistant);
-  prefs.putUChar("LogPeriod", SamSetup.LogPeriod);
+  saveUCharIfChanged("flag", SamSetup.flag);
+  saveUShortIfChanged("Mode", SamSetup.Mode);
+  saveUCharIfChanged("TimeZone", SamSetup.TimeZone);
+  saveFloatIfChanged("HeaterR", SamSetup.HeaterResistant);
+  saveUCharIfChanged("LogPeriod", SamSetup.LogPeriod);
   
   // --- Температурные настройки (Set) ---
-  prefs.putFloat("SetSteam", SamSetup.SetSteamTemp);
-  prefs.putFloat("SetPipe", SamSetup.SetPipeTemp);
-  prefs.putFloat("SetWater", SamSetup.SetWaterTemp);
-  prefs.putFloat("SetTank", SamSetup.SetTankTemp);
-  prefs.putFloat("SetACP", SamSetup.SetACPTemp);
-  prefs.putFloat("DistTemp", SamSetup.DistTemp);
+  saveFloatIfChanged("SetSteam", SamSetup.SetSteamTemp);
+  saveFloatIfChanged("SetPipe", SamSetup.SetPipeTemp);
+  saveFloatIfChanged("SetWater", SamSetup.SetWaterTemp);
+  saveFloatIfChanged("SetTank", SamSetup.SetTankTemp);
+  saveFloatIfChanged("SetACP", SamSetup.SetACPTemp);
+  saveFloatIfChanged("DistTemp", SamSetup.DistTemp);
 
   // --- Температурные настройки (Delta) ---
-  prefs.putFloat("DeltaSteam", SamSetup.DeltaSteamTemp);
-  prefs.putFloat("DeltaPipe", SamSetup.DeltaPipeTemp);
-  prefs.putFloat("DeltaWater", SamSetup.DeltaWaterTemp);
-  prefs.putFloat("DeltaTank", SamSetup.DeltaTankTemp);
-  prefs.putFloat("DeltaACP", SamSetup.DeltaACPTemp);
+  saveFloatIfChanged("DeltaSteam", SamSetup.DeltaSteamTemp);
+  saveFloatIfChanged("DeltaPipe", SamSetup.DeltaPipeTemp);
+  saveFloatIfChanged("DeltaWater", SamSetup.DeltaWaterTemp);
+  saveFloatIfChanged("DeltaTank", SamSetup.DeltaTankTemp);
+  saveFloatIfChanged("DeltaACP", SamSetup.DeltaACPTemp);
 
   // --- Задержки (Delays) ---
-  prefs.putUShort("SteamDelay", SamSetup.SteamDelay);
-  prefs.putUShort("PipeDelay", SamSetup.PipeDelay);
-  prefs.putUShort("WaterDelay", SamSetup.WaterDelay);
-  prefs.putUShort("TankDelay", SamSetup.TankDelay);
-  prefs.putUShort("ACPDelay", SamSetup.ACPDelay);
+  saveUShortIfChanged("SteamDelay", SamSetup.SteamDelay);
+  saveUShortIfChanged("PipeDelay", SamSetup.PipeDelay);
+  saveUShortIfChanged("WaterDelay", SamSetup.WaterDelay);
+  saveUShortIfChanged("TankDelay", SamSetup.TankDelay);
+  saveUShortIfChanged("ACPDelay", SamSetup.ACPDelay);
 
   // --- Шаговик и настройки насоса ---
-  prefs.putUShort("StepMl", SamSetup.StepperStepMl);
-  prefs.putUShort("StepMlI2C", SamSetup.StepperStepMlI2C);
-  prefs.putBool("AutoSpeed", SamSetup.useautospeed);
-  prefs.putBool("DetOnHeads", SamSetup.useDetectorOnHeads);
-  prefs.putUChar("SpeedPerc", SamSetup.autospeed);
-  prefs.putBool("UseWS", SamSetup.UseWS); // Датчик воды
+  saveUShortIfChanged("StepMl", SamSetup.StepperStepMl);
+  saveUShortIfChanged("StepMlI2C", SamSetup.StepperStepMlI2C);
+  saveBoolIfChanged("AutoSpeed", SamSetup.useautospeed);
+  saveBoolIfChanged("DetOnHeads", SamSetup.useDetectorOnHeads);
+  saveUCharIfChanged("SpeedPerc", SamSetup.autospeed);
+  saveBoolIfChanged("UseWS", SamSetup.UseWS); // Датчик воды
 
   // --- PID и Power ---
-  prefs.putFloat("Kp", SamSetup.Kp);
-  prefs.putFloat("Ki", SamSetup.Ki);
-  prefs.putFloat("Kd", SamSetup.Kd);
-  prefs.putFloat("StbVolt", SamSetup.StbVoltage);
-  prefs.putFloat("BVolt", SamSetup.BVolt);
-  prefs.putBool("CheckPwr", SamSetup.CheckPower);
-  prefs.putBool("UseST", SamSetup.UseST); // Разгонный тэн
+  saveFloatIfChanged("Kp", SamSetup.Kp);
+  saveFloatIfChanged("Ki", SamSetup.Ki);
+  saveFloatIfChanged("Kd", SamSetup.Kd);
+  saveFloatIfChanged("StbVolt", SamSetup.StbVoltage);
+  saveFloatIfChanged("BVolt", SamSetup.BVolt);
+  saveBoolIfChanged("CheckPwr", SamSetup.CheckPower);
+  saveBoolIfChanged("UseST", SamSetup.UseST); // Разгонный тэн
 
   // --- Реле ---
-  prefs.putBool("rele1", SamSetup.rele1);
-  prefs.putBool("rele2", SamSetup.rele2);
-  prefs.putBool("rele3", SamSetup.rele3);
-  prefs.putBool("rele4", SamSetup.rele4);
+  saveBoolIfChanged("rele1", SamSetup.rele1);
+  saveBoolIfChanged("rele2", SamSetup.rele2);
+  saveBoolIfChanged("rele3", SamSetup.rele3);
+  saveBoolIfChanged("rele4", SamSetup.rele4);
 
   // --- Адреса датчиков (Bytes) ---
   saveBytesIfChanged("SteamAddr", SamSetup.SteamAdress, 8);
@@ -238,26 +285,26 @@ void save_profile_nvs() {
   saveStringIfChanged("tg_id", SamSetup.tg_chat_id);
 
   // --- Доп настройки ---
-  prefs.putBool("Preccure", SamSetup.UsePreccureCorrect);
-  prefs.putBool("PrgBuzz", SamSetup.ChangeProgramBuzzer);
-  prefs.putBool("UseBuzz", SamSetup.UseBuzzer);
-  prefs.putBool("UseBBuzz", SamSetup.UseBBuzzer);
-  prefs.putUChar("DistTimeF", SamSetup.DistTimeF);
-  prefs.putBool("UseHLS", SamSetup.UseHLS);
-  prefs.putFloat("MaxPress", SamSetup.MaxPressureValue);
+  saveBoolIfChanged("Preccure", SamSetup.UsePreccureCorrect);
+  saveBoolIfChanged("PrgBuzz", SamSetup.ChangeProgramBuzzer);
+  saveBoolIfChanged("UseBuzz", SamSetup.UseBuzzer);
+  saveBoolIfChanged("UseBBuzz", SamSetup.UseBBuzzer);
+  saveUCharIfChanged("DistTimeF", SamSetup.DistTimeF);
+  saveBoolIfChanged("UseHLS", SamSetup.UseHLS);
+  saveFloatIfChanged("MaxPress", SamSetup.MaxPressureValue);
 
   // --- НБК настройки ---
-  prefs.putFloat("NbkIn", SamSetup.NbkIn);
-  prefs.putFloat("NbkDelta", SamSetup.NbkDelta);
-  prefs.putFloat("NbkDM", SamSetup.NbkDM);
-  prefs.putFloat("NbkDP", SamSetup.NbkDP);
-  prefs.putFloat("NbkSteamT", SamSetup.NbkSteamT);
-  prefs.putFloat("NbkOwPress", SamSetup.NbkOwPress);
+  saveFloatIfChanged("NbkIn", SamSetup.NbkIn);
+  saveFloatIfChanged("NbkDelta", SamSetup.NbkDelta);
+  saveFloatIfChanged("NbkDM", SamSetup.NbkDM);
+  saveFloatIfChanged("NbkDP", SamSetup.NbkDP);
+  saveFloatIfChanged("NbkSteamT", SamSetup.NbkSteamT);
+  saveFloatIfChanged("NbkOwPress", SamSetup.NbkOwPress);
 
   // --- Параметры колонны ---
-  prefs.putFloat("ColDiam", SamSetup.ColDiam);
-  prefs.putFloat("ColHeight", SamSetup.ColHeight);
-  prefs.putUChar("PackDens", SamSetup.PackDens);
+  saveFloatIfChanged("ColDiam", SamSetup.ColDiam);
+  saveFloatIfChanged("ColHeight", SamSetup.ColHeight);
+  saveUCharIfChanged("PackDens", SamSetup.PackDens);
 
   prefs.end();
   write_last_mode_meta((uint8_t)SamSetup.Mode);

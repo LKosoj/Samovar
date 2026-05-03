@@ -66,6 +66,7 @@
 
 /* ==================== Базовые элементы ==================== */
 body {
+  position: relative;
   background: var(--bg-page);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
@@ -785,6 +786,7 @@ details.spoiler > .spoiler-content {
   position: absolute;
   top: 0.3em;
   right: 0.5em;
+  left: auto;
   background: transparent;
   border: 1px solid var(--text-on-accent);
   border-radius: var(--radius-sm);

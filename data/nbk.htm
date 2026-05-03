@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
+  <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
   <script>
     
     // ==================== CONNECTION STATUS ============================================================
@@ -74,7 +75,16 @@
 
     // ==================== LUA BUTTONS ==================================================================
     function AddLuaButtons () {
-      let btn_list = '%btn_list%';
+      var btn_list = '';
+      var _luaBtnEl = document.getElementById('samovar_lua_btn_list');
+      if (_luaBtnEl) {
+        try {
+          var _parsed = JSON.parse(_luaBtnEl.textContent || '""');
+          if (typeof _parsed === 'string') btn_list = _parsed;
+        } catch (_e) {
+          btn_list = '';
+        }
+      }
       if (btn_list !== '') {
         let btn_arr = btn_list.split(',');
         for (z = 0; z < btn_arr.length; z++) {
