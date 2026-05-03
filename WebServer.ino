@@ -32,8 +32,7 @@ void FS_init(void);
 void save_profile();
 void read_config();
 void apply_config_runtime();
-void load_profile();
-bool profile_exists_for_mode(SAMOVAR_MODE mode);
+bool profile_exists();
 void set_current_profile_mode(SAMOVAR_MODE mode);
 void change_samovar_mode();
 void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode);
@@ -1012,17 +1011,11 @@ void switch_samovar_mode(SAMOVAR_MODE requestedMode) {
 
   samovar_reset();
 
-  bool targetProfileExists = profile_exists_for_mode(requestedMode);
   SamSetup.Mode = (uint16_t)requestedMode;
   Samovar_Mode = requestedMode;
-  set_current_profile_mode(requestedMode);
+  Samovar_CR_Mode = requestedMode;
   load_default_program_for_mode();
-
-  if (targetProfileExists) {
-    load_profile();
-  } else {
-    SamSetup.flag = 2;
-  }
+  if (SamSetup.flag > 250) SamSetup.flag = 2;
   SamSetup.Mode = (uint16_t)requestedMode;
   Samovar_Mode = requestedMode;
   Samovar_CR_Mode = requestedMode;
@@ -1306,16 +1299,15 @@ void handleSave(AsyncWebServerRequest *request) {
     SamSetup.Mode = (uint16_t)requestedMode;
     Samovar_Mode = requestedMode;
     Samovar_CR_Mode = requestedMode;
-    set_current_profile_mode(requestedMode);
   }
 
   // Сохраняем изменения в память.
   save_profile();
-  if (modeRequested) {
-    // Финально фиксируем активный режим после записи всего профиля:
-    // save_profile() тоже пишет last_mode из SamSetup.Mode, поэтому последним
-    // источником истины должен быть mode, пришедший из полной формы настроек.
+  if (modeRequested && profile_exists()) {
+    // Фиксируем активный режим только после успешной записи общего профиля.
     set_current_profile_mode(requestedMode);
+  } else if (modeRequested) {
+    Serial.println(F("NVS: Common profile was not saved; active mode was not committed"));
   }
   apply_config_runtime();
 

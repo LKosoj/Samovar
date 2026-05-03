@@ -1,11 +1,53 @@
 #include <Preferences.h>
 #include <EEPROM.h>
 #include <WiFi.h>
+#include <nvs.h>
+#include <nvs_flash.h>
 #include "Samovar.h"
 
 Preferences prefs;
+static bool nvsProfileWriteFailed = false;
 
 static void write_last_mode_meta(uint8_t mode);
+static bool compact_samovar_nvs_namespaces();
+static bool rebuild_full_nvs_partition();
+static void load_profile_nvs_from_namespace(const char* ns);
+
+static const char* const SAMOVAR_COMMON_PROFILE_NAMESPACE = "sam_cfg";
+
+static const char* const SAMOVAR_LEGACY_PROFILE_NAMESPACES[] = {
+  "sam_rect",
+  "sam_dist",
+  "sam_beer",
+  "sam_bk",
+  "sam_nbk",
+  "sam_suvid",
+  "sam_lua"
+};
+
+static const size_t SAMOVAR_LEGACY_PROFILE_NAMESPACE_COUNT =
+  sizeof(SAMOVAR_LEGACY_PROFILE_NAMESPACES) / sizeof(SAMOVAR_LEGACY_PROFILE_NAMESPACES[0]);
+
+static const char* const SAMOVAR_NVS_NAMESPACES[] = {
+  "sam_meta",
+  "sam_cfg",
+  "sam_rect",
+  "sam_dist",
+  "sam_beer",
+  "sam_bk",
+  "sam_nbk",
+  "sam_suvid",
+  "sam_lua"
+};
+
+static const size_t SAMOVAR_NVS_NAMESPACE_COUNT =
+  sizeof(SAMOVAR_NVS_NAMESPACES) / sizeof(SAMOVAR_NVS_NAMESPACES[0]);
+
+static void markNvsProfileWriteFailed(const char* key) {
+  nvsProfileWriteFailed = true;
+  Serial.print(F("NVS: Failed to write profile key "));
+  Serial.println(key);
+}
 
 static void loadBytesOrInvalid(const char* key, uint8_t* dst, size_t len) {
   if (prefs.getBytes(key, dst, len) != len) {
@@ -18,7 +60,7 @@ static String getColorOrDefault(const char* key, const char* defaultColor) {
   return color.length() > 0 ? color : String(defaultColor);
 }
 
-static const char* profile_namespace_by_mode(int mode) {
+static const char* legacy_profile_namespace_by_mode(int mode) {
   switch (mode) {
     case SAMOVAR_BEER_MODE: return "sam_beer";
     case SAMOVAR_DISTILLATION_MODE: return "sam_dist";
@@ -32,26 +74,18 @@ static const char* profile_namespace_by_mode(int mode) {
   }
 }
 
-static const char* current_profile_namespace() {
-  int mode = (int)Samovar_CR_Mode;
-  if (mode < SAMOVAR_RECTIFICATION_MODE || mode > SAMOVAR_LUA_MODE) {
-    mode = SAMOVAR_RECTIFICATION_MODE;
-  }
-  return profile_namespace_by_mode(mode);
-}
-
-bool profile_exists_for_mode(SAMOVAR_MODE mode) {
-  int modeValue = (int)mode;
-  if (modeValue < SAMOVAR_RECTIFICATION_MODE || modeValue > SAMOVAR_LUA_MODE) {
-    return false;
-  }
+static bool profile_exists_in_namespace(const char* ns) {
   Preferences profilePrefs;
-  if (!profilePrefs.begin(profile_namespace_by_mode(modeValue), true)) {
+  if (!profilePrefs.begin(ns, true)) {
     return false;
   }
   uint8_t flag = profilePrefs.getUChar("flag", 255);
   profilePrefs.end();
   return flag <= 250;
+}
+
+bool profile_exists() {
+  return profile_exists_in_namespace(SAMOVAR_COMMON_PROFILE_NAMESPACE);
 }
 
 void set_current_profile_mode(SAMOVAR_MODE mode) {
@@ -108,7 +142,365 @@ static void write_last_mode_meta(uint8_t mode) {
   if (written == 0 || savedMode != mode) {
     Serial.print(F("NVS: Failed to repair last_mode = "));
     Serial.println(mode);
+    if (compact_samovar_nvs_namespaces()) {
+      Preferences retryMeta;
+      if (retryMeta.begin("sam_meta", false)) {
+        retryMeta.putUChar("last_mode", mode);
+        retryMeta.end();
+      }
+    }
   }
+}
+
+struct SamovarNvsEntryBackup {
+  char ns[16];
+  char key[16];
+  nvs_type_t type;
+  size_t len;
+  union {
+    uint8_t u8;
+    int8_t i8;
+    uint16_t u16;
+    int16_t i16;
+    uint32_t u32;
+    int32_t i32;
+    uint64_t u64;
+    int64_t i64;
+  } value;
+  uint8_t* data;
+};
+
+static void free_samovar_nvs_backup(SamovarNvsEntryBackup* entries, size_t count) {
+  if (!entries) return;
+  for (size_t i = 0; i < count; i++) {
+    free(entries[i].data);
+    entries[i].data = nullptr;
+  }
+  free(entries);
+}
+
+static bool is_samovar_nvs_namespace(const char* ns) {
+  if (!ns) return false;
+  for (size_t i = 0; i < SAMOVAR_NVS_NAMESPACE_COUNT; i++) {
+    if (strcmp(ns, SAMOVAR_NVS_NAMESPACES[i]) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_legacy_profile_namespace(const char* ns) {
+  if (!ns) return false;
+  for (size_t i = 0; i < SAMOVAR_LEGACY_PROFILE_NAMESPACE_COUNT; i++) {
+    if (strcmp(ns, SAMOVAR_LEGACY_PROFILE_NAMESPACES[i]) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool namespace_has_entries(const char* ns) {
+  nvs_iterator_t it = nvs_entry_find("nvs", ns, NVS_TYPE_ANY);
+  if (!it) return false;
+  nvs_release_iterator(it);
+  return true;
+}
+
+static bool read_samovar_nvs_entry(nvs_handle_t handle, const nvs_entry_info_t& info, SamovarNvsEntryBackup& entry) {
+  strncpy(entry.ns, info.namespace_name, sizeof(entry.ns) - 1);
+  strncpy(entry.key, info.key, sizeof(entry.key) - 1);
+  entry.type = info.type;
+
+  switch (info.type) {
+    case NVS_TYPE_U8:
+      return nvs_get_u8(handle, info.key, &entry.value.u8) == ESP_OK;
+    case NVS_TYPE_I8:
+      return nvs_get_i8(handle, info.key, &entry.value.i8) == ESP_OK;
+    case NVS_TYPE_U16:
+      return nvs_get_u16(handle, info.key, &entry.value.u16) == ESP_OK;
+    case NVS_TYPE_I16:
+      return nvs_get_i16(handle, info.key, &entry.value.i16) == ESP_OK;
+    case NVS_TYPE_U32:
+      return nvs_get_u32(handle, info.key, &entry.value.u32) == ESP_OK;
+    case NVS_TYPE_I32:
+      return nvs_get_i32(handle, info.key, &entry.value.i32) == ESP_OK;
+    case NVS_TYPE_U64:
+      return nvs_get_u64(handle, info.key, &entry.value.u64) == ESP_OK;
+    case NVS_TYPE_I64:
+      return nvs_get_i64(handle, info.key, &entry.value.i64) == ESP_OK;
+    case NVS_TYPE_STR: {
+      size_t len = 0;
+      if (nvs_get_str(handle, info.key, nullptr, &len) != ESP_OK || len == 0) return false;
+      entry.data = (uint8_t*)malloc(len);
+      if (!entry.data) return false;
+      entry.len = len;
+      return nvs_get_str(handle, info.key, (char*)entry.data, &entry.len) == ESP_OK;
+    }
+    case NVS_TYPE_BLOB: {
+      size_t len = 0;
+      if (nvs_get_blob(handle, info.key, nullptr, &len) != ESP_OK || len == 0) return false;
+      entry.data = (uint8_t*)malloc(len);
+      if (!entry.data) return false;
+      entry.len = len;
+      return nvs_get_blob(handle, info.key, entry.data, &entry.len) == ESP_OK;
+    }
+    default:
+      return false;
+  }
+}
+
+static esp_err_t write_samovar_nvs_entry(nvs_handle_t handle, const SamovarNvsEntryBackup& entry) {
+  switch (entry.type) {
+    case NVS_TYPE_U8:
+      return nvs_set_u8(handle, entry.key, entry.value.u8);
+    case NVS_TYPE_I8:
+      return nvs_set_i8(handle, entry.key, entry.value.i8);
+    case NVS_TYPE_U16:
+      return nvs_set_u16(handle, entry.key, entry.value.u16);
+    case NVS_TYPE_I16:
+      return nvs_set_i16(handle, entry.key, entry.value.i16);
+    case NVS_TYPE_U32:
+      return nvs_set_u32(handle, entry.key, entry.value.u32);
+    case NVS_TYPE_I32:
+      return nvs_set_i32(handle, entry.key, entry.value.i32);
+    case NVS_TYPE_U64:
+      return nvs_set_u64(handle, entry.key, entry.value.u64);
+    case NVS_TYPE_I64:
+      return nvs_set_i64(handle, entry.key, entry.value.i64);
+    case NVS_TYPE_STR:
+      return entry.data ? nvs_set_str(handle, entry.key, (const char*)entry.data) : ESP_ERR_INVALID_ARG;
+    case NVS_TYPE_BLOB:
+      return entry.data ? nvs_set_blob(handle, entry.key, entry.data, entry.len) : ESP_ERR_INVALID_ARG;
+    default:
+      return ESP_ERR_NOT_SUPPORTED;
+  }
+}
+
+static bool restore_nvs_entries(const SamovarNvsEntryBackup* entries, size_t count, bool samovarOnly) {
+  for (size_t i = 0; i < count; i++) {
+    if (is_legacy_profile_namespace(entries[i].ns)) {
+      continue;
+    }
+    if (samovarOnly && !is_samovar_nvs_namespace(entries[i].ns)) {
+      continue;
+    }
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(entries[i].ns, NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+      err = write_samovar_nvs_entry(handle, entries[i]);
+      if (err == ESP_OK) err = nvs_commit(handle);
+      nvs_close(handle);
+    }
+    if (err != ESP_OK) {
+      Serial.print(F("NVS: Failed to restore key "));
+      Serial.print(entries[i].ns);
+      Serial.print('/');
+      Serial.println(entries[i].key);
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool erase_nvs_partition_and_restore(const SamovarNvsEntryBackup* entries, size_t count) {
+  Serial.println(F("NVS: Erasing full NVS partition for emergency rebuild"));
+  nvs_flash_deinit();
+  esp_err_t err = nvs_flash_erase();
+  if (err == ESP_OK) {
+    err = nvs_flash_init();
+  }
+  if (err != ESP_OK) {
+    Serial.print(F("NVS: Full NVS erase/init failed, err = "));
+    Serial.println((int)err);
+    return false;
+  }
+  if (!restore_nvs_entries(entries, count, false)) {
+    Serial.println(F("NVS: Full NVS restore failed"));
+    return false;
+  }
+  Serial.println(F("NVS: Full NVS partition rebuilt"));
+  return true;
+}
+
+static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count) {
+  count = 0;
+  nvs_iterator_t it = nvs_entry_find("nvs", nullptr, NVS_TYPE_ANY);
+  while (it) {
+    if (count >= maxEntries) {
+      Serial.println(F("NVS: Backup failed, too many keys"));
+      return false;
+    }
+
+    nvs_entry_info_t info;
+    nvs_entry_info(it, &info);
+    nvs_iterator_t next = nvs_entry_next(it);
+
+    nvs_handle_t handle;
+    if (nvs_open(info.namespace_name, NVS_READONLY, &handle) == ESP_OK) {
+      if (read_samovar_nvs_entry(handle, info, entries[count])) {
+        count++;
+      } else {
+        Serial.print(F("NVS: Failed to backup key "));
+        Serial.print(info.namespace_name);
+        Serial.print('/');
+        Serial.println(info.key);
+        nvs_close(handle);
+        return false;
+      }
+      nvs_close(handle);
+    } else {
+      Serial.print(F("NVS: Failed to open namespace for backup: "));
+      Serial.println(info.namespace_name);
+      return false;
+    }
+    it = next;
+  }
+  return true;
+}
+
+static bool rebuild_full_nvs_partition() {
+  const size_t maxEntries = 512;
+  SamovarNvsEntryBackup* entries = (SamovarNvsEntryBackup*)calloc(maxEntries, sizeof(SamovarNvsEntryBackup));
+  if (!entries) {
+    Serial.println(F("NVS: Full rebuild failed, no RAM"));
+    return false;
+  }
+
+  size_t count = 0;
+  bool ok = backup_all_nvs_entries(entries, maxEntries, count);
+  if (ok) {
+    Serial.print(F("NVS: Full rebuild backup keys = "));
+    Serial.println(count);
+    ok = erase_nvs_partition_and_restore(entries, count);
+  }
+
+  free_samovar_nvs_backup(entries, count);
+  return ok;
+}
+
+static bool compact_samovar_nvs_namespaces() {
+  static bool compacting = false;
+  if (compacting) return false;
+  compacting = true;
+
+  const size_t maxEntries = 512;
+  SamovarNvsEntryBackup* entries = (SamovarNvsEntryBackup*)calloc(maxEntries, sizeof(SamovarNvsEntryBackup));
+  if (!entries) {
+    Serial.println(F("NVS: Samovar namespace compaction failed, no RAM"));
+    compacting = false;
+    return false;
+  }
+
+  size_t count = 0;
+  bool ok = backup_all_nvs_entries(entries, maxEntries, count);
+
+  if (!ok) {
+    free_samovar_nvs_backup(entries, count);
+    compacting = false;
+    return false;
+  }
+
+  Serial.print(F("NVS: Compacting Samovar namespaces, all keys = "));
+  Serial.println(count);
+
+  for (size_t nsIndex = 0; nsIndex < SAMOVAR_NVS_NAMESPACE_COUNT && ok; nsIndex++) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(SAMOVAR_NVS_NAMESPACES[nsIndex], NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+      err = nvs_erase_all(handle);
+      if (err == ESP_OK) err = nvs_commit(handle);
+      nvs_close(handle);
+    }
+    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+      Serial.print(F("NVS: Failed to clear namespace: "));
+      Serial.println(SAMOVAR_NVS_NAMESPACES[nsIndex]);
+      ok = false;
+    }
+  }
+
+  if (ok) {
+    ok = restore_nvs_entries(entries, count, true);
+  }
+
+  if (!ok) {
+    Serial.println(F("NVS: Samovar namespace compaction failed, trying full NVS rebuild"));
+    ok = erase_nvs_partition_and_restore(entries, count);
+  }
+
+  free_samovar_nvs_backup(entries, count);
+  compacting = false;
+
+  if (ok) {
+    Serial.println(F("NVS: Samovar namespaces compacted"));
+  } else {
+    Serial.println(F("NVS: Samovar namespace compaction failed"));
+  }
+  return ok;
+}
+
+static void clear_legacy_profile_namespaces() {
+  for (size_t i = 0; i < SAMOVAR_LEGACY_PROFILE_NAMESPACE_COUNT; i++) {
+    if (!namespace_has_entries(SAMOVAR_LEGACY_PROFILE_NAMESPACES[i])) {
+      continue;
+    }
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(SAMOVAR_LEGACY_PROFILE_NAMESPACES[i], NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+      err = nvs_erase_all(handle);
+      if (err == ESP_OK) {
+        err = nvs_commit(handle);
+      }
+      nvs_close(handle);
+    }
+    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+      Serial.print(F("NVS: Failed to clear legacy namespace "));
+      Serial.println(SAMOVAR_LEGACY_PROFILE_NAMESPACES[i]);
+    }
+  }
+}
+
+static bool migrate_legacy_profile_to_common_nvs() {
+  if (profile_exists_in_namespace(SAMOVAR_COMMON_PROFILE_NAMESPACE)) {
+    clear_legacy_profile_namespaces();
+    return true;
+  }
+
+  uint8_t lastMode = read_last_mode_meta();
+  const char* legacyNs = legacy_profile_namespace_by_mode(lastMode);
+  if (!profile_exists_in_namespace(legacyNs)) {
+    for (int mode = SAMOVAR_RECTIFICATION_MODE; mode <= SAMOVAR_LUA_MODE; mode++) {
+      const char* candidateNs = legacy_profile_namespace_by_mode(mode);
+      if (profile_exists_in_namespace(candidateNs)) {
+        legacyNs = candidateNs;
+        lastMode = (uint8_t)mode;
+        break;
+      }
+    }
+  }
+
+  if (!profile_exists_in_namespace(legacyNs)) {
+    return false;
+  }
+
+  Serial.print(F("NVS: Migrating legacy profile to common namespace from "));
+  Serial.println(legacyNs);
+
+  load_profile_nvs_from_namespace(legacyNs);
+
+  SamSetup.Mode = lastMode;
+  Samovar_Mode = (SAMOVAR_MODE)lastMode;
+  Samovar_CR_Mode = (SAMOVAR_MODE)lastMode;
+
+  save_profile_nvs();
+  if (!profile_exists_in_namespace(SAMOVAR_COMMON_PROFILE_NAMESPACE)) {
+    Serial.println(F("NVS: Failed to migrate legacy profile to common namespace"));
+    return false;
+  }
+
+  write_last_mode_meta(lastMode);
+  clear_legacy_profile_namespaces();
+  Serial.println(F("NVS: Legacy profile migration completed"));
+  return true;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -170,7 +562,9 @@ void clear_wifi_credentials() {
 void saveStringIfChanged(const char* key, const char* value) {
   String current = prefs.getString(key, "");
   if (current != String(value)) {
-    prefs.putString(key, String(value));
+    if (prefs.putString(key, String(value)) == 0) {
+      markNvsProfileWriteFailed(key);
+    }
   }
 }
 
@@ -179,38 +573,55 @@ void saveBytesIfChanged(const char* key, const void* value, size_t len) {
   uint8_t buf[len];
   size_t readLen = prefs.getBytes(key, buf, len);
   if (readLen != len || memcmp(buf, value, len) != 0) {
-    prefs.putBytes(key, value, len);
+    if (prefs.putBytes(key, value, len) != len) {
+      markNvsProfileWriteFailed(key);
+    }
   }
 }
 
 void saveUCharIfChanged(const char* key, uint8_t value) {
   if (!prefs.isKey(key) || prefs.getUChar(key, 0) != value) {
-    prefs.putUChar(key, value);
+    if (prefs.putUChar(key, value) == 0) {
+      markNvsProfileWriteFailed(key);
+    }
   }
 }
 
 void saveUShortIfChanged(const char* key, uint16_t value) {
   if (!prefs.isKey(key) || prefs.getUShort(key, 0) != value) {
-    prefs.putUShort(key, value);
+    if (prefs.putUShort(key, value) == 0) {
+      markNvsProfileWriteFailed(key);
+    }
   }
 }
 
 void saveFloatIfChanged(const char* key, float value) {
   if (!prefs.isKey(key) || prefs.getFloat(key, 0.0f) != value) {
-    prefs.putFloat(key, value);
+    if (prefs.putFloat(key, value) == 0) {
+      markNvsProfileWriteFailed(key);
+    }
   }
 }
 
 void saveBoolIfChanged(const char* key, bool value) {
   if (!prefs.isKey(key) || prefs.getBool(key, !value) != value) {
-    prefs.putBool(key, value);
+    if (prefs.putBool(key, value) == 0) {
+      markNvsProfileWriteFailed(key);
+    }
   }
 }
 
 void save_profile_nvs() {
-  if (!prefs.begin(current_profile_namespace(), false)) {
+  static bool retryingProfileSave = false;
+  static bool rebuildingProfileSave = false;
+  nvsProfileWriteFailed = false;
+
+  if (!prefs.begin(SAMOVAR_COMMON_PROFILE_NAMESPACE, false)) {
     Serial.println("NVS: Failed to open namespace for writing!");
-    return;
+    if (!compact_samovar_nvs_namespaces() || !prefs.begin(SAMOVAR_COMMON_PROFILE_NAMESPACE, false)) {
+      Serial.println("NVS: Failed to open namespace for writing after compaction!");
+      return;
+    }
   }
 
   // --- Основные настройки ---
@@ -307,15 +718,36 @@ void save_profile_nvs() {
   saveUCharIfChanged("PackDens", SamSetup.PackDens);
 
   prefs.end();
-  write_last_mode_meta((uint8_t)SamSetup.Mode);
+  if (nvsProfileWriteFailed) {
+    if (!retryingProfileSave) {
+      Serial.println(F("NVS: Profile write failed, compacting and retrying"));
+      retryingProfileSave = true;
+      if (compact_samovar_nvs_namespaces()) {
+        save_profile_nvs();
+      }
+      if (nvsProfileWriteFailed && !rebuildingProfileSave) {
+        Serial.println(F("NVS: Profile write still failed, full rebuild and retrying"));
+        rebuildingProfileSave = true;
+        if (rebuild_full_nvs_partition()) {
+          save_profile_nvs();
+        }
+        rebuildingProfileSave = false;
+      }
+      retryingProfileSave = false;
+    } else if (rebuildingProfileSave) {
+      Serial.println(F("NVS: Profile write failed after full rebuild"));
+    } else {
+      Serial.println(F("NVS: Profile write failed after compaction"));
+    }
+  }
   //Serial.println("Profile saved to NVS");
 }
 
-void load_profile_nvs() {
+static void load_profile_nvs_from_namespace(const char* ns) {
   uint8_t lastMode = read_last_mode_meta();
   Samovar_CR_Mode = (SAMOVAR_MODE)lastMode;
 
-  if (!prefs.begin(current_profile_namespace(), true)) { // Read-only
+  if (!prefs.begin(ns, true)) { // Read-only
     Serial.println("NVS: Failed to open namespace for reading!");
     return;
   }
@@ -410,6 +842,10 @@ void load_profile_nvs() {
   //Serial.println("Profile loaded from NVS");
 }
 
+void load_profile_nvs() {
+  load_profile_nvs_from_namespace(SAMOVAR_COMMON_PROFILE_NAMESPACE);
+}
+
 // Функция для сброса флага миграции (для тестирования)
 void reset_migration_flag() {
   prefs.begin("sam_meta", false);
@@ -419,6 +855,8 @@ void reset_migration_flag() {
 }
 
 void migrate_from_eeprom() {
+  migrate_legacy_profile_to_common_nvs();
+
   // Проверяем, была ли миграция
   prefs.begin("sam_meta", true);
   bool migrated = prefs.getBool("migrated", false);

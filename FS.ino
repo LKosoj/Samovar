@@ -15,7 +15,6 @@ String get_dist_program();
 String get_nbk_program();
 void SendMsg(const String& m, MESSAGE_TYPE msg_type);
 void read_config();
-String get_prf_name();
 void save_profile_nvs();
 
 //format bytes
@@ -294,24 +293,4 @@ String append_data() {
 
 void save_profile() {
   save_profile_nvs();
-}
-
-void load_profile() {
-  read_config();
-}
-
-String get_prf_name() {
-  String fl;
-  if (Samovar_CR_Mode == SAMOVAR_BEER_MODE) {
-    fl = "/beer.prf";
-  } else if (Samovar_CR_Mode == SAMOVAR_DISTILLATION_MODE) {
-    fl = "/dist.prf";
-  } else if (Samovar_CR_Mode == SAMOVAR_BK_MODE) {
-    fl = "/bk.prf";
-  } else if (Samovar_CR_Mode == SAMOVAR_NBK_MODE) {
-    fl = "/nbk.prf";
-  } else {
-    fl = "/rectificat.prf";
-  }
-  return fl;
 }
