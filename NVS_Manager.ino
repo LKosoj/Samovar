@@ -12,6 +12,15 @@ static void write_last_mode_meta(uint8_t mode);
 static bool compact_samovar_nvs_namespaces();
 static bool rebuild_full_nvs_partition();
 static void load_profile_nvs_from_namespace(const char* ns);
+struct SamovarNvsEntryBackup;
+static void free_samovar_nvs_backup(SamovarNvsEntryBackup* entries, size_t count);
+static bool read_samovar_nvs_entry(nvs_handle_t handle, const nvs_entry_info_t& info, SamovarNvsEntryBackup& entry);
+static esp_err_t write_samovar_nvs_entry(nvs_handle_t handle, const SamovarNvsEntryBackup& entry);
+static bool restore_nvs_entries(const SamovarNvsEntryBackup* entries, size_t count, bool samovarOnly);
+static bool erase_nvs_partition_and_restore(const SamovarNvsEntryBackup* entries, size_t count);
+static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count);
+static bool nvs_find_first_entry(const char* partName, const char* ns, nvs_type_t type, nvs_iterator_t* outIt);
+static esp_err_t nvs_advance_iterator(nvs_iterator_t* it);
 
 static const char* const SAMOVAR_COMMON_PROFILE_NAMESPACE = "sam_cfg";
 
@@ -199,17 +208,42 @@ static bool is_legacy_profile_namespace(const char* ns) {
   return false;
 }
 
+static bool nvs_find_first_entry(const char* partName, const char* ns, nvs_type_t type, nvs_iterator_t* outIt) {
+  if (!outIt) return false;
+  *outIt = nullptr;
+#if defined(ESP_IDF_VERSION_MAJOR) && (ESP_IDF_VERSION_MAJOR >= 5)
+  return (nvs_entry_find(partName, ns, type, outIt) == ESP_OK) && (*outIt != nullptr);
+#else
+  *outIt = nvs_entry_find(partName, ns, type);
+  return *outIt != nullptr;
+#endif
+}
+
+static esp_err_t nvs_advance_iterator(nvs_iterator_t* it) {
+  if (!it || !*it) return ESP_ERR_INVALID_ARG;
+#if defined(ESP_IDF_VERSION_MAJOR) && (ESP_IDF_VERSION_MAJOR >= 5)
+  return nvs_entry_next(it);
+#else
+  *it = nvs_entry_next(*it);
+  return *it ? ESP_OK : ESP_ERR_NVS_NOT_FOUND;
+#endif
+}
+
 static bool namespace_has_entries(const char* ns) {
-  nvs_iterator_t it = nvs_entry_find("nvs", ns, NVS_TYPE_ANY);
-  if (!it) return false;
+  nvs_iterator_t it = nullptr;
+  if (!nvs_find_first_entry("nvs", ns, NVS_TYPE_ANY, &it)) return false;
   nvs_release_iterator(it);
   return true;
 }
 
 static bool read_samovar_nvs_entry(nvs_handle_t handle, const nvs_entry_info_t& info, SamovarNvsEntryBackup& entry) {
   strncpy(entry.ns, info.namespace_name, sizeof(entry.ns) - 1);
+  entry.ns[sizeof(entry.ns) - 1] = '\0';
   strncpy(entry.key, info.key, sizeof(entry.key) - 1);
+  entry.key[sizeof(entry.key) - 1] = '\0';
   entry.type = info.type;
+  entry.len = 0;
+  entry.data = nullptr;
 
   switch (info.type) {
     case NVS_TYPE_U8:
@@ -324,16 +358,26 @@ static bool erase_nvs_partition_and_restore(const SamovarNvsEntryBackup* entries
 
 static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count) {
   count = 0;
-  nvs_iterator_t it = nvs_entry_find("nvs", nullptr, NVS_TYPE_ANY);
+  nvs_iterator_t it = nullptr;
+  if (!nvs_find_first_entry("nvs", nullptr, NVS_TYPE_ANY, &it)) {
+    return true;
+  }
+
   while (it) {
     if (count >= maxEntries) {
       Serial.println(F("NVS: Backup failed, too many keys"));
+      nvs_release_iterator(it);
       return false;
     }
 
     nvs_entry_info_t info;
     nvs_entry_info(it, &info);
-    nvs_iterator_t next = nvs_entry_next(it);
+    esp_err_t nextErr = nvs_advance_iterator(&it);
+    if (nextErr != ESP_OK && nextErr != ESP_ERR_NVS_NOT_FOUND) {
+      Serial.println(F("NVS: Failed to iterate NVS entries"));
+      if (it) nvs_release_iterator(it);
+      return false;
+    }
 
     nvs_handle_t handle;
     if (nvs_open(info.namespace_name, NVS_READONLY, &handle) == ESP_OK) {
@@ -353,7 +397,9 @@ static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEnt
       Serial.println(info.namespace_name);
       return false;
     }
-    it = next;
+    if (nextErr == ESP_ERR_NVS_NOT_FOUND) {
+      it = nullptr;
+    }
   }
   return true;
 }
