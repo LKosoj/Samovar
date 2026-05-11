@@ -283,27 +283,32 @@ void WebServerInit(void) {
   });
   //server.serveStatic("/style.css", SPIFFS, "/style.css").setCacheControl("max-age=5000");
   server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!SPIFFS.exists("/minus.png")) { request->send(404, "text/plain", "Missing /minus.png"); return; }
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=604800");
     request->send(response);
   });
   server.on("/plus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!SPIFFS.exists("/plus.png")) { request->send(404, "text/plain", "Missing /plus.png"); return; }
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/plus.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=614800");
     request->send(response);
   });
   server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!SPIFFS.exists("/favicon.ico")) { request->send(404, "text/plain", "Missing /favicon.ico"); return; }
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/favicon.ico", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=624800");
     request->send(response);
   });
 
   server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!SPIFFS.exists("/Red_light.gif")) { request->send(404, "text/plain", "Missing /Red_light.gif"); return; }
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Red_light.gif", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=634800");
     request->send(response);
   });
   server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!SPIFFS.exists("/Green.png")) { request->send(404, "text/plain", "Missing /Green.png"); return; }
     AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Green.png", emptyString, false, nullptr);
     response->addHeader("Cache-Control", "max-age=644800");
     request->send(response);
@@ -1572,7 +1577,6 @@ static void normalize_web_if_version_string(String& v) {
 void get_web_interface() {
   String version;
   String local_version;
-  String s = "";
 
   version = get_web_file("version.txt", GET_CONTENT);
   if (version == "<ERR>") return;
@@ -1590,64 +1594,77 @@ void get_web_interface() {
   Serial.print(F("Local interface version = "));
   Serial.println(local_version);
   if (version != local_version) {
-    s += get_web_file("wifi.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("index.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("Green.png", SAVE_FILE_OVERRIDE);
-    s += get_web_file("Red_light.gif", SAVE_FILE_OVERRIDE);
-    s += get_web_file("alarm.mp3", SAVE_FILE_OVERRIDE);
-    s += get_web_file("favicon.ico", SAVE_FILE_OVERRIDE);
-    s += get_web_file("minus.png", SAVE_FILE_OVERRIDE);
-    s += get_web_file("plus.png", SAVE_FILE_OVERRIDE);
+    bool updateOk = true;
+    auto updateFile = [&](String fn, get_web_type type) {
+      if (!updateOk) return;
+      String result = get_web_file(fn, type);
+      if (result == "<ERR>") {
+        Serial.println("WEB interface update failed on " + fn);
+        updateOk = false;
+      }
+    };
+
+    updateFile("wifi.htm", SAVE_FILE_OVERRIDE);
+    updateFile("index.htm", SAVE_FILE_OVERRIDE);
+    updateFile("Green.png", SAVE_FILE_OVERRIDE);
+    updateFile("Red_light.gif", SAVE_FILE_OVERRIDE);
+    updateFile("alarm.mp3", SAVE_FILE_OVERRIDE);
+    updateFile("favicon.ico", SAVE_FILE_OVERRIDE);
+    updateFile("minus.png", SAVE_FILE_OVERRIDE);
+    updateFile("plus.png", SAVE_FILE_OVERRIDE);
 
     //s += get_web_file("style.css", SAVE_FILE_OVERRIDE);
-    s += get_web_file("style.css.gz", SAVE_FILE_OVERRIDE);
+    updateFile("style.css.gz", SAVE_FILE_OVERRIDE);
 
-    s += get_web_file("beer.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("bk.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("nbk.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("brewxml.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("calibrate.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("chart.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("distiller.htm", SAVE_FILE_OVERRIDE);
+    updateFile("beer.htm", SAVE_FILE_OVERRIDE);
+    updateFile("bk.htm", SAVE_FILE_OVERRIDE);
+    updateFile("nbk.htm", SAVE_FILE_OVERRIDE);
+    updateFile("brewxml.htm", SAVE_FILE_OVERRIDE);
+    updateFile("calibrate.htm", SAVE_FILE_OVERRIDE);
+    updateFile("chart.htm", SAVE_FILE_OVERRIDE);
+    updateFile("distiller.htm", SAVE_FILE_OVERRIDE);
+    updateFile("i2cstepper.htm", SAVE_FILE_OVERRIDE);
     //s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("edit.htm.gz", SAVE_FILE_OVERRIDE);
+    updateFile("edit.htm.gz", SAVE_FILE_OVERRIDE);
 
-    s += get_web_file("program.htm", SAVE_FILE_OVERRIDE);
-    s += get_web_file("setup.htm", SAVE_FILE_OVERRIDE);
+    updateFile("program.htm", SAVE_FILE_OVERRIDE);
+    updateFile("setup.htm", SAVE_FILE_OVERRIDE);
 
-    s += get_web_file("beer.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("bk.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("nbk.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("dist.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("init.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("rectificat.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("script.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("beer.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("bk.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("nbk.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("dist.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("init.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("rectificat.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("script.lua", SAVE_FILE_IF_NOT_EXIST);
 
-    s += get_web_file("btn_rect_button1.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_rect_button2.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_beer_button1.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_beer_button2.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_dist_button1.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_dist_button2.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_bk_button1.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_bk_button2.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_nbk_button1.lua", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("btn_nbk_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_rect_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_rect_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_beer_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_beer_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_dist_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_dist_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_bk_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_bk_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_nbk_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_nbk_button2.lua", SAVE_FILE_IF_NOT_EXIST);
 
 
 
-    s += get_web_file("program_fruit.txt", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);
-    s += get_web_file("program_shugar.txt", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("program_fruit.txt", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("program_shugar.txt", SAVE_FILE_IF_NOT_EXIST);
 
-    // Версию уже скачали в начале функции — записываем нормализованную строку, без повторного HTTP.
-    {
+    if (updateOk) {
+      // Версию уже скачали в начале функции — записываем нормализованную строку, без повторного HTTP.
       File wf = SPIFFS.open("/version.txt", FILE_WRITE);
       if (wf) {
         wf.print(version);
         wf.print('\n');
         wf.close();
       }
+    } else {
+      Serial.println("WEB interface update aborted; local version marker was not changed.");
     }
   }
 }
@@ -1736,7 +1753,13 @@ String http_sync_request_get(String url) {
       Serial.println("Content " + url + " download error");
       return "<ERR>";
     }
-    return request.responseText();
+    String response = request.responseText();
+    size_t expectedLength = request.responseLength();
+    if (expectedLength > 0 && response.length() != expectedLength) {
+      Serial.println("Content " + url + " incomplete: " + String(response.length()) + "/" + String(expectedLength));
+      return "<ERR>";
+    }
+    return response;
   } else {
     Serial.print(F("responseHTTPcode = "));
     Serial.println(request.responseHTTPcode());
