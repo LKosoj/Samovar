@@ -1285,6 +1285,7 @@ void loop() {
     switch (sam_command_sync) {
       case SAMOVAR_START:
         Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
+        change_samovar_mode();
         menu_samovar_start();
         break;
       case SAMOVAR_POWER:
@@ -1324,11 +1325,13 @@ void loop() {
         break;
       case SAMOVAR_DISTILLATION:
         Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
+        change_samovar_mode();
         SamovarStatusInt = 1000;
         startval = 1000;
         break;
       case SAMOVAR_BEER:
         Samovar_Mode = SAMOVAR_BEER_MODE;
+        change_samovar_mode();
         SamovarStatusInt = 2000;
         startval = 2000;
         break;
@@ -1340,11 +1343,13 @@ void loop() {
         break;
       case SAMOVAR_BK:
         Samovar_Mode = SAMOVAR_BK_MODE;
+        change_samovar_mode();
         SamovarStatusInt = 3000;
         startval = 3000;
         break;
       case SAMOVAR_NBK:
         Samovar_Mode = SAMOVAR_NBK_MODE;
+        change_samovar_mode();
         SamovarStatusInt = 4000;
         startval = 4000;
         break;
@@ -1639,6 +1644,7 @@ void apply_config_runtime() {
 
   if (SamSetup.Mode > SAMOVAR_LUA_MODE) SamSetup.Mode = 0;
   Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
+  change_samovar_mode();
 
   if (SamSetup.videourl[0] == 255) SamSetup.videourl[0] = '\0';
 #ifdef SAMOVAR_USE_BLYNK

@@ -24,6 +24,7 @@ unsigned long lua_timer[10];  //10 таймеров для lua
 String lua_type_script;
 String script1, script2, btn_script;
 void WriteConsoleLog(String StringLogMsg);
+void change_samovar_mode();
 
 SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, String &b) -> int {
   if (a == b) return 0;      // a and b are equal
@@ -309,7 +310,11 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
   } else if (Var == "SamSetup_Mode") {
     SamSetup.Mode = (int)a;
   } else if (Var == "Samovar_Mode") {
-    Samovar_Mode = (SAMOVAR_MODE)a;
+    SAMOVAR_MODE newMode = (SAMOVAR_MODE)a;
+    if (Samovar_Mode != newMode) {
+      Samovar_Mode = newMode;
+      change_samovar_mode();
+    }
   } else if (Var == "Samovar_CR_Mode") {
     Samovar_CR_Mode = (SAMOVAR_MODE)a;
   } else if (Var == "acceleration_temp") {
