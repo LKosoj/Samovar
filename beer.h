@@ -893,6 +893,7 @@ void set_beer_program(String WProgram) {
     float timeMin = 0.0f;
     long sensor = 0;
     bool ok = tokType && tokType[0] != '\0' &&
+              is_program_wtype_one_of(tokType, "MPBCFWLA") &&
               tokTemp && tokTime && tokDevice && tokSensor &&
               !tokExtra &&
               parseFloatSafe(tokTemp, temp) &&

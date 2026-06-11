@@ -490,6 +490,7 @@ void set_dist_program(String WProgram) {
     float power = 0;
     long cap = 0;
     bool ok = tokType && tokType[0] != '\0' &&
+              is_program_wtype_one_of(tokType, "TASPR") &&
               tokSpeed && tokCap && tokPower &&
               !tokExtra &&
               parseFloatSafe(tokSpeed, speed) &&

@@ -551,6 +551,14 @@ void next_capacity(void) {
   set_capacity(capacity_num + 1);
 }
 
+inline bool is_program_wtype_one_of(const char *wtype, const char *allowedTypes) {
+  if (!wtype || wtype[0] == '\0' || wtype[1] != '\0') return false;
+  for (const char *p = allowedTypes; *p; p++) {
+    if (wtype[0] == *p) return true;
+  }
+  return false;
+}
+
 // Установить программу
 void set_program(String WProgram) {
   for (int j = 0; j < CAPACITY_NUM * 2; j++) {
@@ -595,6 +603,7 @@ void set_program(String WProgram) {
     float temp = 0;
     float power = 0;
     bool ok = tokType && tokType[0] != '\0' &&
+              is_program_wtype_one_of(tokType, "HBCTP") &&
               tokVolume && tokSpeed && tokCap && tokTemp && tokPower &&
               !tokExtra &&
               parseLongSafe(tokVolume, volume) &&
