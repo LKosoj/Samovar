@@ -106,12 +106,15 @@ int get_liquid_volume() {
 
 // Установить сигнализацию
 void set_alarm() {
-  // выключаем питание, выключаем воду, взводим флаг аварии
+  // [L-2] alarm_event выставляется ДО set_power и до записи sam_command_sync,
+  // чтобы защита в set_power (if (alarm_event && On) return;) гарантированно
+  // блокировала повторное включение нагрева из обработчика SAMOVAR_POWER,
+  // который запускается в другой задаче во время ~900 мс vTaskDelay внутри set_power.
+  alarm_event = true;
   if (PowerOn) {
     sam_command_sync = SAMOVAR_POWER;
   }
   set_power(false);
-  alarm_event = true;
   open_valve(false, true);
   stopService();
   set_stepper_target(0, 0, 0);
@@ -131,7 +134,8 @@ void withdrawal(void) {
   //Определяем, что необходимо сменить режим работы
   //По завершению паузы
   if (program_Pause) {
-    if (millis() >= t_min) {
+    // [C-13] overflow-safe: беззнаковая разность корректна при переполнении millis()
+    if ((int32_t)(millis() - t_min) >= 0) {
       t_min = 0;
       menu_samovar_start();
     }
@@ -185,10 +189,16 @@ void withdrawal(void) {
         SendMsg(("Пауза по Т пара"), WARNING_MSG);
       }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
+    // [C-13] overflow-safe
+    if ((int32_t)(millis() - t_min) >= 0 && SteamSensor.avgTemp >= c_temp + SteamSensor.SetTemp) {
       t_min = millis() + SteamSensor.Delay * 1000;
     }
-  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < c_temp + SteamSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+  // [L-1/M-31] Ветка возобновления паузы по пару: снимаем ТОЛЬКО паузу типа "(пар)".
+  // Без этой проверки ветка срабатывала при любом program_Wait_Type (включая "(царга)"
+  // и "(Детектор)"), снимала чужую паузу, а соответствующая ветка тут же ставила её
+  // снова → осцилляция каждые PipeDelay сек (спам, зуммер, пуски насоса).
+  // [C-13] overflow-safe: t_min > 0 — сентинель "таймер установлен"; (int32_t)(millis()-t_min) >= 0 — истёк
+  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && SteamSensor.avgTemp < c_temp + SteamSensor.SetTemp && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && program_Wait_Type == "(пар)") {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     t_min = 0;
@@ -234,10 +244,13 @@ void withdrawal(void) {
         SendMsg(("Пауза по Т царги"), WARNING_MSG);
       }
     // если время вышло, еще раз пытаемся дождаться
-    if (millis() >= t_min && PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) {
+    // [C-13] overflow-safe
+    if ((int32_t)(millis() - t_min) >= 0 && PipeSensor.avgTemp >= c_temp + PipeSensor.SetTemp) {
       t_min = millis() + PipeSensor.Delay * 1000;
     }
-  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < c_temp + PipeSensor.SetTemp && millis() >= t_min && t_min > 0 && program_Wait) {
+  // [L-1/M-31] Аналогично: снимаем паузу царги ТОЛЬКО если тип паузы — "(царга)".
+  // [C-13] overflow-safe: t_min > 0 — сентинель; (int32_t)(millis()-t_min) >= 0 — истёк
+  } else if ((program[ProgramNum].WType == "B" || program[ProgramNum].WType == "C") && PipeSensor.avgTemp < c_temp + PipeSensor.SetTemp && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && program_Wait_Type == "(царга)") {
     //продолжаем отбор
     SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
     t_min = 0;
@@ -260,7 +273,9 @@ void withdrawal(void) {
   }
 
   // Пауза детектора: после истечения таймера возобновляем отбор
-  if (program_Wait && program_Wait_Type == "(Детектор)" && t_min > 0 && millis() >= t_min) {
+  // [L-1/M-31] Эта ветка уже проверяла program_Wait_Type == "(Детектор)" — это корректно.
+  // [C-13] overflow-safe: t_min > 0 — сентинель; (int32_t)(millis()-t_min) >= 0 — истёк
+  if (program_Wait && program_Wait_Type == "(Детектор)" && t_min > 0 && (int32_t)(millis() - t_min) >= 0) {
     SendMsg(("Детектор: Продолжаем отбор после паузы"), NOTIFY_MSG);
     t_min = 0;
     program_Wait = false;
@@ -366,131 +381,157 @@ void stop_process(String reason) {
   SendMsg(reason, NOTIFY_MSG);
 }
 
-// Получить статус Самовара
+// Получить статус Самовара (обновляет FSM и кэш SamovarStatus).
+// Вызывается из секундного гейта triggerSysTicker (core 0) — раз в секунду.
+// Веб и Blynk читают кэш SamovarStatus напрямую под runtime_state_lock.
 String get_Samovar_Status() {
-  SamovarStatus.clear();
+  // Строим статус в локальную переменную; под замком — только финальное присваивание кэша.
+  String local;
   // Если питание выключено и нет активного режима - показываем "Выключено"
   if (!PowerOn && SamovarStatusInt == 0) {
-    SamovarStatus = F("Выключено");
+    local = F("Выключено");
   } else if (PowerOn && startval == 1 && !PauseOn && !program_Wait) {
-    SamovarStatus = "Прг №" + String(ProgramNum + 1);
+    local = "Прг №" + String(ProgramNum + 1);
     SamovarStatusInt = 10;
   } else if (PowerOn && startval == 1 && program_Wait) {
     int s = 0;
-    if (t_min > (millis() + 10)) {
-      s = (t_min - millis()) / 1000;
+    // [C-13] overflow-safe: t_min ещё в будущем если (int32_t)(t_min - millis()) > 10.
+    //        millis() читаем один раз в локаль, иначе второй вызов мог бы дать
+    //        отрицательный остаток между двумя замерами.
+    int32_t rem = (int32_t)(t_min - millis());
+    if (rem > 10) {
+      s = rem / 1000;
     }
-    SamovarStatus = "Прг №" + String(ProgramNum + 1) + " пауза " + program_Wait_Type + ". Продолжение через " + (String)s + " сек.";
+    local = "Прг №" + String(ProgramNum + 1) + " пауза " + program_Wait_Type + ". Продолжение через " + (String)s + " сек.";
     SamovarStatusInt = 15;
   } else if (PowerOn && startval == 2) {
-    SamovarStatus = F("Выполнение программы завершено");
+    local = F("Выполнение программы завершено");
     SamovarStatusInt = 20;
   } else if (PowerOn && startval == 100) {
-    SamovarStatus = F("Калибровка");
+    local = F("Калибровка");
     SamovarStatusInt = 30;
   } else if (PauseOn) {
-    SamovarStatus = F("Пауза");
+    local = F("Пауза");
     SamovarStatusInt = 40;
   } else if (PowerOn && startval == 0 && !stepper_safe_get_state()) {
     if (SamovarStatusInt != 51 && SamovarStatusInt != 52) {
-      SamovarStatus = F("Разгон колонны");
+      local = F("Разгон колонны");
       SamovarStatusInt = 50;
     } else if (SamovarStatusInt == 51) {
-      SamovarStatus = F("Разгон завершен. Стабилизация/Работа на себя");
+      local = F("Разгон завершен. Стабилизация/Работа на себя");
     } else if (SamovarStatusInt == 52) {
-      SamovarStatus = F("Стабилизация завершена/Работа на себя");
+      local = F("Стабилизация завершена/Работа на себя");
     }
   } else if (SamovarStatusInt == 1000) {
-    SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; Режим дистилляции";
-    //SamovarStatus += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
-    //SamovarStatus += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
+    local = "Прг №" + String(ProgramNum + 1) + "; Режим дистилляции";
+    //local += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
+    //local += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
   } else if (SamovarStatusInt == 3000) {
-    SamovarStatus = F("Режим бражной колонны");
+    local = F("Режим бражной колонны");
   } else if (SamovarStatusInt == 4000) {
     if (startval == 4001) {
-      SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
+      local = "Прг №" + String(ProgramNum + 1) + "; ";
       if (program[ProgramNum].WType == "H") {
-        SamovarStatus = SamovarStatus + "Прогрев";
+        local = local + "Прогрев";
       } else if (program[ProgramNum].WType == "S") {
-        SamovarStatus = SamovarStatus + "Настройка";
+        local = local + "Настройка";
       } else if (program[ProgramNum].WType == "O") {
-        SamovarStatus = SamovarStatus + "Оптимизация";
+        local = local + "Оптимизация";
       } else if (program[ProgramNum].WType == "W") {
-        SamovarStatus = SamovarStatus + "Работа";
+        local = local + "Работа";
       }
     }
   } else if (SamovarStatusInt == 2000) {
 #ifdef SAM_BEER_PRG
-    SamovarStatus = "Прг №" + String(ProgramNum + 1) + "; ";
+    local = "Прг №" + String(ProgramNum + 1) + "; ";
 #else
-    SamovarStatus = "";
+    local = "";
 #endif
     if (startval == 2001 && program[ProgramNum].WType == "M") {
       float currentTemp = getBeerCurrentTemp();
-      SamovarStatus = SamovarStatus + "Разогрев до температуры засыпи солода";
+      local = local + "Разогрев до температуры засыпи солода";
       if (currentTemp < program[ProgramNum].Temp - 0.5) {
-        SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
+        local += "; Текущая Т: " + String(currentTemp) + "°";
       }
     } else if (startval == 2002 && program[ProgramNum].WType == "M") {
-      SamovarStatus = SamovarStatus + "Ожидание засыпи солода";
+      local = local + "Ожидание засыпи солода";
     } else if (program[ProgramNum].WType == "P") {
       if (begintime == 0) {
         float currentTemp = getBeerCurrentTemp();
-        SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Temp) + "°; Разогрев";
+        local = local + "Пауза " + String(program[ProgramNum].Temp) + "°; Разогрев";
         if (currentTemp < program[ProgramNum].Temp - 0.5) {
-          SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
+          local += "; Текущая Т: " + String(currentTemp) + "°";
         }
       } else {
-        SamovarStatus = SamovarStatus + "Пауза " + String(program[ProgramNum].Temp) + "°";
+        local = local + "Пауза " + String(program[ProgramNum].Temp) + "°";
       }
     } else if (program[ProgramNum].WType == "C") {
       float currentTemp = getBeerCurrentTemp();
-      SamovarStatus = SamovarStatus + "Охлаждение до " + String(program[ProgramNum].Temp);
+      local = local + "Охлаждение до " + String(program[ProgramNum].Temp);
       if (currentTemp > program[ProgramNum].Temp + 0.5) {
-        SamovarStatus += "; Текущая Т: " + String(currentTemp) + "°";
+        local += "; Текущая Т: " + String(currentTemp) + "°";
       }
     } else if (program[ProgramNum].WType == "W") {
-      SamovarStatus = SamovarStatus + "Ожидание. Нажмите 'Следующая программа'; ";
+      local = local + "Ожидание. Нажмите 'Следующая программа'; ";
     } else if (program[ProgramNum].WType == "A") {
-      SamovarStatus = SamovarStatus + "Автокалибровка. После завершения питание будет выключено";
+      local = local + "Автокалибровка. После завершения питание будет выключено";
     } else if (program[ProgramNum].WType == "B") {
       if (begintime == 0) {
-        SamovarStatus = SamovarStatus + "Кипячение - нагрев";
+        local = local + "Кипячение - нагрев";
       } else {
-        SamovarStatus = SamovarStatus + "Кипячение " + String(program[ProgramNum].Time) + " мин";
+        local = local + "Кипячение " + String(program[ProgramNum].Time) + " мин";
       }
     } else if (program[ProgramNum].WType == "F") {
       if (PowerOn) {
         float currentTemp = getBeerCurrentTemp();
-        SamovarStatus = SamovarStatus + "Ферментация; Поддерж. Т=" + String(program[ProgramNum].Temp) + "°";
-        SamovarStatus += "; Тек: " + String(currentTemp) + "°";
+        local = local + "Ферментация; Поддерж. Т=" + String(program[ProgramNum].Temp) + "°";
+        local += "; Тек: " + String(currentTemp) + "°";
         if (heater_state) {
-          SamovarStatus += " (Нагрев)";
+          local += " (Нагрев)";
         } else {
-          SamovarStatus += " (Термостатирование)";
+          local += " (Термостатирование)";
         }
       } else {
-        SamovarStatus = SamovarStatus + "Ферментация (остановлена)";
+        local = local + "Ферментация (остановлена)";
       }
     } else if (program[ProgramNum].WType == "L") {
-      SamovarStatus = SamovarStatus + "Выполнение Lua скрипта";
+      local = local + "Выполнение Lua скрипта";
     }
 
     if (PowerOn && (program[ProgramNum].WType == "P" || program[ProgramNum].WType == "B") && begintime > 0) {
       float progress = ((float)(millis() - begintime) / (program[ProgramNum].Time * 60 * 1000)) * 100;
       if (progress > 100) progress = 100;
-      SamovarStatus += "; Прогресс: " + String(progress, 1) + "%";
+      local += "; Прогресс: " + String(progress, 1) + "%";
     }
   }
 
   if (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) {
-    SamovarStatus += "; Осталось:" + WthdrwTimeS + "|" + WthdrwTimeAllS;
+    // [C-2/2c] WthdrwTimeS/WthdrwTimeAllS пишутся SysTicker под замком → читаем под
+    // тем же замком. Блок короткий и не перекрывается с финальным блоком записи кэша.
+    String localWtS, localWtAllS;
+    {
+      bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+      if (locked) {
+        localWtS = WthdrwTimeS;
+        localWtAllS = WthdrwTimeAllS;
+        runtime_state_unlock(true);
+      }
+    }
+    local += "; Осталось:" + localWtS + "|" + localWtAllS;
   }
   if (SteamSensor.BodyTemp > 0) {
-    SamovarStatus += ";Т тела пар:" + format_float(SteamSensor.BodyTemp, 3) + ";Т тела царга:" + format_float(PipeSensor.BodyTemp, 3);
+    local += ";Т тела пар:" + format_float(SteamSensor.BodyTemp, 3) + ";Т тела царга:" + format_float(PipeSensor.BodyTemp, 3);
   }
 
-  return SamovarStatus;
+  // [C-2] Под замком обновляем кэш SamovarStatus; веб/Blynk читают его отдельно.
+  {
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      SamovarStatus = local;
+      runtime_state_unlock(true);
+    }
+  }
+  return local;
 }
 
 // Установить емкость
@@ -711,6 +752,8 @@ void run_program(uint8_t num) {
       set_current_power(target_power_volt + program[num].Power);
     }
     vTaskDelay(500 / portTICK_PERIOD_MS);
+    // [L-7] alarm_c_low_min = millis() — запоминается момент старта строки предзахлёба;
+    // интервал TIME_C добавляется позже в check_alarm() при срабатывании.
     if (program[num].WType == "C" && alarm_c_low_min == 0) alarm_c_low_min = millis();
 #endif
     p_s = "Программа: старт строки  №" + (String)(num + 1);
@@ -732,9 +775,22 @@ void run_program(uint8_t num) {
       stepper_safe_set_target(TargetStepps);
       startService();
       ActualVolumePerHour = program[num].Speed;
-      if ((program[num].WType == "B" || program[num].WType == "C") && program[num].Temp > 0) {
-        SteamSensor.BodyTemp = program[num].Temp;
-      }
+      // [L-3] Семантика поля Temp строк B/C (согласно UI-документации data/index.htm):
+      //   Temp == 0  → не используется (переход только по объёму)
+      //   0 < Temp < 20 → дельта: переход на следующую строку, когда
+      //                   SteamSensor.avgTemp > StartProgTemp + Temp
+      //   Temp >= 20 → абсолютный порог: переход, когда avgTemp > Temp
+      // BodyTemp — это отдельная переменная для паузы по превышению температуры
+      // (логика pause-by-steam). Устанавливать BodyTemp = program.Temp НЕЛЬЗЯ:
+      //   - при Temp >= 20 условие завершения строки (avgTemp > Temp) срабатывает
+      //     раньше, чем условие паузы (avgTemp >= BodyTemp + SetTemp), поэтому
+      //     пауза по пару никогда не достигается;
+      //   - при 0 < Temp < 20 значение кладётся как абсолютная BodyTemp, а не
+      //     дельта → условие паузы (avgTemp >= ~0..19 + SetTemp) всегда истинно →
+      //     неснимаемая пауза.
+      // BodyTemp всегда захватывается автоматически через set_body_temp() из
+      // текущей avgTemp при старте строки (см. блок ниже).
+      // Поле program.Temp используется ТОЛЬКО в ветке завершения строки в withdrawal().
 
       //Если у первой программы отбора тела не задана температура, при которой начинать отбор, считаем, что она равна текущей
       //Считаем, что колонна стабильна
@@ -820,11 +876,15 @@ void set_body_temp() {
 void check_alarm() {
   static bool close_valve_message_sent = false;
   //сбросим паузу события безопасности
-  if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
+  // [C-13] overflow-safe: alarm_t_min > 0 — сентинель
+  if (alarm_t_min > 0 && (int32_t)(millis() - alarm_t_min) >= 0) alarm_t_min = 0;
 
 #ifdef SAMOVAR_USE_POWER
   //управляем разгонным тэном
-  if (SamovarStatusInt == 50 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
+  // [L-34] avgTemp >= 2 — идиома «датчик подключён» (аналогично check_boiling).
+  // При отсутствующем/замёрзшем датчике куба (avgTemp == 0 или < 2) разгонный ТЭН
+  // НЕ управляется — иначе он не выключится никогда.
+  if (SamovarStatusInt == 50 && TankSensor.avgTemp >= 2 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
     if (!acceleration_heater) {
       //включаем разгонный тэн
       digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
@@ -853,7 +913,7 @@ void check_alarm() {
 #endif
       } else {
 #ifdef SAMOVAR_USE_POWER
-        //запускаем счетчик - TIME_C минут, нужен для возврата заданного напряжения
+        //запускаем счетчик - TIME_C/5 минут, нужен для возврата заданного напряжения
         alarm_c_min = millis() + 1000 * 60 * TIME_C / 5;
         //счетчик для повышения напряжения сбрасываем
         alarm_c_low_min = 0;
@@ -872,12 +932,14 @@ void check_alarm() {
       alarm_h_min = millis() + 1000 * 40;
     }
 
-    if (alarm_h_min > 0 && alarm_h_min <= millis()) {
+    // [C-13] overflow-safe
+    if (alarm_h_min > 0 && (int32_t)(millis() - alarm_h_min) >= 0) {
       alarm_h_min = 0;
     }
 #ifdef SAMOVAR_USE_POWER
     //Если программа - предзахлеб, и сброс напряжения был больше TIME_C минут назад, то возвращаем напряжение к последнему сохраненному - 0.5
-    if (alarm_c_min > 0 && alarm_c_min <= millis()) {
+    // [C-13] overflow-safe
+    if (alarm_c_min > 0 && (int32_t)(millis() - alarm_c_min) >= 0) {
       if (program[ProgramNum].WType == "C") {
         if (prev_target_power_volt == 0) {
 #ifdef SAMOVAR_USE_SEM_AVR
@@ -900,7 +962,8 @@ void check_alarm() {
     }
     //Если программа предзахлеб и давно не было срабатывания датчика - повышаем напряжение
     if (program[ProgramNum].WType == "C") {
-      if (alarm_c_low_min > 0 && alarm_c_low_min <= millis()) {
+      // [C-13] overflow-safe
+      if (alarm_c_low_min > 0 && (int32_t)(millis() - alarm_c_low_min) >= 0) {
 #ifdef SAMOVAR_USE_SEM_AVR
         set_current_power(target_power_volt + target_power_volt / 100 * 1);
 #else
@@ -1113,8 +1176,9 @@ void process_buzzer() {
   }
   
   unsigned long current_time = millis();
-  
-  if (current_time >= buzzer_next_time) {
+
+  // [C-13] overflow-safe: buzzer_next_time — deadline, используем разность
+  if ((int32_t)(current_time - buzzer_next_time) >= 0) {
     if (buzzer_state) {
       // Пищалка включена, выключаем её
       digitalWrite(BZZ_PIN, LOW);
@@ -1210,8 +1274,14 @@ float get_steam_alcohol(float t) {
   float k;
   uint8_t t0;
 
+  // [L-6/M-26] avgTemp уже нормализован к 760 мм рт. ст. в DS_getvalue()
+  // (sensorinit.h: correctT = (760 - bme_pressure) * 0.037, при UsePreccureCorrect).
+  // Повторный вызов get_temp_by_pressure() прибавлял бы ту же поправку ещё раз
+  // со знаком, противоположным первой (~0.038*(P-760)), → коррекции почти гасились
+  // и спиртуозность считалась фактически по сырой температуре.
+  // Решение: t1 сохраняем для ветки t > 99.84 (где вызывается get_alcohol(t1) —
+  // он тоже исправлен), get_temp_by_pressure() не вызываем — t уже в нужной шкале.
   t1 = t;
-  t = get_temp_by_pressure(0, t, bme_pressure);
 
   if (t >= 99 && t < 99.84) {
     s = 11.21;
@@ -1300,7 +1370,8 @@ float get_steam_alcohol(float t) {
 
 float get_alcohol(float t) {
   if (!boil_started) return 100;
-  t = get_temp_by_pressure(0, t, bme_pressure);
+  // [L-6/M-26] avgTemp уже нормализован к 760 мм рт. ст. в DS_getvalue(),
+  // повторный пересчёт через get_temp_by_pressure() создавал двойную коррекцию.
   float r;
   float k;
   k = (t - 89) / 6.49;
@@ -1365,7 +1436,8 @@ bool check_boiling() {
   }
 
   //учтем задержку в 60 секунд до начала процесса определения кипения, чтобы датчик температуры воды успел остыть, если он нагрелся
-  if (b_t_time_delay == 0 || (b_t_time_delay + 60 * 1000 > millis())) {
+  // [C-13] overflow-safe: разность millis()-b_t_time_delay < 60000 означает "ещё не прошло 60 сек"
+  if (b_t_time_delay == 0 || ((int32_t)(millis() - b_t_time_delay) < 60 * 1000)) {
     if (b_t_time_delay == 0) {
       b_t_time_delay = millis();
     }
@@ -1672,7 +1744,11 @@ void check_power_error() {
 #ifndef __SAMOVAR_DEBUG
   if (SamSetup.CheckPower && PowerOn) {
     // 1) Потеря связи с регулятором: отключаем нагрев при длительном отсутствии ответа.
-    // Таймаут здесь должен совпадать с логикой в triggerPowerStatus().
+    // [L-10] Аварийный таймаут здесь — 15000 мс.
+    // В triggerPowerStatus() reg_online сбрасывается с разными таймаутами намеренно:
+    //   Serial2-ветка (#ifndef SAMOVAR_USE_RMVK): 15000 мс (пакеты идут пассивно, нужен запас);
+    //   RMVK-ветка   (#else):                      5000 мс (опрос активный, детект быстрее).
+    // Таймаут здесь (15000 мс) выставлен с запасом поверх обоих значений.
     if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL && !current_power_mode_is(POWER_SLEEP_MODE)) {
       power_err_cnt++;
       if (power_err_cnt == 2) {
@@ -1852,6 +1928,11 @@ unsigned int hexToDec(String hexString) {
 #endif
 
 #ifdef COLUMN_WETTING
+// [L-36fix] File-scope флаг неудачного смачивания: виден из sensorinit.h (включается после logic.h).
+// reset_sensor_counter() сбрасывает его при стопе процесса, обеспечивая корректный
+// новый запуск смачивания. В рамках одного прогона после таймаута удерживает false.
+bool wetting_failed = false;
+
 // Функция для смачивания насадки колонны
 bool column_wetting() {
   // Статические переменные для сохранения состояния между вызовами
@@ -1872,11 +1953,16 @@ bool column_wetting() {
     initial_voltage = 0;
     total_wetting_time = 0;
     min_voltage_time = 0;
+    wetting_failed = false;  // [L-36] сброс флага неудачи
   };
 
   // Проверяем, что датчик уровня флегмы установлен
   #ifdef USE_HEAD_LEVEL_SENSOR
   if (SamSetup.UseHLS) {
+    // [L-36] После неудачного смачивания удерживаем false до ручного сброса.
+    if (wetting_failed) {
+      return false;
+    }
     // Инициализация процесса смачивания
     if (!wetting_started) {
       SendMsg(("Начало смачивания насадки колонны. Следите за уровнем флегмы!"), WARNING_MSG);
@@ -1924,10 +2010,14 @@ bool column_wetting() {
     }
     
     // 2. Превышено максимальное общее время процесса
+    // [L-36] Возвращаем false (не успех!) — оператор должен видеть, что смачивание
+    // не завершено. Вызывающий код при false НЕ переходит к стабилизации и НЕ
+    // автостартует головы. wetting_failed удерживает false до ручного сброса процесса.
     if (millis() - total_wetting_time >= max_total_time) {
-      SendMsg(("Превышено максимальное время смачивания. Процесс прерван."), WARNING_MSG);
+      SendMsg(("Превышено максимальное время смачивания. Смачивание не удалось — остановите процесс вручную."), ALARM_MSG);
       reset_wetting_state();
-      return true;
+      wetting_failed = true;  // устанавливаем ПОСЛЕ reset (reset очищает флаг)
+      return false;
     }
     
     // Проверяем превышение максимального времени до начала снижения напряжения
@@ -1957,10 +2047,12 @@ bool column_wetting() {
           }
           
           // 3. Ждем определенное время на минимальном напряжении и завершаем процесс
+          // [L-36] Аналогично: возвращаем false — смачивание не было успешным.
           if (millis() - min_voltage_time >= min_voltage_wait_time) {
-            SendMsg(("Превышено время ожидания на минимальном напряжении. Завершаем процесс смачивания."), WARNING_MSG);
+            SendMsg(("Превышено время ожидания на минимальном напряжении. Смачивание не удалось — остановите процесс вручную."), ALARM_MSG);
             reset_wetting_state();
-            return true;
+            wetting_failed = true;  // устанавливаем ПОСЛЕ reset (reset очищает флаг)
+            return false;
           }
         }
       }

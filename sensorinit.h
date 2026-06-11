@@ -518,6 +518,9 @@ void reset_sensor_counter(void) {
   d_s_time_min = 0;
   d_s_temp_finish = 0;
   wetting_autostart = false;
+#ifdef COLUMN_WETTING
+  wetting_failed = false;  // [L-36fix] сброс флага при стопе — новый запуск может смачивать заново
+#endif
 
   current_power_volt = 0.0;
   target_power_volt = 0.0;
@@ -567,10 +570,13 @@ void reset_sensor_counter(void) {
   alcohol_s = 0;
   b_t_time_delay = 0;
 
-  if (xSemaphore != NULL) xSemaphoreGive(xSemaphore);
-#ifdef SAMOVAR_USE_SEM_AVR
-  if (xSemaphoreAVR != NULL) xSemaphoreGive(xSemaphoreAVR);
-#endif
+  // [C-7] xSemaphore и xSemaphoreAVR — бинарные мьютексы UART.
+  // Безусловный Give здесь некорректен: reset_sensor_counter() не захватывала
+  // этот семафор, поэтому Give может принудительно освободить семафор,
+  // удерживаемый RMVK_cmd в другой задаче (до ~1.1 с), что приводит к
+  // перемешиванию команд/ответов UART.
+  // Семафоры создаются и инициализируются один раз при инициализации (RMVK_init /
+  // sensor_init) и должны освобождаться только той задачей, которая их захватила.
 
   set_power(false);
   sam_command_sync = SAMOVAR_NONE;
@@ -588,7 +594,17 @@ void reset_sensor_counter(void) {
 }
 
 inline String format_float(float v, int d) {
-  char outstr[15];
+  // [C-19] dtostrf не ограничивает длину вывода: при |v| >= ~1e11 или NaN/Inf
+  // вывод выходит за границу буфера → порча стека.
+  // Защита: клампируем до разумного диапазона датчиков (~-100..+300 °C / Па),
+  // а NaN/Inf заменяем на "---". Нормальный формат для штатных значений не меняется.
+  // Буфер 32 байта: знак + 10 цифр целой части + '.' + d цифр + '\0' — с запасом.
+  char outstr[32];
+  if (isnan(v) || isinf(v)) {
+    return "---";
+  }
+  if (v > 99999.0f)  v = 99999.0f;
+  if (v < -99999.0f) v = -99999.0f;
   dtostrf(v, 1, d, outstr);
   return outstr;
 }

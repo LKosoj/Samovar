@@ -290,6 +290,17 @@ inline uint16_t i2c_stepper_mlh_from_step_speed(uint16_t spd) {
   return mlh > 65535UL ? 65535 : (uint16_t)mlh;
 }
 
+// [W-4] Чистый пересчёт скорости (шаги/с) из л/ч по SamSetup — БЕЗ I2C.
+//        Вынесено из i2c_get_speed_from_rate(), чтобы async-обработчики
+//        (/i2cpump) могли считать скорость без блокирующего i2c_stepper_refresh.
+inline float i2c_stepper_steps_from_rate(float volume_per_hour) {
+  uint16_t stepsPerMl = i2c_stepper_steps_per_ml();
+  float v = round(stepsPerMl * volume_per_hour * 1000 / 3.6) / 1000.0;
+  if (v < 1) return 1;
+  if (v > 65535) return 65535;
+  return v;
+}
+
 inline uint16_t i2c_stepper_ml_from_steps(uint32_t steps) {
   uint16_t stepsPerMl = i2c_stepper_steps_per_ml();
   if (steps == 0 || stepsPerMl == 0) return 0;
@@ -404,11 +415,7 @@ inline float i2c_get_liquid_rate_by_step(int stepperSpeed) {
 
 inline float i2c_get_speed_from_rate(float volume_per_hour) {
   if (!i2c_stepper_refresh(i2cStepperPump)) return get_speed_from_rate(volume_per_hour);
-  uint16_t stepsPerMl = i2c_stepper_steps_per_ml();
-  float v = round(stepsPerMl * volume_per_hour * 1000 / 3.6) / 1000.0;
-  if (v < 1) return 1;
-  if (v > 65535) return 65535;
-  return v;
+  return i2c_stepper_steps_from_rate(volume_per_hour);
 }
 
 inline float i2c_get_liquid_volume() {

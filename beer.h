@@ -151,7 +151,7 @@ bool set_mixer_pump_target(uint8_t on);
  * @brief Управлять шаговым двигателем по времени.
  * @param spd Скорость
  * @param direction Направление
- * @param time Время работы (мс)
+ * @param time Время работы (с)
  * @return true если успешно
  */
 bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
@@ -415,6 +415,15 @@ void check_alarm_beer() {
     open_valve(false, false);
   }
 
+  //Если тип программы неизвестен или пуст - безопасно выключаем нагрев
+  if (program[ProgramNum].WType != "L" && program[ProgramNum].WType != "W" &&
+      program[ProgramNum].WType != "A" && program[ProgramNum].WType != "M" &&
+      program[ProgramNum].WType != "P" && program[ProgramNum].WType != "F" &&
+      program[ProgramNum].WType != "C" && program[ProgramNum].WType != "B") {
+    setHeaterPosition(false);
+    return;
+  }
+
   //Если программа - Lua - ждем, ничего не делаем
   if (program[ProgramNum].WType == "L") {
     return;
@@ -560,7 +569,7 @@ void check_alarm_beer() {
     }
 
     //Проверяем, что еще нужно держать паузу. За 30 секунд до окончания шлем сообщение
-    if (begintime > 0 && msgfl && ((float(millis()) - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {
+    if (begintime > 0 && msgfl && ((float)(millis() - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {  // [C-13] overflow-safe: вычитание до каста
       set_buzzer(true);
       msgfl = false;
       SendMsg(("Засыпьте хмель!"), NOTIFY_MSG);
@@ -590,14 +599,14 @@ void check_mixer_state() {
   if (program[ProgramNum].capacity_num > 0) {
     //обрабатываем время включения и управляем мешалкой и насосом
 
-    if (alarm_c_min > 0 && alarm_c_min <= millis()) {
+    if (alarm_c_min > 0 && (int32_t)(millis() - alarm_c_min) >= 0) {  // [C-13] overflow-safe
       //завершили паузу мешалки
       alarm_c_min = 0;
       alarm_c_low_min = 0;
       set_mixer_state(false, false);
     }
 
-    if ((alarm_c_low_min > 0) && (alarm_c_low_min <= millis())) {
+    if ((alarm_c_low_min > 0) && ((int32_t)(millis() - alarm_c_low_min) >= 0)) {  // [C-13] overflow-safe
       //выключаем мешалку, если alarm_c_min > millis()
       alarm_c_low_min = 0;
       if (alarm_c_min > 0)
@@ -832,7 +841,7 @@ String get_beer_program() {
       Str += program[i].WType + ";";
       Str += (String)program[i].Temp + ";";
       Str += (String)(int)program[i].Time + ";";
-      Str += (String)program[i].capacity_num + "^" + program[i].Speed + "^" + program[i].Volume + "^" + program[i].Power + ";";
+      Str += (String)program[i].capacity_num + "^" + (int)program[i].Speed + "^" + program[i].Volume + "^" + (int)program[i].Power + ";";
       Str += (String)program[i].TempSensor + "\n";
     }
   }

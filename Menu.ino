@@ -534,12 +534,12 @@ void menu_samovar_start() {
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
     delay(200);
 #endif
-    startval = 1;
     Str = "Prg No 1";
     run_program(0);
     SamovarStatusInt = 10;
     ProgramNum = 0;
     create_data();  //создаем файл с данными
+    startval = 1;
   } else if (startval == 1) {
     ProgramNum++;
     Str = "Prg No " + (String)(ProgramNum + 1);
@@ -559,8 +559,7 @@ void menu_samovar_start() {
 }
 
 void samovar_reset() {
-  char str[20] = "Stoped             ";
-  memcpy(str, startval_text_val, 20);
+  copyStringSafe(startval_text_val, String("Stoped"));
   power_text_ptr = (char *)"ON";
   reset_focus();
   set_menu_screen(3);

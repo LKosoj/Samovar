@@ -176,8 +176,92 @@ portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
 
 // WiFiManager отключен: флагов сохранения через портал больше нет
 
+// ---------------------------------------------------------------------------
+// Отложенные команды для выполнения из loop() (set из async-обработчиков)
+// ---------------------------------------------------------------------------
+// [C-3] Отложенная установка программы
+enum PendingProgramMode : int { PPM_NONE = 0, PPM_RECT, PPM_BEER, PPM_DIST, PPM_NBK };
+volatile PendingProgramMode pending_program_mode = PPM_NONE;
+String pending_program_str;                         // буфер заполняется до установки флага
+
+// [W-5] Отложенная смена режима самовара
+volatile bool pending_switch_mode_flag = false;
+volatile SAMOVAR_MODE pending_switch_mode_value = SAMOVAR_RECTIFICATION_MODE;
+
+// [W-9] Отложенное сканирование OneWire датчиков
+volatile bool pending_rescan_ds_flag = false;
+
+// [C-10/W-8] Отложенное сохранение профиля + перечитывание конфига
+volatile bool pending_save_profile_flag = false;
+
+// [W-1] Отложенное сохранение/очистка WiFi-кредов (WiFi.begin/disconnect блокируют async).
+String pending_wifi_ssid;
+String pending_wifi_pass;
+volatile bool pending_wifi_save_flag = false;
+volatile bool pending_wifi_clear_flag = false;
+
+#ifdef USE_LUA
+// [ISSUE-5] Отложенное исполнение Lua-строки (run_lua_string из async конкурирует
+//           с do_lua_script на core 1 за общий lua_State).
+String pending_lua_str;
+volatile bool pending_lua_flag = false;
+#endif
+
+// [W-3] Кэш I2C-шагового двигателя — обновляется в SysTicker, читается из async
+struct I2CStepperCache {
+  bool mixer_present;
+  bool pump_present;
+  uint16_t pump_current_speed;
+  uint32_t pump_remaining;
+  uint8_t pump_status;
+};
+volatile I2CStepperCache i2c_stepper_cache = {false, false, 0, 0, 0};
+
+// [W-4] Отложенная команда /i2cstepper (I2C из async недопустим).
+//        staged — приватная копия конфига с применёнными args; не трогаем глобал до loop.
+//        device_sel: 0=mixer, 1=pump.
+struct PendingI2CStepperCmd {
+  I2CStepperDevice staged;
+  uint8_t device_sel;  // 0=mixer, 1=pump
+  char cmd[16];
+};
+PendingI2CStepperCmd pending_i2cstepper_buf;
+volatile bool pending_i2cstepper_flag = false;
+
+// [W-4] Отложенная команда /i2cpump (stop/start; I2C из async недопустим).
+struct PendingI2CPumpCmd {
+  bool is_stop;
+  uint16_t speedSteps;
+  uint32_t targetSteps;
+  float targetMl;
+  uint16_t fillingMl;
+  uint16_t fillingMlHour;
+  uint16_t stepsPerMl;
+};
+PendingI2CPumpCmd pending_i2cpump_buf;
+volatile bool pending_i2cpump_flag = false;
+
+// [W-4] Отложенная команда калибровки I2C насоса (i2c_stepper_write_config/send_command
+//        из async недопустимы).
+struct PendingI2CCalCmd {
+  bool is_finish;   // false=start, true=finish
+  uint16_t pumpMlHour;
+  uint16_t stepsPerMl;
+  uint16_t cmdSpeed;
+};
+PendingI2CCalCmd pending_i2ccal_buf;
+volatile bool pending_i2ccal_flag = false;
+
+// [W-4] Отложенное ручное управление скоростью I2C-насоса (/command?pnbk):
+//        get_stepper_speed()/set_stepper_target() делают блокирующий I2C — только из loop().
+//        pnbk_value: 9000=+шаг, 8000=-шаг, иначе абсолютная скорость (л/ч).
+volatile float pending_pnbk_value = 0;
+volatile bool pending_pnbk_flag = false;
+
 void load_profile_nvs();
 void migrate_from_eeprom();
+void switch_samovar_mode(SAMOVAR_MODE requestedMode);
+void scan_ds_adress();
 // void reset_migration_flag(); // Только для тестирования миграции
 
 void setupMenu();
@@ -376,16 +460,16 @@ void triggerSysTicker(void *parameter) {
   while (true) {
     CurMinST = (millis() / 1000);
 
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
-    //Проверим, что давление не вышло за пределы, если вышло - авария
-    if (SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue) {
-      SendMsg("Превышено предельное давление!", ALARM_MSG);
-      set_alarm();
-    }
-#endif
-
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
     if (OldMinST != CurMinST) {
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
+      // [C-8] Проверка давления выполняется раз в секунду (внутри гейта OldMinST != CurMinST).
+      //Проверим, что давление не вышло за пределы, если вышло - авария
+      if (SamSetup.MaxPressureValue > 0 && pressure_value >= SamSetup.MaxPressureValue) {
+        SendMsg("Превышено предельное давление!", ALARM_MSG);
+        set_alarm();
+      }
+#endif
 #ifdef __SAMOVAR_DEBUG1
       Serial.println(F("--------------------------------------------"));
       Serial.print(F("PowerStatusTask = "));
@@ -400,17 +484,29 @@ void triggerSysTicker(void *parameter) {
 #endif
 #ifdef USE_LUA
       //если установлена переменная btn_script, запускаем
-      if (btn_script.length() > 0) {
-        String sr;
-        if (show_lua_script) {
-          WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-          WriteConsoleLog(btn_script);
-          WriteConsoleLog(F("--END LUA SCRIPT--"));
+      // [W-4] btn_script пишется из async (run_lua_script) под runtime_state_lock;
+      //        читаем здесь под тем же замком, чтобы избежать гонки на String.
+      {
+        String local_btn_script;
+        {
+          bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+          if (locked) {
+            local_btn_script = btn_script;
+            btn_script = "";
+            runtime_state_unlock(true);
+          }
         }
-        sr = lua.Lua_dostring(&btn_script);
-        sr.trim();
-        if (sr.length() > 0) WriteConsoleLog("ERR in BTN_SCRIPT " + sr);
-        btn_script = "";
+        if (local_btn_script.length() > 0) {
+          String sr;
+          if (show_lua_script) {
+            WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+            WriteConsoleLog(local_btn_script);
+            WriteConsoleLog(F("--END LUA SCRIPT--"));
+          }
+          sr = lua.Lua_dostring(&local_btn_script);
+          sr.trim();
+          if (sr.length() > 0) WriteConsoleLog("ERR in BTN_SCRIPT " + sr);
+        }
       }
 
       //если установлена переменная запуска в цикле lua_script, запускаем
@@ -430,13 +526,34 @@ void triggerSysTicker(void *parameter) {
       DS_getvalue();
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
-      Crt = NTP.getFormattedDate();
-      //StrCrt = Crt.substring(6) + "   " + NTP.getUptimeString();
-      String uptime = format_uptime((unsigned long)(millis() / 1000UL));
-      StrCrt = NTP.getFormattedTime() + "     " + uptime;
-      snprintf(tst, sizeof(tst), "%s   %s",
-               NTP.getFormattedTime().c_str(),
-               uptime.c_str());
+      // [W-3] Обновляем кэш I2C-шагового двигателя раз в секунду из SysTicker.
+      //        Выполняем здесь (не в async), так как I2C защищён xI2CSemaphore внутри функций.
+      {
+        bool mp = i2c_stepper_refresh(i2cStepperMixer);
+        bool pp = i2c_stepper_refresh(i2cStepperPump);
+        i2c_stepper_cache.mixer_present = mp;
+        i2c_stepper_cache.pump_present = pp;
+        i2c_stepper_cache.pump_current_speed = i2cStepperPump.currentSpeed;
+        i2c_stepper_cache.pump_remaining = i2cStepperPump.remaining;
+        i2c_stepper_cache.pump_status = i2cStepperPump.status;
+      }
+
+      // [C-1] Формируем строки времени в локалах, под замком только присваиваем глобалам.
+      {
+        String localCrt = NTP.getFormattedDate();
+        //String localStrCrt = localCrt.substring(6) + "   " + NTP.getUptimeString();
+        String uptime = format_uptime((unsigned long)(millis() / 1000UL));
+        String localStrCrt = NTP.getFormattedTime() + "     " + uptime;
+        snprintf(tst, sizeof(tst), "%s   %s",
+                 NTP.getFormattedTime().c_str(),
+                 uptime.c_str());
+        bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+        if (locked) {
+          Crt = localCrt;
+          StrCrt = localStrCrt;
+          runtime_state_unlock(true);
+        }
+      }
 
       if (startval != 0) {
         tcntST++;
@@ -539,6 +656,7 @@ void triggerSysTicker(void *parameter) {
           WthdrwTimeAll += program[i].Time;
         }
 
+        // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.
         String h, m;
         int hi, mi;
         hi = WthdrwTime / 60;
@@ -551,7 +669,7 @@ void triggerSysTicker(void *parameter) {
         else
           m = "";
         m += (String)mi;
-        WthdrwTimeS = h + ":" + m;
+        String localTimeS = h + ":" + m;
 
         hi = WthdrwTimeAll / 60;
         mi = WthdrwTimeAll - hi * 60;
@@ -563,7 +681,16 @@ void triggerSysTicker(void *parameter) {
         else
           m = "";
         m += (String)mi;
-        WthdrwTimeAllS = h + ":" + m;
+        String localTimeAllS = h + ":" + m;
+
+        {
+          bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+          if (locked) {
+            WthdrwTimeS = localTimeS;
+            WthdrwTimeAllS = localTimeAllS;
+            runtime_state_unlock(true);
+          }
+        }
 
       } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
 
@@ -597,6 +724,7 @@ void triggerSysTicker(void *parameter) {
           WthdrwTimeAll += program[i].Time;
         }
 
+        // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.
         String h, m;
         unsigned int mi;
         if (WthdrwTime < 10) h = "0";
@@ -608,8 +736,7 @@ void triggerSysTicker(void *parameter) {
         else
           m = "";
         m += (String)mi;
-
-        WthdrwTimeS = h + ":" + m;
+        String localTimeS = h + ":" + m;
 
         if (WthdrwTimeAll < 10) h = "0";
         else
@@ -620,14 +747,28 @@ void triggerSysTicker(void *parameter) {
         else
           m = "";
         m += (String)mi;
-        WthdrwTimeAllS = h + ":" + m;
+        String localTimeAllS = h + ":" + m;
+
+        {
+          bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+          if (locked) {
+            WthdrwTimeS = localTimeS;
+            WthdrwTimeAllS = localTimeAllS;
+            runtime_state_unlock(true);
+          }
+        }
 
         //прогресс переводим в проценты
         WthdrwlProgress = wp * 100;
       } else {
         WthdrwlProgress = 0;
-        WthdrwTimeS = "";
-        WthdrwTimeAllS = "";
+        // [C-1] Сброс под замком.
+        bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+        if (locked) {
+          WthdrwTimeS = "";
+          WthdrwTimeAllS = "";
+          runtime_state_unlock(true);
+        }
       }
 
 
@@ -677,6 +818,13 @@ void triggerSysTicker(void *parameter) {
         ACPSensor.ErrCount = -110;
         SendMsg(("Ошибка датчика температуры в ТСА!"), ALARM_MSG);
       }
+
+      // [C-2/2a] Продвигаем FSM и обновляем кэш SamovarStatus раз в секунду.
+      // Все переходы в get_Samovar_Status() оперируют секундными интервалами,
+      // поэтому секундная каденция достаточна. WthdrwTimeS/WthdrwTimeAllS к этому
+      // моменту уже записаны выше под замком — читаем актуальные значения.
+      // Замок в этой точке не удерживается → вложенного захвата нет.
+      get_Samovar_Status();
 
       OldMinST = CurMinST;
     }
@@ -1318,6 +1466,7 @@ void loop() {
         pause_withdrawal(false);
         t_min = 0;
         program_Wait = false;
+        program_Wait_Type = "";  // [L-1/M-31] сброс типа паузы при ручном возобновлении
         detector_on_manual_resume();
         break;
       case SAMOVAR_SETBODYTEMP:
@@ -1364,6 +1513,179 @@ void loop() {
     }
     if (sam_command_sync != SAMOVAR_RESET) {
       sam_command_sync = SAMOVAR_NONE;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Обработка отложенных команд из async-обработчиков
+  // ---------------------------------------------------------------------------
+
+  // [W-5] Смена режима самовара (change_samovar_mode изменяет хендлеры сервера —
+  //        должна выполняться только из одного контекста, здесь из loop).
+  if (pending_switch_mode_flag) {
+    pending_switch_mode_flag = false;
+    SAMOVAR_MODE reqMode = pending_switch_mode_value;
+    switch_samovar_mode(reqMode);
+  }
+
+  // [C-3] Применение программы (set_program пишет program[] — конкурентно читается
+  //        в withdrawal()/SysTicker; применяем только из loop, когда withdrawal не активна).
+  if (pending_program_mode != PPM_NONE) {
+    PendingProgramMode ppm = pending_program_mode;
+    __sync_synchronize();  // [ISSUE-3] барьер: читаем строку после подтверждения флага
+    String pstr = pending_program_str;
+    pending_program_mode = PPM_NONE;
+    switch (ppm) {
+      case PPM_RECT: set_program(pstr); break;
+      case PPM_BEER: set_beer_program(pstr); break;
+      case PPM_DIST: set_dist_program(pstr); break;
+      case PPM_NBK:  set_nbk_program(pstr); break;
+      default: break;
+    }
+  }
+
+  // [W-9] Сканирование OneWire датчиков (блокирующий OneWire — только из loop).
+  if (pending_rescan_ds_flag) {
+    pending_rescan_ds_flag = false;
+    scan_ds_adress();
+  }
+
+  // [C-10/W-8] Сохранение профиля + перечитывание конфига (NVS — только из loop).
+  if (pending_save_profile_flag) {
+    pending_save_profile_flag = false;
+    save_profile();
+    read_config();
+  }
+
+  // [W-1] Сохранение/очистка WiFi-кредов (WiFi.begin/disconnect блокируют — только из loop),
+  //        затем рестарт через is_reboot (ответ клиенту уже отправлен из async).
+  if (pending_wifi_save_flag) {
+    pending_wifi_save_flag = false;
+    __sync_synchronize();  // буферы читаем после подтверждения флага
+    String ssid = pending_wifi_ssid;
+    String pass = pending_wifi_pass;
+    save_wifi_credentials(ssid.c_str(), pass.c_str());
+    is_reboot = true;
+  }
+  if (pending_wifi_clear_flag) {
+    pending_wifi_clear_flag = false;
+    clear_wifi_credentials();
+    is_reboot = true;
+  }
+
+  // [W-1] Отложенный рестарт: async ставит is_reboot=true после отправки ответа;
+  //        loop ждёт ~200мс (ответ успевает уйти) и выполняет рестарт.
+  if (is_reboot) {
+    delay(200);
+    ESP.restart();
+  }
+
+#ifdef USE_LUA
+  // [ISSUE-5] Исполнение Lua-строки из loop — избегаем конкуренции с do_lua_script.
+  if (pending_lua_flag) {
+    pending_lua_flag = false;
+    __sync_synchronize();  // [ISSUE-3] барьер: читаем строку после флага
+    String lstr = pending_lua_str;
+    run_lua_string(lstr);
+  }
+#endif
+
+  // [W-4] Команда /i2cstepper: применяем staged-конфиг к реальной структуре и выполняем I2C.
+  //        Флаг сбрасываем до чтения буфера; барьер симметричен записи в хендлере.
+  if (pending_i2cstepper_flag) {
+    pending_i2cstepper_flag = false;
+    __sync_synchronize();
+    I2CStepperDevice* dev = (pending_i2cstepper_buf.device_sel == 0) ? &i2cStepperMixer : &i2cStepperPump;
+    // Копируем конфиг-поля из staged в реальную структуру (минимальное окно до команды).
+    dev->mode          = pending_i2cstepper_buf.staged.mode;
+    dev->relayMask     = pending_i2cstepper_buf.staged.relayMask;
+    dev->sensorFlags   = pending_i2cstepper_buf.staged.sensorFlags;
+    dev->optionFlags   = pending_i2cstepper_buf.staged.optionFlags;
+    dev->mixerRpm      = pending_i2cstepper_buf.staged.mixerRpm;
+    dev->mixerRunSec   = pending_i2cstepper_buf.staged.mixerRunSec;
+    dev->mixerPauseSec = pending_i2cstepper_buf.staged.mixerPauseSec;
+    dev->pumpMlHour    = pending_i2cstepper_buf.staged.pumpMlHour;
+    dev->pumpPauseSec  = pending_i2cstepper_buf.staged.pumpPauseSec;
+    dev->fillingMl     = pending_i2cstepper_buf.staged.fillingMl;
+    dev->fillingMlHour = pending_i2cstepper_buf.staged.fillingMlHour;
+    dev->stepsPerMl    = pending_i2cstepper_buf.staged.stepsPerMl;
+    const char* cmd = pending_i2cstepper_buf.cmd;
+    if      (strcmp(cmd, "apply")     == 0) i2c_stepper_apply(*dev);
+    else if (strcmp(cmd, "save")      == 0) i2c_stepper_save(*dev);
+    else if (strcmp(cmd, "start")     == 0) i2c_stepper_start(*dev);
+    else if (strcmp(cmd, "stop")      == 0) i2c_stepper_stop(*dev);
+    else if (strcmp(cmd, "calstart")  == 0) i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_START);
+    else if (strcmp(cmd, "calfinish") == 0) i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_FINISH);
+    else if (strcmp(cmd, "relay")     == 0) i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
+    i2c_stepper_refresh(*dev);
+  }
+
+  // [W-4] Команда /i2cpump (stop или start).
+  if (pending_i2cpump_flag) {
+    pending_i2cpump_flag = false;
+    __sync_synchronize();
+    if (pending_i2cpump_buf.is_stop) {
+      i2c_stepper_stop(i2cStepperPump);
+    } else {
+      I2CPumpCmdSpeed    = pending_i2cpump_buf.speedSteps;
+      I2CPumpTargetSteps = pending_i2cpump_buf.targetSteps;
+      I2CPumpTargetMl    = pending_i2cpump_buf.targetMl;
+      i2cStepperPump.mode          = I2CSTEP_MODE_FILLING;
+      i2cStepperPump.fillingMl     = pending_i2cpump_buf.fillingMl;
+      i2cStepperPump.fillingMlHour = pending_i2cpump_buf.fillingMlHour;
+      i2cStepperPump.stepsPerMl    = pending_i2cpump_buf.stepsPerMl;
+      i2c_stepper_start(i2cStepperPump);
+    }
+  }
+
+  // [W-4] Калибровка I2C насоса (start/finish).
+  if (pending_i2ccal_flag) {
+    pending_i2ccal_flag = false;
+    __sync_synchronize();
+    if (!pending_i2ccal_buf.is_finish) {
+      I2CPumpTargetMl  = 0;
+      I2CPumpCmdSpeed  = pending_i2ccal_buf.cmdSpeed;
+      I2CPumpCalibrating = true;
+      i2cStepperPump.pumpMlHour  = pending_i2ccal_buf.pumpMlHour;
+      i2cStepperPump.stepsPerMl  = pending_i2ccal_buf.stepsPerMl;
+      i2c_stepper_write_config(i2cStepperPump);
+      i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_START);
+    } else {
+      i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_FINISH);
+      i2c_stepper_refresh(i2cStepperPump);
+      SamSetup.StepperStepMlI2C = i2cStepperPump.stepsPerMl;
+      I2CPumpCalibrating = false;
+      save_profile();  // [W-4] сохраняем результат калибровки в NVS после обновления SamSetup
+    }
+  }
+
+  // [W-4] Ручное управление скоростью I2C-насоса (/command?pnbk): get_stepper_speed()/
+  //        set_stepper_target() — блокирующий I2C, выполняем здесь. Логика идентична
+  //        прежнему async-обработчику; pnbk заменяет request->arg("pnbk").
+  if (pending_pnbk_flag) {
+    pending_pnbk_flag = false;
+    __sync_synchronize();
+    // [W-4] PowerOn проверяем на момент ИСПОЛНЕНИЯ (не только при постановке флага в async):
+    //        питание могло выключиться между запросом и выполнением (команда SAMOVAR_POWER
+    //        обрабатывается в этом же loop раньше). Флаг сбрасываем всегда — устаревшую
+    //        команду при возврате питания не исполняем.
+    if (PowerOn) {
+      float pnbk = pending_pnbk_value;
+      int pnbk_i = (int)pnbk;
+      if (pnbk_i == 9000) {  // повышаем скорость насоса на один шаг
+        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001), 0, 2147483640);
+      } else if (pnbk_i == 8000) {  // понижаем скорость насоса на один шаг
+        uint16_t currentSpeed = get_stepper_speed();
+        float deltaRate = float(SamSetup.NbkDP) - 0.0001f;
+        uint16_t deltaSpeed = deltaRate > 0 ? (uint16_t)i2c_get_speed_from_rate(deltaRate) : 0;
+        if (deltaSpeed >= currentSpeed) {
+          set_stepper_target(0, 0, 0);
+        } else {
+          set_stepper_target(currentSpeed - deltaSpeed, 0, 2147483640);
+        }
+      } else if (pnbk >= 0 && pnbk_i < 8000) {  // устанавливаем заказанную скорость
+        set_stepper_target(i2c_get_speed_from_rate(pnbk + 0.0001), 0, 2147483640);
+      }
     }
   }
 
@@ -1433,7 +1755,16 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   out.print(format_float(start_pressure, 3));
   jsonAddKey(out, first, "crnt_tm");
   out.print('\"');
-  jsonPrintEscaped(out, Crt);
+  // [C-1] Читаем строку Crt под замком.
+  {
+    String crtCopy;
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      crtCopy = Crt;
+      runtime_state_unlock(true);
+    }
+    jsonPrintEscaped(out, crtCopy);
+  }
   out.print('\"');
   jsonAddKey(out, first, "stm");
   out.print('\"');
@@ -1489,22 +1820,23 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   out.print(mixer_status);
   jsonAddKey(out, first, "ISspd");
   out.print(format_float(i2c_get_liquid_rate_by_step(get_stepper_speed()), 3));
+  // [W-3] Читаем из кэша (обновляется раз в секунду в SysTicker), без I2C в async.
   jsonAddKey(out, first, "i2c_stepper_present");
-  out.print((i2c_stepper_mixer_present() || i2c_stepper_pump_present()) ? 1 : 0);
+  out.print((i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? 1 : 0);
   jsonAddKey(out, first, "i2c_mixer_present");
-  out.print(i2c_stepper_mixer_present() ? 1 : 0);
+  out.print(i2c_stepper_cache.mixer_present ? 1 : 0);
   jsonAddKey(out, first, "i2c_pump_present");
-  out.print(i2c_stepper_pump_present() ? 1 : 0);
+  out.print(i2c_stepper_cache.pump_present ? 1 : 0);
 
-  if (i2c_stepper_pump_present()) {
+  if (i2c_stepper_cache.pump_present) {
     jsonAddKey(out, first, "i2c_pump_speed");
-    out.print(i2cStepperPump.currentSpeed);
+    out.print(i2c_stepper_cache.pump_current_speed);
     jsonAddKey(out, first, "i2c_pump_target_ml");
     out.print(format_float(I2CPumpTargetMl, 1));
     jsonAddKey(out, first, "i2c_pump_remaining_ml");
-    out.print(format_float(i2cStepperPump.remaining, 1));
+    out.print(format_float(i2c_stepper_cache.pump_remaining, 1));
     jsonAddKey(out, first, "i2c_pump_running");
-    out.print((i2cStepperPump.status & I2CSTEPPER_STATUS_RUNNING) ? 1 : 0);
+    out.print((i2c_stepper_cache.pump_status & I2CSTEPPER_STATUS_RUNNING) ? 1 : 0);
   } else {
     jsonAddKey(out, first, "i2c_pump_speed");
     out.print(0);
@@ -1609,7 +1941,17 @@ void send_ajax_json(AsyncWebServerRequest *request) {
 
   jsonAddKey(out, first, "Status");
   out.print('\"');
-  jsonPrintEscaped(out, get_Samovar_Status());
+  // [C-2] Читаем кэш SamovarStatus под замком; FSM продвигает его раз в секунду
+  // из секундного гейта triggerSysTicker (core 0) через get_Samovar_Status().
+  {
+    String statusCopy;
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      statusCopy = SamovarStatus;
+      runtime_state_unlock(true);
+    }
+    jsonPrintEscaped(out, statusCopy);
+  }
   out.print('\"');
   jsonAddKey(out, first, "Lstatus");
   out.print('\"');

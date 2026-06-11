@@ -11,7 +11,7 @@ if not ws_file.exists():
 
 text = ws_file.read_text(encoding="utf-8", errors="ignore")
 
-route_re = re.compile(r'server\.on\("(?P<path>/[^\"]*)"\s*,\s*(?P<method>HTTP_[A-Z| ]+)')
+route_re = re.compile(r'server\.on\("(?P<path>/[^\"]*)"\s*,\s*(?P<method>HTTP_[A-Z_| ]+)')
 routes = {}
 for match in route_re.finditer(text):
     path = match.group("path")
@@ -52,7 +52,7 @@ elif "send_ajax_json(request);" not in ajax_handler.group("body"):
 
 # Keep CORS presence visible for security review (not a hard failure)
 if "Access-Control-Allow-Origin" not in text:
-    errors.append("CORS header declaration missing")
+    print("WARNING: CORS header declaration missing")
 
 if errors:
     print("API smoke check failed:")

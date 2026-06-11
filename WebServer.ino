@@ -15,6 +15,7 @@ extern float nbk_Mo;
 extern float nbk_P;
 extern float nbk_Po;
 float i2c_get_speed_from_rate(float volume_per_hour);
+float i2c_stepper_steps_from_rate(float volume_per_hour);
 String getValue(String& data, char separator, int index);
 void set_current_power(float Volt);
 void menu_reset_wifi();
@@ -80,6 +81,9 @@ void set_program(String WProgram);
 void set_beer_program(String WProgram);
 void set_dist_program(String WProgram);
 void set_nbk_program(String WProgram);
+
+// [C-3/W-5/W-9/C-10] Отложенные команды из Samovar.ino (одна TU, extern не нужен —
+//                     все .ino объединяются в одну единицу компиляции PlatformIO).
 
 #ifdef USE_LUA
 void start_lua_script();
@@ -363,17 +367,19 @@ void WebServerInit(void) {
       return;
     }
 
-    save_wifi_credentials(ssid.c_str(), pass.c_str());
+    // [W-1] save_wifi_credentials() зовёт WiFi.begin() — блокирует async; откладываем
+    //        в loop(). Рестарт выставит loop после сохранения (is_reboot).
+    pending_wifi_ssid = ssid;
+    pending_wifi_pass = pass;
+    __sync_synchronize();  // [W-1] буферы видны до установки флага
+    pending_wifi_save_flag = true;
     request->send(200, "text/plain", "OK. Rebooting...");
-    delay(200);
-    ESP.restart();
   });
 
   server.on("/wifi/clear", HTTP_POST, [](AsyncWebServerRequest* request) {
-    clear_wifi_credentials();
+    // [W-1] clear_wifi_credentials() зовёт WiFi.disconnect() — блокирует async; в loop().
+    pending_wifi_clear_flag = true;
     request->send(200, "text/plain", "OK. Rebooting...");
-    delay(200);
-    ESP.restart();
   });
   //server.serveStatic("/edit", SPIFFS, "/edit.htm");
   // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
@@ -444,14 +450,18 @@ void WebServerInit(void) {
     calibrate_command(request);
   });
   server.on("/i2cpump", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (!i2c_stepper_pump_present()) {
+    // [W-4] Без I2C в async: present берём из глобала (SysTicker держит свежим).
+    if (!i2cStepperPump.present) {
       request->send(400, "text/plain", "I2C pump not available");
       return;
     }
     if (request->hasArg("stop")) {
-      i2c_stepper_stop(i2cStepperPump);
+      // [W-4] Откладываем stop в loop; сбрасываем глобальные счётчики здесь — они не I2C.
       I2CPumpTargetMl = 0;
       I2CPumpCmdSpeed = 0;
+      pending_i2cpump_buf.is_stop = true;
+      __sync_synchronize();
+      pending_i2cpump_flag = true;
       request->send(200, "text/plain", "OK");
       return;
     }
@@ -467,19 +477,20 @@ void WebServerInit(void) {
     }
     uint16_t stepsPerMl = SamSetup.StepperStepMlI2C > 0 ? SamSetup.StepperStepMlI2C : I2C_STEPPER_STEP_ML_DEFAULT;
     uint32_t targetSteps = (uint32_t)(volumeMl * stepsPerMl);
-    uint16_t speedSteps = (uint16_t)i2c_get_speed_from_rate(speedRate);
+    // [W-4] Без I2C в async: считаем скорость по SamSetup (i2c_get_speed_from_rate
+    //        делает блокирующий i2c_stepper_refresh — нельзя из async).
+    uint16_t speedSteps = (uint16_t)i2c_stepper_steps_from_rate(speedRate);
     uint16_t speedMlHour = i2c_stepper_mlh_from_step_speed(speedSteps);
-    I2CPumpCmdSpeed = speedSteps;
-    I2CPumpTargetSteps = targetSteps;
-    I2CPumpTargetMl = volumeMl;
-    i2cStepperPump.mode = I2CSTEP_MODE_FILLING;
-    i2cStepperPump.fillingMl = (uint16_t)volumeMl;
-    i2cStepperPump.fillingMlHour = speedMlHour;
-    i2cStepperPump.stepsPerMl = stepsPerMl;
-    if (!i2c_stepper_start(i2cStepperPump)) {
-      request->send(500, "text/plain", "I2C command failed");
-      return;
-    }
+    // [W-4] Откладываем start в loop; параметры вычислены без I2C.
+    pending_i2cpump_buf.is_stop      = false;
+    pending_i2cpump_buf.speedSteps   = speedSteps;
+    pending_i2cpump_buf.targetSteps  = targetSteps;
+    pending_i2cpump_buf.targetMl     = volumeMl;
+    pending_i2cpump_buf.fillingMl    = (uint16_t)volumeMl;
+    pending_i2cpump_buf.fillingMlHour = speedMlHour;
+    pending_i2cpump_buf.stepsPerMl   = stepsPerMl;
+    __sync_synchronize();
+    pending_i2cpump_flag = true;
     request->send(200, "text/plain", "OK");
   });
   server.on("/i2cstepper", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -490,36 +501,33 @@ void WebServerInit(void) {
     }
     String cmd = request->hasArg("cmd") ? request->arg("cmd") : "status";
     cmd.toLowerCase();
-    i2c_stepper_refresh(*dev);
-    if (!dev->present) {
-      if (cmd != "status") {
-        request->send(404, "application/json", "{\"error\":\"I2C device not available\"}");
-        return;
-      }
+
+    // [W-4] Без I2C в async: cmd=="status" — отвечаем из глобала (SysTicker держит свежим).
+    if (cmd == "status") {
       send_i2c_stepper_json(request, *dev);
       return;
     }
 
-    if (cmd != "status") apply_i2c_stepper_args(request, *dev);
-    if (!i2c_stepper_command_supported(*dev, cmd)) {
+    // [W-4] Командные cmd: проверки без I2C, аргументы в staged-копию, откладываем в loop.
+    if (!dev->present) {
+      request->send(404, "application/json", "{\"error\":\"I2C device not available\"}");
+      return;
+    }
+    // staged-копия: apply_i2c_stepper_args пишет только в staged, не в глобал —
+    // SysTicker не затрёт применённый конфиг до выполнения команды в loop.
+    I2CStepperDevice staged = *dev;
+    apply_i2c_stepper_args(request, staged);
+    if (!i2c_stepper_command_supported(staged, cmd)) {
       request->send(400, "application/json", "{\"error\":\"unsupported I2CStepper command\"}");
       return;
     }
-    bool ok = true;
-    if (cmd == "apply") ok = i2c_stepper_apply(*dev);
-    else if (cmd == "save") ok = i2c_stepper_save(*dev);
-    else if (cmd == "start") ok = i2c_stepper_start(*dev);
-    else if (cmd == "stop") ok = i2c_stepper_stop(*dev);
-    else if (cmd == "calstart") ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_START);
-    else if (cmd == "calfinish") ok = i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_FINISH);
-    else if (cmd == "relay") ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
-    else if (cmd == "status") i2c_stepper_refresh(*dev);
-
-    if (!ok) {
-      request->send(500, "application/json", "{\"error\":\"I2C command failed\"}");
-      return;
-    }
-    i2c_stepper_refresh(*dev);
+    pending_i2cstepper_buf.staged = staged;
+    pending_i2cstepper_buf.device_sel = (dev == &i2cStepperMixer) ? 0 : 1;
+    strncpy(pending_i2cstepper_buf.cmd, cmd.c_str(), sizeof(pending_i2cstepper_buf.cmd) - 1);
+    pending_i2cstepper_buf.cmd[sizeof(pending_i2cstepper_buf.cmd) - 1] = '\0';
+    __sync_synchronize();
+    pending_i2cstepper_flag = true;
+    // Отвечаем pre-command состоянием; UI перечитает статус следующим запросом.
     send_i2c_stepper_json(request, *dev);
   });
   server.on("/getlog", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -657,9 +665,10 @@ String indexKeyProcessor(const String &var) {
   else if (var == "PackDens")
     return String(SamSetup.PackDens);
   else if (var == "I2CStepperTab")
-    return (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) ? "inline-block" : "none";
+    // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
+    return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
   else if (var == "I2CPumpTab")
-    return i2c_stepper_pump_present() ? "inline-block" : "none";
+    return i2c_stepper_cache.pump_present ? "inline-block" : "none";
   else if (var == "HeaterMaxPower") {
     // Расчет мощности ТЭНа: P = U²/R
     float R = SamSetup.HeaterResistant;
@@ -950,9 +959,10 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "PackDens")
     return String(SamSetup.PackDens);
   else if (var == "I2CStepperTab")
-    return (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) ? "inline-block" : "none";
+    // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
+    return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
   else if (var == "I2CPumpTab")
-    return i2c_stepper_pump_present() ? "inline-block" : "none";
+    return i2c_stepper_cache.pump_present ? "inline-block" : "none";
   return "";
 }
 
@@ -979,7 +989,8 @@ String calibrateKeyProcessor(const String &var) {
   else if (var == "StepperStepMlI2C")
     return (String)(SamSetup.StepperStepMlI2C * 100);
   else if (var == "I2CPumpTab")
-    return i2c_stepper_pump_present() ? "inline-block" : "none";
+    // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
+    return i2c_stepper_cache.pump_present ? "inline-block" : "none";
 
   return String();
 }
@@ -1003,6 +1014,8 @@ void stop_active_process_for_mode() {
   }
 }
 
+// [W-6] switch_samovar_mode вызывается ТОЛЬКО из loop() через pending_switch_mode_flag.
+//        Остановка процесса, Lua и runtime-синхронизация не выполняются из async-контекста.
 void switch_samovar_mode(SAMOVAR_MODE requestedMode) {
   stop_active_process_for_mode();
 
@@ -1010,7 +1023,7 @@ void switch_samovar_mode(SAMOVAR_MODE requestedMode) {
   if (loop_lua_fl) {
     SetScriptOff = true;
     loop_lua_fl = false;
-    delay(100);
+    // Без delay: цикл do_lua_script на core 1 проверит SetScriptOff на следующей итерации.
   }
 #endif
 
@@ -1066,11 +1079,6 @@ void handleSave(AsyncWebServerRequest *request) {
       }
       modeRequested = true;
       requestedMode = (SAMOVAR_MODE)requestedModeValue;
-      // Переключать, если отличается сохранённый режим ИЛИ текущий Samovar_Mode (иначе пропускали бы смену при рассинхроне).
-      if (SamSetup.Mode != (uint16_t)requestedModeValue ||
-          Samovar_Mode != (SAMOVAR_MODE)requestedModeValue) {
-        switch_samovar_mode(requestedMode);
-      }
     }
   }
 
@@ -1151,10 +1159,14 @@ void handleSave(AsyncWebServerRequest *request) {
     SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
   }
   if (const AsyncWebParameter *wProgramParam = get_request_param(request, "WProgram")) {
-    String wProgram = wProgramParam->value();
-    if (Samovar_Mode == SAMOVAR_BEER_MODE) set_beer_program(wProgram);
+    // [C-3] Вынесено в loop(): set_program пишет program[], читаемый из SysTicker.
+    pending_program_str = wProgramParam->value();
+    __sync_synchronize();  // [ISSUE-3] барьер: строка видна до установки флага
+    SAMOVAR_MODE programMode = modeRequested ? requestedMode : Samovar_Mode;
+    if (programMode == SAMOVAR_BEER_MODE)
+      pending_program_mode = PPM_BEER;
     else
-      set_program(wProgram);
+      pending_program_mode = PPM_RECT;
   }
 
   update_checkbox_arg(request, "useflevel", SamSetup.UseHLS, fullSetupForm);
@@ -1300,30 +1312,24 @@ void handleSave(AsyncWebServerRequest *request) {
     SamSetup.PackDens = request->arg("PackDens").toInt();
   }
 
-  if (modeRequested) {
-    SamSetup.Mode = (uint16_t)requestedMode;
-    Samovar_Mode = requestedMode;
-    Samovar_CR_Mode = requestedMode;
+  if (modeRequested &&
+      (SamSetup.Mode != (uint16_t)requestedMode ||
+       Samovar_Mode != requestedMode)) {
+    // [W-5] Вынесено в loop(): смена режима останавливает процессы и обновляет runtime-состояние.
+    pending_switch_mode_value = requestedMode;
+    __sync_synchronize();  // [ISSUE-3] режим виден до установки флага
+    pending_switch_mode_flag = true;
   }
 
-  // Сохраняем изменения в память.
-  save_profile();
-  if (modeRequested && profile_exists()) {
-    // Фиксируем активный режим только после успешной записи общего профиля.
-    set_current_profile_mode(requestedMode);
-  } else if (modeRequested) {
-    Serial.println(F("NVS: Common profile was not saved; active mode was not committed"));
-  }
-  apply_config_runtime();
+  // [C-10/W-8] Вынесено в loop(): NVS-операции блокирующие, из async нельзя.
+  pending_save_profile_flag = true;
 
   get_task_stack_usage();
   AsyncWebServerResponse *response = request->beginResponse(301);
   response->addHeader("Location", "/");
   response->addHeader("Cache-Control", "no-cache");
   request->send(response);
-  if (is_reboot) {
-    ESP.restart();
-  }
+  // is_reboot обрабатывается в loop() — рестарт выполнится после отправки ответа.
 }
 
 void web_command(AsyncWebServerRequest *request) {
@@ -1378,13 +1384,17 @@ void web_command(AsyncWebServerRequest *request) {
     } else if (request->hasArg("reset")) {
       sam_command_sync = SAMOVAR_RESET;
     } else if (request->hasArg("reboot")) {
-      ESP.restart();
+      // [W-1] Ответ отправляется до рестарта; рестарт выполнится в loop().
+      request->send(200, "text/plain", "OK. Rebooting...");
+      is_reboot = true;
+      return;
     } else if (request->hasArg("resetwifi")) {
       menu_reset_wifi();
     } else if (request->hasArg("startst")) {
       sam_command_sync = SAMOVAR_SELF_TEST;
     } else if (request->hasArg("rescands")) {
-      scan_ds_adress();
+      // [W-9] Вынесено в loop(): scan_ds_adress блокирует OneWire шину.
+      pending_rescan_ds_flag = true;
     } else if (request->hasArg("stopst")) {
       stop_self_test();
     } else if (request->hasArg("mixer")) {
@@ -1394,25 +1404,12 @@ void web_command(AsyncWebServerRequest *request) {
         set_mixer(false);
       }
     } else if (request->hasArg("pnbk") && PowerOn) {
-      if (request->arg("pnbk").toInt() == 9000) { //TODO повышаем скорость насоса на один шаг
-        set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001), 0, 2147483640);
-        // Serial.println("pnbk inc");
-        // Serial.println(get_stepper_speed());
-        // Serial.println(i2c_get_speed_from_rate(float(SamSetup.NbkDP)));
-        // Serial.println(get_stepper_speed());
-        // Serial.println(i2c_get_liquid_rate_by_step(get_stepper_speed()));
-        } else if (request->arg("pnbk").toInt() == 8000) { //TODO понижаем скорость насоса на один шаг
-          uint16_t currentSpeed = get_stepper_speed();
-          float deltaRate = float(SamSetup.NbkDP) - 0.0001f;
-          uint16_t deltaSpeed = deltaRate > 0 ? (uint16_t)i2c_get_speed_from_rate(deltaRate) : 0;
-          if (deltaSpeed >= currentSpeed) {
-            set_stepper_target(0, 0, 0);
-          } else {
-            set_stepper_target(currentSpeed - deltaSpeed, 0, 2147483640);
-          }
-        } else if (request->arg("pnbk").toFloat() >= 0 && request->arg("pnbk").toInt() < 8000) { // TODO устанавливаем заказанную скорость насоса
-          set_stepper_target(i2c_get_speed_from_rate(float(request->arg("pnbk").toFloat()) + 0.0001), 0, 2147483640);
-        }
+      // [W-4] get_stepper_speed()/set_stepper_target() делают блокирующий I2C —
+      //        откладываем в loop(); pnbk_value несёт сырое значение
+      //        (9000=+шаг, 8000=-шаг, иначе абсолютная скорость л/ч).
+      pending_pnbk_value = request->arg("pnbk").toFloat();
+      __sync_synchronize();
+      pending_pnbk_flag = true;
       } else if (request->hasArg("nbkopt") && PowerOn) { //TODO устанавливаем текущие М и Р как оптимальные Мо и Ро
         nbk_Mo = nbk_M;
         nbk_Po = nbk_P;
@@ -1459,7 +1456,11 @@ void web_command(AsyncWebServerRequest *request) {
     } else if (request->hasArg("luastr")) {
       String lstr = request->arg("luastr");
       lstr.replace("^", " ");
-      run_lua_string(lstr);
+      // [ISSUE-5] Вынесено в loop(): run_lua_string конкурирует с do_lua_script
+      //           (core 1) за общий lua_State — вызывать только из loop.
+      pending_lua_str = lstr;
+      __sync_synchronize();  // [ISSUE-3] барьер: строка видна до установки флага
+      pending_lua_flag = true;
     }
 #endif
   request->send(200, "text/plain", "OK");
@@ -1468,18 +1469,22 @@ void web_program(AsyncWebServerRequest *request) {
   String response = "OK";
   const AsyncWebParameter *wProgramParam = get_request_param(request, "WProgram");
   if (wProgramParam) {
-    String wProgram = wProgramParam->value();
+    // [C-3] Вынесено в loop(): set_*_program пишет program[], читаемый из SysTicker.
+    //        Отвечаем текущим содержимым программы (до применения); UI
+    //        синхронизируется при следующем запросе после цикла loop.
+    pending_program_str = wProgramParam->value();
+    __sync_synchronize();  // [ISSUE-3] барьер: строка видна до установки флага
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      set_beer_program(wProgram);
+      pending_program_mode = PPM_BEER;
       response = get_beer_program();
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      set_dist_program(wProgram);
+      pending_program_mode = PPM_DIST;
       response = get_dist_program();
     } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      set_nbk_program(wProgram);
+      pending_program_mode = PPM_NBK;
       response = get_nbk_program();
     } else {
-      set_program(wProgram);
+      pending_program_mode = PPM_RECT;
       response = get_program(CAPACITY_NUM * 2);
     }
   }
@@ -1516,28 +1521,27 @@ void calibrate_command(AsyncWebServerRequest *request) {
         sam_command_sync = CALIBRATE_STOP;
         cl = true;
       }
-    } else if (i2c_stepper_pump_present()) {
+    } else if (i2cStepperPump.present) {
+      // [W-4] I2C-операции откладываем в loop(); present берём из глобала без I2C.
       if (request->hasArg("start") && !I2CPumpCalibrating) {
-        I2CPumpTargetMl = 0;
-        I2CPumpCmdSpeed = CurrrentStepperSpeed;
-        I2CPumpCalibrating = true;
-        i2cStepperPump.pumpMlHour = i2c_stepper_mlh_from_step_speed(CurrrentStepperSpeed);
-        i2cStepperPump.stepsPerMl = i2c_stepper_steps_per_ml();
-        i2c_stepper_write_config(i2cStepperPump);
-        i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_START);
+        pending_i2ccal_buf.is_finish  = false;
+        pending_i2ccal_buf.pumpMlHour = i2c_stepper_mlh_from_step_speed(CurrrentStepperSpeed);
+        pending_i2ccal_buf.stepsPerMl = i2c_stepper_steps_per_ml();
+        pending_i2ccal_buf.cmdSpeed   = CurrrentStepperSpeed;
+        __sync_synchronize();
+        pending_i2ccal_flag = true;
       }
       if (request->hasArg("finish") && I2CPumpCalibrating) {
-        i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_FINISH);
-        i2c_stepper_refresh(i2cStepperPump);
-        SamSetup.StepperStepMlI2C = i2cStepperPump.stepsPerMl;
-        I2CPumpCalibrating = false;
-        save_profile();
-        read_config();
+        pending_i2ccal_buf.is_finish = true;
+        __sync_synchronize();
+        pending_i2ccal_flag = true;
+        // [C-10/W-8] save_profile() сделает loop() в ветке pending_i2ccal ПОСЛЕ refresh
+        //            (порядок важен: иначе в NVS попадёт старый StepperStepMlI2C).
         cl = true;
       }
     }
   }
-  vTaskDelay(5 / portTICK_PERIOD_MS);
+  // [W-1] Убран vTaskDelay(5): delay/блокировка в async-обработчике недопустима.
   if (cl) {
     int s = 0;
     if (!isI2C) {

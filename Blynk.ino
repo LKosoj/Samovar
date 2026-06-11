@@ -127,7 +127,16 @@ BLYNK_READ(V10) {
   static bool inReadHandler = false;
   if (inReadHandler) return;
   inReadHandler = true;
-  Blynk.virtualWrite(V10, WthdrwTimeS + "; " + WthdrwTimeAllS);
+  // [C-1] Читаем строки времени под замком.
+  {
+    String timesCopy;
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      timesCopy = WthdrwTimeS + "; " + WthdrwTimeAllS;
+      runtime_state_unlock(true);
+    }
+    Blynk.virtualWrite(V10, timesCopy);
+  }
   inReadHandler = false;
 }
 
@@ -135,7 +144,16 @@ BLYNK_READ(V11) {
   static bool inReadHandler = false;
   if (inReadHandler) return;
   inReadHandler = true;
-  Blynk.virtualWrite(V11, StrCrt);
+  // [C-1] Читаем строку StrCrt под замком.
+  {
+    String strCrtCopy;
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      strCrtCopy = StrCrt;
+      runtime_state_unlock(true);
+    }
+    Blynk.virtualWrite(V11, strCrtCopy);
+  }
   inReadHandler = false;
 }
 
@@ -143,7 +161,17 @@ BLYNK_READ(V14) {
   static bool inReadHandler = false;
   if (inReadHandler) return;
   inReadHandler = true;
-  Blynk.virtualWrite(V14, get_Samovar_Status());
+  // [C-2] Читаем кэш SamovarStatus под замком; FSM продвигает его раз в секунду
+  // из секундного гейта triggerSysTicker (core 0) через get_Samovar_Status().
+  {
+    String statusCopy;
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      statusCopy = SamovarStatus;
+      runtime_state_unlock(true);
+    }
+    Blynk.virtualWrite(V14, statusCopy);
+  }
   inReadHandler = false;
 }
 

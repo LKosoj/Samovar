@@ -489,7 +489,14 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
   if (Var == "Msg") {
     Msg = Val;
   } else if (Var == "SamovarStatus") {
-    SamovarStatus = Val;
+    // [2d] SamovarStatus защищён runtime_state_lock (как в logic.h C-2).
+    {
+      bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+      if (locked) {
+        SamovarStatus = Val;
+        runtime_state_unlock(true);
+      }
+    }
   } else if (Var == "test_str_val") {
     test_str_val = Val;
   } else if (Var == "program_type") {
@@ -641,7 +648,14 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
   if (Var == "Msg") {
     c = Msg;
   } else if (Var == "SamovarStatus") {
-    c = SamovarStatus;
+    // [2d] Читаем SamovarStatus под замком (пишется в logic.h под runtime_state_lock).
+    {
+      bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+      if (locked) {
+        c = SamovarStatus;
+        runtime_state_unlock(true);
+      }
+    }
   } else if (Var == "test_str_val") {
     c = test_str_val;
   } else if (Var == "program_type") {
@@ -1045,8 +1059,14 @@ String get_lua_script(String fn) {
 }
 
 void run_lua_script(String fn) {
-  btn_script = get_lua_script(fn);
-  if (btn_script.length() > 0) btn_script = get_global_variables() + btn_script;
+  // [W-4] btn_script читается в SysTicker (core 0); пишем из async под замком.
+  String s = get_lua_script(fn);
+  if (s.length() > 0) s = get_global_variables() + s;
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
+  if (locked) {
+    btn_script = s;
+    runtime_state_unlock(true);
+  }
 }
 
 String run_lua_string(String lstr) {
@@ -1074,8 +1094,15 @@ String run_lua_string(String lstr) {
 }
 
 void load_lua_script() {
-  script1 = get_lua_script("script.lua");
-  script2 = get_lua_script(lua_type_script);
+  // [W-4] script1/script2 читаются из do_lua_script (core 1); пишем под замком.
+  String s1 = get_lua_script("script.lua");
+  String s2 = get_lua_script(lua_type_script);
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
+  if (locked) {
+    script1 = s1;
+    script2 = s2;
+    runtime_state_unlock(true);
+  }
 }
 
 //Запускаем таск для запуска скрипта
@@ -1094,28 +1121,36 @@ void do_lua_script(void *parameter) {
       loop_lua_fl = false;
     }
     if (!lua_finished) {
-      //if (script1.length() > 0 || script2.length() > 0) glv = get_global_variables();
-      if (script1.length() > 0) {
+      // [W-4] Копируем script1/script2 под замком, затем выполняем без удержания замка.
+      String local_s1, local_s2;
+      {
+        bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+        if (locked) {
+          local_s1 = script1;
+          local_s2 = script2;
+          runtime_state_unlock(true);
+        }
+      }
+
+      if (local_s1.length() > 0) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-          WriteConsoleLog(script1);
+          WriteConsoleLog(local_s1);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua.Lua_dostring(&(script1));
-        //script1 = "";
+        sr = lua.Lua_dostring(&local_s1);
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in script.lua: " + sr);
       }
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
-      if (script2.length() > 0) {
+      if (local_s2.length() > 0) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-          WriteConsoleLog(script2);
+          WriteConsoleLog(local_s2);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua.Lua_dostring(&(script2));
-        //script2 = "";
+        sr = lua.Lua_dostring(&local_s2);
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       }

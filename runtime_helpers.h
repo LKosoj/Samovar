@@ -5,7 +5,7 @@
 
 extern portMUX_TYPE timerMux;
 
-inline bool runtime_state_lock(TickType_t timeout = (TickType_t)(50 / portTICK_RATE_MS)) {
+inline bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
   return xRuntimeStateSemaphore && xSemaphoreTake(xRuntimeStateSemaphore, timeout) == pdTRUE;
 }
 
@@ -15,8 +15,9 @@ inline void runtime_state_unlock(bool locked) {
 
 inline String get_current_power_mode_value() {
   bool locked = runtime_state_lock();
+  if (!locked) return String();
   String mode = current_power_mode;
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
   return mode;
 }
 
@@ -25,13 +26,15 @@ inline bool current_power_mode_is(const String& mode) {
 }
 
 inline void set_current_power_mode_value(const String& mode) {
-  bool locked = runtime_state_lock();
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
+  if (!locked) return;
   current_power_mode = mode;
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
 }
 
 inline bool consume_web_message(String& msg, uint8_t& level) {
   bool locked = runtime_state_lock();
+  if (!locked) return false;
   bool hasMessage = Msg.length() > 0;
   if (hasMessage) {
     msg = Msg;
@@ -39,12 +42,13 @@ inline bool consume_web_message(String& msg, uint8_t& level) {
     Msg = "";
     msg_level = NONE_MSG;
   }
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
   return hasMessage;
 }
 
 inline void append_web_message(const String& message, MESSAGE_TYPE messageType) {
-  bool locked = runtime_state_lock();
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
+  if (!locked) return;
   if (Msg.length() > 0) {
     Msg += "; ";
     if (msg_level > messageType) msg_level = messageType;
@@ -56,22 +60,24 @@ inline void append_web_message(const String& message, MESSAGE_TYPE messageType) 
     Msg = message;
     msg_level = messageType;
   }
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
 }
 
 inline bool consume_console_log(String& logMessage) {
   bool locked = runtime_state_lock();
+  if (!locked) return false;
   bool hasLog = LogMsg.length() > 0;
   if (hasLog) {
     logMessage = LogMsg;
     LogMsg = "";
   }
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
   return hasLog;
 }
 
 inline void append_console_log(const String& logMessage) {
-  bool locked = runtime_state_lock();
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
+  if (!locked) return;
   if (LogMsg.length() > 0) {
     LogMsg = LogMsg + "; " + logMessage;
   } else {
@@ -80,22 +86,24 @@ inline void append_console_log(const String& logMessage) {
   if (LogMsg.length() > 10000) {
     LogMsg = logMessage;
   }
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
 }
 
 #ifdef USE_HEAD_LEVEL_SENSOR
 inline void head_level_sensor_tick() {
   bool locked = runtime_state_lock();
+  if (!locked) return;
   whls.tick();
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
 }
 
 inline bool head_level_sensor_holded() {
   bool locked = runtime_state_lock();
+  if (!locked) return false;
   whls.tick();
   bool holded = whls.isHolded();
   if (holded) whls.resetStates();
-  runtime_state_unlock(locked);
+  runtime_state_unlock(true);
   return holded;
 }
 #endif

@@ -25,6 +25,10 @@ static const uint8_t DETECTOR_MIN_HISTORY_CRITICAL = 10;
 static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
 static const unsigned long DETECTOR_STEAM_STABLE_MS = 600000UL; // 10 минут
 
+// [M-29] Предыдущее состояние источника датчика (для детекции смены)
+// -1 = не инициализировано, 0 = пар, 1 = царга
+static int8_t detector_last_pipe_sensor = -1;
+
 /**
  * Инициализация детектора
  */
@@ -42,6 +46,7 @@ void init_impurity_detector() {
   impurityDetector.lastTemp = 0.0f;
   detector_steam_stable_since = 0;
   detector_steam_stable_ref = 0.0f;
+  detector_last_pipe_sensor = -1; // [M-29] сброс выбора датчика
 }
 
 /**
@@ -62,6 +67,7 @@ void reset_impurity_detector() {
   impurityDetector.lastTemp = 0.0f;
   detector_steam_stable_since = 0;
   detector_steam_stable_ref = 0.0f;
+  detector_last_pipe_sensor = -1; // [M-29] сброс выбора датчика — при следующем цикле определится заново
 }
 
 // Вызывается при старте новой строки программы
@@ -296,8 +302,23 @@ bool is_first_body_program_after_heads() {
  * Основная логика работы детектора
  */
 void process_impurity_detector() {
-  // Детектор работает только при включенной авто-коррекции и в режиме отбора (SamovarStatusInt == 10)
-  if (!SamSetup.useautospeed || SamovarStatusInt != 10) {
+  // [L-20/M-30] Если авто-коррекция выключена — сбрасываем всё и выходим
+  if (!SamSetup.useautospeed) {
+    impurityDetector.detectorStatus = 0;
+    impurityDetector.correctionFactor = 1.0f;
+    return;
+  }
+
+  // Паузы в ходе активного цикла (статус 15 = program_Wait, статус 40 = PauseOn):
+  // сохраняем correctionFactor, только снимаем статус детектора
+  if (SamovarStatusInt == 15 || SamovarStatusInt == 40) {
+    impurityDetector.detectorStatus = 0;
+    // correctionFactor НЕ трогаем — накопленная коррекция сохраняется на время паузы
+    return;
+  }
+
+  // Любой другой статус, кроме активного отбора (10) — сброс
+  if (SamovarStatusInt != 10) {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
     return;
@@ -312,14 +333,6 @@ void process_impurity_detector() {
   // Детектор не работает во время программы типа "P" (Пауза)
   // Во время паузы отбор должен быть полностью остановлен и не возобновляться детектором
   if (ProgramNum < 30 && program[ProgramNum].WType == "P") {
-    impurityDetector.detectorStatus = 0;
-    // Не меняем correctionFactor, чтобы сохранить состояние на момент паузы
-    return;
-  }
-
-  // Детектор не работает во время ручной паузы пользователя (PauseOn)
-  // Пользователь может поставить на паузу по любой причине, и детектор не должен вмешиваться
-  if (PauseOn) {
     impurityDetector.detectorStatus = 0;
     // Не меняем correctionFactor, чтобы сохранить состояние на момент паузы
     return;
@@ -344,10 +357,60 @@ void process_impurity_detector() {
     return;
   }
   
-  // Выбор датчика температуры в зависимости от фазы:
-  // - До 92°C в кубе: контроль по пару
-  // - После 92°C в кубе: контроль по царге до конца
-  bool usePipeSensor = (TankSensor.avgTemp >= 92.0f);
+  // [M-29] Выбор датчика температуры с гистерезисом ±0.5°C вокруг 92°:
+  // - при Т куба < 91.5°C: контроль по пару
+  // - при Т куба >= 92.5°C: контроль по царге
+  // - в зоне [91.5, 92.5): сохраняем предыдущий источник (гистерезис, без дребезга)
+  //
+  // [fix] При невалидной Т куба (≤ 0: ошибка DS18B20 = -127, неинициализировано = 0)
+  // НЕ переключаем источник и НЕ сбрасываем историю — сохраняем текущий выбор датчика
+  // до восстановления валидной температуры.
+  bool usePipeSensor;
+  bool sensorChanged = false;
+  if (TankSensor.avgTemp <= 0.0f) {
+    // Невалидная Т куба: блок выбора/смены датчика пропускается целиком.
+    // detector_last_pipe_sensor не изменяется; sensorChanged остаётся false.
+    if (detector_last_pipe_sensor < 0) {
+      // Датчик ещё не инициализирован — безопасный дефолт: пар
+      usePipeSensor = false;
+    } else {
+      usePipeSensor = (detector_last_pipe_sensor == 1);
+    }
+  } else if (detector_last_pipe_sensor < 0) {
+    // Первая инициализация при валидной Т куба: выбираем без гистерезиса
+    usePipeSensor = (TankSensor.avgTemp >= 92.0f);
+    // sensorChanged = false: история пуста, очищать нечего
+    detector_last_pipe_sensor = usePipeSensor ? 1 : 0;
+  } else if (TankSensor.avgTemp >= 92.5f) {
+    usePipeSensor = true;
+    sensorChanged = (detector_last_pipe_sensor != 1);
+    detector_last_pipe_sensor = 1;
+  } else if (TankSensor.avgTemp < 91.5f) {
+    usePipeSensor = false;
+    sensorChanged = (detector_last_pipe_sensor != 0);
+    detector_last_pipe_sensor = 0;
+  } else {
+    // Зона гистерезиса — сохраняем предыдущий источник
+    usePipeSensor = (detector_last_pipe_sensor == 1);
+  }
+
+  // При фактической смене источника датчика — очищаем историю тренда,
+  // чтобы линейная регрессия не считалась по смешанным данным двух датчиков
+  if (sensorChanged) {
+    memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
+    impurityDetector.historyIndex = 0;
+    impurityDetector.historySize = 0;
+    impurityDetector.currentTrend = 0;
+    impurityDetector.consecutiveRises = 0;
+    impurityDetector.lastTemp = 0.0f;
+    impurityDetector.tempStdDev = 0.0f;
+    impurityDetector.lastSampleTime = 0; // [fix M-29] немедленный старт сбора с нового датчика
+    // Короткий грейс-период: дать буферу заполниться свежими данными (30 сек)
+    if (detector_grace_until < now + 30000UL) {
+      detector_grace_until = now + 30000UL;
+    }
+  }
+
   float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
   
   // Сбор данных каждые 2 секунды

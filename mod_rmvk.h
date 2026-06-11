@@ -23,7 +23,6 @@ uart_port_t RMVK_UART = UART_NUM_1;
 
 
 #define MAX_VOLTAGE (230)
-#define MIN_VOLTAGE (40)
 
 typedef enum {
   RMVK_INT = 0,
@@ -47,7 +46,6 @@ void rmvkFn(void* arg);
 
 uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res);
 uint16_t RMVK_set_out_voltge(uint16_t voltge);
-uint16_t RMVK_set_state(uint16_t new_state);
 uint16_t RMVK_set_on(uint16_t state);
 uint16_t RMVK_select_mem(uint16_t sm);
 
