@@ -1,14 +1,12 @@
 #include <asyncHTTPrequest.h>
 //#include <ESPping.h>
 #include <WiFi.h>
-#include <UrlEncode.h>
 
 #include "Samovar.h"
 #include "FS.h"
 #include "sensorinit.h"
 #include "column_math.h"
 #include "string_utils.h"
-#include "wifi_htm_gz.h"
 
 extern float nbk_M;
 extern float nbk_Mo;
@@ -40,7 +38,6 @@ void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPa
 void WebServerInit(void);
 String indexKeyProcessor(const String &var);
 String setupKeyProcessor(const String &var);
-String wifiKeyProcessor(const String &var);
 String get_DSAddressList(String Address);
 void set_pump_speed(float pumpspeed, bool continue_process);
 void start_self_test(void);
@@ -234,29 +231,6 @@ void handleFileWithGzip(AsyncWebServerRequest *request, const String &path, cons
   }
 }
 
-String getWifiHtmUrl() {
-  String ssid = get_wifi_ssid();
-  ssid.trim();
-  if (ssid.length() == 0) return "/wifi.htm";
-  return "/wifi.htm?ssid=" + urlEncode(ssid);
-}
-
-// Функция для отправки wifi.htm из памяти (gzip архив)
-void handleWifiHtmFromMemory(AsyncWebServerRequest *request) {
-  if (!request->hasArg("ssid")) {
-    String wifiUrl = getWifiHtmUrl();
-    if (wifiUrl != "/wifi.htm") {
-      request->redirect(wifiUrl);
-      return;
-    }
-  }
-
-  AsyncWebServerResponse *response = request->beginResponse(200, "text/html", wifi_htm_gz_data, wifi_htm_gz_data_len);
-  response->addHeader("Content-Encoding", "gzip");
-  response->addHeader("Cache-Control", "max-age=1");
-  request->send(response);
-}
-
 void WebServerInit(void) {
 
   FS_init();  // Включаем работу с файловой системой
@@ -271,15 +245,7 @@ void WebServerInit(void) {
 
 
   server.on("/", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
-    // Если нет подключения к WiFi сети - показываем страницу настройки WiFi
-    // Это сработает когда Самовар в режиме AP (точка доступа)
-    if (WiFi.status() != WL_CONNECTED) {
-      // Отправляем wifi.htm из памяти (gzip архив)
-      handleWifiHtmFromMemory(request);
-    } else {
-      // Иначе - обычный интерфейс Самовара (перенаправление на index.htm)
-      request->redirect("/index.htm");
-    }
+    request->redirect("/index.htm");
   });
   
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -342,45 +308,6 @@ void WebServerInit(void) {
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
-  // Обработчик для /wifi.htm из памяти (gzip архив)
-  server.on("/wifi.htm", HTTP_GET, [](AsyncWebServerRequest* request) {
-    handleWifiHtmFromMemory(request);
-  });
-
-  server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->redirect(getWifiHtmUrl());
-  });
-
-  server.on("/wifi/save", HTTP_POST, [](AsyncWebServerRequest* request) {
-    if (!request) return;
-    if (!request->hasArg("ssid")) {
-      request->send(400, "text/plain", "Missing ssid");
-      return;
-    }
-
-    String ssid = request->arg("ssid");
-    String pass = request->hasArg("pass") ? request->arg("pass") : "";
-    ssid.trim();
-
-    if (ssid.length() == 0) {
-      request->send(400, "text/plain", "Empty ssid");
-      return;
-    }
-
-    // [W-1] save_wifi_credentials() зовёт WiFi.begin() — блокирует async; откладываем
-    //        в loop(). Рестарт выставит loop после сохранения (is_reboot).
-    pending_wifi_ssid = ssid;
-    pending_wifi_pass = pass;
-    __sync_synchronize();  // [W-1] буферы видны до установки флага
-    pending_wifi_save_flag = true;
-    request->send(200, "text/plain", "OK. Rebooting...");
-  });
-
-  server.on("/wifi/clear", HTTP_POST, [](AsyncWebServerRequest* request) {
-    // [W-1] clear_wifi_credentials() зовёт WiFi.disconnect() — блокирует async; в loop().
-    pending_wifi_clear_flag = true;
-    request->send(200, "text/plain", "OK. Rebooting...");
-  });
   //server.serveStatic("/edit", SPIFFS, "/edit.htm");
   // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
 
@@ -963,15 +890,6 @@ String setupKeyProcessor(const String &var) {
     return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
   else if (var == "I2CPumpTab")
     return i2c_stepper_cache.pump_present ? "inline-block" : "none";
-  return "";
-}
-
-String wifiKeyProcessor(const String &var) {
-  if (var == "wifi_ssid") {
-    String ssid = get_wifi_ssid();
-    if (ssid.length() == 0) return String("-");
-    return ssid;
-  }
   return "";
 }
 
@@ -1608,7 +1526,6 @@ void get_web_interface() {
       }
     };
 
-    updateFile("wifi.htm", SAVE_FILE_OVERRIDE);
     updateFile("index.htm", SAVE_FILE_OVERRIDE);
     updateFile("Green.png", SAVE_FILE_OVERRIDE);
     updateFile("Red_light.gif", SAVE_FILE_OVERRIDE);

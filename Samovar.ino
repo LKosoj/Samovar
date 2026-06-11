@@ -57,6 +57,7 @@
 
 #include <EEPROM.h>
 #include <Preferences.h>
+#include <ESPAsyncWiFiManager.h>
 
 #include <GyverEncoder.h>
 
@@ -174,7 +175,7 @@ hw_timer_t *timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
 
-// WiFiManager отключен: флагов сохранения через портал больше нет
+bool shouldSaveWiFiConfig = false;
 
 // ---------------------------------------------------------------------------
 // Отложенные команды для выполнения из loop() (set из async-обработчиков)
@@ -193,12 +194,6 @@ volatile bool pending_rescan_ds_flag = false;
 
 // [C-10/W-8] Отложенное сохранение профиля + перечитывание конфига
 volatile bool pending_save_profile_flag = false;
-
-// [W-1] Отложенное сохранение/очистка WiFi-кредов (WiFi.begin/disconnect блокируют async).
-String pending_wifi_ssid;
-String pending_wifi_pass;
-volatile bool pending_wifi_save_flag = false;
-volatile bool pending_wifi_clear_flag = false;
 
 #ifdef USE_LUA
 // [ISSUE-5] Отложенное исполнение Lua-строки (run_lua_string из async конкурирует
@@ -272,7 +267,8 @@ void set_body_temp();
 void distiller_finish();
 void beer_finish();
 void change_samovar_mode();
-// WiFiManager отключен
+void saveConfigCallback();
+void configModeCallback(AsyncWiFiManager *myWiFiManager);
 void verbose_print_reset_reason();
 void set_alarm();
 void menu_switch_focus();
@@ -1057,41 +1053,40 @@ void setup() {
   String StIP;
   //esp_wifi_set_ps( WIFI_PS_NONE );
 
-  auto start_ap = [&]() {
+  if (!wifiAP) {
+    AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
+    AsyncWiFiManager wifiManager(&server, &dns);
+
+    encoder.tick();  // отработка нажатия
+    if (encoder.isPress()) wifiManager.resetSettings();
+
+    wifiManager.setConfigPortalTimeout(360);
+    wifiManager.setSaveConfigCallback(saveConfigCallback);
+    wifiManager.setAPCallback(configModeCallback);
+    wifiManager.setDebugOutput(false);
+    wifiManager.addParameter(&custom_blynk_token);
+
+    if (!wifiManager.autoConnect("Samovar")) {
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP("Samovar", "SamApp123");
+      StIP = WiFi.softAPIP().toString();
+    } else {
+      StIP = WiFi.localIP().toString();
+    }
+
+    if (shouldSaveWiFiConfig) {
+      if (strlen(custom_blynk_token.getValue()) == 33) {
+        strcpy(SamSetup.blynkauth, custom_blynk_token.getValue());
+        save_profile();
+      }
+    }
+    Serial.print(F("Connected to "));
+    Serial.println(WiFi.SSID());
+  } else {
     WiFi.mode(WIFI_AP);
-    WiFi.softAP("Samovar"); // Без пароля для удобства подключения к странице настройки WiFi
+    WiFi.softAP("Samovar", "SamApp123");
     StIP = WiFi.softAPIP().toString();
     Serial.println(F("Started as WiFi AP"));
-  };
-
-  if (!wifiAP) {
-    // пытаемся подключиться через WiFi.begin() без параметров - ESP32 автоматически использует сохраненные креденшалы, если они есть
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect(false);  // Отключаемся, но не очищаем сохраненные креденшалы
-    
-    Serial.println(F("Attempting to connect to saved WiFi..."));
-    WiFi.begin();  // Пытаемся подключиться к сохраненной сети
-
-    uint32_t startMs = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - startMs) < 15000) {
-      delay(250);
-      Serial.print(".");
-    }
-    Serial.println();
-
-    if (WiFi.status() == WL_CONNECTED) {
-      StIP = WiFi.localIP().toString();
-      Serial.print(F("Connected to "));
-      Serial.print(WiFi.SSID());
-      Serial.print(F(" - IP: "));
-      Serial.println(StIP);
-    } else {
-      Serial.println(F("Failed to connect to saved WiFi. Starting AP mode..."));
-      wifiAP = true;
-      start_ap();
-    }
-  } else {
-    start_ap();
   }
 
   Serial.print(F("IP address: "));
@@ -1557,24 +1552,8 @@ void loop() {
     read_config();
   }
 
-  // [W-1] Сохранение/очистка WiFi-кредов (WiFi.begin/disconnect блокируют — только из loop),
-  //        затем рестарт через is_reboot (ответ клиенту уже отправлен из async).
-  if (pending_wifi_save_flag) {
-    pending_wifi_save_flag = false;
-    __sync_synchronize();  // буферы читаем после подтверждения флага
-    String ssid = pending_wifi_ssid;
-    String pass = pending_wifi_pass;
-    save_wifi_credentials(ssid.c_str(), pass.c_str());
-    is_reboot = true;
-  }
-  if (pending_wifi_clear_flag) {
-    pending_wifi_clear_flag = false;
-    clear_wifi_credentials();
-    is_reboot = true;
-  }
-
-  // [W-1] Отложенный рестарт: async ставит is_reboot=true после отправки ответа;
-  //        loop ждёт ~200мс (ответ успевает уйти) и выполняет рестарт.
+  // Отложенный рестарт: async ставит is_reboot=true после отправки ответа;
+  // loop ждёт ~200мс (ответ успевает уйти) и выполняет рестарт.
   if (is_reboot) {
     delay(200);
     ESP.restart();
@@ -1962,7 +1941,21 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   request->send(response);
 }
 
-// WiFiManager отключен: configModeCallback/saveConfigCallback больше не используются
+void configModeCallback(AsyncWiFiManager *myWiFiManager) {
+  Serial.println(F("Entered config WiFi"));
+  Serial.print(F("SSID "));
+  Serial.println(myWiFiManager->getConfigPortalSSID());
+  Serial.print(F("IP: "));
+  Serial.println(WiFi.softAPIP());
+  writeString(F("Entered config WiFi "), 1);
+  writeString(F("SSID: Samovar       "), 2);
+  writeString(F("IP:                 "), 3);
+  writeString(WiFi.softAPIP().toString(), 4);
+}
+
+void saveConfigCallback() {
+  shouldSaveWiFiConfig = true;
+}
 
 void apply_config_runtime() {
   SteamSensor.SetTemp = SamSetup.SetSteamTemp;
