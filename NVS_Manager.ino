@@ -9,19 +9,18 @@ static bool nvsProfileWriteFailed = false;
 
 static void write_last_mode_meta(uint8_t mode);
 static bool compact_samovar_nvs_namespaces();
-static bool rebuild_full_nvs_partition();
 static void load_profile_nvs_from_namespace(const char* ns);
 struct SamovarNvsEntryBackup;
 static void free_samovar_nvs_backup(SamovarNvsEntryBackup* entries, size_t count);
 static bool read_samovar_nvs_entry(nvs_handle_t handle, const nvs_entry_info_t& info, SamovarNvsEntryBackup& entry);
 static esp_err_t write_samovar_nvs_entry(nvs_handle_t handle, const SamovarNvsEntryBackup& entry);
-static bool restore_nvs_entries(const SamovarNvsEntryBackup* entries, size_t count, bool samovarOnly);
-static bool erase_nvs_partition_and_restore(const SamovarNvsEntryBackup* entries, size_t count);
-static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count);
+static bool restore_samovar_nvs_entries(const SamovarNvsEntryBackup* entries, size_t count);
+static bool backup_samovar_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count);
 static bool nvs_find_first_entry(const char* partName, const char* ns, nvs_type_t type, nvs_iterator_t* outIt);
 static esp_err_t nvs_advance_iterator(nvs_iterator_t* it);
 
 static const char* const SAMOVAR_COMMON_PROFILE_NAMESPACE = "sam_cfg";
+static const size_t SAMOVAR_NVS_BACKUP_MAX_ENTRIES = 128;
 
 static const char* const SAMOVAR_LEGACY_PROFILE_NAMESPACES[] = {
   "sam_rect",
@@ -94,6 +93,115 @@ static bool profile_exists_in_namespace(const char* ns) {
 
 bool profile_exists() {
   return profile_exists_in_namespace(SAMOVAR_COMMON_PROFILE_NAMESPACE);
+}
+
+void print_nvs_stats(const char* context) {
+  nvs_stats_t stats;
+  esp_err_t err = nvs_get_stats("nvs", &stats);
+  if (err != ESP_OK) {
+    Serial.print(F("NVS: Failed to read stats, err = "));
+    Serial.println((int)err);
+    return;
+  }
+
+  Serial.print(F("NVS: Stats"));
+  if (context && context[0] != '\0') {
+    Serial.print(F(" ("));
+    Serial.print(context);
+    Serial.print(F(")"));
+  }
+  Serial.print(F(": used="));
+  Serial.print(stats.used_entries);
+  Serial.print(F(", free="));
+  Serial.print(stats.free_entries);
+  Serial.print(F(", total="));
+  Serial.print(stats.total_entries);
+  Serial.print(F(", namespaces="));
+  Serial.println(stats.namespace_count);
+}
+
+void set_default_setup_profile() {
+  memset(&SamSetup, 0, sizeof(SamSetup));
+
+  SamSetup.flag = 2;
+  SamSetup.Mode = SAMOVAR_RECTIFICATION_MODE;
+  SamSetup.TimeZone = 3;
+  SamSetup.HeaterResistant = 15.2;
+  SamSetup.LogPeriod = 3;
+
+  SamSetup.SetSteamTemp = 0;
+  SamSetup.SetPipeTemp = 0;
+  SamSetup.SetWaterTemp = 0;
+  SamSetup.SetTankTemp = 0;
+  SamSetup.SetACPTemp = 0;
+  SamSetup.DistTemp = DEFAULT_DIST_TEMP;
+
+  SamSetup.DeltaSteamTemp = 0.1;
+  SamSetup.DeltaPipeTemp = 0.2;
+  SamSetup.DeltaWaterTemp = 0;
+  SamSetup.DeltaTankTemp = 0;
+  SamSetup.DeltaACPTemp = 0;
+
+  SamSetup.SteamDelay = 20;
+  SamSetup.PipeDelay = 20;
+  SamSetup.WaterDelay = 20;
+  SamSetup.TankDelay = 20;
+  SamSetup.ACPDelay = 20;
+
+  SamSetup.StepperStepMl = STEPPER_STEP_ML;
+  SamSetup.StepperStepMlI2C = I2C_STEPPER_STEP_ML_DEFAULT;
+  SamSetup.useautospeed = false;
+  SamSetup.useDetectorOnHeads = false;
+  SamSetup.autospeed = 0;
+  SamSetup.UseWS = true;
+
+  SamSetup.Kp = 150.0;
+  SamSetup.Ki = 1.4;
+  SamSetup.Kd = 1.4;
+  SamSetup.StbVoltage = 100.0;
+  SamSetup.BVolt = 230.0;
+  SamSetup.CheckPower = false;
+  SamSetup.UseST = true;
+
+  SamSetup.rele1 = false;
+  SamSetup.rele2 = false;
+  SamSetup.rele3 = false;
+  SamSetup.rele4 = false;
+
+  memset(SamSetup.SteamAdress, 255, sizeof(SamSetup.SteamAdress));
+  memset(SamSetup.PipeAdress, 255, sizeof(SamSetup.PipeAdress));
+  memset(SamSetup.WaterAdress, 255, sizeof(SamSetup.WaterAdress));
+  memset(SamSetup.TankAdress, 255, sizeof(SamSetup.TankAdress));
+  memset(SamSetup.ACPAdress, 255, sizeof(SamSetup.ACPAdress));
+
+  copyStringSafe(SamSetup.SteamColor, "#ff0000");
+  copyStringSafe(SamSetup.PipeColor, "#0000ff");
+  copyStringSafe(SamSetup.WaterColor, "#00bfff");
+  copyStringSafe(SamSetup.TankColor, "#008000");
+  copyStringSafe(SamSetup.ACPColor, "#800080");
+  SamSetup.blynkauth[0] = '\0';
+  SamSetup.videourl[0] = '\0';
+  SamSetup.tg_token[0] = '\0';
+  SamSetup.tg_chat_id[0] = '\0';
+
+  SamSetup.UsePreccureCorrect = true;
+  SamSetup.ChangeProgramBuzzer = false;
+  SamSetup.UseBuzzer = false;
+  SamSetup.UseBBuzzer = false;
+  SamSetup.DistTimeF = 16;
+  SamSetup.UseHLS = true;
+  SamSetup.MaxPressureValue = 0;
+
+  SamSetup.NbkIn = 0;
+  SamSetup.NbkDelta = 0;
+  SamSetup.NbkDM = 0;
+  SamSetup.NbkDP = 0;
+  SamSetup.NbkSteamT = 0;
+  SamSetup.NbkOwPress = 0;
+
+  SamSetup.ColDiam = 2.0f;
+  SamSetup.ColHeight = 0.5f;
+  SamSetup.PackDens = 80;
 }
 
 void set_current_profile_mode(SAMOVAR_MODE mode) {
@@ -267,7 +375,13 @@ static bool read_samovar_nvs_entry(nvs_handle_t handle, const nvs_entry_info_t& 
       entry.data = (uint8_t*)malloc(len);
       if (!entry.data) return false;
       entry.len = len;
-      return nvs_get_str(handle, info.key, (char*)entry.data, &entry.len) == ESP_OK;
+      if (nvs_get_str(handle, info.key, (char*)entry.data, &entry.len) != ESP_OK) {
+        free(entry.data);
+        entry.data = nullptr;
+        entry.len = 0;
+        return false;
+      }
+      return true;
     }
     case NVS_TYPE_BLOB: {
       size_t len = 0;
@@ -275,7 +389,13 @@ static bool read_samovar_nvs_entry(nvs_handle_t handle, const nvs_entry_info_t& 
       entry.data = (uint8_t*)malloc(len);
       if (!entry.data) return false;
       entry.len = len;
-      return nvs_get_blob(handle, info.key, entry.data, &entry.len) == ESP_OK;
+      if (nvs_get_blob(handle, info.key, entry.data, &entry.len) != ESP_OK) {
+        free(entry.data);
+        entry.data = nullptr;
+        entry.len = 0;
+        return false;
+      }
+      return true;
     }
     default:
       return false;
@@ -309,12 +429,9 @@ static esp_err_t write_samovar_nvs_entry(nvs_handle_t handle, const SamovarNvsEn
   }
 }
 
-static bool restore_nvs_entries(const SamovarNvsEntryBackup* entries, size_t count, bool samovarOnly) {
+static bool restore_samovar_nvs_entries(const SamovarNvsEntryBackup* entries, size_t count) {
   for (size_t i = 0; i < count; i++) {
-    if (is_legacy_profile_namespace(entries[i].ns)) {
-      continue;
-    }
-    if (samovarOnly && !is_samovar_nvs_namespace(entries[i].ns)) {
+    if (!is_samovar_nvs_namespace(entries[i].ns) || is_legacy_profile_namespace(entries[i].ns)) {
       continue;
     }
     nvs_handle_t handle;
@@ -335,27 +452,7 @@ static bool restore_nvs_entries(const SamovarNvsEntryBackup* entries, size_t cou
   return true;
 }
 
-static bool erase_nvs_partition_and_restore(const SamovarNvsEntryBackup* entries, size_t count) {
-  Serial.println(F("NVS: Erasing full NVS partition for emergency rebuild"));
-  nvs_flash_deinit();
-  esp_err_t err = nvs_flash_erase();
-  if (err == ESP_OK) {
-    err = nvs_flash_init();
-  }
-  if (err != ESP_OK) {
-    Serial.print(F("NVS: Full NVS erase/init failed, err = "));
-    Serial.println((int)err);
-    return false;
-  }
-  if (!restore_nvs_entries(entries, count, false)) {
-    Serial.println(F("NVS: Full NVS restore failed"));
-    return false;
-  }
-  Serial.println(F("NVS: Full NVS partition rebuilt"));
-  return true;
-}
-
-static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count) {
+static bool backup_samovar_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count) {
   count = 0;
   nvs_iterator_t it = nullptr;
   if (!nvs_find_first_entry("nvs", nullptr, NVS_TYPE_ANY, &it)) {
@@ -363,12 +460,6 @@ static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEnt
   }
 
   while (it) {
-    if (count >= maxEntries) {
-      Serial.println(F("NVS: Backup failed, too many keys"));
-      nvs_release_iterator(it);
-      return false;
-    }
-
     nvs_entry_info_t info;
     nvs_entry_info(it, &info);
     esp_err_t nextErr = nvs_advance_iterator(&it);
@@ -379,6 +470,19 @@ static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEnt
     }
 
     nvs_handle_t handle;
+    if (!is_samovar_nvs_namespace(info.namespace_name) || is_legacy_profile_namespace(info.namespace_name)) {
+      if (nextErr == ESP_ERR_NVS_NOT_FOUND) {
+        it = nullptr;
+      }
+      continue;
+    }
+
+    if (count >= maxEntries) {
+      Serial.println(F("NVS: Backup failed, too many Samovar keys"));
+      if (it) nvs_release_iterator(it);
+      return false;
+    }
+
     if (nvs_open(info.namespace_name, NVS_READONLY, &handle) == ESP_OK) {
       if (read_samovar_nvs_entry(handle, info, entries[count])) {
         count++;
@@ -403,33 +507,12 @@ static bool backup_all_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEnt
   return true;
 }
 
-static bool rebuild_full_nvs_partition() {
-  const size_t maxEntries = 512;
-  SamovarNvsEntryBackup* entries = (SamovarNvsEntryBackup*)calloc(maxEntries, sizeof(SamovarNvsEntryBackup));
-  if (!entries) {
-    Serial.println(F("NVS: Full rebuild failed, no RAM"));
-    return false;
-  }
-
-  size_t count = 0;
-  bool ok = backup_all_nvs_entries(entries, maxEntries, count);
-  if (ok) {
-    Serial.print(F("NVS: Full rebuild backup keys = "));
-    Serial.println(count);
-    ok = erase_nvs_partition_and_restore(entries, count);
-  }
-
-  free_samovar_nvs_backup(entries, count);
-  return ok;
-}
-
 static bool compact_samovar_nvs_namespaces() {
   static bool compacting = false;
   if (compacting) return false;
   compacting = true;
 
-  const size_t maxEntries = 512;
-  SamovarNvsEntryBackup* entries = (SamovarNvsEntryBackup*)calloc(maxEntries, sizeof(SamovarNvsEntryBackup));
+  SamovarNvsEntryBackup* entries = (SamovarNvsEntryBackup*)calloc(SAMOVAR_NVS_BACKUP_MAX_ENTRIES, sizeof(SamovarNvsEntryBackup));
   if (!entries) {
     Serial.println(F("NVS: Samovar namespace compaction failed, no RAM"));
     compacting = false;
@@ -437,7 +520,7 @@ static bool compact_samovar_nvs_namespaces() {
   }
 
   size_t count = 0;
-  bool ok = backup_all_nvs_entries(entries, maxEntries, count);
+  bool ok = backup_samovar_nvs_entries(entries, SAMOVAR_NVS_BACKUP_MAX_ENTRIES, count);
 
   if (!ok) {
     free_samovar_nvs_backup(entries, count);
@@ -464,12 +547,7 @@ static bool compact_samovar_nvs_namespaces() {
   }
 
   if (ok) {
-    ok = restore_nvs_entries(entries, count, true);
-  }
-
-  if (!ok) {
-    Serial.println(F("NVS: Samovar namespace compaction failed, trying full NVS rebuild"));
-    ok = erase_nvs_partition_and_restore(entries, count);
+    ok = restore_samovar_nvs_entries(entries, count);
   }
 
   free_samovar_nvs_backup(entries, count);
@@ -603,7 +681,6 @@ void saveBoolIfChanged(const char* key, bool value) {
 
 void save_profile_nvs() {
   static bool retryingProfileSave = false;
-  static bool rebuildingProfileSave = false;
   nvsProfileWriteFailed = false;
 
   if (!prefs.begin(SAMOVAR_COMMON_PROFILE_NAMESPACE, false)) {
@@ -715,19 +792,14 @@ void save_profile_nvs() {
       if (compact_samovar_nvs_namespaces()) {
         save_profile_nvs();
       }
-      if (nvsProfileWriteFailed && !rebuildingProfileSave) {
-        Serial.println(F("NVS: Profile write still failed, full rebuild and retrying"));
-        rebuildingProfileSave = true;
-        if (rebuild_full_nvs_partition()) {
-          save_profile_nvs();
-        }
-        rebuildingProfileSave = false;
-      }
       retryingProfileSave = false;
-    } else if (rebuildingProfileSave) {
-      Serial.println(F("NVS: Profile write failed after full rebuild"));
+      if (nvsProfileWriteFailed) {
+        Serial.println(F("NVS: Profile write failed after compaction; full NVS rebuild is disabled"));
+        print_nvs_stats("profile save failed");
+      }
     } else {
       Serial.println(F("NVS: Profile write failed after compaction"));
+      print_nvs_stats("profile save failed");
     }
   }
   //Serial.println("Profile saved to NVS");
@@ -742,51 +814,53 @@ static void load_profile_nvs_from_namespace(const char* ns) {
     return;
   }
 
+  set_default_setup_profile();
+
   // Читаем с дефолтными значениями. Для flag используем 255, чтобы определить "пустой NVS"
   SamSetup.flag = prefs.getUChar("flag", 255);
-  SamSetup.Mode = prefs.getUShort("Mode", 0);
-  SamSetup.TimeZone = prefs.getUChar("TimeZone", 3);
-  SamSetup.HeaterResistant = prefs.getFloat("HeaterR", 15.2);
-  SamSetup.LogPeriod = prefs.getUChar("LogPeriod", 3);
+  SamSetup.Mode = prefs.getUShort("Mode", SamSetup.Mode);
+  SamSetup.TimeZone = prefs.getUChar("TimeZone", SamSetup.TimeZone);
+  SamSetup.HeaterResistant = prefs.getFloat("HeaterR", SamSetup.HeaterResistant);
+  SamSetup.LogPeriod = prefs.getUChar("LogPeriod", SamSetup.LogPeriod);
 
-  SamSetup.SetSteamTemp = prefs.getFloat("SetSteam", 0);
-  SamSetup.SetPipeTemp = prefs.getFloat("SetPipe", 0);
-  SamSetup.SetWaterTemp = prefs.getFloat("SetWater", 0);
-  SamSetup.SetTankTemp = prefs.getFloat("SetTank", 0);
-  SamSetup.SetACPTemp = prefs.getFloat("SetACP", 0);
-  SamSetup.DistTemp = prefs.getFloat("DistTemp", DEFAULT_DIST_TEMP);
+  SamSetup.SetSteamTemp = prefs.getFloat("SetSteam", SamSetup.SetSteamTemp);
+  SamSetup.SetPipeTemp = prefs.getFloat("SetPipe", SamSetup.SetPipeTemp);
+  SamSetup.SetWaterTemp = prefs.getFloat("SetWater", SamSetup.SetWaterTemp);
+  SamSetup.SetTankTemp = prefs.getFloat("SetTank", SamSetup.SetTankTemp);
+  SamSetup.SetACPTemp = prefs.getFloat("SetACP", SamSetup.SetACPTemp);
+  SamSetup.DistTemp = prefs.getFloat("DistTemp", SamSetup.DistTemp);
 
-  SamSetup.DeltaSteamTemp = prefs.getFloat("DeltaSteam", 0.1);
-  SamSetup.DeltaPipeTemp = prefs.getFloat("DeltaPipe", 0.2);
-  SamSetup.DeltaWaterTemp = prefs.getFloat("DeltaWater", 0);
-  SamSetup.DeltaTankTemp = prefs.getFloat("DeltaTank", 0);
-  SamSetup.DeltaACPTemp = prefs.getFloat("DeltaACP", 0);
+  SamSetup.DeltaSteamTemp = prefs.getFloat("DeltaSteam", SamSetup.DeltaSteamTemp);
+  SamSetup.DeltaPipeTemp = prefs.getFloat("DeltaPipe", SamSetup.DeltaPipeTemp);
+  SamSetup.DeltaWaterTemp = prefs.getFloat("DeltaWater", SamSetup.DeltaWaterTemp);
+  SamSetup.DeltaTankTemp = prefs.getFloat("DeltaTank", SamSetup.DeltaTankTemp);
+  SamSetup.DeltaACPTemp = prefs.getFloat("DeltaACP", SamSetup.DeltaACPTemp);
 
-  SamSetup.SteamDelay = prefs.getUShort("SteamDelay", 20);
-  SamSetup.PipeDelay = prefs.getUShort("PipeDelay", 20);
-  SamSetup.WaterDelay = prefs.getUShort("WaterDelay", 20);
-  SamSetup.TankDelay = prefs.getUShort("TankDelay", 20);
-  SamSetup.ACPDelay = prefs.getUShort("ACPDelay", 20);
+  SamSetup.SteamDelay = prefs.getUShort("SteamDelay", SamSetup.SteamDelay);
+  SamSetup.PipeDelay = prefs.getUShort("PipeDelay", SamSetup.PipeDelay);
+  SamSetup.WaterDelay = prefs.getUShort("WaterDelay", SamSetup.WaterDelay);
+  SamSetup.TankDelay = prefs.getUShort("TankDelay", SamSetup.TankDelay);
+  SamSetup.ACPDelay = prefs.getUShort("ACPDelay", SamSetup.ACPDelay);
 
-  SamSetup.StepperStepMl = prefs.getUShort("StepMl", STEPPER_STEP_ML);
-  SamSetup.StepperStepMlI2C = prefs.getUShort("StepMlI2C", I2C_STEPPER_STEP_ML_DEFAULT);
-  SamSetup.useautospeed = prefs.getBool("AutoSpeed", false);
-  SamSetup.useDetectorOnHeads = prefs.getBool("DetOnHeads", false);
-  SamSetup.autospeed = prefs.getUChar("SpeedPerc", 0);
-  SamSetup.UseWS = prefs.getBool("UseWS", true);
+  SamSetup.StepperStepMl = prefs.getUShort("StepMl", SamSetup.StepperStepMl);
+  SamSetup.StepperStepMlI2C = prefs.getUShort("StepMlI2C", SamSetup.StepperStepMlI2C);
+  SamSetup.useautospeed = prefs.getBool("AutoSpeed", SamSetup.useautospeed);
+  SamSetup.useDetectorOnHeads = prefs.getBool("DetOnHeads", SamSetup.useDetectorOnHeads);
+  SamSetup.autospeed = prefs.getUChar("SpeedPerc", SamSetup.autospeed);
+  SamSetup.UseWS = prefs.getBool("UseWS", SamSetup.UseWS);
 
-  SamSetup.Kp = prefs.getFloat("Kp", 150.0);
-  SamSetup.Ki = prefs.getFloat("Ki", 1.4);
-  SamSetup.Kd = prefs.getFloat("Kd", 1.4);
-  SamSetup.StbVoltage = prefs.getFloat("StbVolt", 100.0);
-  SamSetup.BVolt = prefs.getFloat("BVolt", 230.0);
-  SamSetup.CheckPower = prefs.getBool("CheckPwr", false);
-  SamSetup.UseST = prefs.getBool("UseST", true);
+  SamSetup.Kp = prefs.getFloat("Kp", SamSetup.Kp);
+  SamSetup.Ki = prefs.getFloat("Ki", SamSetup.Ki);
+  SamSetup.Kd = prefs.getFloat("Kd", SamSetup.Kd);
+  SamSetup.StbVoltage = prefs.getFloat("StbVolt", SamSetup.StbVoltage);
+  SamSetup.BVolt = prefs.getFloat("BVolt", SamSetup.BVolt);
+  SamSetup.CheckPower = prefs.getBool("CheckPwr", SamSetup.CheckPower);
+  SamSetup.UseST = prefs.getBool("UseST", SamSetup.UseST);
 
-  SamSetup.rele1 = prefs.getBool("rele1", false);
-  SamSetup.rele2 = prefs.getBool("rele2", false);
-  SamSetup.rele3 = prefs.getBool("rele3", false);
-  SamSetup.rele4 = prefs.getBool("rele4", false);
+  SamSetup.rele1 = prefs.getBool("rele1", SamSetup.rele1);
+  SamSetup.rele2 = prefs.getBool("rele2", SamSetup.rele2);
+  SamSetup.rele3 = prefs.getBool("rele3", SamSetup.rele3);
+  SamSetup.rele4 = prefs.getBool("rele4", SamSetup.rele4);
 
   // Чтение массивов
   loadBytesOrInvalid("SteamAddr", SamSetup.SteamAdress, 8);
@@ -796,36 +870,36 @@ static void load_profile_nvs_from_namespace(const char* ns) {
   loadBytesOrInvalid("ACPAddr", SamSetup.ACPAdress, 8);
 
   // Чтение строк (в буферы структуры)
-  copyStringSafe(SamSetup.SteamColor, getColorOrDefault("SteamCol", "#ff0000"));
-  copyStringSafe(SamSetup.PipeColor, getColorOrDefault("PipeCol", "#0000ff"));
-  copyStringSafe(SamSetup.WaterColor, getColorOrDefault("WaterCol", "#00bfff"));
-  copyStringSafe(SamSetup.TankColor, getColorOrDefault("TankCol", "#008000"));
-  copyStringSafe(SamSetup.ACPColor, getColorOrDefault("ACPCol", "#800080"));
+  copyStringSafe(SamSetup.SteamColor, getColorOrDefault("SteamCol", SamSetup.SteamColor));
+  copyStringSafe(SamSetup.PipeColor, getColorOrDefault("PipeCol", SamSetup.PipeColor));
+  copyStringSafe(SamSetup.WaterColor, getColorOrDefault("WaterCol", SamSetup.WaterColor));
+  copyStringSafe(SamSetup.TankColor, getColorOrDefault("TankCol", SamSetup.TankColor));
+  copyStringSafe(SamSetup.ACPColor, getColorOrDefault("ACPCol", SamSetup.ACPColor));
   
   copyStringSafe(SamSetup.blynkauth, prefs.getString("blynk", ""));
   copyStringSafe(SamSetup.videourl, prefs.getString("video", ""));
   copyStringSafe(SamSetup.tg_token, prefs.getString("tg_tok", ""));
   copyStringSafe(SamSetup.tg_chat_id, prefs.getString("tg_id", ""));
 
-  SamSetup.UsePreccureCorrect = prefs.getBool("Preccure", true);
-  SamSetup.ChangeProgramBuzzer = prefs.getBool("PrgBuzz", false);
-  SamSetup.UseBuzzer = prefs.getBool("UseBuzz", false);
-  SamSetup.UseBBuzzer = prefs.getBool("UseBBuzz", false);
-  SamSetup.DistTimeF = prefs.getUChar("DistTimeF", 16);
-  SamSetup.UseHLS = prefs.getBool("UseHLS", true);
-  SamSetup.MaxPressureValue = prefs.getFloat("MaxPress", 0);
+  SamSetup.UsePreccureCorrect = prefs.getBool("Preccure", SamSetup.UsePreccureCorrect);
+  SamSetup.ChangeProgramBuzzer = prefs.getBool("PrgBuzz", SamSetup.ChangeProgramBuzzer);
+  SamSetup.UseBuzzer = prefs.getBool("UseBuzz", SamSetup.UseBuzzer);
+  SamSetup.UseBBuzzer = prefs.getBool("UseBBuzz", SamSetup.UseBBuzzer);
+  SamSetup.DistTimeF = prefs.getUChar("DistTimeF", SamSetup.DistTimeF);
+  SamSetup.UseHLS = prefs.getBool("UseHLS", SamSetup.UseHLS);
+  SamSetup.MaxPressureValue = prefs.getFloat("MaxPress", SamSetup.MaxPressureValue);
 
-  SamSetup.NbkIn = prefs.getFloat("NbkIn", 0);
-  SamSetup.NbkDelta = prefs.getFloat("NbkDelta", 0);
-  SamSetup.NbkDM = prefs.getFloat("NbkDM", 0);
-  SamSetup.NbkDP = prefs.getFloat("NbkDP", 0);
-  SamSetup.NbkSteamT = prefs.getFloat("NbkSteamT", 0);
-  SamSetup.NbkOwPress = prefs.getFloat("NbkOwPress", 0);
+  SamSetup.NbkIn = prefs.getFloat("NbkIn", SamSetup.NbkIn);
+  SamSetup.NbkDelta = prefs.getFloat("NbkDelta", SamSetup.NbkDelta);
+  SamSetup.NbkDM = prefs.getFloat("NbkDM", SamSetup.NbkDM);
+  SamSetup.NbkDP = prefs.getFloat("NbkDP", SamSetup.NbkDP);
+  SamSetup.NbkSteamT = prefs.getFloat("NbkSteamT", SamSetup.NbkSteamT);
+  SamSetup.NbkOwPress = prefs.getFloat("NbkOwPress", SamSetup.NbkOwPress);
 
   // --- Параметры колонны ---
-  SamSetup.ColDiam = prefs.getFloat("ColDiam", 2.0f);
-  SamSetup.ColHeight = prefs.getFloat("ColHeight", 0.5f);
-  SamSetup.PackDens = prefs.getUChar("PackDens", 80);
+  SamSetup.ColDiam = prefs.getFloat("ColDiam", SamSetup.ColDiam);
+  SamSetup.ColHeight = prefs.getFloat("ColHeight", SamSetup.ColHeight);
+  SamSetup.PackDens = prefs.getUChar("PackDens", SamSetup.PackDens);
 
   prefs.end();
   SamSetup.Mode = lastMode;

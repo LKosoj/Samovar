@@ -255,6 +255,8 @@ volatile bool pending_pnbk_flag = false;
 
 void load_profile_nvs();
 void migrate_from_eeprom();
+void print_nvs_stats(const char* context);
+void set_default_setup_profile();
 void switch_samovar_mode(SAMOVAR_MODE requestedMode);
 void scan_ds_adress();
 // void reset_migration_flag(); // Только для тестирования миграции
@@ -964,40 +966,15 @@ void setup() {
   
   Serial.print("NVS: Configuration loaded. Flag = ");
   Serial.println(SamSetup.flag);
+  print_nvs_stats("after config load");
 
   // Если NVS пустой (flag > 250), инициализируем дефолтными значениями
   if (SamSetup.flag > 250) {
     Serial.println("NVS is empty. Initializing with default values...");
-    SamSetup.flag = 2;
-    SamSetup.DeltaSteamTemp = 0.1;
-    SamSetup.DeltaPipeTemp = 0.2;
-    SamSetup.DeltaWaterTemp = 0;
-    SamSetup.DeltaTankTemp = 0;
-    SamSetup.DeltaACPTemp = 0;
-    SamSetup.SetSteamTemp = 0;
-    SamSetup.SetPipeTemp = 0;
-    SamSetup.SetWaterTemp = 0;
-    SamSetup.SetTankTemp = 0;
-    SamSetup.SetACPTemp = 0;
-    SamSetup.DistTemp = DEFAULT_DIST_TEMP;
-    SamSetup.StepperStepMl = STEPPER_STEP_ML;
-    SamSetup.StepperStepMlI2C = I2C_STEPPER_STEP_ML_DEFAULT;
-    SamSetup.UsePreccureCorrect = true;
-    SamSetup.SteamDelay = 20;
-    SamSetup.PipeDelay = 20;
-    SamSetup.WaterDelay = 20;
-    SamSetup.TankDelay = 20;
-    SamSetup.ACPDelay = 20;
-    SamSetup.HeaterResistant = 15.2;
-    SamSetup.LogPeriod = 3;
-    SamSetup.TimeZone = 3;
-    SamSetup.blynkauth[0] = '\0';
-    SamSetup.videourl[0] = '\0';
-    SamSetup.UseWS = 1;
-    SamSetup.ColDiam = 2.0f;
-    SamSetup.ColHeight = 0.5f;
-    SamSetup.PackDens = 80;
+    set_default_setup_profile();
     save_profile();
+    read_config();
+    print_nvs_stats("after default profile save");
     Serial.println("Default values saved to NVS");
   }
 
