@@ -10,6 +10,9 @@
 //в начало функции loop() строку  uart_event();
 //Обратите внимание! При использовании с Самоваром на стабилизатор будет передаваться не напряжение, а мощность.
 
+#define SAMOVAR_LEGACY_UTF8_AT "\xD0\x90\xD0\xA2"
+#define SAMOVAR_LEGACY_UTF8_AT_CMD(suffix) SAMOVAR_LEGACY_UTF8_AT suffix
+
 String inputString;
 bool stringComplete;
 
@@ -22,13 +25,13 @@ void uart_begin(void) {
 void uart_event(void) {
   if (stringComplete) {
     stringComplete = false;
-    if (inputString == "АТ+VO?") {
+    if (inputString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+VO?"))) {
       Serial.print(Pust);
       Serial.print('\r');
-    } else if (inputString == "АТ+VS?") {
+    } else if (inputString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+VS?"))) {
       Serial.print(Pust);
       Serial.print('\r');
-    } else if (inputString == "АТ+SS?") {
+    } else if (inputString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+SS?"))) {
       if (fl.razg_on) {
         Serial.print(1);
       } else if (fl.Ulow || fl.Udown || fl.NotZero) {
@@ -39,7 +42,7 @@ void uart_event(void) {
         Serial.print(0);
       }
       Serial.print('\r');
-    } else if (inputString.substring(0, 8) == "АТ+VS=") {
+    } else if (inputString.substring(0, 8) == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+VS="))) {
       uint32_t p;
       //выключаем разгон, на всякий случай
       fl.razg_on = 0;     //выключим режим разгона
@@ -53,13 +56,13 @@ void uart_event(void) {
       //показывает расчитанную мощность
       Pust = Pnom << 1; Pust *= PDMust; Pust /= CICLE;  Pust++; Pust = Pust >> 1; // Считаем Pust с округлением
       fl.DisplayOut = 1;  //Обновление информации на дисплее
-    } else if (inputString == "АТ+ON=0") {
+    } else if (inputString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+ON=0"))) {
       PDMust = 0;
       fl.razg_on = 0;     //выключим режим разгона
       fl.TRelay  = 0;     //выключим контактное реле
       Pust = 0;
       fl.DisplayOut = 1;  //Обновление информации на дисплее
-    } else if (inputString == "АТ+ON=1") {
+    } else if (inputString == F(SAMOVAR_LEGACY_UTF8_AT_CMD("+ON=1"))) {
       if ((!fl.NotZero) & (!fl.Udown)) {
         fl.razg_on = 1;
         fl.razg = 1;

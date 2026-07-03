@@ -11,22 +11,19 @@
 #include <esp_system.h>
 #include <rom/rtc.h>
 
-// Максимальный размер стектрейса
-#define STACKTRACE_MAX_SIZE 2048
-
 // Инициализация обработчика сбоев
 void init_crash_handler();
 
-// Сохранение стектрейса в файл
+// Сохранение диагностического отчета в файл
 void save_stacktrace_to_file(const char* info);
 
 // Получение информации о причине сбоя
 String get_reset_reason_string();
 
-// Проверка и загрузка сохраненного стектрейса при старте
+// Проверка и загрузка сохраненного диагностического отчета при старте
 void check_and_load_crash_log();
 
-// Функция для принудительного сохранения стектрейса (можно вызывать вручную)
+// Функция для принудительного сохранения диагностического отчета
 void force_save_stacktrace(const char* reason);
 
 #else // USE_CRASH_HANDLER

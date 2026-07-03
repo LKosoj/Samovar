@@ -10,9 +10,15 @@
   --bg-card-alt: rgb(225, 226, 226);
   --bg-messages: #d0d0d0;
   --bg-history: rgba(200, 200, 200, 0.8);
+  --bg-status: #7cfc0063;
+  --bg-program-panel: #f7f7f7;
+  --bg-program-example: #f2f2f2;
   --text-main: #777;
   --text-strong: #000;
   --text-on-accent: #fff;
+  --text-status: #333;
+  --text-history-link: #fff;
+  --text-history-action: #000;
   --border-input: #a9a9a9;
   --border-soft: #ccc;
   --border-dashed: #bbb;
@@ -26,6 +32,14 @@
   --msg-alarm: red;
   --msg-warn: #ff0;
   --msg-ok: #00ff00c4;
+  --state-danger-bg: red;
+  --state-active-bg: #2f7d4a;
+  --detector-ok-text: green;
+  --detector-ok-bg: #7cfc001a;
+  --detector-warn-text: orange;
+  --detector-warn-bg: #ffa5001a;
+  --detector-alarm-text: red;
+  --detector-alarm-bg: #ff00001a;
 }
 
 /* Тёмная тема: применяется при системном dark-mode либо при <html data-theme="dark"> */
@@ -39,12 +53,26 @@
     --bg-card-alt: #2b3a47;
     --bg-messages: #2b3a47;
     --bg-history: rgba(30, 40, 50, 0.92);
+    --bg-status: rgba(74, 222, 128, 0.20);
+    --bg-program-panel: #2b3a47;
+    --bg-program-example: #334455;
     --text-main: #cfd8e3;
     --text-strong: #f3f6f9;
+    --text-status: #e5ffe9;
+    --text-history-link: #fff;
+    --text-history-action: #f3f6f9;
     --border-input: #4a5b6c;
     --border-soft: #3a4a5a;
     --border-dashed: #4a5b6c;
     --border-card: rgba(255, 255, 255, 0.12);
+    --state-danger-bg: #b3261e;
+    --state-active-bg: #2f7d4a;
+    --detector-ok-text: #7ee787;
+    --detector-ok-bg: rgba(46, 160, 67, 0.18);
+    --detector-warn-text: #f2cc60;
+    --detector-warn-bg: rgba(187, 128, 9, 0.18);
+    --detector-alarm-text: #ff7b72;
+    --detector-alarm-bg: rgba(248, 81, 73, 0.18);
   }
 }
 :root[data-theme="dark"] {
@@ -56,12 +84,26 @@
   --bg-card-alt: #2b3a47;
   --bg-messages: #2b3a47;
   --bg-history: rgba(30, 40, 50, 0.92);
+  --bg-status: rgba(74, 222, 128, 0.20);
+  --bg-program-panel: #2b3a47;
+  --bg-program-example: #334455;
   --text-main: #cfd8e3;
   --text-strong: #f3f6f9;
+  --text-status: #e5ffe9;
+  --text-history-link: #fff;
+  --text-history-action: #f3f6f9;
   --border-input: #4a5b6c;
   --border-soft: #3a4a5a;
   --border-dashed: #4a5b6c;
   --border-card: rgba(255, 255, 255, 0.12);
+  --state-danger-bg: #b3261e;
+  --state-active-bg: #2f7d4a;
+  --detector-ok-text: #7ee787;
+  --detector-ok-bg: rgba(46, 160, 67, 0.18);
+  --detector-warn-text: #f2cc60;
+  --detector-warn-bg: rgba(187, 128, 9, 0.18);
+  --detector-alarm-text: #ff7b72;
+  --detector-alarm-bg: rgba(248, 81, 73, 0.18);
 }
 
 /* ==================== Базовые элементы ==================== */
@@ -78,6 +120,51 @@ body {
   width: 100%;
   height: 500px;
   background: var(--bg-form);
+}
+
+.chart-panel {
+  background: var(--bg-form);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 0.6em;
+}
+
+.chart-canvas {
+  display: block;
+  width: 100%;
+  height: 500px;
+}
+
+.chart-status {
+  min-height: 1.4em;
+  margin-top: 0.4em;
+  color: var(--text-main);
+}
+
+.chart-status-error {
+  color: var(--msg-alarm);
+  font-weight: bold;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7em 1em;
+  margin-top: 0.6em;
+  color: var(--text-strong);
+}
+
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.chart-legend-swatch {
+  display: inline-block;
+  width: 1em;
+  height: 0.7em;
+  border: 1px solid var(--border-soft);
 }
 
 textarea {
@@ -198,7 +285,8 @@ p {
 }
 
 /* ==================== Сообщения ==================== */
-.messages_box {
+.messages_box,
+.message-box {
   position: relative;
   max-height: calc(100vh * 0.4);
   background: var(--bg-messages);
@@ -284,23 +372,6 @@ p {
   width: 100%;
 }
 
-/* ==================== Утилитарные классы для замены inline-стилей ==================== */
-.card-bordered {
-  border: 1px dashed var(--border-dashed);
-  margin-bottom: 1em;
-}
-.card-padded {
-  padding: 0.5em 2em;
-}
-.row-between {
-  justify-content: space-between;
-}
-.row-around {
-  justify-content: space-around;
-}
-.text-center { text-align: center; }
-.bold { font-weight: bold; }
-
 /* ==================== Табы ==================== */
 .tab {
   width: 100%;
@@ -364,22 +435,6 @@ p {
   border: 0.1em solid #dfdfdf;
 }
 
-.button_mob {
-  display: inline-flex;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  background-color: var(--accent);
-  min-height: 1em;
-  font-size: 1em;
-  font-weight: normal;
-  padding: 0.3em 0.4em;
-  margin: 0 0.5em;
-  border-radius: 0.3em;
-  border: 1px solid #dfdfdf;
-  color: var(--text-on-accent);
-}
-
 .button:hover {
   position: relative;
   cursor: pointer;
@@ -400,12 +455,6 @@ p {
 .button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-.button_img {
-  float: left;
-  align-self: center;
-  margin-right: 0.5em;
 }
 
 /* ==================== Контент табов ==================== */
@@ -540,15 +589,15 @@ input:focus-visible {
 }
 
 .prgline input,
-img,
-select {
+.prgline img,
+.prgline select {
   margin-left: 21px !important;
   border-radius: 0;
 }
 
 .prgline input:enabled,
-img,
-select {
+.prgline img,
+.prgline select {
   cursor: pointer;
 }
 
@@ -664,13 +713,6 @@ select {
   position: relative;
 }
 
-.pointer {
-  cursor: pointer;
-  margin-left: auto;
-  margin-right: auto;
-  width: 400px;
-}
-
 /* ==================== Спойлеры (<details>) ==================== */
 details.spoiler {
   display: flex;
@@ -700,11 +742,6 @@ details.spoiler[open] > summary::before {
 details.spoiler > .spoiler-content {
   padding: 0.75rem 1.25rem;
   border-top: 1px solid var(--border-card);
-}
-
-.infotext {
-  font-size: 1em !important;
-  margin-left: 1em !important;
 }
 
 /* ==================== Попапы ==================== */
@@ -810,7 +847,6 @@ details.spoiler > .spoiler-content {
   .tab input { font-size: 1.1em; min-height: 1.8em; margin: 0.2em; }
   .text { font-size: 1.2em; }
   .ingredients { width: 100%; }
-  .pointer { width: 100%; }
   .popup { width: 92vw; }
 }
 
@@ -820,10 +856,6 @@ details.spoiler > .spoiler-content {
   .tab { flex-direction: column; align-items: stretch; }
   .tab input { margin: 0.15em 0; width: 100%; min-height: 2.2em; }
   .container_row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .row-between, .row-around {
     flex-direction: column;
     align-items: stretch;
   }
@@ -847,7 +879,8 @@ details.spoiler > .spoiler-content {
     margin: 0.3em 0;
     min-height: 2.4em;
   }
-  .messages_box { max-height: calc(100vh * 0.5); }
+  .messages_box,
+  .message-box { max-height: calc(100vh * 0.5); }
   .history_box {
     width: calc(100vw - 1em);
     left: 0.5em;

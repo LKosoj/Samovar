@@ -1,16 +1,16 @@
+<!DOCTYPE html>
 <html>
 
 <head>
   <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
-  <script src="https://cdn.amcharts.com/lib/4/core.js"></script>
-  <script src="https://cdn.amcharts.com/lib/4/charts.js"></script>
-  <script src="https://cdn.amcharts.com/lib/4/themes/animated.js"></script>
+  <script src="chart.js"></script>
 
   <!-- Chart code -->
   <script>
@@ -231,6 +231,16 @@ function clearMessages() {
     }
 
     var chart;
+    var chartLastAppendMs = 0;
+
+    function appendChartPoint(myObj) {
+      if (!chart) return;
+      let now = Date.now();
+      if (now - chartLastAppendMs < 15000) return;
+      chartLastAppendMs = now;
+      chart.appendAjaxPoint(myObj);
+    }
+
     function startPolling () {
       (async function pollLoop () {
         await loadDoc();
@@ -272,6 +282,7 @@ function clearMessages() {
           document.getElementById('rssi').innerHTML = myObj.rssi;
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
           sound_is_on = !!myObj.UseBBuzzer;
+          appendChartPoint(myObj);
 
           var dt = myObj.PipeTemp - myObj.SteamTemp;
           document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
@@ -294,128 +305,9 @@ function clearMessages() {
       }
     };
 
-    am4core.ready(function() {
-      // Themes begin
-      am4core.useTheme(am4themes_animated);
-      // Themes end
-      chart = am4core.create("chartdiv", am4charts.XYChart);
-
-      chart.colors.list = [
-        am4core.color("%SteamColor%"),
-        am4core.color("%PipeColor%"),
-        am4core.color("%WaterColor%"),
-        am4core.color("%TankColor%"),
-        am4core.color("#3EFF42"),
-        am4core.color("#000000")
-        
-        
-      ];
-
-      chart.dataSource.url = "data.csv";
-      chart.dataSource.disableCache = true;
-      //chart.numberFormatter.numberFormat = "#,###";
-      chart.dataSource.parser = new am4core.CSVParser();
-      chart.dataSource.parser.options.useColumnNames = true;
-      chart.dataSource.parser.options.emptyAs = "empty";
-      //chart.dataSource.updateCurrentData = true;
-      chart.dataSource.reloadFrequency = 15000;
-
-      // Create axes
-      var dateAxis = chart.xAxes.push(new am4charts.CategoryAxis());
-      dateAxis.dataFields.category = "Date";
-      //dateAxis.renderer.minGridDistance = 60;
-
-      // Create value axis
-      var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-      var valueAxis1 = chart.yAxes.push(new am4charts.ValueAxis());
-      var valueAxis2 = chart.yAxes.push(new am4charts.ValueAxis());
-      // Create series
-      var series1 = chart.series.push(new am4charts.LineSeries());
-      series1.dataFields.valueY = "Steam";
-      series1.dataFields.categoryX = "Date";
-      series1.name = "Температура пара";
-      series1.strokeWidth = 3;
-      series1.tensionX = 0.7;
-      series1.tooltipText = "{valueY.value}";
-      series1.hidden = %SteamHide%;
-      //series1.bullets.push(new am4charts.CircleBullet());
-
-      var series2 = chart.series.push(new am4charts.LineSeries());
-      series2.dataFields.valueY = "Pipe";
-      series2.dataFields.categoryX = "Date";
-      series2.name = "Температура в царге";
-      series2.strokeWidth = 3;
-      series2.tensionX = 0.7;
-      series2.tooltipText = "{valueY.value}";
-      series2.hidden = %PipeHide%;
-      //series2.bullets.push(new am4charts.CircleBullet());
-
-      var series3 = chart.series.push(new am4charts.LineSeries());
-      series3.dataFields.valueY = "Water";
-      series3.dataFields.categoryX = "Date";
-      series3.name = "Температура воды";
-      series3.strokeWidth = 3;
-      series3.tensionX = 0.7;
-      series3.tooltipText = "{valueY.value}";
-      series3.hidden = %WaterHide%;
-      //series3.bullets.push(new am4charts.CircleBullet());
-
-      var series4 = chart.series.push(new am4charts.LineSeries());
-      series4.dataFields.valueY = "Tank";
-      series4.dataFields.categoryX = "Date";
-      series4.name = "Температура в кубе";
-      series4.strokeWidth = 3;
-      series4.tensionX = 0.7;
-      series4.tooltipText = "{valueY.value}";
-      series4.hidden = %TankHide%;
-      //series4.bullets.push(new am4charts.CircleBullet());
-
-      var series5 = chart.series.push(new am4charts.LineSeries());
-      series5.yAxis = valueAxis1;
-      series5.dataFields.valueY = "Pressure";
-      series5.dataFields.categoryX = "Date";
-      series5.name = "Атмосферное давление";
-      series5.strokeWidth = 2;
-      series5.tensionX = 0.7;
-      series5.tooltipText = "{valueY.value}";
-      series5.hidden = %PressureHide%;
-
-      var series6 = chart.series.push(new am4charts.LineSeries());
-      series6.yAxis = valueAxis2;
-      series6.dataFields.valueY = "ProgNum";
-      series6.dataFields.categoryX = "Date";
-      series6.name = "Строка программы";
-      series6.strokeWidth = 1;
-      series6.tensionX = 0.7;
-      series6.tooltipText = "{valueY.value}";
-      series6.hidden = %ProgNumHide%;
-
-      //chart.cursor = new am4charts.XYCursor();
-      //chart.cursor.snapToSeries = series1;
-      //chart.cursor.xAxis = dateAxis;
-
-      ////chart.scrollbarY = new am4core.Scrollbar();
-      chart.scrollbarX = new am4core.Scrollbar();
-      //var scrollbarX = new am4charts.XYChartScrollbar();
-      //scrollbarX.series.push(dateAxis);
-      //chart.scrollbarX = scrollbarX;
-
-      chart.cursor = new am4charts.XYCursor();
-      chart.cursor.xAxis = dateAxis;
-
-
-      // Add legend
-      chart.legend = new am4charts.Legend();
-      //chart.legend = new am4charts.Legend();
-      //chart.legend.parent = chart.plotContainer;
-      //chart.legend.zIndex = 100;
-      //chart.legend.valueLabels.template.text = "{valueY.value.formatNumber('$#.')}";
-    });
-
     function refresh_chart () {
-      if (!document.getElementById('refresh').checked) chart.dataSource.reloadFrequency = null;
-      else chart.dataSource.reloadFrequency = 15000;
-      chart.dataSource.load();
+      if (!chart) return;
+      chart.setAutoRefresh(document.getElementById('refresh').checked);
     };
 
     // ==================== THEME TOGGLE =================================================================
@@ -452,8 +344,36 @@ function clearMessages() {
         else applyTheme(null);
       } catch (e) { applyTheme(null); }
     })();
+    function initChart () {
+      var chartBlock = document.getElementById('chartdiv');
+      if (typeof SamovarChart !== 'function') {
+        chartBlock.textContent = 'График недоступен: локальный chart.js не загружен.';
+        return;
+      }
+      try {
+        chart = new SamovarChart('chartdiv', {
+          hidden: {
+            Steam: templateBool("%SteamHide%"),
+            Pipe: templateBool("%PipeHide%"),
+            Water: templateBool("%WaterHide%"),
+            Tank: templateBool("%TankHide%"),
+            Pressure: templateBool("%PressureHide%"),
+            ProgNum: templateBool("%ProgNumHide%")
+          }
+        });
+        chart.loadCsv('data.csv').catch(function (err) {
+          if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true);
+        });
+      } catch (err) {
+        chartBlock.textContent = 'График недоступен: ' + err;
+      }
+    }
+    function templateBool (value) {
+      return String(value).toLowerCase() === 'true';
+    }
     document.addEventListener('DOMContentLoaded', function () {
       applyTheme(document.documentElement.dataset.theme || null);
+      initChart();
       startPolling();
     });
   </script>

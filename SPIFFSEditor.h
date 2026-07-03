@@ -4,12 +4,13 @@
 #include <FS.h>
 #include <ESPAsyncWebServer.h>
 #include "Samovar.h"
-
-String get_edit_script();
+#include "samovar_api.h"
+#include "runtime_helpers.h"
 
 #ifdef USE_LUA
-void load_lua_script();
-String IRAM_ATTR getValue(const String& data, char separator, int index);
+extern volatile bool pending_lua_reload_flag;
+static const char *SPIFFS_EDITOR_UPLOAD_ERROR_ATTR = "spiffs_upload_error";
+static const char *SPIFFS_EDITOR_LUA_RELOAD_BUSY = "lua_reload_busy";
 #endif
 
 
@@ -178,7 +179,10 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
         return true;
       if (request->hasParam("edit")) {
         String p = request->arg("edit");
-        if (request->arg("edit")[0] != '/') p = "/" + p;
+        if (p.length() == 0) {
+          return false;
+        }
+        if (p[0] != '/') p = "/" + p;
         //        request->_tempFile = _fs.open(request->arg("edit"), "r");
         //request->_tempFile = _fs.open(p, "r");
         fs::FS& ref = const_cast <fs::FS&>(_fs);
@@ -195,7 +199,10 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
       }
       if (request->hasParam("download")) {
         String p = request->arg("download");
-        if (request->arg("edit")[0] != '/') p = "/" + p;
+        if (p.length() == 0) {
+          return false;
+        }
+        if (p[0] != '/') p = "/" + p;
         //request->_tempFile = _fs.open(p, "r");
         fs::FS& ref = const_cast <fs::FS&>(_fs);
         request->_tempFile = ref.open(p, "r");
@@ -303,6 +310,12 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
     if (request->hasParam("data", true, true)) {
       String p = request->getParam("data", true, true)->value();
       if (p[0] != '/') p = "/" + p;
+#ifdef USE_LUA
+      if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR) == SPIFFS_EDITOR_LUA_RELOAD_BUSY) {
+        request->send(503, "text/plain", "BUSY");
+        return;
+      }
+#endif
       if (_fs.exists(p))
         request->send(200, "", "UPLOADED: " + p);
       else
@@ -343,7 +356,13 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
             request->_tempFile.close();
 #ifdef USE_LUA
             if (getValue(filename, '.', 1) == "lua") {
-                load_lua_script();
+                bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+                if (locked) {
+                    pending_lua_reload_flag = true;
+                } else {
+                    request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
+                }
+                pending_command_unlock(locked);
             }
 #endif
         }

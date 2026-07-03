@@ -144,7 +144,7 @@ void run_program(uint8_t num) {
   // --- Пример: обработка различных типов шагов ---
   if (stepType == «H» || stepType == «B» || stepType == „T“ || stepType == «C») {
     // Это этап сбора жидкости (головка, тело, хвост, предварительное кипячение)
-    
+
     // Установите положение сосуда для сбора (с помощью сервопривода или другого механизма)
     set_capacity(vesselNum);
 
@@ -166,7 +166,7 @@ void run_program(uint8_t num) {
 
   } else if (stepType == «P») {
     // Это шаг «Пауза»
-    
+
     // Установить таймер на время паузы (в данном случае поле «Объем» содержит время)
     SendMsg(«Пауза на » + String(targetVolume) + « секунд.», NOTIFY_MSG);
     t_min = millis() + targetVolume * 1000;

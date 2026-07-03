@@ -1,6 +1,8 @@
+<!DOCTYPE html>
 <html>
 <head>
   <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-store, max-age=0">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="style.css">
@@ -55,6 +57,17 @@
     var OfflineCounter = 0;
     var dirtyDevices = { mixer: false, pump: false };
     var deviceCaps = { mixer: 0, pump: 0 };
+    var deviceState = {
+      mixer: { present: false, supported: false, active: false, error: true },
+      pump: { present: false, supported: false, active: false, error: true }
+    };
+    var inFlightActions = {};
+    var pollTimer = null;
+    var pollInFlight = false;
+    const POLL_FAST_MS = 900;
+    const POLL_ACTIVE_MS = 1200;
+    const POLL_IDLE_MS = 3500;
+    const POLL_MISSING_MS = 7000;
 
     function ConnectError (type) {
       var indicator = document.getElementById('connection_indicator');
@@ -131,22 +144,28 @@
     }
 
     async function requestJson(url, done, showAlert) {
+      var timer = null;
       try {
         var ctrl = new AbortController();
-        var timer = setTimeout(function() { ctrl.abort(); }, 4000);
+        timer = setTimeout(function() { ctrl.abort(); }, 4000);
         var resp = await fetch(url, { signal: ctrl.signal });
         clearTimeout(timer);
+        timer = null;
         if (!resp.ok) {
           ConnectError(true);
           if (showAlert) alert(resp.status + ': ' + resp.statusText);
-          return;
+          return null;
         }
         var data = await resp.json();
         ConnectError(false);
         done(data);
+        return data;
       } catch (e) {
         ConnectError(true);
         if (showAlert) alert('I2CStepper ERROR! ' + e);
+        return null;
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
 
@@ -157,17 +176,28 @@
     function loadDevice(device) {
       return requestJson('/i2cstepper?device=' + device, function(data) {
         renderDevice(device, data);
-      }, false);
+      }, false).then(function(data) {
+        if (!data) setDeviceUnavailable(device, 'Ошибка связи с I2CStepper.', true);
+      });
     }
 
     function renderDevice(device, data) {
       var panel = document.getElementById(device + '_panel');
       var missing = document.getElementById(device + '_missing');
       var caps = parseInt(data.caps || '0', 10);
+      var present = parseInt(data.present || '0', 10) === 1;
+      var supported = deviceSupported(device, caps);
+      var status = parseInt(data.status || '0', 10);
+      var error = (status & 128) !== 0;
       deviceCaps[device] = caps;
-      if (data.present !== 1 || !deviceSupported(device, caps)) {
-        panel.style.display = 'none';
-        missing.style.display = 'block';
+      deviceState[device] = {
+        present: present,
+        supported: supported,
+        active: (status & (STATUS_RUNNING | 8)) !== 0,
+        error: error
+      };
+      if (!present || !supported) {
+        setDeviceUnavailable(device, deviceLabel(device) + ' I2CStepper не подключен или не поддерживается.', false);
         return;
       }
       panel.style.display = 'block';
@@ -181,6 +211,7 @@
       document.getElementById(device + '_relayMask').value = relayMask;
       updateRunButton(device, data.status);
       updateRelayButtons(device, relayMask);
+      updateDeviceDisabled(device);
 
       if (device === 'mixer') {
         setFieldValue('mixerRpm', data.mixerRpm, device);
@@ -204,6 +235,27 @@
         setFieldChecked('pumpSensorStop', data.sensorFlags, SENSOR_STOP, device);
         setFieldChecked('pumpSensorPause', data.sensorFlags, SENSOR_PUMP_PAUSE, device);
       }
+      updateDeviceDisabled(device);
+    }
+
+    function deviceLabel(device) {
+      return device === 'mixer' ? 'Мешалка' : 'Насос';
+    }
+
+    function setDeviceUnavailable(device, message, requestError) {
+      var panel = document.getElementById(device + '_panel');
+      var missing = document.getElementById(device + '_missing');
+      var title = missing.querySelector('h2');
+      if (title) title.textContent = message;
+      panel.style.display = 'none';
+      missing.style.display = 'block';
+      deviceState[device] = {
+        present: false,
+        supported: false,
+        active: false,
+        error: requestError
+      };
+      updateDeviceDisabled(device);
     }
 
     function statusText(status, error) {
@@ -233,6 +285,49 @@
       for (var i = 1; i <= 4; i++) {
         var active = (relayMask & (1 << (i - 1))) !== 0;
         setStateButton(device + 'Relay' + i, active, 'R' + i + ': включено', 'R' + i + ': выключено');
+      }
+    }
+
+    function actionKey(device, action) {
+      return device + ':' + action;
+    }
+
+    function actionInFlight(device, action) {
+      return !!inFlightActions[actionKey(device, action)];
+    }
+
+    function setActionInFlight(device, action, value) {
+      var key = actionKey(device, action);
+      if (value) inFlightActions[key] = true;
+      else delete inFlightActions[key];
+      updateDeviceDisabled(device);
+      scheduleNextPoll();
+    }
+
+    function hasInFlightActions() {
+      return Object.keys(inFlightActions).length > 0;
+    }
+
+    function setButtonDisabled(id, disabled) {
+      var button = document.getElementById(id);
+      if (button) button.disabled = disabled;
+    }
+
+    function updateDeviceDisabled(device) {
+      var state = deviceState[device] || {};
+      var caps = deviceCaps[device] || 0;
+      var disabled = !state.present || !state.supported || state.error;
+      setButtonDisabled(device + '_apply', disabled || actionInFlight(device, 'apply'));
+      setButtonDisabled(device + '_run_toggle', disabled || actionInFlight(device, 'run'));
+      setButtonDisabled(device + '_save', disabled || actionInFlight(device, 'save'));
+      for (var i = 1; i <= 4; i++) {
+        setButtonDisabled(device + 'Relay' + i,
+          disabled || !(caps & CAP_RELAY) || actionInFlight(device, 'relay' + i));
+      }
+      if (device === 'pump') {
+        var calibrationDisabled = disabled || !(caps & CAP_FILLING);
+        setButtonDisabled('pump_calstart', calibrationDisabled || actionInFlight(device, 'calstart'));
+        setButtonDisabled('pump_calfinish', calibrationDisabled || actionInFlight(device, 'calfinish'));
       }
     }
 
@@ -270,11 +365,17 @@
     }
 
     function sendDevice(device, cmd) {
+      var action = (cmd === 'start' || cmd === 'stop') ? 'run' : cmd;
+      if (actionInFlight(device, action)) return;
+      setActionInFlight(device, action, true);
       var url = device === 'mixer' ? mixerUrl(cmd) : pumpUrl(cmd);
       requestJson(url, function(data) {
         dirtyDevices[device] = false;
         renderDevice(device, data);
-      }, true);
+      }, true).then(function(data) {
+        if (!data) setDeviceUnavailable(device, 'Ошибка выполнения команды I2CStepper.', true);
+        setActionInFlight(device, action, false);
+      });
     }
 
     function toggleDevice(device) {
@@ -284,12 +385,18 @@
     }
 
     function toggleRelay(device, relayNum) {
+      var action = 'relay' + relayNum;
+      if (actionInFlight(device, action)) return;
+      setActionInFlight(device, action, true);
       var maskInput = document.getElementById(device + '_relayMask');
       var mask = parseInt(maskInput.value || '0', 10);
       var state = (mask & (1 << (relayNum - 1))) ? 0 : 1;
       requestJson('/i2cstepper?device=' + device + '&cmd=relay&relay=' + relayNum + '&state=' + state, function(data) {
         renderDevice(device, data);
-      }, true);
+      }, true).then(function(data) {
+        if (!data) setDeviceUnavailable(device, 'Ошибка переключения реле I2CStepper.', true);
+        setActionInFlight(device, action, false);
+      });
     }
 
     function applyTheme (theme) {
@@ -328,15 +435,41 @@
       } catch (e) { applyTheme(null); }
     })();
 
+    function nextPollDelay() {
+      if (hasInFlightActions()) return POLL_FAST_MS;
+      var states = [deviceState.mixer, deviceState.pump];
+      if (states.some(function(state) { return state.present && state.supported && state.active; })) {
+        return POLL_ACTIVE_MS;
+      }
+      if (states.some(function(state) { return state.present && state.supported && !state.error; })) {
+        return POLL_IDLE_MS;
+      }
+      return POLL_MISSING_MS;
+    }
+
+    function scheduleNextPoll(delay) {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(pollDevices, typeof delay === 'number' ? delay : nextPollDelay());
+    }
+
     async function pollDevices () {
-      await Promise.all([loadDevice('mixer'), loadDevice('pump')]);
-      setTimeout(pollDevices, 2000);
+      if (pollInFlight) {
+        scheduleNextPoll();
+        return;
+      }
+      pollInFlight = true;
+      try {
+        await Promise.all([loadDevice('mixer'), loadDevice('pump')]);
+      } finally {
+        pollInFlight = false;
+        scheduleNextPoll();
+      }
     }
 
     window.onload = function() {
       applyTheme(document.documentElement.dataset.theme || null);
       bindDirtyControls();
-      pollDevices();
+      scheduleNextPoll(0);
     };
   </script>
 </head>
@@ -379,9 +512,9 @@
         </div>
         <input id="mixer_relayMask" type="hidden" value="0">
         <div class="container_row i2c-actions">
-          <input type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
+          <input id="mixer_apply" type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
           <input id="mixer_run_toggle" type="button" class="button state-button state-off" value="Запустить мешалку" onclick="toggleDevice('mixer');">
-          <input type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
+          <input id="mixer_save" type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
         </div>
         <div id="mixer_relay_block">
           <h2>Реле</h2>
@@ -428,9 +561,9 @@
         </div>
         <input id="pump_relayMask" type="hidden" value="0">
         <div class="container_row i2c-actions">
-          <input type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
+          <input id="pump_apply" type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
           <input id="pump_run_toggle" type="button" class="button state-button state-off" value="Запустить насос" onclick="toggleDevice('pump');">
-          <input type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
+          <input id="pump_save" type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
           <input id="pump_calstart" type="button" class="button" value="Калибровка старт" onclick="sendDevice('pump','calstart');">
           <input id="pump_calfinish" type="button" class="button" value="100 мл стоп" onclick="sendDevice('pump','calfinish');">
         </div>

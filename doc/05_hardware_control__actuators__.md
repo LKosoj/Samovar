@@ -187,7 +187,7 @@ void set_power(bool On) {
     // ... возможно, отключение вспомогательных реле ...
     set_power_mode(POWER_SLEEP_MODE); // Перевести регулятор в режим ожидания/выключения
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1); // Отключить главное реле системы
-    sam_command_sync = SAMOVAR_RESET; // Сигнал сброса/очистки системы (Глава 3)
+    queue_samovar_reset_command(); // Сигнал сброса/очистки системы (Глава 3)
   }
 }
 ```

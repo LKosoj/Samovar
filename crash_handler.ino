@@ -2,9 +2,6 @@
 
 #ifdef USE_CRASH_HANDLER
 
-// Буфер для стектрейса
-static char stacktrace_buffer[STACKTRACE_MAX_SIZE];
-static bool crash_occurred = false;
 static bool fs_available = false;
 
 // Функция для получения строки с причиной сбоя
@@ -27,11 +24,8 @@ String get_reset_reason_string() {
   }
 }
 
-// Функция для сохранения стектрейса в файл
+// Функция для сохранения диагностического отчета в файл
 void save_stacktrace_to_file(const char* info) {
-  // Очищаем буфер
-  memset(stacktrace_buffer, 0, sizeof(stacktrace_buffer));
-  
   // Формируем заголовок с информацией о сбое
   String crash_log = "=== CRASH REPORT ===\n";
   crash_log += "Time: " + String(millis()) + " ms\n";
@@ -42,10 +36,9 @@ void save_stacktrace_to_file(const char* info) {
   crash_log += "Chip Model: " + String(ESP.getChipModel()) + "\n";
   crash_log += "Chip Revision: " + String(ESP.getChipRevision()) + "\n";
   crash_log += "CPU Frequency: " + String(ESP.getCpuFreqMHz()) + " MHz\n";
-  crash_log += "\n=== STACKTRACE ===\n";
+  crash_log += "\n=== TASK STACK INFO ===\n";
   
   // Получаем информацию о задачах
-  crash_log += "Task Stack Info:\n";
   UBaseType_t numTasks = uxTaskGetNumberOfTasks();
   crash_log += "Total Tasks: " + String(numTasks) + "\n";
   
@@ -119,27 +112,6 @@ void save_stacktrace_to_file(const char* info) {
   }
 }
 
-// Обработчик завершения системы
-void shutdown_handler() {
-  if (crash_occurred) {
-    return; // Уже обработали
-  }
-  
-  crash_occurred = true;
-  
-  esp_reset_reason_t reason = esp_reset_reason();
-  
-  // Проверяем, был ли это сбой (не обычная перезагрузка)
-  bool is_crash = (reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT || 
-                   reason == ESP_RST_TASK_WDT || reason == ESP_RST_WDT || 
-                   reason == ESP_RST_BROWNOUT);
-  
-  if (is_crash) {
-    String crash_info = "System crash detected. Reason: " + get_reset_reason_string();
-    save_stacktrace_to_file(crash_info.c_str());
-  }
-}
-
 // Инициализация обработчика сбоев
 void init_crash_handler() {
   Serial.println("[CRASH] Initializing crash handler...");
@@ -148,9 +120,6 @@ void init_crash_handler() {
   fs_available = SPIFFS.begin(false);
   Serial.print("[CRASH] Filesystem status: ");
   Serial.println(fs_available ? "OK" : "FAILED");
-  
-  // Регистрируем обработчик завершения системы
-  esp_register_shutdown_handler(shutdown_handler);
   
   esp_reset_reason_t reason = esp_reset_reason();
   String reasonStr = get_reset_reason_string();
@@ -211,7 +180,7 @@ void check_and_load_crash_log() {
   }
 }
 
-// Функция для принудительного сохранения стектрейса (можно вызывать вручную)
+// Функция для принудительного сохранения диагностического отчета
 void force_save_stacktrace(const char* reason) {
   save_stacktrace_to_file(reason);
 }

@@ -1,6 +1,8 @@
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset='utf-8'>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
 <link rel="stylesheet" href="style.css">
 <title>Самовар</title>
@@ -8,6 +10,11 @@
 <script>
 const stepperStepMlLocal = %StepperStepMl%;
 const stepperStepMlI2C = %StepperStepMlI2C%;
+let calibrationRunning = false;
+
+function updateCalibrationButton(){
+  document.getElementById('calibrateid').value = calibrationRunning ? 'Зафиксировать 100 мл' : 'Начать калибровку';
+}
 
 function getPumpType(){
   var sel = document.getElementById('pump_type');
@@ -26,17 +33,20 @@ function onPumpTypeChange(){
 
 async function calibrate(){
   let command;
-  if (document.getElementById('calibrateid').value == 'Начать калибровку'){
-    document.getElementById('calibrateid').value = 'Зафиксировать 100 мл';
+  let nextCalibrationRunning;
+  if (!calibrationRunning){
     command = 'stpstep=' + document.getElementById('kstepperspd').value + '&pump=' + getPumpType() + '&start';
+    nextCalibrationRunning = true;
   } else {
-    document.getElementById('calibrateid').value = 'Начать калибровку';
     command = 'pump=' + getPumpType() + '&finish';
+    nextCalibrationRunning = false;
   }
   try {
     let resp = await fetch('/calibrate?' + command + '=1');
     if (!resp.ok) { alert(resp.status + ': ' + resp.statusText); return; }
     let text = await resp.text();
+    calibrationRunning = nextCalibrationRunning;
+    updateCalibrationButton();
     if (text !== "OK") document.getElementById('stepperstepml').value = text;
   } catch (e) {
     alert('Ошибка сети: ' + e);
@@ -45,6 +55,7 @@ async function calibrate(){
 
 window.onload = function() {
   onPumpTypeChange();
+  updateCalibrationButton();
 };
 </script>
 </head>

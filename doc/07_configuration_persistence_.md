@@ -137,8 +137,8 @@ SetupEEPROM SamSetup; // В текущей RAM
 // Из FS.ino
 void save_profile() {
   // Получить имя файла на основе текущего режима Самовара (Samovar_CR_Mode)
-  String filename = get_prf_name(); 
-  
+  String filename = get_prf_name();
+
   // Открыть файл на SPIFFS/LittleFS для записи. FILE_WRITE — создаёт или перезаписывает.
   File file = SPIFFS.open(filename, FILE_WRITE);
   if (!file) {
@@ -147,7 +147,7 @@ void save_profile() {
     SendMsg("Не удалось сохранить файл конфигурации!", ALARM_MSG);
     return;
   }
-  
+
   // Записать всё содержимое структуры SamSetup в файл
   // sizeof(SamSetup) — общий размер структуры в байтах
   file.write((uint8_t *)&SamSetup, sizeof(SamSetup));
@@ -198,8 +198,8 @@ void read_config() {
 
   // Определить имя файла на основе режима, сохранённого в SamSetup (из EEPROM)
   // ВНИМАНИЕ: Samovar_CR_Mode используется внутри, обычно соответствует последнему сохранённому режиму
-  Samovar_CR_Mode = (SAMOVAR_MODE)SamSetup.Mode; 
-  String filename = get_prf_name(); 
+  Samovar_CR_Mode = (SAMOVAR_MODE)SamSetup.Mode;
+  String filename = get_prf_name();
 
   // Проверить, существует ли файл профиля на файловой системе
   if (SPIFFS.exists(filename)) {
@@ -210,21 +210,21 @@ void read_config() {
        // Обработка ошибки
        return;
     }
-    
+
     // Считать всё содержимое файла напрямую в структуру SamSetup
     file.read((uint8_t *)&SamSetup, sizeof(SamSetup));
     file.close(); // Закрыть файл
-    
+
     // Обновить текущий рабочий режим на основе загруженной настройки
-    Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode; 
-    
+    Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
+
     Serial.println(F("Конфигурация загружена из файла."));
   } else {
     // Если файла профиля нет (первый запуск или файл удалён),
     // попытаться сохранить текущий SamSetup (по умолчанию или из EEPROM)
     // Это гарантирует создание файла для будущих сохранений.
     Serial.println(F("Файл конфигурации не найден, создаётся по умолчанию."));
-    save_profile(); 
+    save_profile();
   }
 
   // ... Дополнительная логика инициализации других настроек или датчиков на основе SamSetup ...
@@ -254,9 +254,9 @@ void create_data() {
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
       File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
       // get_program(CAPACITY_NUM * 2) форматирует массив программы в строку
-      filePrg.println(get_program(CAPACITY_NUM * 2)); 
+      filePrg.println(get_program(CAPACITY_NUM * 2));
       filePrg.close();
-  } 
+  }
   // ... похожая логика для режимов ПИВО, ДИСТИЛЛЯЦИЯ, НБК с сохранением своих программ ...
 
   // ... логика управления лог-файлами (data.csv) ...

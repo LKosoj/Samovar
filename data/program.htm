@@ -1,11 +1,14 @@
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset='utf-8'>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache">
 <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
 <link rel="stylesheet" href="style.css">
 <title>Самовар</title>
 
+<script src="app.js"></script>
 <script>
   var pwr_unit = "%pwr_unit%"; 
 var _lnIdx = 0;
@@ -14,11 +17,14 @@ var ptv = 0;
 var pbas = 0;
 var programerr;
 var glcalcnum = false;
+var programTemplateBaseline = "";
+var currentProgramTemplateValue = "";
+var programTemplateLoaded = false;
 
 // ========== КОНФИГУРАЦИЯ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) ==========
 var columnParams = null;
 
-function updateHeadsTailsPercent() {
+function updateHeadsTailsPercent(recalculate) {
   const materialSelect = document.getElementById('loadprogram');
   const headsInput = document.getElementById('vlhp');
   const tailsInput = document.getElementById('vltp');
@@ -54,7 +60,7 @@ function updateHeadsTailsPercent() {
   tailsInput.value = tailsPercent;
   
   // Пересчитываем программу, если она уже загружена
-  if (typeof set_num === 'function') {
+  if (recalculate !== false && typeof set_num === 'function') {
     set_num();
   }
 }
@@ -64,7 +70,10 @@ function updateColumnParams() {
   const mat = matSelect ? matSelect.value : 2;
   
   fetch("/ajax_col_params?mat=" + mat)
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      if (!r.ok) throw new Error(r.status + ': ' + (r.statusText || 'ошибка HTTP'));
+      return r.json();
+    })
     .then(function (data) {
       console.log("Данные API:", data);
       if (data) {
@@ -72,7 +81,9 @@ function updateColumnParams() {
         displayColumnParams();
       }
     })
-    .catch(function (err) { console.error("Ошибка API:", err); });
+    .catch(function (err) {
+      alert("Ошибка загрузки параметров колонны: " + err);
+    });
 }
 
 function displayColumnParams() {
@@ -166,26 +177,60 @@ function loadFile(e) {
 	reader.readAsText(file, "UTF-8");
 }
 
- function getProgramFromFile(selectObject){
- var value = selectObject.value;
- var fn;
- if (value == 0) fn = 'program_fruit.txt';
- else if (value == 1) fn = 'program_grain.txt';
- else if (value == 2) fn = 'program_shugar.txt';
- 
- // Обновляем проценты голов и хвостов при смене типа сырья
- updateHeadsTailsPercent();
- 
- // Обновляем параметры колонны при смене типа сырья
- updateColumnParams();
- 
- fetch(fn)
-  .then(function (response) { return response.text(); })
-  .then(function (data) {
-  document.getElementById('WProgram1').value = data
-  glcalcnum = false;
-  calc_program();
-  })
+function getProgramTemplateFile(value) {
+  if (value == 0) return 'program_fruit.txt';
+  if (value == 1) return 'program_grain.txt';
+  if (value == 2) return 'program_shugar.txt';
+  return "";
+}
+
+function updateProgramTemplateBaseline() {
+  var program = document.getElementById('WProgram1');
+  programTemplateBaseline = program ? program.value : "";
+}
+
+function programTemplateDirty() {
+  var program = document.getElementById('WProgram1');
+  if (!program) return false;
+  return programTemplateLoaded ? program.value !== programTemplateBaseline : program.value !== "";
+}
+
+function restoreProgramTemplateSelect(selectObject) {
+  if (programTemplateLoaded) selectObject.value = currentProgramTemplateValue;
+}
+
+async function getProgramFromFile(selectObject, options){
+  var value = selectObject.value;
+  var fn = getProgramTemplateFile(value);
+  var skipConfirm = options && options.skipConfirm;
+  if (!fn) {
+    alert("Неизвестный шаблон программы.");
+    restoreProgramTemplateSelect(selectObject);
+    return false;
+  }
+  if (!skipConfirm && programTemplateDirty() && !confirm("Текущая программа изменена. Заменить её шаблоном?")) {
+    restoreProgramTemplateSelect(selectObject);
+    return false;
+  }
+  try {
+    var response = await fetch(fn);
+    if (!response.ok) throw new Error(response.status + ': ' + (response.statusText || 'ошибка HTTP'));
+    var data = await response.text();
+
+    updateHeadsTailsPercent(false);
+    updateColumnParams();
+    document.getElementById('WProgram1').value = data;
+    glcalcnum = false;
+    calc_program();
+    programTemplateLoaded = true;
+    currentProgramTemplateValue = String(value);
+    updateProgramTemplateBaseline();
+    return true;
+  } catch (err) {
+    restoreProgramTemplateSelect(selectObject);
+    alert("Ошибка загрузки шаблона программы: " + err);
+    return false;
+  }
 }
 
 function SaveProgramToFile() {
@@ -387,23 +432,9 @@ async function set_program(){
     return;
   }
   try {
-    let formData = new FormData(document.forms.mainform);
-    let resp = await fetch('/program', { method: 'POST', body: formData });
-    if (!resp.ok) { alert(resp.status + ': ' + resp.statusText); return; }
-    let text = await resp.text();
-    if (text !== "OK") {
-      document.getElementById('WProgram').value = text;
-      alert("Ok");
-    }
-  } catch (e) {
-    alert('Ошибка сети: ' + e);
-  }
-};
-
-async function sendbutton(command){
-  try {
-    let resp = await fetch('/command?' + command);
-    if (!resp.ok) alert(resp.status + ': ' + resp.statusText);
+    let result = await SamovarApp.postProgram(document.forms.mainform);
+    if (!result.ok) { alert(result.err || 'Программа не установлена'); return; }
+    alert("Программа отправлена.");
   } catch (e) {
     alert('Ошибка сети: ' + e);
   }
@@ -525,12 +556,9 @@ function set_bgcolor(obj){
 }
 
 window.onload = function() {
-  updateColumnParams();
   const loadProgramSelect = document.getElementById("loadprogram");
   if (loadProgramSelect) {
-    // Устанавливаем начальные проценты голов и хвостов для выбранного типа сырья
-    updateHeadsTailsPercent();
-    getProgramFromFile(loadProgramSelect);
+    getProgramFromFile(loadProgramSelect, { skipConfirm: true });
   }
   
   // Обработчик изменения мощности ТЭНа для пересчета отображения
@@ -640,8 +668,8 @@ Samovar v. <span id='version'>%v%</span>
 </div>
 
 <div>
-<textarea cols="40" rows="15" id='WProgram1' name='WProgram1' style="visibility: hidden;position: absolute;width: 20;"></textarea>
-<textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20;">%WProgram%</textarea>
+<textarea cols="40" rows="15" id='WProgram1' name='WProgram1' style="visibility: hidden;position: absolute;width: 20px;"></textarea>
+<textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20px;">%WProgram%</textarea>
 </div>
 
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">

@@ -2,6 +2,8 @@
 #define __SAMOVAR_LUA_H_
 
 #include "Samovar.h"
+#include "samovar_api.h"
+#include "runtime_helpers.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"
@@ -9,6 +11,30 @@
 
 #include <LuaWrapper.h>
 LuaWrapper lua;
+
+inline bool lua_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
+  return xLuaSemaphore && xSemaphoreTake(xLuaSemaphore, timeout) == pdTRUE;
+}
+
+inline void lua_state_unlock(bool locked) {
+  if (locked) xSemaphoreGive(xLuaSemaphore);
+}
+
+inline String lua_exec_locked(String& script, bool collect_garbage = false) {
+  String result = lua.Lua_dostring(&script);
+  if (collect_garbage) {
+    lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
+  }
+  return result;
+}
+
+inline String lua_exec(String& script, bool collect_garbage = false, TickType_t timeout = pdMS_TO_TICKS(50)) {
+  bool locked = lua_state_lock(timeout);
+  if (!locked) return "Lua busy";
+  String result = lua_exec_locked(script, collect_garbage);
+  lua_state_unlock(true);
+  return result;
+}
 
 #include <SimpleMap.h>
 
@@ -22,9 +48,8 @@ LuaWrapper lua;
 
 unsigned long lua_timer[10];  //10 таймеров для lua
 String lua_type_script;
-String script1, script2, btn_script;
-void WriteConsoleLog(String StringLogMsg);
-void change_samovar_mode();
+String script1, script2;
+extern String lua_script_list_cache;
 
 SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, String &b) -> int {
   if (a == b) return 0;      // a and b are equal
@@ -34,27 +59,100 @@ SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, 
 
 TaskHandle_t DoLuaScriptTask = NULL;
 volatile bool lua_finished;
-void do_lua_script(void *parameter);
+volatile bool lua_start_requested = false;
 
-String get_lua_mode_name(bool filename = true);
-void load_lua_script();
+enum LuaJobType : uint8_t {
+  LUA_JOB_NONE = 0,
+  LUA_JOB_SCRIPT,
+  LUA_JOB_INLINE
+};
 
-void set_power(bool On);
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-String get_global_variables();
-void open_valve(bool Val, bool msg);
-void set_current_power(float Volt);
-void set_body_temp();
-void set_mixer(bool On);
-void set_alarm();
-void pause_withdrawal(bool Pause);
-String getValue(const String& data, char separator, int index);
-String get_lua_script(String fn);
-void set_capacity(uint8_t cap);
-float get_alcohol(float t);
-float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure);
-bool set_mixer_pump_target(uint8_t on);
-bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
+String lua_job_script;
+volatile LuaJobType lua_job_type = LUA_JOB_NONE;
+
+inline bool queue_lua_job(LuaJobType type, const String& script) {
+  if (script.length() == 0) return true;
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
+  if (!locked) return false;
+  bool queued = false;
+  if (lua_job_type == LUA_JOB_NONE) {
+    lua_job_script = script;
+    lua_job_type = type;
+    queued = true;
+  }
+  runtime_state_unlock(true);
+  return queued;
+}
+
+inline bool queue_lua_script_job(const String& script) {
+  return queue_lua_job(LUA_JOB_SCRIPT, script);
+}
+
+inline bool queue_lua_inline_job(const String& script) {
+  return queue_lua_job(LUA_JOB_INLINE, script);
+}
+
+inline bool take_lua_job(String& script, LuaJobType& type) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  bool hasJob = false;
+  if (lua_job_type != LUA_JOB_NONE) {
+    script = lua_job_script;
+    type = lua_job_type;
+    lua_job_script = "";
+    lua_job_type = LUA_JOB_NONE;
+    hasJob = true;
+  }
+  runtime_state_unlock(true);
+  return hasJob;
+}
+
+inline bool request_lua_periodic_start() {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  bool accepted = false;
+  if (lua_finished && !lua_start_requested) {
+    lua_start_requested = true;
+    accepted = true;
+  }
+  runtime_state_unlock(true);
+  return accepted;
+}
+
+inline bool consume_lua_periodic_start_request(bool& accepted) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  accepted = false;
+  if (lua_start_requested && lua_finished) {
+    lua_start_requested = false;
+    lua_finished = false;
+    accepted = true;
+  }
+  runtime_state_unlock(true);
+  return true;
+}
+
+inline bool lua_periodic_active(bool& active) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  active = !lua_finished;
+  runtime_state_unlock(true);
+  return true;
+}
+
+inline void finish_lua_periodic_run() {
+  bool locked = runtime_state_lock(portMAX_DELAY);
+  if (locked) {
+    lua_finished = true;
+    runtime_state_unlock(true);
+  }
+}
+
+static bool lua_copy_current_program(WProgram& currentProgram) {
+  if (ProgramNum >= PROGRAM_MAX) return false;
+  currentProgram = program[ProgramNum];
+  return !program_type_empty(currentProgram.WType);
+}
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -173,10 +271,6 @@ static int lua_wrapper_delay(lua_State *lua_state) {
   return 0;
 }
 
-void wait_command_sync() {
-  while (sam_command_sync != SAMOVAR_NONE) vTaskDelay(100 / portTICK_PERIOD_MS);
-}
-
 static int lua_wrapper_millis(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   lua_pushnumber(lua_state, (lua_Number)millis());
@@ -192,22 +286,28 @@ static int lua_wrapper_set_pause_withdrawal(lua_State *lua_state) {
 
 static int lua_wrapper_set_power(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  wait_command_sync();
   int a = luaL_checkinteger(lua_state, 1);
+  SamovarCommands command = SAMOVAR_NONE;
 
   if (a && !PowerOn) {
     if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-      sam_command_sync = SAMOVAR_BEER;
+      command = SAMOVAR_BEER;
     } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-      sam_command_sync = SAMOVAR_BK;
+      command = SAMOVAR_BK;
     } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
-      sam_command_sync = SAMOVAR_NBK;
+      command = SAMOVAR_NBK;
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
-      sam_command_sync = SAMOVAR_DISTILLATION;
+      command = SAMOVAR_DISTILLATION;
     } else
-      sam_command_sync = SAMOVAR_POWER;
+      command = SAMOVAR_POWER;
   } else if (!a && PowerOn)
-    sam_command_sync = SAMOVAR_POWER;
+    command = SAMOVAR_POWER;
+
+  if (command != SAMOVAR_NONE) {
+    if (!queue_samovar_command(command, pdMS_TO_TICKS(100))) {
+      return luaL_error(lua_state, "Samovar command queue busy");
+    }
+  }
 
   return 0;
 }
@@ -249,13 +349,18 @@ static int lua_wrapper_set_body_temp(lua_State *lua_state) {
 
 static int lua_wrapper_set_next_program(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  wait_command_sync();
+  SamovarCommands command = SAMOVAR_NONE;
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-    sam_command_sync = SAMOVAR_START;
+    command = SAMOVAR_START;
   } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    sam_command_sync = SAMOVAR_BEER_NEXT;
+    command = SAMOVAR_BEER_NEXT;
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    sam_command_sync = SAMOVAR_DIST_NEXT;
+    command = SAMOVAR_DIST_NEXT;
+  }
+  if (command != SAMOVAR_NONE) {
+    if (!queue_samovar_command(command, pdMS_TO_TICKS(100))) {
+      return luaL_error(lua_state, "Samovar command queue busy");
+    }
   }
   return 0;
 }
@@ -302,7 +407,7 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
   lua_pop(lua_state, 1);
 
   if (Var == "WFpulseCount") {
-    WFpulseCount = (byte)a;
+    water_pulse_count_set((uint16_t)a);
   } else if (Var == "pump_started") {
     pump_started = (int)a;
   } else if (Var == "valve_status") {
@@ -369,9 +474,11 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   s = lua_tolstring(lua_state, -1, &l);
   Var = s;
   lua_pop(lua_state, 1);
+  WProgram currentProgram;
+  bool hasCurrentProgram = lua_copy_current_program(currentProgram);
   float a = 0;
   if (Var == "WFpulseCount") {
-    a = WFpulseCount;
+    a = water_pulse_count_get();
   } else if (Var == "pump_started") {
     a = pump_started;
   } else if (Var == "valve_status") {
@@ -411,17 +518,17 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
   } else if (Var == "SetScriptOff") {
     a = SetScriptOff;
   } else if (Var == "program_volume") {
-    a = program[ProgramNum].Volume;
+    a = hasCurrentProgram ? currentProgram.Volume : 0;
   } else if (Var == "program_speed") {
-    a = program[ProgramNum].Speed;
+    a = hasCurrentProgram ? currentProgram.Speed : 0;
   } else if (Var == "program_temp") {
-    a = program[ProgramNum].Temp;
+    a = hasCurrentProgram ? currentProgram.Temp : 0;
   } else if (Var == "program_power") {
-    a = program[ProgramNum].Power;
+    a = hasCurrentProgram ? currentProgram.Power : 0;
   } else if (Var == "program_time") {
-    a = program[ProgramNum].Time;
+    a = hasCurrentProgram ? currentProgram.Time : 0;
   } else if (Var == "program_capacity_num") {
-    a = program[ProgramNum].capacity_num;
+    a = hasCurrentProgram ? currentProgram.capacity_num : 0;
   } else if (Var == "capacity_num") {
     a = capacity_num;
   } else if (Var == "target_power_volt") {
@@ -487,15 +594,14 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
   lua_pop(lua_state, 1);
 
   if (Var == "Msg") {
-    Msg = Val;
+    if (!set_web_message_raw(Val)) return luaL_error(lua_state, "Msg busy");
   } else if (Var == "SamovarStatus") {
     // [2d] SamovarStatus защищён runtime_state_lock (как в logic.h C-2).
     {
       bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-      if (locked) {
-        SamovarStatus = Val;
-        runtime_state_unlock(true);
-      }
+      if (!locked) return luaL_error(lua_state, "SamovarStatus busy");
+      SamovarStatus = Val;
+      runtime_state_unlock(true);
     }
   } else if (Var == "test_str_val") {
     test_str_val = Val;
@@ -580,14 +686,15 @@ static int lua_wrapper_set_lua_status(lua_State *lua_state) {
   s1 = lua_tolstring(lua_state, -1, &l1);
   Var = s1;
   lua_pop(lua_state, 1);
-  Lua_status = Var;
+  if (!set_lua_status_value(Var)) return luaL_error(lua_state, "Lua_status busy");
   return 0;
 }
 
 static int lua_wrapper_set_capacity(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  uint8_t a = luaL_checknumber(lua_state, 1);
-  set_capacity(a);
+  int a = luaL_checkinteger(lua_state, 1);
+  if (a < 0 || a > CAPACITY_NUM) return luaL_error(lua_state, "capacity out of range");
+  set_capacity((uint8_t)a);
   return 0;
 }
 
@@ -644,22 +751,23 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
   s = lua_tolstring(lua_state, -1, &l);
   Var = s;
   lua_pop(lua_state, 1);
+  WProgram currentProgram;
+  bool hasCurrentProgram = lua_copy_current_program(currentProgram);
   String c;
   if (Var == "Msg") {
-    c = Msg;
+    if (!copy_web_message_raw(c)) return luaL_error(lua_state, "Msg busy");
   } else if (Var == "SamovarStatus") {
     // [2d] Читаем SamovarStatus под замком (пишется в logic.h под runtime_state_lock).
     {
       bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-      if (locked) {
-        c = SamovarStatus;
-        runtime_state_unlock(true);
-      }
+      if (!locked) return luaL_error(lua_state, "SamovarStatus busy");
+      c = SamovarStatus;
+      runtime_state_unlock(true);
     }
   } else if (Var == "test_str_val") {
     c = test_str_val;
   } else if (Var == "program_type") {
-    c = program[ProgramNum].WType;
+    c = hasCurrentProgram ? program_type_to_string(currentProgram.WType) : String();
   } else if (Var.length() > 0) {
     WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var);
     return 0;
@@ -999,7 +1107,7 @@ void lua_init() {
       WriteConsoleLog(script);
       WriteConsoleLog(F("--END LUA SCRIPT--"));
     }
-    String sr = lua.Lua_dostring(&script);
+    String sr = lua_exec(script);
     if (sr.length() > 0) WriteConsoleLog("INI ERR " + sr);
   }
   lua_type_script = get_lua_mode_name();
@@ -1058,36 +1166,29 @@ String get_lua_script(String fn) {
   return s;
 }
 
-void run_lua_script(String fn) {
-  // [W-4] btn_script читается в SysTicker (core 0); пишем из async под замком.
+bool run_lua_script(String fn) {
   String s = get_lua_script(fn);
   if (s.length() > 0) s = get_global_variables() + s;
-  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
-  if (locked) {
-    btn_script = s;
-    runtime_state_unlock(true);
+  if (!queue_lua_script_job(s)) {
+    WriteConsoleLog(F("Lua busy"));
+    return false;
   }
+  return true;
 }
 
 String run_lua_string(String lstr) {
   String sr = "";
   if (lstr.length() > 0) {
-    if (show_lua_script) {
-      WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-      WriteConsoleLog(lstr);
-      WriteConsoleLog(F("--END LUA SCRIPT--"));
-    }
 #ifdef USE_MQTT
     String MsgPl = lstr;
     MsgPl.replace(",", ";");
     MqttSendMsg(MsgPl + "," + NOTIFY_MSG, "msg");
 #endif
-    sr = lua.Lua_dostring(&lstr);
-    sr.trim();
-    if (sr.length() > 0) {
-      WriteConsoleLog("ERR in lua: " + sr);
+    if (!queue_lua_inline_job(lstr)) {
+      sr = "Lua busy";
+      WriteConsoleLog(sr);
     } else {
-      WriteConsoleLog(F("Lua run complete"));
+      WriteConsoleLog(F("Lua queued"));
     }
   }
   return sr;
@@ -1097,10 +1198,12 @@ void load_lua_script() {
   // [W-4] script1/script2 читаются из do_lua_script (core 1); пишем под замком.
   String s1 = get_lua_script("script.lua");
   String s2 = get_lua_script(lua_type_script);
+  String btnList = get_lua_script_list();
   bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
   if (locked) {
     script1 = s1;
     script2 = s2;
+    lua_script_list_cache = btnList;
     runtime_state_unlock(true);
   }
 }
@@ -1109,6 +1212,7 @@ void load_lua_script() {
 void do_lua_script(void *parameter) {
   String sr;
   sr.reserve(128);
+  unsigned long last_periodic_lua_start = 0;
   //String glv;
   while (1) {
     // Приостанавливаем выполнение Lua скриптов во время OTA обновления
@@ -1116,12 +1220,68 @@ void do_lua_script(void *parameter) {
       vTaskDelay(500 / portTICK_PERIOD_MS);  // Увеличиваем задержку во время OTA
       continue;
     }
-    
+
+    // One-shot Lua jobs from web/Blynk/buttons are executed only by this task.
+    {
+      String local_job_script;
+      LuaJobType local_job_type = LUA_JOB_NONE;
+      if (take_lua_job(local_job_script, local_job_type)) {
+        bool lua_locked = false;
+        lua_locked = lua_state_lock(portMAX_DELAY);
+        if (!lua_locked) {
+          WriteConsoleLog(F("Lua mutex unavailable"));
+          vTaskDelay(50 / portTICK_PERIOD_MS);
+          continue;
+        }
+        if (show_lua_script && local_job_script.length() > 0) {
+          WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+          WriteConsoleLog(local_job_script);
+          WriteConsoleLog(F("--END LUA SCRIPT--"));
+        }
+        sr = lua_exec_locked(local_job_script);
+        sr.trim();
+        if (sr.length() > 0) {
+          WriteConsoleLog((local_job_type == LUA_JOB_INLINE) ? "ERR in lua: " + sr : "ERR in BTN_SCRIPT " + sr);
+        } else {
+          WriteConsoleLog((local_job_type == LUA_JOB_INLINE) ? F("Lua run complete") : F("BTN_SCRIPT complete"));
+        }
+        lua_state_unlock(lua_locked);
+      }
+    }
+
     if (SetScriptOff && loop_lua_fl) {
       loop_lua_fl = false;
     }
-    if (!lua_finished) {
-      // [W-4] Копируем script1/script2 под замком, затем выполняем без удержания замка.
+    if (loop_lua_fl && !SetScriptOff) {
+      unsigned long now = millis();
+      if (last_periodic_lua_start == 0 || now - last_periodic_lua_start >= 1000) {
+        if (request_lua_periodic_start()) last_periodic_lua_start = now;
+      }
+    }
+    bool has_lua_start_request = false;
+    if (!consume_lua_periodic_start_request(has_lua_start_request)) {
+      vTaskDelay(5 / portTICK_PERIOD_MS);
+      continue;
+    }
+    bool lua_active = false;
+    if (!lua_periodic_active(lua_active)) {
+      vTaskDelay(5 / portTICK_PERIOD_MS);
+      continue;
+    }
+    if (lua_active) {
+      // [W-4/W3] Копируем script1/script2 под runtime lock, но после захвата Lua VM:
+      // если runtime lock занят, оставляем lua_finished=false и повторяем позже.
+      bool lua_locked = lua_state_lock(portMAX_DELAY);
+      if (!lua_locked) {
+        WriteConsoleLog(F("Lua mutex unavailable"));
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+        continue;
+      }
+      if (ota_running) {
+        lua_state_unlock(lua_locked);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        continue;
+      }
       String local_s1, local_s2;
       {
         bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
@@ -1129,6 +1289,10 @@ void do_lua_script(void *parameter) {
           local_s1 = script1;
           local_s2 = script2;
           runtime_state_unlock(true);
+        } else {
+          lua_state_unlock(lua_locked);
+          vTaskDelay(5 / portTICK_PERIOD_MS);
+          continue;
         }
       }
 
@@ -1138,7 +1302,7 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(local_s1);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua.Lua_dostring(&local_s1);
+        sr = lua_exec_locked(local_s1);
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in script.lua: " + sr);
       }
@@ -1150,13 +1314,14 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(local_s2);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua.Lua_dostring(&local_s2);
+        sr = lua_exec_locked(local_s2, true);
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
+      } else {
+        lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
       }
-      // Принудительно вызываем сборщик мусора
-      lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
-      lua_finished = true;
+      finish_lua_periodic_run();
+      lua_state_unlock(lua_locked);
     } else {
       vTaskDelay(50 / portTICK_PERIOD_MS);
     }
@@ -1167,17 +1332,15 @@ void do_lua_script(void *parameter) {
   }
 }
 
-void start_lua_script() {
-  if (!lua_finished) {
-    WriteConsoleLog("lua runing");
-    return;
+bool start_lua_script() {
+  if (!request_lua_periodic_start()) {
+    WriteConsoleLog(F("Lua busy"));
+    return false;
   }
-
-  lua_finished = false;
+  return true;
 }
 
 String get_global_variables() {
-  return "";
   String Variables;
   //  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
   //  Variables += "start_pressure = " + String(start_pressure) + "\r\n";
@@ -1203,7 +1366,13 @@ String get_global_variables() {
   Variables += "StepperMoving = " + String(StepperMoving) + "\r\n";
   Variables += "program_Pause = " + String(program_Pause) + "\r\n";
   Variables += "program_Wait = " + String(program_Wait) + "\r\n";
-  Variables += "program_Wait_Type = \"" + program_Wait_Type + "\"\r\n";
+  String programWaitTypeText;
+  if (!copy_program_wait_type_text(programWaitTypeText)) {
+    WriteConsoleLog(F("WARNING! program_Wait_Type busy"));
+    Variables += "error('program_Wait_Type busy')\r\n";
+  } else {
+    Variables += "program_Wait_Type = \"" + programWaitTypeText + "\"\r\n";
+  }
   //  Variables += "begintime = " + String(begintime) + "\r\n";
   //  Variables += "t_min = " + String(t_min) + "\r\n";
   //  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
@@ -1229,13 +1398,15 @@ String get_global_variables() {
   Variables += "alarm_event = " + String(alarm_event) + "\r\n";
   Variables += "acceleration_heater = " + String(acceleration_heater) + "\r\n";
   Variables += "valve_status = " + String(valve_status) + "\r\n";
-  Variables += "program_type = \"" + program[ProgramNum].WType + "\"\r\n";
-  Variables += "program_volume = " + String(program[ProgramNum].Volume) + "\r\n";
-  Variables += "program_speed = " + String(program[ProgramNum].Speed) + "\r\n";
-  Variables += "program_temp = " + String(program[ProgramNum].Temp) + "\r\n";
-  Variables += "program_power = " + String(program[ProgramNum].Power) + "\r\n";
-  Variables += "program_time = " + String(program[ProgramNum].Time) + "\r\n";
-  Variables += "program_capacity_num = " + String(program[ProgramNum].capacity_num) + "\r\n";
+  WProgram currentProgram;
+  bool hasCurrentProgram = lua_copy_current_program(currentProgram);
+  Variables += "program_type = \"" + String(hasCurrentProgram ? program_type_to_string(currentProgram.WType) : String()) + "\"\r\n";
+  Variables += "program_volume = " + String(hasCurrentProgram ? currentProgram.Volume : 0) + "\r\n";
+  Variables += "program_speed = " + String(hasCurrentProgram ? currentProgram.Speed : 0) + "\r\n";
+  Variables += "program_temp = " + String(hasCurrentProgram ? currentProgram.Temp : 0) + "\r\n";
+  Variables += "program_power = " + String(hasCurrentProgram ? currentProgram.Power : 0) + "\r\n";
+  Variables += "program_time = " + String(hasCurrentProgram ? currentProgram.Time : 0) + "\r\n";
+  Variables += "program_capacity_num = " + String(hasCurrentProgram ? currentProgram.capacity_num : 0) + "\r\n";
 
   //  Variables += "loop_lua_fl = " + String(loop_lua_fl) + "\r\n";
   //  Variables += "show_lua_script = " + String(show_lua_script) + "\r\n";
@@ -1249,7 +1420,13 @@ String get_global_variables() {
   Variables += "TankTemp = " + String(TankSensor.avgTemp) + "\r\n";
   Variables += "ACPTemp = " + String(ACPSensor.avgTemp) + "\r\n";
 
-  Variables += "current_power_mode = \"" + get_current_power_mode_value() + "\"\r\n";
+  String currentPowerMode;
+  if (!copy_current_power_mode_value(currentPowerMode)) {
+    WriteConsoleLog(F("WARNING! current_power_mode busy"));
+    Variables += "error('current_power_mode busy')\r\n";
+  } else {
+    Variables += "current_power_mode = \"" + currentPowerMode + "\"\r\n";
+  }
   Variables += "target_power_volt = " + String(target_power_volt) + "\r\n";
 
 #ifdef USE_WATER_PUMP

@@ -1,22 +1,9 @@
 #include "Samovar.h"
+#include "samovar_api.h"
 #ifdef SAMOVAR_USE_BLYNK
 #include <BlynkSimpleEsp32.h>
 
-void menu_samovar_start();
-void pause_withdrawal(bool PauseOn);
-void set_current_power(float power);
-void set_pump_speed(float speed, bool msg);
-void set_body_temp();
-int get_liquid_volume();
-String get_Samovar_Status();
-float get_speed_from_rate(float rate);
-String get_beer_program();
-String get_dist_program();
-String get_nbk_program();
-String get_program(uint8_t s);
-
 #ifdef USE_LUA
-String run_lua_string(String lstr);
 WidgetTerminal terminal(V22);
 
 BLYNK_WRITE(V22) {
@@ -27,7 +14,7 @@ BLYNK_WRITE(V22) {
     terminal.println("ERR in lua: " + lstr);
   }
   else {
-    terminal.println(F("Lua run complete"));
+    terminal.println(F("Lua queued"));
   }
   terminal.flush();
 }
@@ -210,7 +197,7 @@ BLYNK_READ(V24) {
   } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
     Blynk.virtualWrite(V24, get_nbk_program());
   } else {
-    Blynk.virtualWrite(V24, get_program(CAPACITY_NUM * 2));
+    Blynk.virtualWrite(V24, get_program(PROGRAM_END));
   }
   inReadHandler = false;
 }
@@ -263,12 +250,14 @@ BLYNK_WRITE(V12) {
   if (!PowerOn) return;
   int State = param.asInt();
   if (State == 1) {
+    SamovarCommands command = SAMOVAR_START;
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      sam_command_sync = SAMOVAR_BEER_NEXT;
+      command = SAMOVAR_BEER_NEXT;
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      sam_command_sync = SAMOVAR_DIST_NEXT;
-    } else {
-      sam_command_sync = SAMOVAR_START;
+      command = SAMOVAR_DIST_NEXT;
+    }
+    if (!queue_samovar_command(command)) {
+      SendMsg("Очередь команд занята: команда Blynk V12 не поставлена", WARNING_MSG);
     }
   }
 }
@@ -281,22 +270,27 @@ BLYNK_WRITE(V13) {
 
 BLYNK_WRITE(V3) {
   int Value3 = param.asInt();  // assigning incoming value from pin V3 to a variable
-  if (Value3 == 1 && PowerOn) menu_samovar_start();
-  else
-    sam_command_sync = SAMOVAR_RESET;
+  if (Value3 == 1 && PowerOn) {
+    menu_samovar_start();
+  } else {
+    if (!queue_samovar_reset_command()) SendMsg("Очередь команд занята: reset из Blynk не поставлен", WARNING_MSG);
+  }
 }
 BLYNK_WRITE(V4) {
   //int Value4 = param.asInt();  // assigning incoming value from pin V4 to a variable
+  SamovarCommands command = SAMOVAR_POWER;
   if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-    sam_command_sync = SAMOVAR_BEER;
+    command = SAMOVAR_BEER;
   } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-    sam_command_sync = SAMOVAR_BK;
+    command = SAMOVAR_BK;
   } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
-    sam_command_sync = SAMOVAR_NBK;
+    command = SAMOVAR_NBK;
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
-    sam_command_sync = SAMOVAR_DISTILLATION;
-  } else
-    sam_command_sync = SAMOVAR_POWER;
+    command = SAMOVAR_DISTILLATION;
+  }
+  if (!queue_samovar_command(command)) {
+    SendMsg("Очередь команд занята: команда Blynk V4 не поставлена", WARNING_MSG);
+  }
   //set_power(Value4);
 }
 

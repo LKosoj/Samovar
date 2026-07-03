@@ -8,7 +8,6 @@
 ## Ключевые структуры данных
 
 - `TimePredictor` — Структура для прогнозирования оставшегося и общего времени дистилляции на основе изменения температуры и спиртуозности.
-- `QualityParams` — Структура, содержащая оценку качества процесса дистилляции, включая общий балл и рекомендации.
 - `program` — Массив структур, определяющих этапы дистилляции (тип, скорость, ёмкость, мощность).
 - `timePredictor` — Экземпляр `TimePredictor` для хранения данных прогнозирования времени завершения этапа.
 
@@ -114,6 +113,5 @@
 - [modules/nbk__h](nbk__h.md)
 - [modules/partition_manager__py](partition_manager__py.md)
 - [modules/pumppwm__h](pumppwm__h.md)
-- [modules/quality__h](quality__h.md)
 - [modules/sensorinit__h](sensorinit__h.md)
 - [modules/wifi_htm_gz__h](wifi_htm_gz__h.md)

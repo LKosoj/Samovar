@@ -33,20 +33,18 @@ void set_pump_pwm(float duty) {
 
   duty = constrain(duty, 0, 1023);
 
-  if (!pump_started && duty > 0) {
-    wp_count = 0;
-    pump_pwm.write(PWM_START_VALUE * 10);
-    water_pump_speed = PWM_START_VALUE * 10;
-    pump_started = true;
-    pump_pwm.write(duty);
-    water_pump_speed = duty;
-    if (bk_pwm != PWM_LOW_VALUE * 40) {
-      delay(1000);
-      pump_pwm.write(bk_pwm);
-      water_pump_speed = bk_pwm;
-    }
-    return;
-  }
+	  if (!pump_started && duty > 0) {
+	    wp_count = 0;
+	    pump_pwm.write(PWM_START_VALUE * 10);
+	    water_pump_speed = PWM_START_VALUE * 10;
+	    pump_started = true;
+	    if (bk_pwm != PWM_LOW_VALUE * 40) {
+	      return;
+	    }
+	    pump_pwm.write(duty);
+	    water_pump_speed = duty;
+	    return;
+	  }
   if (duty > 0 && wp_count < 10 && pump_started) {
     if (bk_pwm != PWM_LOW_VALUE * 40) {
       pump_pwm.write(bk_pwm);
@@ -64,8 +62,9 @@ void set_pump_pwm(float duty) {
   //MsgLog = duty;
 }
 
-void set_pump_speed_pid(float temp) {
-  pump_regulator.input = temp;
-  set_pump_pwm(pump_regulator.getResultNow());
-}
+	void set_pump_speed_pid(float temp) {
+	  pump_regulator.setpoint = SamSetup.SetWaterTemp;
+	  pump_regulator.input = temp;
+	  set_pump_pwm(pump_regulator.getResultNow());
+	}
 #endif

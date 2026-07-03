@@ -1,5 +1,10 @@
+#pragma once
+
 #include <Arduino.h>
 #include "Samovar.h"
+#include "samovar_api.h"
+#include "runtime_helpers.h"
+#include "mode_common.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"
@@ -8,82 +13,6 @@
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
 #endif
-
-/**
- * @brief Завершить работу бражной колонны, отправить уведомление, выключить нагрев и сбросить счетчики.
- */
-void bk_finish();
-
-/**
- * @brief Установить режим питания.
- * @param Mode Режим (строка)
- */
-void set_power_mode(String Mode);
-
-/**
- * @brief Установить текущую мощность.
- * @param power Мощность (Вт)
- */
-void set_current_power(float power);
-
-/**
- * @brief Включить или выключить буззер.
- * @param On true — включить, false — выключить
- */
-void set_buzzer(bool On);
-
-/**
- * @brief Сбросить счетчик датчиков.
- */
-void reset_sensor_counter();
-
-/**
- * @brief Проверить ошибки питания и обработать их.
- */
-void check_power_error();
-
-/**
- * @brief Включить или выключить питание.
- * @param On true — включить, false — выключить
- */
-void set_power(bool On);
-
-/**
- * @brief Создать файл с данными текущей сессии.
- */
-void create_data();
-
-/**
- * @brief Открыть или закрыть клапан.
- * @param Val true — открыть, false — закрыть
- * @param msg true — отправить сообщение
- */
-void open_valve(bool Val, bool msg);
-
-/**
- * @brief Установить ШИМ для насоса.
- * @param duty Значение ШИМ
- */
-void set_pump_pwm(float duty);
-
-/**
- * @brief Установить скорость насоса по ПИД-регулированию.
- * @param temp Целевая температура
- */
-void set_pump_speed_pid(float temp);
-
-/**
- * @brief Отправить сообщение пользователю.
- * @param m Текст сообщения
- * @param msg_type Тип сообщения
- */
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-
-/**
- * @brief Проверить, идет ли кипячение.
- * @return true если кипит, иначе false
- */
-bool check_boiling();
 
 /**
  * @brief Установить температуру воды (ШИМ).
@@ -106,26 +35,24 @@ void set_water_temp(float duty) {
  */
 void bk_proc() {
 
+  if (SamovarStatusInt != 3000) return;
+
+  if (!sensor_valid(TankSensor) && process_sensor_failed("БК", "куба")) return;
+
   if (!PowerOn) {
-#ifdef USE_MQTT
-    SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + ",BK," + SessionDescription, "st");
-#endif
-    set_power(true);
-#ifdef SAMOVAR_USE_POWER
-    delay(1000);
-    set_power_mode(POWER_SPEED_MODE);
-#else
-    set_current_power_mode_value(POWER_SPEED_MODE);
-    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
-#endif
-    create_data();  //создаем файл с данными
-    SteamSensor.Start_Pressure = bme_pressure;
-    SendMsg(("Включен нагрев бражной колонны"), NOTIFY_MSG);
+    if (!mode_start_heating_session(
+      3000,
+      "Ошибка создания файла лога. Старт БК отменён.",
+      "Описание сессии занято. Старт БК отменён.",
+      String("BK"),
+      "Включен нагрев бражной колонны",
+      false
+    )) return;
   }
 
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
     bk_finish();
+    return;
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
@@ -135,18 +62,31 @@ void bk_proc() {
  */
 void check_alarm_bk() {
   //сбросим паузу события безопасности
-  if (alarm_t_min > 0 && alarm_t_min <= millis()) alarm_t_min = 0;
+  mode_clear_alarm_pause_if_expired();
+
+  if (PowerOn && !mode_check_powered_cooling_sensors("БК")) return;
 
 #ifdef SAMOVAR_USE_POWER
   check_power_error();
 #endif
 
-  if (PowerOn && !valve_status && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
+#ifdef USE_WATER_PUMP
+  bool coolingOpenedThisTick = false;
+#endif
+
+  if (mode_should_open_cooling(true, true, true)) {
     open_valve(true, true);
 #ifdef USE_WATER_PUMP
     set_pump_pwm(bk_pwm);
+    coolingOpenedThisTick = true;
 #endif
   }
+
+#ifdef USE_WATER_PUMP
+  if (!coolingOpenedThisTick && valve_status && pump_started && bk_pwm != PWM_LOW_VALUE * 40 && wp_count < 10) {
+    set_pump_pwm(bk_pwm);
+  }
+#endif
 
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (current_power_mode_is(POWER_SPEED_MODE) && (check_boiling() || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
@@ -162,46 +102,36 @@ void check_alarm_bk() {
 #endif
   }
 
-  if (!PowerOn && !is_self_test && valve_status && WaterSensor.avgTemp <= TARGET_WATER_TEMP - 20) {
+  if (mode_should_close_cooling(TARGET_WATER_TEMP - 20, false)) {
     open_valve(false, true);
-#ifdef USE_WATER_PUMP
-    if (pump_started) set_pump_pwm(0);
-#endif
+    mode_stop_cooling_pump_if_started();
   }
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP) && PowerOn) {
-    set_buzzer(true);
+  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
     //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
-    set_power(false);
-    SendMsg(("Аварийное отключение! Превышена максимальная температура воды охлаждения!"), ALARM_MSG);
+    String s = "";
+    if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
+      s = s + " воды охлаждения";
+    if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))
+      s = s + " ТСА";
+    request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s);
   }
 
-#ifdef USE_WATERSENSOR
   //Проверим, что вода подается
-  if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
-    set_buzzer(true);
-    //Если с водой проблемы - выключаем нагрев, пусть оператор разбирается
-    sam_command_sync = SAMOVAR_POWER;
-    SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG);
-  }
-#endif
+  mode_request_water_flow_emergency_if_needed();
 
-  if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
+  if (mode_water_pre_alarm_due()) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
 
 #ifdef SAMOVAR_USE_POWER
-    if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
-      set_buzzer(true);
-      SendMsg("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, ALARM_MSG);
-      //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
-      set_current_power(target_power_volt - 5);
-    }
+    //Попробуем снизить мощность на 5 В/шагов регулятора, чтобы исключить перегрев колонны.
+    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, 5);
 #else
     SendMsg(("Критическая температура воды!"), WARNING_MSG);
 #endif
-    alarm_t_min = millis() + 30000;
+    mode_set_alarm_pause_ms(30000);
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }

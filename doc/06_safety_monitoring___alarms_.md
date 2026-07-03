@@ -73,13 +73,13 @@ sequenceDiagram
 // Настройки предельных значений для контроля автоматики
 
 //Температура воды, при достижении которой будет оповещен оператор
-#define ALARM_WATER_TEMP 70 
+#define ALARM_WATER_TEMP 70
 //Максимальное значение температуры воды, при котором выключится питание
 #define MAX_WATER_TEMP 75
 //Максимальное значение температуры пара, при котором выключится питание
 #define MAX_STEAM_TEMP 98.8
 //Максимальное значение температуры в ТСА, при котором выключится питание
-#define MAX_ACP_TEMP 75 
+#define MAX_ACP_TEMP 75
 
 // ... другие настройки безопасности, такие как WF_ALARM_COUNT (порог по датчику потока), MaxPressureValue и др.
 ```
@@ -94,10 +94,10 @@ sequenceDiagram
 void check_alarm() {
   // --- Проверка критических температурных аварий ---
   // Если ЛЮБАЯ из этих температур превышает абсолютный максимум И питание включено...
-  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP || 
-       WaterSensor.avgTemp >= MAX_WATER_TEMP || 
+  if ((SteamSensor.avgTemp >= MAX_STEAM_TEMP ||
+       WaterSensor.avgTemp >= MAX_WATER_TEMP ||
        ACPSensor.avgTemp >= MAX_ACP_TEMP) && PowerOn) {
-    
+
     // ... тогда срабатывает экстренное отключение!
     delay(1000); // Короткая пауза для выполнения других команд
     set_buzzer(true); // Подать аварийный сигнал!
@@ -108,14 +108,14 @@ void check_alarm() {
     if (SteamSensor.avgTemp >= MAX_STEAM_TEMP) s += " Пара";
     if (WaterSensor.avgTemp >= MAX_WATER_TEMP) { if (s.length() > 0) s+= " и"; s += " Воды"; }
     if (ACPSensor.avgTemp >= MAX_ACP_TEMP) { if (s.length() > 0) s+= " и"; s += " ТСА"; }
-    
+
     SendMsg("Аварийное отключение! Превышена максимальная температура" + s, ALARM_MSG); // Критическое сообщение
-    
+
     // Глобальный флаг, что произошла авария (предотвращает перезапуск системы и пр.)
-    alarm_event = true; 
-    
+    alarm_event = true;
+
     // Примечание: состояние системы также может обновляться здесь или обработчиком отключения питания (см. Глава 3)
-    
+
     return; // Прекратить дальнейшие проверки в этом цикле, произошла критическая авария.
   }
 
@@ -126,7 +126,7 @@ void check_alarm() {
   if ((WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5) && PowerOn && alarm_t_min == 0) {
     set_buzzer(true); // Подать сигнал предупреждения (может отличаться от критичного)
     SendMsg(("Критическая температура воды!"), WARNING_MSG); // Предупреждение
-    
+
     // При желании принять менее радикальные меры, например, снизить мощность (если есть регулятор)
     #ifdef SAMOVAR_USE_POWER
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
@@ -135,7 +135,7 @@ void check_alarm() {
         set_current_power(target_power_volt * 0.9); // Снизить мощность на 10%
     }
     #endif
-    
+
     // Установить таймер, чтобы не срабатывать немедленно снова
     alarm_t_min = millis() + 1000 * 30; // Ждать 30 секунд до следующего срабатывания
   }
@@ -147,7 +147,7 @@ void check_alarm() {
   if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
       set_buzzer(true); // Подать аварийный сигнал
       // Сигнализировать системе выполнить отключение и очистку (см. синхронизирующую команду Глава 3)
-      sam_command_sync = SAMOVAR_POWER; 
+      queue_samovar_command(SAMOVAR_POWER);
       SendMsg(("Аварийное отключение! Прекращена подача воды."), ALARM_MSG); // Критическое сообщение
       alarm_event = true; // Глобальный флаг аварии
       return; // Прекратить дальнейшие проверки
@@ -164,17 +164,17 @@ void check_alarm() {
           whls.resetStates(); // Сбросить состояние после обнаружения
           set_buzzer(true); // Подать сигнал аварии
           SendMsg(("Сработал датчик захлёба!"), ALARM_MSG); // Критическое сообщение
-          
+
           // Эта авария часто вызывает *снижение* мощности, а не полное отключение
           // Это позволяет колонне очиститься от накопившейся жидкости.
           #ifdef SAMOVAR_USE_POWER
           // Сохраняем текущую мощность перед снижением
-          prev_target_power_volt = target_power_volt; 
+          prev_target_power_volt = target_power_volt;
           // Значительно снижаем мощность (например, на 20%)
-          set_current_power(target_power_volt * 0.8); 
+          set_current_power(target_power_volt * 0.8);
           SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
           #endif
-          
+
           // Установить таймер на восстановление перед повторной проверкой аварии
           alarm_h_min = millis() + 1000 * 40; // Ждать 40 секунд
       }
@@ -200,7 +200,7 @@ void check_alarm() {
       return; // Прекратить дальнейшие проверки
   }
   #endif
-  
+
   // ... здесь могут быть и другие проверки (например, превышение количества ошибок чтения датчиков)
 
   // Если критическая авария *уже* была обнаружена в прошлом цикле (alarm_event == true),

@@ -62,7 +62,6 @@ nav:
   - NVS_Manager.ino: modules/NVS_Manager__ino.md
   - partition_manager.py: modules/partition_manager__py.md
   - pumppwm.h: modules/pumppwm__h.md
-  - quality.h: modules/quality__h.md
   - Samovar.h: modules/Samovar__h.md
   - Samovar.ino: modules/Samovar__ino.md
   - Samovar_ini.h: modules/Samovar_ini__h.md

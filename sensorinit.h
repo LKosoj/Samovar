@@ -3,11 +3,14 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include "Samovar.h"
+#include "samovar_api.h"
+#include "runtime_helpers.h"
 #include "pumppwm.h"
 
 #ifdef USE_LUA
 #include "lua.h"
 #endif
+
 // Функция загрузки программы по умолчанию для текущего режима
 void load_default_program_for_mode() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
@@ -45,31 +48,60 @@ Adafruit_BMP280 bme;  // I2C
 Adafruit_BME280 bme;  // I2C
 #endif
 
-String get_Samovar_Status();
-void set_power(bool On);
-void clok();
-void clok1();
-String append_data();
-void stopService(void);
-void startService(void);
-void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
-void set_beer_program(String WProgram);
-void set_program(String WProgram);
-void set_dist_program(String WProgram);
-void set_nbk_program(String WProgram);
-String getDSAddress(DeviceAddress deviceAddress);
-void setupOpenLog(void);
-void createFile(char* fileName);
-void set_capacity(uint8_t cap);
-void init_pump_pwm(uint8_t pin, int freq);
-void set_pump_pwm(float duty);
-
 //**************************************************************************************************************
 // Функции для работы с сенсорами
 //**************************************************************************************************************
 
-void printAddress(DeviceAddress deviceAddress);
-void reset_sensor_counter(void);
+static const uint8_t SAMOVAR_DS_ADDRESS_MAX = 6;
+
+struct DSAddressSnapshot {
+  DeviceAddress addr[SAMOVAR_DS_ADDRESS_MAX];
+  uint8_t count;
+};
+
+extern portMUX_TYPE dsAddressMux;
+
+inline void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress) {
+  for (uint8_t dsj = 0; dsj < 8; dsj++) {
+    DevTAddress[dsj] = DevSAddress[dsj];
+  }
+}
+
+inline void set_invalid_ds_address(uint8_t* address) {
+  for (uint8_t dsj = 0; dsj < 8; dsj++) {
+    address[dsj] = 255;
+  }
+}
+
+inline bool ds_address_equal(const uint8_t* left, const uint8_t* right) {
+  for (uint8_t dsj = 0; dsj < 8; dsj++) {
+    if (left[dsj] != right[dsj]) return false;
+  }
+  return true;
+}
+
+inline bool ds_address_invalid(const uint8_t* address) {
+  for (uint8_t dsj = 0; dsj < 8; dsj++) {
+    if (address[dsj] != 255) return false;
+  }
+  return true;
+}
+
+inline void copy_ds_address_snapshot(DSAddressSnapshot& snapshot) {
+  snapshot.count = 0;
+  for (uint8_t i = 0; i < SAMOVAR_DS_ADDRESS_MAX; i++) {
+    set_invalid_ds_address(snapshot.addr[i]);
+  }
+
+  portENTER_CRITICAL(&dsAddressMux);
+  uint8_t count = DScnt;
+  if (count > SAMOVAR_DS_ADDRESS_MAX) count = SAMOVAR_DS_ADDRESS_MAX;
+  snapshot.count = count;
+  for (uint8_t i = 0; i < count; i++) {
+    CopyDSAddress(DSAddr[i], snapshot.addr[i]);
+  }
+  portEXIT_CRITICAL(&dsAddressMux);
+}
 
 //***************************************************************************************************************
 // считываем параметры с датчика BME680
@@ -274,41 +306,50 @@ void scan_ds_adress() {
   sensors.begin();  // стартуем датчики температуры
 
   uint8_t dc = 0;
+  DeviceAddress foundAddr[SAMOVAR_DS_ADDRESS_MAX];
 
-  while (sensors.getAddress(DSAddr[dc], dc)) {
-    sensors.setResolution(DSAddr[dc], 12);  // устанавливаем разрешение для датчика
-    dc++;
-    if (dc > 5) break;
+  for (uint8_t i = 0; i < SAMOVAR_DS_ADDRESS_MAX; i++) {
+    set_invalid_ds_address(foundAddr[i]);
   }
 
+  while (dc < SAMOVAR_DS_ADDRESS_MAX && sensors.getAddress(foundAddr[dc], dc)) {
+    sensors.setResolution(foundAddr[dc], 12);  // устанавливаем разрешение для датчика
+    dc++;
+  }
+
+  portENTER_CRITICAL(&dsAddressMux);
   DScnt = dc;
+  for (uint8_t i = 0; i < SAMOVAR_DS_ADDRESS_MAX; i++) {
+    CopyDSAddress(foundAddr[i], DSAddr[i]);
+  }
+  portEXIT_CRITICAL(&dsAddressMux);
 
   // определяем устройства на шине
 #ifdef __SAMOVAR_DEBUG
   Serial.print("Locating DS18B20...");
   Serial.print("Found ");
-  Serial.print(DScnt, DEC);
+  Serial.print(dc, DEC);
   Serial.println(" devices.");
 #endif
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("1 Sensor Address: ");  // пишем адрес датчика 0
-  printAddress(DSAddr[0]);
+  printAddress(foundAddr[0]);
   Serial.println();
   Serial.print("2 Sensor Address: ");  // пишем адрес датчика 1
-  printAddress(DSAddr[1]);
+  printAddress(foundAddr[1]);
   Serial.println();
   Serial.print("3 Sensor Address: ");  // пишем адрес датчика 2
-  printAddress(DSAddr[2]);
+  printAddress(foundAddr[2]);
   Serial.println();
   Serial.print("4 Sensor Address: ");  // пишем адрес датчика 3
-  printAddress(DSAddr[3]);
+  printAddress(foundAddr[3]);
   Serial.println();
   Serial.print("5 Sensor Address: ");  // пишем адрес датчика 4
-  printAddress(DSAddr[4]);
+  printAddress(foundAddr[4]);
   Serial.println();
   Serial.print("6 Sensor Address: ");  // пишем адрес датчика 5
-  printAddress(DSAddr[5]);
+  printAddress(foundAddr[5]);
   Serial.println();
 #endif
 
@@ -318,19 +359,19 @@ void scan_ds_adress() {
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("1 Sensor Resolution: ");  // пишем разрешение для датчика 0
-  Serial.print(sensors.getResolution(DSAddr[0]), DEC);
+  Serial.print(sensors.getResolution(foundAddr[0]), DEC);
   Serial.println();
   Serial.print("2 Sensor Resolution: ");  // пишем разрешение для датчика 1
-  Serial.print(sensors.getResolution(DSAddr[1]), DEC);
+  Serial.print(sensors.getResolution(foundAddr[1]), DEC);
   Serial.println();
   Serial.print("3 Sensor Resolution: ");  // пишем разрешение для датчика 2
-  Serial.print(sensors.getResolution(DSAddr[2]), DEC);
+  Serial.print(sensors.getResolution(foundAddr[2]), DEC);
   Serial.println();
   Serial.print("4 Sensor Resolution: ");  // пишем разрешение для датчика 3
-  Serial.print(sensors.getResolution(DSAddr[3]), DEC);
+  Serial.print(sensors.getResolution(foundAddr[3]), DEC);
   Serial.println();
   Serial.print("5 Sensor Resolution: ");  // пишем разрешение для датчика 3
-  Serial.print(sensors.getResolution(DSAddr[4]), DEC);
+  Serial.print(sensors.getResolution(foundAddr[4]), DEC);
   Serial.println();
 #endif
 }
@@ -390,7 +431,9 @@ void sensor_init(void) {
 
   writeString("DS1820 init...     ", 3);
   scan_ds_adress();
-  writeString("Found " + (String)DScnt + "         ", 4);
+  DSAddressSnapshot dsSnapshot;
+  copy_ds_address_snapshot(dsSnapshot);
+  writeString("Found " + (String)dsSnapshot.count + "         ", 4);
 
   //Для шагового двигателя устанавливаем режим работы - следовать до позиции
   //  stepper.setRunMode(FOLLOW_POS);
@@ -498,7 +541,6 @@ void sensor_init(void) {
 
 //Обнуляем все счетчики
 void reset_sensor_counter(void) {
-  sam_command_sync = SAMOVAR_NONE;
   stopService();
   stepper_safe_set_max_speed(0);
   //stepper.setSpeed(0);
@@ -558,19 +600,18 @@ void reset_sensor_counter(void) {
   d_s_temp_prev = 0;
   is_self_test = false;
 
-  if (fileToAppend) {
-    fileToAppend.close();
-  }
+  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
 
   if (bme_pressure < 100) BME_getvalue(false);
   start_pressure = bme_pressure;
 
-  boil_started = false;
-  boil_temp = 0;
-  alcohol_s = 0;
-  b_t_time_delay = 0;
+	  boil_started = false;
+	  boil_temp = 0;
+	  alcohol_s = 0;
+	  b_t_time_delay = 0;
+	  reset_heat_loss_calculation();
 
-  // [C-7] xSemaphore и xSemaphoreAVR — бинарные мьютексы UART.
+	  // [C-7] xSemaphore и xSemaphoreAVR — бинарные мьютексы UART.
   // Безусловный Give здесь некорректен: reset_sensor_counter() не захватывала
   // этот семафор, поэтому Give может принудительно освободить семафор,
   // удерживаемый RMVK_cmd в другой задаче (до ~1.1 с), что приводит к
@@ -578,8 +619,7 @@ void reset_sensor_counter(void) {
   // Семафоры создаются и инициализируются один раз при инициализации (RMVK_init /
   // sensor_init) и должны освобождаться только той задачей, которая их захватила.
 
-  set_power(false);
-  sam_command_sync = SAMOVAR_NONE;
+  set_power(false, false);
   get_Samovar_Status();
 
   bk_pwm = PWM_LOW_VALUE * 40;
@@ -589,7 +629,7 @@ void reset_sensor_counter(void) {
 #endif
 
 #ifdef USE_LUA
-  Lua_status = "";
+  if (!set_lua_status_value("")) SendMsg("Не удалось сбросить Lua_status: runtime lock занят.", WARNING_MSG);
 #endif
 }
 
@@ -624,21 +664,17 @@ String getDSAddress(DeviceAddress deviceAddress) {
 }
 
 String get_DSAddressList(String Address) {
+  DSAddressSnapshot snapshot;
+  copy_ds_address_snapshot(snapshot);
   String s = "<option value='-1'>NONE</option>";
   String dsaddr = "";
-  for (uint8_t i = 0; i != DScnt; i++) {
-    dsaddr = getDSAddress(DSAddr[i]);
+  for (uint8_t i = 0; i != snapshot.count; i++) {
+    dsaddr = getDSAddress(snapshot.addr[i]);
     s += "<option value='" + String(i) + "'";
     if (Address == dsaddr) s = s + " " + "selected";
     s = s + ">" + dsaddr + "</option>";
   }
   return s;
-}
-
-void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress) {
-  for (uint8_t dsj = 0; dsj < 8; dsj++) {
-    DevTAddress[dsj] = DevSAddress[dsj];
-  }
 }
 #endif
 

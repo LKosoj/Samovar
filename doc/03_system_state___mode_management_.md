@@ -91,28 +91,31 @@ String get_Samovar_Status() {
 
 Как этот сигнал передается, например, от нажатия кнопки на веб-странице к изменению системных параметров `Samovar_Mode` или `SamovarStatusInt`?
 
-Как показано в главе 1, веб-команды устанавливают специальную переменную: `sam_command_sync`. Эта переменная `volatile` действует как простое окно сообщений между веб-сервером/задачей LCD и основным циклом программы, который управляет состоянием и режимом.
+Как показано в главе 1, веб-команды, команды Blynk/Lua, меню и аварийные обработчики ставят команду в статическую FreeRTOS-очередь из `samovar_command_queue.h`. Очередь передаёт маленькие POD-сообщения `SamovarCommandMsg` между веб-сервером/задачами управления и основным циклом программы, который управляет состоянием и режимом.
 
 ```c++
-// Из Samovar.h
+// Из Samovar.h и samovar_command_queue.h
 enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT};
-volatile SamovarCommands sam_command_sync; // Переменная для передачи команд между задачами
+struct SamovarCommandMsg {
+  SamovarCommands command;
+};
+bool queue_samovar_command(SamovarCommands command, TickType_t timeout = 0);
+bool queue_samovar_reset_command(TickType_t timeout = 0);
 ```
 
-Основная функция `loop()` в `Samovar.ino` постоянно проверяет `sam_command_sync`. Если она находит команду, отличную от `SAMOVAR_NONE`, она обрабатывает команду (часто изменяя `Samovar_Mode` или `SamovarStatusInt`) и затем сбрасывает `sam_command_sync` обратно в `SAMOVAR_NONE`.
+Основная функция `loop()` в `Samovar.ino` извлекает сообщения из очереди через `receive_samovar_command(...)`. Каждая команда обрабатывается в `switch` (часто изменяя `Samovar_Mode` или `SamovarStatusInt`), после чего `loop()` переходит к обычной обработке активного режима. `SAMOVAR_RESET` ставится через отдельный helper: он очищает ожидающие команды и помещает reset в начало очереди.
 
 Вот упрощенное представление этого процесса:
 ```mermaid
 sequenceDiagram
     Пользователь->>Интерфейс (LCD/Web): Нажимает "Запустить пиво"
     Интерфейс (LCD/Web)->>Обработчик команд: определяет действие
-    Обработчик команд->>Переменная sam_command_sync: Присваивает значение SAMOVAR_BEER
-    Основной цикл Samovar->>Основной цикл Samovar: Проверяет переменную sam_command_sync
-    Основной цикл Samovar->>Основной цикл Samovar: Считывает SAMOVAR_BEER
+    Обработчик команд->>Очередь команд: queue_samovar_command(SAMOVAR_BEER)
+    Основной цикл Samovar->>Очередь команд: receive_samovar_command(...)
+    Основной цикл Samovar->>Основной цикл Samovar: Обрабатывает SAMOVAR_BEER
     Основной цикл Samovar->>Логика Samovar: Изменяет Samovar_Mode на SAMOVAR_BEER_MODE
     Логика Samovar->>Логика Samovar: Изменяет SamovarStatusInt на 2000 (начальное состояние пивного режима)
     Основной цикл Samovar->>Логика Samovar: вызывает beer_proc() (на основе нового состояния)
-    Основной цикл Samovar->>переменная sam_command_sync: Сбрасывает значение на значение SAMOVAR_NONE
     Логика Samovar->>Обработчик интерфейса: Уведомляет об изменении состояния/режима
     Обработчик интерфейса->>Интерфейс (LCD/Web): Отображение обновлений ("Режим приготовления пива", "Программа готова к запуску")
     Интерфейс (LCD/Web)->>Пользователь: Отображение обновленного статуса
@@ -121,7 +124,7 @@ sequenceDiagram
 
 ## Внутри `loop()`: Дирижерская палочка
 
-Основная функция "loop()" в "Samovar.ino" - это функция, с помощью которой дирижер ("loop()") читает партитуру ("sam_command_sync", "Samovar_Mode", "SamovarStatusInt") и управляет различными частями оркестра (функции обработки, зависящие от режима, такие как "beer_proc"), `distiller_proc` и т.д.).
+Основная функция "loop()" в "Samovar.ino" - это функция, с помощью которой дирижер ("loop()") читает партитуру (очередь `SamovarCommandMsg`, `Samovar_Mode`, `SamovarStatusInt`) и управляет различными частями оркестра (функции обработки, зависящие от режима, такие как "beer_proc"), `distiller_proc` и т.д.).
 
 Давайте рассмотрим упрощенную версию соответствующих частей функции `loop()`:
 
@@ -130,9 +133,10 @@ sequenceDiagram
 void loop() {
   // ... other necessary tasks (like checking for button presses, network) ...
 
-  // Check if a command has been signaled (e.g., from web or LCD)
-  if (sam_command_sync != SAMOVAR_NONE) {
-    switch (sam_command_sync) {
+  // Drain commands queued by web, LCD, Blynk, Lua, or alarm paths.
+  SamovarCommandMsg commandMsg;
+  while (receive_samovar_command(commandMsg, 0)) {
+    switch (commandMsg.command) {
       case SAMOVAR_START: // User clicked Start (defaults to Rectification)
         Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
         // menu_samovar_start(); // Function to start/advance Rectification program (Chapter 2)
@@ -158,14 +162,9 @@ void loop() {
       // ... cases for SAMOVAR_NBK, SAMOVAR_BK, SAMOVAR_RESET, SAMOVAR_PAUSE, etc. ...
       case SAMOVAR_RESET:
         samovar_reset(); // Call a function to reset all states and modes
-        sam_command_sync = SAMOVAR_NONE; // Reset handled within samovar_reset
         break;
       case SAMOVAR_NONE:
          break; // Should not happen due to the outer if check, but good practice
-    }
-    // Reset the command flag AFTER processing it (unless it was SAMOVAR_RESET)
-    if (sam_command_sync != SAMOVAR_NONE) {
-      sam_command_sync = SAMOVAR_NONE;
     }
   }
 
@@ -192,8 +191,8 @@ void loop() {
 }
 ```
 Этот упрощенный код показывает суть управления состоянием и режимами:
-1. Он ожидает сигнала в переменной sam_command_sync.
-2. Когда поступает сигнал, команда `switch` действует подобно дирижеру, читающему партитуру, – она идентифицирует команду (`SAMOVAR_BEER`, `SAMOVAR_START` и т.д.).
+1. Он извлекает ожидающие команды из очереди `SamovarCommandMsg`.
+2. Когда поступает команда, `switch` действует подобно дирижеру, читающему партитуру, – он идентифицирует команду (`SAMOVAR_BEER`, `SAMOVAR_START` и т.д.).
 3. На основе команды он устанавливает основные системные переменные (`Samovar_Mode` и `SamovarStatusInt`), которые отражают желаемое новое состояние или режим. Например, SAMOVAR_BEER` устанавливает режим на `SAMOVAR_BEER_MODE`, а начальное состояние - на `2000`.
 4. Важно отметить, что после потенциального изменения состояния/режима структура кода *позже* в `loop()` использует эти новые значения (особенно `SamovarStatusInt`), чтобы решить, какую функцию, зависящую от режима (`beer_proc()`, `distiller_proc()` и т.д.), вызывать в этой итерации цикла. Это подобно тому, как дирижер поднимает палочку, и соответствующая часть оркестра начинает играть.
 
@@ -201,7 +200,7 @@ void loop() {
 
 ## Заключение
 
-В этой главе мы рассмотрели `мозг` Самовара: **Управление состоянием системы и режимами**. Мы узнали, что самовар работает в различных режимах (например, для ректификации или приготовления пива) и имеет подробные рабочие режимы (например, нагрев или запуск шага X). Мы видели, как эти режимы и состояния отслеживаются с помощью специальных переменных (`Samovar_Mode` и `SamovarStatusInt`). Важно отметить, что мы поняли, как команды пользователя или внутренние события запускают переходы между этими состояниями и режимами, часто используя сигнальную переменную команды (`sam_command_sync`), которую считывает основной программный цикл для обновления состояния системы и вызова правильных функций обработки. Такой многоуровневый подход позволяет Samovar управлять сложными процессами, плавно переключаясь между различными задачами по мере необходимости.
+В этой главе мы рассмотрели `мозг` Самовара: **Управление состоянием системы и режимами**. Мы узнали, что самовар работает в различных режимах (например, для ректификации или приготовления пива) и имеет подробные рабочие режимы (например, нагрев или запуск шага X). Мы видели, как эти режимы и состояния отслеживаются с помощью специальных переменных (`Samovar_Mode` и `SamovarStatusInt`). Важно отметить, что мы поняли, как команды пользователя или внутренние события запускают переходы между этими состояниями и режимами через очередь `SamovarCommandMsg`, которую считывает основной программный цикл для обновления состояния системы и вызова правильных функций обработки. Такой многоуровневый подход позволяет Samovar управлять сложными процессами, плавно переключаясь между различными задачами по мере необходимости.
 
 Разобравшись в том, как Samovar понимает, что он делает, давайте разберемся, как он собирает информацию, необходимую для принятия решений: **Сбор данных с датчиков**.
 

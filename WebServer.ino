@@ -3,92 +3,241 @@
 #include <WiFi.h>
 
 #include "Samovar.h"
+#include "samovar_api.h"
 #include "FS.h"
 #include "sensorinit.h"
 #include "column_math.h"
 #include "string_utils.h"
+#include "runtime_helpers.h"
 
 extern float nbk_M;
 extern float nbk_Mo;
 extern float nbk_P;
 extern float nbk_Po;
-float i2c_get_speed_from_rate(float volume_per_hour);
-float i2c_stepper_steps_from_rate(float volume_per_hour);
-String getValue(String& data, char separator, int index);
-void set_current_power(float Volt);
-void menu_reset_wifi();
-uint16_t get_stepper_speed(void);
-uint32_t get_stepper_status(void);
-bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
-String get_program(uint8_t s);
-String get_beer_program();
-String get_dist_program();
-String get_nbk_program();
-float get_speed_from_rate(float rate);
-float get_alcohol(float t);
-void set_mixer(bool On);
-void FS_init(void);
-void save_profile();
-void read_config();
-void apply_config_runtime();
-bool profile_exists();
-void set_current_profile_mode(SAMOVAR_MODE mode);
-void change_samovar_mode();
-void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode);
-void WebServerInit(void);
-String indexKeyProcessor(const String &var);
-String setupKeyProcessor(const String &var);
-String get_DSAddressList(String Address);
-void set_pump_speed(float pumpspeed, bool continue_process);
-void start_self_test(void);
-void stop_self_test(void);
-String get_web_file(String fn, get_web_type type);
-void get_web_interface();
-String http_sync_request_get(String url);
-void set_water_temp(float temp);
-void set_body_temp();
-void send_ajax_json(AsyncWebServerRequest *request);
-void set_power(bool On);
-void set_pump_pwm(float duty);
-void set_pump_speed_pid(float temp);
-void set_power_mode(String Mode);
-void set_capacity(uint8_t cap);
-void web_command(AsyncWebServerRequest *request);
-void handleSave(AsyncWebServerRequest *request);
-void get_data_log(AsyncWebServerRequest *request, String fn);
-String calibrateKeyProcessor(const String &var);
-String indexKeyProcessor(const String &var);
-void web_program(AsyncWebServerRequest *request);
-void calibrate_command(AsyncWebServerRequest *request);
-String setupKeyProcessor(const String &var);
-String get_DSAddressList(String Address);
-void set_pump_speed(float pumpspeed, bool continue_process);
-void start_self_test(void);
-void stop_self_test(void);
-String get_web_file(String fn, get_web_type type);
-void get_web_interface();
-float fromPower(float value);
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-void distiller_finish();
-void beer_finish();
-void bk_finish();
-void nbk_finish();
-void samovar_reset();
-void set_program(String WProgram);
-void set_beer_program(String WProgram);
-void set_dist_program(String WProgram);
-void set_nbk_program(String WProgram);
 
-// [C-3/W-5/W-9/C-10] Отложенные команды из Samovar.ino (одна TU, extern не нужен —
-//                     все .ino объединяются в одну единицу компиляции PlatformIO).
+static bool queue_pending_flag(volatile bool& flag) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  flag = true;
+  pending_command_unlock(true);
+  return true;
+}
+
+static const uint8_t LOG_FLUSH_READY = 0;
+static const uint8_t LOG_FLUSH_QUEUED = 1;
+static const uint8_t LOG_FLUSH_BUSY = 2;
+
+static uint8_t schedule_log_flush_if_needed() {
+  if (log_flush_seq >= log_write_seq) return LOG_FLUSH_READY;
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return LOG_FLUSH_BUSY;
+  uint32_t writeSeq = log_write_seq;
+  if (log_flush_seq < writeSeq) {
+    pending_log_flush_seq = writeSeq;
+    pending_log_flush_flag = true;
+    pending_command_unlock(true);
+    return LOG_FLUSH_QUEUED;
+  }
+  pending_command_unlock(true);
+  return LOG_FLUSH_READY;
+}
+
+static bool queue_pending_bool(volatile bool& flag, volatile bool& valueSlot, bool value) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  valueSlot = value;
+  __sync_synchronize();
+  flag = true;
+  pending_command_unlock(true);
+  return true;
+}
+
+static bool queue_pending_float(volatile bool& flag, volatile float& valueSlot, float value) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  valueSlot = value;
+  __sync_synchronize();
+  flag = true;
+  pending_command_unlock(true);
+  return true;
+}
 
 #ifdef USE_LUA
-void start_lua_script();
-void load_lua_script();
-String get_lua_script_list();
-void run_lua_script(String fn);
-String run_lua_string(String lstr);
+bool queue_pending_string(volatile bool& flag, String& valueSlot, const String& value) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  valueSlot = value;
+  __sync_synchronize();
+  flag = true;
+  pending_command_unlock(true);
+  return true;
+}
 #endif
+
+static PendingProgramMode pending_program_mode_for_samovar_mode(SAMOVAR_MODE mode) {
+  switch (mode) {
+    case SAMOVAR_BEER_MODE:
+      return PPM_BEER;
+    case SAMOVAR_DISTILLATION_MODE:
+      return PPM_DIST;
+    case SAMOVAR_NBK_MODE:
+      return PPM_NBK;
+    default:
+      return PPM_RECT;
+  }
+}
+
+static bool queue_pending_program(PendingProgramMode mode, const String& programText) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (pending_save_profile_flag || pending_program_mode != PPM_NONE) {
+    pending_command_unlock(true);
+    return false;
+  }
+  pending_program_str = programText;
+  __sync_synchronize();
+  pending_program_mode = mode;
+  pending_command_unlock(true);
+  return true;
+}
+
+static bool pending_program_slot_busy() {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return true;
+  bool busy = pending_save_profile_flag || pending_program_mode != PPM_NONE;
+  pending_command_unlock(true);
+  return busy;
+}
+
+static void send_program_json_response(AsyncWebServerRequest *request, uint16_t statusCode, bool ok, const String& err, const String& programText) {
+  String json;
+  json.reserve(programText.length() + err.length() + 48);
+  json += "{\"ok\":";
+  json += ok ? "true" : "false";
+  json += ",\"err\":";
+  json += toJsonString(err);
+  json += ",\"program\":";
+  json += toJsonString(programText);
+  json += "}";
+  request->send(statusCode, "application/json", json);
+}
+
+static bool reject_program_update_if_busy_json(AsyncWebServerRequest *request) {
+  if (pending_program_slot_busy()) {
+    send_program_json_response(request, 503, false, F("BUSY: предыдущее изменение программы ещё не применено"), String());
+    return true;
+  }
+  if (program_update_session_active()) {
+    send_program_json_response(request, 409, false, F("BUSY: программа не изменена, активна сессия режима"), String());
+    return true;
+  }
+  return false;
+}
+
+static bool queue_pending_setup_save(const PendingSetupSave& setupSave,
+                                     bool hasProgram,
+                                     PendingProgramMode programMode,
+                                     const String& programText,
+                                     bool hasSwitchMode,
+                                     SAMOVAR_MODE switchMode,
+                                     const char*& busyText) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) {
+    busyText = "BUSY: не удалось запланировать сохранение настроек";
+    return false;
+  }
+  if (pending_save_profile_flag) {
+    pending_command_unlock(true);
+    busyText = "BUSY: предыдущее сохранение настроек ещё не применено";
+    return false;
+  }
+  if (pending_program_mode != PPM_NONE) {
+    pending_command_unlock(true);
+    busyText = "BUSY: предыдущее изменение программы ещё не применено";
+    return false;
+  }
+  if (pending_switch_mode_flag) {
+    pending_command_unlock(true);
+    busyText = "BUSY: смена режима уже запланирована";
+    return false;
+  }
+
+  pending_setup_save_buf = setupSave;
+  if (hasProgram) {
+    pending_program_str = programText;
+  }
+  if (hasSwitchMode) {
+    pending_switch_mode_value = switchMode;
+  }
+  __sync_synchronize();
+  pending_save_profile_flag = true;
+  if (hasProgram) {
+    pending_program_mode = programMode;
+  }
+  if (hasSwitchMode) {
+    pending_switch_mode_flag = true;
+  }
+  pending_command_unlock(true);
+  return true;
+}
+
+static bool queue_pending_i2cpump(const PendingI2CPumpCmd& cmd) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (pending_i2cpump_flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  pending_i2cpump_buf = cmd;
+  __sync_synchronize();
+  pending_i2cpump_flag = true;
+  pending_command_unlock(true);
+  return true;
+}
+
+static bool queue_pending_i2cstepper(const PendingI2CStepperCmd& cmd) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (pending_i2cstepper_flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  pending_i2cstepper_buf = cmd;
+  __sync_synchronize();
+  pending_i2cstepper_flag = true;
+  pending_command_unlock(true);
+  return true;
+}
+
+static bool queue_pending_i2ccal(const PendingI2CCalCmd& cmd) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (pending_i2ccal_flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  pending_i2ccal_buf = cmd;
+  __sync_synchronize();
+  pending_i2ccal_flag = true;
+  pending_command_unlock(true);
+  return true;
+}
 
 I2CStepperDevice* select_i2c_stepper_device(AsyncWebServerRequest *request) {
   String device = request->hasArg("device") ? request->arg("device") : "pump";
@@ -175,11 +324,25 @@ void change_samovar_mode() {
 }
 
 const char* get_index_page_path() {
-  if (Samovar_Mode == SAMOVAR_BEER_MODE) return "/beer.htm";
-  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return "/distiller.htm";
-  if (Samovar_Mode == SAMOVAR_BK_MODE) return "/bk.htm";
-  if (Samovar_Mode == SAMOVAR_NBK_MODE) return "/nbk.htm";
-  return "/index.htm";
+  return mode_page_path(Samovar_Mode);
+}
+
+void send_index_template_response(AsyncWebServerRequest *request, const char *spiffsPath, const char *cacheControl) {
+  String description;
+  if (!copy_session_description(description)) {
+    request->send(503, "text/plain", "Runtime state busy");
+    return;
+  }
+  String luaButtonList;
+  if (!copy_lua_button_list_cache(luaButtonList)) {
+    request->send(503, "text/plain", "Runtime state busy");
+    return;
+  }
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, spiffsPath, "text/html", false, [description, luaButtonList](const String &var) -> String {
+    return indexKeyProcessorWithSnapshots(var, description, luaButtonList);
+  });
+  response->addHeader("Cache-Control", cacheControl);
+  request->send(response);
 }
 
 void send_index_page(AsyncWebServerRequest *request) {
@@ -193,9 +356,7 @@ void send_index_page(AsyncWebServerRequest *request) {
     Samovar_Mode = (SAMOVAR_MODE)cfgMode;
   }
   change_samovar_mode();
-  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, get_index_page_path(), "text/html", false, indexKeyProcessor);
-  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  request->send(response);
+  send_index_template_response(request, get_index_page_path(), "no-cache, no-store, must-revalidate");
 }
 
 // Прямой GET /distiller.htm|beer.htm|… иначе отдаётся через serveStatic без шаблонизатора — %WProgram% не подставляется, в UI «тип программы» пустой.
@@ -210,9 +371,7 @@ void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPa
   }
   Samovar_Mode = (SAMOVAR_MODE)m;
   change_samovar_mode();
-  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, spiffsPath, "text/html", false, indexKeyProcessor);
-  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  request->send(response);
+  send_index_template_response(request, spiffsPath, "no-cache, no-store, must-revalidate");
 }
 
 // Универсальная функция для обработки файлов с поддержкой gzip
@@ -297,11 +456,21 @@ void WebServerInit(void) {
   server.serveStatic("/prg.csv", SPIFFS, "/prg.csv").setCacheControl("max-age=1");
   server.serveStatic("/state.csv", SPIFFS, "/state.csv").setCacheControl("max-age=1");
   server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
-  server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
+  server.on("/chart.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    send_index_template_response(request, "/chart.htm", "max-age=1");
+  });
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor).setCacheControl("max-age=800");
   server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm").setCacheControl("max-age=800");
-  server.serveStatic("/pong.htm", SPIFFS, "/alarm.mp3");
+  server.on("/pong.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/html; charset=utf-8",
+      F("<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"UTF-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+        "<title>Samovar alarm</title><link rel=\"stylesheet\" href=\"style.css\">"
+        "</head><body><main><h1>Samovar alarm</h1>"
+        "<audio controls autoplay src=\"/alarm.mp3\"></audio>"
+        "</main></body></html>"));
+  });
   server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt").setCacheControl("max-age=1");
@@ -326,11 +495,12 @@ void WebServerInit(void) {
   server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/resetreason.css", String());
   });
-  // GET|HEAD: AmCharts и браузеры могут запрашивать HEAD; только GET давал 501 «Handler did not handle».
+  // GET|HEAD: chart page и браузеры могут запрашивать HEAD; только GET давал 501 «Handler did not handle».
   // Если лога ещё нет — beginResponse(nullptr) → тот же 501; отдаём пустой CSV с заголовком как в FS.ino.
   server.on("/data.csv", (WebRequestMethodComposite)(HTTP_GET | HTTP_HEAD), [](AsyncWebServerRequest *request) {
-    if (fileToAppend && fileToAppend.available()) {
-      fileToAppend.flush();
+    if (schedule_log_flush_if_needed() != LOG_FLUSH_READY) {
+      request->send(503, "text/plain", "BUSY");
+      return;
     }
     if (!SPIFFS.exists("/data.csv")) {
 #ifdef WRITE_PROGNUM_IN_LOG
@@ -345,7 +515,7 @@ void WebServerInit(void) {
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_ajax_json(request);
   });
-  server.on("/command", HTTP_GET, [](AsyncWebServerRequest *request) {
+  server.on("/command", HTTP_POST, [](AsyncWebServerRequest *request) {
     web_command(request);
   });
   server.on("/program", HTTP_POST, [](AsyncWebServerRequest *request) {
@@ -383,12 +553,12 @@ void WebServerInit(void) {
       return;
     }
     if (request->hasArg("stop")) {
-      // [W-4] Откладываем stop в loop; сбрасываем глобальные счётчики здесь — они не I2C.
-      I2CPumpTargetMl = 0;
-      I2CPumpCmdSpeed = 0;
-      pending_i2cpump_buf.is_stop = true;
-      __sync_synchronize();
-      pending_i2cpump_flag = true;
+      PendingI2CPumpCmd cmd = {};
+      cmd.is_stop = true;
+      if (!queue_pending_i2cpump(cmd)) {
+        request->send(503, "text/plain", "BUSY");
+        return;
+      }
       request->send(200, "text/plain", "OK");
       return;
     }
@@ -404,20 +574,23 @@ void WebServerInit(void) {
     }
     uint16_t stepsPerMl = SamSetup.StepperStepMlI2C > 0 ? SamSetup.StepperStepMlI2C : I2C_STEPPER_STEP_ML_DEFAULT;
     uint32_t targetSteps = (uint32_t)(volumeMl * stepsPerMl);
-    // [W-4] Без I2C в async: считаем скорость по SamSetup (i2c_get_speed_from_rate
+    // [W-4] Без I2C в async: считаем скорость по SamSetup (блокирующий helper
     //        делает блокирующий i2c_stepper_refresh — нельзя из async).
     uint16_t speedSteps = (uint16_t)i2c_stepper_steps_from_rate(speedRate);
     uint16_t speedMlHour = i2c_stepper_mlh_from_step_speed(speedSteps);
     // [W-4] Откладываем start в loop; параметры вычислены без I2C.
-    pending_i2cpump_buf.is_stop      = false;
-    pending_i2cpump_buf.speedSteps   = speedSteps;
-    pending_i2cpump_buf.targetSteps  = targetSteps;
-    pending_i2cpump_buf.targetMl     = volumeMl;
-    pending_i2cpump_buf.fillingMl    = (uint16_t)volumeMl;
-    pending_i2cpump_buf.fillingMlHour = speedMlHour;
-    pending_i2cpump_buf.stepsPerMl   = stepsPerMl;
-    __sync_synchronize();
-    pending_i2cpump_flag = true;
+    PendingI2CPumpCmd cmd = {};
+    cmd.is_stop       = false;
+    cmd.speedSteps    = speedSteps;
+    cmd.targetSteps   = targetSteps;
+    cmd.targetMl      = volumeMl;
+    cmd.fillingMl     = (uint16_t)volumeMl;
+    cmd.fillingMlHour = speedMlHour;
+    cmd.stepsPerMl    = stepsPerMl;
+    if (!queue_pending_i2cpump(cmd)) {
+      request->send(503, "text/plain", "BUSY");
+      return;
+    }
     request->send(200, "text/plain", "OK");
   });
   server.on("/i2cstepper", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -448,12 +621,15 @@ void WebServerInit(void) {
       request->send(400, "application/json", "{\"error\":\"unsupported I2CStepper command\"}");
       return;
     }
-    pending_i2cstepper_buf.staged = staged;
-    pending_i2cstepper_buf.device_sel = (dev == &i2cStepperMixer) ? 0 : 1;
-    strncpy(pending_i2cstepper_buf.cmd, cmd.c_str(), sizeof(pending_i2cstepper_buf.cmd) - 1);
-    pending_i2cstepper_buf.cmd[sizeof(pending_i2cstepper_buf.cmd) - 1] = '\0';
-    __sync_synchronize();
-    pending_i2cstepper_flag = true;
+    PendingI2CStepperCmd pendingCmd = {};
+    pendingCmd.staged = staged;
+    pendingCmd.device_sel = (dev == &i2cStepperMixer) ? 0 : 1;
+    strncpy(pendingCmd.cmd, cmd.c_str(), sizeof(pendingCmd.cmd) - 1);
+    pendingCmd.cmd[sizeof(pendingCmd.cmd) - 1] = '\0';
+    if (!queue_pending_i2cstepper(pendingCmd)) {
+      request->send(503, "application/json", "{\"error\":\"BUSY\"}");
+      return;
+    }
     // Отвечаем pre-command состоянием; UI перечитает статус следующим запросом.
     send_i2c_stepper_json(request, *dev);
   });
@@ -465,7 +641,18 @@ void WebServerInit(void) {
   });
 #ifdef USE_LUA
   server.on("/lua", HTTP_GET, [](AsyncWebServerRequest *request) {
-    start_lua_script();
+    if (request->hasArg("script")) {
+      if (!queue_pending_string(pending_lua_file_flag, pending_lua_file, request->arg("script"))) {
+        request->send(503, "text/plain", "BUSY");
+        return;
+      }
+      request->send(200, "text/html", "OK");
+      return;
+    }
+    if (!queue_pending_flag(pending_lua_start_flag)) {
+      request->send(503, "text/plain", "BUSY");
+      return;
+    }
     request->send(200, "text/html", "OK");
   });
 #endif
@@ -478,23 +665,26 @@ void WebServerInit(void) {
   server.onFileUpload([](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data, size_t len, bool final) {
     if (!index)
       Serial.printf("UploadStart: %s\n", filename.c_str());
+#ifdef __SAMOVAR_DEBUG
     if (len) {
       Serial.write(data, len);
     }
+#endif
     if (final)
       Serial.printf("UploadEnd: %s (%u)\n", filename.c_str(), index + len);
   });
   server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!index)
       Serial.printf("BodyStart: %u\n", total);
+#ifdef __SAMOVAR_DEBUG
     if (len) {
       Serial.write(data, len);
     }
+#endif
     if (index + len == total)
       Serial.printf("BodyEnd: %u\n", total);
   });
 
-  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");  // CORS
   headerFilter.filter("If-Modified-Since");
   //  DefaultHeaders::Instance().addHeader("Cache-Control", "no-cache");
   //  DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
@@ -562,9 +752,11 @@ String indexKeyProcessor(const String &var) {
     else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) return get_dist_program();
     else if (Samovar_Mode == SAMOVAR_NBK_MODE) return get_nbk_program();
     else
-      return get_program(CAPACITY_NUM * 2);
+      return get_program(PROGRAM_END);
   } else if (var == "Descr") {
-    return SessionDescription;
+    String description;
+    if (!copy_session_description(description)) return F("Runtime state busy");
+    return description;
   } else if (var == "videourl")
     return (String)SamSetup.videourl;
   else if (var == "PWM_LV")
@@ -577,7 +769,13 @@ String indexKeyProcessor(const String &var) {
     return (String(PWR_TYPE) == "V") ? "block" : "none";
   else if (var == "btn_list") {
 #ifdef USE_LUA
-    return toJsonString(get_lua_script_list());
+    String cachedList;
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      cachedList = lua_script_list_cache;
+      runtime_state_unlock(true);
+    }
+    return toJsonString(cachedList);
 #else
     return toJsonString(String());
 #endif
@@ -606,6 +804,24 @@ String indexKeyProcessor(const String &var) {
   return "";
 }
 
+bool copy_lua_button_list_cache(String &buttonList) {
+#ifdef USE_LUA
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  buttonList = lua_script_list_cache;
+  runtime_state_unlock(true);
+#else
+  buttonList = String();
+#endif
+  return true;
+}
+
+String indexKeyProcessorWithSnapshots(const String &var, const String &description, const String &luaButtonList) {
+  if (var == "Descr") return description;
+  if (var == "btn_list") return toJsonString(luaButtonList);
+  return indexKeyProcessor(var);
+}
+
 String setupKeyProcessor(const String &var) {
   static String s;
   s = "";
@@ -628,28 +844,20 @@ String setupKeyProcessor(const String &var) {
     s = format_float(SamSetup.SetSteamTemp, 2);
     return s;
   } else if (var == "SetPipeTemp") {
-    if (isnan(SamSetup.SetPipeTemp)) {
-      SamSetup.SetPipeTemp = 0;
-    }
-    s = format_float(SamSetup.SetPipeTemp, 2);
+    float setPipeTemp = isnan(SamSetup.SetPipeTemp) ? 0 : SamSetup.SetPipeTemp;
+    s = format_float(setPipeTemp, 2);
     return s;
   } else if (var == "SetWaterTemp") {
-    if (isnan(SamSetup.SetWaterTemp)) {
-      SamSetup.SetWaterTemp = 0;
-    }
-    s = format_float(SamSetup.SetWaterTemp, 2);
+    float setWaterTemp = isnan(SamSetup.SetWaterTemp) ? 0 : SamSetup.SetWaterTemp;
+    s = format_float(setWaterTemp, 2);
     return s;
   } else if (var == "SetTankTemp") {
-    if (isnan(SamSetup.SetTankTemp)) {
-      SamSetup.SetTankTemp = 0;
-    }
-    s = format_float(SamSetup.SetTankTemp, 2);
+    float setTankTemp = isnan(SamSetup.SetTankTemp) ? 0 : SamSetup.SetTankTemp;
+    s = format_float(setTankTemp, 2);
     return s;
   } else if (var == "SetACPTemp") {
-    if (isnan(SamSetup.SetACPTemp)) {
-      SamSetup.SetACPTemp = 0;
-    }
-    s = format_float(SamSetup.SetACPTemp, 2);
+    float setACPTemp = isnan(SamSetup.SetACPTemp) ? 0 : SamSetup.SetACPTemp;
+    s = format_float(setACPTemp, 2);
     return s;
   } else if (var == "StepperStepMl") {
     s = SamSetup.StepperStepMl;
@@ -660,7 +868,7 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "WProgram") {
     if (Samovar_Mode == SAMOVAR_BEER_MODE) return get_beer_program();
     else
-      return get_program(CAPACITY_NUM * 2);
+      return get_program(PROGRAM_END);
   } else if (var == "Kp") {
     s = format_float(SamSetup.Kp, 3);
     return s;
@@ -834,15 +1042,15 @@ String setupKeyProcessor(const String &var) {
   else if (var == "RDH" && SamSetup.rele4)
     return "selected";
   else if (var == "SteamAddr")
-    return get_DSAddressList(getDSAddress(SteamSensor.Sensor));
+    return get_DSAddressList(getDSAddress(SamSetup.SteamAdress));
   else if (var == "PipeAddr")
-    return get_DSAddressList(getDSAddress(PipeSensor.Sensor));
+    return get_DSAddressList(getDSAddress(SamSetup.PipeAdress));
   else if (var == "WaterAddr")
-    return get_DSAddressList(getDSAddress(WaterSensor.Sensor));
+    return get_DSAddressList(getDSAddress(SamSetup.WaterAdress));
   else if (var == "TankAddr")
-    return get_DSAddressList(getDSAddress(TankSensor.Sensor));
+    return get_DSAddressList(getDSAddress(SamSetup.TankAdress));
   else if (var == "ACPAddr")
-    return get_DSAddressList(getDSAddress(ACPSensor.Sensor));
+    return get_DSAddressList(getDSAddress(SamSetup.ACPAdress));
   else if (var == "ColDiam")
     return String(SamSetup.ColDiam, 1);
   else if (var == "ColDiam_1.5") {
@@ -919,17 +1127,19 @@ bool is_valid_samovar_mode(long mode) {
 
 void stop_active_process_for_mode() {
   if (!PowerOn) return;
-  if (SamovarStatusInt == 1000) {
-    distiller_finish();
-  } else if (SamovarStatusInt == 2000) {
-    beer_finish();
-  } else if (SamovarStatusInt == 3000) {
-    bk_finish();
-  } else if (SamovarStatusInt == 4000) {
-    nbk_finish();
-  } else {
-    set_power(false);
+  if (!mode_finish_by_status(SamovarStatusInt)) set_power(false);
+}
+
+bool reject_program_update_if_busy(AsyncWebServerRequest *request) {
+  if (pending_program_slot_busy()) {
+    request->send(503, "text/plain", "BUSY: предыдущее изменение программы ещё не применено");
+    return true;
   }
+  if (program_update_session_active()) {
+    request->send(409, "text/plain", "BUSY: программа не изменена, активна сессия режима");
+    return true;
+  }
+  return false;
 }
 
 // [W-6] switch_samovar_mode вызывается ТОЛЬКО из loop() через pending_switch_mode_flag.
@@ -968,8 +1178,96 @@ void update_checkbox_arg(AsyncWebServerRequest *request, const char* name, bool&
   if (fullSetupForm || request->hasArg(name)) value = request->hasArg(name);
 }
 
+static void send_save_parse_error(AsyncWebServerRequest *request, const char *name) {
+  String message = "Invalid ";
+  message += name;
+  request->send(400, "text/plain", message);
+}
+
+static bool save_float_is_finite(float value) {
+  return !isnan(value) && !isinf(value);
+}
+
+static bool parse_save_long_arg(AsyncWebServerRequest *request, const char *name, long minValue, long maxValue, long& value) {
+  String raw = request->arg(name);
+  if (!parseLongSafe(raw.c_str(), value) || value < minValue || value > maxValue) {
+    send_save_parse_error(request, name);
+    return false;
+  }
+  return true;
+}
+
+static bool parse_save_float_arg(AsyncWebServerRequest *request, const char *name, float minValue, float maxValue, float& value) {
+  String raw = request->arg(name);
+  if (!parseFloatSafe(raw.c_str(), value) || !save_float_is_finite(value) || value < minValue || value > maxValue) {
+    send_save_parse_error(request, name);
+    return false;
+  }
+  return true;
+}
+
+static bool apply_save_u8_arg(AsyncWebServerRequest *request, const char *name, uint8_t& target, long minValue, long maxValue) {
+  if (!request->hasArg(name)) return true;
+  long value = 0;
+  if (!parse_save_long_arg(request, name, minValue, maxValue, value)) return false;
+  target = (uint8_t)value;
+  return true;
+}
+
+static bool apply_save_u16_arg(AsyncWebServerRequest *request, const char *name, uint16_t& target, long minValue, long maxValue) {
+  if (!request->hasArg(name)) return true;
+  long value = 0;
+  if (!parse_save_long_arg(request, name, minValue, maxValue, value)) return false;
+  target = (uint16_t)value;
+  return true;
+}
+
+static bool apply_save_bool01_arg(AsyncWebServerRequest *request, const char *name, bool& target) {
+  if (!request->hasArg(name)) return true;
+  long value = 0;
+  if (!parse_save_long_arg(request, name, 0, 1, value)) return false;
+  target = value != 0;
+  return true;
+}
+
+static bool apply_save_float_arg(AsyncWebServerRequest *request, const char *name, float& target, float minValue, float maxValue) {
+  if (!request->hasArg(name)) return true;
+  float value = 0;
+  if (!parse_save_float_arg(request, name, minValue, maxValue, value)) return false;
+  target = value;
+  return true;
+}
+
+template <size_t N>
+static void apply_save_string_arg(AsyncWebServerRequest *request, const char *name, char (&target)[N]) {
+  if (request->hasArg(name)) copyStringSafe(target, request->arg(name));
+}
+
+static bool apply_save_ds_addr_arg(AsyncWebServerRequest *request, const char *name, const DSAddressSnapshot& snapshot, uint8_t (&target)[8], bool& resetSensor) {
+  if (!request->hasArg(name)) return true;
+  long idx = 0;
+  if (!parse_save_long_arg(request, name, -1, SAMOVAR_DS_ADDRESS_MAX - 1, idx)) return false;
+  DeviceAddress selectedAddress;
+  if (idx == -1) {
+    set_invalid_ds_address(selectedAddress);
+  } else if (idx >= snapshot.count) {
+    send_save_parse_error(request, name);
+    return false;
+  } else {
+    CopyDSAddress(snapshot.addr[idx], selectedAddress);
+  }
+  if (!ds_address_equal(target, selectedAddress)) {
+    CopyDSAddress(selectedAddress, target);
+    resetSensor = true;
+  }
+  return true;
+}
+
 void handleSave(AsyncWebServerRequest *request) {
   if (!request) {
+    return;
+  }
+  if (get_request_param(request, "WProgram") && reject_program_update_if_busy(request)) {
     return;
   }
   /*
@@ -1000,247 +1298,114 @@ void handleSave(AsyncWebServerRequest *request) {
     }
   }
 
-  if (request->hasArg("SteamDelay")) {
-    SamSetup.SteamDelay = request->arg("SteamDelay").toInt();
-  }
-  if (request->hasArg("PipeDelay")) {
-    SamSetup.PipeDelay = request->arg("PipeDelay").toInt();
-  }
-  if (request->hasArg("WaterDelay")) {
-    SamSetup.WaterDelay = request->arg("WaterDelay").toInt();
-  }
-  if (request->hasArg("TankDelay")) {
-    SamSetup.TankDelay = request->arg("TankDelay").toInt();
-  }
-  if (request->hasArg("ACPDelay")) {
-    SamSetup.ACPDelay = request->arg("ACPDelay").toInt();
+  PendingSetupSave setupSave;
+  setupSave.staged = SamSetup;
+  memset(&setupSave.resetSensor, 0, sizeof(setupSave.resetSensor));
+  SetupEEPROM& staged = setupSave.staged;
+  DSAddressSnapshot dsSnapshot;
+  copy_ds_address_snapshot(dsSnapshot);
+  if (modeRequested) {
+    staged.Mode = (int)requestedMode;
   }
 
-  if (request->hasArg("DeltaSteamTemp")) {
-    SamSetup.DeltaSteamTemp = request->arg("DeltaSteamTemp").toFloat();
-  }
-  if (request->hasArg("DeltaPipeTemp")) {
-    SamSetup.DeltaPipeTemp = request->arg("DeltaPipeTemp").toFloat();
-  }
-  if (request->hasArg("DeltaWaterTemp")) {
-    SamSetup.DeltaWaterTemp = request->arg("DeltaWaterTemp").toFloat();
-  }
-  if (request->hasArg("DeltaTankTemp")) {
-    SamSetup.DeltaTankTemp = request->arg("DeltaTankTemp").toFloat();
-  }
-  if (request->hasArg("DeltaACPTemp")) {
-    SamSetup.DeltaACPTemp = request->arg("DeltaACPTemp").toFloat();
-  }
-  if (request->hasArg("SetSteamTemp")) {
-    SamSetup.SetSteamTemp = request->arg("SetSteamTemp").toFloat();
-  }
-  if (request->hasArg("SetPipeTemp")) {
-    SamSetup.SetPipeTemp = request->arg("SetPipeTemp").toFloat();
-  }
-  if (request->hasArg("SetWaterTemp")) {
-    SamSetup.SetWaterTemp = request->arg("SetWaterTemp").toFloat();
-  }
-  if (request->hasArg("SetTankTemp")) {
-    SamSetup.SetTankTemp = request->arg("SetTankTemp").toFloat();
-  }
-  if (request->hasArg("SetACPTemp")) {
-    SamSetup.SetACPTemp = request->arg("SetACPTemp").toFloat();
-  }
-  if (request->hasArg("Kp")) {
-    SamSetup.Kp = request->arg("Kp").toFloat();
-  }
-  if (request->hasArg("Ki")) {
-    SamSetup.Ki = request->arg("Ki").toFloat();
-  }
-  if (request->hasArg("Kd")) {
-    SamSetup.Kd = request->arg("Kd").toFloat();
-  }
-  if (request->hasArg("StbVoltage")) {
-    SamSetup.StbVoltage = request->arg("StbVoltage").toFloat();
-  }
-  if (request->hasArg("BVolt")) {
-    SamSetup.BVolt = request->arg("BVolt").toFloat();
-  }
-  if (request->hasArg("DistTimeF")) {
-    SamSetup.DistTimeF = request->arg("DistTimeF").toInt();
-  }
-  if (request->hasArg("MaxPressureValue")) {
-    SamSetup.MaxPressureValue = request->arg("MaxPressureValue").toFloat();
-  }
-  if (request->hasArg("StepperStepMl")) {
-    SamSetup.StepperStepMl = request->arg("StepperStepMl").toInt();
-  }
-  if (request->hasArg("StepperStepMlI2C")) {
-    SamSetup.StepperStepMlI2C = request->arg("StepperStepMlI2C").toInt();
-  }
+  if (!apply_save_u16_arg(request, "SteamDelay", staged.SteamDelay, 0, 65535)) return;
+  if (!apply_save_u16_arg(request, "PipeDelay", staged.PipeDelay, 0, 65535)) return;
+  if (!apply_save_u16_arg(request, "WaterDelay", staged.WaterDelay, 0, 65535)) return;
+  if (!apply_save_u16_arg(request, "TankDelay", staged.TankDelay, 0, 65535)) return;
+  if (!apply_save_u16_arg(request, "ACPDelay", staged.ACPDelay, 0, 65535)) return;
+
+  if (!apply_save_float_arg(request, "DeltaSteamTemp", staged.DeltaSteamTemp, -1000.0f, 1000.0f)) return;
+  if (!apply_save_float_arg(request, "DeltaPipeTemp", staged.DeltaPipeTemp, -1000.0f, 1000.0f)) return;
+  if (!apply_save_float_arg(request, "DeltaWaterTemp", staged.DeltaWaterTemp, -1000.0f, 1000.0f)) return;
+  if (!apply_save_float_arg(request, "DeltaTankTemp", staged.DeltaTankTemp, -1000.0f, 1000.0f)) return;
+  if (!apply_save_float_arg(request, "DeltaACPTemp", staged.DeltaACPTemp, -1000.0f, 1000.0f)) return;
+  if (!apply_save_float_arg(request, "SetSteamTemp", staged.SetSteamTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "SetPipeTemp", staged.SetPipeTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "SetWaterTemp", staged.SetWaterTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "SetTankTemp", staged.SetTankTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "SetACPTemp", staged.SetACPTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "Kp", staged.Kp, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "Ki", staged.Ki, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "Kd", staged.Kd, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "StbVoltage", staged.StbVoltage, 0.0f, 10000.0f)) return;
+  if (!apply_save_float_arg(request, "BVolt", staged.BVolt, 0.0f, 10000.0f)) return;
+  if (!apply_save_u8_arg(request, "DistTimeF", staged.DistTimeF, 0, 255)) return;
+  if (!apply_save_float_arg(request, "MaxPressureValue", staged.MaxPressureValue, 0.0f, 10000.0f)) return;
+  if (!apply_save_u16_arg(request, "StepperStepMl", staged.StepperStepMl, 0, 65535)) return;
+  if (!apply_save_u16_arg(request, "StepperStepMlI2C", staged.StepperStepMlI2C, 0, 65535)) return;
   if (request->hasArg("stepperstepml")) {
-    SamSetup.StepperStepMl = request->arg("stepperstepml").toInt() / 100;
+    long stepsPer100Ml = 0;
+    if (!parse_save_long_arg(request, "stepperstepml", 0, 6553500, stepsPer100Ml)) return;
+    staged.StepperStepMl = (uint16_t)(stepsPer100Ml / 100);
   }
+
+  update_checkbox_arg(request, "useflevel", staged.UseHLS, fullSetupForm);
+  update_checkbox_arg(request, "usepressure", staged.UsePreccureCorrect, fullSetupForm);
+  update_checkbox_arg(request, "useautospeed", staged.useautospeed, fullSetupForm);
+  update_checkbox_arg(request, "useDetectorOnHeads", staged.useDetectorOnHeads, fullSetupForm);
+  update_checkbox_arg(request, "ChangeProgramBuzzer", staged.ChangeProgramBuzzer, fullSetupForm);
+  update_checkbox_arg(request, "UseBuzzer", staged.UseBuzzer, fullSetupForm);
+  update_checkbox_arg(request, "UseBBuzzer", staged.UseBBuzzer, fullSetupForm);
+  update_checkbox_arg(request, "UseWS", staged.UseWS, fullSetupForm);
+  update_checkbox_arg(request, "UseST", staged.UseST, fullSetupForm);
+  update_checkbox_arg(request, "CheckPower", staged.CheckPower, fullSetupForm);
+
+  if (!apply_save_u8_arg(request, "autospeed", staged.autospeed, 0, 99)) return;
+  if (!apply_save_float_arg(request, "DistTemp", staged.DistTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_u8_arg(request, "TimeZone", staged.TimeZone, 0, 23)) return;
+  if (!apply_save_u8_arg(request, "LogPeriod", staged.LogPeriod, 1, 255)) return;
+  if (!apply_save_float_arg(request, "HeaterR", staged.HeaterResistant, 0.001f, 10000.0f)) return;
+  if (!apply_save_float_arg(request, "NbkIn", staged.NbkIn, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "NbkDelta", staged.NbkDelta, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "NbkDM", staged.NbkDM, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "NbkDP", staged.NbkDP, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "NbkSteamT", staged.NbkSteamT, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "NbkOwPress", staged.NbkOwPress, 0.0f, 100000.0f)) return;
+
+  apply_save_string_arg(request, "videourl", staged.videourl);
+  apply_save_string_arg(request, "blynkauth", staged.blynkauth);
+  apply_save_string_arg(request, "tgtoken", staged.tg_token);
+  apply_save_string_arg(request, "tgchatid", staged.tg_chat_id);
+  apply_save_string_arg(request, "SteamColor", staged.SteamColor);
+  apply_save_string_arg(request, "PipeColor", staged.PipeColor);
+  apply_save_string_arg(request, "WaterColor", staged.WaterColor);
+  apply_save_string_arg(request, "TankColor", staged.TankColor);
+  apply_save_string_arg(request, "ACPColor", staged.ACPColor);
+
+  if (!apply_save_bool01_arg(request, "rele1", staged.rele1)) return;
+  if (!apply_save_bool01_arg(request, "rele2", staged.rele2)) return;
+  if (!apply_save_bool01_arg(request, "rele3", staged.rele3)) return;
+  if (!apply_save_bool01_arg(request, "rele4", staged.rele4)) return;
+
+  if (!apply_save_ds_addr_arg(request, "SteamAddr", dsSnapshot, staged.SteamAdress, setupSave.resetSensor.steam)) return;
+  if (!apply_save_ds_addr_arg(request, "PipeAddr", dsSnapshot, staged.PipeAdress, setupSave.resetSensor.pipe)) return;
+  if (!apply_save_ds_addr_arg(request, "WaterAddr", dsSnapshot, staged.WaterAdress, setupSave.resetSensor.water)) return;
+  if (!apply_save_ds_addr_arg(request, "TankAddr", dsSnapshot, staged.TankAdress, setupSave.resetSensor.tank)) return;
+  if (!apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, setupSave.resetSensor.acp)) return;
+
+  if (!apply_save_float_arg(request, "ColDiam", staged.ColDiam, 0.1f, 10.0f)) return;
+  if (!apply_save_float_arg(request, "ColHeight", staged.ColHeight, 0.01f, 10.0f)) return;
+  if (!apply_save_u8_arg(request, "PackDens", staged.PackDens, 0, 100)) return;
+
+  bool hasProgram = false;
+  PendingProgramMode pendingMode = PPM_NONE;
+  String pendingProgramText;
   if (const AsyncWebParameter *wProgramParam = get_request_param(request, "WProgram")) {
-    // [C-3] Вынесено в loop(): set_program пишет program[], читаемый из SysTicker.
-    pending_program_str = wProgramParam->value();
-    __sync_synchronize();  // [ISSUE-3] барьер: строка видна до установки флага
     SAMOVAR_MODE programMode = modeRequested ? requestedMode : Samovar_Mode;
-    if (programMode == SAMOVAR_BEER_MODE)
-      pending_program_mode = PPM_BEER;
-    else
-      pending_program_mode = PPM_RECT;
+    pendingMode = pending_program_mode_for_samovar_mode(programMode);
+    pendingProgramText = wProgramParam->value();
+    hasProgram = true;
   }
 
-  update_checkbox_arg(request, "useflevel", SamSetup.UseHLS, fullSetupForm);
-  update_checkbox_arg(request, "usepressure", SamSetup.UsePreccureCorrect, fullSetupForm);
-  update_checkbox_arg(request, "useautospeed", SamSetup.useautospeed, fullSetupForm);
-  update_checkbox_arg(request, "useDetectorOnHeads", SamSetup.useDetectorOnHeads, fullSetupForm);
-  update_checkbox_arg(request, "ChangeProgramBuzzer", SamSetup.ChangeProgramBuzzer, fullSetupForm);
-  update_checkbox_arg(request, "UseBuzzer", SamSetup.UseBuzzer, fullSetupForm);
-  update_checkbox_arg(request, "UseBBuzzer", SamSetup.UseBBuzzer, fullSetupForm);
-  update_checkbox_arg(request, "UseWS", SamSetup.UseWS, fullSetupForm);
-  update_checkbox_arg(request, "UseST", SamSetup.UseST, fullSetupForm);
-  update_checkbox_arg(request, "CheckPower", SamSetup.CheckPower, fullSetupForm);
-
-  if (request->hasArg("autospeed")) {
-    SamSetup.autospeed = request->arg("autospeed").toInt();
-  }
-  if (request->hasArg("DistTemp")) {
-    SamSetup.DistTemp = request->arg("DistTemp").toFloat();
-  }
-  if (request->hasArg("TimeZone")) {
-    SamSetup.TimeZone = request->arg("TimeZone").toInt();
-  }
-  if (request->hasArg("LogPeriod")) {
-    SamSetup.LogPeriod = request->arg("LogPeriod").toInt();
-  }
-  if (request->hasArg("HeaterR")) {
-    SamSetup.HeaterResistant = request->arg("HeaterR").toFloat();
-  }
-  if (request->hasArg("NbkIn")) {
-    SamSetup.NbkIn = request->arg("NbkIn").toFloat();
-  }
-  if (request->hasArg("NbkDelta")) {
-    SamSetup.NbkDelta = request->arg("NbkDelta").toFloat();
-  }
-  if (request->hasArg("NbkDM")) {
-    SamSetup.NbkDM = request->arg("NbkDM").toFloat();
-  }
-  if (request->hasArg("NbkDP")) {
-    SamSetup.NbkDP = request->arg("NbkDP").toFloat();
-  }
-  if (request->hasArg("NbkSteamT")) {
-    SamSetup.NbkSteamT = request->arg("NbkSteamT").toFloat();
-  }
-  if (request->hasArg("NbkOwPress")) {
-    SamSetup.NbkOwPress = request->arg("NbkOwPress").toFloat();
-  }
-  if (request->hasArg("videourl")) {
-    copyStringSafe(SamSetup.videourl, request->arg("videourl"));
-  }
-  if (request->hasArg("blynkauth")) {
-    copyStringSafe(SamSetup.blynkauth, request->arg("blynkauth"));
-  }
-  if (request->hasArg("tgtoken")) {
-    copyStringSafe(SamSetup.tg_token, request->arg("tgtoken"));
-  }
-  if (request->hasArg("tgchatid")) {
-    copyStringSafe(SamSetup.tg_chat_id, request->arg("tgchatid"));
-  }
-  if (request->hasArg("SteamColor")) {
-    copyStringSafe(SamSetup.SteamColor, request->arg("SteamColor"));
-  }
-  if (request->hasArg("PipeColor")) {
-    copyStringSafe(SamSetup.PipeColor, request->arg("PipeColor"));
-  }
-  if (request->hasArg("WaterColor")) {
-    copyStringSafe(SamSetup.WaterColor, request->arg("WaterColor"));
-  }
-  if (request->hasArg("TankColor")) {
-    copyStringSafe(SamSetup.TankColor, request->arg("TankColor"));
-  }
-  if (request->hasArg("ACPColor")) {
-    copyStringSafe(SamSetup.ACPColor, request->arg("ACPColor"));
-  }
-  if (request->hasArg("rele1")) {
-    SamSetup.rele1 = request->arg("rele1").toInt();
-  }
-  if (request->hasArg("rele2")) {
-    SamSetup.rele2 = request->arg("rele2").toInt();
-  }
-  if (request->hasArg("rele3")) {
-    SamSetup.rele3 = request->arg("rele3").toInt();
-  }
-  if (request->hasArg("rele4")) {
-    SamSetup.rele4 = request->arg("rele4").toInt();
-  }
-  const int dsAddrMax = (int)(sizeof(DSAddr) / sizeof(DSAddr[0]));
-  auto isValidDsIndex = [&](int idx) -> bool {
-    return idx >= 0 && idx < DScnt && idx < dsAddrMax;
-  };
-  if (request->hasArg("SteamAddr")) {
-    int idx = request->arg("SteamAddr").toInt();
-    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.SteamAdress);
-    else {
-      SamSetup.SteamAdress[0] = 255;
-      SteamSensor.Sensor[0] = 255;
-      SteamSensor.avgTemp = 0;
-    }
-  }
-  if (request->hasArg("PipeAddr")) {
-    int idx = request->arg("PipeAddr").toInt();
-    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.PipeAdress);
-    else {
-      SamSetup.PipeAdress[0] = 255;
-      PipeSensor.Sensor[0] = 255;
-      PipeSensor.avgTemp = 0;
-    }
-  }
-  if (request->hasArg("WaterAddr")) {
-    int idx = request->arg("WaterAddr").toInt();
-    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.WaterAdress);
-    else {
-      SamSetup.WaterAdress[0] = 255;
-      WaterSensor.Sensor[0] = 255;
-      WaterSensor.avgTemp = 0;
-    }
-  }
-  if (request->hasArg("TankAddr")) {
-    int idx = request->arg("TankAddr").toInt();
-    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.TankAdress);
-    else {
-      SamSetup.TankAdress[0] = 255;
-      TankSensor.Sensor[0] = 255;
-      TankSensor.avgTemp = 0;
-    }
-  }
-  if (request->hasArg("ACPAddr")) {
-    int idx = request->arg("ACPAddr").toInt();
-    if (isValidDsIndex(idx)) CopyDSAddress(DSAddr[idx], SamSetup.ACPAdress);
-    else {
-      SamSetup.ACPAdress[0] = 255;
-      ACPSensor.Sensor[0] = 255;
-      ACPSensor.avgTemp = 0;
-    }
-  }
-
-  if (request->hasArg("ColDiam")) {
-    SamSetup.ColDiam = request->arg("ColDiam").toFloat();
-  }
-  if (request->hasArg("ColHeight")) {
-    SamSetup.ColHeight = request->arg("ColHeight").toFloat();
-  }
-  if (request->hasArg("PackDens")) {
-    SamSetup.PackDens = request->arg("PackDens").toInt();
-  }
-
-  if (modeRequested &&
+  bool hasSwitchMode = modeRequested &&
       (SamSetup.Mode != (uint16_t)requestedMode ||
-       Samovar_Mode != requestedMode)) {
-    // [W-5] Вынесено в loop(): смена режима останавливает процессы и обновляет runtime-состояние.
-    pending_switch_mode_value = requestedMode;
-    __sync_synchronize();  // [ISSUE-3] режим виден до установки флага
-    pending_switch_mode_flag = true;
-  }
+       Samovar_Mode != requestedMode);
 
-  // [C-10/W-8] Вынесено в loop(): NVS-операции блокирующие, из async нельзя.
-  pending_save_profile_flag = true;
+  const char *busyText = nullptr;
+  if (!queue_pending_setup_save(setupSave, hasProgram, pendingMode, pendingProgramText, hasSwitchMode, requestedMode, busyText)) {
+    request->send(503, "text/plain", busyText ? busyText : "BUSY");
+    return;
+  }
 
   get_task_stack_usage();
   AsyncWebServerResponse *response = request->beginResponse(301);
@@ -1250,160 +1415,286 @@ void handleSave(AsyncWebServerRequest *request) {
   // is_reboot обрабатывается в loop() — рестарт выполнится после отправки ответа.
 }
 
-void web_command(AsyncWebServerRequest *request) {
-  // Защита от повторных команд
-  static uint32_t last_command_time = 0;
-  if (millis() - last_command_time < 1500) {
-    request->send(200, "text/plain", "OK");
-    return;
-  }
-  last_command_time = millis();
-  /*
-    int params = request->params();
-    for(int i=0;i<params;i++){
-      AsyncWebParameter* p = request->getParam(i);
-      Serial.print(p->name().c_str());
-      Serial.print("=");
-      Serial.println(p->value().c_str());
-    }
-    //return;
-  */
-  if (request->hasArg("start") && PowerOn) {
-      if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-        sam_command_sync = SAMOVAR_BEER_NEXT;
-      } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-        sam_command_sync = SAMOVAR_DIST_NEXT;
-      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-        sam_command_sync = SAMOVAR_NBK_NEXT;
-      } else {
-        sam_command_sync = SAMOVAR_START;
-      }
-    } else if (request->hasArg("power")) {
-      if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-        if (!PowerOn) sam_command_sync = SAMOVAR_BEER;
-        else
-          sam_command_sync = SAMOVAR_POWER;
-      } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-        if (!PowerOn) sam_command_sync = SAMOVAR_DISTILLATION;
-        else
-          sam_command_sync = SAMOVAR_POWER;
-      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-        if (!PowerOn) sam_command_sync = SAMOVAR_BK;
-        else
-          sam_command_sync = SAMOVAR_POWER;
-      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-        if (!PowerOn) sam_command_sync = SAMOVAR_NBK;
-        else
-          sam_command_sync = SAMOVAR_POWER;
-      } else
-        sam_command_sync = SAMOVAR_POWER;
-    } else if (request->hasArg("setbodytemp")) {
-      sam_command_sync = SAMOVAR_SETBODYTEMP;
-    } else if (request->hasArg("reset")) {
-      sam_command_sync = SAMOVAR_RESET;
-    } else if (request->hasArg("reboot")) {
-      // [W-1] Ответ отправляется до рестарта; рестарт выполнится в loop().
-      request->send(200, "text/plain", "OK. Rebooting...");
-      is_reboot = true;
-      return;
-    } else if (request->hasArg("resetwifi")) {
-      menu_reset_wifi();
-    } else if (request->hasArg("startst")) {
-      sam_command_sync = SAMOVAR_SELF_TEST;
-    } else if (request->hasArg("rescands")) {
-      // [W-9] Вынесено в loop(): scan_ds_adress блокирует OneWire шину.
-      pending_rescan_ds_flag = true;
-    } else if (request->hasArg("stopst")) {
-      stop_self_test();
-    } else if (request->hasArg("mixer")) {
-      if (request->arg("mixer").toInt() == 1) {
-        set_mixer(true);
-      } else {
-        set_mixer(false);
-      }
-    } else if (request->hasArg("pnbk") && PowerOn) {
-      // [W-4] get_stepper_speed()/set_stepper_target() делают блокирующий I2C —
-      //        откладываем в loop(); pnbk_value несёт сырое значение
-      //        (9000=+шаг, 8000=-шаг, иначе абсолютная скорость л/ч).
-      pending_pnbk_value = request->arg("pnbk").toFloat();
-      __sync_synchronize();
-      pending_pnbk_flag = true;
-      } else if (request->hasArg("nbkopt") && PowerOn) { //TODO устанавливаем текущие М и Р как оптимальные Мо и Ро
-        nbk_Mo = nbk_M;
-        nbk_Po = nbk_P;
+static const AsyncWebParameter* get_web_command_param(AsyncWebServerRequest *request, const char *name) {
+  if (!request || !name) return nullptr;
+  return request->getParam(name, true);
+}
+
+static bool web_command_has_arg(AsyncWebServerRequest *request, const char *name) {
+  return get_web_command_param(request, name) != nullptr;
+}
+
+static String web_command_arg(AsyncWebServerRequest *request, const char *name) {
+  const AsyncWebParameter *param = get_web_command_param(request, name);
+  return param ? param->value() : String();
+}
+
+static String get_web_command_key(AsyncWebServerRequest *request) {
+  if (web_command_has_arg(request, "start")) return "start";
+  if (web_command_has_arg(request, "power")) return "power";
+  if (web_command_has_arg(request, "setbodytemp")) return "setbodytemp";
+  if (web_command_has_arg(request, "reset")) return "reset";
+  if (web_command_has_arg(request, "reboot")) return "reboot";
+  if (web_command_has_arg(request, "resetwifi")) return "resetwifi";
+  if (web_command_has_arg(request, "startst")) return "startst";
+  if (web_command_has_arg(request, "rescands")) return "rescands";
+  if (web_command_has_arg(request, "stopst")) return "stopst";
+  if (web_command_has_arg(request, "mixer")) return String("mixer=") + web_command_arg(request, "mixer");
+  if (web_command_has_arg(request, "pnbk")) return String("pnbk=") + web_command_arg(request, "pnbk");
+  if (web_command_has_arg(request, "nbkopt")) return "nbkopt";
+  if (web_command_has_arg(request, "distiller")) return String("distiller=") + web_command_arg(request, "distiller");
+  if (web_command_has_arg(request, "startbk")) return String("startbk=") + web_command_arg(request, "startbk");
+  if (web_command_has_arg(request, "startnbk")) return String("startnbk=") + web_command_arg(request, "startnbk");
+  if (web_command_has_arg(request, "watert")) return String("watert=") + web_command_arg(request, "watert");
+  if (web_command_has_arg(request, "pumpspeed")) return String("pumpspeed=") + web_command_arg(request, "pumpspeed");
+  if (web_command_has_arg(request, "pause")) return "pause";
 #ifdef SAMOVAR_USE_POWER
-        SendMsg("Установлены оптимальные значения: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ",  " + String(nbk_Po,1) + " л/ч", WARNING_MSG);
-#endif
-    } else if (request->hasArg("distiller")) {
-      if (request->arg("distiller").toInt() == 1) {
-        sam_command_sync = SAMOVAR_DISTILLATION;
-      } else {
-        sam_command_sync = SAMOVAR_POWER;
-      }
-    } else if (request->hasArg("startbk")) {
-      if (request->arg("startbk").toInt() == 1) {
-        sam_command_sync = SAMOVAR_BK;
-      } else {
-        sam_command_sync = SAMOVAR_POWER;
-      }
-    } else if (request->hasArg("startnbk")) {
-      if (request->arg("startnbk").toInt() == 1) {
-        sam_command_sync = SAMOVAR_NBK;
-      } else {
-        sam_command_sync = SAMOVAR_POWER;
-      }
-    } else if (request->hasArg("watert")) {
-      set_water_temp(request->arg("watert").toFloat());
-    } else if (request->hasArg("pumpspeed")) {
-      set_pump_speed(get_speed_from_rate(request->arg("pumpspeed").toFloat()), true);
-    } else if (request->hasArg("pause")) {
-      if (PauseOn) {
-        sam_command_sync = SAMOVAR_CONTINUE;
-      } else {
-        sam_command_sync = SAMOVAR_PAUSE;
-      }
-    }
-#ifdef SAMOVAR_USE_POWER
-    else if (request->hasArg("voltage")) {
-      set_current_power(request->arg("voltage").toFloat());
-    }
+  if (web_command_has_arg(request, "voltage")) return String("voltage=") + web_command_arg(request, "voltage");
 #endif
 #ifdef USE_LUA
-    else if (request->hasArg("lua")) {
-      run_lua_script(request->arg("lua"));
-    } else if (request->hasArg("luastr")) {
-      String lstr = request->arg("luastr");
-      lstr.replace("^", " ");
-      // [ISSUE-5] Вынесено в loop(): run_lua_string конкурирует с do_lua_script
-      //           (core 1) за общий lua_State — вызывать только из loop.
-      pending_lua_str = lstr;
-      __sync_synchronize();  // [ISSUE-3] барьер: строка видна до установки флага
-      pending_lua_flag = true;
-    }
+  if (web_command_has_arg(request, "lua")) return String("lua=") + web_command_arg(request, "lua");
+  if (web_command_has_arg(request, "luastr")) return "luastr";
 #endif
+  return "";
+}
+
+static bool web_command_parse_float(AsyncWebServerRequest *request, const char *name, float& value) {
+  if (!web_command_has_arg(request, name)) return false;
+  String raw = web_command_arg(request, name);
+  return parseFloatSafe(raw.c_str(), value);
+}
+
+static void send_web_command_response(AsyncWebServerRequest *request, int status, const char *text) {
+  request->send(status, "text/plain", text);
+}
+
+void web_command(AsyncWebServerRequest *request) {
+  static uint32_t last_command_time = 0;
+  static String last_command_key;
+  String commandKey = get_web_command_key(request);
+  bool bypassThrottle = web_command_has_arg(request, "reset") || web_command_has_arg(request, "reboot") || web_command_has_arg(request, "resetwifi");
+  if (!bypassThrottle && commandKey.length() > 0 && commandKey == last_command_key && millis() - last_command_time < 1500) {
+    send_web_command_response(request, 429, "IGNORED");
+    return;
+  }
+  auto markAccepted = [&]() {
+    if (!bypassThrottle && commandKey.length() > 0) {
+      last_command_key = commandKey;
+      last_command_time = millis();
+    }
+  };
+
+  if (web_command_has_arg(request, "start")) {
+    if (!PowerOn) {
+      send_web_command_response(request, 409, "POWER_OFF");
+      return;
+    }
+    SamovarCommands command = mode_start_command(Samovar_Mode);
+    if (!queue_samovar_command(command)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "power")) {
+    SamovarCommands command = SAMOVAR_POWER;
+    if (!PowerOn) command = mode_power_on_command(Samovar_Mode);
+    if (!queue_samovar_command(command)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "setbodytemp")) {
+    if (!queue_samovar_command(SAMOVAR_SETBODYTEMP)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "reset")) {
+    if (!queue_samovar_reset_command()) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "reboot")) {
+    if (!queue_pending_flag(is_reboot)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+    markAccepted();
+    request->send(200, "text/plain", "OK");
+    return;
+  } else if (web_command_has_arg(request, "resetwifi")) {
+    if (!queue_pending_flag(pending_reset_wifi_flag)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+    markAccepted();
+    request->send(200, "text/plain", "OK");
+    return;
+  } else if (web_command_has_arg(request, "startst")) {
+    if (!queue_samovar_command(SAMOVAR_SELF_TEST)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "rescands")) {
+    if (samovar_process_active()) {
+      send_web_command_response(request, 409, "BUSY");
+      return;
+    }
+    if (!queue_pending_flag(pending_rescan_ds_flag)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "stopst")) {
+    if (!queue_pending_flag(pending_stop_self_test_flag)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "mixer")) {
+    long mixerValue = 0;
+    String raw = web_command_arg(request, "mixer");
+    if (!parseLongSafe(raw.c_str(), mixerValue)) {
+      send_web_command_response(request, 400, "BAD_REQUEST");
+      return;
+    }
+    if (!queue_pending_bool(pending_mixer_flag, pending_mixer_on, mixerValue == 1)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "pnbk")) {
+    if (!PowerOn) {
+      send_web_command_response(request, 409, "POWER_OFF");
+      return;
+    }
+    float pnbkValue = 0;
+    if (!web_command_parse_float(request, "pnbk", pnbkValue)) {
+      send_web_command_response(request, 400, "BAD_REQUEST");
+      return;
+    }
+    if (!queue_pending_float(pending_pnbk_flag, pending_pnbk_value, pnbkValue)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "nbkopt")) {
+    if (!PowerOn) {
+      send_web_command_response(request, 409, "POWER_OFF");
+      return;
+    }
+    if (!queue_pending_flag(pending_nbkopt_flag)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "distiller")) {
+    SamovarCommands command = (web_command_arg(request, "distiller").toInt() == 1) ? SAMOVAR_DISTILLATION : SAMOVAR_POWER;
+    if (!queue_samovar_command(command)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "startbk")) {
+    SamovarCommands command = (web_command_arg(request, "startbk").toInt() == 1) ? SAMOVAR_BK : SAMOVAR_POWER;
+    if (!queue_samovar_command(command)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "startnbk")) {
+    SamovarCommands command = (web_command_arg(request, "startnbk").toInt() == 1) ? SAMOVAR_NBK : SAMOVAR_POWER;
+    if (!queue_samovar_command(command)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "watert")) {
+    float waterTemp = 0;
+    if (!web_command_parse_float(request, "watert", waterTemp)) {
+      send_web_command_response(request, 400, "BAD_REQUEST");
+      return;
+    }
+    if (!queue_pending_float(pending_water_temp_flag, pending_water_temp_value, waterTemp)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "pumpspeed")) {
+    float pumpSpeed = 0;
+    if (!web_command_parse_float(request, "pumpspeed", pumpSpeed) || pumpSpeed <= 0) {
+      send_web_command_response(request, 400, "BAD_REQUEST");
+      return;
+    }
+    if (!queue_pending_float(pending_pump_speed_flag, pending_pump_speed_rate, pumpSpeed)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "pause")) {
+    SamovarCommands command = PauseOn ? SAMOVAR_CONTINUE : SAMOVAR_PAUSE;
+    if (!queue_samovar_command(command)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  }
+#ifdef SAMOVAR_USE_POWER
+  else if (web_command_has_arg(request, "voltage")) {
+    if (!PowerOn) {
+      send_web_command_response(request, 409, "POWER_OFF");
+      return;
+    }
+    float voltage = 0;
+    if (!web_command_parse_float(request, "voltage", voltage) || voltage < 0) {
+      send_web_command_response(request, 400, "BAD_REQUEST");
+      return;
+    }
+    if (!queue_pending_float(pending_voltage_flag, pending_voltage_value, voltage)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  }
+#endif
+#ifdef USE_LUA
+  else if (web_command_has_arg(request, "lua")) {
+    if (!queue_pending_string(pending_lua_file_flag, pending_lua_file, web_command_arg(request, "lua"))) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  } else if (web_command_has_arg(request, "luastr")) {
+    String lstr = web_command_arg(request, "luastr");
+    lstr.replace("^", " ");
+    if (!queue_pending_string(pending_lua_flag, pending_lua_str, lstr)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+  }
+#endif
+  else {
+    send_web_command_response(request, 400, "BAD_REQUEST");
+    return;
+  }
+  markAccepted();
   request->send(200, "text/plain", "OK");
 }
 void web_program(AsyncWebServerRequest *request) {
-  String response = "OK";
+  String responseProgram;
+  if (request->hasArg("Descr")) {
+    String description = request->arg("Descr");
+    description.replace("%", "&#37;");
+    if (!set_session_description_value(description, pdMS_TO_TICKS(500))) {
+      send_program_json_response(request, 503, false, F("BUSY: описание сессии занято"), String());
+      return;
+    }
+  }
   const AsyncWebParameter *wProgramParam = get_request_param(request, "WProgram");
   if (wProgramParam) {
+    if (reject_program_update_if_busy_json(request)) {
+      return;
+    }
     // [C-3] Вынесено в loop(): set_*_program пишет program[], читаемый из SysTicker.
     //        Отвечаем текущим содержимым программы (до применения); UI
     //        синхронизируется при следующем запросе после цикла loop.
-    pending_program_str = wProgramParam->value();
-    __sync_synchronize();  // [ISSUE-3] барьер: строка видна до установки флага
+    PendingProgramMode pendingMode = pending_program_mode_for_samovar_mode(Samovar_Mode);
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      pending_program_mode = PPM_BEER;
-      response = get_beer_program();
+      responseProgram = get_beer_program();
     } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      pending_program_mode = PPM_DIST;
-      response = get_dist_program();
+      responseProgram = get_dist_program();
     } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      pending_program_mode = PPM_NBK;
-      response = get_nbk_program();
+      responseProgram = get_nbk_program();
     } else {
-      pending_program_mode = PPM_RECT;
-      response = get_program(CAPACITY_NUM * 2);
+      responseProgram = get_program(PROGRAM_END);
+    }
+    if (!queue_pending_program(pendingMode, wProgramParam->value())) {
+      send_program_json_response(request, 503, false, F("BUSY: предыдущее изменение программы ещё не применено"), String());
+      return;
     }
   }
   if (request->hasArg("vless")) {
@@ -1412,11 +1703,7 @@ void web_program(AsyncWebServerRequest *request) {
     heatLossCalculated = false; // Сбрасываем расчет при смене объема
     heatStartMillis = 0;
   }
-  if (request->hasArg("Descr")) {
-    SessionDescription = request->arg("Descr");
-    SessionDescription.replace("%", "&#37;");
-  }
-  request->send(200, "text/plain", response);
+  send_program_json_response(request, 200, true, String(), responseProgram);
 }
 
 void calibrate_command(AsyncWebServerRequest *request) {
@@ -1433,26 +1720,38 @@ void calibrate_command(AsyncWebServerRequest *request) {
     }
     if (!isI2C) {
       if (request->hasArg("start") && startval == 0) {
-        sam_command_sync = CALIBRATE_START;
+        if (!queue_samovar_command(CALIBRATE_START)) {
+          request->send(503, "text/plain", "BUSY");
+          return;
+        }
       }
       if (request->hasArg("finish") && startval == 100) {
-        sam_command_sync = CALIBRATE_STOP;
+        if (!queue_samovar_command(CALIBRATE_STOP)) {
+          request->send(503, "text/plain", "BUSY");
+          return;
+        }
         cl = true;
       }
     } else if (i2cStepperPump.present) {
       // [W-4] I2C-операции откладываем в loop(); present берём из глобала без I2C.
       if (request->hasArg("start") && !I2CPumpCalibrating) {
-        pending_i2ccal_buf.is_finish  = false;
-        pending_i2ccal_buf.pumpMlHour = i2c_stepper_mlh_from_step_speed(CurrrentStepperSpeed);
-        pending_i2ccal_buf.stepsPerMl = i2c_stepper_steps_per_ml();
-        pending_i2ccal_buf.cmdSpeed   = CurrrentStepperSpeed;
-        __sync_synchronize();
-        pending_i2ccal_flag = true;
+        PendingI2CCalCmd cmd = {};
+        cmd.is_finish  = false;
+        cmd.pumpMlHour = i2c_stepper_mlh_from_step_speed(CurrrentStepperSpeed);
+        cmd.stepsPerMl = i2c_stepper_steps_per_ml();
+        cmd.cmdSpeed   = CurrrentStepperSpeed;
+        if (!queue_pending_i2ccal(cmd)) {
+          request->send(503, "text/plain", "BUSY");
+          return;
+        }
       }
       if (request->hasArg("finish") && I2CPumpCalibrating) {
-        pending_i2ccal_buf.is_finish = true;
-        __sync_synchronize();
-        pending_i2ccal_flag = true;
+        PendingI2CCalCmd cmd = {};
+        cmd.is_finish = true;
+        if (!queue_pending_i2ccal(cmd)) {
+          request->send(503, "text/plain", "BUSY");
+          return;
+        }
         // [C-10/W-8] save_profile() сделает loop() в ветке pending_i2ccal ПОСЛЕ refresh
         //            (порядок важен: иначе в NVS попадёт старый StepperStepMlI2C).
         cl = true;
@@ -1473,8 +1772,10 @@ void calibrate_command(AsyncWebServerRequest *request) {
 }
 
 void get_data_log(AsyncWebServerRequest *request, String fn) {
-  if (fileToAppend && fileToAppend.available())
-    fileToAppend.flush();
+  if (schedule_log_flush_if_needed() != LOG_FLUSH_READY) {
+    request->send(503, "text/plain", "BUSY");
+    return;
+  }
   AsyncWebServerResponse *response;
   if (SPIFFS.exists("/" + fn)) {
     response = request->beginResponse(SPIFFS, "/" + fn, String(), true);
@@ -1496,12 +1797,84 @@ static void normalize_web_if_version_string(String& v) {
   v.replace("\r", "");
 }
 
+static bool write_web_file_atomic(const String& path, const String& content) {
+  String tmpPath = path + ".tmp";
+  String backupPath = path + ".bak";
+
+  SPIFFS.remove(tmpPath);
+  SPIFFS.remove(backupPath);
+
+  File wf = SPIFFS.open(tmpPath, FILE_WRITE);
+  if (!wf) {
+    Serial.println("WEB interface write failed, open tmp: " + tmpPath);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+
+  size_t written = wf.write((const uint8_t*)content.c_str(), content.length());
+  wf.close();
+  if (written != content.length()) {
+    Serial.println("WEB interface write failed, partial tmp: " + tmpPath);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+
+  File rf = SPIFFS.open(tmpPath, FILE_READ);
+  if (!rf) {
+    Serial.println("WEB interface write failed, reopen tmp: " + tmpPath);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+  size_t tmpSize = rf.size();
+  rf.close();
+  if (tmpSize != content.length()) {
+    Serial.println("WEB interface write failed, tmp size: " + tmpPath);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+
+  bool hadFinal = SPIFFS.exists(path);
+  if (hadFinal && !SPIFFS.rename(path, backupPath)) {
+    Serial.println("WEB interface write failed, backup final: " + path);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+
+  if (!SPIFFS.rename(tmpPath, path)) {
+    Serial.println("WEB interface write failed, install tmp: " + path);
+    SPIFFS.remove(tmpPath);
+    if (hadFinal && !SPIFFS.rename(backupPath, path)) {
+      Serial.println("WEB interface rollback failed: " + path);
+    }
+    return false;
+  }
+
+  if (hadFinal) {
+    SPIFFS.remove(backupPath);
+  }
+  return true;
+}
+
+static bool web_file_content_empty_invalid(const String& fn, get_web_type type, const String& content) {
+  if (content.length() != 0) {
+    return false;
+  }
+  if (type == GET_CONTENT || type == SAVE_FILE_OVERRIDE || type == SAVE_FILE_IF_NOT_EXIST) {
+    Serial.println("WEB interface download failed, empty body: " + fn);
+    return true;
+  }
+  return false;
+}
+
 void get_web_interface() {
   String version;
   String local_version;
 
   version = get_web_file("version.txt", GET_CONTENT);
-  if (version == "<ERR>") return;
+  if (version == "<ERR>") {
+    Serial.println("WEB interface update failed on version.txt");
+    return;
+  }
   normalize_web_if_version_string(version);
 
   Serial.print(F("WEB interface version = "));
@@ -1578,13 +1951,14 @@ void get_web_interface() {
 
     if (updateOk) {
       // Версию уже скачали в начале функции — записываем нормализованную строку, без повторного HTTP.
-      File wf = SPIFFS.open("/version.txt", FILE_WRITE);
-      if (wf) {
-        wf.print(version);
-        wf.print('\n');
-        wf.close();
+      String versionMarker = version + "\n";
+      if (!write_web_file_atomic("/version.txt", versionMarker)) {
+        Serial.println("WEB interface update failed on version marker; local version marker was not changed.");
+        updateOk = false;
       }
-    } else {
+    }
+
+    if (!updateOk) {
       Serial.println("WEB interface update aborted; local version marker was not changed.");
     }
   }
@@ -1604,13 +1978,15 @@ String get_web_file(String fn, get_web_type type) {
 
   if (s == "<ERR>") {
     return s;
+  } else if (web_file_content_empty_invalid(fn, type, s)) {
+    return "<ERR>";
   } else {
     if (type == GET_CONTENT) {
       return s;
     } else {
-      File wf = SPIFFS.open("/" + fn, FILE_WRITE);
-      wf.print(s);
-      wf.close();
+      if (!write_web_file_atomic("/" + fn, s)) {
+        return "<ERR>";
+      }
       //Serial.print("responseText = ");
       //Serial.println(s);
     }

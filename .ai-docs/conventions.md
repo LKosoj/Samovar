@@ -5,7 +5,7 @@
 *   **Переменные и функции C/C++**: Используется `snake_case` (например, `distiller_proc`, `SamSetup`, `get_alcohol`).
 *   **Переменные Lua**: Используется `snake_case` (например, `set_power`, `get_timer`).
 *   **Константы и макросы**: Используется `UPPER_CASE` с подчёркиванием (например, `MAX_WATER_TEMP`, `USE_MQTT`, `STEPPER_STEP_ML`).
-*   **Структуры и классы**: Используется `PascalCase` (например, `QualityParams`, `LuaWrapper`).
+*   **Структуры и классы**: Используется `PascalCase` (например, `TimePredictor`, `LuaWrapper`).
 
 ## Форматирование кода
 

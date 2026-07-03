@@ -9,17 +9,28 @@ static bool nvsProfileWriteFailed = false;
 
 static void write_last_mode_meta(uint8_t mode);
 static bool compact_samovar_nvs_namespaces();
+static bool recover_pending_samovar_nvs_compaction();
 static void load_profile_nvs_from_namespace(const char* ns);
 struct SamovarNvsEntryBackup;
+struct SamovarNvsBackupDiskHeader;
+struct SamovarNvsEntryDiskHeader;
 static void free_samovar_nvs_backup(SamovarNvsEntryBackup* entries, size_t count);
 static bool read_samovar_nvs_entry(nvs_handle_t handle, const nvs_entry_info_t& info, SamovarNvsEntryBackup& entry);
 static esp_err_t write_samovar_nvs_entry(nvs_handle_t handle, const SamovarNvsEntryBackup& entry);
 static bool restore_samovar_nvs_entries(const SamovarNvsEntryBackup* entries, size_t count);
 static bool backup_samovar_nvs_entries(SamovarNvsEntryBackup* entries, size_t maxEntries, size_t& count);
+static bool save_samovar_nvs_compaction_backup(const SamovarNvsEntryBackup* entries, size_t count);
+static bool load_samovar_nvs_compaction_backup(SamovarNvsEntryBackup*& entries, size_t& count);
+static void clear_samovar_nvs_compaction_backup();
 static bool nvs_find_first_entry(const char* partName, const char* ns, nvs_type_t type, nvs_iterator_t* outIt);
 static esp_err_t nvs_advance_iterator(nvs_iterator_t* it);
 
 static const char* const SAMOVAR_COMMON_PROFILE_NAMESPACE = "sam_cfg";
+static const char* const SAMOVAR_NVS_COMPACTION_BACKUP_NAMESPACE = "sam_tmp";
+static const char* const SAMOVAR_NVS_COMPACTION_BACKUP_DATA_KEY = "data";
+static const char* const SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC_KEY = "magic";
+static const uint32_t SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC = 0x534E5653; // SNVS
+static const uint16_t SAMOVAR_NVS_COMPACTION_BACKUP_VERSION = 1;
 static const size_t SAMOVAR_NVS_BACKUP_MAX_ENTRIES = 128;
 
 static const char* const SAMOVAR_LEGACY_PROFILE_NAMESPACES[] = {
@@ -286,6 +297,21 @@ struct SamovarNvsEntryBackup {
   uint8_t* data;
 };
 
+struct SamovarNvsBackupDiskHeader {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t count;
+  uint32_t totalLen;
+};
+
+struct SamovarNvsEntryDiskHeader {
+  char ns[16];
+  char key[16];
+  uint8_t type;
+  uint32_t len;
+  uint8_t value[8];
+};
+
 static void free_samovar_nvs_backup(SamovarNvsEntryBackup* entries, size_t count) {
   if (!entries) return;
   for (size_t i = 0; i < count; i++) {
@@ -507,10 +533,237 @@ static bool backup_samovar_nvs_entries(SamovarNvsEntryBackup* entries, size_t ma
   return true;
 }
 
+static size_t samovar_nvs_backup_entry_serialized_len(const SamovarNvsEntryBackup& entry) {
+  size_t len = sizeof(SamovarNvsEntryDiskHeader);
+  if (entry.type == NVS_TYPE_STR || entry.type == NVS_TYPE_BLOB) {
+    len += entry.len;
+  }
+  return len;
+}
+
+static bool save_samovar_nvs_compaction_backup(const SamovarNvsEntryBackup* entries, size_t count) {
+  if (!entries && count > 0) return false;
+  size_t totalLen = sizeof(SamovarNvsBackupDiskHeader);
+  for (size_t i = 0; i < count; i++) {
+    totalLen += samovar_nvs_backup_entry_serialized_len(entries[i]);
+  }
+
+  uint8_t* blob = (uint8_t*)malloc(totalLen);
+  if (!blob) {
+    Serial.println(F("NVS: Compaction backup failed, no RAM for blob"));
+    return false;
+  }
+
+  SamovarNvsBackupDiskHeader header = {};
+  header.magic = SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC;
+  header.version = SAMOVAR_NVS_COMPACTION_BACKUP_VERSION;
+  header.count = (uint16_t)count;
+  header.totalLen = (uint32_t)totalLen;
+
+  uint8_t* cursor = blob;
+  memcpy(cursor, &header, sizeof(header));
+  cursor += sizeof(header);
+
+  for (size_t i = 0; i < count; i++) {
+    SamovarNvsEntryDiskHeader entryHeader = {};
+    strncpy(entryHeader.ns, entries[i].ns, sizeof(entryHeader.ns) - 1);
+    strncpy(entryHeader.key, entries[i].key, sizeof(entryHeader.key) - 1);
+    entryHeader.type = (uint8_t)entries[i].type;
+    entryHeader.len = (uint32_t)entries[i].len;
+    memcpy(entryHeader.value, &entries[i].value, sizeof(entryHeader.value));
+
+    memcpy(cursor, &entryHeader, sizeof(entryHeader));
+    cursor += sizeof(entryHeader);
+    if (entries[i].type == NVS_TYPE_STR || entries[i].type == NVS_TYPE_BLOB) {
+      if (!entries[i].data || entries[i].len == 0) {
+        free(blob);
+        Serial.println(F("NVS: Compaction backup failed, empty dynamic value"));
+        return false;
+      }
+      memcpy(cursor, entries[i].data, entries[i].len);
+      cursor += entries[i].len;
+    }
+  }
+
+  nvs_handle_t handle;
+  esp_err_t err = nvs_open(SAMOVAR_NVS_COMPACTION_BACKUP_NAMESPACE, NVS_READWRITE, &handle);
+  if (err == ESP_OK) {
+    err = nvs_erase_all(handle);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    if (err == ESP_OK) err = nvs_set_blob(handle, SAMOVAR_NVS_COMPACTION_BACKUP_DATA_KEY, blob, totalLen);
+    if (err == ESP_OK) err = nvs_set_u32(handle, SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC_KEY, SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    nvs_close(handle);
+  }
+  free(blob);
+
+  if (err != ESP_OK) {
+    Serial.print(F("NVS: Compaction backup write failed, err = "));
+    Serial.println((int)err);
+    clear_samovar_nvs_compaction_backup();
+    return false;
+  }
+  return true;
+}
+
+static bool load_samovar_nvs_compaction_backup(SamovarNvsEntryBackup*& entries, size_t& count) {
+  entries = nullptr;
+  count = 0;
+
+  nvs_handle_t handle;
+  esp_err_t err = nvs_open(SAMOVAR_NVS_COMPACTION_BACKUP_NAMESPACE, NVS_READONLY, &handle);
+  if (err != ESP_OK) {
+    return false;
+  }
+
+  uint32_t magic = 0;
+  err = nvs_get_u32(handle, SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC_KEY, &magic);
+  if (err != ESP_OK || magic != SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC) {
+    nvs_close(handle);
+    return false;
+  }
+
+  size_t blobLen = 0;
+  err = nvs_get_blob(handle, SAMOVAR_NVS_COMPACTION_BACKUP_DATA_KEY, nullptr, &blobLen);
+  if (err != ESP_OK || blobLen < sizeof(SamovarNvsBackupDiskHeader)) {
+    nvs_close(handle);
+    return false;
+  }
+
+  uint8_t* blob = (uint8_t*)malloc(blobLen);
+  if (!blob) {
+    nvs_close(handle);
+    Serial.println(F("NVS: Compaction backup restore failed, no RAM"));
+    return false;
+  }
+
+  err = nvs_get_blob(handle, SAMOVAR_NVS_COMPACTION_BACKUP_DATA_KEY, blob, &blobLen);
+  nvs_close(handle);
+  if (err != ESP_OK) {
+    free(blob);
+    return false;
+  }
+
+  SamovarNvsBackupDiskHeader header;
+  memcpy(&header, blob, sizeof(header));
+  if (header.magic != SAMOVAR_NVS_COMPACTION_BACKUP_MAGIC ||
+      header.version != SAMOVAR_NVS_COMPACTION_BACKUP_VERSION ||
+      header.totalLen != blobLen ||
+      header.count > SAMOVAR_NVS_BACKUP_MAX_ENTRIES) {
+    free(blob);
+    Serial.println(F("NVS: Compaction backup restore failed, invalid header"));
+    return false;
+  }
+
+  SamovarNvsEntryBackup* loaded = (SamovarNvsEntryBackup*)calloc(header.count, sizeof(SamovarNvsEntryBackup));
+  if (!loaded && header.count > 0) {
+    free(blob);
+    Serial.println(F("NVS: Compaction backup restore failed, no RAM for entries"));
+    return false;
+  }
+
+  const uint8_t* cursor = blob + sizeof(SamovarNvsBackupDiskHeader);
+  const uint8_t* end = blob + blobLen;
+  for (size_t i = 0; i < header.count; i++) {
+    if ((size_t)(end - cursor) < sizeof(SamovarNvsEntryDiskHeader)) {
+      free_samovar_nvs_backup(loaded, i);
+      free(blob);
+      Serial.println(F("NVS: Compaction backup restore failed, truncated entry"));
+      return false;
+    }
+
+    SamovarNvsEntryDiskHeader entryHeader;
+    memcpy(&entryHeader, cursor, sizeof(entryHeader));
+    cursor += sizeof(entryHeader);
+
+    strncpy(loaded[i].ns, entryHeader.ns, sizeof(loaded[i].ns) - 1);
+    strncpy(loaded[i].key, entryHeader.key, sizeof(loaded[i].key) - 1);
+    loaded[i].type = (nvs_type_t)entryHeader.type;
+    loaded[i].len = entryHeader.len;
+    memcpy(&loaded[i].value, entryHeader.value, sizeof(entryHeader.value));
+
+    if (!is_samovar_nvs_namespace(loaded[i].ns) || is_legacy_profile_namespace(loaded[i].ns)) {
+      free_samovar_nvs_backup(loaded, i + 1);
+      free(blob);
+      Serial.println(F("NVS: Compaction backup restore failed, invalid namespace"));
+      return false;
+    }
+
+    if (loaded[i].type == NVS_TYPE_STR || loaded[i].type == NVS_TYPE_BLOB) {
+      if (loaded[i].len == 0 || (size_t)(end - cursor) < loaded[i].len) {
+        free_samovar_nvs_backup(loaded, i + 1);
+        free(blob);
+        Serial.println(F("NVS: Compaction backup restore failed, invalid dynamic value"));
+        return false;
+      }
+      loaded[i].data = (uint8_t*)malloc(loaded[i].len);
+      if (!loaded[i].data) {
+        free_samovar_nvs_backup(loaded, i + 1);
+        free(blob);
+        Serial.println(F("NVS: Compaction backup restore failed, no RAM for value"));
+        return false;
+      }
+      memcpy(loaded[i].data, cursor, loaded[i].len);
+      cursor += loaded[i].len;
+    }
+  }
+
+  if (cursor != end) {
+    free_samovar_nvs_backup(loaded, header.count);
+    free(blob);
+    Serial.println(F("NVS: Compaction backup restore failed, trailing data"));
+    return false;
+  }
+
+  free(blob);
+  entries = loaded;
+  count = header.count;
+  return true;
+}
+
+static void clear_samovar_nvs_compaction_backup() {
+  nvs_handle_t handle;
+  esp_err_t err = nvs_open(SAMOVAR_NVS_COMPACTION_BACKUP_NAMESPACE, NVS_READWRITE, &handle);
+  if (err == ESP_OK) {
+    nvs_erase_all(handle);
+    nvs_commit(handle);
+    nvs_close(handle);
+  }
+}
+
+static bool recover_pending_samovar_nvs_compaction() {
+  SamovarNvsEntryBackup* entries = nullptr;
+  size_t count = 0;
+  if (!load_samovar_nvs_compaction_backup(entries, count)) {
+    return true;
+  }
+
+  Serial.print(F("NVS: Restoring interrupted compaction backup, keys = "));
+  Serial.println(count);
+  bool ok = restore_samovar_nvs_entries(entries, count);
+  free_samovar_nvs_backup(entries, count);
+  if (ok) {
+    clear_samovar_nvs_compaction_backup();
+    Serial.println(F("NVS: Interrupted compaction backup restored"));
+  } else {
+    Serial.println(F("NVS: Interrupted compaction backup restore failed; backup kept"));
+  }
+  return ok;
+}
+
+bool recover_pending_nvs_compaction() {
+  return recover_pending_samovar_nvs_compaction();
+}
+
 static bool compact_samovar_nvs_namespaces() {
   static bool compacting = false;
   if (compacting) return false;
   compacting = true;
+
+  if (!recover_pending_samovar_nvs_compaction()) {
+    compacting = false;
+    return false;
+  }
 
   SamovarNvsEntryBackup* entries = (SamovarNvsEntryBackup*)calloc(SAMOVAR_NVS_BACKUP_MAX_ENTRIES, sizeof(SamovarNvsEntryBackup));
   if (!entries) {
@@ -530,6 +783,13 @@ static bool compact_samovar_nvs_namespaces() {
 
   Serial.print(F("NVS: Compacting Samovar namespaces, all keys = "));
   Serial.println(count);
+
+  if (!save_samovar_nvs_compaction_backup(entries, count)) {
+    Serial.println(F("NVS: Samovar namespace compaction aborted, backup not durable"));
+    free_samovar_nvs_backup(entries, count);
+    compacting = false;
+    return false;
+  }
 
   for (size_t nsIndex = 0; nsIndex < SAMOVAR_NVS_NAMESPACE_COUNT && ok; nsIndex++) {
     nvs_handle_t handle;
@@ -554,6 +814,7 @@ static bool compact_samovar_nvs_namespaces() {
   compacting = false;
 
   if (ok) {
+    clear_samovar_nvs_compaction_backup();
     Serial.println(F("NVS: Samovar namespaces compacted"));
   } else {
     Serial.println(F("NVS: Samovar namespace compaction failed"));
@@ -630,7 +891,7 @@ static bool migrate_legacy_profile_to_common_nvs() {
 void saveStringIfChanged(const char* key, const char* value) {
   String current = prefs.getString(key, "");
   if (current != String(value)) {
-    if (prefs.putString(key, String(value)) == 0) {
+    if (prefs.putString(key, String(value)) == 0 && value[0] != '\0') {
       markNvsProfileWriteFailed(key);
     }
   }

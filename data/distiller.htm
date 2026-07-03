@@ -1,43 +1,18 @@
+<!DOCTYPE html>
 <html>
 
 <head>
   <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
+  <script src="app.js"></script>
   <script>
-        // ==================== CONNECTION STATUS ============================================================
-    var IsOffline = false; //признак обрыва связи
-    var OfflineCounter = 0;
-
-    function ConnectError (Type) {
-      if (Type) {
-        if (OfflineCounter < 3) { //считаем 3 обрыва подряд
-          OfflineCounter++
-        } else {
-          document.getElementById('connection_indicator').innerHTML = `
-          <img src="Red_light.gif" style="margin: 0!important; width: 20px">`;
-          addMessage('Обрыв связи!', 0);
-          setTimeout(() => {
-            IsOffline = true;
-            OfflineCounter++
-          }, 100);
-        }
-      } else {
-        document.getElementById('connection_indicator').innerHTML = `
-        <img src="Green.png" style="margin: 0 !important; width: 20px">`
-        IsOffline = false;
-        if (OfflineCounter >= 3) {
-          playSound(false);
-        }
-        OfflineCounter = 0
-      }
-    };
-
-    // ==================== POWER UNIT ===================================================================
+        // ==================== POWER UNIT ===================================================================
     function setPowerUnit () {
       let setPowerLabel;
       let setPowerButton;
@@ -70,319 +45,46 @@
       document.getElementById('power_unit_target').innerHTML = powerUnit;
     }
 
-    // ==================== LUA BUTTONS ==================================================================
-    function AddLuaButtons () {
-      var btn_list = '';
-      var _luaBtnEl = document.getElementById('samovar_lua_btn_list');
-      if (_luaBtnEl) {
-        try {
-          var _parsed = JSON.parse(_luaBtnEl.textContent || '""');
-          if (typeof _parsed === 'string') btn_list = _parsed;
-        } catch (_e) {
-          btn_list = '';
-        }
-      }
-      if (btn_list !== '') {
-        let btn_arr = btn_list.split(',');
-        for (z = 0; z < btn_arr.length; z++) {
-          if (btn_arr[z] !== '') {
-            let arr = btn_arr[z].split('|');
-            let btn = document.createElement('input');
-            btn.type = 'submit';
-            btn.name = 'luabtn' + z;
-            btn.value = arr[1];
-            btn.className = 'button';
-            btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
-            document.getElementById('lua_btn_ln').appendChild(btn);
-            document.getElementById('lua_btn').style = 'visibility: visible';
-          }
-        }
-      }
-    }
-
-    // ==================== SOUND & MESSAGES QUEUE =======================================================
-    var sound_is_on = true; //признак включения звукв (будет изменён на настройку пользователя при ajax)
-    var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
-
-    var Messages_Array = []; //текущий массив сообщений
-    var sound_is_playing = false; //звук сейчас восспроизводится
-    var is_ALARM = false; //признак тревоги
-    var sound_play_count = 0; //счетчик воспроизведений сигнала
-    const MAX_SOUND_PLAYS = 2; //максимальное количество воспроизведений
-
-    const sound = new Audio('alarm.mp3');
-    sound.loop = false; // Отключаем бесконечное повторение
-    sound.preload = 'auto';
-    sound.autoplay = false;
-
-    function playSound (play) {
-      if (!sound_is_playing && play && sound_play_count < MAX_SOUND_PLAYS) {
-        sound.play();
-        sound_is_playing = true;
-        sound_play_count++;
-        
-        // Когда звук закончится
-        sound.onended = function() {
-          sound_is_playing = false;
-          if (sound_play_count < MAX_SOUND_PLAYS && is_ALARM) {
-            setTimeout(() => playSound(true), 2000); // Пауза 2 секунды между повторами
-          }
-        };
-      } else if (sound_is_playing && !play) {
-        sound.pause();
-        sound_is_playing = false;
-      }
-    }
-
- 
-    function getHistory(){
-      let history = [];
-      let fromStorage = localStorage.getItem('samovarHistory');
-      try {
-        let parsed = JSON.parse(fromStorage);
-        history = parsed ? parsed : [];
-      } catch (err) {
-        console.log('ERR parsed: ', err)
-        history = []
-      };
-      return history
-    }
-
-    function saveHistory(message){
-      let saved = getHistory();
-      saved.push(message);
-      localStorage.setItem('samovarHistory', JSON.stringify(saved));
-    }
-
-    let historyShown = false;
-    function showHistory() {
-      if (historyShown) {
-        document.getElementById('historyBox').style.display = 'none';
-        historyShown = false
-      } else {
-        let historyArray = getHistory();
-        document.getElementById('historyList').innerHTML = historyArray;
-        document.getElementById('historyBox').style.display = 'block';
-        let queue = document.getElementById('historyBox');
-        queue.scrollTop = queue.scrollHeight;
-        historyShown = true
-      }
-    };
-
-    function clearHistory () {
-      localStorage.setItem('samovarHistory', JSON.stringify([]));
-      showHistory()
-    }
-
-
-    function addMessage (msg, lvl) {
-      if (IsOffline) {
-        return; //ничего не делаем чтобы не дублировать сообщения о продолжающемся разрыве связи
-      } else {
-        let time = new Date().toLocaleTimeString('ru-RU');
-        let cssClass = null;
-        switch (lvl) {
-          case 0:
-            cssClass = 'message_0';
-            is_ALARM = true;
-            break;
-          case 1:
-            cssClass = 'message_1';
-            break;
-          case 2:
-            cssClass = 'message_2';
-            break;
-          default:
-            cssClass = 'message_0';
-            is_ALARM = true;
-            break;
-        }
-        let safeMsg = escapeHtml(msg);
-        let safeTime = escapeHtml(time);
-        let lastMsg = `
-            <div align="left" class="${cssClass}" onclick="removeLastMessage()" style="cursor: pointer;">
-              ${safeTime}  ${safeMsg}
-            </div>`;
-
-        let msg4history = `<div align="left" class="${cssClass}" style="margin-top: 0"> <span style="text-decoration: underline">${safeTime}</span>  ${safeMsg}</div>`;
-        saveHistory(msg4history);
-        
-        Messages_Array.push(lastMsg); //добавляем сообщение в конец очереди
-        if (Messages_Array.length > 1) {
-          //убираем у предпоследнего сообщения обработчик удаления, активно всегда последнее
-          previousMsg = Messages_Array[Messages_Array.length - 2];
-          let changed = previousMsg.replace(
-            'onclick=removeLastMessage() style="cursor: pointer"',
-            ''
-          );
-          Messages_Array[Messages_Array.length - 2] = changed;
-        }
-        showMessages();
-      }
-    }
-
-    function removeLastMessage () {
-      Messages_Array.pop();
-      if (Messages_Array.length > 0) {
-        lastMsg = Messages_Array[Messages_Array.length - 1];
-        let changed = lastMsg.replace(
-          '<div align="left"',
-          '<div align="left" onclick=removeLastMessage() style="cursor: pointer"'
-        );
-        Messages_Array[Messages_Array.length - 1] = changed;
-      } else {
-        is_ALARM = false;
-        sound_play_count = 0; // Сбрасываем счетчик когда все сообщения удалены
-      }
-      showMessages();
-    }
-
-    function showMessages () {
-      //показываем обновлённый список сообщений
-      if (Messages_Array.length > 0) {
-        let alarm_is_there = []; //массив false/true для признаков тревоги
-        document.getElementById('messages').innerHTML = '';
-        Messages_Array.forEach(message => {
-          document.getElementById('messages').innerHTML += message;
-          alarm_is_there.push(message.includes('class="message_0"'));
-        });
-        document.getElementById('messagesBox').style.display = 'block';
-        let queue = document.getElementById('messagesBox');
-        queue.scrollTop = queue.scrollHeight;
-        function positive (item) {
-          return item === true;
-        }
-        is_ALARM = alarm_is_there.some(positive); //содержит ли хоть одно сообщение признак тревоги
-        if (sound_is_on && is_ALARM) {
-          //играем звук тревоги, если включён
-          playSound(true);
-        } else {
-          playSound(false);
-        }
-      } else {
-        //убираем блок, если очередь пуста
-        document.getElementById('messagesBox').style.display = 'none';
-        playSound(false);
-      }
-    }
-
-    function clearMessages () {
-      Messages_Array = [];
-      sound_play_count = 0; // Сбрасываем счетчик при очистке сообщений
-      showMessages();
-    }
-
     var pwr_unit = "%pwr_unit%";
     var _lnIdx = 0;
-
-    // ==================== THEME TOGGLE =================================================================
-    function applyTheme (theme) {
-      if (theme === 'dark' || theme === 'light') {
-        document.documentElement.dataset.theme = theme;
-      } else {
-        delete document.documentElement.dataset.theme;
-      }
-      var btn = document.getElementById('themeToggle');
-      if (btn) {
-        var dark = (theme === 'dark') ||
-          (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        btn.textContent = dark ? '☼' : '☾';
-        btn.title = dark ? 'Светлая тема' : 'Тёмная тема';
-      }
-    }
-    function toggleTheme () {
-      var cur = document.documentElement.dataset.theme;
-      var next;
-      if (!cur) {
-        var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        next = sysDark ? 'light' : 'dark';
-      } else {
-        next = (cur === 'dark') ? 'light' : 'dark';
-      }
-      try { localStorage.setItem('theme', next); } catch (e) {}
-      applyTheme(next);
-    }
-    (function initTheme () {
-      try {
-        var saved = localStorage.getItem('theme');
-        if (saved === 'dark' || saved === 'light') applyTheme(saved);
-        else applyTheme(null);
-      } catch (e) { applyTheme(null); }
-    })();
-
-    function openTab (evt, tabName) {
-      var i, tabcontent, tablinks;
-      tabcontent = document.getElementsByClassName("tabcontent");
-      for (i = 0; i < tabcontent.length; i++) {
-        tabcontent[i].style.display = "none";
-      }
-      tablinks = document.getElementsByClassName("tablinks");
-      for (i = 0; i < tablinks.length; i++) {
-        tablinks[i].className = tablinks[i].className.replace(" active", "");
-      }
-      document.getElementById(tabName).style.display = "block";
-      evt.currentTarget.className += " active";
-      return 0;
-    }
 
     function setDistCommand () {
       var cmd = "distiller=";
       if (document.getElementById('power').value == "Выключить нагрев") {
+        if (!confirm("Выключить нагрев?")) return false;
         cmd = cmd + "0";
       } else {
         cmd = cmd + "1";
       }
-      sendbutton(cmd);
+      SamovarApp.sendCommand(cmd);
+      return false;
     }
 
-    function escapeHtml (s) {
-      if (s === undefined || s === null) return '';
-      return String(s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
 
-    async function sendbutton (command) {
-      try {
-        let resp = await fetch('/command?' + command);
-        if (!resp.ok) alert("sendbutton ERROR! " + resp.status + ': ' + resp.statusText);
-      } catch (e) {
-        alert("sendbutton ERROR! " + e);
-      }
-    };
 
     async function sendvoltage () {
       document.getElementById('Voltage').value = document.getElementById('Voltage').value.replace(",",".");
-      await sendbutton('voltage=' + document.getElementById('Voltage').value);
-      alert("Установлено.");
+      var num = document.getElementById('Voltage').value;
+      if (!num.match(/^\d+\.\d+$/) && !num.match(/^-{0,1}\d+$/)) {
+        SamovarApp.notify("Введите напряжение!", 1);
+        return;
+      }
+      await SamovarApp.sendCommand('voltage=' + encodeURIComponent(num), { successMessage: 'Команда принята.' });
     };
 
-    function sendI2CPump () {
-      var speed = document.getElementById('i2c_speed').value.replace(",", ".");
-      var volume = document.getElementById('i2c_volume').value.replace(",", ".");
-      fetch('/i2cpump?speed=' + speed + '&volume=' + volume).catch(() => {});
-    }
 
-    function stopI2CPump () {
-      fetch('/i2cpump?stop=1').catch(() => {});
-    }
 
     async function set_program () {
-      document.getElementById("WProgram").value = document.getElementById("WProgram").value.replace(",", ".");
+      document.getElementById("WProgram").value = document.getElementById("WProgram").value.replaceAll(",", ".");
       try {
-        let formData = new FormData(document.forms.mainform);
-        let resp = await fetch('/program', { method: 'POST', body: formData });
-        if (!resp.ok) {
-          alert(resp.status + ': ' + resp.statusText);
+        let result = await SamovarApp.postProgram(document.forms.mainform);
+        if (!result.ok) {
+          SamovarApp.notify(result.err || 'Программа не установлена', 0);
           return;
         }
-        let text = await resp.text();
-        if (text !== "OK") {
-          document.getElementById('WProgram').value = text;
-          alert("Ok");
-        }
+        SamovarApp.notify("Программа отправлена.", 2);
       } catch (e) {
-        alert('Ошибка сети: ' + e);
+        SamovarApp.notify('Ошибка сети: ' + e, 0);
       }
     };
 
@@ -526,14 +228,7 @@
 
 
     async function loadDoc () {
-      try {
-        let ctrl = new AbortController();
-        let timer = setTimeout(() => ctrl.abort(), 4000);
-        let resp = await fetch('/ajax', { signal: ctrl.signal });
-        clearTimeout(timer);
-        if (!resp.ok) { ConnectError(true); return; }
-        let myObj = await resp.json();
-        ConnectError(false);
+      await SamovarApp.pollAjax(function (myObj) {
         {
           document.getElementById('version').textContent = myObj.version;
           document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
@@ -558,7 +253,7 @@
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
           document.getElementById('alc').innerHTML = myObj.alc.toFixed(1);
           document.getElementById('stm_alc').innerHTML = myObj.stm_alc.toFixed(2);
-          sound_is_on = !!myObj.UseBBuzzer;
+          SamovarApp.setSoundEnabled(!!myObj.UseBBuzzer);
 
           if (myObj.Lstatus) {
             if (myObj.Lstatus != "") {
@@ -567,7 +262,7 @@
           }
 
           if (myObj.Msg && myObj.Msg !== "") {
-            addMessage(myObj.Msg, myObj.msglvl);
+            SamovarApp.addMessage(myObj.Msg, myObj.msglvl);
           }
 
           // Обновляем значения прогноза времени
@@ -603,41 +298,29 @@
           var powerstyle;
           if (myObj.PowerOn == 1) {
             powerstr = 'Выключить нагрев';
-            powerstyle = 'red';
+            powerstyle = SamovarApp.cssVar('--state-danger-bg');
           } else {
             powerstr = 'Включить нагрев';
-            powerstyle = 'lightgreen';
+            powerstyle = SamovarApp.cssVar('--state-active-bg');
           }
           document.getElementById('power').value = powerstr;
           document.getElementById('power').style.backgroundColor = powerstyle;
 
         }
-      } catch (e) {
-        ConnectError(true);
-      }
+      });
     };
 
-    function run_lua (num) {
-      sendbutton("lua=" + num);
-    };
 
-    function run_strlua() {
-      var str = encodeURIComponent(document.getElementById('lua_str_i').value);
-      sendbutton("luastr=" + str);
-    };
     
     window.onload = function() {
-      AddLuaButtons();
+      SamovarApp.init({ threshold: 3 });
+      SamovarApp.addLuaButtons();
       setPowerUnit();
       getProgram();
-      (async function pollLoop () {
-        await loadDoc();
-        setTimeout(pollLoop, 2000);
-      })();
+      SamovarApp.startPollLoop(loadDoc, 2000);
     };
 
     document.addEventListener('DOMContentLoaded', function() {
-      applyTheme(document.documentElement.dataset.theme || null);
       document.getElementById("WProgram").addEventListener("change", function(event) {
         var element = document.getElementById("prg");
         while (element.firstChild) {
@@ -655,10 +338,10 @@
 
 
 <body>
-  <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Переключить тему">☾</button>
-  <div style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: #FFF; text-decoration: underline; cursor: pointer" onclick='showHistory()'>История</div>
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  <div style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: var(--text-history-link); text-decoration: underline; cursor: pointer" onclick='SamovarApp.showHistory()'>История</div>
   <div class="history_box" style="display: none;" id="historyBox">
-    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: #000000; cursor: pointer" onclick='clearHistory()'>
+    <div style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; size: 0.8em; font-style: italic; color: var(--text-history-action); cursor: pointer" onclick='SamovarApp.clearHistory()'>
       [x] очистить историю
     </div>
     <div class="history_array" id="historyList"></div>
@@ -667,9 +350,9 @@
   <form action='none' onsubmit='return false' name="mainform" id="mainform">
 
     <div class="tab">
-      <input type='button' class="tablinks active" onclick="openTab(event, 'Main');" value="Дистилляция">
-      <input type='button' class="tablinks" onclick="openTab(event, 'Prog');" value="Программа">
-      <input type='button' class="tablinks" onclick="openTab(event, 'Other');" value="Дополнительно">
+      <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Дистилляция">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Prog');" value="Программа">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Дополнительно">
       <input type='button' class="tablinks" onclick="location.href='/i2cstepper.htm';" value="I2CStepper" style="display: %I2CStepperTab%;">
     </div>
 
@@ -692,7 +375,7 @@
           </div>
 
           <div class="messages_box" style="display: none;" id="messagesBox">
-            <div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='clearMessages()'>
+            <div style="position: absolute; height: 0.6em; top: 0; right: 0.5em; cursor: pointer" onclick='SamovarApp.clearMessages()'>
               [x] очистить
             </div>
             <div class="messages_array" id="messages"></div>
@@ -750,8 +433,8 @@
         </div>
         </div>
 
-      <div class="container_row" style="margin-top: 1em; background-color: #7cfc0063; padding-top: 0.5em; padding-bottom: 0.5em;">
-        <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: #333">
+      <div class="container_row" style="margin-top: 1em; background-color: var(--bg-status); padding-top: 0.5em; padding-bottom: 0.5em;">
+        <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: var(--text-status)">
           Статус: <span id='Status'></span>
         </span>
       </div>
@@ -778,7 +461,7 @@
             <input name='Voltage' id='Voltage' type='text' inputmode='decimal' value=''>
           </div>
           <div class="flex_row" style="padding-bottom: 0.5em;">
-            <input id='SetVoltage' type='submit' name='SetVoltage' onclick='sendvoltage();' class="button">
+            <input id='SetVoltage' type='button' name='SetVoltage' onclick='sendvoltage();' class="button">
           </div>
         </div>
         <div id='regulator' class='container_row' style="justify-content: space-around; font-size: 1.4em; font-weight: bold; margin-top: 1em;">
@@ -829,12 +512,12 @@
 
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
-          <input id='power' type='submit' name='power' value='Включить нагрев' onclick='setDistCommand();' class="button">
-          <input id='nextprg' type='submit' name='nextprg' value='Следующая программа' onclick='sendbutton("start=1");' class="button">
+          <input id='power' type='button' name='power' value='Включить нагрев' onclick='return setDistCommand();' class="button">
+          <input id='nextprg' type='button' name='nextprg' value='Следующая программа' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;' class="button">
         </div>
         <div class="container_row" style="justify-content: space-around; align-items: center;">
-          <input id='chart' type='submit' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
-          <input id='setup' type='submit' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
+          <input id='chart' type='button' name='chart' value='График' onclick='javascript:location.href="chart.htm"' class="button">
+          <input id='setup' type='button' name='setup' value='Настройки' onclick='javascript:location.href="setup.htm"' class="button">
         </div>
       </div>
     </div>
@@ -844,7 +527,7 @@
       <div class="prg" id="prg"></div>
       <div>
 
-        <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: #F7F7F7">
+        <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: var(--bg-program-panel)">
 
           <details class="spoiler">
             <summary>Описание программы дистилляции в текстовом формате для сохранения в облаке:</summary>
@@ -891,7 +574,7 @@
 
               <div style="border: 1px dashed #bbb; padding: 1em; 
       margin-top: 1em; margin-bottom: 1em; margin-right: 3em; margin-left: 3em; 
-      font-size: 1.2em; font-weight: bold; background-color: #f2f2f2">
+      font-size: 1.2em; font-weight: bold; background-color: var(--bg-program-example)">
                 Пример программы дистилляции:
                 <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
                   <div>T;90;0;190</div>
@@ -919,26 +602,11 @@
             <div class="container_row" style="justify-content: space-around; align-items: center; display: block;" id="lua_btn_ln"></div>
             <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">
               <input name='lua_str_i' id='lua_str_i' type='text' value='' style='padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;'>
-              <input type="submit" name="lua_str_b" value="Выполнить Lua" class="button" onclick="run_strlua();" style='margin-bottom: 20px; margin-right: 100;'>
+              <input type="button" name="lua_str_b" value="Выполнить Lua" class="button" onclick="SamovarApp.runLuaString();" style='margin-bottom: 20px; margin-right: 100;'>
             </div>
             <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
           </div>
         </div>
-      </div>
-    </div>
-
-    <div id="I2CPump" class="tabcontent">
-      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
-        <h2>Внешний I2C насос</h2>
-        <h2>Скорость отбора (л/ч): <input id='i2c_speed' type='text' inputmode='decimal' value='0' style="width: 6em;"></h2>
-        <h2>Объем (мл): <input id='i2c_volume' type='text' inputmode='decimal' value='0' style="width: 6em;"></h2>
-        <div style="display: flex; gap: 1em; flex-wrap: wrap;">
-          <input type='button' class="button" value="Отправить" onclick='sendI2CPump();'>
-          <input type='button' class="button" value="Стоп" onclick='stopI2CPump();'>
-        </div>
-        <h2>Статус: <span id='i2c_status'>-</span></h2>
-        <h2>Текущая скорость (шаг/сек): <span id='i2c_speed_cur'>-</span></h2>
-        <h2>Осталось: <span id='i2c_remaining'>-</span> мл</h2>
       </div>
     </div>
 

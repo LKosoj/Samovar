@@ -1,12 +1,15 @@
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset='utf-8'>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache">
 
 <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
 <link rel="stylesheet" href="style.css">
 <title>Самовар</title>
 
+<script src="app.js"></script>
 <script>
 
 var is_program = false;
@@ -444,26 +447,20 @@ function get_recipe(recipe){
           program = program + "B;0.00;" + bth + ";1^-1^2^3;0\n";
     }
 
-    program = program + "C;" + pt + ";0;1^-1^2^3\nF;" + pt + ";0;1^-1^2^3;0";
+    program = program + "C;" + pt + ";0;1^-1^2^3;0\nF;" + pt + ";0;1^-1^2^3;0";
     is_program = true;
 }
 
 async function set_program(){
   if (!is_program) {
-    alert("Error");
+    alert("Рецепт не сформирован.");
     return;
   }
-  alert(program);
   document.getElementById("WProgram").value = program;
   try {
-    let formData = new FormData(document.forms.mainform);
-    let resp = await fetch('/program', { method: 'POST', body: formData });
-    if (!resp.ok) { alert(resp.status + ': ' + resp.statusText); return; }
-    let text = await resp.text();
-    if (text !== "OK") {
-      document.getElementById('WProgram').value = text;
-      alert("Ok");
-    }
+    let result = await SamovarApp.postProgram(document.forms.mainform);
+    if (!result.ok) { alert(result.err || 'Программа не установлена'); return; }
+    alert("Программа отправлена.");
   } catch (e) {
     alert('Ошибка сети: ' + e);
   }
@@ -480,7 +477,7 @@ Samovar v. <span id='version'>%v%</span>
 
 <div class="text">Программа затирания</div>
 
-<div style="margin: 20 auto; width: 200px;">
+<div style="margin: 20px auto; width: 200px;">
 <label for="fileToLoad" class="button custom-file-upload">
     <i class="fa fa-cloud-upload"></i>Загрузить рецепт
 </label>
@@ -522,7 +519,7 @@ Samovar v. <span id='version'>%v%</span>
 </div>
 </div>
 
-<div className="ingredients">
+<div class="ingredients">
 <label style="font-size: 20px; font-weight: 600;">Ингредиенты:</label>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div id="ingredients">
@@ -530,7 +527,7 @@ Samovar v. <span id='version'>%v%</span>
 </div>
 </div>
 
-<div className="ingredients">
+<div class="ingredients">
 <label style="font-size: 20px; font-weight: 600;">Температурные паузы:</label>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div id="mash">
@@ -546,7 +543,7 @@ Samovar v. <span id='version'>%v%</span>
 
 </div>
 </div>
-<textarea cols="40" rows="7" id='WProgram' name='WProgram' style="visibility: hidden;"></textarea>
+<textarea cols="40" rows="7" id='WProgram' name='WProgram' style="display: none;"></textarea>
 </form>
 </body>
 </html>

@@ -75,7 +75,7 @@ void setup() {
     wifiManager.setAPCallback(configModeCallback); // Функция при входе в AP-режим
     wifiManager.setDebugOutput(false);
     // Можно добавить свои параметры в портал, например, для Blynk token
-    wifiManager.addParameter(&custom_blynk_token); 
+    wifiManager.addParameter(&custom_blynk_token);
 
     if (!wifiManager.autoConnect("Samovar")) {
       // Если авто-подключение не удалось — остаёмся в AP-режиме, задаём инфо для отображения
@@ -84,7 +84,7 @@ void setup() {
       StIP = WiFi.softAPIP().toString(); // IP адрес AP
     } else {
       // Если авто-подключение удалось, получаем локальный IP
-      StIP = WiFi.localIP().toString(); 
+      StIP = WiFi.localIP().toString();
     }
 
     if (shouldSaveWiFiConfig) { // Флаг из saveConfigCallback
@@ -131,7 +131,7 @@ void WebServerInit(void) {
   server.on("/", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
     request->redirect("/index.htm"); // Перенаправление на index.htm
   });
-  
+
   // Раздача статических файлов (HTML, CSS, картинки) прямо из файловой системы
   server.serveStatic("/style.css", SPIFFS, "/style.css").setCacheControl("max-age=5000");
   server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
@@ -207,9 +207,9 @@ String indexKeyProcessor(const String &var) {
 // Функция, регулярно отправляющая данные В Blynk (виртуальный пин V0)
 BLYNK_READ(V0) {
   // Отправка температуры пара
-  Blynk.virtualWrite(V0, SteamSensor.avgTemp); 
+  Blynk.virtualWrite(V0, SteamSensor.avgTemp);
   // Отправка состояния питания
-  Blynk.virtualWrite(V4, PowerOn); 
+  Blynk.virtualWrite(V4, PowerOn);
   // ... другие статусы ...
 }
 
@@ -218,10 +218,10 @@ BLYNK_WRITE(V3) {
   int State = param.asInt(); // Значение из виджета Blynk
   if (State == 1 && PowerOn) {
     // Если значение 1 и питание включено — команда SAMOVAR_START
-    sam_command_sync = SAMOVAR_START; // (Сигнал главному циклу — Глава 3)
+    queue_samovar_command(SAMOVAR_START); // (Сигнал главному циклу — Глава 3)
   } else {
     // Иначе — команда сброса
-    sam_command_sync = SAMOVAR_RESET;
+    queue_samovar_reset_command();
   }
 }
 
@@ -275,7 +275,7 @@ void MqttSendMsg(const String &Str, const char *chart ) {
 // Из Samovar.ino (упрощённая часть функции SendMsg)
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   String MsgPl;
-  
+
   // ... Логика MQTT (см. выше) ...
 
 #ifdef USE_TELEGRAM
@@ -292,7 +292,7 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
     // Используем очередь и семафор для асинхронной отправки (без блокировки)
     if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
       // Помещаем строку сообщения в очередь
-      msg_q.push(MsgPl.c_str()); 
+      msg_q.push(MsgPl.c_str());
       xSemaphoreGive(xMsgSemaphore); // Освобождаем семафор
     }
   }
@@ -319,7 +319,7 @@ void triggerGetClock(void *parameter) {
         xSemaphoreGive(xMsgSemaphore); // Освобождаем семафор
       }
     }
-  } 
+  }
   // ... обработка оффлайн-случая ...
 #endif
 

@@ -42,11 +42,11 @@ end
 
 ValveStatus = getNumVariable("valve_status") + 0
 
+status = string.format("ACPT = %.2f; TankT = %.2f; WaterTemp = %.2f; Клапан %.0f", ACPTemp, TankTemp, WaterTemp, ValveStatus)
 setLuaStatus(status)
 
 --проверяем признак завершения работы скрипта, если он установлен, то завершаем работу
 SetScriptOff = getNumVariable("SetScriptOff") + 0
-status = string.format("ACPT = %.2f; TankT = %.2f; WaterTemp = %.2f; Клапан %.0f", ACPTemp, TankTemp, WaterTemp, ValveStatus)
 
 if SetScriptOff == 1 then
   setLuaStatus("Скрипт остановлен")

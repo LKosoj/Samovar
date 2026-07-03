@@ -1,182 +1,12 @@
+#pragma once
+
 #include <Arduino.h>
 #include "Samovar.h"
+#include "samovar_api.h"
+#include "runtime_helpers.h"
+#include "program_io.h"
 #include "SamovarMqtt.h"
 #include "pumppwm.h"
-
-/**
- * @brief Прочитать конфигурацию из памяти.
- */
-void read_config();
-
-/**
- * @brief Получить значение из строки по разделителю.
- * @param data Строка
- * @param separator Разделитель
- * @param index Индекс значения
- * @return Значение (строка)
- */
-String getValue(const String& data, char separator, int index);
-
-/**
- * @brief Запустить сервисные задачи (например, шаговый двигатель).
- */
-void startService(void);
-
-/**
- * @brief Остановить сервисные задачи.
- */
-void stopService(void);
-
-/**
- * @brief Установить режим питания.
- * @param Mode Режим (строка)
- */
-void set_power_mode(String Mode);
-
-/**
- * @brief Проверить ошибки питания и обработать их.
- */
-void check_power_error();
-
-/**
- * @brief Установить текущую мощность.
- * @param Volt Мощность (Вольт)
- */
-void set_current_power(float Volt);
-
-/**
- * @brief Сохранить текущий профиль настроек.
- */
-void save_profile();
-
-/**
- * @brief Завершить программу затирания, выключить нагрев, насос и клапаны.
- */
-void beer_finish();
-
-/**
- * @brief Управлять состоянием нагревателя по ПИД-регулятору.
- * @param setpoint Целевая температура
- * @param temp Текущая температура
- */
-void set_heater_state(float setpoint, float temp);
-
-/**
- * @brief Установить ШИМ для нагревателя.
- * @param dutyCycle Скважность (0.0 - 1.0)
- */
-void set_heater(double dutyCycle);
-
-#ifdef SAMOVAR_USE_POWER
-/**
- * @brief Установить уставку UART-регулятора по выходу PID.
- * @param dutyCycle Доля мощности (0.0 - 1.0)
- */
-inline void set_heater_regulator(double dutyCycle);
-#endif
-
-/**
- * @brief Включить или выключить нагреватель.
- * @param state true — включить, false — выключить
- */
-void setHeaterPosition(bool state);
-
-/**
- * @brief Перейти к строке программы с номером num, инициализировать этап.
- * @param num Номер строки программы
- */
-void run_beer_program(uint8_t num);
-
-/**
- * @brief Запустить автотюнинг ПИД-регулятора.
- */
-void StartAutoTune();
-
-/**
- * @brief Завершить автотюнинг ПИД-регулятора и применить параметры.
- */
-void FinishAutoTune();
-
-/**
- * @brief Включить или выключить питание.
- * @param On true — включить, false — выключить
- */
-void set_power(bool On);
-
-/**
- * @brief Создать файл с данными текущей сессии.
- */
-void create_data();
-
-/**
- * @brief Открыть или закрыть клапан.
- * @param Val true — открыть, false — закрыть
- * @param msg true — отправить сообщение
- */
-void open_valve(bool Val, bool msg);
-
-/**
- * @brief Отправить сообщение пользователю.
- * @param m Текст сообщения
- * @param msg_type Тип сообщения
- */
-void SendMsg(const String& m, MESSAGE_TYPE msg_type);
-
-/**
- * @brief Получить строковое описание программы затирания.
- * @return Строка с описанием программы
- */
-String get_beer_program();
-
-/**
- * @brief Проверить и обработать состояние мешалки и насоса.
- */
-void check_mixer_state();
-
-/**
- * @brief Установить состояние мешалки.
- * @param state true — включить, false — выключить
- * @param dir true — реверс, false — прямое вращение
- */
-void set_mixer_state(bool state, bool dir);
-
-/**
- * @brief Установить целевое состояние насоса через I2C.
- * @param on 1 — включить, 0 — выключить
- * @return true если успешно
- */
-bool set_mixer_pump_target(uint8_t on);
-
-/**
- * @brief Управлять шаговым двигателем по времени.
- * @param spd Скорость
- * @param direction Направление
- * @param time Время работы (с)
- * @return true если успешно
- */
-bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
-
-/**
- * @brief Совершить шаг шаговым двигателем для засыпи хмеля.
- */
-void HopStepperStep();
-
-/**
- * @brief Включить или выключить буззер.
- * @param fl true — включить, false — выключить
- */
-void set_buzzer(bool fl);
-
-/**
- * @brief Установить ШИМ для насоса.
- * @param duty Значение ШИМ
- */
-void set_pump_pwm(float duty);
-
-/**
- * @brief Сбросить счетчик датчиков и состояния процесса.
- */
-void reset_sensor_counter(void);
 
 #define TEMP_HISTORY_SIZE 10  // Размер буфера истории температур (точек)
 #define BOILING_DETECT_THRESHOLD 0.08  // Порог по стандартному отклонению, °C
@@ -266,6 +96,35 @@ bool isBoilingStarted(float currentTemp) {
     return boilingDetector.isBoiling;
 }
 
+inline bool beer_control_sensor(uint8_t sensorId, const DSSensor*& sensor, const char*& sensorName) {
+  switch (sensorId) {
+    case 0:
+      sensor = &TankSensor;
+      sensorName = "куба";
+      return true;
+    case 1:
+      sensor = &WaterSensor;
+      sensorName = "воды";
+      return true;
+    case 2:
+      sensor = &PipeSensor;
+      sensorName = "царги";
+      return true;
+    case 3:
+      sensor = &SteamSensor;
+      sensorName = "пара";
+      return true;
+    case 4:
+      sensor = &ACPSensor;
+      sensorName = "ТСА";
+      return true;
+    default:
+      sensor = nullptr;
+      sensorName = "";
+      return false;
+  }
+}
+
 /**
  * @brief Основной цикл запуска процесса затирания. Инициализация и старт программы.
  */
@@ -273,13 +132,41 @@ void beer_proc() {
   if (SamovarStatusInt != 2000) return;
 
   if (startval == 2000 && !PowerOn) {
+    if (ProgramLen == 0 || program_type_empty(program[0].WType)) {
+      SendMsg("Ошибка программы Пиво: строка не задана", ALARM_MSG);
+      SamovarStatusInt = 0;
+      startval = 0;
+      return;
+    }
+    const DSSensor* controlSensor = nullptr;
+    const char* controlSensorName = "";
+    if (!beer_control_sensor(program[0].TempSensor, controlSensor, controlSensorName)) {
+      SendMsg("Ошибка программы: неверный датчик температуры в режиме Пиво", ALARM_MSG);
+      SamovarStatusInt = 0;
+      startval = 0;
+      return;
+    }
+    if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
+
     // Сброс детектора кипения при запуске процесса
     resetBoilingDetector();
+    if (!create_data()) {
+      SendMsg("Ошибка создания файла лога. Старт затирания отменён.", ALARM_MSG);
+      SamovarStatusInt = 0;
+      startval = 0;
+      return;
+    }
 #ifdef USE_MQTT
-    SessionDescription.replace(",", ";");
-    MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + SessionDescription, "st");
+    String sessionDescription;
+    if (!copy_mqtt_session_description(sessionDescription, portMAX_DELAY)) {
+      SendMsg("Описание сессии занято. Старт затирания отменён.", ALARM_MSG);
+      SamovarStatusInt = 0;
+      startval = 0;
+      if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+      return;
+    }
+    MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + sessionDescription, "st");
 #endif
-    create_data();  //создаем файл с данными
     set_power(true);
     if (!PowerOn) return;
     run_beer_program(0);
@@ -296,16 +183,16 @@ void run_beer_program(uint8_t num) {
   if (startval == 2000) startval = 2001;
 
   uint8_t targetProgram = num;
-  if (ProgramLen == 0 || targetProgram >= ProgramLen || targetProgram >= CAPACITY_NUM * 2) {
-    targetProgram = CAPACITY_NUM * 2;
+  if (ProgramLen == 0 || targetProgram >= ProgramLen || targetProgram >= PROGRAM_END) {
+    targetProgram = PROGRAM_END;
     SetScriptOff = 1;
   }
 
-  if (targetProgram > 0 && targetProgram <= CAPACITY_NUM * 2 && program[targetProgram - 1].WType == "L" && loop_lua_fl) {
+  if (targetProgram > 0 && targetProgram <= PROGRAM_END && program[targetProgram - 1].WType == 'L' && loop_lua_fl) {
     SetScriptOff = 1;
   }
 
-  if (targetProgram == CAPACITY_NUM * 2) {
+  if (targetProgram == PROGRAM_END) {
     beer_finish();
     return;
   }
@@ -314,22 +201,22 @@ void run_beer_program(uint8_t num) {
   begintime = 0;
   msgfl = true;
 
-  if (program[ProgramNum].WType == "A") {
+  if (program[ProgramNum].WType == 'A') {
     StartAutoTune();
   }
 
   String msg = "Переход к строке программы №" + String((ProgramNum + 1));
-  if (program[ProgramNum].WType == "M") {
+  if (program[ProgramNum].WType == 'M') {
     msg += "; Нагрев до температуры засыпи солода: " + String(program[ProgramNum].Temp) + "°";
-  } else if (program[ProgramNum].WType == "P") {
+  } else if (program[ProgramNum].WType == 'P') {
     msg += "; Температурная пауза: " + String(program[ProgramNum].Temp) + "°, время: " + String(program[ProgramNum].Time) + " мин";
-  } else if (program[ProgramNum].WType == "B") {
+  } else if (program[ProgramNum].WType == 'B') {
     msg += "; Кипячение, время: " + String(program[ProgramNum].Time) + " мин";
-  } else if (program[ProgramNum].WType == "C") {
+  } else if (program[ProgramNum].WType == 'C') {
     msg += "; Охлаждение до температуры: " + String(program[ProgramNum].Temp) + "°";
-  } else if (program[ProgramNum].WType == "F") {
+  } else if (program[ProgramNum].WType == 'F') {
     msg += "; Ферментация, поддержание температуры: " + String(program[ProgramNum].Temp) + "°";
-  } else if (program[ProgramNum].WType == "W") {
+  } else if (program[ProgramNum].WType == 'W') {
     msg += "; Режим ожидания";
   }
 
@@ -380,57 +267,41 @@ void check_alarm_beer() {
 
   float temp = 0;
   float tempDelta = 0;
-  switch (program[ProgramNum].TempSensor) {
-    case 0:
-      temp = TankSensor.avgTemp;
-      tempDelta = TankSensor.SetTemp;
-      break;
-    case 1:
-      temp = WaterSensor.avgTemp;
-      tempDelta = WaterSensor.SetTemp;
-      break;
-    case 2:
-      temp = PipeSensor.avgTemp;
-      tempDelta = PipeSensor.SetTemp;
-      break;
-    case 3:
-      temp = SteamSensor.avgTemp;
-      tempDelta = SteamSensor.SetTemp;
-      break;
-    case 4:
-      temp = ACPSensor.avgTemp;
-      tempDelta = ACPSensor.SetTemp;
-      break;
-    default:
-      SendMsg("Ошибка программы: неверный датчик температуры в режиме Пиво", ALARM_MSG);
-      beer_finish();
-      return;
+  const DSSensor* controlSensor = nullptr;
+  const char* controlSensorName = "";
+  if (!beer_control_sensor(program[ProgramNum].TempSensor, controlSensor, controlSensorName)) {
+    request_emergency_stop("Ошибка программы: неверный датчик температуры в режиме Пиво");
+    return;
   }
+  if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
+  temp = controlSensor->avgTemp;
+  tempDelta = controlSensor->SetTemp;
+  ProgramType currentType = current_program_type();
 
   //Обрабатываем программу
 
   //Проверяем, что клапан воды охлаждения не открыт, когда не нужно
-  if (program[ProgramNum].WType != "C" && program[ProgramNum].WType != "F" && valve_status && PowerOn && program[ProgramNum].WType != "L") {
+  if (currentType != 'C' && currentType != 'F' && valve_status && PowerOn && currentType != 'L') {
     //Закрываем клапан воды
     open_valve(false, false);
   }
 
   //Если тип программы неизвестен или пуст - безопасно выключаем нагрев
-  if (program[ProgramNum].WType != "L" && program[ProgramNum].WType != "W" &&
-      program[ProgramNum].WType != "A" && program[ProgramNum].WType != "M" &&
-      program[ProgramNum].WType != "P" && program[ProgramNum].WType != "F" &&
-      program[ProgramNum].WType != "C" && program[ProgramNum].WType != "B") {
+  if (currentType != 'L' && currentType != 'W' &&
+      currentType != 'A' && currentType != 'M' &&
+      currentType != 'P' && currentType != 'F' &&
+      currentType != 'C' && currentType != 'B') {
     setHeaterPosition(false);
     return;
   }
 
   //Если программа - Lua - ждем, ничего не делаем
-  if (program[ProgramNum].WType == "L") {
+  if (currentType == 'L') {
     return;
   }
 
   //Если программа - ожидание - ждем, ничего не делаем
-  if (program[ProgramNum].WType == "W") {
+  if (currentType == 'W') {
     if (begintime == 0) {
       begintime = millis();
       setHeaterPosition(false);
@@ -441,21 +312,24 @@ void check_alarm_beer() {
   }
 
   //Если режим Автотюнинг
-  if (program[ProgramNum].WType == "A") {
+  if (currentType == 'A') {
     if (tuning) {
       set_heater_state(program[ProgramNum].Temp, temp);
     } else {
-      beer_finish();
+      if (!queue_samovar_command(SAMOVAR_BEER_NEXT)) {
+        request_emergency_stop("Очередь команд занята: завершение автотюнинга пива не поставлено");
+      }
     }
+    return;
   }
 
   //Если режим Засыпь солода или Пауза
-  if (program[ProgramNum].WType == "M" || program[ProgramNum].WType == "P") {
+  if (currentType == 'M' || currentType == 'P') {
     set_heater_state(program[ProgramNum].Temp, temp);
   }
 
   //Если режим Брага
-  if (program[ProgramNum].WType == "F") {
+  if (currentType == 'F') {
     //Если температура меньше целевой - греем, иначе охлаждаем.
     if (temp < program[ProgramNum].Temp - tempDelta) {
       if (valve_status) {
@@ -492,7 +366,7 @@ void check_alarm_beer() {
     }
   }
 
-  if (program[ProgramNum].WType == "M" && temp >= program[ProgramNum].Temp - tempDelta) {
+  if (currentType == 'M' && temp >= program[ProgramNum].Temp - tempDelta) {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
     if (startval == 2001) {
       set_buzzer(true);
@@ -501,7 +375,7 @@ void check_alarm_beer() {
     startval = 2002;
   }
 
-  if (program[ProgramNum].WType == "P" && temp >= program[ProgramNum].Temp - tempDelta) {
+  if (currentType == 'P' && temp >= program[ProgramNum].Temp - tempDelta) {
     if (begintime == 0) {
       //Засекаем время для отсчета, сколько держать паузу
       begintime = millis();
@@ -510,7 +384,7 @@ void check_alarm_beer() {
   }
 
   //Если программа - охлаждение - ждем, когда температура в кубе упадет ниже заданной, и управляем водой для охлаждения
-  if (program[ProgramNum].WType == "C") {
+  if (currentType == 'C') {
     if (begintime == 0) {
       begintime = millis();
       setHeaterPosition(false);
@@ -535,9 +409,9 @@ void check_alarm_beer() {
   }
 
   //Если программа - кипячение
-  if (program[ProgramNum].WType == "B") {
+  if (currentType == 'B') {
     //Если предыдущая программа была программой кипячения - просто продолжаем кипятить.
-    if (begintime == 0 && ProgramNum > 0 && program[ProgramNum - 1].WType == "B") begintime = millis();
+    if (begintime == 0 && ProgramNum > 0 && program_type_at(ProgramNum - 1) == 'B') begintime = millis();
 
     if (begintime == 0) {
       //Определяем начало кипения
@@ -581,7 +455,7 @@ void check_alarm_beer() {
   }
 
   //Проверяем, что еще нужно держать паузу
-  if (begintime > 0 && (program[ProgramNum].WType == "B" || program[ProgramNum].WType == "P") && ((millis() - begintime) / 1000 / 60 >= program[ProgramNum].Time)) {
+  if (begintime > 0 && (currentType == 'B' || currentType == 'P') && ((float)(millis() - begintime) / 60000.0f >= program[ProgramNum].Time)) {
     //Запускаем следующую программу
     run_beer_program(ProgramNum + 1);
   }
@@ -645,21 +519,21 @@ void set_mixer_state(bool state, bool dir) {
       //включаем реле 2
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
       //включаем I2CStepper шаговик
-      if (i2c_stepper_mixer_present()) {
-        int tm = abs(program[ProgramNum].Volume);
-        if (tm == 0) tm = 10;
-        bool b = set_stepper_by_time(20, dir, tm);
-      }
+	      if (i2c_stepper_mixer_present()) {
+	        int tm = abs(program[ProgramNum].Volume);
+	        if (tm == 0) tm = 10;
+	        set_stepper_by_time(20, dir, tm);
+	      }
     }
     if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
 #ifdef USE_WATER_PUMP
       //включаем SSD реле
       set_pump_pwm(1023);
 #endif
-      //включаем I2CStepper реле 1
-      if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
-        bool b = set_mixer_pump_target(1);
-      }
+	      //включаем I2CStepper реле 1
+	      if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
+	        set_mixer_pump_target(1);
+	      }
     }
   } else {
     //выключаем реле 2
@@ -668,14 +542,14 @@ void set_mixer_state(bool state, bool dir) {
     //выключаем SSD реле
     set_pump_pwm(0);
 #endif
-    //выключаем I2CStepper шаговик
-    if (i2c_stepper_mixer_present()) {
-      bool b = set_stepper_by_time(0, 0, 0);
-    }
-    //выключаем I2CStepper реле 1
-    if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
-      bool b = set_mixer_pump_target(0);
-    }
+	    //выключаем I2CStepper шаговик
+	    if (i2c_stepper_mixer_present()) {
+	      set_stepper_by_time(0, 0, 0);
+	    }
+	    //выключаем I2CStepper реле 1
+	    if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
+	      set_mixer_pump_target(0);
+	    }
   }
 }
 
@@ -832,20 +706,7 @@ void setHeaterPosition(bool state) {
  * @return Строка с описанием программы
  */
 String get_beer_program() {
-  String Str = "";
-  int k = CAPACITY_NUM * 2;
-  for (uint8_t i = 0; i < k; i++) {
-    if (program[i].WType.length() == 0) {
-      i = CAPACITY_NUM * 2 + 1;
-    } else {
-      Str += program[i].WType + ";";
-      Str += (String)program[i].Temp + ";";
-      Str += (String)(int)program[i].Time + ";";
-      Str += (String)program[i].capacity_num + "^" + (int)program[i].Speed + "^" + program[i].Volume + "^" + (int)program[i].Power + ";";
-      Str += (String)program[i].TempSensor + "\n";
-    }
-  }
-  return Str;
+  return program_serialize_rows(0, PROGRAM_END, program_append_beer_row);
 }
 
 /**
@@ -853,99 +714,7 @@ String get_beer_program() {
  * @param WProgram Строка с описанием программы
  */
 void set_beer_program(String WProgram) {
-  // M - malt application temp, P - pause, B - boil, C - cool
-  for (int j = 0; j < CAPACITY_NUM * 2; j++) {
-    program[j].WType = "";
-  }
-  ProgramLen = 0;
-
-  if (WProgram.length() == 0) return;
-  if (WProgram.length() > MAX_PROGRAM_INPUT_LEN) {
-    SendMsg("Ошибка программы: слишком длинная строка (beer)", ALARM_MSG);
-    return;
-  }
-
-  char input[MAX_PROGRAM_INPUT_LEN + 1] = {0};
-  copyStringSafe(input, WProgram);
-
-  int i = 0;
-  char* saveLine = nullptr;
-  char* line = strtok_r(input, "\n", &saveLine);
-  while (line && i < CAPACITY_NUM * 2) {
-    size_t lineLen = strlen(line);
-    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
-      line[--lineLen] = '\0';
-    }
-    if (lineLen == 0) {
-      line = strtok_r(NULL, "\n", &saveLine);
-      continue;
-    }
-
-    char* saveTok = nullptr;
-    char* tokType = strtok_r(line, ";", &saveTok);
-    char* tokTemp = strtok_r(NULL, ";", &saveTok);
-    char* tokTime = strtok_r(NULL, ";", &saveTok);
-    char* tokDevice = strtok_r(NULL, ";", &saveTok);
-    char* tokSensor = strtok_r(NULL, ";", &saveTok);
-    char* tokExtra = strtok_r(NULL, ";", &saveTok);
-
-    float temp = 0.0f;
-    float timeMin = 0.0f;
-    long sensor = 0;
-    bool ok = tokType && tokType[0] != '\0' &&
-              is_program_wtype_one_of(tokType, "MPBCFWLA") &&
-              tokTemp && tokTime && tokDevice && tokSensor &&
-              !tokExtra &&
-              parseFloatSafe(tokTemp, temp) &&
-              parseFloatSafe(tokTime, timeMin) &&
-              parseLongSafe(tokSensor, sensor) &&
-              sensor >= 0 && sensor <= 4 &&
-              timeMin >= 0.0f;
-
-    if (!ok) {
-      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
-      ProgramLen = 0;
-      SendMsg("Ошибка программы: неверный формат строки beer", ALARM_MSG);
-      return;
-    }
-
-    String device = tokDevice;
-    long devType = 0;
-    long speed = 0;
-    long onTime = 0;
-    long offTime = 0;
-    ok = parseLongSafe(getValue(device, '^', 0).c_str(), devType) &&
-         parseLongSafe(getValue(device, '^', 1).c_str(), speed) &&
-         parseLongSafe(getValue(device, '^', 2).c_str(), onTime) &&
-         parseLongSafe(getValue(device, '^', 3).c_str(), offTime) &&
-         devType >= 0 && devType <= 255 &&
-         onTime >= 0 && onTime <= 65535 &&
-         offTime >= 0 && offTime <= 65535;
-
-    if (!ok) {
-      for (int j = 0; j < CAPACITY_NUM * 2; j++) program[j].WType = "";
-      ProgramLen = 0;
-      SendMsg("Ошибка программы: неверный шаблон устройства beer", ALARM_MSG);
-      return;
-    }
-
-    program[i].WType = tokType;
-    program[i].Temp = temp;
-    program[i].Time = timeMin;
-    program[i].capacity_num = (uint8_t)devType;
-    program[i].Speed = (float)speed;
-    program[i].Volume = (uint16_t)onTime;
-    program[i].Power = (uint16_t)offTime;
-    program[i].TempSensor = (uint8_t)sensor;
-
-    i++;
-    ProgramLen = i;
-    line = strtok_r(NULL, "\n", &saveLine);
-  }
-
-  if (i < CAPACITY_NUM * 2) {
-    program[i].WType = "";
-  }
+  program_parse_lines(WProgram, beer_program_parse_spec());
 }
 
 /**

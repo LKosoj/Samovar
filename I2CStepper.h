@@ -4,12 +4,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "Samovar.h"
-
-void stopService(void);
-void startService(void);
-float get_liquid_volume_by_step(float StepCount);
-float get_liquid_rate_by_step(int StepperSpeed);
-float get_speed_from_rate(float volume_per_hour);
+#include "samovar_api.h"
 
 #define I2CSTEPPER_PROTO_VERSION 2
 #define I2CSTEPPER_MAGIC 0x53
@@ -116,10 +111,51 @@ struct I2CStepperDevice {
   uint16_t currentSpeed;
 };
 
-I2CStepperDevice i2cStepperMixer = {false, I2CSTEPPER_MIXER_ADDR};
-I2CStepperDevice i2cStepperPump = {false, I2CSTEPPER_PUMP_ADDR};
+inline I2CStepperDevice make_i2c_stepper_device(uint8_t address) {
+  I2CStepperDevice dev = {};
+  dev.address = address;
+  return dev;
+}
 
-inline bool i2c_stepper_refresh(I2CStepperDevice& dev);
+I2CStepperDevice i2cStepperMixer = make_i2c_stepper_device(I2CSTEPPER_MIXER_ADDR);
+I2CStepperDevice i2cStepperPump = make_i2c_stepper_device(I2CSTEPPER_PUMP_ADDR);
+
+#define I2CSTEP_CONFIG_MIXER 0x01
+#define I2CSTEP_CONFIG_PUMP  0x02
+volatile uint8_t i2c_config_in_flight = 0;
+
+inline uint8_t i2c_stepper_config_bit(const I2CStepperDevice& dev) {
+  if (dev.address == I2CSTEPPER_MIXER_ADDR) return I2CSTEP_CONFIG_MIXER;
+  if (dev.address == I2CSTEPPER_PUMP_ADDR) return I2CSTEP_CONFIG_PUMP;
+  return 0;
+}
+
+inline bool i2c_stepper_config_begin(const I2CStepperDevice& dev) {
+  uint8_t bit = i2c_stepper_config_bit(dev);
+  if (bit == 0) return false;
+  uint8_t current = 0;
+  do {
+    current = i2c_config_in_flight;
+    if ((current & bit) != 0) return false;
+  } while (!__sync_bool_compare_and_swap(&i2c_config_in_flight, current, current | bit));
+  return true;
+}
+
+inline void i2c_stepper_config_end(const I2CStepperDevice& dev) {
+  uint8_t bit = i2c_stepper_config_bit(dev);
+  if (bit == 0) return;
+  uint8_t current = 0;
+  do {
+    current = i2c_config_in_flight;
+  } while (!__sync_bool_compare_and_swap(&i2c_config_in_flight, current, current & ~bit));
+}
+
+inline bool i2c_stepper_config_busy(const I2CStepperDevice& dev) {
+  uint8_t bit = i2c_stepper_config_bit(dev);
+  return bit != 0 && (i2c_config_in_flight & bit) != 0;
+}
+
+inline bool i2c_stepper_refresh(I2CStepperDevice& dev, bool force = false);
 
 inline uint8_t check_I2C_device(uint8_t address) {
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) == pdTRUE) {
@@ -138,6 +174,27 @@ inline bool i2c_stepper_read_byte(uint8_t address, uint8_t reg, uint8_t& value) 
   return true;
 }
 
+inline bool i2c_stepper_read_block(uint8_t address, uint8_t reg, uint8_t* data, uint8_t len) {
+  if (len == 0 || data == nullptr) return false;
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) != pdTRUE) return false;
+  Wire.beginTransmission(address);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) {
+    xSemaphoreGive(xI2CSemaphore);
+    return false;
+  }
+  uint8_t bytesRead = Wire.requestFrom(address, len);
+  if (bytesRead != len) {
+    xSemaphoreGive(xI2CSemaphore);
+    return false;
+  }
+  for (uint8_t i = 0; i < len; i++) {
+    data[i] = Wire.read();
+  }
+  xSemaphoreGive(xI2CSemaphore);
+  return true;
+}
+
 inline bool i2c_stepper_write_byte(uint8_t address, uint8_t reg, uint8_t value) {
   if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) != pdTRUE) return false;
   uint8_t rc = I2C2.writeByte(address, reg, value);
@@ -146,29 +203,24 @@ inline bool i2c_stepper_write_byte(uint8_t address, uint8_t reg, uint8_t value) 
 }
 
 inline bool i2c_stepper_read_u16(uint8_t address, uint8_t reg, uint16_t& value) {
-  uint8_t hi = 0;
-  uint8_t lo = 0;
-  if (!i2c_stepper_read_byte(address, reg, hi)) return false;
-  if (!i2c_stepper_read_byte(address, reg + 1, lo)) return false;
-  value = ((uint16_t)hi << 8) | lo;
+  uint8_t data[2] = {};
+  if (!i2c_stepper_read_block(address, reg, data, sizeof(data))) return false;
+  value = ((uint16_t)data[0] << 8) | data[1];
   return true;
 }
 
 inline bool i2c_stepper_write_u16(uint8_t address, uint8_t reg, uint16_t value) {
-  return i2c_stepper_write_byte(address, reg, value >> 8) &&
-         i2c_stepper_write_byte(address, reg + 1, value & 0xFF);
+  if (xSemaphoreTake(xI2CSemaphore, (TickType_t)(1000 / portTICK_RATE_MS)) != pdTRUE) return false;
+  uint8_t hi = I2C2.writeByte(address, reg, value >> 8);
+  uint8_t lo = I2C2.writeByte(address, reg + 1, value & 0xFF);
+  xSemaphoreGive(xI2CSemaphore);
+  return hi == 0 && lo == 0;
 }
 
 inline bool i2c_stepper_read_u32(uint8_t address, uint8_t reg, uint32_t& value) {
-  uint8_t b0 = 0;
-  uint8_t b1 = 0;
-  uint8_t b2 = 0;
-  uint8_t b3 = 0;
-  if (!i2c_stepper_read_byte(address, reg, b0)) return false;
-  if (!i2c_stepper_read_byte(address, reg + 1, b1)) return false;
-  if (!i2c_stepper_read_byte(address, reg + 2, b2)) return false;
-  if (!i2c_stepper_read_byte(address, reg + 3, b3)) return false;
-  value = ((uint32_t)b0 << 24) | ((uint32_t)b1 << 16) | ((uint32_t)b2 << 8) | b3;
+  uint8_t data[4] = {};
+  if (!i2c_stepper_read_block(address, reg, data, sizeof(data))) return false;
+  value = ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
   return true;
 }
 
@@ -180,7 +232,8 @@ inline bool i2c_stepper_pump_present() {
   return i2c_stepper_refresh(i2cStepperPump);
 }
 
-inline bool i2c_stepper_refresh(I2CStepperDevice& dev) {
+inline bool i2c_stepper_refresh(I2CStepperDevice& dev, bool force) {
+  if (!force && i2c_stepper_config_busy(dev)) return dev.present;
   uint8_t magic = 0;
   uint8_t version = 0;
   if (check_I2C_device(dev.address) != dev.address) {
@@ -256,7 +309,7 @@ inline bool i2c_stepper_send_command(I2CStepperDevice& dev, uint8_t command) {
   if (!i2c_stepper_write_byte(dev.address, I2CSTEP_REG_COMMAND_SEQ, seq)) return false;
   for (uint8_t i = 0; i < 20; i++) {
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_stepper_refresh(dev);
+    i2c_stepper_refresh(dev, true);
     if (dev.ackSeq == seq) break;
   }
   return dev.present && dev.ackSeq == seq && dev.error == 0;
@@ -311,12 +364,15 @@ inline uint16_t i2c_stepper_ml_from_steps(uint32_t steps) {
 
 inline bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time) {
   if (!i2c_stepper_refresh(i2cStepperMixer)) return false;
+  if (!i2c_stepper_config_begin(i2cStepperMixer)) return false;
   i2cStepperMixer.mode = I2CSTEP_MODE_MIXER;
   i2cStepperMixer.mixerRpm = spd;
   i2cStepperMixer.mixerRunSec = time;
   if (direction) i2cStepperMixer.optionFlags |= I2CSTEPPER_FLAG_DIRECTION;
   else i2cStepperMixer.optionFlags &= ~I2CSTEPPER_FLAG_DIRECTION;
-  return spd == 0 ? i2c_stepper_stop(i2cStepperMixer) : i2c_stepper_start(i2cStepperMixer);
+  bool ok = spd == 0 ? i2c_stepper_stop(i2cStepperMixer) : i2c_stepper_start(i2cStepperMixer);
+  i2c_stepper_config_end(i2cStepperMixer);
+  return ok;
 }
 
 inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
@@ -335,9 +391,12 @@ inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target)
 
   I2CPumpCmdSpeed = spd;
   I2CPumpTargetSteps = target;
+  if (!i2c_stepper_config_begin(i2cStepperPump)) return false;
   if (spd == 0 || target == 0) {
     I2CPumpTargetMl = 0;
-    return i2c_stepper_stop(i2cStepperPump);
+    bool ok = i2c_stepper_stop(i2cStepperPump);
+    i2c_stepper_config_end(i2cStepperPump);
+    return ok;
   }
 
   uint16_t mlh = i2c_stepper_mlh_from_step_speed(spd);
@@ -356,7 +415,9 @@ inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target)
     i2cStepperPump.fillingMl = ml;
     i2cStepperPump.fillingMlHour = mlh;
   }
-  return i2c_stepper_start(i2cStepperPump);
+  bool ok = i2c_stepper_start(i2cStepperPump);
+  i2c_stepper_config_end(i2cStepperPump);
+  return ok;
 }
 
 inline uint16_t get_stepper_speed(void) {
@@ -374,9 +435,12 @@ inline bool set_mixer_pump_target(uint8_t on) {
   if (i2c_stepper_refresh(i2cStepperMixer) && (i2cStepperMixer.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperMixer;
   else if (i2c_stepper_refresh(i2cStepperPump) && (i2cStepperPump.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperPump;
   if (!dev) return false;
+  if (!i2c_stepper_config_begin(*dev)) return false;
   if (on) dev->relayMask |= 0x01;
   else dev->relayMask &= ~0x01;
-  return i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
+  bool ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
+  i2c_stepper_config_end(*dev);
+  return ok;
 }
 
 inline uint8_t get_mixer_pump_status(void) {
@@ -398,9 +462,12 @@ inline bool set_i2c_rele_state(uint8_t r, bool s) {
   if (i2c_stepper_refresh(i2cStepperMixer) && (i2cStepperMixer.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperMixer;
   else if (i2c_stepper_refresh(i2cStepperPump) && (i2cStepperPump.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperPump;
   if (!dev) return false;
+  if (!i2c_stepper_config_begin(*dev)) return false;
   if (s) dev->relayMask |= (1 << (r - 1));
   else dev->relayMask &= ~(1 << (r - 1));
-  return i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
+  bool ok = i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
+  i2c_stepper_config_end(*dev);
+  return ok;
 }
 
 inline float i2c_get_liquid_volume_by_step(int stepCount) {

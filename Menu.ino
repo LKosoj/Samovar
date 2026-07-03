@@ -1,4 +1,6 @@
 #include "Samovar.h"
+#include "samovar_api.h"
+#include "runtime_helpers.h"
 #include <LiquidCrystal_I2C.h>
 #include <LiquidMenu.h>
 #include <Arduino.h>
@@ -7,29 +9,6 @@
 #ifdef USE_MQTT
 #include "SamovarMqtt.h"
 #endif
-
-void read_config();
-void run_program(uint8_t num);
-void set_menu_screen(uint8_t param);
-void save_profile();
-void set_pump_speed(float speed, bool continue_process);
-float get_speed_from_rate(float rate);
-void pump_calibrate(int stpspeed);
-void pause_withdrawal(bool Pause);
-void set_pump_pwm(float duty);
-void set_pump_speed_pid(float temp);
-void set_power(bool On);
-void set_buzzer(bool fl);
-bool check_boiling();
-float get_alcohol(float t);
-void check_power_error();
-bool column_wetting();
-void reset_sensor_counter();
-void set_capacity(uint8_t cap);
-void set_program(String WProgram);
-String get_program(uint8_t s);
-void create_data();
-void detector_on_manual_resume();
 
 const char str_BACK[] PROGMEM = "<BACK";
 const char str_Steam_T[] PROGMEM = "Steam T: ";
@@ -441,7 +420,7 @@ void menu_get_power() {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     if (!PowerOn) {
       set_menu_screen(2);
-      sam_command_sync = SAMOVAR_BEER;
+      if (!queue_samovar_command(SAMOVAR_BEER)) SendMsg("Очередь команд занята: старт пива из меню не поставлен", WARNING_MSG);
     } else {
       set_menu_screen(3);
       samovar_reset();
@@ -449,7 +428,7 @@ void menu_get_power() {
   } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
     if (!PowerOn) {
       set_menu_screen(2);
-      sam_command_sync = SAMOVAR_DISTILLATION;
+      if (!queue_samovar_command(SAMOVAR_DISTILLATION)) SendMsg("Очередь команд занята: старт дистилляции из меню не поставлен", WARNING_MSG);
     } else {
       set_menu_screen(3);
       samovar_reset();
@@ -457,7 +436,7 @@ void menu_get_power() {
   } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
     if (!PowerOn) {
       set_menu_screen(2);
-      sam_command_sync = SAMOVAR_BK;
+      if (!queue_samovar_command(SAMOVAR_BK)) SendMsg("Очередь команд занята: старт БК из меню не поставлен", WARNING_MSG);
     } else {
       set_menu_screen(3);
       samovar_reset();
@@ -465,7 +444,7 @@ void menu_get_power() {
   } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
     if (!PowerOn) {
       set_menu_screen(2);
-      sam_command_sync = SAMOVAR_NBK;
+      if (!queue_samovar_command(SAMOVAR_NBK)) SendMsg("Очередь команд занята: старт НБК из меню не поставлен", WARNING_MSG);
     } else {
       set_menu_screen(3);
       samovar_reset();
@@ -473,7 +452,7 @@ void menu_get_power() {
   } else {
     if (!PowerOn) {
       set_menu_screen(2);
-      sam_command_sync = SAMOVAR_POWER;
+      if (!queue_samovar_command(SAMOVAR_POWER)) SendMsg("Очередь команд занята: включение нагрева из меню не поставлено", WARNING_MSG);
     } else {
       set_menu_screen(3);
       samovar_reset();
@@ -530,16 +509,28 @@ void menu_samovar_start() {
     startval = 2;
 
   if (startval == 0) {
+    Str = "Prg No 1";
+    if (!create_data()) {
+      SendMsg("Ошибка создания файла лога. Старт ректификации отменён.", ALARM_MSG);
+      SamovarStatusInt = 0;
+      startval = 0;
+      return;
+    }
 #ifdef USE_MQTT
-    SessionDescription.replace(",", ";");
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_program(CAPACITY_NUM * 2) + "," + SessionDescription, "st");
+    String sessionDescription;
+    if (!copy_mqtt_session_description(sessionDescription, portMAX_DELAY)) {
+      SendMsg("Описание сессии занято. Старт ректификации отменён.", ALARM_MSG);
+      SamovarStatusInt = 0;
+      startval = 0;
+      if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+      return;
+    }
+    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_program(PROGRAM_END) + "," + sessionDescription, "st");
     delay(200);
 #endif
-    Str = "Prg No 1";
     run_program(0);
     SamovarStatusInt = 10;
     ProgramNum = 0;
-    create_data();  //создаем файл с данными
     startval = 1;
   } else if (startval == 1) {
     ProgramNum++;
@@ -548,10 +539,10 @@ void menu_samovar_start() {
     SamovarStatusInt = 10;
   } else if (startval == 2) {
     Str = "Prg finish";
-    run_program(CAPACITY_NUM * 2);
+    run_program(PROGRAM_END);
   } else {
     Str = "Stoped";
-    run_program(CAPACITY_NUM * 2);
+    run_program(PROGRAM_END);
     reset_sensor_counter();
   }
   copyStringSafe(startval_text_val, Str);
@@ -565,7 +556,6 @@ void samovar_reset() {
   reset_focus();
   set_menu_screen(3);
   reset_sensor_counter();
-  sam_command_sync = SAMOVAR_NONE;
 }
 
 void setupMenu() {
