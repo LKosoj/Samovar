@@ -36,6 +36,65 @@ inline String lua_exec(String& script, bool collect_garbage = false, TickType_t 
   return result;
 }
 
+inline bool lua_chunk_ref_valid(int ref) {
+  return ref != LUA_NOREF && ref != LUA_REFNIL;
+}
+
+inline void lua_unref_chunk_locked(int& ref) {
+  if (lua_chunk_ref_valid(ref)) {
+    luaL_unref(lua.GetState(), LUA_REGISTRYINDEX, ref);
+  }
+  ref = LUA_NOREF;
+}
+
+inline String lua_error_string(lua_State* L) {
+  const char* error = lua_tostring(L, -1);
+  return error ? String(error) : String("unknown Lua error");
+}
+
+inline String lua_compile_chunk_locked(const String& script, const char* chunk_name, int& ref) {
+  lua_unref_chunk_locked(ref);
+  if (script.length() == 0) return "";
+  lua_State* L = lua.GetState();
+  int base = lua_gettop(L);
+  if (luaL_loadbuffer(L, script.c_str(), script.length(), chunk_name) != LUA_OK) {
+    String error = lua_error_string(L);
+    lua_settop(L, base);
+    return "# lua compile error:\n" + error;
+  }
+  ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  lua_settop(L, base);
+  return "";
+}
+
+inline String lua_exec_chunk_locked(int ref, bool collect_garbage = false) {
+  if (!lua_chunk_ref_valid(ref)) return "";
+  lua_State* L = lua.GetState();
+  int base = lua_gettop(L);
+  String result;
+  lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+  if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
+    result = "# lua error:\n" + lua_error_string(L);
+  }
+  lua_settop(L, base);
+  if (collect_garbage) {
+    lua_gc(L, LUA_GCCOLLECT, 0);
+  }
+  return result;
+}
+
+inline void lua_set_number_global_locked(const char* name, lua_Number value) {
+  lua_pushnumber(lua.GetState(), value);
+  lua_setglobal(lua.GetState(), name);
+}
+
+inline void lua_install_constants_locked() {
+  lua_set_number_global_locked("INPUT", INPUT);
+  lua_set_number_global_locked("OUTPUT", OUTPUT);
+  lua_set_number_global_locked("LOW", LOW);
+  lua_set_number_global_locked("HIGH", HIGH);
+}
+
 #include <SimpleMap.h>
 
 #include <asyncHTTPrequest.h>
@@ -49,6 +108,8 @@ inline String lua_exec(String& script, bool collect_garbage = false, TickType_t 
 unsigned long lua_timer[10];  //10 таймеров для lua
 String lua_type_script;
 String script1, script2;
+int script1_ref = LUA_NOREF;
+int script2_ref = LUA_NOREF;
 extern String lua_script_list_cache;
 
 SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, String &b) -> int {
@@ -152,6 +213,231 @@ static bool lua_copy_current_program(WProgram& currentProgram) {
   if (ProgramNum >= PROGRAM_MAX) return false;
   currentProgram = program[ProgramNum];
   return !program_type_empty(currentProgram.WType);
+}
+
+static String lua_to_string_arg(lua_State *lua_state, int index) {
+  String value;
+  lua_getglobal(lua_state, "tostring");
+  lua_pushvalue(lua_state, index);
+  lua_call(lua_state, 1, 1);
+  size_t len;
+  const char *text = lua_tolstring(lua_state, -1, &len);
+  if (text) value = text;
+  lua_pop(lua_state, 1);
+  return value;
+}
+
+enum LuaVariableAccess : uint8_t {
+  LUA_VAR_READ = 0x01,
+  LUA_VAR_WRITE = 0x02
+};
+
+static const uint8_t LUA_VAR_RO = LUA_VAR_READ;
+static const uint8_t LUA_VAR_WO = LUA_VAR_WRITE;
+static const uint8_t LUA_VAR_RW = LUA_VAR_READ | LUA_VAR_WRITE;
+
+struct LuaNumVariableDescriptor {
+  const char* name;
+  float (*getter)();
+  void (*setter)(float value);
+  uint8_t access;
+};
+
+static float lua_num_get_WFpulseCount() { return water_pulse_count_get(); }
+static void lua_num_set_WFpulseCount(float value) { water_pulse_count_set((uint16_t)value); }
+static float lua_num_get_pump_started() { return pump_started; }
+static void lua_num_set_pump_started(float value) { pump_started = (int)value; }
+static float lua_num_get_valve_status() { return valve_status; }
+static void lua_num_set_valve_status(float value) { valve_status = (int)value; }
+static float lua_num_get_SamSetup_Mode() { return SamSetup.Mode; }
+static void lua_num_set_SamSetup_Mode(float value) { SamSetup.Mode = (int)value; }
+static float lua_num_get_Samovar_Mode() { return Samovar_Mode; }
+static void lua_num_set_Samovar_Mode(float value) {
+  SAMOVAR_MODE newMode = (SAMOVAR_MODE)value;
+  if (Samovar_Mode != newMode) {
+    Samovar_Mode = newMode;
+    change_samovar_mode();
+  }
+}
+static float lua_num_get_Samovar_CR_Mode() { return Samovar_CR_Mode; }
+static void lua_num_set_Samovar_CR_Mode(float value) { Samovar_CR_Mode = (SAMOVAR_MODE)value; }
+static float lua_num_get_acceleration_temp() { return acceleration_temp; }
+static void lua_num_set_acceleration_temp(float value) { acceleration_temp = (uint16_t)value; }
+#ifdef USE_WATER_PUMP
+static float lua_num_get_wp_count() { return wp_count; }
+static void lua_num_set_wp_count(float value) { wp_count = (byte)value; }
+static void lua_num_set_pmpKp(float value) { pump_regulator.Kp = (byte)value; }
+static void lua_num_set_pmpKi(float value) { pump_regulator.Ki = (byte)value; }
+static void lua_num_set_pmpKd(float value) { pump_regulator.Kd = (byte)value; }
+#endif
+static float lua_num_get_SteamTemp() { return SteamSensor.avgTemp; }
+static void lua_num_set_SteamTemp(float value) { SteamSensor.avgTemp = value; }
+static float lua_num_get_boil_temp() { return boil_temp; }
+static void lua_num_set_boil_temp(float value) { boil_temp = value; }
+static float lua_num_get_PipeTemp() { return PipeSensor.avgTemp; }
+static void lua_num_set_PipeTemp(float value) { PipeSensor.avgTemp = value; }
+static float lua_num_get_WaterTemp() { return WaterSensor.avgTemp; }
+static void lua_num_set_WaterTemp(float value) { WaterSensor.avgTemp = value; }
+static float lua_num_get_TankTemp() { return TankSensor.avgTemp; }
+static void lua_num_set_TankTemp(float value) { TankSensor.avgTemp = value; }
+static float lua_num_get_ACPTemp() { return ACPSensor.avgTemp; }
+static void lua_num_set_ACPTemp(float value) { ACPSensor.avgTemp = value; }
+static float lua_num_get_loop_lua_fl() { return loop_lua_fl; }
+static void lua_num_set_loop_lua_fl(float value) { loop_lua_fl = (int)value; }
+static float lua_num_get_SetScriptOff() { return SetScriptOff; }
+static void lua_num_set_SetScriptOff(float value) { SetScriptOff = (bool)value; }
+static float lua_num_get_show_lua_script() { return show_lua_script; }
+static void lua_num_set_show_lua_script(float value) { show_lua_script = (int)value; }
+static float lua_num_get_test_num_val() { return test_num_val; }
+static void lua_num_set_test_num_val(float value) { test_num_val = value; }
+static float lua_num_get_WFtotalMilliLitres() { return WFtotalMilliLitres; }
+static float lua_num_get_WFflowRate() { return WFflowRate; }
+static float lua_num_get_program_volume() {
+  WProgram currentProgram;
+  return lua_copy_current_program(currentProgram) ? currentProgram.Volume : 0;
+}
+static float lua_num_get_program_speed() {
+  WProgram currentProgram;
+  return lua_copy_current_program(currentProgram) ? currentProgram.Speed : 0;
+}
+static float lua_num_get_program_temp() {
+  WProgram currentProgram;
+  return lua_copy_current_program(currentProgram) ? currentProgram.Temp : 0;
+}
+static float lua_num_get_program_power() {
+  WProgram currentProgram;
+  return lua_copy_current_program(currentProgram) ? currentProgram.Power : 0;
+}
+static float lua_num_get_program_time() {
+  WProgram currentProgram;
+  return lua_copy_current_program(currentProgram) ? currentProgram.Time : 0;
+}
+static float lua_num_get_program_capacity_num() {
+  WProgram currentProgram;
+  return lua_copy_current_program(currentProgram) ? currentProgram.capacity_num : 0;
+}
+static float lua_num_get_capacity_num() { return capacity_num; }
+static float lua_num_get_target_power_volt() { return target_power_volt; }
+static float lua_num_get_PowerOn() { return PowerOn; }
+static float lua_num_get_alcohol() { return get_alcohol(TankSensor.avgTemp); }
+static float lua_num_get_alcohol_s() { return alcohol_s; }
+static float lua_num_get_water_pump_speed() { return water_pump_speed; }
+static float lua_num_get_pressure_value() { return pressure_value; }
+static float lua_num_get_PauseOn() { return PauseOn; }
+static float lua_num_get_program_Wait() { return program_Wait; }
+static float lua_num_get_YY() { return year(time(NULL)); }
+static float lua_num_get_MM() { return month(time(NULL)); }
+static float lua_num_get_DD() { return day(time(NULL)); }
+static float lua_num_get_HH() { return hour(time(NULL)) + SamSetup.TimeZone; }
+static float lua_num_get_MI() { return minute(time(NULL)); }
+static float lua_num_get_SS() { return second(time(NULL)); }
+
+static const LuaNumVariableDescriptor lua_num_variables[] = {
+  {"WFpulseCount", lua_num_get_WFpulseCount, lua_num_set_WFpulseCount, LUA_VAR_RW},
+  {"pump_started", lua_num_get_pump_started, lua_num_set_pump_started, LUA_VAR_RW},
+  {"valve_status", lua_num_get_valve_status, lua_num_set_valve_status, LUA_VAR_RW},
+  {"SamSetup_Mode", lua_num_get_SamSetup_Mode, lua_num_set_SamSetup_Mode, LUA_VAR_RW},
+  {"Samovar_Mode", lua_num_get_Samovar_Mode, lua_num_set_Samovar_Mode, LUA_VAR_RW},
+  {"Samovar_CR_Mode", lua_num_get_Samovar_CR_Mode, lua_num_set_Samovar_CR_Mode, LUA_VAR_RW},
+  {"acceleration_temp", lua_num_get_acceleration_temp, lua_num_set_acceleration_temp, LUA_VAR_RW},
+#ifdef USE_WATER_PUMP
+  {"wp_count", lua_num_get_wp_count, lua_num_set_wp_count, LUA_VAR_RW},
+  {"pmpKp", nullptr, lua_num_set_pmpKp, LUA_VAR_WO},
+  {"pmpKi", nullptr, lua_num_set_pmpKi, LUA_VAR_WO},
+  {"pmpKd", nullptr, lua_num_set_pmpKd, LUA_VAR_WO},
+#endif
+  {"SteamTemp", lua_num_get_SteamTemp, lua_num_set_SteamTemp, LUA_VAR_RW},
+  {"boil_temp", lua_num_get_boil_temp, lua_num_set_boil_temp, LUA_VAR_RW},
+  {"PipeTemp", lua_num_get_PipeTemp, lua_num_set_PipeTemp, LUA_VAR_RW},
+  {"WaterTemp", lua_num_get_WaterTemp, lua_num_set_WaterTemp, LUA_VAR_RW},
+  {"TankTemp", lua_num_get_TankTemp, lua_num_set_TankTemp, LUA_VAR_RW},
+  {"ACPTemp", lua_num_get_ACPTemp, lua_num_set_ACPTemp, LUA_VAR_RW},
+  {"loop_lua_fl", lua_num_get_loop_lua_fl, lua_num_set_loop_lua_fl, LUA_VAR_RW},
+  {"SetScriptOff", lua_num_get_SetScriptOff, lua_num_set_SetScriptOff, LUA_VAR_RW},
+  {"show_lua_script", lua_num_get_show_lua_script, lua_num_set_show_lua_script, LUA_VAR_RW},
+  {"test_num_val", lua_num_get_test_num_val, lua_num_set_test_num_val, LUA_VAR_RW},
+  {"WFtotalMilliLitres", lua_num_get_WFtotalMilliLitres, nullptr, LUA_VAR_RO},
+  {"WFflowRate", lua_num_get_WFflowRate, nullptr, LUA_VAR_RO},
+  {"program_volume", lua_num_get_program_volume, nullptr, LUA_VAR_RO},
+  {"program_speed", lua_num_get_program_speed, nullptr, LUA_VAR_RO},
+  {"program_temp", lua_num_get_program_temp, nullptr, LUA_VAR_RO},
+  {"program_power", lua_num_get_program_power, nullptr, LUA_VAR_RO},
+  {"program_time", lua_num_get_program_time, nullptr, LUA_VAR_RO},
+  {"program_capacity_num", lua_num_get_program_capacity_num, nullptr, LUA_VAR_RO},
+  {"capacity_num", lua_num_get_capacity_num, nullptr, LUA_VAR_RO},
+  {"target_power_volt", lua_num_get_target_power_volt, nullptr, LUA_VAR_RO},
+  {"PowerOn", lua_num_get_PowerOn, nullptr, LUA_VAR_RO},
+  {"alcohol", lua_num_get_alcohol, nullptr, LUA_VAR_RO},
+  {"alcohol_s", lua_num_get_alcohol_s, nullptr, LUA_VAR_RO},
+  {"water_pump_speed", lua_num_get_water_pump_speed, nullptr, LUA_VAR_RO},
+  {"pressure_value", lua_num_get_pressure_value, nullptr, LUA_VAR_RO},
+  {"PauseOn", lua_num_get_PauseOn, nullptr, LUA_VAR_RO},
+  {"program_Wait", lua_num_get_program_Wait, nullptr, LUA_VAR_RO},
+  {"YY", lua_num_get_YY, nullptr, LUA_VAR_RO},
+  {"MM", lua_num_get_MM, nullptr, LUA_VAR_RO},
+  {"DD", lua_num_get_DD, nullptr, LUA_VAR_RO},
+  {"HH", lua_num_get_HH, nullptr, LUA_VAR_RO},
+  {"MI", lua_num_get_MI, nullptr, LUA_VAR_RO},
+  {"SS", lua_num_get_SS, nullptr, LUA_VAR_RO},
+};
+
+static const LuaNumVariableDescriptor* find_lua_num_variable(const String& name) {
+  for (size_t i = 0; i < sizeof(lua_num_variables) / sizeof(lua_num_variables[0]); i++) {
+    if (name == lua_num_variables[i].name) return &lua_num_variables[i];
+  }
+  return nullptr;
+}
+
+struct LuaStrVariableDescriptor {
+  const char* name;
+  bool (*getter)(String& value);
+  bool (*setter)(const String& value);
+  uint8_t access;
+  const char* busy_error;
+};
+
+static bool lua_str_get_Msg(String& value) { return copy_web_message_raw(value); }
+static bool lua_str_set_Msg(const String& value) { return set_web_message_raw(value); }
+static bool lua_str_get_SamovarStatus(String& value) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  value = SamovarStatus;
+  runtime_state_unlock(true);
+  return true;
+}
+static bool lua_str_set_SamovarStatus(const String& value) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  SamovarStatus = value;
+  runtime_state_unlock(true);
+  return true;
+}
+static bool lua_str_get_test_str_val(String& value) {
+  value = test_str_val;
+  return true;
+}
+static bool lua_str_set_test_str_val(const String& value) {
+  test_str_val = value;
+  return true;
+}
+static bool lua_str_get_program_type(String& value) {
+  WProgram currentProgram;
+  value = lua_copy_current_program(currentProgram) ? program_type_to_string(currentProgram.WType) : String();
+  return true;
+}
+
+static const LuaStrVariableDescriptor lua_str_variables[] = {
+  {"Msg", lua_str_get_Msg, lua_str_set_Msg, LUA_VAR_RW, "Msg busy"},
+  {"SamovarStatus", lua_str_get_SamovarStatus, lua_str_set_SamovarStatus, LUA_VAR_RW, "SamovarStatus busy"},
+  {"test_str_val", lua_str_get_test_str_val, lua_str_set_test_str_val, LUA_VAR_RW, nullptr},
+  {"program_type", lua_str_get_program_type, nullptr, LUA_VAR_RO, nullptr},
+};
+
+static const LuaStrVariableDescriptor* find_lua_str_variable(const String& name) {
+  for (size_t i = 0; i < sizeof(lua_str_variables) / sizeof(lua_str_variables[0]); i++) {
+    if (name == lua_str_variables[i].name) return &lua_str_variables[i];
+  }
+  return nullptr;
 }
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
@@ -272,7 +558,6 @@ static int lua_wrapper_delay(lua_State *lua_state) {
 }
 
 static int lua_wrapper_millis(lua_State *lua_state) {
-  vTaskDelay(5 / portTICK_PERIOD_MS);
   lua_pushnumber(lua_state, (lua_Number)millis());
   return 1;
 }
@@ -366,24 +651,14 @@ static int lua_wrapper_set_next_program(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_state(lua_State *lua_state) {
-  vTaskDelay(5 / portTICK_PERIOD_MS);
   lua_pushnumber(lua_state, (lua_Number)SamovarStatusInt);
   return 1;
 }
 
 static int lua_wrapper_send_msg(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  String st;
-  const char *s;
-  size_t l;
   int a = luaL_checkinteger(lua_state, 2);
-  lua_getglobal(lua_state, "tostring");
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s = lua_tolstring(lua_state, -1, &l);
-  st = s;
-  lua_pop(lua_state, 1);
+  String st = lua_to_string_arg(lua_state, 1);
   if (a == -1) {
     WriteConsoleLog(st);
   } else {
@@ -394,175 +669,23 @@ static int lua_wrapper_send_msg(lua_State *lua_state) {
 
 static int lua_wrapper_set_num_variable(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  String Var;
-  const char *s;
-  size_t l;
   float a = luaL_checknumber(lua_state, 2);
-  lua_getglobal(lua_state, "tostring");
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s = lua_tolstring(lua_state, -1, &l);
-  Var = s;
-  lua_pop(lua_state, 1);
-
-  if (Var == "WFpulseCount") {
-    water_pulse_count_set((uint16_t)a);
-  } else if (Var == "pump_started") {
-    pump_started = (int)a;
-  } else if (Var == "valve_status") {
-    valve_status = (int)a;
-  } else if (Var == "SamSetup_Mode") {
-    SamSetup.Mode = (int)a;
-  } else if (Var == "Samovar_Mode") {
-    SAMOVAR_MODE newMode = (SAMOVAR_MODE)a;
-    if (Samovar_Mode != newMode) {
-      Samovar_Mode = newMode;
-      change_samovar_mode();
-    }
-  } else if (Var == "Samovar_CR_Mode") {
-    Samovar_CR_Mode = (SAMOVAR_MODE)a;
-  } else if (Var == "acceleration_temp") {
-    acceleration_temp = (uint16_t)a;
-#ifdef USE_WATER_PUMP
-  } else if (Var == "wp_count") {
-    wp_count = (byte)a;
-#endif
-#ifdef USE_WATER_PUMP
-  } else if (Var == "pmpKp") {
-    pump_regulator.Kp = (byte)a;
-  } else if (Var == "pmpKi") {
-    pump_regulator.Ki = (byte)a;
-  } else if (Var == "pmpKd") {
-    pump_regulator.Kd = (byte)a;
-#endif
-  } else if (Var == "SteamTemp") {
-    SteamSensor.avgTemp = a;
-  } else if (Var == "boil_temp") {
-    boil_temp = a;
-  } else if (Var == "PipeTemp") {
-    PipeSensor.avgTemp = a;
-  } else if (Var == "WaterTemp") {
-    WaterSensor.avgTemp = a;
-  } else if (Var == "TankTemp") {
-    TankSensor.avgTemp = a;
-  } else if (Var == "ACPTemp") {
-    ACPSensor.avgTemp = a;
-  } else if (Var == "loop_lua_fl") {
-    loop_lua_fl = (int)a;
-  } else if (Var == "SetScriptOff") {
-    SetScriptOff = (bool)a;
-  } else if (Var == "show_lua_script") {
-    show_lua_script = (int)a;
-  } else if (Var == "test_num_val") {
-    test_num_val = a;
+  String Var = lua_to_string_arg(lua_state, 1);
+  const LuaNumVariableDescriptor* descriptor = find_lua_num_variable(Var);
+  if (descriptor && (descriptor->access & LUA_VAR_WRITE) && descriptor->setter) {
+    descriptor->setter(a);
   } else if (Var.length() > 0) {
-    WriteConsoleLog("UNDEF NUMERIC LUA VAR " + Var + " = " + a);
+    WriteConsoleLog("UNDEF NUMERIC LUA VAR " + Var + " = " + String(a));
   }
   return 0;
 }
 
 static int lua_wrapper_get_num_variable(lua_State *lua_state) {
-  vTaskDelay(5 / portTICK_PERIOD_MS);
-  String Var;
-  const char *s;
-  size_t l;
-  lua_getglobal(lua_state, "tostring");
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s = lua_tolstring(lua_state, -1, &l);
-  Var = s;
-  lua_pop(lua_state, 1);
-  WProgram currentProgram;
-  bool hasCurrentProgram = lua_copy_current_program(currentProgram);
   float a = 0;
-  if (Var == "WFpulseCount") {
-    a = water_pulse_count_get();
-  } else if (Var == "pump_started") {
-    a = pump_started;
-  } else if (Var == "valve_status") {
-    a = valve_status;
-  } else if (Var == "SamSetup_Mode") {
-    a = SamSetup.Mode;
-  } else if (Var == "Samovar_Mode") {
-    a = Samovar_Mode;
-  } else if (Var == "Samovar_CR_Mode") {
-    a = Samovar_CR_Mode;
-  } else if (Var == "boil_temp") {
-    a = boil_temp;
-  } else if (Var == "acceleration_temp") {
-    a = acceleration_temp;
-#ifdef USE_WATER_PUMP
-  } else if (Var == "wp_count") {
-    a = wp_count;
-#endif
-  } else if (Var == "WFtotalMilliLitres") {
-    a = WFtotalMilliLitres;
-  } else if (Var == "WFflowRate") {
-    a = WFflowRate;
-  } else if (Var == "SteamTemp") {
-    a = SteamSensor.avgTemp;
-  } else if (Var == "PipeTemp") {
-    a = PipeSensor.avgTemp;
-  } else if (Var == "WaterTemp") {
-    a = WaterSensor.avgTemp;
-  } else if (Var == "TankTemp") {
-    a = TankSensor.avgTemp;
-  } else if (Var == "ACPTemp") {
-    a = ACPSensor.avgTemp;
-  } else if (Var == "loop_lua_fl") {
-    a = loop_lua_fl;
-  } else if (Var == "show_lua_script") {
-    a = show_lua_script;
-  } else if (Var == "SetScriptOff") {
-    a = SetScriptOff;
-  } else if (Var == "program_volume") {
-    a = hasCurrentProgram ? currentProgram.Volume : 0;
-  } else if (Var == "program_speed") {
-    a = hasCurrentProgram ? currentProgram.Speed : 0;
-  } else if (Var == "program_temp") {
-    a = hasCurrentProgram ? currentProgram.Temp : 0;
-  } else if (Var == "program_power") {
-    a = hasCurrentProgram ? currentProgram.Power : 0;
-  } else if (Var == "program_time") {
-    a = hasCurrentProgram ? currentProgram.Time : 0;
-  } else if (Var == "program_capacity_num") {
-    a = hasCurrentProgram ? currentProgram.capacity_num : 0;
-  } else if (Var == "capacity_num") {
-    a = capacity_num;
-  } else if (Var == "target_power_volt") {
-    a = target_power_volt;
-  } else if (Var == "PowerOn") {
-    a = PowerOn;
-  } else if (Var == "boil_temp") {
-    a = boil_temp;
-  } else if (Var == "alcohol") {
-    a = get_alcohol(TankSensor.avgTemp);
-  } else if (Var == "alcohol_s") {
-    a = alcohol_s;
-  } else if (Var == "water_pump_speed") {
-    a = water_pump_speed;
-  } else if (Var == "pressure_value") {
-    a = pressure_value;
-  } else if (Var == "PauseOn") {
-    a = PauseOn;
-  } else if (Var == "program_Wait") {
-    a = program_Wait;
-  } else if (Var == "YY") {
-    a = year(time(NULL));
-  } else if (Var == "MM") {
-    a = month(time(NULL));
-  } else if (Var == "DD") {
-    a = day(time(NULL));
-  } else if (Var == "HH") {
-    a = hour(time(NULL)) + SamSetup.TimeZone;
-  } else if (Var == "MI") {
-    a = minute(time(NULL));
-  } else if (Var == "SS") {
-    a = second(time(NULL));
-  } else if (Var == "test_num_val") {
-    a = test_num_val;
+  String Var = lua_to_string_arg(lua_state, 1);
+  const LuaNumVariableDescriptor* descriptor = find_lua_num_variable(Var);
+  if (descriptor && (descriptor->access & LUA_VAR_READ) && descriptor->getter) {
+    a = descriptor->getter();
   } else if (Var.length() > 0) {
     WriteConsoleLog("GET UNDEF NUMERIC LUA VAR " + Var);
   }
@@ -572,41 +695,13 @@ static int lua_wrapper_get_num_variable(lua_State *lua_state) {
 
 static int lua_wrapper_set_str_variable(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  String Var, Val;
-  lua_getglobal(lua_state, "tostring");
-
-  const char *s1;
-  size_t l1;
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s1 = lua_tolstring(lua_state, -1, &l1);
-  Var = s1;
-  lua_pop(lua_state, 1);
-
-  const char *s2;
-  size_t l2;
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 2);
-  lua_call(lua_state, 1, 1);
-  s2 = lua_tolstring(lua_state, -1, &l2);
-  Val = s2;
-  lua_pop(lua_state, 1);
-
-  if (Var == "Msg") {
-    if (!set_web_message_raw(Val)) return luaL_error(lua_state, "Msg busy");
-  } else if (Var == "SamovarStatus") {
-    // [2d] SamovarStatus защищён runtime_state_lock (как в logic.h C-2).
-    {
-      bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-      if (!locked) return luaL_error(lua_state, "SamovarStatus busy");
-      SamovarStatus = Val;
-      runtime_state_unlock(true);
-    }
-  } else if (Var == "test_str_val") {
-    test_str_val = Val;
-  } else if (Var == "program_type") {
-    WriteConsoleLog(F("WARNING! program_type is read only property"));
+  String Var = lua_to_string_arg(lua_state, 1);
+  String Val = lua_to_string_arg(lua_state, 2);
+  const LuaStrVariableDescriptor* descriptor = find_lua_str_variable(Var);
+  if (descriptor && (descriptor->access & LUA_VAR_WRITE) && descriptor->setter) {
+    if (!descriptor->setter(Val)) return luaL_error(lua_state, descriptor->busy_error ? descriptor->busy_error : "Lua string variable busy");
+  } else if (descriptor) {
+    WriteConsoleLog("WARNING! " + Var + " is read only property");
   } else if (Var.length() > 0) {
     WriteConsoleLog("UNDEF STRING LUA VAR " + Var + " = " + Val);
   }
@@ -615,55 +710,20 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
 
 static int lua_wrapper_set_object(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  String Var, Val;
-  lua_getglobal(lua_state, "tostring");
-
-  const char *s1;
-  size_t l1;
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s1 = lua_tolstring(lua_state, -1, &l1);
-  Var = s1;
-  lua_pop(lua_state, 1);
-
-  const char *s2;
-  size_t l2;
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 2);
-  lua_call(lua_state, 1, 1);
-  s2 = lua_tolstring(lua_state, -1, &l2);
-  Val = s2;
-  lua_pop(lua_state, 1);
-
+  String Var = lua_to_string_arg(lua_state, 1);
+  String Val = lua_to_string_arg(lua_state, 2);
   luaObj->put(Var, Val);
   return 0;
 }
 
 static int lua_wrapper_get_object(lua_State *lua_state) {
-  vTaskDelay(5 / portTICK_PERIOD_MS);
   String Var, Type;
-  const char *s;
   int n = lua_gettop(lua_state); /* number of arguments */
-  size_t l;
-  lua_getglobal(lua_state, "tostring");
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s = lua_tolstring(lua_state, -1, &l);
-  Var = s;
-  lua_pop(lua_state, 1);
+  Var = lua_to_string_arg(lua_state, 1);
 
   String v = luaObj->get(Var);
   if (n == 2) {
-    const char *s2;
-    size_t l2;
-    lua_pushvalue(lua_state, -1);
-    lua_pushvalue(lua_state, 2);
-    lua_call(lua_state, 1, 1);
-    s2 = lua_tolstring(lua_state, -1, &l2);
-    Type = s2;
-    lua_pop(lua_state, 1);
+    Type = lua_to_string_arg(lua_state, 2);
     if (Type == "NUMERIC" && v.length() == 0) {
       v = "0";
     }
@@ -675,17 +735,7 @@ static int lua_wrapper_get_object(lua_State *lua_state) {
 
 static int lua_wrapper_set_lua_status(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  String Var;
-  lua_getglobal(lua_state, "tostring");
-
-  const char *s1;
-  size_t l1;
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s1 = lua_tolstring(lua_state, -1, &l1);
-  Var = s1;
-  lua_pop(lua_state, 1);
+  String Var = lua_to_string_arg(lua_state, 1);
   if (!set_lua_status_value(Var)) return luaL_error(lua_state, "Lua_status busy");
   return 0;
 }
@@ -740,34 +790,11 @@ static int lua_wrapper_get_timer(lua_State *lua_state) {
 }
 
 static int lua_wrapper_get_str_variable(lua_State *lua_state) {
-  vTaskDelay(5 / portTICK_PERIOD_MS);
-  String Var;
-  const char *s;
-  size_t l;
-  lua_getglobal(lua_state, "tostring");
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s = lua_tolstring(lua_state, -1, &l);
-  Var = s;
-  lua_pop(lua_state, 1);
-  WProgram currentProgram;
-  bool hasCurrentProgram = lua_copy_current_program(currentProgram);
   String c;
-  if (Var == "Msg") {
-    if (!copy_web_message_raw(c)) return luaL_error(lua_state, "Msg busy");
-  } else if (Var == "SamovarStatus") {
-    // [2d] Читаем SamovarStatus под замком (пишется в logic.h под runtime_state_lock).
-    {
-      bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-      if (!locked) return luaL_error(lua_state, "SamovarStatus busy");
-      c = SamovarStatus;
-      runtime_state_unlock(true);
-    }
-  } else if (Var == "test_str_val") {
-    c = test_str_val;
-  } else if (Var == "program_type") {
-    c = hasCurrentProgram ? program_type_to_string(currentProgram.WType) : String();
+  String Var = lua_to_string_arg(lua_state, 1);
+  const LuaStrVariableDescriptor* descriptor = find_lua_str_variable(Var);
+  if (descriptor && (descriptor->access & LUA_VAR_READ) && descriptor->getter) {
+    if (!descriptor->getter(c)) return luaL_error(lua_state, descriptor->busy_error ? descriptor->busy_error : "Lua string variable busy");
   } else if (Var.length() > 0) {
     WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var);
     return 0;
@@ -778,18 +805,8 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
 
 static int lua_wrapper_http_request(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  String Var;
-  const char *s;
-  size_t l;
   int n = lua_gettop(lua_state); /* number of arguments */
-
-  lua_getglobal(lua_state, "tostring");
-  lua_pushvalue(lua_state, -1);
-  lua_pushvalue(lua_state, 1);
-  lua_call(lua_state, 1, 1);
-  s = lua_tolstring(lua_state, -1, &l);
-  Var = s;
-  lua_pop(lua_state, 1);
+  String Var = lua_to_string_arg(lua_state, 1);
 
   asyncHTTPrequest request;
   String payload;
@@ -829,26 +846,9 @@ static int lua_wrapper_http_request(lua_State *lua_state) {
     String Body;
     String RequestType;
 
-    lua_pushvalue(lua_state, -1);
-    lua_pushvalue(lua_state, 2);
-    lua_call(lua_state, 1, 1);
-    s = lua_tolstring(lua_state, -1, &l);
-    RequestType = s;
-    lua_pop(lua_state, 1);
-
-    lua_pushvalue(lua_state, -1);
-    lua_pushvalue(lua_state, 3);
-    lua_call(lua_state, 1, 1);
-    s = lua_tolstring(lua_state, -1, &l);
-    ContentType = s;
-    lua_pop(lua_state, 1);
-
-    lua_pushvalue(lua_state, -1);
-    lua_pushvalue(lua_state, 4);
-    lua_call(lua_state, 1, 1);
-    s = lua_tolstring(lua_state, -1, &l);
-    Body = s;
-    lua_pop(lua_state, 1);
+    RequestType = lua_to_string_arg(lua_state, 2);
+    ContentType = lua_to_string_arg(lua_state, 3);
+    Body = lua_to_string_arg(lua_state, 4);
 
     if (!request.open(RequestType.c_str(), Var.c_str())) {  //URL
       lua_pushstring(lua_state, "error");
@@ -1093,6 +1093,7 @@ void lua_init() {
   lua_State* L = lua.GetState();
   lua_gc(L, LUA_GCSETPAUSE, 120); // Увеличим паузу между сборками мусора
   lua_gc(L, LUA_GCSETSTEPMUL, 200); // Увеличим агрессивность сборки
+  lua_install_constants_locked();
   
   //Запускаем инициализирующий lua-скрипт
   File f = SPIFFS.open("/init.lua");
@@ -1195,17 +1196,28 @@ String run_lua_string(String lstr) {
 }
 
 void load_lua_script() {
-  // [W-4] script1/script2 читаются из do_lua_script (core 1); пишем под замком.
   String s1 = get_lua_script("script.lua");
   String s2 = get_lua_script(lua_type_script);
   String btnList = get_lua_script_list();
-  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
+  String modeChunkName = "@" + lua_type_script;
+
+  bool lua_locked = lua_state_lock(portMAX_DELAY);
+  if (!lua_locked) {
+    WriteConsoleLog(F("Lua reload busy"));
+    return;
+  }
+  String script1Error = lua_compile_chunk_locked(s1, "@script.lua", script1_ref);
+  String script2Error = lua_compile_chunk_locked(s2, modeChunkName.c_str(), script2_ref);
+  bool locked = runtime_state_lock(portMAX_DELAY);
   if (locked) {
     script1 = s1;
     script2 = s2;
     lua_script_list_cache = btnList;
     runtime_state_unlock(true);
   }
+  lua_state_unlock(lua_locked);
+  if (script1Error.length() > 0) WriteConsoleLog("ERR in script.lua: " + script1Error);
+  if (script2Error.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + script2Error);
 }
 
 //Запускаем таск для запуска скрипта
@@ -1283,6 +1295,8 @@ void do_lua_script(void *parameter) {
         continue;
       }
       String local_s1, local_s2;
+      int local_script1_ref = script1_ref;
+      int local_script2_ref = script2_ref;
       {
         bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
         if (locked) {
@@ -1296,25 +1310,25 @@ void do_lua_script(void *parameter) {
         }
       }
 
-      if (local_s1.length() > 0) {
+      if (local_s1.length() > 0 && lua_chunk_ref_valid(local_script1_ref)) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
           WriteConsoleLog(local_s1);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua_exec_locked(local_s1);
+        sr = lua_exec_chunk_locked(local_script1_ref);
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in script.lua: " + sr);
       }
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
-      if (local_s2.length() > 0) {
+      if (local_s2.length() > 0 && lua_chunk_ref_valid(local_script2_ref)) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
           WriteConsoleLog(local_s2);
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
-        sr = lua_exec_locked(local_s2, true);
+        sr = lua_exec_chunk_locked(local_script2_ref, true);
         sr.trim();
         if (sr.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
       } else {

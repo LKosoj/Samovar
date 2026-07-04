@@ -241,26 +241,24 @@ if samovar_text:
 
 if lua_text:
     try:
-        set_str_body = extract_function_body(lua_text, "static int lua_wrapper_set_str_variable")
+        set_str_body = extract_function_body(lua_text, "static bool lua_str_set_Msg")
         require_ordered_tokens(
             "Lua Msg setter uses shared-state helper",
             set_str_body,
             [
-                'if (Var == "Msg") {',
-                "set_web_message_raw(Val)",
+                "set_web_message_raw(value)",
             ],
             errors,
         )
     except ValueError as exc:
         errors.append(str(exc))
     try:
-        get_str_body = extract_function_body(lua_text, "static int lua_wrapper_get_str_variable")
+        get_str_body = extract_function_body(lua_text, "static bool lua_str_get_Msg")
         require_ordered_tokens(
             "Lua Msg getter uses shared-state helper",
             get_str_body,
             [
-                'if (Var == "Msg") {',
-                "copy_web_message_raw(c)",
+                "copy_web_message_raw(value)",
             ],
             errors,
         )
