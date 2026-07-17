@@ -117,11 +117,10 @@ if runtime_text:
         "copy_session_description",
         "set_session_description_value",
         "copy_mqtt_session_description",
-        "set_web_message_raw",
         "copy_web_message_raw",
         "set_lua_status_value",
         "copy_lua_status",
-        "consume_ajax_runtime_snapshot",
+        "copy_ajax_runtime_snapshot",
         "append_web_message",
         "append_console_log",
     ]:
@@ -145,23 +144,26 @@ if runtime_text:
         errors.append(str(exc))
 
 if samovar_h_text:
-    for token in ["SessionDescription", "Lua_status", "Msg", "LogMsg", "msg_level", "program_Wait_Type"]:
+    for token in ["SessionDescription", "Lua_status", "program_Wait_Type"]:
         uses = find_token_uses("Samovar.h", token)
         if not uses:
             errors.append(f"Samovar.h missing shared global declaration: {token}")
         elif len(uses) != 1:
             errors.append(f"Samovar.h has unexpected extra uses of shared global {token}: {uses}")
+    for token in ["Msg", "LogMsg", "msg_level"]:
+        uses = find_token_uses("Samovar.h", token)
+        if uses:
+            errors.append(f"Samovar.h retains obsolete shared global {token}: {uses}")
 
 for name in ["WebServer.ino", "Samovar.ino", "lua.h", "Menu.ino", "BK.h", "beer.h", "distiller.h", "nbk.h", "logic.h", "impurity_detector.h"]:
-    if name == "Samovar.ino":
-        if token_use_count(name, "pending_program_str") != 2:
-            errors.append("Samovar.ino must only declare pending_program_str and copy it in loop()")
-    elif name == "WebServer.ino":
-        if token_use_count(name, "pending_program_str") != 2:
-            errors.append("WebServer.ino must only write pending_program_str from pending queue helpers")
-    elif token_use_count(name, "pending_program_str") != 0:
-        errors.append(f"{name} uses pending_program_str outside the pending command owner files")
+    if token_use_count(name, "pending_program_str") != 0:
+        errors.append(f"{name} reintroduces forbidden raw pending_program_str storage")
     for token in ["SessionDescription", "Lua_status", "program_Wait_Type"]:
+        if name == "Samovar.ino" and token == "SessionDescription":
+            if token_use_count(name, token) != 1:
+                errors.append(
+                    "Samovar.ino owner commit must have exactly one locked SessionDescription write")
+            continue
         if token_use_count(name, token) != 0:
             errors.append(f"{name} uses shared token {token} outside runtime helpers")
     for token in ["Msg", "LogMsg", "msg_level"]:
@@ -170,35 +172,17 @@ for name in ["WebServer.ino", "Samovar.ino", "lua.h", "Menu.ino", "BK.h", "beer.
 
 if web_text:
     try:
-        queue_body = extract_function_body(web_text, "static bool queue_pending_program")
+        queue_body = extract_function_body(web_text, "static OperationError queue_profile_operation(")
         require_ordered_tokens(
-            "queue_pending_program serializes pending_program_str before flag",
+            "queue_profile_operation copies validated POD under pending lock",
             queue_body,
             [
                 "pending_command_lock",
-                "pending_program_mode != PPM_NONE",
-                "pending_program_str = programText;",
-                "__sync_synchronize();",
-                "pending_program_mode = mode;",
+                "operation_store_reserve_locked(",
+                "reset_profile_operation_slot();",
+                "active_profile_operation.program = *programDraft;",
+                "profile_operation_phase_store(PROFILE_OPERATION_QUEUED);",
                 "pending_command_unlock(true);",
-            ],
-            errors,
-        )
-    except ValueError as exc:
-        errors.append(str(exc))
-    try:
-        setup_body = extract_function_body(web_text, "static bool queue_pending_setup_save")
-        require_ordered_tokens(
-            "queue_pending_setup_save checks pending program slot before storing program text",
-            setup_body,
-            [
-                "pending_command_lock",
-                "pending_save_profile_flag",
-                "pending_program_mode != PPM_NONE",
-                "pending_program_str = programText;",
-                "__sync_synchronize();",
-                "pending_save_profile_flag = true;",
-                "pending_program_mode = programMode;",
             ],
             errors,
         )
@@ -207,12 +191,14 @@ if web_text:
     try:
         web_program_body = extract_function_body(web_text, "void web_program")
         require_ordered_tokens(
-            "web_program writes SessionDescription through helper",
+            "web_program stages bounded SessionDescription metadata",
             web_program_body,
             [
-                "String description = request->arg(\"Descr\");",
-                "description.replace(\"%\", \"&#37;\");",
-                "set_session_description_value(description",
+                'char descriptionValue[251] = "";',
+                "description.length() > 250",
+                "memcpy(descriptionValue, description.c_str(), description.length());",
+                "metadataFlags |= PROFILE_OPERATION_METADATA_DESCRIPTION;",
+                "queue_profile_operation(",
             ],
             errors,
         )
@@ -221,32 +207,44 @@ if web_text:
 
 if samovar_text:
     try:
-        loop_body = extract_function_body(samovar_text, "void loop()")
+        signature = "static OperationError commit_profile_operation()"
+        offset = samovar_text.rfind(signature)
+        if offset < 0:
+            raise ValueError(f"function not found: {signature}")
+        commit_body = extract_function_body(samovar_text[offset:], signature)
         require_ordered_tokens(
-            "loop copies pending_program_str under pending_command_lock before applying",
-            loop_body,
+            "owner commit locks metadata before program/description publication",
+            commit_body,
             [
-                "pending_command_lock",
-                "pending_program_mode != PPM_NONE",
-                "pstr = pending_program_str;",
-                "pending_program_mode = PPM_NONE;",
-                "pending_command_unlock(locked);",
-                "if (ppm != PPM_NONE) {",
-                "program_update_session_active()",
+                "runtime_state_lock(pdMS_TO_TICKS(500))",
+                "program_commit(active_profile_operation.program);",
+                "SessionDescription = escapedDescription;",
+                "runtime_state_unlock(runtimeLocked);",
             ],
             errors,
         )
+        if "program_clear();" not in commit_body:
+            errors.append("owner commit lost standalone clear")
     except ValueError as exc:
         errors.append(str(exc))
 
 if lua_text:
+    if "static bool lua_str_set_Msg" in lua_text:
+        errors.append("Lua retains obsolete boolean Msg setter")
+    if '{"Msg", lua_str_get_Msg, nullptr, LUA_VAR_RW, "Msg busy"}' not in lua_text:
+        errors.append("Lua Msg descriptor lost specialized typed setter shape")
     try:
-        set_str_body = extract_function_body(lua_text, "static bool lua_str_set_Msg")
+        set_str_body = extract_function_body(lua_text, "static int lua_wrapper_set_str_variable(")
         require_ordered_tokens(
-            "Lua Msg setter uses shared-state helper",
+            "Lua Msg setter maps typed runtime event results",
             set_str_body,
             [
-                "set_web_message_raw(value)",
+                'if (Var == "Msg")',
+                "append_web_message(Val, NOTIFY_MSG)",
+                "RUNTIME_EVENT_PUBLISH_LOCK_BUSY",
+                '"Msg busy"',
+                "RUNTIME_EVENT_PUBLISH_TEXT_TOO_LONG",
+                '"Msg too long"',
             ],
             errors,
         )

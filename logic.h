@@ -252,9 +252,9 @@ void withdrawal(void) {
 }
 
 // Калибровка насоса
-void pump_calibrate(int stpspeed) {
+PumpCalibrationResult pump_calibrate(int stpspeed) {
   if (startval != 0 && startval != 100) {
-    return;
+    return PUMP_CALIBRATION_INVALID_STATE;
   }
 
   if (stpspeed == 0) {
@@ -266,11 +266,21 @@ void pump_calibrate(int stpspeed) {
     stepper_safe_stop();
     if (stepsPerMl == 0 || stepsPerMl > UINT16_MAX) {
       SendMsg("Ошибка калибровки помпы: неверное количество шагов", ALARM_MSG);
-      return;
+      return PUMP_CALIBRATION_INVALID_RESULT;
     }
-    SamSetup.StepperStepMl = (uint16_t)stepsPerMl;
-    save_profile();
-    read_config();
+    SetupEEPROM profileCandidate{};
+    profileCandidate = SamSetup;
+    profileCandidate.StepperStepMl = (uint16_t)stepsPerMl;
+    const PersistResult persistResult = save_profile_nvs(profileCandidate);
+    if (persistResult == PERSIST_OK) {
+      SamSetup = profileCandidate;
+    } else {
+      String message = "Калибровка помпы не сохранена: ";
+      message += persist_result_code(persistResult);
+      message += ". Результат потерян, повторите калибровку.";
+      SendMsg(message, ALARM_MSG);
+      return PUMP_CALIBRATION_PROFILE_PERSIST_FAILED;
+    }
   } else {
     startval = 100;
     //крутим двигатель, пока не остановят
@@ -280,6 +290,7 @@ void pump_calibrate(int stpspeed) {
     stepper_safe_set_target(999999999);
     startService();
   }
+  return PUMP_CALIBRATION_OK;
 }
 
 // Пауза отбора
@@ -486,7 +497,11 @@ String get_Samovar_Status() {
     local = F("Пауза");
     SamovarStatusInt = 40;
   } else if (PowerOn && startval == 0 && !stepper_safe_get_state()) {
-    if (SamovarStatusInt != 51 && SamovarStatusInt != 52) {
+    // [PKG-B п.2] При активном nbk-переходе (в т.ч. мягком финише FINISH_WAIT: нагрев ещё
+    // включён, startval=0) НЕ захватываем статус 50 — иначе finishOwnerValid (требует
+    // SamovarStatusInt==0) ложнеет и мягкий финиш срывается в аварийное отключение нагрева.
+    // nbk_transition_active() истинна только в режиме НБК, ректификацию это не затрагивает.
+    if (SamovarStatusInt != 51 && SamovarStatusInt != 52 && !nbk_transition_active()) {
       local = F("Разгон колонны");
       SamovarStatusInt = 50;
     } else if (SamovarStatusInt == 51) {
@@ -546,8 +561,8 @@ void next_capacity(void) {
 }
 
 // Установить программу
-void set_program(String WProgram) {
-  program_parse_lines(WProgram, rect_program_parse_spec());
+ProgramParseResult set_program(const String& WProgram) {
+  return program_parse_lines(WProgram, rect_program_parse_spec());
 }
 
 // Получить программу
@@ -578,6 +593,7 @@ void run_program(uint8_t num) {
     // PROGRAM_END — sentinel завершения; его нельзя публиковать в ProgramNum.
     reset_rect_program_pause_state();
     ProgramNum = 0;
+    startval = 0;
     stopService();
     stepper_safe_stop_reset();
     set_capacity(0);

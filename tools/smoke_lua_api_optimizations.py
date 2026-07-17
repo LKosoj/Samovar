@@ -82,8 +82,89 @@ if lua_text:
         except ValueError as exc:
             errors.append(str(exc))
             continue
-        if re.search(r'\bif\s*\(\s*Var\s*==\s*"', body) or re.search(r'\belse\s+if\s*\(\s*Var\s*==\s*"', body):
-            errors.append(f"{function_name} still dispatches Lua variables through if/else chains")
+        dispatch_names = re.findall(
+            r'\b(?:if|else\s+if)\s*\(\s*Var\s*==\s*"([^"]+)"',
+            body,
+        )
+        expected_dispatch_names = (
+            ["Msg"] if function_name == "lua_wrapper_set_str_variable" else []
+        )
+        if dispatch_names != expected_dispatch_names:
+            errors.append(
+                f"{function_name} has unexpected Lua variable dispatch: {dispatch_names!r}"
+            )
+        if function_name == "lua_wrapper_set_str_variable":
+            msg_branch = body.find('if (Var == "Msg")')
+            descriptor_path = body.find("find_lua_str_variable(Var)")
+            if msg_branch < 0 or descriptor_path < msg_branch:
+                errors.append(
+                    "lua_wrapper_set_str_variable lost Msg-before-descriptor dispatch order"
+                )
+
+    for function_name in [
+        "lua_wrapper_set_str_variable",
+        "lua_wrapper_set_object",
+        "lua_wrapper_set_lua_status",
+    ]:
+        try:
+            body = extract_function_body(lua_text, f"static int {function_name}")
+        except ValueError as exc:
+            errors.append(str(exc))
+            continue
+        mutation_gate = body.find("lua_reject_state_mutation(lua_state)")
+        first_string = body.find("String ")
+        if mutation_gate < 0 or first_string < 0 or mutation_gate > first_string:
+            errors.append(
+                f"{function_name} must reject state mutation before creating Arduino String"
+            )
+
+    try:
+        body = extract_function_body(lua_text, "static int lua_wrapper_set_str_variable")
+        deferred_error = body.find(
+            'if (errorMessage) return luaL_error(lua_state, "%s", errorMessage);'
+        )
+        for token in [
+            "const char* errorMessage = nullptr;",
+            "String Var = lua_to_string_arg(lua_state, 1);",
+            "String Val = lua_to_string_arg(lua_state, 2);",
+            'errorMessage = "Msg busy";',
+            'errorMessage = "Msg too long";',
+            'errorMessage = "Msg event store corrupt";',
+        ]:
+            if token not in body:
+                errors.append(f"lua_wrapper_set_str_variable missing deferred-error token: {token}")
+        if deferred_error < 0 or "luaL_error" in body[:deferred_error]:
+            errors.append(
+                "lua_wrapper_set_str_variable must defer every direct Lua error until String destruction"
+            )
+        elif not re.search(
+            r'}\s*if \(errorMessage\) return luaL_error\(lua_state, "%s", errorMessage\);',
+            body,
+        ):
+            errors.append(
+                "lua_wrapper_set_str_variable deferred error is not outside the String scope"
+            )
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    try:
+        body = extract_function_body(lua_text, "static int lua_wrapper_set_lua_status")
+        deferred_error = body.find(
+            'if (!statusSet) return luaL_error(lua_state, "Lua_status busy");'
+        )
+        if deferred_error < 0 or "luaL_error" in body[:deferred_error]:
+            errors.append(
+                "lua_wrapper_set_lua_status must report busy only after String destruction"
+            )
+        elif not re.search(
+            r'}\s*if \(!statusSet\) return luaL_error\(lua_state, "Lua_status busy"\);',
+            body,
+        ):
+            errors.append(
+                "lua_wrapper_set_lua_status busy error is not outside the String scope"
+            )
+    except ValueError as exc:
+        errors.append(str(exc))
 
     if lua_text.count('lua_getglobal(lua_state, "tostring")') != 1:
         errors.append("Lua wrappers must convert arguments through lua_to_string_arg only")

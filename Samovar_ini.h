@@ -64,12 +64,23 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #define SAMOVAR_USE_BLYNK                    //использовать Blynk в проекте
 #define BLYNK_SAMOVAR_TOOL "samovar-tool.ru" //использовать бесплатный сервер Blynk samovar-tool.ru  вместо облачного Blynk
 //#define USE_MQTT                             //использовать сохранение логов в облако. Для этого необходимо зарегистрироваться на сайте www.samovar-tool.ru и в редактировании своего профиля указать токен Blynk.
+#ifdef SAMOVAR_BUILD_MQTT
+#define USE_MQTT
+#endif
 //Все логи с сообщения Самовара будут сохраняться и будут доступны на сайте через меню - Пользователь - Логи.
 
+#ifndef SAMOVAR_BUILD_NO_POWER
 #define SAMOVAR_USE_POWER                    //использовать регулятор напряжения в проекте https://alcodistillers.ru/forum/viewtopic.php?id=1524
+#endif
 //#define KVIC_USE_9600                      //использовать для регулятора KVIC скорость обмена по UART 9600 (новые версии), иначе использовать 38400
 //#define SAMOVAR_USE_RMVK                     //использовать в проекте регулятор напряжения РМВК с управлением по UART
 //#define SAMOVAR_USE_SEM_AVR                  //использовать в проекте регулятор мощности https://alcodistillers.ru/forum/viewtopic.php?id=1549 с управлением по UART
+#if defined(SAMOVAR_BUILD_RMVK) || defined(SAMOVAR_BUILD_SEM)
+#define SAMOVAR_USE_RMVK
+#endif
+#ifdef SAMOVAR_BUILD_SEM
+#define SAMOVAR_USE_SEM_AVR
+#endif
 
 
 //**************************************************************************************************************
@@ -116,6 +127,9 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //#define USE_EXPANDER 0x20                    //использовать расширитель портов PCF8575
 //#define USE_ANALOG_EXPANDER 0x48             //использовать расширитель аналоговых портов PCF8591
 //#define USE_LUA                              //использовать lua для написания скриптов для управления Самоваром и расширителем портов
+#ifdef SAMOVAR_BUILD_LUA
+#define USE_LUA
+#endif
 
 //Определение типа используемого датчика давления. Может быть использован только один тип. Если раскомментировать три или два датчика, то использоваться будет только MPX5010D
 //#define USE_PRESSURE_XGZ 32                  //использовать датчик давления XGZP6897D (или аналогичный). Какое использовать значение - смотреть параметр К в таблице: https://github.com/fanfanlatulipe26/XGZP6897D 

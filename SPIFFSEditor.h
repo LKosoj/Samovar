@@ -7,9 +7,10 @@
 #include "samovar_api.h"
 #include "runtime_helpers.h"
 
+static const char *SPIFFS_EDITOR_UPLOAD_ERROR_ATTR = "spiffs_upload_error";
+static const char *SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE = "process_active";
 #ifdef USE_LUA
 extern volatile bool pending_lua_reload_flag;
-static const char *SPIFFS_EDITOR_UPLOAD_ERROR_ATTR = "spiffs_upload_error";
 static const char *SPIFFS_EDITOR_LUA_RELOAD_BUSY = "lua_reload_busy";
 #endif
 
@@ -299,6 +300,18 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
       }
     }
   } else if (request->method() == HTTP_DELETE) {
+    // Во время процесса (нагрев/перегонка) редактор не трогает ФС: SysTicker на
+    // ядре 0 пишет журнал перегонки под xLogFileSemaphore, а редактор из async_tcp
+    // на ядре 1 этот лок не берёт, поэтому удаление файла гонялось бы с записью
+    // журнала между ядрами. Гейт закрывает два состояния логгера: активный процесс
+    // (идёт дозапись/сброс) и ещё не выполненное отложенное закрытие журнала —
+    // request_data_log_close() лишь взводит флаг, а реальное закрытие журнала идёт
+    // позже тиком SysTicker, и сразу после конца процесса samovar_process_active()
+    // уже ложна, но файл ещё закрывается. Тот же гейт стоит на PUT и в handleUpload().
+    if (samovar_process_active() || data_log_close_pending()) {
+      request->send(503, "text/plain", "BUSY");
+      return;
+    }
     if (request->hasParam("path", true)) {
       String p = request->getParam("path", true)->value();
       if (p[0] != '/') p = "/" + p;
@@ -310,18 +323,23 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
     if (request->hasParam("data", true, true)) {
       String p = request->getParam("data", true, true)->value();
       if (p[0] != '/') p = "/" + p;
-#ifdef USE_LUA
-      if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR) == SPIFFS_EDITOR_LUA_RELOAD_BUSY) {
+      // handleUpload() не может ответить клиенту сам, поэтому лишь помечает запрос
+      // причиной отказа. Любая непустая причина (идёт процесс или барьер смены
+      // режима для .lua) означает 503 BUSY.
+      if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR).length() > 0) {
         request->send(503, "text/plain", "BUSY");
         return;
       }
-#endif
       if (_fs.exists(p))
         request->send(200, "", "UPLOADED: " + p);
       else
         request->send(500);
     }
   } else if (request->method() == HTTP_PUT) {
+    if (samovar_process_active() || data_log_close_pending()) {
+      request->send(503, "text/plain", "BUSY");
+      return;
+    }
     if (request->hasParam("path", true)) {
       String filename = request->getParam("path", true)->value();
       if (filename[0] != '/') filename = "/" + filename;
@@ -344,9 +362,29 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
 
 void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
   if (!index) {
+      // Тот же гейт, что на DELETE/PUT (активный процесс или ещё не закрытый
+      // журнал): при нём файл на запись не открываем, иначе запись чанков из
+      // async_tcp гоняется с журналом перегонки. Причину читает handleRequest и
+      // отвечает 503 BUSY; _tempFile остаётся закрытым, поэтому чанки ниже
+      // просто отбрасываются.
+      if (samovar_process_active() || data_log_close_pending()) {
+        request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE);
+        return;
+      }
       String p = filename;
       if (filename[0] != '/') p = "/" + filename;
-      request->_tempFile = _fs.open(p, "w");      
+      request->_tempFile = _fs.open(p, "w");
+    }
+    // Процесс может стартовать на ядре 0 уже ПОСЛЕ первого чанка: тогда запись
+    // оставшихся чанков снова гонялась бы с журналом перегонки. Перепроверяем
+    // гейт на каждом чанке — если процесс поднялся в ходе загрузки, прекращаем
+    // запись (закрываем файл, следующие чанки отбрасываются) и помечаем запрос
+    // для ответа 503. Частично записанный файл — издержка потоковой записи в сам
+    // целевой файл, а не гонка.
+    if (request->_tempFile && (samovar_process_active() || data_log_close_pending())) {
+      request->_tempFile.close();
+      request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE);
+      return;
     }
     if (request->_tempFile) {
         if (len) {
@@ -356,13 +394,17 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
             request->_tempFile.close();
 #ifdef USE_LUA
             if (getValue(filename, '.', 1) == "lua") {
-                bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-                if (locked) {
-                    pending_lua_reload_flag = true;
-                } else {
+                if (mode_switch_in_progress()) {
                     request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
+                } else {
+                    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+                    if (locked && !mode_switch_in_progress()) {
+                        pending_lua_reload_flag = true;
+                    } else {
+                        request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
+                    }
+                    pending_command_unlock(locked);
                 }
-                pending_command_unlock(locked);
             }
 #endif
         }

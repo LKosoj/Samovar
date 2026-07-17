@@ -1,8 +1,6 @@
 #pragma once
 
 #include <Arduino.h>
-#include <errno.h>
-#include <stdlib.h>
 #include <string.h>
 
 #ifndef MAX_PROGRAM_INPUT_LEN
@@ -19,24 +17,25 @@ inline void copyStringSafe(char (&dst)[N], const String& src) {
   dst[n] = '\0';
 }
 
-inline bool parseLongSafe(const char* token, long& out) {
-  if (!token || token[0] == '\0') return false;
-  errno = 0;
-  char* end = nullptr;
-  long value = strtol(token, &end, 10);
-  if (errno != 0 || end == token || *end != '\0') return false;
-  out = value;
-  return true;
-}
-
-inline bool parseFloatSafe(const char* token, float& out) {
-  if (!token || token[0] == '\0') return false;
-  errno = 0;
-  char* end = nullptr;
-  float value = strtof(token, &end);
-  if (errno != 0 || end == token || *end != '\0') return false;
-  out = value;
-  return true;
+/** Раскрытие caret-экранирования Lua-строки из /command?luastr=.
+    Соглашение UI старше URL-кодирования: одиночный '^' означает пробел. Двойной '^^'
+    даёт сам символ '^' — оператор возведения в степень, который иначе записать нельзя.
+    Проход строго однократный: два replace() подряд свернули бы "^^" в пробел. */
+inline String expandLuaCaretEscapes(const String& s) {
+  String out;
+  out.reserve(s.length());
+  for (unsigned int i = 0; i < s.length(); i++) {
+    char c = s.charAt(i);
+    if (c != '^') {
+      out += c;
+    } else if (i + 1 < s.length() && s.charAt(i + 1) == '^') {
+      out += '^';
+      i++;
+    } else {
+      out += ' ';
+    }
+  }
+  return out;
 }
 
 /** JSON-строка (включая внешние кавычки) для вставки в <script type="application/json"> или JSON.parse. */

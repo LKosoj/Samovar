@@ -610,19 +610,19 @@ void update_heat_loss_calculation() {
   }
 
   // Финальный расчет при достижении 70°C
-	  if (heatStartMillis > 0 && TankSensor.avgTemp >= 70.0) {
-	    float timeSec = (millis() - heatStartMillis) / 1000.0;
-	    if (timeSec > 60) { // Минимум 1 минута замера для точности
-	      float deltaT = TankSensor.avgTemp - heatStartTemp;
-	      if (deltaT < HEAT_LOSS_MIN_DELTA_T) return;
+  if (heatStartMillis > 0 && TankSensor.avgTemp >= 70.0) {
+    float timeSec = (millis() - heatStartMillis) / 1000.0;
+    if (timeSec > 60) { // Минимум 1 минута замера для точности
+      float deltaT = TankSensor.avgTemp - heatStartTemp;
+      if (deltaT < HEAT_LOSS_MIN_DELTA_T) return;
 
-	      // Энергия на нагрев: Q = m * c * deltaT (c воды = 4187 Дж/(кг*К))
+      // Энергия на нагрев: Q = m * c * deltaT (c воды = 4187 Дж/(кг*К))
       // Принимаем плотность сырца за 1 кг/л
+#ifdef SAMOVAR_USE_POWER
       float energyUsed = BoilerVolume * 4187.0f * deltaT;
       float powerEffective = energyUsed / timeSec;
 
       // Теплопотери = Поданная мощность - Эффективная мощность
-#ifdef SAMOVAR_USE_POWER
       CurrentHeatLoss = (float)current_power_p - powerEffective;
 #else
       CurrentHeatLoss = 0; // Если нет датчика мощности, не можем вычислить потери автоматически

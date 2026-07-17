@@ -49,6 +49,14 @@ bool request_data_log_close() {
   return true;
 }
 
+bool data_log_close_pending() {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return true;
+  const bool pending = pending_log_close_flag;
+  pending_command_unlock(true);
+  return pending;
+}
+
 void process_pending_data_log_ops() {
   bool hasPendingLogClose = false;
   bool hasPendingLogFlush = false;
@@ -127,17 +135,19 @@ String formatBytes(size_t bytes) {
 //}
 
 // Инициализация FFS
-void FS_init(void) {
+FsInitResult FS_init(void) {
+  bool formatted = false;
   if (!SPIFFS.begin(false)) {
     Serial.println(F("Не удалось подключиться к файловой системе, форматируем..."));
     if (!SPIFFS.format()) {
       Serial.println(F("Не удалось отформатировать файловую систему, загрузите интерфейс через Arduino"));
-      return;
+      return FS_INIT_MOUNT_FAILED;
     }
     if (!SPIFFS.begin(false)) {
       Serial.println(F("Ошибка файловой системы! Загрузите через Arduino"));
-      return;
+      return FS_INIT_MOUNT_FAILED;
     }
+    formatted = true;
   }
 
   total_byte = SPIFFS.totalBytes();
@@ -150,6 +160,10 @@ void FS_init(void) {
   //    }
   //  }
 
+  return formatted ? FS_INIT_FORMATTED : FS_INIT_OK;
+}
+
+void FS_register_web_handlers(void) {
   events.onConnect([](AsyncEventSourceClient * client) {
     client->send("hello!", NULL, millis(), 1000);
   });
@@ -496,8 +510,4 @@ String append_data() {
     return str;
   }
   return "";
-}
-
-void save_profile() {
-  save_profile_nvs();
 }

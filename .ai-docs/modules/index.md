@@ -102,7 +102,6 @@
 - [modules/data/program__htm](data/program__htm.md)
 - [modules/data/setup__htm](data/setup__htm.md)
 - [modules/data/style__css](data/style__css.md)
-- [modules/data/wifi__htm](data/wifi__htm.md)
 - [modules/distiller__h](distiller__h.md)
 - [modules/font__h](font__h.md)
 - [modules/impurity_detector__h](impurity_detector__h.md)
@@ -114,4 +113,3 @@
 - [modules/partition_manager__py](partition_manager__py.md)
 - [modules/pumppwm__h](pumppwm__h.md)
 - [modules/sensorinit__h](sensorinit__h.md)
-- [modules/wifi_htm_gz__h](wifi_htm_gz__h.md)

@@ -81,19 +81,21 @@ LiquidScreen main_screen4(lql_get_power, lql_setup, lql_ip, lql_time);
 
 LiquidScreen main_screen5(lql_tank_temp, lql_atm, lql_water_temp, lql_time);
 
-LiquidLine lql_setup_steam_temp(0, 0, str_Steam_T, SamSetup.DeltaSteamTemp);
-LiquidLine lql_setup_pipe_temp(0, 1, str_Pipe_T, SamSetup.DeltaPipeTemp);
-LiquidLine lql_setup_water_temp(0, 2, str_Water_T, SamSetup.DeltaWaterTemp);
-LiquidLine lql_setup_tank_temp(0, 3, str_Tank_T, SamSetup.DeltaTankTemp);
+static SetupEEPROM menuSetupCandidate{};
+
+LiquidLine lql_setup_steam_temp(0, 0, str_Steam_T, menuSetupCandidate.DeltaSteamTemp);
+LiquidLine lql_setup_pipe_temp(0, 1, str_Pipe_T, menuSetupCandidate.DeltaPipeTemp);
+LiquidLine lql_setup_water_temp(0, 2, str_Water_T, menuSetupCandidate.DeltaWaterTemp);
+LiquidLine lql_setup_tank_temp(0, 3, str_Tank_T, menuSetupCandidate.DeltaTankTemp);
 LiquidScreen setup_temp_screen(lql_setup_steam_temp, lql_setup_pipe_temp, lql_setup_water_temp, lql_setup_tank_temp);
 
-LiquidLine lql_setup_set_steam_temp(0, 0, str_Set_Steam_T, SamSetup.SetSteamTemp);
-LiquidLine lql_setup_set_pipe_temp(0, 1, str_Set_Pipe_T, SamSetup.SetPipeTemp);
-LiquidLine lql_setup_set_water_temp(0, 2, str_Set_Water_T, SamSetup.SetWaterTemp);
-LiquidLine lql_setup_set_tank_temp(0, 3, str_Set_Tank_T, SamSetup.SetTankTemp);
+LiquidLine lql_setup_set_steam_temp(0, 0, str_Set_Steam_T, menuSetupCandidate.SetSteamTemp);
+LiquidLine lql_setup_set_pipe_temp(0, 1, str_Set_Pipe_T, menuSetupCandidate.SetPipeTemp);
+LiquidLine lql_setup_set_water_temp(0, 2, str_Set_Water_T, menuSetupCandidate.SetWaterTemp);
+LiquidLine lql_setup_set_tank_temp(0, 3, str_Set_Tank_T, menuSetupCandidate.SetTankTemp);
 LiquidScreen setup_set_temp_screen(lql_setup_set_steam_temp, lql_setup_set_pipe_temp, lql_setup_set_water_temp, lql_setup_set_tank_temp);
 
-LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, str_Step_Ml, SamSetup.StepperStepMl);
+LiquidLine lql_setup_stepper_stepper_step_ml(0, 0, str_Step_Ml, menuSetupCandidate.StepperStepMl);
 LiquidLine lql_setup_stepper_calibrate(0, 1, str_Calibrate, get_calibrate_text);
 LiquidLine lql_setup_stepper_program(0, 2, str_Program);
 LiquidScreen setup_stepper_settings(lql_setup_stepper_stepper_step_ml, lql_setup_stepper_calibrate, lql_setup_stepper_program, lql_time);
@@ -294,6 +296,7 @@ void set_menu_screen(uint8_t param) {
 }
 
 void menu_setup() {
+  menuSetupCandidate = SamSetup;
   reset_focus();
   set_menu_screen(1);
   //menu.change_menu(setup_menu);
@@ -304,9 +307,16 @@ void setup_go_back() {
   reset_focus();
   set_menu_screen(2);
 
-  // Сохраняем изменения в память.
-  save_profile();
-  read_config();
+  const PersistResult persistResult = save_profile_nvs(menuSetupCandidate);
+  if (persistResult == PERSIST_OK) {
+    SamSetup = menuSetupCandidate;
+    apply_config_runtime();
+  } else {
+    menuSetupCandidate = SamSetup;
+    String message = "Настройки меню не сохранены: ";
+    message += persist_result_code(persistResult);
+    SendMsg(message, ALARM_MSG);
+  }
   // Данная функция ссылается на необходимое меню.
   //main_menu1.change_menu(main_menu);
 }
@@ -340,63 +350,63 @@ void menu_pump_speed_down() {
 }
 
 void set_delta_steam_temp_up() {
-  SamSetup.DeltaSteamTemp += 0.01 * multiplier;
+  menuSetupCandidate.DeltaSteamTemp += 0.01 * multiplier;
 }
 void set_delta_steam_temp_down() {
-  SamSetup.DeltaSteamTemp -= 0.01 * multiplier;
+  menuSetupCandidate.DeltaSteamTemp -= 0.01 * multiplier;
 }
 void set_delta_pipe_temp_up() {
-  SamSetup.DeltaPipeTemp += 0.01 * multiplier;
+  menuSetupCandidate.DeltaPipeTemp += 0.01 * multiplier;
 }
 void set_delta_pipe_temp_down() {
-  SamSetup.DeltaPipeTemp -= 0.01 * multiplier;
+  menuSetupCandidate.DeltaPipeTemp -= 0.01 * multiplier;
 }
 void set_delta_water_temp_up() {
-  SamSetup.DeltaWaterTemp += 0.01 * multiplier;
+  menuSetupCandidate.DeltaWaterTemp += 0.01 * multiplier;
 }
 void set_delta_water_temp_down() {
-  SamSetup.DeltaWaterTemp -= 0.01 * multiplier;
+  menuSetupCandidate.DeltaWaterTemp -= 0.01 * multiplier;
 }
 void set_delta_tank_temp_up() {
-  SamSetup.DeltaTankTemp += 0.01 * multiplier;
+  menuSetupCandidate.DeltaTankTemp += 0.01 * multiplier;
 }
 void set_delta_tank_temp_down() {
-  SamSetup.DeltaTankTemp -= 0.01 * multiplier;
+  menuSetupCandidate.DeltaTankTemp -= 0.01 * multiplier;
 }
 
 void set_delta_set_steam_temp_up() {
-  SamSetup.SetSteamTemp += 0.01 * multiplier;
+  menuSetupCandidate.SetSteamTemp += 0.01 * multiplier;
 }
 void set_delta_set_steam_temp_down() {
-  SamSetup.SetSteamTemp -= 0.01 * multiplier;
+  menuSetupCandidate.SetSteamTemp -= 0.01 * multiplier;
 }
 void set_delta_set_pipe_temp_up() {
-  SamSetup.SetPipeTemp += 0.01 * multiplier;
+  menuSetupCandidate.SetPipeTemp += 0.01 * multiplier;
 }
 void set_delta_set_pipe_temp_down() {
-  SamSetup.SetPipeTemp -= 0.01 * multiplier;
+  menuSetupCandidate.SetPipeTemp -= 0.01 * multiplier;
 }
 void set_delta_set_water_temp_up() {
-  SamSetup.SetWaterTemp += 0.01 * multiplier;
+  menuSetupCandidate.SetWaterTemp += 0.01 * multiplier;
 }
 void set_delta_set_water_temp_down() {
-  SamSetup.SetWaterTemp -= 0.01 * multiplier;
+  menuSetupCandidate.SetWaterTemp -= 0.01 * multiplier;
 }
 void set_delta_set_tank_temp_up() {
-  SamSetup.SetTankTemp += 0.01 * multiplier;
+  menuSetupCandidate.SetTankTemp += 0.01 * multiplier;
 }
 void set_delta_set_tank_temp_down() {
-  SamSetup.SetTankTemp -= 0.01 * multiplier;
+  menuSetupCandidate.SetTankTemp -= 0.01 * multiplier;
 }
 
 void stepper_step_ml_up() {
-  SamSetup.StepperStepMl += 1 * multiplier;
+  menuSetupCandidate.StepperStepMl += 1 * multiplier;
 }
 void stepper_step_ml_down() {
-  if (SamSetup.StepperStepMl > 0) {
-    SamSetup.StepperStepMl -= 1 * multiplier;
+  if (menuSetupCandidate.StepperStepMl > 0) {
+    menuSetupCandidate.StepperStepMl -= 1 * multiplier;
   } else
-    SamSetup.StepperStepMl = 0;
+    menuSetupCandidate.StepperStepMl = 0;
 }
 
 void menu_program() {
@@ -518,7 +528,7 @@ void menu_samovar_start() {
     }
 #ifdef USE_MQTT
     String sessionDescription;
-    if (!copy_mqtt_session_description(sessionDescription, portMAX_DELAY)) {
+    if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
       SendMsg("Описание сессии занято. Старт ректификации отменён.", ALARM_MSG);
       SamovarStatusInt = 0;
       startval = 0;

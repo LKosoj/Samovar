@@ -64,12 +64,17 @@ if samovar:
             "WebSerial WFpulseCount access uses helpers",
             body,
             [
-                'if (Var == "WFpulseCount")',
-                "water_pulse_count_set((uint16_t)Val.toInt());",
+                'static const char prefix[] = "WFpulseCount=";',
+                "parse_bounded_uint16(valueText, 0, UINT16_MAX, value)",
+                "if (!result.ok())",
+                "water_pulse_count_set(value);",
                 "WebSerial.println(water_pulse_count_get());",
             ],
             errors,
         )
+        for forbidden in ["String d", ".toInt()", "getValue("]:
+            if forbidden in body:
+                errors.append(f"WebSerial recvMsg contains unsafe parser token: {forbidden}")
 
 if helpers:
     for signature, tokens in [

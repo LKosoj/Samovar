@@ -95,11 +95,44 @@ if nbk_text:
         body = ""
 
     require_ordered_tokens(
-        "NBK normal finish keeps power-off wrapper",
+        "NBK normal finish starts deferred power-off cleanup",
         body,
-        ["nbk_finish_common(false);", "delay(1000);", "set_power(false);", "reset_sensor_counter();", "nbk_close_data_log();"],
+        [
+            "nbk_finish_common(false);",
+            "safety_transition_begin(",
+            "NBK_TRANSITION_FINISH_WAIT",
+            "safety_deadline_after(millis(), 1000)",
+        ],
         errors,
     )
+    forbid_tokens("nbk_finish", body, ["delay(", "reset_sensor_counter(", "nbk_close_data_log("])
+    for token in ["heatStartupPending", "set_power(false, false)"]:
+        if token not in body:
+            errors.append(f"nbk_finish missing owned heat-start cancellation: {token}")
+
+    try:
+        body = extract_function_body(nbk_text, "void tick_nbk_transition")
+    except ValueError as exc:
+        errors.append(str(exc))
+        body = ""
+
+    require_ordered_tokens(
+        "NBK finish transition performs delayed cleanup",
+        body,
+        [
+            "if (!finishOwnerValid && phase != NBK_TRANSITION_FINISH_WAIT_POWER_OFF)",
+            "set_power(false, false);",
+            "safety_transition_due(nbkTransition.transition, millis())",
+            "set_power(false);",
+            "safety_transition_advance(",
+            "if (power_transition_active()) return;",
+            "reset_sensor_counter();",
+            "if (!nbk_close_data_log()) return;",
+            "cancel_nbk_transition();",
+        ],
+        errors,
+    )
+    forbid_tokens("tick_nbk_transition", body, ["delay(", "vTaskDelay("])
 
 if alarm_text:
     try:
@@ -113,7 +146,6 @@ if alarm_text:
         body,
         [
             "if (Samovar_Mode == SAMOVAR_NBK_MODE) nbk_emergency_finish();",
-            "if (PowerOn)",
             "set_power(false);",
             "set_stepper_target(0, 0, 0);",
         ],

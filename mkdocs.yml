@@ -41,7 +41,6 @@ nav:
     - program.htm: modules/data/program__htm.md
     - setup.htm: modules/data/setup__htm.md
     - style.css: modules/data/style__css.md
-    - wifi.htm: modules/data/wifi__htm.md
   - beer.h: modules/beer__h.md
   - BK.h: modules/BK__h.md
   - Blynk.ino: modules/Blynk__ino.md
@@ -70,7 +69,6 @@ nav:
   - sensorinit.h: modules/sensorinit__h.md
   - SPIFFSEditor.h: modules/SPIFFSEditor__h.md
   - WebServer.ino: modules/WebServer__ino.md
-  - wifi_htm_gz.h: modules/wifi_htm_gz__h.md
 - Изменения: changes.md
 site_url: ''
 use_directory_urls: false

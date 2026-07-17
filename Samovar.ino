@@ -15,8 +15,10 @@
 
 //#define Serial2 Serial
 
-#define CONFIG_ASYNC_TCP_RUNNING_CORE 1      // force async_tcp task to be on same core as Arduino app (default is any core)
-#define CONFIG_ASYNC_TCP_STACK_SIZE 4096     // reduce the stack size (default is 16K)
+// CONFIG_ASYNC_TCP_RUNNING_CORE вынесен в platformio.ini (build_flags) — только оттуда
+// он доходит до отдельного TU библиотеки Async_TCP. Локальный #define здесь был мёртвым.
+
+struct AjaxTelemetrySnapshot;
 
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
@@ -57,6 +59,7 @@
 
 #include <EEPROM.h>
 #include <Preferences.h>
+#include <nvs.h>
 #include <ESPAsyncWiFiManager.h>
 
 #include <GyverEncoder.h>
@@ -76,8 +79,12 @@
 
 #include "Samovar.h"
 #include "samovar_api.h"
+#include "operation_store.h"
+#include "profile_store.h"
 #include "crash_handler.h"
+#include "control_numeric_input.h"
 #include "time_utils.h"
+#include "runtime_event_log.h"
 #include "runtime_helpers.h"
 
 #ifndef __SAMOVAR_DEBUG
@@ -185,17 +192,94 @@ StaticSemaphore_t samovar_command_queue_mutex_buffer;
 
 bool shouldSaveWiFiConfig = false;
 
+// Профиль загрузился в деградированном режиме (fail-open: грузимся на дефолтах/частично
+// восстановленных данных, но громко сообщаем об этом). Пишутся один раз в setup(),
+// читаются из JSON-статуса телеметрии уже после старта веба — гонок нет.
+bool bootDegraded = false;
+String bootDegradedReason = "";
+
 // ---------------------------------------------------------------------------
 // Отложенные команды для выполнения из loop() (set из async-обработчиков)
 // ---------------------------------------------------------------------------
-// [C-3] Отложенная установка программы
-enum PendingProgramMode : int { PPM_NONE = 0, PPM_RECT, PPM_BEER, PPM_DIST, PPM_NBK };
-volatile PendingProgramMode pending_program_mode = PPM_NONE;
-String pending_program_str;                         // буфер заполняется до установки флага
+OperationStore operationStore{};
+RuntimeEventRing runtimeEventRing{};
 
-// [W-5] Отложенная смена режима самовара
-volatile bool pending_switch_mode_flag = false;
-volatile SAMOVAR_MODE pending_switch_mode_value = SAMOVAR_RECTIFICATION_MODE;
+enum ProfileOperationFlags : uint8_t {
+  PROFILE_OPERATION_HAS_SETTINGS = 0x01,
+  PROFILE_OPERATION_HAS_PROGRAM = 0x02,
+  PROFILE_OPERATION_METADATA_VOLUME = 0x04,
+  PROFILE_OPERATION_METADATA_DESCRIPTION = 0x08,
+  PROFILE_OPERATION_MODE_CHANGE = 0x10,
+  PROFILE_OPERATION_REQUIRE_PROGRAM_IDLE = 0x20,
+};
+
+enum ProfileSensorResetMask : uint8_t {
+  PROFILE_SENSOR_RESET_STEAM = 0x01,
+  PROFILE_SENSOR_RESET_PIPE = 0x02,
+  PROFILE_SENSOR_RESET_WATER = 0x04,
+  PROFILE_SENSOR_RESET_TANK = 0x08,
+  PROFILE_SENSOR_RESET_ACP = 0x10,
+};
+
+enum ProfileOperationPhase : uint8_t {
+  PROFILE_OPERATION_EMPTY = 0,
+  PROFILE_OPERATION_QUEUED,
+  PROFILE_OPERATION_RUNNING,
+  PROFILE_OPERATION_MODE_SWITCH,
+  PROFILE_OPERATION_TERMINAL_PENDING,
+  PROFILE_OPERATION_FAILED_CLOSED,
+};
+
+struct ProfileOperationSlot {
+  SetupEEPROM settings;
+  ProgramDraft program;
+  char description[251];
+  OperationId id;
+  float boilerVolume;
+  uint8_t flags;
+  uint8_t sensorResetMask;
+  uint8_t sourceMode;
+  uint8_t targetMode;
+  ProfileOperationPhase phase;
+  OperationState terminalState;
+  OperationError terminalError;
+  ProgramUpdateAction programAction;
+};
+
+ProfileOperationSlot active_profile_operation{};
+static_assert(sizeof(ProfileOperationPhase) == sizeof(uint8_t),
+              "ProfileOperationPhase must remain byte-sized");
+static_assert(std::is_trivially_copyable<ProfileOperationSlot>::value,
+              "ProfileOperationSlot must remain safe for fixed slot copies");
+static_assert(sizeof(ProfileOperationSlot) <= 1368,
+              "ProfileOperationSlot exceeds replaced pending storage");
+
+static inline ProfileOperationPhase profile_operation_phase_load() {
+  return __atomic_load_n(&active_profile_operation.phase, __ATOMIC_ACQUIRE);
+}
+
+static inline void profile_operation_phase_store(ProfileOperationPhase phase) {
+  __atomic_store_n(&active_profile_operation.phase, phase, __ATOMIC_RELEASE);
+}
+
+static void reset_profile_operation_slot() {
+  active_profile_operation.settings = SetupEEPROM{};
+  active_profile_operation.program = ProgramDraft{};
+  memset(active_profile_operation.description, 0,
+         sizeof(active_profile_operation.description));
+  active_profile_operation.id = 0;
+  active_profile_operation.boilerVolume = 0.0f;
+  active_profile_operation.flags = 0;
+  active_profile_operation.sensorResetMask = 0;
+  active_profile_operation.sourceMode = 0;
+  active_profile_operation.targetMode = 0;
+  active_profile_operation.terminalState = OPERATION_STATE_EMPTY;
+  active_profile_operation.terminalError = OPERATION_ERROR_NONE;
+  active_profile_operation.programAction = PROGRAM_UPDATE_NONE;
+  profile_operation_phase_store(PROFILE_OPERATION_EMPTY);
+}
+
+volatile bool mode_switch_barrier_active = false;
 
 // [W-9] Отложенное сканирование OneWire датчиков
 volatile bool pending_rescan_ds_flag = false;
@@ -205,34 +289,24 @@ volatile bool pending_emergency_stop_flag = false;
 volatile bool pending_emergency_stop_reason_flag = false;
 char pending_emergency_stop_reason[EMERGENCY_STOP_REASON_LEN] = "";
 
-// [C-10/W-8] Отложенное сохранение профиля + перечитывание конфига.
-// Настройки из /save сначала попадают сюда, а SamSetup меняется только в loop().
-struct PendingSetupSensorReset {
-  bool steam;
-  bool pipe;
-  bool water;
-  bool tank;
-  bool acp;
-};
-
-struct PendingSetupSave {
-  SetupEEPROM staged;
-  PendingSetupSensorReset resetSensor;
-};
-
 struct SamovarNvsEntryBackup;
 
-PendingSetupSave pending_setup_save_buf;
-volatile bool pending_save_profile_flag = false;
-
-static PendingProgramMode pending_program_mode_for_samovar_mode(SAMOVAR_MODE mode);
-static bool queue_pending_setup_save(const PendingSetupSave& setupSave,
-                                     bool hasProgram,
-                                     PendingProgramMode programMode,
-                                     const String& programText,
-                                     bool hasSwitchMode,
-                                     SAMOVAR_MODE switchMode,
-                                     const char*& busyText);
+static OperationError queue_profile_operation(
+    OperationKind kind,
+    const SetupEEPROM* settings,
+    uint8_t sensorResetMask,
+    const ProgramDraft* programDraft,
+    ProgramUpdateAction programAction,
+    uint8_t metadataFlags,
+    float boilerVolume,
+    const char* description,
+    bool requireProgramIdle,
+    bool modeChange,
+    SAMOVAR_MODE sourceMode,
+    SAMOVAR_MODE targetMode,
+    OperationId& operationId);
+static OperationError commit_profile_operation();
+static void process_profile_operation();
 
 static void clear_ds_sensor_runtime(DSSensor& sensor) {
   sensor.avgTemp = 0;
@@ -240,25 +314,287 @@ static void clear_ds_sensor_runtime(DSSensor& sensor) {
   sensor.ErrCount = 0;
 }
 
-static void apply_setup_sensor_fields(const PendingSetupSensorReset& resetSensor) {
+static void apply_setup_sensor_fields(uint8_t resetMask) {
   CopyDSAddress(SamSetup.SteamAdress, SteamSensor.Sensor);
   CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);
   CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
   CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
   CopyDSAddress(SamSetup.ACPAdress, ACPSensor.Sensor);
 
-  if (resetSensor.steam) clear_ds_sensor_runtime(SteamSensor);
-  if (resetSensor.pipe) clear_ds_sensor_runtime(PipeSensor);
-  if (resetSensor.water) clear_ds_sensor_runtime(WaterSensor);
-  if (resetSensor.tank) clear_ds_sensor_runtime(TankSensor);
-  if (resetSensor.acp) clear_ds_sensor_runtime(ACPSensor);
+  if ((resetMask & PROFILE_SENSOR_RESET_STEAM) != 0) clear_ds_sensor_runtime(SteamSensor);
+  if ((resetMask & PROFILE_SENSOR_RESET_PIPE) != 0) clear_ds_sensor_runtime(PipeSensor);
+  if ((resetMask & PROFILE_SENSOR_RESET_WATER) != 0) clear_ds_sensor_runtime(WaterSensor);
+  if ((resetMask & PROFILE_SENSOR_RESET_TANK) != 0) clear_ds_sensor_runtime(TankSensor);
+  if ((resetMask & PROFILE_SENSOR_RESET_ACP) != 0) clear_ds_sensor_runtime(ACPSensor);
 }
 
-static void apply_pending_setup_sensor_resets(const PendingSetupSensorReset& resetSensor) {
-  apply_setup_sensor_fields(resetSensor);
+static OperationError commit_profile_operation() {
+  const bool hasSettings =
+      (active_profile_operation.flags & PROFILE_OPERATION_HAS_SETTINGS) != 0;
+  const bool hasProgram =
+      (active_profile_operation.flags & PROFILE_OPERATION_HAS_PROGRAM) != 0;
+  const bool hasMetadata =
+      (active_profile_operation.flags &
+       (PROFILE_OPERATION_METADATA_VOLUME |
+        PROFILE_OPERATION_METADATA_DESCRIPTION)) != 0;
+  const bool modeChange =
+      (active_profile_operation.flags & PROFILE_OPERATION_MODE_CHANGE) != 0;
+
+  String escapedDescription;
+  if ((active_profile_operation.flags &
+       PROFILE_OPERATION_METADATA_DESCRIPTION) != 0) {
+    escapedDescription = active_profile_operation.description;
+    escapedDescription.replace("%", "&#37;");
+  }
+
+  bool runtimeLocked = false;
+  if (hasMetadata) {
+    runtimeLocked = runtime_state_lock(pdMS_TO_TICKS(500));
+    if (!runtimeLocked) {
+      SendMsg("Операция профиля отменена: runtime state занят.", WARNING_MSG);
+      return OPERATION_ERROR_RUNTIME_BUSY;
+    }
+  }
+
+  bool persistFailed = false;
+  if (hasSettings) {
+    const PersistResult persistResult = save_profile_nvs(active_profile_operation.settings);
+    if (persistResult != PERSIST_OK) {
+      // modeChange: режим ниже применяется в RAM несмотря на отказ NVS, поэтому
+      // ОЗУ и NVS расходятся - работает новый режим, сохранён прежний. Текст
+      // обязан назвать именно расхождение: иначе про откат при перезагрузке
+      // пользователь узнает только после неё. Запас до молчаливого усечения в
+      // msg_q (200 байт на запись минус приставки SendMsg) - 23 байта при самом
+      // длинном коде persist_result_code, длиннее текст делать нельзя.
+      String message = modeChange
+          ? "Режим переключён, но не сохранён, перезагрузка вернёт прежний: "
+          : "Настройки не сохранены: ";
+      message += persist_result_code(persistResult);
+      SendMsg(message, ALARM_MSG);
+      // !modeChange: менять нечего (только настройки) - ранний возврат безопасен.
+      // modeChange: применение режима в RAM обязано дойти до конца всегда - см.
+      // switch_samovar_mode/force_complete_mode_switch_failed.
+      if (!modeChange) {
+        runtime_state_unlock(runtimeLocked);
+        return OPERATION_ERROR_PROFILE_PERSIST_FAILED;
+      }
+      persistFailed = true;
+    }
+  }
+
+  if (modeChange) samovar_reset();
+  if (hasSettings) SamSetup = active_profile_operation.settings;
+  if (modeChange) {
+    Samovar_Mode = static_cast<SAMOVAR_MODE>(active_profile_operation.targetMode);
+    Samovar_CR_Mode = Samovar_Mode;
+  }
+  if (hasProgram) {
+    switch (active_profile_operation.programAction) {
+      case PROGRAM_UPDATE_REPLACE:
+        program_commit(active_profile_operation.program);
+        break;
+      case PROGRAM_UPDATE_CLEAR:
+        program_clear();
+        break;
+      case PROGRAM_UPDATE_NONE:
+      default:
+        break;
+    }
+  }
+  if ((active_profile_operation.flags &
+       PROFILE_OPERATION_METADATA_DESCRIPTION) != 0) {
+    SessionDescription = escapedDescription;
+  }
+  if ((active_profile_operation.flags &
+       PROFILE_OPERATION_METADATA_VOLUME) != 0) {
+    BoilerVolume = active_profile_operation.boilerVolume;
+    heatLossCalculated = false;
+    heatStartMillis = 0;
+  }
+  if (hasSettings) {
+    apply_setup_sensor_fields(active_profile_operation.sensorResetMask);
+  }
+  runtime_state_unlock(runtimeLocked);
+
+  if (hasSettings) apply_config_runtime();
+#ifdef USE_LUA
+  if (modeChange) {
+    lua_type_script = get_lua_mode_name();
+    load_lua_script();
+  }
+#endif
+  return persistFailed ? OPERATION_ERROR_PROFILE_PERSIST_FAILED : OPERATION_ERROR_NONE;
 }
+
+static void set_profile_operation_terminal(
+    OperationState state,
+    OperationError error) {
+  active_profile_operation.terminalState = state;
+  active_profile_operation.terminalError = error;
+  profile_operation_phase_store(PROFILE_OPERATION_TERMINAL_PENDING);
+}
+
+static void publish_profile_operation_terminal() {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return;
+  bool publishFailed = false;
+  if (profile_operation_phase_load() == PROFILE_OPERATION_TERMINAL_PENDING) {
+    const OperationError finishError = operation_store_finish_locked(
+        operationStore,
+        active_profile_operation.id,
+        active_profile_operation.terminalState,
+        active_profile_operation.terminalError);
+    if (finishError == OPERATION_ERROR_NONE) {
+      reset_profile_operation_slot();
+    } else {
+      profile_operation_phase_store(PROFILE_OPERATION_FAILED_CLOSED);
+      publishFailed = true;
+    }
+  }
+  pending_command_unlock(true);
+  if (publishFailed) {
+    SendMsg(
+        "Операция профиля: terminal state не опубликован; требуется перезагрузка.",
+        ALARM_MSG);
+  }
+}
+
+static void process_profile_operation() {
+  if (profile_operation_phase_load() == PROFILE_OPERATION_EMPTY) return;
+  if (profile_operation_phase_load() == PROFILE_OPERATION_FAILED_CLOSED) return;
+  if (profile_operation_phase_load() == PROFILE_OPERATION_TERMINAL_PENDING) {
+    publish_profile_operation_terminal();
+    return;
+  }
+
+  if (profile_operation_phase_load() == PROFILE_OPERATION_QUEUED) {
+    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+    if (!locked) return;
+    bool transitionFailed = false;
+    if (profile_operation_phase_load() == PROFILE_OPERATION_QUEUED) {
+      const OperationError runningError = operation_store_mark_running_locked(
+          operationStore, active_profile_operation.id);
+      if (runningError == OPERATION_ERROR_NONE) {
+        profile_operation_phase_store(PROFILE_OPERATION_RUNNING);
+      } else {
+        const OperationError finishError = operation_store_finish_locked(
+            operationStore,
+            active_profile_operation.id,
+            OPERATION_STATE_FAILED,
+            OPERATION_ERROR_INTERNAL);
+        if (finishError == OPERATION_ERROR_NONE) {
+          if ((active_profile_operation.flags &
+               PROFILE_OPERATION_MODE_CHANGE) != 0) {
+            portENTER_CRITICAL(&emergencyStopMux);
+            mode_switch_barrier_active = false;
+            portEXIT_CRITICAL(&emergencyStopMux);
+          }
+          reset_profile_operation_slot();
+        } else {
+          active_profile_operation.terminalState = OPERATION_STATE_FAILED;
+          active_profile_operation.terminalError = OPERATION_ERROR_INTERNAL;
+          profile_operation_phase_store(PROFILE_OPERATION_FAILED_CLOSED);
+          transitionFailed = true;
+        }
+      }
+    }
+    pending_command_unlock(true);
+    if (transitionFailed) {
+      SendMsg(
+          "Операция профиля: record недоступен при запуске; требуется перезагрузка.",
+          ALARM_MSG);
+    }
+    if (profile_operation_phase_load() != PROFILE_OPERATION_RUNNING) return;
+  }
+
+  if (profile_operation_phase_load() == PROFILE_OPERATION_RUNNING) {
+    const SAMOVAR_MODE sourceMode =
+        static_cast<SAMOVAR_MODE>(active_profile_operation.sourceMode);
+    const bool requiresProgramIdle =
+        (active_profile_operation.flags &
+         PROFILE_OPERATION_REQUIRE_PROGRAM_IDLE) != 0;
+    if ((requiresProgramIdle && program_update_session_active()) ||
+        Samovar_Mode != sourceMode) {
+      if ((active_profile_operation.flags &
+           PROFILE_OPERATION_MODE_CHANGE) != 0) {
+        portENTER_CRITICAL(&emergencyStopMux);
+        mode_switch_barrier_active = false;
+        portEXIT_CRITICAL(&emergencyStopMux);
+      }
+      set_profile_operation_terminal(
+          OPERATION_STATE_FAILED, OPERATION_ERROR_CANCELLED);
+      publish_profile_operation_terminal();
+      return;
+    }
+    if ((active_profile_operation.flags &
+         PROFILE_OPERATION_MODE_CHANGE) != 0) {
+      profile_operation_phase_store(PROFILE_OPERATION_MODE_SWITCH);
+    } else {
+      const OperationError commitError = commit_profile_operation();
+      set_profile_operation_terminal(
+          commitError == OPERATION_ERROR_NONE
+              ? OPERATION_STATE_SUCCEEDED
+              : OPERATION_STATE_FAILED,
+          commitError);
+      publish_profile_operation_terminal();
+      return;
+    }
+  }
+
+  if (profile_operation_phase_load() == PROFILE_OPERATION_MODE_SWITCH) {
+    const ModeSwitchResult switchResult = switch_samovar_mode(
+        static_cast<SAMOVAR_MODE>(active_profile_operation.targetMode));
+    if (switchResult == MODE_SWITCH_PENDING) return;
+    OperationError switchError = active_profile_operation.terminalError;
+    if (switchResult == MODE_SWITCH_FAILED &&
+        switchError == OPERATION_ERROR_NONE) {
+      switchError = OPERATION_ERROR_MODE_SWITCH_FAILED;
+    }
+    set_profile_operation_terminal(
+        switchResult == MODE_SWITCH_SUCCEEDED
+            ? OPERATION_STATE_SUCCEEDED
+            : OPERATION_STATE_FAILED,
+        switchError);
+    publish_profile_operation_terminal();
+  }
+}
+
+bool is_valid_samovar_mode(long mode);
 
 #ifdef USE_LUA
+bool set_lua_mode_value(LuaModeTarget target, int32_t value) {
+  if (!is_valid_samovar_mode(value)) return false;
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (profile_operation_phase_load() != PROFILE_OPERATION_EMPTY ||
+      mode_switch_in_progress()) {
+    pending_command_unlock(true);
+    return false;
+  }
+
+  const SAMOVAR_MODE mode = static_cast<SAMOVAR_MODE>(value);
+  switch (target) {
+    case LUA_MODE_TARGET_SETUP:
+      SamSetup.Mode = value;
+      break;
+    case LUA_MODE_TARGET_ACTIVE:
+      if (Samovar_Mode != mode) {
+        Samovar_Mode = mode;
+        change_samovar_mode();
+      }
+      break;
+    case LUA_MODE_TARGET_CONTROL:
+      Samovar_CR_Mode = mode;
+      break;
+    default:
+      pending_command_unlock(true);
+      return false;
+  }
+
+  pending_command_unlock(true);
+  return true;
+}
+
 // [ISSUE-5] Отложенное исполнение Lua-строки (run_lua_string из async конкурирует
 //           с do_lua_script на core 1 за общий lua_State).
 String pending_lua_str;
@@ -271,9 +607,9 @@ volatile bool pending_stop_self_test_flag = false;
 volatile bool pending_mixer_flag = false;
 volatile bool pending_mixer_on = false;
 volatile bool pending_water_temp_flag = false;
-volatile float pending_water_temp_value = 0;
+volatile uint16_t pending_water_temp_value = 0;
 volatile bool pending_pump_speed_flag = false;
-volatile float pending_pump_speed_rate = 0;
+volatile uint16_t pending_pump_speed_steps = 0;
 volatile bool pending_nbkopt_flag = false;
 volatile bool pending_log_flush_flag = false;
 volatile bool pending_log_close_flag = false;
@@ -305,6 +641,28 @@ struct I2CStepperCache {
 };
 volatile I2CStepperCache i2c_stepper_cache = {false, false, 0, 0, 0, 0};
 
+static void refresh_i2c_stepper_cache(I2CStepperDevice& device) {
+  if (!i2c_stepper_config_begin(device)) return;
+
+  bool present = i2c_stepper_refresh(device, true);
+  if (device.address == I2CSTEPPER_MIXER_ADDR) {
+    i2c_stepper_cache.mixer_present = present;
+  } else if (device.address == I2CSTEPPER_PUMP_ADDR) {
+    uint16_t stepsPerMl = i2c_stepper_steps_per_ml();
+    i2c_stepper_cache.pump_present = present;
+    i2c_stepper_cache.pump_current_speed = device.currentSpeed;
+    float pumpRate = (present && stepsPerMl > 0)
+        ? static_cast<float>(device.currentSpeed) / stepsPerMl
+        : 0;
+    i2c_stepper_cache.pump_current_rate =
+        round(pumpRate * 3.6 * 1000) / 1000.0;
+    i2c_stepper_cache.pump_remaining = device.remaining;
+    i2c_stepper_cache.pump_status = device.status;
+  }
+
+  i2c_stepper_config_end(device);
+}
+
 // [W-4] Отложенная команда /i2cstepper (I2C из async недопустим).
 //        staged — приватная копия конфига с применёнными args; не трогаем глобал до loop.
 //        device_sel: 0=mixer, 1=pump.
@@ -312,7 +670,10 @@ struct PendingI2CStepperCmd {
   I2CStepperDevice staged;
   uint8_t device_sel;  // 0=mixer, 1=pump
   char cmd[16];
+  OperationId operationId;
 };
+static_assert(sizeof(PendingI2CStepperCmd) <= 64,
+              "PendingI2CStepperCmd exceeds its request-draft budget");
 PendingI2CStepperCmd pending_i2cstepper_buf;
 volatile bool pending_i2cstepper_flag = false;
 
@@ -325,7 +686,10 @@ struct PendingI2CPumpCmd {
   uint16_t fillingMl;
   uint16_t fillingMlHour;
   uint16_t stepsPerMl;
+  OperationId operationId;
 };
+static_assert(sizeof(PendingI2CPumpCmd) <= 24,
+              "PendingI2CPumpCmd exceeds its request-draft budget");
 PendingI2CPumpCmd pending_i2cpump_buf;
 volatile bool pending_i2cpump_flag = false;
 
@@ -336,20 +700,392 @@ struct PendingI2CCalCmd {
   uint16_t pumpMlHour;
   uint16_t stepsPerMl;
   uint16_t cmdSpeed;
+  OperationId operationId;
 };
+static_assert(sizeof(PendingI2CCalCmd) <= 12,
+              "PendingI2CCalCmd exceeds its request-draft budget");
 PendingI2CCalCmd pending_i2ccal_buf;
 volatile bool pending_i2ccal_flag = false;
 
+struct PendingLocalCalCmd {
+  bool is_finish;
+  uint16_t speed;
+  OperationId operationId;
+};
+static_assert(sizeof(PendingLocalCalCmd) <= 8,
+              "PendingLocalCalCmd exceeds its request-draft budget");
+PendingLocalCalCmd pending_local_cal_buf;
+volatile bool pending_local_cal_flag = false;
+
+struct PendingOperationResult {
+  OperationId id;
+  OperationState state;
+  OperationError error;
+  bool pending;
+};
+static_assert(sizeof(PendingOperationResult) <= 8,
+              "PendingOperationResult exceeds its fixed RAM budget");
+PendingOperationResult pending_i2c_operation_result{};
+
 // Явные прототипы нужны Arduino-препроцессору: иначе он генерирует их до
 // объявлений Pending*Cmd и ломает сборку root .ino.
-static bool queue_pending_i2cpump(const PendingI2CPumpCmd& cmd);
-static bool queue_pending_i2cstepper(const PendingI2CStepperCmd& cmd);
-static bool queue_pending_i2ccal(const PendingI2CCalCmd& cmd);
+static OperationError queue_pending_i2cpump(
+    PendingI2CPumpCmd command, OperationId& operationId);
+static OperationError queue_pending_i2cstepper(
+    PendingI2CStepperCmd command, OperationId& operationId);
+static OperationError queue_pending_i2ccal(
+    PendingI2CCalCmd command, OperationId& operationId);
+static OperationError queue_pending_local_cal(
+    PendingLocalCalCmd command, OperationId& operationId);
+static OperationError execute_pending_i2c_stepper(
+    const PendingI2CStepperCmd& command);
+static OperationError execute_pending_i2c_pump(
+    const PendingI2CPumpCmd& command);
+static OperationError execute_pending_i2c_calibration(
+    const PendingI2CCalCmd& command);
+static OperationError execute_pending_local_calibration(
+    const PendingLocalCalCmd& command);
 
-// [W-4] Отложенное ручное управление скоростью I2C-насоса (/command?pnbk):
-//        get_stepper_speed()/set_stepper_target() делают блокирующий I2C — только из loop().
-//        pnbk_value: 9000=+шаг, 8000=-шаг, иначе абсолютная скорость (л/ч).
-volatile float pending_pnbk_value = 0;
+enum PendingI2COperationOwner : uint8_t {
+  PENDING_I2C_OPERATION_NONE = 0,
+  PENDING_I2C_OPERATION_STEPPER,
+  PENDING_I2C_OPERATION_PUMP,
+  PENDING_I2C_OPERATION_LOCAL_CALIBRATION,
+  PENDING_I2C_OPERATION_I2C_CALIBRATION,
+};
+
+static bool pending_i2c_operation_matches_locked(OperationId id) {
+  return (pending_i2cstepper_flag && pending_i2cstepper_buf.operationId == id) ||
+         (pending_i2cpump_flag && pending_i2cpump_buf.operationId == id) ||
+         (pending_local_cal_flag && pending_local_cal_buf.operationId == id) ||
+         (pending_i2ccal_flag && pending_i2ccal_buf.operationId == id);
+}
+
+static bool clear_pending_i2c_operation_locked(OperationId id) {
+  if (pending_i2cstepper_flag && pending_i2cstepper_buf.operationId == id) {
+    pending_i2cstepper_buf = {};
+    pending_i2cstepper_flag = false;
+    return true;
+  }
+  if (pending_i2cpump_flag && pending_i2cpump_buf.operationId == id) {
+    pending_i2cpump_buf = {};
+    pending_i2cpump_flag = false;
+    return true;
+  }
+  if (pending_local_cal_flag && pending_local_cal_buf.operationId == id) {
+    pending_local_cal_buf = {};
+    pending_local_cal_flag = false;
+    return true;
+  }
+  if (pending_i2ccal_flag && pending_i2ccal_buf.operationId == id) {
+    pending_i2ccal_buf = {};
+    pending_i2ccal_flag = false;
+    return true;
+  }
+  return false;
+}
+
+static void publish_pending_i2c_result(
+    OperationId id,
+    OperationState state,
+    OperationError error) {
+  pending_i2c_operation_result.id = id;
+  pending_i2c_operation_result.state = state;
+  pending_i2c_operation_result.error = error;
+  __sync_synchronize();
+  pending_i2c_operation_result.pending = true;
+}
+
+static OperationError i2c_command_result(
+    bool commandSucceeded,
+    const I2CStepperDevice& candidate) {
+  if (candidate.error != 0) {
+    String message = "I2CStepper error: ";
+    message += String(candidate.error);
+    WriteConsoleLog(message);
+    return OPERATION_ERROR_I2C_DEVICE_ERROR;
+  }
+  return commandSucceeded
+      ? OPERATION_ERROR_NONE
+      : OPERATION_ERROR_I2C_COMMAND_FAILED;
+}
+
+static OperationError confirm_i2c_candidate(I2CStepperDevice& candidate) {
+  if (!i2c_stepper_refresh(candidate, true)) {
+    return OPERATION_ERROR_I2C_REFRESH_FAILED;
+  }
+  return i2c_command_result(true, candidate);
+}
+
+static OperationError execute_pending_i2c_stepper(
+    const PendingI2CStepperCmd& command) {
+  I2CStepperDevice* device = command.device_sel == 0
+      ? &i2cStepperMixer
+      : &i2cStepperPump;
+  if (command.device_sel > 1) return OPERATION_ERROR_INTERNAL;
+  if (!i2c_stepper_config_begin(*device)) {
+    return OPERATION_ERROR_I2C_CONFIG_BUSY;
+  }
+
+  I2CStepperDevice candidate = *device;
+  candidate.mode = command.staged.mode;
+  candidate.relayMask = command.staged.relayMask;
+  candidate.sensorFlags = command.staged.sensorFlags;
+  candidate.optionFlags = command.staged.optionFlags;
+  candidate.mixerRpm = command.staged.mixerRpm;
+  candidate.mixerRunSec = command.staged.mixerRunSec;
+  candidate.mixerPauseSec = command.staged.mixerPauseSec;
+  candidate.pumpMlHour = command.staged.pumpMlHour;
+  candidate.pumpPauseSec = command.staged.pumpPauseSec;
+  candidate.fillingMl = command.staged.fillingMl;
+  candidate.fillingMlHour = command.staged.fillingMlHour;
+  candidate.stepsPerMl = command.staged.stepsPerMl;
+
+  bool commandSucceeded = false;
+  if (strcmp(command.cmd, "apply") == 0) {
+    commandSucceeded = i2c_stepper_apply(candidate);
+  } else if (strcmp(command.cmd, "save") == 0) {
+    commandSucceeded = i2c_stepper_save(candidate);
+  } else if (strcmp(command.cmd, "start") == 0) {
+    commandSucceeded = i2c_stepper_start(candidate);
+  } else if (strcmp(command.cmd, "stop") == 0) {
+    commandSucceeded = i2c_stepper_stop(candidate);
+  } else if (strcmp(command.cmd, "calstart") == 0) {
+    commandSucceeded = i2c_stepper_write_config(candidate) &&
+        i2c_stepper_send_command(candidate, I2CSTEP_CMD_CALIBRATE_START);
+  } else if (strcmp(command.cmd, "calfinish") == 0) {
+    commandSucceeded = i2c_stepper_send_command(
+        candidate, I2CSTEP_CMD_CALIBRATE_FINISH);
+  } else if (strcmp(command.cmd, "relay") == 0) {
+    commandSucceeded = i2c_stepper_write_config(candidate) &&
+        i2c_stepper_send_command(candidate, I2CSTEP_CMD_RELAY);
+  } else {
+    i2c_stepper_config_end(*device);
+    return OPERATION_ERROR_INTERNAL;
+  }
+
+  OperationError result = i2c_command_result(commandSucceeded, candidate);
+  if (result == OPERATION_ERROR_NONE) result = confirm_i2c_candidate(candidate);
+  if (result == OPERATION_ERROR_NONE) *device = candidate;
+  i2c_stepper_config_end(*device);
+  return result;
+}
+
+static OperationError execute_pending_i2c_pump(
+    const PendingI2CPumpCmd& command) {
+  if (!i2c_stepper_config_begin(i2cStepperPump)) {
+    return OPERATION_ERROR_I2C_CONFIG_BUSY;
+  }
+
+  I2CStepperDevice candidate = i2cStepperPump;
+  bool commandSucceeded = false;
+  if (command.is_stop) {
+    commandSucceeded = i2c_stepper_stop(candidate);
+  } else {
+    candidate.mode = I2CSTEP_MODE_FILLING;
+    candidate.fillingMl = command.fillingMl;
+    candidate.fillingMlHour = command.fillingMlHour;
+    candidate.stepsPerMl = command.stepsPerMl;
+    commandSucceeded = i2c_stepper_start(candidate);
+  }
+
+  OperationError result = i2c_command_result(commandSucceeded, candidate);
+  if (result == OPERATION_ERROR_NONE) result = confirm_i2c_candidate(candidate);
+  if (result == OPERATION_ERROR_NONE) {
+    i2cStepperPump = candidate;
+    if (command.is_stop) {
+      I2CPumpCmdSpeed = 0;
+      I2CPumpTargetMl = 0;
+    } else {
+      I2CPumpCmdSpeed = command.speedSteps;
+      I2CPumpTargetSteps = command.targetSteps;
+      I2CPumpTargetMl = command.targetMl;
+    }
+  }
+  i2c_stepper_config_end(i2cStepperPump);
+  return result;
+}
+
+static OperationError execute_pending_i2c_calibration(
+    const PendingI2CCalCmd& command) {
+  if (!i2c_stepper_config_begin(i2cStepperPump)) {
+    return OPERATION_ERROR_I2C_CONFIG_BUSY;
+  }
+
+  I2CStepperDevice candidate = i2cStepperPump;
+  bool commandSucceeded = false;
+  if (command.is_finish) {
+    commandSucceeded = i2c_stepper_send_command(
+        candidate, I2CSTEP_CMD_CALIBRATE_FINISH);
+  } else {
+    candidate.pumpMlHour = command.pumpMlHour;
+    candidate.stepsPerMl = command.stepsPerMl;
+    commandSucceeded = i2c_stepper_write_config(candidate) &&
+        i2c_stepper_send_command(candidate, I2CSTEP_CMD_CALIBRATE_START);
+  }
+
+  OperationError result = i2c_command_result(commandSucceeded, candidate);
+  if (result == OPERATION_ERROR_NONE) result = confirm_i2c_candidate(candidate);
+  if (result == OPERATION_ERROR_NONE && command.is_finish) {
+    // Калибровка уже физически завершена: CALIBRATE_FINISH подтверждена насосом,
+    // а confirm_i2c_candidate() перечитал новый stepsPerMl из его регистров.
+    // Отменить это отказом записи в NVS нельзя, поэтому staging-схема
+    // (кандидат -> запись -> применение), уместная для ещё не применённых
+    // настроек, здесь неприменима: дозу считает ESP по SamSetup.StepperStepMlI2C
+    // (i2c_stepper_steps_per_ml() и производные), и откат RAM заставил бы её
+    // лить по старому коэффициенту, пока насос откалиброван по новому.
+    // Применяем безусловно, отказ записи только сообщаем.
+    SamSetup.StepperStepMlI2C = candidate.stepsPerMl;
+    i2cStepperPump = candidate;
+    I2CPumpCalibrating = false;
+    if (save_profile_nvs(SamSetup) != PERSIST_OK) {
+      result = OPERATION_ERROR_PROFILE_PERSIST_FAILED;
+    }
+  } else if (result == OPERATION_ERROR_NONE) {
+    i2cStepperPump = candidate;
+    I2CPumpTargetMl = 0;
+    I2CPumpCmdSpeed = command.cmdSpeed;
+    I2CPumpCalibrating = true;
+  }
+  i2c_stepper_config_end(i2cStepperPump);
+  return result;
+}
+
+static OperationError execute_pending_local_calibration(
+    const PendingLocalCalCmd& command) {
+  switch (pump_calibrate(command.is_finish ? 0 : command.speed)) {
+    case PUMP_CALIBRATION_OK:
+      if (!command.is_finish) CurrrentStepperSpeed = command.speed;
+      return OPERATION_ERROR_NONE;
+    case PUMP_CALIBRATION_INVALID_STATE:
+      return OPERATION_ERROR_RUNTIME_BUSY;
+    case PUMP_CALIBRATION_INVALID_RESULT:
+      return OPERATION_ERROR_CALIBRATION_INVALID_RESULT;
+    case PUMP_CALIBRATION_PROFILE_PERSIST_FAILED:
+      return OPERATION_ERROR_PROFILE_PERSIST_FAILED;
+  }
+  return OPERATION_ERROR_INTERNAL;
+}
+
+static bool cancel_queued_i2c_operations_locked(bool& cancelled) {
+  const bool pending[] = {
+    pending_i2cstepper_flag,
+    pending_i2cpump_flag,
+    pending_local_cal_flag,
+    pending_i2ccal_flag,
+  };
+  const OperationId operationIds[] = {
+    pending_i2cstepper_buf.operationId,
+    pending_i2cpump_buf.operationId,
+    pending_local_cal_buf.operationId,
+    pending_i2ccal_buf.operationId,
+  };
+  for (size_t index = 0; index < 4; index++) {
+    if (!pending[index]) continue;
+    cancelled = true;
+    OperationRecord record{};
+    if (operation_store_copy_locked(
+            operationStore, operationIds[index], record) !=
+        OPERATION_ERROR_NONE) {
+      return false;
+    }
+    if (record.state == OPERATION_STATE_RUNNING) continue;
+    if (record.state != OPERATION_STATE_QUEUED ||
+        operation_store_finish_locked(
+            operationStore,
+            operationIds[index],
+            OPERATION_STATE_FAILED,
+            OPERATION_ERROR_CANCELLED) != OPERATION_ERROR_NONE ||
+        !clear_pending_i2c_operation_locked(operationIds[index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void process_pending_i2c_operations() {
+  if (pending_i2c_operation_result.pending) {
+    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+    if (!locked) return;
+    if (pending_i2c_operation_matches_locked(
+            pending_i2c_operation_result.id)) {
+      const OperationError finishError = operation_store_finish_locked(
+          operationStore,
+          pending_i2c_operation_result.id,
+          pending_i2c_operation_result.state,
+          pending_i2c_operation_result.error);
+      if (finishError == OPERATION_ERROR_NONE &&
+          clear_pending_i2c_operation_locked(
+              pending_i2c_operation_result.id)) {
+        pending_i2c_operation_result = {};
+      }
+    }
+    pending_command_unlock(true);
+    return;
+  }
+
+  PendingI2COperationOwner owner = PENDING_I2C_OPERATION_NONE;
+  PendingI2CStepperCmd stepperCommand{};
+  PendingI2CPumpCmd pumpCommand{};
+  PendingLocalCalCmd localCalibrationCommand{};
+  PendingI2CCalCmd i2cCalibrationCommand{};
+  OperationId operationId = 0;
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return;
+  if (!mode_switch_in_progress()) {
+    if (pending_i2cstepper_flag) {
+      owner = PENDING_I2C_OPERATION_STEPPER;
+      stepperCommand = pending_i2cstepper_buf;
+      operationId = stepperCommand.operationId;
+    } else if (pending_i2cpump_flag) {
+      owner = PENDING_I2C_OPERATION_PUMP;
+      pumpCommand = pending_i2cpump_buf;
+      operationId = pumpCommand.operationId;
+    } else if (pending_local_cal_flag) {
+      owner = PENDING_I2C_OPERATION_LOCAL_CALIBRATION;
+      localCalibrationCommand = pending_local_cal_buf;
+      operationId = localCalibrationCommand.operationId;
+    } else if (pending_i2ccal_flag) {
+      owner = PENDING_I2C_OPERATION_I2C_CALIBRATION;
+      i2cCalibrationCommand = pending_i2ccal_buf;
+      operationId = i2cCalibrationCommand.operationId;
+    }
+    if (owner != PENDING_I2C_OPERATION_NONE &&
+        operation_store_mark_running_locked(operationStore, operationId) !=
+            OPERATION_ERROR_NONE) {
+      owner = PENDING_I2C_OPERATION_NONE;
+    }
+  }
+  pending_command_unlock(true);
+  if (owner == PENDING_I2C_OPERATION_NONE) return;
+
+  OperationError result = OPERATION_ERROR_INTERNAL;
+  switch (owner) {
+    case PENDING_I2C_OPERATION_STEPPER:
+      result = execute_pending_i2c_stepper(stepperCommand);
+      break;
+    case PENDING_I2C_OPERATION_PUMP:
+      result = execute_pending_i2c_pump(pumpCommand);
+      break;
+    case PENDING_I2C_OPERATION_LOCAL_CALIBRATION:
+      result = execute_pending_local_calibration(localCalibrationCommand);
+      break;
+    case PENDING_I2C_OPERATION_I2C_CALIBRATION:
+      result = execute_pending_i2c_calibration(i2cCalibrationCommand);
+      break;
+    case PENDING_I2C_OPERATION_NONE:
+      break;
+  }
+  publish_pending_i2c_result(
+      operationId,
+      result == OPERATION_ERROR_NONE
+          ? OPERATION_STATE_SUCCEEDED
+          : OPERATION_STATE_FAILED,
+      result);
+}
+
+// [W-4] Отложенное ручное управление скоростью I2C-насоса (/command?pnbk).
+ControlNbkCommand pending_pnbk_value = {};
 volatile bool pending_pnbk_flag = false;
 
 // void reset_migration_flag(); // Только для тестирования миграции
@@ -360,36 +1096,53 @@ volatile bool pending_pnbk_flag = false;
 #endif
 
 #ifdef USE_WEB_SERIAL
+static const size_t WEBSERIAL_COMMAND_MAX = 32;
+
 void recvMsg(uint8_t *data, size_t len) {
-  WebSerial.println("Received Data...");
-  String d = "";
-  d = "";
-  for (int i = 0; i < len; i++) {
-    d += char(data[i]);
+  if (!data || len == 0 || len > WEBSERIAL_COMMAND_MAX) {
+    WebSerial.println("ERR BAD_REQUEST");
+    return;
   }
-  String Var, Val;
-  Var = "";
-  Val = "";
-  Var = getValue(d, '=', 0);
-  Val = getValue(d, '=', 1);
-  Var.trim();
-  Val.trim();
-  if (Val.length() > 0) {
-    WebSerial.print(Var);
-    WebSerial.print(" = ");
-    if (Var == "WFpulseCount") {
-      water_pulse_count_set((uint16_t)Val.toInt());
-      WebSerial.println(water_pulse_count_get());
-    } else if (Var.length() > 0) {
+  char command[WEBSERIAL_COMMAND_MAX + 1];
+  for (size_t index = 0; index < len; index++) {
+    if (data[index] == '\0') {
+      WebSerial.println("ERR BAD_REQUEST");
+      return;
     }
-  } else if (d == "print") {
+    command[index] = char(data[index]);
+  }
+  command[len] = '\0';
+
+  if (strcmp(command, "print") == 0) {
     WebSerial.println("_______________________________________________");
     WebSerial.print("WFpulseCount = ");
     WebSerial.println(water_pulse_count_get());
     WebSerial.println("_______________________________________________");
-  } else
-    WebSerial.print("echo ");
-  WebSerial.println(d);
+    return;
+  }
+
+  static const char prefix[] = "WFpulseCount=";
+  if (strncmp(command, prefix, sizeof(prefix) - 1) != 0) {
+    WebSerial.println("ERR UNKNOWN_COMMAND");
+    return;
+  }
+  const char *valueText = command + sizeof(prefix) - 1;
+  for (const char *current = valueText; *current; current++) {
+    if (numeric_ascii_space(*current)) {
+      WebSerial.println("ERR WFpulseCount format");
+      return;
+    }
+  }
+  uint16_t value = 0;
+  NumericParseResult result = parse_bounded_uint16(valueText, 0, UINT16_MAX, value);
+  if (!result.ok()) {
+    WebSerial.print("ERR WFpulseCount ");
+    WebSerial.println(numeric_parse_error_code(result.error));
+    return;
+  }
+  water_pulse_count_set(value);
+  WebSerial.print("WFpulseCount = ");
+  WebSerial.println(water_pulse_count_get());
 }
 #endif
 
@@ -425,9 +1178,46 @@ void IRAM_ATTR WFpulseCounter() {
 }
 #endif
 
+#ifdef ALARM_BTN_PIN
+static TaskHandle_t EmergencyButtonTask = nullptr;
+
+void IRAM_ATTR emergencyButtonInterrupt() {
+  BaseType_t higherPriorityTaskWoken = pdFALSE;
+  if (EmergencyButtonTask != nullptr) {
+    vTaskNotifyGiveFromISR(EmergencyButtonTask, &higherPriorityTaskWoken);
+  }
+  if (higherPriorityTaskWoken == pdTRUE) portYIELD_FROM_ISR();
+}
+
+void triggerEmergencyButton(void *parameter) {
+  (void)parameter;
+  while (true) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    request_emergency_stop("Аварийное отключение: нажата аварийная кнопка");
+    vTaskDelay(pdMS_TO_TICKS(30));
+  }
+}
+
+bool initEmergencyButtonTask() {
+  const BaseType_t created = xTaskCreatePinnedToCore(
+    triggerEmergencyButton,
+    "EmergencyButton",
+    2048,
+    nullptr,
+    3,
+    &EmergencyButtonTask,
+    1
+  );
+  if (created != pdPASS || EmergencyButtonTask == nullptr) return false;
+  pinMode(ALARM_BTN_PIN, INPUT_PULLUP);
+  attachInterrupt(ALARM_BTN_PIN, emergencyButtonInterrupt, FALLING);
+  if (digitalRead(ALARM_BTN_PIN) == LOW) xTaskNotifyGive(EmergencyButtonTask);
+  return true;
+}
+#endif
+
 //Запускаем таск для получения точного времени из интернет
 void triggerGetClock(void *parameter) {
-  String qMsg;
   int counter = 0;
   while (true) {
     // Пропускаем все активности во время OTA обновления (кроме проверки WiFi)
@@ -479,28 +1269,51 @@ void triggerGetClock(void *parameter) {
 
     // Обработка сообщений из очереди: отправка во все включенные сервисы одновременно
     // Пропускаем отправку сообщений во время OTA для освобождения ресурсов
-    if (!msg_q.isEmpty() && WiFi.status() == WL_CONNECTED && !ota_running) {
-      vTaskDelay(5 / portTICK_PERIOD_MS);
-      if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-        char c[200];
-        msg_q.pop(c);
-        qMsg = c;
-        
-        // Отправка в Telegram (если включен и настроен)
-#ifdef USE_TELEGRAM
-        if (SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
-          http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg));
-        }
-#endif
-
-        // Отправка в Blynk (если включен, подключен и настроен)
-#ifdef SAMOVAR_USE_BLYNK
-        if (Blynk.connected() && SamSetup.blynkauth[0] != 0) {
-          Blynk.virtualWrite(V26, qMsg);
-        }
-#endif
-
+    if (WiFi.status() == WL_CONNECTED && !ota_running) {
+      char c[200] = {};
+      bool queueHasMessage = false;
+      bool queuePopResult = false;
+      const BaseType_t queueTakeResult =
+          xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));
+      if (queueTakeResult == pdTRUE) {
+        queueHasMessage = !msg_q.isEmpty();
+        if (queueHasMessage) queuePopResult = msg_q.pop(c);
         xSemaphoreGive(xMsgSemaphore);
+      }
+
+      if (queueTakeResult != pdTRUE) {
+        WriteConsoleLog(F("notify_queue_pop_lock_busy"));
+      } else if (queueHasMessage && !queuePopResult) {
+        WriteConsoleLog(F("notify_queue_pop_failed"));
+      } else if (queuePopResult) {
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+        String qMsg(c);
+
+#ifdef USE_TELEGRAM
+        bool telegramDeliveryFailed = false;
+        if (SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
+          telegramDeliveryFailed =
+              http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg)) == "<ERR>";
+        }
+#endif
+
+#ifdef SAMOVAR_USE_BLYNK
+        bool blynkDisconnected = false;
+        if (SamSetup.blynkauth[0] != 0) {
+          if (Blynk.connected()) {
+            Blynk.virtualWrite(V26, qMsg);
+          } else {
+            blynkDisconnected = true;
+          }
+        }
+#endif
+
+#ifdef USE_TELEGRAM
+        if (telegramDeliveryFailed) WriteConsoleLog(F("notify_telegram_delivery_failed"));
+#endif
+#ifdef SAMOVAR_USE_BLYNK
+        if (blynkDisconnected) WriteConsoleLog(F("notify_blynk_disconnected"));
+#endif
       }
     }
 #ifdef USE_TELEGRAM
@@ -573,8 +1386,16 @@ void triggerSysTicker(void *parameter) {
       // Авто-расчет теплопотерь при нагреве (п. 5)
       update_heat_loss_calculation();
 
-      if (pending_rescan_ds_flag) {
-        pending_rescan_ds_flag = false;
+      bool rescanDs = false;
+      {
+        bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+        if (locked && pending_rescan_ds_flag) {
+          pending_rescan_ds_flag = false;
+          rescanDs = !mode_switch_in_progress();
+        }
+        pending_command_unlock(locked);
+      }
+      if (rescanDs) {
         if (samovar_process_active()) {
           SendMsg("Сканирование датчиков отклонено: процесс активен.", WARNING_MSG);
           DS_getvalue();
@@ -588,18 +1409,8 @@ void triggerSysTicker(void *parameter) {
 
       // [W-3] Обновляем кэш I2C-шагового двигателя раз в секунду из SysTicker.
       //        Выполняем здесь (не в async), так как I2C защищён xI2CSemaphore внутри функций.
-      {
-        bool mp = i2c_stepper_config_busy(i2cStepperMixer) ? i2cStepperMixer.present : i2c_stepper_refresh(i2cStepperMixer);
-        bool pp = i2c_stepper_config_busy(i2cStepperPump) ? i2cStepperPump.present : i2c_stepper_refresh(i2cStepperPump);
-        uint16_t stepsPerMl = i2c_stepper_steps_per_ml();
-        i2c_stepper_cache.mixer_present = mp;
-        i2c_stepper_cache.pump_present = pp;
-        i2c_stepper_cache.pump_current_speed = i2cStepperPump.currentSpeed;
-        float pumpRate = (pp && stepsPerMl > 0) ? static_cast<float>(i2cStepperPump.currentSpeed) / stepsPerMl : 0;
-        i2c_stepper_cache.pump_current_rate = round(pumpRate * 3.6 * 1000) / 1000.0;
-        i2c_stepper_cache.pump_remaining = i2cStepperPump.remaining;
-        i2c_stepper_cache.pump_status = i2cStepperPump.status;
-      }
+      refresh_i2c_stepper_cache(i2cStepperMixer);
+      refresh_i2c_stepper_cache(i2cStepperPump);
 
       // [C-1] Формируем строки времени в локалах, под замком только присваиваем глобалам.
       {
@@ -886,7 +1697,139 @@ void triggerSysTicker(void *parameter) {
   }
 }
 
+// Fail-open: подсистема (профиль, ФС, очередь команд, веб-интерфейс, MQTT...) не
+// поднялась штатно. НЕ останавливаем загрузку — владелец решил грузиться дальше в
+// degraded-режиме, но громко сообщить об этом. Serial пишем сразу, а лог/ленту сообщений
+// — одним пакетом в самом конце setup(): SendMsg/WriteConsoleLog трогают
+// xMsgSemaphore/msg_q без null-проверки, да и часть отказов случается уже после того
+// места, где семафоры поднялись. Веб-статус отдаётся из bootDegraded/bootDegradedReason
+// через AJAX-телеметрию.
+static void report_degraded_boot(const char* stage, const char* error) {
+  Serial.print(F("WARN: "));
+  Serial.print(stage);
+  Serial.print(F(" failed: "));
+  Serial.println(error);
+  const String reason = String(stage) + ": " + String(error);
+  if (bootDegraded) {
+    bootDegradedReason += "; ";
+    bootDegradedReason += reason;
+  } else {
+    bootDegraded = true;
+    bootDegradedReason = reason;
+  }
+}
+
+// Best-effort инициализация силовых выходов ДО загрузки профиля из NVS — на этот момент
+// полярность реле ещё не известна (SamSetup ещё не заполнен). RELE_CHANNEL1 — пускатель
+// нагревателя. HIGH здесь безопасен ТОЛЬКО для полярности releN=false (дефолт, см.
+// set_default_setup_profile()): нормальный путь пишет !SamSetup.releN, что при false
+// даёт HIGH=выключено. Полярность реле — настраиваемая пользователем опция (setup.htm,
+// «Настройки уровней для реле»): на платах с releN=true (активный высокий уровень)
+// HIGH означает ВКЛЮЧЕНО, т.е. этот вызов на таких платах на мгновение включает нагрев.
+// Окно закрывается сразу после загрузки профиля — см. вызов apply_loaded_relay_polarity_off()
+// в setup() сразу за присвоением SamSetup из startupProfile, до FS_init/apply_config_runtime
+// и проверки кнопки AP. До загрузки профиля скорректировать уровень по факту нечем:
+// полярность физически неизвестна раньше этой точки.
+static void init_power_outputs_safe_off() {
+  pinMode(RELE_CHANNEL1, OUTPUT);
+  digitalWrite(RELE_CHANNEL1, HIGH);
+  pinMode(RELE_CHANNEL2, OUTPUT);
+  digitalWrite(RELE_CHANNEL2, HIGH);
+  pinMode(RELE_CHANNEL3, OUTPUT);
+  digitalWrite(RELE_CHANNEL3, HIGH);
+  pinMode(RELE_CHANNEL4, OUTPUT);
+  digitalWrite(RELE_CHANNEL4, HIGH);
+}
+
+// Как только профиль загружен (успешно, мигрирован или дефолтный при отказе — во всех
+// случаях SamSetup.releN уже валиден), сразу переводим все каналы в реальное «выключено»
+// с учётом полярности, не дожидаясь основной инициализации реле ниже в setup(). Закрывает
+// окно, которое иначе держало бы releN=true платы включёнными вплоть до неё (FS_init,
+// apply_config_runtime, ожидание кнопки AP — секунды). Pin mode уже выставлен в OUTPUT
+// в init_power_outputs_safe_off().
+static void apply_loaded_relay_polarity_off() {
+  digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
+  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
+  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+}
+
 void setup() {
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+  Serial.begin(115200);
+  init_power_outputs_safe_off();
+
+  SetupEEPROM startupProfile{};
+  ProfileLoadResult profileResult = load_profile_nvs(startupProfile);
+  bool persistStartupProfile = false;
+  bool migratedFromLegacy = false;
+  if (profileResult == PROFILE_LOAD_NOT_FOUND) {
+    profileResult = migrate_from_eeprom(startupProfile);
+    if (profileResult == PROFILE_LOAD_OK) {
+      persistStartupProfile = true;
+      migratedFromLegacy = true;
+    } else if (profileResult == PROFILE_LOAD_NOT_FOUND) {
+      set_default_setup_profile(startupProfile);
+      profileResult = PROFILE_LOAD_OK;
+      persistStartupProfile = true;
+    }
+  }
+  if (profileResult != PROFILE_LOAD_OK) {
+    // Профиль в NVS битый/нечитаемый: сообщаем и грузимся на безопасных дефолтах
+    // (rele1..4=false, т.е. нагрев выключен) вместо неинициализированной структуры.
+    report_degraded_boot("load", profile_load_result_code(profileResult));
+    set_default_setup_profile(startupProfile);
+  }
+  // Диапазон HeaterResistant не проверяет ни чтение NVS, ни миграция из EEPROM, а в
+  // setup.htm уходит сырое значение. Без лечения страница показывала бы одно, а расчёты
+  // мощности — они спрашивают trusted_heater_resistance() — считали бы по другому.
+  // Лечим до save_profile_nvs(), чтобы мигрированный профиль починился в NVS насовсем.
+  const float storedHeaterR = startupProfile.HeaterResistant;
+  startupProfile.HeaterResistant = trusted_heater_resistance(storedHeaterR);
+  if (startupProfile.HeaterResistant != storedHeaterR) {
+    Serial.print(F("WARN: heater resistance "));
+    Serial.print(storedHeaterR, 3);
+    Serial.print(F(" out of range, using default "));
+    Serial.print(startupProfile.HeaterResistant, 3);
+    Serial.println(F(": set the real value in setup.htm, power calculations depend on it"));
+  }
+  if (persistStartupProfile) {
+    const PersistResult persistResult = save_profile_nvs(startupProfile);
+    if (persistResult != PERSIST_OK) {
+      // Сохранить в NVS не удалось, но startupProfile в памяти уже валиден
+      // (мигрированный/дефолтный) — продолжаем на нём, просто без персиста.
+      report_degraded_boot("migration", persist_result_code(persistResult));
+    } else if (migratedFromLegacy) {
+      // Новый профиль записан и проверен чтением — только теперь legacy-остатки
+      // можно стирать. Обратный порядок оставил бы окно, где пропадание питания
+      // уничтожает настройки. Свежие устройства сюда не попадают: там нет ни
+      // миграции, ни чего стирать.
+      clear_migrated_legacy_profile_data();
+    }
+  }
+  SamSetup = startupProfile;
+  // Полярность реле теперь известна — закрываем окно из init_power_outputs_safe_off()
+  // (см. её комментарий) немедленно, не дожидаясь основной инициализации реле ниже.
+  apply_loaded_relay_polarity_off();
+  print_nvs_stats("after config load");
+
+  const FsInitResult fsInitResult = FS_init();
+  if (fsInitResult == FS_INIT_FORMATTED) {
+    // FS_init() не смонтировал ФС с первой попытки, отформатировал её и смонтировал
+    // заново (см. FS.ino) — загрузка продолжается и веб-сервер поднимется как обычно
+    // (WebServerInit() ниже больше не смотрит на fsInitResult), но пользовательские
+    // Lua-скрипты, логи и /data были стёрты форматированием; get_web_interface()
+    // перекачает статический UI с сервера, а вот пользовательский контент — нет.
+    report_degraded_boot("filesystem", "formatted, user files lost");
+  } else if (fsInitResult != FS_INIT_OK) {
+    // Fail-open: и монтирование, и формат провалились (см. FS_init()/FS.ino) — не
+    // вешаем загрузку в вечный цикл, а сообщаем и продолжаем. Все обращения к
+    // SPIFFS/LittleFS в остальном коде (File::operator bool(), SPIFFS.exists()/
+    // usedBytes() и т.д.) уже проверены на безопасное поведение при незамонтированной
+    // ФС — см. отчёт аудита.
+    report_degraded_boot("filesystem", "mount failed");
+  }
+
   esp_log_level_set("i2c.master", ESP_LOG_NONE);
   pinMode(0, INPUT);
   vTaskDelay(600 / portTICK_PERIOD_MS);
@@ -906,9 +1849,6 @@ void setup() {
 #endif
   heap_caps_enable_nonos_stack_heaps();
 
-  vTaskDelay(500 / portTICK_PERIOD_MS);
-  Serial.begin(115200);
-
 #ifdef __SAMOVAR_DEBUG
   esp_log_level_set("*", ESP_LOG_VERBOSE);
   Serial.println("Using ESP object:");
@@ -917,15 +1857,6 @@ void setup() {
   Serial.println("Using lower level function:");
   Serial.println(esp_get_idf_version());
 #endif
-
-
-  if (!recover_pending_nvs_compaction()) {
-    Serial.println(F("FATAL: NVS compaction recovery failed"));
-    while (true) {
-      delay(1000);
-    }
-  }
-
   //delay(2000);
   //  dac_output_disable(DAC_CHANNEL_1);
   //  dac_output_disable(DAC_CHANNEL_2);
@@ -940,16 +1871,26 @@ void setup() {
   xSemaphoreGive(xMsgSemaphore);
 
   xRuntimeStateSemaphore = xSemaphoreCreateBinaryStatic(&xRuntimeStateSemaphoreBuffer);
+  runtime_event_init(runtimeEventRing);
   xSemaphoreGive(xRuntimeStateSemaphore);
 
   xPendingCommandSemaphore = xSemaphoreCreateBinaryStatic(&xPendingCommandSemaphoreBuffer);
   xSemaphoreGive(xPendingCommandSemaphore);
 
   if (!init_samovar_command_queue()) {
-    Serial.println(F("FATAL: samovar command queue init failed"));
-    while (true) {
-      delay(1000);
-    }
+    // Fail-open: очередь/мьютекс команд не создались — samovar_command_queue остаётся
+    // nullptr. Все точки постановки/чтения команд (samovar_command_queue.h:
+    // queue_samovar_command/receive_samovar_command/discard_samovar_commands/
+    // samovar_command_queue_idle/queue_samovar_reset_command) уже проверяют handle на
+    // nullptr и просто отказывают вызывающему, так что деградация не может привести к
+    // обращению по NULL-хэндлу. Аварийные пути останова идут мимо очереди
+    // (request_emergency_stop()/stop_process() дергают set_power(false) напрямую), а
+    // штатное завершение по температуре куба - единственный останов, который очередью
+    // пользуется, - при отказе постановки эскалирует в аварийный стоп (см. alarm.h,
+    // ветка TankSensor.avgTemp >= DistTemp). Без этой эскалации нагрев при мёртвой
+    // очереди остался бы включённым: else с аварийным стопом там уже недостижим.
+    report_degraded_boot("command queue", "init failed");
+    Serial.println(F("WARN: command queue disabled: starting new modes/power-on from menu, web UI, Blynk and Lua will be rejected as busy; stopping an active process and the emergency-stop/alarm safety path still work directly"));
   }
 
   xLogFileSemaphore = xSemaphoreCreateMutexStatic(&xLogFileSemaphoreBuffer);
@@ -1001,9 +1942,6 @@ void setup() {
   servo.attach(SERVO_PIN, 500, 2500);  // attaches the servo
 #endif
 
-  //Читаем сохраненную конфигурацию
-  //read_config();
-
   // Инициализация кнопок и энкодера (обработка в loop())
 #ifdef BTN_PIN
   btn.setType(LOW_PULL);
@@ -1032,32 +1970,20 @@ void setup() {
   btn.resetStates();
 #endif
 
-  //Читаем сохраненную конфигурацию
-  
-  // Сначала мигрируем старые настройки из EEPROM (если они есть)
-  //reset_migration_flag(); // ТОЛЬКО ДЛЯ ТЕСТА! Удалить после проверки!
-  migrate_from_eeprom();
-  
-  // Затем загружаем из NVS
-  read_config();
-  
+  apply_config_runtime();
+
   Serial.print("NVS: Configuration loaded. Flag = ");
   Serial.println(SamSetup.flag);
-  print_nvs_stats("after config load");
-
-  // Если NVS пустой (flag > 250), инициализируем дефолтными значениями
-  if (SamSetup.flag > 250) {
-    Serial.println("NVS is empty. Initializing with default values...");
-    set_default_setup_profile();
-    save_profile();
-    read_config();
-    print_nvs_stats("after default profile save");
-    Serial.println("Default values saved to NVS");
-  }
 
   // Программа хранится в общем runtime-буфере program[]; после загрузки режима из NVS
   // нужно заполнить его дефолтом именно текущего режима.
-  load_default_program_for_mode();
+  ProgramParseResult defaultProgramResult = load_default_program_for_mode(Samovar_Mode);
+  if (!defaultProgramResult.ok()) {
+    String error = "Аварийная блокировка: ";
+    error += format_program_parse_error(defaultProgramResult);
+    Serial.println(error);
+    request_emergency_stop(error);
+  }
 
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
@@ -1078,13 +2004,18 @@ void setup() {
   pinMode(BZZ_PIN, OUTPUT);
   digitalWrite(BZZ_PIN, LOW);
 
+#ifdef ALARM_BTN_PIN
+  if (!initEmergencyButtonTask()) {
+    request_emergency_stop("Аварийное отключение: задача аварийной кнопки не запущена");
+  }
+#endif
+
 #ifdef USE_PRESSURE_MPX
   //Инициализируем ногу для датчика давления MPX5010D
   pinMode(LUA_PIN, INPUT);
 #endif
 
   //Настраиваем меню
-  Serial.println(F("Samovar started"));
   setupMenu();
   writeString(F("      Samovar "), 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
@@ -1130,8 +2061,18 @@ void setup() {
 
     if (shouldSaveWiFiConfig) {
       if (strlen(custom_blynk_token.getValue()) == 32) {
-        copyStringSafe(SamSetup.blynkauth, String(custom_blynk_token.getValue()));
-        save_profile();
+        SetupEEPROM profileCandidate{};
+        profileCandidate = SamSetup;
+        copyStringSafe(
+            profileCandidate.blynkauth,
+            String(custom_blynk_token.getValue()));
+        const PersistResult persistResult = save_profile_nvs(profileCandidate);
+        if (persistResult == PERSIST_OK) {
+          SamSetup = profileCandidate;
+        } else {
+          Serial.print(F("NVS: Blynk token was not saved: "));
+          Serial.println(persist_result_code(persistResult));
+        }
       }
     }
     Serial.print(F("Connected to "));
@@ -1251,6 +2192,7 @@ void setup() {
   samovar_reset();
 
   WebServerInit();
+  Serial.println(F("Samovar started"));
   
 #ifdef USE_CRASH_HANDLER
   // Инициализация обработчика сбоев (после инициализации файловой системы)
@@ -1259,7 +2201,7 @@ void setup() {
 
 #ifdef SAMOVAR_USE_POWER
   //Запускаем таск считывания параметров регулятора
-  xTaskCreatePinnedToCore(
+  const BaseType_t powerTaskCreated = xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
     1800,               /* Stack size in words */
@@ -1267,8 +2209,14 @@ void setup() {
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
     0);                 /* Core where the task should run */
-  //На всякий случай пошлем команду выключения питания на UART
-  set_power_mode(POWER_SLEEP_MODE);
+  const bool powerTaskReady = powerTaskCreated == pdPASS && PowerStatusTask != nullptr;
+  set_power_worker_ready(powerTaskReady);
+  if (powerTaskReady) {
+    //На всякий случай пошлем команду выключения питания на UART
+    set_power_mode(POWER_SLEEP_MODE);
+  } else {
+    request_emergency_stop("Аварийное отключение: задача регулятора не запущена");
+  }
 #endif
 
 #ifdef USE_WEB_SERIAL
@@ -1295,13 +2243,16 @@ void setup() {
 #endif
 
 #ifdef USE_MQTT
-  if (!init_mqtt_lock()) {
-    Serial.println(F("FATAL: MQTT mutex init failed"));
-    while (true) {
-      delay(1000);
-    }
+  const bool mqttLockReady = init_mqtt_lock();
+  if (!mqttLockReady) {
+    // Fail-open: мьютекс MQTT не создался (xMqttSemaphore остаётся nullptr). mqtt_lock()
+    // в SamovarMqtt.h уже проверяет handle на nullptr и отказывает вызывающему, так что
+    // connectToMqtt/disconnectFromMqtt/mqttConnected/MqttSendMsg сами по себе безопасны —
+    // но initMqtt() всё равно НЕ вызываем ниже, чтобы не заводить клиент/коллбэки впустую.
+    report_degraded_boot("mqtt", "mutex init failed");
+    Serial.println(F("WARN: MQTT disabled: cloud status/log publishing will not run; local control, heating and safety logic are unaffected"));
   }
-  if (!wifiAP) {
+  if (mqttLockReady && !wifiAP) {
     initMqtt();
     vTaskDelay(500);
   }
@@ -1385,11 +2336,23 @@ void setup() {
   //Serial.println(sizeof(SamSetup));
 
   SamovarStatus.reserve(80);
+
+  // Публикуем итог degraded-загрузки одним пакетом: здесь уже подняты и семафоры для
+  // SendMsg/WriteConsoleLog, и все точки отказа (профиль, ФС, очередь команд, веб, MQTT)
+  // уже отработали, так что в сообщение попадают ВСЕ причины, а не только ранние.
+  // bootDegradedReason сам называет отказавшую подсистему, поэтому текст общий.
+  if (bootDegraded) {
+    const String notice = String(F("Загрузка с ошибками (")) + bootDegradedReason +
+                          F("). Часть функций недоступна, работаем в ограниченном режиме.");
+    WriteConsoleLog(notice);
+    SendMsg(notice, ALARM_MSG);
+  }
 }
 
 void loop() {
   // Проверка переполнения стека
   if (uxTaskGetStackHighWaterMark(NULL) < 325) {
+    request_emergency_stop("Аварийное отключение: критически малый остаток стека");
     SendMsg("Стек переполнился. Перезагрузка", ALARM_MSG);
     vTaskDelay(5000);
     ESP.restart();
@@ -1434,10 +2397,15 @@ void loop() {
     return;
   }
 
+  tick_power_transition();
+  cancel_invalid_mode_heating_session();
+  tick_self_test();
+  tick_nbk_transition();
+
 #ifdef BTN_PIN
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
   btn.tick();
-  if (btn.isPress()) {
+  if (!mode_switch_in_progress() && btn.isPress()) {
     if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
       //если выключен - включаем
       if (!PowerOn) {
@@ -1487,7 +2455,7 @@ void loop() {
 #endif
 
   SamovarCommandMsg commandMsg;
-  while (receive_samovar_command(commandMsg, 0)) {
+  while (!mode_switch_in_progress() && receive_samovar_command(commandMsg, 0)) {
     switch (commandMsg.command) {
       case SAMOVAR_START:
         mode_apply_power_on_command(commandMsg.command);
@@ -1553,72 +2521,64 @@ void loop() {
   // Обработка отложенных команд из async-обработчиков
   // ---------------------------------------------------------------------------
 
-  // [C-10/W-8] Сохранение профиля + перечитывание конфига (NVS — только из loop).
-  // Для пакетного /save сначала применяем staged SamSetup, затем mode/program.
-  bool hasPendingSetupSave = false;
-  PendingSetupSave setupSave;
+  process_profile_operation();
+  process_pending_i2c_operations();
+
+  // Recovery-команды (resetwifi/reboot) обрабатываем ДО барьер-return ниже: при застрявшем
+  // mode_switch_barrier_active loop() уходит в ранний return, поэтому здесь — единственное
+  // место, где рестарт/сброс Wi-Fi (поставленные с bypassBarrier в /command) гарантированно
+  // исполнятся. Это закрывает блокер «503 BUSY навсегда после MODE_SWITCH_FAILED».
   {
+    bool hasPendingResetWifi = false;
     bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_save_profile_flag) {
-      setupSave = pending_setup_save_buf;
-      hasPendingSetupSave = true;
+    if (locked && pending_reset_wifi_flag) {
+      pending_reset_wifi_flag = false;
+      hasPendingResetWifi = true;
     }
     pending_command_unlock(locked);
+    if (hasPendingResetWifi) {
+      delay(200);
+      menu_reset_wifi();
+    }
   }
-  if (hasPendingSetupSave) {
-    SamSetup = setupSave.staged;
-    save_profile();
-    read_config();
-    apply_pending_setup_sensor_resets(setupSave.resetSensor);
-    bool locked = pending_command_lock(portMAX_DELAY);
-    if (locked) {
-      pending_save_profile_flag = false;
+  {
+    bool hasPendingReboot = false;
+    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+    if (locked && is_reboot) {
+      is_reboot = false;
+      hasPendingReboot = true;
     }
     pending_command_unlock(locked);
+    if (hasPendingReboot) {
+      delay(200);
+      ESP.restart();
+    }
   }
 
-  // [W-5] Смена режима самовара (change_samovar_mode изменяет хендлеры сервера —
-  //        должна выполняться только из одного контекста, здесь из loop).
-  bool hasPendingSwitchMode = false;
-  SAMOVAR_MODE reqMode = SAMOVAR_RECTIFICATION_MODE;
+  // Реапер просроченных операций (PKG-H): не чаще ~1с под pending_command_lock переводит
+  // зависшие QUEUED/RUNNING в FAILED и однократно (латч внутри) сигналит ALARM. Выполняется
+  // и при активном барьере — стешенная операция могла быть его причиной.
   {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_switch_mode_flag) {
-      reqMode = pending_switch_mode_value;
-      pending_switch_mode_flag = false;
-      hasPendingSwitchMode = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingSwitchMode) {
-    switch_samovar_mode(reqMode);
-  }
-
-  // [C-3] Применение программы (set_program пишет program[] — конкурентно читается
-  //        в withdrawal()/SysTicker; применяем только из loop, когда withdrawal не активна).
-  PendingProgramMode ppm = PPM_NONE;
-  String pstr;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_program_mode != PPM_NONE) {
-      ppm = pending_program_mode;
-      pstr = pending_program_str;
-      pending_program_mode = PPM_NONE;
-    }
-    pending_command_unlock(locked);
-  }
-  if (ppm != PPM_NONE) {
-    if (program_update_session_active()) {
-      SendMsg("Программа не изменена: активна сессия режима.", WARNING_MSG);
-    } else {
-      switch (ppm) {
-        case PPM_RECT: set_program(pstr); break;
-        case PPM_BEER: set_beer_program(pstr); break;
-        case PPM_DIST: set_dist_program(pstr); break;
-        case PPM_NBK:  set_nbk_program(pstr); break;
-        default: break;
+    static uint32_t lastReapMs = 0;
+    const uint32_t nowMs = millis();
+    if ((int32_t)(nowMs - lastReapMs) >= 1000) {
+      lastReapMs = nowMs;
+      bool reaped = false;
+      bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+      if (locked) {
+        reaped = operation_store_reap_stale_locked(operationStore, nowMs);
+      }
+      pending_command_unlock(locked);
+      if (reaped) {
+        SendMsg("Просроченная операция принудительно завершена (reaper)", ALARM_MSG);
       }
     }
+  }
+
+  if (mode_switch_in_progress()) {
+    process_buzzer();
+    vTaskDelay(5 / portTICK_PERIOD_MS);
+    return;
   }
 
   bool hasPendingStopSelfTest = false;
@@ -1650,7 +2610,7 @@ void loop() {
   }
 
   bool hasPendingWaterTemp = false;
-  float waterTemp = 0;
+  uint16_t waterTemp = 0;
   {
     bool locked = pending_command_lock(pdMS_TO_TICKS(50));
     if (locked && pending_water_temp_flag) {
@@ -1665,18 +2625,18 @@ void loop() {
   }
 
   bool hasPendingPumpSpeed = false;
-  float pumpSpeedRate = 0;
+  uint16_t pumpSpeedSteps = 0;
   {
     bool locked = pending_command_lock(pdMS_TO_TICKS(50));
     if (locked && pending_pump_speed_flag) {
-      pumpSpeedRate = pending_pump_speed_rate;
+      pumpSpeedSteps = pending_pump_speed_steps;
       pending_pump_speed_flag = false;
       hasPendingPumpSpeed = true;
     }
     pending_command_unlock(locked);
   }
   if (hasPendingPumpSpeed) {
-    set_pump_speed(get_speed_from_rate(pumpSpeedRate), true);
+    set_pump_speed(pumpSpeedSteps, true);
   }
 
 #ifdef SAMOVAR_USE_POWER
@@ -1715,35 +2675,8 @@ void loop() {
     }
   }
 
-  bool hasPendingResetWifi = false;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_reset_wifi_flag) {
-      pending_reset_wifi_flag = false;
-      hasPendingResetWifi = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingResetWifi) {
-    delay(200);
-    menu_reset_wifi();
-  }
-
-  // Отложенный рестарт: async ставит is_reboot через pending lock и отправляет ответ;
-  // loop ждёт ~200мс (ответ успевает уйти) и выполняет рестарт.
-  bool hasPendingReboot = false;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && is_reboot) {
-      is_reboot = false;
-      hasPendingReboot = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingReboot) {
-    delay(200);
-    ESP.restart();
-  }
+  // Обработка recovery-команд (reboot/resetwifi) и реапера перенесена ВЫШЕ барьер-return,
+  // чтобы застрявший mode_switch_barrier_active не блокировал восстановление устройства.
 
 #ifdef USE_LUA
   bool hasPendingLuaReload = false;
@@ -1819,120 +2752,11 @@ void loop() {
   }
 #endif
 
-  // [W-4] Команда /i2cstepper: применяем staged-конфиг к реальной структуре и выполняем I2C.
-  //        Флаг держим поднятым до конца аппаратной команды: новые async-запросы получают BUSY.
-  bool hasPendingI2CStepper = false;
-  PendingI2CStepperCmd i2cStepperCmd;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_i2cstepper_flag) {
-      i2cStepperCmd = pending_i2cstepper_buf;
-      hasPendingI2CStepper = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingI2CStepper) {
-    I2CStepperDevice* dev = (i2cStepperCmd.device_sel == 0) ? &i2cStepperMixer : &i2cStepperPump;
-    if (i2c_stepper_config_begin(*dev)) {
-      // Копируем конфиг-поля из staged в реальную структуру (минимальное окно до команды).
-      dev->mode          = i2cStepperCmd.staged.mode;
-      dev->relayMask     = i2cStepperCmd.staged.relayMask;
-      dev->sensorFlags   = i2cStepperCmd.staged.sensorFlags;
-      dev->optionFlags   = i2cStepperCmd.staged.optionFlags;
-      dev->mixerRpm      = i2cStepperCmd.staged.mixerRpm;
-      dev->mixerRunSec   = i2cStepperCmd.staged.mixerRunSec;
-      dev->mixerPauseSec = i2cStepperCmd.staged.mixerPauseSec;
-      dev->pumpMlHour    = i2cStepperCmd.staged.pumpMlHour;
-      dev->pumpPauseSec  = i2cStepperCmd.staged.pumpPauseSec;
-      dev->fillingMl     = i2cStepperCmd.staged.fillingMl;
-      dev->fillingMlHour = i2cStepperCmd.staged.fillingMlHour;
-      dev->stepsPerMl    = i2cStepperCmd.staged.stepsPerMl;
-      const char* cmd = i2cStepperCmd.cmd;
-      if      (strcmp(cmd, "apply")     == 0) i2c_stepper_apply(*dev);
-      else if (strcmp(cmd, "save")      == 0) i2c_stepper_save(*dev);
-      else if (strcmp(cmd, "start")     == 0) i2c_stepper_start(*dev);
-      else if (strcmp(cmd, "stop")      == 0) i2c_stepper_stop(*dev);
-      else if (strcmp(cmd, "calstart")  == 0) i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_START);
-      else if (strcmp(cmd, "calfinish") == 0) i2c_stepper_send_command(*dev, I2CSTEP_CMD_CALIBRATE_FINISH);
-      else if (strcmp(cmd, "relay")     == 0) i2c_stepper_write_config(*dev) && i2c_stepper_send_command(*dev, I2CSTEP_CMD_RELAY);
-      i2c_stepper_refresh(*dev, true);
-      i2c_stepper_config_end(*dev);
-      bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-      if (locked) pending_i2cstepper_flag = false;
-      pending_command_unlock(locked);
-    }
-  }
-
-  // [W-4] Команда /i2cpump (stop или start).
-  bool hasPendingI2CPump = false;
-  PendingI2CPumpCmd i2cPumpCmd;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_i2cpump_flag) {
-      i2cPumpCmd = pending_i2cpump_buf;
-      hasPendingI2CPump = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingI2CPump && i2c_stepper_config_begin(i2cStepperPump)) {
-    if (i2cPumpCmd.is_stop) {
-      I2CPumpTargetMl = 0;
-      I2CPumpCmdSpeed = 0;
-      i2c_stepper_stop(i2cStepperPump);
-    } else {
-      I2CPumpCmdSpeed    = i2cPumpCmd.speedSteps;
-      I2CPumpTargetSteps = i2cPumpCmd.targetSteps;
-      I2CPumpTargetMl    = i2cPumpCmd.targetMl;
-      i2cStepperPump.mode          = I2CSTEP_MODE_FILLING;
-      i2cStepperPump.fillingMl     = i2cPumpCmd.fillingMl;
-      i2cStepperPump.fillingMlHour = i2cPumpCmd.fillingMlHour;
-      i2cStepperPump.stepsPerMl    = i2cPumpCmd.stepsPerMl;
-      i2c_stepper_start(i2cStepperPump);
-    }
-    i2c_stepper_config_end(i2cStepperPump);
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked) pending_i2cpump_flag = false;
-    pending_command_unlock(locked);
-  }
-
-  // [W-4] Калибровка I2C насоса (start/finish).
-  bool hasPendingI2CCal = false;
-  PendingI2CCalCmd i2cCalCmd;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_i2ccal_flag) {
-      i2cCalCmd = pending_i2ccal_buf;
-      hasPendingI2CCal = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingI2CCal && i2c_stepper_config_begin(i2cStepperPump)) {
-    if (!i2cCalCmd.is_finish) {
-      I2CPumpTargetMl  = 0;
-      I2CPumpCmdSpeed  = i2cCalCmd.cmdSpeed;
-      I2CPumpCalibrating = true;
-      i2cStepperPump.pumpMlHour  = i2cCalCmd.pumpMlHour;
-      i2cStepperPump.stepsPerMl  = i2cCalCmd.stepsPerMl;
-      i2c_stepper_write_config(i2cStepperPump);
-      i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_START);
-    } else {
-      i2c_stepper_send_command(i2cStepperPump, I2CSTEP_CMD_CALIBRATE_FINISH);
-      i2c_stepper_refresh(i2cStepperPump, true);
-      SamSetup.StepperStepMlI2C = i2cStepperPump.stepsPerMl;
-      I2CPumpCalibrating = false;
-      save_profile();  // [W-4] сохраняем результат калибровки в NVS после обновления SamSetup
-    }
-    i2c_stepper_config_end(i2cStepperPump);
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked) pending_i2ccal_flag = false;
-    pending_command_unlock(locked);
-  }
-
   // [W-4] Ручное управление скоростью I2C-насоса (/command?pnbk): get_stepper_speed()/
   //        set_stepper_target() — блокирующий I2C, выполняем здесь. Логика идентична
   //        прежнему async-обработчику; pnbk заменяет request->arg("pnbk").
   bool hasPendingPnbk = false;
-  float pnbk = 0;
+  ControlNbkCommand pnbk = {};
   {
     bool locked = pending_command_lock(pdMS_TO_TICKS(50));
     if (locked && pending_pnbk_flag) {
@@ -1948,20 +2772,38 @@ void loop() {
     //        обрабатывается в этом же loop раньше). Флаг сбрасываем всегда — устаревшую
     //        команду при возврате питания не исполняем.
     if (PowerOn) {
-      int pnbk_i = (int)pnbk;
-      if (pnbk_i == 9000) {  // повышаем скорость насоса на один шаг
-        pnbkDone = set_stepper_target(get_stepper_speed() + i2c_get_speed_from_rate(float(SamSetup.NbkDP) + 0.0001), 0, 2147483640);
-      } else if (pnbk_i == 8000) {  // понижаем скорость насоса на один шаг
+      if (pnbk.kind == CONTROL_NBK_INCREMENT) {
+        uint16_t deltaSpeed = 0;
+        NumericParseResult conversion = checked_rate_to_step_speed(
+            float(SamSetup.NbkDP) + 0.0001f,
+            SamSetup.StepperStepMlI2C,
+            deltaSpeed);
+        const uint32_t requestedSpeed = uint32_t(get_stepper_speed()) + deltaSpeed;
+        if (!conversion.ok() || requestedSpeed > UINT16_MAX) {
+          SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
+          pnbkDone = true;
+        } else {
+          pnbkDone = set_stepper_target(uint16_t(requestedSpeed), 0, 2147483640);
+        }
+      } else if (pnbk.kind == CONTROL_NBK_DECREMENT) {
         uint16_t currentSpeed = get_stepper_speed();
         float deltaRate = float(SamSetup.NbkDP) - 0.0001f;
-        uint16_t deltaSpeed = deltaRate > 0 ? (uint16_t)i2c_get_speed_from_rate(deltaRate) : 0;
-        if (deltaSpeed >= currentSpeed) {
+        uint16_t deltaSpeed = 0;
+        NumericParseResult conversion = deltaRate > 0.0f
+            ? checked_rate_to_step_speed(deltaRate, SamSetup.StepperStepMlI2C, deltaSpeed)
+            : numeric_parse_result(NUMERIC_PARSE_OK);
+        if (!conversion.ok()) {
+          SendMsg("Команда НБК отклонена: неверная калибровка скорости.", WARNING_MSG);
+          pnbkDone = true;
+        } else if (deltaSpeed >= currentSpeed) {
           pnbkDone = set_stepper_target(0, 0, 0);
         } else {
           pnbkDone = set_stepper_target(currentSpeed - deltaSpeed, 0, 2147483640);
         }
-      } else if (pnbk >= 0 && pnbk_i < 8000) {  // устанавливаем заказанную скорость
-        pnbkDone = set_stepper_target(i2c_get_speed_from_rate(pnbk + 0.0001), 0, 2147483640);
+      } else if (pnbk.kind == CONTROL_NBK_ABSOLUTE) {
+        pnbkDone = set_stepper_target(pnbk.stepSpeed, 0, 2147483640);
+      } else if (pnbk.kind == CONTROL_NBK_STOP) {
+        pnbkDone = set_stepper_target(0, 0, 0);
       } else {
         pnbkDone = true;
       }
@@ -2013,113 +2855,435 @@ static void jsonPrintEscaped(Print &out, const String &value) {
   }
 }
 
-void send_ajax_json(AsyncWebServerRequest *request) {
-  String crtCopy;
-  String statusCopy;
-  String luaStatus;
-  String currentPowerMode;
-  String msgCopy;
-  uint8_t msgLevel = NONE_MSG;
-  bool hasWebMessage = false;
-  String logCopy;
-  bool hasConsoleLog = false;
-  if (!consume_ajax_runtime_snapshot(crtCopy, statusCopy, luaStatus, currentPowerMode, msgCopy, msgLevel, hasWebMessage, logCopy, hasConsoleLog)) {
-    request->send(503, "text/plain", "Runtime state busy");
-    return;
+static bool runtimeEventWrite(Print& out, const char* value, size_t length) {
+  return out.write(reinterpret_cast<const uint8_t*>(value), length) == length;
+}
+
+static bool runtimeEventWriteEscaped(Print& out, const String& value) {
+  static const char hexDigits[] = "0123456789ABCDEF";
+  size_t plainStart = 0;
+  for (size_t index = 0; index < value.length(); index++) {
+    const char character = value[index];
+    const uint8_t byte = static_cast<uint8_t>(character);
+    const char* escaped = nullptr;
+    size_t escapedLength = 0;
+    char unicodeEscape[6];
+    if (character == '"') {
+      escaped = "\\\"";
+      escapedLength = 2;
+    } else if (character == '\\') {
+      escaped = "\\\\";
+      escapedLength = 2;
+    } else if (character == '\n') {
+      escaped = "\\n";
+      escapedLength = 2;
+    } else if (character == '\r') {
+      escaped = "\\r";
+      escapedLength = 2;
+    } else if (character == '\t') {
+      escaped = "\\t";
+      escapedLength = 2;
+    } else if (character == '\b') {
+      escaped = "\\b";
+      escapedLength = 2;
+    } else if (character == '\f') {
+      escaped = "\\f";
+      escapedLength = 2;
+    } else if (byte < 0x20) {
+      unicodeEscape[0] = '\\';
+      unicodeEscape[1] = 'u';
+      unicodeEscape[2] = '0';
+      unicodeEscape[3] = '0';
+      unicodeEscape[4] = hexDigits[byte >> 4];
+      unicodeEscape[5] = hexDigits[byte & 0x0F];
+      escaped = unicodeEscape;
+      escapedLength = sizeof(unicodeEscape);
+    }
+    if (!escaped) continue;
+    if (index > plainStart &&
+        !runtimeEventWrite(out, value.c_str() + plainStart, index - plainStart)) {
+      return false;
+    }
+    if (!runtimeEventWrite(out, escaped, escapedLength)) return false;
+    plainStart = index + 1;
+  }
+  return plainStart == value.length() ||
+         runtimeEventWrite(out, value.c_str() + plainStart, value.length() - plainStart);
+}
+
+static bool runtimeEventWriteUnsigned(Print& out, uint32_t value) {
+  char number[11];
+  const int length = snprintf(number, sizeof(number), "%lu", static_cast<unsigned long>(value));
+  return length > 0 && static_cast<size_t>(length) < sizeof(number) &&
+         runtimeEventWrite(out, number, static_cast<size_t>(length));
+}
+
+static bool runtimeEventWriteSection(
+    Print& out, const RuntimeEventDescriptor& event, const String& eventText) {
+  if (event.kind == RUNTIME_EVENT_MESSAGE) {
+    if (!runtimeEventWrite(out, ",\"Msg\":\"", sizeof(",\"Msg\":\"") - 1U) ||
+        !runtimeEventWriteEscaped(out, eventText) ||
+        !runtimeEventWrite(out, "\",\"msglvl\":", sizeof("\",\"msglvl\":") - 1U) ||
+        !runtimeEventWriteUnsigned(out, event.level)) {
+      return false;
+    }
+  } else if (event.kind == RUNTIME_EVENT_CONSOLE) {
+    if (!runtimeEventWrite(out, ",\"LogMsg\":\"", sizeof(",\"LogMsg\":\"") - 1U) ||
+        !runtimeEventWriteEscaped(out, eventText) ||
+        !runtimeEventWrite(out, "\"", 1)) {
+      return false;
+    }
+  } else {
+    return false;
+  }
+  return runtimeEventWrite(
+             out, ",\"messageSequence\":", sizeof(",\"messageSequence\":") - 1U) &&
+         runtimeEventWriteUnsigned(out, event.sequence) &&
+         runtimeEventWrite(out, "}", 1);
+}
+
+static RuntimeAjaxQuery classifyRuntimeAjaxQuery(AsyncWebServerRequest* request) {
+  const size_t parameterCount = request->params();
+  const AsyncWebParameter* firstParam = nullptr;
+  bool allOperationIds = parameterCount > 0;
+  for (size_t index = 0; index < parameterCount; index++) {
+    const AsyncWebParameter* param = request->getParam(index);
+    if (index == 0) firstParam = param;
+    if (!param || param->name() != "operationId") allOperationIds = false;
   }
 
-  AsyncResponseStream *response = request->beginResponseStream("application/json");
-  response->addHeader("Cache-Control", "no-cache");
+  if (allOperationIds) {
+    uint32_t operationId = 0;
+    const bool validOperationId =
+        parameterCount == 1 && firstParam && !firstParam->isFile() &&
+        !firstParam->isPost() && runtime_event_parse_cursor(
+            firstParam->value().c_str(), firstParam->value().length(), operationId) &&
+        operationId != 0;
+    return {validOperationId ? RUNTIME_AJAX_QUERY_OPERATION
+                             : RUNTIME_AJAX_QUERY_INVALID_OPERATION,
+            validOperationId ? operationId : 0};
+  }
 
-  Print &out = *response;
+  uint32_t messageCursor = 0;
+  const bool validCursor =
+      parameterCount == 1 && firstParam && firstParam->name() == "messageCursor" &&
+      !firstParam->isFile() && !firstParam->isPost() &&
+      runtime_event_parse_cursor(
+          firstParam->value().c_str(), firstParam->value().length(), messageCursor);
+  return {validCursor ? RUNTIME_AJAX_QUERY_TELEMETRY
+                      : RUNTIME_AJAX_QUERY_BAD_REQUEST,
+          validCursor ? messageCursor : 0};
+}
+
+static bool sendRuntimeAjaxQueryError(
+    AsyncWebServerRequest* request, RuntimeAjaxQueryKind kind) {
+  const char* contentType = nullptr;
+  const char* body = nullptr;
+  char invalidOperationBody[80];
+  if (kind == RUNTIME_AJAX_QUERY_INVALID_OPERATION) {
+    contentType = "application/json";
+    snprintf(invalidOperationBody, sizeof(invalidOperationBody),
+             "{\"operationId\":0,\"error\":\"%s\"}",
+             operation_error_code(OPERATION_ERROR_INVALID_ID));
+    body = invalidOperationBody;
+  } else if (kind == RUNTIME_AJAX_QUERY_BAD_REQUEST) {
+    contentType = "text/plain";
+    body = "BAD_REQUEST";
+  } else {
+    return false;
+  }
+  AsyncWebServerResponse* response = request->beginResponse(400, contentType, body);
+  response->addHeader("Cache-Control", "no-store");
+  request->send(response);
+  return true;
+}
+
+static bool sendRuntimeEventResponse(
+    AsyncWebServerRequest* request, AsyncResponseStream* response,
+    const RuntimeEventDescriptor& event, const String& eventText) {
+  if (runtimeEventWriteSection(*response, event, eventText)) {
+    request->send(response);
+    return true;
+  }
+  delete response;
+  AsyncWebServerResponse* unavailableResponse = request->beginResponse(
+      503, "text/plain", "Runtime event response unavailable");
+  unavailableResponse->addHeader("Cache-Control", "no-store");
+  request->send(unavailableResponse);
+  return false;
+}
+
+struct AjaxTelemetrySnapshot {
+  String crt;
+  String uptime;
+  String programType;
+  String status;
+  String luaStatus;
+  String currentPowerMode;
+  String eventText;
+  RuntimeEventDescriptor runtimeEvent;
+  float bmeTemp;
+  float bmePressure;
+  float startPressure;
+  float steamTemp;
+  float pipeTemp;
+  float waterTemp;
+  float tankTemp;
+  float acpTemp;
+  float detectorTrend;
+  float actualVolumePerHour;
+  float steamBodyTemp;
+  float pipeBodyTemp;
+  float i2cStepperSpeed;
+  float i2cPumpTargetMl;
+  float i2cPumpRemainingMl;
+  float alcohol;
+  float steamAlcohol;
+#ifdef SAMOVAR_USE_POWER
+  float currentPowerVolt;
+  float targetPowerVolt;
+  uint16_t currentPower;
+#endif
+#ifdef USE_WATERSENSOR
+  float waterFlowRate;
+  uint32_t waterFlowTotalMl;
+#endif
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
+  float pressure;
+#endif
+#ifdef USE_WATER_PUMP
+  uint16_t waterPumpSpeed;
+#endif
+  uint32_t freeHeap;
+  int32_t rssi;
+  uint32_t freeFsBytes;
+  int32_t targetSteps;
+  int32_t currentSteps;
+  float currentSpeed;
+  int volumeAll;
+  int timeRemaining;
+  int totalTime;
+  int16_t withdrawalStatus;
+  uint16_t stepperStepMl;
+  uint16_t i2cPumpSpeed;
+  uint8_t detectorStatus;
+  uint8_t withdrawalProgress;
+  uint8_t programIndex;
+  bool useAutoSpeed;
+  bool powerOn;
+  bool pauseOn;
+  bool useBrowserBuzzer;
+  bool mixer;
+  bool i2cStepperPresent;
+  bool i2cMixerPresent;
+  bool i2cPumpPresent;
+  bool i2cPumpRunning;
+  bool hasAlcohol;
+  bool hasTimePrediction;
+  bool hasRuntimeEvent;
+  bool heaterAlarmLatched;
+  uint32_t latestMessageSequence;
+};
+
+static_assert(sizeof(AjaxTelemetrySnapshot) <= 512,
+              "AjaxTelemetrySnapshot exceeds its request stack budget");
+
+static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
+    uint32_t messageCursor, AjaxTelemetrySnapshot& snapshot) {
+  const RuntimeAjaxSnapshotResult snapshotResult = copy_ajax_runtime_snapshot(
+      snapshot.crt, snapshot.status, snapshot.luaStatus,
+      snapshot.currentPowerMode, messageCursor, snapshot.eventText,
+      snapshot.runtimeEvent, snapshot.hasRuntimeEvent,
+      snapshot.latestMessageSequence);
+  if (snapshotResult != RUNTIME_AJAX_SNAPSHOT_OK) return snapshotResult;
+
+  snapshot.heaterAlarmLatched = heater_safety_latched();
+  snapshot.bmeTemp = bme_temp;
+  snapshot.bmePressure = bme_pressure;
+  snapshot.startPressure = start_pressure;
+  snapshot.uptime = format_uptime((unsigned long)(millis() / 1000UL));
+  snapshot.steamTemp = SteamSensor.avgTemp;
+  snapshot.pipeTemp = PipeSensor.avgTemp;
+  snapshot.waterTemp = WaterSensor.avgTemp;
+  snapshot.tankTemp = TankSensor.avgTemp;
+  snapshot.acpTemp = ACPSensor.avgTemp;
+  snapshot.detectorTrend = impurityDetector.currentTrend;
+  snapshot.detectorStatus = impurityDetector.detectorStatus;
+  snapshot.useAutoSpeed = SamSetup.useautospeed;
+  snapshot.volumeAll = get_liquid_volume();
+  snapshot.actualVolumePerHour = ActualVolumePerHour;
+  snapshot.powerOn = PowerOn;
+  snapshot.pauseOn = PauseOn;
+  snapshot.withdrawalProgress = WthdrwlProgress;
+  snapshot.targetSteps = stepper_safe_get_target();
+  snapshot.currentSteps = stepper_safe_get_current();
+  snapshot.withdrawalStatus = startval;
+  snapshot.programIndex = ProgramNum;
+  snapshot.currentSpeed = round(
+      stepper_safe_get_speed() * (uint8_t)stepper_safe_get_state());
+  snapshot.useBrowserBuzzer = SamSetup.UseBBuzzer;
+  snapshot.stepperStepMl = SamSetup.StepperStepMl;
+  snapshot.steamBodyTemp = SteamSensor.BodyTemp;
+  snapshot.pipeBodyTemp = PipeSensor.BodyTemp;
+  snapshot.mixer = mixer_status;
+
+  const bool i2cMixerPresent = i2c_stepper_cache.mixer_present;
+  const bool i2cPumpPresent = i2c_stepper_cache.pump_present;
+  snapshot.i2cStepperSpeed = i2c_stepper_cache.pump_current_rate;
+  snapshot.i2cStepperPresent = i2cMixerPresent || i2cPumpPresent;
+  snapshot.i2cMixerPresent = i2cMixerPresent;
+  snapshot.i2cPumpPresent = i2cPumpPresent;
+  if (i2cPumpPresent) {
+    snapshot.i2cPumpSpeed = i2c_stepper_cache.pump_current_speed;
+    snapshot.i2cPumpTargetMl = I2CPumpTargetMl;
+    snapshot.i2cPumpRemainingMl = i2c_stepper_cache.pump_remaining;
+    snapshot.i2cPumpRunning =
+        (i2c_stepper_cache.pump_status & I2CSTEPPER_STATUS_RUNNING) != 0;
+  }
+
+  snapshot.freeHeap = ESP.getFreeHeap();
+  snapshot.rssi = WiFi.RSSI();
+  snapshot.freeFsBytes = total_byte - used_byte;
+
+  const SAMOVAR_MODE mode = Samovar_Mode;
+  const int16_t status = SamovarStatusInt;
+  const ProgramType currentType = current_program_type();
+  if ((mode == SAMOVAR_RECTIFICATION_MODE || mode == SAMOVAR_BEER_MODE ||
+       mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE) &&
+      (status == 10 || status == 15 || (status == 2000 && snapshot.powerOn)) &&
+      !program_type_empty(currentType)) {
+    snapshot.programType = program_type_to_string(currentType);
+  }
+
+#ifdef SAMOVAR_USE_POWER
+  snapshot.currentPowerVolt = current_power_volt;
+  snapshot.targetPowerVolt = target_power_volt;
+  snapshot.currentPower = current_power_p;
+#endif
+#ifdef USE_WATER_PUMP
+  snapshot.waterPumpSpeed = water_pump_speed;
+#endif
+#ifdef USE_WATERSENSOR
+  snapshot.waterFlowRate = WFflowRate;
+  snapshot.waterFlowTotalMl = WFtotalMilliLitres;
+#endif
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
+  snapshot.pressure = pressure_value;
+#endif
+
+  snapshot.hasAlcohol =
+      mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_RECTIFICATION_MODE ||
+      mode == SAMOVAR_BK_MODE || mode == SAMOVAR_NBK_MODE;
+  if (snapshot.hasAlcohol) {
+    snapshot.alcohol = get_alcohol(snapshot.tankTemp);
+    snapshot.steamAlcohol = get_steam_alcohol(
+        mode == SAMOVAR_RECTIFICATION_MODE ? snapshot.steamTemp : snapshot.tankTemp);
+  }
+
+  snapshot.hasTimePrediction =
+      snapshot.powerOn && mode == SAMOVAR_DISTILLATION_MODE;
+  if (snapshot.hasTimePrediction) {
+    snapshot.timeRemaining = int(timePredictor.remainingTime);
+    snapshot.totalTime = int(timePredictor.predictedTotalTime);
+  }
+  return RUNTIME_AJAX_SNAPSHOT_OK;
+}
+
+static void writeAjaxTelemetryFields(
+    Print& out, const AjaxTelemetrySnapshot& snapshot) {
   bool first = true;
   out.print('{');
 
   jsonAddKey(out, first, "bme_temp");
-  out.print(format_float(bme_temp, 3));
+  out.print(format_float(snapshot.bmeTemp, 3));
   jsonAddKey(out, first, "bme_pressure");
-  out.print(format_float(bme_pressure, 3));
+  out.print(format_float(snapshot.bmePressure, 3));
   jsonAddKey(out, first, "start_pressure");
-  out.print(format_float(start_pressure, 3));
+  out.print(format_float(snapshot.startPressure, 3));
   jsonAddKey(out, first, "crnt_tm");
-  out.print('\"');
-  jsonPrintEscaped(out, crtCopy);
-  out.print('\"');
+  out.print('"');
+  jsonPrintEscaped(out, snapshot.crt);
+  out.print('"');
   jsonAddKey(out, first, "stm");
-  out.print('\"');
-  jsonPrintEscaped(out, format_uptime((unsigned long)(millis() / 1000UL)));
-  out.print('\"');
+  out.print('"');
+  jsonPrintEscaped(out, snapshot.uptime);
+  out.print('"');
   jsonAddKey(out, first, "SteamTemp");
-  out.print(format_float(SteamSensor.avgTemp, 3));
+  out.print(format_float(snapshot.steamTemp, 3));
   jsonAddKey(out, first, "PipeTemp");
-  out.print(format_float(PipeSensor.avgTemp, 3));
+  out.print(format_float(snapshot.pipeTemp, 3));
   jsonAddKey(out, first, "WaterTemp");
-  out.print(format_float(WaterSensor.avgTemp, 3));
+  out.print(format_float(snapshot.waterTemp, 3));
   jsonAddKey(out, first, "TankTemp");
-  out.print(format_float(TankSensor.avgTemp, 3));
+  out.print(format_float(snapshot.tankTemp, 3));
   jsonAddKey(out, first, "ACPTemp");
-  out.print(format_float(ACPSensor.avgTemp, 3));
+  out.print(format_float(snapshot.acpTemp, 3));
   jsonAddKey(out, first, "DetectorTrend");
-  out.print(format_float(impurityDetector.currentTrend, 3));
+  out.print(format_float(snapshot.detectorTrend, 3));
   jsonAddKey(out, first, "DetectorStatus");
-  out.print(impurityDetector.detectorStatus);
+  out.print(snapshot.detectorStatus);
   jsonAddKey(out, first, "useautospeed");
-  out.print(SamSetup.useautospeed);
+  out.print(snapshot.useAutoSpeed);
   jsonAddKey(out, first, "version");
-  out.print('\"');
+  out.print('"');
   out.print(SAMOVAR_VERSION);
-  out.print('\"');
+  out.print('"');
+  jsonAddKey(out, first, "boot_degraded");
+  out.print(bootDegraded ? 1 : 0);
+  jsonAddKey(out, first, "boot_degraded_reason");
+  out.print('"');
+  jsonPrintEscaped(out, bootDegradedReason);
+  out.print('"');
   jsonAddKey(out, first, "VolumeAll");
-  out.print(get_liquid_volume());
+  out.print(snapshot.volumeAll);
   jsonAddKey(out, first, "ActualVolumePerHour");
-  out.print(format_float(ActualVolumePerHour, 3));
+  out.print(format_float(snapshot.actualVolumePerHour, 3));
   jsonAddKey(out, first, "PowerOn");
-  out.print(PowerOn);
+  out.print(snapshot.powerOn);
   jsonAddKey(out, first, "PauseOn");
-  out.print(PauseOn);
+  out.print(snapshot.pauseOn);
   jsonAddKey(out, first, "WthdrwlProgress");
-  out.print(WthdrwlProgress);
+  out.print(snapshot.withdrawalProgress);
   jsonAddKey(out, first, "TargetStepps");
-  out.print(stepper_safe_get_target());
+  out.print(snapshot.targetSteps);
   jsonAddKey(out, first, "CurrrentStepps");
-  out.print(stepper_safe_get_current());
+  out.print(snapshot.currentSteps);
   jsonAddKey(out, first, "WthdrwlStatus");
-  out.print(startval);
+  out.print(snapshot.withdrawalStatus);
   jsonAddKey(out, first, "ProgramNum");
-  out.print(ProgramNum + 1);
+  out.print(snapshot.programIndex + 1);
   jsonAddKey(out, first, "ProgramIndex");
-  out.print(ProgramNum);
+  out.print(snapshot.programIndex);
   jsonAddKey(out, first, "CurrrentSpeed");
-  out.print(round(stepper_safe_get_speed() * (uint8_t)stepper_safe_get_state()));
+  out.print(snapshot.currentSpeed);
   jsonAddKey(out, first, "UseBBuzzer");
-  out.print(SamSetup.UseBBuzzer);
+  out.print(snapshot.useBrowserBuzzer);
   jsonAddKey(out, first, "StepperStepMl");
-  out.print(SamSetup.StepperStepMl);
+  out.print(snapshot.stepperStepMl);
   jsonAddKey(out, first, "BodyTemp_Steam");
-  out.print(format_float(SteamSensor.BodyTemp, 3));
+  out.print(format_float(snapshot.steamBodyTemp, 3));
   jsonAddKey(out, first, "BodyTemp_Pipe");
-  out.print(format_float(PipeSensor.BodyTemp, 3));
+  out.print(format_float(snapshot.pipeBodyTemp, 3));
   jsonAddKey(out, first, "mixer");
-  out.print(mixer_status);
+  out.print(snapshot.mixer);
   jsonAddKey(out, first, "ISspd");
-  out.print(format_float(i2c_stepper_cache.pump_current_rate, 3));
-  // [W-3] Читаем из кэша (обновляется раз в секунду в SysTicker), без I2C в async.
+  out.print(format_float(snapshot.i2cStepperSpeed, 3));
   jsonAddKey(out, first, "i2c_stepper_present");
-  out.print((i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? 1 : 0);
+  out.print(snapshot.i2cStepperPresent ? 1 : 0);
   jsonAddKey(out, first, "i2c_mixer_present");
-  out.print(i2c_stepper_cache.mixer_present ? 1 : 0);
+  out.print(snapshot.i2cMixerPresent ? 1 : 0);
   jsonAddKey(out, first, "i2c_pump_present");
-  out.print(i2c_stepper_cache.pump_present ? 1 : 0);
+  out.print(snapshot.i2cPumpPresent ? 1 : 0);
 
-  if (i2c_stepper_cache.pump_present) {
+  if (snapshot.i2cPumpPresent) {
     jsonAddKey(out, first, "i2c_pump_speed");
-    out.print(i2c_stepper_cache.pump_current_speed);
+    out.print(snapshot.i2cPumpSpeed);
     jsonAddKey(out, first, "i2c_pump_target_ml");
-    out.print(format_float(I2CPumpTargetMl, 1));
+    out.print(format_float(snapshot.i2cPumpTargetMl, 1));
     jsonAddKey(out, first, "i2c_pump_remaining_ml");
-    out.print(format_float(i2c_stepper_cache.pump_remaining, 1));
+    out.print(format_float(snapshot.i2cPumpRemainingMl, 1));
     jsonAddKey(out, first, "i2c_pump_running");
-    out.print((i2c_stepper_cache.pump_status & I2CSTEPPER_STATUS_RUNNING) ? 1 : 0);
+    out.print(snapshot.i2cPumpRunning ? 1 : 0);
   } else {
     jsonAddKey(out, first, "i2c_pump_speed");
     out.print(0);
@@ -2132,105 +3296,164 @@ void send_ajax_json(AsyncWebServerRequest *request) {
   }
 
   jsonAddKey(out, first, "heap");
-  out.print(ESP.getFreeHeap());
+  out.print(snapshot.freeHeap);
   jsonAddKey(out, first, "rssi");
-  out.print(WiFi.RSSI());
+  out.print(snapshot.rssi);
   jsonAddKey(out, first, "fr_bt");
-  out.print(total_byte - used_byte);
-
-  String pt = "";
-  ProgramType currentType = current_program_type();
-  if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) &&
-      (SamovarStatusInt == 10 || SamovarStatusInt == 15 || (SamovarStatusInt == 2000 && PowerOn)) &&
-      !program_type_empty(currentType)) {
-    pt = program_type_to_string(currentType);
-  }
+  out.print(snapshot.freeFsBytes);
   jsonAddKey(out, first, "PrgType");
-  out.print('\"');
-  jsonPrintEscaped(out, pt);
-  out.print('\"');
-
-  if (hasWebMessage) {
-    jsonAddKey(out, first, "Msg");
-    out.print('\"');
-    jsonPrintEscaped(out, msgCopy);
-    out.print('\"');
-    jsonAddKey(out, first, "msglvl");
-    out.print(msgLevel);
-  }
-  if (hasConsoleLog) {
-    jsonAddKey(out, first, "LogMsg");
-    out.print('\"');
-    jsonPrintEscaped(out, logCopy);
-    out.print('\"');
-  }
+  out.print('"');
+  jsonPrintEscaped(out, snapshot.programType);
+  out.print('"');
 
 #ifdef SAMOVAR_USE_POWER
   jsonAddKey(out, first, "current_power_volt");
-  out.print(format_float(current_power_volt, 1));
+  out.print(format_float(snapshot.currentPowerVolt, 1));
   jsonAddKey(out, first, "target_power_volt");
-  out.print(format_float(target_power_volt, 1));
+  out.print(format_float(snapshot.targetPowerVolt, 1));
   jsonAddKey(out, first, "current_power_mode");
-  out.print('\"');
-  jsonPrintEscaped(out, currentPowerMode);
-  out.print('\"');
+  out.print('"');
+  jsonPrintEscaped(out, snapshot.currentPowerMode);
+  out.print('"');
   jsonAddKey(out, first, "current_power_p");
-  out.print(current_power_p);
+  out.print(snapshot.currentPower);
 #else
   jsonAddKey(out, first, "current_power_volt");
   out.print(0);
   jsonAddKey(out, first, "target_power_volt");
   out.print(0);
   jsonAddKey(out, first, "current_power_mode");
-  out.print('\"');
+  out.print('"');
   out.print(0);
-  out.print('\"');
+  out.print('"');
   jsonAddKey(out, first, "current_power_p");
   out.print(0);
 #endif
 
 #ifdef USE_WATER_PUMP
   jsonAddKey(out, first, "wp_spd");
-  out.print(water_pump_speed);
+  out.print(snapshot.waterPumpSpeed);
 #endif
-
 #ifdef USE_WATERSENSOR
   jsonAddKey(out, first, "WFflowRate");
-  out.print(format_float(WFflowRate, 2));
+  out.print(format_float(snapshot.waterFlowRate, 2));
   jsonAddKey(out, first, "WFtotalMl");
-  out.print(WFtotalMilliLitres);
+  out.print(snapshot.waterFlowTotalMl);
 #endif
-
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
   jsonAddKey(out, first, "prvl");
-  out.print(format_float(pressure_value, 2));
+  out.print(format_float(snapshot.pressure, 2));
 #endif
 
-  if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BK_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
+  if (snapshot.hasAlcohol) {
     jsonAddKey(out, first, "alc");
-    out.print(format_float(get_alcohol(TankSensor.avgTemp), 2));
+    out.print(format_float(snapshot.alcohol, 2));
     jsonAddKey(out, first, "stm_alc");
-    out.print(format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2));
+    out.print(format_float(snapshot.steamAlcohol, 2));
   }
-
-  if (PowerOn && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+  if (snapshot.hasTimePrediction) {
     jsonAddKey(out, first, "TimeRemaining");
-    out.print(String(int(timePredictor.remainingTime)));
+    out.print(String(snapshot.timeRemaining));
     jsonAddKey(out, first, "TotalTime");
-    out.print(String(int(timePredictor.predictedTotalTime)));
+    out.print(String(snapshot.totalTime));
   }
 
   jsonAddKey(out, first, "Status");
-  out.print('\"');
-  jsonPrintEscaped(out, statusCopy);
-  out.print('\"');
+  out.print('"');
+  jsonPrintEscaped(out, snapshot.status);
+  out.print('"');
   jsonAddKey(out, first, "Lstatus");
-  out.print('\"');
-  jsonPrintEscaped(out, luaStatus);
-  out.print('\"');
-  out.print('}');
+  out.print('"');
+  jsonPrintEscaped(out, snapshot.luaStatus);
+  out.print('"');
+  jsonAddKey(out, first, "heaterAlarmLatched");
+  out.print(snapshot.heaterAlarmLatched ? 1 : 0);
+  jsonAddKey(out, first, "latestMessageSequence");
+  out.print(snapshot.latestMessageSequence);
+}
 
-  request->send(response);
+void send_ajax_json(AsyncWebServerRequest *request) {
+  const RuntimeAjaxQuery query = classifyRuntimeAjaxQuery(request);
+  if (sendRuntimeAjaxQueryError(request, query.kind)) return;
+
+  if (query.kind == RUNTIME_AJAX_QUERY_OPERATION) {
+    const OperationId operationId = query.value;
+    if (!pending_command_lock(pdMS_TO_TICKS(50))) {
+      char body[96];
+      snprintf(body, sizeof(body),
+               "{\"operationId\":%lu,\"error\":\"%s\"}",
+               static_cast<unsigned long>(operationId),
+               operation_error_code(OPERATION_ERROR_LOCK_BUSY));
+      AsyncWebServerResponse *lookupResponse =
+          request->beginResponse(503, "application/json", body);
+      lookupResponse->addHeader("Cache-Control", "no-store");
+      request->send(lookupResponse);
+      return;
+    }
+
+    OperationRecord record{};
+    const OperationError lookupError =
+        operation_store_copy_locked(operationStore, operationId, record);
+    pending_command_unlock(true);
+
+    if (lookupError != OPERATION_ERROR_NONE) {
+      char body[96];
+      snprintf(body, sizeof(body),
+               "{\"operationId\":%lu,\"error\":\"%s\"}",
+               static_cast<unsigned long>(operationId),
+               operation_error_code(lookupError));
+      AsyncWebServerResponse *lookupResponse =
+          request->beginResponse(404, "application/json", body);
+      lookupResponse->addHeader("Cache-Control", "no-store");
+      request->send(lookupResponse);
+      return;
+    }
+
+    char body[128];
+    snprintf(body, sizeof(body),
+             "{\"operationId\":%lu,\"state\":\"%s\",\"error\":\"%s\"}",
+             static_cast<unsigned long>(record.id),
+             operation_state_code(record.state),
+             operation_error_code(record.error));
+    AsyncWebServerResponse *lookupResponse =
+        request->beginResponse(200, "application/json", body);
+    lookupResponse->addHeader("Cache-Control", "no-store");
+    request->send(lookupResponse);
+    return;
+  }
+
+  const uint32_t messageCursor = query.value;
+  AjaxTelemetrySnapshot snapshot{};
+  const RuntimeAjaxSnapshotResult snapshotResult =
+      captureAjaxTelemetrySnapshot(messageCursor, snapshot);
+  if (snapshotResult == RUNTIME_AJAX_SNAPSHOT_LOCK_BUSY) {
+    AsyncWebServerResponse *busyResponse =
+        request->beginResponse(503, "text/plain", "Runtime state busy");
+    busyResponse->addHeader("Cache-Control", "no-store");
+    request->send(busyResponse);
+    return;
+  }
+  if (snapshotResult != RUNTIME_AJAX_SNAPSHOT_OK) {
+    AsyncWebServerResponse *unavailableResponse = request->beginResponse(
+        503, "text/plain", "Runtime event snapshot unavailable");
+    unavailableResponse->addHeader("Cache-Control", "no-store");
+    request->send(unavailableResponse);
+    return;
+  }
+
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  response->addHeader("Cache-Control", "no-store");
+
+  Print &out = *response;
+  writeAjaxTelemetryFields(out, snapshot);
+
+  if (!snapshot.hasRuntimeEvent) {
+    out.print('}');
+    request->send(response);
+    return;
+  }
+  sendRuntimeEventResponse(
+      request, response, snapshot.runtimeEvent, snapshot.eventText);
 }
 
 void configModeCallback(AsyncWiFiManager *myWiFiManager) {
@@ -2260,13 +3483,16 @@ void apply_config_runtime() {
   WaterSensor.Delay = SamSetup.WaterDelay;
   TankSensor.Delay = SamSetup.TankDelay;
   ACPSensor.Delay = SamSetup.ACPDelay;
-  if (SamSetup.HeaterResistant == 0) SamSetup.HeaterResistant = 10;
   if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
   if (SamSetup.autospeed >= 100) SamSetup.autospeed = 0;
-  PendingSetupSensorReset noSensorReset = {};
-  apply_setup_sensor_fields(noSensorReset);
+  apply_setup_sensor_fields(0);
 
-  if (SamSetup.Mode > SAMOVAR_LUA_MODE) SamSetup.Mode = 0;
+  // Проверка через валидатор, а не только по верхней границе: SamSetup.Mode — знаковый int
+  // из загруженного профиля, и отрицательное значение раньше проходило насквозь. Тогда
+  // mode_ops_by_mode() не находит запись реестра и mode_dispatch_alarm() молча не вызывает
+  // ни одного обработчика — надзор за авариями пропадает. Семантика прежняя (тихий сброс
+  // в 0, а не отказ): это путь загрузки профиля, ронять его нельзя.
+  if (!is_valid_samovar_mode(SamSetup.Mode)) SamSetup.Mode = 0;
   Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
   change_samovar_mode();
 
@@ -2343,9 +3569,25 @@ void apply_config_runtime() {
   init_impurity_detector();
 }
 
-void read_config() {
-  load_profile_nvs();
-  apply_config_runtime();
+static void printRuntimeEventPublishFailure(
+    Print& output, const __FlashStringHelper* name,
+    RuntimeEventPublishResult result, size_t length) {
+  if (result == RUNTIME_EVENT_PUBLISH_LOCK_BUSY) {
+    output.print(F("WARNING! "));
+    output.print(name);
+    output.println(F(" busy"));
+  } else if (result == RUNTIME_EVENT_PUBLISH_TEXT_TOO_LONG) {
+    output.print(F("WARNING! "));
+    output.print(name);
+    output.print(F(" too long: "));
+    output.print(static_cast<unsigned long>(length));
+    output.print(F(" > "));
+    output.println(RUNTIME_EVENT_MAX_TEXT_BYTES);
+  } else if (result == RUNTIME_EVENT_PUBLISH_CORRUPT) {
+    output.print(F("ERROR! "));
+    output.print(name);
+    output.println(F(" event store corrupt"));
+  }
 }
 
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
@@ -2364,18 +3606,25 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
     default: MsgPl = "";
   }
   MsgPl += " Самовар - " + m;
-  if (xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS)) == pdTRUE) {
-    msg_q.push(MsgPl.c_str());
+  const BaseType_t queueTakeResult =
+      xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));
+  bool queuePushResult = false;
+  if (queueTakeResult == pdTRUE) {
+    queuePushResult = msg_q.push(MsgPl.c_str());
     xSemaphoreGive(xMsgSemaphore);
+  }
+  if (queueTakeResult != pdTRUE) {
+    WriteConsoleLog(F("notify_queue_push_lock_busy"));
+  } else if (!queuePushResult) {
+    WriteConsoleLog(F("notify_queue_push_failed"));
   }
 #endif
 
-  if (!append_web_message(m, msg_type)) {
+  const RuntimeEventPublishResult publishResult = append_web_message(m, msg_type);
 #ifdef USE_WEB_SERIAL
-    WebSerial.println(F("WARNING! Msg busy"));
+  printRuntimeEventPublishFailure(WebSerial, F("Msg"), publishResult, m.length());
 #endif
-    Serial.println(F("WARNING! Msg busy"));
-  }
+  printRuntimeEventPublishFailure(Serial, F("Msg"), publishResult, m.length());
 }
 
 void WriteConsoleLog(String StringLogMsg) {
@@ -2385,7 +3634,7 @@ void WriteConsoleLog(String StringLogMsg) {
     else if (StringLogMsg[i] == '\r') StringLogMsg[i] = '^';
     else if (StringLogMsg[i] == '\n') StringLogMsg[i] = ' ';
   }
-  append_console_log(StringLogMsg);
+  const RuntimeEventPublishResult publishResult = append_console_log(StringLogMsg);
 
 #ifdef USE_WEB_SERIAL
   WebSerial.println(StringLogMsg);
@@ -2393,4 +3642,9 @@ void WriteConsoleLog(String StringLogMsg) {
 #else
   Serial.println(StringLogMsg);
 #endif
+
+#ifdef USE_WEB_SERIAL
+  printRuntimeEventPublishFailure(WebSerial, F("LogMsg"), publishResult, StringLogMsg.length());
+#endif
+  printRuntimeEventPublishFailure(Serial, F("LogMsg"), publishResult, StringLogMsg.length());
 }

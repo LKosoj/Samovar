@@ -43,9 +43,9 @@ extern rmvk_t rmvk;
 void RMVK_init(void);
 void rmvk_read();
 
-uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res);
-uint16_t RMVK_set_out_voltge(uint16_t voltge);
-uint16_t RMVK_set_on(uint16_t state);
+uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res, bool energizing, uint64_t powerGeneration);
+uint16_t RMVK_set_out_voltge(uint16_t voltge, uint64_t powerGeneration);
+uint16_t RMVK_set_on(uint16_t state, uint64_t powerGeneration);
 uint16_t RMVK_select_mem(uint16_t sm);
 
 uint16_t RMVK_get_in_voltge();

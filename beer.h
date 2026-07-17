@@ -148,6 +148,15 @@ void beer_proc() {
     }
     if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
 
+    // [PKG-B п.4] Пока не завершён OFF-переход нагрева, set_power(true) молча откажет,
+    // а create_data() каждый тик зря перезапишет SPIFFS-лог (+MQTT). Отменяем старт.
+    if (power_transition_active()) {
+      SendMsg("Выключение нагрева ещё не завершено. Старт затирания отменён.", ALARM_MSG);
+      SamovarStatusInt = 0;
+      startval = 0;
+      return;
+    }
+
     // Сброс детектора кипения при запуске процесса
     resetBoilingDetector();
     if (!create_data()) {
@@ -158,7 +167,7 @@ void beer_proc() {
     }
 #ifdef USE_MQTT
     String sessionDescription;
-    if (!copy_mqtt_session_description(sessionDescription, portMAX_DELAY)) {
+    if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
       SendMsg("Описание сессии занято. Старт затирания отменён.", ALARM_MSG);
       SamovarStatusInt = 0;
       startval = 0;
@@ -248,14 +257,10 @@ void beer_finish() {
   pump_started = false;
 #endif
   setHeaterPosition(false);
-  PowerOn = false;
   heater_state = false;
+  ProgramNum = 0;
   startval = 0;
   stop_process("Программа затирания завершена");
-  delay(200);
-  //set_power(false); // Вызывается внутри stop_process
-  delay(1000);
-  //reset_sensor_counter(); // Вызывается внутри stop_process
 }
 
 /**
@@ -433,10 +438,10 @@ void check_alarm_beer() {
       set_current_power(SamSetup.BVolt);
 #else
       set_current_power_mode_value(POWER_WORK_MODE);
-      digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
+      heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN);
 #endif
       if (SamSetup.UseST) {
-        digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+        heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
       } else {
         digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
       }
@@ -563,8 +568,7 @@ void set_heater_state(float setpoint, float temp) {
   //Если дельта большая и не тюнинг, включаем разгонный тэн, иначе выключаем
   if (setpoint - temp > ACCELERATION_HEATER_DELTA && !tuning) {
     if (!acceleration_heater) {
-      acceleration_heater = true;
-      digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+      acceleration_heater = heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
     }
   } else {
     if (acceleration_heater) {
@@ -582,8 +586,7 @@ void set_heater_state(float setpoint, float temp) {
     set_current_power(SamSetup.BVolt);
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
-    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
-    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+    heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN | SAFETY_HEATER_OUTPUT_BOOST);
 #endif
   } else {
     heaterPID.SetMode(AUTOMATIC);
@@ -682,7 +685,7 @@ void setHeaterPosition(bool state) {
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
-    digitalWrite(RELE_CHANNEL1, SamSetup.rele1);
+    heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN);
     vTaskDelay(50 / portTICK_PERIOD_MS);
 #endif
   } else {
@@ -713,8 +716,8 @@ String get_beer_program() {
  * @brief Устанавливает программу затирания из строки.
  * @param WProgram Строка с описанием программы
  */
-void set_beer_program(String WProgram) {
-  program_parse_lines(WProgram, beer_program_parse_spec());
+ProgramParseResult set_beer_program(const String& WProgram) {
+  return program_parse_lines(WProgram, beer_program_parse_spec());
 }
 
 /**
@@ -742,25 +745,29 @@ void FinishAutoTune() {
   aTune.Cancel();
   tuning = false;
 
-  // Extract the auto-tune calculated parameters
-  SamSetup.Kp = aTune.GetKp();
-  SamSetup.Ki = aTune.GetKi();
-  SamSetup.Kd = aTune.GetKd();
+  SetupEEPROM profileCandidate{};
+  profileCandidate = SamSetup;
+  profileCandidate.Kp = aTune.GetKp();
+  profileCandidate.Ki = aTune.GetKi();
+  profileCandidate.Kd = aTune.GetKd();
 
-  WriteConsoleLog("Kp = " + (String)SamSetup.Kp);
-  WriteConsoleLog("Ki = " + (String)SamSetup.Ki);
-  WriteConsoleLog("Kd = " + (String)SamSetup.Kd);
+  const PersistResult persistResult = save_profile_nvs(profileCandidate);
+  if (persistResult == PERSIST_OK) {
+    SamSetup = profileCandidate;
+    WriteConsoleLog("Kp = " + (String)SamSetup.Kp);
+    WriteConsoleLog("Ki = " + (String)SamSetup.Ki);
+    WriteConsoleLog("Kd = " + (String)SamSetup.Kd);
+  } else {
+    String message = "PID autotune не сохранён: ";
+    message += persist_result_code(persistResult);
+    SendMsg(message, ALARM_MSG);
+  }
 
-  // Re-tune the PID and revert to normal control mode
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
   heaterPID.SetOutputLimits(0, 100);
   heaterPID.SetSampleTime(1000);
-  heaterPID.SetMode(ATuneModeRemember);
-
-  save_profile();
-  read_config();
-
   set_heater_state(0, 50);
+  heaterPID.SetMode(ATuneModeRemember);
 }
 
 /**

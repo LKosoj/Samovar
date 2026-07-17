@@ -155,7 +155,7 @@ for name, text, proc_signature, expected_sensor in [
     require_ordered_tokens(
         f"{name} start sensor guard before heating",
         body,
-        [expected_sensor, "mode_start_heating_session("],
+        [expected_sensor, "mode_run_heating_start("],
         errors,
     )
     for token in [
@@ -176,8 +176,8 @@ for name, text, proc_signature, expected_sensor in [
             [
                 "if (SamovarStatusInt != 1000) return;",
                 expected_sensor,
-                "if (!PowerOn)",
-                "mode_start_heating_session(",
+                "if (!PowerOn || mode_heating_start_pending(1000))",
+                "mode_run_heating_start(",
                 "1000",
                 "Ошибка создания файла лога. Старт дистилляции отменён.",
                 "Описание сессии занято. Старт дистилляции отменён.",
@@ -195,8 +195,8 @@ for name, text, proc_signature, expected_sensor in [
             [
                 "if (SamovarStatusInt != 3000) return;",
                 expected_sensor,
-                "if (!PowerOn)",
-                "mode_start_heating_session(",
+                "if (!PowerOn || mode_heating_start_pending(3000))",
+                "mode_run_heating_start(",
                 "3000",
                 "Ошибка создания файла лога. Старт БК отменён.",
                 "Описание сессии занято. Старт БК отменён.",
@@ -209,33 +209,50 @@ for name, text, proc_signature, expected_sensor in [
 
 if mode_common_text:
     try:
-        body = extract_function_body(mode_common_text, "inline bool mode_start_heating_session")
+        begin_body = extract_function_body(mode_common_text, "inline ModeHeatingStartResult mode_begin_heating_session")
     except ValueError as exc:
         errors.append(str(exc))
-        body = ""
+        begin_body = ""
     require_ordered_tokens(
-        "shared start helper blocks alarm restart before heating",
-        body,
+        "shared start begin blocks alarm restart before heating",
+        begin_body,
         [
-            "PowerOn || SamovarStatusInt != activeStatus || alarm_event",
+            "PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()",
             "if (resetHeatLoss) reset_heat_loss_calculation();",
             "create_data()",
-            "if (alarm_event || SamovarStatusInt != activeStatus)",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "copy_mqtt_session_description",
-            "if (alarm_event || SamovarStatusInt != activeStatus)",
-            "if (alarm_event || SamovarStatusInt != activeStatus)",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "set_power(true);",
-            "if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn)",
-            "set_power(false, false)",
-            "set_power_mode(POWER_SPEED_MODE)",
-            "SteamSensor.Start_Pressure = bme_pressure;",
-            "if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn)",
-            "MqttSendMsg",
-            "if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn)",
-            "SendMsg(heatingMessage, NOTIFY_MSG);",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "mode_fail_heating_start()",
         ],
         errors,
     )
+    try:
+        tick_body = extract_function_body(mode_common_text, "inline ModeHeatingStartResult mode_tick_heating_session")
+    except ValueError as exc:
+        errors.append(str(exc))
+        tick_body = ""
+    require_ordered_tokens(
+        "shared start tick preserves alarm gates",
+        tick_body,
+        [
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "power_transition_start_pending()",
+            "safety_transition_due",
+            "SteamSensor.Start_Pressure = bme_pressure;",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "MqttSendMsg",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);",
+        ],
+        errors,
+    )
+    for token in ["create_data()", "copy_mqtt_session_description", "set_power(true);"]:
+        if token in tick_body:
+            errors.append(f"shared start tick repeats start-only work: {token}")
 
 for name, text, signature, tokens in [
     (

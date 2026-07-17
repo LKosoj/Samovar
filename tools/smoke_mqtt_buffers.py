@@ -88,13 +88,22 @@ if samovar_ino:
             setup_body,
             [
                 "#ifdef USE_MQTT",
-                "if (!init_mqtt_lock())",
-                "FATAL: MQTT mutex init failed",
-                "if (!wifiAP)",
+                "const bool mqttLockReady = init_mqtt_lock();",
+                "if (!mqttLockReady) {",
+                'report_degraded_boot("mqtt", "mutex init failed");',
+                "if (mqttLockReady && !wifiAP) {",
                 "initMqtt();",
             ],
             errors,
         )
+    except ValueError as exc:
+        errors.append(str(exc))
+    # Owner decision: a failed MQTT mutex init degrades and continues (fail-open) instead
+    # of halting boot forever; initMqtt() must stay gated behind the lock actually existing.
+    try:
+        mqtt_gate_body = extract_function_body(samovar_ino, "if (!mqttLockReady) {")
+        if "while (true)" in mqtt_gate_body or "while(true)" in mqtt_gate_body:
+            errors.append("MQTT mutex init failure must not halt boot forever")
     except ValueError as exc:
         errors.append(str(exc))
     if "mqttClient.connected()" in samovar_ino or "mqttClient.disconnect()" in samovar_ino:

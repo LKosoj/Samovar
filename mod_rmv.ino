@@ -7,6 +7,7 @@
 //#include "driver/gpio.h"
 #include "mod_rmvk.h"
 #include "Samovar.h"
+#include "samovar_api.h"
 
 #define BUF_SIZE (1024)
 #define RD_BUF_SIZE (BUF_SIZE)
@@ -46,12 +47,14 @@ static bool rmvk_parse_uint8_response(const char* response, uint8_t& value) {
   return true;
 }
 
-uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res) {
-  size_t cmd_len;
+uint8_t RMVK_cmd(
+  const char* cmd,
+  rmvk_res_t res,
+  bool energizing,
+  uint64_t powerGeneration
+) {
   int len;
-  cmd_len = strlen(cmd);
-  char cmd_buf[cmd_len + 2];
-  const char * pc = cmd_buf;
+  char cmd_buf[32];
   uint8_t buf[10];//10*8=80 бит, при плохом раскладе  получим за 80*1000/9600 ~ 8,5 ms
   String s;
   if ( xSemaphore != NULL )
@@ -61,11 +64,24 @@ uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res) {
     if ( xSemaphoreTake( xSemaphore, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
     {
       size_t copyLen = strnlen(cmd, sizeof(cmd_buf) - 2);
+      if (cmd[copyLen] != '\0') {
+        xSemaphoreGive(xSemaphore);
+        return RMVK_ERROR;
+      }
       memcpy(cmd_buf, cmd, copyLen);
       cmd_buf[copyLen] = '\r';
       cmd_buf[copyLen + 1] = '\0';
       uart_flush(RMVK_UART);
-      cmd_len = uart_write_bytes(RMVK_UART, pc, strlen(pc));
+      if (!heater_uart_enqueue(
+            RMVK_UART,
+            cmd_buf,
+            copyLen + 1,
+            powerGeneration,
+            energizing
+          )) {
+        xSemaphoreGive(xSemaphore);
+        return RMVK_ERROR;
+      }
       len = uart_read_bytes(RMVK_UART, buf, sizeof(buf) - 1, RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
       if (len < 0) len = 0;
       buf[len] = '\0';
@@ -122,7 +138,7 @@ uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res) {
 
 uint16_t RMVK_get_in_voltge() {
 	  char cmd[] = "AT+VI?";
-	  uint8_t ret = RMVK_cmd(cmd, RMVK_INT);
+		  uint8_t ret = RMVK_cmd(cmd, RMVK_INT, false, 0);
 	  if (ret != RMVK_ERROR) rmvk.VI = ret;
 	  return rmvk.VI;
 }
@@ -130,7 +146,7 @@ uint16_t RMVK_get_in_voltge() {
 uint16_t RMVK_get_out_voltge() {
 	  char cmd[] = "AT+VO?";
 	  //    char cmd[]="AT+VI?";
-	  uint8_t ret = RMVK_cmd(cmd, RMVK_INT);
+		  uint8_t ret = RMVK_cmd(cmd, RMVK_INT, false, 0);
 	  if (ret != RMVK_ERROR) {
 	    rmvk.VO = ret;
 	    reg_online = true;
@@ -141,7 +157,7 @@ uint16_t RMVK_get_out_voltge() {
 
 uint16_t RMVK_get_store_out_voltge() {
 	  char cmd[] = "AT+VS?";
-	  uint8_t ret = RMVK_cmd(cmd, RMVK_INT);
+		  uint8_t ret = RMVK_cmd(cmd, RMVK_INT, false, 0);
 	  if (ret != RMVK_ERROR) {
 	    rmvk.VS = ret;
 	    reg_online = true;
@@ -151,7 +167,7 @@ uint16_t RMVK_get_store_out_voltge() {
 	}
 	bool RMVK_get_state() {
 	  char cmd[] = "AT+ON?";
-	  uint8_t ret = RMVK_cmd(cmd, RMVK_ON);
+		  uint8_t ret = RMVK_cmd(cmd, RMVK_ON, false, 0);
 	  if (ret != RMVK_ERROR) {
 	    rmvk.on = ret > 0;
 	    reg_online = true;
@@ -159,13 +175,13 @@ uint16_t RMVK_get_store_out_voltge() {
 	  }
 	  return rmvk.on;
 }
-uint16_t RMVK_set_out_voltge(uint16_t voltge) {
+uint16_t RMVK_set_out_voltge(uint16_t voltge, uint64_t powerGeneration) {
   uint16_t ret;
   char cmd[20];
-  if (!rmvk.on)RMVK_set_on(1);
+  if (!rmvk.on && RMVK_set_on(1, powerGeneration) == RMVK_ERROR) return RMVK_ERROR;
   if (voltge > MAX_VOLTAGE)voltge = MAX_VOLTAGE;
   snprintf(cmd, sizeof(cmd), "AT+VS=%03d", voltge);
-  ret = RMVK_cmd(cmd, RMVK_INT);
+  ret = RMVK_cmd(cmd, RMVK_INT, true, powerGeneration);
   return ret;
 }
 
@@ -174,20 +190,20 @@ bool RMVK_get_conn() {
   return (rmvk.conn > 0);
 }
 
-uint16_t RMVK_set_on(uint16_t state) {
+uint16_t RMVK_set_on(uint16_t state, uint64_t powerGeneration) {
   uint16_t ret;
   char cmd[20];
   if (state > 0)state = 1;
   else state = 0;
   snprintf(cmd, sizeof(cmd), "AT+ON=%d", state);
-  ret = RMVK_cmd(cmd, RMVK_ON);
+  ret = RMVK_cmd(cmd, RMVK_ON, state > 0, powerGeneration);
   return ret;
 }
 uint16_t RMVK_select_mem(uint16_t sm) {
   int ret;
   char cmd[20];
   snprintf(cmd, sizeof(cmd), "AT+SM=%d", sm);
-  ret = RMVK_cmd(cmd, RMVK_OK);
+  ret = RMVK_cmd(cmd, RMVK_OK, false, 0);
   return ret;
 }
 
@@ -220,10 +236,10 @@ void RMVK_init(void) {
   uart_config.rx_flow_ctrl_thresh = 122;
   uart_param_config(RMVK_UART, &uart_config);
   uart_set_pin(RMVK_UART, RMVK_TXD, RMVK_RXD, -1, -1);
-  uart_driver_install(RMVK_UART, BUF_SIZE * 2, BUF_SIZE * 2,  0, NULL, 0);
+  uart_driver_install(RMVK_UART, BUF_SIZE * 2, 0, 0, NULL, 0);
 
   xSemaphore = xSemaphoreCreateBinaryStatic( &xSemaphoreBuffer );
   xSemaphoreGive( xSemaphore );
-  RMVK_set_on(0);
+  RMVK_set_on(0, 0);
   rmvk_read();
 }

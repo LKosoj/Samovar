@@ -84,17 +84,17 @@ if reset_sensor_body:
     require_token("reset_sensor_counter", reset_sensor_body, "reset_heat_loss_calculation();")
 
 try:
-    start_body = extract_function_body(mode_common, "inline bool mode_start_heating_session")
+    start_body = extract_function_body(mode_common, "inline ModeHeatingStartResult mode_begin_heating_session")
 except ValueError as exc:
     errors.append(str(exc))
     start_body = ""
 
 if start_body:
     require_ordered_tokens(
-        "mode_start_heating_session resets heat-loss before create_data",
+        "mode_begin_heating_session resets heat-loss before create_data",
         start_body,
         [
-            "if (PowerOn || SamovarStatusInt != activeStatus || alarm_event) return false;",
+            "if (PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()) return MODE_HEATING_START_FAILED;",
             "if (resetHeatLoss) reset_heat_loss_calculation();",
             "create_data()",
         ],
@@ -102,7 +102,7 @@ if start_body:
     )
 
 try:
-    power_body = extract_function_body(power, "void set_power(bool On, bool enqueueResetCommand)")
+    power_body = extract_function_body(power, "inline void set_power(bool On, bool enqueueResetCommand)")
 except ValueError as exc:
     errors.append(str(exc))
     power_body = ""
@@ -112,10 +112,10 @@ if power_body:
         "rectification heat-loss reset before enabling power",
         power_body,
         [
-            "bool wasPowerOn = PowerOn;",
-            "if (On && !wasPowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE)",
+            "if (On)",
+            "if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE)",
             "reset_heat_loss_calculation();",
-            "PowerOn = On;",
+            "heater_outputs_enable_locked(SAFETY_HEATER_OUTPUT_MAIN, true);",
         ],
         errors,
     )
@@ -130,7 +130,7 @@ if dist_body:
     require_ordered_tokens(
         "distiller start resets heat-loss through shared helper",
         dist_body,
-        ["mode_start_heating_session(", '"Включен нагрев дистиллятора"', "true"],
+        ["mode_run_heating_start(", '"Включен нагрев дистиллятора"', "true"],
         errors,
     )
 
@@ -144,7 +144,7 @@ if bk_body:
     require_ordered_tokens(
         "BK start keeps heat-loss reset disabled",
         bk_body,
-        ["mode_start_heating_session(", '"Включен нагрев бражной колонны"', "false"],
+        ["mode_run_heating_start(", '"Включен нагрев бражной колонны"', "false"],
         errors,
     )
 

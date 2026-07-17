@@ -30,8 +30,8 @@ def require_order(name: str, text: str, tokens: list[str]) -> None:
         offset = index + len(token)
 
 
-beer = read_text("data/beer.lua")
-rectificat = read_text("data/rectificat.lua")
+beer = read_text("data_raw/beer.lua")
+rectificat = read_text("data_raw/rectificat.lua")
 
 if beer:
     require_order(

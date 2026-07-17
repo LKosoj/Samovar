@@ -11,6 +11,26 @@ constexpr uint8_t NBK_PROGRAM_MAX = 4;
 static_assert(PROGRAM_MAX > 0 && PROGRAM_MAX < 255, "PROGRAM_MAX must fit uint8_t and leave room for sentinel math");
 static_assert(PROGRAM_END == PROGRAM_MAX, "PROGRAM_END is a sentinel, not a valid program[] index");
 
+enum ProgramParseError : uint8_t {
+  PROGRAM_PARSE_OK = 0,
+  PROGRAM_PARSE_EMPTY_INPUT,
+  PROGRAM_PARSE_INPUT_TOO_LONG,
+  PROGRAM_PARSE_TOO_MANY_ROWS,
+  PROGRAM_PARSE_INVALID_ROW,
+  PROGRAM_PARSE_WRONG_ROW_COUNT,
+  PROGRAM_PARSE_UNSUPPORTED_MODE,
+};
+
+struct ProgramParseResult {
+  ProgramParseError error;
+  uint16_t lineNumber;
+  const char* errorMessage;
+
+  bool ok() const {
+    return error == PROGRAM_PARSE_OK;
+  }
+};
+
 inline bool program_type_empty(ProgramType type) {
   return type == PROGRAM_TYPE_NONE;
 }

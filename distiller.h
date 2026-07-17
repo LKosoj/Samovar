@@ -45,19 +45,18 @@ void distiller_proc() {
 
   if (!sensor_valid(TankSensor) && process_sensor_failed("Дистилляция", "куба")) return;
 
-  if (!PowerOn) {
-    if (!mode_start_heating_session(
-      1000,
-      "Ошибка создания файла лога. Старт дистилляции отменён.",
-      "Описание сессии занято. Старт дистилляции отменён.",
-      get_dist_program(),
-      "Включен нагрев дистиллятора",
-      true
-    )) return;
+  if (!PowerOn || mode_heating_start_pending(1000)) {
+    if (mode_run_heating_start(
+          1000,
+          "Ошибка создания файла лога. Старт дистилляции отменён.",
+          "Описание сессии занято. Старт дистилляции отменён.",
+          get_dist_program(),
+          "Включен нагрев дистиллятора",
+          true) != MODE_HEATING_START_SUCCEEDED) return;
     run_dist_program(0);
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
-    digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
+    heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
 #endif
     // Инициализируем систему прогнозирования
     resetTimePredictor();
@@ -111,9 +110,8 @@ void distiller_proc() {
 }
 
 void distiller_finish() {
-#ifdef SAMOVAR_USE_POWER
-  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
-#endif
+  ProgramNum = 0;
+  startval = 0;
   String timeMsg = "Дистилляция завершена. Общее время: " + String(int((millis() - timePredictor.startTime) / 60000)) + " мин.";
   stop_process(timeMsg);
 }
@@ -223,8 +221,8 @@ void run_dist_program(uint8_t num) {
 
 }
 
-void set_dist_program(String WProgram) {
-  program_parse_lines(WProgram, dist_program_parse_spec());
+ProgramParseResult set_dist_program(const String& WProgram) {
+  return program_parse_lines(WProgram, dist_program_parse_spec());
 }
 
 String get_dist_program() {

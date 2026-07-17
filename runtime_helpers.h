@@ -2,6 +2,7 @@
 #define RUNTIME_HELPERS_H
 
 #include "Samovar.h"
+#include "runtime_event_log.h"
 
 extern portMUX_TYPE timerMux;
 extern portMUX_TYPE waterPulseMux;
@@ -41,6 +42,24 @@ inline bool pending_command_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
 
 inline void pending_command_unlock(bool locked) {
   if (locked) xSemaphoreGive(xPendingCommandSemaphore);
+}
+
+bool mode_switch_in_progress();
+
+template <typename T>
+inline bool queue_pending_value(volatile bool& flag, volatile T& valueSlot, T value) {
+  if (mode_switch_in_progress()) return false;
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  if (mode_switch_in_progress() || flag) {
+    pending_command_unlock(true);
+    return false;
+  }
+  valueSlot = value;
+  __sync_synchronize();
+  flag = true;
+  pending_command_unlock(true);
+  return true;
 }
 
 inline ProgramType program_type_at(uint8_t index) {
@@ -125,18 +144,48 @@ inline bool copy_mqtt_session_description(String& description, TickType_t timeou
   return true;
 }
 
-inline bool set_web_message_raw(const String& message, TickType_t timeout = pdMS_TO_TICKS(50)) {
+// [PKG-F] Приватный Lua-курсор по кольцу событий. Трогается только из задачи
+// do_lua_script (одиночный писатель): Msg-геттер продвигает его, старт one-shot
+// job сбрасывает. Кольцо общее с веб-клиентами (у них свой курсор в
+// copy_ajax_runtime_snapshot), поэтому Lua читает «прочитал-и-стёр» приватно.
+static uint32_t lua_message_cursor = 0;
+
+// [PKG-F] Возвращает следующее непрочитанное ЭТИМ Lua-читателем сообщение (или "",
+// если новых нет), продвигая приватный курсор. Console-события пропускаются.
+inline bool copy_web_message_raw(String& message, TickType_t timeout = pdMS_TO_TICKS(50)) {
   bool locked = runtime_state_lock(timeout);
   if (!locked) return false;
-  Msg = message;
+  message = "";
+  uint32_t localCursor = lua_message_cursor;
+  for (uint8_t guard = 0; guard <= RUNTIME_EVENT_DESCRIPTOR_CAPACITY; guard++) {
+    RuntimeEventDescriptor selected{};
+    const RuntimeEventSelectResult selectResult =
+        runtime_event_select_locked(runtimeEventRing, localCursor, selected);
+    if (selectResult == RUNTIME_EVENT_SELECT_NONE) break;  // новых событий нет
+    if (selectResult != RUNTIME_EVENT_SELECT_FOUND) {       // corrupt
+      runtime_state_unlock(true);
+      return false;
+    }
+    localCursor = selected.sequence;                        // продвигаем за это событие
+    if (selected.kind != RUNTIME_EVENT_MESSAGE) continue;   // console пропускаем
+    if (runtime_event_copy_text_locked(runtimeEventRing, selected, message) !=
+        RUNTIME_EVENT_SNAPSHOT_OK) {
+      runtime_state_unlock(true);
+      return false;
+    }
+    break;
+  }
+  lua_message_cursor = localCursor;
   runtime_state_unlock(true);
   return true;
 }
 
-inline bool copy_web_message_raw(String& message, TickType_t timeout = pdMS_TO_TICKS(50)) {
+// [PKG-F] Сброс Lua-курсора на новейшее событие («с текущего момента»), чтобы
+// свежий one-shot job не переигрывал бэклог сообщений.
+inline bool reset_lua_message_cursor(TickType_t timeout = pdMS_TO_TICKS(50)) {
   bool locked = runtime_state_lock(timeout);
   if (!locked) return false;
-  message = Msg;
+  lua_message_cursor = runtime_event_latest_sequence_locked(runtimeEventRing);
   runtime_state_unlock(true);
   return true;
 }
@@ -157,30 +206,55 @@ inline bool copy_lua_status(String& status, TickType_t timeout = pdMS_TO_TICKS(5
   return true;
 }
 
-inline bool consume_ajax_runtime_snapshot(String& crt, String& status, String& luaStatus, String& currentPowerMode,
-                                          String& msg, uint8_t& level, bool& hasMessage,
-                                          String& logMessage, bool& hasLog,
-                                          TickType_t timeout = pdMS_TO_TICKS(50)) {
+enum RuntimeAjaxQueryKind : uint8_t {
+  RUNTIME_AJAX_QUERY_OPERATION = 0,
+  RUNTIME_AJAX_QUERY_TELEMETRY,
+  RUNTIME_AJAX_QUERY_INVALID_OPERATION,
+  RUNTIME_AJAX_QUERY_BAD_REQUEST,
+};
+
+struct RuntimeAjaxQuery {
+  RuntimeAjaxQueryKind kind;
+  uint32_t value;
+};
+
+enum RuntimeAjaxSnapshotResult : uint8_t {
+  RUNTIME_AJAX_SNAPSHOT_OK = 0,
+  RUNTIME_AJAX_SNAPSHOT_LOCK_BUSY,
+  RUNTIME_AJAX_SNAPSHOT_NO_MEMORY,
+  RUNTIME_AJAX_SNAPSHOT_CORRUPT,
+};
+
+inline RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
+    String& crt, String& status, String& luaStatus, String& currentPowerMode,
+    uint32_t cursor, String& eventText, RuntimeEventDescriptor& event,
+    bool& hasEvent, uint32_t& latestSequence, TickType_t timeout = pdMS_TO_TICKS(50)) {
   bool locked = runtime_state_lock(timeout);
-  if (!locked) return false;
+  if (!locked) return RUNTIME_AJAX_SNAPSHOT_LOCK_BUSY;
   crt = Crt;
   status = SamovarStatus;
   luaStatus = Lua_status;
   currentPowerMode = current_power_mode;
-  hasMessage = Msg.length() > 0;
-  if (hasMessage) {
-    msg = Msg;
-    level = msg_level;
-    Msg = "";
-    msg_level = NONE_MSG;
+  latestSequence = runtime_event_latest_sequence_locked(runtimeEventRing);
+  const RuntimeEventSelectResult selectResult =
+      runtime_event_select_locked(runtimeEventRing, cursor, event);
+  if (selectResult == RUNTIME_EVENT_SELECT_CORRUPT) {
+    runtime_state_unlock(true);
+    return RUNTIME_AJAX_SNAPSHOT_CORRUPT;
   }
-  hasLog = LogMsg.length() > 0;
-  if (hasLog) {
-    logMessage = LogMsg;
-    LogMsg = "";
+  hasEvent = selectResult == RUNTIME_EVENT_SELECT_FOUND;
+  if (hasEvent) {
+    const RuntimeEventSnapshotResult copyResult =
+        runtime_event_copy_text_locked(runtimeEventRing, event, eventText);
+    if (copyResult != RUNTIME_EVENT_SNAPSHOT_OK) {
+      runtime_state_unlock(true);
+      return copyResult == RUNTIME_EVENT_SNAPSHOT_NO_MEMORY
+                 ? RUNTIME_AJAX_SNAPSHOT_NO_MEMORY
+                 : RUNTIME_AJAX_SNAPSHOT_CORRUPT;
+    }
   }
   runtime_state_unlock(true);
-  return true;
+  return RUNTIME_AJAX_SNAPSHOT_OK;
 }
 
 inline bool copy_current_power_mode_value(String& mode, TickType_t timeout = pdMS_TO_TICKS(50)) {
@@ -212,36 +286,88 @@ inline float reduce_power_by_volts(float power, float volts) {
   return power - volts * PWR_FACTOR;
 }
 
-inline bool append_web_message(const String& message, MESSAGE_TYPE messageType) {
-  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
-  if (!locked) return false;
-  if (Msg.length() > 0) {
-    Msg += "; ";
-    if (msg_level > messageType) msg_level = messageType;
-  } else {
-    msg_level = messageType;
+enum RuntimeEventPublishResult : uint8_t {
+  RUNTIME_EVENT_PUBLISH_OK = 0,
+  RUNTIME_EVENT_PUBLISH_EMPTY,
+  RUNTIME_EVENT_PUBLISH_LOCK_BUSY,
+  RUNTIME_EVENT_PUBLISH_TEXT_TOO_LONG,
+  RUNTIME_EVENT_PUBLISH_CORRUPT,
+};
+
+inline RuntimeEventPublishResult append_runtime_event(
+    RuntimeEventKind kind, const String& text, uint8_t level,
+    TickType_t timeout = pdMS_TO_TICKS(500)) {
+  if (text.length() == 0) return RUNTIME_EVENT_PUBLISH_EMPTY;
+  if (text.length() > RUNTIME_EVENT_MAX_TEXT_BYTES) {
+    return RUNTIME_EVENT_PUBLISH_TEXT_TOO_LONG;
   }
-  Msg += message;
-  if (Msg.length() > 250) {
-    Msg = message;
-    msg_level = messageType;
+  // Задача 6: SendMsg/WriteConsoleLog зовутся из SysTicker и PowerStatusTask — обе жёстко
+  // запинены на core0 (xTaskCreatePinnedToCore в Samovar.ino) и обязаны укладываться в свой
+  // секундный/UART-цикл. Долгое ожидание лока (по умолчанию 500мс) стопорит эти циклы.
+  // async_tcp тут ни при чём: он запинен на CONFIG_ASYNC_TCP_RUNNING_CORE=1 (platformio.ini)
+  // и сегодня не вызывает SendMsg/WriteConsoleLog напрямую — только через pending_*-флаги,
+  // разбираемые в loop(). Раньше клэмп держался на xPortGetCoreID()==0, что верно совпадало
+  // с этими двумя задачами лишь случайно и ломалось при любой перепиновке core в будущем.
+  // Сравниваем хэндл текущей задачи явно, а не номер ядра, чтобы клэмп бил точно по своим
+  // владельцам короткого таймаута. loopTask и все прочие задачи сохраняют полный таймаут.
+  const TaskHandle_t currentRuntimeEventTask = xTaskGetCurrentTaskHandle();
+  const bool isShortTimeoutTask =
+      (currentRuntimeEventTask == SysTickerTask1)
+#ifdef SAMOVAR_USE_POWER
+      || (currentRuntimeEventTask == PowerStatusTask)
+#endif
+      ;
+  if (isShortTimeoutTask && timeout > pdMS_TO_TICKS(50)) {
+    timeout = pdMS_TO_TICKS(50);
+  }
+  bool locked = runtime_state_lock(timeout);
+  if (!locked) return RUNTIME_EVENT_PUBLISH_LOCK_BUSY;
+  RuntimeEventAppendResult result = runtime_event_append_locked(
+      runtimeEventRing, kind, level, text.c_str(), text.length());
+  // Задача 2: кольцо повреждено. Единственный писатель уже держит runtime_state_lock,
+  // поэтому чиним здесь же (повторно лок НЕ берём): реинициализируем кольцо, оставляем
+  // маркер восстановления и повторяем исходную запись. Rate-limit защищает от бесконечного
+  // реинита при устойчивой порче — не чаще раза в 5с (первый раз — всегда), overflow-safe.
+  if (result == RUNTIME_EVENT_APPEND_CORRUPT) {
+    static const char kRingRecoveryMarker[] =
+        "Журнал событий переинициализирован после повреждения";
+    constexpr uint32_t RUNTIME_EVENT_RESET_MIN_INTERVAL_MS = 5000U;
+    static uint32_t lastRingResetMs = 0;
+    static bool ringResetSeen = false;
+    const uint32_t nowMs = millis();
+    if (!ringResetSeen ||
+        (int32_t)(nowMs - lastRingResetMs) >=
+            (int32_t)RUNTIME_EVENT_RESET_MIN_INTERVAL_MS) {
+      ringResetSeen = true;
+      lastRingResetMs = nowMs;
+      runtime_event_init(runtimeEventRing);
+      runtime_event_append_locked(runtimeEventRing, RUNTIME_EVENT_MESSAGE,
+                                  static_cast<uint8_t>(WARNING_MSG),
+                                  kRingRecoveryMarker,
+                                  sizeof(kRingRecoveryMarker) - 1);
+      result = runtime_event_append_locked(
+          runtimeEventRing, kind, level, text.c_str(), text.length());
+    }
   }
   runtime_state_unlock(true);
-  return true;
+  switch (result) {
+    case RUNTIME_EVENT_APPEND_OK: return RUNTIME_EVENT_PUBLISH_OK;
+    case RUNTIME_EVENT_APPEND_EMPTY: return RUNTIME_EVENT_PUBLISH_EMPTY;
+    case RUNTIME_EVENT_TEXT_TOO_LONG: return RUNTIME_EVENT_PUBLISH_TEXT_TOO_LONG;
+    case RUNTIME_EVENT_APPEND_INVALID_ARGUMENT:
+    case RUNTIME_EVENT_APPEND_CORRUPT:
+    default: return RUNTIME_EVENT_PUBLISH_CORRUPT;
+  }
 }
 
-inline void append_console_log(const String& logMessage) {
-  bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
-  if (!locked) return;
-  if (LogMsg.length() > 0) {
-    LogMsg = LogMsg + "; " + logMessage;
-  } else {
-    LogMsg = logMessage;
-  }
-  if (LogMsg.length() > 10000) {
-    LogMsg = logMessage;
-  }
-  runtime_state_unlock(true);
+inline RuntimeEventPublishResult append_web_message(
+    const String& message, MESSAGE_TYPE messageType) {
+  return append_runtime_event(
+      RUNTIME_EVENT_MESSAGE, message, static_cast<uint8_t>(messageType));
+}
+
+inline RuntimeEventPublishResult append_console_log(const String& logMessage) {
+  return append_runtime_event(RUNTIME_EVENT_CONSOLE, logMessage, NONE_MSG);
 }
 
 #ifdef USE_HEAD_LEVEL_SENSOR

@@ -1,12 +1,25 @@
 #include "Samovar.h"
+#include "control_numeric_input.h"
 #include "samovar_api.h"
+#include "program_io.h"
 #ifdef SAMOVAR_USE_BLYNK
 #include <BlynkSimpleEsp32.h>
+
+static inline void report_blynk_numeric_error(
+    uint8_t virtualPin,
+    NumericParseResult result) {
+  String message = "Blynk V";
+  message += virtualPin;
+  message += ": ";
+  message += numeric_parse_error_code(result.error);
+  SendMsg(message, WARNING_MSG);
+}
 
 #ifdef USE_LUA
 WidgetTerminal terminal(V22);
 
 BLYNK_WRITE(V22) {
+  if (mode_switch_in_progress()) return;
   String lstr = param.asStr();  // assigning incoming value from pin V22 to a variable
   terminal.println(lstr);
   lstr = run_lua_string(lstr);
@@ -190,15 +203,7 @@ BLYNK_READ(V24) {
   static bool inReadHandler = false;
   if (inReadHandler) return;
   inReadHandler = true;
-  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-    Blynk.virtualWrite(V24, get_beer_program());
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    Blynk.virtualWrite(V24, get_dist_program());
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    Blynk.virtualWrite(V24, get_nbk_program());
-  } else {
-    Blynk.virtualWrite(V24, get_program(PROGRAM_END));
-  }
+  Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));
   inReadHandler = false;
 }
 
@@ -232,24 +237,61 @@ BLYNK_READ(V16) {
 }
 
 BLYNK_WRITE(V16) {
-  float Value16 = param.asFloat();  // assigning incoming value from pin V16 to a variable
-  set_current_power(Value16);
+  if (mode_switch_in_progress()) return;
+  float maxPower = 0.0f;
+#ifdef SAMOVAR_USE_SEM_AVR
+  const bool semBuild = true;
+#else
+  const bool semBuild = false;
+#endif
+  NumericParseResult result = control_power_input_max(
+      semBuild, SamSetup.HeaterResistant, maxPower);
+  float value = 0.0f;
+  if (result.ok()) result = parse_control_power(param.asStr(), maxPower, value);
+  if (!result.ok()) {
+    report_blynk_numeric_error(16, result);
+    return;
+  }
+  set_current_power(value);
 }
 #endif
 
 BLYNK_WRITE(V17) {
-  float Value17 = param.asFloat();  // assigning incoming value from pin V17 to a variable
-  set_pump_speed(get_speed_from_rate(Value17), true);
+  if (mode_switch_in_progress()) return;
+  uint16_t stepSpeed = 0;
+  // [PKG-F] Ноль снова останавливает насос, как на HEAD: param.asFloat()==0 шёл через
+  // set_pump_speed(get_speed_from_rate(0)) до внедрения строгого парсера, который
+  // отвергает rate<=0. Нулевой вход обрабатываем ДО строгого парсера.
+  float rate = 0.0f;
+  NumericParseResult result = parse_finite_float(param.asStr(), rate);
+  if (result.ok() && rate == 0.0f) {
+    stepSpeed = (uint16_t)get_speed_from_rate(0);
+  } else {
+    result = parse_control_rate_steps(
+        param.asStr(), SamSetup.StepperStepMl, stepSpeed);
+  }
+  if (!result.ok()) {
+    report_blynk_numeric_error(17, result);
+    return;
+  }
+  set_pump_speed(stepSpeed, true);
 }
 
 BLYNK_WRITE(V18) {
+  if (mode_switch_in_progress()) return;
   set_body_temp();
 }
 
 BLYNK_WRITE(V12) {
+  if (mode_switch_in_progress()) return;
+  bool state = false;
+  NumericParseResult result = parse_exact_bool(param.asStr(), state);
+  if (!result.ok()) {
+    report_blynk_numeric_error(12, result);
+    return;
+  }
   if (!PowerOn) return;
-  int State = param.asInt();
-  if (State == 1) {
+  if (state) {
     SamovarCommands command = SAMOVAR_START;
     if (Samovar_Mode == SAMOVAR_BEER_MODE) {
       command = SAMOVAR_BEER_NEXT;
@@ -263,21 +305,28 @@ BLYNK_WRITE(V12) {
 }
 
 BLYNK_WRITE(V13) {
+  if (mode_switch_in_progress()) return;
   pause_withdrawal(!PauseOn);
   t_min = 0;
   program_Wait = false;
 }
 
 BLYNK_WRITE(V3) {
-  int Value3 = param.asInt();  // assigning incoming value from pin V3 to a variable
-  if (Value3 == 1 && PowerOn) {
+  if (mode_switch_in_progress()) return;
+  bool value = false;
+  NumericParseResult result = parse_exact_bool(param.asStr(), value);
+  if (!result.ok()) {
+    report_blynk_numeric_error(3, result);
+    return;
+  }
+  if (value && PowerOn) {
     menu_samovar_start();
   } else {
     if (!queue_samovar_reset_command()) SendMsg("Очередь команд занята: reset из Blynk не поставлен", WARNING_MSG);
   }
 }
 BLYNK_WRITE(V4) {
-  //int Value4 = param.asInt();  // assigning incoming value from pin V4 to a variable
+  if (mode_switch_in_progress()) return;
   SamovarCommands command = SAMOVAR_POWER;
   if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
     command = SAMOVAR_BEER;

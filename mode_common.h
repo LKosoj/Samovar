@@ -3,21 +3,14 @@
 #include <Arduino.h>
 #include "runtime_helpers.h"
 #include "samovar_api.h"
-
-inline bool mode_deadline_expired(uint32_t deadline) {
-  return (int32_t)(millis() - deadline) >= 0;
-}
-
-inline uint32_t mode_deadline_from_now(uint32_t delayMs) {
-  return millis() + delayMs;
-}
+#include "safety_transition.h"
 
 inline void mode_clear_alarm_pause_if_expired() {
-  if (alarm_t_min > 0 && mode_deadline_expired(alarm_t_min)) alarm_t_min = 0;
+  if (alarm_t_min > 0 && safety_deadline_expired(millis(), alarm_t_min)) alarm_t_min = 0;
 }
 
 inline void mode_set_alarm_pause_ms(uint32_t delayMs) {
-  alarm_t_min = mode_deadline_from_now(delayMs);
+  alarm_t_min = safety_deadline_after(millis(), delayMs);
 }
 
 inline bool mode_check_powered_cooling_sensors(const char* modeName) {
@@ -94,7 +87,100 @@ inline void mode_update_water_valve_by_setpoint() {
 #endif
 }
 
-inline bool mode_start_heating_session(
+enum ModeHeatingStartResult : uint8_t {
+  MODE_HEATING_START_PENDING = 0,
+  MODE_HEATING_START_SUCCEEDED,
+  MODE_HEATING_START_FAILED,
+};
+
+struct ModeHeatingStartState {
+  SafetyTransition transition;
+  int16_t activeStatus;
+  const char* heatingMessage;
+#ifdef USE_MQTT
+  String mqttProgram;
+  String sessionDescription;
+#endif
+};
+
+static ModeHeatingStartState modeHeatingStart;
+
+inline bool mode_heating_start_pending(int16_t activeStatus) {
+  return safety_transition_active(modeHeatingStart.transition) &&
+         modeHeatingStart.activeStatus == activeStatus;
+}
+
+inline bool mode_heating_start_active() {
+  return safety_transition_active(modeHeatingStart.transition);
+}
+
+inline void mode_clear_heating_start() {
+  safety_transition_cancel(modeHeatingStart.transition);
+  modeHeatingStart.activeStatus = 0;
+  modeHeatingStart.heatingMessage = nullptr;
+#ifdef USE_MQTT
+  modeHeatingStart.mqttProgram = String();
+  modeHeatingStart.sessionDescription = String();
+#endif
+}
+
+inline ModeHeatingStartResult mode_fail_heating_start() {
+  const bool resetOwnerState = SamovarStatusInt == modeHeatingStart.activeStatus;
+  if (PowerOn) set_power(false, false);
+  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+  mode_clear_heating_start();
+  if (resetOwnerState) {
+    SamovarStatusInt = 0;
+    startval = 0;
+  }
+  return MODE_HEATING_START_FAILED;
+}
+
+inline void cancel_invalid_mode_heating_session() {
+  if (!safety_transition_active(modeHeatingStart.transition)) return;
+  if (heater_safety_latched() || SamovarStatusInt != modeHeatingStart.activeStatus ||
+      !PowerOn) {
+    mode_fail_heating_start();
+  }
+}
+
+inline ModeHeatingStartResult mode_tick_heating_session(int16_t activeStatus) {
+  if (!safety_transition_active(modeHeatingStart.transition) ||
+      modeHeatingStart.activeStatus != activeStatus) {
+    return MODE_HEATING_START_FAILED;
+  }
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
+
+  if (modeHeatingStart.transition.phase == MODE_HEATING_PHASE_WAIT_POWER) {
+    if (power_transition_start_pending()) return MODE_HEATING_START_PENDING;
+    safety_transition_advance(
+      modeHeatingStart.transition,
+      MODE_HEATING_PHASE_WAIT_STABILIZE,
+      safety_deadline_after(millis(), 1000)
+    );
+    return MODE_HEATING_START_PENDING;
+  }
+
+  if (!safety_transition_due(modeHeatingStart.transition, millis())) {
+    return MODE_HEATING_START_PENDING;
+  }
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
+  SteamSensor.Start_Pressure = bme_pressure;
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
+#ifdef USE_MQTT
+  MqttSendMsg(
+    (String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," +
+    modeHeatingStart.mqttProgram + "," + modeHeatingStart.sessionDescription,
+    "st"
+  );
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
+#endif
+  SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);
+  mode_clear_heating_start();
+  return MODE_HEATING_START_SUCCEEDED;
+}
+
+inline ModeHeatingStartResult mode_begin_heating_session(
   int16_t activeStatus,
   const char* createLogError,
   const char* sessionBusyError,
@@ -102,70 +188,95 @@ inline bool mode_start_heating_session(
   const char* heatingMessage,
   bool resetHeatLoss
 ) {
-  if (PowerOn || SamovarStatusInt != activeStatus || alarm_event) return false;
+  if (safety_transition_active(modeHeatingStart.transition)) {
+    return modeHeatingStart.activeStatus == activeStatus
+      ? MODE_HEATING_START_PENDING
+      : mode_fail_heating_start();
+  }
+
+  // [PKG-B п.7] Нагрев жёстко заблокирован аварийной защёлкой (снимается только перезагрузкой).
+  // Явно уведомляем оператора и гасим владение статусом — иначе старт будет молча
+  // проваливаться каждый тик, а UI ничего не объяснит.
+  if (heater_safety_latched() && SamovarStatusInt == activeStatus) {
+    SendMsg("Нагрев заблокирован аварийной защитой, требуется перезагрузка", ALARM_MSG);
+    SamovarStatusInt = 0;
+    startval = 0;
+    return MODE_HEATING_START_FAILED;
+  }
+  if (PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()) return MODE_HEATING_START_FAILED;
+  if (power_transition_active()) {
+    SendMsg("Выключение нагрева ещё не завершено. Старт отменён.", ALARM_MSG);
+    SamovarStatusInt = 0;
+    startval = 0;
+    return MODE_HEATING_START_FAILED;
+  }
 
   if (resetHeatLoss) reset_heat_loss_calculation();
   if (!create_data()) {
     SendMsg(createLogError, ALARM_MSG);
     SamovarStatusInt = 0;
     startval = 0;
-    return false;
+    return MODE_HEATING_START_FAILED;
   }
 
-  if (alarm_event || SamovarStatusInt != activeStatus) {
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
     if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    return false;
+    return MODE_HEATING_START_FAILED;
   }
 
 #ifdef USE_MQTT
-  String sessionDescription;
-  if (!copy_mqtt_session_description(sessionDescription, portMAX_DELAY)) {
+  if (!copy_mqtt_session_description(modeHeatingStart.sessionDescription, pdMS_TO_TICKS(50))) {
     SendMsg(sessionBusyError, ALARM_MSG);
     SamovarStatusInt = 0;
     startval = 0;
     if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    return false;
+    return MODE_HEATING_START_FAILED;
   }
-  if (alarm_event || SamovarStatusInt != activeStatus) {
+  modeHeatingStart.mqttProgram = mqttProgram;
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
     if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    return false;
+    modeHeatingStart.sessionDescription = String();
+    modeHeatingStart.mqttProgram = String();
+    return MODE_HEATING_START_FAILED;
   }
 #else
   (void)mqttProgram;
+  (void)sessionBusyError;
 #endif
 
-  if (alarm_event || SamovarStatusInt != activeStatus) {
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
     if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    return false;
+    return MODE_HEATING_START_FAILED;
   }
 
+  modeHeatingStart.activeStatus = activeStatus;
+  modeHeatingStart.heatingMessage = heatingMessage;
+  safety_transition_begin(
+    modeHeatingStart.transition,
+    MODE_HEATING_PHASE_WAIT_POWER,
+    0
+  );
   set_power(true);
-  if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn) {
-    if (PowerOn) set_power(false, false);
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    return false;
+  if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
+  return MODE_HEATING_START_PENDING;
+}
+
+// [PKG-B п.8] Общая обёртка старта нагрева для distiller/BK: диспетчеризует между
+// продолжением уже идущего старта (tick) и началом нового (begin). Возвращает результат;
+// пост-обработку успеха (свой колбэк) выполняет вызывающий.
+inline ModeHeatingStartResult mode_run_heating_start(
+  int16_t activeStatus,
+  const char* createLogError,
+  const char* sessionBusyError,
+  const String& mqttProgram,
+  const char* heatingMessage,
+  bool resetHeatLoss
+) {
+  if (mode_heating_start_pending(activeStatus)) {
+    return mode_tick_heating_session(activeStatus);
   }
-#ifdef SAMOVAR_USE_POWER
-  delay(1000);
-  set_power_mode(POWER_SPEED_MODE);
-#else
-  set_current_power_mode_value(POWER_SPEED_MODE);
-  digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
-#endif
-  SteamSensor.Start_Pressure = bme_pressure;
-  if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn) {
-    if (PowerOn) set_power(false, false);
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    return false;
-  }
-#ifdef USE_MQTT
-  MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + mqttProgram + "," + sessionDescription, "st");
-  if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn) {
-    if (PowerOn) set_power(false, false);
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-    return false;
-  }
-#endif
-  SendMsg(heatingMessage, NOTIFY_MSG);
-  return true;
+  return mode_begin_heating_session(
+    activeStatus, createLogError, sessionBusyError,
+    mqttProgram, heatingMessage, resetHeatLoss
+  );
 }

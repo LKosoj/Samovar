@@ -46,7 +46,6 @@ for file_name, source, signature in [
     ("sensorinit.h", sensor_text, "String get_DSAddressList"),
     ("Samovar.ino", samovar_text, "static void clear_ds_sensor_runtime"),
     ("Samovar.ino", samovar_text, "static void apply_setup_sensor_fields"),
-    ("Samovar.ino", samovar_text, "static void apply_pending_setup_sensor_resets"),
     ("Samovar.ino", samovar_text, "void apply_config_runtime()"),
     ("Samovar.ino", samovar_text, "void loop()"),
     ("WebServer.ino", web_text, "String setupKeyProcessor"),
@@ -153,7 +152,8 @@ if setup_body:
 
 apply_save_ds_body = functions.get("static bool apply_save_ds_addr_arg", "")
 if apply_save_ds_body:
-    require_token("apply_save_ds_addr_arg snapshot signature", web_text, "static bool apply_save_ds_addr_arg(AsyncWebServerRequest *request, const char *name, const DSAddressSnapshot& snapshot")
+    for token in ("const DSAddressSnapshot& snapshot", "uint8_t resetBit", "uint8_t& resetMask"):
+        require_token("apply_save_ds_addr_arg snapshot signature", web_text, token)
     for token in [
         "parse_save_long_arg(request, name, -1, SAMOVAR_DS_ADDRESS_MAX - 1, idx)",
         "DeviceAddress selectedAddress;",
@@ -172,12 +172,12 @@ if apply_save_ds_body:
             reset_if_body,
             [
                 "CopyDSAddress(selectedAddress, target);",
-                "resetSensor = true;",
+                "resetMask |= resetBit;",
             ],
             errors,
         )
         reset_outside_if = apply_save_ds_body[:reset_if_start] + apply_save_ds_body[reset_if_end:]
-        forbid_pattern("apply_save_ds_addr_arg reset outside address-change block", reset_outside_if, r"\bresetSensor\s*=\s*true\s*;")
+        forbid_pattern("apply_save_ds_addr_arg reset outside address-change block", reset_outside_if, r"\bresetMask\s*\|=\s*resetBit\s*;")
     except ValueError as exc:
         errors.append(f"apply_save_ds_addr_arg reset block: {exc}")
     for token in ["DScnt", "DSAddr["]:
@@ -191,11 +191,11 @@ if handle_save_body:
         [
             "DSAddressSnapshot dsSnapshot;",
             "copy_ds_address_snapshot(dsSnapshot);",
-            'apply_save_ds_addr_arg(request, "SteamAddr", dsSnapshot, staged.SteamAdress, setupSave.resetSensor.steam)',
-            'apply_save_ds_addr_arg(request, "PipeAddr", dsSnapshot, staged.PipeAdress, setupSave.resetSensor.pipe)',
-            'apply_save_ds_addr_arg(request, "WaterAddr", dsSnapshot, staged.WaterAdress, setupSave.resetSensor.water)',
-            'apply_save_ds_addr_arg(request, "TankAddr", dsSnapshot, staged.TankAdress, setupSave.resetSensor.tank)',
-            'apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, setupSave.resetSensor.acp)',
+            'apply_save_ds_addr_arg(request, "SteamAddr", dsSnapshot, staged.SteamAdress, PROFILE_SENSOR_RESET_STEAM, sensorResetMask)',
+            'apply_save_ds_addr_arg(request, "PipeAddr", dsSnapshot, staged.PipeAdress, PROFILE_SENSOR_RESET_PIPE, sensorResetMask)',
+            'apply_save_ds_addr_arg(request, "WaterAddr", dsSnapshot, staged.WaterAdress, PROFILE_SENSOR_RESET_WATER, sensorResetMask)',
+            'apply_save_ds_addr_arg(request, "TankAddr", dsSnapshot, staged.TankAdress, PROFILE_SENSOR_RESET_TANK, sensorResetMask)',
+            'apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, PROFILE_SENSOR_RESET_ACP, sensorResetMask)',
         ],
         errors,
     )
@@ -219,22 +219,14 @@ if apply_fields_body:
             "CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);",
             "CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);",
             "CopyDSAddress(SamSetup.ACPAdress, ACPSensor.Sensor);",
-            "if (resetSensor.steam) clear_ds_sensor_runtime(SteamSensor);",
+            "if ((resetMask & PROFILE_SENSOR_RESET_STEAM) != 0) clear_ds_sensor_runtime(SteamSensor);",
         ],
         errors,
     )
 
-pending_resets_body = functions.get("static void apply_pending_setup_sensor_resets", "")
-if pending_resets_body:
-    require_token("apply_pending_setup_sensor_resets delegates to sensor field apply", pending_resets_body, "apply_setup_sensor_fields(resetSensor);")
-
 apply_config_body = functions.get("void apply_config_runtime()", "")
 if apply_config_body:
-    for token in [
-        "PendingSetupSensorReset noSensorReset = {};",
-        "apply_setup_sensor_fields(noSensorReset);",
-    ]:
-        require_token("apply_config_runtime sensor field apply", apply_config_body, token)
+    require_token("apply_config_runtime sensor field apply", apply_config_body, "apply_setup_sensor_fields(0);")
     for token in [
         "CopyDSAddress(SamSetup.SteamAdress, SteamSensor.Sensor)",
         "CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor)",
@@ -244,16 +236,19 @@ if apply_config_body:
     ]:
         forbid_token("apply_config_runtime direct sensor address copy", apply_config_body, token)
 
-loop_body = functions.get("void loop()", "")
-if loop_body:
+commit_signature = "static OperationError commit_profile_operation()"
+commit_offset = samovar_text.rfind(commit_signature)
+commit_body = extract_function_body(samovar_text[commit_offset:], commit_signature) if commit_offset >= 0 else ""
+if commit_body:
     require_ordered_tokens(
-        "pending setup save applies sensor fields after read_config from loop",
-        loop_body,
+        "profile owner applies sensor fields only after verified profile commit",
+        commit_body,
         [
-            "SamSetup = setupSave.staged;",
-            "save_profile();",
-            "read_config();",
-            "apply_pending_setup_sensor_resets(setupSave.resetSensor);",
+            "save_profile_nvs(active_profile_operation.settings)",
+            "if (persistResult != PERSIST_OK)",
+            "SamSetup = active_profile_operation.settings;",
+            "apply_setup_sensor_fields(active_profile_operation.sensorResetMask);",
+            "if (hasSettings) apply_config_runtime();",
         ],
         errors,
     )

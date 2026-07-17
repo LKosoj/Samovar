@@ -5,6 +5,7 @@
 #include "samovar_api.h"
 #include "runtime_helpers.h"
 #include "mode_common.h"
+#include "safety_transition.h"
 
 #ifndef EMERGENCY_STOP_REASON_LEN
 #define EMERGENCY_STOP_REASON_LEN 192
@@ -40,10 +41,9 @@ inline bool sensor_temp_at_least(const DSSensor& sensor, float temp) {
   return sensor_configured(sensor) && sensor_reading_valid(sensor) && sensor.avgTemp >= temp;
 }
 
-void request_emergency_stop(const String& reason) {
+inline void request_emergency_stop(const String& reason) {
   portENTER_CRITICAL(&emergencyStopMux);
-  const bool first_alarm = !alarm_event;
-  alarm_event = true;
+  const bool first_alarm = emergency_trip_heater_outputs_locked();
   if (first_alarm && reason.length() > 0) {
     copyStringSafe(pending_emergency_stop_reason, reason);
     pending_emergency_stop_reason_flag = true;
@@ -51,10 +51,11 @@ void request_emergency_stop(const String& reason) {
   pending_emergency_stop_flag = true;
   portEXIT_CRITICAL(&emergencyStopMux);
 
+  notify_power_worker();
   set_buzzer(true);
 }
 
-void perform_emergency_stop() {
+inline void perform_emergency_stop() {
   char reason[EMERGENCY_STOP_REASON_LEN];
   reason[0] = '\0';
   bool send_reason = false;
@@ -75,11 +76,7 @@ void perform_emergency_stop() {
 
   if (Samovar_Mode == SAMOVAR_NBK_MODE) nbk_emergency_finish();
 
-  if (PowerOn) {
-    set_power(false);
-  } else {
-    if (!queue_samovar_reset_command()) SendMsg("Очередь команд занята: аварийный reset не поставлен", ALARM_MSG);
-  }
+  set_power(false);
   open_valve(false, true);
   stopService();
   set_stepper_target(0, 0, 0);
@@ -117,8 +114,7 @@ void check_alarm() {
   if (SamovarStatusInt == 50 && TankSensor.avgTemp >= 2 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
     if (!acceleration_heater) {
       //включаем разгонный тэн
-      digitalWrite(RELE_CHANNEL4, SamSetup.rele4);
-      acceleration_heater = true;
+      acceleration_heater = heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
     }
   } else {
     if (acceleration_heater) {
@@ -257,7 +253,14 @@ void check_alarm() {
     if (TankSensor.avgTemp >= SamSetup.DistTemp) {
       //Если температура в кубе превысила заданную, штатно завершаем ректификацию.
       SendMsg(("Лимит максимальной температуры куба. Программа завершена."), NOTIFY_MSG);
-      if (!queue_samovar_command(SAMOVAR_POWER)) SendMsg("Очередь команд занята: завершение ректификации не поставлено", WARNING_MSG);
+      if (!queue_samovar_command(SAMOVAR_POWER)) {
+        //Штатное завершение не поставлено: очередь занята или не создалась при старте.
+        //Ждать следующего цикла нельзя - условие TankSensor.avgTemp >= DistTemp удерживает
+        //нас в этой ветке, else с аварийным стопом уже недостижим, и нагрев остался бы
+        //включённым до выкипания. Глушим напрямую: хуже по UX, но единственное безопасное
+        //направление отказа.
+        request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу по температуре куба");
+      }
     } else
       request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s);
   }

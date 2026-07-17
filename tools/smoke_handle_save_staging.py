@@ -5,11 +5,11 @@ from pathlib import Path
 
 from smoke_helpers import extract_function_body, require_ordered_tokens
 
+
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "WebServer.ino"
 SAMOVAR = ROOT / "Samovar.ino"
-
-errors = []
+errors: list[str] = []
 
 
 def read_file(path: Path) -> str:
@@ -19,225 +19,171 @@ def read_file(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def require_token(name: str, body: str, token: str) -> None:
-    if token not in body:
-        errors.append(f"{name} missing token: {token}")
-
-
-def forbid_token(name: str, body: str, token: str) -> None:
-    if token in body:
-        errors.append(f"{name} contains forbidden token: {token}")
+def body(source: str, signature: str, *, last: bool = False) -> str:
+    try:
+        if last:
+            offset = source.rfind(signature)
+            if offset < 0:
+                raise ValueError(f"function not found: {signature}")
+            return extract_function_body(source[offset:], signature)
+        return extract_function_body(source, signature)
+    except ValueError as error:
+        errors.append(str(error))
+        return ""
 
 
 web_text = read_file(WEB)
 samovar_text = read_file(SAMOVAR)
+handle_save = body(web_text, "void handleSave(AsyncWebServerRequest *request)")
+queue = body(web_text, "static OperationError queue_profile_operation(")
+commit = body(samovar_text, "static OperationError commit_profile_operation()", last=True)
+process = body(samovar_text, "static void process_profile_operation()", last=True)
+loop = body(samovar_text, "void loop()")
+setup_processor = body(web_text, "String setupKeyProcessor(const String &var)")
+parse_long = body(web_text, "static bool parse_save_long_arg")
+parse_float = body(web_text, "static bool parse_save_float_arg")
+save_allowlist = body(web_text, "static bool save_param_name_allowed")
 
-try:
-    handle_save_body = extract_function_body(web_text, "void handleSave(AsyncWebServerRequest *request)")
-except ValueError as exc:
-    errors.append(str(exc))
-    handle_save_body = ""
-
-try:
-    setup_processor_body = extract_function_body(web_text, "String setupKeyProcessor(const String &var)")
-except ValueError as exc:
-    errors.append(str(exc))
-    setup_processor_body = ""
-
-try:
-    send_parse_error_body = extract_function_body(web_text, "static void send_save_parse_error")
-except ValueError as exc:
-    errors.append(str(exc))
-    send_parse_error_body = ""
-
-try:
-    parse_long_body = extract_function_body(web_text, "static bool parse_save_long_arg")
-except ValueError as exc:
-    errors.append(str(exc))
-    parse_long_body = ""
-
-try:
-    parse_float_body = extract_function_body(web_text, "static bool parse_save_float_arg")
-except ValueError as exc:
-    errors.append(str(exc))
-    parse_float_body = ""
-
-try:
-    program_mode_mapper_body = extract_function_body(web_text, "static PendingProgramMode pending_program_mode_for_samovar_mode")
-except ValueError as exc:
-    errors.append(str(exc))
-    program_mode_mapper_body = ""
-
-try:
-    queue_setup_body = extract_function_body(web_text, "static bool queue_pending_setup_save")
-except ValueError as exc:
-    errors.append(str(exc))
-    queue_setup_body = ""
-
-try:
-    loop_body = extract_function_body(samovar_text, "void loop()")
-except ValueError as exc:
-    errors.append(str(exc))
-    loop_body = ""
-
-if handle_save_body:
-    for token in [
-        "PendingSetupSave setupSave;",
-        "setupSave.staged = SamSetup;",
-        "SetupEEPROM& staged = setupSave.staged;",
-    ]:
-        require_token("handleSave staging", handle_save_body, token)
-
-    direct_setup_assignments = re.findall(r"\bSamSetup\.[A-Za-z_][A-Za-z0-9_]*\s*=", handle_save_body)
-    if direct_setup_assignments:
-        errors.append("handleSave contains direct SamSetup assignments: " + ", ".join(sorted(set(direct_setup_assignments))))
-
-    for token in [".toInt()", ".toFloat()"]:
-        forbid_token("handleSave parse", handle_save_body, token)
-
+if handle_save:
     require_ordered_tokens(
-        "handleSave parse/apply before queue",
-        handle_save_body,
+        "handleSave validates and stages before one compound queue",
+        handle_save,
         [
-            "SetupEEPROM& staged = setupSave.staged;",
+            "for (size_t index = 0; index < request->params(); index++)",
+            "save_param_name_allowed(param->name())",
+            "request_param_count(request, param->name().c_str()) != 1",
+            "const SAMOVAR_MODE sourceMode = Samovar_Mode;",
+            "SetupEEPROM staged = SamSetup;",
+            "uint8_t sensorResetMask = 0;",
             'apply_save_u16_arg(request, "SteamDelay", staged.SteamDelay, 0, 65535)',
             'apply_save_float_arg(request, "SetPipeTemp", staged.SetPipeTemp, 0.0f, 150.0f)',
-            'apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, setupSave.resetSensor.acp)',
+            'apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, PROFILE_SENSOR_RESET_ACP, sensorResetMask)',
             'apply_save_u8_arg(request, "PackDens", staged.PackDens, 0, 100)',
-            "queue_pending_setup_save(setupSave, hasProgram, pendingMode, pendingProgramText, hasSwitchMode, requestedMode, busyText)",
+            "const bool hasSwitchMode = modeRequested",
+            "prepare_program_for_mode(",
+            "prepare_default_program_for_mode(",
+            "queue_profile_operation(",
+            "send_save_operation_accepted(request, operationId);",
         ],
         errors,
     )
     require_ordered_tokens(
-        "handleSave WProgram uses shared mode mapper",
-        handle_save_body,
+        "explicit WProgram is validated before publication",
+        handle_save,
         [
-            "SAMOVAR_MODE programMode = modeRequested ? requestedMode : Samovar_Mode;",
-            "pendingMode = pending_program_mode_for_samovar_mode(programMode);",
-            "pendingProgramText = wProgramParam->value();",
+            'wProgramCount == 1 ? get_request_param(request, "WProgram") : nullptr',
+            "wProgramCount == 1 && (!wProgramParam || wProgramParam->isFile())",
+            "prepare_program_for_mode(",
+            "wProgramParam->value(),",
+            "programDraft);",
+            "if (!result.ok())",
+            "programDraftPtr = &programDraft;",
+            "wProgramCount == 1,",
         ],
         errors,
     )
-    require_ordered_tokens(
-        "handleSave busy path returns 503 before success redirect",
-        handle_save_body,
-        [
-            "if (!queue_pending_setup_save(setupSave, hasProgram, pendingMode, pendingProgramText, hasSwitchMode, requestedMode, busyText))",
-            'request->send(503, "text/plain", busyText ? busyText : "BUSY");',
-            "return;",
-            "AsyncWebServerResponse *response = request->beginResponse(301);",
-            'response->addHeader("Location", "/");',
-            "request->send(response);",
-        ],
-        errors,
-    )
+    if re.search(r"\bSamSetup\.[A-Za-z_][A-Za-z0-9_]*\s*=", handle_save):
+        errors.append("handleSave mutates SamSetup before loop owner commit")
+    for forbidden in (
+        ".toInt()",
+        ".toFloat()",
+        "beginResponse(301",
+        "queue_pending_setup_save",
+        "PendingSetupSave",
+        "pending_program_str",
+    ):
+        if forbidden in handle_save:
+            errors.append(f"handleSave contains obsolete/unsafe token: {forbidden}")
 
-if program_mode_mapper_body:
+if queue:
     require_ordered_tokens(
-        "pending program mode mapper covers distiller and NBK",
-        program_mode_mapper_body,
+        "queue_profile_operation atomically reserves and publishes POD",
+        queue,
         [
-            "case SAMOVAR_BEER_MODE:",
-            "return PPM_BEER;",
-            "case SAMOVAR_DISTILLATION_MODE:",
-            "return PPM_DIST;",
-            "case SAMOVAR_NBK_MODE:",
-            "return PPM_NBK;",
-            "default:",
-            "return PPM_RECT;",
-        ],
-        errors,
-    )
-
-if queue_setup_body:
-    require_ordered_tokens(
-        "queue_pending_setup_save writes payload before flags",
-        queue_setup_body,
-        [
-            "bool locked = pending_command_lock",
-            "if (!locked)",
-            "if (pending_save_profile_flag)",
-            "if (pending_program_mode != PPM_NONE)",
-            "if (pending_switch_mode_flag)",
-            "pending_setup_save_buf = setupSave;",
-            "pending_program_str = programText;",
-            "pending_switch_mode_value = switchMode;",
-            "__sync_synchronize();",
-            "pending_save_profile_flag = true;",
-            "pending_program_mode = programMode;",
-            "pending_switch_mode_flag = true;",
+            "bool locked = pending_command_lock(pdMS_TO_TICKS(50));",
+            "profile_operation_phase_load() != PROFILE_OPERATION_EMPTY",
+            "mode_switch_in_progress()",
+            "requireProgramIdle && program_update_session_active()",
+            "operation_store_reserve_locked(",
+            "reset_profile_operation_slot();",
+            "active_profile_operation.id = reservedId;",
+            "active_profile_operation.programAction = programAction;",
+            "profile_operation_phase_store(PROFILE_OPERATION_QUEUED);",
+            "operationId = reservedId;",
             "pending_command_unlock(true);",
         ],
         errors,
     )
+    for token in (
+        "kind == OPERATION_KIND_SAVE && metadataFlags != 0",
+        "kind == OPERATION_KIND_PROGRAM",
+        "settings || sensorResetMask != 0 || modeChange",
+    ):
+        if token not in queue:
+            errors.append(f"queue_profile_operation missing invalid-combination guard: {token}")
 
-if send_parse_error_body:
-    require_token("send_save_parse_error", send_parse_error_body, 'request->send(400, "text/plain", message);')
-
-if parse_long_body:
+if commit:
     require_ordered_tokens(
-        "parse_save_long_arg invalid path",
-        parse_long_body,
+        "profile commit persists before publishing owner state",
+        commit,
         [
-            "parseLongSafe(raw.c_str(), value)",
-            "send_save_parse_error(request, name);",
-            "return false;",
+            "save_profile_nvs(active_profile_operation.settings)",
+            "if (persistResult != PERSIST_OK)",
+            "SamSetup = active_profile_operation.settings;",
+            "program_commit(active_profile_operation.program);",
+            "apply_setup_sensor_fields(active_profile_operation.sensorResetMask);",
+            "if (hasSettings) apply_config_runtime();",
         ],
         errors,
     )
 
-if parse_float_body:
+if process:
     require_ordered_tokens(
-        "parse_save_float_arg invalid path",
-        parse_float_body,
+        "loop owner lifecycle",
+        process,
         [
-            "parseFloatSafe(raw.c_str(), value)",
-            "save_float_is_finite(value)",
-            "send_save_parse_error(request, name);",
-            "return false;",
+            "operation_store_mark_running_locked(",
+            "PROFILE_OPERATION_RUNNING",
+            "PROFILE_OPERATION_REQUIRE_PROGRAM_IDLE",
+            "OPERATION_ERROR_CANCELLED",
+            "switch_samovar_mode(",
+            "set_profile_operation_terminal(",
+            "publish_profile_operation_terminal();",
         ],
         errors,
     )
+    if "ProfileOperationSlot" in process:
+        errors.append("process_profile_operation copies the compound DTO to loop stack")
 
-if setup_processor_body:
-    for field in ["SetPipeTemp", "SetWaterTemp", "SetTankTemp", "SetACPTemp"]:
-        if re.search(rf"\bSamSetup\.{field}\s*=", setup_processor_body):
+if loop and loop.count("process_profile_operation();") != 1:
+    errors.append("loop must call process_profile_operation exactly once")
+
+if save_allowlist:
+    for name in ("fullsetup", "mode", "WProgram", "SteamDelay", "PackDens"):
+        if f'name == "{name}"' not in save_allowlist:
+            errors.append(f"save allowlist missing {name}")
+
+for name, parse_body, parser in (
+    ("parse_save_long_arg", parse_long, "parse_bounded_long"),
+    ("parse_save_float_arg", parse_float, "parse_bounded_float"),
+):
+    if parse_body:
+        require_ordered_tokens(
+            name,
+            parse_body,
+            [
+                "request_param_count(request, name) != 1",
+                parser,
+                "send_save_parse_error(request, name, result.error);",
+                "return false;",
+            ],
+            errors,
+        )
+
+if setup_processor:
+    for field in ("SetPipeTemp", "SetWaterTemp", "SetTankTemp", "SetACPTemp"):
+        if re.search(rf"\bSamSetup\.{field}\s*=", setup_processor):
             errors.append(f"setupKeyProcessor mutates SamSetup.{field}")
-    for token in [
-        "float setPipeTemp = isnan(SamSetup.SetPipeTemp) ? 0 : SamSetup.SetPipeTemp;",
-        "float setWaterTemp = isnan(SamSetup.SetWaterTemp) ? 0 : SamSetup.SetWaterTemp;",
-        "float setTankTemp = isnan(SamSetup.SetTankTemp) ? 0 : SamSetup.SetTankTemp;",
-        "float setACPTemp = isnan(SamSetup.SetACPTemp) ? 0 : SamSetup.SetACPTemp;",
-    ]:
-        require_token("setupKeyProcessor display-only NaN formatting", setup_processor_body, token)
-
-if loop_body:
-    require_ordered_tokens(
-        "loop applies setup-save before mode/program consumers",
-        loop_body,
-        [
-            "if (locked && pending_save_profile_flag)",
-            "setupSave = pending_setup_save_buf;",
-            "if (hasPendingSetupSave) {",
-            "SamSetup = setupSave.staged;",
-            "save_profile();",
-            "read_config();",
-            "apply_pending_setup_sensor_resets(setupSave.resetSensor);",
-            "pending_save_profile_flag = false;",
-            "if (locked && pending_switch_mode_flag)",
-            "switch_samovar_mode(reqMode);",
-            "if (locked && pending_program_mode != PPM_NONE)",
-            "if (ppm != PPM_NONE) {",
-        ],
-        errors,
-    )
-
-if samovar_text:
-    for token in [
-        "static PendingProgramMode pending_program_mode_for_samovar_mode(SAMOVAR_MODE mode);",
-        "static bool queue_pending_setup_save(const PendingSetupSave& setupSave,",
-    ]:
-        require_token("Samovar.ino explicit pending prototypes", samovar_text, token)
 
 if errors:
     print("handleSave staging smoke failed:")

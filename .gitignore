@@ -32,3 +32,4 @@ AGENTS.md
 /.ai_docs_cache
 /.cli-proxy
 AGENTS.md
+.cli-proxy/runtime/

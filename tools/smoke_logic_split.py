@@ -74,7 +74,6 @@ moved_functions = {
         "get_current_power",
         "set_current_power",
         "set_power_mode",
-        "hexToDec",
     ],
     "selftest.h": ["start_self_test", "stop_self_test"],
 }

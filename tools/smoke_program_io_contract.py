@@ -31,14 +31,29 @@ logic = strip_cpp_comments(read_text("logic.h"))
 distiller = strip_cpp_comments(read_text("distiller.h"))
 beer = strip_cpp_comments(read_text("beer.h"))
 nbk = strip_cpp_comments(read_text("nbk.h"))
+sensorinit = strip_cpp_comments(read_text("sensorinit.h"))
+samovar_api = strip_cpp_comments(read_text("samovar_api.h"))
+blynk = strip_cpp_comments(read_text("Blynk.ino"))
 
 if program_io:
+    require_token("program_io.h", program_io, '#include "numeric_parse.h"')
+    forbid_token("program_io.h", program_io, "parseFloatSafe(")
+    forbid_token("program_io.h", program_io, "parseLongSafe(")
     for token in [
         "enum ProgramFieldKind",
+        "enum ProgramFormat",
+        "enum ProgramUpdateAction",
+        "struct ProgramDraft",
         "struct ProgramParseSpec",
         "using ProgramRowParser",
-        "inline void program_clear_rows()",
-        "inline bool program_parse_lines",
+        "inline void program_reset_draft",
+        "inline void program_commit",
+        "inline void program_clear()",
+        "inline String format_program_parse_error",
+        "inline ProgramFormat program_format_for_mode",
+        "inline ProgramParseResult prepare_program_for_mode",
+        "inline String serialize_program_for_mode",
+        "inline ProgramParseResult program_parse_lines",
         "inline String program_serialize_rows",
         "PROGRAM_FIELD_TYPE",
         "PROGRAM_FIELD_VOLUME",
@@ -52,8 +67,17 @@ if program_io:
     ]:
         require_token("program_io.h", program_io, token)
 
+    for token in [
+        "PROGRAM_FORMAT_UNSUPPORTED",
+        "PROGRAM_PARSE_UNSUPPORTED_MODE",
+        "case SAMOVAR_SUVID_MODE:",
+        "case SAMOVAR_LUA_MODE:",
+        "inline size_t program_count_char",
+    ]:
+        require_token("program_io.h program update contract", program_io, token)
+
     try:
-        body = extract_function_body(program_io, "inline bool program_parse_lines")
+        body = extract_function_body(program_io, "inline ProgramParseResult program_parse_lines")
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
@@ -61,20 +85,40 @@ if program_io:
         "program_parse_lines shared skeleton",
         body,
         [
-            "program_clear_rows();",
-            "ProgramLen = 0;",
+            "program_reset_draft(draft);",
             "text.length() == 0",
             "text.length() > MAX_PROGRAM_INPUT_LEN",
             "copyStringSafe(input, text)",
-            "strtok_r(input, \"\\n\", &saveLine)",
-            "while (line && i < spec.maxRows)",
+            "while (*cursor != '\\0')",
             "program_trim_line_right(line)",
-            "spec.parseRow(line, lineLen, i, program[i], spec, rowErrorMessage)",
+            "i >= spec.maxRows || i >= PROGRAM_END",
+            "program_count_char(line, ';') != static_cast<size_t>(spec.fieldCount - 1)",
+            "spec.parseRow(line, lineLen, i, draft.rows[i], spec, rowErrorMessage)",
             "i++;",
-            "ProgramLen = i;",
+            "draft.len = i;",
+            "i == 0",
             "spec.expectedRowCount > 0 && i != spec.expectedRowCount",
-            "if (i < PROGRAM_END)",
+            "PROGRAM_PARSE_OK",
+        ],
+        errors,
+    )
+    for forbidden in ["program[", "ProgramLen", "SendMsg("]:
+        forbid_token("program_parse_lines draft isolation", body, forbidden)
+
+    try:
+        body = extract_function_body(program_io, "inline void program_commit")
+    except ValueError as exc:
+        errors.append(str(exc))
+        body = ""
+    require_ordered_tokens(
+        "program_commit publishes only validated draft",
+        body,
+        [
+            "i < draft.len",
+            "program[i] = draft.rows[i];",
+            "i = draft.len",
             "program[i].WType = PROGRAM_TYPE_NONE;",
+            "ProgramLen = draft.len;",
         ],
         errors,
     )
@@ -163,7 +207,6 @@ if program_io:
         "beer parser preserves device-template error",
         body,
         [
-            "delimCount == 4",
             "parse_program_type(tokType, spec.allowedTypes, parsedType)",
             "program_parse_beer_device",
             "errorMessage = \"Ошибка программы: неверный шаблон устройства beer\";",
@@ -180,13 +223,13 @@ if program_io:
     forbid_token("beer serializer keeps legacy integer time", body, "format_beer_step_minutes")
 
 wrappers = [
-    ("logic.h", logic, "void set_program", "program_parse_lines(WProgram, rect_program_parse_spec());"),
+    ("logic.h", logic, "ProgramParseResult set_program", "return program_parse_lines(WProgram, rect_program_parse_spec());"),
     ("logic.h", logic, "String get_program", "program_serialize_rows(s, k, program_append_rect_row)"),
-    ("distiller.h", distiller, "void set_dist_program", "program_parse_lines(WProgram, dist_program_parse_spec());"),
+    ("distiller.h", distiller, "ProgramParseResult set_dist_program", "return program_parse_lines(WProgram, dist_program_parse_spec());"),
     ("distiller.h", distiller, "String get_dist_program", "program_serialize_rows(0, PROGRAM_END, program_append_dist_row)"),
-    ("beer.h", beer, "void set_beer_program", "program_parse_lines(WProgram, beer_program_parse_spec());"),
+    ("beer.h", beer, "ProgramParseResult set_beer_program", "return program_parse_lines(WProgram, beer_program_parse_spec());"),
     ("beer.h", beer, "String get_beer_program", "program_serialize_rows(0, PROGRAM_END, program_append_beer_row)"),
-    ("nbk.h", nbk, "void set_nbk_program", "program_parse_lines(WProgram, nbk_program_parse_spec());"),
+    ("nbk.h", nbk, "ProgramParseResult set_nbk_program", "return program_parse_lines(WProgram, nbk_program_parse_spec());"),
     ("nbk.h", nbk, "String get_nbk_program", "program_serialize_rows(0, PROGRAM_END, program_append_nbk_row)"),
 ]
 
@@ -222,6 +265,82 @@ for file_name, text in [
         "while (line && i < NBK_PROGRAM_MAX)",
     ]:
         forbid_token(file_name, text, forbidden)
+
+if sensorinit:
+    try:
+        prepare_default = extract_function_body(
+            sensorinit,
+            "ProgramParseResult prepare_default_program_for_mode",
+        )
+        load_default = extract_function_body(
+            sensorinit,
+            "ProgramParseResult load_default_program_for_mode",
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        prepare_default = ""
+        load_default = ""
+    for token in [
+        "case SAMOVAR_RECTIFICATION_MODE:",
+        "case SAMOVAR_DISTILLATION_MODE:",
+        "case SAMOVAR_BEER_MODE:",
+        "case SAMOVAR_BK_MODE:",
+        "case SAMOVAR_NBK_MODE:",
+        "case SAMOVAR_SUVID_MODE:",
+        "case SAMOVAR_LUA_MODE:",
+        "PROGRAM_PARSE_UNSUPPORTED_MODE",
+        "return prepare_program_for_mode(mode, String(defaultProgram), draft);",
+    ]:
+        require_token("checked default prepare", prepare_default, token)
+    for forbidden in [
+        "set_program(",
+        "set_dist_program(",
+        "set_beer_program(",
+        "set_nbk_program(",
+    ]:
+        forbid_token("checked default prepare", prepare_default, forbidden)
+    require_ordered_tokens(
+        "checked default commit",
+        load_default,
+        [
+            "prepare_default_program_for_mode(mode, draft)",
+            "if (result.ok()) program_commit(draft);",
+            "return result;",
+        ],
+        errors,
+    )
+
+if samovar_api:
+    for token in [
+        "ProgramParseResult set_nbk_program(const String& WProgram);",
+        "ProgramParseResult prepare_default_program_for_mode(SAMOVAR_MODE mode, ProgramDraft& draft);",
+        "ProgramParseResult load_default_program_for_mode(SAMOVAR_MODE mode);",
+    ]:
+        require_token("samovar_api.h program result API", samovar_api, token)
+
+if blynk:
+    require_token("Blynk.ino centralized program serializer", blynk, '#include "program_io.h"')
+    try:
+        blynk_v24 = extract_function_body(blynk, "BLYNK_READ(V24)")
+    except ValueError as exc:
+        errors.append(str(exc))
+        blynk_v24 = ""
+    require_token(
+        "Blynk V24 centralized mode mapping",
+        blynk_v24,
+        "Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));",
+    )
+    for forbidden in [
+        "get_program(",
+        "get_dist_program(",
+        "get_beer_program(",
+        "get_nbk_program(",
+        "SAMOVAR_BEER_MODE",
+        "SAMOVAR_SUVID_MODE",
+        "SAMOVAR_DISTILLATION_MODE",
+        "SAMOVAR_NBK_MODE",
+    ]:
+        forbid_token("Blynk V24 centralized mode mapping", blynk_v24, forbidden)
 
 if errors:
     print("Program IO contract smoke check failed:")

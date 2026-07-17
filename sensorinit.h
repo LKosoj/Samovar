@@ -4,6 +4,7 @@
 #include <DallasTemperature.h>
 #include "Samovar.h"
 #include "samovar_api.h"
+#include "program_io.h"
 #include "runtime_helpers.h"
 #include "pumppwm.h"
 
@@ -11,17 +12,40 @@
 #include "lua.h"
 #endif
 
-// Функция загрузки программы по умолчанию для текущего режима
-void load_default_program_for_mode() {
-  if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
-    set_beer_program("M;45;0;0^-1^2^2;0\nP;45;1;0^-1^2^3;0\nP;60;1;0^-1^2^3;0\nW;0;0;0^-1^2^3;0\nB;0;1;0^-1^2^3;0\nC;30;0;0^-1^2^3;0\n");
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    set_dist_program("A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n");
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    set_nbk_program(NBK_DEFAULT_PROGRAM);
-  } else {
-    set_program("H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n");
+ProgramParseResult prepare_default_program_for_mode(
+    SAMOVAR_MODE mode,
+    ProgramDraft& draft) {
+  const char* defaultProgram = nullptr;
+  switch (mode) {
+    case SAMOVAR_BEER_MODE:
+    case SAMOVAR_SUVID_MODE:
+      defaultProgram = "M;45;0;0^-1^2^2;0\nP;45;1;0^-1^2^3;0\nP;60;1;0^-1^2^3;0\nW;0;0;0^-1^2^3;0\nB;0;1;0^-1^2^3;0\nC;30;0;0^-1^2^3;0\n";
+      break;
+    case SAMOVAR_DISTILLATION_MODE:
+      defaultProgram = "A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n";
+      break;
+    case SAMOVAR_NBK_MODE:
+      defaultProgram = NBK_DEFAULT_PROGRAM;
+      break;
+    case SAMOVAR_RECTIFICATION_MODE:
+    case SAMOVAR_BK_MODE:
+    case SAMOVAR_LUA_MODE:
+      defaultProgram = "H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n";
+      break;
+    default:
+      return program_parse_result(
+          PROGRAM_PARSE_UNSUPPORTED_MODE,
+          0,
+          "Ошибка default-программы: неподдерживаемый режим");
   }
+  return prepare_program_for_mode(mode, String(defaultProgram), draft);
+}
+
+ProgramParseResult load_default_program_for_mode(SAMOVAR_MODE mode) {
+  ProgramDraft draft{};
+  ProgramParseResult result = prepare_default_program_for_mode(mode, draft);
+  if (result.ok()) program_commit(draft);
+  return result;
 }
 
 #ifdef USE_BME680
@@ -450,9 +474,6 @@ void sensor_init(void) {
   //Настраиваем датчик потока
   pinMode(WATERSENSOR_PIN, INPUT);
 #endif
-
-  // Загружаем программу по умолчанию для текущего режима
-  load_default_program_for_mode();
 
 #ifdef SAMOVAR_USE_SEM_AVR
   //Если SEM_AVR иницииурем порт

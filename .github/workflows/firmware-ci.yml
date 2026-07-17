@@ -13,7 +13,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env_name: [Samovar, Samovar_s3]
+        env_name:
+          - Samovar
+          - Samovar_s3
+          - Samovar_no_power
+          - Samovar_rmvk
+          - Samovar_sem
+          - Samovar_lua_mqtt
+          - Samovar_alarm_button
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,63 +31,35 @@ jobs:
           python-version: "3.12"
 
       - name: Install PlatformIO
-        run: python -m pip install --upgrade platformio==6.1.19
+        run: python -m pip install platformio==6.1.19
+
+      - name: Install exact SCons
+        run: python -m platformio pkg install --global --no-save --tool platformio/tool-scons@4.40801.0
+
+      - name: Set reproducible build epoch
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GITHUB_SHA")" >> "$GITHUB_ENV"
 
       - name: Build firmware (${{ matrix.env_name }})
-        run: pio run -e ${{ matrix.env_name }}
+        run: python -m platformio run -e ${{ matrix.env_name }}
+
+      - name: Generate and validate build metadata
+        run: |
+          DIRTY=false
+          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then DIRTY=true; fi
+          python tools/build_metadata.py \
+            --project-root . \
+            --core-dir "$HOME/.platformio" \
+            --environment "${{ matrix.env_name }}" \
+            --firmware ".pio/build/${{ matrix.env_name }}/firmware.bin" \
+            --map ".pio/build/${{ matrix.env_name }}/firmware.map" \
+            --git-sha "$GITHUB_SHA" \
+            --dirty "$DIRTY" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --output ".pio/build/${{ matrix.env_name }}/build-metadata.json"
+          python -m json.tool ".pio/build/${{ matrix.env_name }}/build-metadata.json" >/dev/null
 
   static-analysis:
     name: Static Analysis (cppcheck)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install cppcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cppcheck
-
-      - name: Run cppcheck
-        run: |
-          cppcheck \
-            --enable=warning,performance,portability \
-            --std=c++11 \
-            --inline-suppr \
-            --error-exitcode=1 \
-            --suppress=missingIncludeSystem \
-            --language=c++ \
-            Samovar.ino WebServer.ino FS.ino NVS_Manager.ino Menu.ino \
-            logic.h beer.h distiller.h nbk.h sensorinit.h Samovar.h
-
-  static-analysis-force:
-    name: Static Analysis (cppcheck --force, extended)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install cppcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cppcheck
-
-      - name: Run cppcheck (force, all configurations)
-        run: |
-          cppcheck \
-            --force \
-            --enable=warning,performance,portability,information \
-            --std=c++11 \
-            --inline-suppr \
-            --error-exitcode=1 \
-            --suppress=missingIncludeSystem \
-            --language=c++ \
-            Samovar.ino WebServer.ino FS.ino NVS_Manager.ino Menu.ino \
-            logic.h beer.h distiller.h nbk.h sensorinit.h Samovar.h
-
-  smoke-api:
-    name: Smoke API Routes
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -91,5 +70,54 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: API smoke check
-        run: python tools/smoke_api_routes.py
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: python tools/run_cppcheck.py --timeout 300
+
+  static-analysis-force:
+    name: Static Analysis (cppcheck --force, extended)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck (force, all configurations)
+        run: python tools/run_cppcheck.py --force --timeout 600 --report cppcheck-extended.txt
+
+      - name: Upload extended cppcheck report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-extended
+          path: cppcheck-extended.txt
+          if-no-files-found: error
+
+  smoke:
+    name: First-party smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run all smoke tests
+        run: python tools/run_smoke_tests.py --timeout 60

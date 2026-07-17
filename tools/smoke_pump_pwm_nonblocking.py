@@ -126,16 +126,18 @@ if bk_alarm_body:
 if apply_config_body:
     require_token("apply_config_runtime", apply_config_body, "pump_regulator.setpoint = SamSetup.SetWaterTemp;")
 
-if loop_body:
+commit_signature = "static OperationError commit_profile_operation()"
+commit_offset = samovar.rfind(commit_signature)
+commit_body = extract_function_body(samovar[commit_offset:], commit_signature) if commit_offset >= 0 else ""
+if commit_body:
     require_ordered_tokens(
-        "pending setup save reapplies runtime config",
-        loop_body,
+        "profile owner reapplies runtime config",
+        commit_body,
         [
-            "setupSave = pending_setup_save_buf;",
-            "SamSetup = setupSave.staged;",
-            "save_profile();",
-            "read_config();",
-            "apply_pending_setup_sensor_resets(setupSave.resetSensor);",
+            "save_profile_nvs(active_profile_operation.settings)",
+            "if (persistResult != PERSIST_OK)",
+            "SamSetup = active_profile_operation.settings;",
+            "if (hasSettings) apply_config_runtime();",
         ],
         errors,
     )

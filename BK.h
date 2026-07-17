@@ -39,15 +39,14 @@ void bk_proc() {
 
   if (!sensor_valid(TankSensor) && process_sensor_failed("БК", "куба")) return;
 
-  if (!PowerOn) {
-    if (!mode_start_heating_session(
-      3000,
-      "Ошибка создания файла лога. Старт БК отменён.",
-      "Описание сессии занято. Старт БК отменён.",
-      String("BK"),
-      "Включен нагрев бражной колонны",
-      false
-    )) return;
+  if (!PowerOn || mode_heating_start_pending(3000)) {
+    if (mode_run_heating_start(
+          3000,
+          "Ошибка создания файла лога. Старт БК отменён.",
+          "Описание сессии занято. Старт БК отменён.",
+          String("BK"),
+          "Включен нагрев бражной колонны",
+          false) != MODE_HEATING_START_SUCCEEDED) return;
   }
 
   if (TankSensor.avgTemp >= SamSetup.DistTemp) {
@@ -137,5 +136,7 @@ void check_alarm_bk() {
 }
 
 void bk_finish() {
+  ProgramNum = 0;
+  startval = 0;
   stop_process("Работа бражной колонны завершена");
 }

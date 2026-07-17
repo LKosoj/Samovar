@@ -27,7 +27,10 @@ if "#define RMVK_ERROR 255" not in mod_rmvk:
     errors.append("mod_rmvk.h must reserve 255 as RMVK_ERROR")
 
 try:
-    cmd_body = extract_function_body(mod_rmv, "uint8_t RMVK_cmd(const char* cmd, rmvk_res_t res)")
+    cmd_body = extract_function_body(
+        mod_rmv,
+        "uint8_t RMVK_cmd(",
+    )
 except ValueError as exc:
     errors.append(str(exc))
     cmd_body = ""
@@ -38,6 +41,19 @@ if "return rmvk.conn" in cmd_body:
 for token in ['rmvk_response_equals(response, "OFF")', "return 0;"]:
     if token not in cmd_body:
         errors.append(f"RMVK_cmd RMVK_ON path missing valid OFF handling token: {token}")
+
+for token in ("heater_uart_enqueue", "powerGeneration", "energizing", "return RMVK_ERROR;"):
+    if token not in cmd_body:
+        errors.append(f"RMVK_cmd missing epoch-bound UART commit: {token}")
+
+if "uart_write_bytes" in cmd_body:
+    errors.append("RMVK_cmd bypasses the epoch-bound UART commit")
+
+if not re.search(r"uart_driver_install\(RMVK_UART,\s*BUF_SIZE \* 2,\s*0,", mod_rmv):
+    errors.append("RMVK UART TX buffer must be disabled for bounded uart_tx_chars commits")
+
+if "bool energizing =" in mod_rmvk:
+    errors.append("RMVK_cmd must not provide an epoch-less default energizing argument")
 
 for signature in (
     "uint16_t RMVK_get_in_voltge()",

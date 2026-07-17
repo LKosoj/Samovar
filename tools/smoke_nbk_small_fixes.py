@@ -115,7 +115,7 @@ if nbk:
     require_token(
         "NBK work stage initializes next deadline",
         nbk_code,
-        "nbk_work_next_time = mode_deadline_from_now((uint32_t)nbk_column_inertia * 1000);",
+        "nbk_work_next_time = safety_deadline_after(millis(), (uint32_t)nbk_column_inertia * 1000);",
     )
 
 if program_types:

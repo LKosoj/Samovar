@@ -14,17 +14,39 @@ jobs:
       - name: Set up python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.12'
           architecture: 'x64'
       - name: Install PlatformIO
-        run: python -m pip install platformio==6.1.6
+        run: python -m pip install platformio==6.1.19
+      - name: Install exact SCons
+        run: python -m platformio pkg install --global --no-save --tool platformio/tool-scons@4.40801.0
+      - name: Set reproducible build epoch
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GITHUB_SHA")" >> "$GITHUB_ENV"
       - name: Build firmwares
-        run: FIRMWARE_VERSION=${{github.ref_name}} platformio run
+        run: FIRMWARE_VERSION=${{github.ref_name}} python -m platformio run
+      - name: Generate and validate build metadata
+        run: |
+          DIRTY=false
+          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then DIRTY=true; fi
+          python tools/build_metadata.py \
+            --project-root . \
+            --core-dir "$HOME/.platformio" \
+            --environment Samovar \
+            --firmware .pio/build/Samovar/firmware.bin \
+            --map .pio/build/Samovar/firmware.map \
+            --git-sha "$GITHUB_SHA" \
+            --dirty "$DIRTY" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --output .pio/build/Samovar/build-metadata.json
+          python -m json.tool .pio/build/Samovar/build-metadata.json >/dev/null
       - name: Archive
         uses: actions/upload-artifact@v4
         with:
           name: firmware
-          path: .pio/build/*/firmware*.bin
+          path: |
+            .pio/build/Samovar/firmware.bin
+            .pio/build/Samovar/firmware.map
+            .pio/build/Samovar/build-metadata.json
           retention-days: 1
   release:
     name: Release

@@ -6,12 +6,12 @@ from pathlib import Path
 from smoke_helpers import extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
-PROGRAM_PAGE = ROOT / "data" / "program.htm"
+PROGRAM_PAGE = ROOT / "data_raw" / "program.htm"
 
 errors = []
 
 if not PROGRAM_PAGE.exists():
-  errors.append("data/program.htm not found")
+  errors.append("data_raw/program.htm not found")
   text = ""
 else:
   text = PROGRAM_PAGE.read_text(encoding="utf-8", errors="ignore")
@@ -27,7 +27,7 @@ if text:
     "function restoreProgramTemplateSelect(selectObject)",
   ]:
     if token not in text:
-      errors.append(f"data/program.htm missing W7.5 template state token: {token}")
+      errors.append(f"data_raw/program.htm missing W7.5 template state token: {token}")
 
   try:
     load_file_body = extract_function_body(text, "function loadFile(e)")
@@ -35,7 +35,7 @@ if text:
     errors.append(str(exc))
     load_file_body = ""
   if "updateProgramTemplateBaseline" in load_file_body:
-    errors.append("data/program.htm loadFile() marks user-loaded program as clean template baseline")
+    errors.append("data_raw/program.htm loadFile() marks user-loaded program as clean template baseline")
 
   try:
     dirty_body = extract_function_body(text, "function programTemplateDirty()")
@@ -91,15 +91,17 @@ if text:
     )
 
   try:
-    column_body = extract_function_body(text, "function updateColumnParams()")
+    column_body = extract_function_body(text, "async function updateColumnParams()")
   except ValueError as exc:
     errors.append(str(exc))
     column_body = ""
   if column_body:
     for token in [
-      'fetch("/ajax_col_params?mat=" + mat)',
-      "if (!r.ok) throw new Error",
-      'alert("Ошибка загрузки параметров колонны: " + err);',
+      "SamovarApp.readNumericInput(matSelect",
+      "fetch('/ajax_col_params?mat=' + encodeURIComponent(material.text))",
+      "if (!response.ok)",
+      "SamovarApp.responseErrorText",
+      "SamovarApp.showRequestError",
     ]:
       if token not in column_body:
         errors.append(f"updateColumnParams() missing visible error handling token: {token}")
@@ -107,9 +109,9 @@ if text:
       errors.append("updateColumnParams() still hides failures in console-only error handling")
 
   if re.search(r"\b(?:async\s+)?function\s+sendbutton\s*\(", text):
-    errors.append("data/program.htm still defines stale local sendbutton()")
+    errors.append("data_raw/program.htm still defines stale local sendbutton()")
   if re.search(r"\bfetch\s*\(\s*['\"]\/command\?", text):
-    errors.append("data/program.htm still calls /command through direct fetch()")
+    errors.append("data_raw/program.htm still calls /command through direct fetch()")
   if "getProgramFromFile(loadProgramSelect, { skipConfirm: true });" not in text:
     errors.append("program.htm initial template load is not explicitly confirm-free")
 

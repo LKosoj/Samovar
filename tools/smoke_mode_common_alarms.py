@@ -42,6 +42,26 @@ alarm = strip_cpp_comments(read_text("alarm.h"))
 distiller = strip_cpp_comments(read_text("distiller.h"))
 bk = strip_cpp_comments(read_text("BK.h"))
 nbk = strip_cpp_comments(read_text("nbk.h"))
+safety_transition = strip_cpp_comments(read_text("safety_transition.h"))
+
+if safety_transition:
+    for signature, tokens in [
+        (
+            "inline bool safety_deadline_expired",
+            ["(int32_t)(now - deadline) >= 0"],
+        ),
+        (
+            "inline uint32_t safety_deadline_after",
+            ["return now + delayMs;"],
+        ),
+    ]:
+        try:
+            body = extract_function_body(safety_transition, signature)
+        except ValueError as exc:
+            errors.append(str(exc))
+            body = ""
+        for token in tokens:
+            require_token(signature, body, token)
 
 for name, text in [
     ("logic.h", logic),
@@ -54,20 +74,12 @@ for name, text in [
 if mode_common:
     for signature, tokens in [
         (
-            "inline bool mode_deadline_expired",
-            ["(int32_t)(millis() - deadline) >= 0"],
-        ),
-        (
-            "inline uint32_t mode_deadline_from_now",
-            ["return millis() + delayMs;"],
-        ),
-        (
             "inline void mode_clear_alarm_pause_if_expired",
-            ["alarm_t_min > 0", "mode_deadline_expired(alarm_t_min)", "alarm_t_min = 0;"],
+            ["alarm_t_min > 0", "safety_deadline_expired(millis(), alarm_t_min)", "alarm_t_min = 0;"],
         ),
         (
             "inline void mode_set_alarm_pause_ms",
-            ["alarm_t_min = mode_deadline_from_now(delayMs);"],
+            ["alarm_t_min = safety_deadline_after(millis(), delayMs);"],
         ),
         (
             "inline bool mode_check_powered_cooling_sensors",
@@ -147,17 +159,29 @@ if mode_common:
             ],
         ),
         (
-            "inline bool mode_start_heating_session",
+            "inline ModeHeatingStartResult mode_begin_heating_session",
             [
-                "PowerOn || SamovarStatusInt != activeStatus || alarm_event",
+                "PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()",
                 "if (resetHeatLoss) reset_heat_loss_calculation();",
                 "create_data()",
                 "copy_mqtt_session_description",
+                "MODE_HEATING_PHASE_WAIT_POWER",
                 "set_power(true);",
-                "if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn)",
-                "set_power(false, false)",
+                "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+                "mode_fail_heating_start()",
+            ],
+        ),
+        (
+            "inline ModeHeatingStartResult mode_tick_heating_session",
+            [
+                "power_transition_start_pending()",
+                "MODE_HEATING_PHASE_WAIT_STABILIZE",
+                "safety_deadline_after(millis(), 1000)",
+                "safety_transition_due",
+                "SteamSensor.Start_Pressure = bme_pressure;",
                 "MqttSendMsg",
-                "SendMsg(heatingMessage, NOTIFY_MSG);",
+                "SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);",
+                "MODE_HEATING_START_SUCCEEDED",
             ],
         ),
     ]:
@@ -170,32 +194,54 @@ if mode_common:
             require_token(signature, body, token)
 
     try:
-        body = extract_function_body(mode_common, "inline bool mode_start_heating_session")
+        body = extract_function_body(mode_common, "inline ModeHeatingStartResult mode_begin_heating_session")
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
     require_ordered_tokens(
-        "mode start helper alarm gates",
+        "mode start begin alarm gates",
         body,
         [
-            "PowerOn || SamovarStatusInt != activeStatus || alarm_event",
+            "PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()",
             "create_data()",
-            "if (alarm_event || SamovarStatusInt != activeStatus)",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "copy_mqtt_session_description",
-            "if (alarm_event || SamovarStatusInt != activeStatus)",
-            "if (alarm_event || SamovarStatusInt != activeStatus)",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "set_power(true);",
-            "if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn)",
-            "set_power(false, false)",
-            "set_power_mode(POWER_SPEED_MODE)",
-            "SteamSensor.Start_Pressure = bme_pressure;",
-            "if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn)",
-            "MqttSendMsg",
-            "if (alarm_event || SamovarStatusInt != activeStatus || !PowerOn)",
-            "SendMsg(heatingMessage, NOTIFY_MSG);",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "mode_fail_heating_start()",
         ],
         errors,
     )
+
+    try:
+        body = extract_function_body(mode_common, "inline ModeHeatingStartResult mode_tick_heating_session")
+    except ValueError as exc:
+        errors.append(str(exc))
+        body = ""
+    require_ordered_tokens(
+        "mode start tick waits without repeating setup",
+        body,
+        [
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "MODE_HEATING_PHASE_WAIT_POWER",
+            "power_transition_start_pending()",
+            "MODE_HEATING_PHASE_WAIT_STABILIZE",
+            "safety_deadline_after(millis(), 1000)",
+            "safety_transition_due",
+            "SteamSensor.Start_Pressure = bme_pressure;",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "MqttSendMsg",
+            "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
+            "SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);",
+            "mode_clear_heating_start();",
+            "MODE_HEATING_START_SUCCEEDED",
+        ],
+        errors,
+    )
+    for token in ["create_data()", "copy_mqtt_session_description", "set_power(true);"]:
+        forbid_token("mode start tick", body, token)
 
     for signature in [
         "inline bool mode_check_powered_cooling_sensors",
@@ -337,10 +383,10 @@ if nbk:
     ]:
         forbid_token("nbk deadlines", nbk, token)
     for token in [
-        "nbk_opt_next_time = mode_deadline_from_now",
-        "nbk_work_next_time = mode_deadline_from_now",
-        "mode_deadline_expired(nbk_opt_next_time)",
-        "mode_deadline_expired(nbk_work_next_time)",
+        "nbk_opt_next_time = safety_deadline_after(millis(),",
+        "nbk_work_next_time = safety_deadline_after(millis(),",
+        "safety_deadline_expired(millis(), nbk_opt_next_time)",
+        "safety_deadline_expired(millis(), nbk_work_next_time)",
     ]:
         require_token("nbk deadlines", nbk, token)
     try:

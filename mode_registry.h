@@ -89,7 +89,9 @@ inline bool mode_is_program_owner(SAMOVAR_MODE mode) {
          mode == SAMOVAR_DISTILLATION_MODE ||
          mode == SAMOVAR_BEER_MODE ||
          mode == SAMOVAR_BK_MODE ||
-         mode == SAMOVAR_NBK_MODE;
+         mode == SAMOVAR_NBK_MODE ||
+         mode == SAMOVAR_SUVID_MODE ||
+         mode == SAMOVAR_LUA_MODE;
 }
 
 inline bool program_update_session_active() {
@@ -103,7 +105,15 @@ inline bool program_update_session_active() {
   return false;
 }
 
+inline bool mode_runtime_owner_idle() {
+  return SamovarStatusInt == 0 && startval == 0 && ProgramNum == 0;
+}
+
 inline bool mode_apply_power_on_command(SamovarCommands command) {
+  if (mode_switch_in_progress()) {
+    SendMsg("Команда запуска отклонена: смена режима ещё не завершена", WARNING_MSG);
+    return false;
+  }
   if (command == SAMOVAR_START) {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
     change_samovar_mode();
@@ -136,11 +146,16 @@ inline bool mode_status_by_status(int16_t status, String& text) {
 }
 
 inline void mode_dispatch_alarm() {
+  // [PKG-B п.9] Инвариант: при смене режима надзор аварий пропускается НАМЕРЕННО — реле
+  // выключены синхронно ДО входа в mode switch (барьер рубит их в emergencyStopMux).
+  // Порядок не менять: синхронное снятие реле обязано предшествовать этому skip'у.
+  if (mode_switch_in_progress()) return;
   const ModeOps* ops = mode_ops_by_mode(Samovar_Mode);
   if (ops != nullptr && ops->alarm != nullptr) ops->alarm();
 }
 
 inline void mode_dispatch_loop() {
+  if (mode_switch_in_progress()) return;
   const ModeOps* ops = mode_ops_by_status(SamovarStatusInt);
   if (ops == nullptr) return;
 

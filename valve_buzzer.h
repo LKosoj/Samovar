@@ -5,7 +5,7 @@
 #include "samovar_api.h"
 
 void open_valve(bool Val, bool msg = true) {
-  if (Val && !alarm_event) {
+  if (Val && !heater_safety_latched()) {
     valve_status = true;
     if (msg) {
       SendMsg(("Откройте подачу воды!"), WARNING_MSG);

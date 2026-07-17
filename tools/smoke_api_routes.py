@@ -3,11 +3,16 @@ import re
 import sys
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens
+from smoke_helpers import (
+    extract_braced_block_after,
+    extract_function_body,
+    require_ordered_tokens,
+    strip_cpp_comments,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 ws_file = ROOT / "WebServer.ino"
-DATA = ROOT / "data"
+DATA = ROOT / "data_raw"
 if not ws_file.exists():
     print("ERROR: WebServer.ino not found")
     sys.exit(1)
@@ -29,16 +34,11 @@ routes = {}
 for match in route_re.finditer(text):
     path = match.group("path")
     method = match.group("method").replace(" ", "")
-    routes.setdefault(path, set()).add(method)
+    routes.setdefault(path, []).append(method)
 
 required = {
     "/": None,
     "/ajax": "HTTP_GET",
-    "/command": "HTTP_POST",
-    "/program": "HTTP_POST",
-    "/save": "HTTP_POST",
-    "/calibrate": "HTTP_GET",
-    "/i2cpump": "HTTP_GET",
     "/getlog": "HTTP_GET",
 }
 
@@ -49,8 +49,25 @@ for path, method in required.items():
     if method and method not in routes[path]:
         errors.append(f"route {path} missing method {method}; found {sorted(routes[path])}")
 
-if routes.get("/command") != {"HTTP_POST"}:
-    errors.append(f"/command must be POST-only; found {sorted(routes.get('/command', set()))}")
+exact_route_methods = {
+    "/command": "HTTP_POST",
+    "/program": "HTTP_POST",
+    "/save": "HTTP_POST",
+    "/calibrate": "HTTP_GET",
+    "/i2cpump": "HTTP_GET",
+    "/i2cstepper": "HTTP_GET",
+    "/lua": "HTTP_GET",
+}
+for route, expected_method in exact_route_methods.items():
+    matches = re.findall(
+        rf'server\.on\("{re.escape(route)}"\s*,\s*(HTTP_[A-Z_]+)\s*,',
+        text,
+    )
+    if matches != [expected_method]:
+        errors.append(
+            f"route {route} must be registered exactly once as "
+            f"{expected_method}; found {matches}"
+        )
 
 if DATA.exists():
     for page_file in list(DATA.glob("*.htm")) + list(DATA.glob("*.js")):
@@ -75,15 +92,16 @@ samovar_ino = ROOT / "Samovar.ino"
 if samovar_ino.exists():
     samovar_text = samovar_ino.read_text(encoding="utf-8", errors="ignore")
     try:
-        ajax_body = extract_function_body(samovar_text, "void send_ajax_json(AsyncWebServerRequest *request)")
+        telemetry_writer = extract_function_body(
+            samovar_text, "static void writeAjaxTelemetryFields(")
         require_ordered_tokens(
             "/ajax exposes numeric ProgramNum without localized status parsing",
-            ajax_body,
+            telemetry_writer,
             [
                 'jsonAddKey(out, first, "ProgramNum")',
-                "out.print(ProgramNum + 1)",
+                "out.print(snapshot.programIndex + 1)",
                 'jsonAddKey(out, first, "ProgramIndex")',
-                "out.print(ProgramNum)",
+                "out.print(snapshot.programIndex)",
             ],
             errors,
         )
@@ -92,15 +110,15 @@ if samovar_ino.exists():
 else:
     errors.append("Samovar.ino not found")
 
-index_htm = ROOT / "data" / "index.htm"
+index_htm = ROOT / "data_raw" / "index.htm"
 if index_htm.exists():
     index_text = index_htm.read_text(encoding="utf-8", errors="ignore")
     if "indexOf('Прг №')" in index_text or 'indexOf("Прг №")' in index_text:
-        errors.append("data/index.htm still parses ProgramNum from localized Status")
+        errors.append("data_raw/index.htm still parses ProgramNum from localized Status")
     if "Number(myObj.ProgramNum || 0)" not in index_text:
-        errors.append("data/index.htm does not use numeric /ajax ProgramNum")
+        errors.append("data_raw/index.htm does not use numeric /ajax ProgramNum")
 else:
-    errors.append("data/index.htm not found")
+    errors.append("data_raw/index.htm not found")
 
 # Async-safe /command pipeline contract.
 try:
@@ -110,18 +128,33 @@ except ValueError as exc:
     command_body = ""
 
 try:
-    command_param_body = extract_function_body(text, "static const AsyncWebParameter* get_web_command_param")
+    command_param_body = extract_function_body(text, "static bool get_web_command_action")
 except ValueError as exc:
     errors.append(str(exc))
     command_param_body = ""
 
 for scope_name, scope_body in [
-    ("get_web_command_param", command_param_body),
+    ("get_web_command_action", command_param_body),
     ("web_command", command_body),
 ]:
-    for token in ["getParam(name, false)", "request->hasArg(", "request->arg(", "getParam(0)"]:
+    for token in ["getParam(name, false)", "request->hasArg(", "request->arg("]:
         if token in scope_body:
             errors.append(f"/command {scope_name} contains query/fallback API: {token}")
+
+if command_param_body:
+    require_ordered_tokens(
+        "/command requires exactly one POST body action",
+        command_param_body,
+        [
+            "request->params() != 1",
+            "request->getParam(0)",
+            "!param->isPost()",
+            "param->isFile()",
+            "name.toLowerCase()",
+            "!web_command_name_allowed(name)",
+        ],
+        errors,
+    )
 
 if command_body:
     allowed_responses = {"OK", "BUSY", "IGNORED", "POWER_OFF", "BAD_REQUEST"}
@@ -137,27 +170,25 @@ if command_body:
             errors.append(f"/command response token missing: {token}")
 
     try:
-        command_key_body = extract_function_body(text, "static String get_web_command_key(AsyncWebServerRequest *request)")
+        command_key_body = extract_function_body(text, "static bool web_command_name_allowed")
     except ValueError as exc:
         errors.append(str(exc))
         command_key_body = ""
-    if "getParam(0)" in command_key_body:
-        errors.append("/command throttle key uses first query parameter")
-    if "getParam(name, true)" not in text:
-        errors.append("/command does not read POST body params with getParam(name, true)")
     for token in [
-        'web_command_has_arg(request, "voltage")',
-        'web_command_has_arg(request, "mixer")',
-        'web_command_has_arg(request, "watert")',
-        'web_command_has_arg(request, "pumpspeed")',
-        'web_command_has_arg(request, "pnbk")',
-        'web_command_has_arg(request, "nbkopt")',
+        'name == "voltage"',
+        'name == "mixer"',
+        'name == "watert"',
+        'name == "pumpspeed"',
+        'name == "pnbk"',
+        'name == "nbkopt"',
     ]:
         if token not in command_key_body:
             errors.append(f"/command throttle key does not recognize branch: {token}")
 
     for token in [
-        "String commandKey = get_web_command_key(request);",
+        "get_web_command_action(request, action, actionParam)",
+        "if (!parseResult.ok())",
+        "String commandKey = action;",
         "commandKey == last_command_key",
         "last_command_key = commandKey;",
     ]:
@@ -165,17 +196,17 @@ if command_body:
             errors.append(f"/command throttle no longer keys by command: {token}")
 
     pending_contract = {
-        "voltage": "queue_pending_float(pending_voltage_flag, pending_voltage_value, voltage)",
-        "mixer": "queue_pending_bool(pending_mixer_flag, pending_mixer_on, mixerValue == 1)",
-        "pnbk": "queue_pending_float(pending_pnbk_flag, pending_pnbk_value, pnbkValue)",
-        "watert": "queue_pending_float(pending_water_temp_flag, pending_water_temp_value, waterTemp)",
-        "pumpspeed": "queue_pending_float(pending_pump_speed_flag, pending_pump_speed_rate, pumpSpeed)",
+        "voltage": "queue_pending_value(pending_voltage_flag, pending_voltage_value, voltage)",
+        "mixer": "queue_pending_value(pending_mixer_flag, pending_mixer_on, boolValue)",
+        "pnbk": "queue_pending_nbk(nbkCommand)",
+        "watert": "queue_pending_value(pending_water_temp_flag, pending_water_temp_value, waterPwm)",
+        "pumpspeed": "queue_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)",
         "nbkopt": "queue_pending_flag(pending_nbkopt_flag)",
         "rescands": "queue_pending_flag(pending_rescan_ds_flag)",
-        "lua": "queue_pending_string(pending_lua_file_flag, pending_lua_file, web_command_arg(request, \"lua\"))",
+        "lua": "queue_pending_string(pending_lua_file_flag, pending_lua_file, actionParam->value())",
     }
     for name, token in pending_contract.items():
-        if f'web_command_has_arg(request, "{name}")' not in command_body:
+        if f'action == "{name}"' not in command_body:
             errors.append(f"/command missing branch: {name}")
         if token not in command_body:
             errors.append(f"/command {name} does not use pending queue: {token}")
@@ -200,21 +231,23 @@ if command_body:
         "/command rescands rejects active process before queuing OneWire scan",
         command_body,
         [
-            'web_command_has_arg(request, "rescands")',
+            'action == "rescands"',
             "samovar_process_active()",
-            'send_web_command_response(request, 409, "BUSY")',
+            'send_web_command_response(request, 503, "BUSY")',
             "queue_pending_flag(pending_rescan_ds_flag)",
         ],
         errors,
     )
     try:
-        rescands_body, _ = extract_braced_block_after(command_body, 'web_command_has_arg(request, "rescands")')
+        rescands_body, _ = extract_braced_block_after(command_body, 'action == "rescands"')
         rescands_active_body, rescands_active_end = extract_braced_block_after(
             rescands_body,
             "if (samovar_process_active())",
         )
-        if 'send_web_command_response(request, 409, "BUSY")' not in rescands_active_body:
-            errors.append("/command rescands active branch does not return 409 BUSY")
+        # 503, как и все остальные отказы /command: занятость - это временная
+        # неготовность, а не конфликт состояния, и клиенту незачем различать их.
+        if 'send_web_command_response(request, 503, "BUSY")' not in rescands_active_body:
+            errors.append("/command rescands active branch does not return 503 BUSY")
         if "return;" not in rescands_active_body:
             errors.append("/command rescands active branch does not return before queueing")
         if "queue_pending_flag(pending_rescan_ds_flag)" in rescands_active_body:
@@ -236,41 +269,24 @@ if menu_file.exists():
 else:
     errors.append("Menu.ino not found")
 
-lua_handler_re = re.compile(
-    r'server\.on\("/lua"\s*,\s*HTTP_GET\s*,\s*\[\]\(AsyncWebServerRequest \*request\)\s*\{(?P<body>.*?)\n\s*\}\);',
-    re.S,
-)
-lua_handler = lua_handler_re.search(text)
-if lua_handler:
-    lua_body = lua_handler.group("body")
-    for token in [
-        'request->hasArg("script")',
-        "queue_pending_string(pending_lua_file_flag, pending_lua_file, request->arg(\"script\"))",
-        "queue_pending_flag(pending_lua_start_flag)",
-    ]:
-        if token not in lua_body:
-            errors.append(f"/lua handler missing pending contract: {token}")
-    for token in ["run_lua_script(", "load_lua_script(", "get_lua_script_list("]:
-        if token in lua_body:
-            errors.append(f"/lua handler contains direct async Lua/SPIFFS operation: {token}")
-else:
-    errors.append("/lua handler not found")
-
 try:
-    reject_program_body = extract_function_body(text, "bool reject_program_update_if_busy(AsyncWebServerRequest *request)")
+    profile_queue_body = extract_function_body(
+        text, "static OperationError queue_profile_operation(")
 except ValueError as exc:
     errors.append(str(exc))
-    reject_program_body = ""
+    profile_queue_body = ""
 
-if reject_program_body:
+if profile_queue_body:
     require_ordered_tokens(
-        "program update reject checks pending slot before active session",
-        reject_program_body,
+        "profile queue checks slot/session before atomic reserve",
+        profile_queue_body,
         [
-            "pending_program_slot_busy()",
-            "request->send(503, \"text/plain\", \"BUSY: предыдущее изменение программы ещё не применено\")",
-            "program_update_session_active()",
-            "request->send(409, \"text/plain\", \"BUSY: программа не изменена, активна сессия режима\")",
+            "pending_command_lock(pdMS_TO_TICKS(50))",
+            "profile_operation_phase_load() != PROFILE_OPERATION_EMPTY",
+            "requireProgramIdle && program_update_session_active()",
+            "operation_store_reserve_locked(",
+            "reset_profile_operation_slot();",
+            "profile_operation_phase_store(PROFILE_OPERATION_QUEUED);",
         ],
         errors,
     )
@@ -294,72 +310,159 @@ if program_json_body:
         'toJsonString(err)',
         'json += ",\\"program\\":";',
         'toJsonString(programText)',
-        'request->send(statusCode, "application/json", json)',
+        'request->beginResponse(statusCode, "application/json", json)',
+        'response->addHeader("Cache-Control", "no-store")',
+        "request->send(response)",
     ]:
         if token not in program_json_body:
             errors.append(f"/program JSON response helper missing token: {token}")
 
 try:
-    reject_program_json_body = extract_function_body(text, "static bool reject_program_update_if_busy_json")
+    program_accepted_body = extract_function_body(
+        text, "static void send_program_operation_accepted(")
 except ValueError as exc:
     errors.append(str(exc))
-    reject_program_json_body = ""
+    program_accepted_body = ""
 
-if reject_program_json_body:
-    require_ordered_tokens(
-        "program JSON reject checks pending slot before active session",
-        reject_program_json_body,
-        [
-            "pending_program_slot_busy()",
-            'send_program_json_response(request, 503, false, F("BUSY: предыдущее изменение программы ещё не применено"), String())',
-            "program_update_session_active()",
-            'send_program_json_response(request, 409, false, F("BUSY: программа не изменена, активна сессия режима"), String())',
-        ],
-        errors,
-    )
+if program_accepted_body:
+    for token in (
+        r'\"ok\":true',
+        r'\"err\":\"\"',
+        r'\"program\":',
+        r'\"operationId\":',
+        r'\"state\":\"queued\"',
+        r'\"error\":\"none\"',
+        '202, "application/json", json',
+    ):
+        if token not in program_accepted_body:
+            errors.append(f"/program accepted response missing token: {token}")
 
 if web_program_body:
     require_ordered_tokens(
-        "/program rejects with JSON before pending queue",
+        "/program validates action and draft before pending queue",
         web_program_body,
         [
-            "const AsyncWebParameter *wProgramParam = get_request_param(request, \"WProgram\");",
-            "reject_program_update_if_busy_json(request)",
-            "queue_pending_program(pendingMode, wProgramParam->value())",
+            'const uint8_t clearCount = request_param_count(request, "clear");',
+            'const uint8_t wProgramCount = request_param_count(request, "WProgram");',
+            'wProgramCount == 1 ? get_request_param(request, "WProgram") : nullptr',
+            "wProgramCount == 1 && (!wProgramParam || wProgramParam->isFile())",
+            'F("WProgram должен быть текстовым параметром")',
+            'clearParam->value() != "1"',
+            "ProgramDraft programDraft{};",
+            "ProgramUpdateAction programAction = PROGRAM_UPDATE_NONE;",
+            "prepare_program_for_mode(",
+            "sourceMode,",
+            "if (!result.ok())",
+            "programAction = PROGRAM_UPDATE_REPLACE;",
+            "uint8_t metadataFlags = 0;",
+            "parse_control_vless(",
+            "const bool hasMetadata = metadataFlags != 0;",
+            "queue_profile_operation(",
+            "send_program_operation_accepted(request, responseProgram, operationId);",
         ],
         errors,
     )
     if 'request->send(' in web_program_body:
         errors.append("/program handler bypasses JSON response helper")
-    if 'send_program_json_response(request, 200, true, String(), responseProgram)' not in web_program_body:
-        errors.append("/program success does not use JSON contract")
+    for token in [
+        "PROGRAM_UPDATE_CLEAR",
+        "format_program_parse_error(result)",
+        "serialize_program_for_mode(sourceMode)",
+    ]:
+        if token not in web_program_body:
+            errors.append(f"/program action contract missing token: {token}")
+    for forbidden in ["pending_program_str", ".toFloat()", "program_commit(", "program_clear("]:
+        if forbidden in web_program_body:
+            errors.append(f"/program handler contains forbidden token: {forbidden}")
     for token in ["set_program(", "set_beer_program(", "set_dist_program(", "set_nbk_program("]:
         if token in web_program_body:
             errors.append(f"/program handler applies program directly: {token}")
 
-app_js = ROOT / "data" / "app.js"
+app_js = ROOT / "data_raw" / "app.js"
 if app_js.exists():
     app_text = app_js.read_text(encoding="utf-8", errors="ignore")
     try:
         post_program_body = extract_function_body(app_text, "async function postProgram")
+        read_program_body = extract_function_body(app_text, "async function readProgramResponse")
+        clear_program_body = extract_function_body(app_text, "async function clearProgram")
     except ValueError as exc:
         errors.append(str(exc))
         post_program_body = ""
+        read_program_body = ""
+        clear_program_body = ""
     if post_program_body:
         for token in [
-            "await fetch('/program', { method: 'POST', body: new FormData(form) })",
+            "const body = new FormData();",
+            "const allowedFields = ['WProgram', 'vless', 'Descr'];",
+            "form.querySelectorAll('[name=\"' + name + '\"]')",
+            "body.append(name, fields[0].value);",
+            "await fetch('/program', { method: 'POST', body: body })",
+            "readProgramResponse(resp)",
+            "await waitForOperation(result.operationId);",
+            "result.state = 'succeeded';",
+        ]:
+            if token not in post_program_body:
+                errors.append(f"data_raw/app.js postProgram missing queue contract token: {token}")
+        if "new FormData(form)" in post_program_body:
+            errors.append("data_raw/app.js postProgram serializes non-allowlisted form fields")
+    if read_program_body:
+        for token in [
             "await resp.json()",
             "typeof result.ok !== 'boolean'",
             "typeof result.err !== 'string'",
             "typeof result.program !== 'string'",
             "Некорректный контракт /program.",
+            "const acceptedKeys = baseKeys.concat(['operationId', 'state', 'error']);",
+            "validateOperationPayload(result, acceptedKeys, undefined, '/program');",
+            "result.httpStatus = resp.status;",
+            "result.queued = result.ok && resp.status === 202;",
         ]:
-            if token not in post_program_body:
-                errors.append(f"data/app.js postProgram missing JSON contract token: {token}")
-        if "resp.text()" in post_program_body:
-            errors.append("data/app.js postProgram still reads text response")
+            if token not in read_program_body:
+                errors.append(f"data_raw/app.js readProgramResponse missing JSON contract token: {token}")
+        if "resp.text()" in read_program_body:
+            errors.append("data_raw/app.js program response parser still reads text response")
+    if clear_program_body:
+        require_ordered_tokens(
+            "data_raw/app.js clearProgram sends exact standalone clear action",
+            clear_program_body,
+            [
+                "confirm('Очистить текущую программу?')",
+                "const body = new FormData();",
+                "body.append('clear', '1');",
+                "await fetch('/program', { method: 'POST', body: body })",
+                "readProgramResponse(resp)",
+                "if (!result.queued)",
+                "await waitForOperation(result.operationId);",
+                "Программа очищена.",
+            ],
+            errors,
+        )
+        if "WProgram" in clear_program_body:
+            errors.append("data_raw/app.js clearProgram serializes WProgram")
+    if "clearProgram: clearProgram" not in app_text:
+        errors.append("data_raw/app.js does not export clearProgram")
 else:
-    errors.append("data/app.js not found")
+    errors.append("data_raw/app.js not found")
+
+program_clear_browser = ROOT / "tools" / "test_program_clear_ui_browser.py"
+if not program_clear_browser.exists():
+    errors.append("tools/test_program_clear_ui_browser.py not found")
+else:
+    browser_text = program_clear_browser.read_text(encoding="utf-8", errors="ignore")
+    for token in [
+        '{ name: "desktop", width: 1440, height: 900 }',
+        '{ name: "mobile", width: 390, height: 844 }',
+        'const pages = ["index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm", "program.htm"]',
+        "for (const status of [202, 400, 409, 503])",
+        "cancelled confirmation sent a request",
+        "invalid clear body",
+        "feedback is not visible",
+        "feedback.text.includes(lastMessage)",
+        "page.on(\"pageerror\"",
+        "playwright-cli is required for this explicit browser gate",
+    ]:
+        if token not in browser_text:
+            errors.append(f"program clear browser gate missing token: {token}")
 
 program_pages = [
     "index.htm",
@@ -371,16 +474,35 @@ program_pages = [
     "brewxml.htm",
     "setup.htm",
 ]
+clear_program_pages = {
+    "index.htm",
+    "beer.htm",
+    "distiller.htm",
+    "nbk.htm",
+    "bk.htm",
+    "program.htm",
+}
 for page in program_pages:
-    page_file = ROOT / "data" / page
+    page_file = ROOT / "data_raw" / page
     if not page_file.exists():
-        errors.append(f"data/{page} not found")
+        errors.append(f"data_raw/{page} not found")
         continue
     page_text = page_file.read_text(encoding="utf-8", errors="ignore")
     if "SamovarApp.postProgram(" not in page_text:
-        errors.append(f"data/{page} does not use SamovarApp.postProgram for /program")
+        errors.append(f"data_raw/{page} does not use SamovarApp.postProgram for /program")
     if "fetch('/program'" in page_text or 'fetch("/program"' in page_text:
-        errors.append(f"data/{page} still posts /program directly")
+        errors.append(f"data_raw/{page} still posts /program directly")
+    if page in clear_program_pages:
+        if page_text.count("id='clearprogram'") != 1:
+            errors.append(f"data_raw/{page} must contain exactly one clearprogram button")
+        if "SamovarApp.clearProgram();" not in page_text:
+            errors.append(f"data_raw/{page} clear button does not use shared clearProgram helper")
+        if "Изменение программы принято в обработку." in page_text:
+            errors.append(f"data_raw/{page} still reports queued work as success")
+        if page == "program.htm":
+            for token in ['id="messagesBox"', 'id="messages"']:
+                if token not in page_text:
+                    errors.append(f"data_raw/program.htm visible feedback missing token: {token}")
     for token in [
         'text !== "OK"',
         "text !== 'OK'",
@@ -392,7 +514,7 @@ for page in program_pages:
         "response.program",
     ]:
         if token in page_text:
-            errors.append(f"data/{page} still has old /program text handling: {token}")
+            errors.append(f"data_raw/{page} still has old /program text handling: {token}")
 
 try:
     save_body = extract_function_body(text, "void handleSave")
@@ -402,14 +524,26 @@ except ValueError as exc:
 
 if save_body:
     require_ordered_tokens(
-        "/save rejects active session before pending setup/program queue",
+        "/save rejects clear, validates draft, then queues POD",
         save_body,
         [
-            "get_request_param(request, \"WProgram\") && reject_program_update_if_busy(request)",
-            "queue_pending_setup_save(setupSave, hasProgram, pendingMode, pendingProgramText, hasSwitchMode, requestedMode, busyText)",
+            'request_param_count(request, "clear") != 0',
+            'const uint8_t wProgramCount = request_param_count(request, "WProgram");',
+            'wProgramCount == 1 ? get_request_param(request, "WProgram") : nullptr',
+            "wProgramCount == 1 && (!wProgramParam || wProgramParam->isFile())",
+            'build_error_envelope("argument", "WProgram", "WProgram must be a text parameter")',
+            "prepare_program_for_mode(",
+            "programDraftPtr = &programDraft;",
+            "prepare_default_program_for_mode(",
+            "queue_profile_operation(",
+            "wProgramCount == 1,",
+            "send_save_operation_accepted(request, operationId);",
         ],
         errors,
     )
+    for forbidden in ["pending_program_str", "PendingProgramMode", "pendingProgramText"]:
+        if forbidden in save_body:
+            errors.append(f"/save reintroduces raw pending program token: {forbidden}")
 
 mode_registry_file = ROOT / "mode_registry.h"
 if mode_registry_file.exists():
@@ -425,6 +559,8 @@ if mode_registry_file.exists():
         "SAMOVAR_BEER_MODE",
         "SAMOVAR_BK_MODE",
         "SAMOVAR_NBK_MODE",
+        "SAMOVAR_SUVID_MODE",
+        "SAMOVAR_LUA_MODE",
     ]:
         if token not in owner_body:
             errors.append(f"program owner helper missing mode: {token}")
@@ -500,39 +636,34 @@ if samovar_file.exists():
         ],
         errors,
     )
+    process_signature = "static void process_profile_operation()"
+    process_offset = samovar_text.rfind(process_signature)
+    process_body = extract_function_body(
+        samovar_text[process_offset:], process_signature) if process_offset >= 0 else ""
     require_ordered_tokens(
-        "pending program loop rejects active session before applying program",
-        loop_body,
+        "profile operation rechecks races before owner commit",
+        process_body,
         [
-            "if (ppm != PPM_NONE) {",
+            "PROFILE_OPERATION_REQUIRE_PROGRAM_IDLE",
             "program_update_session_active()",
-            "Программа не изменена: активна сессия режима.",
-            "case PPM_RECT: set_program(pstr); break;",
-            "case PPM_BEER: set_beer_program(pstr); break;",
-            "case PPM_DIST: set_dist_program(pstr); break;",
-            "case PPM_NBK:  set_nbk_program(pstr); break;",
+            "Samovar_Mode != sourceMode",
+            "OPERATION_ERROR_CANCELLED",
+            "commit_profile_operation();",
+            "set_profile_operation_terminal(",
         ],
         errors,
     )
-    try:
-        pending_program_body, _ = extract_braced_block_after(loop_body, "if (ppm != PPM_NONE)")
-        active_reject_body, active_reject_end = extract_braced_block_after(
-            pending_program_body,
-            "if (program_update_session_active())",
-        )
-        else_index = pending_program_body.find("else", active_reject_end)
-        if else_index < 0:
-            errors.append("pending program apply has no else branch after active-session reject")
-            apply_body = ""
-        else:
-            apply_body, _ = extract_braced_block_after(pending_program_body, "else", active_reject_end)
-        for token in ["set_program(", "set_beer_program(", "set_dist_program(", "set_nbk_program("]:
-            if token in active_reject_body:
-                errors.append(f"pending program active reject branch still applies program: {token}")
-            if token not in apply_body:
-                errors.append(f"pending program else branch missing apply call: {token}")
-    except ValueError as exc:
-        errors.append(str(exc))
+    for forbidden in [
+        "pending_program_str",
+        "set_program(",
+        "set_beer_program(",
+        "set_dist_program(",
+        "set_nbk_program(",
+        "prepare_program_for_mode(",
+        "program_parse_lines(",
+    ]:
+        if forbidden in loop_body:
+            errors.append(f"pending program loop contains forbidden parse/string token: {forbidden}")
     if "scan_ds_adress(" in loop_body or "pending_rescan_ds_flag" in loop_body:
         errors.append("loop() contains direct OneWire rescan handling")
     try:
@@ -545,8 +676,13 @@ if samovar_file.exists():
             "SysTicker serializes pending OneWire scan with normal DS polling",
             sys_ticker_body,
             [
-                "if (pending_rescan_ds_flag) {",
+                "bool rescanDs = false;",
+                "pending_command_lock(pdMS_TO_TICKS(50))",
+                "if (locked && pending_rescan_ds_flag) {",
                 "pending_rescan_ds_flag = false;",
+                "rescanDs = !mode_switch_in_progress();",
+                "pending_command_unlock(locked);",
+                "if (rescanDs) {",
                 "samovar_process_active()",
                 'SendMsg("Сканирование датчиков отклонено: процесс активен.", WARNING_MSG);',
                 "DS_getvalue();",
@@ -558,7 +694,7 @@ if samovar_file.exists():
         if samovar_text.count("scan_ds_adress(") != sys_ticker_body.count("scan_ds_adress("):
             errors.append("Samovar.ino contains OneWire scan outside triggerSysTicker")
         try:
-            rescan_body, rescan_end = extract_braced_block_after(sys_ticker_body, "if (pending_rescan_ds_flag)")
+            rescan_body, rescan_end = extract_braced_block_after(sys_ticker_body, "if (rescanDs)")
             active_rescan_body, active_rescan_end = extract_braced_block_after(
                 rescan_body,
                 "if (samovar_process_active())",
@@ -598,12 +734,16 @@ else:
 spiffs_file = ROOT / "SPIFFSEditor.h"
 if spiffs_file.exists():
     spiffs_text = spiffs_file.read_text(encoding="utf-8", errors="ignore")
-    post_error_marker = "request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR) == SPIFFS_EDITOR_LUA_RELOAD_BUSY"
+    # Гейт разрушающих операций редактора: и активный процесс, и ещё не выполненное
+    # отложенное закрытие журнала (close идёт тиком SysTicker уже после того, как
+    # samovar_process_active() стала ложной — иначе осталось бы окно гонки).
+    gate_marker = "samovar_process_active() || data_log_close_pending()"
+    post_error_marker = "request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR).length() > 0"
     post_error_index = spiffs_text.find(post_error_marker)
     if post_error_index < 0:
         errors.append(f"SPIFFSEditor POST upload error response missing: {post_error_marker}")
     else:
-        post_error_window = spiffs_text[post_error_index:post_error_index + 300]
+        post_error_window = spiffs_text[post_error_index:post_error_index + 200]
         if 'request->send(503, "text/plain", "BUSY");' not in post_error_window:
             errors.append('SPIFFSEditor POST upload error response missing: request->send(503, "text/plain", "BUSY");')
     try:
@@ -612,18 +752,156 @@ if spiffs_file.exists():
         errors.append(str(exc))
         upload_body = ""
     if upload_body:
-        for token in [
-            'getValue(filename, \'.\', 1) == "lua"',
-            "pending_command_lock(pdMS_TO_TICKS(50))",
-            "pending_lua_reload_flag = true;",
-            "request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);",
-            "pending_command_unlock(locked);",
-        ]:
-            if token not in upload_body:
-                errors.append(f"SPIFFSEditor .lua upload reload contract missing: {token}")
+        require_ordered_tokens(
+            "SPIFFSEditor .lua reload is rejected across the mode-barrier race",
+            upload_body,
+            [
+                'getValue(filename, \'.\', 1) == "lua"',
+                "if (mode_switch_in_progress())",
+                "request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);",
+                "pending_command_lock(pdMS_TO_TICKS(50))",
+                "if (locked && !mode_switch_in_progress())",
+                "pending_lua_reload_flag = true;",
+                "request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);",
+                "pending_command_unlock(locked);",
+            ],
+            errors,
+        )
+        if upload_body.count("mode_switch_in_progress()") < 2:
+            errors.append("SPIFFSEditor .lua upload does not recheck the mode barrier under the pending lock")
         for token in ["load_lua_script(", "run_lua_script("]:
             if token in upload_body:
                 errors.append(f"SPIFFSEditor upload contains direct Lua operation: {token}")
+        # Гейт «идёт процесс / журнал ещё закрывается»: во время перегонки и пока
+        # не выполнено отложенное закрытие журнала редактор не пишет чанки на ФС
+        # (гонка с журналом на ядре 0). Загрузчик помечает запрос, ответ 503 даёт
+        # handleRequest. Гейт обязан стоять ДО открытия файла на запись, иначе
+        # перестановка гейта после _fs.open(p, "w") пройдёт незамеченной.
+        upload_gate_index = upload_body.find(gate_marker)
+        upload_open_index = upload_body.find('_fs.open(p, "w")')
+        if upload_gate_index < 0:
+            errors.append("SPIFFSEditor upload is not gated by samovar_process_active()/data_log_close_pending()")
+        elif upload_open_index < 0 or upload_gate_index > upload_open_index:
+            errors.append("SPIFFSEditor upload gate does not precede the file open for write")
+        if "SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE" not in upload_body:
+            errors.append("SPIFFSEditor upload does not flag the busy reason when a process is active")
+        # Гейт должен проверяться не только при открытии файла (первый чанк), но и
+        # на каждом последующем вызове handleUpload: процесс может стартовать на
+        # ядре 0 уже в ходе загрузки, и тогда запись оставшихся чанков снова
+        # гонялась бы с журналом. Устойчивое к текстовым переформулировкам условие
+        # достижимости — гейт стоит на ГЛУБИНЕ ВЛОЖЕННОСТИ 0 тела handleUpload (на
+        # одном уровне с guard'ом записи `if (request->_tempFile)`), т.е. НЕ обёрнут
+        # ни в какой БЛОК ({...}: `if (!index) { ... }`, `if (index==0) { ... }`,
+        # второй такой же блок, голые {}). Любая скобочная обёртка, ограничивающая
+        # рекчек первым чанком, повышает глубину — и ловится независимо от её
+        # текстовой формы, в отличие от позиционного/по-литералу сравнения.
+        # Счётчик пропускает содержимое строковых/символьных литералов, чтобы
+        # непарная `{`/`}` внутри строки (напр. отладочный `"note {"`) не сбивала
+        # глубину и не давала ложного падения на корректной правке.
+        #
+        # ПРИНЯТАЯ ГРАНИЦА ТЕХНИКИ (не ловится статикой — держат компиляция 7
+        # окружений и ревью): (1) нейтрализация самого условия (`if (false && ...)`);
+        # (2) БЕЗСКОБОЧНАЯ обёртка control-flow (`if (!index)` без `{}` над рекчеком):
+        # подсчёт скобок — прокси для control-flow-вложенности, а `if/for/while` без
+        # скобок создают вложенность БЕЗ `{`, поэтому brace-depth её принципиально не
+        # видит. Догонять это новыми частными правилами = разбор грамматики C++, что
+        # для smoke-пина неоправданно; достоверно закрыл бы только рантайм-харнесс
+        # (решение о трудозатратах — за владельцем). Пин ловит все РЕАЛИСТИЧНЫЕ
+        # регрессии рекчека: удаление, перестановку после записи, скобочную обёртку.
+        body_nc = strip_cpp_comments(upload_body)
+        write_pos = body_nc.find("request->_tempFile.write(data, len)")
+        depth = 0
+        pos = 0
+        in_string = False
+        in_char = False
+        escaped = False
+        gate_at_body_level = False
+        while pos < len(body_nc):
+            ch = body_nc[pos]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                pos += 1
+                continue
+            if in_char:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == "'":
+                    in_char = False
+                pos += 1
+                continue
+            if ch == '"':
+                in_string = True
+                pos += 1
+                continue
+            if ch == "'":
+                in_char = True
+                pos += 1
+                continue
+            if body_nc.startswith(gate_marker, pos):
+                if depth == 0 and (write_pos < 0 or pos < write_pos):
+                    gate_at_body_level = True
+                pos += len(gate_marker)
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+            pos += 1
+        if upload_body.count(gate_marker) < 2:
+            errors.append("SPIFFSEditor upload gates only the first chunk (no re-check before writing later chunks)")
+        elif write_pos < 0:
+            errors.append("SPIFFSEditor upload has no chunk write to guard")
+        elif not gate_at_body_level:
+            errors.append("SPIFFSEditor upload re-check gate is not at handleUpload body level (unreachable for chunks after the first)")
+
+    # Разрушающие операции редактора (DELETE, создание через PUT) обязаны
+    # отклоняться при активном процессе ДО того, как тронут ФС. Проверяем каждую
+    # ветку отдельно и требуем, чтобы гейт стоял перед мутацией, иначе выпадение
+    # или сдвиг одного гейта пройдёт незамеченным.
+    # (handleRequest не извлекается через extract_function_body: тело строит JSON
+    # с литеральными { } в строках, чего брейс-парсер хелпера не разбирает.)
+    # Якорим поиск на определении handleRequest: те же маркеры методов есть и в
+    # canHandle (там они лишь `return true`), а гейт нужен именно в handleRequest.
+    handle_request_index = spiffs_text.find("void SPIFFSEditor::handleRequest")
+    if handle_request_index < 0:
+        errors.append("SPIFFSEditor::handleRequest definition not found")
+        handle_request_index = 0
+    busy_send = 'request->send(503, "text/plain", "BUSY");'
+    for method_marker, mutation, label in (
+        ("request->method() == HTTP_DELETE", "_fs.remove(", "DELETE"),
+        ("request->method() == HTTP_PUT", '_fs.open(filename, "w")', "PUT create"),
+    ):
+        branch_index = spiffs_text.find(method_marker, handle_request_index)
+        if branch_index < 0:
+            errors.append(f"SPIFFSEditor {label} branch not found")
+            continue
+        # Окно ограничиваем телом самой ветки — до следующего разветвления по
+        # методу или до следующего определения метода класса. Иначе гейт соседней
+        # ветки подменил бы удалённый гейт текущей, и мутация прошла бы незамеченной.
+        search_from = branch_index + len(method_marker)
+        boundaries = [
+            idx
+            for idx in (
+                spiffs_text.find("request->method() == HTTP_", search_from),
+                spiffs_text.find("void SPIFFSEditor::", search_from),
+            )
+            if idx >= 0
+        ]
+        window_end = min(boundaries) if boundaries else len(spiffs_text)
+        window = spiffs_text[branch_index:window_end]
+        gate_index = window.find(gate_marker)
+        mutation_index = window.find(mutation)
+        if gate_index < 0 or busy_send not in window[gate_index:gate_index + 150]:
+            errors.append(f"SPIFFSEditor {label} is not gated by samovar_process_active()/data_log_close_pending() with 503 BUSY")
+        elif mutation_index < 0 or gate_index > mutation_index:
+            errors.append(f"SPIFFSEditor {label} gate does not precede the filesystem mutation")
 else:
     errors.append("SPIFFSEditor.h not found")
 

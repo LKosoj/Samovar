@@ -23,8 +23,6 @@ SKIP_DIRS = {
 }
 
 SKIP_FILES = {
-    "AUDIT.md",
-    "AUDIT_REMEDIATION_PLAN.md",
     "smoke_quality_cleanup.py",
 }
 

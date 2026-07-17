@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STYLE = ROOT / "data" / "style.css"
+STYLE = ROOT / "data_raw" / "style.css"
+# .gz - продукт сборки: в data/ сырого style.css уже нет, он уезжает только сжатым.
 STYLE_GZ = ROOT / "data" / "style.css.gz"
 
 errors = []
@@ -24,8 +25,8 @@ if css:
     if forbidden in css:
       errors.append(f"style.css still has global prgline selector: {forbidden!r}")
   for token in [
-    ".prgline input,\n.prgline img,\n.prgline select",
-    ".prgline input:enabled,\n.prgline img,\n.prgline select",
+    ".prgline input,\n.prgline .program-row-action,\n.prgline select",
+    ".prgline input:enabled,\n.prgline .program-row-action,\n.prgline select",
   ]:
     if token not in css:
       errors.append(f"style.css missing scoped prgline selector: {token!r}")
@@ -68,7 +69,7 @@ if css:
 if STYLE.exists() and STYLE_GZ.exists():
   try:
     if gzip.decompress(STYLE_GZ.read_bytes()) != STYLE.read_bytes():
-      errors.append("data/style.css.gz is not synchronized with data/style.css")
+      errors.append("data/style.css.gz is not synchronized with data_raw/style.css")
   except OSError as exc:
     errors.append(f"data/style.css.gz is not valid gzip: {exc}")
 elif STYLE.exists():

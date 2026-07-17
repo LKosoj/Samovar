@@ -62,7 +62,7 @@ if runtime_helpers:
 
 checks = [
     ("Samovar.ino", "void triggerSysTicker"),
-    ("Samovar.ino", "void send_ajax_json"),
+    ("Samovar.ino", "static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot"),
     ("logic.h", "void withdrawal"),
     ("logic.h", "String get_nbk_status_text"),
     ("logic.h", "String get_beer_status_text"),
@@ -88,7 +88,9 @@ for file_name, signature in checks:
 
 snapshot_requirements = {
     "Samovar.ino:void triggerSysTicker": ["current_program_type()"],
-    "Samovar.ino:void send_ajax_json": ["current_program_type()"],
+    "Samovar.ino:static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot": [
+        "current_program_type()"
+    ],
     "logic.h:void withdrawal": ["program_type_at(currentProgram)"],
     "logic.h:String get_nbk_status_text": ["current_program_type()"],
     "logic.h:String get_beer_status_text": ["current_program_type()"],

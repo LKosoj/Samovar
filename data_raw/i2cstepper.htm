@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset='utf-8'>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, max-age=0">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css">
+  <title>Самовар - I2CStepper</title>
+  <style>
+    #i2cstepperContent {
+      box-sizing: border-box;
+      width: 100%;
+    }
+
+    .i2c-panel {
+      border: 1px dashed var(--border-dashed);
+      box-sizing: border-box;
+      display: none;
+      margin-bottom: 1em;
+      padding: 1em;
+      width: 100%;
+    }
+
+    .i2c-actions {
+      flex-wrap: wrap;
+      gap: 0.6em;
+      justify-content: space-around;
+    }
+
+    .state-button.state-on {
+      background-color: #19733c;
+    }
+
+    .state-button.state-on:hover {
+      background-color: #176b3a;
+      color: var(--text-on-accent);
+    }
+
+    .state-button.state-off {
+      background-color: var(--accent);
+    }
+  </style>
+  <script src="app.js"></script>
+  <script>
+    const FLAG_REVERSE = 1;
+    const FLAG_SMOOTH = 2;
+    const SENSOR_ACTIVE_HIGH = 1;
+    const SENSOR_STOP = 2;
+    const SENSOR_PUMP_PAUSE = 4;
+    const STATUS_RUNNING = 1;
+    const CAP_MIXER = 1;
+    const CAP_PUMP = 2;
+    const CAP_FILLING = 4;
+    const CAP_RELAY = 8;
+    const CAP_SENSOR = 16;
+
+    var OfflineCounter = 0;
+    var dirtyDevices = { mixer: false, pump: false };
+    var deviceEditVersion = { mixer: 0, pump: 0 };
+    var pendingDeviceConfig = { mixer: null, pump: null };
+    var deviceCaps = { mixer: 0, pump: 0 };
+    var deviceState = {
+      mixer: { present: false, supported: false, active: false, error: true },
+      pump: { present: false, supported: false, active: false, error: true }
+    };
+    var inFlightActions = {};
+    var i2cRequestErrorOwner = null;
+    var pollTimer = null;
+    var pollInFlight = false;
+    const POLL_FAST_MS = 900;
+    const POLL_ACTIVE_MS = 1200;
+    const POLL_IDLE_MS = 3500;
+    const POLL_MISSING_MS = 7000;
+
+    function ConnectError (type) {
+      var indicator = document.getElementById('connection_indicator');
+      if (!indicator) return;
+      if (type) {
+        if (OfflineCounter < 3) {
+          OfflineCounter++;
+        } else {
+          indicator.innerHTML = '<img src="Red_light.gif" style="margin: 0!important; width: 20px">';
+          OfflineCounter++;
+        }
+      } else {
+        indicator.innerHTML = '<img src="Green.png" style="margin: 0 !important; width: 20px">';
+        OfflineCounter = 0;
+      }
+    }
+
+    function bitValue(id, bit) {
+      return document.getElementById(id).checked ? bit : 0;
+    }
+
+    function setChecked(id, mask, bit) {
+      document.getElementById(id).checked = (mask & bit) !== 0;
+    }
+
+    function setVisible(id, visible) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = visible ? '' : 'none';
+    }
+
+    function setFieldValue(id, value, device) {
+      if (dirtyDevices[device]) return;
+      document.getElementById(id).value = value;
+    }
+
+    function setFieldChecked(id, mask, bit, device) {
+      if (dirtyDevices[device]) return;
+      setChecked(id, mask, bit);
+    }
+
+    function markDirty(device) {
+      dirtyDevices[device] = true;
+      deviceEditVersion[device]++;
+      pendingDeviceConfig[device] = null;
+    }
+
+    function bindDirtyControls() {
+      var controls = document.querySelectorAll('#mixer_panel input, #mixer_panel select');
+      controls.forEach(function(el) {
+        el.addEventListener('input', function() { markDirty('mixer'); });
+        el.addEventListener('change', function() { markDirty('mixer'); });
+      });
+      controls = document.querySelectorAll('#pump_panel input, #pump_panel select');
+      controls.forEach(function(el) {
+        el.addEventListener('input', function() { markDirty('pump'); });
+        el.addEventListener('change', function() { markDirty('pump'); });
+      });
+    }
+
+    function deviceSupported(device, caps) {
+      if (device === 'mixer') return (caps & CAP_MIXER) !== 0;
+      return (caps & (CAP_PUMP | CAP_FILLING)) !== 0;
+    }
+
+    function updateCapabilityVisibility(device, caps) {
+      setVisible(device + '_relay_block', (caps & CAP_RELAY) !== 0);
+      if (device === 'mixer') {
+        setVisible('mixer_sensor_block', (caps & CAP_SENSOR) !== 0);
+      } else {
+        setVisible('pump_sensor_block', (caps & CAP_SENSOR) !== 0);
+        setVisible('pump_pump_block', (caps & CAP_PUMP) !== 0);
+        setVisible('pump_filling_block', (caps & CAP_FILLING) !== 0);
+        setVisible('pump_calstart', (caps & CAP_FILLING) !== 0);
+        setVisible('pump_calfinish', (caps & CAP_FILLING) !== 0);
+      }
+    }
+
+    async function requestJson(url, done, showAlert, errorOwner) {
+      var timer = null;
+      var errorRevision = SamovarApp.currentRequestErrorRevision();
+      try {
+        var ctrl = new AbortController();
+        timer = setTimeout(function() { ctrl.abort(); }, 4000);
+        var resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+        if (!resp.ok) {
+          var responseError = await SamovarApp.responseErrorText(
+            resp, 'I2CStepper не принял команду'
+          );
+          clearTimeout(timer);
+          timer = null;
+          ConnectError(false);
+          if (showAlert) {
+            i2cRequestErrorOwner = errorOwner;
+            SamovarApp.showRequestError(responseError);
+          }
+          return false;
+        }
+        var data;
+        if (resp.status === 202) {
+          try {
+            var acceptance = await SamovarApp.readOperationAcceptance(resp);
+            clearTimeout(timer);
+            timer = null;
+            data = await SamovarApp.waitForOperation(acceptance.operationId);
+          } catch (operationError) {
+            ConnectError(false);
+            if (showAlert) {
+              i2cRequestErrorOwner = errorOwner;
+              SamovarApp.showRequestError(
+                String(operationError && operationError.message
+                  ? operationError.message
+                  : operationError)
+              );
+            }
+            return false;
+          }
+        } else {
+          data = await resp.json();
+          clearTimeout(timer);
+          timer = null;
+        }
+        ConnectError(false);
+        if (showAlert &&
+            (i2cRequestErrorOwner === null || i2cRequestErrorOwner === errorOwner) &&
+            SamovarApp.clearRequestErrorIfUnchanged(errorRevision)) {
+          i2cRequestErrorOwner = null;
+        }
+        done(data);
+        return data;
+      } catch (e) {
+        ConnectError(true);
+        if (showAlert) {
+          i2cRequestErrorOwner = errorOwner;
+          SamovarApp.showRequestError('I2CStepper: ошибка сети или ответа: ' + e);
+        }
+        return null;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+
+    function loadDevice(device) {
+      return requestJson('/i2cstepper?device=' + device, function(data) {
+        renderPolledDevice(device, data);
+      }, false).then(function(data) {
+        if (data === null) setDeviceUnavailable(device, 'Ошибка связи с I2CStepper.', true);
+      });
+    }
+
+    function renderDevice(device, data) {
+      var panel = document.getElementById(device + '_panel');
+      var missing = document.getElementById(device + '_missing');
+      var caps = parseInt(data.caps || '0', 10);
+      var present = parseInt(data.present || '0', 10) === 1;
+      var supported = deviceSupported(device, caps);
+      var status = parseInt(data.status || '0', 10);
+      var error = (status & 128) !== 0;
+      deviceCaps[device] = caps;
+      deviceState[device] = {
+        present: present,
+        supported: supported,
+        active: (status & (STATUS_RUNNING | 8)) !== 0,
+        error: error
+      };
+      if (!present || !supported) {
+        setDeviceUnavailable(device, deviceLabel(device) + ' I2CStepper не подключен или не поддерживается.', false);
+        return;
+      }
+      panel.style.display = 'block';
+      missing.style.display = 'none';
+      updateCapabilityVisibility(device, caps);
+      panel.dataset.status = data.status;
+      document.getElementById(device + '_status').textContent = statusText(data.status, data.error);
+      document.getElementById(device + '_remaining').textContent = data.remaining;
+      document.getElementById(device + '_speed').textContent = data.currentSpeed;
+      var relayMask = parseInt(data.relayMask || '0', 10);
+      document.getElementById(device + '_relayMask').value = relayMask;
+      updateRunButton(device, data.status);
+      updateRelayButtons(device, relayMask);
+      updateDeviceDisabled(device);
+
+      if (device === 'mixer') {
+        setFieldValue('mixerRpm', data.mixerRpm, device);
+        setFieldValue('mixerRunSec', data.mixerRunSec, device);
+        setFieldValue('mixerPauseSec', data.mixerPauseSec, device);
+        setFieldChecked('mixerReverse', data.optionFlags, FLAG_REVERSE, device);
+        setFieldChecked('mixerSmooth', data.optionFlags, FLAG_SMOOTH, device);
+        setFieldChecked('mixerSensorHigh', data.sensorFlags, SENSOR_ACTIVE_HIGH, device);
+        setFieldChecked('mixerSensorStop', data.sensorFlags, SENSOR_STOP, device);
+      } else {
+        if (!dirtyDevices[device]) {
+          document.getElementById('pumpMode').value = (caps & CAP_FILLING) ? data.mode : '2';
+        }
+        setFieldValue('pumpMlHour', data.pumpMlHour, device);
+        setFieldValue('pumpPauseSec', data.pumpPauseSec, device);
+        setFieldValue('fillingMl', data.fillingMl, device);
+        setFieldValue('fillingMlHour', data.fillingMlHour, device);
+        setFieldValue('stepsPerMl', data.stepsPerMl, device);
+        setFieldChecked('pumpSmooth', data.optionFlags, FLAG_SMOOTH, device);
+        setFieldChecked('pumpSensorHigh', data.sensorFlags, SENSOR_ACTIVE_HIGH, device);
+        setFieldChecked('pumpSensorStop', data.sensorFlags, SENSOR_STOP, device);
+        setFieldChecked('pumpSensorPause', data.sensorFlags, SENSOR_PUMP_PAUSE, device);
+      }
+      updateDeviceDisabled(device);
+    }
+
+    function deviceLabel(device) {
+      return device === 'mixer' ? 'Мешалка' : 'Насос';
+    }
+
+    function setDeviceUnavailable(device, message, requestError) {
+      var panel = document.getElementById(device + '_panel');
+      var missing = document.getElementById(device + '_missing');
+      var title = missing.querySelector('h2');
+      if (title) title.textContent = message;
+      panel.style.display = 'none';
+      missing.style.display = 'block';
+      deviceState[device] = {
+        present: false,
+        supported: false,
+        active: false,
+        error: requestError
+      };
+      updateDeviceDisabled(device);
+    }
+
+    function statusText(status, error) {
+      var parts = [];
+      if (status & 1) parts.push('работает');
+      if (status & 2) parts.push('пауза');
+      if (status & 4) parts.push('датчик');
+      if (status & 8) parts.push('калибровка');
+      if (status & 128) parts.push('ошибка ' + error);
+      return parts.length ? parts.join(', ') : 'остановлен';
+    }
+
+    function setStateButton(id, active, onText, offText) {
+      var button = document.getElementById(id);
+      button.value = active ? onText : offText;
+      button.classList.toggle('state-on', active);
+      button.classList.toggle('state-off', !active);
+    }
+
+    function updateRunButton(device, status) {
+      var running = (status & STATUS_RUNNING) !== 0;
+      var name = device === 'mixer' ? 'мешалку' : 'насос';
+      setStateButton(device + '_run_toggle', running, 'Работает - остановить', 'Запустить ' + name);
+    }
+
+    function updateRelayButtons(device, relayMask) {
+      for (var i = 1; i <= 4; i++) {
+        var active = (relayMask & (1 << (i - 1))) !== 0;
+        setStateButton(device + 'Relay' + i, active, 'R' + i + ': включено', 'R' + i + ': выключено');
+      }
+    }
+
+    function actionKey(device, action) {
+      return device + ':' + action;
+    }
+
+    function actionInFlight(device, action) {
+      return !!inFlightActions[actionKey(device, action)];
+    }
+
+    function deviceActionInFlight(device) {
+      var prefix = device + ':';
+      return Object.keys(inFlightActions).some(function(key) { return key.indexOf(prefix) === 0; });
+    }
+
+    function setActionInFlight(device, action, value) {
+      var key = actionKey(device, action);
+      if (value) inFlightActions[key] = true;
+      else delete inFlightActions[key];
+      updateDeviceDisabled(device);
+      scheduleNextPoll();
+    }
+
+    function hasInFlightActions() {
+      return Object.keys(inFlightActions).length > 0;
+    }
+
+    function setButtonDisabled(id, disabled) {
+      var button = document.getElementById(id);
+      if (button) button.disabled = disabled;
+    }
+
+    function updateDeviceDisabled(device) {
+      var state = deviceState[device] || {};
+      var caps = deviceCaps[device] || 0;
+      var disabled = !state.present || !state.supported || state.error;
+      var actionBusy = deviceActionInFlight(device);
+      setButtonDisabled(device + '_apply', disabled || actionBusy);
+      setButtonDisabled(device + '_run_toggle', disabled || actionBusy);
+      setButtonDisabled(device + '_save', disabled || actionBusy);
+      for (var i = 1; i <= 4; i++) {
+        setButtonDisabled(device + 'Relay' + i,
+          disabled || !(caps & CAP_RELAY) || actionBusy);
+      }
+      if (device === 'pump') {
+        var calibrationDisabled = disabled || !(caps & CAP_FILLING);
+        setButtonDisabled('pump_calstart', calibrationDisabled || actionBusy);
+        setButtonDisabled('pump_calfinish', calibrationDisabled || actionBusy);
+      }
+    }
+
+    function appendInteger(params, name, id, label, min, max) {
+      var result = SamovarApp.readNumericInput(id, {
+        label: label, integer: true, min: min, max: max
+      });
+      if (!result) return false;
+      params.set(name, result.text);
+      return true;
+    }
+
+    function mixerParams(cmd, params) {
+      var flags = bitValue('mixerReverse', FLAG_REVERSE) | bitValue('mixerSmooth', FLAG_SMOOTH);
+      var sensor = (deviceCaps.mixer & CAP_SENSOR) ?
+        (bitValue('mixerSensorHigh', SENSOR_ACTIVE_HIGH) | bitValue('mixerSensorStop', SENSOR_STOP)) : 0;
+      var relayMask = SamovarApp.readNumericInput('mixer_relayMask', {
+        label: 'Маска реле мешалки', integer: true, min: 0, max: 15
+      });
+      if (!relayMask) return false;
+      if (!appendInteger(params, 'mixerRpm', 'mixerRpm', 'RPM мешалки',
+          cmd === 'start' ? 1 : 0, 65535) ||
+          !appendInteger(params, 'mixerRunSec', 'mixerRunSec', 'Время работы мешалки', 0, 65535) ||
+          !appendInteger(params, 'mixerPauseSec', 'mixerPauseSec', 'Пауза мешалки', 0, 65535)) {
+        return false;
+      }
+      params.set('mode', '1');
+      params.set('optionFlags', String(flags));
+      params.set('sensorFlags', String(sensor));
+      params.set('relayMask', relayMask.text);
+      return true;
+    }
+
+    function pumpMode(params) {
+      var mode = SamovarApp.readNumericInput('pumpMode', {
+        label: 'Режим насоса', integer: true, min: 2, max: 3
+      });
+      if (!mode) return null;
+      if ((mode.number === 2 && !(deviceCaps.pump & CAP_PUMP)) ||
+          (mode.number === 3 && !(deviceCaps.pump & CAP_FILLING))) {
+        SamovarApp.showRequestError('Выбранный режим не поддерживается I2CStepper.');
+        return null;
+      }
+      params.set('mode', mode.text);
+      return mode.number;
+    }
+
+    function pumpParams(cmd, params) {
+      var mode = pumpMode(params);
+      if (mode === null) return false;
+      if (!appendInteger(params, 'stepsPerMl', 'stepsPerMl', 'Шагов на 1 мл', 1, 65535)) {
+        return false;
+      }
+      if (cmd === 'calstart') {
+        return mode === 2
+          ? appendInteger(params, 'pumpMlHour', 'pumpMlHour', 'Прокачка', 1, 65535)
+          : appendInteger(params, 'fillingMlHour', 'fillingMlHour', 'Скорость наполнения', 1, 65535);
+      }
+
+      var flags = bitValue('pumpSmooth', FLAG_SMOOTH);
+      var sensor = (deviceCaps.pump & CAP_SENSOR) ?
+        (bitValue('pumpSensorHigh', SENSOR_ACTIVE_HIGH) |
+        bitValue('pumpSensorStop', SENSOR_STOP) |
+        bitValue('pumpSensorPause', SENSOR_PUMP_PAUSE)) : 0;
+      var relayMask = SamovarApp.readNumericInput('pump_relayMask', {
+        label: 'Маска реле насоса', integer: true, min: 0, max: 15
+      });
+      if (!relayMask ||
+          !appendInteger(params, 'pumpMlHour', 'pumpMlHour', 'Прокачка',
+            cmd === 'start' && mode === 2 ? 1 : 0, 65535) ||
+          !appendInteger(params, 'pumpPauseSec', 'pumpPauseSec', 'Пауза насоса', 0, 65535) ||
+          !appendInteger(params, 'fillingMl', 'fillingMl', 'Объём наполнения',
+            cmd === 'start' && mode === 3 ? 1 : 0, 65535) ||
+          !appendInteger(params, 'fillingMlHour', 'fillingMlHour', 'Скорость наполнения',
+            cmd === 'start' && mode === 3 ? 1 : 0, 65535)) {
+        return false;
+      }
+      params.set('optionFlags', String(flags));
+      params.set('sensorFlags', String(sensor));
+      params.set('relayMask', relayMask.text);
+      return true;
+    }
+
+    function deviceUrl(device, cmd) {
+      var params = new URLSearchParams();
+      params.set('device', device);
+      params.set('cmd', cmd);
+      if (cmd === 'stop' || cmd === 'calfinish') {
+        return '/i2cstepper?' + params.toString();
+      }
+      var valid = device === 'mixer'
+        ? mixerParams(cmd, params)
+        : pumpParams(cmd, params);
+      return valid ? '/i2cstepper?' + params.toString() : null;
+    }
+
+    function configSnapshot(url, editVersion) {
+      var params = new URLSearchParams(url.slice(url.indexOf('?') + 1));
+      var keys = [
+        'mode', 'optionFlags', 'sensorFlags', 'mixerRpm',
+        'mixerRunSec', 'mixerPauseSec', 'pumpMlHour', 'pumpPauseSec',
+        'fillingMl', 'fillingMlHour', 'stepsPerMl'
+      ];
+      var values = {};
+      keys.forEach(function(key) {
+        if (params.has(key)) values[key] = Number(params.get(key));
+      });
+      return Object.keys(values).length
+        ? { editVersion: editVersion, accepted: false, values: values }
+        : null;
+    }
+
+    function configMatches(data, snapshot) {
+      return Object.keys(snapshot.values).every(function(key) {
+        return Number(data[key]) === snapshot.values[key];
+      });
+    }
+
+    function renderPolledDevice(device, data) {
+      var pending = pendingDeviceConfig[device];
+      if (pending && pending.accepted &&
+          pending.editVersion === deviceEditVersion[device] && configMatches(data, pending)) {
+        dirtyDevices[device] = false;
+        pendingDeviceConfig[device] = null;
+      }
+      renderDevice(device, data);
+    }
+
+    function sendDevice(device, cmd) {
+      var action = (cmd === 'start' || cmd === 'stop') ? 'run' : cmd;
+      if (deviceActionInFlight(device)) return false;
+      var url = deviceUrl(device, cmd);
+      if (!url) {
+        i2cRequestErrorOwner = device;
+        return false;
+      }
+      var fullConfig = cmd === 'apply' || cmd === 'save' || cmd === 'start';
+      var snapshot = fullConfig ? configSnapshot(url, deviceEditVersion[device]) : null;
+      if (snapshot) {
+        pendingDeviceConfig[device] = snapshot;
+        dirtyDevices[device] = true;
+      }
+      setActionInFlight(device, action, true);
+      requestJson(url, function() {}, true, device).then(function(data) {
+        if (data && pendingDeviceConfig[device] === snapshot && snapshot) {
+          snapshot.accepted = true;
+        }
+        if (!data && pendingDeviceConfig[device] === snapshot) {
+          pendingDeviceConfig[device] = null;
+          if (snapshot) dirtyDevices[device] = true;
+        }
+        if (data === null) setDeviceUnavailable(device, 'Ошибка выполнения команды I2CStepper.', true);
+        if (data) return loadDevice(device);
+        return null;
+      }).then(function() {
+        setActionInFlight(device, action, false);
+      });
+      return true;
+    }
+
+    function toggleDevice(device) {
+      var panel = document.getElementById(device + '_panel');
+      var status = parseInt(panel.dataset.status || '0', 10);
+      sendDevice(device, (status & STATUS_RUNNING) ? 'stop' : 'start');
+    }
+
+    function toggleRelay(device, relayNum) {
+      var action = 'relay' + relayNum;
+      if (deviceActionInFlight(device)) return false;
+      setActionInFlight(device, action, true);
+      var maskInput = document.getElementById(device + '_relayMask');
+      var mask = parseInt(maskInput.value || '0', 10);
+      var state = (mask & (1 << (relayNum - 1))) ? 0 : 1;
+      requestJson('/i2cstepper?device=' + device + '&cmd=relay&relay=' + relayNum + '&state=' + state,
+          function() {}, true, device).then(function(data) {
+        if (data === null) setDeviceUnavailable(device, 'Ошибка переключения реле I2CStepper.', true);
+        if (data) return loadDevice(device);
+        return null;
+      }).then(function() {
+        setActionInFlight(device, action, false);
+      });
+      return true;
+    }
+
+    SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
+
+    function nextPollDelay() {
+      if (hasInFlightActions()) return POLL_FAST_MS;
+      var states = [deviceState.mixer, deviceState.pump];
+      if (states.some(function(state) { return state.present && state.supported && state.active; })) {
+        return POLL_ACTIVE_MS;
+      }
+      if (states.some(function(state) { return state.present && state.supported && !state.error; })) {
+        return POLL_IDLE_MS;
+      }
+      return POLL_MISSING_MS;
+    }
+
+    function scheduleNextPoll(delay) {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(pollDevices, typeof delay === 'number' ? delay : nextPollDelay());
+    }
+
+    async function pollDevices () {
+      if (pollInFlight) {
+        scheduleNextPoll();
+        return;
+      }
+      pollInFlight = true;
+      try {
+        await Promise.all([loadDevice('mixer'), loadDevice('pump')]);
+      } finally {
+        pollInFlight = false;
+        scheduleNextPoll();
+      }
+    }
+
+    window.onload = function() {
+      SamovarApp.initTheme({ dynamicThemeTitle: true, implicitSystemTheme: true });
+      bindDirtyControls();
+      scheduleNextPoll(0);
+    };
+  </script>
+</head>
+<body>
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  <form action='none' onsubmit='return false' name="i2cstepperform" id="i2cstepperform">
+    <div class="container_row" style="justify-content: center; align-items: center;">
+      <h1>I2CStepper</h1>
+      <div id="connection_indicator" style="width: 21px; margin-left: 0.5em;">
+        <img src="Green.png" style="margin: 0 !important; width: 20px">
+      </div>
+    </div>
+    <div class="tab">
+      <input type='button' class="tablinks" onclick='location.href="/index.htm";' value="Назад">
+      <input type='button' class="tablinks active" value="I2CStepper">
+    </div>
+
+    <div id="i2cstepperContent" class="tabcontent" style="display:block;">
+      <div id="mixer_missing" class="container_column i2c-panel">
+        <h2>Мешалка I2CStepper не подключена.</h2>
+      </div>
+
+      <div id="mixer_panel" class="container_column i2c-panel">
+        <h2>Мешалка (Mixer)</h2>
+        <div class="container_row" style="justify-content: space-between;">
+          <div class="text">Статус: <span id="mixer_status">-</span></div>
+          <div class="text">Осталось: <span id="mixer_remaining">-</span> сек</div>
+          <div class="text">Скорость: <span id="mixer_speed">-</span> шаг/с</div>
+        </div>
+        <div class="container_row" style="justify-content: space-between;">
+          <h2><label for="mixerRpm">RPM:</label> <input id="mixerRpm" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2><label for="mixerRunSec">Работа, сек:</label> <input id="mixerRunSec" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2><label for="mixerPauseSec">Пауза, сек:</label> <input id="mixerPauseSec" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        </div>
+        <h2><input id="mixerReverse" type="checkbox"><label for="mixerReverse">Реверс после паузы</label></h2>
+        <h2><input id="mixerSmooth" type="checkbox"><label for="mixerSmooth">Плавный старт</label></h2>
+        <div id="mixer_sensor_block">
+          <h2><input id="mixerSensorHigh" type="checkbox"><label for="mixerSensorHigh">Датчик активен уровнем 1</label></h2>
+          <h2><input id="mixerSensorStop" type="checkbox"><label for="mixerSensorStop">Стоп по внешнему датчику</label></h2>
+        </div>
+        <input id="mixer_relayMask" type="hidden" value="0">
+        <div class="container_row i2c-actions">
+          <input id="mixer_apply" type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
+          <input id="mixer_run_toggle" type="button" class="button state-button state-off" value="Запустить мешалку" onclick="toggleDevice('mixer');">
+          <input id="mixer_save" type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
+        </div>
+        <div id="mixer_relay_block">
+          <h2>Реле</h2>
+          <div class="container_row i2c-actions">
+            <input id="mixerRelay1" type="button" class="button state-button state-off" value="R1: выключено" onclick="toggleRelay('mixer',1);">
+            <input id="mixerRelay2" type="button" class="button state-button state-off" value="R2: выключено" onclick="toggleRelay('mixer',2);">
+            <input id="mixerRelay3" type="button" class="button state-button state-off" value="R3: выключено" onclick="toggleRelay('mixer',3);">
+            <input id="mixerRelay4" type="button" class="button state-button state-off" value="R4: выключено" onclick="toggleRelay('mixer',4);">
+          </div>
+        </div>
+      </div>
+
+      <div id="pump_missing" class="container_column i2c-panel">
+        <h2>Насос I2CStepper не подключен.</h2>
+      </div>
+
+      <div id="pump_panel" class="container_column i2c-panel">
+        <h2>Насос / Наполнение</h2>
+        <div class="container_row" style="justify-content: space-between;">
+          <div class="text">Статус: <span id="pump_status">-</span></div>
+          <div class="text">Осталось: <span id="pump_remaining">-</span> мл</div>
+          <div class="text">Скорость: <span id="pump_speed">-</span> шаг/с</div>
+        </div>
+        <h2><label for="pumpMode">Режим:</label>
+          <select id="pumpMode">
+            <option value="2">Прокачка</option>
+            <option value="3">Наполнение</option>
+          </select>
+        </h2>
+        <div id="pump_pump_block" class="container_row" style="justify-content: space-between;">
+          <h2><label for="pumpMlHour">Прокачка, мл/час:</label> <input id="pumpMlHour" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2><label for="pumpPauseSec">Пауза насоса, сек:</label> <input id="pumpPauseSec" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        </div>
+        <div id="pump_filling_block" class="container_row" style="justify-content: space-between;">
+          <h2><label for="fillingMl">Наполнение, мл:</label> <input id="fillingMl" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+          <h2><label for="fillingMlHour">Скорость наполнения, мл/час:</label> <input id="fillingMlHour" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        </div>
+        <h2><label for="stepsPerMl">Шагов на 1 мл:</label> <input id="stepsPerMl" type="text" inputmode="decimal" value="0" style="width:6em;"></h2>
+        <h2><input id="pumpSmooth" type="checkbox"><label for="pumpSmooth">Плавный старт</label></h2>
+        <div id="pump_sensor_block">
+          <h2><input id="pumpSensorHigh" type="checkbox"><label for="pumpSensorHigh">Датчик активен уровнем 1</label></h2>
+          <h2><input id="pumpSensorStop" type="checkbox"><label for="pumpSensorStop">Стоп по внешнему датчику</label></h2>
+          <h2><input id="pumpSensorPause" type="checkbox"><label for="pumpSensorPause">Пауза по датчику с обнулением таймера</label></h2>
+        </div>
+        <input id="pump_relayMask" type="hidden" value="0">
+        <div class="container_row i2c-actions">
+          <input id="pump_apply" type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
+          <input id="pump_run_toggle" type="button" class="button state-button state-off" value="Запустить насос" onclick="toggleDevice('pump');">
+          <input id="pump_save" type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
+          <input id="pump_calstart" type="button" class="button" value="Калибровка старт" onclick="sendDevice('pump','calstart');">
+          <input id="pump_calfinish" type="button" class="button" value="100 мл стоп" onclick="sendDevice('pump','calfinish');">
+        </div>
+        <div id="pump_relay_block">
+          <h2>Реле</h2>
+          <div class="container_row i2c-actions">
+            <input id="pumpRelay1" type="button" class="button state-button state-off" value="R1: выключено" onclick="toggleRelay('pump',1);">
+            <input id="pumpRelay2" type="button" class="button state-button state-off" value="R2: выключено" onclick="toggleRelay('pump',2);">
+            <input id="pumpRelay3" type="button" class="button state-button state-off" value="R3: выключено" onclick="toggleRelay('pump',3);">
+            <input id="pumpRelay4" type="button" class="button state-button state-off" value="R4: выключено" onclick="toggleRelay('pump',4);">
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+</body>
+</html>
