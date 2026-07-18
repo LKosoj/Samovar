@@ -2023,11 +2023,6 @@ static bool apply_save_float_arg(AsyncWebServerRequest *request, const char *nam
   return true;
 }
 
-template <size_t N>
-static void apply_save_string_arg(AsyncWebServerRequest *request, const char *name, char (&target)[N]) {
-  if (request->hasArg(name)) copyStringSafe(target, request->arg(name));
-}
-
 static bool apply_save_ds_addr_arg(
     AsyncWebServerRequest *request,
     const char *name,
@@ -2239,15 +2234,15 @@ void handleSave(AsyncWebServerRequest *request) {
   if (!apply_save_float_arg(request, "NbkSteamT", staged.NbkSteamT, 0.0f, 150.0f)) return;
   if (!apply_save_float_arg(request, "NbkOwPress", staged.NbkOwPress, 0.0f, 100000.0f)) return;
 
-  apply_save_string_arg(request, "videourl", staged.videourl);
-  apply_save_string_arg(request, "blynkauth", staged.blynkauth);
-  apply_save_string_arg(request, "tgtoken", staged.tg_token);
-  apply_save_string_arg(request, "tgchatid", staged.tg_chat_id);
-  apply_save_string_arg(request, "SteamColor", staged.SteamColor);
-  apply_save_string_arg(request, "PipeColor", staged.PipeColor);
-  apply_save_string_arg(request, "WaterColor", staged.WaterColor);
-  apply_save_string_arg(request, "TankColor", staged.TankColor);
-  apply_save_string_arg(request, "ACPColor", staged.ACPColor);
+  if (request->hasArg("videourl")) copyStringSafe(staged.videourl, request->arg("videourl"));
+  if (request->hasArg("blynkauth")) copyStringSafe(staged.blynkauth, request->arg("blynkauth"));
+  if (request->hasArg("tgtoken")) copyStringSafe(staged.tg_token, request->arg("tgtoken"));
+  if (request->hasArg("tgchatid")) copyStringSafe(staged.tg_chat_id, request->arg("tgchatid"));
+  if (request->hasArg("SteamColor")) copyStringSafe(staged.SteamColor, request->arg("SteamColor"));
+  if (request->hasArg("PipeColor")) copyStringSafe(staged.PipeColor, request->arg("PipeColor"));
+  if (request->hasArg("WaterColor")) copyStringSafe(staged.WaterColor, request->arg("WaterColor"));
+  if (request->hasArg("TankColor")) copyStringSafe(staged.TankColor, request->arg("TankColor"));
+  if (request->hasArg("ACPColor")) copyStringSafe(staged.ACPColor, request->arg("ACPColor"));
 
   if (!apply_save_bool01_arg(request, "rele1", staged.rele1)) return;
   if (!apply_save_bool01_arg(request, "rele2", staged.rele2)) return;

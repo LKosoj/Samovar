@@ -1,7 +1,9 @@
 //TODO
 //
-//Проверить на С подъем напряжения
+//Проверить на программе С подъем напряжения
 //Перейти на GyverPID
+//**************************************************************************************************************
+
 
 // copy partitions/samovar.csv to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.x.x/tools/partitions/samovar.csv
 // add to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.x.x/boards.txt
