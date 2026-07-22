@@ -120,6 +120,7 @@
       { name: 'DeltaACPTemp', min: -1000, max: 1000 },
       { name: 'SetACPTemp', min: 0, max: 150 },
       { name: 'ACPDelay', integer: true, min: 0, max: 65535 },
+      { name: 'SuvidTemp', min: 0, max: 150 },
       { name: 'SteamAddr', integer: true, min: -1, max: 255 },
       { name: 'PipeAddr', integer: true, min: -1, max: 255 },
       { name: 'WaterAddr', integer: true, min: -1, max: 255 },
@@ -132,14 +133,17 @@
       { name: 'Kd', min: 0, max: 100000 },
       { name: 'StbVoltage', min: 0, max: 10000 },
       { name: 'BVolt', min: 0, max: 10000 },
+      { name: 'BKPower', min: 0, max: 10000 },
       { name: 'NbkIn', min: 0, max: 100000 },
       { name: 'NbkDelta', min: 0, max: 100000 },
       { name: 'NbkDM', min: 0, max: 100000 },
       { name: 'NbkDP', min: 0, max: 100000 },
       { name: 'NbkSteamT', min: 0, max: 150 },
       { name: 'NbkOwPress', min: 0, max: 100000 },
+      { name: 'NbkTn', min: 0, max: 150 },
       { name: 'TimeZone', integer: true, min: 0, max: 23 },
       { name: 'HeaterR', min: 2, max: 65 },
+      { name: 'MainsVoltage', min: 0, max: 1000 },
       { name: 'LogPeriod', integer: true, min: 1, max: 255 },
       { name: 'rele1', integer: true, min: 0, max: 1 },
       { name: 'rele2', integer: true, min: 0, max: 1 },
@@ -399,6 +403,7 @@
           <h2><label for="ACPDelay">Задержка срабатывания при выходе Т в ТСА за уставку:</label> <input id="ACPDelay" name='ACPDelay' type='text' inputmode='decimal' value='%ACPDelay%'> сек</h2>
         </div>
       </div>
+      <h2><label for="SuvidTemp">Уставка Су-вид (0 = не задано):</label> <input id="SuvidTemp" name='SuvidTemp' type='text' inputmode='decimal' value='%SuvidTemp%'>&#176;C</h2>
       <div 
         style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
         >
@@ -429,6 +434,9 @@
       <div id='VoltBoil' style=''>
         <h2><label for="BVolt">Напр./мощность регулятора в режиме нагрева и кипения:</label> <input name='BVolt' id='BVolt' type='text' inputmode='decimal' value='%BVolt%'> V</h2>
       </div>
+      <div id='VoltBK' style=''>
+        <h2><label for="BKPower">Мощность БК после закипания:</label> <input name='BKPower' id='BKPower' type='text' inputmode='decimal' value='%BKPower%'> V</h2>
+      </div>
         <h2>
           <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
           <label for='UseST' class="tooltip">Использовать разгонный тэн при кипении<span class="tooltiptext">Если используется разгонный тэн, можно использовать его в режиме кипения</span></label>
@@ -443,6 +451,7 @@
       <h2><label for="NbkDP">Шаг подачи:</label> <input id="NbkDP" name='NbkDP' type='text' inputmode='decimal' value='%NbkDP%'></h2>
       <h2><label for="NbkSteamT">Т пара:</label> <input id="NbkSteamT" name='NbkSteamT' type='text' inputmode='decimal' value='%NbkSteamT%'></h2>
       <h2><label for="NbkOwPress">Давление захлёба:</label> <input id="NbkOwPress" name='NbkOwPress' type='text' inputmode='decimal' value='%NbkOwPress%'></h2>
+      <h2><label for="NbkTn">Т завершения (барда):</label> <input id="NbkTn" name='NbkTn' type='text' inputmode='decimal' value='%NbkTn%'>&#176;C</h2>
     </div>
 
     <div id="Other" class="tabcontent" aria-hidden="true">
@@ -459,6 +468,7 @@
           <label for='CheckPower' class="tooltip">Использовать проверку подключения регулятора<span class="tooltiptext">Если используется регулятор, при отсутствии связи с ним Самовар выключит питание</span></label>
         </h2>
         <h2><label for="HeaterR">Сопротивление тэна для расчета мощности:</label> <input id="HeaterR" name='HeaterR' type='text' inputmode='decimal' value='%HeaterR%'> Ом</h2>
+        <h2><label for="MainsVoltage">Напряжение сети:</label> <input id="MainsVoltage" name='MainsVoltage' type='text' inputmode='decimal' value='%MainsVoltage%'> V</h2>
         <h2><label for="LogPeriod">Периодичность записи данных в лог:</label> <input id="LogPeriod" name='LogPeriod' type='text' inputmode='decimal' value='%LogPeriod%'> сек</h2>
         <h2>
           <input id='UseWS' type='checkbox' name='UseWS' value='UseWS' %UseWS%>

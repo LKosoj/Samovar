@@ -99,7 +99,7 @@ void handle_nbk_stage_heatup();
 void handle_nbk_stage_manual();
 void handle_nbk_stage_optimization();
 void handle_nbk_stage_work();
-void handle_overflow(const String& msg, bool finish = true, uint32_t pause_ms = 0);
+void handle_overflow(const String& msg, bool finish = true, uint32_t pause_ms = 0, bool graceful = false);
 inline bool nbk_close_data_log();
 
 bool overflow(){
@@ -140,24 +140,6 @@ float toPower(float value) { // конвертер в мощность ( V | W )
       return value * value / R; //если от kvic или RVMK пересчитываем в P
  #endif
   }
- #ifndef SAMOVAR_USE_SEM_AVR
-float SQRT(float num) { // компилируем только по необходимости
-  if (num < 0) {
-    return -1.0f;
-  }
-  if (num == 0) {
-      return 0.0f;
-  }
-  float guess = num;
-  float prev_guess;
-  do {
-    prev_guess = guess;
-    guess = (guess + num / guess) / 2;
-    delay(3);
-  } while (abs(guess - prev_guess) > 0.001);
-  return guess;
-}
- #endif
 float fromPower(float value) { // конвертер из мощности: W => ( V | W )
  #ifdef SAMOVAR_USE_SEM_AVR
     return value;
@@ -167,7 +149,7 @@ float fromPower(float value) { // конвертер из мощности: W =>
       if (value != prev_W) {
           prev_W = value;
           float R = trusted_heater_resistance(SamSetup.HeaterResistant);
-          prev_V = SQRT(value * R);
+          prev_V = sqrtf(value * R);
       }
       return prev_V;
  #endif
@@ -196,16 +178,17 @@ void nbk_proc() { //главный цикл НБК
   // Обновление переменных из настроек (на случай, если пользователь их изменил в процессе)
   nbk_column_inertia =  SamSetup.NbkIn > 1 ? SamSetup.NbkIn : NBK_COLUMN_INERTIA_DEFAULT;
   nbk_dT = SamSetup.NbkDelta > 0 ? SamSetup.NbkDelta : NBK_DT_DEFAULT;
-  nbk_Tn = SamSetup.DistTemp > 0 ? SamSetup.DistTemp : NBK_TN_DEFAULT;
+  nbk_Tn = SamSetup.NbkTn > 0 ? SamSetup.NbkTn : NBK_TN_DEFAULT;
   nbk_overflow_pressure = SamSetup.NbkOwPress > 1 ? SamSetup.NbkOwPress : NBK_OVERFLOW_PRESSURE_DEFAULT;
   nbk_dM = SamSetup.NbkDM > 1 ? SamSetup.NbkDM : NBK_DM_DEFAULT;
   nbk_dP = SamSetup.NbkDP > 0 ? SamSetup.NbkDP : NBK_DP_DEFAULT;
   nbk_Tp_lim = SamSetup.NbkSteamT > 80 ? SamSetup.NbkSteamT : NBK_TP_DEFAULT;
-  nbk_M_max = 230 * 230 / trusted_heater_resistance(SamSetup.HeaterResistant); // Максимальная мощность ТЭН-а в режиме НБК
+  const float mainsVoltage = SamSetup.MainsVoltage > 0 ? SamSetup.MainsVoltage : 230.0f;
+  nbk_M_max = mainsVoltage * mainsVoltage / trusted_heater_resistance(SamSetup.HeaterResistant); // Максимальная мощность ТЭН-а в режиме НБК
 
   if (nbk_transition_blocks_process()) return;
 
-  if (startval == 4000) {
+  if (startval == SAMOVAR_STARTVAL_NBK_START) {
     run_nbk_program(0);
     return;
   }
@@ -254,7 +237,7 @@ void handle_nbk_stage_heatup() {
   //выводим сообщение "Захлёб колонны! Останов программы".
  if (overflow()){
     handle_overflow(
-      " На прогреве заданы слишком большие " + String(PWR_MSG) + " и/или подача! Останов программы.", true, 0);
+      " На прогреве заданы слишком большие " + String(PWR_MSG) + " и/или подача! Останов программы.", true, 0, true);
 }
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
@@ -551,13 +534,13 @@ void run_nbk_program(uint8_t num) {
   if (!PowerOn && power_transition_active()) {
     SendMsg("Выключение нагрева ещё не завершено. Старт НБК отменён.", ALARM_MSG);
     ProgramNum = 0;
-    startval = 0;
-    SamovarStatusInt = 0;
+    startval = SAMOVAR_STARTVAL_IDLE;
+    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
     return;
   }
   ProgramNum = num;
-  if (num == 0 && startval == 4000) {
-    startval = 4001;
+  if (num == 0 && startval == SAMOVAR_STARTVAL_NBK_START) {
+    startval = SAMOVAR_STARTVAL_NBK_RUNNING;
   }
  // Сообщение о переходе между этапами
   if (ProgramNum == 0) {
@@ -569,8 +552,8 @@ void run_nbk_program(uint8_t num) {
     if (!create_data()) {
       SendMsg("Ошибка создания файла лога. Старт НБК отменён.", ALARM_MSG);
       ProgramNum = 0;
-      startval = 0;
-      SamovarStatusInt = 0;
+      startval = SAMOVAR_STARTVAL_IDLE;
+      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
       return;
     }
     SendMsg("Запуск программы НБК. Прогрев", NOTIFY_MSG);
@@ -579,9 +562,9 @@ void run_nbk_program(uint8_t num) {
     if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
       SendMsg("Описание сессии занято. Старт НБК отменён.", ALARM_MSG);
       ProgramNum = 0;
-      startval = 0;
-      SamovarStatusInt = 0;
-      if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+      startval = SAMOVAR_STARTVAL_IDLE;
+      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+      mode_warn_log_close_failed();
       return;
     }
     MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_nbk_program() + "," + sessionDescription, "st");
@@ -597,8 +580,8 @@ void run_nbk_program(uint8_t num) {
     if (!PowerOn) {
       SendMsg("Нагрев НБК не включён. Старт отменён.", ALARM_MSG);
       ProgramNum = 0;
-      startval = 0;
-      SamovarStatusInt = 0;
+      startval = SAMOVAR_STARTVAL_IDLE;
+      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
       nbk_close_data_log();
       return;
     }
@@ -661,7 +644,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
  /*ТЗ: В строках "Оптимизация", "Работа":
  Тп > 98°C = "Кончилась брага", М=0, П=0, выключить нагрев ИСПРАВИЛ на 98
  В строке "Ручная настройка" это условие не проверяем, т.к. в инструкции будет юстировка датчика Тб по воде*/
-  if (SamovarStatusInt != 4000 || !PowerOn || startval < 4001) {
+  if (SamovarStatusInt != SAMOVAR_STATUS_NBK || !PowerOn || startval < SAMOVAR_STARTVAL_NBK_RUNNING) {
     nbk_overheat_start_time = 0;
     return false;
   }
@@ -683,7 +666,10 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
 
   if (currentType != 'S') { // если не Ручная настройка
     if (SteamSensor.avgTemp > 98.0) { // если Т пара больше 98
-      request_emergency_stop("Кончилась брага! Останов.");
+      SendMsg("Кончилась брага. Программа НБК завершена.", NOTIFY_MSG);
+      if (!queue_samovar_command(SAMOVAR_POWER)) {
+        request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)");
+      }
       return true; //возвращаем аварию
     }
   }
@@ -759,7 +745,7 @@ inline void tick_nbk_transition() {
 
   if (nbk_finish_transition_active()) {
     const bool finishOwnerValid = Samovar_Mode == SAMOVAR_NBK_MODE &&
-      SamovarStatusInt == 0 && startval == 0;
+      SamovarStatusInt == SAMOVAR_STATUS_IDLE && startval == SAMOVAR_STARTVAL_IDLE;
     if (!finishOwnerValid && phase != NBK_TRANSITION_FINISH_WAIT_POWER_OFF) {
       set_power(false, false);
       safety_transition_advance(
@@ -798,20 +784,20 @@ inline void tick_nbk_transition() {
     return;
   }
 
-  const bool heatStageValid = !heater_safety_latched() && PowerOn && SamovarStatusInt == 4000 &&
+  const bool heatStageValid = !heater_safety_latched() && PowerOn && SamovarStatusInt == SAMOVAR_STATUS_NBK &&
     ProgramNum == nbkTransition.programNum && ProgramNum < ProgramLen &&
     ProgramNum < NBK_PROGRAM_MAX && program[ProgramNum].WType == 'H';
   if (!heatStageValid) {
     // [PKG-B п.1] Запуск нагрева НБК сорвался (авария/снятие питания/смена статуса).
     // Гасим нагрев И полностью сбрасываем состояние процесса, иначе UI показывает
     // «процесс идёт» при выключенном нагреве (зомби-состояние).
-    const bool resetOwnerState = SamovarStatusInt == 4000;
+    const bool resetOwnerState = SamovarStatusInt == SAMOVAR_STATUS_NBK;
     set_power(false, false);
     SendMsg("Запуск нагрева НБК прерван: условие старта нарушено, процесс остановлен.", ALARM_MSG);
     if (resetOwnerState) {
       ProgramNum = 0;
-      startval = 0;
-      SamovarStatusInt = 0;
+      startval = SAMOVAR_STARTVAL_IDLE;
+      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
     }
     safety_transition_advance(
       nbkTransition.transition,
@@ -863,8 +849,8 @@ void nbk_finish_common(bool resetWorkState) {
     SendMsg(summary, NOTIFY_MSG);
   }
   ProgramNum = 0;
-  startval = 0;
-  SamovarStatusInt = 0;
+  startval = SAMOVAR_STARTVAL_IDLE;
+  SamovarStatusInt = SAMOVAR_STATUS_IDLE;
   if (resetWorkState) {
     nbk_M = 0;
     nbk_P = 0;
@@ -897,10 +883,10 @@ inline void nbk_emergency_finish() {
     transitionPhase == NBK_TRANSITION_FINISH_WAIT_POWER_OFF ||
     transitionPhase == NBK_TRANSITION_HEAT_CANCEL_WAIT_POWER_OFF;
   cancel_nbk_transition();
-  if (stats.startTime == 0 && startval < 4001 && !PowerOn) {
+  if (stats.startTime == 0 && startval < SAMOVAR_STARTVAL_NBK_RUNNING && !PowerOn) {
     ProgramNum = 0;
-    startval = 0;
-    SamovarStatusInt = 0;
+    startval = SAMOVAR_STARTVAL_IDLE;
+    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
     nbk_M = 0;
     nbk_P = 0;
     if (logClosePending) nbk_close_data_log();
@@ -911,15 +897,21 @@ inline void nbk_emergency_finish() {
   nbk_close_data_log();
 }
 // === Централизованная обработка захлёба ===
-void handle_overflow(const String& msg, bool finish, uint32_t pause_ms) {
+void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool graceful) {
   nbk_M = nbk_M/2;
   nbk_P = nbk_P/3;
   SetSpeed(nbk_P);
-  SendMsg(msg, ALARM_MSG);
+  SendMsg(msg, graceful ? NOTIFY_MSG : ALARM_MSG);
   if (finish) {
     nbk_M = 0;
     nbk_P = 0;
-    request_emergency_stop("");
+    if (graceful) {
+      if (!queue_samovar_command(SAMOVAR_POWER)) {
+        request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу НБК (захлёб)");
+      }
+    } else {
+      request_emergency_stop("");
+    }
   } else if (pause_ms > 0) { // Для этапа W: пауза и переход к восстановлению
     set_current_power(fromPower(nbk_Mo/2));// в Работе захлёб некатастрофический, колонну можно не охлаждать
     nbk_work_in_pause = true;

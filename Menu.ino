@@ -481,10 +481,10 @@ void menu_pause() {
   }
 }
 void menu_calibrate() {
-  if (startval > 0 && startval != 100) return;
+  if (startval > SAMOVAR_STARTVAL_IDLE && startval != SAMOVAR_STARTVAL_CALIBRATION) return;
 
   int stpspeed = stepper_safe_get_speed();
-  if (startval == 100) {
+  if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
     stpspeed = stpspeed + stpspeed / 10;
     pump_calibrate(stpspeed);
     return;
@@ -493,7 +493,7 @@ void menu_calibrate() {
     calibrate_text_ptr = (char *)"Stop";
     stpspeed = 0;
   } else {
-    startval = 100;
+    startval = SAMOVAR_STARTVAL_CALIBRATION;
     calibrate_text_ptr = (char *)"Start";
     stpspeed = STEPPER_MAX_SPEED;
   }
@@ -501,7 +501,7 @@ void menu_calibrate() {
 }
 
 void menu_calibrate_down() {
-  if (startval == 100) {
+  if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
     int stpspeed = stepper_safe_get_speed();
     stpspeed = stpspeed - stpspeed / 10;
     if (stpspeed > 0) pump_calibrate(stpspeed);
@@ -514,40 +514,36 @@ void menu_samovar_start() {
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE || !PowerOn) return;
   String Str;
 
-  if (startval == 2) startval = 3;
-  else if (ProgramNum >= ProgramLen - 1 && startval != 0)
-    startval = 2;
+  if (startval == SAMOVAR_STARTVAL_RECT_DONE) startval = SAMOVAR_STARTVAL_RECT_STOPPING;
+  else if (ProgramNum >= ProgramLen - 1 && startval != SAMOVAR_STARTVAL_IDLE)
+    startval = SAMOVAR_STARTVAL_RECT_DONE;
 
-  if (startval == 0) {
+  if (startval == SAMOVAR_STARTVAL_IDLE) {
     Str = "Prg No 1";
     if (!create_data()) {
-      SendMsg("Ошибка создания файла лога. Старт ректификации отменён.", ALARM_MSG);
-      SamovarStatusInt = 0;
-      startval = 0;
+      mode_cancel_process_start("Ошибка создания файла лога. Старт ректификации отменён.");
       return;
     }
 #ifdef USE_MQTT
     String sessionDescription;
     if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
-      SendMsg("Описание сессии занято. Старт ректификации отменён.", ALARM_MSG);
-      SamovarStatusInt = 0;
-      startval = 0;
-      if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+      mode_cancel_process_start("Описание сессии занято. Старт ректификации отменён.");
+      mode_warn_log_close_failed();
       return;
     }
     MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_program(PROGRAM_END) + "," + sessionDescription, "st");
     delay(200);
 #endif
     run_program(0);
-    SamovarStatusInt = 10;
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
     ProgramNum = 0;
-    startval = 1;
-  } else if (startval == 1) {
+    startval = SAMOVAR_STARTVAL_RECT_RUNNING;
+  } else if (startval == SAMOVAR_STARTVAL_RECT_RUNNING) {
     ProgramNum++;
     Str = "Prg No " + (String)(ProgramNum + 1);
     run_program(ProgramNum);
-    SamovarStatusInt = 10;
-  } else if (startval == 2) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
+  } else if (startval == SAMOVAR_STARTVAL_RECT_DONE) {
     Str = "Prg finish";
     run_program(PROGRAM_END);
   } else {
@@ -705,7 +701,7 @@ void encoder_getvalue() {
   if (encoder.isRight()) {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
-    if (startval == 100) {
+    if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
       menu_calibrate();
       //updscreen = false;
       return;
@@ -721,7 +717,7 @@ void encoder_getvalue() {
   } else if (encoder.isLeft()) {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
-    if (startval == 100) {
+    if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
       //updscreen = false;
       menu_calibrate_down();
       return;
@@ -744,8 +740,8 @@ void encoder_getvalue() {
     main_menu1.call_function(2);
   } else if (encoder.isClick()) {
     //Выход из режима калибровки - нажатие на кнопку.
-    if (startval == 100) {
-      startval = 0;
+    if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
+      startval = SAMOVAR_STARTVAL_IDLE;
       menu_calibrate();
     }
     updscreen = false;

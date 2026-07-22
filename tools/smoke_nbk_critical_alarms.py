@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens
+from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 errors = []
@@ -34,11 +34,30 @@ if nbk_text:
         body = ""
 
     for token in [
-        "request_emergency_stop(\"Кончилась брага! Останов.\")",
         "request_emergency_stop(\"Недостаточное охлаждение! Останов.\")",
     ]:
         if token not in body:
             errors.append(f"NBK critical alarm missing emergency request: {token}")
+
+    try:
+        mash_depleted_body, _ = extract_braced_block_after(
+            body, "if (SteamSensor.avgTemp > 98.0) {"
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        mash_depleted_body = ""
+
+    if mash_depleted_body:
+        require_ordered_tokens(
+            "NBK ran-out-of-mash finishes gracefully via command queue, emergency stop only as fallback",
+            mash_depleted_body,
+            [
+                "SendMsg(\"Кончилась брага. Программа НБК завершена.\", NOTIFY_MSG);",
+                "if (!queue_samovar_command(SAMOVAR_POWER)) {",
+                "request_emergency_stop(\"Аварийное отключение! Не удалось штатно завершить программу НБК (кончилась брага)\");",
+            ],
+            errors,
+        )
 
     forbid_tokens(
         "check_nbk_critical_alarms",
@@ -65,8 +84,8 @@ if nbk_text:
         "SetSpeed(0);",
         "stats.avgSpeed",
         "ProgramNum = 0;",
-        "startval = 0;",
-        "SamovarStatusInt = 0;",
+        "startval = SAMOVAR_STARTVAL_IDLE;",
+        "SamovarStatusInt = SAMOVAR_STATUS_IDLE;",
         "stats.startTime = 0;",
         "stats.totalVolume = 0;",
     ]:

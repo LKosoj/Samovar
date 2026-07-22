@@ -47,6 +47,20 @@ inline void mode_request_water_flow_emergency_if_needed() {
 #endif
 }
 
+// Предельные температуры воды охлаждения/ТСА: при превышении во время работы —
+// аварийный останов с перечнем превысивших датчиков. Общий блок четырёх режимов
+// (дистилляция, БК, пиво-охлаждение, сувид).
+inline void mode_request_overheat_emergency_if_needed() {
+  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
+    String s = "";
+    if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
+      s = s + " Воды";
+    if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))
+      s = s + " ТСА";
+    request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s);
+  }
+}
+
 inline bool mode_water_pre_alarm_due() {
   return WaterSensor.avgTemp >= ALARM_WATER_TEMP - 5 && PowerOn && alarm_t_min == 0;
 }
@@ -85,6 +99,23 @@ inline void mode_update_water_valve_by_setpoint() {
     digitalWrite(WATER_PUMP_PIN, !USE_WATER_VALVE);
   }
 #endif
+}
+
+/**
+ * @brief Отменяет запуск процесса из-за ошибки предусловий: сообщение + сброс
+ *        статуса в «Ожидание» до того, как режим начал работу.
+ */
+inline void mode_cancel_process_start(const String& message) {
+  SendMsg(message, ALARM_MSG);
+  SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+  startval = SAMOVAR_STARTVAL_IDLE;
+}
+
+/**
+ * @brief Закрывает файл лога с диагностикой занятости (WARNING вместо тихой потери).
+ */
+inline void mode_warn_log_close_failed() {
+  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
 }
 
 enum ModeHeatingStartResult : uint8_t {
@@ -127,11 +158,11 @@ inline void mode_clear_heating_start() {
 inline ModeHeatingStartResult mode_fail_heating_start() {
   const bool resetOwnerState = SamovarStatusInt == modeHeatingStart.activeStatus;
   if (PowerOn) set_power(false, false);
-  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+  mode_warn_log_close_failed();
   mode_clear_heating_start();
   if (resetOwnerState) {
-    SamovarStatusInt = 0;
-    startval = 0;
+    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+    startval = SAMOVAR_STARTVAL_IDLE;
   }
   return MODE_HEATING_START_FAILED;
 }
@@ -198,43 +229,35 @@ inline ModeHeatingStartResult mode_begin_heating_session(
   // Явно уведомляем оператора и гасим владение статусом — иначе старт будет молча
   // проваливаться каждый тик, а UI ничего не объяснит.
   if (heater_safety_latched() && SamovarStatusInt == activeStatus) {
-    SendMsg("Нагрев заблокирован аварийной защитой, требуется перезагрузка", ALARM_MSG);
-    SamovarStatusInt = 0;
-    startval = 0;
+    mode_cancel_process_start("Нагрев заблокирован аварийной защитой, требуется перезагрузка");
     return MODE_HEATING_START_FAILED;
   }
   if (PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()) return MODE_HEATING_START_FAILED;
   if (power_transition_active()) {
-    SendMsg("Выключение нагрева ещё не завершено. Старт отменён.", ALARM_MSG);
-    SamovarStatusInt = 0;
-    startval = 0;
+    mode_cancel_process_start("Выключение нагрева ещё не завершено. Старт отменён.");
     return MODE_HEATING_START_FAILED;
   }
 
   if (resetHeatLoss) reset_heat_loss_calculation();
   if (!create_data()) {
-    SendMsg(createLogError, ALARM_MSG);
-    SamovarStatusInt = 0;
-    startval = 0;
+    mode_cancel_process_start(createLogError);
     return MODE_HEATING_START_FAILED;
   }
 
   if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+    mode_warn_log_close_failed();
     return MODE_HEATING_START_FAILED;
   }
 
 #ifdef USE_MQTT
   if (!copy_mqtt_session_description(modeHeatingStart.sessionDescription, pdMS_TO_TICKS(50))) {
-    SendMsg(sessionBusyError, ALARM_MSG);
-    SamovarStatusInt = 0;
-    startval = 0;
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+    mode_cancel_process_start(sessionBusyError);
+    mode_warn_log_close_failed();
     return MODE_HEATING_START_FAILED;
   }
   modeHeatingStart.mqttProgram = mqttProgram;
   if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+    mode_warn_log_close_failed();
     modeHeatingStart.sessionDescription = String();
     modeHeatingStart.mqttProgram = String();
     return MODE_HEATING_START_FAILED;
@@ -245,7 +268,7 @@ inline ModeHeatingStartResult mode_begin_heating_session(
 #endif
 
   if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
-    if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+    mode_warn_log_close_failed();
     return MODE_HEATING_START_FAILED;
   }
 

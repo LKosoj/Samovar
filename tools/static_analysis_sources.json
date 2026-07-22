@@ -45,6 +45,7 @@
     "selftest.h",
     "sensorinit.h",
     "string_utils.h",
+    "suvid.h",
     "time_utils.h",
     "user_config_override.h",
     "valve_buzzer.h"

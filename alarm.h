@@ -17,7 +17,7 @@ extern volatile bool pending_emergency_stop_reason_flag;
 extern char pending_emergency_stop_reason[EMERGENCY_STOP_REASON_LEN];
 
 inline bool samovar_process_active() {
-  return PowerOn || startval != 0 || SamovarStatusInt != 0;
+  return PowerOn || startval != SAMOVAR_STARTVAL_IDLE || SamovarStatusInt != SAMOVAR_STATUS_IDLE;
 }
 
 inline bool sensor_configured(const DSSensor& sensor) {
@@ -111,7 +111,7 @@ void check_alarm() {
   // [L-34] avgTemp >= 2 — идиома «датчик подключён» (аналогично check_boiling).
   // При отсутствующем/замёрзшем датчике куба (avgTemp == 0 или < 2) разгонный ТЭН
   // НЕ управляется — иначе он не выключится никогда.
-  if (SamovarStatusInt == 50 && TankSensor.avgTemp >= 2 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_ACCEL && TankSensor.avgTemp >= 2 && TankSensor.avgTemp <= OPEN_VALVE_TANK_TEMP && PowerOn) {
     if (!acceleration_heater) {
       //включаем разгонный тэн
       acceleration_heater = heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
@@ -288,7 +288,7 @@ void check_alarm() {
     mode_set_alarm_pause_ms(30000);
   }
 
-  if (SamovarStatusInt == 50 && SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_ACCEL && SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
 #ifdef USE_WATER_PUMP
     //Сбросим счетчик насоса охлаждения, что приведет к увеличению потока воды. Дальше уже будет штатно работать PID
     wp_count = -5;
@@ -303,14 +303,14 @@ void check_alarm() {
     if (column_wetting_result) {
 
         //достигли заданной температуры на разгоне и смочили насадку (если используется эта функция), переходим на рабочий режим, устанавливаем заданную температуру, зовем оператора
-        SamovarStatusInt = 51;
+        SamovarStatusInt = SAMOVAR_STATUS_RECT_STABILIZING;
 
         // Инициализируем переменные для проверки стабилизации
         acceleration_temp = 0;
 
 #ifdef COLUMN_WETTING
         // Помечаем, что после стабилизации нужно автоматически перейти к головам
-        wetting_autostart = (startval == 0);
+        wetting_autostart = (startval == SAMOVAR_STARTVAL_IDLE);
 #endif
 
         SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
@@ -324,7 +324,7 @@ void check_alarm() {
     }
   }
 
-  if (SamovarStatusInt == 51 && !boil_started) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_STABILIZING && !boil_started) {
     set_boiling();
     if (boil_started) {
       SendMsg("Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);
@@ -333,20 +333,20 @@ void check_alarm() {
 
   //Разгон и стабилизация завершены - шесть минут температура пара не меняется больше, чем на 0.1 градус:
   //https://alcodistillers.ru/forum/viewtopic.php?id=137 - указано 3 замера раз в три минуты.
-  if (SamovarStatusInt == 51 && SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_STABILIZING && SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
     static float prev_stable_temp = 0;  // Предыдущая температура для проверки стабилизации
     float d = SteamSensor.avgTemp - prev_stable_temp;
     d = abs(d);
     if (d < 0.1) {
       acceleration_temp += 1;
       if (acceleration_temp == 60 * 6) {
-        SamovarStatusInt = 52;
+        SamovarStatusInt = SAMOVAR_STATUS_RECT_STABLE;
         acceleration_temp = 0;  // Сбрасываем счетчик после установки статуса стабилизации
         prev_stable_temp = 0;  // Сбрасываем предыдущую температуру
         set_buzzer(true);
         SendMsg(("Стабилизация завершена, колонна работает стабильно."), NOTIFY_MSG);
 #ifdef COLUMN_WETTING
-        if (wetting_autostart && startval == 0) {
+        if (wetting_autostart && startval == SAMOVAR_STARTVAL_IDLE) {
           wetting_autostart = false;
           menu_samovar_start();  // Автостарт голов после стабилизации
         }

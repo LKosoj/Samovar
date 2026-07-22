@@ -572,19 +572,33 @@ if mode_registry_file.exists():
     for token in [
         "PowerOn",
         "mode_is_program_owner(Samovar_Mode)",
-        "SamovarStatusInt > 0 && SamovarStatusInt < 1000",
-        "SamovarStatusInt == 1000",
-        "SamovarStatusInt == 2000",
-        "SamovarStatusInt == 3000",
-        "SamovarStatusInt == 4000",
-        "startval > 0 && startval < 1000",
-        "startval == 1000",
-        "startval >= 2000 && startval < 3000",
-        "startval == 3000",
-        "startval >= 4000 && startval < 5000",
+        "mode_status_session_active(SamovarStatusInt)",
+        "mode_startval_session_active(startval)",
     ]:
         if token not in active_body:
             errors.append(f"program active helper missing state token: {token}")
+    try:
+        status_active_body = extract_function_body(mode_registry_text, "inline bool mode_status_session_active")
+    except ValueError as exc:
+        errors.append(str(exc))
+        status_active_body = ""
+    for token in [
+        "status > SAMOVAR_STATUS_IDLE && status < SAMOVAR_STATUS_DISTILLATION",
+        "ops[i].activeStatus > SAMOVAR_STATUS_IDLE && ops[i].activeStatus == status",
+    ]:
+        if token not in status_active_body:
+            errors.append(f"mode_status_session_active missing token: {token}")
+    try:
+        startval_active_body = extract_function_body(mode_registry_text, "inline bool mode_startval_session_active")
+    except ValueError as exc:
+        errors.append(str(exc))
+        startval_active_body = ""
+    for token in [
+        "ops[i].startvalRangeHigh > ops[i].startvalRangeLow",
+        "value >= ops[i].startvalRangeLow && value < ops[i].startvalRangeHigh",
+    ]:
+        if token not in startval_active_body:
+            errors.append(f"mode_startval_session_active missing token: {token}")
 else:
     errors.append("mode_registry.h not found")
 

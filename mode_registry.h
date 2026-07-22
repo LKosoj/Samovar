@@ -9,6 +9,8 @@ using ModeStatusFn = String (*)();
 struct ModeOps {
   SAMOVAR_MODE mode;
   int16_t activeStatus;
+  int16_t startvalRangeLow;    // включительно
+  int16_t startvalRangeHigh;   // исключительно
   const char* pagePath;
   SamovarCommands powerOnCommand;
   SamovarCommands startCommand;
@@ -22,19 +24,19 @@ inline void mode_alarm_nbk() {
 }
 
 inline void mode_alarm_beer() {
-  check_alarm_beer();
-  water_pulse_count_set(100);
+  beer_check_cooling_limits();
+  water_pulse_count_set(100);  // в пиве нет постоянного протока — авария глушится намеренно
 }
 
 inline const ModeOps* mode_registry() {
   static const ModeOps ops[] = {
-    {SAMOVAR_RECTIFICATION_MODE, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr},
-    {SAMOVAR_DISTILLATION_MODE, 1000, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text},
-    {SAMOVAR_BEER_MODE, 2000, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text},
-    {SAMOVAR_BK_MODE, 3000, "/bk.htm", SAMOVAR_BK, SAMOVAR_START, check_alarm_bk, bk_finish, get_bk_status_text},
-    {SAMOVAR_NBK_MODE, 4000, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text},
-    {SAMOVAR_SUVID_MODE, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, nullptr, nullptr, nullptr},
-    {SAMOVAR_LUA_MODE, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, nullptr, nullptr, nullptr},
+    {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr},
+    {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text},
+    {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text},
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_START, check_alarm_bk, bk_finish, get_bk_status_text},
+    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text},
+    {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr},
+    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, nullptr, nullptr, nullptr},
   };
   return ops;
 }
@@ -52,8 +54,8 @@ inline const ModeOps* mode_ops_by_mode(SAMOVAR_MODE mode) {
 }
 
 inline const ModeOps* mode_ops_by_status(int16_t status) {
-  if (status <= 0) return nullptr;
-  if (status > 0 && status < 1000) return mode_ops_by_mode(SAMOVAR_RECTIFICATION_MODE);
+  if (status <= SAMOVAR_STATUS_IDLE) return nullptr;
+  if (status > SAMOVAR_STATUS_IDLE && status < SAMOVAR_STATUS_DISTILLATION) return mode_ops_by_mode(SAMOVAR_RECTIFICATION_MODE);
   const ModeOps* ops = mode_registry();
   for (size_t i = 0; i < mode_registry_count(); i++) {
     if (ops[i].activeStatus == status) return &ops[i];
@@ -94,19 +96,33 @@ inline bool mode_is_program_owner(SAMOVAR_MODE mode) {
          mode == SAMOVAR_LUA_MODE;
 }
 
+inline bool mode_status_session_active(int16_t status) {
+  if (status > SAMOVAR_STATUS_IDLE && status < SAMOVAR_STATUS_DISTILLATION) return true;  // ректификация — спец-диапазон
+  const ModeOps* ops = mode_registry();
+  for (size_t i = 0; i < mode_registry_count(); i++) {
+    if (ops[i].activeStatus > SAMOVAR_STATUS_IDLE && ops[i].activeStatus == status) return true;
+  }
+  return false;
+}
+
+inline bool mode_startval_session_active(int16_t value) {
+  const ModeOps* ops = mode_registry();
+  for (size_t i = 0; i < mode_registry_count(); i++) {
+    if (ops[i].startvalRangeHigh > ops[i].startvalRangeLow &&
+        value >= ops[i].startvalRangeLow && value < ops[i].startvalRangeHigh) return true;
+  }
+  return false;
+}
+
 inline bool program_update_session_active() {
   if (PowerOn && mode_is_program_owner(Samovar_Mode)) return true;
-  if (SamovarStatusInt > 0 && SamovarStatusInt < 1000) return true;
-  if (SamovarStatusInt == 1000 || SamovarStatusInt == 2000 ||
-      SamovarStatusInt == 3000 || SamovarStatusInt == 4000) return true;
-  if (startval > 0 && startval < 1000) return true;
-  if (startval == 1000 || (startval >= 2000 && startval < 3000) ||
-      startval == 3000 || (startval >= 4000 && startval < 5000)) return true;
+  if (mode_status_session_active(SamovarStatusInt)) return true;
+  if (mode_startval_session_active(startval)) return true;
   return false;
 }
 
 inline bool mode_runtime_owner_idle() {
-  return SamovarStatusInt == 0 && startval == 0 && ProgramNum == 0;
+  return SamovarStatusInt == SAMOVAR_STATUS_IDLE && startval == SAMOVAR_STARTVAL_IDLE && ProgramNum == 0;
 }
 
 inline bool mode_apply_power_on_command(SamovarCommands command) {
@@ -122,7 +138,7 @@ inline bool mode_apply_power_on_command(SamovarCommands command) {
   }
 
   const ModeOps* ops = mode_ops_by_power_on_command(command);
-  if (ops == nullptr || ops->activeStatus <= 0) return false;
+  if (ops == nullptr || ops->activeStatus <= SAMOVAR_STATUS_IDLE) return false;
 
   Samovar_Mode = ops->mode;
   change_samovar_mode();
@@ -173,7 +189,8 @@ inline void mode_dispatch_loop() {
       nbk_proc();
       break;
     case SAMOVAR_BEER_MODE:
-      if (startval == 2000) beer_proc();
+      if (startval == SAMOVAR_STARTVAL_BEER_START) beer_proc();
+      else if (startval > SAMOVAR_STARTVAL_BEER_START) beer_stage_tick();
       break;
     case SAMOVAR_SUVID_MODE:
     case SAMOVAR_LUA_MODE:

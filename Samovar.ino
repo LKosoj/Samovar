@@ -168,6 +168,7 @@ SimpleStringQueue msg_q(5, 200);
 #include "beer.h"
 #include "BK.h"
 #include "nbk.h"
+#include "suvid.h"
 #include "SPIFFSEditor.h"
 
 //#include <HTTPClient.h>
@@ -1433,7 +1434,7 @@ void triggerSysTicker(void *parameter) {
 
       process_pending_data_log_ops();
 
-      if (startval != 0) {
+      if (startval != SAMOVAR_STARTVAL_IDLE) {
         tcntST++;
         if (tcntST >= SamSetup.LogPeriod) {
           tcntST = 0;
@@ -1687,11 +1688,11 @@ void triggerSysTicker(void *parameter) {
       }
 
       // [C-2/2a] Продвигаем FSM и обновляем кэш SamovarStatus раз в секунду.
-      // Все переходы в get_Samovar_Status() оперируют секундными интервалами,
+      // Все переходы в tick_status_fsm() оперируют секундными интервалами,
       // поэтому секундная каденция достаточна. WthdrwTimeS/WthdrwTimeAllS к этому
       // моменту уже записаны выше под замком — читаем актуальные значения.
       // Замок в этой точке не удерживается → вложенного захвата нет.
-      get_Samovar_Status();
+      tick_status_fsm();
 
       OldMinST = CurMinST;
     }
@@ -2412,19 +2413,19 @@ void loop() {
       //если выключен - включаем
       if (!PowerOn) {
         set_power(true);
-      } else if (startval == 0 && SamovarStatusInt < 1000) {
+      } else if (startval == SAMOVAR_STARTVAL_IDLE && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         //если включен и программа отбора не работает - запускаем программу
         menu_samovar_start();
-      } else if (startval != 0 && !program_Pause && SamovarStatusInt < 1000) {
+      } else if (startval != SAMOVAR_STARTVAL_IDLE && !program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
         pause_withdrawal(!PauseOn);
-      } else if (startval != 0 && program_Pause && SamovarStatusInt < 1000) {
+      } else if (startval != SAMOVAR_STARTVAL_IDLE && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         //если выполняется программа, и программа - пауза, переходим к следующей программе
         menu_samovar_start();
       }
       //Выход из режима калибровки - нажатие на кнопку.
-      if (startval == 100) {
-        startval = 0;
+      if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
+        startval = SAMOVAR_STARTVAL_IDLE;
         menu_calibrate();
         menu_switch_focus();
       }
@@ -2465,7 +2466,7 @@ void loop() {
       case SAMOVAR_POWER:
         if (!mode_finish_by_status(SamovarStatusInt)) set_power(!PowerOn);
         if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-          SamovarStatusInt = 50;
+          SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
         }
         break;
       case SAMOVAR_RESET:
@@ -3152,7 +3153,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   const ProgramType currentType = current_program_type();
   if ((mode == SAMOVAR_RECTIFICATION_MODE || mode == SAMOVAR_BEER_MODE ||
        mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE) &&
-      (status == 10 || status == 15 || (status == 2000 && snapshot.powerOn)) &&
+      (status == SAMOVAR_STATUS_RECT_WITHDRAWAL || status == SAMOVAR_STATUS_RECT_AUTOPAUSE || (status == SAMOVAR_STATUS_BEER && snapshot.powerOn)) &&
       !program_type_empty(currentType)) {
     snapshot.programType = program_type_to_string(currentType);
   }
@@ -3527,6 +3528,15 @@ void apply_config_runtime() {
   if (isnan(SamSetup.BVolt)) {
     SamSetup.BVolt = 230;
   }
+
+  if (isnan(SamSetup.BKPower) || SamSetup.BKPower <= 0) {
+#ifndef SAMOVAR_USE_SEM_AVR
+    SamSetup.BKPower = 45;
+#else
+    SamSetup.BKPower = 200;
+#endif
+  }
+  if (isnan(SamSetup.MainsVoltage) || SamSetup.MainsVoltage <= 0) SamSetup.MainsVoltage = 230;
 
   if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;
   if (isnan(SamSetup.SetACPTemp) || SamSetup.SetACPTemp == 0) SamSetup.SetACPTemp = 43;

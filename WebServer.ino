@@ -335,8 +335,8 @@ static OperationError queue_pending_i2ccal(
   bool locked = pending_command_lock(pdMS_TO_TICKS(50));
   if (!locked) return OPERATION_ERROR_LOCK_BUSY;
   const bool calibrationStateValid = command.is_finish
-      ? I2CPumpCalibrating && startval != 100
-      : startval == 0 && !I2CPumpCalibrating;
+      ? I2CPumpCalibrating && startval != SAMOVAR_STARTVAL_CALIBRATION
+      : startval == SAMOVAR_STARTVAL_IDLE && !I2CPumpCalibrating;
   if (mode_switch_in_progress() || pending_i2ccal_flag || pending_local_cal_flag ||
       !calibrationStateValid || i2c_stepper_config_busy(i2cStepperPump)) {
     pending_command_unlock(true);
@@ -363,8 +363,8 @@ static OperationError queue_pending_local_cal(
   bool locked = pending_command_lock(pdMS_TO_TICKS(50));
   if (!locked) return OPERATION_ERROR_LOCK_BUSY;
   const bool calibrationStateValid = command.is_finish
-      ? startval == 100 && !I2CPumpCalibrating
-      : startval == 0 && !I2CPumpCalibrating;
+      ? startval == SAMOVAR_STARTVAL_CALIBRATION && !I2CPumpCalibrating
+      : startval == SAMOVAR_STARTVAL_IDLE && !I2CPumpCalibrating;
   if (mode_switch_in_progress() || pending_local_cal_flag || pending_i2ccal_flag ||
       !calibrationStateValid) {
     pending_command_unlock(true);
@@ -1329,6 +1329,9 @@ String setupKeyProcessor(const String &var) {
     float setACPTemp = isnan(SamSetup.SetACPTemp) ? 0 : SamSetup.SetACPTemp;
     s = format_float(setACPTemp, 2);
     return s;
+  } else if (var == "SuvidTemp") {
+    s = format_float(SamSetup.SuvidTemp, 2);
+    return s;
   } else if (var == "StepperStepMl") {
     s = SamSetup.StepperStepMl;
     return s;
@@ -1373,6 +1376,9 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "HeaterR") {
     s = format_float(SamSetup.HeaterResistant, 3);
     return s;
+  } else if (var == "MainsVoltage") {
+    s = SamSetup.MainsVoltage;
+    return s;
   } else if (var == "videourl") {
     s = SamSetup.videourl;
     return s;
@@ -1387,6 +1393,9 @@ String setupKeyProcessor(const String &var) {
     return s;
   } else if (var == "BVolt") {
     s = SamSetup.BVolt;
+    return s;
+  } else if (var == "BKPower") {
+    s = SamSetup.BKPower;
     return s;
   } else if (var == "DistTimeF") {
     s = SamSetup.DistTimeF;
@@ -1411,6 +1420,9 @@ String setupKeyProcessor(const String &var) {
     return s;
   } else if (var == "NbkOwPress") {
     s = SamSetup.NbkOwPress;
+    return s;
+  } else if (var == "NbkTn") {
+    s = SamSetup.NbkTn;
     return s;
   } else if (var == "Checked") {
     if (SamSetup.UsePreccureCorrect) return "checked='true'";
@@ -1596,7 +1608,7 @@ String calibrateKeyProcessor(const String &var) {
     // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
     return i2c_stepper_cache.pump_present ? "inline-block" : "none";
   else if (var == "CalibrationRunning")
-    return startval == 100 || I2CPumpCalibrating ? "1" : "0";
+    return startval == SAMOVAR_STARTVAL_CALIBRATION || I2CPumpCalibrating ? "1" : "0";
   else if (var == "CalibrationPump")
     return I2CPumpCalibrating ? "i2c" : "local";
 
@@ -1766,11 +1778,11 @@ static bool tick_mode_actuator_cleanup(bool luaIdle) {
 
 void stop_active_process_for_mode() {
   if (self_test_active()) stop_self_test();
-  const bool ownerActive = heater_power_on() || SamovarStatusInt != 0 ||
-                           startval != 0 || ProgramNum != 0;
+  const bool ownerActive = heater_power_on() || SamovarStatusInt != SAMOVAR_STATUS_IDLE ||
+                           startval != SAMOVAR_STARTVAL_IDLE || ProgramNum != 0;
   if (!ownerActive) {
-    SamovarStatusInt = 0;
-    startval = 0;
+    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+    startval = SAMOVAR_STARTVAL_IDLE;
     ProgramNum = 0;
     return;
   }
@@ -1794,8 +1806,8 @@ void stop_active_process_for_mode() {
     case SAMOVAR_SUVID_MODE:
     case SAMOVAR_LUA_MODE:
     default:
-      SamovarStatusInt = 0;
-      startval = 0;
+      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+      startval = SAMOVAR_STARTVAL_IDLE;
       ProgramNum = 0;
       set_power(false);
       break;
@@ -2070,6 +2082,8 @@ static bool save_param_name_allowed(const String& name) {
       name == "TimeZone" || name == "LogPeriod" || name == "HeaterR" ||
       name == "NbkIn" || name == "NbkDelta" || name == "NbkDM" ||
       name == "NbkDP" || name == "NbkSteamT" || name == "NbkOwPress" ||
+      name == "NbkTn" || name == "BKPower" || name == "MainsVoltage" ||
+      name == "SuvidTemp" ||
       name == "videourl" || name == "blynkauth" || name == "tgtoken" ||
       name == "tgchatid" || name == "SteamColor" || name == "PipeColor" ||
       name == "WaterColor" || name == "TankColor" || name == "ACPColor" ||
@@ -2188,11 +2202,13 @@ void handleSave(AsyncWebServerRequest *request) {
   if (!apply_save_float_arg(request, "SetWaterTemp", staged.SetWaterTemp, 0.0f, 150.0f)) return;
   if (!apply_save_float_arg(request, "SetTankTemp", staged.SetTankTemp, 0.0f, 150.0f)) return;
   if (!apply_save_float_arg(request, "SetACPTemp", staged.SetACPTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "SuvidTemp", staged.SuvidTemp, 0.0f, 150.0f)) return;
   if (!apply_save_float_arg(request, "Kp", staged.Kp, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "Ki", staged.Ki, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "Kd", staged.Kd, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "StbVoltage", staged.StbVoltage, 0.0f, 10000.0f)) return;
   if (!apply_save_float_arg(request, "BVolt", staged.BVolt, 0.0f, 10000.0f)) return;
+  if (!apply_save_float_arg(request, "BKPower", staged.BKPower, 0.0f, 10000.0f)) return;
   if (!apply_save_u8_arg(request, "DistTimeF", staged.DistTimeF, 0, 255)) return;
   if (!apply_save_float_arg(request, "MaxPressureValue", staged.MaxPressureValue, 0.0f, 10000.0f)) return;
   if (!apply_save_u16_arg(request, "StepperStepMl", staged.StepperStepMl, 0, 65535)) return;
@@ -2227,12 +2243,14 @@ void handleSave(AsyncWebServerRequest *request) {
   if (!apply_save_u8_arg(request, "TimeZone", staged.TimeZone, 0, 23)) return;
   if (!apply_save_u8_arg(request, "LogPeriod", staged.LogPeriod, 1, 255)) return;
   if (!apply_save_float_arg(request, "HeaterR", staged.HeaterResistant, CONTROL_HEATER_R_MIN, CONTROL_HEATER_R_MAX)) return;
+  if (!apply_save_float_arg(request, "MainsVoltage", staged.MainsVoltage, 0.0f, 1000.0f)) return;
   if (!apply_save_float_arg(request, "NbkIn", staged.NbkIn, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "NbkDelta", staged.NbkDelta, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "NbkDM", staged.NbkDM, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "NbkDP", staged.NbkDP, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "NbkSteamT", staged.NbkSteamT, 0.0f, 150.0f)) return;
   if (!apply_save_float_arg(request, "NbkOwPress", staged.NbkOwPress, 0.0f, 100000.0f)) return;
+  if (!apply_save_float_arg(request, "NbkTn", staged.NbkTn, 0.0f, 150.0f)) return;
 
   if (request->hasArg("videourl")) copyStringSafe(staged.videourl, request->arg("videourl"));
   if (request->hasArg("blynkauth")) copyStringSafe(staged.blynkauth, request->arg("blynkauth"));
@@ -2816,12 +2834,12 @@ void calibrate_command(AsyncWebServerRequest *request) {
   }
 
   const bool isFinish = finishCount == 1;
-  const bool localCalibrating = startval == 100;
+  const bool localCalibrating = startval == SAMOVAR_STARTVAL_CALIBRATION;
   const bool i2cCalibrating = I2CPumpCalibrating;
   const bool invalidState = isFinish
       ? (isI2C ? !i2cCalibrating || localCalibrating
                : !localCalibrating || i2cCalibrating)
-      : startval != 0 || i2cCalibrating;
+      : startval != SAMOVAR_STARTVAL_IDLE || i2cCalibrating;
   if (invalidState) {
     send_no_store_response(
         request, 503, "application/json", build_error_envelope("BUSY", nullptr, "BUSY"));

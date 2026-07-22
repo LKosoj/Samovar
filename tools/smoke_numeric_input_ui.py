@@ -194,7 +194,7 @@ for token in [
 calibrate_processor = body(web, "String calibrateKeyProcessor(const String &var)")
 for token in [
     'var == "CalibrationRunning"',
-    "startval == 100 || I2CPumpCalibrating",
+    "startval == SAMOVAR_STARTVAL_CALIBRATION || I2CPumpCalibrating",
     'var == "CalibrationPump"',
     'I2CPumpCalibrating ? "i2c" : "local"',
 ]:

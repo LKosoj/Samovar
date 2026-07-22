@@ -1911,6 +1911,12 @@ String get_lua_mode_name(bool filename) {
     } else {
       fl = "nbk";
     }
+  } else if (Samovar_CR_Mode == SAMOVAR_SUVID_MODE) {
+    if (filename) {
+      fl = "/suvid" + String(LUA_SUVID) + ".lua";
+    } else {
+      fl = "suvid";
+    }
   } else {
     if (filename) {
       fl = "/rectificat" + String(LUA_RECT) + ".lua";

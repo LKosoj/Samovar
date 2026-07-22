@@ -12,9 +12,9 @@ static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
 static const char* const SAMOVAR_PROFILE_KEY = "profile";
 static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 1;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
-static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 499;
+static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
 
-static_assert(sizeof(SetupEEPROM) == 516,
+static_assert(sizeof(SetupEEPROM) == 532,
               "SetupEEPROM v1 ABI changed; bump the profile format version");
 static_assert(std::is_trivially_copyable<SetupEEPROM>::value,
               "SetupEEPROM must remain trivially copyable");
@@ -104,7 +104,11 @@ static bool encode_setup_payload(
       writer.put_float(candidate.ColDiam) &&
       writer.put_float(candidate.ColHeight) &&
       writer.put_u8(candidate.PackDens) &&
-      writer.put_u16(candidate.StepperStepMlI2C);
+      writer.put_u16(candidate.StepperStepMlI2C) &&
+      writer.put_float(candidate.NbkTn) &&
+      writer.put_float(candidate.BKPower) &&
+      writer.put_float(candidate.MainsVoltage) &&
+      writer.put_float(candidate.SuvidTemp);
   return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V1 &&
          writer.finish();
 }
@@ -183,7 +187,11 @@ static bool decode_setup_payload(
       reader.get_float(decoded.ColDiam) &&
       reader.get_float(decoded.ColHeight) &&
       reader.get_u8(decoded.PackDens) &&
-      reader.get_u16(decoded.StepperStepMlI2C);
+      reader.get_u16(decoded.StepperStepMlI2C) &&
+      reader.get_float(decoded.NbkTn) &&
+      reader.get_float(decoded.BKPower) &&
+      reader.get_float(decoded.MainsVoltage) &&
+      reader.get_float(decoded.SuvidTemp);
   if (!decodedFields ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V1 ||
       !reader.finish()) {
@@ -441,6 +449,12 @@ void set_default_setup_profile(SetupEEPROM& candidate) {
   candidate.Kd = 1.4;
   candidate.StbVoltage = 100.0;
   candidate.BVolt = 230.0;
+#ifndef SAMOVAR_USE_SEM_AVR
+  candidate.BKPower = 45.0f;
+#else
+  candidate.BKPower = 200.0f;
+#endif
+  candidate.MainsVoltage = 230.0f;
   candidate.CheckPower = false;
   candidate.UseST = true;
   candidate.rele1 = false;

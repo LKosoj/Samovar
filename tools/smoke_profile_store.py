@@ -255,7 +255,7 @@ setup_fields = re.findall(
     setup_definition,
     re.MULTILINE,
 )
-require(len(setup_fields) == 68, "SetupEEPROM field inventory changed")
+require(len(setup_fields) == 72, "SetupEEPROM field inventory changed")
 padding_marks = "\n".join(
     "  mark_field(occupied, offsetof(SetupEEPROM, "
     f"{field}), sizeof(((SetupEEPROM*)0)->{field}));"
@@ -306,13 +306,13 @@ nvs_harness = (
         static const char* const SAMOVAR_PROFILE_KEY = "profile";
         static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 1;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
-        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 499;
+        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
 
         using ProfileCodec = ProfileBlobCodec<
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V1,
             SAMOVAR_PROFILE_FORMAT_VERSION>;
 
-        static_assert(sizeof(SetupEEPROM) == 516, "host ABI drift");
+        static_assert(sizeof(SetupEEPROM) == 532, "host ABI drift");
         static_assert(ProfileCodec::BLOB_SIZE == 530, "blob size drift");
 
         static const float DEFAULT_DIST_TEMP = 98.0f;
@@ -490,7 +490,7 @@ nvs_harness = (
           } else if (fake.mutation == MUTATE_INVALID_BOOL) {
             fake.blob[ProfileCodec::HEADER_SIZE + 35] = 2U;
           } else {
-            fake.blob[ProfileCodec::HEADER_SIZE + 499] = 1U;
+            fake.blob[ProfileCodec::HEADER_SIZE + 515] = 1U;
           }
           write_crc(fake.blob);
         }
@@ -1038,7 +1038,7 @@ nvs_harness += (
 
           reset_fake();
           seed_current_blob(expected);
-          fake.blob[ProfileCodec::HEADER_SIZE + 499] = 1U;
+          fake.blob[ProfileCodec::HEADER_SIZE + 515] = 1U;
           write_crc(fake.blob);
           expect_load_failure(PROFILE_LOAD_PAYLOAD_ENCODING);
 
@@ -1098,7 +1098,7 @@ nvs_harness += (
           assert(memcmp(before, &destination, sizeof(before)) == 0);
 
           firstPayload[35] = 0U;
-          firstPayload[499] = 1U;
+          firstPayload[515] = 1U;
           assert(!decode_setup_payload(firstPayload, destination));
           assert(memcmp(before, &destination, sizeof(before)) == 0);
         }
@@ -1854,7 +1854,7 @@ for forbidden in [
 require("void save_profile()" not in (ROOT / "FS.ino").read_text(encoding="utf-8"),
         "FS.ino void save_profile wrapper remains")
 require("void save_profile();" not in api_text, "void save_profile API remains")
-require('static_assert(sizeof(SetupEEPROM) == 516' in nvs_text,
+require('static_assert(sizeof(SetupEEPROM) == 532' in nvs_text,
         "production SetupEEPROM v1 ABI assertion is missing")
 
 setup_body = function_body(samovar_text, "void setup()")

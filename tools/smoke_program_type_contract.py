@@ -70,7 +70,7 @@ checks = [
     ("alarm.h", "void check_alarm"),
     ("impurity_detector.h", "bool is_first_body_program_after_heads"),
     ("impurity_detector.h", "void process_impurity_detector"),
-    ("beer.h", "void check_alarm_beer"),
+    ("beer.h", "void beer_stage_tick"),
     ("nbk.h", "void SetSpeed"),
     ("nbk.h", "bool check_nbk_critical_alarms"),
 ]
@@ -101,7 +101,7 @@ snapshot_requirements = {
         "const uint8_t currentProgram = ProgramNum;",
         "const ProgramType currentType = program_type_at(currentProgram);",
     ],
-    "beer.h:void check_alarm_beer": ["current_program_type()"],
+    "beer.h:void beer_stage_tick": ["current_program_type()"],
     "nbk.h:void SetSpeed": ["current_program_type()"],
     "nbk.h:bool check_nbk_critical_alarms": ["current_program_type()"],
 }

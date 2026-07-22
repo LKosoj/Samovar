@@ -100,7 +100,7 @@ if helpers:
 
 if beer:
     try:
-        body = extract_function_body(beer, "void check_alarm_beer")
+        body = extract_function_body(beer, "void beer_stage_tick")
     except ValueError as exc:
         errors.append(str(exc))
         body = ""

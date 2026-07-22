@@ -136,6 +136,7 @@ String get_program(uint8_t s);
 PumpCalibrationResult pump_calibrate(int stpspeed);
 void pause_withdrawal(bool Pause);
 String get_Samovar_Status();
+String tick_status_fsm();
 String get_distiller_status_text();
 String get_beer_status_text();
 String get_bk_status_text();
@@ -170,6 +171,8 @@ inline void safety_owner_generation_release(uint64_t generation);
 inline void process_pending_power_request();
 inline void cancel_invalid_mode_heating_session();
 inline bool mode_heating_start_active();
+inline void mode_cancel_process_start(const String& message);
+inline void mode_warn_log_close_failed();
 inline void set_current_power(float Volt);
 inline void set_power_mode(String Mode);
 void check_power_error();
@@ -224,7 +227,8 @@ float get_dist_predicted_total_time();
 
 void beer_proc();
 void beer_finish();
-void check_alarm_beer();
+void beer_stage_tick();
+void beer_check_cooling_limits();
 void run_beer_program(uint8_t num);
 ProgramParseResult set_beer_program(const String& WProgram);
 String get_beer_program();
@@ -259,6 +263,9 @@ void run_nbk_program(uint8_t num);
 ProgramParseResult set_nbk_program(const String& WProgram);
 String get_nbk_program();
 float fromPower(float value);
+
+inline void check_alarm_suvid();
+inline float suvid_target_temp();
 
 // Sensors and hardware
 ProgramParseResult prepare_default_program_for_mode(SAMOVAR_MODE mode, ProgramDraft& draft);

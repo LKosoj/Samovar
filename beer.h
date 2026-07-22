@@ -126,52 +126,67 @@ inline bool beer_control_sensor(uint8_t sensorId, const DSSensor*& sensor, const
 }
 
 /**
+ * @brief Проверяет ВСЕ заполненные строки программы затирания при старте: тип
+ *        этапа (MPBCFWLA) и корректность номера датчика температуры.
+ *        НЕ проверяет физическую доступность датчика (sensor_valid) — это
+ *        аппаратная авария, остаётся рантайм-проверкой (process_sensor_failed).
+ */
+inline bool beer_validate_program(String& errorMessage) {
+  if (ProgramLen == 0 || program_type_empty(program[0].WType)) {
+    errorMessage = "Ошибка программы Пиво: строка не задана";
+    return false;
+  }
+  for (uint8_t i = 0; i < ProgramLen && i < PROGRAM_END; i++) {
+    if (program_type_empty(program[i].WType)) break;
+    if (!program_type_one_of(program[i].WType, beer_program_parse_spec().allowedTypes)) {
+      errorMessage = "Ошибка программы: неверный тип этапа в строке " + String(i + 1);
+      return false;
+    }
+    const DSSensor* rowSensor = nullptr;
+    const char* rowSensorName = "";
+    if (!beer_control_sensor(program[i].TempSensor, rowSensor, rowSensorName)) {
+      errorMessage = "Ошибка программы: неверный датчик температуры в строке " + String(i + 1);
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * @brief Основной цикл запуска процесса затирания. Инициализация и старт программы.
  */
 void beer_proc() {
-  if (SamovarStatusInt != 2000) return;
+  if (SamovarStatusInt != SAMOVAR_STATUS_BEER) return;
 
-  if (startval == 2000 && !PowerOn) {
-    if (ProgramLen == 0 || program_type_empty(program[0].WType)) {
-      SendMsg("Ошибка программы Пиво: строка не задана", ALARM_MSG);
-      SamovarStatusInt = 0;
-      startval = 0;
+  if (startval == SAMOVAR_STARTVAL_BEER_START && !PowerOn) {
+    String programError;
+    if (!beer_validate_program(programError)) {
+      mode_cancel_process_start(programError);
       return;
     }
     const DSSensor* controlSensor = nullptr;
     const char* controlSensorName = "";
-    if (!beer_control_sensor(program[0].TempSensor, controlSensor, controlSensorName)) {
-      SendMsg("Ошибка программы: неверный датчик температуры в режиме Пиво", ALARM_MSG);
-      SamovarStatusInt = 0;
-      startval = 0;
-      return;
-    }
+    beer_control_sensor(program[0].TempSensor, controlSensor, controlSensorName);
     if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
 
     // [PKG-B п.4] Пока не завершён OFF-переход нагрева, set_power(true) молча откажет,
     // а create_data() каждый тик зря перезапишет SPIFFS-лог (+MQTT). Отменяем старт.
     if (power_transition_active()) {
-      SendMsg("Выключение нагрева ещё не завершено. Старт затирания отменён.", ALARM_MSG);
-      SamovarStatusInt = 0;
-      startval = 0;
+      mode_cancel_process_start("Выключение нагрева ещё не завершено. Старт затирания отменён.");
       return;
     }
 
     // Сброс детектора кипения при запуске процесса
     resetBoilingDetector();
     if (!create_data()) {
-      SendMsg("Ошибка создания файла лога. Старт затирания отменён.", ALARM_MSG);
-      SamovarStatusInt = 0;
-      startval = 0;
+      mode_cancel_process_start("Ошибка создания файла лога. Старт затирания отменён.");
       return;
     }
 #ifdef USE_MQTT
     String sessionDescription;
     if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
-      SendMsg("Описание сессии занято. Старт затирания отменён.", ALARM_MSG);
-      SamovarStatusInt = 0;
-      startval = 0;
-      if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+      mode_cancel_process_start("Описание сессии занято. Старт затирания отменён.");
+      mode_warn_log_close_failed();
       return;
     }
     MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + sessionDescription, "st");
@@ -189,7 +204,7 @@ void beer_proc() {
  */
 void run_beer_program(uint8_t num) {
   if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
-  if (startval == 2000) startval = 2001;
+  if (startval == SAMOVAR_STARTVAL_BEER_START) startval = SAMOVAR_STARTVAL_BEER_HEATING;
 
   uint8_t targetProgram = num;
   if (ProgramLen == 0 || targetProgram >= ProgramLen || targetProgram >= PROGRAM_END) {
@@ -209,6 +224,14 @@ void run_beer_program(uint8_t num) {
   ProgramNum = targetProgram;
   begintime = 0;
   msgfl = true;
+
+  // [п.11] Несмежная строка 'B' — это НОВОЕ кипячение на остывшей жидкости:
+  // сбрасываем накопленную историю/стабильность детектора. Смежные 'B'->'B'
+  // (продолжение одного кипячения ради разных всыпок хмеля) детектор не трогаем.
+  if (program[ProgramNum].WType == 'B' &&
+      (ProgramNum == 0 || program_type_at(ProgramNum - 1) != 'B')) {
+    resetBoilingDetector();
+  }
 
   if (program[ProgramNum].WType == 'A') {
     StartAutoTune();
@@ -259,23 +282,52 @@ void beer_finish() {
   setHeaterPosition(false);
   heater_state = false;
   ProgramNum = 0;
-  startval = 0;
+  startval = SAMOVAR_STARTVAL_IDLE;
   stop_process("Программа затирания завершена");
 }
 
 /**
- * @brief Проверяет и управляет состоянием процесса затирания, включая нагрев, охлаждение, паузы и кипячение.
+ * @brief Штатно останавливает варку из-за ОШИБКИ КОНФИГУРАЦИИ программы,
+ *        обнаруженной в рантайме. В отличие от request_emergency_stop НЕ взводит
+ *        аварийную защёлку: достаточно поправить программу и запустить заново.
  */
-void check_alarm_beer() {
+void beer_abort_config_error(const String& reason) {
+  SendMsg(reason, ALARM_MSG);
+  beer_finish();
+}
 
-  if (startval <= 2000) return;
+/**
+ * @brief Проверяет превышение предельных температур воды/ТСА на этапе охлаждения
+ *        и инициирует аварийный останов. Надзорная функция alarm-пути (mode_alarm_beer),
+ *        работает независимо от каденции beer_stage_tick() в loop().
+ */
+inline void beer_check_cooling_limits() {
+  if (current_program_type() != 'C') return;
+  mode_request_overheat_emergency_if_needed();
+}
+
+/**
+ * @brief Проверяет и управляет состоянием процесса затирания, включая нагрев, охлаждение, паузы и кипячение.
+ *        Каденция 1 Гц через внутренний гейт по millis(). Раньше жила в
+ *        check_alarm_beer(), вызываемой из SysTicker (ядро 0, alarm-путь);
+ *        теперь это beer_stage_tick(), вызываемая из loop() (ядро 1) через
+ *        dispatch_loop. Надзор за аварийными температурными лимитами вынесен в
+ *        beer_check_cooling_limits() и остаётся в alarm-пути (mode_alarm_beer).
+ */
+void beer_stage_tick() {
+  static unsigned long lastBeerTickMs = 0;
+  const unsigned long nowMs = millis();
+  if (nowMs - lastBeerTickMs < 1000) return;
+  lastBeerTickMs = nowMs;
+
+  if (startval <= SAMOVAR_STARTVAL_BEER_START) return;
 
   float temp = 0;
   float tempDelta = 0;
   const DSSensor* controlSensor = nullptr;
   const char* controlSensorName = "";
   if (!beer_control_sensor(program[ProgramNum].TempSensor, controlSensor, controlSensorName)) {
-    request_emergency_stop("Ошибка программы: неверный датчик температуры в режиме Пиво");
+    beer_abort_config_error("Ошибка программы: неверный датчик температуры в строке " + String(ProgramNum + 1));
     return;
   }
   if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
@@ -296,7 +348,7 @@ void check_alarm_beer() {
       currentType != 'A' && currentType != 'M' &&
       currentType != 'P' && currentType != 'F' &&
       currentType != 'C' && currentType != 'B') {
-    setHeaterPosition(false);
+    beer_abort_config_error("Ошибка программы: неизвестный тип этапа в строке " + String(ProgramNum + 1));
     return;
   }
 
@@ -373,11 +425,11 @@ void check_alarm_beer() {
 
   if (currentType == 'M' && temp >= program[ProgramNum].Temp - tempDelta) {
     //Достигли температуры засыпи солода. Пишем об этом. Продолжаем поддерживать температуру. Переход с этой строки программы на следующую возможен только в ручном режиме
-    if (startval == 2001) {
+    if (startval == SAMOVAR_STARTVAL_BEER_HEATING) {
       set_buzzer(true);
       SendMsg(("Достигнута температура засыпи солода!"), NOTIFY_MSG);
     }
-    startval = 2002;
+    startval = SAMOVAR_STARTVAL_BEER_WAIT_MALT;
   }
 
   if (currentType == 'P' && temp >= program[ProgramNum].Temp - tempDelta) {

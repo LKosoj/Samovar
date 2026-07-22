@@ -160,7 +160,7 @@ if samovar_ino:
             ticker_body,
             [
                 "process_pending_data_log_ops();",
-                "if (startval != 0)",
+                "if (startval != SAMOVAR_STARTVAL_IDLE)",
                 "append_data();",
             ],
             errors,

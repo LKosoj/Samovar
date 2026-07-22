@@ -104,7 +104,7 @@ if beer_text:
         "beer_proc sensor guard before heating",
         body,
         [
-            "ProgramLen == 0 || program_type_empty(program[0].WType)",
+            "beer_validate_program(programError)",
             "beer_control_sensor(program[0].TempSensor",
             "sensor_valid(*controlSensor)",
             "process_sensor_failed(\"Пиво\", controlSensorName)",
@@ -114,7 +114,7 @@ if beer_text:
         errors,
     )
     try:
-        body = extract_function_body(beer_text, "void check_alarm_beer()")
+        body = extract_function_body(beer_text, "void beer_stage_tick()")
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
@@ -130,11 +130,11 @@ if beer_text:
         errors,
     )
     require_ordered_tokens(
-        "beer invalid sensor uses emergency stop",
+        "beer invalid sensor triggers orderly stop, not emergency latch",
         body,
         [
             "beer_control_sensor(program[ProgramNum].TempSensor",
-            "request_emergency_stop(\"Ошибка программы: неверный датчик температуры в режиме Пиво\")",
+            "beer_abort_config_error(\"Ошибка программы: неверный датчик температуры в строке \" + String(ProgramNum + 1))",
             "return;",
             "sensor_valid(*controlSensor)",
         ],
@@ -174,11 +174,11 @@ for name, text, proc_signature, expected_sensor in [
             "distiller start helper parameters and side effects",
             body,
             [
-                "if (SamovarStatusInt != 1000) return;",
+                "if (SamovarStatusInt != SAMOVAR_STATUS_DISTILLATION) return;",
                 expected_sensor,
-                "if (!PowerOn || mode_heating_start_pending(1000))",
+                "if (!PowerOn || mode_heating_start_pending(SAMOVAR_STATUS_DISTILLATION))",
                 "mode_run_heating_start(",
-                "1000",
+                "SAMOVAR_STATUS_DISTILLATION",
                 "Ошибка создания файла лога. Старт дистилляции отменён.",
                 "Описание сессии занято. Старт дистилляции отменён.",
                 "get_dist_program()",
@@ -193,11 +193,11 @@ for name, text, proc_signature, expected_sensor in [
             "BK start helper parameters",
             body,
             [
-                "if (SamovarStatusInt != 3000) return;",
+                "if (SamovarStatusInt != SAMOVAR_STATUS_BK) return;",
                 expected_sensor,
-                "if (!PowerOn || mode_heating_start_pending(3000))",
+                "if (!PowerOn || mode_heating_start_pending(SAMOVAR_STATUS_BK))",
                 "mode_run_heating_start(",
-                "3000",
+                "SAMOVAR_STATUS_BK",
                 "Ошибка создания файла лога. Старт БК отменён.",
                 "Описание сессии занято. Старт БК отменён.",
                 "String(\"BK\")",
@@ -285,23 +285,17 @@ for name, text, signature, tokens in [
         errors,
     )
     if name == "BK":
+        # Критический перегрев воды/ТСА вынесен в общий хелпер
+        # mode_common.h::mode_request_overheat_emergency_if_needed (его тело пинит
+        # smoke_dist_bk_small_fixes.py); здесь — что пред-аварийное открытие
+        # охлаждения предшествует критическому останову.
         require_ordered_tokens(
             "BK ACP pre-alarm opens cooling before critical stop",
             body,
             [
                 "mode_should_open_cooling(true, true, true)",
                 "open_valve(true, true)",
-                "sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)",
-            ],
-            errors,
-        )
-        require_ordered_tokens(
-            "BK ACP critical alarm reports TCA and requests emergency stop",
-            body,
-            [
-                "sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)",
-                "s = s + \" ТСА\"",
-                "request_emergency_stop(\"Аварийное отключение! Превышена максимальная температура\" + s)",
+                "mode_request_overheat_emergency_if_needed()",
             ],
             errors,
         )
@@ -355,7 +349,6 @@ if nbk_text:
 
 for name, text, signatures in [
     ("alarm", alarm_text, ["void check_alarm()"]),
-    ("beer", beer_text, ["void check_alarm_beer()"]),
     ("distiller", distiller_text, ["void check_alarm_distiller()"]),
     ("BK", bk_text, ["void check_alarm_bk()"]),
     ("NBK", nbk_text, ["bool check_nbk_critical_alarms"]),

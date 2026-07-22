@@ -315,14 +315,14 @@ void process_impurity_detector() {
 
   // Паузы в ходе активного цикла (статус 15 = program_Wait, статус 40 = PauseOn):
   // сохраняем correctionFactor, только снимаем статус детектора
-  if (SamovarStatusInt == 15 || SamovarStatusInt == 40) {
+  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED) {
     impurityDetector.detectorStatus = 0;
     // correctionFactor НЕ трогаем — накопленная коррекция сохраняется на время паузы
     return;
   }
 
   // Любой другой статус, кроме активного отбора (10) — сброс
-  if (SamovarStatusInt != 10) {
+  if (SamovarStatusInt != SAMOVAR_STATUS_RECT_WITHDRAWAL) {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
     return;

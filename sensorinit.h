@@ -604,8 +604,8 @@ void reset_sensor_counter(void) {
 
 
   ActualVolumePerHour = 0;
-  SamovarStatusInt = 0;
-  startval = 0;
+  SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+  startval = SAMOVAR_STARTVAL_IDLE;
   PauseOn = false;
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;
@@ -641,7 +641,7 @@ void reset_sensor_counter(void) {
   // sensor_init) и должны освобождаться только той задачей, которая их захватила.
 
   set_power(false, false);
-  get_Samovar_Status();
+  tick_status_fsm();
 
   bk_pwm = PWM_LOW_VALUE * 40;
 

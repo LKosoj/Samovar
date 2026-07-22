@@ -35,13 +35,13 @@ void set_water_temp(float duty) {
  */
 void bk_proc() {
 
-  if (SamovarStatusInt != 3000) return;
+  if (SamovarStatusInt != SAMOVAR_STATUS_BK) return;
 
   if (!sensor_valid(TankSensor) && process_sensor_failed("БК", "куба")) return;
 
-  if (!PowerOn || mode_heating_start_pending(3000)) {
+  if (!PowerOn || mode_heating_start_pending(SAMOVAR_STATUS_BK)) {
     if (mode_run_heating_start(
-          3000,
+          SAMOVAR_STATUS_BK,
           "Ошибка создания файла лога. Старт БК отменён.",
           "Описание сессии занято. Старт БК отменён.",
           String("BK"),
@@ -90,11 +90,7 @@ void check_alarm_bk() {
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (current_power_mode_is(POWER_SPEED_MODE) && (check_boiling() || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
 #ifdef SAMOVAR_USE_POWER
-#ifndef SAMOVAR_USE_SEM_AVR
-    set_current_power(45);
-#else
-    set_current_power(200);
-#endif
+    set_current_power(SamSetup.BKPower);
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
@@ -107,15 +103,7 @@ void check_alarm_bk() {
   }
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
-    //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
-    String s = "";
-    if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
-      s = s + " воды охлаждения";
-    if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))
-      s = s + " ТСА";
-    request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s);
-  }
+  mode_request_overheat_emergency_if_needed();
 
   //Проверим, что вода подается
   mode_request_water_flow_emergency_if_needed();
@@ -137,6 +125,6 @@ void check_alarm_bk() {
 
 void bk_finish() {
   ProgramNum = 0;
-  startval = 0;
+  startval = SAMOVAR_STARTVAL_IDLE;
   stop_process("Работа бражной колонны завершена");
 }

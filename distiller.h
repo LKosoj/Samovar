@@ -23,9 +23,13 @@ struct TimePredictor {
     unsigned long lastUpdateTime;      ///< Время последнего обновления
     float predictedTotalTime;          ///< Прогнозируемое общее время (мин)
     float remainingTime;               ///< Оставшееся время (мин)
+    float initialSteamAlcohol;         ///< Начальная крепость пара (для строк 'P'/'R')
 };
 
-TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0};
+TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+// Фронт-детектор начала кипения для перезахвата TankSensor.StartProgTemp (не static
+// внутри функции — нужен сброс между сессиями дистилляции, см. resetTimePredictor()).
+bool distBoilStartedPrev = false;
 // Минимальные пороги, чтобы не делить на ноль и не спамить оценками
 static constexpr float MIN_TEMP_RATE = 0.01f;    // °C/мин
 static constexpr float MIN_ALC_RATE  = 0.001f;   // доля/мин
@@ -41,13 +45,13 @@ void distiller_proc() {
 //            ", Режим: " + String(Samovar_Mode) + 
 //            ", PowerOn: " + String(PowerOn), NOTIFY_MSG);
     
-  if (SamovarStatusInt != 1000) return;
+  if (SamovarStatusInt != SAMOVAR_STATUS_DISTILLATION) return;
 
   if (!sensor_valid(TankSensor) && process_sensor_failed("Дистилляция", "куба")) return;
 
-  if (!PowerOn || mode_heating_start_pending(1000)) {
+  if (!PowerOn || mode_heating_start_pending(SAMOVAR_STATUS_DISTILLATION)) {
     if (mode_run_heating_start(
-          1000,
+          SAMOVAR_STATUS_DISTILLATION,
           "Ошибка создания файла лога. Старт дистилляции отменён.",
           "Описание сессии занято. Старт дистилляции отменён.",
           get_dist_program(),
@@ -61,6 +65,16 @@ void distiller_proc() {
     // Инициализируем систему прогнозирования
     resetTimePredictor();
   }
+
+  // [distiller-cold-start] get_alcohol()/get_steam_alcohol() гейтятся текущим
+  // boil_started, а TankSensor.StartProgTemp по умолчанию захватывается при входе
+  // в строку программы (run_dist_program), в т.ч. до закипания. Если кипение
+  // началось внутри уже идущей строки (без перехода на новую), перезахватываем
+  // StartProgTemp по фронту boil_started, чтобы полином не считался по холодной температуре.
+  if (boil_started && !distBoilStartedPrev) {
+    TankSensor.StartProgTemp = TankSensor.avgTemp;
+  }
+  distBoilStartedPrev = boil_started;
 
   // Обновляем прогноз времени
   updateTimePredictor();
@@ -111,7 +125,7 @@ void distiller_proc() {
 
 void distiller_finish() {
   ProgramNum = 0;
-  startval = 0;
+  startval = SAMOVAR_STARTVAL_IDLE;
   String timeMsg = "Дистилляция завершена. Общее время: " + String(int((millis() - timePredictor.startTime) / 60000)) + " мин.";
   stop_process(timeMsg);
 }
@@ -150,15 +164,7 @@ void check_alarm_distiller() {
   mode_update_water_pump_pid(SamSetup.SetACPTemp);
 
   //Проверяем, что температурные параметры не вышли за предельные значения
-  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
-    //Если с температурой проблемы - выключаем нагрев, пусть оператор разбирается
-    String s = "";
-    if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
-      s = s + " Воды";
-    if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP))
-      s = s + " ТСА";
-    request_emergency_stop("Аварийное отключение! Превышена максимальная температура" + s);
-  }
+  mode_request_overheat_emergency_if_needed();
 
   //Проверим, что вода подается
   mode_request_water_flow_emergency_if_needed();
@@ -232,18 +238,24 @@ String get_dist_program() {
 void resetTimePredictor() {
     timePredictor.startTime = millis();
     timePredictor.initialAlcohol = get_alcohol(TankSensor.avgTemp);
+    timePredictor.initialSteamAlcohol = get_steam_alcohol(TankSensor.avgTemp);
     timePredictor.initialTemp = TankSensor.avgTemp;
     timePredictor.lastTemp = TankSensor.avgTemp;
     timePredictor.lastUpdateTime = millis();
     timePredictor.tempChangeRate = 0;
     timePredictor.predictedTotalTime = 0;
     timePredictor.remainingTime = 0;
+    // Сбрасываем фронт-детектор кипения: resetTimePredictor() вызывается на каждом
+    // (пере)старте дистилляции (distiller_proc()) и на каждом переходе строки
+    // (run_dist_program()), поэтому распространяем сброс сюда же.
+    distBoilStartedPrev = false;
 }
 
 void updateTimePredictor() {
     unsigned long currentTime = millis();
     float currentTemp = TankSensor.avgTemp;
     float currentAlcohol = get_alcohol(currentTemp);
+    float currentSteamAlcohol = get_steam_alcohol(currentTemp);
 
     unsigned long dtMs = currentTime - timePredictor.lastUpdateTime;
     if (dtMs < PREDICTOR_UPDATE_MS) return; // считаем не чаще, чем нужно
@@ -256,6 +268,8 @@ void updateTimePredictor() {
     // Обновляем прогноз по спирту (используем долю, а не %)
     float alcoholDelta = timePredictor.initialAlcohol - currentAlcohol;
     float alcoholChangeRate = (dtMin > 0) ? (alcoholDelta / ((currentTime - timePredictor.startTime) / 60000.0f)) : 0; // доля/мин
+    float steamAlcoholDelta = timePredictor.initialSteamAlcohol - currentSteamAlcohol;
+    float steamAlcoholChangeRate = (dtMin > 0) ? (steamAlcoholDelta / ((currentTime - timePredictor.startTime) / 60000.0f)) : 0; // доля/мин (пар)
 
     // Если программы закончились, не делаем прогноз
     if (ProgramNum >= ProgramLen || program_type_empty(program[ProgramNum].WType)) {
@@ -289,7 +303,6 @@ void updateTimePredictor() {
         }
     } else if (wtype == 'P' || wtype == 'R') {
         // Ориентируемся на крепость пара
-        float currentSteamAlcohol = get_steam_alcohol(currentTemp);
         float target = program[ProgramNum].Speed;
         if (wtype == 'R') {
             target *= get_steam_alcohol(TankSensor.StartProgTemp);
@@ -297,8 +310,8 @@ void updateTimePredictor() {
         float dS = currentSteamAlcohol - target;
         if (dS <= 0) {
             remaining = 0;
-        } else if (alcoholChangeRate > MIN_ALC_RATE) {
-            remaining = dS / alcoholChangeRate;
+        } else if (steamAlcoholChangeRate > MIN_ALC_RATE) {
+            remaining = dS / steamAlcoholChangeRate;
         }
     } else {
         // Для прочих шагов оставляем 0 — нет метрики для прогноза
