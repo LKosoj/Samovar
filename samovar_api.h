@@ -135,6 +135,10 @@ ProgramParseResult set_program(const String& WProgram);
 String get_program(uint8_t s);
 PumpCalibrationResult pump_calibrate(int stpspeed);
 void pause_withdrawal(bool Pause);
+// [P2 п.6] Определены в logic.h сразу после pause_withdrawal (enter_manual_pause
+// перед resume_from_pause()).
+void enter_manual_pause();
+void resume_from_pause();
 String get_Samovar_Status();
 String tick_status_fsm();
 String get_distiller_status_text();
@@ -173,7 +177,16 @@ inline void cancel_invalid_mode_heating_session();
 inline bool mode_heating_start_active();
 inline void mode_cancel_process_start(const String& message);
 inline void mode_warn_log_close_failed();
+// [P7 п.3a/F1] Определена в mode_common.h; нужна здесь - mode_registry.h (подключается раньше
+// mode_common.h) взводит флаг из mode_apply_power_on_command. Параметр - целевой activeStatus,
+// для которого взводится флаг (см. mode_consume_heating_start_request).
+inline void mode_request_heating_start(int16_t activeStatus);
+// [P2 п.8] Определена в mode_common.h, который подключается позже mode_registry.h
+// (см. mode_registry.h::mode_alarm_beer) - нужна форвард-декларация здесь же,
+// рядом с остальными mode_*, чтобы порядок включения не ломал компиляцию.
+inline void mode_request_water_flow_emergency_if_needed();
 inline void set_current_power(float Volt);
+inline void apply_program_power_row(float power);
 inline void set_power_mode(String Mode);
 void check_power_error();
 void get_current_power();
@@ -257,6 +270,10 @@ inline void tick_nbk_transition();
 inline void cancel_nbk_transition();
 inline bool nbk_transition_blocks_process();
 inline bool nbk_transition_active();
+// [P7 F4] Уже правильно возвращает true только для фаз, где tick_nbk_transition() сам
+// шлёт сообщение о прерывании - НЕ путать с nbk_transition_active() (true и на мягком
+// финише, где никакого сообщения не будет). См. определение и обоснование в nbk.h.
+inline bool nbk_transition_reports_interruption();
 void check_alarm_nbk();
 bool check_nbk_critical_alarms();
 void run_nbk_program(uint8_t num);
@@ -266,6 +283,7 @@ float fromPower(float value);
 
 inline void check_alarm_suvid();
 inline float suvid_target_temp();
+inline int32_t suvid_hold_remaining_sec();
 
 // Sensors and hardware
 ProgramParseResult prepare_default_program_for_mode(SAMOVAR_MODE mode, ProgramDraft& draft);
@@ -284,7 +302,7 @@ void get_task_stack_usage();
 void init_pump_pwm(uint8_t pin, int freq);
 void set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
-void set_pump_speed(float pumpspeed, bool continue_process);
+void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true);
 
 // I2C stepper
 inline void detect_i2c_steppers();
@@ -320,6 +338,19 @@ void do_lua_script(void *parameter);
 bool start_lua_script();
 String get_global_variables();
 String get_lua_mode_name(bool filename = true);
+// [P8] Определены в mode_common.h, который подключается позже lua.h -
+// нужны форвард-декларации здесь же для check_alarm_lua (lua.h).
+inline void mode_clear_alarm_pause_if_expired();
+inline void mode_request_overheat_emergency_if_needed();
+inline void check_alarm_lua();
+#endif
+
+// [P8] mode_registry.h подключается ниже и в НЕ-Lua сборках тоже - макрос
+// должен быть определён всегда, отдельно от Lua-only блока деклараций выше.
+#ifdef USE_LUA
+#define SAMOVAR_LUA_ALARM_FN check_alarm_lua
+#else
+#define SAMOVAR_LUA_ALARM_FN nullptr
 #endif
 
 #ifdef USE_MQTT

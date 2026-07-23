@@ -1757,6 +1757,121 @@ static void apply_loaded_relay_polarity_off() {
   digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
 }
 
+// [P8] NVS-чекпоинт сессии: отдельный неймспейс (НЕ sam_cfg — тот несёт основной
+// профиль), один uint16 (mode<<8 | номер программы). Смысл — только диагностика:
+// после незапланированной перезагрузки владелец узнаёт, что грелось, но нагрев
+// НЕ возобновляется автоматически (см. session_checkpoint_report_pending ниже).
+static const char* const SESSION_CHECKPOINT_NAMESPACE = "sam_sess";
+static const char* const SESSION_CHECKPOINT_KEY = "chk";
+
+static void session_checkpoint_write(uint8_t mode, uint8_t prog) {
+  nvs_handle_t handle;
+  const esp_err_t openError = nvs_open(SESSION_CHECKPOINT_NAMESPACE, NVS_READWRITE, &handle);
+  if (openError != ESP_OK) {
+    Serial.print(F("NVS: session checkpoint open failed, err = "));
+    Serial.println((int)openError);
+    return;
+  }
+  const uint16_t payload = (uint16_t(mode) << 8) | prog;
+  const esp_err_t setError = nvs_set_u16(handle, SESSION_CHECKPOINT_KEY, payload);
+  if (setError != ESP_OK) {
+    Serial.print(F("NVS: session checkpoint write failed, err = "));
+    Serial.println((int)setError);
+  }
+  const esp_err_t commitError = nvs_commit(handle);
+  if (commitError != ESP_OK) {
+    Serial.print(F("NVS: session checkpoint commit failed, err = "));
+    Serial.println((int)commitError);
+  }
+  nvs_close(handle);
+}
+
+static void session_checkpoint_clear() {
+  nvs_handle_t handle;
+  const esp_err_t openError = nvs_open(SESSION_CHECKPOINT_NAMESPACE, NVS_READWRITE, &handle);
+  if (openError != ESP_OK) {
+    Serial.print(F("NVS: session checkpoint open failed, err = "));
+    Serial.println((int)openError);
+    return;
+  }
+  const esp_err_t eraseError = nvs_erase_key(handle, SESSION_CHECKPOINT_KEY);
+  if (eraseError != ESP_OK && eraseError != ESP_ERR_NVS_NOT_FOUND) {
+    Serial.print(F("NVS: session checkpoint erase failed, err = "));
+    Serial.println((int)eraseError);
+  }
+  const esp_err_t commitError = nvs_commit(handle);
+  if (commitError != ESP_OK) {
+    Serial.print(F("NVS: session checkpoint commit failed, err = "));
+    Serial.println((int)commitError);
+  }
+  nvs_close(handle);
+}
+
+// 0 = чекпоинта нет. Заполняется один раз при загрузке (session_checkpoint_capture_pending),
+// используется потом в session_checkpoint_report_pending().
+static uint16_t pendingCheckpoint = 0;
+
+static void session_checkpoint_capture_pending() {
+  nvs_handle_t handle;
+  // NVS_READONLY: неймспейса может не быть (обычная ситуация — сессий ещё не было),
+  // а NVS_READWRITE в этом случае молча создал бы его, насорив вместо диагностики.
+  if (nvs_open(SESSION_CHECKPOINT_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) return;
+  uint16_t payload = 0;
+  if (nvs_get_u16(handle, SESSION_CHECKPOINT_KEY, &payload) == ESP_OK) {
+    pendingCheckpoint = payload;
+  }
+  nvs_close(handle);
+}
+
+static void session_checkpoint_report_pending() {
+  if (pendingCheckpoint == 0) return;
+  const uint8_t mode = uint8_t(pendingCheckpoint >> 8);
+  const uint8_t prog = uint8_t(pendingCheckpoint & 0xFF);
+  const String notice = String(F("Обнаружена незавершённая сессия, режим ")) + String(mode) +
+                         F(", программа №") + String(prog) +
+                         F("; нагрев НЕ возобновлён автоматически.");
+  WriteConsoleLog(notice);
+  SendMsg(notice, WARNING_MSG);
+  // [P8 fix#2] Без этого одно и то же предупреждение повторялось бы на каждой
+  // перезагрузке (OTA, отладка), пока пользователь не пройдёт полный цикл
+  // BEER/SUVID. pendingCheckpoint != 0 гарантирует, что неймспейс существует
+  // (session_checkpoint_capture_pending его читала через NVS_READONLY).
+  session_checkpoint_clear();
+}
+
+// PowerOn rising edge (BEER/SUVID) -> пишем чекпоинт и держим его "нашим" (checkpointOwned),
+// пока сессия жива; falling edge -> стираем, но ТОЛЬКО если чекпоинт писали мы сами в этой
+// же сессии (иначе затёрли бы чужой, ещё не прочитанный, чекпоинт предыдущей загрузки).
+static void session_checkpoint_tick() {
+  static bool prevPowerOn = false;
+  static bool checkpointOwned = false;
+  static uint16_t lastWrittenPayload = 0;
+
+  if (PowerOn && !prevPowerOn) {
+    if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
+      lastWrittenPayload = (uint16_t(Samovar_Mode) << 8) | ProgramNum;
+      session_checkpoint_write((uint8_t)Samovar_Mode, ProgramNum);
+      checkpointOwned = true;
+    }
+  } else if (PowerOn && prevPowerOn && checkpointOwned) {
+    // [P8 fix#1] Многочасовая варка идёт под одним PowerOn — переходы между
+    // строками программы фронта не дают. Перезаписываем чекпоинт при смене
+    // ProgramNum, иначе после сбоя на N-й строке отчёт наврёт про стартовую.
+    // Пишем только при РЕАЛЬНОМ изменении payload — не молотим NVS каждый loop.
+    const uint16_t currentPayload = (uint16_t(Samovar_Mode) << 8) | ProgramNum;
+    if (currentPayload != lastWrittenPayload) {
+      session_checkpoint_write((uint8_t)Samovar_Mode, ProgramNum);
+      lastWrittenPayload = currentPayload;
+    }
+  } else if (!PowerOn && prevPowerOn) {
+    if (checkpointOwned) {
+      session_checkpoint_clear();
+      checkpointOwned = false;
+    }
+  }
+  prevPowerOn = PowerOn;
+}
+
 void setup() {
   vTaskDelay(500 / portTICK_PERIOD_MS);
   Serial.begin(115200);
@@ -1815,6 +1930,7 @@ void setup() {
   // (см. её комментарий) немедленно, не дожидаясь основной инициализации реле ниже.
   apply_loaded_relay_polarity_off();
   print_nvs_stats("after config load");
+  session_checkpoint_capture_pending();
 
   const FsInitResult fsInitResult = FS_init();
   if (fsInitResult == FS_INIT_FORMATTED) {
@@ -2350,6 +2466,8 @@ void setup() {
     WriteConsoleLog(notice);
     SendMsg(notice, ALARM_MSG);
   }
+
+  session_checkpoint_report_pending();
 }
 
 void loop() {
@@ -2479,14 +2597,12 @@ void loop() {
         pump_calibrate(0);
         break;
       case SAMOVAR_PAUSE:
-        pause_withdrawal(true);
+        // [P2 п.6][Ревью] Тело консолидировано в enter_manual_pause() (logic.h).
+        enter_manual_pause();
         break;
       case SAMOVAR_CONTINUE:
-        pause_withdrawal(false);
-        t_min = 0;
-        program_Wait = false;
-        if (!set_program_wait_type(PROGRAM_WAIT_NONE, pdMS_TO_TICKS(500))) SendMsg("Не удалось сбросить тип автоматической паузы.", WARNING_MSG);
-        detector_on_manual_resume();
+        // [P7 п.4][P2 п.6] Тело консолидировано в resume_from_pause() (logic.h).
+        resume_from_pause();
         break;
       case SAMOVAR_SETBODYTEMP:
         set_body_temp();
@@ -2819,6 +2935,7 @@ void loop() {
   }
 
   mode_dispatch_loop();
+  session_checkpoint_tick();
 
   // Обработка энкодера
   encoder.tick();

@@ -73,7 +73,7 @@ void check_alarm_bk() {
   bool coolingOpenedThisTick = false;
 #endif
 
-  if (mode_should_open_cooling(true, true, true)) {
+  if (mode_should_open_cooling(false, true, true)) {
     open_valve(true, true);
 #ifdef USE_WATER_PUMP
     set_pump_pwm(bk_pwm);
@@ -87,8 +87,17 @@ void check_alarm_bk() {
   }
 #endif
 
+  // [П4.1] check_boiling() должна вызываться безусловно каждый тик: если внутри if
+  // ниже сработает короткое замыкание на Steam/Pipe>39 (режим мощности сменится
+  // раньше), сам check_boiling() больше не вызовется и boil_started может навсегда
+  // остаться false, из-за чего get_alcohol()/get_steam_alcohol() отдают заглушку 100.
+  // check_boiling() возвращает true ТОЛЬКО в тот единственный вызов, когда кипение
+  // обнаружено впервые (дальше boil_started=true и guard всегда отдаёт false) -
+  // поэтому вызываем её РОВНО ОДИН раз за тик и переиспользуем результат ниже.
+  bool boilingNow = check_boiling();
+
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
-  if (current_power_mode_is(POWER_SPEED_MODE) && (check_boiling() || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
+  if (current_power_mode_is(POWER_SPEED_MODE) && (boilingNow || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
 #ifdef SAMOVAR_USE_POWER
     set_current_power(SamSetup.BKPower);
 #else
@@ -97,7 +106,7 @@ void check_alarm_bk() {
 #endif
   }
 
-  if (mode_should_close_cooling(TARGET_WATER_TEMP - 20, false)) {
+  if (mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)) {
     open_valve(false, true);
     mode_stop_cooling_pump_if_started();
   }
@@ -111,12 +120,11 @@ void check_alarm_bk() {
   if (mode_water_pre_alarm_due()) {
     set_buzzer(true);
     //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 
 #ifdef SAMOVAR_USE_POWER
     //Попробуем снизить мощность на 5 В/шагов регулятора, чтобы исключить перегрев колонны.
     mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, 5);
-#else
-    SendMsg(("Критическая температура воды!"), WARNING_MSG);
 #endif
     mode_set_alarm_pause_ms(30000);
   }

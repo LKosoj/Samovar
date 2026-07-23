@@ -134,8 +134,10 @@ if withdrawal_body:
         errors.append("logic.h:void withdrawal missing explicit two-next-program bounds snapshot")
     if "program[ProgramNum].Speed = actualRate;" in withdrawal_body:
         errors.append("logic.h:void withdrawal writes Speed through live ProgramNum instead of currentProgram snapshot")
-    if "program[currentProgram].Speed = actualRate;" not in withdrawal_body:
-        errors.append("logic.h:void withdrawal missing currentProgram Speed write")
+    if "program[currentProgram].Speed = actualRate;" in withdrawal_body:
+        errors.append("logic.h:void withdrawal must not ratchet program[].Speed on resume (use CurrentBaseSpeedRate)")
+    if "CurrentBaseSpeedRate" not in withdrawal_body:
+        errors.append("logic.h:void withdrawal missing CurrentBaseSpeedRate usage")
 
 detector_text = read_text("impurity_detector.h")
 if detector_text:
@@ -143,8 +145,10 @@ if detector_text:
         detector_body = extract_function_body(detector_text, "void process_impurity_detector")
         if "program[ProgramNum].Speed" in detector_body:
             errors.append("impurity_detector.h:void process_impurity_detector reads Speed through live ProgramNum")
-        if "program[currentProgram].Speed" not in detector_body:
-            errors.append("impurity_detector.h:void process_impurity_detector missing currentProgram Speed reads")
+        if "program[currentProgram].Speed" in detector_body:
+            errors.append("impurity_detector.h:void process_impurity_detector must read CurrentBaseSpeedRate, not program[].Speed")
+        if "CurrentBaseSpeedRate" not in detector_body:
+            errors.append("impurity_detector.h:void process_impurity_detector missing CurrentBaseSpeedRate usage")
         if "is_first_body_program_after_heads(currentProgram, currentType)" not in detector_body:
             errors.append("impurity_detector.h:void process_impurity_detector does not pass ProgramType snapshot to first-body helper")
     except ValueError as exc:

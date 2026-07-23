@@ -140,7 +140,7 @@ for token in ["String d", ".toInt()", "getValue("]:
         errors.append(f"WebSerial contains legacy parser: {token}")
 
 expected_hashes = {
-    "program_io.h": "7f5a49075711251bbc4ea0d84b23abe75109f3f74cb7f3ac3cb3c328c3ed08c7",
+    "program_io.h": "dda522556e8db4c7b0b6ff1a9aaf800c811a37643a4b3f261869313408e036a5",
     "program_types.h": "8e9a8a991b6d4a1e10ddcaf574c7e48cfe2f1cdb20e12601b040f28075466f12",
 }
 for name, expected in expected_hashes.items():

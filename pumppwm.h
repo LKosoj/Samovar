@@ -24,13 +24,6 @@ void init_pump_pwm(uint8_t pin, int freq) {
 }
 
 void set_pump_pwm(float duty) {
-  if (heater_safety_latched()) {
-    water_pump_speed = 0;
-    pump_pwm.write(0);
-    pump_started = false;
-    return;
-  }
-
   duty = constrain(duty, 0, 1023);
 
 	  if (!pump_started && duty > 0) {

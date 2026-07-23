@@ -5,6 +5,7 @@
 #include "samovar_api.h"
 #include "numeric_parse.h"
 #include "runtime_helpers.h"
+#include "safety_transition.h"
 
 #ifdef USE_WATER_PUMP
 #include "pumppwm.h"
@@ -21,8 +22,55 @@ inline void lua_state_unlock(bool locked) {
   if (locked) xSemaphoreGive(xLuaSemaphore);
 }
 
+// [P8] Watchdog зависших Lua-чанков: hook по счётчику VM-инструкций обрывает
+// исполнение luaL_error'ом (longjmp), если чанк не уложился в дедлайн.
+// Компромисс: lua_wrapper_delay (см. ниже) НЕ ограничен этим таймаутом — там нет
+// байткода между инструкциями, а vTaskDelay внутри hook не дёрнуть; hook сработает
+// только когда задача проснётся и вернётся к выполнению чанка.
+#ifndef LUA_CHUNK_TIMEOUT_MS
+#define LUA_CHUNK_TIMEOUT_MS 20000
+#endif
+#ifndef LUA_CHUNK_TIMEOUT_INSTRUCTIONS
+#define LUA_CHUNK_TIMEOUT_INSTRUCTIONS 1000
+#endif
+
+static volatile uint32_t luaHookDeadlineMs;
+static volatile bool luaTimeoutFired;
+
+static void lua_timeout_hook(lua_State* L, lua_Debug*) {
+  if (safety_deadline_expired(millis(), luaHookDeadlineMs)) {
+    luaTimeoutFired = true;
+    luaL_error(L, "chunk timeout");  // longjmp! никаких SendMsg/тяжёлых вызовов здесь
+  }
+}
+
+inline void lua_install_timeout_hook_locked() {
+  luaHookDeadlineMs = safety_deadline_after(millis(), LUA_CHUNK_TIMEOUT_MS);
+  luaTimeoutFired = false;
+  lua_sethook(lua.GetState(), lua_timeout_hook, LUA_MASKCOUNT, LUA_CHUNK_TIMEOUT_INSTRUCTIONS);
+}
+
+inline void lua_remove_timeout_hook_locked() {
+  lua_sethook(lua.GetState(), NULL, 0, 0);
+}
+
+inline void lua_report_timeout_if_fired() {
+  if (!luaTimeoutFired) return;
+  luaTimeoutFired = false;
+  SendMsg("Lua: выполнение чанка прервано по таймауту", ALARM_MSG);
+}
+
 inline String lua_exec_locked(String& script, bool collect_garbage = false) {
+  lua_install_timeout_hook_locked();
   String result = lua.Lua_dostring(&script);
+  lua_remove_timeout_hook_locked();
+  lua_report_timeout_if_fired();
+  // [P8] __gc-финализаторы НЕ покрываются hook-watchdog'ом: вендорный lgc.c::GCTM()
+  // выставляет L->allowhook=0 перед вызовом __gc (ldo.c::luaD_hook вызывает хук
+  // только когда allowhook==1) - count-хук во время __gc не сработает вне
+  // зависимости от того, снят он к этому моменту или ещё установлен. Зависший
+  // __gc-финализатор повесит задачу Lua - принятое ограничение, а не защищённый
+  // watchdog'ом случай.
   if (collect_garbage) {
     lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
   }
@@ -74,13 +122,19 @@ inline String lua_exec_chunk_locked(int ref, bool collect_garbage = false) {
   int base = lua_gettop(L);
   String result;
   lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+  lua_install_timeout_hook_locked();
   if (lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) {
     result = "# lua error:\n" + lua_error_string(L);
   }
-  lua_settop(L, base);
+  lua_remove_timeout_hook_locked();
+  lua_report_timeout_if_fired();
+  // [P8] __gc-финализаторы НЕ покрываются hook-watchdog'ом - см. комментарий в
+  // lua_exec_locked(). Зависший __gc-финализатор повесит задачу Lua - принятое
+  // ограничение.
   if (collect_garbage) {
     lua_gc(L, LUA_GCCOLLECT, 0);
   }
+  lua_settop(L, base);
   return result;
 }
 
@@ -94,6 +148,83 @@ inline void lua_install_constants_locked() {
   lua_set_number_global_locked("OUTPUT", OUTPUT);
   lua_set_number_global_locked("LOW", LOW);
   lua_set_number_global_locked("HIGH", HIGH);
+}
+
+// [P8] lua_sethook выше вооружает только ГЛАВНЫЙ lua_State. Код внутри
+// coroutine.resume исполняется в СВОЁМ lua_State и хуком главного состояния не
+// покрыт - зависший `while true do end` внутри корутины watchdog не прервёт
+// (подтверждено экспериментом: MASKCOUNT=50 не сработал ни разу за 10000
+// итераций в корутине). Лечим Lua-прелюдией: подменяем coroutine.create/wrap/
+// resume так, чтобы дочерний lua_State тоже вооружался тем же хуком. Дедлайн
+// (luaHookDeadlineMs) - общий static, его выставляет lua_install_timeout_hook_locked()
+// перед исполнением; корутина, резюмируемая внутри exec-окна, увидит актуальный
+// дедлайн, а вне exec-окна Lua не исполняется вовсе - ложных срабатываний нет.
+static int lua_wrapper_arm_coroutine_watchdog(lua_State* lua_state) {
+  lua_State* co = lua_tothread(lua_state, 1);
+  if (co) lua_sethook(co, lua_timeout_hook, LUA_MASKCOUNT, LUA_CHUNK_TIMEOUT_INSTRUCTIONS);
+  return 0;
+}
+
+// coroutine.resume перевооружает co перед КАЖДЫМ резюме - это ловит и корутины,
+// созданные до подмены, и созданные через сохранённые оригиналы (originalCreate).
+// coroutine.wrap оборачивает оригинальный resume, а не подменённый глобальный,
+// и пробрасывает ошибку (в т.ч. "chunk timeout") через error(msg, 0) - как это
+// делает штатный coroutine.wrap.
+static const char* const LUA_COROUTINE_WATCHDOG_PRELUDE = R"lua(
+local originalCreate = coroutine.create
+local originalResume = coroutine.resume
+coroutine.create = function(f)
+  local co = originalCreate(f)
+  armCoroutineWatchdog(co)
+  return co
+end
+coroutine.wrap = function(f)
+  local co = coroutine.create(f)
+  armCoroutineWatchdog(co)
+  return function(...)
+    local results = table.pack(originalResume(co, ...))
+    if not results[1] then error(results[2], 0) end
+    return table.unpack(results, 2, results.n)
+  end
+end
+coroutine.resume = function(co, ...)
+  armCoroutineWatchdog(co)
+  return originalResume(co, ...)
+end
+)lua";
+
+// Исполняется один раз при инициализации Lua-состояния (см. lua_init(), сразу
+// после lua_install_constants_locked()). Защищено luaL_dostring - ошибка
+// прелюдии не должна ронять загрузку, только деградировать watchdog корутин
+// (главный lua_State хуком по-прежнему покрыт).
+inline void lua_install_coroutine_watchdog_locked() {
+  lua_State* L = lua.GetState();
+  lua_register(L, "armCoroutineWatchdog", lua_wrapper_arm_coroutine_watchdog);
+  if (luaL_dostring(L, LUA_COROUTINE_WATCHDOG_PRELUDE) != LUA_OK) {
+    lua_pop(L, 1);
+  }
+}
+
+/**
+ * @brief Надзор за режимом Lua (mode_registry.h::mode_dispatch_alarm, SysTicker,
+ * core 0, 1 Гц). В отличие от check_alarm_suvid (suvid.h) все три датчика тут
+ * опциональны — какие датчики нужны, решает сам Lua-скрипт, а не прошивка.
+ */
+inline void check_alarm_lua() {
+  mode_clear_alarm_pause_if_expired();
+
+  if (PowerOn) {
+    if (optional_sensor_failed(WaterSensor) && process_sensor_failed("Lua", "воды")) return;
+    if (optional_sensor_failed(ACPSensor) && process_sensor_failed("Lua", "ТСА")) return;
+    if (optional_sensor_failed(TankSensor) && process_sensor_failed("Lua", "куба")) return;
+  }
+
+#ifdef SAMOVAR_USE_POWER
+  check_power_error();
+#endif
+
+  mode_request_overheat_emergency_if_needed();
+  mode_request_water_flow_emergency_if_needed();
 }
 
 #include <SimpleMap.h>
@@ -1523,7 +1654,8 @@ void lua_init() {
   lua_gc(L, LUA_GCSETPAUSE, 120); // Увеличим паузу между сборками мусора
   lua_gc(L, LUA_GCSETSTEPMUL, 200); // Увеличим агрессивность сборки
   lua_install_constants_locked();
-  
+  lua_install_coroutine_watchdog_locked();
+
   //Запускаем инициализирующий lua-скрипт
   File f = SPIFFS.open("/init.lua");
   if (f) {

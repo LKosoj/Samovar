@@ -316,7 +316,7 @@ void check_alarm() {
         SendMsg("Разгон завершён. Стабилизация/работа на себя.", NOTIFY_MSG);
         set_buzzer(true);
 #ifdef SAMOVAR_USE_POWER
-        set_current_power(program[0].Power);
+        apply_program_power_row(program[0].Power);
 #else
         set_current_power_mode_value(POWER_WORK_MODE);
         digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);

@@ -306,9 +306,11 @@ BLYNK_WRITE(V12) {
 
 BLYNK_WRITE(V13) {
   if (mode_switch_in_progress()) return;
-  pause_withdrawal(!PauseOn);
-  t_min = 0;
-  program_Wait = false;
+  // [P7 п.4][P2 п.6][Ревью] PauseOn (ректификация) ИЛИ beerManualPause (пиво) - см.
+  // Menu.ino menu_pause(). Пауза/возобновление - через общие хелперы enter_manual_pause()/
+  // resume_from_pause() (logic.h), симметрично остальным точкам входа.
+  if (PauseOn || beerManualPause) resume_from_pause();
+  else enter_manual_pause();
 }
 
 BLYNK_WRITE(V3) {

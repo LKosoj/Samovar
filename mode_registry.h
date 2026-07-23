@@ -25,7 +25,14 @@ inline void mode_alarm_nbk() {
 
 inline void mode_alarm_beer() {
   beer_check_cooling_limits();
-  water_pulse_count_set(100);  // в пиве нет постоянного протока — авария глушится намеренно
+  // [P2 п.8] На 'C'/'F' клапан открыт и вода реально течёт через тракт
+  // охлаждения - протока нужно требовать, как и в остальных режимах.
+  // В остальное время протока нет намеренно - авария по нему глушится.
+  if (valve_status) {
+    mode_request_water_flow_emergency_if_needed();
+  } else {
+    water_pulse_count_set(100);
+  }
 }
 
 inline const ModeOps* mode_registry() {
@@ -33,10 +40,13 @@ inline const ModeOps* mode_registry() {
     {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr},
     {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text},
     {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text},
-    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_START, check_alarm_bk, bk_finish, get_bk_status_text},
+    // [P7 п.2] startCommand=SAMOVAR_NONE: у БК нет своего "следующая программа"/старт-действия
+    // через SAMOVAR_START (это команда ректификации) - веб-экшен action=start для БК не должен
+    // молча дёргать чужой (ректификационный) старт. SUVID/LUA намеренно НЕ трогаем (асимметрия).
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text},
     {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text},
     {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr},
-    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, nullptr, nullptr, nullptr},
+    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr},
   };
   return ops;
 }
@@ -131,6 +141,12 @@ inline bool mode_apply_power_on_command(SamovarCommands command) {
     return false;
   }
   if (command == SAMOVAR_START) {
+    // [P7 п.1] SAMOVAR_START не должен молча перезапускать чужую активную сессию
+    // (другой режим уже работает) - вместо форсированного переключения режима отказываем.
+    if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE && program_update_session_active()) {
+      SendMsg("Команда запуска недоступна в текущем режиме", WARNING_MSG);
+      return false;
+    }
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
     change_samovar_mode();
     menu_samovar_start();
@@ -139,6 +155,19 @@ inline bool mode_apply_power_on_command(SamovarCommands command) {
 
   const ModeOps* ops = mode_ops_by_power_on_command(command);
   if (ops == nullptr || ops->activeStatus <= SAMOVAR_STATUS_IDLE) return false;
+
+  // [P7 п.1] Аналогичный guard для табличных режимов: чужая активная сессия не даёт стартовать.
+  if (ops->mode != Samovar_Mode && program_update_session_active()) {
+    SendMsg("Команда запуска недоступна в текущем режиме", WARNING_MSG);
+    return false;
+  }
+
+  // [P7 п.1/3a] Явный пользовательский запрос новой сессии - взводим флаг для целевого
+  // activeStatus, который mode_begin_heating_session (mode_common.h) потребует перед
+  // фактическим стартом нагрева. Взвод для конкретного статуса не даёт другому режиму
+  // (например, БК) ошибочно потребить чужой взвод (см. [P7 F1]).
+  const bool isNewSession = ops->mode != Samovar_Mode || SamovarStatusInt != ops->activeStatus;
+  if (isNewSession) mode_request_heating_start(ops->activeStatus);
 
   Samovar_Mode = ops->mode;
   change_samovar_mode();

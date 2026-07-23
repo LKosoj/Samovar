@@ -14,6 +14,10 @@
 #define STABLE_WINDOWS_REQUIRED 5 // Кол-во стабильных окон подряд для фиксации кипения
 #define MAX_TREND_ABS_PER_SEC 0.02 // Макс. модуль тренда в °C/с для стабильности
 
+#ifndef BEER_TEMP_HYSTERESIS
+#define BEER_TEMP_HYSTERESIS 0.3f  // [P2 п.2] Ширина гистерезиса вокруг уставки для M/P/F (было: controlSensor->SetTemp — чужая величина датчика)
+#endif
+
 struct BoilingDetector {
     float tempHistory[TEMP_HISTORY_SIZE];
     uint8_t historyIndex = 0;
@@ -24,6 +28,21 @@ struct BoilingDetector {
 };
 
 BoilingDetector boilingDetector;
+
+#ifdef USE_WATER_PUMP
+// [P2 п.1] Гонка насоса охлаждения ('C'/'F') и планового выключения насоса
+// по расписанию мешалки (set_mixer_state OFF-ветка, ниже) — новый флаг не
+// даёт плановому выключению заглушить активное охлаждение.
+static bool beerCoolingPumpActive = false;
+#endif
+
+#ifndef BEER_SKIP_CONFIRM_WINDOW_MS
+#define BEER_SKIP_CONFIRM_WINDOW_MS 10000UL  // окно повторного нажатия для подтверждения пропуска горячего охлаждения
+#endif
+// [P2 п.9] Без static: значение читает logic.h::get_beer_status_text через
+// локальную extern-декларацию (logic.h подключается в Samovar.ino раньше beer.h).
+uint8_t beerSkipConfirmProgramNum = 0xFF;    // строка, для которой ждём подтверждения (0xFF = нет ожидания)
+unsigned long beerSkipConfirmDeadlineMs = 0; // окно подтверждения истекает после этого millis()
 
 static inline void resetBoilingDetector() {
     boilingDetector.historyIndex = 0;
@@ -176,6 +195,14 @@ void beer_proc() {
       return;
     }
 
+    // [P2 п.4] Защёлка безопасности нагрева взведена - старт нагрева всё равно
+    // молча провалится (see set_power/heater_safety_latched), но create_data()
+    // и MQTT-сессия уже успеют создаться. Отменяем старт раньше.
+    if (heater_safety_latched()) {
+      mode_cancel_process_start("Защёлка безопасности нагрева активна. Старт затирания отменён.");
+      return;
+    }
+
     // Сброс детектора кипения при запуске процесса
     resetBoilingDetector();
     if (!create_data()) {
@@ -192,7 +219,11 @@ void beer_proc() {
     MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + sessionDescription, "st");
 #endif
     set_power(true);
-    if (!PowerOn) return;
+    if (!PowerOn) {
+      mode_cancel_process_start("Не удалось включить питание нагрева. Старт затирания отменён.");
+      mode_warn_log_close_failed();
+      return;
+    }
     run_beer_program(0);
   }
   vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -204,6 +235,29 @@ void beer_proc() {
  */
 void run_beer_program(uint8_t num) {
   if (Samovar_Mode != SAMOVAR_BEER_MODE || !PowerOn) return;
+
+  // [P2 п.9] Пропуск охлаждения, пока сусло ещё горячее цели, рискован для
+  // следующего этапа. Автопереход сюда не долетает — к его моменту
+  // температура уже в цели, поэтому проверка температуры ниже его не задержит.
+  // Не завязываемся на begintime: пока он ещё не выставлен (первый такт
+  // beer_stage_tick после входа в строку 'C'), ручное "дальше" тоже должно
+  // спросить подтверждение, если сусло горячее цели.
+  if (program[ProgramNum].WType == 'C') {
+    const DSSensor* confirmSensor = nullptr;
+    const char* confirmSensorName = "";
+    if (beer_control_sensor(program[ProgramNum].TempSensor, confirmSensor, confirmSensorName) &&
+        sensor_valid(*confirmSensor) && confirmSensor->avgTemp > program[ProgramNum].Temp) {
+      unsigned long nowMsConfirm = millis();
+      if (beerSkipConfirmProgramNum != ProgramNum || nowMsConfirm > beerSkipConfirmDeadlineMs) {
+        beerSkipConfirmProgramNum = ProgramNum;
+        beerSkipConfirmDeadlineMs = nowMsConfirm + BEER_SKIP_CONFIRM_WINDOW_MS;
+        SendMsg("Сусло ещё не остыло до цели. Повторите переход в течение 10 секунд для подтверждения.", WARNING_MSG);
+        return;
+      }
+    }
+  }
+  beerSkipConfirmProgramNum = 0xFF;
+
   if (startval == SAMOVAR_STARTVAL_BEER_START) startval = SAMOVAR_STARTVAL_BEER_HEATING;
 
   uint8_t targetProgram = num;
@@ -263,6 +317,19 @@ void run_beer_program(uint8_t num) {
   alarm_c_low_min = 0;  //мешалка вкл
   alarm_c_min = 0;  //мешалка пауза
   currentstepcnt = 0; //счетчик циклов мешалки
+
+  // [P2 п.3] Ручной пропуск строки может оборвать 'C'/'F' раньше, чем они
+  // сами закроют клапан/насос по температуре — актуаторы не должны
+  // "утекать" в произвольную следующую строку.
+  if (valve_status) open_valve(false, false);
+#ifdef USE_WATER_PUMP
+  set_pump_pwm(0);
+  pump_started = false;
+  beerCoolingPumpActive = false;
+#endif
+  // [P2 п.5+6] Накопитель простоя считается только для текущей строки P/B.
+  beerStageIdleAccumMs = 0;
+  beerStageIdleSinceMs = 0;
 }
 
 /**
@@ -278,9 +345,18 @@ void beer_finish() {
 #ifdef USE_WATER_PUMP
   set_pump_pwm(0);
   pump_started = false;
+  beerCoolingPumpActive = false;
 #endif
   setHeaterPosition(false);
   heater_state = false;
+  // [P2 п.5+6] Ручная пауза и накопитель простоя строки не переживают завершение процесса.
+  beerManualPause = false;
+  beerStageIdleAccumMs = 0;
+  beerStageIdleSinceMs = 0;
+  // [P2 п.9] Ожидание подтверждения пропуска охлаждения не переживает завершение процесса;
+  // begintime=0 также защищает от протухшего значения при новом запуске.
+  beerSkipConfirmProgramNum = 0xFF;
+  begintime = 0;
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
   stop_process("Программа затирания завершена");
@@ -297,13 +373,37 @@ void beer_abort_config_error(const String& reason) {
 }
 
 /**
- * @brief Проверяет превышение предельных температур воды/ТСА на этапе охлаждения
+ * @brief Проверяет превышение предельных температур воды/ТСА на этапах охлаждения
+ *        ('C' и 'F' - оба реально гоняют воду через тракт охлаждения)
  *        и инициирует аварийный останов. Надзорная функция alarm-пути (mode_alarm_beer),
  *        работает независимо от каденции beer_stage_tick() в loop().
  */
 inline void beer_check_cooling_limits() {
-  if (current_program_type() != 'C') return;
+  if (current_program_type() != 'C' && current_program_type() != 'F') return;
   mode_request_overheat_emergency_if_needed();
+}
+
+/**
+ * @brief Обновляет накопитель простоя строки P/B: время ручной паузы, а также
+ *        время вне полосы гистерезиса на 'P', не должно засчитываться в
+ *        выдержку строки (см. проверки в beer_stage_tick()).
+ */
+inline void beer_update_stage_idle(ProgramType currentType, float temp, float tempDelta, unsigned long nowMs) {
+  bool idleNow = false;
+  if (currentType == 'P' || currentType == 'B') {
+    if (beerManualPause) {
+      idleNow = true;
+    } else if (currentType == 'P' && begintime > 0 &&
+               (temp < program[ProgramNum].Temp - tempDelta || temp > program[ProgramNum].Temp + tempDelta)) {
+      idleNow = true;
+    }
+  }
+  if (idleNow) {
+    if (beerStageIdleSinceMs == 0) beerStageIdleSinceMs = nowMs;
+  } else if (beerStageIdleSinceMs > 0) {
+    beerStageIdleAccumMs += nowMs - beerStageIdleSinceMs;
+    beerStageIdleSinceMs = 0;
+  }
 }
 
 /**
@@ -332,8 +432,9 @@ void beer_stage_tick() {
   }
   if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
   temp = controlSensor->avgTemp;
-  tempDelta = controlSensor->SetTemp;
+  tempDelta = BEER_TEMP_HYSTERESIS;
   ProgramType currentType = current_program_type();
+  beer_update_stage_idle(currentType, temp, tempDelta, nowMs);
 
   //Обрабатываем программу
 
@@ -372,17 +473,18 @@ void beer_stage_tick() {
   if (currentType == 'A') {
     if (tuning) {
       set_heater_state(program[ProgramNum].Temp, temp);
-    } else {
-      if (!queue_samovar_command(SAMOVAR_BEER_NEXT)) {
-        request_emergency_stop("Очередь команд занята: завершение автотюнинга пива не поставлено");
-      }
+    } else if (!queue_samovar_command(SAMOVAR_BEER_NEXT)) {
+      // [P2 п.7] Очередь команд временно занята — не аварийный останов всего
+      // процесса, а просто повтор на следующем такте (1 Гц).
+      SendMsg("Очередь команд занята: завершение автотюнинга пива будет повторено", WARNING_MSG);
     }
     return;
   }
 
   //Если режим Засыпь солода или Пауза
   if (currentType == 'M' || currentType == 'P') {
-    set_heater_state(program[ProgramNum].Temp, temp);
+    // [P2 п.6] Ручная пауза держит нагрев выключенным, не трогая ПИД/таймеры.
+    if (beerManualPause) setHeaterPosition(false); else set_heater_state(program[ProgramNum].Temp, temp);
   }
 
   //Если режим Брага
@@ -394,7 +496,8 @@ void beer_stage_tick() {
         open_valve(false, false);
       }
       //Поддерживаем целевую температуру
-      set_heater_state(program[ProgramNum].Temp, temp);
+      // [P2 п.6] Ручная пауза держит нагрев выключенным, не трогая ПИД/таймеры.
+      if (beerManualPause) setHeaterPosition(false); else set_heater_state(program[ProgramNum].Temp, temp);
     } else if (temp > program[ProgramNum].Temp + tempDelta) {
       {
         if (!valve_status) {
@@ -405,6 +508,7 @@ void beer_stage_tick() {
 #ifdef USE_WATER_PUMP
           set_pump_pwm(1023);
           pump_started = true;
+          beerCoolingPumpActive = true;
 #endif
         }
       }
@@ -418,6 +522,7 @@ void beer_stage_tick() {
 #ifdef USE_WATER_PUMP
         set_pump_pwm(0);
         pump_started = false;
+        beerCoolingPumpActive = false;
 #endif
       }
     }
@@ -450,6 +555,7 @@ void beer_stage_tick() {
 #ifdef USE_WATER_PUMP
       set_pump_pwm(1023);
       pump_started = true;
+      beerCoolingPumpActive = true;
 #endif
     }
     if (temp <= program[ProgramNum].Temp) {
@@ -459,6 +565,7 @@ void beer_stage_tick() {
 #ifdef USE_WATER_PUMP
       set_pump_pwm(0);
       pump_started = false;
+      beerCoolingPumpActive = false;
 #endif
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
@@ -481,7 +588,12 @@ void beer_stage_tick() {
 
     //Греем до температуры кипения, исходя из того, что датчик в кубе врет не сильно
     if (begintime == 0) {
-      set_heater_state(BOILING_TEMP + 5, temp);
+      // [P2 п.6] Ручная пауза держит нагрев выключенным при разгоне до кипения.
+      if (!beerManualPause) set_heater_state(BOILING_TEMP + 5, temp);
+    } else if (beerManualPause) {
+      // [P2 п.6] Ручная пауза во время уже идущего кипячения — выключаем нагрев.
+      setHeaterPosition(false);
+      heater_state = false;
     } else {
       //Иначе поддерживаем температуру
       heater_state = true;
@@ -489,8 +601,10 @@ void beer_stage_tick() {
       //Устанавливаем заданное напряжение
       set_current_power(SamSetup.BVolt);
 #else
+      // [P2 п.10] Скважность реле по SamSetup.BVolt (0-100%), а не постоянное
+      // 100% включение - симметрично SAMOVAR_USE_POWER-ветке выше (set_current_power(SamSetup.BVolt)).
       set_current_power_mode_value(POWER_WORK_MODE);
-      heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN);
+      set_heater(constrain(SamSetup.BVolt, 0.0f, 100.0f) / 100.0);
 #endif
       if (SamSetup.UseST) {
         heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
@@ -500,7 +614,9 @@ void beer_stage_tick() {
     }
 
     //Проверяем, что еще нужно держать паузу. За 30 секунд до окончания шлем сообщение
-    if (begintime > 0 && msgfl && ((float)(millis() - begintime) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {  // [C-13] overflow-safe: вычитание до каста
+    // [P2 п.11] Напоминание про хмель уместно, только если следующая строка — тоже кипячение
+    // ('B'): иначе (переход на охлаждение/паузу и т.п.) хмель сыпать уже поздно/не нужно.
+    if (begintime > 0 && msgfl && program_type_at(ProgramNum + 1) == 'B' && ((float)(millis() - begintime - beerStageIdleAccumMs) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {  // [C-13] overflow-safe: вычитание до каста
       set_buzzer(true);
       msgfl = false;
       SendMsg(("Засыпьте хмель!"), NOTIFY_MSG);
@@ -512,7 +628,7 @@ void beer_stage_tick() {
   }
 
   //Проверяем, что еще нужно держать паузу
-  if (begintime > 0 && (currentType == 'B' || currentType == 'P') && ((float)(millis() - begintime) / 60000.0f >= program[ProgramNum].Time)) {
+  if (begintime > 0 && (currentType == 'B' || currentType == 'P') && ((float)(millis() - begintime - beerStageIdleAccumMs) / 60000.0f >= program[ProgramNum].Time)) {
     //Запускаем следующую программу
     run_beer_program(ProgramNum + 1);
   }
@@ -596,8 +712,9 @@ void set_mixer_state(bool state, bool dir) {
     //выключаем реле 2
     digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 #ifdef USE_WATER_PUMP
-    //выключаем SSD реле
-    set_pump_pwm(0);
+    //выключаем SSD реле, но не глушим активное охлаждение 'C'/'F' плановым
+    //выключением насоса по расписанию мешалки [P2 п.1]
+    if (!beerCoolingPumpActive) set_pump_pwm(0);
 #endif
 	    //выключаем I2CStepper шаговик
 	    if (i2c_stepper_mixer_present()) {

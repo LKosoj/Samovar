@@ -39,6 +39,31 @@ if nbk_text:
         if token not in body:
             errors.append(f"NBK critical alarm missing emergency request: {token}")
 
+    # [Ревью П1, находка 2] ранний return (режим сменился/питание снято/старт ещё не
+    # дошёл до RUNNING) обязан сбрасывать nbk_dry_steam_start_time симметрично
+    # nbk_overheat_start_time — иначе рестарт НБК сразу на 'S' с горячим
+    # парогенератором даст мгновенный ложный стоп без выдержки 60с.
+    try:
+        early_return_body, _ = extract_braced_block_after(
+            body,
+            "if (SamovarStatusInt != SAMOVAR_STATUS_NBK || !PowerOn || startval < SAMOVAR_STARTVAL_NBK_RUNNING) {",
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        early_return_body = ""
+
+    if early_return_body:
+        require_ordered_tokens(
+            "[Ревью П1, находка 2] early return resets both critical-alarm timers before leaving NBK mode",
+            early_return_body,
+            [
+                "nbk_overheat_start_time = 0;",
+                "nbk_dry_steam_start_time = 0;",
+                "return false;",
+            ],
+            errors,
+        )
+
     try:
         mash_depleted_body, _ = extract_braced_block_after(
             body, "if (SteamSensor.avgTemp > 98.0) {"
@@ -58,6 +83,19 @@ if nbk_text:
             ],
             errors,
         )
+
+    # [T3] верхний предел Тп на Ручной настройке (S) — защита от сухого хода парогенератора
+    require_ordered_tokens(
+        "NBK dry-steam upper limit on manual setup stage",
+        body,
+        [
+            "} else if (SteamSensor.avgTemp >= 100.0) {",
+            "nbk_dry_steam_start_time == 0",
+            "millis() - nbk_dry_steam_start_time > 60000",
+            "queue_samovar_command(SAMOVAR_POWER)",
+        ],
+        errors,
+    )
 
     forbid_tokens(
         "check_nbk_critical_alarms",

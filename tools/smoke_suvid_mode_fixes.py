@@ -7,6 +7,11 @@
 3. Общий хелпер перегрева mode_request_overheat_emergency_if_needed вызывается
    из beer_check_cooling_limits и check_alarm_suvid (пины distiller/BK — в
    smoke_dist_bk_small_fixes.py, тело хелпера — там же).
+
+Плюс П6 (22.07.2026): вода/ТСА в Сувиде опциональны (optional_sensor_failed),
+куб обязателен (sensor_valid), общий mode_check_powered_cooling_sensors (жёсткая
+проверка воды) в теле check_alarm_suvid больше не вызывается; и кламп уставки
+SuvidTemp в WebServer.ino снижен со 150 до 100°.
 """
 import sys
 from pathlib import Path
@@ -96,7 +101,7 @@ if beer_text:
         "beer cooling limits gate by stage then delegate to common overheat helper",
         body,
         [
-            "if (current_program_type() != 'C') return;",
+            "if (current_program_type() != 'C' && current_program_type() != 'F') return;",
             "mode_request_overheat_emergency_if_needed();",
         ],
         errors,
@@ -135,12 +140,54 @@ if suvid_text:
             "if (!PowerOn) {",
             "suvidHeaterOn = false;",
             "heater_state = false;",
+            "suvidHold = {false, false, 0};",
             "return;",
             "heater_state = suvidHeaterOn;",
             "setHeaterPosition(suvidHeaterOn);",
         ],
         errors,
     )
+
+    require_ordered_tokens(
+        "suvid sensor guard: water/ACP optional, tank mandatory",
+        body,
+        [
+            "optional_sensor_failed(WaterSensor)",
+            "process_sensor_failed(\"Сувид\", \"воды\")",
+            "optional_sensor_failed(ACPSensor)",
+            "process_sensor_failed(\"Сувид\", \"ТСА\")",
+            "sensor_valid(TankSensor)",
+            "process_sensor_failed(\"Сувид\", \"куба\")",
+        ],
+        errors,
+    )
+    if "mode_check_powered_cooling_sensors" in body:
+        errors.append(
+            "check_alarm_suvid must not call mode_check_powered_cooling_sensors "
+            "(that helper treats water as mandatory; Сувид needs it optional)"
+        )
+
+webserver_text = strip_cpp_comments(read_text("WebServer.ino"))
+if webserver_text:
+    try:
+        handle_save_body = extract_function_body(webserver_text, "void handleSave")
+    except ValueError as exc:
+        errors.append(str(exc))
+        handle_save_body = ""
+    if handle_save_body:
+        suvid_clamp_marker = 'apply_save_float_arg(request, "SuvidTemp"'
+        idx = handle_save_body.find(suvid_clamp_marker)
+        if idx < 0:
+            errors.append("handleSave lost the SuvidTemp save clamp call")
+        else:
+            line_end = handle_save_body.find(";", idx)
+            suvid_clamp_line = handle_save_body[idx:line_end if line_end >= 0 else idx + 120]
+            if "0.0f" not in suvid_clamp_line:
+                errors.append("SuvidTemp clamp lost its 0.0f lower bound")
+            if "100.0f" not in suvid_clamp_line:
+                errors.append("SuvidTemp clamp must cap at 100.0f (setpoint can't exceed 100°)")
+            if "150.0f" in suvid_clamp_line:
+                errors.append("SuvidTemp clamp still allows the old 150.0f upper bound")
 
 if errors:
     print("suvid mode fixes smoke failed:")

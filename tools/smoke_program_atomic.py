@@ -332,6 +332,34 @@ void test_blank_lines_and_all_formats_round_trip() {
       "HSOW");
 }
 
+void test_dist_row_type_bounds() {
+  struct Case {
+    const char* text;
+    bool expectOk;
+  };
+  const Case cases[] = {
+      {"T;150;0;0\n", true},
+      {"T;0.01;0;0\n", true},
+      {"T;0;0;0\n", false},
+      {"A;0;0;0\n", true},
+      {"A;99.99;0;0\n", true},
+      {"A;100;0;0\n", false},
+      {"P;50;0;0\n", true},
+      {"P;100;0;0\n", false},
+      {"S;1;0;0\n", true},
+      {"S;0.0001;0;0\n", true},
+      {"S;0;0;0\n", false},
+      {"R;0.5;0;0\n", true},
+      {"R;1.5;0;0\n", false},
+  };
+  for (const Case& test : cases) {
+    ProgramDraft draft{};
+    ProgramParseResult result = program_parse_lines(String(test.text), dist_program_parse_spec(), draft);
+    std::string message = std::string("dist row type-dependent bound mismatch for: ") + test.text;
+    check(result.ok() == test.expectOk, message.c_str());
+  }
+}
+
 void test_mode_mapping_and_defaults() {
   struct ModeCase {
     SAMOVAR_MODE mode;
@@ -389,6 +417,7 @@ int main() {
   test_non_finite_values_are_atomic();
   test_delimiter_structure_is_atomic();
   test_blank_lines_and_all_formats_round_trip();
+  test_dist_row_type_bounds();
   test_mode_mapping_and_defaults();
 
   if (failures != 0) return 1;

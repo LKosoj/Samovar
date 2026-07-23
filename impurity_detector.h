@@ -25,6 +25,17 @@ static const float HEAT_LOSS_MIN_DELTA_T = 15.0f;
 // -1 = не инициализировано, 0 = пар, 1 = царга
 static int8_t detector_last_pipe_sensor = -1;
 
+// [П3-1] Базовая скорость отбора текущей строки программы для детектора примесей.
+// Обновляется при старте строки (run_program) и внешних/пользовательских вызовах
+// set_pump_speed(updateBase=true). Корректировки самого детектора базу НЕ трогают
+// (updateBase=false), чтобы не портить program[N].Speed при резюме после паузы.
+volatile float CurrentBaseSpeedRate = 0.0f;
+
+// [П3-2] Счетчик стоп-пауз текущей строки программы (по датчику пара/царги или от
+// детектора), кумулятивный за время строки (не только подряд идущие). Сбрасывается
+// при смене строки и при срабатывании лимита (авто-снижение скорости).
+volatile uint8_t RowStopPauseCount = 0;
+
 /**
  * Инициализация детектора
  */
@@ -303,6 +314,56 @@ bool is_first_body_program_after_heads(uint8_t currentProgram, ProgramType curre
 }
 
 /**
+ * [П3-2] Политика реакции на повторяющиеся стоп-паузы одной строки программы:
+ * если подряд накопилось PROGRAM_ROW_STOP_PAUSE_LIMIT пауз (по датчику пара/царги
+ * или от детектора) без смены строки - снижаем базовую скорость строки на фиксированный
+ * процент, чтобы колонна не продолжала раз за разом упираться в тот же предел.
+ */
+inline void apply_row_stop_pause_policy() {
+  if (RowStopPauseCount < PROGRAM_ROW_STOP_PAUSE_LIMIT) return;
+  RowStopPauseCount = 0;
+  if (CurrentBaseSpeedRate <= 0) return;
+  float reducedRate = CurrentBaseSpeedRate * (1.0f - PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT / 100.0f);
+  float reducedStepSpeed = get_speed_from_rate(reducedRate);
+  set_pump_speed(reducedStepSpeed, false, true);  // continue_process=false: насос остаётся стоять, меняем только базу на будущее резюме
+  SendMsg("Строка №" + String(ProgramNum + 1) + ": " + String(PROGRAM_ROW_STOP_PAUSE_LIMIT) +
+          " стоп-паузы подряд. Базовая скорость снижена до " + String(reducedRate, 2) + " л/ч.", ALARM_MSG);
+}
+
+/**
+ * [П3-4] Порог восстановления тренда (дублирует формулу adaptive-порога из
+ * process_impurity_detector — рефакторить рабочую функцию не трогаем).
+ * Используется withdrawal() для проверки "тренд устоялся" перед резюме
+ * после паузы, поставленной детектором.
+ */
+inline float detector_current_recovery_threshold() {
+  const uint8_t currentProgram = ProgramNum;
+  const ProgramType currentType = program_type_at(currentProgram);
+  float baseWarningThreshold = 0.03f + (100 - SamSetup.PackDens) * 0.0005f;
+  float currentVolumePerHour = (CurrentBaseSpeedRate > 0) ? CurrentBaseSpeedRate : 0.24f;
+  ProgramType processPhase = !program_type_empty(currentType) ? currentType : 'B';
+  float warningThreshold = get_adaptive_threshold(baseWarningThreshold, impurityDetector.tempStdDev, currentVolumePerHour, processPhase);
+  return warningThreshold - warningThreshold * 0.15f;
+}
+
+inline bool detector_trend_settled() {
+  return impurityDetector.currentTrend < detector_current_recovery_threshold();
+}
+
+/**
+ * @brief [П3-7] Шаг коррекции (доля 0.01-0.20) на основе SamSetup.autospeed
+ * (0-99%, "Процент изменения скорости"). 0/не задано -> дефолт 5%. Клампим
+ * до 20%, чтобы одна коррекция не могла резко обрушить скорость (веб-форма
+ * допускает до 99%, а это поле раньше было полностью мёртвым/непроверенным).
+ */
+inline float get_detector_correction_step() {
+  uint8_t pct = SamSetup.autospeed;
+  if (pct < 1) pct = 5;
+  if (pct > 20) pct = 20;
+  return pct / 100.0f;
+}
+
+/**
  * Основная логика работы детектора
  */
 void process_impurity_detector() {
@@ -318,6 +379,23 @@ void process_impurity_detector() {
   if (SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED) {
     impurityDetector.detectorStatus = 0;
     // correctionFactor НЕ трогаем — накопленная коррекция сохраняется на время паузы
+    // [П3-4] Во время паузы, поставленной САМИМ детектором, тренд продолжаем обновлять —
+    // иначе withdrawal() никогда не увидит "тренд устоялся" (значение замороженное
+    // на критическом уровне момента входа в паузу). Паузы по пару/царге и ручная —
+    // тренд по-прежнему замораживаем (данные при остановленном насосе нерепрезентативны).
+    ProgramWaitType pauseWaitType = PROGRAM_WAIT_NONE;
+    bool isDetectorOwnPause = program_Wait && copy_program_wait_type(pauseWaitType) && pauseWaitType == PROGRAM_WAIT_DETECTOR;
+    if (isDetectorOwnPause) {
+      bool usePipeSensor = (detector_last_pipe_sensor == 1);
+      float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
+      unsigned long now = millis();
+      if (now - impurityDetector.lastSampleTime >= 2000) {
+        update_detector_history(detectorTemp);
+        impurityDetector.currentTrend = calculate_temperature_trend();
+        impurityDetector.lastSampleTime = now;
+      }
+      return;
+    }
     return;
   }
 
@@ -454,9 +532,9 @@ void process_impurity_detector() {
   float baseWarningThreshold = 0.03f + (100 - SamSetup.PackDens) * 0.0005f;
 
   // Получаем текущие параметры процесса
-  float currentVolumePerHour = (currentProgram < PROGRAM_MAX && program[currentProgram].Speed > 0)
-                                ? program[currentProgram].Speed
-                                : 0.24f; // Дефолтное значение
+  // [П3-1] База берется из CurrentBaseSpeedRate (актуальная скорость строки с учетом
+  // резюме после паузы), а не из program[].Speed, которое больше не ратчетится.
+  float currentVolumePerHour = (CurrentBaseSpeedRate > 0) ? CurrentBaseSpeedRate : 0.24f; // Дефолтное значение
   ProgramType processPhase = !program_type_empty(currentType) ? currentType : 'B'; // По умолчанию тело
 
   // Адаптивный порог с учетом дисперсии, скорости отбора и фазы процесса
@@ -512,6 +590,8 @@ void process_impurity_detector() {
       SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " +
               String(impurityDetector.currentTrend, 3) + ", variance: " +
               String(impurityDetector.tempStdDev, 4) + ")", ALARM_MSG);
+      RowStopPauseCount++;
+      apply_row_stop_pause_policy();
     } else if (isDetectorPause && impurityDetector.detectorStatus != 2) {
       // Пауза уже установлена детектором, но статус почему-то не 2 - восстанавливаем
       impurityDetector.detectorStatus = 2; // Breakthrough
@@ -553,15 +633,16 @@ void process_impurity_detector() {
       }
 
       if (now - impurityDetector.lastCorrectionTime > correctionInterval) {
-        impurityDetector.correctionFactor *= 0.95f; // Снижаем скорость на 5%
+        float correctionStep = get_detector_correction_step();
+        impurityDetector.correctionFactor *= (1.0f - correctionStep);
         if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
         impurityDetector.lastCorrectionTime = now;
 
         // Применяем новую скорость
-        float baseSpeedRate = currentProgram < PROGRAM_MAX ? program[currentProgram].Speed : 0;
+        float baseSpeedRate = CurrentBaseSpeedRate;
         if (baseSpeedRate > 0) {
           float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
+          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true, false);
         }
 
         SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
@@ -581,15 +662,15 @@ void process_impurity_detector() {
     // Если пользователь поставил на паузу вручную, или есть автоматическая пауза - не возобновляем
     if (impurityDetector.correctionFactor < 1.0f && !PauseOn && !program_Wait) {
       if (now - impurityDetector.lastCorrectionTime > 30000) { // Восстанавливаем медленно, раз в 30 сек
-        impurityDetector.correctionFactor += 0.02f;
+        impurityDetector.correctionFactor += get_detector_correction_step() * 0.4f;  // сохраняем текущее соотношение 2%/5%=0.4 — восстановление медленнее реакции
         if (impurityDetector.correctionFactor > 1.0f) impurityDetector.correctionFactor = 1.0f;
         impurityDetector.lastCorrectionTime = now;
 
         // Применяем новую скорость
-        float baseSpeedRate = currentProgram < PROGRAM_MAX ? program[currentProgram].Speed : 0;
+        float baseSpeedRate = CurrentBaseSpeedRate;
         if (baseSpeedRate > 0) {
           float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true);
+          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true, false);
         }
       }
     }

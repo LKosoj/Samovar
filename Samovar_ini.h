@@ -149,4 +149,19 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //#define NOT_USE_INTERFACE_UPDATE              //не использовать обновление интерфейса при загрузке
 
 //#define KVIC_DEBUG
+
+#ifndef PAUSE_RESUME_HYSTERESIS_DELTA
+#define PAUSE_RESUME_HYSTERESIS_DELTA 0.07f  //гистерезис (°C) между порогом входа в паузу по Т пара/царги и порогом выхода — устраняет дребезг у границы
+#endif
+
+#ifndef PROGRAM_ROW_STOP_PAUSE_LIMIT
+#define PROGRAM_ROW_STOP_PAUSE_LIMIT 3      //кумулятивное число стоп-пауз за время текущей строки программы (счётчик сбрасывается при смене строки или при срабатывании этого лимита), после которого базовая скорость строки автоматически снижается
+#endif
+#ifndef PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT
+#define PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT 10   //на сколько % снижать базовую скорость строки при срабатывании PROGRAM_ROW_STOP_PAUSE_LIMIT
+#endif
+
+#ifndef PROGRAM_DONE_AUTO_POWEROFF_MIN
+#define PROGRAM_DONE_AUTO_POWEROFF_MIN 0   //время (мин) удержания статуса "Выполнение программы завершено" (насос остановлен, нагрев продолжается) перед автоотключением; 0 = отключать немедленно (прежнее поведение)
+#endif
 #endif

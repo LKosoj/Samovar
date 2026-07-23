@@ -108,6 +108,42 @@ static int currentstepcnt = 0;
 static unsigned long alarm_c_min = 0;
 static unsigned long alarm_c_low_min = 0;
 
+#define USE_WATER_PUMP
+static bool valve_status = false;
+static int openValveCalls = 0;
+void open_valve(bool val, bool /*msg*/) { valve_status = val; openValveCalls++; }
+static bool pump_started = false;
+static float lastPumpPwm = -1;
+static int pumpPwmCalls = 0;
+void set_pump_pwm(float duty) { lastPumpPwm = duty; pumpPwmCalls++; }
+static bool beerCoolingPumpActive = false;
+
+static unsigned long fakeMillis = 1000;
+unsigned long millis() { return fakeMillis; }
+
+// [P2 п.9] Минимальный стаб датчика: только то, что реально читает
+// run_beer_program() из подтверждения пропуска охлаждения.
+struct DSSensor {
+  float avgTemp = 0;
+  bool alarm = false;
+};
+static DSSensor TankSensor;
+static bool sensor_valid(const DSSensor&) { return true; }
+static bool beer_control_sensor(uint8_t, const DSSensor*& sensor, const char*& name) {
+  sensor = &TankSensor;
+  name = "куба";
+  return true;
+}
+
+#ifndef BEER_SKIP_CONFIRM_WINDOW_MS
+#define BEER_SKIP_CONFIRM_WINDOW_MS 10000UL
+#endif
+static uint8_t beerSkipConfirmProgramNum = 0xFF;
+static unsigned long beerSkipConfirmDeadlineMs = 0;
+
+static unsigned long beerStageIdleAccumMs = 0;
+static unsigned long beerStageIdleSinceMs = 0;
+
 static int startAutoTuneCalls = 0;
 void StartAutoTune() { startAutoTuneCalls++; }
 
@@ -157,6 +193,18 @@ static void reset_fixture() {
   beerFinishCalls = 0;
   sendMsgCalls = 0;
   setBuzzerCalls = 0;
+  valve_status = true;
+  openValveCalls = 0;
+  pump_started = true;
+  lastPumpPwm = -1;
+  pumpPwmCalls = 0;
+  beerCoolingPumpActive = true;
+  fakeMillis = 1000;
+  TankSensor.avgTemp = 0;
+  beerSkipConfirmProgramNum = 0xFF;
+  beerSkipConfirmDeadlineMs = 0;
+  beerStageIdleAccumMs = 0;
+  beerStageIdleSinceMs = 0;
 }
 
 // Состояние "после кипения": детектор уже накопил полную стабильную серию.
@@ -233,10 +281,123 @@ static void test_non_boiling_transition_keeps_detector() {
         "РЕГРЕСС: переход на строку без кипячения не должен был сбрасывать stableCount");
 }
 
+// [P2 п.3] Ручной пропуск строки (например, из активного 'C'/'F') не должен
+// оставлять клапан/насос охлаждения включёнными на новой строке программы -
+// run_beer_program обязан сбросить эти актуаторы сам, не дожидаясь, пока это
+// сделает прежняя строка по своей температурной логике.
+static void test_manual_skip_from_active_cooling_resets_actuators() {
+  reset_fixture();
+  program[0].WType = 'C';
+  program[1].WType = 'P';
+  ProgramLen = 2;
+
+  run_beer_program(1);
+
+  check(ProgramNum == 1, "run_beer_program должен был перейти на строку 1");
+  check(valve_status == false,
+        "РЕГРЕСС: ручной пропуск строки из активного охлаждения не закрыл клапан");
+  check(lastPumpPwm == 0,
+        "РЕГРЕСС: ручной пропуск строки из активного охлаждения не обнулил скважность насоса");
+  check(pump_started == false,
+        "РЕГРЕСС: ручной пропуск строки из активного охлаждения не сбросил pump_started");
+  check(beerCoolingPumpActive == false,
+        "РЕГРЕСС: ручной пропуск строки из активного охлаждения не сбросил beerCoolingPumpActive");
+}
+
+// [P2 п.9] Сусло ещё горячее цели (avgTemp > Temp) - первый вызов должен
+// только запросить подтверждение (не переходить и не сбрасывать begintime),
+// а повторный в течение окна BEER_SKIP_CONFIRM_WINDOW_MS - выполнить переход.
+static void test_manual_skip_from_hot_cooling_requires_confirmation() {
+  reset_fixture();
+  program[0].WType = 'C';
+  program[0].Temp = 10;
+  program[1].WType = 'P';
+  ProgramLen = 2;
+  begintime = 1;
+  TankSensor.avgTemp = 20;
+
+  run_beer_program(1);
+  check(ProgramNum == 0,
+        "РЕГРЕСС: первое нажатие на горячем сусле не должно переходить на следующую строку без подтверждения");
+  check(begintime == 1,
+        "РЕГРЕСС: первое нажатие на горячем сусле не должно сбрасывать begintime текущей строки");
+  check(sendMsgCalls == 1, "первое нажатие должно было отправить предупреждение о подтверждении");
+  check(beerSkipConfirmProgramNum == 0, "должен запомнить строку, ожидающую подтверждения");
+
+  fakeMillis += 2000;  // в пределах 10-секундного окна подтверждения
+  run_beer_program(1);
+  check(ProgramNum == 1, "повторное нажатие в течение окна подтверждения должно перевести на строку 1");
+  check(sendMsgCalls == 2, "переход должен был также отправить обычное уведомление о смене строки");
+  check(beerSkipConfirmProgramNum == 0xFF, "после подтверждённого перехода ожидание должно быть снято");
+}
+
+// [P2 п.9] Автопереход из beer_stage_tick вызывает run_beer_program уже когда
+// avgTemp <= Temp (цель достигнута) - подтверждение в этом случае не нужно и
+// не должно требоваться.
+static void test_auto_transition_from_cooled_target_skips_confirmation() {
+  reset_fixture();
+  program[0].WType = 'C';
+  program[0].Temp = 10;
+  program[1].WType = 'P';
+  ProgramLen = 2;
+  begintime = 1;
+  TankSensor.avgTemp = 5;
+
+  run_beer_program(1);
+  check(ProgramNum == 1,
+        "РЕГРЕСС: авто-переход при уже достигнутой цели охлаждения не должен требовать подтверждения");
+  check(sendMsgCalls == 1, "авто-переход должен сразу отправить обычное уведомление о смене строки");
+  check(beerSkipConfirmProgramNum == 0xFF, "авто-переход не должен оставлять ожидание подтверждения");
+}
+
+// [P2 п.9 находка] Guard подтверждения не должен зависеть от begintime: пока
+// он ещё не выставлен (строка 'C' только началась, первый такт
+// beer_stage_tick ещё не прошёл), ручное "дальше" на горячем сусле всё равно
+// обязано запросить подтверждение - иначе окно в <1с пропускает проверку.
+static void test_manual_skip_hot_before_begintime_set_requires_confirmation() {
+  reset_fixture();
+  program[0].WType = 'C';
+  program[0].Temp = 10;
+  program[1].WType = 'P';
+  ProgramLen = 2;
+  begintime = 0;  // строка 'C' только началась - первый такт tick ещё не прошёл
+  TankSensor.avgTemp = 20;  // горячее цели
+
+  run_beer_program(1);
+  check(ProgramNum == 0,
+        "РЕГРЕСС: до выставления begintime горячее сусло пропустило подтверждение при ручном \"дальше\"");
+  check(begintime == 0, "блокирующее нажатие не должно менять begintime текущей строки");
+  check(sendMsgCalls == 1, "первое нажатие должно было отправить предупреждение о подтверждении");
+  check(beerSkipConfirmProgramNum == 0, "должен запомнить строку, ожидающую подтверждения");
+}
+
+// Контрольный случай: сусло уже остыло до цели, begintime тоже ещё не
+// выставлен - переход должен пройти сразу, без подтверждения.
+static void test_manual_skip_cold_before_begintime_set_skips_confirmation() {
+  reset_fixture();
+  program[0].WType = 'C';
+  program[0].Temp = 10;
+  program[1].WType = 'P';
+  ProgramLen = 2;
+  begintime = 0;
+  TankSensor.avgTemp = 5;  // уже холоднее цели
+
+  run_beer_program(1);
+  check(ProgramNum == 1,
+        "РЕГРЕСС: переход при уже остывшем сусле не должен требовать подтверждения даже при begintime==0");
+  check(sendMsgCalls == 1, "переход должен был отправить обычное уведомление о смене строки");
+  check(beerSkipConfirmProgramNum == 0xFF, "переход без подтверждения не должен оставлять ожидание");
+}
+
 int main() {
   test_transition_from_cooling_resets_detector();
   test_adjacent_boiling_transition_keeps_detector();
   test_non_boiling_transition_keeps_detector();
+  test_manual_skip_from_active_cooling_resets_actuators();
+  test_manual_skip_from_hot_cooling_requires_confirmation();
+  test_auto_transition_from_cooled_target_skips_confirmation();
+  test_manual_skip_hot_before_begintime_set_requires_confirmation();
+  test_manual_skip_cold_before_begintime_set_skips_confirmation();
   if (failures != 0) return 1;
   std::cout << "beer.h boiling detector reset behaviour checks passed\n";
   return 0;

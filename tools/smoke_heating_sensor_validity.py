@@ -293,7 +293,7 @@ for name, text, signature, tokens in [
             "BK ACP pre-alarm opens cooling before critical stop",
             body,
             [
-                "mode_should_open_cooling(true, true, true)",
+                "mode_should_open_cooling(false, true, true)",
                 "open_valve(true, true)",
                 "mode_request_overheat_emergency_if_needed()",
             ],

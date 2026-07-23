@@ -300,9 +300,9 @@ for name, text, signature, ordered in [
         [
             "mode_clear_alarm_pause_if_expired();",
             "mode_check_powered_cooling_sensors(\"БК\")",
-            "mode_should_open_cooling(true, true, true)",
+            "mode_should_open_cooling(false, true, true)",
             "set_pump_pwm(bk_pwm);",
-            "mode_should_close_cooling(TARGET_WATER_TEMP - 20, false)",
+            "mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)",
             "mode_request_water_flow_emergency_if_needed();",
             "mode_water_pre_alarm_due()",
             "mode_reduce_power_for_water_alarm_by_volts(",

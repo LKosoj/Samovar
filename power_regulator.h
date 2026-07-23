@@ -252,7 +252,22 @@ inline void finish_power_off_transition(bool enqueueResetCommand) {
   }
 }
 
-inline void fail_close_regulator_locked(uint32_t now, bool enqueueResetCommand) {
+// [P7 п.3b] Статусы-владельцы, чью сессию отказ регулятора нельзя тихо оставлять
+// взведённой - иначе она сама переподнимет нагрев без пользователя. DISTILLATION/BK
+// защищены "ленивым" стартом (mode_begin_heating_session/mode_run_heating_start,
+// одноразовый флаг modeHeatingStartRequested - см. mode_common.h). NBK эту машинерию
+// НЕ использует (nbk.h зовёт set_power() напрямую, минуя mode_begin_heating_session) -
+// для него единственная защита - сброс SamovarStatusInt/startval в IDLE ниже, в
+// fail_close_regulator_locked. Ректификация и пиво сюда не входят вовсе - у них нет
+// статуса-владельца в этом списке.
+inline bool lazy_start_owner_status(int16_t status) {
+  return status == SAMOVAR_STATUS_DISTILLATION || status == SAMOVAR_STATUS_BK || status == SAMOVAR_STATUS_NBK;
+}
+
+// [P7 п.3b] Возвращает true, если сессия владельца ленивого старта была сброшена в IDLE -
+// вызывающий обязан после portEXIT_CRITICAL уведомить оператора (авто-рестарт нагрева иначе
+// произойдёт молча при следующем тике proc()).
+inline bool fail_close_regulator_locked(uint32_t now, bool enqueueResetCommand) {
   force_heater_output_off_locked(true);
   if (enqueueResetCommand) powerTransition.enqueueResetCommand = true;
   safety_transition_advance(
@@ -260,6 +275,12 @@ inline void fail_close_regulator_locked(uint32_t now, bool enqueueResetCommand) 
     POWER_TRANSITION_OFF_REGULATOR_WAIT,
     now
   );
+  const bool ownerReset = lazy_start_owner_status(SamovarStatusInt);
+  if (ownerReset) {
+    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+    startval = SAMOVAR_STARTVAL_IDLE;
+  }
+  return ownerReset;
 }
 
 inline void terminate_sleep_fault_locked(uint32_t now) {
@@ -382,6 +403,7 @@ inline void tick_power_transition() {
   bool reportSuperseded = false;
   bool reportTimeout = false;
   bool notifyWorker = false;
+  bool ownerReset = false;
 
   portENTER_CRITICAL(&emergencyStopMux);
 #ifdef SAMOVAR_USE_POWER
@@ -394,7 +416,7 @@ inline void tick_power_transition() {
       if (desiredMode == SAFETY_REGULATOR_MODE_SLEEP) {
         terminate_sleep_fault_locked(now);
       } else {
-        fail_close_regulator_locked(now, true);
+        ownerReset = fail_close_regulator_locked(now, true);
         notifyWorker = true;
       }
     }
@@ -462,7 +484,7 @@ inline void tick_power_transition() {
           powerTransition.transition.deadline = regulatorRequestState.desiredDeadline;
           if (powerTransition.regulatorGeneration == 0) {
             reportApplyFailure = true;
-            fail_close_regulator_locked(now, true);
+            ownerReset = fail_close_regulator_locked(now, true);
             notifyWorker = true;
           }
         } else {
@@ -471,15 +493,15 @@ inline void tick_power_transition() {
         }
       } else if (status == SAFETY_REGULATOR_REQUEST_FAILED) {
         reportApplyFailure = true;
-        fail_close_regulator_locked(now, true);
+        ownerReset = fail_close_regulator_locked(now, true);
         notifyWorker = true;
       } else if (status == SAFETY_REGULATOR_REQUEST_TIMED_OUT) {
         reportTimeout = true;
-        fail_close_regulator_locked(now, true);
+        ownerReset = fail_close_regulator_locked(now, true);
         notifyWorker = true;
       } else if (status == SAFETY_REGULATOR_REQUEST_SUPERSEDED) {
         reportSuperseded = true;
-        fail_close_regulator_locked(now, true);
+        ownerReset = fail_close_regulator_locked(now, true);
         notifyWorker = true;
       }
 #endif
@@ -489,6 +511,11 @@ inline void tick_power_transition() {
     if (reportApplyFailure) SendMsg("Команда запуска регулятора завершилась ошибкой", ALARM_MSG);
     if (reportTimeout) SendMsg("Таймаут команды запуска регулятора; нагрев отключён", ALARM_MSG);
     if (reportSuperseded) SendMsg("Команда запуска регулятора была явно отменена новой командой", ALARM_MSG);
+    // [P7 п.3b] См. аналогичный блок в ветке POWER_TRANSITION_OFF_REGULATOR_WAIT ниже.
+    if (ownerReset && !nbk_transition_reports_interruption()) {
+      mode_warn_log_close_failed();
+      SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+    }
     return;
   }
 
@@ -538,6 +565,15 @@ inline void tick_power_transition() {
     if (reportApplyFailure) SendMsg("Команда выключения регулятора завершилась ошибкой", ALARM_MSG);
     if (reportTimeout) SendMsg("Таймаут команды выключения регулятора при снятых локальных реле", ALARM_MSG);
     if (reportSuperseded) SendMsg("Команда выключения регулятора была явно отменена новой командой", ALARM_MSG);
+    // [P7 п.3b] Отказ регулятора сбросил сессию владельца ленивого старта (distiller/BK/NBK) -
+    // явно сообщаем, иначе она молча переподнимется без пользователя. nbk_transition_reports_
+    // interruption() не дублирует сообщение только там, где уже есть собственный NBK-надзор за
+    // этим переходом (heat-старт) - на мягком финише NBK своего сообщения нет, поэтому там
+    // общий отчёт остаётся включённым (см. [P7 F4] в nbk.h).
+    if (ownerReset && !nbk_transition_reports_interruption()) {
+      mode_warn_log_close_failed();
+      SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+    }
     return;
   }
 
@@ -1046,6 +1082,29 @@ inline void set_current_power(float Volt) {
   notify_power_worker();
 }
 
+// Порог трактовки поля Power строки программы: |Power| выше него и Power > 0 -
+// абсолютная уставка (В для KVIC/RMVK, Вт для SEM_AVR), иначе - дельта к текущей
+// target_power_volt, 0 - строка явно "не трогать регулятор".
+// НЕ путать с POWER_WORK_MODE_THRESHOLD (порог WORK/SLEEP самого регулятора) -
+// для SEM_AVR числа разные (400 против 100), совпадают только у KVIC/RMVK (40).
+#ifdef SAMOVAR_USE_SEM_AVR
+static constexpr float PROGRAM_POWER_ABS_THRESHOLD = 400.0f;
+#else
+static constexpr float PROGRAM_POWER_ABS_THRESHOLD = 40.0f;
+#endif
+
+// Применяет значение поля Power строки программы к регулятору. Логика перенесена
+// без изменений из run_program()/run_dist_program(): 0 не даёт сработать ни одной
+// ветке (регулятор не трогается намеренно); |power| > порога и > 0 - абсолютная
+// уставка; иначе (кроме нуля) - дельта к текущей target_power_volt.
+inline void apply_program_power_row(float power) {
+  if (abs(power) > PROGRAM_POWER_ABS_THRESHOLD && power > 0) {
+    set_current_power(power);
+  } else if (power != 0) {
+    set_current_power(target_power_volt + power);
+  }
+}
+
 inline void set_power_mode(String Mode) {
   SafetyRegulatorMode regulatorMode;
   if (!regulator_mode_from_string(Mode, regulatorMode)) {
@@ -1069,6 +1128,7 @@ inline void process_pending_power_request() {
   bool notifyWorker = false;
   bool reportFailure = false;
   bool reportTimeout = false;
+  bool ownerReset = false;
 
   portENTER_CRITICAL(&emergencyStopMux);
   const uint32_t claimTime = millis();
@@ -1084,7 +1144,7 @@ inline void process_pending_power_request() {
       if (desiredMode == SAFETY_REGULATOR_MODE_SLEEP) {
         terminate_sleep_fault_locked(claimTime);
       } else {
-        fail_close_regulator_locked(claimTime, true);
+        ownerReset = fail_close_regulator_locked(claimTime, true);
         notifyWorker = true;
       }
     }
@@ -1098,6 +1158,11 @@ inline void process_pending_power_request() {
   portEXIT_CRITICAL(&emergencyStopMux);
   if (notifyWorker) notify_power_worker();
   if (reportTimeout) SendMsg("Таймаут команды регулятора; локальные реле сняты", ALARM_MSG);
+  // [P7 п.3b] Ранний return (нет заявки после таймаута) - отчёт о сбросе сессии нужен уже здесь.
+  if (ownerReset && !nbk_transition_reports_interruption()) {
+    mode_warn_log_close_failed();
+    SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+  }
   if (!hasRequest) return;
 
   portENTER_CRITICAL(&emergencyStopMux);
@@ -1125,7 +1190,7 @@ inline void process_pending_power_request() {
   if (failureAction == SAFETY_REGULATOR_FAILURE_TERMINATE_SLEEP) {
     terminate_sleep_fault_locked(millis());
   } else if (failureAction == SAFETY_REGULATOR_FAILURE_FAIL_CLOSE) {
-      fail_close_regulator_locked(millis(), true);
+      ownerReset = fail_close_regulator_locked(millis(), true);
       notifyWorker = true;
   }
   reportTimeout = timedOut;
@@ -1136,6 +1201,11 @@ inline void process_pending_power_request() {
   if (notifyWorker) notify_power_worker();
   if (reportTimeout) SendMsg("Таймаут фонового применения команды регулятора", ALARM_MSG);
   if (reportFailure) SendMsg("Фоновое применение команды регулятора завершилось ошибкой", ALARM_MSG);
+  // [P7 п.3b] См. аналогичный блок выше (после таймаута claim'а воркера).
+  if (ownerReset && !nbk_transition_reports_interruption()) {
+    mode_warn_log_close_failed();
+    SendMsg("Сессия прервана: отказ регулятора нагрева. Требуется повторный запуск.", ALARM_MSG);
+  }
 }
 
 #endif

@@ -471,13 +471,18 @@ void menu_get_power() {
 }
 
 void menu_pause() {
-  pause_withdrawal(!PauseOn);
-  if (PauseOn) pause_text_ptr = (char *)"Continue";
-  else {
+  // [P7 п.4][P2 п.6][Ревью] Ветвление по старому суммарному состоянию паузы: PauseOn
+  // (ректификация) ИЛИ beerManualPause (пиво) - pause_withdrawal сам по себе no-op для
+  // пива, поэтому одного PauseOn недостаточно, иначе кнопка на LCD никогда не резюмировала бы
+  // ручную паузу пива. Возобновление/пауза - через общие хелперы resume_from_pause()/
+  // enter_manual_pause() (logic.h).
+  bool wasPaused = PauseOn || beerManualPause;
+  if (wasPaused) {
+    resume_from_pause();
     pause_text_ptr = (char *)"Pause";
-    t_min = 0;
-    program_Wait = false;
-    detector_on_manual_resume();
+  } else {
+    enter_manual_pause();
+    pause_text_ptr = (char *)"Continue";
   }
 }
 void menu_calibrate() {
@@ -520,6 +525,11 @@ void menu_samovar_start() {
 
   if (startval == SAMOVAR_STARTVAL_IDLE) {
     Str = "Prg No 1";
+    String programError;
+    if (!validate_rect_program_startable(programError)) {
+      mode_cancel_process_start(programError);
+      return;
+    }
     if (!create_data()) {
       mode_cancel_process_start("Ошибка создания файла лога. Старт ректификации отменён.");
       return;
@@ -545,7 +555,20 @@ void menu_samovar_start() {
     SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
   } else if (startval == SAMOVAR_STARTVAL_RECT_DONE) {
     Str = "Prg finish";
-    run_program(PROGRAM_END);
+    if (PROGRAM_DONE_AUTO_POWEROFF_MIN <= 0) {
+      run_program(PROGRAM_END);
+    } else {
+      // [П3-6] "Работа на себя": глушим насос, нагрев НЕ трогаем.
+      // Полное завершение — по таймауту (withdrawal()) или повторным Стартом
+      // (ветка startval==STOPPING ниже сработает при СЛЕДУЮЩЕМ вызове).
+      reset_rect_program_pause_state(false);
+      stopService();
+      stepper_safe_stop_reset();
+      set_capacity(0);
+      program_done_hold_since = millis();
+      set_buzzer(true);
+      SendMsg("Выполнение программы завершено. Работа на себя (" + String(PROGRAM_DONE_AUTO_POWEROFF_MIN) + " мин до автоотключения).", ALARM_MSG);
+    }
   } else {
     Str = "Stoped";
     run_program(PROGRAM_END);

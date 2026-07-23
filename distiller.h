@@ -27,9 +27,21 @@ struct TimePredictor {
 };
 
 TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+// [П4.6] Время СТАРТА СЕССИИ дистилляции (не строки программы). timePredictor.startTime
+// используется предиктором для скорости изменения показателей ВНУТРИ текущей строки и
+// намеренно сбрасывается на каждом run_dist_program(); честное «Общее время» сессии
+// требует отдельного таймера, который выставляется один раз — при (пере)старте.
+unsigned long sessionStartTime = 0;
 // Фронт-детектор начала кипения для перезахвата TankSensor.StartProgTemp (не static
 // внутри функции — нужен сброс между сессиями дистилляции, см. resetTimePredictor()).
 bool distBoilStartedPrev = false;
+#ifdef SAMOVAR_USE_POWER
+// [П4.4] Гейт однократного гашения BOOST-ТЭНа на первом переходе строки программы,
+// которая явно задаёт Power (программа начинает управлять мощностью сама).
+// Сбрасывается только при (пере)старте дистилляции — НЕ через resetTimePredictor(),
+// иначе флаг обнулялся бы на КАЖДОМ переходе строки.
+bool distBoostGated = false;
+#endif
 // Минимальные пороги, чтобы не делить на ноль и не спамить оценками
 static constexpr float MIN_TEMP_RATE = 0.01f;    // °C/мин
 static constexpr float MIN_ALC_RATE  = 0.001f;   // доля/мин
@@ -61,9 +73,11 @@ void distiller_proc() {
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
     heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
+    distBoostGated = false;
 #endif
     // Инициализируем систему прогнозирования
     resetTimePredictor();
+    sessionStartTime = millis();
   }
 
   // [distiller-cold-start] get_alcohol()/get_steam_alcohol() гейтятся текущим
@@ -126,7 +140,7 @@ void distiller_proc() {
 void distiller_finish() {
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
-  String timeMsg = "Дистилляция завершена. Общее время: " + String(int((millis() - timePredictor.startTime) / 60000)) + " мин.";
+  String timeMsg = "Дистилляция завершена. Общее время: " + String(int((millis() - sessionStartTime) / 60000)) + " мин.";
   stop_process(timeMsg);
 }
 
@@ -212,19 +226,20 @@ void run_dist_program(uint8_t num) {
     set_capacity(program[num - 1].capacity_num);
     if (!program_type_empty(program[num - 1].WType)) {
 #ifdef SAMOVAR_USE_POWER
-#ifdef SAMOVAR_USE_SEM_AVR
-      if (abs(program[num - 1].Power) > 400 && program[num - 1].Power > 0) {
-#else
-      if (abs(program[num - 1].Power) > 40 && program[num - 1].Power > 0) {
-#endif
-        set_current_power(program[num - 1].Power);
-      } else if (program[num - 1].Power != 0) {
-        set_current_power(target_power_volt + program[num - 1].Power);
-      }
+      apply_program_power_row(program[num - 1].Power);
 #endif
     }
   }
 
+#ifdef SAMOVAR_USE_POWER
+  // [П4.4] BOOST горит с самого старта дистилляции (см. distiller_proc()) и без
+  // явного гашения — до конца сессии. Гасим один раз, когда программа впервые
+  // начинает сама управлять мощностью (Power предыдущей строки задан).
+  if (num > 0 && !distBoostGated && program[num - 1].Power != 0) {
+    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+    distBoostGated = true;
+  }
+#endif
 }
 
 ProgramParseResult set_dist_program(const String& WProgram) {
@@ -274,7 +289,7 @@ void updateTimePredictor() {
     // Если программы закончились, не делаем прогноз
     if (ProgramNum >= ProgramLen || program_type_empty(program[ProgramNum].WType)) {
         timePredictor.remainingTime = 0;
-        float elapsedMinutes = (currentTime - timePredictor.startTime) / 60000.0f;
+        float elapsedMinutes = (currentTime - sessionStartTime) / 60000.0f;
         timePredictor.predictedTotalTime = elapsedMinutes;
         return;
     }
@@ -319,7 +334,7 @@ void updateTimePredictor() {
     }
 
     timePredictor.remainingTime = max(0.0f, remaining);
-    float elapsedMinutes = (currentTime - timePredictor.startTime) / 60000.0f;
+    float elapsedMinutes = (currentTime - sessionStartTime) / 60000.0f;
     timePredictor.predictedTotalTime = elapsedMinutes + timePredictor.remainingTime;
 }
 

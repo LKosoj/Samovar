@@ -219,8 +219,8 @@ if program_io:
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
-    require_token("beer serializer keeps legacy integer time", body, "out += (String)(int)row.Time + \";\";")
-    forbid_token("beer serializer keeps legacy integer time", body, "format_beer_step_minutes")
+    require_token("beer serializer keeps fractional time", body, "out += (String)row.Time + \";\";")
+    forbid_token("beer serializer keeps fractional time", body, "(int)row.Time")
 
 wrappers = [
     ("logic.h", logic, "ProgramParseResult set_program", "return program_parse_lines(WProgram, rect_program_parse_spec());"),

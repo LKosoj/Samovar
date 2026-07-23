@@ -2202,7 +2202,7 @@ void handleSave(AsyncWebServerRequest *request) {
   if (!apply_save_float_arg(request, "SetWaterTemp", staged.SetWaterTemp, 0.0f, 150.0f)) return;
   if (!apply_save_float_arg(request, "SetTankTemp", staged.SetTankTemp, 0.0f, 150.0f)) return;
   if (!apply_save_float_arg(request, "SetACPTemp", staged.SetACPTemp, 0.0f, 150.0f)) return;
-  if (!apply_save_float_arg(request, "SuvidTemp", staged.SuvidTemp, 0.0f, 150.0f)) return;
+  if (!apply_save_float_arg(request, "SuvidTemp", staged.SuvidTemp, 0.0f, 100.0f)) return;
   if (!apply_save_float_arg(request, "Kp", staged.Kp, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "Ki", staged.Ki, 0.0f, 100000.0f)) return;
   if (!apply_save_float_arg(request, "Kd", staged.Kd, 0.0f, 100000.0f)) return;

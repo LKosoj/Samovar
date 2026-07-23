@@ -26,6 +26,7 @@ constexpr float PROGRAM_RATE_MAX = 8000.0f;
 // «Speed» строки дистилляции — НЕ расход, а порог перехода: целевая T куба ('T', °C),
 // либо спиртуозность ('A'/'P', % об.), либо доля ('S'/'R', 0..1) — см. distiller.h.
 // 0..150 покрывает температуру (потолок DistTemp), спиртуозность (<100) и доли.
+// Это лишь первый грубый фильтр; точные типозависимые границы — в program_parse_dist_row().
 constexpr float PROGRAM_DIST_THRESHOLD_MIN = 0.0f;
 constexpr float PROGRAM_DIST_THRESHOLD_MAX = 150.0f;
 
@@ -225,7 +226,7 @@ inline bool program_parse_rect_row(char* line, size_t, uint8_t, WProgram& row, c
   return true;
 }
 
-inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*&) {
+inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage) {
   char* saveTok = nullptr;
   char* tokType = strtok_r(line, ";", &saveTok);
   char* tokSpeed = strtok_r(nullptr, ";", &saveTok);
@@ -243,6 +244,21 @@ inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, c
             parse_bounded_float(tokSpeed, PROGRAM_DIST_THRESHOLD_MIN, PROGRAM_DIST_THRESHOLD_MAX, speed).ok() &&
             parse_bounded_long(tokCap, 0, CAPACITY_NUM, cap).ok() &&
             parse_bounded_float(tokPower, PROGRAM_POWER_MIN, PROGRAM_POWER_MAX, power).ok();
+
+  // Типозависимое сужение общих границ PROGRAM_DIST_THRESHOLD_*: поле Speed
+  // хранит разный физический смысл в зависимости от WType (см. комментарий выше).
+  if (ok && (parsedType == 'S' || parsedType == 'R') && (speed <= 0.0f || speed > 1.0f)) {
+    errorMessage = "Ошибка программы: для типа S/R Speed должен быть в диапазоне (0,1]";
+    ok = false;
+  }
+  if (ok && (parsedType == 'A' || parsedType == 'P') && speed >= 100.0f) {
+    errorMessage = "Ошибка программы: для типа A/P Speed должен быть в диапазоне [0,100)";
+    ok = false;
+  }
+  if (ok && parsedType == 'T' && speed <= 0.0f) {
+    errorMessage = "Ошибка программы: для типа T Speed должен быть в диапазоне (0,150]";
+    ok = false;
+  }
 
   if (!ok) return false;
 
@@ -450,7 +466,7 @@ inline void program_append_beer_row(String& out, const WProgram& row) {
   append_program_type(out, row.WType);
   out += ";";
   out += (String)row.Temp + ";";
-  out += (String)(int)row.Time + ";";
+  out += (String)row.Time + ";";
   out += (String)row.capacity_num + "^" + (int)row.Speed + "^" + row.Volume + "^" + (int)row.Power + ";";
   out += (String)row.TempSensor + "\n";
 }

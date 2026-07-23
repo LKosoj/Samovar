@@ -118,6 +118,30 @@ inline void mode_warn_log_close_failed() {
   if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
 }
 
+// [P7 п.3a] Одноразовый флаг явного пользовательского запроса старта нагрева. Взводится
+// ТОЛЬКО из mode_apply_power_on_command (mode_registry.h) в ответ на реальную команду
+// пользователя; mode_begin_heating_session требует его перед фактическим стартом сессии -
+// это отменяет молчаливый авто-рестарт нагрева после отказа регулятора (см. power_regulator.h
+// fail_close_regulator_locked / lazy_start_owner_status).
+// [P7 F1] Взводится generic-веткой для ЛЮБОГО табличного режима (в т.ч. BEER/NBK, которые
+// mode_begin_heating_session не вызывают и поэтому флаг не потребляют) - вместе с флагом
+// хранится целевой activeStatus, ради которого он взведён. mode_consume_heating_start_request
+// сверяет сохранённый статус с запрошенным: чужой (взведённый для другого режима) или
+// устаревший взвод не проходит.
+static bool modeHeatingStartRequested = false;
+static int16_t modeHeatingStartRequestedStatus = 0;
+
+inline void mode_request_heating_start(int16_t activeStatus) {
+  modeHeatingStartRequested = true;
+  modeHeatingStartRequestedStatus = activeStatus;
+}
+
+inline bool mode_consume_heating_start_request(int16_t activeStatus) {
+  if (!modeHeatingStartRequested || modeHeatingStartRequestedStatus != activeStatus) return false;
+  modeHeatingStartRequested = false;
+  return true;
+}
+
 enum ModeHeatingStartResult : uint8_t {
   MODE_HEATING_START_PENDING = 0,
   MODE_HEATING_START_SUCCEEDED,
@@ -235,6 +259,14 @@ inline ModeHeatingStartResult mode_begin_heating_session(
   if (PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()) return MODE_HEATING_START_FAILED;
   if (power_transition_active()) {
     mode_cancel_process_start("Выключение нагрева ещё не завершено. Старт отменён.");
+    return MODE_HEATING_START_FAILED;
+  }
+
+  // [P7 п.3a] Без явного запроса (mode_request_heating_start) сессию не начинаем - иначе
+  // отказ регулятора, молча сбросивший статус в IDLE и тут же снова выставленный где-то
+  // выше по стеку, привёл бы к авто-рестарту нагрева без нового действия пользователя.
+  if (!mode_consume_heating_start_request(activeStatus)) {
+    mode_cancel_process_start("Нагрев не возобновлён автоматически. Требуется повторная команда старта.");
     return MODE_HEATING_START_FAILED;
   }
 

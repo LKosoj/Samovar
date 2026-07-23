@@ -69,8 +69,22 @@ int get_liquid_volume() {
   return get_liquid_volume_by_step(stepper_safe_get_current());
 }
 
+// [П3-6] Момент постановки статуса "программа завершена, работа на себя" (0 - неактивно).
+volatile unsigned long program_done_hold_since = 0;
+
 // Функция для управления отбором
 void withdrawal(void) {
+  if (startval == SAMOVAR_STARTVAL_RECT_DONE) {
+    // [П3-6] Проверяем startval (core1, синхронно), не SamovarStatusInt=20 —
+    // тот выставляется асинхронно из tick_status_fsm() на core0 с задержкой до ~1с.
+    if (PROGRAM_DONE_AUTO_POWEROFF_MIN > 0 && program_done_hold_since > 0) {
+      unsigned long poweroffDeadline = program_done_hold_since + (unsigned long)PROGRAM_DONE_AUTO_POWEROFF_MIN * 60000UL;
+      if ((int32_t)(millis() - poweroffDeadline) >= 0) {
+        run_program(PROGRAM_END);
+      }
+    }
+    return;
+  }
   if (!(SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED)) return;
 
   // ОБРАБОТКА ДЕТЕКТОРА ПРИМЕСЕЙ
@@ -126,15 +140,14 @@ void withdrawal(void) {
     //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура вышла за пределы или корректируем пределы
     if ((currentType == 'B' || currentType == 'C') && (sensor.avgTemp >= c_temp + sensor.SetTemp) && sensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
-      ProgramType prevType = (currentProgram > 0) ? program_type_at(currentProgram - 1) : PROGRAM_TYPE_NONE;
       //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
       if (hasTwoNextPrograms && currentType == 'C' &&
           (program_type_at(currentProgram + 1) == 'B' || program_type_at(currentProgram + 1) == 'C' || program_type_at(currentProgram + 1) == 'P') &&
           (program_type_at(currentProgram + 2) == 'B' || program_type_at(currentProgram + 2) == 'C')) {
         set_body_temp();
       }
-      //Если это первая строка с телом - корректируем Т тела
-      else if ((currentProgram > 0) && (currentType == 'B' || currentType == 'C') && prevType == 'H') {
+      //Если это первая строка с телом после голов (в т.ч. через строки паузы P) - корректируем Т тела
+      else if (is_first_body_program_after_heads(currentProgram, currentType)) {
         set_body_temp();
       } else
 #endif
@@ -151,6 +164,8 @@ void withdrawal(void) {
           t_min = millis() + sensor.Delay * 1000;
           set_buzzer(true);
           SendMsg(String("Пауза по ") + sensorLabel, WARNING_MSG);
+          RowStopPauseCount++;
+          apply_row_stop_pause_policy();
         }
       // если время вышло, еще раз пытаемся дождаться
       // [C-13] overflow-safe
@@ -162,25 +177,19 @@ void withdrawal(void) {
     // другого сенсора и "(Детектор)"), снимала чужую паузу, а соответствующая ветка тут
     // же ставила её снова → осцилляция каждые Delay сек (спам, зуммер, пуски насоса).
     // [C-13] overflow-safe: t_min > 0 — сентинель "таймер установлен"; (int32_t)(millis()-t_min) >= 0 — истёк
-    } else if ((currentType == 'B' || currentType == 'C') && sensor.avgTemp < c_temp + sensor.SetTemp && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && currentWaitType == waitType) {
+    } else if ((currentType == 'B' || currentType == 'C') && sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && currentWaitType == waitType) {
       //продолжаем отбор
       SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
       t_min = 0;
       program_Wait = false;
       pause_withdrawal(false);
       // После возобновления с паузы устанавливаем сохраненную скорость как базовую для детектора
-      // Вычисляем скорость в л/ч из сохраненной скорости шагов и временно корректируем program[ProgramNum].Speed
+      // [П3-1] Базой становится CurrentBaseSpeedRate (через set_pump_speed с updateBase=true),
+      // program[].Speed больше не перезаписываем - строка программы не портится.
       if (SamSetup.useautospeed && currentProgram < PROGRAM_MAX && CurrrentStepperSpeed > 0) {
-        float actualRate = get_liquid_rate_by_step(CurrrentStepperSpeed);
-        if (actualRate > 0) {
-          // Временно корректируем скорость программы на текущую скорость насоса
-          // Это позволяет детектору считать текущую скорость базовой (correctionFactor = 1.0)
-          program[currentProgram].Speed = actualRate;
-          impurityDetector.correctionFactor = 1.0f;
-          impurityDetector.lastCorrectionTime = millis();
-          // Устанавливаем скорость явно через set_pump_speed для синхронизации
-          set_pump_speed(CurrrentStepperSpeed, true);
-        }
+        impurityDetector.correctionFactor = 1.0f;
+        impurityDetector.lastCorrectionTime = millis();
+        set_pump_speed(CurrrentStepperSpeed, true);
       }
     }
     return true;
@@ -189,10 +198,12 @@ void withdrawal(void) {
   if (!handlePauseBySensor(SteamSensor, PROGRAM_WAIT_STEAM, "Т пара")) return;
   if (!handlePauseBySensor(PipeSensor, PROGRAM_WAIT_PIPE, "Т царги")) return;
 
-  // Пауза детектора: после истечения таймера возобновляем отбор
+  // Пауза детектора: после истечения таймера И устоявшегося тренда возобновляем отбор
   // [L-1/M-31] Эта ветка уже проверяла program_Wait_Type == "(Детектор)" — это корректно.
   // [C-13] overflow-safe: t_min > 0 — сентинель; (int32_t)(millis()-t_min) >= 0 — истёк
-  if (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR && t_min > 0 && (int32_t)(millis() - t_min) >= 0) {
+  // [П3-4] detector_trend_settled() — тренд, обновлявшийся все время паузы (см. process_impurity_detector),
+  // должен опуститься ниже порога восстановления, иначе резюме отбора вернёт колонну сразу в критику.
+  if (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && detector_trend_settled()) {
     SendMsg(("Детектор: Продолжаем отбор после паузы"), NOTIFY_MSG);
     t_min = 0;
     program_Wait = false;
@@ -264,8 +275,44 @@ void pause_withdrawal(bool Pause) {
   }
 }
 
+// [P2 п.6][Ревью] Общая точка входа в ручную паузу: консолидирует шаги, ранее
+// продублированные в Samovar.ino (case SAMOVAR_PAUSE) - паузу отбора (pause_withdrawal,
+// no-op вне ректификации) и ветку ручной паузы пива (гейтит нагрев в beer.h через
+// beerManualPause). Используется также из Blynk V13 и Menu.ino menu_pause(), симметрично
+// resume_from_pause(), чтобы три точки входа не расходились логикой.
+void enter_manual_pause() {
+  pause_withdrawal(true);
+  if (Samovar_Mode == SAMOVAR_BEER_MODE && startval > SAMOVAR_STARTVAL_BEER_START) {
+    if (current_program_type() == 'A') {
+      SendMsg("Пауза недоступна во время автокалибровки ПИД.", WARNING_MSG);
+    } else if (!beerManualPause) {
+      beerManualPause = true;
+      SendMsg("Затирание поставлено на паузу.", NOTIFY_MSG);
+    }
+  }
+}
+
+// [P7 п.4][P2 п.6] Общая точка возобновления после паузы: консолидирует шаги, ранее
+// продублированные в Samovar.ino (case SAMOVAR_CONTINUE) - снятие паузы отбора, сброс
+// таймера/типа ожидания, уведомление детектора примесей о ручном возобновлении и снятие
+// ручной паузы пива (симметрично её установке в enter_manual_pause()). Используется также
+// из Blynk V13 и Menu.ino menu_pause(), чтобы три точки входа не расходились логикой.
+void resume_from_pause() {
+  pause_withdrawal(false);
+  t_min = 0;
+  program_Wait = false;
+  if (!set_program_wait_type(PROGRAM_WAIT_NONE, pdMS_TO_TICKS(500))) {
+    SendMsg("Не удалось сбросить тип автоматической паузы.", WARNING_MSG);
+  }
+  detector_on_manual_resume();
+  if (Samovar_Mode == SAMOVAR_BEER_MODE && beerManualPause) {
+    beerManualPause = false;
+    SendMsg("Затирание продолжено.", NOTIFY_MSG);
+  }
+}
+
 // Установить скорость насоса
-void set_pump_speed(float pumpspeed, bool continue_process) {
+void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase) {
   if (pumpspeed < 1) return;
   if (!(SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED)) return;
 
@@ -274,6 +321,9 @@ void set_pump_speed(float pumpspeed, bool continue_process) {
 
   CurrrentStepperSpeed = pumpspeed;
   ActualVolumePerHour = get_liquid_rate_by_step(CurrrentStepperSpeed);
+  // [П3-1] Внешнее/пользовательское изменение скорости обновляет базу детектора.
+  // Корректирующие вызовы самого детектора передают updateBase=false.
+  if (updateBase && ActualVolumePerHour > 0) CurrentBaseSpeedRate = ActualVolumePerHour;
 
   stopService();
   stepper_safe_set_max_speed(CurrrentStepperSpeed);
@@ -308,7 +358,12 @@ float getBeerCurrentTemp() {
 }
 
 String get_distiller_status_text() {
-  String local = "Прг №" + String(ProgramNum + 1) + "; Режим дистилляции";
+  String local;
+  if (ProgramNum < ProgramLen) {
+    local = "Прг №" + String(ProgramNum + 1) + "; Режим дистилляции";
+  } else {
+    local = "Программы выполнены, отбор до T куба " + String(SamSetup.DistTemp, 1) + "°; Режим дистилляции";
+  }
   if (PowerOn) {
     local += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
     local += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
@@ -344,6 +399,12 @@ String get_beer_status_text() {
 #else
   String local = "";
 #endif
+  // [P2 п.6] Индикатор ручной паузы затирания.
+  if (beerManualPause) local += "На паузе; ";
+  // [P2 п.9] Индикатор ожидания подтверждения пропуска охлаждения на горячем сусле.
+  // extern: beer.h (где определена переменная) подключается позже logic.h в Samovar.ino.
+  extern uint8_t beerSkipConfirmProgramNum;
+  if (beerSkipConfirmProgramNum == ProgramNum) local += "Ожидание подтверждения пропуска охлаждения; ";
   ProgramType currentType = current_program_type();
   if (startval == SAMOVAR_STARTVAL_BEER_HEATING && currentType == 'M') {
     float currentTemp = getBeerCurrentTemp();
@@ -397,8 +458,13 @@ String get_beer_status_text() {
   }
 
   if (PowerOn && (currentType == 'P' || currentType == 'B') && begintime > 0) {
-    float progress = ((float)(millis() - begintime) / (program[ProgramNum].Time * 60 * 1000)) * 100;
+    // [P2 п.5+6] Прогресс считается по времени "в работе": простой (ручная
+    // пауза и/или выход за гистерезис на 'P') не засчитывается в выдержку строки.
+    float elapsedMs = (float)(millis() - begintime) - (float)beerStageIdleAccumMs;
+    if (elapsedMs < 0) elapsedMs = 0;
+    float progress = (elapsedMs / (program[ProgramNum].Time * 60 * 1000)) * 100;
     if (progress > 100) progress = 100;
+    if (progress < 0) progress = 0;
     local += "; Прогресс: " + String(progress, 1) + "%";
   }
   return local;
@@ -457,14 +523,20 @@ String tick_status_fsm() {
     } else {
       local += " (Термостатирование)";
     }
+    int32_t suvidRemainSec = suvid_hold_remaining_sec();
+    if (suvidRemainSec >= 0) local += "; Выдержка: " + format_uptime((unsigned long)suvidRemainSec);
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_IDLE && !stepper_safe_get_state()) {
     // [PKG-B п.2] При активном nbk-переходе (в т.ч. мягком финише FINISH_WAIT: нагрев ещё
     // включён, startval=0) НЕ захватываем статус 50 — иначе finishOwnerValid (требует
     // SamovarStatusInt==0) ложнеет и мягкий финиш срывается в аварийное отключение нагрева.
     // nbk_transition_active() истинна только в режиме НБК, ректификацию это не затрагивает.
-    if (SamovarStatusInt != SAMOVAR_STATUS_RECT_STABILIZING && SamovarStatusInt != SAMOVAR_STATUS_RECT_STABLE && !nbk_transition_active()) {
+    if (SamovarStatusInt != SAMOVAR_STATUS_RECT_STABILIZING && SamovarStatusInt != SAMOVAR_STATUS_RECT_STABLE && !nbk_transition_active() && Samovar_Mode != SAMOVAR_LUA_MODE) {
       local = F("Разгон колонны");
       SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
+    } else if (Samovar_Mode == SAMOVAR_LUA_MODE) {
+      // LUA исключён из «Разгона колонны» выше: сценарий колонны ему неприменим,
+      // но текст статуса всё равно нужен - иначе local останется пустым.
+      local = F("Выполнение Lua скрипта");
     } else if (SamovarStatusInt == SAMOVAR_STATUS_RECT_STABILIZING) {
       local = F("Разгон завершен. Стабилизация/Работа на себя");
     } else if (SamovarStatusInt == SAMOVAR_STATUS_RECT_STABLE) {
@@ -548,7 +620,7 @@ String get_program(uint8_t s) {
   return program_serialize_rows(s, k, program_append_rect_row);
 }
 
-static void reset_rect_program_pause_state() {
+static void reset_rect_program_pause_state(bool resumeStepper = true) {
   t_min = 0;
   program_Pause = false;
   program_Wait = false;
@@ -556,7 +628,31 @@ static void reset_rect_program_pause_state() {
   if (!set_program_wait_type(PROGRAM_WAIT_NONE, pdMS_TO_TICKS(500))) {
     SendMsg("Не удалось сбросить тип автоматической паузы.", WARNING_MSG);
   }
-  pause_withdrawal(false);
+  if (resumeStepper) pause_withdrawal(false);
+  RowStopPauseCount = 0;  // [П3-2] сброс счетчика стоп-пауз при смене строки/старте
+  program_done_hold_since = 0;  // [П3-6] сброс холда завершения программы
+}
+
+/**
+ * @brief [П3-5] Проверка стартовой готовности программы ректификации: пустая
+ *        программа (ProgramLen==0 — старт ничего не делает, но статус переходит
+ *        в "работает") и строки H/B/C/T без условия завершения (Volume==0 И
+ *        Temp==0 — ни TargetStepps!=0, ни температурный выход не могут сработать).
+ */
+inline bool validate_rect_program_startable(String& errorMessage) {
+  if (ProgramLen == 0 || program_type_empty(program[0].WType)) {
+    errorMessage = "Ошибка программы ректификации: строка не задана";
+    return false;
+  }
+  for (uint8_t i = 0; i < ProgramLen && i < PROGRAM_END; i++) {
+    ProgramType t = program[i].WType;
+    if (program_type_empty(t)) break;
+    if ((t == 'H' || t == 'B' || t == 'C' || t == 'T') && program[i].Volume == 0 && program[i].Temp == 0) {
+      errorMessage = "Ошибка программы: строка " + String(i + 1) + " никогда не завершится (не заданы объём и температура)";
+      return false;
+    }
+  }
+  return true;
 }
 
 // Запустить программу
@@ -635,15 +731,7 @@ void run_program(uint8_t num) {
 
   String p_s;
 #ifdef SAMOVAR_USE_POWER
-#ifdef SAMOVAR_USE_SEM_AVR
-  if (abs(program[num].Power) > 400 && program[num].Power > 0) {
-#else
-  if (abs(program[num].Power) > 40 && program[num].Power > 0) {
-#endif
-    set_current_power(program[num].Power);
-  } else if (program[num].Power != 0) {
-    set_current_power(target_power_volt + program[num].Power);
-  }
+  apply_program_power_row(program[num].Power);
   vTaskDelay(500 / portTICK_PERIOD_MS);
   // [L-7] alarm_c_low_min = millis() — запоминается момент старта строки предзахлёба;
   // интервал TIME_C добавляется позже в check_alarm() при срабатывании.
@@ -661,6 +749,7 @@ void run_program(uint8_t num) {
     //устанавливаем параметры для текущей программы отбора
     set_capacity(program[num].capacity_num);
     CurrrentStepperSpeed = (uint16_t)get_speed_from_rate(program[num].Speed);
+    CurrentBaseSpeedRate = program[num].Speed;  // [П3-1] новая база для детектора при старте строки
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
     //stepper.setSpeed(get_speed_from_rate(program[num].Speed));
     TargetStepps = (uint32_t)program[num].Volume * (uint32_t)SamSetup.StepperStepMl;
