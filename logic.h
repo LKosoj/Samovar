@@ -72,6 +72,24 @@ int get_liquid_volume() {
 // [П3-6] Момент постановки статуса "программа завершена, работа на себя" (0 - неактивно).
 volatile unsigned long program_done_hold_since = 0;
 
+inline bool rect_row_transition_requested(
+    const WProgram& row,
+    uint32_t targetSteps,
+    uint32_t currentSteps,
+    int16_t currentStartval,
+    float steamTemp,
+    float steamStartTemp) {
+  if (targetSteps != 0 && targetSteps <= currentSteps &&
+      (currentStartval == SAMOVAR_STARTVAL_RECT_RUNNING ||
+       currentStartval == SAMOVAR_STARTVAL_RECT_DONE)) {
+    return true;
+  }
+  if (row.Temp == 0) return false;
+  const float threshold =
+      row.Temp > 0 && row.Temp < 20 ? row.Temp + steamStartTemp : row.Temp;
+  return steamTemp > threshold;
+}
+
 // Функция для управления отбором
 void withdrawal(void) {
   if (startval == SAMOVAR_STARTVAL_RECT_DONE) {
@@ -87,8 +105,22 @@ void withdrawal(void) {
   }
   if (!(SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED)) return;
 
+  const uint8_t currentProgram = ProgramNum;
+  const WProgram currentRow =
+      currentProgram < ProgramLen ? program[currentProgram] : WProgram{};
+  const ProgramType currentType = program_type_at(currentProgram);
+  const float currentSteamTemp = SteamSensor.avgTemp;
+  const float currentSteamStartTemp = SteamSensor.StartProgTemp;
+  const uint32_t currentTargetSteps = TargetStepps;
+  const uint32_t currentCompletedSteps = stepper_safe_get_current();
+  const int16_t currentStartval = startval;
+  const bool detectorWaitWasActive = program_Wait;
+  const bool pauseWasActive = PauseOn;
+
   // ОБРАБОТКА ДЕТЕКТОРА ПРИМЕСЕЙ
   process_impurity_detector();
+  if ((!detectorWaitWasActive && program_Wait) ||
+      (!pauseWasActive && PauseOn)) return;
 
   //Определяем, что необходимо сменить режим работы
   //По завершению паузы
@@ -108,27 +140,19 @@ void withdrawal(void) {
   }
 
   //По достижению шаговика цели
-  CurrrentStepps = stepper_safe_get_current();
+  CurrrentStepps = currentCompletedSteps;
 
-  if (TargetStepps <= CurrrentStepps && TargetStepps != 0 && (startval == SAMOVAR_STARTVAL_RECT_RUNNING || startval == SAMOVAR_STARTVAL_RECT_DONE)) {
+  if (!program_Wait && !PauseOn && rect_row_transition_requested(
+        currentRow,
+        currentTargetSteps,
+        currentCompletedSteps,
+        currentStartval,
+        currentSteamTemp,
+        currentSteamStartTemp)) {
     menu_samovar_start();
+    return;
   }
 
-  //По превышению температуры в программе
-  if (program[ProgramNum].Temp != 0) {
-    if (program[ProgramNum].Temp > 0 && program[ProgramNum].Temp < 20) {
-      if (SteamSensor.avgTemp > (program[ProgramNum].Temp + SteamSensor.StartProgTemp)) {
-        menu_samovar_start();
-      }
-    } else {
-      if (SteamSensor.avgTemp > program[ProgramNum].Temp) {
-        menu_samovar_start();
-      }
-    }
-  }
-
-  const uint8_t currentProgram = ProgramNum;
-  ProgramType currentType = program_type_at(currentProgram);
   bool hasTwoNextPrograms = currentProgram + 2 < ProgramLen;
 
   // Общая логика паузы отбора по датчику температуры (пар/царга): 1:1 перенесена из
@@ -365,8 +389,20 @@ String get_distiller_status_text() {
     local = "Программы выполнены, отбор до T куба " + String(SamSetup.DistTemp, 1) + "°; Режим дистилляции";
   }
   if (PowerOn) {
-    local += "; Осталось:" + String(get_dist_remaining_time(), 1) + " мин";
-    local += "; Общее:" + String(get_dist_predicted_total_time(), 1) + " мин";
+    if (dist_row_prediction_available()) {
+      local += "; Строка, осталось:" +
+          String(get_dist_remaining_time(), 1) + " мин";
+    } else {
+      local += "; Прогноз строки: ожидание данных";
+    }
+    if (dist_process_prediction_available()) {
+      local += "; Процесс до DistTemp, осталось:" +
+          String(get_dist_process_remaining_time(), 1) + " мин";
+      local += "; Всего:" +
+          String(get_dist_predicted_total_time(), 1) + " мин";
+    } else {
+      local += "; Прогноз процесса: ожидание кипения/данных";
+    }
   }
   return local;
 }
@@ -1009,6 +1045,21 @@ void set_boiling() {
   }
 }
 
+enum BoilingEvidence : uint8_t {
+  BOILING_EVIDENCE_NONE = 0,
+  BOILING_EVIDENCE_STEAM,
+  BOILING_EVIDENCE_PIPE,
+  BOILING_EVIDENCE_TANK_AND_WATER,
+  BOILING_EVIDENCE_TANK,
+  BOILING_EVIDENCE_WATER,
+};
+
+BoilingEvidence boiling_evidence = BOILING_EVIDENCE_NONE;
+
+inline void record_boiling_evidence(BoilingEvidence evidence) {
+  if (boiling_evidence == BOILING_EVIDENCE_NONE) boiling_evidence = evidence;
+}
+
 bool check_boiling() {
   if (boil_started || !PowerOn || !valve_status) {
     return false;
@@ -1038,6 +1089,7 @@ bool check_boiling() {
   }
 
   bool boiling_detected = false;
+  BoilingEvidence evidence = BOILING_EVIDENCE_NONE;
 
   if (has_tank_sensor && has_water_sensor) {
     //Оба датчика есть - определяем по совокупности факторов
@@ -1061,8 +1113,12 @@ bool check_boiling() {
                          (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2);
     
     //Кипение определяется при одновременном выполнении ОБОИХ условий (куб стабилен И вода нагревается) или при высокой температуре пара
-    if ((tank_stable && water_heating) || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
+    if (SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
       boiling_detected = true;
+      evidence = BOILING_EVIDENCE_STEAM;
+    } else if (tank_stable && water_heating) {
+      boiling_detected = true;
+      evidence = BOILING_EVIDENCE_TANK_AND_WATER;
     }
   } else if (has_tank_sensor) {
     //Только датчик куба - определяем по стабильности температуры в кубе
@@ -1071,10 +1127,12 @@ bool check_boiling() {
       b_t_time_min = millis();
     } else if ((millis() - b_t_time_min) > 50 * 1000 && b_t_time_min > 0) {
       boiling_detected = true;
+      evidence = BOILING_EVIDENCE_TANK;
     }
     //Также можно использовать температуру пара как дополнительный индикатор
     if (SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
       boiling_detected = true;
+      evidence = BOILING_EVIDENCE_STEAM;
     }
   } else if (has_water_sensor) {
     //Только датчик воды - определяем по нагреву воды охлаждения
@@ -1083,17 +1141,21 @@ bool check_boiling() {
     }
     if (WaterSensor.avgTemp - d_s_temp_prev > 8) {
       boiling_detected = true;
+      evidence = BOILING_EVIDENCE_WATER;
     }
     if (abs(WaterSensor.avgTemp - SamSetup.SetWaterTemp) < 3 && WaterSensor.avgTemp - d_s_temp_prev > 2) {
       boiling_detected = true;
+      evidence = BOILING_EVIDENCE_WATER;
     }
     //Также можно использовать температуру пара как дополнительный индикатор
     if (SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP) {
       boiling_detected = true;
+      evidence = BOILING_EVIDENCE_STEAM;
     }
   }
 
   if (boiling_detected) {
+    record_boiling_evidence(evidence);
     set_boiling();
     if (boil_started) {
       if (has_tank_sensor) {

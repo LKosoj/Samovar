@@ -92,6 +92,23 @@
         var arrayOfDelim = arrayOfStrings[i].split(";");
         if (arrayOfDelim.length != 5) return false;
         if (char_count(arrayOfDelim[3], "^") != 3) return false;
+        var type = arrayOfDelim[0];
+        var temp = Number(arrayOfDelim[1]);
+        var time = Number(arrayOfDelim[2]);
+        var device = arrayOfDelim[3].split("^").map(Number);
+        var sensor = Number(arrayOfDelim[4]);
+        if (!Number.isFinite(temp) || !Number.isFinite(time) ||
+            device.length != 4 || device.some(function(v) { return !Number.isInteger(v); }) ||
+            !Number.isInteger(sensor) || sensor < 0 || sensor > 4 || time < 0) return false;
+        var noDevice = device.every(function(v) { return v === 0; });
+        var scheduledDevice = device[0] >= 1 && device[0] <= 3 && device[2] > 0;
+        if (!(noDevice || scheduledDevice)) return false;
+        if ((type === "M" || type === "C" || type === "F") && !(temp > 0 && time === 0)) return false;
+        if (type === "P" && !(temp > 0 && time > 0)) return false;
+        if (type === "B" && !(temp === 0 && time > 0)) return false;
+        if (type === "W" && !(temp === 0 && time === 0)) return false;
+        if (type === "L" && !(temp === 0 && time === 0 && noDevice && sensor === 0)) return false;
+        if (type === "A" && !(temp > 0 && time === 0 && noDevice)) return false;
       }
       return true;
     }
@@ -623,14 +640,14 @@
             <p><span>M - malt application temp (температура закладки солода), P - pause (пауза при заданной температуре),</span></p>
             <p><span>B - boil (кипячение и засыпка хмеля в конце), C - cool (охлаждение до заданной температуры),</span></p>
             <p><span>W - wait (режим ожидания, ничего не делает до смены строки программы)</span></p>
-            <p><span>F - ferment (ферментирование, режим браги, поддерживает заданную температуру до сменты строки программы)</span></p>
-            <p><span>L - Lua скрипт, управление Самоваром осуществляется через Lua скрипт, скрипт необходимо самостоятельно запустить и, если необходимо, остановить. При переходе на следующую строку программы скрипт останавливается. Никакие параметры строки программы не используются.</span></p>
+            <p><span>F - ferment (ферментирование; ручная пауза выключает и нагрев, и охлаждение до продолжения).</span></p>
+            <p><span>L - Lua скрипт: все параметры строки должны быть нулевыми. Вход ждёт подтверждённый запуск Lua-job, выход ждёт его остановку; ошибка Lua останавливает варку.</span></p>
             <p><span>A - AutoTune (автотюнинг)</span></p>
             <p><span>&nbsp;</span></p>
             <p><span>Пример программы отбора:</span></p>
             <p><span>M;45.00;0;1^1^1^1;0</span></p>
             <p><span>P;60.00;1;1^1^1^1;0</span></p>
-            <p><span>W;0.00;1;1^1^1^1;0</span></p>
+            <p><span>W;0.00;0;1^1^1^1;0</span></p>
             <p><span>B;0.00;1;1^1^1^1;0</span></p>
             <p><span>C;30.00;0;1^1^1^1;0</span></p>
             <p><span>&nbsp;</span></p>

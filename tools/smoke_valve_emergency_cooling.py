@@ -26,7 +26,7 @@ from smoke_helpers import extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
-OPEN_VALVE_SIGNATURE = "void open_valve(bool Val, bool msg = true)"
+OPEN_VALVE_SIGNATURE = "ActuatorCommandResult open_valve(bool Val, bool msg = true)"
 
 HARNESS_TEMPLATE = r'''
 #include <iostream>
@@ -42,6 +42,12 @@ static SetupEEPROM SamSetup;
 static bool valve_status = false;
 
 enum { WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum ActuatorCommandResult {
+  ACTUATOR_COMMAND_ACCEPTED = 0,
+  ACTUATOR_COMMAND_PENDING,
+  ACTUATOR_COMMAND_APPLIED,
+  ACTUATOR_COMMAND_FAILED,
+};
 static int sendMsgCalls = 0;
 void SendMsg(const char*, int) { sendMsgCalls++; }
 
@@ -58,7 +64,7 @@ void digitalWrite(int pin, int value) {
   lastDigitalWriteValue = value;
 }
 
-void open_valve(bool Val, bool msg = true) {
+ActuatorCommandResult open_valve(bool Val, bool msg = true) {
 @BODY@
 }
 
@@ -89,7 +95,8 @@ int main() {
   for (bool rele3 : bools) {
     for (bool latched : bools) {
       reset_fixture(rele3, latched);
-      open_valve(true, false);
+      check(open_valve(true, false) == ACTUATOR_COMMAND_APPLIED,
+            "open_valve(true) должен подтвердить GPIO-команду как APPLIED");
       check(valve_status == true, "open_valve(true) должен открыть клапан независимо от защёлки");
       check(digitalWriteCalls == 1, "open_valve(true) должен вызвать digitalWrite ровно один раз");
       check(lastDigitalWritePin == RELE_CHANNEL3, "open_valve(true) должен писать в RELE_CHANNEL3");
@@ -103,7 +110,8 @@ int main() {
   for (bool rele3 : bools) {
     for (bool latched : bools) {
       reset_fixture(rele3, latched);
-      open_valve(false, false);
+      check(open_valve(false, false) == ACTUATOR_COMMAND_APPLIED,
+            "open_valve(false) должен подтвердить GPIO-команду как APPLIED");
       check(valve_status == false, "open_valve(false) должен закрыть клапан независимо от защёлки");
       check(digitalWriteCalls == 1, "open_valve(false) должен вызвать digitalWrite ровно один раз");
       check(lastDigitalWriteValue == (rele3 ? 0 : 1),
@@ -164,7 +172,9 @@ def compile_and_run_open_valve() -> int:
 def check_pump_pwm_no_latch_gate() -> int:
     source = (ROOT / "pumppwm.h").read_text(encoding="utf-8", errors="ignore")
     try:
-        body = extract_function_body(source, "void set_pump_pwm(float duty)")
+        body = extract_function_body(
+            source, "ActuatorCommandResult set_pump_pwm(float duty)"
+        )
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1

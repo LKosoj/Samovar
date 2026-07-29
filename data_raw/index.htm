@@ -206,7 +206,49 @@
             detBlock.style.display = 'flex';
             const detTrend = document.getElementById('detector_trend');
             const detStatus = document.getElementById('detector_status_text');
-            detTrend.innerHTML = (myObj.DetectorTrend > 0 ? '+' : '') + myObj.DetectorTrend.toFixed(3) + ' °C/мин';
+            const steamStability = document.getElementById('detector_steam_stability');
+            const detectorTrendAvailable = Number.isFinite(myObj.DetectorTrend);
+            detTrend.textContent = detectorTrendAvailable
+              ? (myObj.DetectorTrend > 0 ? '+' : '') + myObj.DetectorTrend.toFixed(3) + ' °C/мин'
+              : '—';
+            const stabilityTelemetryAvailable = [
+              myObj.DetectorSteamSpan,
+              myObj.DetectorSteamVariance,
+              myObj.DetectorSteamStableSeconds,
+              myObj.DetectorSteamStabilityReason,
+              myObj.DetectorSteamSpanThreshold,
+              myObj.DetectorSteamVarianceThreshold,
+              myObj.DetectorRecoveryThreshold,
+              myObj.DetectorRecoveryReady
+            ].every(Number.isFinite);
+            if (stabilityTelemetryAvailable && detectorTrendAvailable) {
+              const stabilityReasons = [
+                'наполнение окна измерений',
+                'диапазон выше порога',
+                'дисперсия выше порога',
+                'идёт непрерывная выдержка',
+                'условие выполнено'
+              ];
+              const reason = stabilityReasons[myObj.DetectorSteamStabilityReason] || 'неизвестная причина';
+              steamStability.textContent =
+                'Стабилизация пара: ' + reason +
+                '; T=' + myObj.SteamTemp.toFixed(3) + ' °C' +
+                '; диапазон=' + myObj.DetectorSteamSpan.toFixed(3) +
+                ' °C (порог ≤' + myObj.DetectorSteamSpanThreshold.toFixed(3) + ')' +
+                '; дисперсия=' + myObj.DetectorSteamVariance.toFixed(6) +
+                ' (порог ≤' + myObj.DetectorSteamVarianceThreshold.toFixed(6) + ')' +
+                '; выдержка=' + myObj.DetectorSteamStableSeconds + ' с.' +
+                '; восстановление тренда: ' +
+                myObj.DetectorTrend.toFixed(3) + ' < ' +
+                myObj.DetectorRecoveryThreshold.toFixed(4) + ' °C/мин — ' +
+                (myObj.DetectorRecoveryReady ? 'условие выполнено' : 'ожидание') +
+                (myObj.DetectorSteamStabilityReason === 4
+                  ? ''
+                  : ' Ожидается устойчивое окно диапазона и дисперсии в пределах порогов.');
+            } else {
+              steamStability.textContent =
+                'Стабилизация пара: расширенная телеметрия недоступна в этой версии прошивки.';
+            }
             
             if (myObj.DetectorStatus == 0) {
               detStatus.innerHTML = '✅ Стабильно';
@@ -657,6 +699,7 @@
         <div style="flex: 1; padding-left: 1em;">
           <div class="text" style="font-weight: bold;">Детектор примесей:</div>
           <div id="detector_status_text" style="font-size: 1.2em;">-</div>
+          <div id="detector_steam_stability" class="text">-</div>
         </div>
         <div style="flex: 1; text-align: right; padding-right: 1em;">
           <div class="text">Тренд:</div>

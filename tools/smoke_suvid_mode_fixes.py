@@ -140,7 +140,8 @@ if suvid_text:
             "if (!PowerOn) {",
             "suvidHeaterOn = false;",
             "heater_state = false;",
-            "suvidHold = {false, false, 0};",
+        "suvidHold = {false, false, false, false, 0, 0};",
+        "suvidDeviation = {false, false, 0};",
             "return;",
             "heater_state = suvidHeaterOn;",
             "setHeaterPosition(suvidHeaterOn);",
@@ -166,6 +167,8 @@ if suvid_text:
             "check_alarm_suvid must not call mode_check_powered_cooling_sensors "
             "(that helper treats water as mandatory; Сувид needs it optional)"
         )
+    if "program[" in body:
+        errors.append("Suvid hold must not read stale shared program rows")
 
 webserver_text = strip_cpp_comments(read_text("WebServer.ino"))
 if webserver_text:
@@ -188,6 +191,15 @@ if webserver_text:
                 errors.append("SuvidTemp clamp must cap at 100.0f (setpoint can't exceed 100°)")
             if "150.0f" in suvid_clamp_line:
                 errors.append("SuvidTemp clamp still allows the old 150.0f upper bound")
+        if 'apply_save_u16_arg(request, "SuvidHoldMinutes", staged.SuvidHoldMinutes, 0, 65535)' not in handle_save_body:
+            errors.append("handleSave must stage the SuvidHoldMinutes uint16 setting")
+
+setup_text = read_text("data_raw/setup.htm")
+if setup_text:
+    if "SuvidHoldMinutes" not in setup_text:
+        errors.append("setup page must expose SuvidHoldMinutes")
+    if "{ name: 'SuvidTemp', min: 0, max: 100 }" not in setup_text:
+        errors.append("setup page must validate SuvidTemp up to 100 degrees")
 
 if errors:
     print("suvid mode fixes smoke failed:")

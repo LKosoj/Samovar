@@ -85,8 +85,8 @@ blocking_tokens = (
 )
 for signature, source in (
     ("inline void tick_power_transition", power),
-    ("inline void set_power(bool On, bool enqueueResetCommand)", power),
-    ("inline void set_current_power", power),
+    ("inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand)", power),
+    ("inline ActuatorCommandResult set_current_power", power),
     ("inline void set_power_mode", power),
     ("inline ModeHeatingStartResult mode_tick_heating_session", mode_common),
     ("inline void tick_self_test", selftest),
@@ -167,7 +167,7 @@ require_ordered_tokens(
     ],
     errors,
 )
-set_power = function_body(power, "inline void set_power(bool On, bool enqueueResetCommand)")
+set_power = function_body(power, "inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand)")
 require(
     "heater ON worker and reservation gate",
     set_power,

@@ -4,9 +4,9 @@
 Тест вытаскивает РЕАЛЬНЫЙ блок кода (if-ветку понижения подачи при низкой
 температуре/паре ниже предела) из nbk.h через extract_braced_block_after —
 без переписывания логики — и подставляет его в минимальный host-харнесс,
-замокав только downstream-вызовы (set_current_power, SetSpeed, fromPower).
-Так проверяется реальное поведение переменной nbk_Po при многократных тиках
-с температурой ниже порога, а не наличие конкретной строки в исходнике.
+который моделирует commit уже принятой составной команды. Так проверяется
+реальное поведение переменной nbk_Po при многократных тиках с температурой
+ниже порога, а не наличие конкретной строки в исходнике.
 """
 import subprocess
 import sys
@@ -32,29 +32,22 @@ float nbk_M = 0;
 float nbk_Mo = 100.0f;
 float nbk_dP = 0.5f;
 
-static int setSpeedCalls = 0;
 static float lastSpeed = 0;
-static int powerCalls = 0;
 static float lastPower = -1.0f;
 
-// Заглушки НЕ static: единственный вызов каждой лежит во вклеенном теле блока
-// (run_low_temp_tick ниже), и со static мутация, убравшая вызов, роняла бы
-// компилятор по unused-function вместо содержательного assert-а. Держится это
-// на проверках powerCalls/lastPower/setSpeedCalls ниже: без них снятие static
-// меняет ложный улов на молчаливую слепую зону, что хуже.
-//
-// fromPower обязана быть ОТЛИЧИМА от тождества: настоящая (nbk.h:161) переводит
-// мощность в напряжение через сопротивление ТЭНа. С тождественной заглушкой
-// set_current_power(fromPower(nbk_M)) неотличимо от set_current_power(nbk_M) -
-// в регулятор уехали бы ватты вместо вольт, а тест молчал бы. Коэффициент
-// условный: пинится сам факт конверсии, а не число. Тождество - это реальная
-// ветка настоящей fromPower под SAMOVAR_USE_SEM_AVR, но харнесс её не задаёт.
-inline float fromPower(float m) { return m * 2.0f; }
-inline void set_current_power(float v) { powerCalls++; lastPower = v; }
-inline void SetSpeed(float v) { setSpeedCalls++; lastSpeed = v; }
-
 static void run_low_temp_tick() {
+  const float currentM = nbk_M;
+  const float currentP = nbk_P;
+  float candidateM = currentM;
+  float candidateP = currentP;
+  bool commandNeeded = false;
 @BODY@
+  if (commandNeeded) {
+    lastPower = candidateM;
+    lastSpeed = candidateP;
+    nbk_M = candidateM;
+    nbk_P = candidateP;
+  }
 }
 
 static int failures = 0;
@@ -88,18 +81,9 @@ int main() {
   }
 
   check(nbk_Po == 0.0f, "после длительного периода низкой температуры nbk_Po должен зафиксироваться на нуле, а не уйти в минус");
-  check(setSpeedCalls == 200, "SetSpeed должен вызываться на каждом тике внутри блока");
   check(lastSpeed == 0.0f, "последняя команда насосу должна быть 0, а не отрицательной");
-  // Подача обнуляется, но мощность обязана уходить в регулятор на каждом тике:
-  // иначе НБК крутит подачу вслепую, а уставка нагрева остаётся от прошлой
-  // итерации.
-  check(powerCalls == 200, "set_current_power должен вызываться на каждом тике внутри блока");
-  // Уставка обязана быть КОНВЕРТИРОВАННОЙ: nbk_M - это ватты, а set_current_power
-  // ждёт напряжение. Второй терм страхует сам тест: если заглушку fromPower
-  // вернут к тождеству, первый терм станет тавтологией и перестанет что-либо
-  // ловить.
-  check(lastPower == fromPower(nbk_Mo) && lastPower != nbk_Mo,
-        "в регулятор ушла не конвертированная уставка (сырая мощность вместо напряжения)");
+  check(lastPower == nbk_Mo,
+        "коррекция подачи не должна самовольно менять мощность");
 
   if (failures != 0) return 1;
   std::cout << "nbk_Po floor clamp behaviour checks passed\n";

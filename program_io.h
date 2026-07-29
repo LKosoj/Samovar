@@ -183,6 +183,63 @@ inline bool program_parse_beer_device(char* token, long& devType, long& speed, l
          parse_bounded_long(tokOffTime, 0, UINT16_MAX, offTime).ok();
 }
 
+inline bool program_validate_beer_row_semantics(
+    ProgramType type,
+    float temp,
+    float timeMin,
+    long devType,
+    long speed,
+    long onTime,
+    long offTime,
+    long sensor,
+    const char*& errorMessage) {
+  (void)sensor;
+  const bool noDevice = devType == 0 && speed == 0 && onTime == 0 && offTime == 0;
+  const bool zeroTempTime = temp == 0.0f && timeMin == 0.0f;
+  const bool validDeviceMask = devType >= 1 && devType <= 3;
+  const bool validDeviceSchedule = validDeviceMask && onTime > 0;
+  const bool mixerScheduleValid = noDevice || validDeviceSchedule;
+  if (!mixerScheduleValid) {
+    errorMessage = "Ошибка программы: устройство должно быть 0^0^0^0 или маской 1..3 с ненулевым расписанием";
+    return false;
+  }
+  switch (type) {
+    case 'M':
+    case 'C':
+    case 'F':
+      if (temp > 0.0f && timeMin == 0.0f) return true;
+      errorMessage = "Ошибка программы: для типа M/C/F Temp больше 0 и Time=0";
+      return false;
+    case 'P':
+      if (temp > 0.0f && timeMin > 0.0f) return true;
+      errorMessage = "Ошибка программы: для типа P Temp и Time должны быть больше 0";
+      return false;
+    case 'B':
+      if (temp == 0.0f && timeMin > 0.0f) return true;
+      errorMessage = "Ошибка программы: для типа B Temp=0 и Time больше 0";
+      return false;
+    case 'W':
+      if (zeroTempTime) return true;
+      errorMessage = "Ошибка программы: для типа W Temp=0 и Time=0";
+      return false;
+    case 'L':
+#ifdef USE_LUA
+      if (zeroTempTime && noDevice && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для типа L нужны нулевые параметры";
+#else
+      errorMessage = "Ошибка программы: тип L требует USE_LUA";
+#endif
+      return false;
+    case 'A':
+      if (temp > 0.0f && timeMin == 0.0f && noDevice) return true;
+      errorMessage = "Ошибка программы: для типа A Temp больше 0, Time=0 и устройство=0^0^0^0";
+      return false;
+    default:
+      errorMessage = "Ошибка программы: неизвестный тип beer";
+      return false;
+  }
+}
+
 inline bool program_parse_rect_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*&) {
   char* saveTok = nullptr;
   char* tokType = strtok_r(line, ";", &saveTok);
@@ -296,6 +353,11 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
   long offTime = 0;
   if (ok && !program_parse_beer_device(tokDevice, devType, speed, onTime, offTime)) {
     errorMessage = "Ошибка программы: неверный шаблон устройства beer";
+    ok = false;
+  }
+
+  if (ok && !program_validate_beer_row_semantics(
+      parsedType, temp, timeMin, devType, speed, onTime, offTime, sensor, errorMessage)) {
     ok = false;
   }
 

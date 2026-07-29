@@ -25,14 +25,7 @@ inline void mode_alarm_nbk() {
 
 inline void mode_alarm_beer() {
   beer_check_cooling_limits();
-  // [P2 п.8] На 'C'/'F' клапан открыт и вода реально течёт через тракт
-  // охлаждения - протока нужно требовать, как и в остальных режимах.
-  // В остальное время протока нет намеренно - авария по нему глушится.
-  if (valve_status) {
-    mode_request_water_flow_emergency_if_needed();
-  } else {
-    water_pulse_count_set(100);
-  }
+  mode_request_water_flow_emergency_if_needed();
 }
 
 inline const ModeOps* mode_registry() {

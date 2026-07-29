@@ -393,6 +393,59 @@ BROWSER_TEST = r'''async page => {
     const result = await page.evaluate(async () => {
       const form = document.getElementById("mainform");
       const volume = document.getElementById("vless");
+      const summaryText = id => document.getElementById(id).textContent.trim();
+      const initialSummary = {
+        headsAs: summaryText("summaryHeadsAs"),
+        headsVolume: summaryText("summaryHeadsVolume"),
+        headsTime: summaryText("summaryHeadsTime"),
+        headsDistribution: summaryText("summaryHeadsDistribution"),
+        bodyAs: summaryText("summaryBodyAs"),
+        bodyVolume: summaryText("summaryBodyVolume"),
+        bodyTime: summaryText("summaryBodyTime"),
+        bodyDistribution: summaryText("summaryBodyDistribution"),
+        tailsAs: summaryText("summaryTailsAs"),
+        tailsVolume: summaryText("summaryTailsVolume"),
+        tailsTime: summaryText("summaryTailsTime"),
+        tailsDistribution: summaryText("summaryTailsDistribution"),
+        totalVolume: summaryText("summaryTotalVolume"),
+        totalTime: summaryText("summaryTotalTime"),
+        pauseTime: summaryText("summaryPauseTime"),
+        valid: !programerr
+      };
+      const firstHeadsPercent = document.getElementById("percent0");
+      firstHeadsPercent.value = "20";
+      firstHeadsPercent.dispatchEvent(new Event("input", { bubbles: true }));
+      const headsShort = {
+        distribution: summaryText("summaryHeadsDistribution"),
+        volume: summaryText("summaryHeadsVolume"),
+        invalid: programerr,
+        error: programErrorMessage
+      };
+      const firstBodyRow = Array.from(document.querySelectorAll(".prgline")).find(row => {
+        const type = row.querySelector('select[name^="ptype"]');
+        return type && type.value === "B";
+      });
+      const firstBodyPercent = firstBodyRow.querySelector('input[name^="percent"]');
+      firstBodyPercent.value = String(Number(firstBodyPercent.value) + 5);
+      firstBodyPercent.dispatchEvent(new Event("input", { bubbles: true }));
+      const bothInvalid = {
+        bodyDistribution: summaryText("summaryBodyDistribution"),
+        error: programErrorMessage
+      };
+      firstHeadsPercent.value = "30";
+      firstHeadsPercent.dispatchEvent(new Event("input", { bubbles: true }));
+      firstBodyPercent.value = String(Number(firstBodyPercent.value) - 5);
+      firstBodyPercent.dispatchEvent(new Event("input", { bubbles: true }));
+      const restored = !programerr;
+      const headsAsInput = document.getElementById("vlhp");
+      headsAsInput.value = "9";
+      headsAsInput.dispatchEvent(new Event("input", { bubbles: true }));
+      const immediateHeadsUpdate = {
+        percent: summaryText("summaryHeadsAs"),
+        volume: summaryText("summaryHeadsVolume")
+      };
+      headsAsInput.value = "8";
+      headsAsInput.dispatchEvent(new Event("input", { bubbles: true }));
       for (const value of ["0.001", "10000", "1,5"]) {
         volume.value = value;
         window.__numericStatus = 202;
@@ -416,13 +469,33 @@ BROWSER_TEST = r'''async page => {
       const bad503 = await SamovarApp.postProgram(form);
       const heater = document.getElementById("heaterMaxPower");
       return {
+        initialSummary, headsShort, bothInvalid, restored, immediateHeadsUpdate,
         allowlist, invalidBlocked, bad400: bad400.ok, bad503: bad503.ok,
         heaterValue: heater.value, heaterDisabled: heater.disabled
       };
     });
     const state = await requestState();
-    if (!result.allowlist || !result.invalidBlocked || result.bad400 || result.bad503 ||
-        result.heaterValue !== "4840" || result.heaterDisabled || !state.errorVisible) {
+    const expectedSummary = {
+      headsAs: "8%", headsVolume: "354 мл", headsTime: "2 ч 54 мин",
+      headsDistribution: "По строкам: 100% — распределено полностью",
+      bodyAs: "87%", bodyVolume: "3855 мл", bodyTime: "4 ч 02 мин",
+      bodyDistribution: "По строкам B+C: 100% — распределено полностью",
+      tailsAs: "5%", tailsVolume: "88 мл", tailsTime: "0 ч 39 мин",
+      tailsDistribution: "По строкам: 20% — информационно",
+      totalVolume: "4297 мл", totalTime: "7 ч 47 мин", pauseTime: "0 ч 11 мин",
+      valid: true
+    };
+    if (JSON.stringify(result.initialSummary) !== JSON.stringify(expectedSummary) ||
+        result.headsShort.distribution !== "По строкам: 90% — не хватает 10%" ||
+        result.headsShort.volume !== "319 мл" || !result.headsShort.invalid ||
+        !result.headsShort.error.includes("Головы: 90% — не хватает 10%") ||
+        result.bothInvalid.bodyDistribution !== "По строкам B+C: 105% — превышение на 5%" ||
+        !result.bothInvalid.error.includes("Головы: 90% — не хватает 10%") ||
+        !result.bothInvalid.error.includes("Тело B+C: 105% — превышение на 5%") ||
+        !result.restored || result.immediateHeadsUpdate.percent !== "9%" ||
+        result.immediateHeadsUpdate.volume !== "400 мл" ||
+        !result.allowlist || !result.invalidBlocked || result.bad400 || result.bad503 ||
+        result.heaterValue !== "5290" || result.heaterDisabled || !state.errorVisible) {
       throw new Error("program contract mismatch: " + JSON.stringify({ result, state }));
     }
   }

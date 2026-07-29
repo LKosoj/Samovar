@@ -68,6 +68,8 @@ static PowerTransitionState powerTransition = {
   false,
   0,
   0,
+  0,
+  0,
 };
 
 // --- Глобальное состояние, которым управляют сценарии ---
@@ -99,6 +101,11 @@ static void reset_fixture(int16_t status) {
   powerTransition.transition.phase = SAFETY_TRANSITION_IDLE;
   powerTransition.transition.deadline = 0;
   powerTransition.enqueueResetCommand = false;
+  powerTransition.pendingPowerValueSet = false;
+  powerTransition.pendingPowerValue = 0;
+  powerTransition.pendingPowerGeneration = 0;
+  powerTransition.pendingPowerRegulatorGeneration = 0;
+  powerTransition.regulatorGeneration = 0;
   forceHeaterOffCalls = 0;
   lastForceHeaterOffArg = false;
 }

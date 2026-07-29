@@ -12,13 +12,24 @@ static unsigned long detector_grace_until = 0;
 // Окно блокировки детектора после ручного продолжения (мс)
 static unsigned long detector_manual_override_until = 0;
 // Стабилизация пара перед стартом детектора
-static unsigned long detector_steam_stable_since = 0;
-static float detector_steam_stable_ref = 0.0f;
+static uint32_t detector_steam_stable_since = 0;
+enum DetectorSteamStabilityReason : uint8_t {
+  DETECTOR_STEAM_FILLING = 0,
+  DETECTOR_STEAM_RANGE_HIGH,
+  DETECTOR_STEAM_VARIANCE_HIGH,
+  DETECTOR_STEAM_HOLDING,
+  DETECTOR_STEAM_READY,
+};
+static DetectorSteamStabilityReason detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
+static float detector_steam_stability_span = 0.0f;
+static float detector_steam_stability_variance = 0.0f;
 // Минимальное число точек истории для критического тренда
 static const uint8_t DETECTOR_MIN_HISTORY_CRITICAL = 10;
 // Порог стабильности пара и окно стабилизации
 static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
-static const unsigned long DETECTOR_STEAM_STABLE_MS = 600000UL; // 10 минут
+static const float DETECTOR_STEAM_STABLE_VARIANCE =
+    DETECTOR_STEAM_STABLE_DELTA * DETECTOR_STEAM_STABLE_DELTA * 0.25f;
+static const uint32_t DETECTOR_STEAM_STABLE_MS = 600000UL; // 10 минут
 static const float HEAT_LOSS_MIN_DELTA_T = 15.0f;
 
 // [M-29] Предыдущее состояние источника датчика (для детекции смены)
@@ -43,6 +54,10 @@ void init_impurity_detector() {
   memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
   impurityDetector.historyIndex = 0;
   impurityDetector.historySize = 0;
+  impurityDetector.historySum = 0.0f;
+  impurityDetector.historySumSquares = 0.0f;
+  impurityDetector.historyMin = 0.0f;
+  impurityDetector.historyMax = 0.0f;
   impurityDetector.lastSampleTime = 0;
   impurityDetector.currentTrend = 0;
   impurityDetector.detectorStatus = 0;
@@ -52,7 +67,9 @@ void init_impurity_detector() {
   impurityDetector.consecutiveRises = 0;
   impurityDetector.lastTemp = 0.0f;
   detector_steam_stable_since = 0;
-  detector_steam_stable_ref = 0.0f;
+  detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
+  detector_steam_stability_span = 0.0f;
+  detector_steam_stability_variance = 0.0f;
   detector_last_pipe_sensor = -1; // [M-29] сброс выбора датчика
 }
 
@@ -71,6 +88,10 @@ void reset_impurity_detector() {
   memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
   impurityDetector.historySize = 0;
   impurityDetector.historyIndex = 0;
+  impurityDetector.historySum = 0.0f;
+  impurityDetector.historySumSquares = 0.0f;
+  impurityDetector.historyMin = 0.0f;
+  impurityDetector.historyMax = 0.0f;
   impurityDetector.lastSampleTime = 0; // Сбрасываем время последней выборки для немедленного начала сбора данных
   impurityDetector.currentTrend = 0;
   impurityDetector.detectorStatus = 0;
@@ -80,7 +101,9 @@ void reset_impurity_detector() {
   impurityDetector.consecutiveRises = 0;
   impurityDetector.lastTemp = 0.0f;
   detector_steam_stable_since = 0;
-  detector_steam_stable_ref = 0.0f;
+  detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
+  detector_steam_stability_span = 0.0f;
+  detector_steam_stability_variance = 0.0f;
   detector_last_pipe_sensor = -1; // [M-29] сброс выбора датчика — при следующем цикле определится заново
 }
 
@@ -93,7 +116,9 @@ void detector_on_program_start(ProgramType wtype) {
   }
   detector_manual_override_until = 0;
   detector_steam_stable_since = 0;
-  detector_steam_stable_ref = 0.0f;
+  detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
+  detector_steam_stability_span = 0.0f;
+  detector_steam_stability_variance = 0.0f;
 }
 
 // Вызывается при ручном продолжении отбора
@@ -111,26 +136,50 @@ void detector_on_auto_resume() {
 }
 
 /**
- * Проверка стабилизации температуры пара (ΔT <= 0.05°C в течение 10 минут)
+ * Проверка стабилизации температуры пара по скользящему диапазону и дисперсии.
  */
 bool is_steam_stable(float steamTemp) {
-  unsigned long now = millis();
-  if (detector_steam_stable_ref <= 0.0f) {
-    detector_steam_stable_ref = steamTemp;
+  (void)steamTemp;
+  const uint32_t now = millis();
+  const uint8_t count = impurityDetector.historySize;
+  if (count < 30) {
     detector_steam_stable_since = 0;
+    detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
+    detector_steam_stability_span = 0.0f;
+    detector_steam_stability_variance = 0.0f;
     return false;
   }
 
-  if (fabsf(steamTemp - detector_steam_stable_ref) <= DETECTOR_STEAM_STABLE_DELTA) {
-    if (detector_steam_stable_since == 0) {
-      detector_steam_stable_since = now;
-    }
-    return (now - detector_steam_stable_since) >= DETECTOR_STEAM_STABLE_MS;
-  }
+  const double mean = impurityDetector.historySum / count;
+  double variance =
+      impurityDetector.historySumSquares / count - mean * mean;
+  if (variance < 0.0f) variance = 0.0f;
+  detector_steam_stability_span =
+      impurityDetector.historyMax - impurityDetector.historyMin;
+  detector_steam_stability_variance = static_cast<float>(variance);
 
-  detector_steam_stable_ref = steamTemp;
-  detector_steam_stable_since = 0;
-  return false;
+  if (detector_steam_stability_span > DETECTOR_STEAM_STABLE_DELTA * 2.0f) {
+    detector_steam_stable_since = 0;
+    detector_steam_stability_reason = DETECTOR_STEAM_RANGE_HIGH;
+    return false;
+  }
+  if (variance > static_cast<double>(DETECTOR_STEAM_STABLE_VARIANCE)) {
+    detector_steam_stable_since = 0;
+    detector_steam_stability_reason = DETECTOR_STEAM_VARIANCE_HIGH;
+    return false;
+  }
+  if (detector_steam_stable_since == 0) detector_steam_stable_since = now;
+  if (now - detector_steam_stable_since < DETECTOR_STEAM_STABLE_MS) {
+    detector_steam_stability_reason = DETECTOR_STEAM_HOLDING;
+    return false;
+  }
+  detector_steam_stability_reason = DETECTOR_STEAM_READY;
+  return true;
+}
+
+inline uint32_t detector_steam_stable_seconds() {
+  if (detector_steam_stable_since == 0) return 0;
+  return (millis() - detector_steam_stable_since) / 1000UL;
 }
 
 /**
@@ -187,9 +236,28 @@ void update_detector_history(float columnTemp) {
   // Проверяем последовательные повышения для фильтрации выбросов
   check_consecutive_rises(columnTemp);
 
+  if (impurityDetector.historySize == 30) {
+    const float replaced =
+        impurityDetector.tempHistory[impurityDetector.historyIndex];
+    impurityDetector.historySum -= replaced;
+    impurityDetector.historySumSquares -= replaced * replaced;
+  }
   impurityDetector.tempHistory[impurityDetector.historyIndex] = columnTemp;
   impurityDetector.historyIndex = (impurityDetector.historyIndex + 1) % 30;
   if (impurityDetector.historySize < 30) impurityDetector.historySize++;
+  impurityDetector.historySum += columnTemp;
+  impurityDetector.historySumSquares += columnTemp * columnTemp;
+
+  const uint8_t oldest =
+      (impurityDetector.historyIndex - impurityDetector.historySize + 30) % 30;
+  impurityDetector.historyMin = impurityDetector.tempHistory[oldest];
+  impurityDetector.historyMax = impurityDetector.tempHistory[oldest];
+  for (uint8_t i = 1; i < impurityDetector.historySize; i++) {
+    const uint8_t index = (oldest + i) % 30;
+    const float value = impurityDetector.tempHistory[index];
+    if (value < impurityDetector.historyMin) impurityDetector.historyMin = value;
+    if (value > impurityDetector.historyMax) impurityDetector.historyMax = value;
+  }
 
   // Пересчитываем дисперсию (реже, чем каждое обновление - для оптимизации)
   // Вычисляем раз в 10 секунд (каждые 5 обновлений при обновлении раз в 2 сек)
@@ -492,6 +560,10 @@ void process_impurity_detector() {
     memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
     impurityDetector.historyIndex = 0;
     impurityDetector.historySize = 0;
+    impurityDetector.historySum = 0.0f;
+    impurityDetector.historySumSquares = 0.0f;
+    impurityDetector.historyMin = 0.0f;
+    impurityDetector.historyMax = 0.0f;
     impurityDetector.currentTrend = 0;
     impurityDetector.consecutiveRises = 0;
     impurityDetector.lastTemp = 0.0f;

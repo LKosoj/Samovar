@@ -54,6 +54,20 @@ HARNESS_TEMPLATE = r'''
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <string>
+
+class String {
+ public:
+  String() = default;
+  String(const char* value) : value_(value ? value : "") {}
+  String& operator=(const char* value) {
+    value_ = value ? value : "";
+    return *this;
+  }
+
+ private:
+  std::string value_;
+};
 
 extern "C" {
 #include "lua.h"
@@ -166,7 +180,7 @@ static void check_coroutine_watchdog_tripped(
 
 int main() {
   // [P8 finding 3] Реальная прошивка (см. linit.c ниже) coroutine НЕ грузит -
-  // прелюдия обязана деградировать без краша именно в этой конфигурации.
+  // установщик watchdog обязан сам открыть библиотеку и подтвердить готовность.
   // Проверяем это ДО того, как ниже открываем coroutine вручную для остальных
   // проверок этого файла.
   {
@@ -175,10 +189,15 @@ int main() {
     if (prodLikeL) {
       luaL_openlibs(prodLikeL);
       lua.state = prodLikeL;
-      lua_install_coroutine_watchdog_locked();  // coroutine == nil здесь - не должно падать
+      check(lua_install_coroutine_watchdog_locked(),
+            "production-like state rejected coroutine watchdog installation");
+      lua_getglobal(prodLikeL, "coroutine");
+      check(lua_istable(prodLikeL, -1),
+            "watchdog installer did not publish the coroutine library");
+      lua_pop(prodLikeL, 1);
       if (luaL_dostring(prodLikeL, "return 1") != LUA_OK) {
         check(false, "a trivial script failed after installing the coroutine watchdog "
-                     "without the coroutine library (prelude must degrade silently)");
+                     "in the production-like state");
       } else {
         check(lua_tointeger(prodLikeL, -1) == 1,
               "a trivial script returned a wrong value after installing the coroutine watchdog");
@@ -382,6 +401,17 @@ def parse_metric(stdout: str, key: str) -> int:
 
 def main() -> int:
     lua_source = (ROOT / "lua.h").read_text(encoding="utf-8")
+    prelude_error = "lua_coroutine_watchdog_error = error ? error : \"unknown watchdog prelude error\";"
+    installer = source_slice(
+        lua_source,
+        "inline bool lua_install_coroutine_watchdog_locked()",
+        "inline void check_alarm_lua()",
+    )
+    error_position = installer.find(prelude_error)
+    error_pop_position = installer.find("lua_pop(L, 1);", error_position)
+    if error_position < 0 or error_pop_position < error_position:
+        print("FAIL: watchdog prelude error is not preserved before stack pop", file=sys.stderr)
+        return 1
     try:
         watchdog_block = source_slice(
             lua_source, "#ifndef LUA_CHUNK_TIMEOUT_MS", "inline String lua_exec_locked"
@@ -444,6 +474,36 @@ def main() -> int:
             print(
                 f"FAIL: LUA_CHUNK_TIMEOUT_MS override had no effect on trip timing "
                 f"(small={elapsed_small}ms, large={elapsed_large}ms)",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Mutation proof: without the explicit coroutine library load the
+        # production-like state must reject watchdog readiness.
+        coroutine_load = (
+            "  luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1);\n"
+            "  lua_pop(L, 1);\n"
+        )
+        if coroutine_load not in coroutine_watchdog_block:
+            print("FAIL: coroutine watchdog does not load the coroutine library", file=sys.stderr)
+            return 1
+        mutated_coroutine_watchdog = coroutine_watchdog_block.replace(
+            coroutine_load, "", 1
+        )
+        rc_mutated, _, _ = compile_and_run(
+            temp,
+            "watchdog_without_coroutine_load",
+            build_harness(
+                watchdog_block,
+                mutated_coroutine_watchdog,
+                small_ms,
+                small_instr,
+            ),
+            objects,
+        )
+        if rc_mutated == 0:
+            print(
+                "FAIL: production-like readiness survived removal of coroutine library load",
                 file=sys.stderr,
             )
             return 1

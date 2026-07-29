@@ -255,7 +255,7 @@ setup_fields = re.findall(
     setup_definition,
     re.MULTILINE,
 )
-require(len(setup_fields) == 72, "SetupEEPROM field inventory changed")
+require(len(setup_fields) == 73, "SetupEEPROM field inventory changed")
 padding_marks = "\n".join(
     "  mark_field(occupied, offsetof(SetupEEPROM, "
     f"{field}), sizeof(((SetupEEPROM*)0)->{field}));"
@@ -304,16 +304,22 @@ nvs_harness = (
         r'''
         static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
         static const char* const SAMOVAR_PROFILE_KEY = "profile";
-        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 1;
+        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 2;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
+        static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
+        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V2 = 517;
 
         using ProfileCodec = ProfileBlobCodec<
-            SAMOVAR_PROFILE_PAYLOAD_SIZE_V1,
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V2,
             SAMOVAR_PROFILE_FORMAT_VERSION>;
+        using LegacyProfileCodec = ProfileBlobCodec<
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V1,
+            1>;
 
-        static_assert(sizeof(SetupEEPROM) == 532, "host ABI drift");
-        static_assert(ProfileCodec::BLOB_SIZE == 530, "blob size drift");
+        static_assert(sizeof(SetupEEPROM) == 536, "host ABI drift");
+        static_assert(ProfileCodec::BLOB_SIZE == 534, "v2 blob size drift");
+        static_assert(LegacyProfileCodec::BLOB_SIZE == 530, "v1 blob size drift");
 
         static const float DEFAULT_DIST_TEMP = 98.0f;
         static const uint16_t STEPPER_STEP_ML = 100;
@@ -490,7 +496,8 @@ nvs_harness = (
           } else if (fake.mutation == MUTATE_INVALID_BOOL) {
             fake.blob[ProfileCodec::HEADER_SIZE + 35] = 2U;
           } else {
-            fake.blob[ProfileCodec::HEADER_SIZE + 515] = 1U;
+            fake.blob[ProfileCodec::HEADER_SIZE +
+                      SAMOVAR_PROFILE_CANONICAL_BYTES_V2] = 1U;
           }
           write_crc(fake.blob);
         }
@@ -696,8 +703,16 @@ for token, signature in [
         "static bool encode_setup_payload(const SetupEEPROM& candidate, uint8_t* payload)",
     ),
     (
+        "decode_setup_payload_fields(",
+        "template <size_t PayloadSize>\nstatic bool decode_setup_payload_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
+    ),
+    (
         "decode_setup_payload(",
         "static bool decode_setup_payload(const uint8_t* payload, SetupEEPROM& candidate)",
+    ),
+    (
+        "decode_setup_payload_v1(",
+        "static bool decode_setup_payload_v1(const uint8_t* payload, SetupEEPROM& candidate)",
     ),
     (
         "nvs_value_result(",
@@ -834,6 +849,7 @@ nvs_harness += textwrap.dedent(
     // обязан ловить assert на serialLog, а не жалоба компилятора на саму заглушку.
     __attribute__((unused)) static FakeSerial Serial;
     #define F(literal) (literal)
+    static void nbk_preserve_startup_input_validity(float, float) {}
     ''') + heater_trust_definitions + textwrap.dedent(
     r'''
 
@@ -883,6 +899,8 @@ nvs_harness += (
           candidate.ColHeight = 0.5f;
           candidate.PackDens = 80;
           candidate.StepperStepMlI2C = 654;
+          candidate.SuvidTemp = 62.5f;
+          candidate.SuvidHoldMinutes = 37;
           return candidate;
         }
 
@@ -891,6 +909,19 @@ nvs_harness += (
           assert(encode_setup_payload(candidate, payload));
           ProfileCodec::Blob blob{};
           ProfileCodec::encode(payload, blob);
+          return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
+        }
+
+        static std::vector<uint8_t> encode_v1_blob(const SetupEEPROM& candidate) {
+          uint8_t v2Payload[ProfileCodec::PAYLOAD_SIZE] = {};
+          assert(encode_setup_payload(candidate, v2Payload));
+          uint8_t v1Payload[LegacyProfileCodec::PAYLOAD_SIZE] = {};
+          memcpy(
+              v1Payload,
+              v2Payload,
+              SAMOVAR_PROFILE_CANONICAL_BYTES_V1);
+          LegacyProfileCodec::Blob blob{};
+          LegacyProfileCodec::encode(v1Payload, blob);
           return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
         }
 
@@ -1038,7 +1069,8 @@ nvs_harness += (
 
           reset_fake();
           seed_current_blob(expected);
-          fake.blob[ProfileCodec::HEADER_SIZE + 515] = 1U;
+          fake.blob[ProfileCodec::HEADER_SIZE +
+                    SAMOVAR_PROFILE_CANONICAL_BYTES_V2] = 1U;
           write_crc(fake.blob);
           expect_load_failure(PROFILE_LOAD_PAYLOAD_ENCODING);
 
@@ -1051,7 +1083,37 @@ nvs_harness += (
           assert(loaded.Kp == expected.Kp);
           assert(loaded.Mode == expected.Mode);
           assert(loaded.StepperStepMlI2C == expected.StepperStepMlI2C);
+          assert(loaded.SuvidHoldMinutes == expected.SuvidHoldMinutes);
           assert(encode_blob(loaded) == fake.blob);
+        }
+
+        static void test_v1_profile_migrates_after_verified_v2_write() {
+          SetupEEPROM legacy = sample_setup();
+          legacy.SuvidHoldMinutes = 999;
+
+          reset_fake();
+          fake.blob = encode_v1_blob(legacy);
+          SetupEEPROM loaded{};
+          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          assert(loaded.Kp == legacy.Kp);
+          assert(loaded.SuvidTemp == legacy.SuvidTemp);
+          assert(loaded.SuvidHoldMinutes == 0);
+          assert(fake.writes == 1);
+          assert(fake.blob.size() == ProfileCodec::BLOB_SIZE);
+          const SetupEEPROM rewritten = decode_written_blob();
+          assert(rewritten.Kp == legacy.Kp);
+          assert(rewritten.SuvidTemp == legacy.SuvidTemp);
+          assert(rewritten.SuvidHoldMinutes == 0);
+
+          reset_fake();
+          fake.blob = encode_v1_blob(legacy);
+          fake.writerBegin = false;
+          SetupEEPROM destination;
+          memset(&destination, 0xA5, sizeof(destination));
+          uint8_t before[sizeof(destination)];
+          memcpy(before, &destination, sizeof(before));
+          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
+          assert(memcmp(before, &destination, sizeof(before)) == 0);
         }
 
         static void mark_field(bool* occupied, size_t offset, size_t size) {
@@ -1098,7 +1160,7 @@ nvs_harness += (
           assert(memcmp(before, &destination, sizeof(before)) == 0);
 
           firstPayload[35] = 0U;
-          firstPayload[515] = 1U;
+          firstPayload[SAMOVAR_PROFILE_CANONICAL_BYTES_V2] = 1U;
           assert(!decode_setup_payload(firstPayload, destination));
           assert(memcmp(before, &destination, sizeof(before)) == 0);
         }
@@ -1427,6 +1489,7 @@ nvs_harness += (
         int main() {
           test_save_fault_matrix();
           test_load_fault_matrix();
+          test_v1_profile_migrates_after_verified_v2_write();
           test_poisoned_padding_and_canonical_rejection();
           test_legacy_fault_matrix();
           test_migration_precedence_and_errors();
@@ -1713,7 +1776,7 @@ if save_body:
     require(
         save_body.count("ProfileCodec::Blob") == 2 and
         save_body.count("uint8_t payload[ProfileCodec::PAYLOAD_SIZE]") == 1,
-        "profile save fixed byte buffers must remain 516 + 530 + 530 bytes",
+        "profile V2 save must keep one payload and two fixed codec blobs",
     )
 
 if load_body:
@@ -1740,10 +1803,14 @@ if load_body:
     ]:
         require(forbidden not in load_body, f"blob load contains forbidden fallback {forbidden}")
     require(
-        load_body.count("ProfileCodec::Blob") == 1 and
+        len(re.findall(r"(?<!Legacy)ProfileCodec::Blob", load_body)) == 1 and
+        load_body.count("LegacyProfileCodec::Blob") == 1 and
         load_body.count("uint8_t payload[ProfileCodec::PAYLOAD_SIZE]") == 1 and
+        load_body.count("uint8_t payload[LegacyProfileCodec::PAYLOAD_SIZE]") == 1 and
+        "decode_setup_payload_v1(payload, migrated)" in load_body and
+        "save_profile_nvs(migrated)" in load_body and
         "SetupEEPROM decoded" not in load_body,
-        "profile load stack must remain 530 + 516 outer + 516 decoder bytes",
+        "profile load must decode V1 and confirm its V2 rewrite with fixed buffers",
     )
 
 if migrate_body:
@@ -1788,26 +1855,36 @@ decode_body = function_body(
     nvs_text,
     "decode_setup_payload(",
 )
+decode_fields_body = function_body(
+    nvs_text,
+    "template <size_t PayloadSize>\nstatic bool decode_setup_payload_fields(",
+)
 require(bool(encode_body), "field-wise SetupEEPROM encoder is missing")
 require(bool(decode_body), "field-wise SetupEEPROM decoder is missing")
-for body, label in [(encode_body, "encoder"), (decode_body, "decoder")]:
+require(bool(decode_fields_body), "shared field-wise SetupEEPROM decoder is missing")
+for body, label in [(encode_body, "encoder"), (decode_fields_body, "decoder")]:
     for forbidden in ["memcpy(payload, &candidate", "memcpy(&candidate", "sizeof(SetupEEPROM)"]:
         require(forbidden not in body, f"{label} uses raw SetupEEPROM representation")
-    require("CanonicalProfile" in body, f"{label} does not use canonical field codec")
+require("CanonicalProfile" in encode_body, "encoder does not use canonical field codec")
+require("reader.get_" in decode_fields_body, "decoder does not use canonical field codec")
 if encode_body:
     ordered(
         encode_body,
         [f"candidate.{field}" for field in setup_fields],
         "SetupEEPROM declaration-order encoder",
     )
-if decode_body:
+if decode_fields_body:
     ordered(
-        decode_body,
+        decode_fields_body,
         [
             "reader.get_i32(mode)" if field == "Mode" else f"decoded.{field}"
-            for field in setup_fields
+            for field in setup_fields if field != "SuvidHoldMinutes"
         ],
         "SetupEEPROM declaration-order decoder",
+    )
+    require(
+        "reader.get_u16(decoded.SuvidHoldMinutes)" in decode_body,
+        "V2 decoder must decode SuvidHoldMinutes after the V1 field prefix",
     )
 
 finish_autotune_body = function_body(beer_text, "void FinishAutoTune()")
@@ -1854,8 +1931,8 @@ for forbidden in [
 require("void save_profile()" not in (ROOT / "FS.ino").read_text(encoding="utf-8"),
         "FS.ino void save_profile wrapper remains")
 require("void save_profile();" not in api_text, "void save_profile API remains")
-require('static_assert(sizeof(SetupEEPROM) == 532' in nvs_text,
-        "production SetupEEPROM v1 ABI assertion is missing")
+require('static_assert(sizeof(SetupEEPROM) == 536' in nvs_text,
+        "production SetupEEPROM v2 ABI assertion is missing")
 
 setup_body = function_body(samovar_text, "void setup()")
 if setup_body:

@@ -615,6 +615,106 @@ input[type="radio"]:checked + label:after {
 }
 
 /* ==================== Программа отбора ==================== */
+.program-summary {
+  margin-bottom: 1em;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-top: 4px solid var(--accent);
+  background: var(--bg-program-panel);
+}
+
+.program-summary h2 {
+  margin: 0 0 10px;
+  font-size: 1.15em;
+  color: var(--text-strong);
+}
+
+.program-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.program-summary-card {
+  padding: 10px;
+  border: 1px solid var(--border-card);
+  background: var(--bg-program-example);
+}
+
+.program-summary-card h3 {
+  margin: 0 0 8px;
+  color: var(--text-strong);
+}
+
+.program-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.program-summary-metrics dt {
+  font-size: 0.8em;
+}
+
+.program-summary-metrics dd {
+  margin: 2px 0 0;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.program-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-card);
+}
+
+.program-summary-row strong {
+  color: var(--text-strong);
+}
+
+.program-summary-tails {
+  background: var(--bg-program-example);
+}
+
+.program-summary-total {
+  border-color: var(--accent);
+  background: var(--bg-status);
+  color: var(--text-status);
+}
+
+.program-summary-status {
+  margin: 9px 0 0 !important;
+  padding: 6px 8px;
+  border: 1px solid var(--border-card);
+  font-weight: 700;
+}
+
+.program-summary-row .program-summary-status {
+  margin: 0 !important;
+}
+
+.program-summary-status.is-valid {
+  border-color: var(--detector-ok-text);
+  background: var(--detector-ok-bg);
+  color: var(--detector-ok-text);
+}
+
+.program-summary-status.is-invalid {
+  border-color: var(--detector-alarm-text);
+  background: var(--detector-alarm-bg);
+  color: var(--detector-alarm-text);
+}
+
+.program-summary-status.is-info {
+  color: var(--text-main);
+}
+
 .prgline input {
   font-size: 18px !important;
   padding: 4px !important;
@@ -966,6 +1066,13 @@ details.spoiler > .spoiler-content {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4em;
+  }
+  .program-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .program-summary-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
   #hdr { flex-wrap: wrap; }
   .prgline input,

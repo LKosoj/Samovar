@@ -3,8 +3,8 @@
 
 Тест вытаскивает РЕАЛЬНЫЙ блок кода (else-if ветку повышения подачи при
 устойчиво высокой Тб) из nbk.h через extract_braced_block_after — без
-переписывания логики — и подставляет его в минимальный host-харнесс, замокав
-только downstream-вызовы (set_current_power, SetSpeed, fromPower).
+переписывания логики — и подставляет его в минимальный host-харнесс,
+который моделирует commit уже принятой составной команды.
 
 Регресс, который тест защищает: раньше регулирование По в Работе было
 ОДНОСТОРОННИМ (только вниз при просадке Тб). Задача 2 добавила счётчик
@@ -37,23 +37,22 @@ float nbk_dP = 0;
 float nbk_Po_ceiling = 0;
 uint8_t nbk_high_temp_ticks = 0;
 
-static int setSpeedCalls = 0;
 static float lastSpeed = -1.0f;
-static int powerCalls = 0;
 static float lastPower = -1.0f;
 
-// Заглушки НЕ static: единственный вызов каждой лежит во вклеенном теле блока
-// (run_high_temp_tick ниже), и со static мутация, убравшая вызов, роняла бы
-// компилятор по unused-function вместо содержательного assert-а.
-//
-// fromPower обязана быть ОТЛИЧИМА от тождества (см. smoke_nbk_po_floor.py) -
-// иначе тест не поймал бы утечку сырых ватт в регулятор напряжения.
-inline float fromPower(float m) { return m * 2.0f; }
-inline void set_current_power(float v) { powerCalls++; lastPower = v; }
-inline void SetSpeed(float v) { setSpeedCalls++; lastSpeed = v; }
-
 static void run_high_temp_tick() {
+  const float currentM = nbk_M;
+  const float currentP = nbk_P;
+  float candidateM = currentM;
+  float candidateP = currentP;
+  bool commandNeeded = false;
 @BODY@
+  if (commandNeeded) {
+    lastPower = candidateM;
+    lastSpeed = candidateP;
+    nbk_M = candidateM;
+    nbk_P = candidateP;
+  }
 }
 
 static int failures = 0;
@@ -73,8 +72,6 @@ static void reset_fixture(float po, float dp, float ceiling) {
   nbk_M = nbk_Mo;
   nbk_P = nbk_Po;
   nbk_high_temp_ticks = 0;
-  setSpeedCalls = 0;
-  powerCalls = 0;
   lastPower = -1.0f;
   lastSpeed = -1.0f;
 }
@@ -90,14 +87,12 @@ static void test_hold_and_clamp_for(float po, float dp) {
     run_high_temp_tick();
     check(nbk_Po == po, "По не должна меняться раньше, чем счётчик наберёт NBK_HIGH_TB_HOLD_TICKS тиков подряд");
     check(nbk_high_temp_ticks == static_cast<uint8_t>(t), "счётчик тиков высокой Тб должен расти на каждом тике без вмешательств");
-    check(powerCalls == t, "set_current_power должен вызываться на каждом тике блока");
-    check(setSpeedCalls == t, "SetSpeed должен вызываться на каждом тике блока");
   }
 
   run_high_temp_tick(); // NBK_HIGH_TB_HOLD_TICKS-й тик подряд без вмешательств
   check(nbk_Po == po + dp / 10.0f, "после NBK_HIGH_TB_HOLD_TICKS тиков подряд По должна вырасти РОВНО на dП/10");
   check(nbk_high_temp_ticks == 0, "счётчик обязан сброситься сразу после применения повышения");
-  check(lastPower == fromPower(nbk_Mo), "мощность в регуляторе должна оставаться конвертированной nbk_Mo");
+  check(lastPower == nbk_Mo, "коррекция подачи не должна менять мощность");
   check(lastSpeed == nbk_Po, "последняя команда насосу должна совпадать с обновлённой По");
 
   // Второй полный цикл: попытка ещё раз поднять По должна упереться в потолок.

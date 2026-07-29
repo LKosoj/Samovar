@@ -10,9 +10,6 @@ from smoke_helpers import extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 LUA = strip_cpp_comments((ROOT / "lua.h").read_text(encoding="utf-8"))
-SAMOVAR = strip_cpp_comments((ROOT / "Samovar.ino").read_text(encoding="utf-8"))
-API = strip_cpp_comments((ROOT / "samovar_api.h").read_text(encoding="utf-8"))
-WEB = strip_cpp_comments((ROOT / "WebServer.ino").read_text(encoding="utf-8"))
 ERRORS: list[str] = []
 
 
@@ -23,66 +20,6 @@ def body(source: str, signature: str) -> str:
         ERRORS.append(str(exc))
         return ""
 
-
-for token in [
-    "enum LuaModeTarget",
-    "bool set_lua_mode_value(LuaModeTarget target, int32_t value);",
-]:
-    if token not in API:
-        ERRORS.append(f"samovar_api.h missing A-07 mode-owner contract: {token}")
-
-enum_start = API.find("enum LuaModeTarget")
-enum_end = API.find("};", enum_start)
-declaration_start = API.find(
-    "bool set_lua_mode_value(LuaModeTarget target, int32_t value);"
-)
-api_lua_guard = API.rfind("#ifdef USE_LUA", 0, declaration_start)
-api_lua_guard_end = API.find("#endif", declaration_start)
-api_lua_region = API[api_lua_guard : api_lua_guard_end + len("#endif")]
-api_lua_directives = re.findall(
-    r"(?m)^\s*(#(?:if|ifdef|ifndef|elif|else|endif)\b[^\n]*)", api_lua_region
-)
-if not (
-    API.count("enum LuaModeTarget") == 1
-    and enum_start >= 0
-    and enum_start < enum_end < api_lua_guard < declaration_start < api_lua_guard_end
-    and API[api_lua_guard:declaration_start].strip().endswith("#ifdef USE_LUA")
-    and api_lua_directives == ["#ifdef USE_LUA", "#endif"]
-    and API.count("bool set_lua_mode_value(LuaModeTarget target, int32_t value);") == 1
-):
-    ERRORS.append(
-        "LuaModeTarget must be unconditionally visible before the single Lua-only owner declaration"
-    )
-
-definition_start = SAMOVAR.find(
-    "bool set_lua_mode_value(LuaModeTarget target, int32_t value)"
-)
-definition_guard = SAMOVAR.rfind("#ifdef USE_LUA", 0, definition_start)
-definition_guard_end = SAMOVAR.find("#endif", definition_start)
-lua_include_start = SAMOVAR.find('#include "lua.h"')
-lua_include_guard = SAMOVAR.rfind("#ifdef USE_LUA", 0, lua_include_start)
-lua_include_guard_end = SAMOVAR.find("#endif", lua_include_start)
-if not (
-    SAMOVAR.count("bool set_lua_mode_value(LuaModeTarget target, int32_t value)") == 1
-    and definition_guard < definition_start < definition_guard_end
-    and SAMOVAR[definition_guard:definition_start].strip().endswith("#ifdef USE_LUA")
-    and SAMOVAR.count('#include "lua.h"') == 1
-    and lua_include_guard < lua_include_start < lua_include_guard_end
-    and SAMOVAR[lua_include_guard:lua_include_start].strip().endswith("#ifdef USE_LUA")
-):
-    ERRORS.append(
-        "Lua mode owner definition and lua.h registration surface must remain Lua-only"
-    )
-
-owner = body(SAMOVAR, "bool set_lua_mode_value")
-for token in [
-    "pending_command_lock(pdMS_TO_TICKS(50))",
-    "profile_operation_phase_load() != PROFILE_OPERATION_EMPTY",
-    "mode_switch_in_progress()",
-    "pending_command_unlock(true)",
-]:
-    if owner and token not in owner:
-        ERRORS.append(f"Lua mode owner missing token: {token}")
 
 set_num = body(LUA, "static int lua_wrapper_set_num_variable")
 for token in [
@@ -130,7 +67,7 @@ for direct in [
     if direct in LUA:
         ERRORS.append(f"lua.h retains direct mode mutation: {direct}")
 
-a07_surface = set_num + owner
+a07_surface = set_num
 for signature, _, _ in [
     ("static int lua_wrapper_exp_pinMode", [], []),
     ("static int lua_wrapper_exp_digitalWrite", [], []),
@@ -186,7 +123,10 @@ expected_descriptor_names = [
     "WFpulseCount", "pump_started", "valve_status", "SamSetup_Mode",
     "Samovar_Mode", "Samovar_CR_Mode", "acceleration_temp", "wp_count",
     "pmpKp", "pmpKi", "pmpKd", "SteamTemp", "boil_temp", "PipeTemp",
-    "WaterTemp", "TankTemp", "ACPTemp", "loop_lua_fl", "SetScriptOff",
+    "WaterTemp", "TankTemp", "ACPTemp",
+    "VirtualSteamTemp", "VirtualPipeTemp", "VirtualWaterTemp",
+    "VirtualTankTemp", "VirtualACPTemp",
+    "loop_lua_fl", "SetScriptOff",
     "show_lua_script", "test_num_val", "WFtotalMilliLitres", "WFflowRate",
     "program_volume", "program_speed", "program_temp", "program_power",
     "program_time", "program_capacity_num", "capacity_num",
@@ -194,8 +134,85 @@ expected_descriptor_names = [
     "water_pump_speed", "pressure_value", "PauseOn", "program_Wait", "YY",
     "MM", "DD", "HH", "MI", "SS",
 ]
-if descriptor_names != expected_descriptor_names or len(descriptor_names) != 44:
+if descriptor_names != expected_descriptor_names or len(descriptor_names) != 49:
     ERRORS.append("Lua numeric descriptor names/order/cardinality changed")
+
+for read_only in [
+    "WFpulseCount", "pump_started", "valve_status", "SamSetup_Mode", "Samovar_Mode",
+    "Samovar_CR_Mode", "SteamTemp", "PipeTemp", "WaterTemp", "TankTemp",
+    "ACPTemp",
+]:
+    pattern = r'\{\s*"' + re.escape(read_only) + r'"\s*,\s*[^,]+\s*,\s*nullptr\s*,\s*LUA_VAR_RO'
+    if not re.search(pattern, LUA[descriptor_table_start:descriptor_table_end], re.DOTALL):
+        ERRORS.append(f"{read_only} must remain Lua read-only")
+if 'return luaL_error(lua_state, "%s is read-only", variableName);' not in set_num:
+    ERRORS.append("setNumVariable must explicitly reject read-only variables")
+
+for signature in [
+    "static int lua_wrapper_pinMode", "static int lua_wrapper_digitalWrite",
+    "static int lua_wrapper_set_power", "static int lua_wrapper_set_mixer",
+    "static int lua_wrapper_open_valve", "static int lua_wrapper_set_pump_pwm",
+    "static int lua_wrapper_set_next_program",
+    "static int lua_wrapper_set_stepper_by_time",
+    "static int lua_wrapper_set_i2c_rele_state",
+]:
+    callback = body(LUA, signature)
+    if callback and "lua_simulation_enabled()" not in callback:
+        ERRORS.append(f"simulation does not block {signature}")
+delay = body(LUA, "static int lua_wrapper_delay")
+clock = body(LUA, "static int lua_wrapper_millis")
+if "lua_check_index_arg(lua_state, 1, 0, 1000, \"delay\")" not in delay:
+    ERRORS.append("delay must require an integer in the 0..1000 range")
+if "luaSimulationMillis +=" not in delay or "luaSimulationMillis" not in clock:
+    ERRORS.append("simulation logical clock contract changed")
+
+
+def preserves_delay_upper_bound(source: str) -> bool:
+    try:
+        delay_body = extract_function_body(source, "static int lua_wrapper_delay")
+    except ValueError:
+        return False
+    return 'lua_check_index_arg(lua_state, 1, 0, 1000, "delay")' in delay_body
+
+
+if preserves_delay_upper_bound(LUA.replace(
+    'lua_check_index_arg(lua_state, 1, 0, 1000, "delay")',
+    'lua_check_index_arg(lua_state, 1, 0, 1001, "delay")',
+    1,
+)):
+    ERRORS.append("mutation proof failed for delay upper bound")
+
+
+def preserves_read_only_contract(source: str) -> bool:
+    try:
+        setter = extract_function_body(source, "static int lua_wrapper_set_num_variable")
+    except ValueError:
+        return False
+    return 'return luaL_error(lua_state, "%s is read-only", variableName);' in setter
+
+
+def preserves_simulation_output_block(source: str) -> bool:
+    try:
+        callback = extract_function_body(source, "static int lua_wrapper_digitalWrite")
+    except ValueError:
+        return False
+    return "lua_simulation_enabled()" in callback
+
+
+# Mutation proof: contracts above must reject removal of the runtime Lua error
+# and removal of an actuator block.  The source is mutated only in memory.
+if preserves_read_only_contract(LUA.replace(
+    'return luaL_error(lua_state, "%s is read-only", variableName);', "return 0;", 1
+)):
+    ERRORS.append("mutation proof failed for the read-only Lua error")
+digital_write_body = body(LUA, "static int lua_wrapper_digitalWrite")
+digital_write_without_block = digital_write_body.replace(
+    "if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);", "", 1
+)
+if preserves_simulation_output_block(LUA.replace(
+    digital_write_body, digital_write_without_block, 1
+)):
+    ERRORS.append("mutation proof failed for the simulation actuator block")
 
 
 def definition(source: str, signature: str) -> str:
@@ -213,6 +230,8 @@ def run_behavioral_harness() -> tuple[int, str, str]:
         for signature in [
             "inline bool lua_state_mutation_allowed()",
             "inline int lua_reject_state_mutation(lua_State* lua_state)",
+            "inline bool lua_simulation_enabled()",
+            "inline int lua_reject_actuator_mutation(lua_State* lua_state)",
         ]
     )
     string_helper = definition(
@@ -220,6 +239,7 @@ def run_behavioral_harness() -> tuple[int, str, str]:
     )
     callback_signatures = [
         "static int lua_wrapper_set_num_variable(lua_State *lua_state)",
+        "static int lua_wrapper_delay(lua_State *lua_state)",
         "static int lua_wrapper_set_str_variable(lua_State *lua_state)",
         "static int lua_wrapper_set_object(lua_State *lua_state)",
         "static int lua_wrapper_set_lua_status(lua_State *lua_state)",
@@ -238,18 +258,6 @@ def run_behavioral_harness() -> tuple[int, str, str]:
         "static int lua_wrapper_set_current_power(lua_State *lua_state)",
     ]
     callbacks = "\n".join(definition(LUA, signature) for signature in callback_signatures)
-    mode_validator = (
-        "bool is_valid_samovar_mode(long mode) {\n"
-        f"{extract_function_body(WEB, 'bool is_valid_samovar_mode(long mode) {')}\n"
-        "}\n"
-    )
-    owner_definition = (
-        f"{mode_validator}\n"
-        "bool set_lua_mode_value(LuaModeTarget target, int32_t value) {\n"
-        f"{owner}\n"
-        "}\n"
-    )
-
     harness = r'''
 #include <cfloat>
 #include <cmath>
@@ -514,7 +522,9 @@ bool set_lua_status_value(const String& value) {
   return luaStatusSetResult;
 }
 
-void vTaskDelay(TickType_t) {}
+int vTaskDelayCalls = 0;
+TickType_t lastDelayTicks = 0;
+void vTaskDelay(TickType_t ticks) { vTaskDelayCalls++; lastDelayTicks = ticks; }
 
 bool semaphoreAvailable = true;
 int semaphoreTakeCount = 0;
@@ -614,9 +624,16 @@ uint8_t get_i2c_rele_state(uint8_t relay) {
 
 int powerCalls = 0;
 float lastPowerArg = 0.0f;
-void set_current_power(float volt) {
+enum ActuatorCommandResult {
+  ACTUATOR_COMMAND_ACCEPTED = 0,
+  ACTUATOR_COMMAND_PENDING,
+  ACTUATOR_COMMAND_APPLIED,
+  ACTUATOR_COMMAND_FAILED,
+};
+ActuatorCommandResult set_current_power(float volt) {
   powerCalls++;
   lastPowerArg = volt;
+  return ACTUATOR_COMMAND_APPLIED;
 }
 
 __CALLBACKS__
@@ -692,6 +709,7 @@ void set_number_global(lua_State* state, const char* name, lua_Number value) {
 }
 
 void register_callbacks(lua_State* state) {
+  lua_register(state, "delay", lua_wrapper_delay);
   lua_register(state, "setNumVariable", lua_wrapper_set_num_variable);
   lua_register(state, "setStrVariable", lua_wrapper_set_str_variable);
   lua_register(state, "setObject", lua_wrapper_set_object);
@@ -716,8 +734,23 @@ void register_callbacks(lua_State* state) {
   set_number_global(state, "HIGH", HIGH);
 }
 
+void test_delay(lua_State* state) {
+  vTaskDelayCalls = 0;
+  lastDelayTicks = 0;
+  run_chunk(state, "delay(0)", true, 0);
+  run_chunk(state, "delay(1000)", true, 0);
+  check(vTaskDelayCalls == 2, "integer delays did not reach vTaskDelay");
+  run_chunk(state, "delay(0.5)", false);
+  check_last_error_contains("Invalid delay: format", "fractional delay error text/class");
+  run_chunk(state, "delay(-1)", false);
+  check_last_error_contains("Invalid delay: range", "negative delay error text/class");
+  run_chunk(state, "delay(1001)", false);
+  check_last_error_contains("Invalid delay: range", "oversized delay error text/class");
+  run_chunk(state, "delay(2147483647)", false);
+  check_last_error_contains("Invalid delay: range", "LONG_MAX delay error text/class");
+}
+
 float descriptor_target_value(const char* name) {
-  if (std::strcmp(name, "WFpulseCount") == 0) return waterPulseCount;
   if (std::strcmp(name, "pump_started") == 0) return pump_started;
   if (std::strcmp(name, "valve_status") == 0) return valve_status;
   if (std::strcmp(name, "SamSetup_Mode") == 0) return SamSetup.Mode;
@@ -745,10 +778,6 @@ float descriptor_target_value(const char* name) {
 void test_descriptors(lua_State* state) {
   struct IntegralDomain { const char* name; int32_t minimum; int32_t maximum; };
   const IntegralDomain domains[] = {
-      {"WFpulseCount", 0, UINT16_MAX}, {"pump_started", 0, 1},
-      {"valve_status", 0, 1}, {"SamSetup_Mode", 0, SAMOVAR_LUA_MODE},
-      {"Samovar_Mode", 0, SAMOVAR_LUA_MODE},
-      {"Samovar_CR_Mode", 0, SAMOVAR_LUA_MODE},
       {"acceleration_temp", 0, UINT16_MAX}, {"wp_count", INT8_MIN, INT8_MAX},
       {"loop_lua_fl", 0, 1}, {"SetScriptOff", 0, 1},
       {"show_lua_script", 0, 1},
@@ -793,16 +822,8 @@ void test_descriptors(lua_State* state) {
     check_last_error_contains("number has no integer representation",
                               "integral negative infinity error class/text");
   }
-  run_chunk(state, "setNumVariable(\"WFpulseCount\",16777217)", false);
-  check_last_error_contains("Invalid WFpulseCount: range",
-                            "wide exact integer range error text");
-  run_chunk(state, "setNumVariable(\"WFpulseCount\",2147483647)", false);
-  check_last_error_contains("Invalid WFpulseCount: range",
-                            "INT32_MAX range error text");
-
   const char* fractional[] = {
-      "pmpKp", "pmpKi", "pmpKd", "SteamTemp", "boil_temp", "PipeTemp",
-      "WaterTemp", "TankTemp", "ACPTemp", "test_num_val",
+      "pmpKp", "pmpKi", "pmpKd", "boil_temp", "test_num_val",
   };
   for (const char* name : fractional) {
     set_number_global(state, "value", -FLT_MAX);
@@ -839,86 +860,31 @@ void test_descriptors(lua_State* state) {
 }
 
 void test_modes(lua_State* state) {
-  SamSetup.Mode = 1;
-  Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
-  Samovar_CR_Mode = SAMOVAR_BK_MODE;
-  changeModeCalls = 0;
-  pendingLockCalls = pendingUnlockCount = modeSwitchCheckCalls = 0;
-  run_chunk(state, "setNumVariable(\"SamSetup_Mode\",4)", true);
-  check(SamSetup.Mode == 4 && Samovar_Mode == SAMOVAR_DISTILLATION_MODE &&
-            Samovar_CR_Mode == SAMOVAR_BK_MODE && changeModeCalls == 0,
-        "SamSetup_Mode changed active/control mode");
-  check(pendingLockCalls == 1 && pendingUnlockCount == 1,
-        "SamSetup_Mode owner lock/unlock accounting");
-
-  Samovar_CR_Mode = SAMOVAR_NBK_MODE;
-  pendingLockCalls = pendingUnlockCount = modeSwitchCheckCalls = 0;
-  run_chunk(state, "setNumVariable(\"Samovar_Mode\",1)", true);
-  check(Samovar_CR_Mode == SAMOVAR_NBK_MODE && changeModeCalls == 0,
-        "same active mode normalized control mode");
-  check(pendingLockCalls == 1 && pendingUnlockCount == 1,
-        "same active mode owner lock/unlock accounting");
-  pendingLockCalls = pendingUnlockCount = modeSwitchCheckCalls = 0;
-  run_chunk(state, "setNumVariable(\"Samovar_Mode\",2)", true);
-  check(Samovar_Mode == SAMOVAR_BEER_MODE && Samovar_CR_Mode == SAMOVAR_BEER_MODE &&
-            changeModeCalls == 1 && SamSetup.Mode == 4,
-        "active mode semantics changed");
-  check(pendingLockCalls == 1 && pendingUnlockCount == 1,
-        "active mode owner lock/unlock accounting");
-  pendingLockCalls = pendingUnlockCount = modeSwitchCheckCalls = 0;
-  run_chunk(state, "setNumVariable(\"Samovar_CR_Mode\",3)", true);
-  check(Samovar_CR_Mode == SAMOVAR_BK_MODE && Samovar_Mode == SAMOVAR_BEER_MODE &&
-            SamSetup.Mode == 4 && changeModeCalls == 1,
-        "control mode semantics changed");
-  check(pendingLockCalls == 1 && pendingUnlockCount == 1,
-        "control mode owner lock/unlock accounting");
-
-  const char* modeNames[] = {"SamSetup_Mode", "Samovar_Mode", "Samovar_CR_Mode"};
-  for (const char* name : modeNames) {
+  const char* readOnly[] = {
+      "WFpulseCount", "pump_started", "valve_status", "SamSetup_Mode", "Samovar_Mode",
+      "Samovar_CR_Mode", "SteamTemp", "PipeTemp", "WaterTemp", "TankTemp",
+      "ACPTemp",
+  };
+  for (const char* name : readOnly) {
     SamSetup.Mode = 1;
     Samovar_Mode = SAMOVAR_DISTILLATION_MODE;
     Samovar_CR_Mode = SAMOVAR_BK_MODE;
-    pendingLockAvailable = false;
-    pendingLockCalls = pendingUnlockCount = modeSwitchCheckCalls = 0;
+    SteamSensor.avgTemp = 11;
+    PipeSensor.avgTemp = 12;
+    WaterSensor.avgTemp = 13;
+    TankSensor.avgTemp = 14;
+    ACPSensor.avgTemp = 15;
+    pump_started = 0;
+    valve_status = 0;
     run_chunk(state, "setNumVariable(\"" + std::string(name) + "\",2)", false);
-    check_last_error_contains(std::string(name) + " busy",
-                              "mode owner lock-busy error text/class");
+    check_last_error_contains(std::string(name) + " is read-only",
+                              "read-only error text/class");
     check(SamSetup.Mode == 1 && Samovar_Mode == SAMOVAR_DISTILLATION_MODE &&
-              Samovar_CR_Mode == SAMOVAR_BK_MODE,
-          "mode lock busy changed state");
-    check(pendingLockCalls == 1 && pendingUnlockCount == 0,
-          "mode lock-busy accounting");
-
-    pendingLockAvailable = true;
-    modeSwitchActive = true;
-    bypassOuterModeSwitchCheck = true;
-    pendingLockCalls = pendingUnlockCount = modeSwitchCheckCalls = 0;
-    run_chunk(state, "setNumVariable(\"" + std::string(name) + "\",2)", false);
-    check_last_error_contains(std::string(name) + " busy",
-                              "owner mode-switch barrier error text/class");
-    check(SamSetup.Mode == 1 && Samovar_Mode == SAMOVAR_DISTILLATION_MODE &&
-              Samovar_CR_Mode == SAMOVAR_BK_MODE,
-          "active mode switch changed state");
-    check(pendingLockCalls == 1 && pendingUnlockCount == 1 &&
-              modeSwitchCheckCalls >= 2,
-          "owner mode-switch barrier did not execute under lock");
-    bypassOuterModeSwitchCheck = false;
-    modeSwitchActive = false;
-
-    for (int phase = PROFILE_OPERATION_QUEUED;
-         phase <= PROFILE_OPERATION_FAILED_CLOSED; phase++) {
-      profilePhase = static_cast<ProfileOperationPhase>(phase);
-      pendingLockCalls = pendingUnlockCount = modeSwitchCheckCalls = 0;
-      run_chunk(state, "setNumVariable(\"" + std::string(name) + "\",2)", false);
-      check_last_error_contains(std::string(name) + " busy",
-                                "owner profile barrier error text/class");
-      check(SamSetup.Mode == 1 && Samovar_Mode == SAMOVAR_DISTILLATION_MODE &&
-                Samovar_CR_Mode == SAMOVAR_BK_MODE,
-            "non-empty profile phase changed mode state");
-      check(pendingLockCalls == 1 && pendingUnlockCount == 1,
-            "owner profile barrier lock/unlock accounting");
-    }
-    profilePhase = PROFILE_OPERATION_EMPTY;
+              Samovar_CR_Mode == SAMOVAR_BK_MODE && pump_started == 0 &&
+              valve_status == 0 && SteamSensor.avgTemp == 11 &&
+              PipeSensor.avgTemp == 12 && WaterSensor.avgTemp == 13 &&
+              TankSensor.avgTemp == 14 && ACPSensor.avgTemp == 15,
+          "read-only descriptor changed production state");
   }
 }
 
@@ -1414,6 +1380,7 @@ int main() {
   if (!state) return 1;
   luaL_openlibs(state);
   register_callbacks(state);
+  test_delay(state);
   test_descriptors(state);
   test_modes(state);
   test_expanders(state);
@@ -1429,7 +1396,7 @@ int main() {
   return 0;
 }
 '''
-    harness = harness.replace("__OWNER__", owner_definition)
+    harness = harness.replace("__OWNER__", "")
     harness = harness.replace("__STATE_HELPERS__", state_helpers)
     harness = harness.replace("__STRING_HELPER__", string_helper)
     harness = harness.replace(

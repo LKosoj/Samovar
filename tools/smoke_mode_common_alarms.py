@@ -109,10 +109,21 @@ if mode_common:
             ],
         ),
         (
+            "inline bool mode_water_flow_demanded",
+            [
+                "if (!SamSetup.UseWS) return false;",
+                "if (valve_status) return true;",
+                "#ifdef USE_WATER_PUMP",
+                "return pump_started;",
+                "return false;",
+            ],
+        ),
+        (
             "inline void mode_request_water_flow_emergency_if_needed",
             [
                 "#ifdef USE_WATERSENSOR",
-                "WFAlarmCount > WF_ALARM_COUNT && PowerOn",
+                "mode_water_flow_demanded()",
+                "WFAlarmCount > WF_ALARM_COUNT",
                 "set_buzzer(true);",
                 "request_emergency_stop(\"Аварийное отключение! Прекращена подача воды.\")",
             ],
@@ -383,8 +394,8 @@ if nbk:
     ]:
         forbid_token("nbk deadlines", nbk, token)
     for token in [
-        "nbk_opt_next_time = safety_deadline_after(millis(),",
-        "nbk_work_next_time = safety_deadline_after(millis(),",
+        "nbk_opt_next_time = safety_deadline_after(",
+        "nbk_work_next_time = safety_deadline_after(",
         "safety_deadline_expired(millis(), nbk_opt_next_time)",
         "safety_deadline_expired(millis(), nbk_work_next_time)",
     ]:

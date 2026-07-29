@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+"""Поведенческая проверка скользящей стабильности пара."""
+
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+from smoke_helpers import extract_function_body
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def telemetry_contract_ok(samovar_source: str, index_source: str) -> bool:
+    firmware_tokens = (
+        "snapshot.detectorRecoveryThreshold =",
+        "detector_current_recovery_threshold();",
+        "snapshot.detectorRecoveryReady = detector_trend_settled();",
+        '"DetectorRecoveryThreshold"',
+        '"DetectorRecoveryReady"',
+    )
+    ui_tokens = (
+        "myObj.DetectorRecoveryThreshold.toFixed(4)",
+        "myObj.DetectorRecoveryReady ? 'условие выполнено' : 'ожидание'",
+        "восстановление тренда",
+    )
+    return all(token in samovar_source for token in firmware_tokens) and all(
+        token in index_source for token in ui_tokens
+    )
+
+HARNESS = r'''
+#include <cmath>
+#include <cstdint>
+#include <iostream>
+
+struct Detector {
+  float tempHistory[30];
+  uint8_t historyIndex;
+  uint8_t historySize;
+  double historySum;
+  double historySumSquares;
+  float historyMin;
+  float historyMax;
+  float tempStdDev;
+};
+
+static Detector impurityDetector = {};
+static uint32_t detector_steam_stable_since = 0;
+enum DetectorSteamStabilityReason : uint8_t {
+  DETECTOR_STEAM_FILLING = 0,
+  DETECTOR_STEAM_RANGE_HIGH,
+  DETECTOR_STEAM_VARIANCE_HIGH,
+  DETECTOR_STEAM_HOLDING,
+  DETECTOR_STEAM_READY,
+};
+static DetectorSteamStabilityReason detector_steam_stability_reason =
+    DETECTOR_STEAM_FILLING;
+static float detector_steam_stability_span = 0.0f;
+static float detector_steam_stability_variance = 0.0f;
+static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
+static const float DETECTOR_STEAM_STABLE_VARIANCE =
+    DETECTOR_STEAM_STABLE_DELTA * DETECTOR_STEAM_STABLE_DELTA * 0.25f;
+static const uint32_t DETECTOR_STEAM_STABLE_MS = 600000UL;
+static uint32_t fakeNow = 1000;
+static uint32_t millis() { return fakeNow; }
+static uint8_t check_consecutive_rises(float) { return 0; }
+static float calculate_temperature_variance() { return 0.0f; }
+
+@UPDATE_FUNCTION@
+@FUNCTION@
+
+static int failures = 0;
+static void check(bool condition, const char* message) {
+  if (!condition) {
+    std::cerr << "FAIL: " << message << '\n';
+    failures++;
+  }
+}
+
+static void load(const float* values, uint8_t count) {
+  impurityDetector.historySize = count;
+  impurityDetector.historyIndex = count % 30;
+  impurityDetector.historySum = 0.0f;
+  impurityDetector.historySumSquares = 0.0f;
+  impurityDetector.historyMin = count > 0 ? values[0] : 0.0f;
+  impurityDetector.historyMax = impurityDetector.historyMin;
+  for (uint8_t i = 0; i < count; i++) {
+    impurityDetector.tempHistory[i] = values[i];
+    impurityDetector.historySum += values[i];
+    impurityDetector.historySumSquares += values[i] * values[i];
+    if (values[i] < impurityDetector.historyMin) impurityDetector.historyMin = values[i];
+    if (values[i] > impurityDetector.historyMax) impurityDetector.historyMax = values[i];
+  }
+}
+
+int main() {
+  for (uint8_t i = 0; i < 30; i++) update_detector_history(77.0f + i * 0.01f);
+  check(impurityDetector.historySize == 30, "кольцо должно заполниться 30 точками");
+  check(std::fabs(impurityDetector.historyMin - 77.0f) < 0.0001f,
+        "кольцо должно хранить минимум");
+  check(std::fabs(impurityDetector.historyMax - 77.29f) < 0.0001f,
+        "кольцо должно хранить максимум");
+  check(std::fabs(impurityDetector.historySum - 2314.35f) < 0.01f,
+        "кольцо должно поддерживать сумму");
+  check(std::fabs(impurityDetector.historySumSquares - 178540.7555f) < 0.1f,
+        "кольцо должно поддерживать сумму квадратов");
+  update_detector_history(78.0f);
+  check(std::fabs(impurityDetector.historyMin - 77.01f) < 0.0001f,
+        "перезапись старейшего минимума должна обновить минимум");
+  check(std::fabs(impurityDetector.historyMax - 78.0f) < 0.0001f,
+        "перезапись должна обновить максимум");
+  check(std::fabs(impurityDetector.historySum - 2315.35f) < 0.01f,
+        "перезапись должна вычесть старое значение из суммы");
+  check(std::fabs(impurityDetector.historySumSquares - 178695.7555f) < 0.1f,
+        "перезапись должна вычесть старый квадрат");
+
+  float stable[30];
+  for (uint8_t i = 0; i < 30; i++) stable[i] = 78.00f + (i % 3) * 0.01f;
+  load(stable, 29);
+  check(!is_steam_stable(78.01f), "29 точек недостаточно для полного окна");
+  check(detector_steam_stability_reason == DETECTOR_STEAM_FILLING,
+        "29 точек должны сообщать FILLING");
+  load(stable, 30);
+  check(!is_steam_stable(78.01f), "первое стабильное окно только запускает выдержку");
+  check(detector_steam_stability_reason == DETECTOR_STEAM_HOLDING,
+        "стабильное окно должно сообщать причину HOLDING");
+  fakeNow += DETECTOR_STEAM_STABLE_MS - 1;
+  check(!is_steam_stable(78.01f), "599.999 секунд недостаточно");
+  fakeNow += 1;
+  check(is_steam_stable(78.01f), "600 секунд стабильного окна должны дать READY");
+
+  float rangeHigh[30];
+  for (uint8_t i = 0; i < 30; i++) rangeHigh[i] = 78.00f + (i % 3) * 0.01f;
+  rangeHigh[17] = 78.11f;
+  load(rangeHigh, 30);
+  check(!is_steam_stable(78.04f), "широкий диапазон должен сбрасывать стабильность");
+  check(detector_steam_stability_reason == DETECTOR_STEAM_RANGE_HIGH,
+        "телеметрия должна объяснять превышенный диапазон");
+  check(detector_steam_stable_since == 0, "выброс должен сбросить непрерывную выдержку");
+
+  float varianceHigh[30];
+  for (uint8_t i = 0; i < 30; i++) varianceHigh[i] = i < 15 ? 78.00f : 78.09f;
+  load(varianceHigh, 30);
+  check(!is_steam_stable(78.09f), "шумное окно должно отклоняться по дисперсии");
+  check(detector_steam_stability_reason == DETECTOR_STEAM_VARIANCE_HIGH,
+        "телеметрия должна объяснять высокую дисперсию");
+
+  impurityDetector.historySize = 4;
+  check(!is_steam_stable(78.0f), "неполное окно не должно считаться стабильным");
+  check(detector_steam_stability_reason == DETECTOR_STEAM_FILLING,
+        "неполное окно должно сообщать FILLING");
+
+  load(stable, 30);
+  fakeNow = UINT32_MAX - 300000U;
+  check(!is_steam_stable(78.01f), "выдержка до переполнения должна стартовать");
+  fakeNow += DETECTOR_STEAM_STABLE_MS - 1U;
+  check(!is_steam_stable(78.01f), "переполнение millis не должно сокращать выдержку");
+  fakeNow += 1U;
+  check(is_steam_stable(78.01f), "выдержка должна завершиться после wraparound");
+
+  if (failures != 0) return 1;
+  std::cout << "rectification steam stability window passed\n";
+  return 0;
+}
+'''
+
+
+def main() -> int:
+    source = (ROOT / "impurity_detector.h").read_text(encoding="utf-8")
+    samovar_source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+    index_source = (ROOT / "data_raw" / "index.htm").read_text(encoding="utf-8")
+    if not telemetry_contract_ok(samovar_source, index_source):
+        print("FAIL: неполный telemetry-контракт восстановления детектора", file=sys.stderr)
+        return 1
+    telemetry_mutants = (
+        (
+            samovar_source.replace(
+                "detector_current_recovery_threshold();", "0.0f;", 1
+            ),
+            index_source,
+        ),
+        (
+            samovar_source.replace('"DetectorRecoveryReady"', '"DetectorReady"', 1),
+            index_source,
+        ),
+        (
+            samovar_source,
+            index_source.replace(
+                "myObj.DetectorRecoveryReady ? 'условие выполнено' : 'ожидание'",
+                "'неизвестно'",
+                1,
+            ),
+        ),
+    )
+    if any(telemetry_contract_ok(*mutant) for mutant in telemetry_mutants):
+        print("FAIL: мутация recovery-телеметрии пережила контракт", file=sys.stderr)
+        return 1
+    body = extract_function_body(source, "bool is_steam_stable(float steamTemp)")
+    function = "bool is_steam_stable(float steamTemp) {" + body + "}"
+    update_body = extract_function_body(
+        source, "void update_detector_history(float columnTemp)"
+    )
+    update_function = (
+        "void update_detector_history(float columnTemp) {" + update_body + "}"
+    )
+    harness = HARNESS.replace("@UPDATE_FUNCTION@", update_function).replace(
+        "@FUNCTION@", function
+    )
+    with tempfile.TemporaryDirectory(prefix="samovar-steam-stability-") as temp_dir:
+        temp = Path(temp_dir)
+        def compile_and_run(name: str, text: str) -> subprocess.CompletedProcess[str]:
+            source_path = temp / f"{name}.cpp"
+            binary_path = temp / name
+            source_path.write_text(text, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "g++",
+                    "-std=c++11",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    str(source_path),
+                    "-o",
+                    str(binary_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                return result
+            return subprocess.run(
+                [str(binary_path)], capture_output=True, text=True, check=False
+            )
+
+        result = compile_and_run("steam_stability", harness)
+        sys.stdout.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        if result.returncode != 0:
+            return result.returncode
+
+        mutant = harness.replace(
+            "detector_steam_stable_since = 0;\n"
+            "    detector_steam_stability_reason = DETECTOR_STEAM_RANGE_HIGH;",
+            "detector_steam_stability_reason = DETECTOR_STEAM_RANGE_HIGH;",
+            1,
+        )
+        if mutant == harness:
+            print("FAIL: не удалось построить мутацию сброса стабильности", file=sys.stderr)
+            return 1
+        if compile_and_run("steam_stability_mutant", mutant).returncode == 0:
+            print("FAIL: мутация сброса стабильности пережила тест", file=sys.stderr)
+            return 1
+        count_mutant = harness.replace("if (count < 30)", "if (count < 29)", 1)
+        if count_mutant == harness:
+            print("FAIL: не удалось построить мутацию полного окна", file=sys.stderr)
+            return 1
+        if compile_and_run("steam_stability_count_mutant", count_mutant).returncode == 0:
+            print("FAIL: мутация порога заполнения пережила тест", file=sys.stderr)
+            return 1
+        aggregate_mutant = harness.replace(
+            "impurityDetector.historySumSquares += columnTemp * columnTemp;", "", 1
+        )
+        if aggregate_mutant == harness:
+            print("FAIL: не удалось построить мутацию агрегатов кольца", file=sys.stderr)
+            return 1
+        if compile_and_run("steam_stability_aggregate_mutant", aggregate_mutant).returncode == 0:
+            print("FAIL: мутация агрегатов кольца пережила тест", file=sys.stderr)
+            return 1
+        wrap_mutant = harness.replace(
+            "if (now - detector_steam_stable_since < DETECTOR_STEAM_STABLE_MS)",
+            "if (now >= detector_steam_stable_since && "
+            "now - detector_steam_stable_since < DETECTOR_STEAM_STABLE_MS)",
+            1,
+        )
+        if wrap_mutant == harness:
+            print("FAIL: не удалось построить мутацию wraparound выдержки", file=sys.stderr)
+            return 1
+        if compile_and_run("steam_stability_wrap_mutant", wrap_mutant).returncode == 0:
+            print("FAIL: мутация wraparound выдержки пережила тест", file=sys.stderr)
+            return 1
+        return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

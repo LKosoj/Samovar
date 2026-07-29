@@ -40,7 +40,6 @@ if nbk:
     require_token("[T2] high temp ticks counter", nbk_code, "uint8_t nbk_high_temp_ticks = 0;")
     require_token("[T3] dry steam start time", nbk_code, "uint32_t nbk_dry_steam_start_time = 0;")
     require_token("[T8] work entry overflow pending flag", nbk_code, "bool nbk_work_entry_overflow_pending = false;")
-    require_token("[T9] defaults notice sent flag", nbk_code, "bool nbk_defaults_notice_sent = false;")
 
     try:
         run_body = extract_function_body(nbk_code, "void run_nbk_program")
@@ -58,7 +57,6 @@ if nbk:
                 # [Ревью П1, находка 2] симметричный сброс — иначе рестарт НБК на 'S' с
                 # горячим парогенератором даёт мгновенный ложный стоп без выдержки 60с
                 "nbk_dry_steam_start_time = 0;",
-                "nbk_defaults_notice_sent = false;",
                 "if (num >= ProgramLen || program_type_empty(program[num].WType))",
             ],
             errors,
@@ -105,33 +103,24 @@ if nbk:
         if guard_index >= 0 and num_zero_end >= 0 and guard_index < num_zero_end:
             errors.append("[T5] guard num>0 && !PowerOn is positioned before the end of the num==0 branch")
 
-        # [T2]+[T6]+[T8] консолидированная W-ветка: инициализация потолка По,
-        # сброс счётчиков, подавление полного Мо/По при входе сразу после захлёба
+        # W разрешён только явной командой и коммитит строку после APPLIED.
         require_ordered_tokens(
-            "[T2/T6/T8] run_nbk_program W-branch initializes ceiling and honours pending overflow",
+            "run_nbk_program W-branch requires explicit confirmation and schedules commit",
             run_body,
             [
-                "nbk_Mo = nbk_M; nbk_Po=nbk_P;",
-                "nbk_Po_ceiling = nbk_Po;",
-                "if (nbk_work_entry_overflow_pending) {",
-                "nbk_work_entry_overflow_pending = false;",
-                "} else {",
-                "set_current_power(fromPower(nbk_M));",
+                "if (program[num].WType == 'W') {",
+                "if (!workConfirmed) {",
+                "if (program[num].Power <= 0 || program[num].Speed <= 0) {",
+                "const float candidateM = toPower(program[num].Power);",
+                "const float candidateP = program[num].Speed;",
+                "nbk_schedule_actuator_command(",
+                "true,",
+                "num))",
             ],
             errors,
         )
-        require_ordered_tokens(
-            "[T6] run_nbk_program W-branch distinguishes skipped optimization from empty optimum",
-            run_body,
-            [
-                "const bool optimizationEmpty = (nbk_Mo <= 0);",
-                "if (nbk_Mo_temp > 0 && nbk_Po_temp > 0) {",
-                '"Оптимизация пропущена. "',
-                "} else if (optimizationEmpty) {",
-                '"Оптимум не найден, работа на минимальных параметрах."',
-            ],
-            errors,
-        )
+        if ": 500" in run_body or "? program[num].Speed : 1" in run_body:
+            errors.append("run_nbk_program contains forbidden W fallback")
 
         # [T10] точка отсчёта статистики — на входе в S, не в H
         try:
@@ -146,7 +135,7 @@ if nbk:
                 [
                     "begintime = 0;",
                     "time_speed = millis();",
-                    "SetSpeed(nbk_P);",
+                    "nbk_schedule_actuator_command(",
                 ],
                 errors,
             )
@@ -174,7 +163,7 @@ if nbk:
             errors,
         )
 
-    # [T9] одноразовое сообщение о применении настроек по умолчанию
+    # Снимок НБК применяется до любых переходов стадии.
     try:
         proc_body = extract_function_body(nbk_code, "void nbk_proc()")
     except ValueError as exc:
@@ -183,12 +172,10 @@ if nbk:
 
     if proc_body:
         require_ordered_tokens(
-            "[T9] nbk_proc sends defaults notice once before transition guard",
+            "nbk_proc applies session snapshot before transition guard",
             proc_body,
             [
-                "nbk_M_max = mainsVoltage",
-                "if (!nbk_defaults_notice_sent) {",
-                "nbk_defaults_notice_sent = true;",
+                "nbk_M_max = nbkSessionConfig.maxPower;",
                 "if (nbk_transition_blocks_process()) return;",
             ],
             errors,
@@ -225,7 +212,7 @@ if nbk:
             "nbk_finish_common resets alarm timer and only reports real session stats",
             finish_body,
             [
-                "SetSpeed(0);",
+                "SetSpeed(0)",
                 "nbk_overheat_start_time = 0;",
                 "uint32_t totalTime = stats.startTime > 0",
                 "if (stats.startTime > 0)",

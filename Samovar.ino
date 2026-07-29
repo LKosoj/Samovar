@@ -562,42 +562,7 @@ static void process_profile_operation() {
   }
 }
 
-bool is_valid_samovar_mode(long mode);
-
 #ifdef USE_LUA
-bool set_lua_mode_value(LuaModeTarget target, int32_t value) {
-  if (!is_valid_samovar_mode(value)) return false;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return false;
-  if (profile_operation_phase_load() != PROFILE_OPERATION_EMPTY ||
-      mode_switch_in_progress()) {
-    pending_command_unlock(true);
-    return false;
-  }
-
-  const SAMOVAR_MODE mode = static_cast<SAMOVAR_MODE>(value);
-  switch (target) {
-    case LUA_MODE_TARGET_SETUP:
-      SamSetup.Mode = value;
-      break;
-    case LUA_MODE_TARGET_ACTIVE:
-      if (Samovar_Mode != mode) {
-        Samovar_Mode = mode;
-        change_samovar_mode();
-      }
-      break;
-    case LUA_MODE_TARGET_CONTROL:
-      Samovar_CR_Mode = mode;
-      break;
-    default:
-      pending_command_unlock(true);
-      return false;
-  }
-
-  pending_command_unlock(true);
-  return true;
-}
-
 // [ISSUE-5] Отложенное исполнение Lua-строки (run_lua_string из async конкурирует
 //           с do_lua_script на core 1 за общий lua_State).
 String pending_lua_str;
@@ -1655,7 +1620,7 @@ void triggerSysTicker(void *parameter) {
       WFflowMilliLitres = WFflowRate * 100 / 6;
       WFtotalMilliLitres += WFflowMilliLitres;
 
-      if (TankSensor.avgTemp > (OPEN_VALVE_TANK_TEMP + 2) && PowerOn && waterPulses == 0 && SamSetup.UseWS) {
+      if (mode_water_flow_demanded() && waterPulses == 0) {
         WFAlarmCount++;
       } else {
         WFAlarmCount = 0;
@@ -1903,6 +1868,8 @@ void setup() {
   // мощности — они спрашивают trusted_heater_resistance() — считали бы по другому.
   // Лечим до save_profile_nvs(), чтобы мигрированный профиль починился в NVS насовсем.
   const float storedHeaterR = startupProfile.HeaterResistant;
+  nbk_preserve_startup_input_validity(
+      storedHeaterR, startupProfile.MainsVoltage);
   startupProfile.HeaterResistant = trusted_heater_resistance(storedHeaterR);
   if (startupProfile.HeaterResistant != storedHeaterR) {
     Serial.print(F("WARN: heater resistance "));
@@ -2066,6 +2033,7 @@ void setup() {
   btn.setType(LOW_PULL);
   btn.setTickMode(AUTO);
   btn.setDebounce(30);
+  btn.setTimeout(2000);
 #endif
 
 #ifdef ALARM_BTN_PIN
@@ -2526,51 +2494,63 @@ void loop() {
 #ifdef BTN_PIN
   //обработка нажатий кнопки и разное поведение в зависимости от режима работы
   btn.tick();
-  if (!mode_switch_in_progress() && btn.isPress()) {
+  const bool mainButtonHeld = btn.isHolded();
+  const bool mainButtonClicked = btn.isClick();
+  const bool mainButtonPressed = btn.isPress();
+  if (!mode_switch_in_progress()) {
     if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-      //если выключен - включаем
-      if (!PowerOn) {
-        set_power(true);
-      } else if (startval == SAMOVAR_STARTVAL_IDLE && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
-        //если включен и программа отбора не работает - запускаем программу
+      if (mainButtonHeld && PowerOn &&
+          startval != SAMOVAR_STARTVAL_IDLE &&
+          startval != SAMOVAR_STARTVAL_CALIBRATION &&
+          SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
         menu_samovar_start();
-      } else if (startval != SAMOVAR_STARTVAL_IDLE && !program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
-        //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
-        pause_withdrawal(!PauseOn);
-      } else if (startval != SAMOVAR_STARTVAL_IDLE && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
-        //если выполняется программа, и программа - пауза, переходим к следующей программе
-        menu_samovar_start();
+      } else if (mainButtonClicked) {
+        //если выключен - включаем
+        if (!PowerOn) {
+          set_power(true);
+        } else if (startval == SAMOVAR_STARTVAL_IDLE && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
+          //если включен и программа отбора не работает - запускаем программу
+          menu_samovar_start();
+        } else if (startval != SAMOVAR_STARTVAL_IDLE && !program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
+          //если выполняется программа, и программа - не пауза, ставим на паузу или снимаем с паузы
+          pause_withdrawal(!PauseOn);
+        } else if (startval != SAMOVAR_STARTVAL_IDLE && program_Pause && SamovarStatusInt < SAMOVAR_STATUS_DISTILLATION) {
+          //если выполняется программа, и программа - пауза, переходим к следующей программе
+          menu_samovar_start();
+        }
+        //Выход из режима калибровки - короткое нажатие на кнопку.
+        if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
+          startval = SAMOVAR_STARTVAL_IDLE;
+          menu_calibrate();
+          menu_switch_focus();
+        }
       }
-      //Выход из режима калибровки - нажатие на кнопку.
-      if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
-        startval = SAMOVAR_STARTVAL_IDLE;
-        menu_calibrate();
-        menu_switch_focus();
+    } else if (mainButtonPressed) {
+      if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
+        //если дистилляция включаем или выключаем
+        if (!PowerOn) {
+          if (!queue_samovar_command(SAMOVAR_DISTILLATION)) SendMsg("Очередь команд занята: старт дистилляции не поставлен", WARNING_MSG);
+        } else
+          distiller_finish();
+      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
+        //если дистилляция включаем или выключаем
+        if (!PowerOn) {
+          if (!queue_samovar_command(SAMOVAR_BK)) SendMsg("Очередь команд занята: старт БК не поставлен", WARNING_MSG);
+        } else
+          bk_finish();
+      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
+        //если НБК включаем или выключаем
+        if (!PowerOn) {
+          if (!queue_samovar_command(SAMOVAR_NBK)) SendMsg("Очередь команд занята: старт НБК не поставлен", WARNING_MSG);
+        } else
+          nbk_finish();
+      } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+        //если пиво включаем или двигаем программу
+        if (!PowerOn) {
+          if (!queue_samovar_command(SAMOVAR_BEER)) SendMsg("Очередь команд занята: старт пива не поставлен", WARNING_MSG);
+        } else
+          run_beer_program(ProgramNum + 1);
       }
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      //если дистилляция включаем или выключаем
-      if (!PowerOn) {
-        if (!queue_samovar_command(SAMOVAR_DISTILLATION)) SendMsg("Очередь команд занята: старт дистилляции не поставлен", WARNING_MSG);
-      } else
-        distiller_finish();
-    } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-      //если дистилляция включаем или выключаем
-      if (!PowerOn) {
-        if (!queue_samovar_command(SAMOVAR_BK)) SendMsg("Очередь команд занята: старт БК не поставлен", WARNING_MSG);
-      } else
-        bk_finish();
-    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      //если НБК включаем или выключаем
-      if (!PowerOn) {
-        if (!queue_samovar_command(SAMOVAR_NBK)) SendMsg("Очередь команд занята: старт НБК не поставлен", WARNING_MSG);
-      } else
-        nbk_finish();
-    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      //если пиво включаем или двигаем программу
-      if (!PowerOn) {
-        if (!queue_samovar_command(SAMOVAR_BEER)) SendMsg("Очередь команд занята: старт пива не поставлен", WARNING_MSG);
-      } else
-        run_beer_program(ProgramNum + 1);
     }
   }
 #endif
@@ -2623,10 +2603,14 @@ void loop() {
         mode_apply_power_on_command(commandMsg.command);
         break;
       case SAMOVAR_NBK:
+#ifdef SAMOVAR_USE_POWER
         mode_apply_power_on_command(commandMsg.command);
+#else
+        SendMsg("Запуск НБК отклонён: регулятор мощности недоступен в этой сборке.", ALARM_MSG);
+#endif
         break;
       case SAMOVAR_NBK_NEXT:
-        run_nbk_program(ProgramNum + 1);
+        run_nbk_program(ProgramNum + 1, true);
         break;
       case SAMOVAR_SELF_TEST:
         start_self_test();
@@ -2725,7 +2709,9 @@ void loop() {
     pending_command_unlock(locked);
   }
   if (hasPendingMixer) {
-    set_mixer(mixerOn);
+    if (set_mixer(mixerOn) == ACTUATOR_COMMAND_FAILED) {
+      SendMsg("Команда мешалки не выполнена: исполнитель не подтвердил состояние", ALARM_MSG);
+    }
   }
 
   bool hasPendingWaterTemp = false;
@@ -3151,6 +3137,9 @@ struct AjaxTelemetrySnapshot {
   float tankTemp;
   float acpTemp;
   float detectorTrend;
+  float detectorSteamSpan;
+  float detectorSteamVariance;
+  float detectorRecoveryThreshold;
   float actualVolumePerHour;
   float steamBodyTemp;
   float pipeBodyTemp;
@@ -3175,6 +3164,7 @@ struct AjaxTelemetrySnapshot {
   uint16_t waterPumpSpeed;
 #endif
   uint32_t freeHeap;
+  uint32_t detectorSteamStableSeconds;
   int32_t rssi;
   uint32_t freeFsBytes;
   int32_t targetSteps;
@@ -3183,10 +3173,16 @@ struct AjaxTelemetrySnapshot {
   int volumeAll;
   int timeRemaining;
   int totalTime;
+  int rowPredictedTotalTime;
+  int processRemainingTime;
   int16_t withdrawalStatus;
   uint16_t stepperStepMl;
   uint16_t i2cPumpSpeed;
   uint8_t detectorStatus;
+  uint8_t detectorSteamStabilityReason;
+  uint8_t distRowPredictionReason;
+  uint8_t distProcessPredictionReason;
+  uint8_t boilingEvidence;
   uint8_t withdrawalProgress;
   uint8_t programIndex;
   bool useAutoSpeed;
@@ -3200,8 +3196,13 @@ struct AjaxTelemetrySnapshot {
   bool i2cPumpRunning;
   bool hasAlcohol;
   bool hasTimePrediction;
+  bool rowPredictionAvailable;
+  bool processPredictionAvailable;
   bool hasRuntimeEvent;
   bool heaterAlarmLatched;
+  bool boilingDetected;
+  bool boilingPrecisionSensorConfigured;
+  bool detectorRecoveryReady;
   uint32_t latestMessageSequence;
 };
 
@@ -3229,6 +3230,17 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.acpTemp = ACPSensor.avgTemp;
   snapshot.detectorTrend = impurityDetector.currentTrend;
   snapshot.detectorStatus = impurityDetector.detectorStatus;
+  snapshot.detectorSteamSpan = detector_steam_stability_span;
+  snapshot.detectorSteamVariance = detector_steam_stability_variance;
+  snapshot.detectorSteamStableSeconds = detector_steam_stable_seconds();
+  snapshot.detectorSteamStabilityReason = detector_steam_stability_reason;
+  snapshot.detectorRecoveryThreshold =
+      detector_current_recovery_threshold();
+  snapshot.detectorRecoveryReady = detector_trend_settled();
+  snapshot.boilingDetected = boiling_evidence != BOILING_EVIDENCE_NONE;
+  snapshot.boilingEvidence = boiling_evidence;
+  snapshot.boilingPrecisionSensorConfigured =
+      sensor_configured(SteamSensor) || sensor_configured(PipeSensor);
   snapshot.useAutoSpeed = SamSetup.useautospeed;
   snapshot.volumeAll = get_liquid_volume();
   snapshot.actualVolumePerHour = ActualVolumePerHour;
@@ -3305,6 +3317,16 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   if (snapshot.hasTimePrediction) {
     snapshot.timeRemaining = int(timePredictor.remainingTime);
     snapshot.totalTime = int(timePredictor.predictedTotalTime);
+    snapshot.rowPredictedTotalTime =
+        int(timePredictor.rowPredictedTotalTime);
+    snapshot.processRemainingTime =
+        int(timePredictor.processRemainingTime);
+    snapshot.rowPredictionAvailable =
+        timePredictor.rowPredictionAvailable;
+    snapshot.processPredictionAvailable =
+        timePredictor.processPredictionAvailable;
+    snapshot.distRowPredictionReason = distRowPredictionReason;
+    snapshot.distProcessPredictionReason = distProcessPredictionReason;
   }
   return RUNTIME_AJAX_SNAPSHOT_OK;
 }
@@ -3342,6 +3364,28 @@ static void writeAjaxTelemetryFields(
   out.print(format_float(snapshot.detectorTrend, 3));
   jsonAddKey(out, first, "DetectorStatus");
   out.print(snapshot.detectorStatus);
+  jsonAddKey(out, first, "DetectorSteamSpan");
+  out.print(format_float(snapshot.detectorSteamSpan, 4));
+  jsonAddKey(out, first, "DetectorSteamVariance");
+  out.print(format_float(snapshot.detectorSteamVariance, 6));
+  jsonAddKey(out, first, "DetectorSteamStableSeconds");
+  out.print(snapshot.detectorSteamStableSeconds);
+  jsonAddKey(out, first, "DetectorSteamStabilityReason");
+  out.print(snapshot.detectorSteamStabilityReason);
+  jsonAddKey(out, first, "DetectorSteamSpanThreshold");
+  out.print(format_float(DETECTOR_STEAM_STABLE_DELTA * 2.0f, 3));
+  jsonAddKey(out, first, "DetectorSteamVarianceThreshold");
+  out.print(format_float(DETECTOR_STEAM_STABLE_VARIANCE, 6));
+  jsonAddKey(out, first, "DetectorRecoveryThreshold");
+  out.print(format_float(snapshot.detectorRecoveryThreshold, 4));
+  jsonAddKey(out, first, "DetectorRecoveryReady");
+  out.print(snapshot.detectorRecoveryReady ? 1 : 0);
+  jsonAddKey(out, first, "BoilingDetected");
+  out.print(snapshot.boilingDetected ? 1 : 0);
+  jsonAddKey(out, first, "BoilingEvidence");
+  out.print(snapshot.boilingEvidence);
+  jsonAddKey(out, first, "BoilingPrecisionSensorConfigured");
+  out.print(snapshot.boilingPrecisionSensorConfigured ? 1 : 0);
   jsonAddKey(out, first, "useautospeed");
   out.print(snapshot.useAutoSpeed);
   jsonAddKey(out, first, "version");
@@ -3472,10 +3516,26 @@ static void writeAjaxTelemetryFields(
     out.print(format_float(snapshot.steamAlcohol, 2));
   }
   if (snapshot.hasTimePrediction) {
-    jsonAddKey(out, first, "TimeRemaining");
-    out.print(String(snapshot.timeRemaining));
-    jsonAddKey(out, first, "TotalTime");
-    out.print(String(snapshot.totalTime));
+    jsonAddKey(out, first, "RowPredictionAvailable");
+    out.print(snapshot.rowPredictionAvailable ? 1 : 0);
+    jsonAddKey(out, first, "ProcessPredictionAvailable");
+    out.print(snapshot.processPredictionAvailable ? 1 : 0);
+    jsonAddKey(out, first, "RowPredictionReason");
+    out.print(snapshot.distRowPredictionReason);
+    jsonAddKey(out, first, "ProcessPredictionReason");
+    out.print(snapshot.distProcessPredictionReason);
+    if (snapshot.rowPredictionAvailable) {
+      jsonAddKey(out, first, "TimeRemaining");
+      out.print(String(snapshot.timeRemaining));
+      jsonAddKey(out, first, "RowTotalTime");
+      out.print(String(snapshot.rowPredictedTotalTime));
+    }
+    if (snapshot.processPredictionAvailable) {
+      jsonAddKey(out, first, "ProcessTimeRemaining");
+      out.print(String(snapshot.processRemainingTime));
+      jsonAddKey(out, first, "TotalTime");
+      out.print(String(snapshot.totalTime));
+    }
   }
 
   jsonAddKey(out, first, "Status");
@@ -3593,6 +3653,8 @@ void saveConfigCallback() {
 }
 
 void apply_config_runtime() {
+  nbk_capture_runtime_input_validity(
+      SamSetup.HeaterResistant, SamSetup.MainsVoltage);
   SteamSensor.SetTemp = SamSetup.SetSteamTemp;
   PipeSensor.SetTemp = SamSetup.SetPipeTemp;
   WaterSensor.SetTemp = SamSetup.SetWaterTemp;

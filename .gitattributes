@@ -1,0 +1,2 @@
+nbk.h whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+Lua_script/*.lua whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

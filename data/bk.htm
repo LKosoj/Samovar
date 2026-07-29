@@ -140,6 +140,23 @@
           document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(3);
           document.getElementById('start_pressure').innerHTML = myObj.start_pressure.toFixed(3);
           document.getElementById('Status').textContent = myObj.Status;
+          const boilingEvidence = [
+            'ожидание подтверждения',
+            'пар — более точный критерий',
+            'царга — более точный критерий',
+            'куб + вода — менее точный алгоритм',
+            'куб — менее точный алгоритм',
+            'вода — менее точный алгоритм'
+          ];
+          const evidenceText = boilingEvidence[myObj.BoilingEvidence] || 'неизвестно';
+          document.getElementById('boiling_evidence').textContent =
+            myObj.BoilingEvidence === 0 && !myObj.BoilingPrecisionSensorConfigured
+              ? 'Подтверждение кипения: датчики пара/царги не настроены; используется менее точный алгоритм куб/вода'
+              : 'Подтверждение кипения: ' + evidenceText;
+          document.getElementById('boiling_evidence').dataset.precision =
+            myObj.BoilingEvidence === 1 || myObj.BoilingEvidence === 2
+              ? 'precise'
+              : 'estimated';
           document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
           document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
@@ -325,6 +342,8 @@
           Статус: <span id='Status'></span>
         </span>
       </div>
+      <div id="boiling_evidence" class="text" data-precision="estimated"
+           style="padding: 0.5em 1em;">Подтверждение кипения: ожидание</div>
 
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="text" id='WaterH2'>

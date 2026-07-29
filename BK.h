@@ -98,6 +98,12 @@ void check_alarm_bk() {
 
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   if (current_power_mode_is(POWER_SPEED_MODE) && (boilingNow || SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP || PipeSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP)) {
+    if (!boilingNow) {
+      record_boiling_evidence(
+          SteamSensor.avgTemp > CHANGE_POWER_MODE_STEAM_TEMP
+              ? BOILING_EVIDENCE_STEAM
+              : BOILING_EVIDENCE_PIPE);
+    }
 #ifdef SAMOVAR_USE_POWER
     set_current_power(SamSetup.BKPower);
 #else

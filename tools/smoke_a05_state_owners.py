@@ -216,6 +216,10 @@ struct I2CCacheFixture {
 struct TimePredictorFixture {
   float predictedTotalTime;
   float remainingTime;
+  float rowPredictedTotalTime;
+  float processRemainingTime;
+  bool rowPredictionAvailable;
+  bool processPredictionAvailable;
 };
 
 volatile float bme_temp = 1.25f;
@@ -251,9 +255,24 @@ uint16_t water_pump_speed = 321;
 volatile float WFflowRate = 1.25f;
 volatile uint32_t WFtotalMilliLitres = 456;
 float pressure_value = 3.5f;
-TimePredictorFixture timePredictor{99.9f, 12.9f};
+TimePredictorFixture timePredictor{99.9f, 12.9f, 44.9f, 22.9f, true, true};
 bool bootDegraded = false;
 String bootDegradedReason = "";
+
+static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
+static const float DETECTOR_STEAM_STABLE_VARIANCE = 0.000625f;
+float detector_steam_stability_span = 0.025f;
+float detector_steam_stability_variance = 0.000313f;
+uint8_t detector_steam_stability_reason = 0;
+enum BoilingEvidence : uint8_t {
+  BOILING_EVIDENCE_NONE = 0,
+  BOILING_EVIDENCE_STEAM,
+  BOILING_EVIDENCE_PIPE,
+  BOILING_EVIDENCE_TANK_AND_WATER,
+};
+BoilingEvidence boiling_evidence = BOILING_EVIDENCE_TANK_AND_WATER;
+uint8_t distRowPredictionReason = 4;
+uint8_t distProcessPredictionReason = 4;
 
 static uint32_t fakeMillis = 3723000;
 static uint32_t fakeHeap = 123456;
@@ -290,6 +309,11 @@ uint32_t millis() {
   sourceGetterCalls++;
   return fakeMillis;
 }
+
+uint32_t detector_steam_stable_seconds() { return 123; }
+float detector_current_recovery_threshold() { return 0.1234f; }
+bool detector_trend_settled() { return true; }
+bool sensor_configured(const SensorFixture&) { return true; }
 
 String format_uptime(unsigned long seconds) {
   std::ostringstream out;
@@ -432,7 +456,13 @@ int main() {
   const std::string distillationJson = serialize(distillation);
   if (!contains(distillationJson, "\"alc\":") ||
       !contains(distillationJson, "\"stm_alc\":") ||
+      !contains(distillationJson, "\"RowPredictionAvailable\":1") ||
+      !contains(distillationJson, "\"ProcessPredictionAvailable\":1") ||
+      !contains(distillationJson, "\"RowPredictionReason\":4") ||
+      !contains(distillationJson, "\"ProcessPredictionReason\":4") ||
       !contains(distillationJson, "\"TimeRemaining\":12") ||
+      !contains(distillationJson, "\"RowTotalTime\":44") ||
+      !contains(distillationJson, "\"ProcessTimeRemaining\":22") ||
       !contains(distillationJson, "\"TotalTime\":99") ||
       !contains(distillationJson, "\"i2c_pump_speed\":0,\"i2c_pump_target_ml\":0,\"i2c_pump_remaining_ml\":0,\"i2c_pump_running\":0")) return 16;
 
@@ -482,6 +512,11 @@ EXPECTED_DEFAULT = (
     '"crnt_tm":"clock\\"x","stm":"01:02:03","SteamTemp":78.125,'
     '"PipeTemp":77.250,"WaterTemp":20.500,"TankTemp":89.750,'
     '"ACPTemp":30.000,"DetectorTrend":0.125,"DetectorStatus":2,'
+    '"DetectorSteamSpan":0.0250,"DetectorSteamVariance":0.000313,'
+    '"DetectorSteamStableSeconds":123,"DetectorSteamStabilityReason":0,'
+    '"DetectorSteamSpanThreshold":0.100,"DetectorSteamVarianceThreshold":0.000625,'
+    '"DetectorRecoveryThreshold":0.1234,"DetectorRecoveryReady":1,'
+    '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
     '"useautospeed":1,"version":"6.27",'
     '"boot_degraded":0,"boot_degraded_reason":"","VolumeAll":42,'
     '"ActualVolumePerHour":1.234,"PowerOn":1,"PauseOn":0,'

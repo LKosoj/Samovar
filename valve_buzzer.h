@@ -4,24 +4,25 @@
 #include "Samovar.h"
 #include "samovar_api.h"
 
-void open_valve(bool Val, bool msg = true) {
+ActuatorCommandResult open_valve(bool Val, bool msg = true) {
   if (Val) {
+    digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
     valve_status = true;
     if (msg) {
       SendMsg(("Откройте подачу воды!"), WARNING_MSG);
     } else {
       SendMsg(("Открыт клапан воды охлаждения!"), NOTIFY_MSG);
     }
-    digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
   } else {
+    digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
     valve_status = false;
     if (msg) {
       SendMsg(("Закройте подачу воды!"), WARNING_MSG);
     } else {
       SendMsg(("Закрыт клапан воды охлаждения!"), NOTIFY_MSG);
     }
-    digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
   }
+  return ACTUATOR_COMMAND_APPLIED;
 }
 
 // Обработка пищалки в основном цикле

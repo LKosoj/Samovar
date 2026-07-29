@@ -276,13 +276,25 @@
             }
           }
 
-          // Обновляем значения прогноза времени
-          if (myObj.TimeRemaining !== undefined) {
-            document.getElementById('TimeRemaining').innerHTML = myObj.TimeRemaining;
-          }
-          if (myObj.TotalTime !== undefined) {
-            document.getElementById('TotalTime').innerHTML = myObj.TotalTime;
-          }
+          // Прогноз строки и всего процесса имеют независимую готовность.
+          const predictionReasons = [
+            'ожидание фактического кипения',
+            'накопление данных',
+            'готов',
+            'строки программы завершены'
+          ];
+          document.getElementById('TimeRemaining').textContent =
+            myObj.RowPredictionAvailable ? myObj.TimeRemaining : '--';
+          document.getElementById('RowTotalTime').textContent =
+            myObj.RowPredictionAvailable ? myObj.RowTotalTime : '--';
+          document.getElementById('ProcessTimeRemaining').textContent =
+            myObj.ProcessPredictionAvailable ? myObj.ProcessTimeRemaining : '--';
+          document.getElementById('TotalTime').textContent =
+            myObj.ProcessPredictionAvailable ? myObj.TotalTime : '--';
+          document.getElementById('RowPredictionStatus').textContent =
+            predictionReasons[myObj.RowPredictionReason] || 'нет данных';
+          document.getElementById('ProcessPredictionStatus').textContent =
+            predictionReasons[myObj.ProcessPredictionReason] || 'нет данных';
 
           if (myObj.WFflowRate === undefined) {
             document.getElementById('flowsensor').style = 'visibility: hidden; position: fixed;';
@@ -451,14 +463,24 @@
       <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
         <div class="container_column" style="flex: 1.1; padding-left: 2em;">
           <div class="text">
-            Осталось времени (прогноз): &nbsp;&nbsp;
+            Текущая строка — осталось: &nbsp;&nbsp;
             <span id='TimeRemaining' style="font-size: 1.5em; font-weight: bold;">--</span>
             мин
           </div>
           <div class="text">
-            Общее время: &nbsp;
-            <span id='TotalTime' style="font-size: 1.5em; font-weight: bold;">--</span>
+            Текущая строка — всего: &nbsp;
+            <span id='RowTotalTime' style="font-size: 1.5em; font-weight: bold;">--</span>
+            мин; <span id='RowPredictionStatus'>ожидание данных</span>
+          </div>
+          <div class="text">
+            Весь процесс до DistTemp — осталось: &nbsp;
+            <span id='ProcessTimeRemaining' style="font-size: 1.5em; font-weight: bold;">--</span>
             мин
+          </div>
+          <div class="text">
+            Весь процесс до DistTemp — всего: &nbsp;
+            <span id='TotalTime' style="font-size: 1.5em; font-weight: bold;">--</span>
+            мин; <span id='ProcessPredictionStatus'>ожидание данных</span>
           </div>
         </div>
       </div>

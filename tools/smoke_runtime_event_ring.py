@@ -1069,8 +1069,8 @@ def run_source_contracts() -> None:
             errors.append(f"Lua specialized Msg setter token missing: {token}")
 
     lua_sizes = [path.stat().st_size for path in (ROOT / "data_raw").glob("*.lua")]
-    if not lua_sizes or max(lua_sizes) != 8691 or max(lua_sizes) > RUNTIME_MAX_TEXT_BYTES:
-        errors.append("tracked Lua size evidence no longer matches 8691/10000 contract")
+    if not lua_sizes or max(lua_sizes) != 8803 or max(lua_sizes) > RUNTIME_MAX_TEXT_BYTES:
+        errors.append("tracked Lua size evidence no longer matches 8803/10000 contract")
 
     app = read("data_raw/app.js")
     for token in (

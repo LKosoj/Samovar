@@ -120,7 +120,8 @@
       { name: 'DeltaACPTemp', min: -1000, max: 1000 },
       { name: 'SetACPTemp', min: 0, max: 150 },
       { name: 'ACPDelay', integer: true, min: 0, max: 65535 },
-      { name: 'SuvidTemp', min: 0, max: 150 },
+      { name: 'SuvidTemp', min: 0, max: 100 },
+      { name: 'SuvidHoldMinutes', integer: true, min: 0, max: 65535 },
       { name: 'SteamAddr', integer: true, min: -1, max: 255 },
       { name: 'PipeAddr', integer: true, min: -1, max: 255 },
       { name: 'WaterAddr', integer: true, min: -1, max: 255 },
@@ -404,6 +405,7 @@
         </div>
       </div>
       <h2><label for="SuvidTemp">Уставка Су-вид (0 = не задано):</label> <input id="SuvidTemp" name='SuvidTemp' type='text' inputmode='decimal' value='%SuvidTemp%'>&#176;C</h2>
+      <h2><label for="SuvidHoldMinutes">Выдержка Су-вид в полосе уставки (0 = бессрочно):</label> <input id="SuvidHoldMinutes" name='SuvidHoldMinutes' type='text' inputmode='numeric' value='%SuvidHoldMinutes%'> мин</h2>
       <div 
         style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
         >

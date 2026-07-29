@@ -38,9 +38,20 @@ inline void mode_stop_cooling_pump_if_started() {
 #endif
 }
 
+inline bool mode_water_flow_demanded() {
+  if (!SamSetup.UseWS) return false;
+  if (valve_status) return true;
+#ifdef USE_WATER_PUMP
+  if (Samovar_Mode == SAMOVAR_BEER_MODE) return beer_cooling_pump_demanded();
+  return pump_started;
+#else
+  return false;
+#endif
+}
+
 inline void mode_request_water_flow_emergency_if_needed() {
 #ifdef USE_WATERSENSOR
-  if (WFAlarmCount > WF_ALARM_COUNT && PowerOn) {
+  if (mode_water_flow_demanded() && WFAlarmCount > WF_ALARM_COUNT) {
     set_buzzer(true);
     request_emergency_stop("Аварийное отключение! Прекращена подача воды.");
   }

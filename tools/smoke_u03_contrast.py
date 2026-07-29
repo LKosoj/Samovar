@@ -27,15 +27,15 @@ STYLE_TOKEN_ALLOWLIST = (
     "detector-alarm-bg",
 )
 NORMALIZED_SHA256 = {
-    "style.css": "9fb63518cdf5ef78a9d4c6eea83250ff823dd44d52e60a6b4fcf83608264f7f5",
-    "index.htm": "58d11c99c75f3d27eb9c2d4320651179471e548df54ba303e79cf5825bc23ee5",
-    "beer.htm": "9d3a4ab340bb44d0d47d75fcd8acdd304d0bc0aacddcf3af177430531b2d7d69",
-    "distiller.htm": "f929c701a50869a1062e51b8b85bf73d41f15c56a847414f5203ee046315d591",
-    "bk.htm": "711c4854b58c7a3295bc8008a6aeb9d8c8bcc6aaa07490acb9fabf94b0c4412f",
+    "style.css": "c2e2bfc57ea49cf1d67318a71892c0205938635a45c2c17c1d7c1daedfe8f32d",
+    "index.htm": "6a63d3040668bafe8b9342f29612b5a6864a067a0de045518cb8c0da5b6e469e",
+    "beer.htm": "976dd5558dc63ac0bf72ee123777768205be147c7ed18a09153c36cdd2544398",
+    "distiller.htm": "6330a1719723ba5a76f45e9f2f90cb9244968ae1e23766b2afd1b6b49e0a6fae",
+    "bk.htm": "0913598d673b5b571b87201a93413ee6a17c32f493925a04362b6abad1465033",
     "nbk.htm": "a6e336f1c96c20d4e95381e27f747af780717bf7a7067f7f50b29be14cbb4d38",
-    "setup.htm": "8e5f6004fbfd7525b2d4aebfd9e35fa28d2ca5ddce41b63b00b7921486317ccb",
-    "chart.htm": "7beb4857bfa1e1445de8d7d2c51a2ef6a1207f70e83e371d41a2990a634e8a12",
-    "program.htm": "c19b178f773db195059fb744d9c5a7709cc23e60798ebe73a5d951d394a18294",
+    "setup.htm": "e52b074b5b51a86fe99b8ec8d675c65860deedd0de596832ee95c605a664c9eb",
+    "chart.htm": "703f395c5feda13cbb5e4bb1ad76c66888ab6d8868df7730ba86356938eea5d1",
+    "program.htm": "2192511f600fcadcea07735f5007ebd1852ec77d9f336771f79b9bea231467a3",
     "i2cstepper.htm": "73cb500944566fa78dd21538e0cd3a3ca6124ed2c590c3d6027dd9586d6eb017",
     "chart.js": "c75f9056f18a8cd81622f6e2dbef6b7f1ead05467407183aec11a4aa6011b80e",
 }

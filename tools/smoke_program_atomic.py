@@ -242,7 +242,7 @@ void test_non_finite_values_are_atomic() {
   const Case invalid[] = {
       {"H;450;nan;1;0;45\n", rect_program_parse_spec},
       {"A;80;1;inf\n", dist_program_parse_spec},
-      {"M;-inf;0;0^-1^2^2;0\n", beer_program_parse_spec},
+      {"M;-inf;0;0^0^0^0;0\n", beer_program_parse_spec},
       {"H;1e999;0\nS;1;10\nO;2;20\nW;3;30\n", nbk_program_parse_spec},
   };
   for (const Case& test : invalid) {
@@ -260,7 +260,7 @@ void test_delimiter_structure_is_atomic() {
   const char* malformed[] = {
       "H;;450;0.1;1;0;45\n",
       "A;80;1;0;\n",
-      ";M;45;0;0^-1^2^2;0\n",
+      ";M;45;0;0^0^0^0;0\n",
       "H;;1;0\nS;1;10\nO;2;20\nW;3;30\n",
   };
   const ProgramParseSpec* specs[] = {
@@ -282,9 +282,9 @@ void test_delimiter_structure_is_atomic() {
   }
 
   const std::string semicolon_overflow =
-      std::string("M;") + std::string(256, ';') + "45;0;0^-1^2^2;0\n";
+      std::string("M;") + std::string(256, ';') + "45;0;0^0^0^0;0\n";
   const std::string device_overflow =
-      std::string("M;45;0;0") + std::string(256, '^') + "^-1^2^2;0\n";
+      std::string("M;45;0;0") + std::string(256, '^') + "^0^0^0;0\n";
   for (const std::string& text : {semicolon_overflow, device_overflow}) {
     seed_program();
     const auto before = program_bytes();
@@ -319,7 +319,7 @@ void test_blank_lines_and_all_formats_round_trip() {
       2,
       "AS");
   check_round_trip(
-      "M;45;0;0^-1^2^2;0\nP;60;10;1^20^3^4;1\n",
+      "M;45;0;0^0^0^0;0\nP;60;10;1^20^3^4;1\n",
       beer_program_parse_spec(),
       program_append_beer_row,
       2,
@@ -360,6 +360,51 @@ void test_dist_row_type_bounds() {
   }
 }
 
+void test_beer_row_semantics() {
+  struct Case {
+    ProgramType type;
+    float temp;
+    float time;
+    long devType;
+    long speed;
+    long onTime;
+    long offTime;
+    long sensor;
+    bool expectOk;
+  };
+  const Case cases[] = {
+      {'M', 45, 0, 0, 0, 0, 0, 0, true},
+      {'M', 45, 1, 0, 0, 0, 0, 0, false},
+      {'M', 0, 0, 0, 0, 0, 0, 0, false},
+      {'C', 20, 0, 0, 0, 0, 0, 0, true},
+      {'C', 20, 1, 0, 0, 0, 0, 0, false},
+      {'F', 18, 0, 0, 0, 0, 0, 0, true},
+      {'F', 18, 1, 0, 0, 0, 0, 0, false},
+      {'P', 65, 1, 0, 0, 0, 0, 0, true},
+      {'P', 65, 0, 0, 0, 0, 0, 0, false},
+      {'P', 65, 1, 0, -1, 2, 3, 0, false},
+      {'P', 65, 1, 1, -1, 2, 0, 0, true},
+      {'B', 0, 1, 0, 0, 0, 0, 0, true},
+      {'B', 1, 1, 0, 0, 0, 0, 0, false},
+      {'W', 0, 0, 1, 20, 3, 4, 0, true},
+      {'W', 0, 1, 1, 20, 3, 4, 0, false},
+      {'W', 0, 0, 1, 20, 3, 4, 4, true},
+      {'A', 70, 0, 0, 0, 0, 0, 1, true},
+      {'A', 70, 0, 1, 20, 3, 4, 1, false},
+      {'A', 0, 0, 0, 0, 0, 0, 1, false},
+      {'L', 0, 0, 0, 0, 0, 0, 0, false},
+  };
+  for (const Case& test : cases) {
+    const char* error = nullptr;
+    const bool ok = program_validate_beer_row_semantics(
+        test.type, test.temp, test.time, test.devType, test.speed,
+        test.onTime, test.offTime, test.sensor, error);
+    std::string message = std::string("beer semantic matrix mismatch for type ") + test.type;
+    check(ok == test.expectOk, message.c_str());
+    if (!ok) check(error != nullptr, "rejected beer semantic row lacks an error message");
+  }
+}
+
 void test_mode_mapping_and_defaults() {
   struct ModeCase {
     SAMOVAR_MODE mode;
@@ -373,13 +418,13 @@ void test_mode_mapping_and_defaults() {
       {SAMOVAR_DISTILLATION_MODE, PROGRAM_FORMAT_DIST,
        "A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n", 3},
       {SAMOVAR_BEER_MODE, PROGRAM_FORMAT_BEER,
-       "M;45;0;0^-1^2^2;0\nP;45;1;0^-1^2^3;0\nP;60;1;0^-1^2^3;0\nW;0;0;0^-1^2^3;0\nB;0;1;0^-1^2^3;0\nC;30;0;0^-1^2^3;0\n", 6},
+       "M;45;0;0^0^0^0;0\nP;45;1;0^0^0^0;0\nP;60;1;0^0^0^0;0\nW;0;0;0^0^0^0;0\nB;0;1;0^0^0^0;0\nC;30;0;0^0^0^0;0\n", 6},
       {SAMOVAR_BK_MODE, PROGRAM_FORMAT_RECT,
        "H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n", 3},
       {SAMOVAR_NBK_MODE, PROGRAM_FORMAT_NBK,
        "H;1;0\nS;10;2000\nO;0;0\nW;0;0\n", 4},
       {SAMOVAR_SUVID_MODE, PROGRAM_FORMAT_BEER,
-       "M;45;0;0^-1^2^2;0\nP;45;1;0^-1^2^3;0\nP;60;1;0^-1^2^3;0\nW;0;0;0^-1^2^3;0\nB;0;1;0^-1^2^3;0\nC;30;0;0^-1^2^3;0\n", 6},
+       "M;45;0;0^0^0^0;0\nP;45;1;0^0^0^0;0\nP;60;1;0^0^0^0;0\nW;0;0;0^0^0^0;0\nB;0;1;0^0^0^0;0\nC;30;0;0^0^0^0;0\n", 6},
       {SAMOVAR_LUA_MODE, PROGRAM_FORMAT_RECT,
        "H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n", 3},
   };
@@ -418,6 +463,7 @@ int main() {
   test_delimiter_structure_is_atomic();
   test_blank_lines_and_all_formats_round_trip();
   test_dist_row_type_bounds();
+  test_beer_row_semantics();
   test_mode_mapping_and_defaults();
 
   if (failures != 0) return 1;
@@ -468,7 +514,39 @@ def main() -> int:
         )
         sys.stdout.write(run_result.stdout)
         sys.stderr.write(run_result.stderr)
-        return run_result.returncode
+        if run_result.returncode != 0:
+            return run_result.returncode
+
+        # Mutation proof: a nonzero mixer schedule without a selected device
+        # must not become accepted. Compile the altered production header in a
+        # temporary include directory; the repository source itself is never
+        # written.
+        mutated_program_io = (ROOT / "program_io.h").read_text(encoding="utf-8")
+        mutated_program_io = mutated_program_io.replace(
+            "const bool validDeviceSchedule = validDeviceMask && onTime > 0;",
+            "const bool validDeviceSchedule = devType == 0 || (validDeviceMask && onTime > 0);", 1,
+        )
+        (temp / "program_io.h").write_text(mutated_program_io, encoding="utf-8")
+        mutation_binary = temp / "program_atomic_mutation_test"
+        mutation_compile = subprocess.run(
+            [
+                "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                "-I", str(temp), "-I", str(ROOT), str(harness), "-o", str(mutation_binary),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        if mutation_compile.returncode != 0:
+            sys.stderr.write("FAIL: semantic mutation did not compile\n")
+            sys.stderr.write(mutation_compile.stderr)
+            return 1
+        mutation_run = subprocess.run(
+            [str(mutation_binary)], capture_output=True, text=True, check=False
+        )
+        if mutation_run.returncode == 0:
+            sys.stderr.write("FAIL: beer semantic test did not catch the mutation\n")
+            return 1
+        print("Beer semantic mutation was rejected as expected")
+        return 0
 
 
 if __name__ == "__main__":

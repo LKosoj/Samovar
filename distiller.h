@@ -15,7 +15,8 @@
  * @brief Структура для прогнозирования времени процесса дистилляции.
  */
 struct TimePredictor {
-    unsigned long startTime;           ///< Время начала процесса
+    unsigned long startTime;           ///< Время начала текущей строки
+    unsigned long processStartTime;    ///< Время фактического начала кипения
     float initialAlcohol;              ///< Начальное содержание спирта
     float initialTemp;                 ///< Начальная температура
     float lastTemp;                    ///< Последняя температура
@@ -24,14 +25,21 @@ struct TimePredictor {
     float predictedTotalTime;          ///< Прогнозируемое общее время (мин)
     float remainingTime;               ///< Оставшееся время (мин)
     float initialSteamAlcohol;         ///< Начальная крепость пара (для строк 'P'/'R')
+    float processInitialTemp;           ///< Температура на фронте кипения
+    float processRemainingTime;         ///< Остаток процесса до DistTemp
+    float rowPredictedTotalTime;        ///< Полная оценка текущей строки
+    bool baselineValid;                 ///< Крепость и температура захвачены после кипения
+    bool rowPredictionAvailable;
+    bool processPredictionAvailable;
 };
 
-TimePredictor timePredictor = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+TimePredictor timePredictor = {};
 // [П4.6] Время СТАРТА СЕССИИ дистилляции (не строки программы). timePredictor.startTime
 // используется предиктором для скорости изменения показателей ВНУТРИ текущей строки и
 // намеренно сбрасывается на каждом run_dist_program(); честное «Общее время» сессии
 // требует отдельного таймера, который выставляется один раз — при (пере)старте.
 unsigned long sessionStartTime = 0;
+bool sessionTimerValid = false;
 // Фронт-детектор начала кипения для перезахвата TankSensor.StartProgTemp (не static
 // внутри функции — нужен сброс между сессиями дистилляции, см. resetTimePredictor()).
 bool distBoilStartedPrev = false;
@@ -46,6 +54,16 @@ bool distBoostGated = false;
 static constexpr float MIN_TEMP_RATE = 0.01f;    // °C/мин
 static constexpr float MIN_ALC_RATE  = 0.001f;   // доля/мин
 static constexpr unsigned long PREDICTOR_UPDATE_MS = 30000; // шаг пересчёта, мс
+
+enum DistPredictionReason : uint8_t {
+  DIST_PREDICTION_AWAITING_BOIL = 0,
+  DIST_PREDICTION_COLLECTING,
+  DIST_PREDICTION_READY,
+  DIST_PREDICTION_NO_ACTIVE_ROW,
+};
+
+DistPredictionReason distRowPredictionReason = DIST_PREDICTION_AWAITING_BOIL;
+DistPredictionReason distProcessPredictionReason = DIST_PREDICTION_AWAITING_BOIL;
 
 /**
  * @brief Основной цикл обработки процесса дистилляции.
@@ -76,8 +94,10 @@ void distiller_proc() {
     distBoostGated = false;
 #endif
     // Инициализируем систему прогнозирования
+    distBoilStartedPrev = false;
     resetTimePredictor();
     sessionStartTime = millis();
+    sessionTimerValid = true;
   }
 
   // [distiller-cold-start] get_alcohol()/get_steam_alcohol() гейтятся текущим
@@ -87,6 +107,7 @@ void distiller_proc() {
   // StartProgTemp по фронту boil_started, чтобы полином не считался по холодной температуре.
   if (boil_started && !distBoilStartedPrev) {
     TankSensor.StartProgTemp = TankSensor.avgTemp;
+    resetTimePredictor();
   }
   distBoilStartedPrev = boil_started;
 
@@ -140,7 +161,14 @@ void distiller_proc() {
 void distiller_finish() {
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
-  String timeMsg = "Дистилляция завершена. Общее время: " + String(int((millis() - sessionStartTime) / 60000)) + " мин.";
+  String timeMsg = "Дистилляция завершена.";
+  if (sessionTimerValid) {
+    timeMsg += " Общее время: " +
+        String(int((millis() - sessionStartTime) / 60000)) + " мин.";
+  }
+  sessionTimerValid = false;
+  sessionStartTime = 0;
+  distBoilStartedPrev = false;
   stop_process(timeMsg);
 }
 
@@ -213,8 +241,23 @@ void run_dist_program(uint8_t num) {
   ProgramNum = num;
 
   SendMsg("Переход к строке программы №" + (String)(num + 1), NOTIFY_MSG);
-  // Сбрасываем прогноз при переходе к новой программе
-  resetTimePredictor();
+  // Переход строки сбрасывает только строковый baseline. Процессный baseline,
+  // захваченный по фактическому фронту кипения, сохраняется до конца сессии.
+  timePredictor.startTime = millis();
+  timePredictor.initialAlcohol =
+      timePredictor.baselineValid ? get_alcohol(TankSensor.avgTemp) : 0.0f;
+  timePredictor.initialSteamAlcohol =
+      timePredictor.baselineValid ? get_steam_alcohol(TankSensor.avgTemp) : 0.0f;
+  timePredictor.initialTemp = TankSensor.avgTemp;
+  timePredictor.lastTemp = TankSensor.avgTemp;
+  timePredictor.lastUpdateTime = millis();
+  timePredictor.tempChangeRate = 0.0f;
+  timePredictor.remainingTime = 0.0f;
+  timePredictor.rowPredictedTotalTime = 0.0f;
+  timePredictor.rowPredictionAvailable = false;
+  distRowPredictionReason = timePredictor.baselineValid
+      ? DIST_PREDICTION_COLLECTING
+      : DIST_PREDICTION_AWAITING_BOIL;
 
   //запоминаем текущие значения температур
   SteamSensor.StartProgTemp = SteamSensor.avgTemp;
@@ -251,22 +294,57 @@ String get_dist_program() {
 }
 
 void resetTimePredictor() {
-    timePredictor.startTime = millis();
-    timePredictor.initialAlcohol = get_alcohol(TankSensor.avgTemp);
-    timePredictor.initialSteamAlcohol = get_steam_alcohol(TankSensor.avgTemp);
+    const unsigned long now = millis();
+    timePredictor.startTime = now;
+    timePredictor.processStartTime = boil_started ? now : 0;
+    timePredictor.initialAlcohol = boil_started ? get_alcohol(TankSensor.avgTemp) : 0.0f;
+    timePredictor.initialSteamAlcohol =
+        boil_started ? get_steam_alcohol(TankSensor.avgTemp) : 0.0f;
     timePredictor.initialTemp = TankSensor.avgTemp;
+    timePredictor.processInitialTemp = TankSensor.avgTemp;
     timePredictor.lastTemp = TankSensor.avgTemp;
-    timePredictor.lastUpdateTime = millis();
+    timePredictor.lastUpdateTime = now;
     timePredictor.tempChangeRate = 0;
     timePredictor.predictedTotalTime = 0;
     timePredictor.remainingTime = 0;
-    // Сбрасываем фронт-детектор кипения: resetTimePredictor() вызывается на каждом
-    // (пере)старте дистилляции (distiller_proc()) и на каждом переходе строки
-    // (run_dist_program()), поэтому распространяем сброс сюда же.
-    distBoilStartedPrev = false;
+    timePredictor.processRemainingTime = 0;
+    timePredictor.rowPredictedTotalTime = 0;
+    timePredictor.baselineValid = boil_started;
+    timePredictor.rowPredictionAvailable = false;
+    timePredictor.processPredictionAvailable = false;
+    distRowPredictionReason = boil_started
+        ? DIST_PREDICTION_COLLECTING
+        : DIST_PREDICTION_AWAITING_BOIL;
+    distProcessPredictionReason = distRowPredictionReason;
+}
+
+inline bool calculate_dist_process_remaining(
+    float currentTemp,
+    float targetTemp,
+    float initialTemp,
+    float elapsedMinutes,
+    float& remainingMinutes) {
+    const float delta = targetTemp - currentTemp;
+    if (delta <= 0.0f) {
+        remainingMinutes = 0.0f;
+        return true;
+    }
+    if (elapsedMinutes <= 0.0f) return false;
+    const float rate = (currentTemp - initialTemp) / elapsedMinutes;
+    if (rate <= MIN_TEMP_RATE) return false;
+    remainingMinutes = delta / rate;
+    return true;
 }
 
 void updateTimePredictor() {
+    if (!timePredictor.baselineValid || !sessionTimerValid) {
+        timePredictor.rowPredictionAvailable = false;
+        timePredictor.processPredictionAvailable = false;
+        distRowPredictionReason = DIST_PREDICTION_AWAITING_BOIL;
+        distProcessPredictionReason = DIST_PREDICTION_AWAITING_BOIL;
+        return;
+    }
+
     unsigned long currentTime = millis();
     float currentTemp = TankSensor.avgTemp;
     float currentAlcohol = get_alcohol(currentTemp);
@@ -286,18 +364,18 @@ void updateTimePredictor() {
     float steamAlcoholDelta = timePredictor.initialSteamAlcohol - currentSteamAlcohol;
     float steamAlcoholChangeRate = (dtMin > 0) ? (steamAlcoholDelta / ((currentTime - timePredictor.startTime) / 60000.0f)) : 0; // доля/мин (пар)
 
-    // Если программы закончились, не делаем прогноз
-    if (ProgramNum >= ProgramLen || program_type_empty(program[ProgramNum].WType)) {
-        timePredictor.remainingTime = 0;
-        float elapsedMinutes = (currentTime - sessionStartTime) / 60000.0f;
-        timePredictor.predictedTotalTime = elapsedMinutes;
-        return;
-    }
-
     float remaining = 0;
-    ProgramType wtype = program[ProgramNum].WType;
+    const bool hasActiveRow =
+        ProgramNum < ProgramLen && !program_type_empty(program[ProgramNum].WType);
+    ProgramType wtype =
+        hasActiveRow ? program[ProgramNum].WType : PROGRAM_TYPE_NONE;
 
-    if (wtype == 'T') {
+    if (!hasActiveRow) {
+        timePredictor.remainingTime = 0;
+        timePredictor.rowPredictedTotalTime = 0;
+        timePredictor.rowPredictionAvailable = false;
+        distRowPredictionReason = DIST_PREDICTION_NO_ACTIVE_ROW;
+    } else if (wtype == 'T') {
         float targetTemp = program[ProgramNum].Speed;
         float dT = targetTemp - currentTemp;
         if (dT <= 0) {
@@ -333,9 +411,47 @@ void updateTimePredictor() {
         remaining = 0;
     }
 
-    timePredictor.remainingTime = max(0.0f, remaining);
-    float elapsedMinutes = (currentTime - sessionStartTime) / 60000.0f;
-    timePredictor.predictedTotalTime = elapsedMinutes + timePredictor.remainingTime;
+    if (hasActiveRow) {
+        timePredictor.remainingTime = max(0.0f, remaining);
+        timePredictor.rowPredictionAvailable = remaining > 0.0f;
+        if (timePredictor.rowPredictionAvailable) {
+            const float rowElapsed =
+                (currentTime - timePredictor.startTime) / 60000.0f;
+            timePredictor.rowPredictedTotalTime =
+                rowElapsed + timePredictor.remainingTime;
+            distRowPredictionReason = DIST_PREDICTION_READY;
+        } else {
+            timePredictor.rowPredictedTotalTime = 0.0f;
+            distRowPredictionReason = DIST_PREDICTION_COLLECTING;
+        }
+    }
+
+    const float processElapsed =
+        (currentTime - timePredictor.processStartTime) / 60000.0f;
+    float processRemaining = 0.0f;
+    if (calculate_dist_process_remaining(
+          currentTemp,
+          SamSetup.DistTemp,
+          timePredictor.processInitialTemp,
+          processElapsed,
+          processRemaining)) {
+        timePredictor.processRemainingTime = processRemaining;
+        timePredictor.processPredictionAvailable = true;
+        distProcessPredictionReason = DIST_PREDICTION_READY;
+    } else {
+        timePredictor.processRemainingTime = 0.0f;
+        timePredictor.processPredictionAvailable = false;
+        distProcessPredictionReason = DIST_PREDICTION_COLLECTING;
+    }
+
+    if (timePredictor.processPredictionAvailable) {
+        const float sessionElapsed =
+            (currentTime - sessionStartTime) / 60000.0f;
+        timePredictor.predictedTotalTime =
+            sessionElapsed + timePredictor.processRemainingTime;
+    } else {
+        timePredictor.predictedTotalTime = 0.0f;
+    }
 }
 
 float get_dist_remaining_time() {
@@ -344,4 +460,20 @@ float get_dist_remaining_time() {
 
 float get_dist_predicted_total_time() {
     return timePredictor.predictedTotalTime;
+}
+
+float get_dist_process_remaining_time() {
+    return timePredictor.processRemainingTime;
+}
+
+float get_dist_row_predicted_total_time() {
+    return timePredictor.rowPredictedTotalTime;
+}
+
+bool dist_row_prediction_available() {
+    return timePredictor.rowPredictionAvailable;
+}
+
+bool dist_process_prediction_available() {
+    return timePredictor.processPredictionAvailable;
 }

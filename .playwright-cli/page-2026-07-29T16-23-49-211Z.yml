@@ -1,0 +1,37 @@
+- generic [active] [ref=e1]:
+  - button "Включить тёмную тему" [ref=e2] [cursor=pointer]: ☾
+  - generic [ref=e4]:
+    - generic [ref=e6]: "Ошибка загрузки графика: HTTP 404"
+    - generic [ref=e7]:
+      - generic [ref=e8]: Температура пара
+      - generic [ref=e10]: Температура в царге
+      - generic [ref=e12]: Температура воды
+      - generic [ref=e14]: Температура в кубе
+      - generic [ref=e16]: Давление
+      - generic [ref=e18]: Строка программы
+  - generic [ref=e20]:
+    - heading "Статус" [level=1] [ref=e21]
+    - heading "Обновлять график" [level=2] [ref=e22]:
+      - checkbox "Обновлять график" [checked] [ref=e23]
+    - generic [ref=e25]:
+      - generic [ref=e26]: "Текущее время:"
+      - generic [ref=e29]: "Время работы:"
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - generic [ref=e32]: "Т в царге: °C"
+        - generic [ref=e33]: "Т пара: °C"
+        - generic [ref=e34]: "Δ температур: °C"
+      - generic [ref=e35]:
+        - generic [ref=e36]: "Т воды: °C"
+        - generic [ref=e37]: "Т в кубе: °C"
+        - generic [ref=e38]: "Т в ТСА: °C"
+    - generic [ref=e39]:
+      - generic [ref=e40]:
+        - generic [ref=e41]: "Скорость отбора: л/ч"
+        - generic [ref=e42]: "Отобранный объем: мл"
+      - generic [ref=e43]: "Прогресс отбора: %"
+    - generic [ref=e45]: "Статус:"
+    - button "Назад" [ref=e48]
+    - button "Сохранить лог" [ref=e49]
+    - button "Сохранить старый лог" [ref=e50]
+    - generic [ref=e51]: "Системные параметры: Heap=; BME temp=; RSSI = ; Свободно:"

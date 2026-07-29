@@ -13,7 +13,7 @@ use_flow_sensor = false
 
 -- ОПРЕДЕЛЕНИЕ ПЕРЕМЕННЫХ ---
 tank_filled = getObject("tank_filled") -- читаем, наполнен ли куб
-pump_started = getObject("pump_started") -- читаем признак включения насоса
+pump_started = getNumVariable("pump_started") + 0 -- читаем подтверждённый признак включения насоса
 bottom_pin = getObject("bottom_pin", "NUMERIC") + 0 -- читаем сохранённый нижний уровень
 bottom_readings_count = getObject("bottom_readings_count", "NUMERIC") + 0 -- читаем количество уже пропущенных показаний
 start_time = getObject("start_time", "NUMERIC") + 0 -- читаем время начала работы насоса
@@ -34,20 +34,28 @@ local function verifyVolumeTargets () -- проверяем корректнос
 end
 
 local function startPump()
-  pinMode(4, OUTPUT) --устанавливаем режим пина
-	digitalWrite(4, HIGH) --устанавливаем на 4 ноге высокий уровень => включаем насос
-	setObject("pump_started", "true") --сохраняем признак включения насоса
-	sendMsg("Насос включён", -1) --отчитываемся в консоль браузера
-	sendMsg("Насос включён", 2) --отправляем сообщение оператору
+  if setPumpPwm(1023) ~= ACTUATOR_COMMAND_APPLIED then
+    setLuaStatus("Ошибка включения насоса")
+    sendMsg("Насос не подтвердил включение.", -1)
+    sendMsg("Насос не подтвердил включение.", 0)
+    return false
+  end
+  sendMsg("Насос включён", -1) --отчитываемся в консоль браузера
+  sendMsg("Насос включён", 2) --отправляем сообщение оператору
+  return true
 end
 
 
 local function stopPump()
-  pinMode(4, OUTPUT) --устанавливаем режим пина
-	digitalWrite(4, LOW) --устанавливаем на 4 ноге низкий уровень => выключаем насос
-	setObject("pump_started", "false") --сохраняем признак выключения насоса
-	sendMsg("Насос выключен", -1) --сообщаем в консоль браузера
-	sendMsg("Насос выключен", 2) --отправляем сообщение оператору
+  if setPumpPwm(0) ~= ACTUATOR_COMMAND_APPLIED then
+    setLuaStatus("Ошибка выключения насоса")
+    sendMsg("Насос не подтвердил выключение.", -1)
+    sendMsg("Насос не подтвердил выключение.", 0)
+    return false
+  end
+  sendMsg("Насос выключен", -1) --сообщаем в консоль браузера
+  sendMsg("Насос выключен", 2) --отправляем сообщение оператору
+  return true
 end
 
 
@@ -85,13 +93,14 @@ end
 -----------------------------------------
 
 local function stopFilling ()
-	stopPump()
+  if not stopPump() then return false end
   setLuaStatus("Куб заполнен")
 	setObject("bottom_pin", 0)
 	setObject("tank_filled", "true")
 	sendMsg("Done: filling stopped.", -1)
 	sendMsg("Done: filling stopped.", 0)
     setNumVariable("loop_lua_fl",0)
+  return true
 end
 
 
@@ -102,11 +111,11 @@ local function fillTank ()
   sendMsg("sensor: " .. sensor, -1)
 	if tank_filled ~= "true" then
 	  sendMsg("pump_started: " .. pump_started, -1)
-	  if pump_started ~= "true" then
+	  if pump_started == 0 then
 			sendMsg("Начинаем заполнение куба...", -1) --отчитываемся в консоль браузера
 			sendMsg("Начинаем заполнение куба...", 2) --отправляем сообщение оператору
             setLuaStatus("Заполнение куба")
-            startPump()
+            if not startPump() then return false end
 		else
       if use_level_sensor and check4level() then stopFilling() end
       if use_flow_sensor and check4volume() then stopFilling() end
@@ -134,6 +143,4 @@ end
 --resetFilling ()
  fillTank()
 -- stopFilling()
-
-
 

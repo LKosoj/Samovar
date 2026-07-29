@@ -21,6 +21,7 @@ var phv = 0;
 var ptv = 0;
 var pbas = 0;
 var programerr;
+var programErrorMessage = "";
 var glcalcnum = false;
 var programTemplateBaseline = "";
 var currentProgramTemplateValue = "";
@@ -296,9 +297,102 @@ function get_time(tm){
   return s;
 }
 
+function formatSummaryPercent(value) {
+  if (!Number.isFinite(value)) return "—";
+  return String(Math.round(value * 100) / 100) + "%";
+}
+
+function formatSummaryVolume(value) {
+  if (!Number.isFinite(value) || value < 0) return "—";
+  return Math.round(value * 1000) + " мл";
+}
+
+function formatSummaryTime(value) {
+  if (!Number.isFinite(value) || value < 0) return "—";
+  var minutes = Math.floor(value * 60);
+  return Math.floor(minutes / 60) + " ч " + String(minutes % 60).padStart(2, "0") + " мин";
+}
+
+function distributionStatus(label, prefix, value) {
+  if (!Number.isFinite(value)) {
+    return {
+      text: prefix + ": — — некорректное значение",
+      className: "program-summary-status is-invalid",
+      error: label + ": некорректный процент"
+    };
+  }
+  if (value == 100) {
+    return {
+      text: prefix + ": 100% — распределено полностью",
+      className: "program-summary-status is-valid",
+      error: ""
+    };
+  }
+  var delta = Math.abs(100 - value);
+  var reason = value < 100 ? "не хватает " + formatSummaryPercent(delta) : "превышение на " + formatSummaryPercent(delta);
+  return {
+    text: prefix + ": " + formatSummaryPercent(value) + " — " + reason,
+    className: "program-summary-status is-invalid",
+    error: label + ": " + formatSummaryPercent(value) + " — " + reason
+  };
+}
+
+function setSummaryText(id, value) {
+  document.getElementById(id).textContent = value;
+}
+
+function renderProgramSummary(summary) {
+  if (!summary) {
+    [
+      "summaryHeadsAs", "summaryHeadsVolume", "summaryHeadsTime",
+      "summaryBodyAs", "summaryBodyVolume", "summaryBodyTime",
+      "summaryTailsAs", "summaryTailsVolume", "summaryTailsTime",
+      "summaryTotalVolume", "summaryTotalTime", "summaryPauseTime"
+    ].forEach(function(id) { setSummaryText(id, "—"); });
+    ["summaryHeadsDistribution", "summaryBodyDistribution"].forEach(function(id) {
+      var status = document.getElementById(id);
+      status.textContent = "По строкам: —";
+      status.className = "program-summary-status is-invalid";
+    });
+    var tailsStatus = document.getElementById("summaryTailsDistribution");
+    tailsStatus.textContent = "По строкам: —";
+    tailsStatus.className = "program-summary-status is-info";
+    return [];
+  }
+
+  setSummaryText("summaryHeadsAs", formatSummaryPercent(summary.headsAs));
+  setSummaryText("summaryHeadsVolume", formatSummaryVolume(summary.headsVolume));
+  setSummaryText("summaryHeadsTime", formatSummaryTime(summary.headsTime));
+  setSummaryText("summaryBodyAs", formatSummaryPercent(summary.bodyAs));
+  setSummaryText("summaryBodyVolume", formatSummaryVolume(summary.bodyVolume));
+  setSummaryText("summaryBodyTime", formatSummaryTime(summary.bodyTime));
+  setSummaryText("summaryTailsAs", formatSummaryPercent(summary.tailsAs));
+  setSummaryText("summaryTailsVolume", formatSummaryVolume(summary.tailsVolume));
+  setSummaryText("summaryTailsTime", formatSummaryTime(summary.tailsTime));
+  setSummaryText("summaryTotalVolume", formatSummaryVolume(summary.totalVolume));
+  setSummaryText("summaryTotalTime", formatSummaryTime(summary.totalTime));
+  setSummaryText("summaryPauseTime", formatSummaryTime(summary.pauseTime));
+
+  var headsStatus = distributionStatus("Головы", "По строкам", summary.headsPercent);
+  var bodyStatus = distributionStatus("Тело B+C", "По строкам B+C", summary.bodyPercent);
+  var headsElement = document.getElementById("summaryHeadsDistribution");
+  var bodyElement = document.getElementById("summaryBodyDistribution");
+  headsElement.textContent = headsStatus.text;
+  headsElement.className = headsStatus.className;
+  bodyElement.textContent = bodyStatus.text;
+  bodyElement.className = bodyStatus.className;
+  var tailsElement = document.getElementById("summaryTailsDistribution");
+  tailsElement.textContent = "По строкам: " + formatSummaryPercent(summary.tailsPercent) + " — информационно";
+  tailsElement.className = "program-summary-status is-info";
+
+  return [headsStatus.error, bodyStatus.error].filter(Boolean);
+}
+
 function set_num(){
     if (!prep_calc()) {
       programerr = true;
+      programErrorMessage = "Неверные исходные параметры расчёта.";
+      renderProgramSummary(null);
       return true;
     }
     programerr = false;
@@ -311,6 +405,13 @@ function set_num(){
     var sumh = 0;
     var sumt = 0;
     var sumb = 0;
+    var volumeh = 0;
+    var volumet = 0;
+    var volumeb = 0;
+    var timeh = 0;
+    var timet = 0;
+    var timeb = 0;
+    var pauseTime = 0;
     var prgc = "";
     var prgo = "";
     for (i=1;i<e.length;i++){
@@ -343,6 +444,7 @@ function set_num(){
       }
       else if (e[i].childNodes[4].value == "T") {
         vlc = ptv / 100;
+        sumt = sumt + Number(e[i].childNodes[3].value);
       }
       else if (e[i].childNodes[4].value == "P") {
         vlc = 1;
@@ -366,17 +468,40 @@ function set_num(){
       prgc = prgc + ";" + e[i].childNodes[2].value + ";" + capacityNum + ";0;" + e[i].childNodes[5].value + "\n";
       t.value = get_time(a);
       sum = sum + Number(a);
+      if (e[i].childNodes[4].value == "P") {
+        pauseTime = pauseTime + Number(a);
+      } else if (e[i].childNodes[4].value == "H") {
+        volumeh = volumeh + Number(v.value);
+        timeh = timeh + Number(a);
+      } else if (e[i].childNodes[4].value == "T") {
+        volumet = volumet + Number(v.value);
+        timet = timet + Number(a);
+      } else {
+        volumeb = volumeb + Number(v.value);
+        timeb = timeb + Number(a);
+      }
       prgo = prgo + capacityNum + ";" + e[i].childNodes[2].value + ";" + e[i].childNodes[3].value + ";" + e[i].childNodes[4].value + ";" + e[i].childNodes[5].value + "\n"
     }
     document.getElementById("sum").value = get_time(sum);
-    var err = ""
-    programerr = false;
-    if (sumh != 100) err = "Ошибка в программе - объем головных фракций не равен 100 (" + sumh + ")";
-    if (sumb != 100) err = "Ошибка в программе - объем фракции тела не равен 100 (" + sumb + ")";
-    if (err !=""){
-      //alert(err);
-      programerr = true;
-    }
+    var validationErrors = renderProgramSummary({
+      headsAs: Number(document.getElementById("vlhp").value),
+      headsPercent: sumh,
+      headsVolume: volumeh,
+      headsTime: timeh,
+      bodyAs: 100 - Number(document.getElementById("vlhp").value) - Number(document.getElementById("vltp").value),
+      bodyPercent: sumb,
+      bodyVolume: volumeb,
+      bodyTime: timeb,
+      tailsAs: Number(document.getElementById("vltp").value),
+      tailsPercent: sumt,
+      tailsVolume: volumet,
+      tailsTime: timet,
+      totalVolume: volumeh + volumeb + volumet,
+      totalTime: sum,
+      pauseTime: pauseTime
+    });
+    programErrorMessage = validationErrors.join("\n");
+    programerr = validationErrors.length > 0;
 //    if (!programerr) {
       prgc = prgc.slice(0, -1);
       prgo = prgo.slice(0, -1);
@@ -418,6 +543,8 @@ function prep_calc(){
 function calc_program(){
     if (!prep_calc()) {
       programerr = true;
+      programErrorMessage = "Неверные исходные параметры расчёта.";
+      renderProgramSummary(null);
       return true;
     }
     let programPwrLabel = pwr_unit == 'P' ? 'Мощн' : 'Напр';   
@@ -454,7 +581,7 @@ async function set_program(){
   if (!volume) return;
   calc_program();
   if (programerr) {
-    alert("В программе ошибка! Программа не установлена");
+    alert(programErrorMessage + "\nПрограмма не установлена.");
     return;
   }
   try {
@@ -502,7 +629,7 @@ function addLine(obj, s){
   speed.name = "speed" + _lnIdx;
   speed.setAttribute("aria-labelledby", "program-row-" + _lnIdx + " program-col-speed");
   speed.value = arr[1];
-  speed.setAttribute("onchange", "set_num();");
+  speed.setAttribute("oninput", "set_num();");
   dl.appendChild(speed);
   
   var percent = document.createElement("input");
@@ -511,7 +638,7 @@ function addLine(obj, s){
   percent.name = "percent" + _lnIdx;
   percent.setAttribute("aria-labelledby", "program-row-" + _lnIdx + " program-col-percent");
   percent.value = arr[2];
-  percent.setAttribute("onchange", "set_num();");
+  percent.setAttribute("oninput", "set_num();");
   dl.appendChild(percent);
   
   percent.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" aria-labelledby="program-row-' + _lnIdx + ' program-col-type" onchange="set_bgcolor(' + _lnIdx + ')"><option value="H">Головы</option><option value="B">Тело</option><option value="C">Предзахлеб</option><option value="T">Хвосты</option><option value="P">Пауза</option></select>');
@@ -683,13 +810,13 @@ Samovar v. <span id='version'>%v%</span>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div id="Prog">
 <div style="margin-bottom: 10px !important;">
-<label for="vless" class="tooltip prgline">Объем спирта-сырца</label><input id='vless' name='vless' type='text' value='12.25' onchange="set_num();"><label class="tooltip prgline">л</label>&nbsp;&nbsp;&nbsp;&nbsp;
-<label for="vlssp" class="tooltip prgline">Содержание АС в с-с<span class="tooltiptext">Содержание абсолютного спирта в спирте-сырце в &#37;</span></label><input id='vlssp' type='text' value='34' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
-<label for="vlp" class="tooltip prgline">Выход спирта<span class="tooltiptext">Прогнозируемый выход спирта в &#37;</span></label><input id='vlp' type='text' value='94' onchange="set_num();"><label class="tooltip prgline">&#37;</label>
+<label for="vless" class="tooltip prgline">Объем спирта-сырца</label><input id='vless' name='vless' type='text' value='12.25' oninput="set_num();"><label class="tooltip prgline">л</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vlssp" class="tooltip prgline">Содержание АС в с-с<span class="tooltiptext">Содержание абсолютного спирта в спирте-сырце в &#37;</span></label><input id='vlssp' type='text' value='34' oninput="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vlp" class="tooltip prgline">Выход спирта<span class="tooltiptext">Прогнозируемый выход спирта в &#37;</span></label><input id='vlp' type='text' value='94' oninput="set_num();"><label class="tooltip prgline">&#37;</label>
 </div>
 <div style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">
-<label for="vlhp" class="tooltip prgline">Объем голов<span class="tooltiptext">Прогнозируемый выход голов в &#37;</span></label><input id='vlhp' type='text' value='8' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
-<label for="vltp" class="tooltip prgline">Объем хвостов<span class="tooltiptext">Прогнозируемый выход хвостов в &#37;</span></label><input id='vltp' type='text' value='5' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vlhp" class="tooltip prgline">Объем голов<span class="tooltiptext">Прогнозируемый выход голов в &#37;</span></label><input id='vlhp' type='text' value='8' oninput="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vltp" class="tooltip prgline">Объем хвостов<span class="tooltiptext">Прогнозируемый выход хвостов в &#37;</span></label><input id='vltp' type='text' value='5' oninput="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
 <label for="trest" class="tooltip prgline">Кубовый остаток<span class="tooltiptext">Прогнозируемый кубовый остаток после завершения перегонки в литрах</span></label><input id='trest' type='text' value='8' disabled><label class="tooltip prgline">л</label>
 </div>
 <label class="tooltip prgline" style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">Информация о параметрах программы отбора
@@ -719,6 +846,43 @@ Samovar v. <span id='version'>%v%</span>
 </span></label>
 </div>
 </div>
+
+<section class="program-summary" id="programSummary" aria-labelledby="programSummaryTitle" aria-live="polite">
+  <h2 id="programSummaryTitle">Итоги программы отбора</h2>
+  <div class="program-summary-grid">
+    <article class="program-summary-card">
+      <h3>Головы</h3>
+      <dl class="program-summary-metrics">
+        <div><dt>От АС</dt><dd id="summaryHeadsAs">—</dd></div>
+        <div><dt>Объем</dt><dd id="summaryHeadsVolume">—</dd></div>
+        <div><dt>Время</dt><dd id="summaryHeadsTime">—</dd></div>
+      </dl>
+      <p class="program-summary-status" id="summaryHeadsDistribution">По строкам: —</p>
+    </article>
+    <article class="program-summary-card">
+      <h3>Тело</h3>
+      <dl class="program-summary-metrics">
+        <div><dt>От АС</dt><dd id="summaryBodyAs">—</dd></div>
+        <div><dt>Объем</dt><dd id="summaryBodyVolume">—</dd></div>
+        <div><dt>Время</dt><dd id="summaryBodyTime">—</dd></div>
+      </dl>
+      <p class="program-summary-status" id="summaryBodyDistribution">По строкам B+C: —</p>
+    </article>
+  </div>
+  <div class="program-summary-row program-summary-tails">
+    <strong>Хвосты</strong>
+    <span>От АС: <b id="summaryTailsAs">—</b></span>
+    <span>Объем: <b id="summaryTailsVolume">—</b></span>
+    <span>Время: <b id="summaryTailsTime">—</b></span>
+    <span class="program-summary-status is-info" id="summaryTailsDistribution">По строкам: —</span>
+  </div>
+  <div class="program-summary-row program-summary-total">
+    <strong>Итого по программе</strong>
+    <span>Отбор: <b id="summaryTotalVolume">—</b></span>
+    <span>Время: <b id="summaryTotalTime">—</b></span>
+    <span>Паузы: <b id="summaryPauseTime">—</b></span>
+  </div>
+</section>
 
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div class="prg" id="prg"></div>

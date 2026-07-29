@@ -32,6 +32,8 @@ def require_order(name: str, text: str, tokens: list[str]) -> None:
 
 beer = read_text("data_raw/beer.lua")
 rectificat = read_text("data_raw/rectificat.lua")
+dist_autofill = read_text("Lua_script/dist_autofill.lua")
+pump_speed_script = read_text("Lua_script/beer (Управление скоростью насоса воды).lua")
 
 if beer:
     require_order(
@@ -66,6 +68,90 @@ if rectificat:
             "return total_volume >= target_volume",
         ],
     )
+
+
+for script_name, script in [
+    ("rectificat.lua", rectificat),
+    ("dist_autofill.lua", dist_autofill),
+]:
+    if not script:
+        continue
+    require_token(
+        f"{script_name} reads physical pump state",
+        script,
+        'getNumVariable("pump_started") + 0',
+    )
+    require_order(
+        f"{script_name} starts pump through confirmed actuator API",
+        script,
+        [
+            "local function startPump()",
+            "setPumpPwm(1023)",
+            "ACTUATOR_COMMAND_APPLIED",
+            "return false",
+            "return true",
+        ],
+    )
+    require_order(
+        f"{script_name} stops pump through confirmed actuator API",
+        script,
+        [
+            "local function stopPump()",
+            "setPumpPwm(0)",
+            "ACTUATOR_COMMAND_APPLIED",
+            "return false",
+            "return true",
+        ],
+    )
+    require_order(
+        f"{script_name} does not publish filling success after failed pump stop",
+        script,
+        [
+            "local function stopFilling",
+            "if not stopPump() then return false end",
+            'setLuaStatus("Куб заполнен")',
+            'setObject("tank_filled", "true")',
+            "return true",
+        ],
+    )
+    require_order(
+        f"{script_name} does not continue after failed pump start",
+        script,
+        [
+            'setLuaStatus("Заполнение куба")',
+            "if not startPump() then return false end",
+        ],
+    )
+    for forbidden in [
+        'getObject("pump_started")',
+        'setObject("pump_started"',
+        "pinMode(4",
+        "digitalWrite(4",
+    ]:
+        if forbidden in script:
+            errors.append(f"{script_name} retains forbidden pump bypass: {forbidden}")
+
+
+def preserves_pump_failure_status_contract(script: str) -> bool:
+    return all(
+        token in script
+        for token in [
+            "if not stopPump() then return false end",
+            'setLuaStatus("Куб заполнен")',
+            'setObject("tank_filled", "true")',
+        ]
+    ) and script.find("if not stopPump() then return false end") < script.find(
+        'setLuaStatus("Куб заполнен")'
+    )
+
+
+for script_name, script in [
+    ("rectificat.lua", rectificat),
+    ("dist_autofill.lua", dist_autofill),
+]:
+    mutant = script.replace("if not stopPump() then return false end", "if false then return false end", 1)
+    if preserves_pump_failure_status_contract(mutant):
+        errors.append(f"{script_name} pump-stop status mutation survived")
     require_order(
         "rectificat.lua validates flow configuration before run",
         rectificat,
@@ -80,6 +166,78 @@ if rectificat:
             "if not use_level_sensor and not use_flow_sensor then",
         ],
     )
+
+
+if pump_speed_script:
+    require_order(
+        "pump speed script confirms start before clearing request",
+        pump_speed_script,
+        [
+            "if pump_start == 1 and pump_started == 0 then",
+            "local result = setPumpPwm(1023)",
+            "if result ~= ACTUATOR_COMMAND_APPLIED then",
+            'setLuaStatus("Ошибка включения насоса; запрос сохранён для повтора")',
+            "else",
+            'setObject("pump_start", 0)',
+            'sendMsg("Насос включен", 2)',
+        ],
+    )
+    require_order(
+        "pump speed script confirms speed change before clearing request",
+        pump_speed_script,
+        [
+            "local function applyPumpSpeed",
+            "local result = setPumpPwm(target_speed)",
+            "if result ~= ACTUATOR_COMMAND_APPLIED then",
+            'setLuaStatus("Ошибка изменения скорости насоса; запрос сохранён для повтора")',
+            "return false",
+            'setObject(request_name, 0)',
+            'setLuaStatus(" Скорость насоса "..target_speed.."/1023")',
+            "return true",
+        ],
+    )
+
+
+def preserves_pump_start_confirmation(script: str) -> bool:
+    required = [
+        "local result = setPumpPwm(1023)",
+        "if result ~= ACTUATOR_COMMAND_APPLIED then",
+        'setObject("pump_start", 0)',
+    ]
+    return all(token in script for token in required) and (
+        script.find(required[0]) < script.find(required[1]) < script.find(required[2])
+    )
+
+
+def preserves_pump_speed_confirmation(script: str) -> bool:
+    required = [
+        "local result = setPumpPwm(target_speed)",
+        "if result ~= ACTUATOR_COMMAND_APPLIED then",
+        'setObject(request_name, 0)',
+        'setLuaStatus(" Скорость насоса "..target_speed.."/1023")',
+    ]
+    return all(token in script for token in required) and (
+        script.find(required[0]) < script.find(required[1]) < script.find(required[2]) < script.find(required[3])
+    )
+
+
+for label, contract, old, new in [
+    (
+        "pump start confirmation",
+        preserves_pump_start_confirmation,
+        "local result = setPumpPwm(1023)\n  if result ~= ACTUATOR_COMMAND_APPLIED then",
+        "local result = setPumpPwm(1023)\n  if result == ACTUATOR_COMMAND_APPLIED then",
+    ),
+    (
+        "pump speed confirmation",
+        preserves_pump_speed_confirmation,
+        "local result = setPumpPwm(target_speed)",
+        "setObject(request_name, 0)\n  local result = setPumpPwm(target_speed)",
+    ),
+]:
+    mutant = pump_speed_script.replace(old, new, 1)
+    if contract(mutant):
+        errors.append(f"{label} mutation survived")
 
 if errors:
     print("Lua scripts smoke failed:")

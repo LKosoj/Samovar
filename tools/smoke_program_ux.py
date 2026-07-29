@@ -115,6 +115,29 @@ if text:
   if "getProgramFromFile(loadProgramSelect, { skipConfirm: true });" not in text:
     errors.append("program.htm initial template load is not explicitly confirm-free")
 
+  for token in [
+    'id="programSummary"',
+    'id="summaryHeadsAs"',
+    'id="summaryHeadsVolume"',
+    'id="summaryHeadsTime"',
+    'id="summaryHeadsDistribution"',
+    'id="summaryBodyAs"',
+    'id="summaryBodyVolume"',
+    'id="summaryBodyTime"',
+    'id="summaryBodyDistribution"',
+    'id="summaryTailsAs"',
+    'id="summaryTailsVolume"',
+    'id="summaryTailsTime"',
+    'id="summaryTailsDistribution"',
+    'id="summaryTotalVolume"',
+    'id="summaryTotalTime"',
+    'id="summaryPauseTime"',
+    "function renderProgramSummary(summary)",
+    "programErrorMessage",
+  ]:
+    if token not in text:
+      errors.append(f"data_raw/program.htm missing fraction summary token: {token}")
+
 if errors:
   print("Program UX smoke check failed:")
   for error in errors:

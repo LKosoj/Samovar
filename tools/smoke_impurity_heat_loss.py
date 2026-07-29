@@ -102,7 +102,7 @@ if start_body:
     )
 
 try:
-    power_body = extract_function_body(power, "inline void set_power(bool On, bool enqueueResetCommand)")
+    power_body = extract_function_body(power, "inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand)")
 except ValueError as exc:
     errors.append(str(exc))
     power_body = ""

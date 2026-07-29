@@ -34,6 +34,10 @@ SIGNATURES = {
     "get_liquid_volume_by_step": ("float get_liquid_volume_by_step(float StepCount)", "logic.h"),
     "get_liquid_rate_by_step": ("float get_liquid_rate_by_step(int StepperSpeed)", "logic.h"),
     "set_pump_speed": ("void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase)", "logic.h"),
+    "rect_row_transition_requested": (
+        "inline bool rect_row_transition_requested",
+        "logic.h",
+    ),
     "withdrawal": ("void withdrawal(void)", "logic.h"),
     "program_type_at": ("inline ProgramType program_type_at(uint8_t index)", "runtime_helpers.h"),
     "is_first_body_program_after_heads": (
@@ -186,8 +190,25 @@ static void set_body_temp() { setBodyTempCalls++; }
 static int applyRowStopPausePolicyCalls = 0;
 static void apply_row_stop_pause_policy() { applyRowStopPausePolicyCalls++; }
 
-static void process_impurity_detector() {}
-static void menu_samovar_start() {}
+static bool detectorTriggersWait = false;
+static bool detectorTriggersPause = false;
+static bool detectorMutatesEndpointInputs = false;
+static void process_impurity_detector() {
+  if (detectorTriggersWait) program_Wait = true;
+  if (detectorTriggersPause) PauseOn = true;
+  if (detectorMutatesEndpointInputs) {
+    TargetStepps = 999;
+    CurrrentStepps = 0;
+    startval = 0;
+    SteamSensor.avgTemp = 0.0f;
+    SteamSensor.StartProgTemp = 100.0f;
+  }
+}
+static int menuSamovarStartCalls = 0;
+static void menu_samovar_start() {
+  menuSamovarStartCalls++;
+  if (ProgramNum + 1 < ProgramLen) ProgramNum++;
+}
 static void run_program(uint8_t) {}
 
 static bool stepperState = true;
@@ -213,6 +234,7 @@ static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBa
 @DETECTOR_CURRENT_RECOVERY_THRESHOLD_BODY@
 @DETECTOR_TREND_SETTLED_BODY@
 @SET_PUMP_SPEED_BODY@
+@RECT_ROW_TRANSITION_REQUESTED_BODY@
 @WITHDRAWAL_BODY@
 
 // ---- Тесты ----
@@ -255,7 +277,11 @@ static void reset_fixture() {
   detectorOnAutoResumeCalls = 0;
   setBodyTempCalls = 0;
   applyRowStopPausePolicyCalls = 0;
+  menuSamovarStartCalls = 0;
   stepperState = true;
+  detectorTriggersWait = false;
+  detectorTriggersPause = false;
+  detectorMutatesEndpointInputs = false;
 }
 
 // [П3-3] Гистерезис резюме: два разных SetTemp, каждый раз проверяем и "мёртвую
@@ -373,12 +399,194 @@ static void test_first_body_after_heads_topologies() {
   check(setBodyTempCalls == 1, "H;P;B: set_body_temp() должен был вызваться (единый критерий, П3-8)");
 }
 
+static void test_trace_h_b_c_t_with_noise_pause_and_recovery() {
+  reset_fixture();
+  ProgramLen = 4;
+  program[0].WType = 'H';
+  program[0].Temp = 78.0f;
+  program[1].WType = 'B';
+  program[2].WType = 'C';
+  program[3].WType = 'T';
+
+  // H: одновременно выполнены объём и температура. За tick разрешён один переход.
+  TargetStepps = 100;
+  CurrrentStepps = 100;
+  SteamSensor.avgTemp = 78.5f;
+  withdrawal();
+  check(ProgramNum == 1, "trace H->B: строка должна смениться");
+  check(menuSamovarStartCalls == 1,
+        "trace H->B: объём и температура не должны дать два перехода за tick");
+
+  // B: несколько шумовых точек ниже условий перехода не меняют строку.
+  TargetStepps = 1000;
+  CurrrentStepps = 100;
+  SteamSensor.avgTemp = 77.95f;
+  withdrawal();
+  SteamSensor.avgTemp = 78.03f;
+  withdrawal();
+  check(ProgramNum == 1 && menuSamovarStartCalls == 1,
+        "trace B: допустимый шум не должен менять строку");
+
+  // B завершается подтверждённым объёмом.
+  CurrrentStepps = 1000;
+  withdrawal();
+  check(ProgramNum == 2 && menuSamovarStartCalls == 2,
+        "trace B->C: достижение объёма должно дать ровно один переход");
+
+  // C: моделируем захлёб, затем восстановление после выдержки.
+  TargetStepps = 2000;
+  CurrrentStepps = 1000;
+  SteamSensor.BodyTemp = 78.0f;
+  SteamSensor.SetTemp = 0.5f;
+  SteamSensor.Delay = 1;
+  SteamSensor.avgTemp = 78.7f;
+  withdrawal();
+  check(program_Wait, "trace C: захлёб должен поставить отбор на паузу");
+  check(ProgramNum == 2 && menuSamovarStartCalls == 2,
+        "trace C: пауза не должна пропускать строку");
+
+  currentWaitTypeFixture = PROGRAM_WAIT_STEAM;
+  fake_millis_value = t_min + 1;
+  SteamSensor.avgTemp = 78.3f;
+  withdrawal();
+  check(!program_Wait, "trace C: восстановление должно снять паузу");
+
+  CurrrentStepps = 2000;
+  withdrawal();
+  check(ProgramNum == 3 && menuSamovarStartCalls == 3,
+        "trace C->T: после восстановления допускается один переход");
+}
+
+static void test_detector_pause_blocks_endpoint_transition() {
+  reset_fixture();
+  ProgramLen = 2;
+  program[0].WType = 'B';
+  program[1].WType = 'T';
+  TargetStepps = 100;
+  CurrrentStepps = 100;
+  detectorTriggersWait = true;
+  currentWaitTypeFixture = PROGRAM_WAIT_DETECTOR;
+  t_min = fake_millis_value - 1;
+  impurityDetector.currentTrend = -1.0f;
+
+  withdrawal();
+
+  check(program_Wait && !PauseOn,
+        "детектор должен смоделировать новую program_Wait");
+  check(detectorOnAutoResumeCalls == 0,
+        "новая detector-пауза не должна сниматься в том же tick");
+  check(ProgramNum == 0 && menuSamovarStartCalls == 0,
+        "новая program_Wait детектора должна блокировать endpoint в этом tick");
+
+  reset_fixture();
+  ProgramLen = 2;
+  program[0].WType = 'B';
+  program[1].WType = 'T';
+  TargetStepps = 100;
+  CurrrentStepps = 100;
+  detectorTriggersPause = true;
+
+  withdrawal();
+
+  check(!program_Wait && PauseOn,
+        "детектор должен смоделировать новую PauseOn");
+  check(ProgramNum == 0 && menuSamovarStartCalls == 0,
+        "новая PauseOn детектора должна блокировать endpoint в этом tick");
+}
+
+// Уже активная ручная пауза не должна давать endpoint перейти строку. После
+// явного снятия паузы тот же endpoint обязан перейти ровно один раз.
+static void test_active_manual_pause_blocks_endpoint_until_resume() {
+  reset_fixture();
+  ProgramLen = 2;
+  program[0].WType = 'B';
+  program[1].WType = 'T';
+  TargetStepps = 100;
+  CurrrentStepps = 100;
+  PauseOn = true;
+
+  withdrawal();
+  check(ProgramNum == 0 && menuSamovarStartCalls == 0,
+        "уже активная ручная пауза должна блокировать endpoint");
+
+  PauseOn = false;
+  withdrawal();
+  check(ProgramNum == 1 && menuSamovarStartCalls == 1,
+        "после снятия ручной паузы endpoint должен перейти ровно один раз");
+}
+
+// У детекторной паузы тик восстановления сначала снимает паузу, а endpoint
+// имеет право перейти только на следующем тике. Это сохраняет обработку
+// detector_on_auto_resume() и исключает переход во время активной паузы.
+static void test_active_detector_pause_blocks_endpoint_until_resume() {
+  reset_fixture();
+  ProgramLen = 2;
+  program[0].WType = 'B';
+  program[1].WType = 'T';
+  TargetStepps = 100;
+  CurrrentStepps = 100;
+  program_Wait = true;
+  currentWaitTypeFixture = PROGRAM_WAIT_DETECTOR;
+  t_min = fake_millis_value - 1;
+  impurityDetector.currentTrend = 5.0f;
+
+  withdrawal();
+  check(ProgramNum == 0 && menuSamovarStartCalls == 0,
+        "уже активная detector-пауза должна блокировать endpoint");
+
+  impurityDetector.currentTrend = -1.0f;
+  withdrawal();
+  check(!program_Wait && ProgramNum == 0 && menuSamovarStartCalls == 0,
+        "тик восстановления detector-паузы не должен одновременно перейти строку");
+
+  withdrawal();
+  check(ProgramNum == 1 && menuSamovarStartCalls == 1,
+        "после снятия detector-паузы endpoint должен перейти ровно один раз");
+}
+
+static void test_endpoint_inputs_are_snapshotted_before_detector() {
+  reset_fixture();
+  ProgramLen = 2;
+  program[0].WType = 'B';
+  program[0].Temp = 0.0f;
+  program[1].WType = 'T';
+  TargetStepps = 100;
+  CurrrentStepps = 100;
+  detectorMutatesEndpointInputs = true;
+
+  withdrawal();
+
+  check(ProgramNum == 1 && menuSamovarStartCalls == 1,
+        "объёмный endpoint должен использовать target/current/startval snapshot");
+
+  reset_fixture();
+  ProgramLen = 2;
+  program[0].WType = 'P';
+  program[0].Temp = 1.5f;
+  program[1].WType = 'T';
+  TargetStepps = 0;
+  CurrrentStepps = 0;
+  SteamSensor.avgTemp = 79.6f;
+  SteamSensor.StartProgTemp = 78.0f;
+  detectorMutatesEndpointInputs = true;
+
+  withdrawal();
+
+  check(ProgramNum == 1 && menuSamovarStartCalls == 1,
+        "температурный endpoint должен использовать temperature/start snapshot");
+}
+
 int main() {
   test_hysteresis_for_set_temp(0.5f);
   test_hysteresis_for_set_temp(1.0f);
   test_sensor_resume_updates_base_not_program_speed();
   test_detector_pause_resume_keeps_base_untouched();
   test_first_body_after_heads_topologies();
+  test_trace_h_b_c_t_with_noise_pause_and_recovery();
+  test_detector_pause_blocks_endpoint_transition();
+  test_active_manual_pause_blocks_endpoint_until_resume();
+  test_active_detector_pause_blocks_endpoint_until_resume();
+  test_endpoint_inputs_are_snapshotted_before_detector();
 
   if (failures != 0) return 1;
   std::cout << "withdrawal() pause/resume behaviour checks passed\n";
@@ -440,13 +648,22 @@ def build_harness() -> str:
         wrap("set_pump_speed", "static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase) "),
     )
     harness = harness.replace(
+        "@RECT_ROW_TRANSITION_REQUESTED_BODY@",
+        wrap(
+            "rect_row_transition_requested",
+            "static bool rect_row_transition_requested("
+            "const WProgram& row, uint32_t targetSteps, uint32_t currentSteps, "
+            "int16_t currentStartval, float steamTemp, float steamStartTemp) ",
+        ),
+    )
+    harness = harness.replace(
         "@WITHDRAWAL_BODY@",
         wrap("withdrawal", "static void withdrawal(void) "),
     )
     return harness
 
 
-def compile_and_run(harness: str) -> int:
+def compile_and_run(harness: str, show_output: bool = True) -> int:
     with tempfile.TemporaryDirectory(prefix="samovar-withdrawal-pause-resume-") as temp_dir:
         temp = Path(temp_dir)
         source = temp / "withdrawal_pause_resume_test.cpp"
@@ -464,8 +681,9 @@ def compile_and_run(harness: str) -> int:
             sys.stderr.write(compile_result.stderr)
             return compile_result.returncode
         run_result = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
-        sys.stdout.write(run_result.stdout)
-        sys.stderr.write(run_result.stderr)
+        if show_output:
+            sys.stdout.write(run_result.stdout)
+            sys.stderr.write(run_result.stderr)
         return run_result.returncode
 
 
@@ -475,7 +693,55 @@ def main() -> int:
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
-    return compile_and_run(harness)
+    if compile_and_run(harness) != 0:
+        return 1
+
+    mutants = [
+        (
+            "detector_pause_or",
+            "(!detectorWaitWasActive && program_Wait) ||\n"
+            "      (!pauseWasActive && PauseOn)",
+            "(!detectorWaitWasActive && program_Wait) &&\n"
+            "      (!pauseWasActive && PauseOn)",
+        ),
+        (
+            "endpoint_snapshot",
+            "  const float currentSteamTemp = SteamSensor.avgTemp;\n"
+            "  const float currentSteamStartTemp = SteamSensor.StartProgTemp;\n"
+            "  const uint32_t currentTargetSteps = TargetStepps;\n"
+            "  const uint32_t currentCompletedSteps = stepper_safe_get_current();\n"
+            "  const int16_t currentStartval = startval;",
+            "  const float currentSteamTemp = SteamSensor.avgTemp - SteamSensor.avgTemp;\n"
+            "  const float currentSteamStartTemp = SteamSensor.StartProgTemp + 100.0f;\n"
+            "  const uint32_t currentTargetSteps = TargetStepps + 899;\n"
+            "  const uint32_t currentCompletedSteps = stepper_safe_get_current() - stepper_safe_get_current();\n"
+            "  const int16_t currentStartval = startval - startval;",
+        ),
+        (
+            "trace_volume_endpoint",
+            "targetSteps <= currentSteps",
+            "targetSteps < currentSteps",
+        ),
+        (
+            "active_pause_endpoint_guard",
+            "if (!program_Wait && !PauseOn && rect_row_transition_requested(",
+            "if (rect_row_transition_requested(",
+        ),
+        (
+            "trace_flood_pause",
+            "sensor.avgTemp >= c_temp + sensor.SetTemp",
+            "sensor.avgTemp >= c_temp + sensor.SetTemp + 100.0f",
+        ),
+    ]
+    for name, original, replacement in mutants:
+        mutant = harness.replace(original, replacement, 1)
+        if mutant == harness:
+            print(f"FAIL: не удалось построить мутацию {name}", file=sys.stderr)
+            return 1
+        if compile_and_run(mutant, show_output=False) == 0:
+            print(f"FAIL: мутация {name} пережила тест", file=sys.stderr)
+            return 1
+    return 0
 
 
 if __name__ == "__main__":

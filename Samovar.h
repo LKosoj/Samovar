@@ -464,6 +464,7 @@ struct SetupEEPROM {
   float BKPower;                                               //Рабочая мощность/напряжение БК после закипания
   float MainsVoltage;                                          //Номинальное напряжение сети, В
   float SuvidTemp;                                             //Уставка термостата Су-вид; 0 = не задано (дефолт в suvid-логике)
+  uint16_t SuvidHoldMinutes;                                   //Выдержка Су-вид в полосе уставки; 0 = бессрочный термостат
   //Serial.println(sizeof(SamSetup));
 };
 
@@ -471,6 +472,10 @@ struct ImpurityDetector {
   float tempHistory[30];        // Кольцевой буфер (60 сек при опросе раз в 2 сек)
   uint8_t historyIndex;         // Текущий индекс в буфере
   uint8_t historySize;          // Фактически заполненный размер
+  double historySum;            // Сумма заполненного окна
+  double historySumSquares;     // Сумма квадратов заполненного окна
+  float historyMin;             // Минимум заполненного окна
+  float historyMax;             // Максимум заполненного окна
   unsigned long lastSampleTime; // Время последнего замера
   float currentTrend;           // Текущий тренд (°C/мин)
   uint8_t detectorStatus;       // Статус: 0=Stable, 1=Correction, 2=Breakthrough

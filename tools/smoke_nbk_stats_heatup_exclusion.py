@@ -2,13 +2,10 @@
 """Поведенческая проверка [T10]: сброс точки отсчёта статистики объёма на входе в S.
 
 Тест вытаскивает РЕАЛЬНЫЙ блок кода S-ветки run_nbk_program
-("if (program[ProgramNum].WType == 'S') { ... }", который заканчивается
-собственным вызовом SetSpeed(nbk_P)) и РЕАЛЬНОЕ тело SetSpeed — через
-extract_braced_block_after / extract_function_body, без переписывания
-логики — и подставляет их в минимальный host-харнесс, замокав только
-downstream-вызовы (current_program_type, i2c_get_liquid_rate_by_step,
-get_stepper_speed, set_stepper_target, i2c_get_speed_from_rate, toPower,
-fromPower, set_current_power).
+("if (program[ProgramNum].WType == 'S') { ... }") и РЕАЛЬНОЕ тело SetSpeed —
+через extract_braced_block_after / extract_function_body, без переписывания
+логики. Харнесс отдельно моделирует принятие составной команды и её
+подтверждённое применение.
 
 Регресс, который тест защищает: до задачи 10 time_speed мог оставаться
 "протухшим" с момента старта всей программы НБК (ProgramNum==0, ещё на
@@ -29,7 +26,7 @@ from smoke_helpers import extract_braced_block_after, extract_function_body
 ROOT = Path(__file__).resolve().parents[1]
 
 ANCHOR_S = "if (program[ProgramNum].WType == 'S') {"
-SETSPEED_SIGNATURE = "void SetSpeed(float Speed) {"
+SETSPEED_SIGNATURE = "ActuatorCommandResult SetSpeed(float Speed) {"
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
@@ -37,6 +34,12 @@ HARNESS_TEMPLATE = r'''
 #include <cmath>
 
 using ProgramType = char;
+enum ActuatorCommandResult {
+  ACTUATOR_COMMAND_ACCEPTED = 0,
+  ACTUATOR_COMMAND_PENDING,
+  ACTUATOR_COMMAND_APPLIED,
+  ACTUATOR_COMMAND_FAILED,
+};
 
 static uint32_t fakeMillis = 0;
 uint32_t millis() { return fakeMillis; }
@@ -44,38 +47,60 @@ uint32_t millis() { return fakeMillis; }
 uint32_t time_speed = 0;
 uint32_t begintime = 12345; // заведомо не 0 — проверим, что S-ветка обнуляет
 
-struct StatsProbe { float totalVolume; };
+struct StatsProbe {
+  float totalVolume;
+  float activeVolume;
+  uint32_t activeFeedMs;
+};
 static StatsProbe stats;
 
 struct ProgramRow { float Power; float Speed; };
 static ProgramRow program[4];
 static uint8_t ProgramNum = 0;
 
-float nbk_M = 0;
 float nbk_P = 0;
+uint16_t nbk_opt_iter = 0;
+enum NbkActuatorDeadlineTarget : uint8_t {
+  NBK_ACTUATOR_NO_DEADLINE = 0,
+};
 
 static ProgramType currentTypeValue = 'S'; // не 'H' — прогрев уже позади
 ProgramType current_program_type() { return currentTypeValue; }
 
 static double liquidRateValue = 60.0; // условная скорость подачи (не 0, чтобы разница во времени была заметна)
 double i2c_get_liquid_rate_by_step(int) { return liquidRateValue; }
-int get_stepper_speed() { return 0; }
-int i2c_get_speed_from_rate(float) { return 0; }
+struct PumpProbe { uint16_t currentSpeed; };
+static PumpProbe i2cStepperPump = {600};
+bool i2c_stepper_refresh(PumpProbe&) { return true; }
+float i2c_stepper_steps_from_rate(float rate) { return rate * 10.0f; }
 static int stepperTargetCalls = 0;
-void set_stepper_target(int, int, int) { stepperTargetCalls++; }
+bool set_stepper_target(uint16_t speed, uint8_t, uint32_t, bool requireI2c) {
+  stepperTargetCalls++;
+  if (!requireI2c) return false;
+  i2cStepperPump.currentSpeed = speed;
+  return true;
+}
 
-// toPower/fromPower тождественны конверсии ватт<->вольт не по теме ЭТОГО
-// теста (её защищает smoke_nbk_po_floor.py); set_current_power — просто
-// счётчик вызовов.
+// Конверсия мощности не является предметом этого теста.
 float toPower(float v) { return v; }
-float fromPower(float v) { return v; }
-static int powerCalls = 0;
-void set_current_power(float) { powerCalls++; }
+static int scheduleCalls = 0;
+static float scheduledSpeed = 0;
+bool nbk_schedule_actuator_command(
+    float,
+    float speed,
+    NbkActuatorDeadlineTarget,
+    uint32_t,
+    uint16_t) {
+  scheduleCalls++;
+  scheduledSpeed = speed;
+  return true;
+}
+void nbk_enter_safe_wait(const char*) {}
 
 // Заглушка SetSpeed НЕ переопределяется — сама функция ниже собрана из
-// РЕАЛЬНОГО тела SetSpeed (nbk.h), поэтому её вызов внутри S-ветки —
-// это вызов настоящей логики учёта статистики.
-void SetSpeed(float Speed) {
+// РЕАЛЬНОГО тела SetSpeed (nbk.h), поэтому после подтверждения составной
+// команды вызывается настоящая логика учёта статистики.
+ActuatorCommandResult SetSpeed(float Speed) {
 @SETSPEED_BODY@
 }
 
@@ -99,13 +124,18 @@ static void test_no_heatup_leak_for(uint32_t stale_gap_ms) {
   time_speed = fakeMillis - stale_gap_ms; // протухшая точка отсчёта с прогрева
   begintime = 12345;
   stats.totalVolume = 0;
-  program[0].Power = 0; // нет значения в строке -> нужно 500 по умолчанию (не важно для этого теста)
-  program[0].Speed = 0;
+  program[0].Power = 500;
+  program[0].Speed = 1;
   ProgramNum = 0;
-  powerCalls = 0;
+  scheduleCalls = 0;
   stepperTargetCalls = 0;
 
-  enter_s_stage(); // сама S-ветка внутри вызывает SetSpeed(nbk_P) один раз
+  enter_s_stage();
+  check(scheduleCalls == 1, "вход в S обязан принять одну составную команду");
+  check(stepperTargetCalls == 0,
+        "ACCEPTED не должен применять насос до подтверждения регулятора");
+  check(SetSpeed(scheduledSpeed) == ACTUATOR_COMMAND_APPLIED,
+        "подтверждённый этап S должен применить насос");
 
   check(begintime == 0, "вход в S обязан сбросить begintime в 0");
   check(time_speed == fakeMillis, "вход в S обязан выставить time_speed = millis() (точку входа), а не оставить протухшее значение");
@@ -116,7 +146,6 @@ static void test_no_heatup_leak_for(uint32_t stale_gap_ms) {
   // stale_gap_ms.
   check(stats.totalVolume == 0.0f,
         "РЕГРЕСС: протухший интервал прогрева не должен попадать в totalVolume после входа в S");
-  check(powerCalls == 1, "вход в S обязан один раз выставить текущую мощность");
   check(stepperTargetCalls == 1, "вход в S обязан один раз выставить целевую скорость шагового двигателя");
 }
 

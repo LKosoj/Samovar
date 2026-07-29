@@ -23,7 +23,7 @@ FROZEN_SHA256 = {
     "edit.htm.gz": "86e2801e2370cd45420ed84005194b752cc22198e7ab85faa33129bd28a50cac",
 }
 STRUCTURE_SHA256 = {
-    "setup.htm": "f7e296d2697f431578df7a18d4de70644471f689e9afb3a94b8c3e5abedefd7c",
+    "setup.htm": "f0b6a2a046698d2d84436c14074f879586aca020ca5f370ec04cb8d3b9d319b5",
     "chart.htm": "c536a344fbc7c6aedd0bbfc4fb0475b63c37f817d4535ae7874b4813d89793fd",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")

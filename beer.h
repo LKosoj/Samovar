@@ -29,12 +29,82 @@ struct BoilingDetector {
 
 BoilingDetector boilingDetector;
 
+enum BeerLuaStagePhase : uint8_t {
+  BEER_LUA_STAGE_IDLE = 0,
+  BEER_LUA_STAGE_ENTER_QUEUED,
+  BEER_LUA_STAGE_RUNNING,
+  BEER_LUA_STAGE_EXIT_QUEUED,
+};
+
+struct BeerLuaStageState {
+  BeerLuaStagePhase phase;
+  uint32_t ticket;
+  uint8_t nextProgram;
+};
+
+BeerLuaStageState beerLuaStage = {BEER_LUA_STAGE_IDLE, 0, PROGRAM_END};
+
 #ifdef USE_WATER_PUMP
 // [P2 п.1] Гонка насоса охлаждения ('C'/'F') и планового выключения насоса
 // по расписанию мешалки (set_mixer_state OFF-ветка, ниже) — новый флаг не
 // даёт плановому выключению заглушить активное охлаждение.
 static bool beerCoolingPumpActive = false;
 #endif
+
+inline bool beer_cooling_pump_demanded() {
+#ifdef USE_WATER_PUMP
+  return beerCoolingPumpActive;
+#else
+  return false;
+#endif
+}
+
+inline ActuatorCommandResult beer_set_cooling_pump(bool active) {
+#ifdef USE_WATER_PUMP
+  if (set_pump_pwm(active ? 1023 : 0) != ACTUATOR_COMMAND_APPLIED) {
+    return ACTUATOR_COMMAND_FAILED;
+  }
+  beerCoolingPumpActive = active;
+#else
+  (void)active;
+#endif
+  return ACTUATOR_COMMAND_APPLIED;
+}
+
+inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
+  if (active) {
+    if (!valve_status &&
+        open_valve(true, false) != ACTUATOR_COMMAND_APPLIED) {
+      request_emergency_stop("Аварийное отключение: не удалось открыть охлаждение");
+      return ACTUATOR_COMMAND_FAILED;
+    }
+    if (beer_set_cooling_pump(true) == ACTUATOR_COMMAND_APPLIED) {
+      return ACTUATOR_COMMAND_APPLIED;
+    }
+    if (valve_status &&
+        open_valve(false, false) != ACTUATOR_COMMAND_APPLIED) {
+      request_emergency_stop("Аварийное отключение: не удалось вернуть охлаждение в безопасное состояние");
+    } else {
+      request_emergency_stop("Аварийное отключение: не удалось включить насос охлаждения");
+    }
+    return ACTUATOR_COMMAND_FAILED;
+  }
+
+  if (beer_set_cooling_pump(false) != ACTUATOR_COMMAND_APPLIED) {
+    request_emergency_stop("Аварийное отключение: не удалось выключить насос охлаждения");
+    return ACTUATOR_COMMAND_FAILED;
+  }
+  if (!valve_status ||
+      open_valve(false, false) == ACTUATOR_COMMAND_APPLIED) {
+    return ACTUATOR_COMMAND_APPLIED;
+  }
+  if (beer_set_cooling_pump(true) != ACTUATOR_COMMAND_APPLIED) {
+    request_emergency_stop("Аварийное отключение: не удалось вернуть охлаждение в рабочее состояние");
+  } else {
+    request_emergency_stop("Аварийное отключение: не удалось закрыть охлаждение");
+  }
+  return ACTUATOR_COMMAND_FAILED;
+}
 
 #ifndef BEER_SKIP_CONFIRM_WINDOW_MS
 #define BEER_SKIP_CONFIRM_WINDOW_MS 10000UL  // окно повторного нажатия для подтверждения пропуска горячего охлаждения
@@ -43,6 +113,26 @@ static bool beerCoolingPumpActive = false;
 // локальную extern-декларацию (logic.h подключается в Samovar.ino раньше beer.h).
 uint8_t beerSkipConfirmProgramNum = 0xFF;    // строка, для которой ждём подтверждения (0xFF = нет ожидания)
 unsigned long beerSkipConfirmDeadlineMs = 0; // окно подтверждения истекает после этого millis()
+
+inline ActuatorCommandResult beer_safe_lua_outputs() {
+  setHeaterPosition(false);
+  if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) {
+    return ACTUATOR_COMMAND_FAILED;
+  }
+  return set_mixer_state(false, false);
+}
+
+inline bool beer_pause_fermentation_outputs() {
+  return beer_safe_lua_outputs() == ACTUATOR_COMMAND_APPLIED;
+}
+
+inline void beer_reset_lua_stage() {
+  beerLuaStage.phase = BEER_LUA_STAGE_IDLE;
+  beerLuaStage.ticket = 0;
+  beerLuaStage.nextProgram = PROGRAM_END;
+}
+
+void beer_abort_config_error(const String& reason);
 
 static inline void resetBoilingDetector() {
     boilingDetector.historyIndex = 0;
@@ -161,6 +251,16 @@ inline bool beer_validate_program(String& errorMessage) {
       errorMessage = "Ошибка программы: неверный тип этапа в строке " + String(i + 1);
       return false;
     }
+    const char* semanticError = nullptr;
+    if (!program_validate_beer_row_semantics(
+            program[i].WType, program[i].Temp, program[i].Time,
+            program[i].capacity_num, static_cast<long>(program[i].Speed),
+            program[i].Volume, program[i].Power, program[i].TempSensor,
+            semanticError)) {
+      errorMessage = String(semanticError ? semanticError : "Ошибка программы") +
+                     " в строке " + String(i + 1);
+      return false;
+    }
     const DSSensor* rowSensor = nullptr;
     const char* rowSensorName = "";
     if (!beer_control_sensor(program[i].TempSensor, rowSensor, rowSensorName)) {
@@ -258,16 +358,30 @@ void run_beer_program(uint8_t num) {
   }
   beerSkipConfirmProgramNum = 0xFF;
 
-  if (startval == SAMOVAR_STARTVAL_BEER_START) startval = SAMOVAR_STARTVAL_BEER_HEATING;
-
   uint8_t targetProgram = num;
   if (ProgramLen == 0 || targetProgram >= ProgramLen || targetProgram >= PROGRAM_END) {
     targetProgram = PROGRAM_END;
     SetScriptOff = 1;
   }
 
-  if (targetProgram > 0 && targetProgram <= PROGRAM_END && program[targetProgram - 1].WType == 'L' && loop_lua_fl) {
-    SetScriptOff = 1;
+  if (program[ProgramNum].WType == 'L' && beerLuaStage.phase != BEER_LUA_STAGE_IDLE) {
+    if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
+      beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед переходом");
+      return;
+    }
+#ifdef USE_LUA
+    if (beerLuaStage.phase != BEER_LUA_STAGE_EXIT_QUEUED) {
+      if (!request_beer_lua_stop(beerLuaStage.ticket)) {
+        beer_abort_config_error("Ошибка Lua: не удалось запросить остановку job");
+        return;
+      }
+      beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;
+      beerLuaStage.nextProgram = targetProgram;
+    }
+#else
+    beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
+#endif
+    return;
   }
 
   if (targetProgram == PROGRAM_END) {
@@ -275,6 +389,9 @@ void run_beer_program(uint8_t num) {
     return;
   }
 
+  if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
+
+  if (startval == SAMOVAR_STARTVAL_BEER_START) startval = SAMOVAR_STARTVAL_BEER_HEATING;
   ProgramNum = targetProgram;
   begintime = 0;
   msgfl = true;
@@ -289,6 +406,26 @@ void run_beer_program(uint8_t num) {
 
   if (program[ProgramNum].WType == 'A') {
     StartAutoTune();
+  }
+
+  if (program[ProgramNum].WType == 'L') {
+    if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
+      beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед запуском");
+      return;
+    }
+#ifdef USE_LUA
+    uint32_t ticket = 0;
+    if (!request_beer_lua_job(ticket)) {
+      beer_abort_config_error("Ошибка Lua: job не принят к запуску");
+      return;
+    }
+    beerLuaStage.phase = BEER_LUA_STAGE_ENTER_QUEUED;
+    beerLuaStage.ticket = ticket;
+    beerLuaStage.nextProgram = PROGRAM_END;
+#else
+    beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
+    return;
+#endif
   }
 
   String msg = "Переход к строке программы №" + String((ProgramNum + 1));
@@ -318,15 +455,6 @@ void run_beer_program(uint8_t num) {
   alarm_c_min = 0;  //мешалка пауза
   currentstepcnt = 0; //счетчик циклов мешалки
 
-  // [P2 п.3] Ручной пропуск строки может оборвать 'C'/'F' раньше, чем они
-  // сами закроют клапан/насос по температуре — актуаторы не должны
-  // "утекать" в произвольную следующую строку.
-  if (valve_status) open_valve(false, false);
-#ifdef USE_WATER_PUMP
-  set_pump_pwm(0);
-  pump_started = false;
-  beerCoolingPumpActive = false;
-#endif
   // [P2 п.5+6] Накопитель простоя считается только для текущей строки P/B.
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
@@ -336,18 +464,33 @@ void run_beer_program(uint8_t num) {
  * @brief Завершает процесс затирания: выключает насос, нагрев, клапаны, сбрасывает состояния.
  */
 void beer_finish() {
-  if (valve_status) {
-    open_valve(false, true);
+  if (beerLuaStage.phase != BEER_LUA_STAGE_IDLE) {
+    if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
+      SendMsg("Ошибка завершения варки: не удалось отключить исполнитель", ALARM_MSG);
+      return;
+    }
+#ifdef USE_LUA
+    if (beerLuaStage.phase != BEER_LUA_STAGE_EXIT_QUEUED) {
+      if (!request_beer_lua_stop(beerLuaStage.ticket)) {
+        SendMsg("Ошибка Lua: не удалось запросить остановку job", ALARM_MSG);
+        return;
+      }
+      beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;
+      beerLuaStage.nextProgram = PROGRAM_END;
+    }
+    if (!beer_lua_job_idle(beerLuaStage.ticket)) return;
+#else
+    SendMsg("Ошибка Lua: job активен без USE_LUA", ALARM_MSG);
+    return;
+#endif
+  }
+  beer_reset_lua_stage();
+  if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
+    SendMsg("Ошибка завершения варки: не удалось отключить исполнитель", ALARM_MSG);
+    return;
   }
   // Сброс детектора кипения при завершении процесса
   resetBoilingDetector();
-  set_mixer_state(false, false);
-#ifdef USE_WATER_PUMP
-  set_pump_pwm(0);
-  pump_started = false;
-  beerCoolingPumpActive = false;
-#endif
-  setHeaterPosition(false);
   heater_state = false;
   // [P2 п.5+6] Ручная пауза и накопитель простоя строки не переживают завершение процесса.
   beerManualPause = false;
@@ -420,6 +563,7 @@ void beer_stage_tick() {
   if (nowMs - lastBeerTickMs < 1000) return;
   lastBeerTickMs = nowMs;
 
+  if (heater_safety_latched()) return;
   if (startval <= SAMOVAR_STARTVAL_BEER_START) return;
 
   float temp = 0;
@@ -439,9 +583,9 @@ void beer_stage_tick() {
   //Обрабатываем программу
 
   //Проверяем, что клапан воды охлаждения не открыт, когда не нужно
-  if (currentType != 'C' && currentType != 'F' && valve_status && PowerOn && currentType != 'L') {
-    //Закрываем клапан воды
-    open_valve(false, false);
+  if (currentType != 'C' && currentType != 'F' && currentType != 'L' &&
+      currentType != 'W' && (valve_status || beer_cooling_pump_demanded()) && PowerOn) {
+    if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
   }
 
   //Если тип программы неизвестен или пуст - безопасно выключаем нагрев
@@ -453,17 +597,44 @@ void beer_stage_tick() {
     return;
   }
 
-  //Если программа - Lua - ждем, ничего не делаем
+  // Lua-этап принимает управление только после подтверждённого periodic job.
   if (currentType == 'L') {
+#ifdef USE_LUA
+    if (beerLuaStage.phase == BEER_LUA_STAGE_EXIT_QUEUED) {
+      if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
+        beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку при остановке job");
+        return;
+      }
+      if (!beer_lua_job_idle(beerLuaStage.ticket)) return;
+      const uint8_t nextProgram = beerLuaStage.nextProgram;
+      beer_reset_lua_stage();
+      run_beer_program(nextProgram);
+      return;
+    }
+    const LuaBeerJobResult result = beer_lua_job_result(beerLuaStage.ticket);
+    if (result == LUA_BEER_JOB_QUEUED || result == LUA_BEER_JOB_RUNNING) {
+      if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
+        beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед подтверждением job");
+      }
+      return;
+    }
+    if (result == LUA_BEER_JOB_SUCCEEDED) {
+      beerLuaStage.phase = BEER_LUA_STAGE_RUNNING;
+      return;
+    }
+    beer_abort_config_error("Ошибка Lua: job завершился без подтверждённого запуска");
+#else
+    beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
+#endif
     return;
   }
 
   //Если программа - ожидание - ждем, ничего не делаем
   if (currentType == 'W') {
     if (begintime == 0) {
-      begintime = millis();
       setHeaterPosition(false);
-      open_valve(false, false);
+      if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
+      begintime = millis();
     }
     check_mixer_state(); // Управление мешалкой и насосом по параметрам программы
     return;
@@ -489,27 +660,25 @@ void beer_stage_tick() {
 
   //Если режим Брага
   if (currentType == 'F') {
+    if (beerManualPause) {
+      if (!beer_pause_fermentation_outputs()) {
+        beer_abort_config_error("Ошибка паузы F: не удалось выключить исполнитель");
+      }
+      return;
+    }
     //Если температура меньше целевой - греем, иначе охлаждаем.
     if (temp < program[ProgramNum].Temp - tempDelta) {
-      if (valve_status) {
-        //Закрываем клапан воды
-        open_valve(false, false);
-      }
+      if ((valve_status || beer_cooling_pump_demanded()) &&
+          beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       //Поддерживаем целевую температуру
       // [P2 п.6] Ручная пауза держит нагрев выключенным, не трогая ПИД/таймеры.
-      if (beerManualPause) setHeaterPosition(false); else set_heater_state(program[ProgramNum].Temp, temp);
+      set_heater_state(program[ProgramNum].Temp, temp);
     } else if (temp > program[ProgramNum].Temp + tempDelta) {
       {
-        if (!valve_status) {
+        if (!valve_status || !beer_cooling_pump_demanded()) {
           //Отключаем нагреватель
           setHeaterPosition(false);
-          //Открываем клапан воды
-          open_valve(true, false);
-#ifdef USE_WATER_PUMP
-          set_pump_pwm(1023);
-          pump_started = true;
-          beerCoolingPumpActive = true;
-#endif
+          if (beer_set_cooling_outputs(true) != ACTUATOR_COMMAND_APPLIED) return;
         }
       }
     } else {
@@ -518,12 +687,7 @@ void beer_stage_tick() {
       setHeaterPosition(false);
       //Закрываем клапан воды, если температура в кубе чуть меньше температурной уставки, чтобы часто не щелкать клапаном
       if ((temp < program[ProgramNum].Temp + tempDelta - 0.1) && valve_status && PowerOn) {
-        open_valve(false, false);
-#ifdef USE_WATER_PUMP
-        set_pump_pwm(0);
-        pump_started = false;
-        beerCoolingPumpActive = false;
-#endif
+        if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       }
     }
   }
@@ -548,25 +712,13 @@ void beer_stage_tick() {
   //Если программа - охлаждение - ждем, когда температура в кубе упадет ниже заданной, и управляем водой для охлаждения
   if (currentType == 'C') {
     if (begintime == 0) {
-      begintime = millis();
       setHeaterPosition(false);
-      //Открываем клапан воды
-      open_valve(true, false);
-#ifdef USE_WATER_PUMP
-      set_pump_pwm(1023);
-      pump_started = true;
-      beerCoolingPumpActive = true;
-#endif
+      if (beer_set_cooling_outputs(true) != ACTUATOR_COMMAND_APPLIED) return;
+      begintime = millis();
     }
     if (temp <= program[ProgramNum].Temp) {
       //Если температура упала
-      //Закрываем клапан воды
-      open_valve(false, false);
-#ifdef USE_WATER_PUMP
-      set_pump_pwm(0);
-      pump_started = false;
-      beerCoolingPumpActive = false;
-#endif
+      if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
     }
@@ -643,6 +795,7 @@ void beer_stage_tick() {
  * @brief Управляет состоянием мешалки и насоса в зависимости от этапа программы и времени.
  */
 void check_mixer_state() {
+  if (heater_safety_latched()) return;
   if (program[ProgramNum].capacity_num > 0) {
     //обрабатываем время включения и управляем мешалкой и насосом
 
@@ -650,24 +803,35 @@ void check_mixer_state() {
       //завершили паузу мешалки
       alarm_c_min = 0;
       alarm_c_low_min = 0;
-      set_mixer_state(false, false);
+      if (set_mixer_state(false, false) == ACTUATOR_COMMAND_FAILED) {
+        alarm_c_min = millis() + 1000;
+        return;
+      }
     }
 
     if ((alarm_c_low_min > 0) && ((int32_t)(millis() - alarm_c_low_min) >= 0)) {  // [C-13] overflow-safe
       //выключаем мешалку, если alarm_c_min > millis()
       alarm_c_low_min = 0;
       if (alarm_c_min > 0)
-        set_mixer_state(false, false);
+        if (set_mixer_state(false, false) == ACTUATOR_COMMAND_FAILED) {
+          alarm_c_low_min = millis() + 1000;
+          return;
+        }
     }
 
     if (alarm_c_low_min == 0 && alarm_c_min == 0) {
       //включаем мешалку
       alarm_c_low_min = millis() + program[ProgramNum].Volume * 1000;
       if (program[ProgramNum].Power > 0) alarm_c_min = alarm_c_low_min + program[ProgramNum].Power * 1000;
-      currentstepcnt++;
+      const int candidateStepCount = currentstepcnt + 1;
       bool dir = false;
-      if (currentstepcnt % 2 == 0 && program[ProgramNum].Speed < 0) dir = true;
-      set_mixer_state(true, dir);
+      if (candidateStepCount % 2 == 0 && program[ProgramNum].Speed < 0) dir = true;
+      if (set_mixer_state(true, dir) == ACTUATOR_COMMAND_FAILED) {
+        alarm_c_low_min = 0;
+        alarm_c_min = 0;
+        return;
+      }
+      currentstepcnt = candidateStepCount;
     }
 
   } else {
@@ -683,48 +847,86 @@ void check_mixer_state() {
  * @param state true — включить, false — выключить
  * @param dir true — реверс, false — прямое вращение
  */
-void set_mixer_state(bool state, bool dir) {
-  mixer_status = state;
+ActuatorCommandResult set_mixer_state(bool state, bool dir) {
   //Serial.println("State = " + String(state) + "; DIR = " + String(dir) + "; alarm_c_min = " + String(alarm_c_min) + "; alarm_c_low_min = " + String(alarm_c_low_min));
   if (state) {
+    bool mixerRelayEnabled = false;
+    bool mixerStepperStarted = false;
     //включаем мешалку
     if (BitIsSet(program[ProgramNum].capacity_num, 0)) {
       //включаем реле 2
       digitalWrite(RELE_CHANNEL2, SamSetup.rele2);
+      mixerRelayEnabled = true;
       //включаем I2CStepper шаговик
-	      if (i2c_stepper_mixer_present()) {
+      if (i2c_stepper_mixer_present()) {
 	        int tm = abs(program[ProgramNum].Volume);
 	        if (tm == 0) tm = 10;
-	        set_stepper_by_time(20, dir, tm);
+	        if (!set_stepper_by_time(20, dir, tm)) {
+          if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+          return ACTUATOR_COMMAND_FAILED;
+        }
+        mixerStepperStarted = true;
 	      }
     }
     if (BitIsSet(program[ProgramNum].capacity_num, 1)) {
 #ifdef USE_WATER_PUMP
       //включаем SSD реле
-      set_pump_pwm(1023);
-#endif
+      if (set_pump_pwm(1023) != ACTUATOR_COMMAND_APPLIED) {
+	        bool rollbackFailed = mixerStepperStarted && !set_stepper_by_time(0, 0, 0);
+	        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+	        if (rollbackFailed) {
+          request_emergency_stop("Аварийное отключение: не удалось вернуть состояние мешалки");
+        }
+	        return ACTUATOR_COMMAND_FAILED;
+      }
 	      //включаем I2CStepper реле 1
 	      if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
-	        set_mixer_pump_target(1);
+	        if (!set_mixer_pump_target(1)) {
+          bool rollbackFailed = set_pump_pwm(0) != ACTUATOR_COMMAND_APPLIED;
+          if (mixerStepperStarted && !set_stepper_by_time(0, 0, 0)) rollbackFailed = true;
+          if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+	          if (rollbackFailed) {
+            request_emergency_stop("Аварийное отключение: не удалось вернуть состояние мешалки");
+          }
+          return ACTUATOR_COMMAND_FAILED;
+        }
 	      }
+#else
+      if (!set_mixer_pump_target(1)) {
+        bool rollbackFailed = false;
+        if (mixerStepperStarted) {
+          rollbackFailed = !set_stepper_by_time(0, 0, 0);
+        }
+        if (mixerRelayEnabled) digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+        if (rollbackFailed) {
+          request_emergency_stop("Аварийное отключение: не удалось вернуть состояние мешалки");
+        }
+        return ACTUATOR_COMMAND_FAILED;
+      }
+#endif
     }
   } else {
+    bool stopFailed = false;
     //выключаем реле 2
     digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
 #ifdef USE_WATER_PUMP
     //выключаем SSD реле, но не глушим активное охлаждение 'C'/'F' плановым
     //выключением насоса по расписанию мешалки [P2 п.1]
-    if (!beerCoolingPumpActive) set_pump_pwm(0);
+    if (!beerCoolingPumpActive &&
+        set_pump_pwm(0) != ACTUATOR_COMMAND_APPLIED) stopFailed = true;
 #endif
 	    //выключаем I2CStepper шаговик
 	    if (i2c_stepper_mixer_present()) {
-	      set_stepper_by_time(0, 0, 0);
+	      if (!set_stepper_by_time(0, 0, 0)) stopFailed = true;
 	    }
 	    //выключаем I2CStepper реле 1
 	    if (i2c_stepper_mixer_present() || i2c_stepper_pump_present()) {
-	      set_mixer_pump_target(0);
+	      if (!set_mixer_pump_target(0)) stopFailed = true;
 	    }
+    if (stopFailed) return ACTUATOR_COMMAND_FAILED;
   }
+  mixer_status = state;
+  return ACTUATOR_COMMAND_APPLIED;
 }
 
 /**
@@ -743,8 +945,8 @@ void set_heater_state(float setpoint, float temp) {
     if (acceleration_heater) {
       digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
       acceleration_heater = false;
-    }
-  }
+	        }
+	      }
 #endif
 
   if (setpoint - temp > HEAT_DELTA && !tuning) {
@@ -943,8 +1145,8 @@ void FinishAutoTune() {
  * @brief Включает или выключает мешалку (обертка для set_mixer_state).
  * @param On true — включить, false — выключить
  */
-void set_mixer(bool On) {
-  set_mixer_state(On, false);
+ActuatorCommandResult set_mixer(bool On) {
+  return set_mixer_state(On, false);
 }
 
 /**

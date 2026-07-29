@@ -189,6 +189,11 @@ if distiller_text:
             distiller_finish_body,
             "millis() - sessionStartTime",
         )
+        require_token(
+            "distiller_finish guards the session timer",
+            distiller_finish_body,
+            "if (sessionTimerValid)",
+        )
         if "millis() - timePredictor.startTime" in distiller_finish_body:
             errors.append("distiller_finish still reads timePredictor.startTime for total time")
 
@@ -198,16 +203,26 @@ if distiller_text:
         errors.append(str(exc))
         update_predictor_body = ""
     if update_predictor_body:
-        session_count = update_predictor_body.count("(currentTime - sessionStartTime)")
-        if session_count != 2:
-            errors.append(
-                f"updateTimePredictor sessionStartTime usage count mismatch: expected 2, got {session_count}"
-            )
         require_token(
             "updateTimePredictor keeps the per-row rate denominator on timePredictor.startTime",
             update_predictor_body,
             "(currentTime - timePredictor.startTime)",
         )
+        require_token(
+            "updateTimePredictor keeps process estimation after program rows",
+            update_predictor_body,
+            "timePredictor.processRemainingTime",
+        )
+        require_token(
+            "updateTimePredictor guards pre-boil predictions",
+            update_predictor_body,
+            "!timePredictor.baselineValid || !sessionTimerValid",
+        )
+        if "ProgramNum >= ProgramLen" in update_predictor_body and \
+                "timePredictor.predictedTotalTime = elapsedMinutes" in update_predictor_body:
+            errors.append(
+                "updateTimePredictor still forces process forecast to elapsed time after rows"
+            )
 
 # [П4.7] logic.h: get_distiller_status_text must not fabricate a phantom program
 # row once ProgramNum reaches ProgramLen.

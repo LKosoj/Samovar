@@ -14,6 +14,8 @@ struct PowerTransitionState {
   bool enqueueResetCommand;
   bool pendingPowerValueSet;
   float pendingPowerValue;
+  uint64_t pendingPowerGeneration;
+  uint64_t pendingPowerRegulatorGeneration;
   uint64_t regulatorGeneration;
 };
 
@@ -21,6 +23,8 @@ static PowerTransitionState powerTransition = {
   {SAFETY_TRANSITION_IDLE, 0},
   false,
   false,
+  0,
+  0,
   0,
   0,
 };
@@ -161,6 +165,8 @@ inline void apply_heater_outputs_off_locked() {
   current_power_p = 0;
 #endif
   powerTransition.pendingPowerValueSet = false;
+  powerTransition.pendingPowerGeneration = 0;
+  powerTransition.pendingPowerRegulatorGeneration = 0;
   powerTransition.regulatorGeneration = 0;
 }
 
@@ -292,7 +298,7 @@ inline void terminate_sleep_fault_locked(uint32_t now) {
   );
 }
 
-inline void set_power(bool On, bool enqueueResetCommand) {
+inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand) {
   if (On) {
     bool started = false;
     bool workerReady = true;
@@ -321,6 +327,8 @@ inline void set_power(bool On, bool enqueueResetCommand) {
         reg_online = false;
         last_reg_online = millis();
         powerTransition.pendingPowerValueSet = false;
+        powerTransition.pendingPowerGeneration = 0;
+        powerTransition.pendingPowerRegulatorGeneration = 0;
         powerTransition.regulatorGeneration = 0;
 
 #ifdef SAMOVAR_USE_SEM_AVR
@@ -350,14 +358,14 @@ inline void set_power(bool On, bool enqueueResetCommand) {
       else if (blockedOffTransition) SendMsg("Нагрев отклонён: выполняется выключение нагрева, повторите позже", WARNING_MSG);
       else if (blockedExclusiveOwner) SendMsg("Нагрев отклонён: активна эксклюзивная операция (самотест/калибровка)", WARNING_MSG);
       else if (blockedModeSwitch) SendMsg("Нагрев отклонён: идёт переключение режима", WARNING_MSG);
-      return;
+      return ACTUATOR_COMMAND_FAILED;
     }
 #ifndef SAMOVAR_USE_POWER
     if (updatePowerMode) set_current_power_mode_value(POWER_SPEED_MODE);
 #endif
     set_menu_screen(2);
     power_text_ptr = (char *)"OFF";
-    return;
+    return ACTUATOR_COMMAND_APPLIED;
   }
 
   bool finishImmediately = false;
@@ -393,6 +401,7 @@ inline void set_power(bool On, bool enqueueResetCommand) {
   if (updatePowerMode) set_current_power_mode_value(POWER_SLEEP_MODE);
 #endif
   if (finishImmediately) finish_power_off_transition(finishEnqueueReset);
+  return ACTUATOR_COMMAND_APPLIED;
 }
 
 inline void tick_power_transition() {
@@ -472,6 +481,7 @@ inline void tick_power_transition() {
       if (status == SAFETY_REGULATOR_REQUEST_APPLIED) {
         if (powerTransition.pendingPowerValueSet) {
           const float pendingPower = powerTransition.pendingPowerValue;
+          const uint64_t pendingGeneration = powerTransition.pendingPowerGeneration;
           powerTransition.pendingPowerValueSet = false;
           const float threshold = POWER_WORK_MODE_THRESHOLD;
           powerTransition.regulatorGeneration = request_regulator_state_locked(
@@ -480,6 +490,9 @@ inline void tick_power_transition() {
             pendingPower,
             false
           );
+          powerTransition.pendingPowerRegulatorGeneration =
+              powerTransition.regulatorGeneration;
+          powerTransition.pendingPowerGeneration = pendingGeneration;
           notifyWorker = powerTransition.regulatorGeneration != 0;
           powerTransition.transition.deadline = regulatorRequestState.desiredDeadline;
           if (powerTransition.regulatorGeneration == 0) {
@@ -1044,7 +1057,7 @@ inline bool apply_regulator_mode_blocking(SafetyRegulatorMode mode, uint64_t pow
   return true;
 }
 
-inline void set_current_power(float Volt) {
+inline ActuatorCommandResult set_current_power(float Volt, uint64_t* generation) {
   // Отрицательная уставка физически бессмысленна и в вольтах, и в ваттах: трактуем
   // как ноль. Сравнение через !(Volt >= 0) заодно ловит NaN — он тоже уходит в ноль,
   // то есть в SLEEP, а не в непредсказуемое состояние регулятора.
@@ -1062,16 +1075,23 @@ inline void set_current_power(float Volt) {
   portENTER_CRITICAL(&emergencyStopMux);
   if (!PowerOn || heaterSafetyState.emergencyLatched || mode_switch_barrier_active) {
     portEXIT_CRITICAL(&emergencyStopMux);
-    return;
+    if (generation != nullptr) *generation = 0;
+    return ACTUATOR_COMMAND_FAILED;
   }
   if (power_transition_start_pending_locked()) {
     target_power_volt = Volt;
     powerTransition.pendingPowerValue = Volt;
     powerTransition.pendingPowerValueSet = true;
+    powerTransition.pendingPowerGeneration =
+        safety_regulator_next_generation(regulatorRequestState);
+    powerTransition.pendingPowerRegulatorGeneration = 0;
     portEXIT_CRITICAL(&emergencyStopMux);
-    return;
+    if (generation != nullptr) {
+      *generation = powerTransition.pendingPowerGeneration;
+    }
+    return ACTUATOR_COMMAND_PENDING;
   }
-  request_regulator_state_locked(
+  const uint64_t requestGeneration = request_regulator_state_locked(
     Volt < threshold ? SAFETY_REGULATOR_MODE_SLEEP : SAFETY_REGULATOR_MODE_WORK,
     Volt >= threshold,
     Volt,
@@ -1079,7 +1099,29 @@ inline void set_current_power(float Volt) {
   );
   if (Volt < threshold) target_power_volt = 0;
   portEXIT_CRITICAL(&emergencyStopMux);
+  if (generation != nullptr) *generation = requestGeneration;
+  if (requestGeneration == 0) return ACTUATOR_COMMAND_FAILED;
   notify_power_worker();
+  return current_power_command_status(requestGeneration);
+}
+
+inline ActuatorCommandResult current_power_command_status(uint64_t generation) {
+  if (generation == 0) return ACTUATOR_COMMAND_FAILED;
+  portENTER_CRITICAL(&emergencyStopMux);
+  if (generation == powerTransition.pendingPowerGeneration) {
+    if (powerTransition.pendingPowerValueSet ||
+        powerTransition.pendingPowerRegulatorGeneration == 0) {
+      portEXIT_CRITICAL(&emergencyStopMux);
+      return ACTUATOR_COMMAND_PENDING;
+    }
+    generation = powerTransition.pendingPowerRegulatorGeneration;
+  }
+  const SafetyRegulatorRequestStatus status =
+      safety_regulator_request_status(regulatorRequestState, generation);
+  portEXIT_CRITICAL(&emergencyStopMux);
+  if (status == SAFETY_REGULATOR_REQUEST_APPLIED) return ACTUATOR_COMMAND_APPLIED;
+  if (status == SAFETY_REGULATOR_REQUEST_PENDING) return ACTUATOR_COMMAND_PENDING;
+  return ACTUATOR_COMMAND_FAILED;
 }
 
 // Порог трактовки поля Power строки программы: |Power| выше него и Power > 0 -

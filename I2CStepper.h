@@ -375,9 +375,14 @@ inline bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time) 
   return ok;
 }
 
-inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target) {
-  I2CStepperSpeed = spd;
+inline bool set_stepper_target(
+    uint16_t spd,
+    uint8_t direction,
+    uint32_t target,
+    bool requireI2c) {
   if (!i2c_stepper_refresh(i2cStepperPump)) {
+    if (requireI2c) return false;
+    I2CStepperSpeed = spd;
     CurrrentStepperSpeed = spd;
     stopService();
     if (spd > 0) {
@@ -395,6 +400,7 @@ inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target)
   if (spd == 0 || target == 0) {
     I2CPumpTargetMl = 0;
     bool ok = i2c_stepper_stop(i2cStepperPump);
+    if (ok) I2CStepperSpeed = spd;
     i2c_stepper_config_end(i2cStepperPump);
     return ok;
   }
@@ -416,6 +422,7 @@ inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target)
     i2cStepperPump.fillingMlHour = mlh;
   }
   bool ok = i2c_stepper_start(i2cStepperPump);
+  if (ok) I2CStepperSpeed = spd;
   i2c_stepper_config_end(i2cStepperPump);
   return ok;
 }

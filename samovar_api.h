@@ -3,6 +3,7 @@
 #include "Samovar.h"
 #include "samovar_command_queue.h"
 #include "operation_store.h"
+#include "safety_transition.h"
 
 class AsyncWiFiManager;
 struct ProgramDraft;
@@ -104,6 +105,7 @@ void set_menu_screen(uint8_t param);
 // Web API
 void WebServerInit(void);
 void change_samovar_mode();
+bool is_valid_samovar_mode(long mode);
 bool mode_switch_in_progress();
 ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode);
 void send_index_template_response(AsyncWebServerRequest *request, const char *spiffsPath, const char *cacheControl);
@@ -154,11 +156,11 @@ void set_body_temp();
 void set_capacity(uint8_t cap);
 void next_capacity(void);
 void check_alarm();
-void open_valve(bool Val, bool msg);
+ActuatorCommandResult open_valve(bool Val, bool msg);
 void process_buzzer();
 void set_buzzer(bool fl);
 void set_alarm();
-inline void set_power(bool On, bool enqueueResetCommand = true);
+inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand = true);
 inline bool emergency_trip_heater_outputs_locked();
 inline void force_heater_output_off_locked(bool requestSleep);
 inline bool heater_safety_latched();
@@ -185,7 +187,8 @@ inline void mode_request_heating_start(int16_t activeStatus);
 // (см. mode_registry.h::mode_alarm_beer) - нужна форвард-декларация здесь же,
 // рядом с остальными mode_*, чтобы порядок включения не ломал компиляцию.
 inline void mode_request_water_flow_emergency_if_needed();
-inline void set_current_power(float Volt);
+inline ActuatorCommandResult set_current_power(float Volt, uint64_t* generation = nullptr);
+inline ActuatorCommandResult current_power_command_status(uint64_t generation);
 inline void apply_program_power_row(float power);
 inline void set_power_mode(String Mode);
 void check_power_error();
@@ -237,17 +240,22 @@ void resetTimePredictor();
 void updateTimePredictor();
 float get_dist_remaining_time();
 float get_dist_predicted_total_time();
+float get_dist_process_remaining_time();
+float get_dist_row_predicted_total_time();
+bool dist_row_prediction_available();
+bool dist_process_prediction_available();
 
 void beer_proc();
 void beer_finish();
 void beer_stage_tick();
 void beer_check_cooling_limits();
+inline bool beer_cooling_pump_demanded();
 void run_beer_program(uint8_t num);
 ProgramParseResult set_beer_program(const String& WProgram);
 String get_beer_program();
 void check_mixer_state();
-void set_mixer_state(bool state, bool dir);
-void set_mixer(bool On);
+ActuatorCommandResult set_mixer_state(bool state, bool dir);
+ActuatorCommandResult set_mixer(bool On);
 void set_heater_state(float setpoint, float temp);
 void set_heater(double dutyCycle);
 #ifdef SAMOVAR_USE_POWER
@@ -276,7 +284,7 @@ inline bool nbk_transition_active();
 inline bool nbk_transition_reports_interruption();
 void check_alarm_nbk();
 bool check_nbk_critical_alarms();
-void run_nbk_program(uint8_t num);
+void run_nbk_program(uint8_t num, bool workConfirmed = false);
 ProgramParseResult set_nbk_program(const String& WProgram);
 String get_nbk_program();
 float fromPower(float value);
@@ -300,7 +308,7 @@ String get_DSAddressList(String Address);
 void CopyDSAddress(const uint8_t* DevSAddress, uint8_t* DevTAddress);
 void get_task_stack_usage();
 void init_pump_pwm(uint8_t pin, int freq);
-void set_pump_pwm(float duty);
+ActuatorCommandResult set_pump_pwm(float duty);
 void set_pump_speed_pid(float temp);
 void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = true);
 
@@ -308,7 +316,11 @@ void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase = tr
 inline void detect_i2c_steppers();
 inline float i2c_stepper_steps_from_rate(float volume_per_hour);
 inline bool set_stepper_by_time(uint16_t spd, uint8_t direction, uint16_t time);
-inline bool set_stepper_target(uint16_t spd, uint8_t direction, uint32_t target);
+inline bool set_stepper_target(
+    uint16_t spd,
+    uint8_t direction,
+    uint32_t target,
+    bool requireI2c = false);
 inline uint16_t get_stepper_speed(void);
 inline uint32_t get_stepper_status(void);
 inline bool set_mixer_pump_target(uint8_t on);
@@ -320,14 +332,7 @@ inline float i2c_get_liquid_rate_by_step(int stepperSpeed);
 inline float i2c_get_speed_from_rate(float volume_per_hour);
 inline float i2c_get_liquid_volume();
 
-enum LuaModeTarget : uint8_t {
-  LUA_MODE_TARGET_SETUP = 0,
-  LUA_MODE_TARGET_ACTIVE,
-  LUA_MODE_TARGET_CONTROL,
-};
-
 #ifdef USE_LUA
-bool set_lua_mode_value(LuaModeTarget target, int32_t value);
 void lua_init();
 String get_lua_script_list();
 String get_lua_script(String fn);

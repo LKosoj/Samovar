@@ -1,5 +1,6 @@
 #pragma once
 #include "Samovar.h"
+#include "safety_transition.h"
 #ifdef USE_WATER_PUMP
 #include <Arduino.h>
 //#define PID_OPTIMIZED_I
@@ -23,7 +24,7 @@ void init_pump_pwm(uint8_t pin, int freq) {
   pump_started = false;
 }
 
-void set_pump_pwm(float duty) {
+ActuatorCommandResult set_pump_pwm(float duty) {
   duty = constrain(duty, 0, 1023);
 
 	  if (!pump_started && duty > 0) {
@@ -32,11 +33,11 @@ void set_pump_pwm(float duty) {
 	    water_pump_speed = PWM_START_VALUE * 10;
 	    pump_started = true;
 	    if (bk_pwm != PWM_LOW_VALUE * 40) {
-	      return;
+	      return ACTUATOR_COMMAND_APPLIED;
 	    }
 	    pump_pwm.write(duty);
 	    water_pump_speed = duty;
-	    return;
+	    return ACTUATOR_COMMAND_APPLIED;
 	  }
   if (duty > 0 && wp_count < 10 && pump_started) {
     if (bk_pwm != PWM_LOW_VALUE * 40) {
@@ -47,12 +48,13 @@ void set_pump_pwm(float duty) {
       water_pump_speed = PWM_START_VALUE * 10;
     }
     wp_count++;
-    return;
+    return ACTUATOR_COMMAND_APPLIED;
   }
   if (duty == 0) pump_started = false;
   pump_pwm.write(duty);
   water_pump_speed = duty;
   //MsgLog = duty;
+  return ACTUATOR_COMMAND_APPLIED;
 }
 
 	void set_pump_speed_pid(float temp) {

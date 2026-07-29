@@ -19,7 +19,7 @@ ProgramParseResult prepare_default_program_for_mode(
   switch (mode) {
     case SAMOVAR_BEER_MODE:
     case SAMOVAR_SUVID_MODE:
-      defaultProgram = "M;45;0;0^-1^2^2;0\nP;45;1;0^-1^2^3;0\nP;60;1;0^-1^2^3;0\nW;0;0;0^-1^2^3;0\nB;0;1;0^-1^2^3;0\nC;30;0;0^-1^2^3;0\n";
+      defaultProgram = "M;45;0;0^0^0^0;0\nP;45;1;0^0^0^0;0\nP;60;1;0^0^0^0;0\nW;0;0;0^0^0^0;0\nB;0;1;0^0^0^0;0\nC;30;0;0^0^0^0;0\n";
       break;
     case SAMOVAR_DISTILLATION_MODE:
       defaultProgram = "A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n";
@@ -629,6 +629,7 @@ void reset_sensor_counter(void) {
 	  boil_started = false;
 	  boil_temp = 0;
 	  alcohol_s = 0;
+	  boiling_evidence = BOILING_EVIDENCE_NONE;
 	  b_t_time_delay = 0;
 	  reset_heat_loss_calculation();
 

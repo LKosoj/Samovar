@@ -1332,6 +1332,9 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "SuvidTemp") {
     s = format_float(SamSetup.SuvidTemp, 2);
     return s;
+  } else if (var == "SuvidHoldMinutes") {
+    s = String(SamSetup.SuvidHoldMinutes);
+    return s;
   } else if (var == "StepperStepMl") {
     s = SamSetup.StepperStepMl;
     return s;
@@ -2191,6 +2194,7 @@ void handleSave(AsyncWebServerRequest *request) {
   if (!apply_save_u16_arg(request, "WaterDelay", staged.WaterDelay, 0, 65535)) return;
   if (!apply_save_u16_arg(request, "TankDelay", staged.TankDelay, 0, 65535)) return;
   if (!apply_save_u16_arg(request, "ACPDelay", staged.ACPDelay, 0, 65535)) return;
+  if (!apply_save_u16_arg(request, "SuvidHoldMinutes", staged.SuvidHoldMinutes, 0, 65535)) return;
 
   if (!apply_save_float_arg(request, "DeltaSteamTemp", staged.DeltaSteamTemp, -1000.0f, 1000.0f)) return;
   if (!apply_save_float_arg(request, "DeltaPipeTemp", staged.DeltaPipeTemp, -1000.0f, 1000.0f)) return;

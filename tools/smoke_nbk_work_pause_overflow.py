@@ -5,8 +5,8 @@
 "if (nbk_work_in_pause)" плюс непосредственно следующую за ним строку сброса
 латча ("nbk_pause_overflow_repeat_latched = false;") — через
 extract_braced_block_after и подставляет в минимальный host-харнесс, замокав
-только downstream-вызовы (overflow, SendMsg, set_current_power, fromPower,
-safety_deadline_after, millis).
+только downstream-вызовы (overflow, SendMsg,
+nbk_schedule_actuator_command).
 
 Регресс, который тест защищает: до задачи 1 повторный захлёб в паузе W вообще
 не отслеживался (пауза просто истекала по таймеру). Задача 1 добавила опрос
@@ -61,10 +61,15 @@ static String operator+(const char* lhs, const String& rhs) {
 
 uint16_t nbk_column_inertia = 180;
 float nbk_Mo = 100.0f;
+float nbk_P = 9.0f;
+uint16_t nbk_opt_iter = 0;
 uint8_t nbk_work_pause_stage = 0;
 bool nbk_overflow_happened = false;
 bool nbk_pause_overflow_repeat_latched = false;
 uint32_t nbk_work_next_time = 0;
+enum NbkActuatorDeadlineTarget : uint8_t {
+  NBK_ACTUATOR_WORK_DEADLINE = 2,
+};
 
 static bool overflowFlag = false;
 bool overflow() { return overflowFlag; }
@@ -80,14 +85,21 @@ static int sendMsgCalls = 0;
 // улов на молчаливую слепую зону, что хуже.
 void SendMsg(const String&, MESSAGE_TYPE) { sendMsgCalls++; }
 
-static int powerCalls = 0;
+static int scheduleCalls = 0;
 static float lastPower = -1.0f;
-// fromPower обязана быть ОТЛИЧИМА от тождества: настоящая (nbk.h) переводит
-// мощность в напряжение через сопротивление ТЭНа. С тождественной заглушкой
-// set_current_power(fromPower(nbk_Mo/2)) неотличимо от set_current_power(nbk_Mo/2) -
-// тест не поймал бы потерю деления пополам.
-float fromPower(float v) { return v * 2.0f; }
-void set_current_power(float v) { powerCalls++; lastPower = v; }
+static float lastSpeed = -1.0f;
+bool nbk_schedule_actuator_command(
+    float power,
+    float speed,
+    NbkActuatorDeadlineTarget,
+    uint32_t,
+    uint16_t) {
+  scheduleCalls++;
+  lastPower = power;
+  lastSpeed = speed;
+  return true;
+}
+void nbk_enter_safe_wait(const String&) {}
 
 static uint32_t fakeMillis = 1000;
 uint32_t millis() { return fakeMillis; }
@@ -116,23 +128,25 @@ static void reset_fixture(float mo) {
   nbk_pause_overflow_repeat_latched = false;
   nbk_work_next_time = 0;
   sendMsgCalls = 0;
-  powerCalls = 0;
+  scheduleCalls = 0;
   lastPower = -1.0f;
+  lastSpeed = -1.0f;
   overflowFlag = false;
 }
 
 // Основной сценарий для одного значения nbk_Mo: 5 тиков подряд с overflow=true
 // должны дать РОВНО одно сообщение (латч подавляет повтор), но
-// set_current_power обязан вызываться на КАЖДОМ тике со сниженной вдвое
-// мощностью. Затем overflow отпускает (false), латч сбрасывается, и при
-// новом overflow=true сообщение должно появиться СНОВА.
+// составная команда обязана приниматься на КАЖДОМ тике со сниженной вдвое
+// мощностью. Затем overflow отпускает (false), латч сбрасывается, и при новом
+// overflow=true сообщение должно появиться СНОВА.
 static void test_repeat_overflow_for(float mo) {
   reset_fixture(mo);
   overflowFlag = true;
   for (int tick = 0; tick < 5; tick++) {
     run_pause_overflow_tick();
-    check(powerCalls == tick + 1, "set_current_power должен вызываться на каждом тике повторного захлёба");
-    check(lastPower == fromPower(mo / 2.0f), "set_current_power должен получать fromPower(nbk_Mo/2), а не иное значение");
+    check(scheduleCalls == tick + 1, "повторный захлёб должен принимать новую составную команду");
+    check(lastPower == mo / 2.0f, "составная команда должна снижать мощность nbk_Mo/2");
+    check(lastSpeed == nbk_P, "повторный захлёб не должен подменять текущую подачу");
     check(nbk_work_pause_stage == 1, "во время повторного захлёба стадия паузы должна оставаться 1");
     check(nbk_overflow_happened, "флаг nbk_overflow_happened обязан быть выставлен во время повторного захлёба");
   }

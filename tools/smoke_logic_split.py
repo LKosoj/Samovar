@@ -27,8 +27,20 @@ def require_ordered(name: str, text: str, tokens: list[str]) -> None:
         pos = next_pos
 
 
-def count_defs(text: str, name: str) -> int:
-    return len(re.findall(rf"^\s*(?:inline\s+)?(?:bool|void|float|unsigned int)\s+{re.escape(name)}\s*\(", text, re.MULTILINE))
+def count_defs(text: str, name: str, return_type: str) -> int:
+    return len(re.findall(
+        rf"^\s*(?:inline\s+)?{re.escape(return_type)}\s+{re.escape(name)}\s*\(",
+        text,
+        re.MULTILINE,
+    ))
+
+
+def count_moved_defs(text: str, name: str) -> int:
+    return len(re.findall(
+        rf"^\s*(?:inline\s+)?(?:bool|void|float|unsigned int|ActuatorCommandResult)\s+{re.escape(name)}\s*\(",
+        text,
+        re.MULTILINE,
+    ))
 
 
 logic = strip_cpp_comments(read_text("logic.h"))
@@ -52,40 +64,49 @@ require_ordered(
 )
 
 moved_functions = {
-    "alarm.h": [
-        "samovar_process_active",
-        "sensor_configured",
-        "sensor_reading_valid",
-        "sensor_valid",
-        "optional_sensor_failed",
-        "sensor_temp_at_least",
-        "request_emergency_stop",
-        "perform_emergency_stop",
-        "process_sensor_failed",
-        "set_alarm",
-        "check_alarm",
-    ],
-    "valve_buzzer.h": ["open_valve", "process_buzzer", "set_buzzer"],
-    "power_regulator.h": [
-        "set_power",
-        "clear_serial_in_buff",
-        "triggerPowerStatus",
-        "check_power_error",
-        "get_current_power",
-        "set_current_power",
-        "set_power_mode",
-    ],
-    "selftest.h": ["start_self_test", "stop_self_test"],
+    "alarm.h": {
+        "samovar_process_active": ("bool", 1),
+        "sensor_configured": ("bool", 1),
+        "sensor_reading_valid": ("bool", 1),
+        "sensor_valid": ("bool", 1),
+        "optional_sensor_failed": ("bool", 1),
+        "sensor_temp_at_least": ("bool", 1),
+        "request_emergency_stop": ("void", 1),
+        "perform_emergency_stop": ("void", 1),
+        "process_sensor_failed": ("bool", 1),
+        "set_alarm": ("void", 1),
+        "check_alarm": ("void", 1),
+    },
+    "valve_buzzer.h": {
+        "open_valve": ("ActuatorCommandResult", 1),
+        "process_buzzer": ("void", 1),
+        "set_buzzer": ("void", 1),
+    },
+    "power_regulator.h": {
+        "set_power": ("ActuatorCommandResult", 1),
+        "clear_serial_in_buff": ("void", 1),
+        "triggerPowerStatus": ("void", 2),
+        "check_power_error": ("void", 1),
+        "get_current_power": ("void", 1),
+        "set_current_power": ("ActuatorCommandResult", 1),
+        "set_power_mode": ("void", 1),
+    },
+    "selftest.h": {
+        "start_self_test": ("void", 1),
+        "stop_self_test": ("void", 1),
+    },
 }
 
 for file_name, functions in moved_functions.items():
     text = headers.get(file_name, "")
-    for name in functions:
-        expected = 2 if name == "triggerPowerStatus" else 1
-        actual = count_defs(text, name)
+    for name, (return_type, expected) in functions.items():
+        actual = count_defs(text, name, return_type)
         if actual != expected:
-            errors.append(f"{file_name} expected {expected} definition(s) of {name}, found {actual}")
-        if count_defs(logic, name) != 0:
+            errors.append(
+                f"{file_name} expected {expected} {return_type} definition(s) "
+                f"of {name}, found {actual}"
+            )
+        if count_moved_defs(logic, name) != 0:
             errors.append(f"logic.h still defines moved function: {name}")
 
 for file_name, text in headers.items():

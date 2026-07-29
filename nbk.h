@@ -8,16 +8,14 @@
  #include "mode_common.h"
  #include "program_io.h"
  #include "safety_transition.h"
-// Новые веянья, platformio вестимо, сворачиваем
- #ifndef SAMOVAR_USE_POWER
- inline void set_current_power(float Volt) { (void)Volt; }
-#endif
-
 struct { // Структура для статистики
   float avgSpeed;
+  float avgActiveSpeed;
   float totalVolume;
+  float activeVolume;
   uint32_t startTime;
   uint32_t lastVolumeUpdate;
+  uint32_t activeFeedMs;
 } stats;
 // === Новые и переименованные параметры по ТЗ ===
 #define NBK_COLUMN_INERTIA_DEFAULT 180 // Инерция колонны (Ин), по умолчанию 180 секунд
@@ -71,7 +69,89 @@ float nbk_Po_ceiling = 0; // [T2] потолок повышающей корре
 uint8_t nbk_high_temp_ticks = 0; // [T2] счётчик тиков подряд с Тб выше Тн+dT
 uint32_t nbk_dry_steam_start_time = 0; // [T3] отсчёт времени перегрева пара на Ручной настройке
 bool nbk_work_entry_overflow_pending = false; // [T8] вход в Работу сразу после захлёба в конце Оптимизации
-bool nbk_defaults_notice_sent = false; // [T9] одноразовое сообщение о применении настроек по умолчанию
+bool nbk_safe_waiting = false;
+bool nbk_safe_wait_feed_stopped = false;
+ActuatorCommandResult nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+
+struct NbkSessionConfig {
+  bool valid;
+  uint16_t columnInertia;
+  float deltaT;
+  float tankTemp;
+  float overflowPressure;
+  float deltaPower;
+  float deltaFeed;
+  float steamTempLimit;
+  float mainsVoltage;
+  float heaterResistance;
+  float maxPower;
+};
+
+static NbkSessionConfig nbkSessionConfig = {};
+static bool nbkHeaterResistanceInputValid = true;
+static bool nbkMainsVoltageInputValid = true;
+static bool nbkPreserveStartupInputValidity = false;
+
+inline void nbk_preserve_startup_input_validity(
+    float heaterResistance, float mainsVoltage) {
+  nbkHeaterResistanceInputValid =
+      heaterResistance >= CONTROL_HEATER_R_MIN &&
+      heaterResistance <= CONTROL_HEATER_R_MAX;
+  nbkMainsVoltageInputValid = mainsVoltage > 0 && mainsVoltage < 1000;
+  nbkPreserveStartupInputValidity = true;
+}
+
+inline void nbk_capture_runtime_input_validity(
+    float heaterResistance, float mainsVoltage) {
+  if (nbkPreserveStartupInputValidity) {
+    nbkPreserveStartupInputValidity = false;
+    return;
+  }
+  nbkHeaterResistanceInputValid =
+      heaterResistance >= CONTROL_HEATER_R_MIN &&
+      heaterResistance <= CONTROL_HEATER_R_MAX;
+  nbkMainsVoltageInputValid = mainsVoltage > 0 && mainsVoltage < 1000;
+}
+
+inline bool nbk_capture_session_config() {
+  const float heaterResistance = SamSetup.HeaterResistant;
+  const bool configValid =
+      SamSetup.NbkIn > 1 &&
+      SamSetup.NbkDelta > 0 &&
+      SamSetup.NbkTn > 0 &&
+      SamSetup.NbkOwPress > 1 &&
+      SamSetup.NbkDM > 1 &&
+      SamSetup.NbkDP > 0 &&
+      SamSetup.NbkSteamT > 80 &&
+      SamSetup.NbkSteamT <= 97 &&
+      nbkMainsVoltageInputValid &&
+      nbkHeaterResistanceInputValid &&
+      SamSetup.MainsVoltage > 0 &&
+      SamSetup.MainsVoltage < 1000 &&
+      heaterResistance >= CONTROL_HEATER_R_MIN &&
+      heaterResistance <= CONTROL_HEATER_R_MAX;
+  if (!configValid) {
+    nbkSessionConfig = {};
+    return false;
+  }
+  nbkSessionConfig.columnInertia = SamSetup.NbkIn;
+  nbkSessionConfig.deltaT = SamSetup.NbkDelta;
+  nbkSessionConfig.tankTemp = SamSetup.NbkTn;
+  nbkSessionConfig.overflowPressure = SamSetup.NbkOwPress;
+  nbkSessionConfig.deltaPower = SamSetup.NbkDM;
+  nbkSessionConfig.deltaFeed = SamSetup.NbkDP;
+  nbkSessionConfig.steamTempLimit = SamSetup.NbkSteamT;
+  nbkSessionConfig.mainsVoltage = SamSetup.MainsVoltage;
+  nbkSessionConfig.heaterResistance = heaterResistance;
+  nbkSessionConfig.maxPower = nbkSessionConfig.mainsVoltage *
+      nbkSessionConfig.mainsVoltage / nbkSessionConfig.heaterResistance;
+  nbkSessionConfig.valid = true;
+  return true;
+}
+
+inline void nbk_clear_session_config() {
+  nbkSessionConfig = {};
+}
 
 struct NbkTransitionState {
   SafetyTransition transition;
@@ -141,26 +221,206 @@ inline const char* nbk_overflow_source() {
   return "?";
 }
 
-void SetSpeed(float Speed) { // Прокладка для подсчета статистики
+ActuatorCommandResult SetSpeed(float Speed) { // Прокладка для подсчета статистики
+  if (!(Speed >= 0.0f)) return ACTUATOR_COMMAND_FAILED;
+  if (!i2c_stepper_refresh(i2cStepperPump)) return ACTUATOR_COMMAND_FAILED;
+  const float previousRate =
+      i2c_get_liquid_rate_by_step(i2cStepperPump.currentSpeed);
+  const uint16_t requestedSpeed = Speed == 0
+      ? 0
+      : uint16_t(i2c_stepper_steps_from_rate(Speed));
+  const bool applied = Speed == 0
+      ? set_stepper_target(0, 0, 0, true)
+      : set_stepper_target(requestedSpeed, 0, 2147483640, true);
+  if (!applied) return ACTUATOR_COMMAND_FAILED;
   uint32_t now = millis();
   if (time_speed == 0) {
     time_speed = now;
   }
   ProgramType currentType = current_program_type();
   if (currentType != 'H') { //Иначе в среднюю скорость попадает 1л/ч прогрева
-    stats.totalVolume += i2c_get_liquid_rate_by_step(get_stepper_speed()) * (now - time_speed) / 3600000.0;
+    const uint32_t elapsed = now - time_speed;
+    const float volume = previousRate * elapsed / 3600000.0f;
+    stats.totalVolume += volume;
+    if (previousRate > 0) {
+      stats.activeVolume += volume;
+      stats.activeFeedMs += elapsed;
+    }
   }
   time_speed = now;
-  if (Speed == 0) set_stepper_target(0, 0, 0);
-  else
-  set_stepper_target(i2c_get_speed_from_rate(Speed), 0, 2147483640);
+  nbk_P = Speed;
+  return ACTUATOR_COMMAND_APPLIED;
+}
+
+inline ActuatorCommandResult nbk_set_power(float watts, uint64_t* generation = nullptr) {
+#ifdef SAMOVAR_USE_POWER
+  return set_current_power(fromPower(watts), generation);
+#else
+  (void)watts;
+  if (generation != nullptr) *generation = 0;
+  return ACTUATOR_COMMAND_FAILED;
+#endif
+}
+
+enum NbkActuatorDeadlineTarget : uint8_t {
+  NBK_ACTUATOR_NO_DEADLINE = 0,
+  NBK_ACTUATOR_OPTIMIZATION_DEADLINE,
+  NBK_ACTUATOR_WORK_DEADLINE,
+};
+
+struct NbkActuatorCommandState {
+  bool active;
+  ActuatorCommandResult result;
+  uint64_t generation;
+  float candidateM;
+  float candidateP;
+  uint32_t deadline;
+  uint32_t nextDelayMs;
+  uint16_t iteration;
+  NbkActuatorDeadlineTarget deadlineTarget;
+  bool commitProgram;
+  uint8_t candidateProgramNum;
+};
+
+static NbkActuatorCommandState nbkActuatorCommand = {};
+static constexpr uint32_t NBK_ACTUATOR_TIMEOUT_MS = 15000;
+
+inline void nbk_reset_actuator_command() {
+  nbkActuatorCommand = {};
+}
+
+inline void nbk_enter_safe_wait(const String& reason) {
+  nbk_reset_actuator_command();
+  const ActuatorCommandResult feedResult = SetSpeed(0);
+  set_power(false, false);
+  nbk_safe_wait_feed_stopped =
+      feedResult == ACTUATOR_COMMAND_APPLIED;
+  nbk_safe_waiting = true;
+  if (power_transition_active()) {
+    nbk_safe_wait_result = nbk_safe_wait_feed_stopped
+        ? ACTUATOR_COMMAND_PENDING
+        : ACTUATOR_COMMAND_FAILED;
+  } else if (!PowerOn) {
+    nbk_M = 0;
+    nbk_safe_wait_result = nbk_safe_wait_feed_stopped
+        ? ACTUATOR_COMMAND_APPLIED
+        : ACTUATOR_COMMAND_FAILED;
+  } else {
+    nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+  }
+  SendMsg(reason, nbk_safe_wait_result == ACTUATOR_COMMAND_APPLIED
+      ? WARNING_MSG
+      : ALARM_MSG);
+}
+
+inline void tick_nbk_safe_wait() {
+  if (!nbk_safe_waiting || power_transition_active()) return;
+  if (!PowerOn) nbk_M = 0;
+  nbk_safe_wait_result =
+      nbk_safe_wait_feed_stopped && !PowerOn
+          ? ACTUATOR_COMMAND_APPLIED
+          : ACTUATOR_COMMAND_FAILED;
+}
+
+inline bool nbk_schedule_actuator_command(
+    float candidateM,
+    float candidateP,
+    NbkActuatorDeadlineTarget deadlineTarget,
+    uint32_t nextDelayMs,
+    uint16_t iteration,
+    bool commitProgram = false,
+    uint8_t candidateProgramNum = 0) {
+  if (nbkActuatorCommand.active ||
+      !(candidateM >= 0.0f) ||
+      !(candidateP >= 0.0f)) {
+    return false;
+  }
+  nbkActuatorCommand.active = true;
+  nbkActuatorCommand.result = ACTUATOR_COMMAND_ACCEPTED;
+  nbkActuatorCommand.generation = 0;
+  nbkActuatorCommand.candidateM = candidateM;
+  nbkActuatorCommand.candidateP = candidateP;
+  nbkActuatorCommand.deadline =
+      safety_deadline_after(millis(), NBK_ACTUATOR_TIMEOUT_MS);
+  nbkActuatorCommand.nextDelayMs = nextDelayMs;
+  nbkActuatorCommand.iteration = iteration;
+  nbkActuatorCommand.deadlineTarget = deadlineTarget;
+  nbkActuatorCommand.commitProgram = commitProgram;
+  nbkActuatorCommand.candidateProgramNum = candidateProgramNum;
+  return true;
+}
+
+inline void tick_nbk_actuator_command() {
+  if (!nbkActuatorCommand.active) return;
+  if (safety_deadline_expired(millis(), nbkActuatorCommand.deadline)) {
+    nbk_enter_safe_wait(
+        "Таймаут подтверждения приводов НБК. Безопасное ожидание.");
+    return;
+  }
+
+  if (nbkActuatorCommand.result == ACTUATOR_COMMAND_ACCEPTED) {
+    if (!PowerOn) {
+      nbk_enter_safe_wait(
+          "Команда приводов НБК отклонена при выключенном нагреве.");
+      return;
+    }
+    if (power_transition_start_pending()) return;
+    nbkActuatorCommand.result = nbk_set_power(
+        nbkActuatorCommand.candidateM,
+        &nbkActuatorCommand.generation);
+  } else if (nbkActuatorCommand.result == ACTUATOR_COMMAND_PENDING) {
+#ifdef SAMOVAR_USE_POWER
+    nbkActuatorCommand.result =
+        current_power_command_status(nbkActuatorCommand.generation);
+#else
+    nbkActuatorCommand.result = ACTUATOR_COMMAND_FAILED;
+#endif
+  }
+
+  if (nbkActuatorCommand.result == ACTUATOR_COMMAND_PENDING) return;
+  if (nbkActuatorCommand.result != ACTUATOR_COMMAND_APPLIED) {
+    nbk_enter_safe_wait(
+        "Регулятор не подтвердил команду НБК. Безопасное ожидание.");
+    return;
+  }
+  if (SetSpeed(nbkActuatorCommand.candidateP) != ACTUATOR_COMMAND_APPLIED) {
+    nbk_enter_safe_wait(
+        "Насос НБК не подтвердил команду. Нагрев выключен.");
+    return;
+  }
+
+  nbk_M = nbkActuatorCommand.candidateM;
+  if (nbkActuatorCommand.deadlineTarget ==
+      NBK_ACTUATOR_OPTIMIZATION_DEADLINE) {
+    nbk_opt_iter = nbkActuatorCommand.iteration;
+    nbk_opt_next_time = safety_deadline_after(
+        millis(), nbkActuatorCommand.nextDelayMs);
+  } else if (nbkActuatorCommand.deadlineTarget ==
+             NBK_ACTUATOR_WORK_DEADLINE) {
+    nbk_work_next_time = safety_deadline_after(
+        millis(), nbkActuatorCommand.nextDelayMs);
+  }
+  if (nbkActuatorCommand.commitProgram) {
+    ProgramNum = nbkActuatorCommand.candidateProgramNum;
+    nbk_Mo = nbkActuatorCommand.candidateM;
+    nbk_Po = nbkActuatorCommand.candidateP;
+    nbk_Po_ceiling = nbk_Po;
+    nbk_high_temp_ticks = 0;
+    nbk_pause_overflow_repeat_latched = false;
+    nbk_work_in_pause = false;
+    nbk_overflow_happened = false;
+    nbk_safe_waiting = false;
+    nbk_safe_wait_feed_stopped = false;
+    nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+  }
+  nbk_reset_actuator_command();
 }
 
 float toPower(float value) { // конвертер в мощность ( V | W ) => W
  #ifdef SAMOVAR_USE_SEM_AVR
     return value; // если нечто иное возвращаем неизменным
  #else
-      float R = trusted_heater_resistance(SamSetup.HeaterResistant);
+      const float R = nbkSessionConfig.heaterResistance;
       return value * value / R; //если от kvic или RVMK пересчитываем в P
  #endif
   }
@@ -168,14 +428,7 @@ float fromPower(float value) { // конвертер из мощности: W =>
  #ifdef SAMOVAR_USE_SEM_AVR
     return value;
  #else
-      static float prev_W = 0.0f;
-      static float prev_V = 0.0f;
-      if (value != prev_W) {
-          prev_W = value;
-          float R = trusted_heater_resistance(SamSetup.HeaterResistant);
-          prev_V = sqrtf(value * R);
-      }
-      return prev_V;
+      return sqrtf(value * nbkSessionConfig.heaterResistance);
  #endif
   }
 
@@ -191,47 +444,38 @@ bool nbk_stage_sensors_valid(ProgramType wtype) {
 }
 
 void nbk_proc() { //главный цикл НБК
- #ifndef SAMOVAR_USE_POWER
-  static bool noPowerAlarmSent = false;
-  if (!noPowerAlarmSent) {
-    SendMsg("Работа НБК невозможна - отсутствует регулятор напряжения.", ALARM_MSG);
-    noPowerAlarmSent = true;
-  }
-  return;
- #endif
-  // Обновление переменных из настроек (на случай, если пользователь их изменил в процессе)
-  nbk_column_inertia =  SamSetup.NbkIn > 1 ? SamSetup.NbkIn : NBK_COLUMN_INERTIA_DEFAULT;
-  nbk_dT = SamSetup.NbkDelta > 0 ? SamSetup.NbkDelta : NBK_DT_DEFAULT;
-  nbk_Tn = SamSetup.NbkTn > 0 ? SamSetup.NbkTn : NBK_TN_DEFAULT;
-  nbk_overflow_pressure = SamSetup.NbkOwPress > 1 ? SamSetup.NbkOwPress : NBK_OVERFLOW_PRESSURE_DEFAULT;
-  nbk_dM = SamSetup.NbkDM > 1 ? SamSetup.NbkDM : NBK_DM_DEFAULT;
-  nbk_dP = SamSetup.NbkDP > 0 ? SamSetup.NbkDP : NBK_DP_DEFAULT;
-  const float nbkSteamTSetting = SamSetup.NbkSteamT > 80 ? SamSetup.NbkSteamT : NBK_TP_DEFAULT;
-  nbk_Tp_lim = nbkSteamTSetting > 97 ? 97 : nbkSteamTSetting; // [T7] строго ниже порога "Кончилась брага" (98.0)
-  const float mainsVoltage = SamSetup.MainsVoltage > 0 ? SamSetup.MainsVoltage : 230.0f;
-  nbk_M_max = mainsVoltage * mainsVoltage / trusted_heater_resistance(SamSetup.HeaterResistant); // Максимальная мощность ТЭН-а в режиме НБК
-
-  if (!nbk_defaults_notice_sent) { // [T9] одноразовое сообщение о подмене незаданных настроек значениями по умолчанию
-    String defaulted; defaulted.reserve(48);
-    if (SamSetup.NbkIn <= 1) defaulted += "Ин, ";
-    if (SamSetup.NbkDelta <= 0) defaulted += "dT, ";
-    if (SamSetup.NbkTn <= 0) defaulted += "Тн, ";
-    if (SamSetup.NbkOwPress <= 1) defaulted += "Дз, ";
-    if (SamSetup.NbkDM <= 1) defaulted += "dM, ";
-    if (SamSetup.NbkDP <= 0) defaulted += "dП, ";
-    if (SamSetup.NbkSteamT <= 80) defaulted += "Тп, ";
-    if (defaulted.length() > 0) {
-      SendMsg("Настройки НБК не заданы, применены значения по умолчанию: " + defaulted, WARNING_MSG);
+  if (nbk_safe_waiting) {
+    tick_nbk_safe_wait();
+    if (startval != SAMOVAR_STARTVAL_NBK_START ||
+        nbk_safe_wait_result != ACTUATOR_COMMAND_APPLIED) {
+      return;
     }
-    nbk_defaults_notice_sent = true;
+    nbk_safe_waiting = false;
+    nbk_safe_wait_feed_stopped = false;
+    nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
   }
-
-  if (nbk_transition_blocks_process()) return;
-
+  if (nbkActuatorCommand.active) {
+    tick_nbk_actuator_command();
+    return;
+  }
   if (startval == SAMOVAR_STARTVAL_NBK_START) {
     run_nbk_program(0);
     return;
   }
+  if (!nbkSessionConfig.valid) {
+    nbk_enter_safe_wait("Конфигурация сессии НБК не зафиксирована.");
+    return;
+  }
+  nbk_column_inertia = nbkSessionConfig.columnInertia;
+  nbk_dT = nbkSessionConfig.deltaT;
+  nbk_Tn = nbkSessionConfig.tankTemp;
+  nbk_overflow_pressure = nbkSessionConfig.overflowPressure;
+  nbk_dM = nbkSessionConfig.deltaPower;
+  nbk_dP = nbkSessionConfig.deltaFeed;
+  nbk_Tp_lim = nbkSessionConfig.steamTempLimit;
+  nbk_M_max = nbkSessionConfig.maxPower;
+
+  if (nbk_transition_blocks_process()) return;
 
   if (ProgramNum >= NBK_PROGRAM_MAX || ProgramNum >= ProgramLen || ProgramNum >= PROGRAM_MAX) {
     request_emergency_stop("Ошибка программы НБК: номер строки вне диапазона");
@@ -289,11 +533,19 @@ void handle_nbk_stage_heatup() {
 void handle_nbk_stage_manual() { //Если захлёб, выводим сообщение "Захлёб колонны!", М=1/2, П=1/3 (оставляем от подачи треть, половиним мощность).
   bool hasOverflow = overflow();
   if (hasOverflow && !manual_overflow) {
+      const float candidateP = nbk_P / 3;
+      const float candidateM = toPower(target_power_volt) / 2;
+      if (!nbk_schedule_actuator_command(
+              candidateM,
+              candidateP,
+              NBK_ACTUATOR_NO_DEADLINE,
+              0,
+              nbk_opt_iter)) {
+        nbk_enter_safe_wait(
+            "Снижение приводов НБК после захлёба не принято.");
+        return;
+      }
       manual_overflow = true;
-      nbk_P = nbk_P/3;
-      nbk_M = toPower(target_power_volt) / 2;
-      set_current_power(fromPower(nbk_M));
-      SetSpeed(nbk_P);
       SendMsg("Захлёб по " + String(nbk_overflow_source()) + ". Подача 1/3, мощность 1/2.", ALARM_MSG);
       vTaskDelay(200 / portTICK_PERIOD_MS);
       return;
@@ -346,20 +598,40 @@ void handle_nbk_stage_optimization() {
       nbk_Mo = 0; //Мо=0, По=0
       nbk_Po = 0;
       //передаём в Оптимизацию текущие М и П. (те, что сложились после манипуляций пользователя в Настройке)
-      nbk_M = toPower(target_power_volt) > 100 ? toPower(target_power_volt) : 0.3 * nbk_M_max;
-      nbk_P = get_stepper_speed() > 0 ? i2c_get_liquid_rate_by_step(get_stepper_speed()) : 10;
-      nbk_M = program[ProgramNum].Power > 0 ? toPower(program[ProgramNum].Power) : nbk_M; // если только не заданы явно в строке
-      nbk_P = program[ProgramNum].Speed > 0 ? program[ProgramNum].Speed : nbk_P;
-     set_current_power(fromPower(nbk_M));
-     SetSpeed(nbk_P);
-     nbk_opt_next_time = safety_deadline_after(millis(), (uint32_t)(nbk_column_inertia * NBK_MULT_PAUSE_OVERFLOW / 3.0f * 1000)); // Ждём время NBK_MULT_PAUSE_OVERFLOW/3 * Ин (первая пауза)
+      float candidateM = toPower(target_power_volt) > 100
+          ? toPower(target_power_volt)
+          : 0.3 * nbk_M_max;
+      float candidateP = get_stepper_speed() > 0
+          ? i2c_get_liquid_rate_by_step(get_stepper_speed())
+          : 10;
+      if (program[ProgramNum].Power > 0) {
+        candidateM = toPower(program[ProgramNum].Power);
+      }
+      if (program[ProgramNum].Speed > 0) {
+        candidateP = program[ProgramNum].Speed;
+      }
+      if (!nbk_schedule_actuator_command(
+              candidateM,
+              candidateP,
+              NBK_ACTUATOR_OPTIMIZATION_DEADLINE,
+              uint32_t(nbk_column_inertia *
+                  NBK_MULT_PAUSE_OVERFLOW / 3.0f * 1000),
+              0)) {
+        nbk_enter_safe_wait(
+            "Начальные параметры Оптимизации НБК не приняты.");
+        return;
+      }
 #ifdef SAMOVAR_USE_POWER
-     SendMsg("Оптимизация начата с: " + String(fromPower(nbk_M),0) + String(PWR_SIGN) + ",  " + String(nbk_P,1) + " л/ч ", NOTIFY_MSG);
+     SendMsg("Оптимизация принята с: " + String(fromPower(candidateM),0) + String(PWR_SIGN) + ",  " + String(candidateP,1) + " л/ч ", NOTIFY_MSG);
 #endif
   }
 
   // Собственно цикл оптимизации
   if (nbk_opt_in_progress) {
+     if (nbk_opt_iter >= 300) {
+       run_nbk_program(ProgramNum + 1);
+       return;
+     }
      if (overflow() && !workrun) { // Если захлёб по ДЗ или ДД
         if (nbk_Mo == 0 && nbk_Po == 0) {
           // Если захлёб на первых же итерациях  (когда Мо или По равны нулю)
@@ -394,14 +666,16 @@ void handle_nbk_stage_optimization() {
       }
     #endif
 
-    nbk_M = toPower(target_power_volt);  // Актуализация текущих М и П с учетом возможных воздействий пользователя
-    nbk_P = i2c_get_liquid_rate_by_step(get_stepper_speed());
+    const float currentM = nbk_M;
+    const float currentP = nbk_P;
+    float candidateM = currentM;
+    float candidateP = currentP;
     nbk_Tp = SteamSensor.avgTemp; // обновляем
     if ((nbk_Tb >= nbk_Tn + nbk_dD) && (nbk_Tp >= nbk_Tp_lim)) { // если по барде и пару всё Ок
-      nbk_Po = nbk_P;
-      nbk_Mo = nbk_M;
-      nbk_P += nbk_dP;
-      if (nbk_P > NBK_PUMP_LIMIT) {
+      nbk_Po = currentP;
+      nbk_Mo = currentM;
+      candidateP += nbk_dP;
+      if (candidateP > NBK_PUMP_LIMIT) {
 #ifdef SAMOVAR_USE_POWER
         SendMsg("Достигнута предельная подача (" + String(NBK_PUMP_LIMIT) + " л/ч). Результат: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN), WARNING_MSG);
 #endif
@@ -412,16 +686,16 @@ void handle_nbk_stage_optimization() {
       msg += "Оптимизация: Тб >= Тн (";
       msg += String(nbk_Tn + nbk_dD, 1);
       msg += "), увеличиваем подачу. Итерация ";
-      msg += nbk_opt_iter + 1;
+      msg += uint16_t(nbk_opt_iter + 1);
       SendMsg(msg, NOTIFY_MSG);
     } else {
-      if ((nbk_M + nbk_dM) > nbk_M_max) {
-        SendMsg("Достигнута предельная мощность. (" + String(nbk_M ,0) + "+dM>" + String(nbk_M_max,0)  + " Вт.). Результат: " + String(nbk_Po,1) + " л/ч.", WARNING_MSG);
+      if ((currentM + nbk_dM) > nbk_M_max) {
+        SendMsg("Достигнута предельная мощность. (" + String(currentM ,0) + "+dM>" + String(nbk_M_max,0)  + " Вт.). Результат: " + String(nbk_Po,1) + " л/ч.", WARNING_MSG);
         run_nbk_program(ProgramNum + 1);
         return;
       }
-      nbk_P *= 0.9;
-      nbk_M += nbk_dM;
+      candidateP *= 0.9f;
+      candidateM += nbk_dM;
       if (nbk_Tp < nbk_Tp_lim) {
         String msg; msg.reserve(128);
         msg += "Оптимизация: Тп < Тп мин(";
@@ -429,7 +703,7 @@ void handle_nbk_stage_optimization() {
         msg += "), увеличиваем ";
         msg += PWR_MSG;
         msg += ". Итерация ";
-        msg += nbk_opt_iter + 1;
+        msg += uint16_t(nbk_opt_iter + 1);
         SendMsg(msg, NOTIFY_MSG);
       } else {
         String msg; msg.reserve(128);
@@ -438,21 +712,26 @@ void handle_nbk_stage_optimization() {
         msg += "), увеличиваем ";
         msg += PWR_MSG;
         msg += ". Итерация ";
-        msg += nbk_opt_iter + 1;
+        msg += uint16_t(nbk_opt_iter + 1);
         SendMsg(msg, NOTIFY_MSG);
       }
     }
-    set_current_power(fromPower(nbk_M));
-    SetSpeed(nbk_P);
-    nbk_opt_iter++;
-    if (nbk_opt_iter >= 300) {
+    const uint16_t nextIteration = uint16_t(nbk_opt_iter + 1);
+    if (!nbk_schedule_actuator_command(
+            candidateM,
+            candidateP,
+            NBK_ACTUATOR_OPTIMIZATION_DEADLINE,
+            uint32_t(nbk_column_inertia) * 1000,
+            nextIteration)) {
+      nbk_enter_safe_wait(
+          "Коррекция Оптимизации НБК не принята.");
+      return;
+    }
+    if (nextIteration >= 300) {
 #ifdef SAMOVAR_USE_POWER
       SendMsg("Достигнут лимит итераций. Результат: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ", " + String(nbk_Po,1) + " л/ч", WARNING_MSG);
 #endif
-      run_nbk_program(ProgramNum + 1);
-      return;
     }
-    nbk_opt_next_time = safety_deadline_after(millis(), (uint32_t)nbk_column_inertia * 1000); // 3.1) Ждём опять время Ин
   }
   }
   vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -478,24 +757,25 @@ void handle_nbk_stage_work() {
         nbk_dD = 0.00001913 * pressure_value * pressure_value + 0.03694 * pressure_value; // Поправка по давлению если включена в Samovar_ini.h
       }
     #endif
-    nbk_M = toPower(target_power_volt);  // !! Актуализация текущих М и П с учетом возможных воздействий пользователя
-    nbk_P = i2c_get_liquid_rate_by_step(get_stepper_speed()); // даже если пользователь не менял вручную теперь может отличаться от Po из-за множественных преобразований
+    const float currentM = nbk_M;
+    const float currentP = nbk_P;
+    float candidateM = currentM;
+    float candidateP = currentP;
+    bool commandNeeded = false;
     //  4.1) если Тб<Тн-dT+dД, то П=П-dП/10, переход на 4.1)
     // 4.1.1) если Т пара ниже предела, то П=П-dП/10 (нововведение), ограничение спиртуозности выхода на случай вранья датчика Тб.
      // чем выше Т, тем ниже % спирта, нам надо снижать %, значит Т поднимать.
                                // 60% это примерно 81 гр.Ц., 50% - 84,4 гр.Ц., 40% - 87.7 гр.Ц
     if ((nbk_Tb < nbk_Tn - nbk_dT + nbk_dD) || (nbk_Tp < nbk_Tp_lim)) {
-        if ((nbk_P > nbk_Po-0.1) && (nbk_P < nbk_Po+0.1) && (nbk_M > nbk_Mo-5) && (nbk_M < nbk_Mo+5)) {// если небыло вмешательств TODO теперь из-за преобразований мощность-напряжение-мощность придётся и по мощности сравнение делать с допустимым отклонением
+        if ((currentP > nbk_Po-0.1) && (currentP < nbk_Po+0.1) && (currentM > nbk_Mo-5) && (currentM < nbk_Mo+5)) {// если небыло вмешательств TODO теперь из-за преобразований мощность-напряжение-мощность придётся и по мощности сравнение делать с допустимым отклонением
           nbk_Po -= nbk_dP / 10.0;
           if (nbk_Po < 0) nbk_Po = 0; // По — подача не может быть отрицательной (по аналогии с 497-498)
         }
-      nbk_P = nbk_Po;
-      nbk_M = nbk_Mo;
-      set_current_power(fromPower(nbk_M));
-      if (nbk_P < 0) nbk_P = 0;
-      SetSpeed(nbk_P);
+      candidateP = nbk_Po > 0 ? nbk_Po : 0;
+      candidateM = nbk_Mo;
+      commandNeeded = true;
     } else if (nbk_Tb > nbk_Tn + nbk_dT + nbk_dD) { // [T2] Тб держится выше Тн+dT — колонна недогружена, можно повысить подачу
-      if ((nbk_P > nbk_Po-0.1) && (nbk_P < nbk_Po+0.1) && (nbk_M > nbk_Mo-5) && (nbk_M < nbk_Mo+5)) { // не было вмешательств
+      if ((currentP > nbk_Po-0.1) && (currentP < nbk_Po+0.1) && (currentM > nbk_Mo-5) && (currentM < nbk_Mo+5)) { // не было вмешательств
         nbk_high_temp_ticks++;
         if (nbk_high_temp_ticks >= NBK_HIGH_TB_HOLD_TICKS) {
           nbk_Po += nbk_dP / 10.0;
@@ -505,10 +785,9 @@ void handle_nbk_stage_work() {
       } else {
         nbk_high_temp_ticks = 0;
       }
-      nbk_P = nbk_Po;
-      nbk_M = nbk_Mo;
-      set_current_power(fromPower(nbk_M));
-      SetSpeed(nbk_P);
+      candidateP = nbk_Po;
+      candidateM = nbk_Mo;
+      commandNeeded = true;
     } else {
       nbk_high_temp_ticks = 0;
     }
@@ -519,7 +798,7 @@ void handle_nbk_stage_work() {
       msg += "), снижаем подачу на ";
       msg += String(nbk_dP / 10.0, 1);
       msg += ", до: ";
-      msg += String(nbk_P, 1);
+      msg += String(candidateP, 1);
       msg += " л/ч";
       SendMsg(msg, NOTIFY_MSG);
     } else if (nbk_Tp < nbk_Tp_lim) {
@@ -529,7 +808,7 @@ void handle_nbk_stage_work() {
       msg += "), снижаем подачу на ";
       msg += String(nbk_dP / 10.0, 1);
       msg += ", до: ";
-      msg += String(nbk_P, 1);
+      msg += String(candidateP, 1);
       msg += " л/ч";
       SendMsg(msg, NOTIFY_MSG);
     } else if (nbk_Tb > nbk_Tn + nbk_dT + nbk_dD) { // [T2]
@@ -539,11 +818,24 @@ void handle_nbk_stage_work() {
       msg += "), увеличиваем подачу на ";
       msg += String(nbk_dP / 10.0, 1);
       msg += ", до: ";
-      msg += String(nbk_P, 1);
+      msg += String(candidateP, 1);
       msg += " л/ч";
       SendMsg(msg, NOTIFY_MSG);
     }
-    nbk_work_next_time = safety_deadline_after(millis(), (uint32_t)nbk_column_inertia * 1000); // задаём следующую проверку через Ин
+    if (commandNeeded) {
+      if (!nbk_schedule_actuator_command(
+              candidateM,
+              candidateP,
+              NBK_ACTUATOR_WORK_DEADLINE,
+              uint32_t(nbk_column_inertia) * 1000,
+              nbk_opt_iter)) {
+        nbk_enter_safe_wait(
+            "Коррекция Работы НБК не принята.");
+      }
+    } else {
+      nbk_work_next_time = safety_deadline_after(
+          millis(), uint32_t(nbk_column_inertia) * 1000);
+    }
   }
  }
   // Обработка паузы после захлёба
@@ -555,8 +847,16 @@ void handle_nbk_stage_work() {
       }
       nbk_work_pause_stage = 1;
       nbk_overflow_happened = true;
-      set_current_power(fromPower(nbk_Mo / 2));
-      nbk_work_next_time = safety_deadline_after(millis(), (uint32_t)(NBK_MULT_PAUSE_OVERFLOW * nbk_column_inertia * 1000));
+      if (!nbk_schedule_actuator_command(
+              nbk_Mo / 2,
+              nbk_P,
+              NBK_ACTUATOR_WORK_DEADLINE,
+              uint32_t(NBK_MULT_PAUSE_OVERFLOW) *
+                  nbk_column_inertia * 1000,
+              nbk_opt_iter)) {
+        nbk_enter_safe_wait(
+            "Повторное снижение мощности НБК не принято.");
+      }
       return;
     }
     nbk_pause_overflow_repeat_latched = false;
@@ -573,10 +873,17 @@ void handle_nbk_stage_work() {
       if (!workrun) workrun = true; //если был захлеб в конце оптимизации после первой паузы, Mo не снижаем
       if (nbk_Mo < 0) nbk_Mo = 0;
       if (nbk_Po < 0) nbk_Po = 0;
-      nbk_M = nbk_Mo;
-      nbk_P = nbk_Po;
-      set_current_power(fromPower(nbk_M));
-      SetSpeed(nbk_P);
+      if (!nbk_schedule_actuator_command(
+              nbk_Mo,
+              nbk_Po,
+              NBK_ACTUATOR_WORK_DEADLINE,
+              uint32_t(2.0f * NBK_MULT_PAUSE_OVERFLOW / 3.0f *
+                  nbk_column_inertia * 1000),
+              nbk_opt_iter)) {
+        nbk_enter_safe_wait(
+            "Возобновление Работы НБК не принято.");
+        return;
+      }
 
       String msg; msg.reserve(128);
       msg += "Работа: возобновление после захлёба, скорректированные параметры: ";
@@ -589,7 +896,6 @@ void handle_nbk_stage_work() {
       msg += " л/ч";
       SendMsg(msg, NOTIFY_MSG);
       nbk_work_pause_stage = 2; // ждём время 2*NBK_MULT_PAUSE_OVERFLOW/3 * Ин
-      nbk_work_next_time = safety_deadline_after(millis(), (uint32_t)(2.0f * NBK_MULT_PAUSE_OVERFLOW / 3.0f * nbk_column_inertia * 1000));
     } else if (nbk_work_pause_stage == 2) { // после MULT*Ин: продолжаем работу
       nbk_work_in_pause = false;
       nbk_work_pause_stage = 0;
@@ -602,8 +908,38 @@ void handle_nbk_stage_work() {
 }
 
 // Смена программы
-void run_nbk_program(uint8_t num) {
+void run_nbk_program(uint8_t num, bool workConfirmed) {
  // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
+#ifndef SAMOVAR_USE_POWER
+  if (num == 0) {
+    nbk_reset_actuator_command();
+    const ActuatorCommandResult feedResult = SetSpeed(0);
+    set_power(false, false);
+    cancel_nbk_transition();
+    SendMsg(
+        "Запуск НБК отклонён: регулятор мощности недоступен в этой сборке.",
+        ALARM_MSG);
+    if (feedResult != ACTUATOR_COMMAND_APPLIED) {
+      SendMsg(
+          "Останов насоса НБК в недоступной конфигурации не подтверждён.",
+          ALARM_MSG);
+    }
+    ProgramNum = 0;
+    startval = SAMOVAR_STARTVAL_IDLE;
+    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+    if (!PowerOn) nbk_M = 0;
+    nbk_safe_waiting = false;
+    nbk_safe_wait_feed_stopped =
+        feedResult == ACTUATOR_COMMAND_APPLIED;
+    nbk_safe_wait_result =
+        nbk_safe_wait_feed_stopped && !PowerOn
+            ? ACTUATOR_COMMAND_APPLIED
+            : ACTUATOR_COMMAND_FAILED;
+    nbk_clear_session_config();
+    nbk_close_data_log();
+    return;
+  }
+#endif
   if (nbk_finish_transition_active()) return;
   if (nbk_transition_blocks_process() && nbkTransition.programNum == num) return;
   if (nbk_transition_blocks_process()) {
@@ -616,7 +952,6 @@ void run_nbk_program(uint8_t num) {
   if (num == 0) {
     nbk_overheat_start_time = 0;
     nbk_dry_steam_start_time = 0; // [Ревью П1, находка 2] симметрично nbk_overheat_start_time
-    nbk_defaults_notice_sent = false; // [T9] новый цикл НБК — сообщение о дефолтах снова актуально
   }
   if (num >= PROGRAM_END || num >= NBK_PROGRAM_MAX) {
     nbk_finish();
@@ -627,6 +962,74 @@ void run_nbk_program(uint8_t num) {
     return;
   }
   if (!nbk_stage_sensors_valid(program[num].WType)) return;
+  if (program[num].WType == 'W') {
+    if (!nbkSessionConfig.valid) {
+      nbk_enter_safe_wait(
+          "Переход к Работе НБК отклонён: нет снимка конфигурации сессии.");
+      return;
+    }
+    if (!workConfirmed) {
+      nbk_enter_safe_wait(
+          "Автоматический переход к Работе НБК запрещён. "
+          "Задайте Power/Speed строки W и нажмите «Следующая программа».");
+      return;
+    }
+    if (program[num].Power <= 0 || program[num].Speed <= 0) {
+      nbk_enter_safe_wait(
+          "Строка W требует явно заданные ненулевые Power и Speed.");
+      return;
+    }
+    if (nbk_safe_waiting) {
+      tick_nbk_safe_wait();
+      if (nbk_safe_wait_result == ACTUATOR_COMMAND_PENDING) {
+        SendMsg(
+            "Работа НБК ожидает завершения выключения нагрева.",
+            WARNING_MSG);
+        return;
+      }
+      if (nbk_safe_wait_result != ACTUATOR_COMMAND_APPLIED) {
+        SendMsg(
+            "Работа НБК недоступна: останов насоса не был подтверждён.",
+            ALARM_MSG);
+        return;
+      }
+      set_power(true);
+      if (!PowerOn) {
+        nbk_enter_safe_wait(
+            "Нагрев НБК не включён по явной команде перехода к Работе.");
+        return;
+      }
+      nbk_safe_waiting = false;
+      nbk_safe_wait_feed_stopped = false;
+      nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+    }
+    if (!PowerOn) {
+      SendMsg(
+          "Нагрев НБК выключен. Переход к Работе отклонён.",
+          ALARM_MSG);
+      return;
+    }
+    const float candidateM = toPower(program[num].Power);
+    const float candidateP = program[num].Speed;
+    if (!nbk_schedule_actuator_command(
+            candidateM,
+            candidateP,
+            NBK_ACTUATOR_WORK_DEADLINE,
+            uint32_t(nbk_column_inertia) * 1000,
+            nbk_opt_iter,
+            true,
+            num)) {
+      nbk_enter_safe_wait(
+          "Параметры строки W не приняты приводами НБК.");
+      return;
+    }
+    SendMsg(
+        "Явный переход к Работе НБК принят: М=" +
+            String(candidateM, 0) + " Вт, П=" +
+            String(candidateP, 1) + " л/ч",
+        NOTIFY_MSG);
+    return;
+  }
   if (!PowerOn && power_transition_active()) {
     SendMsg("Выключение нагрева ещё не завершено. Старт НБК отменён.", ALARM_MSG);
     ProgramNum = 0;
@@ -641,6 +1044,21 @@ void run_nbk_program(uint8_t num) {
     SamovarStatusInt = SAMOVAR_STATUS_IDLE;
     return;
   }
+  if (num == 0) {
+    if (!nbk_capture_session_config()) {
+      SendMsg(
+          "Запуск НБК отклонён: некорректные настройки НБК или питания.",
+          ALARM_MSG);
+      ProgramNum = 0;
+      startval = SAMOVAR_STARTVAL_IDLE;
+      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+      nbk_close_data_log();
+      return;
+    }
+    nbk_safe_waiting = false;
+    nbk_safe_wait_feed_stopped = false;
+    nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+  }
   ProgramNum = num;
   if (num == 0 && startval == SAMOVAR_STARTVAL_NBK_START) {
     startval = SAMOVAR_STARTVAL_NBK_RUNNING;
@@ -651,7 +1069,10 @@ void run_nbk_program(uint8_t num) {
     time_speed = millis();
     stats.startTime = millis();
     stats.avgSpeed = 0;
+    stats.avgActiveSpeed = 0;
     stats.totalVolume = 0;
+    stats.activeVolume = 0;
+    stats.activeFeedMs = 0;
     if (!create_data()) {
       SendMsg("Ошибка создания файла лога. Старт НБК отменён.", ALARM_MSG);
       ProgramNum = 0;
@@ -704,11 +1125,26 @@ void run_nbk_program(uint8_t num) {
     begintime = 0;
     time_speed = millis(); // [T10] точка отсчёта статистики объёма — прогрев (H) не должен в неё попадать
     // если параметры есть в строке берём их, иначе минимальные
-    nbk_M = program[ProgramNum].Power > 0 ? toPower(program[ProgramNum].Power) : 500;
-    nbk_P = program[ProgramNum].Speed > 0 ? program[ProgramNum].Speed : 1;
+    const float candidateM = program[ProgramNum].Power > 0
+        ? toPower(program[ProgramNum].Power)
+        : 0;
+    const float candidateP = program[ProgramNum].Speed > 0
+        ? program[ProgramNum].Speed
+        : 0;
     //set_power(true);
-    set_current_power(fromPower(nbk_M));
-    SetSpeed(nbk_P);
+    if (candidateM <= 0 || candidateP <= 0) {
+      nbk_enter_safe_wait("Ручная настройка НБК требует ненулевые мощность и подачу.");
+      return;
+    }
+    if (!nbk_schedule_actuator_command(
+            candidateM,
+            candidateP,
+            NBK_ACTUATOR_NO_DEADLINE,
+            0,
+            nbk_opt_iter)) {
+      nbk_enter_safe_wait(
+          "Параметры Ручной настройки НБК не приняты.");
+    }
   }
   // при переходе на Оптимизацию
  if (program[ProgramNum].WType == 'O') {
@@ -719,39 +1155,6 @@ void run_nbk_program(uint8_t num) {
       nbk_Po_temp = i2c_get_liquid_rate_by_step(get_stepper_speed());
       noDZ_message_sent = false;
  }
-  // при переходе на работу
-  // при пропуске Оптимизации пользователем передаём полученные от Ручной настройки М и П в Работу как Мо и По
-  // 4) "Работа" - основной режим
-  // М=Мо, П=По, либо (если указаны) - из строки программы
-  if (program[ProgramNum].WType == 'W') {
-    const bool optimizationEmpty = (nbk_Mo <= 0); // [T6] до подстановки ниже: 0 — оптимизация не нашла рабочую точку
-    if (nbk_Mo_temp > 0 && nbk_Po_temp > 0) { // при пропуске Оптимизации передаём полученные от Ручной настройки М и П в Работу как Мо и По
-      nbk_Mo = nbk_Mo_temp;
-      nbk_Po = nbk_Po_temp;
-      SendMsg("Оптимизация пропущена. ", WARNING_MSG);
-    } else if (optimizationEmpty) {
-      SendMsg("Оптимум не найден, работа на минимальных параметрах.", WARNING_MSG); // [T6]
-    }
-    // М=Мо, П=По, либо (если указаны) - из строки программы, если уж ничего нет 500 и 1 (Алексей дополнил)
-    if (!nbk_work_entry_overflow_pending) { // [Ревью П1, находка 1] при pending — не затираем сниженные handle_overflow() значения полными
-      nbk_M = (program[ProgramNum].Power > 0) ? toPower(program[ProgramNum].Power) : (nbk_Mo > 0 ? nbk_Mo : 500);
-      nbk_P = (program[ProgramNum].Speed > 0) ? program[ProgramNum].Speed : (nbk_Po > 0 ? nbk_Po : 1.0);
-    }
-    nbk_Mo = nbk_M; nbk_Po=nbk_P;// уравниваем на случай чтения из программы и дефолтов
-    nbk_Po_ceiling = nbk_Po; // [T2] потолок повышающей коррекции подачи в Работе
-    nbk_high_temp_ticks = 0; // [T2] новый вход в Работу — счётчик заново
-    nbk_pause_overflow_repeat_latched = false; // [T1] свежий вход в Работу
-    if (nbk_work_entry_overflow_pending) { // [T8] вход в Работу сразу после захлёба в конце Оптимизации:
-      nbk_work_entry_overflow_pending = false; // снижение уже применено handle_overflow() ДО этого вызова — не затираем его
-    } else {
-      set_current_power(fromPower(nbk_M));
-      SetSpeed(nbk_P);
-      nbk_work_in_pause = false; // в начале работы паузу после захлёба отключаем
-      nbk_overflow_happened = false; // [M-10] сбрасываем guard при старте/рестарте цикла Работа
-      nbk_work_next_time = safety_deadline_after(millis(), (uint32_t)nbk_column_inertia * 1000);
-    }
-    SendMsg("Работа: М= " + String(nbk_M,0) + " Вт, П=" + String(nbk_P,1) + " л/ч", NOTIFY_MSG);
-  }
 }
 
 
@@ -948,19 +1351,32 @@ inline void tick_nbk_transition() {
 
   if (!safety_transition_due(nbkTransition.transition, millis())) return;
   safety_transition_cancel(nbkTransition.transition);
-  if (program[ProgramNum].Power > 0) {
-    nbk_M = toPower(program[ProgramNum].Power);
-    set_current_power(fromPower(nbk_M));
-  } else {
-    nbk_M = nbk_M_max;
+  const float candidateM = program[ProgramNum].Power > 0
+      ? toPower(program[ProgramNum].Power)
+      : nbk_M_max;
+  const float candidateP = program[ProgramNum].Speed > 0
+      ? program[ProgramNum].Speed
+      : 0;
+  if (candidateP <= 0 ||
+      !nbk_schedule_actuator_command(
+          candidateM,
+          candidateP,
+          NBK_ACTUATOR_NO_DEADLINE,
+          0,
+          nbk_opt_iter)) {
+    nbk_enter_safe_wait(
+        "Разгон НБК требует подтверждаемую ненулевую подачу.");
   }
-  nbk_P = program[ProgramNum].Speed > 0 ? program[ProgramNum].Speed : 1;
-  SetSpeed(nbk_P);
 }
 
 void nbk_finish_common(bool resetWorkState) {
   SendMsg("Работа НБК завершена", NOTIFY_MSG);
-  SetSpeed(0);
+  nbk_reset_actuator_command();
+  if (SetSpeed(0) != ACTUATOR_COMMAND_APPLIED) {
+    SendMsg(
+        "Останов насоса НБК не подтверждён при завершении.",
+        ALARM_MSG);
+  }
   nbk_overheat_start_time = 0;
   // Вычислить и отправить статистику
   uint32_t totalTime = stats.startTime > 0 ? (millis() - stats.startTime) / 1000 : 0; // в секундах
@@ -969,11 +1385,15 @@ void nbk_finish_common(bool resetWorkState) {
   } else {
     stats.avgSpeed = 0;
   }
+  stats.avgActiveSpeed = stats.activeFeedMs > 0
+      ? stats.activeVolume * 3600000.0f / stats.activeFeedMs
+      : 0;
 
   if (stats.startTime > 0) {
     String summary = "";//"Итоги работы НБК:\n";
     summary += "Пропущено браги " + String(stats.totalVolume, 2) + " л ";
-    summary += "со средней скоростью " + String(stats.avgSpeed, 2) + " л/ч ";
+    summary += "со средней скоростью сессии " + String(stats.avgSpeed, 2) + " л/ч ";
+    summary += "и средней скоростью подачи " + String(stats.avgActiveSpeed, 2) + " л/ч ";
     summary += "за: " + String(totalTime / 3600.0, 2) + " ч.";
     SendMsg(summary, NOTIFY_MSG);
   }
@@ -986,7 +1406,14 @@ void nbk_finish_common(bool resetWorkState) {
   }
   stats.startTime = 0;
   stats.avgSpeed = 0;
+  stats.avgActiveSpeed = 0;
   stats.totalVolume = 0;
+  stats.activeVolume = 0;
+  stats.activeFeedMs = 0;
+  nbk_safe_waiting = false;
+  nbk_safe_wait_feed_stopped = false;
+  nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+  nbk_clear_session_config();
 }
 
 // Окончание программы НБК
@@ -1013,6 +1440,7 @@ inline void nbk_emergency_finish() {
     transitionPhase == NBK_TRANSITION_HEAT_CANCEL_WAIT_POWER_OFF;
   cancel_nbk_transition();
   if (stats.startTime == 0 && startval < SAMOVAR_STARTVAL_NBK_RUNNING && !PowerOn) {
+    nbk_reset_actuator_command();
     ProgramNum = 0;
     startval = SAMOVAR_STARTVAL_IDLE;
     SamovarStatusInt = SAMOVAR_STATUS_IDLE;
@@ -1027,13 +1455,14 @@ inline void nbk_emergency_finish() {
 }
 // === Централизованная обработка захлёба ===
 void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool graceful) {
-  nbk_M = nbk_M/2;
-  nbk_P = nbk_P/3;
-  SetSpeed(nbk_P);
+  const float candidateP = nbk_P / 3;
   SendMsg("Захлёб по " + String(nbk_overflow_source()) + ". " + msg, graceful ? NOTIFY_MSG : ALARM_MSG); // [Ревью П1, находка 3] восстановлена дифференциация по датчику
   if (finish) {
-    nbk_M = 0;
-    nbk_P = 0;
+    if (SetSpeed(candidateP) != ACTUATOR_COMMAND_APPLIED) {
+      SendMsg(
+          "Снижение подачи НБК при захлёбе не подтверждено.",
+          ALARM_MSG);
+    }
     if (graceful) {
       if (!queue_samovar_command(SAMOVAR_POWER)) {
         request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу НБК (захлёб)");
@@ -1042,10 +1471,18 @@ void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool gra
       request_emergency_stop("");
     }
   } else if (pause_ms > 0) { // Для этапа W: пауза и переход к восстановлению
-    set_current_power(fromPower(nbk_Mo/2));// в Работе захлёб некатастрофический, колонну можно не охлаждать
+    if (!nbk_schedule_actuator_command(
+            nbk_Mo / 2,
+            candidateP,
+            NBK_ACTUATOR_WORK_DEADLINE,
+            pause_ms,
+            nbk_opt_iter)) {
+      nbk_enter_safe_wait(
+          "Снижение приводов НБК при захлёбе не принято.");
+      return;
+    }
     nbk_work_in_pause = true;
     nbk_work_pause_stage = 1;
-    nbk_work_next_time = safety_deadline_after(millis(), pause_ms);
     nbk_overflow_happened = true; // захлёб зафиксирован — guard по снижению Mo/Po должен сработать
     nbk_pause_overflow_repeat_latched = false; // [T1] новая пауза W — не подавлять первое сообщение о повторном захлёбе
   }

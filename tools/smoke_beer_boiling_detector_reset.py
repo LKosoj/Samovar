@@ -24,6 +24,8 @@ from smoke_helpers import extract_function_body
 ROOT = Path(__file__).resolve().parents[1]
 
 RUN_BEER_PROGRAM_SIGNATURE = "void run_beer_program(uint8_t num)"
+COOLING_PUMP_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_pump(bool active)"
+COOLING_OUTPUTS_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_outputs(bool active)"
 RESET_BOILING_DETECTOR_SIGNATURE = "static inline void resetBoilingDetector()"
 PROGRAM_TYPE_AT_SIGNATURE = "inline ProgramType program_type_at(uint8_t index)"
 
@@ -108,15 +110,44 @@ static int currentstepcnt = 0;
 static unsigned long alarm_c_min = 0;
 static unsigned long alarm_c_low_min = 0;
 
+enum ActuatorCommandResult {
+  ACTUATOR_COMMAND_ACCEPTED = 0,
+  ACTUATOR_COMMAND_PENDING,
+  ACTUATOR_COMMAND_APPLIED,
+  ACTUATOR_COMMAND_FAILED,
+};
+
 #define USE_WATER_PUMP
 static bool valve_status = false;
 static int openValveCalls = 0;
-void open_valve(bool val, bool /*msg*/) { valve_status = val; openValveCalls++; }
+ActuatorCommandResult open_valve(bool val, bool /*msg*/) {
+  valve_status = val;
+  openValveCalls++;
+  return ACTUATOR_COMMAND_APPLIED;
+}
 static bool pump_started = false;
 static float lastPumpPwm = -1;
 static int pumpPwmCalls = 0;
-void set_pump_pwm(float duty) { lastPumpPwm = duty; pumpPwmCalls++; }
+ActuatorCommandResult set_pump_pwm(float duty) {
+  lastPumpPwm = duty;
+  pumpPwmCalls++;
+  pump_started = duty > 0;
+  return ACTUATOR_COMMAND_APPLIED;
+}
 static bool beerCoolingPumpActive = false;
+void request_emergency_stop(const char*) {}
+enum BeerLuaStagePhase { BEER_LUA_STAGE_IDLE = 0 };
+struct BeerLuaStageState {
+  BeerLuaStagePhase phase;
+  uint32_t ticket;
+  uint8_t nextProgram;
+};
+static BeerLuaStageState beerLuaStage = {BEER_LUA_STAGE_IDLE, 0, PROGRAM_END};
+static ActuatorCommandResult beer_safe_lua_outputs() {
+  return ACTUATOR_COMMAND_APPLIED;
+}
+static int beerAbortCalls = 0;
+void beer_abort_config_error(const String&) { beerAbortCalls++; }
 
 static unsigned long fakeMillis = 1000;
 unsigned long millis() { return fakeMillis; }
@@ -164,6 +195,14 @@ static void resetBoilingDetector() {
 @RESET_BOILING_DETECTOR_BODY@
 }
 
+inline ActuatorCommandResult beer_set_cooling_pump(bool active) {
+@COOLING_PUMP_BODY@
+}
+
+inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
+@COOLING_OUTPUTS_BODY@
+}
+
 @RUN_BEER_PROGRAM_BODY@
 
 static int failures = 0;
@@ -199,6 +238,8 @@ static void reset_fixture() {
   lastPumpPwm = -1;
   pumpPwmCalls = 0;
   beerCoolingPumpActive = true;
+  beerLuaStage = {BEER_LUA_STAGE_IDLE, 0, PROGRAM_END};
+  beerAbortCalls = 0;
   fakeMillis = 1000;
   TankSensor.avgTemp = 0;
   beerSkipConfirmProgramNum = 0xFF;
@@ -410,6 +451,8 @@ def build_harness(beer_header_path: Path, runtime_helpers_path: Path) -> str:
     runtime_source = runtime_helpers_path.read_text(encoding="utf-8")
 
     run_beer_program_body = extract_function_body(beer_source, RUN_BEER_PROGRAM_SIGNATURE)
+    cooling_pump_body = extract_function_body(beer_source, COOLING_PUMP_SIGNATURE)
+    cooling_outputs_body = extract_function_body(beer_source, COOLING_OUTPUTS_SIGNATURE)
     reset_boiling_detector_body = extract_function_body(beer_source, RESET_BOILING_DETECTOR_SIGNATURE)
     program_type_at_body = extract_function_body(runtime_source, PROGRAM_TYPE_AT_SIGNATURE)
 
@@ -417,6 +460,8 @@ def build_harness(beer_header_path: Path, runtime_helpers_path: Path) -> str:
 
     harness = HARNESS_TEMPLATE.replace("@RUN_BEER_PROGRAM_BODY@", run_beer_program_fn)
     harness = harness.replace("@RESET_BOILING_DETECTOR_BODY@", reset_boiling_detector_body)
+    harness = harness.replace("@COOLING_PUMP_BODY@", cooling_pump_body)
+    harness = harness.replace("@COOLING_OUTPUTS_BODY@", cooling_outputs_body)
     harness = harness.replace("@PROGRAM_TYPE_AT_BODY@", program_type_at_body)
     return harness
 

@@ -40,7 +40,9 @@ except ValueError as exc:
     init_body = ""
 
 try:
-    pwm_body = extract_function_body(pwm, "void set_pump_pwm(float duty)")
+    pwm_body = extract_function_body(
+        pwm, "ActuatorCommandResult set_pump_pwm(float duty)"
+    )
 except ValueError as exc:
     errors.append(str(exc))
     pwm_body = ""
@@ -87,10 +89,10 @@ if pwm_body:
             "if (!pump_started && duty > 0)",
             "pump_pwm.write(PWM_START_VALUE * 10);",
             "pump_started = true;",
-            "return;",
+            "return ACTUATOR_COMMAND_APPLIED;",
             "if (duty > 0 && wp_count < 10 && pump_started)",
             "wp_count++;",
-            "return;",
+            "return ACTUATOR_COMMAND_APPLIED;",
         ],
         errors,
     )

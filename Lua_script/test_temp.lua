@@ -1,48 +1,46 @@
-setNumVariable("WFpulseCount",20)
-
 pos = 1
 
 if pos == 1 then
-  setNumVariable("TankTemp",50)
-  setNumVariable("WaterTemp",20)
+  setNumVariable("VirtualTankTemp",50)
+  setNumVariable("VirtualWaterTemp",20)
 
 elseif pos == 2 then
-  setNumVariable("TankTemp",78)
-  setNumVariable("WaterTemp",23)
+  setNumVariable("VirtualTankTemp",78)
+  setNumVariable("VirtualWaterTemp",23)
 
 elseif pos == 3 then
-  setNumVariable("TankTemp",82)
-  setNumVariable("WaterTemp",24)
+  setNumVariable("VirtualTankTemp",82)
+  setNumVariable("VirtualWaterTemp",24)
 
 elseif pos == 4 then
-  setNumVariable("TankTemp",83)
-  setNumVariable("WaterTemp",25)
+  setNumVariable("VirtualTankTemp",83)
+  setNumVariable("VirtualWaterTemp",25)
 
 elseif pos == 5 then
-  setNumVariable("TankTemp",84)
-  setNumVariable("WaterTemp",19)
+  setNumVariable("VirtualTankTemp",84)
+  setNumVariable("VirtualWaterTemp",19)
 
 elseif pos == 6 then
-  setNumVariable("TankTemp",85)
-  setNumVariable("WaterTemp",35)
+  setNumVariable("VirtualTankTemp",85)
+  setNumVariable("VirtualWaterTemp",35)
 
 elseif pos == 7 then
-  setNumVariable("TankTemp",86)
-  setNumVariable("WaterTemp",49)
+  setNumVariable("VirtualTankTemp",86)
+  setNumVariable("VirtualWaterTemp",49)
 
 elseif pos == 8 then
-  setNumVariable("TankTemp",87)
-  setNumVariable("WaterTemp",49)
+  setNumVariable("VirtualTankTemp",87)
+  setNumVariable("VirtualWaterTemp",49)
 
 elseif pos == 9 then
-  setNumVariable("TankTemp",97)
-  setNumVariable("WaterTemp",49)
+  setNumVariable("VirtualTankTemp",97)
+  setNumVariable("VirtualWaterTemp",49)
 
 elseif pos == 10 then
-  setNumVariable("TankTemp",99)
-  setNumVariable("WaterTemp",49)
+  setNumVariable("VirtualTankTemp",99)
+  setNumVariable("VirtualWaterTemp",49)
 
 elseif pos == 11 then
-  setNumVariable("TankTemp",99.8)
-  setNumVariable("WaterTemp",49)
+  setNumVariable("VirtualTankTemp",99.8)
+  setNumVariable("VirtualWaterTemp",49)
 end

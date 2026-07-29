@@ -119,7 +119,7 @@ if nbk_text:
         body = ""
 
     for token in [
-        "SetSpeed(0);",
+        "SetSpeed(0)",
         "stats.avgSpeed",
         "ProgramNum = 0;",
         "startval = SAMOVAR_STARTVAL_IDLE;",

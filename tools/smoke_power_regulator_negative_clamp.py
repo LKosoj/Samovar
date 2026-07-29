@@ -37,16 +37,19 @@ volatile bool mode_switch_barrier_active = false;
 volatile float target_power_volt = 0.0f;
 
 static SafetyHeaterBarrierState heaterSafetyState = {false, false, false, 0};
+static SafetyRegulatorRequestState regulatorRequestState = {};
 
 struct PowerTransitionState {
   SafetyTransition transition;
   bool enqueueResetCommand;
   bool pendingPowerValueSet;
   float pendingPowerValue;
+  uint64_t pendingPowerGeneration;
+  uint64_t pendingPowerRegulatorGeneration;
   uint64_t regulatorGeneration;
 };
 static PowerTransitionState powerTransition = {
-  {SAFETY_TRANSITION_IDLE, 0}, false, false, 0, 0,
+  {SAFETY_TRANSITION_IDLE, 0}, false, false, 0, 0, 0, 0,
 };
 
 inline bool power_transition_start_pending_locked() {
@@ -80,8 +83,13 @@ static int notifyCalls = 0;
 // это на проверках requestCalls/notifyCalls: без них снятие static меняет
 // ложный улов на молчаливую слепую зону, что хуже.
 void notify_power_worker() { notifyCalls++; }
+ActuatorCommandResult current_power_command_status(uint64_t generation) {
+@STATUS_BODY@
+}
 
-inline void set_current_power(float Volt) {
+inline ActuatorCommandResult set_current_power(
+    float Volt,
+    uint64_t* generation = nullptr) {
 @BODY@
 }
 
@@ -99,7 +107,7 @@ static void reset_fixture() {
   mode_switch_barrier_active = false;
   heaterSafetyState = {false, false, false, 0};
   target_power_volt = 123.0f;  // не ноль — чтобы увидеть, что реально обнулили
-  powerTransition = {{SAFETY_TRANSITION_IDLE, 0}, false, false, 0, 0};
+  powerTransition = {{SAFETY_TRANSITION_IDLE, 0}, false, false, 0, 0, 0, 0};
   requestCalls = 0;
   lastMode = SAFETY_REGULATOR_MODE_WORK;  // sentinel, не должен остаться
   lastHasVoltage = true;                  // sentinel, не должен остаться
@@ -188,7 +196,9 @@ static void test_each_guard_condition_blocks_power_alone() {
 static void test_pending_transition_defers_setpoint() {
   reset_fixture();
   powerTransition.transition.phase = POWER_TRANSITION_ON_REGULATOR_WAIT;
-  set_current_power(200.0f);
+  uint64_t generation = 0;
+  check(set_current_power(200.0f, &generation) == ACTUATOR_COMMAND_PENDING,
+        "отложенная уставка должна вернуть PENDING");
   check(requestCalls == 0, "во время перехода питания уставка ушла в регулятор напрямую");
   check(notifyCalls == 0, "во время перехода питания разбужен воркер регулятора");
   check(powerTransition.pendingPowerValueSet &&
@@ -196,6 +206,20 @@ static void test_pending_transition_defers_setpoint() {
         "уставка не отложена в pendingPowerValue на время перехода питания");
   check(target_power_volt == 200.0f,
         "target_power_volt не принял отложенную уставку");
+  check(generation != 0 && generation == powerTransition.pendingPowerGeneration,
+        "PENDING обязан вернуть зарезервированное поколение команды");
+  check(current_power_command_status(generation) == ACTUATOR_COMMAND_PENDING,
+        "статус зарезервированного поколения до старта регулятора обязан быть PENDING");
+  powerTransition.pendingPowerValueSet = false;
+  powerTransition.pendingPowerRegulatorGeneration = 2;
+  regulatorRequestState.desiredGeneration = 2;
+  regulatorRequestState.pending = true;
+  check(current_power_command_status(generation) == ACTUATOR_COMMAND_PENDING,
+        "статус должен оставаться PENDING после передачи поколения регулятору");
+  regulatorRequestState.pending = false;
+  regulatorRequestState.completedGeneration = 2;
+  check(current_power_command_status(generation) == ACTUATOR_COMMAND_APPLIED,
+        "статус должен наблюдать APPLIED фактической команды регулятора");
 }
 
 int main() {
@@ -212,19 +236,22 @@ int main() {
 '''
 
 
-def build_harness() -> str:
-    source = (ROOT / "power_regulator.h").read_text(encoding="utf-8")
-    body = extract_function_body(source, "inline void set_current_power(float Volt)")
-    return HARNESS_TEMPLATE.replace("@BODY@", body)
+def build_harness(body: str | None = None, status_body: str | None = None) -> str:
+    if body is None:
+        source = (ROOT / "power_regulator.h").read_text(encoding="utf-8")
+        body = extract_function_body(
+            source,
+            "inline ActuatorCommandResult set_current_power(float Volt, uint64_t* generation)",
+        )
+    if status_body is None:
+        status_body = extract_function_body(
+            (ROOT / "power_regulator.h").read_text(encoding="utf-8"),
+            "inline ActuatorCommandResult current_power_command_status(uint64_t generation)",
+        )
+    return HARNESS_TEMPLATE.replace("@BODY@", body).replace("@STATUS_BODY@", status_body)
 
 
-def main() -> int:
-    try:
-        harness = build_harness()
-    except ValueError as error:
-        print(f"FAIL: {error}", file=sys.stderr)
-        return 1
-
+def compile_and_run(harness: str, emit: bool) -> int:
     with tempfile.TemporaryDirectory(prefix="samovar-power-clamp-") as temp_dir:
         temp = Path(temp_dir)
         source = temp / "power_regulator_negative_clamp_test.cpp"
@@ -248,15 +275,60 @@ def main() -> int:
             check=False,
         )
         if compile_result.returncode != 0:
-            sys.stderr.write(compile_result.stdout)
-            sys.stderr.write(compile_result.stderr)
+            if emit:
+                sys.stderr.write(compile_result.stdout)
+                sys.stderr.write(compile_result.stderr)
             return compile_result.returncode
         run_result = subprocess.run(
             [str(binary)], capture_output=True, text=True, check=False
         )
-        sys.stdout.write(run_result.stdout)
-        sys.stderr.write(run_result.stderr)
+        if emit:
+            sys.stdout.write(run_result.stdout)
+            sys.stderr.write(run_result.stderr)
         return run_result.returncode
+
+
+def main() -> int:
+    try:
+        harness = build_harness()
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+
+    if compile_and_run(harness, True) != 0:
+        return 1
+    body = extract_function_body(
+        (ROOT / "power_regulator.h").read_text(encoding="utf-8"),
+        "inline ActuatorCommandResult set_current_power(float Volt, uint64_t* generation)",
+    )
+    mutation = body.replace(
+        "powerTransition.pendingPowerGeneration =\n        safety_regulator_next_generation(regulatorRequestState);",
+        "powerTransition.pendingPowerGeneration = 0;",
+        1,
+    )
+    if mutation == body:
+        print("FAIL: PENDING generation mutation anchor missing", file=sys.stderr)
+        return 1
+    if compile_and_run(build_harness(mutation), False) == 0:
+        print("FAIL: PENDING generation mutation survived", file=sys.stderr)
+        return 1
+    status_body = extract_function_body(
+        (ROOT / "power_regulator.h").read_text(encoding="utf-8"),
+        "inline ActuatorCommandResult current_power_command_status(uint64_t generation)",
+    )
+    status_mutation = status_body.replace(
+        "if (generation == powerTransition.pendingPowerGeneration)",
+        "if (false)",
+        1,
+    )
+    if status_mutation == status_body:
+        print("FAIL: PENDING status mutation anchor missing", file=sys.stderr)
+        return 1
+    if compile_and_run(build_harness(body, status_mutation), False) == 0:
+        print("FAIL: PENDING status mutation survived", file=sys.stderr)
+        return 1
+    print("set_current_power negative/NaN clamp and PENDING generation checks passed")
+    return 0
 
 
 if __name__ == "__main__":

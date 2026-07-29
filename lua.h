@@ -36,6 +36,8 @@ inline void lua_state_unlock(bool locked) {
 
 static volatile uint32_t luaHookDeadlineMs;
 static volatile bool luaTimeoutFired;
+static volatile bool luaLastExecutionTimedOut;
+String lua_coroutine_watchdog_error;
 
 static void lua_timeout_hook(lua_State* L, lua_Debug*) {
   if (safety_deadline_expired(millis(), luaHookDeadlineMs)) {
@@ -64,6 +66,7 @@ inline String lua_exec_locked(String& script, bool collect_garbage = false) {
   lua_install_timeout_hook_locked();
   String result = lua.Lua_dostring(&script);
   lua_remove_timeout_hook_locked();
+  luaLastExecutionTimedOut = luaTimeoutFired;
   lua_report_timeout_if_fired();
   // [P8] __gc-финализаторы НЕ покрываются hook-watchdog'ом: вендорный lgc.c::GCTM()
   // выставляет L->allowhook=0 перед вызовом __gc (ldo.c::luaD_hook вызывает хук
@@ -127,6 +130,7 @@ inline String lua_exec_chunk_locked(int ref, bool collect_garbage = false) {
     result = "# lua error:\n" + lua_error_string(L);
   }
   lua_remove_timeout_hook_locked();
+  luaLastExecutionTimedOut = luaTimeoutFired;
   lua_report_timeout_if_fired();
   // [P8] __gc-финализаторы НЕ покрываются hook-watchdog'ом - см. комментарий в
   // lua_exec_locked(). Зависший __gc-финализатор повесит задачу Lua - принятое
@@ -148,6 +152,10 @@ inline void lua_install_constants_locked() {
   lua_set_number_global_locked("OUTPUT", OUTPUT);
   lua_set_number_global_locked("LOW", LOW);
   lua_set_number_global_locked("HIGH", HIGH);
+  lua_set_number_global_locked("ACTUATOR_COMMAND_ACCEPTED", ACTUATOR_COMMAND_ACCEPTED);
+  lua_set_number_global_locked("ACTUATOR_COMMAND_PENDING", ACTUATOR_COMMAND_PENDING);
+  lua_set_number_global_locked("ACTUATOR_COMMAND_APPLIED", ACTUATOR_COMMAND_APPLIED);
+  lua_set_number_global_locked("ACTUATOR_COMMAND_FAILED", ACTUATOR_COMMAND_FAILED);
 }
 
 // [P8] lua_sethook выше вооружает только ГЛАВНЫЙ lua_State. Код внутри
@@ -194,15 +202,21 @@ end
 )lua";
 
 // Исполняется один раз при инициализации Lua-состояния (см. lua_init(), сразу
-// после lua_install_constants_locked()). Защищено luaL_dostring - ошибка
-// прелюдии не должна ронять загрузку, только деградировать watchdog корутин
-// (главный lua_State хуком по-прежнему покрыт).
-inline void lua_install_coroutine_watchdog_locked() {
+// после lua_install_constants_locked()). Ошибка прелюдии делает Lua runtime
+// неготовым: запуск без watchdog'а корутин запрещён.
+inline bool lua_install_coroutine_watchdog_locked() {
   lua_State* L = lua.GetState();
   lua_register(L, "armCoroutineWatchdog", lua_wrapper_arm_coroutine_watchdog);
+  luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1);
+  lua_pop(L, 1);
   if (luaL_dostring(L, LUA_COROUTINE_WATCHDOG_PRELUDE) != LUA_OK) {
+    const char* error = lua_tostring(L, -1);
+    lua_coroutine_watchdog_error = error ? error : "unknown watchdog prelude error";
     lua_pop(L, 1);
+    return false;
   }
+  lua_coroutine_watchdog_error = "";
+  return true;
 }
 
 /**
@@ -264,6 +278,27 @@ String lua_job_script;
 volatile LuaJobType lua_job_type = LUA_JOB_NONE;
 volatile bool lua_job_active = false;
 
+enum LuaBeerJobResult : uint8_t {
+  LUA_BEER_JOB_IDLE = 0,
+  LUA_BEER_JOB_QUEUED,
+  LUA_BEER_JOB_RUNNING,
+  LUA_BEER_JOB_SUCCEEDED,
+  LUA_BEER_JOB_STOPPED,
+  LUA_BEER_JOB_FAILED_INIT,
+  LUA_BEER_JOB_FAILED_RUNTIME,
+  LUA_BEER_JOB_FAILED_TIMEOUT,
+};
+
+volatile bool lua_runtime_ready = false;
+volatile bool lua_coroutine_watchdog_ready = false;
+volatile bool lua_boot_init_ready = false;
+volatile uint32_t lua_beer_job_next_ticket = 0;
+volatile uint32_t lua_beer_job_ticket = 0;
+volatile LuaBeerJobResult lua_beer_job_result = LUA_BEER_JOB_IDLE;
+#ifdef SAMOVAR_LUA_SIMULATION
+static uint32_t luaSimulationMillis = 0;
+#endif
+
 inline bool lua_state_mutation_allowed() {
   return !mode_switch_in_progress();
 }
@@ -272,8 +307,21 @@ inline int lua_reject_state_mutation(lua_State* lua_state) {
   return luaL_error(lua_state, "mode switch blocks state changes");
 }
 
+inline bool lua_simulation_enabled() {
+#ifdef SAMOVAR_LUA_SIMULATION
+  return true;
+#else
+  return false;
+#endif
+}
+
+inline int lua_reject_actuator_mutation(lua_State* lua_state) {
+  return luaL_error(lua_state, "Lua simulation blocks actuator control");
+}
+
 inline bool queue_lua_job(LuaJobType type, const String& script) {
   if (script.length() == 0) return true;
+  if (!lua_runtime_ready) return false;
   if (mode_switch_in_progress()) return false;
   bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
   if (!locked) return false;
@@ -320,6 +368,7 @@ inline void finish_lua_job() {
 }
 
 inline bool request_lua_periodic_start() {
+  if (!lua_runtime_ready) return false;
   if (mode_switch_in_progress()) return false;
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
   if (!locked) return false;
@@ -363,10 +412,16 @@ inline bool consume_lua_periodic_start_request(bool& accepted) {
   accepted = false;
   if (mode_switch_in_progress()) {
     lua_start_requested = false;
+    if (lua_beer_job_result == LUA_BEER_JOB_QUEUED) {
+      lua_beer_job_result = LUA_BEER_JOB_FAILED_RUNTIME;
+    }
   } else if (lua_start_requested && lua_finished) {
     lua_start_requested = false;
     lua_finished = false;
     accepted = true;
+    if (lua_beer_job_result == LUA_BEER_JOB_QUEUED) {
+      lua_beer_job_result = LUA_BEER_JOB_RUNNING;
+    }
   }
   runtime_state_unlock(true);
   return true;
@@ -386,6 +441,66 @@ inline void finish_lua_periodic_run() {
     lua_finished = true;
     runtime_state_unlock(true);
   }
+}
+
+inline void finish_beer_lua_periodic_result(bool periodicFailed, bool periodicTimedOut) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (locked && (lua_beer_job_result == LUA_BEER_JOB_RUNNING ||
+      (lua_beer_job_result == LUA_BEER_JOB_SUCCEEDED && periodicFailed))) {
+    lua_beer_job_result = periodicTimedOut ? LUA_BEER_JOB_FAILED_TIMEOUT
+        : periodicFailed ? LUA_BEER_JOB_FAILED_RUNTIME : LUA_BEER_JOB_SUCCEEDED;
+  }
+  runtime_state_unlock(locked);
+}
+
+inline bool request_beer_lua_job(uint32_t& ticket) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return false;
+  const bool modeScriptReady = lua_runtime_ready && script2.length() > 0 &&
+                               lua_chunk_ref_valid(script2_ref);
+  if (!modeScriptReady || mode_switch_in_progress() || !lua_finished ||
+      lua_start_requested || loop_lua_fl) {
+    lua_beer_job_result = modeScriptReady ? LUA_BEER_JOB_FAILED_RUNTIME
+                                          : LUA_BEER_JOB_FAILED_INIT;
+    runtime_state_unlock(true);
+    return false;
+  }
+  ticket = ++lua_beer_job_next_ticket;
+  lua_beer_job_ticket = ticket;
+  lua_beer_job_result = LUA_BEER_JOB_QUEUED;
+  SetScriptOff = false;
+  loop_lua_fl = true;
+  lua_start_requested = true;
+  runtime_state_unlock(true);
+  return true;
+}
+
+inline LuaBeerJobResult beer_lua_job_result(uint32_t ticket) {
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (!locked) return LUA_BEER_JOB_FAILED_RUNTIME;
+  const LuaBeerJobResult result = ticket == lua_beer_job_ticket
+      ? lua_beer_job_result : LUA_BEER_JOB_FAILED_RUNTIME;
+  runtime_state_unlock(true);
+  return result;
+}
+
+inline bool request_beer_lua_stop(uint32_t ticket) {
+  bool locked = runtime_state_lock(portMAX_DELAY);
+  if (!locked || ticket != lua_beer_job_ticket) {
+    runtime_state_unlock(locked);
+    return false;
+  }
+  SetScriptOff = true;
+  loop_lua_fl = false;
+  lua_start_requested = false;
+  lua_beer_job_result = LUA_BEER_JOB_STOPPED;
+  runtime_state_unlock(true);
+  return true;
+}
+
+inline bool beer_lua_job_idle(uint32_t ticket) {
+  if (ticket != lua_beer_job_ticket) return false;
+  return lua_mode_owner_idle();
 }
 
 static bool lua_copy_current_program(WProgram& currentProgram) {
@@ -431,32 +546,11 @@ struct LuaNumVariableDescriptor {
 };
 
 static float lua_num_get_WFpulseCount() { return water_pulse_count_get(); }
-static bool lua_num_set_WFpulseCount(int32_t value, float) {
-  water_pulse_count_set(static_cast<uint16_t>(value));
-  return true;
-}
 static float lua_num_get_pump_started() { return pump_started; }
-static bool lua_num_set_pump_started(int32_t value, float) {
-  pump_started = value;
-  return true;
-}
 static float lua_num_get_valve_status() { return valve_status; }
-static bool lua_num_set_valve_status(int32_t value, float) {
-  valve_status = value;
-  return true;
-}
 static float lua_num_get_SamSetup_Mode() { return SamSetup.Mode; }
-static bool lua_num_set_SamSetup_Mode(int32_t value, float) {
-  return set_lua_mode_value(LUA_MODE_TARGET_SETUP, value);
-}
 static float lua_num_get_Samovar_Mode() { return Samovar_Mode; }
-static bool lua_num_set_Samovar_Mode(int32_t value, float) {
-  return set_lua_mode_value(LUA_MODE_TARGET_ACTIVE, value);
-}
 static float lua_num_get_Samovar_CR_Mode() { return Samovar_CR_Mode; }
-static bool lua_num_set_Samovar_CR_Mode(int32_t value, float) {
-  return set_lua_mode_value(LUA_MODE_TARGET_CONTROL, value);
-}
 static float lua_num_get_acceleration_temp() { return acceleration_temp; }
 static bool lua_num_set_acceleration_temp(int32_t value, float) {
   acceleration_temp = static_cast<uint16_t>(value);
@@ -482,35 +576,32 @@ static bool lua_num_set_pmpKd(int32_t, float value) {
 }
 #endif
 static float lua_num_get_SteamTemp() { return SteamSensor.avgTemp; }
-static bool lua_num_set_SteamTemp(int32_t, float value) {
-  SteamSensor.avgTemp = value;
-  return true;
-}
 static float lua_num_get_boil_temp() { return boil_temp; }
 static bool lua_num_set_boil_temp(int32_t, float value) {
   boil_temp = value;
   return true;
 }
 static float lua_num_get_PipeTemp() { return PipeSensor.avgTemp; }
-static bool lua_num_set_PipeTemp(int32_t, float value) {
-  PipeSensor.avgTemp = value;
-  return true;
-}
 static float lua_num_get_WaterTemp() { return WaterSensor.avgTemp; }
-static bool lua_num_set_WaterTemp(int32_t, float value) {
-  WaterSensor.avgTemp = value;
-  return true;
-}
 static float lua_num_get_TankTemp() { return TankSensor.avgTemp; }
-static bool lua_num_set_TankTemp(int32_t, float value) {
-  TankSensor.avgTemp = value;
-  return true;
-}
 static float lua_num_get_ACPTemp() { return ACPSensor.avgTemp; }
-static bool lua_num_set_ACPTemp(int32_t, float value) {
-  ACPSensor.avgTemp = value;
-  return true;
-}
+#ifdef SAMOVAR_LUA_SIMULATION
+static float virtualSteamTemp = 0;
+static float virtualPipeTemp = 0;
+static float virtualWaterTemp = 0;
+static float virtualTankTemp = 0;
+static float virtualACPTemp = 0;
+static float lua_num_get_VirtualSteamTemp() { return virtualSteamTemp; }
+static bool lua_num_set_VirtualSteamTemp(int32_t, float value) { virtualSteamTemp = value; return true; }
+static float lua_num_get_VirtualPipeTemp() { return virtualPipeTemp; }
+static bool lua_num_set_VirtualPipeTemp(int32_t, float value) { virtualPipeTemp = value; return true; }
+static float lua_num_get_VirtualWaterTemp() { return virtualWaterTemp; }
+static bool lua_num_set_VirtualWaterTemp(int32_t, float value) { virtualWaterTemp = value; return true; }
+static float lua_num_get_VirtualTankTemp() { return virtualTankTemp; }
+static bool lua_num_set_VirtualTankTemp(int32_t, float value) { virtualTankTemp = value; return true; }
+static float lua_num_get_VirtualACPTemp() { return virtualACPTemp; }
+static bool lua_num_set_VirtualACPTemp(int32_t, float value) { virtualACPTemp = value; return true; }
+#endif
 static float lua_num_get_loop_lua_fl() { return loop_lua_fl; }
 static bool lua_num_set_loop_lua_fl(int32_t value, float) {
   loop_lua_fl = value;
@@ -574,18 +665,18 @@ static float lua_num_get_MI() { return minute(time(NULL)); }
 static float lua_num_get_SS() { return second(time(NULL)); }
 
 static const LuaNumVariableDescriptor lua_num_variables[] = {
-  {"WFpulseCount", lua_num_get_WFpulseCount, lua_num_set_WFpulseCount,
-   LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, UINT16_MAX},
-  {"pump_started", lua_num_get_pump_started, lua_num_set_pump_started,
-   LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, 1},
-  {"valve_status", lua_num_get_valve_status, lua_num_set_valve_status,
-   LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, 1},
-  {"SamSetup_Mode", lua_num_get_SamSetup_Mode, lua_num_set_SamSetup_Mode,
-   LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, SAMOVAR_LUA_MODE},
-  {"Samovar_Mode", lua_num_get_Samovar_Mode, lua_num_set_Samovar_Mode,
-   LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, SAMOVAR_LUA_MODE},
-  {"Samovar_CR_Mode", lua_num_get_Samovar_CR_Mode, lua_num_set_Samovar_CR_Mode,
-   LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, SAMOVAR_LUA_MODE},
+  {"WFpulseCount", lua_num_get_WFpulseCount, nullptr,
+   LUA_VAR_RO, LUA_NUM_INTEGRAL, 0, UINT16_MAX},
+  {"pump_started", lua_num_get_pump_started, nullptr,
+   LUA_VAR_RO, LUA_NUM_INTEGRAL, 0, 1},
+  {"valve_status", lua_num_get_valve_status, nullptr,
+   LUA_VAR_RO, LUA_NUM_INTEGRAL, 0, 1},
+  {"SamSetup_Mode", lua_num_get_SamSetup_Mode, nullptr,
+   LUA_VAR_RO, LUA_NUM_INTEGRAL, 0, SAMOVAR_LUA_MODE},
+  {"Samovar_Mode", lua_num_get_Samovar_Mode, nullptr,
+   LUA_VAR_RO, LUA_NUM_INTEGRAL, 0, SAMOVAR_LUA_MODE},
+  {"Samovar_CR_Mode", lua_num_get_Samovar_CR_Mode, nullptr,
+   LUA_VAR_RO, LUA_NUM_INTEGRAL, 0, SAMOVAR_LUA_MODE},
   {"acceleration_temp", lua_num_get_acceleration_temp, lua_num_set_acceleration_temp,
    LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, UINT16_MAX},
 #ifdef USE_WATER_PUMP
@@ -598,18 +689,30 @@ static const LuaNumVariableDescriptor lua_num_variables[] = {
   {"pmpKd", nullptr, lua_num_set_pmpKd,
    LUA_VAR_WO, LUA_NUM_FRACTIONAL, 0, 0},
 #endif
-  {"SteamTemp", lua_num_get_SteamTemp, lua_num_set_SteamTemp,
-   LUA_VAR_RW, LUA_NUM_FRACTIONAL, 0, 0},
+  {"SteamTemp", lua_num_get_SteamTemp, nullptr,
+   LUA_VAR_RO, LUA_NUM_FRACTIONAL, 0, 0},
   {"boil_temp", lua_num_get_boil_temp, lua_num_set_boil_temp,
    LUA_VAR_RW, LUA_NUM_FRACTIONAL, 0, 0},
-  {"PipeTemp", lua_num_get_PipeTemp, lua_num_set_PipeTemp,
+  {"PipeTemp", lua_num_get_PipeTemp, nullptr,
+   LUA_VAR_RO, LUA_NUM_FRACTIONAL, 0, 0},
+  {"WaterTemp", lua_num_get_WaterTemp, nullptr,
+   LUA_VAR_RO, LUA_NUM_FRACTIONAL, 0, 0},
+  {"TankTemp", lua_num_get_TankTemp, nullptr,
+   LUA_VAR_RO, LUA_NUM_FRACTIONAL, 0, 0},
+  {"ACPTemp", lua_num_get_ACPTemp, nullptr,
+   LUA_VAR_RO, LUA_NUM_FRACTIONAL, 0, 0},
+#ifdef SAMOVAR_LUA_SIMULATION
+  {"VirtualSteamTemp", lua_num_get_VirtualSteamTemp, lua_num_set_VirtualSteamTemp,
    LUA_VAR_RW, LUA_NUM_FRACTIONAL, 0, 0},
-  {"WaterTemp", lua_num_get_WaterTemp, lua_num_set_WaterTemp,
+  {"VirtualPipeTemp", lua_num_get_VirtualPipeTemp, lua_num_set_VirtualPipeTemp,
    LUA_VAR_RW, LUA_NUM_FRACTIONAL, 0, 0},
-  {"TankTemp", lua_num_get_TankTemp, lua_num_set_TankTemp,
+  {"VirtualWaterTemp", lua_num_get_VirtualWaterTemp, lua_num_set_VirtualWaterTemp,
    LUA_VAR_RW, LUA_NUM_FRACTIONAL, 0, 0},
-  {"ACPTemp", lua_num_get_ACPTemp, lua_num_set_ACPTemp,
+  {"VirtualTankTemp", lua_num_get_VirtualTankTemp, lua_num_set_VirtualTankTemp,
    LUA_VAR_RW, LUA_NUM_FRACTIONAL, 0, 0},
+  {"VirtualACPTemp", lua_num_get_VirtualACPTemp, lua_num_set_VirtualACPTemp,
+   LUA_VAR_RW, LUA_NUM_FRACTIONAL, 0, 0},
+#endif
   {"loop_lua_fl", lua_num_get_loop_lua_fl, lua_num_set_loop_lua_fl,
    LUA_VAR_RW, LUA_NUM_INTEGRAL, 0, 1},
   {"SetScriptOff", lua_num_get_SetScriptOff, lua_num_set_SetScriptOff,
@@ -835,6 +938,7 @@ static int lua_wrapper_pinMode(lua_State *lua_state) {
   int a = lua_check_truncated_arg(lua_state, 1);
   int b = lua_check_truncated_arg(lua_state, 2);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN) {
     if (lua_pin_is_heater_channel(a) && heater_safety_latched()) {
       // Защёлка взведена: pinMode(INPUT) отдал бы пин подтяжке платы в обход
@@ -851,6 +955,7 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
   int a = lua_check_truncated_arg(lua_state, 1);
   int b = lua_check_truncated_arg(lua_state, 2);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN
 #ifdef ALARM_BTN_PIN
       || a == ALARM_BTN_PIN
@@ -913,6 +1018,7 @@ static int lua_wrapper_exp_pinMode(lua_State *lua_state) {
     return lua_numeric_error(lua_state, "mode", NUMERIC_PARSE_NOT_ALLOWED);
   }
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   if (xSemaphoreTake(
           xI2CSemaphore,
           static_cast<TickType_t>(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) !=
@@ -933,6 +1039,7 @@ static int lua_wrapper_exp_digitalWrite(lua_State *lua_state) {
     return lua_numeric_error(lua_state, "value", NUMERIC_PARSE_NOT_ALLOWED);
   }
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   if (xSemaphoreTake(
           xI2CSemaphore,
           static_cast<TickType_t>(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) !=
@@ -968,6 +1075,7 @@ static int lua_wrapper_exp_analogWrite(lua_State *lua_state) {
   const int32_t value = lua_check_int32_arg(
       lua_state, 1, 0, UINT8_MAX, "value");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   if (xSemaphoreTake(
           xI2CSemaphore,
           static_cast<TickType_t>(EXPANDER_UPDATE_TIMEOUT / portTICK_RATE_MS)) !=
@@ -998,13 +1106,21 @@ static int lua_wrapper_exp_analogRead(lua_State *lua_state) {
 #endif
 
 static int lua_wrapper_delay(lua_State *lua_state) {
-  int a = lua_check_truncated_arg(lua_state, 1);
+  const int32_t a = lua_check_index_arg(lua_state, 1, 0, 1000, "delay");
+#ifdef SAMOVAR_LUA_SIMULATION
+  luaSimulationMillis += static_cast<uint32_t>(a);
+#else
   vTaskDelay(a / portTICK_PERIOD_MS);
+#endif
   return 0;
 }
 
 static int lua_wrapper_millis(lua_State *lua_state) {
+#ifdef SAMOVAR_LUA_SIMULATION
+  lua_pushnumber(lua_state, static_cast<lua_Number>(luaSimulationMillis));
+#else
   lua_pushnumber(lua_state, (lua_Number)millis());
+#endif
   return 1;
 }
 
@@ -1012,6 +1128,7 @@ static int lua_wrapper_set_pause_withdrawal(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = lua_check_truncated_arg(lua_state, 1);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   pause_withdrawal(a);
   return 0;
 }
@@ -1020,6 +1137,7 @@ static int lua_wrapper_set_power(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = lua_check_truncated_arg(lua_state, 1);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   SamovarCommands command = SAMOVAR_NONE;
 
   if (a && !PowerOn) {
@@ -1049,16 +1167,20 @@ static int lua_wrapper_set_mixer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = lua_check_truncated_arg(lua_state, 1);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
-  set_mixer(a);
-  return 0;
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
+  const ActuatorCommandResult result = set_mixer(a);
+  lua_pushnumber(lua_state, static_cast<lua_Number>(result));
+  return 1;
 }
 
 static int lua_wrapper_open_valve(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   bool a = lua_check_truncated_arg(lua_state, 1);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
-  open_valve(a, false);
-  return 0;
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
+  const ActuatorCommandResult result = open_valve(a, false);
+  lua_pushnumber(lua_state, static_cast<lua_Number>(result));
+  return 1;
 }
 
 #ifdef SAMOVAR_USE_POWER
@@ -1066,18 +1188,21 @@ static int lua_wrapper_set_current_power(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   float a = lua_check_finite_arg(lua_state, 1, "power");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
 #ifdef SAMOVAR_USE_SEM_AVR
   a = roundf(a);  // регулятор SEM/AVR: уставка в ваттах
 #else
   a = roundf(a * 10.0f) / 10.0f;  // регулятор по напряжению: один знак после запятой
 #endif
-  set_current_power(a);
-  return 0;
+  const ActuatorCommandResult result = set_current_power(a);
+  lua_pushnumber(lua_state, static_cast<lua_Number>(result));
+  return 1;
 }
 #endif
 
 static int lua_wrapper_set_alarm(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   set_alarm();
   return 0;
 }
@@ -1085,6 +1210,7 @@ static int lua_wrapper_set_alarm(lua_State *lua_state) {
 static int lua_wrapper_set_body_temp(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   set_body_temp();
   return 0;
 }
@@ -1092,6 +1218,7 @@ static int lua_wrapper_set_body_temp(lua_State *lua_state) {
 static int lua_wrapper_set_next_program(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   SamovarCommands command = SAMOVAR_NONE;
   if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
     command = SAMOVAR_START;
@@ -1150,6 +1277,8 @@ static int lua_wrapper_set_num_variable(lua_State *lua_state) {
     if (!descriptor->setter(integerValue, fractionalValue)) {
       return luaL_error(lua_state, "%s busy", variableName);
     }
+  } else if (descriptor) {
+    return luaL_error(lua_state, "%s is read-only", variableName);
   } else {
     const lua_Number value = luaL_checknumber(lua_state, 2);
     if (variableName[0] != '\0') {
@@ -1245,6 +1374,7 @@ static int lua_wrapper_set_capacity(lua_State *lua_state) {
   int a = luaL_checkinteger(lua_state, 1);
   if (a < 0 || a > CAPACITY_NUM) return luaL_error(lua_state, "capacity out of range");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   set_capacity((uint8_t)a);
   return 0;
 }
@@ -1256,9 +1386,10 @@ static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
   // в pumppwm.h; water_pump_speed тоже 0..1023). Float-вход усекается до целого.
   const int32_t duty = lua_check_int32_arg(lua_state, 1, 0, 1023, "pwm");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
-  pump_pwm.write(duty);
-  water_pump_speed = duty;
-  return 0;
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
+  const ActuatorCommandResult result = set_pump_pwm(duty);
+  lua_pushnumber(lua_state, static_cast<lua_Number>(result));
+  return 1;
 }
 #endif
 
@@ -1410,6 +1541,7 @@ static int lua_wrapper_set_stepper_by_time(lua_State *lua_state) {
   const int32_t seconds = lua_check_int32_arg(
       lua_state, 3, 0, UINT16_MAX, "time");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   const bool started = set_stepper_by_time(
       static_cast<uint16_t>(speed), static_cast<uint8_t>(direction),
       static_cast<uint16_t>(seconds));
@@ -1426,6 +1558,7 @@ static int lua_wrapper_set_stepper_target(lua_State *lua_state) {
   const int32_t target = lua_check_int32_arg(
       lua_state, 3, 0, INT32_MAX, "target");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   const bool started = set_stepper_target(
       static_cast<uint16_t>(speed), static_cast<uint8_t>(direction),
       static_cast<uint32_t>(target));
@@ -1476,6 +1609,7 @@ static int lua_wrapper_i2cpump_start(lua_State *lua_state) {
     return 1;
   }
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   const uint16_t speedSteps = static_cast<uint16_t>(speedValue);
   I2CPumpCmdSpeed = speedSteps;
   I2CPumpTargetSteps = targetSteps;
@@ -1492,6 +1626,7 @@ static int lua_wrapper_i2cpump_stop(lua_State *lua_state) {
     return 1;
   }
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   const bool stopped = set_stepper_target(0, 0, 0);
   I2CPumpTargetSteps = 0;
   I2CPumpTargetMl = 0;
@@ -1544,6 +1679,7 @@ static int lua_wrapper_set_mixer_pump_target(lua_State *lua_state) {
   const int32_t target = lua_check_index_arg(
       lua_state, 1, 0, 1, "target");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   const bool started = set_mixer_pump_target(static_cast<uint8_t>(target));
   lua_pushnumber(lua_state, static_cast<lua_Number>(started));
   return 1;
@@ -1568,6 +1704,7 @@ static int lua_wrapper_set_i2c_rele_state(lua_State *lua_state) {
   const int32_t state = lua_check_index_arg(
       lua_state, 2, 0, 1, "state");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
+  if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
   const bool changed = set_i2c_rele_state(
       static_cast<uint8_t>(relay), state != 0);
   lua_pushnumber(lua_state, static_cast<lua_Number>(changed));
@@ -1585,6 +1722,9 @@ static int lua_wrapper_get_i2c_rele_state(lua_State *lua_state) {
 }
 
 void lua_init() {
+  lua_runtime_ready = false;
+  lua_coroutine_watchdog_ready = false;
+  lua_boot_init_ready = false;
   lua.Lua_register("pinMode", &lua_wrapper_pinMode);
   lua.Lua_register("digitalWrite", &lua_wrapper_digitalWrite);
   lua.Lua_register("digitalRead", &lua_wrapper_digitalRead);
@@ -1654,10 +1794,16 @@ void lua_init() {
   lua_gc(L, LUA_GCSETPAUSE, 120); // Увеличим паузу между сборками мусора
   lua_gc(L, LUA_GCSETSTEPMUL, 200); // Увеличим агрессивность сборки
   lua_install_constants_locked();
-  lua_install_coroutine_watchdog_locked();
+  const bool watchdogReady = lua_install_coroutine_watchdog_locked();
+  lua_coroutine_watchdog_ready = watchdogReady;
+  if (!watchdogReady) {
+    WriteConsoleLog("Lua coroutine watchdog init failed: " + lua_coroutine_watchdog_error);
+    lua_runtime_ready = false;
+  }
 
   //Запускаем инициализирующий lua-скрипт
   File f = SPIFFS.open("/init.lua");
+  bool initOk = true;
   if (f) {
     //нашли файл со скриптом, выполняем
     String script;
@@ -1670,10 +1816,14 @@ void lua_init() {
       WriteConsoleLog(F("--END LUA SCRIPT--"));
     }
     String sr = lua_exec(script);
-    if (sr.length() > 0) WriteConsoleLog("INI ERR " + sr);
+    if (sr.length() > 0) {
+      initOk = false;
+      WriteConsoleLog("INI ERR " + sr);
+    }
   }
   lua_type_script = get_lua_mode_name();
   lua_finished = true;
+  lua_boot_init_ready = initOk && watchdogReady;
 
   load_lua_script();
 
@@ -1765,6 +1915,7 @@ void load_lua_script() {
   bool lua_locked = lua_state_lock(portMAX_DELAY);
   if (!lua_locked) {
     WriteConsoleLog(F("Lua reload busy"));
+    lua_runtime_ready = false;
     return;
   }
   String script1Error = lua_compile_chunk_locked(s1, "@script.lua", script1_ref);
@@ -1779,6 +1930,10 @@ void load_lua_script() {
   lua_state_unlock(lua_locked);
   if (script1Error.length() > 0) WriteConsoleLog("ERR in script.lua: " + script1Error);
   if (script2Error.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + script2Error);
+  const bool ready = lua_boot_init_ready &&
+                     lua_coroutine_watchdog_ready &&
+                     script1Error.length() == 0 && script2Error.length() == 0;
+  lua_runtime_ready = ready;
 }
 
 //Запускаем таск для запуска скрипта
@@ -1877,6 +2032,8 @@ void do_lua_script(void *parameter) {
         }
       }
 
+      bool periodicFailed = false;
+      bool periodicTimedOut = false;
       if (local_s1.length() > 0 && lua_chunk_ref_valid(local_script1_ref)) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
@@ -1884,8 +2041,12 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua_exec_chunk_locked(local_script1_ref);
+        periodicTimedOut = periodicTimedOut || luaLastExecutionTimedOut;
         sr.trim();
-        if (sr.length() > 0) WriteConsoleLog("ERR in script.lua: " + sr);
+        if (sr.length() > 0) {
+          periodicFailed = true;
+          WriteConsoleLog("ERR in script.lua: " + sr);
+        }
       }
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
@@ -1896,12 +2057,17 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua_exec_chunk_locked(local_script2_ref, true);
+        periodicTimedOut = periodicTimedOut || luaLastExecutionTimedOut;
         sr.trim();
-        if (sr.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
+        if (sr.length() > 0) {
+          periodicFailed = true;
+          WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
+        }
       } else {
         lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
       }
       finish_lua_periodic_run();
+      finish_beer_lua_periodic_result(periodicFailed, periodicTimedOut);
       lua_state_unlock(lua_locked);
     } else {
       vTaskDelay(50 / portTICK_PERIOD_MS);

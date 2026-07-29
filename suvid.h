@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <math.h>
 #include "Samovar.h"
 #include "samovar_api.h"
 #include "runtime_helpers.h"
@@ -11,18 +12,29 @@ inline float suvid_target_temp() {
   return SamSetup.SuvidTemp > 0 ? SamSetup.SuvidTemp : 60.0f;
 }
 
-// Таймер выдержки Сувида: отсчёт от первого достижения уставки, до истечения
-// program[0].Time минут. fired — защёлка, не даёт запустить отсчёт заново
-// после штатного завершения в той же сессии (сброс — только на !PowerOn).
-struct SuvidHoldState { bool active; bool fired; uint32_t deadlineMs; };
+// Выдержка Сувида учитывает только подтверждённое время внутри полосы
+// setpoint±HEAT_DELTA. active остаётся взведённым между выходами из полосы,
+// чтобы накопленное время не терялось; inBand отделяет текущий зачёт интервала.
+struct SuvidHoldState {
+  bool active;
+  bool fired;
+  bool inBand;
+  bool completionWarningSent;
+  uint32_t accumulatedMs;
+  uint32_t lastTickMs;
+};
 static SuvidHoldState suvidHold;
+
+struct SuvidDeviationState { bool active; bool warningSent; uint32_t sinceMs; };
+static SuvidDeviationState suvidDeviation;
 
 // Остаток выдержки в секундах; -1, если отсчёт не идёт (см. tick_status_fsm в logic.h).
 inline int32_t suvid_hold_remaining_sec() {
-  if (!suvidHold.active) return -1;
-  // [C-13] overflow-safe: millis() читаем один раз, как и в остальных остатках (logic.h).
-  int32_t remMs = (int32_t)(suvidHold.deadlineMs - millis());
-  return remMs > 0 ? remMs / 1000 : 0;
+  if (!suvidHold.active || SamSetup.SuvidHoldMinutes == 0) return -1;
+  const uint32_t totalMs = (uint32_t)SamSetup.SuvidHoldMinutes * 60000UL;
+  return suvidHold.accumulatedMs >= totalMs
+      ? 0
+      : (int32_t)((totalMs - suvidHold.accumulatedMs) / 1000UL);
 }
 
 /**
@@ -58,34 +70,58 @@ inline void check_alarm_suvid() {
   if (!PowerOn) {
     suvidHeaterOn = false;  // холодный старт следующей сессии: не наследовать состояние реле
     heater_state = false;
-    suvidHold = {false, false, 0};  // сброс таймера выдержки для следующей сессии
+    suvidHold = {false, false, false, false, 0, 0};
+    suvidDeviation = {false, false, 0};
     return;
   }
   const float setpoint = suvid_target_temp();
   if (TankSensor.avgTemp <= setpoint - HEAT_DELTA) suvidHeaterOn = true;
-  else if (TankSensor.avgTemp >= setpoint) suvidHeaterOn = false;
+  else if (TankSensor.avgTemp >= setpoint + HEAT_DELTA) suvidHeaterOn = false;
   heater_state = suvidHeaterOn;  // для строки статуса и mode_actuators_idle()
   setHeaterPosition(suvidHeaterOn);
 
-  // Таймер выдержки: program[0].Time (мин) — сколько держать температуру после
-  // первого достижения уставки. WType != PROGRAM_TYPE_NONE отличает заданную
-  // строку Сувида от «чужого» значения, оставшегося в общем буфере program[0]
-  // от другого режима (если пользователь сменил режим без пересылки программы).
-  const float holdMinutes = program[0].Time;
-  if (program[0].WType != PROGRAM_TYPE_NONE && holdMinutes > 0 && !suvidHold.fired) {
-    if (!suvidHold.active && TankSensor.avgTemp >= setpoint) {
-      suvidHold.active = true;
-      suvidHold.deadlineMs = safety_deadline_after(millis(), (uint32_t)(holdMinutes * 60000.0f));
+  const uint32_t now = millis();
+  const float deviation = fabsf(TankSensor.avgTemp - setpoint);
+  if (deviation > 2.0f) {
+    if (!suvidDeviation.active) {
+      suvidDeviation.active = true;
+      suvidDeviation.sinceMs = now;
     }
-    if (suvidHold.active && safety_deadline_expired(millis(), suvidHold.deadlineMs)) {
-      set_buzzer(true);
-      SendMsg("Сувид: выдержка завершена, нагрев выключен.", NOTIFY_MSG);
-      // Останов только через очередь команд (штатно выключает питание режима);
-      // при занятой очереди — fallback на аварийный останов, как в nbk.h.
-      if (!queue_samovar_command(SAMOVAR_POWER)) {
-        request_emergency_stop("Аварийное отключение! Не удалось штатно завершить выдержку Сувида");
+    if (!suvidDeviation.warningSent &&
+        (uint32_t)(now - suvidDeviation.sinceMs) >= 60000UL) {
+      SendMsg("Сувид: температура отклоняется от уставки более чем на 2° уже 60 сек.", WARNING_MSG);
+      suvidDeviation.warningSent = true;
+    }
+  } else {
+    suvidDeviation = {false, false, 0};
+  }
+
+  const uint32_t holdMs = (uint32_t)SamSetup.SuvidHoldMinutes * 60000UL;
+  const bool inHoldBand = deviation <= HEAT_DELTA;
+  if (holdMs > 0 && !suvidHold.fired) {
+    if (!suvidHold.active && inHoldBand) {
+      suvidHold.active = true;
+      suvidHold.inBand = true;
+      suvidHold.lastTickMs = now;
+    } else if (suvidHold.active) {
+      if (inHoldBand) {
+        if (suvidHold.inBand) suvidHold.accumulatedMs += now - suvidHold.lastTickMs;
+        suvidHold.inBand = true;
+        suvidHold.lastTickMs = now;
+      } else {
+        suvidHold.inBand = false;
       }
-      suvidHold.fired = true;
+    }
+
+    if (suvidHold.active && suvidHold.accumulatedMs >= holdMs) {
+      set_buzzer(true);
+      if (queue_samovar_command(SAMOVAR_POWER)) {
+        SendMsg("Сувид: выдержка завершена, нагрев выключен.", NOTIFY_MSG);
+        suvidHold.fired = true;
+      } else if (!suvidHold.completionWarningSent) {
+        SendMsg("Сувид: выдержка завершена, но штатное выключение не поставлено: очередь команд занята.", WARNING_MSG);
+        suvidHold.completionWarningSent = true;
+      }
     }
   }
 }

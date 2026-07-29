@@ -55,6 +55,17 @@ enum SafetyRegulatorRequestStatus : uint8_t {
   SAFETY_REGULATOR_REQUEST_SUPERSEDED,
 };
 
+// Единый результат исполнительной команды. ACCEPTED означает, что команда
+// прошла локальную валидацию, PENDING — что драйвер ещё применяет её, APPLIED
+// — что исполнитель подтвердил применение, FAILED — что подтверждения нет.
+// Это не HTTP OperationState: последний описывает жизненный цикл web-запроса.
+enum ActuatorCommandResult : uint8_t {
+  ACTUATOR_COMMAND_ACCEPTED = 0,
+  ACTUATOR_COMMAND_PENDING,
+  ACTUATOR_COMMAND_APPLIED,
+  ACTUATOR_COMMAND_FAILED,
+};
+
 enum SafetyRegulatorWorkerClaim : uint8_t {
   SAFETY_REGULATOR_WORKER_IDLE = 0,
   SAFETY_REGULATOR_WORKER_CLAIMED,
