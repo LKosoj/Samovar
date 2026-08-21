@@ -1398,6 +1398,9 @@ void triggerSysTicker(void *parameter) {
       }
 
       process_pending_data_log_ops();
+      // Снимок состояния пишется вне гейта отбора: он нужен и когда сессия ещё не
+      // запущена, а программа уже набрана - её терять при перезагрузке нельзя.
+      process_state_snapshot();
 
       if (startval != SAMOVAR_STARTVAL_IDLE) {
         tcntST++;
@@ -1837,6 +1840,54 @@ static void session_checkpoint_tick() {
   prevPowerOn = PowerOn;
 }
 
+// Снимок /state.csv: после незапланированной перезагрузки возвращаем в рабочий буфер
+// программу, которая шла до сбоя, но нагрев НЕ возобновляем - решает владелец.
+// Текст предупреждения копится здесь и уходит в конце setup(), когда уже подняты
+// семафоры SendMsg/WriteConsoleLog.
+static String pendingStateSnapshotNotice;
+
+static void restore_state_snapshot() {
+  StateSnapshot snapshot;
+  if (!read_state_snapshot(snapshot)) return;
+  // Снимок чужого режима не трогаем: у другого режима другой формат программы,
+  // а подставлять её в текущий буфер нельзя.
+  if (snapshot.mode != (uint8_t)Samovar_Mode) return;
+
+  bool restored = false;
+  if (snapshot.programText.length() > 0) {
+    ProgramDraft draft{};
+    const ProgramParseResult result =
+        prepare_program_for_mode(Samovar_Mode, snapshot.programText, draft);
+    if (result.ok()) {
+      program_commit(draft);
+      restored = true;
+      // Программа в буфере и в файле совпадают - в простое снимок переписывать нечем.
+      state_snapshot_mark_saved();
+    } else {
+      Serial.print(F("state snapshot program ignored: "));
+      Serial.println(format_program_parse_error(result));
+    }
+  }
+
+  // Предупреждаем только если в снимке нагрев был включён. Иначе выключились штатно,
+  // программа просто не потерялась - тревожить владельца незачем.
+  if (!snapshot.powerOn) return;
+  String notice = F("Сессия прервана: строка ");
+  notice += String(snapshot.programRow);
+  notice += "/";
+  notice += String(snapshot.programLen);
+  notice += restored ? F(", программа восстановлена") : F(", программа не восстановлена");
+  notice += F(". Нагрев не возобновлён.");
+  pendingStateSnapshotNotice = notice;
+}
+
+static void state_snapshot_report_pending() {
+  if (pendingStateSnapshotNotice.length() == 0) return;
+  WriteConsoleLog(pendingStateSnapshotNotice);
+  SendMsg(pendingStateSnapshotNotice, WARNING_MSG);
+  pendingStateSnapshotNotice = "";
+}
+
 void setup() {
   vTaskDelay(500 / portTICK_PERIOD_MS);
   Serial.begin(115200);
@@ -1917,13 +1968,24 @@ void setup() {
   }
 
   esp_log_level_set("i2c.master", ESP_LOG_NONE);
-  pinMode(0, INPUT);
-  vTaskDelay(600 / portTICK_PERIOD_MS);
+  // Замыкание GPIO0 на землю стирает сохранённую сеть. Раньше пин настраивался без
+  // подтяжки (INPUT), поэтому «висящая» линия ловила наводки, а на части плат GPIO0 занят
+  // другой периферией - и настройки WiFi стирались сами при каждом старте.
+  // Теперь пин подтянут к питанию и низкий уровень надо удерживать две секунды.
+  pinMode(0, INPUT_PULLUP);
+  vTaskDelay(50 / portTICK_PERIOD_MS);  // даём подтяжке установить уровень на линии
   if (digitalRead(0) == LOW) {
-    WiFi.mode(WIFI_STA);  // cannot erase if not in STA mode !
-    WiFi.persistent(true);
-    WiFi.disconnect(true, true);
-    WiFi.persistent(false);
+    uint32_t wifiResetHoldStart = millis();
+    while (digitalRead(0) == LOW && millis() - wifiResetHoldStart < 2000) {
+      vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+    if (digitalRead(0) == LOW) {
+      Serial.println(F("GPIO0 held low: erasing WiFi settings"));
+      WiFi.mode(WIFI_STA);  // cannot erase if not in STA mode !
+      WiFi.persistent(true);
+      WiFi.disconnect(true, true);
+      WiFi.persistent(false);
+    }
   }
 #ifdef __SAMOVAR_NOT_USE_WDT
   esp_task_wdt_init(1, false);
@@ -2072,6 +2134,10 @@ void setup() {
     request_emergency_stop(error);
   }
 
+  // Поверх дефолта кладём программу из снимка предыдущей работы, если он от этого же
+  // режима. ФС уже смонтирована (FS_init выше), семафор журнала создан.
+  restore_state_snapshot();
+
   //Инициализируем ноги для реле
   pinMode(RELE_CHANNEL1, OUTPUT);
   digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
@@ -2129,8 +2195,22 @@ void setup() {
     AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
     AsyncWiFiManager wifiManager(&server, &dns);
 
+    // Сброс настроек WiFi кнопкой энкодера. Короткое нажатие (или наводка на входе SW -
+    // на части плат он без внутренней подтяжки) стирало сеть при старте, поэтому кнопку
+    // теперь нужно удержать две секунды - так же, как кнопку запуска в режиме AP выше.
     encoder.tick();  // отработка нажатия
-    if (encoder.isPress()) wifiManager.resetSettings();
+    if (encoder.isPress()) {
+      uint32_t encoderHoldStart = millis();
+      while (encoder.isHold() && millis() - encoderHoldStart < 2000) {
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+        encoder.tick();  // опрос ручной: без tick() состояние кнопки не обновится
+      }
+      if (encoder.isHold()) {
+        Serial.println(F("Encoder button held: resetting WiFi settings"));
+        wifiManager.resetSettings();
+      }
+    }
+    encoder.resetStates();
 
     wifiManager.setConfigPortalTimeout(360);
     wifiManager.setSaveConfigCallback(saveConfigCallback);
@@ -2436,6 +2516,7 @@ void setup() {
   }
 
   session_checkpoint_report_pending();
+  state_snapshot_report_pending();
 }
 
 void loop() {

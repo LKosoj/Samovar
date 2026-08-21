@@ -435,8 +435,9 @@ inline float get_detector_correction_step() {
  * Основная логика работы детектора
  */
 void process_impurity_detector() {
-  // [L-20/M-30] Если авто-коррекция выключена — сбрасываем всё и выходим
-  if (!SamSetup.useautospeed) {
+  // [L-20/M-30] Если авто-коррекция или сам детектор выключены — сбрасываем всё и выходим.
+  // useDetector действует на все типы строк (H/B/C/T), а не только на головы.
+  if (!SamSetup.useautospeed || !SamSetup.useDetector) {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
     return;
@@ -507,12 +508,6 @@ void process_impurity_detector() {
 
   unsigned long now = millis();
   if (detector_manual_override_until > 0 && (int32_t)(now - detector_manual_override_until) < 0) {
-    impurityDetector.detectorStatus = 0;
-    return;
-  }
-
-  // Детектор на головах отключен по умолчанию
-  if (currentType == 'H' && !SamSetup.useDetectorOnHeads) {
     impurityDetector.detectorStatus = 0;
     return;
   }
@@ -706,20 +701,26 @@ void process_impurity_detector() {
 
       if (now - impurityDetector.lastCorrectionTime > correctionInterval) {
         float correctionStep = get_detector_correction_step();
+        const float previousFactor = impurityDetector.correctionFactor;
         impurityDetector.correctionFactor *= (1.0f - correctionStep);
         if (impurityDetector.correctionFactor < 0.7f) impurityDetector.correctionFactor = 0.7f;
         impurityDetector.lastCorrectionTime = now;
+        // Коэффициент упёрся в нижний предел 0.7 - скорость больше не меняется. Без этой
+        // проверки сообщение уходило каждые 5-25 сек до конца строки (спам на хвостах).
+        const bool factorChanged = impurityDetector.correctionFactor != previousFactor;
 
         // Применяем новую скорость
         float baseSpeedRate = CurrentBaseSpeedRate;
-        if (baseSpeedRate > 0) {
+        if (factorChanged && baseSpeedRate > 0) {
           float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
           set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true, false);
         }
 
-        SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
-                ", порог: " + String(warningThreshold, 3) + ", variance: " +
-                String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);
+        if (factorChanged) {
+          SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
+                  ", порог: " + String(warningThreshold, 3) + ", variance: " +
+                  String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);
+        }
       }
     }
   } else if (impurityDetector.currentTrend < recoveryThreshold) {

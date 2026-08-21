@@ -89,6 +89,10 @@ String append_data();
 bool request_data_log_close();
 bool data_log_close_pending();
 void process_pending_data_log_ops();
+bool write_state_snapshot();
+void process_state_snapshot();
+void state_snapshot_mark_saved();
+bool read_state_snapshot(StateSnapshot& snapshot);
 String formatBytes(size_t bytes);
 bool exists(String path);
 

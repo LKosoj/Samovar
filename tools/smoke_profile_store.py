@@ -878,7 +878,7 @@ nvs_harness += (
           candidate.rele2 = true;
           candidate.SteamAdress[0] = 0x28;
           candidate.useautospeed = true;
-          candidate.useDetectorOnHeads = true;
+          candidate.useDetector = true;
           candidate.autospeed = 75;
           memcpy(candidate.blynkauth, "auth", 5);
           memcpy(candidate.videourl, "https://example.invalid", 24);

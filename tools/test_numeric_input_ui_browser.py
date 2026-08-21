@@ -936,7 +936,7 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
     }
     empty_markers = {
         "RECT", "DIST", "BEER", "BK", "NBK", "SUVID", "LUA_MODE",
-        "Checked", "FLChecked", "UASChecked", "UASHeadsChecked", "CPBuzz",
+        "Checked", "FLChecked", "UASChecked", "UASDetectorChecked", "CPBuzz",
         "CUBuzz", "CUBBuzz", "UseWS", "UseST", "ChckPwr", "IgnFL",
     }
     address_tokens = {"SteamAddr", "PipeAddr", "WaterAddr", "TankAddr", "ACPAddr"}

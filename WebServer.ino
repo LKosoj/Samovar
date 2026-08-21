@@ -1180,7 +1180,13 @@ void WebServerInit(void) {
 #endif
 
 #ifndef NOT_USE_INTERFACE_UPDATE
-  get_web_interface();
+  // Без подключения к сети (режим AP или роутер не отвечает) качать интерфейс некуда:
+  // запрос всё равно упрётся в таймаут DNS и задержит загрузку на восемь секунд.
+  if (WiFi.status() == WL_CONNECTED) {
+    get_web_interface();
+  } else {
+    Serial.println(F("WEB interface update skipped: no WiFi connection"));
+  }
 #endif
 }
 
@@ -1445,8 +1451,8 @@ String setupKeyProcessor(const String &var) {
     if (SamSetup.useautospeed) return "checked='true'";
     else
       return "";
-  } else if (var == "UASHeadsChecked") {
-    if (SamSetup.useDetectorOnHeads) return "checked='true'";
+  } else if (var == "UASDetectorChecked") {
+    if (SamSetup.useDetector) return "checked='true'";
     else
       return "";
   } else if (var == "CPBuzz") {
@@ -2078,7 +2084,7 @@ static bool save_param_name_allowed(const String& name) {
       name == "MaxPressureValue" || name == "StepperStepMl" ||
       name == "StepperStepMlI2C" || name == "stepperstepml" ||
       name == "useflevel" || name == "usepressure" ||
-      name == "useautospeed" || name == "useDetectorOnHeads" ||
+      name == "useautospeed" || name == "useDetector" ||
       name == "ChangeProgramBuzzer" || name == "UseBuzzer" ||
       name == "UseBBuzzer" || name == "UseWS" || name == "UseST" ||
       name == "CheckPower" || name == "autospeed" || name == "DistTemp" ||
@@ -2234,7 +2240,7 @@ void handleSave(AsyncWebServerRequest *request) {
   update_checkbox_arg(request, "useflevel", staged.UseHLS, fullSetupForm);
   update_checkbox_arg(request, "usepressure", staged.UsePreccureCorrect, fullSetupForm);
   update_checkbox_arg(request, "useautospeed", staged.useautospeed, fullSetupForm);
-  update_checkbox_arg(request, "useDetectorOnHeads", staged.useDetectorOnHeads, fullSetupForm);
+  update_checkbox_arg(request, "useDetector", staged.useDetector, fullSetupForm);
   update_checkbox_arg(request, "ChangeProgramBuzzer", staged.ChangeProgramBuzzer, fullSetupForm);
   update_checkbox_arg(request, "UseBuzzer", staged.UseBuzzer, fullSetupForm);
   update_checkbox_arg(request, "UseBBuzzer", staged.UseBBuzzer, fullSetupForm);
@@ -3113,6 +3119,32 @@ String get_web_file(String fn, get_web_type type) {
   return "";
 }
 
+// Один объект запроса на всю прошивку, живёт всё время работы.
+// Почему не локальный на стеке: lwIP не умеет отменять начатый DNS-резолв, и колбэк с
+// именем хоста приходит уже после нашего таймаута. Разрушенный объект в этот момент —
+// обращение в освобождённую память (панику InstrFetchProhibited сразу за строкой
+// "Timeout: readyState never reached 1" ловили пользователи при пропаже интернета).
+// У долгоживущего объекта опоздавший колбэк попадает в живую память.
+static asyncHTTPrequest sharedHttpRequest;
+
+// Мьютекс сериализует обращения: объект один, а зовут его из задачи уведомлений и из
+// загрузки веб-интерфейса. Ждать освобождения долго незачем — запрос всё равно
+// блокирующий, поэтому занятость возвращаем как обычную ошибку запроса.
+static const TickType_t HTTP_REQUEST_LOCK_WAIT = pdMS_TO_TICKS(2000);
+static StaticSemaphore_t httpRequestLockBuffer;
+static SemaphoreHandle_t httpRequestLock = xSemaphoreCreateMutexStatic(&httpRequestLockBuffer);
+
+struct HttpRequestLockGuard {
+  bool acquired;
+
+  HttpRequestLockGuard()
+    : acquired(httpRequestLock != nullptr && xSemaphoreTake(httpRequestLock, HTTP_REQUEST_LOCK_WAIT) == pdTRUE) {}
+
+  ~HttpRequestLockGuard() {
+    if (acquired) xSemaphoreGive(httpRequestLock);
+  }
+};
+
 static void abort_http_request(void* requestPtr) {
   asyncHTTPrequest* request = static_cast<asyncHTTPrequest*>(requestPtr);
   request->abort();
@@ -3124,12 +3156,17 @@ static void abort_http_request(void* requestPtr) {
 }
 
 String http_sync_request_get(String url) {
-  asyncHTTPrequest request;
+  HttpRequestLockGuard lockGuard;
+  if (!lockGuard.acquired) {
+    Serial.println("HTTP GET skipped: request object is busy");
+    return "<ERR>";
+  }
+  asyncHTTPrequest& request = sharedHttpRequest;
   request.setDebug(false);
   const uint32_t timeoutMs = 8000;
   request.setTimeout(8); // Таймаут восемь секунд (внутренний по отсутствию активности)
   if (!request.open("GET", url.c_str())) {
-    Serial.println("HTTP GET open() failed");
+    Serial.println("HTTP GET open() failed, readyState = " + String(request.readyState()));
     return "<ERR>";
   }
   
@@ -3184,13 +3221,18 @@ String http_sync_request_get(String url) {
 }
 
 String http_sync_request_post(String url, String body, String ContentType) {
-  asyncHTTPrequest request;
+  HttpRequestLockGuard lockGuard;
+  if (!lockGuard.acquired) {
+    Serial.println("HTTP POST skipped: request object is busy");
+    return "<ERR>";
+  }
+  asyncHTTPrequest& request = sharedHttpRequest;
   request.setDebug(false);
   const uint32_t timeoutMs = 8000;
   request.setTimeout(8);  //Таймаут восемь секунд (внутренний по отсутствию активности)
 
   if (!request.open("POST", url.c_str())) {  //URL
-    Serial.println("HTTP POST open() failed");
+    Serial.println("HTTP POST open() failed, readyState = " + String(request.readyState()));
     return "<ERR>";
   }
   unsigned long startTime = millis();

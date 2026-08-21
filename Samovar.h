@@ -423,7 +423,7 @@ struct SetupEEPROM {
   uint8_t WaterAdress[8];
   uint8_t TankAdress[8];
   bool useautospeed;                                           //Настройка для использования автокорректировки скорости
-  bool useDetectorOnHeads;                                     //Разрешить детектор на головах (по умолчанию выкл)
+  bool useDetector;                                            //Разрешить детектор примесей на всех строках программы (по умолчанию выкл)
   uint8_t autospeed;                                           //Процент изменения скорости
   char blynkauth[33];
   char videourl[120];                                          //URL для потокового видео с камеры
@@ -515,6 +515,16 @@ enum ProgramWaitType : uint8_t {
   PROGRAM_WAIT_STEAM,
   PROGRAM_WAIT_PIPE,
   PROGRAM_WAIT_DETECTOR
+};
+
+// Снимок последнего состояния из /state.csv (пишется FS.ino, читается при загрузке).
+// Первая строка файла - поля key=value через ';', дальше - текст программы режима.
+struct StateSnapshot {
+  uint8_t mode;         // режим на момент снимка (SAMOVAR_MODE числом)
+  uint8_t programRow;   // номер текущей строки программы, 1-based (как в файле)
+  uint8_t programLen;   // всего строк в программе
+  bool powerOn;         // был ли включён нагрев - только по нему решаем, предупреждать ли
+  String programText;   // текст программы в формате режима, пригодный для разбора
 };
 
 SetupEEPROM SamSetup;

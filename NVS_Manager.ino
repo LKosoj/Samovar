@@ -73,7 +73,7 @@ static bool encode_setup_payload(
       writer.put_bytes(candidate.WaterAdress, sizeof(candidate.WaterAdress)) &&
       writer.put_bytes(candidate.TankAdress, sizeof(candidate.TankAdress)) &&
       writer.put_bool(candidate.useautospeed) &&
-      writer.put_bool(candidate.useDetectorOnHeads) &&
+      writer.put_bool(candidate.useDetector) &&
       writer.put_u8(candidate.autospeed) &&
       writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.blynkauth), sizeof(candidate.blynkauth)) &&
       writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.videourl), sizeof(candidate.videourl)) &&
@@ -156,7 +156,7 @@ static bool decode_setup_payload_fields(
       reader.get_bytes(decoded.WaterAdress, sizeof(decoded.WaterAdress)) &&
       reader.get_bytes(decoded.TankAdress, sizeof(decoded.TankAdress)) &&
       reader.get_bool(decoded.useautospeed) &&
-      reader.get_bool(decoded.useDetectorOnHeads) &&
+      reader.get_bool(decoded.useDetector) &&
       reader.get_u8(decoded.autospeed) &&
       reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.blynkauth), sizeof(decoded.blynkauth)) &&
       reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.videourl), sizeof(decoded.videourl)) &&
@@ -467,7 +467,7 @@ void set_default_setup_profile(SetupEEPROM& candidate) {
   candidate.StepperStepMl = STEPPER_STEP_ML;
   candidate.StepperStepMlI2C = I2C_STEPPER_STEP_ML_DEFAULT;
   candidate.useautospeed = false;
-  candidate.useDetectorOnHeads = false;
+  candidate.useDetector = false;
   candidate.autospeed = 0;
   candidate.UseWS = true;
   candidate.Kp = 150.0;
@@ -680,7 +680,7 @@ static ProfileLoadResult load_legacy_profile_namespace(
       nvs_read_u16(handle, "StepMl", loaded.StepperStepMl) != PROFILE_VALUE_ERROR &&
       nvs_read_u16(handle, "StepMlI2C", loaded.StepperStepMlI2C) != PROFILE_VALUE_ERROR &&
       nvs_read_bool(handle, "AutoSpeed", loaded.useautospeed) != PROFILE_VALUE_ERROR &&
-      nvs_read_bool(handle, "DetOnHeads", loaded.useDetectorOnHeads) != PROFILE_VALUE_ERROR &&
+      nvs_read_bool(handle, "DetOnHeads", loaded.useDetector) != PROFILE_VALUE_ERROR &&  // legacy-имя ключа сохранено: формат NVS не меняем
       nvs_read_u8(handle, "SpeedPerc", loaded.autospeed) != PROFILE_VALUE_ERROR &&
       nvs_read_bool(handle, "UseWS", loaded.UseWS) != PROFILE_VALUE_ERROR &&
       nvs_read_float(handle, "Kp", loaded.Kp) != PROFILE_VALUE_ERROR &&

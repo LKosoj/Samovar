@@ -3,11 +3,16 @@
 
 #include "Samovar.h"
 #include "samovar_api.h"
+#include "program_io.h"
 #include "runtime_helpers.h"
 #include "SPIFFSEditor.h"
 
 static File fileToAppend;
 static volatile bool data_log_ready = false;
+
+// Секунд между снимками состояния (/state.csv). Счётчик STcnt тикает раз в секунду
+// из SysTicker; подробности - у process_state_snapshot() ниже.
+static const uint8_t STATE_SNAPSHOT_PERIOD_S = 30;
 
 bool flush_data_log() {
   bool locked = log_file_lock(pdMS_TO_TICKS(500));
@@ -252,24 +257,17 @@ bool exists(String path) {
 bool create_data() {
   data_log_ready = false;
 
-  //Если режим ректификация, запишем в файл текущую программу отбора
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) {
+  //Запишем в файл программу текущего режима. Программа есть у всех режимов
+  //(serialize_program_for_mode покрывает все четыре формата), поэтому перечислять
+  //режимы вручную больше не нужно.
+  String programText = serialize_program_for_mode(Samovar_Mode);
+  if (programText.length() > 0) {
     File filePrg = SPIFFS.open("/prg.csv", FILE_WRITE);
     if (!filePrg) {
       Serial.println(F("data log create failed: open prg.csv"));
       return false;
     }
-    String programText;
-    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-      programText = get_program(PROGRAM_END);
-    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      programText = get_beer_program();
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      programText = get_dist_program();
-    } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-      programText = get_nbk_program();
-    }
-    size_t programWritten = filePrg.println(programText);
+    size_t programWritten = filePrg.print(programText);
     Serial.println(programText);
     filePrg.close();
     if (programWritten == 0) {
@@ -334,7 +332,9 @@ bool create_data() {
   TankSensor.LogPrevTemp = 0;
   bme_prev_pressure = 0;
   prev_ProgramNum = PROGRAM_END;
-  STcnt = 0;
+  // Не обнуляем, а взводим: снимок новой сессии нужен сразу, иначе перезагрузка в
+  // первые полминуты оставит на диске состояние с выключенным нагревом.
+  STcnt = STATE_SNAPSHOT_PERIOD_S;
 
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
   if (!fileToAppend) {
@@ -362,42 +362,170 @@ bool create_data() {
   return true;
 }
 
+// ---- Снимок последнего состояния (/state.csv) ----
+// Зачем: после незапланированной перезагрузки не терять набранную программу и
+// показать владельцу, на чём остановились. Нагрев по снимку НЕ возобновляется,
+// восстановление и отчёт живут в Samovar.ino (restore_state_snapshot).
+// Формат файла: первая строка - поля key=value через ';', дальше - текст
+// программы в формате режима, пригодный для обратного разбора.
+static const char* const STATE_SNAPSHOT_FILE = "/state.csv";
+// Больше этого не читаем: программа ограничена MAX_PROGRAM_INPUT_LEN, остальное - мусор.
+static const size_t STATE_SNAPSHOT_MAX_BYTES = 2048;
+// Подпись последней записанной программы. В простое снимок обновляется только при её
+// изменении: иначе запись каждые 30 секунд жгла бы флеш круглые сутки впустую.
+static uint32_t state_snapshot_program_hash = 0;
+
+static uint32_t state_snapshot_hash_bytes(uint32_t hash, const void* data, size_t len) {
+  const uint8_t* bytes = (const uint8_t*)data;
+  for (size_t i = 0; i < len; i++) {
+    hash ^= bytes[i];
+    hash *= 16777619UL;  // FNV-1a
+  }
+  return hash;
+}
+
+static uint32_t state_snapshot_program_signature() {
+  uint32_t hash = 2166136261UL;
+  const uint8_t mode = (uint8_t)Samovar_Mode;
+  hash = state_snapshot_hash_bytes(hash, &mode, sizeof(mode));
+  const uint8_t len = (uint8_t)ProgramLen;
+  hash = state_snapshot_hash_bytes(hash, &len, sizeof(len));
+  // program[] заполняется целыми структурами из обнулённого черновика (program_commit),
+  // поэтому байты выравнивания стабильны и подписи не мешают.
+  for (uint8_t i = 0; i < PROGRAM_END; i++) {
+    hash = state_snapshot_hash_bytes(hash, &program[i], sizeof(WProgram));
+  }
+  return hash;
+}
+
+static String state_snapshot_header() {
+  const uint8_t row = (uint8_t)ProgramNum < PROGRAM_END ? (uint8_t)ProgramNum : 0;
+  String out = "P=" + String(row + 1);
+  out += ";M=" + String((int)Samovar_Mode);
+  out += ";S=" + String((int)SamovarStatusInt);
+  out += ";W=" + String((int)startval);
+  out += ";L=" + String((int)ProgramLen);
+  out += ";H=" + String(PowerOn ? 1 : 0);
+  out += ";V=" + String(get_liquid_volume());
+  out += ";TT=" + format_float(program[row].Temp, 2);
+  out += ";TC=" + format_float(TankSensor.avgTemp, 2);
+  out += ";TS=" + format_float(SteamSensor.avgTemp, 2);
+  // Время - последним полем: строку собирают вне этого файла, её содержимое не под
+  // нашим контролем, и разделитель внутри неё не должен ломать разбор остальных полей.
+  out += ";T=" + WthdrwTimeS;
+  return out;
+}
+
+bool write_state_snapshot() {
+  const String header = state_snapshot_header();
+  const String programText = serialize_program_for_mode(Samovar_Mode);
+  bool locked = log_file_lock(pdMS_TO_TICKS(50));
+  if (!locked) {
+    Serial.println(F("state log write skipped: file busy"));
+    return false;
+  }
+  File fileState = SPIFFS.open(STATE_SNAPSHOT_FILE, FILE_WRITE);
+  if (!fileState) {
+    log_file_unlock(true);
+    Serial.println(F("state log write failed: open state.csv"));
+    return false;
+  }
+  bool written = fileState.println(header) > 0;
+  // Каждая строка программы уже заканчивается переводом строки (program_append_*_row).
+  if (written && programText.length() > 0) {
+    written = fileState.print(programText) > 0;
+  }
+  fileState.close();
+  log_file_unlock(true);
+  if (!written) {
+    Serial.println(F("state log write failed: write state.csv"));
+    return false;
+  }
+  return true;
+}
+
+void process_state_snapshot() {
+  STcnt++;
+  if (STcnt < STATE_SNAPSHOT_PERIOD_S) return;
+  STcnt = 0;
+  const uint32_t signature = state_snapshot_program_signature();
+  // PowerOn ловит режимы, которые греют без отбора (Пиво/Сувид на выдержке).
+  const bool sessionActive = startval != SAMOVAR_STARTVAL_IDLE || PowerOn;
+  if (!sessionActive && signature == state_snapshot_program_hash) return;
+  if (write_state_snapshot()) state_snapshot_program_hash = signature;
+}
+
+// Запомнить программу как уже сохранённую: вызывается после восстановления снимка,
+// чтобы простой сразу после загрузки не переписывал файл тем же содержимым.
+void state_snapshot_mark_saved() {
+  state_snapshot_program_hash = state_snapshot_program_signature();
+}
+
+static bool state_snapshot_field(const String& header, const char* key, String& value) {
+  const String pattern = String(key) + "=";
+  int index = 0;
+  const int length = (int)header.length();
+  while (index <= length) {
+    const int end = header.indexOf(';', index);
+    const String token = end < 0 ? header.substring(index) : header.substring(index, end);
+    if (token.startsWith(pattern)) {
+      value = token.substring(pattern.length());
+      return true;
+    }
+    if (end < 0) break;
+    index = end + 1;
+  }
+  return false;
+}
+
+static bool state_snapshot_uint8(const String& header, const char* key, uint8_t& value) {
+  String raw;
+  if (!state_snapshot_field(header, key, raw)) return false;
+  return parse_bounded_uint8(raw.c_str(), 0, 255, value).ok();
+}
+
+bool read_state_snapshot(StateSnapshot& snapshot) {
+  snapshot = StateSnapshot{};
+  bool locked = log_file_lock(pdMS_TO_TICKS(500));
+  if (!locked) {
+    Serial.println(F("state snapshot read skipped: file busy"));
+    return false;
+  }
+  File fileState = SPIFFS.open(STATE_SNAPSHOT_FILE, FILE_READ);
+  if (!fileState) {
+    log_file_unlock(true);
+    return false;
+  }
+  if (fileState.size() > STATE_SNAPSHOT_MAX_BYTES) {
+    fileState.close();
+    log_file_unlock(true);
+    Serial.println(F("state snapshot ignored: file too large"));
+    return false;
+  }
+  const String header = fileState.readStringUntil('\n');
+  const String programText = fileState.readString();
+  fileState.close();
+  log_file_unlock(true);
+
+  // Снимок без режима - это файл прежнего формата (только "P=" и объём). Понять,
+  // от какой программы он остался, невозможно, поэтому восстанавливать нечего.
+  uint8_t mode = 0;
+  if (!state_snapshot_uint8(header, "M", mode)) return false;
+  snapshot.mode = mode;
+  state_snapshot_uint8(header, "P", snapshot.programRow);
+  state_snapshot_uint8(header, "L", snapshot.programLen);
+  uint8_t power = 0;
+  if (state_snapshot_uint8(header, "H", power)) snapshot.powerOn = power != 0;
+  snapshot.programText = programText;
+  return true;
+}
+
 String append_data() {
   if (!data_log_ready) return "";
 
-  //Если режим ректификация и идет отбор, запишем в файл текущий статус
-  STcnt++;
-  if ((Samovar_Mode == SAMOVAR_RECTIFICATION_MODE || Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_DISTILLATION_MODE || Samovar_Mode == SAMOVAR_NBK_MODE) && STcnt > 10) {
-    String sapd = "P=" + String(ProgramNum + 1);
-    if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-      sapd += ";V=" + String(get_liquid_volume());
-    } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      sapd += ";T=" + WthdrwTimeS;
-    }
-    bool stateLocked = log_file_lock(pdMS_TO_TICKS(50));
-    if (stateLocked) {
-      if (!data_log_ready) {
-        STcnt = 0;
-        log_file_unlock(true);
-        return "";
-      } else {
-        File fileState = SPIFFS.open("/state.csv", FILE_WRITE);
-        if (!fileState) {
-          Serial.println(F("state log write failed: open state.csv"));
-        } else {
-          size_t stateWritten = fileState.println(sapd);
-          if (stateWritten == 0) {
-            Serial.println(F("state log write failed: write state.csv"));
-          }
-          fileState.close();
-        }
-      }
-      log_file_unlock(true);
-    } else {
-      Serial.println(F("state log write skipped: file busy"));
-    }
-    STcnt = 0;
-  }
+  // Снимок состояния больше не привязан к журналу: он пишется отдельно из SysTicker
+  // (process_state_snapshot), потому что нужен и для режимов без журнала, и когда
+  // сессия не запущена, а программа уже набрана.
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
   float steamTemp = SteamSensor.avgTemp;

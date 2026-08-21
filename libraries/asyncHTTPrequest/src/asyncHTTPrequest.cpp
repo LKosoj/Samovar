@@ -186,7 +186,12 @@ bool	asyncHTTPrequest::send(xbuf* body, size_t len){
 void    asyncHTTPrequest::abort(){
     DEBUG_HTTP("abort()\r\n");
     _seize;
-    if(! _client) return;
+    // Выход без _release оставлял рекурсивный мьютекс захваченным: следующий вызов
+    // любого метода объекта вставал на нём навсегда, а деструктор удалял занятый мьютекс.
+    if(! _client){
+        _release;
+        return;
+    }
     _client->abort();
     _release;
 }
