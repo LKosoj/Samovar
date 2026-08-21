@@ -126,6 +126,7 @@ void calibrate_command(AsyncWebServerRequest *request);
 void get_data_log(AsyncWebServerRequest *request, String fn);
 String http_sync_request_get(String url);
 String http_sync_request_post(String url, String body, String ContentType);
+String http_sync_request_custom(const String& method, const String& url, const String& body, const String& contentType);
 String get_web_file(String fn, get_web_type type);
 void get_web_interface();
 

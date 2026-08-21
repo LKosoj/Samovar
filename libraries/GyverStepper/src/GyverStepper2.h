@@ -112,7 +112,7 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
     }
 
     // ручной тикер для вызова в прерывании таймера. Вернёт true, если мотор движется
-    bool tickManual() {
+    bool GS_ISR_INLINE tickManual() {
         if (!status) return 0;  // стоим-выходим
         step();                 // шаг
 
@@ -398,7 +398,7 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
     }
 
     // остановить мотор
-    void brake() {
+    void GS_ISR_INLINE brake() {
         status = 0;
         if (autoP) disable();
     }

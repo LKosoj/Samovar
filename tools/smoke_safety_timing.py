@@ -217,7 +217,9 @@ require_ordered_tokens(
     "low-stack fail closed",
     loop,
     [
-        "if (uxTaskGetStackHighWaterMark(NULL) < 325)",
+        # Порог в байтах: uxTaskGetStackHighWaterMark в ESP-IDF считает байты, и прежние
+        # 325 не оставляли места самому аварийному пути (отсечка + SendMsg ≈ 200 байт).
+        "if (uxTaskGetStackHighWaterMark(NULL) < 1024)",
         "request_emergency_stop(\"Аварийное отключение: критически малый остаток стека\")",
         "SendMsg(\"Стек переполнился. Перезагрузка\"",
         "vTaskDelay(5000)",

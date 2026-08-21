@@ -46,6 +46,30 @@
 #define DRIVER_STEP_TIME 4
 #endif
 
+// Режим работы из прерывания при отключённом кэше флеш-памяти (см. USE_STEPPER_IRAM_ISR
+// в Samovar.h). digitalWrite и delayMicroseconds лежат во флеше и в этом режиме недоступны,
+// поэтому пин переключается прямой записью в регистр GPIO, а пауза берётся из ПЗУ чипа.
+#if defined(ESP32) && defined(USE_STEPPER_IRAM_ISR)
+#include <esp_rom_sys.h>
+#include <soc/gpio_reg.h>
+// Принудительный инлайн вместо IRAM_ATTR: методы шаблонов класса GCC размещает в общей
+// секции и атрибут секции для них молча игнорирует, а вот инлайн в обработчик (он уже
+// в IRAM) работает всегда. Иначе вызов ушёл бы во флеш и обвалил прошивку при записи в файл.
+#define GS_ISR_INLINE __attribute__((always_inline))
+#define GS_DIGITAL_WRITE(pin, state) gsFastWrite((uint8_t)(pin), (state))
+#define GS_DELAY_US(us) esp_rom_delay_us(us)
+
+static inline void IRAM_ATTR gsFastWrite(uint8_t pin, bool state) {
+    if (pin >= 48) return;  // 255 - "пина нет", остальное вне диапазона ESP32/ESP32-S3
+    if (pin < 32) *(volatile uint32_t*)(state ? GPIO_OUT_W1TS_REG : GPIO_OUT_W1TC_REG) = 1UL << pin;
+    else *(volatile uint32_t*)(state ? GPIO_OUT1_W1TS_REG : GPIO_OUT1_W1TC_REG) = 1UL << (pin - 32);
+}
+#else
+#define GS_ISR_INLINE
+#define GS_DIGITAL_WRITE(pin, state) digitalWrite((pin), (state))
+#define GS_DELAY_US(us) delayMicroseconds(us)
+#endif
+
 #define _PINS_AMOUNT ((_TYPE == STEPPER_PINS) ? (_DRV == 0 ? 2 : 4) : (0))
 
 template <GS_driverType _DRV, GS_driverType _TYPE = STEPPER_PINS>
@@ -74,7 +98,7 @@ class Stepper {
     }
 
     // сделать шаг
-    void step() {
+    void GS_ISR_INLINE step() {
         pos += dir;
         if (_DRV == STEPPER2WIRE) {  // ~4 + DRIVER_STEP_TIME us
             stepDir();
@@ -98,7 +122,7 @@ class Stepper {
     }
 
     // отключить питание и EN
-    void disable() {
+    void GS_ISR_INLINE disable() {
         if (_TYPE == STEPPER_PINS) {
             if (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF) {
                 setPin(0, 0);
@@ -106,7 +130,7 @@ class Stepper {
                 setPin(2, 0);
                 setPin(3, 0);
             }
-            if (_enPin != 255) digitalWrite(_enPin, !_enDir);
+            if (_enPin != 255) GS_DIGITAL_WRITE(_enPin, !_enDir);
         } else {
             if (*_power) _power(0);
             if (*_step && (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF)) _step(0);
@@ -118,7 +142,7 @@ class Stepper {
         if (_TYPE == STEPPER_PINS) {
             // подадим прошлый сигнал на мотор, чтобы вал зафиксировался
             if (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF) step4();
-            if (_enPin != 255) digitalWrite(_enPin, _enDir);
+            if (_enPin != 255) GS_DIGITAL_WRITE(_enPin, _enDir);
         } else {
             if (*_power) _power(1);
             if (*_step && (_DRV == STEPPER4WIRE || _DRV == STEPPER4WIRE_HALF)) step4();
@@ -157,7 +181,7 @@ class Stepper {
     }
 
     // быстрая установка пина
-    void setPin(int num, bool state) {
+    void GS_ISR_INLINE setPin(int num, bool state) {
 #ifdef __AVR__
         if (state) *_port_reg[num] |= _bit_mask[num];
         else *_port_reg[num] &= ~_bit_mask[num];
@@ -165,7 +189,7 @@ class Stepper {
         if (state) GPOS = (1 << _pins[num]);
         else GPOC = (1 << _pins[num]);
 #else
-        digitalWrite(_pins[num], state);
+        GS_DIGITAL_WRITE(_pins[num], state);
 #endif
     }
 
@@ -301,14 +325,14 @@ class Stepper {
     }
 
     // шажочек степдир
-    void stepDir() {
+    void GS_ISR_INLINE stepDir() {
         if (_TYPE == STEPPER_PINS) {
             if (_pdir != dir) {
                 _pdir = dir;
                 setPin(1, (dir > 0) ^ _globDir);  // DIR
             }
             setPin(0, 1);  // step HIGH
-            if (DRIVER_STEP_TIME > 0) delayMicroseconds(DRIVER_STEP_TIME);
+            if (DRIVER_STEP_TIME > 0) GS_DELAY_US(DRIVER_STEP_TIME);
             setPin(0, 0);  // step LOW
         } else if (*_step) {
             _step((dir > 0) ^ _globDir);

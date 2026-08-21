@@ -2072,10 +2072,21 @@ void setup() {
   // 80000000 / 80 = 1000000 tics / seconde
 #if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))
   timer = timerBegin(1000000);
+  // В core 3.x таймер работает через драйвер gptimer, и он не принимает флаг прерывания
+  // от скетча: IRAM-безопасность там включается только при сборке IDF
+  // (CONFIG_GPTIMER_ISR_IRAM_SAFE). Поэтому здесь остаётся штатная привязка, а
+  // USE_STEPPER_IRAM_ISR даёт эффект только на core 2.x.
   timerAttachInterrupt(timer, &StepperTicker);
 #else  // ESP_ARDUINO_VERSION_MAJOR >= 3
   timer = timerBegin(2, 80, true);
+#ifdef USE_STEPPER_IRAM_ISR
+  // ESP_INTR_FLAG_IRAM оставляет прерывание живым, пока идёт запись во флеш и отключён кэш,
+  // иначе мотор замирает на всё время записи. Требует, чтобы весь код обработчика лежал
+  // в IRAM или в ПЗУ - это обеспечивают правки в libraries/GyverStepper.
+  timerAttachInterruptFlag(timer, &StepperTicker, true, ESP_INTR_FLAG_IRAM);
+#else
   timerAttachInterrupt(timer, &StepperTicker, true);
+#endif
 #endif
 
   ESP32PWM::allocateTimer(0);
@@ -2371,7 +2382,7 @@ void setup() {
   const BaseType_t powerTaskCreated = xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
-    1800,               /* Stack size in words */
+    3072,               /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
@@ -2431,7 +2442,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    3200,             /* Stack size in words */
+    6144,             /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
@@ -2441,7 +2452,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetClock,  /* Function to implement the task */
     "GetClockTicker", /* Name of the task */
-    3400,             /* Stack size in words */
+    6144,             /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
@@ -2520,8 +2531,11 @@ void setup() {
 }
 
 void loop() {
-  // Проверка переполнения стека
-  if (uxTaskGetStackHighWaterMark(NULL) < 325) {
+  // Проверка переполнения стека. Порог в БАЙТАХ: uxTaskGetStackHighWaterMark в ESP-IDF
+  // считает байты, поэтому прежние 325 срабатывали тогда, когда на отсечку нагрева и
+  // отправку сообщения (их кадры плюс временные String — около 200 байт) стека уже не
+  // хватало, и сторож падал раньше, чем успевал погасить ТЭН.
+  if (uxTaskGetStackHighWaterMark(NULL) < 1024) {
     request_emergency_stop("Аварийное отключение: критически малый остаток стека");
     SendMsg("Стек переполнился. Перезагрузка", ALARM_MSG);
     vTaskDelay(5000);

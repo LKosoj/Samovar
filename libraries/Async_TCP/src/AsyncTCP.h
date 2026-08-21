@@ -33,7 +33,11 @@ extern "C" {
 #endif
 
 #ifndef CONFIG_ASYNC_TCP_STACK_SIZE
-#define CONFIG_ASYNC_TCP_STACK_SIZE 4096  // Уменьшили с 16384 до 4096
+// В этом стеке выполняются все обработчики веб-сервера. Самая глубокая цепочка —
+// handleSave (кадр 1296 байт) -> program_parse_lines (1088 байт) плюс ~1 КБ на кадры
+// самого веб-сервера и lwIP, то есть около 3.4 КБ. При 4096 запас был меньше 700 байт,
+// и POST /save валил задачу по канарейке стека.
+#define CONFIG_ASYNC_TCP_STACK_SIZE 8192
 #endif
 
 #ifndef CONFIG_ASYNC_TCP_PRIORITY

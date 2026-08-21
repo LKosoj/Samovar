@@ -277,7 +277,9 @@ bool create_data() {
   }
 
   //Удаляем старый файл с архивным логом
-  bool locked = log_file_lock(portMAX_DELAY);
+  // Конечный таймаут вместо portMAX_DELAY: бесконечное ожидание вешало задачу навсегда,
+  // если журнал в этот момент удерживала другая задача.
+  bool locked = log_file_lock(pdMS_TO_TICKS(2000));
   if (!locked) {
     Serial.println(F("data log create failed: mutex unavailable"));
     return false;
@@ -345,7 +347,9 @@ bool create_data() {
   log_write_seq = 0;
   log_flush_seq = 0;
   {
-    bool pendingLocked = pending_command_lock(portMAX_DELAY);
+    // Конечный таймаут: этот лок берётся уже под log_file_lock, и бесконечное ожидание
+    // здесь превращало любую задержку соседней задачи в вечную взаимную блокировку.
+    bool pendingLocked = pending_command_lock(pdMS_TO_TICKS(2000));
     if (!pendingLocked) {
       fileToAppend.close();
       log_file_unlock(true);
@@ -608,7 +612,21 @@ String append_data() {
 
     {
       static bool memory_warning_sent = false;
-      used_byte = SPIFFS.usedBytes();
+      // usedBytes() у LittleFS не читает готовое число, а обходит все служебные записи ФС.
+      // Раз в секунду это лишняя нагрузка на ядро 0, за которым следит сторожевой таймер,
+      // поэтому полный пересчёт делаем раз в десять записей, а между ними ведём оценку по
+      // фактически записанному — так порог уборки не срабатывает с опозданием.
+      static uint8_t space_check_countdown = 0;
+      if (space_check_countdown == 0) {
+        space_check_countdown = 10;
+        used_byte = SPIFFS.usedBytes();
+      } else {
+        space_check_countdown--;
+        used_byte += written;
+        // total_byte - used_byte считается в uint32_t: без ограничения оценка сверху дала бы
+        // при вычитании огромное «свободно» и отключила бы и уборку, и предупреждение.
+        if (used_byte > total_byte) used_byte = total_byte;
+      }
       if (total_byte - used_byte < 400) {
         //Кончилось место, удалим старый файл. Надо было сохранять раньше
         bool cleanupLocked = log_file_lock(pdMS_TO_TICKS(50));

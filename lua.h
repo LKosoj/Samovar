@@ -1442,90 +1442,26 @@ static int lua_wrapper_get_str_variable(lua_State *lua_state) {
 static int lua_wrapper_http_request(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int n = lua_gettop(lua_state); /* number of arguments */
-  String Var = lua_to_string_arg(lua_state, 1);
-
-  asyncHTTPrequest request;
-  String payload;
-  //int httpResponseCode;
-
-  const uint32_t timeoutMs = 4000; // общий таймаут на connect/done
-  request.setDebug(false);
-  request.setTimeout(3);  //Таймаут три секунды (внутренний по отсутствию активности)
-  vTaskDelay(10 / portTICK_PERIOD_MS);
   if (n != 1 && n != 4) {
     lua_pushstring(lua_state, "error");
     return 1;
   }
 
-  if (n == 1) { // GET(url)
-    if (!request.open("GET", Var.c_str())) {  //URL
-      lua_pushstring(lua_state, "error");
-      return 1;
-    }
-    unsigned long startTime = millis();
-    while (request.readyState() < 1) {
-      if (millis() - startTime > timeoutMs) {
-        request.abort();
-        lua_pushstring(lua_state, "error");
-        return 1;
-      }
-      vTaskDelay(25 / portTICK_PERIOD_MS);
-    }
-    vTaskDelay(150 / portTICK_PERIOD_MS);
-    if (!request.send()) {
-      request.abort();
-      lua_pushstring(lua_state, "error");
-      return 1;
-    }
+  String Var = lua_to_string_arg(lua_state, 1);
+  String payload;
+
+  // Запрос выполняется на общем долгоживущем объекте (http_sync_request_custom).
+  // Прежний локальный asyncHTTPrequest уничтожался сразу после abort(), а колбэк lwIP
+  // приходил уже в освобождённую память — это и была паника при пропаже интернета.
+  if (n == 1) {  // GET(url)
+    payload = http_sync_request_custom("GET", Var, "", "");
   } else {
-    String ContentType;
-    String Body;
-    String RequestType;
-
-    RequestType = lua_to_string_arg(lua_state, 2);
-    ContentType = lua_to_string_arg(lua_state, 3);
-    Body = lua_to_string_arg(lua_state, 4);
-
-    if (!request.open(RequestType.c_str(), Var.c_str())) {  //URL
-      lua_pushstring(lua_state, "error");
-      return 1;
-    }
-    unsigned long startTime = millis();
-    while (request.readyState() < 1) {
-      if (millis() - startTime > timeoutMs) {
-        request.abort();
-        lua_pushstring(lua_state, "error");
-        return 1;
-      }
-      vTaskDelay(25 / portTICK_PERIOD_MS);
-    }
-    vTaskDelay(150 / portTICK_PERIOD_MS);
-    String ctVal = getValue(ContentType, ':', 1);
-    request.setReqHeader("Content-Type", ctVal.c_str());
-    if (!request.send(Body)) {
-      request.abort();
-      lua_pushstring(lua_state, "error");
-      return 1;
-    }
+    String RequestType = lua_to_string_arg(lua_state, 2);
+    String ContentType = lua_to_string_arg(lua_state, 3);
+    String Body = lua_to_string_arg(lua_state, 4);
+    payload = http_sync_request_custom(RequestType, Var, Body, ContentType);
   }
-
-  vTaskDelay(150 / portTICK_PERIOD_MS);
-  unsigned long doneStartTime = millis();
-  while (request.readyState() != 4) {
-    if (millis() - doneStartTime > timeoutMs) {
-      request.abort();
-      lua_pushstring(lua_state, "error");
-      return 1;
-    }
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-  }
-  vTaskDelay(60 / portTICK_PERIOD_MS);
-  if (request.responseHTTPcode() > 0) {
-    payload = request.responseText();
-  } else {
-    payload = "error";
-  }
-  // Free resources
+  if (payload == "<ERR>") payload = "error";
 
   lua_pushstring(lua_state, payload.c_str());
 
@@ -1831,7 +1767,7 @@ void lua_init() {
   xTaskCreatePinnedToCore(
     do_lua_script,    /* Function to implement the task */
     "do_lua_script",  /* Name of the task */
-    5900,             /* Stack size in words */
+    8192,             /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask, /* Task handle. */

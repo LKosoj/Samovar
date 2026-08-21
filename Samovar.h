@@ -2,7 +2,9 @@
 #define __SAMOVAR_H_
 
 #define CONFIG_ASYNC_TCP_RUNNING_CORE 1      // force async_tcp task to be on same core as Arduino app (default is any core)
-#define CONFIG_ASYNC_TCP_STACK_SIZE 4096     // reduce the stack size (default is 16K)
+// Размер стека задачи async_tcp задан в самой библиотеке (libraries/Async_TCP/src/AsyncTCP.h).
+// Отсюда он всё равно не действовал: библиотека — отдельная единица трансляции, define из
+// заголовка прошивки до неё не доходит, зато конфликтовал с её собственным значением.
 
 #ifndef ESP32
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
@@ -304,6 +306,21 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 
 
 #define DRIVER_STEP_TIME 4
+
+// Прерывание шагового двигателя должно работать и во время записи в файл: на это время
+// ESP32 отключает кэш флеш-памяти и вместе с ним все прерывания, у которых нет флага
+// ESP_INTR_FLAG_IRAM. Без флага мотор замирает на всё время записи (стирание сектора -
+// до 45 мс) и доезжает до нужного положения с опозданием.
+// Флаг требует, чтобы весь код внутри прерывания лежал в IRAM или в ПЗУ чипа: он включает
+// в GyverStepper прямую запись в регистры GPIO вместо digitalWrite и задержку из ПЗУ
+// вместо delayMicroseconds. Если строку закомментировать, вернётся прежнее поведение.
+// Работает только на Arduino core 2.x: в core 3.x таймер живёт на драйвере gptimer,
+// и флаг там задаётся при сборке IDF (CONFIG_GPTIMER_ISR_IRAM_SAFE), а не из скетча.
+#define USE_STEPPER_IRAM_ISR
+
+#if defined(USE_STEPPER_IRAM_ISR) && defined(USE_STEPPER_ACCELERATION)
+#error "USE_STEPPER_IRAM_ISR несовместим с USE_STEPPER_ACCELERATION: в режиме с ускорением тикер вызывает из прерывания пересчёт профиля (setTarget), который лежит во флеше. Закомментируйте одну из двух строк."
+#endif
 
 #ifdef USE_STEPPER_ACCELERATION
 #define GS_FAST_PROFILE 10

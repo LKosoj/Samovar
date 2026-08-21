@@ -3270,3 +3270,60 @@ String http_sync_request_post(String url, String body, String ContentType) {
     return "<ERR>";
   }
 }
+
+// Вариант для Lua-обёртки: метод, тело и Content-Type задаёт скрипт, таймаут короче, чем у
+// загрузки веб-интерфейса. Тот же долгоживущий объект под тем же мьютексом, что и у
+// http_sync_request_get/post — локальный asyncHTTPrequest на стеке Lua-задачи разрушался
+// раньше, чем приходил опоздавший колбэк lwIP, и это давало панику при пропаже интернета.
+String http_sync_request_custom(const String& method, const String& url, const String& body, const String& contentType) {
+  HttpRequestLockGuard lockGuard;
+  if (!lockGuard.acquired) {
+    Serial.println("HTTP " + method + " skipped: request object is busy");
+    return "<ERR>";
+  }
+  asyncHTTPrequest& request = sharedHttpRequest;
+  request.setDebug(false);
+  const uint32_t timeoutMs = 4000;
+  request.setTimeout(3);  //Таймаут три секунды (внутренний по отсутствию активности)
+
+  if (!request.open(method.c_str(), url.c_str())) {  //URL
+    Serial.println("HTTP " + method + " open() failed, readyState = " + String(request.readyState()));
+    return "<ERR>";
+  }
+  unsigned long startTime = millis();
+  while (request.readyState() < 1) {
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
+      Serial.println("Timeout: readyState never reached 1");
+      abort_http_request(&request);
+      return "<ERR>";
+    }
+    vTaskDelay(25 / portTICK_PERIOD_MS);
+  }
+  vTaskDelay(150 / portTICK_PERIOD_MS);
+  if (contentType.length() > 0) {
+    request.setReqHeader("Content-Type", getValue(contentType, ':', 1).c_str());
+  }
+  const bool sent = body.length() > 0 ? request.send(body) : request.send();
+  if (!sent) {
+    Serial.println("HTTP " + method + " send() failed");
+    abort_http_request(&request);
+    return "<ERR>";
+  }
+
+  vTaskDelay(150 / portTICK_PERIOD_MS);
+  // Таймаут для ожидания завершения запроса (readyState == 4)
+  startTime = millis();
+  while (request.readyState() != 4) {
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
+      Serial.println("Timeout: request not completed within 4 seconds");
+      abort_http_request(&request);
+      return "<ERR>";
+    }
+    vTaskDelay(25 / portTICK_PERIOD_MS);
+  }
+  vTaskDelay(60 / portTICK_PERIOD_MS);
+  if (request.responseHTTPcode() > 0) {
+    return request.responseText();
+  }
+  return "<ERR>";
+}

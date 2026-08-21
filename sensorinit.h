@@ -709,15 +709,17 @@ void get_task_stack_usage() {
 
   // Выводим статистику использования стека задачами
   Serial.println(F("=== Task Stack Usage ==="));
-  Serial.printf("SysTicker:        %u words free (of 3200)\n", uxTaskGetStackHighWaterMark(SysTickerTask1));
-  Serial.printf("GetClock:         %u words free (of 3400)\n", uxTaskGetStackHighWaterMark(GetClockTask1));
+  // uxTaskGetStackHighWaterMark в ESP-IDF возвращает БАЙТЫ, а не слова: подпись "words"
+  // завышала оставшийся запас вчетверо.
+  Serial.printf("SysTicker:        %u bytes free (of 6144)\n", uxTaskGetStackHighWaterMark(SysTickerTask1));
+  Serial.printf("GetClock:         %u bytes free (of 6144)\n", uxTaskGetStackHighWaterMark(GetClockTask1));
 #ifdef USE_LUA
   if (DoLuaScriptTask) {
-    Serial.printf("LuaScript:        %u words free (of 5900)\n", uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+    Serial.printf("LuaScript:        %u bytes free (of 8192)\n", uxTaskGetStackHighWaterMark(DoLuaScriptTask));
   }
 #endif
 #ifdef SAMOVAR_USE_POWER
-  Serial.printf("PowerStatus:      %u words free (of 1800)\n", uxTaskGetStackHighWaterMark(PowerStatusTask));
+  Serial.printf("PowerStatus:      %u bytes free (of 3072)\n", uxTaskGetStackHighWaterMark(PowerStatusTask));
 #endif
   Serial.println(F("========================"));
 }
