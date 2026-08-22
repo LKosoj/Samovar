@@ -24,9 +24,29 @@ try:
     action_body = extract_function_body(web, "static bool get_web_command_action")
     command_body = extract_function_body(web, "void web_command")
     loop_body = extract_function_body(samovar, "void loop()")
+    # P8: вода/скорость насоса/pnbk вынесены из loop() в отдельные tick_* функции
+    # (Samovar.ino). Тела подставляются в loop_body_with_pending в ТОМ ЖЕ порядке,
+    # в котором loop() их реально вызывает (ищем позицию каждого call-сайта), чтобы
+    # перестановка вызовов в loop() по-прежнему ломала проверку порядка токенов ниже.
+    pending_tick_functions = [
+        ("tick_apply_pending_water_temp", "static void tick_apply_pending_water_temp()"),
+        ("tick_apply_pending_pump_speed", "static void tick_apply_pending_pump_speed()"),
+        ("tick_apply_pending_pnbk", "static void tick_apply_pending_pnbk()"),
+    ]
+    call_positions = []
+    for call_name, signature in pending_tick_functions:
+        call_index = loop_body.find(call_name + "();")
+        if call_index < 0:
+            raise ValueError(f"loop() does not call {call_name}()")
+        call_positions.append((call_index, signature))
+    call_positions.sort(key=lambda item: item[0])
+    loop_body_with_pending = loop_body
+    for _, signature in call_positions:
+        loop_body_with_pending += extract_function_body(samovar, signature)
 except ValueError as exc:
     errors.append(str(exc))
     action_body = command_body = loop_body = ""
+    loop_body_with_pending = ""
 
 require_ordered_tokens(
     "exactly one POST action",
@@ -78,7 +98,7 @@ for token in ["set_current_power(", "set_mixer(", "set_water_temp(", "set_pump_s
 
 require_ordered_tokens(
     "typed pending command consumption",
-    loop_body,
+    loop_body_with_pending,
     [
         "waterTemp = pending_water_temp_value;",
         "set_water_temp(waterTemp);",

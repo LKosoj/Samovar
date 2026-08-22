@@ -244,13 +244,6 @@ void test_unsigned_hex_and_arithmetic() {
             NUMERIC_PARSE_INVALID_ARGUMENT && hex == 71,
         "invalid fixed hex argument changed output or error kind");
 
-  uint32_t product = 33;
-  check(checked_mul_u32(65535, 65535, product).ok() && product == 4294836225U,
-        "checked uint32 product failed");
-  product = 33;
-  check(!checked_mul_u32(UINT32_MAX, 2, product).ok() && product == 33,
-        "overflowing uint32 product changed output");
-
   uint16_t steps = 29;
   check(checked_rate_to_step_speed(3.6f, 1000, steps).ok() && steps == 1000,
         "rate to steps conversion failed");

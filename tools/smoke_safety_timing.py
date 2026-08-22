@@ -213,9 +213,16 @@ require(
     ),
 )
 loop = function_body(samovar, "void loop()")
+# P8: сторож стека вынесен из loop() в tick_check_stack_headroom() (Samovar.ino), вызываемую
+# первой же строкой loop(). Конкатенация сохраняет прежний порядок проверяемых токенов,
+# но сама по себе не докажет, что loop() эту функцию вызывает, поэтому вызов проверяем явно.
+if "tick_check_stack_headroom();" not in loop:
+    errors.append("low-stack fail closed: loop() не вызывает tick_check_stack_headroom()")
+stack_headroom_body = function_body(samovar, "static void tick_check_stack_headroom()")
+loop_with_stack_check = loop + stack_headroom_body
 require_ordered_tokens(
     "low-stack fail closed",
-    loop,
+    loop_with_stack_check,
     [
         # Порог в байтах: uxTaskGetStackHighWaterMark в ESP-IDF считает байты, и прежние
         # 325 не оставляли места самому аварийному пути (отсечка + SendMsg ≈ 200 байт).
@@ -512,6 +519,26 @@ all_heater_sources = "\n".join(
 enable_locked = function_body(power, "inline bool heater_outputs_enable_locked")
 if sorted(on_write.findall(all_heater_sources)) != ["1", "4"] or sorted(on_write.findall(enable_locked)) != ["1", "4"]:
     errors.append("heater ON writes must exist only once inside heater_outputs_enable_locked")
+
+# All BOOST (RELE_CHANNEL4) heater OFF writes remain centralized.
+# Samovar.ino содержит два законных boot-time raw digitalWrite(RELE_CHANNEL4, ...):
+# apply_loaded_relay_polarity_off() и pin-init в setup_init_output_pins(). Это установка
+# исходного состояния реле до старта runtime heater-пути. Исключаем ровно эти две функции,
+# а не весь файл, иначе новый сырой digitalWrite в любой другой части Samovar.ino
+# (например, в tick_*) прошёл бы мимо проверки.
+off4_write = re.compile(r"digitalWrite\(RELE_CHANNEL4,\s*!SamSetup\.rele4\)")
+samovar_runtime = samovar
+for boot_signature in (
+    "static void apply_loaded_relay_polarity_off()",
+    "static void setup_init_output_pins()",
+):
+    boot_body = function_body(samovar, boot_signature)
+    if boot_body:
+        samovar_runtime = samovar_runtime.replace(boot_body, "", 1)
+off4_scope_sources = all_heater_sources.replace(samovar, samovar_runtime)
+boost_off_helper = function_body(power, "inline void heater_boost_output_off")
+if len(off4_write.findall(off4_scope_sources)) != 1 or not off4_write.search(boost_off_helper):
+    errors.append("heater BOOST OFF writes must exist only once inside heater_boost_output_off()")
 
 require(
     "compile macro profiles",

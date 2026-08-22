@@ -427,46 +427,14 @@ void menu_reset_wifi() {
 
 void menu_get_power() {
   reset_focus();
-  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    if (!PowerOn) {
-      set_menu_screen(2);
-      if (!queue_samovar_command(SAMOVAR_BEER)) SendMsg("Очередь команд занята: старт пива из меню не поставлен", WARNING_MSG);
-    } else {
-      set_menu_screen(3);
-      samovar_reset();
-    }
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    if (!PowerOn) {
-      set_menu_screen(2);
-      if (!queue_samovar_command(SAMOVAR_DISTILLATION)) SendMsg("Очередь команд занята: старт дистилляции из меню не поставлен", WARNING_MSG);
-    } else {
-      set_menu_screen(3);
-      samovar_reset();
-    }
-  } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-    if (!PowerOn) {
-      set_menu_screen(2);
-      if (!queue_samovar_command(SAMOVAR_BK)) SendMsg("Очередь команд занята: старт БК из меню не поставлен", WARNING_MSG);
-    } else {
-      set_menu_screen(3);
-      samovar_reset();
-    }
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-    if (!PowerOn) {
-      set_menu_screen(2);
-      if (!queue_samovar_command(SAMOVAR_NBK)) SendMsg("Очередь команд занята: старт НБК из меню не поставлен", WARNING_MSG);
-    } else {
-      set_menu_screen(3);
-      samovar_reset();
+  if (!PowerOn) {
+    set_menu_screen(2);
+    if (!queue_samovar_command(mode_power_on_command(Samovar_Mode))) {
+      SendMsg("Очередь команд занята: старт из меню не поставлен", WARNING_MSG);
     }
   } else {
-    if (!PowerOn) {
-      set_menu_screen(2);
-      if (!queue_samovar_command(SAMOVAR_POWER)) SendMsg("Очередь команд занята: включение нагрева из меню не поставлено", WARNING_MSG);
-    } else {
-      set_menu_screen(3);
-      samovar_reset();
-    }
+    set_menu_screen(3);
+    samovar_reset();
   }
 }
 

@@ -104,6 +104,7 @@
       { name: 'ColDiam', min: 0.1, max: 10 },
       { name: 'ColHeight', min: 0.01, max: 10 },
       { name: 'PackDens', integer: true, min: 0, max: 100 },
+      { name: 'autospeed', integer: true, min: 0, max: 20 },
       { name: 'MaxPressureValue', min: 0, max: 10000 },
       { name: 'DeltaSteamTemp', min: -1000, max: 1000 },
       { name: 'SetSteamTemp', min: 0, max: 150 },
@@ -293,6 +294,7 @@
             <input id='useautospeed' type='checkbox' name='useautospeed' value='useautospeed' %UASChecked%>
             <label for='useautospeed' class="tooltip">Использовать корректировку скорости насоса<span class="tooltiptext">для снижения скорости отбора при повышении температуры по пару</span></label>
           </h2>
+          <h2><label for="autospeed">Шаг корректировки скорости:</label> <input id="autospeed" name='autospeed' type='text' inputmode='numeric' value='%autospeed%'> &#37; (0 = по умолчанию 5, максимум 20)</h2>
           <h2>
             <input id='useDetector' type='checkbox' name='useDetector' value='useDetector' %UASDetectorChecked%>
             <label for='useDetector' class="tooltip">Использовать детектор<span class="tooltiptext">детектор примесей на всех строках программы (головы, тело, предзахлеб, хвосты); по умолчанию выключено, действует только в ректификации</span></label>

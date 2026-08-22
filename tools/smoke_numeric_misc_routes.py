@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -56,7 +57,7 @@ require_ordered_tokens(
     ],
     errors,
 )
-for token in ["BoilerVolume =", "set_session_description_value(", "heatLossCalculated =", "heatStartMillis ="]:
+for token in ["BoilerVolume =", "heatLossCalculated =", "heatStartMillis ="]:
     if token in program:
         errors.append(f"web_program mutates runtime before loop: {token}")
 require_ordered_tokens(
@@ -86,7 +87,7 @@ require_ordered_tokens(
         "queue_pending_local_cal(command, operationId)",
         "checked_step_speed_to_mlh(",
         "queue_pending_i2ccal(command, operationId)",
-        "send_i2c_operation_accepted(request, operationId);",
+        "send_operation_accepted(request, operationId);",
     ],
     errors,
 )
@@ -117,9 +118,20 @@ require_ordered_tokens(
     ],
     errors,
 )
-for token in ['name == "SteamDelay"', 'name == "fullsetup"', 'name == "WProgram"']:
-    if token not in save_allowlist:
-        errors.append(f"save allowlist missing token: {token}")
+# save_param_name_allowed больше не хардкодит name == "...": оно перебирает те же
+# таблицы/массивы имён, что применяет handleSave (см. tools/smoke_handle_save_staging.py
+# для полной проверки). Здесь просто убеждаемся, что нужные имена всё ещё в источнике
+# истины и что старая захардкоженная цепочка сравнений не вернулась.
+for source, name in (
+    ("kSaveU16Fields", "SteamDelay"),
+    ("kSaveSpecialNames", "fullsetup"),
+    ("kSaveSpecialNames", "WProgram"),
+):
+    table_match = re.search(rf"{source}\[\]\s*=\s*\{{(.*?)\}};", web, re.S)
+    if not table_match or f'"{name}"' not in table_match.group(1):
+        errors.append(f"save allowlist source {source} missing {name}")
+if re.search(r'name\s*==\s*"', save_allowlist):
+    errors.append("save allowlist still hardcodes a literal name == \"...\" comparison")
 
 require_ordered_tokens(
     "WebSerial fixed strict command",

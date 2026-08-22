@@ -28,7 +28,10 @@ inline void mode_alarm_beer() {
   mode_request_water_flow_emergency_if_needed();
 }
 
-inline const ModeOps* mode_registry() {
+// Единственное место, где объявлена таблица режимов и её размер. mode_registry()
+// и mode_registry_count() читают её только отсюда — количество строк больше не
+// может разойтись с фактическим размером массива.
+inline const ModeOps* mode_registry_table(size_t& count) {
   static const ModeOps ops[] = {
     {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr},
     {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text},
@@ -41,11 +44,19 @@ inline const ModeOps* mode_registry() {
     {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr},
     {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr},
   };
+  count = sizeof(ops) / sizeof(ops[0]);
   return ops;
 }
 
+inline const ModeOps* mode_registry() {
+  size_t count = 0;
+  return mode_registry_table(count);
+}
+
 inline size_t mode_registry_count() {
-  return 7;
+  size_t count = 0;
+  mode_registry_table(count);
+  return count;
 }
 
 inline const ModeOps* mode_ops_by_mode(SAMOVAR_MODE mode) {

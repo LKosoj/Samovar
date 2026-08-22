@@ -211,17 +211,7 @@ void check_alarm_distiller() {
   //Проверим, что вода подается
   mode_request_water_flow_emergency_if_needed();
 
-  if (mode_water_pre_alarm_due()) {
-    set_buzzer(true);
-    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
-    SendMsg(("Критическая температура воды!"), WARNING_MSG);
-
-#ifdef SAMOVAR_USE_POWER
-    //Попробуем снизить мощность на 5 В/шагов регулятора, чтобы исключить перегрев колонны.
-    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, 5);
-#endif
-    mode_set_alarm_pause_ms(30000);
-  }
+  mode_handle_water_pre_alarm_if_due();
 
   mode_update_water_valve_by_setpoint();
   vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -279,7 +269,7 @@ void run_dist_program(uint8_t num) {
   // явного гашения — до конца сессии. Гасим один раз, когда программа впервые
   // начинает сама управлять мощностью (Power предыдущей строки задан).
   if (num > 0 && !distBoostGated && program[num - 1].Power != 0) {
-    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+    heater_boost_output_off();
     distBoostGated = true;
   }
 #endif

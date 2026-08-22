@@ -81,6 +81,15 @@ inline bool heater_outputs_enable_locked(uint8_t outputs, bool setPowerOn) {
   return true;
 }
 
+// Выключает разгонный ТЭН (RELE_CHANNEL4) - только запись в GPIO, без блокировок.
+// Не трогает acceleration_heater: за пределами аварийной отсечки состав действий в
+// точках вызова разный (где-то флаг сбрасывается сразу, где-то нет), поэтому сброс
+// остаётся на месте вызова. Дешёвая и без локов специально: вызывается в т.ч. из
+// apply_heater_outputs_off_locked() внутри уже взятой portENTER_CRITICAL(&emergencyStopMux).
+inline void heater_boost_output_off() {
+  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+}
+
 inline uint64_t request_regulator_state_locked(
   SafetyRegulatorMode mode,
   bool hasVoltage,
@@ -156,7 +165,7 @@ inline void set_power_worker_ready(bool ready) {
 
 inline void apply_heater_outputs_off_locked() {
   digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-  digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+  heater_boost_output_off();
   PowerOn = false;
   acceleration_heater = false;
   target_power_volt = 0;

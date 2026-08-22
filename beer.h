@@ -761,7 +761,7 @@ void beer_stage_tick() {
       if (SamSetup.UseST) {
         heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
       } else {
-        digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+        heater_boost_output_off();
       }
     }
 
@@ -943,7 +943,7 @@ void set_heater_state(float setpoint, float temp) {
     }
   } else {
     if (acceleration_heater) {
-      digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+      heater_boost_output_off();
       acceleration_heater = false;
 	        }
 	      }
@@ -1055,7 +1055,7 @@ void setHeaterPosition(bool state) {
     check_power_error();
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
-    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+    heater_boost_output_off();
     heater_enable_outputs(SAFETY_HEATER_OUTPUT_MAIN);
     vTaskDelay(50 / portTICK_PERIOD_MS);
 #endif
@@ -1070,7 +1070,7 @@ void setHeaterPosition(bool state) {
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);
-    digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+    heater_boost_output_off();
 #endif
   }
 }

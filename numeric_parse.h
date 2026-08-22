@@ -339,15 +339,6 @@ inline NumericParseResult validate_bounded_finite_float(
   return numeric_parse_result(NUMERIC_PARSE_OK);
 }
 
-inline NumericParseResult checked_mul_u32(uint32_t left, uint32_t right, uint32_t& out) {
-  const uint64_t product = static_cast<uint64_t>(left) * right;
-  if (product > UINT32_MAX) {
-    return numeric_parse_result(NUMERIC_PARSE_OUT_OF_RANGE);
-  }
-  out = static_cast<uint32_t>(product);
-  return numeric_parse_result(NUMERIC_PARSE_OK);
-}
-
 inline NumericParseResult checked_narrow_int32(
     int64_t value,
     int64_t minValue,

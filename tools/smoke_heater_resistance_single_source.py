@@ -117,10 +117,13 @@ def main() -> int:
         )
 
     # --- приём формы обязан идти через те же константы --------------------------
+    # handleSave больше не вызывает apply_save_float_arg(..., "HeaterR", ...) построчно -
+    # это теперь запись в общей таблице kSaveFloatFields (generic-цикл), но границы
+    # обязаны остаться теми же именованными константами, а не превратиться в литералы.
     web = read(ROOT / "WebServer.ino")
     if not re.search(
-        r'apply_save_float_arg\(\s*request,\s*"HeaterR",\s*staged\.HeaterResistant,\s*'
-        r"CONTROL_HEATER_R_MIN,\s*CONTROL_HEATER_R_MAX\s*\)",
+        r'\{"HeaterR",\s*&SetupEEPROM::HeaterResistant,\s*'
+        r"CONTROL_HEATER_R_MIN,\s*CONTROL_HEATER_R_MAX\}",
         web,
     ):
         errors.append(

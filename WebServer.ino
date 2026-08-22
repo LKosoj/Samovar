@@ -251,19 +251,7 @@ static void send_program_operation_accepted(
   request->send(response);
 }
 
-static void send_save_operation_accepted(
-    AsyncWebServerRequest *request,
-    OperationId operationId) {
-  String json = "{\"operationId\":";
-  json += String(static_cast<unsigned long>(operationId));
-  json += ",\"state\":\"queued\",\"error\":\"none\"}";
-  AsyncWebServerResponse *response = request->beginResponse(
-      202, "application/json", json);
-  response->addHeader("Cache-Control", "no-store");
-  request->send(response);
-}
-
-static void send_i2c_operation_accepted(
+static void send_operation_accepted(
     AsyncWebServerRequest *request,
     OperationId operationId) {
   String json = "{\"operationId\":";
@@ -394,13 +382,15 @@ I2CStepperDevice* select_i2c_stepper_device(AsyncWebServerRequest *request) {
   return nullptr;
 }
 
-static NumericParseResult parse_i2c_stepper_u8(
+template <typename T>
+static NumericParseResult parse_i2c_stepper_bounded(
     AsyncWebServerRequest *request,
     const char *name,
-    uint8_t minValue,
-    uint8_t maxValue,
-    uint8_t& target,
-    const char*& errorField) {
+    T minValue,
+    T maxValue,
+    T& target,
+    const char*& errorField,
+    NumericParseResult (*parser)(const char*, T, T, T&)) {
   const uint8_t count = request_param_count(request, name);
   if (count == 0) return numeric_parse_result(NUMERIC_PARSE_OK);
   if (count != 1) {
@@ -408,35 +398,9 @@ static NumericParseResult parse_i2c_stepper_u8(
     return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
   }
   const AsyncWebParameter *param = get_request_param(request, name);
-  uint8_t parsed = 0;
+  T parsed = 0;
   NumericParseResult result = param && !param->isFile()
-      ? parse_bounded_uint8(param->value().c_str(), minValue, maxValue, parsed)
-      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-  if (!result.ok()) {
-    errorField = name;
-    return result;
-  }
-  target = parsed;
-  return result;
-}
-
-static NumericParseResult parse_i2c_stepper_u16(
-    AsyncWebServerRequest *request,
-    const char *name,
-    uint16_t minValue,
-    uint16_t maxValue,
-    uint16_t& target,
-    const char*& errorField) {
-  const uint8_t count = request_param_count(request, name);
-  if (count == 0) return numeric_parse_result(NUMERIC_PARSE_OK);
-  if (count != 1) {
-    errorField = name;
-    return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-  }
-  const AsyncWebParameter *param = get_request_param(request, name);
-  uint16_t parsed = 0;
-  NumericParseResult result = param && !param->isFile()
-      ? parse_bounded_uint16(param->value().c_str(), minValue, maxValue, parsed)
+      ? parser(param->value().c_str(), minValue, maxValue, parsed)
       : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
   if (!result.ok()) {
     errorField = name;
@@ -467,29 +431,29 @@ static NumericParseResult parse_i2c_stepper_patch(
     I2CStepperDevice& candidate,
     const char*& errorField) {
   I2CStepperDevice parsed = current;
-  NumericParseResult result = parse_i2c_stepper_u8(request, "mode", 1, 3, parsed.mode, errorField);
+  NumericParseResult result = parse_i2c_stepper_bounded<uint8_t>(request, "mode", 1, 3, parsed.mode, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u8(request, "relayMask", 0, 15, parsed.relayMask, errorField);
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "relayMask", 0, 15, parsed.relayMask, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u8(request, "sensorFlags", 0, 7, parsed.sensorFlags, errorField);
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "sensorFlags", 0, 7, parsed.sensorFlags, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u8(request, "optionFlags", 0, 7, parsed.optionFlags, errorField);
+  result = parse_i2c_stepper_bounded<uint8_t>(request, "optionFlags", 0, 7, parsed.optionFlags, errorField, parse_bounded_uint8);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "mixerRpm", 0, UINT16_MAX, parsed.mixerRpm, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "mixerRpm", 0, UINT16_MAX, parsed.mixerRpm, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "mixerRunSec", 0, UINT16_MAX, parsed.mixerRunSec, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "mixerRunSec", 0, UINT16_MAX, parsed.mixerRunSec, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "mixerPauseSec", 0, UINT16_MAX, parsed.mixerPauseSec, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "mixerPauseSec", 0, UINT16_MAX, parsed.mixerPauseSec, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "pumpMlHour", 0, UINT16_MAX, parsed.pumpMlHour, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "pumpMlHour", 0, UINT16_MAX, parsed.pumpMlHour, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "pumpPauseSec", 0, UINT16_MAX, parsed.pumpPauseSec, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "pumpPauseSec", 0, UINT16_MAX, parsed.pumpPauseSec, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "fillingMl", 0, UINT16_MAX, parsed.fillingMl, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "fillingMl", 0, UINT16_MAX, parsed.fillingMl, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "fillingMlHour", 0, UINT16_MAX, parsed.fillingMlHour, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "fillingMlHour", 0, UINT16_MAX, parsed.fillingMlHour, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
-  result = parse_i2c_stepper_u16(request, "stepsPerMl", 1, UINT16_MAX, parsed.stepsPerMl, errorField);
+  result = parse_i2c_stepper_bounded<uint16_t>(request, "stepsPerMl", 1, UINT16_MAX, parsed.stepsPerMl, errorField, parse_bounded_uint16);
   if (!result.ok()) return result;
 
   const uint8_t relayCount = request_param_count(request, "relay");
@@ -766,7 +730,7 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
         request, 503, "application/json", build_error_envelope(code, nullptr, code));
     return;
   }
-  send_i2c_operation_accepted(request, operationId);
+  send_operation_accepted(request, operationId);
 }
 
 static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
@@ -964,6 +928,22 @@ void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPa
   send_index_template_response(request, spiffsPath, "no-cache, no-store, must-revalidate");
 }
 
+struct CachedStaticFile {
+  const char *path;
+  const char *cacheControl;
+};
+
+static void send_cached_static_file(
+    AsyncWebServerRequest *request, const char *path, const char *cacheControl) {
+  if (!SPIFFS.exists(path)) {
+    request->send(404, "text/plain", String("Missing ") + path);
+    return;
+  }
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, path, emptyString, false, nullptr);
+  response->addHeader("Cache-Control", cacheControl);
+  request->send(response);
+}
+
 void WebServerInit(void) {
   FS_register_web_handlers();
 
@@ -982,37 +962,18 @@ void WebServerInit(void) {
   
   // style.css уезжает только сжатым: serveStatic сам найдёт .gz и проставит Content-Encoding.
   server.serveStatic("/style.css", SPIFFS, "/style.css").setCacheControl("max-age=5000");
-  server.on("/minus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (!SPIFFS.exists("/minus.png")) { request->send(404, "text/plain", "Missing /minus.png"); return; }
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/minus.png", emptyString, false, nullptr);
-    response->addHeader("Cache-Control", "max-age=604800");
-    request->send(response);
-  });
-  server.on("/plus.png", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (!SPIFFS.exists("/plus.png")) { request->send(404, "text/plain", "Missing /plus.png"); return; }
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/plus.png", emptyString, false, nullptr);
-    response->addHeader("Cache-Control", "max-age=614800");
-    request->send(response);
-  });
-  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (!SPIFFS.exists("/favicon.ico")) { request->send(404, "text/plain", "Missing /favicon.ico"); return; }
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/favicon.ico", emptyString, false, nullptr);
-    response->addHeader("Cache-Control", "max-age=624800");
-    request->send(response);
-  });
-
-  server.on("/Red_light.gif", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (!SPIFFS.exists("/Red_light.gif")) { request->send(404, "text/plain", "Missing /Red_light.gif"); return; }
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Red_light.gif", emptyString, false, nullptr);
-    response->addHeader("Cache-Control", "max-age=634800");
-    request->send(response);
-  });
-  server.on("/Green.png", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (!SPIFFS.exists("/Green.png")) { request->send(404, "text/plain", "Missing /Green.png"); return; }
-    AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/Green.png", emptyString, false, nullptr);
-    response->addHeader("Cache-Control", "max-age=644800");
-    request->send(response);
-  });
+  static const CachedStaticFile cachedStaticFiles[] = {
+      {"/minus.png", "max-age=604800"},
+      {"/plus.png", "max-age=614800"},
+      {"/favicon.ico", "max-age=624800"},
+      {"/Red_light.gif", "max-age=634800"},
+      {"/Green.png", "max-age=644800"},
+  };
+  for (const CachedStaticFile &entry : cachedStaticFiles) {
+    server.on(entry.path, HTTP_GET, [entry](AsyncWebServerRequest *request) {
+      send_cached_static_file(request, entry.path, entry.cacheControl);
+    });
+  }
 
   //  server.serveStatic("/style.css", SPIFFS, "/style.css");
   //  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
@@ -2070,36 +2031,123 @@ static bool apply_save_ds_addr_arg(
   return true;
 }
 
+// Единый источник истины для сохраняемых полей #setupform: каждая таблица описывает
+// имя параметра формы, поле SetupEEPROM (через указатель на член) и границы валидации.
+// save_param_name_allowed() и handleSave() читают ОДНИ И ТЕ ЖЕ таблицы, поэтому имя,
+// добавленное в применение, автоматически становится допустимым (и наоборот).
+struct SaveFloatField { const char* name; float SetupEEPROM::* member; float minValue; float maxValue; };
+struct SaveU16Field { const char* name; uint16_t SetupEEPROM::* member; long minValue; long maxValue; };
+struct SaveU8Field  { const char* name; uint8_t  SetupEEPROM::* member; long minValue; long maxValue; };
+struct SaveCheckboxField { const char* name; bool SetupEEPROM::* member; };
+struct SaveBool01Field   { const char* name; bool SetupEEPROM::* member; };
+struct SaveColorField    { const char* name; char (SetupEEPROM::* member)[20]; };
+struct SaveDsAddrField   { const char* name; uint8_t (SetupEEPROM::* member)[8]; uint8_t resetBit; };
+
+static const SaveU16Field kSaveU16Fields[] = {
+    {"SteamDelay", &SetupEEPROM::SteamDelay, 0, 65535},
+    {"PipeDelay", &SetupEEPROM::PipeDelay, 0, 65535},
+    {"WaterDelay", &SetupEEPROM::WaterDelay, 0, 65535},
+    {"TankDelay", &SetupEEPROM::TankDelay, 0, 65535},
+    {"ACPDelay", &SetupEEPROM::ACPDelay, 0, 65535},
+    {"SuvidHoldMinutes", &SetupEEPROM::SuvidHoldMinutes, 0, 65535},
+    {"StepperStepMl", &SetupEEPROM::StepperStepMl, 0, 65535},
+    {"StepperStepMlI2C", &SetupEEPROM::StepperStepMlI2C, 0, 65535},
+};
+
+static const SaveFloatField kSaveFloatFields[] = {
+    {"DeltaSteamTemp", &SetupEEPROM::DeltaSteamTemp, -1000.0f, 1000.0f},
+    {"DeltaPipeTemp", &SetupEEPROM::DeltaPipeTemp, -1000.0f, 1000.0f},
+    {"DeltaWaterTemp", &SetupEEPROM::DeltaWaterTemp, -1000.0f, 1000.0f},
+    {"DeltaTankTemp", &SetupEEPROM::DeltaTankTemp, -1000.0f, 1000.0f},
+    {"DeltaACPTemp", &SetupEEPROM::DeltaACPTemp, -1000.0f, 1000.0f},
+    {"SetSteamTemp", &SetupEEPROM::SetSteamTemp, 0.0f, 150.0f},
+    {"SetPipeTemp", &SetupEEPROM::SetPipeTemp, 0.0f, 150.0f},
+    {"SetWaterTemp", &SetupEEPROM::SetWaterTemp, 0.0f, 150.0f},
+    {"SetTankTemp", &SetupEEPROM::SetTankTemp, 0.0f, 150.0f},
+    {"SetACPTemp", &SetupEEPROM::SetACPTemp, 0.0f, 150.0f},
+    {"SuvidTemp", &SetupEEPROM::SuvidTemp, 0.0f, 100.0f},
+    {"Kp", &SetupEEPROM::Kp, 0.0f, 100000.0f},
+    {"Ki", &SetupEEPROM::Ki, 0.0f, 100000.0f},
+    {"Kd", &SetupEEPROM::Kd, 0.0f, 100000.0f},
+    {"StbVoltage", &SetupEEPROM::StbVoltage, 0.0f, 10000.0f},
+    {"BVolt", &SetupEEPROM::BVolt, 0.0f, 10000.0f},
+    {"BKPower", &SetupEEPROM::BKPower, 0.0f, 10000.0f},
+    {"MaxPressureValue", &SetupEEPROM::MaxPressureValue, 0.0f, 10000.0f},
+    {"DistTemp", &SetupEEPROM::DistTemp, 0.0f, 150.0f},
+    {"HeaterR", &SetupEEPROM::HeaterResistant, CONTROL_HEATER_R_MIN, CONTROL_HEATER_R_MAX},
+    {"MainsVoltage", &SetupEEPROM::MainsVoltage, 0.0f, 1000.0f},
+    {"NbkIn", &SetupEEPROM::NbkIn, 0.0f, 100000.0f},
+    {"NbkDelta", &SetupEEPROM::NbkDelta, 0.0f, 100000.0f},
+    {"NbkDM", &SetupEEPROM::NbkDM, 0.0f, 100000.0f},
+    {"NbkDP", &SetupEEPROM::NbkDP, 0.0f, 100000.0f},
+    {"NbkSteamT", &SetupEEPROM::NbkSteamT, 0.0f, 150.0f},
+    {"NbkOwPress", &SetupEEPROM::NbkOwPress, 0.0f, 100000.0f},
+    {"NbkTn", &SetupEEPROM::NbkTn, 0.0f, 150.0f},
+    {"ColDiam", &SetupEEPROM::ColDiam, 0.1f, 10.0f},
+    {"ColHeight", &SetupEEPROM::ColHeight, 0.01f, 10.0f},
+};
+
+static const SaveU8Field kSaveU8Fields[] = {
+    {"DistTimeF", &SetupEEPROM::DistTimeF, 0, 255},
+    {"autospeed", &SetupEEPROM::autospeed, 0, 99},
+    {"TimeZone", &SetupEEPROM::TimeZone, 0, 23},
+    {"LogPeriod", &SetupEEPROM::LogPeriod, 1, 255},
+    {"PackDens", &SetupEEPROM::PackDens, 0, 100},
+};
+
+static const SaveCheckboxField kSaveCheckboxFields[] = {
+    {"useflevel", &SetupEEPROM::UseHLS},
+    {"usepressure", &SetupEEPROM::UsePreccureCorrect},
+    {"useautospeed", &SetupEEPROM::useautospeed},
+    {"useDetector", &SetupEEPROM::useDetector},
+    {"ChangeProgramBuzzer", &SetupEEPROM::ChangeProgramBuzzer},
+    {"UseBuzzer", &SetupEEPROM::UseBuzzer},
+    {"UseBBuzzer", &SetupEEPROM::UseBBuzzer},
+    {"UseWS", &SetupEEPROM::UseWS},
+    {"UseST", &SetupEEPROM::UseST},
+    {"CheckPower", &SetupEEPROM::CheckPower},
+};
+
+static const SaveBool01Field kSaveBool01Fields[] = {
+    {"rele1", &SetupEEPROM::rele1},
+    {"rele2", &SetupEEPROM::rele2},
+    {"rele3", &SetupEEPROM::rele3},
+    {"rele4", &SetupEEPROM::rele4},
+};
+
+static const SaveColorField kSaveColorFields[] = {
+    {"SteamColor", &SetupEEPROM::SteamColor},
+    {"PipeColor", &SetupEEPROM::PipeColor},
+    {"WaterColor", &SetupEEPROM::WaterColor},
+    {"TankColor", &SetupEEPROM::TankColor},
+    {"ACPColor", &SetupEEPROM::ACPColor},
+};
+
+static const SaveDsAddrField kSaveDsAddrFields[] = {
+    {"SteamAddr", &SetupEEPROM::SteamAdress, PROFILE_SENSOR_RESET_STEAM},
+    {"PipeAddr", &SetupEEPROM::PipeAdress, PROFILE_SENSOR_RESET_PIPE},
+    {"WaterAddr", &SetupEEPROM::WaterAdress, PROFILE_SENSOR_RESET_WATER},
+    {"TankAddr", &SetupEEPROM::TankAdress, PROFILE_SENSOR_RESET_TANK},
+    {"ACPAddr", &SetupEEPROM::ACPAdress, PROFILE_SENSOR_RESET_ACP},
+};
+
+// Строки разного размера (copyStringSafe шаблонный по N) и служебные параметры,
+// меняющие поток управления в handleSave, не табличятся по значению — но их имена
+// обязаны попадать в тот же источник истины для allowlist.
+static const char* const kSaveMiscStringNames[] = {"videourl", "blynkauth", "tgtoken", "tgchatid"};
+static const char* const kSaveSpecialNames[] = {"fullsetup", "save", "clear", "mode", "WProgram", "stepperstepml"};
+
 static bool save_param_name_allowed(const String& name) {
-  return name == "fullsetup" || name == "save" || name == "clear" || name == "mode" ||
-      name == "WProgram" || name == "SteamDelay" || name == "PipeDelay" ||
-      name == "WaterDelay" || name == "TankDelay" || name == "ACPDelay" ||
-      name == "DeltaSteamTemp" || name == "DeltaPipeTemp" ||
-      name == "DeltaWaterTemp" || name == "DeltaTankTemp" ||
-      name == "DeltaACPTemp" || name == "SetSteamTemp" ||
-      name == "SetPipeTemp" || name == "SetWaterTemp" ||
-      name == "SetTankTemp" || name == "SetACPTemp" || name == "Kp" ||
-      name == "Ki" || name == "Kd" || name == "StbVoltage" ||
-      name == "BVolt" || name == "DistTimeF" ||
-      name == "MaxPressureValue" || name == "StepperStepMl" ||
-      name == "StepperStepMlI2C" || name == "stepperstepml" ||
-      name == "useflevel" || name == "usepressure" ||
-      name == "useautospeed" || name == "useDetector" ||
-      name == "ChangeProgramBuzzer" || name == "UseBuzzer" ||
-      name == "UseBBuzzer" || name == "UseWS" || name == "UseST" ||
-      name == "CheckPower" || name == "autospeed" || name == "DistTemp" ||
-      name == "TimeZone" || name == "LogPeriod" || name == "HeaterR" ||
-      name == "NbkIn" || name == "NbkDelta" || name == "NbkDM" ||
-      name == "NbkDP" || name == "NbkSteamT" || name == "NbkOwPress" ||
-      name == "NbkTn" || name == "BKPower" || name == "MainsVoltage" ||
-      name == "SuvidTemp" ||
-      name == "videourl" || name == "blynkauth" || name == "tgtoken" ||
-      name == "tgchatid" || name == "SteamColor" || name == "PipeColor" ||
-      name == "WaterColor" || name == "TankColor" || name == "ACPColor" ||
-      name == "rele1" || name == "rele2" || name == "rele3" ||
-      name == "rele4" || name == "SteamAddr" || name == "PipeAddr" ||
-      name == "WaterAddr" || name == "TankAddr" || name == "ACPAddr" ||
-      name == "ColDiam" || name == "ColHeight" || name == "PackDens";
+  for (const SaveU16Field &f : kSaveU16Fields) if (name == f.name) return true;
+  for (const SaveFloatField &f : kSaveFloatFields) if (name == f.name) return true;
+  for (const SaveU8Field &f : kSaveU8Fields) if (name == f.name) return true;
+  for (const SaveCheckboxField &f : kSaveCheckboxFields) if (name == f.name) return true;
+  for (const SaveBool01Field &f : kSaveBool01Fields) if (name == f.name) return true;
+  for (const SaveColorField &f : kSaveColorFields) if (name == f.name) return true;
+  for (const SaveDsAddrField &f : kSaveDsAddrFields) if (name == f.name) return true;
+  for (const char* n : kSaveMiscStringNames) if (name == n) return true;
+  for (const char* n : kSaveSpecialNames) if (name == n) return true;
+  return false;
 }
 
 void handleSave(AsyncWebServerRequest *request) {
@@ -2195,34 +2243,9 @@ void handleSave(AsyncWebServerRequest *request) {
     staged.Mode = (int)requestedMode;
   }
 
-  if (!apply_save_u16_arg(request, "SteamDelay", staged.SteamDelay, 0, 65535)) return;
-  if (!apply_save_u16_arg(request, "PipeDelay", staged.PipeDelay, 0, 65535)) return;
-  if (!apply_save_u16_arg(request, "WaterDelay", staged.WaterDelay, 0, 65535)) return;
-  if (!apply_save_u16_arg(request, "TankDelay", staged.TankDelay, 0, 65535)) return;
-  if (!apply_save_u16_arg(request, "ACPDelay", staged.ACPDelay, 0, 65535)) return;
-  if (!apply_save_u16_arg(request, "SuvidHoldMinutes", staged.SuvidHoldMinutes, 0, 65535)) return;
-
-  if (!apply_save_float_arg(request, "DeltaSteamTemp", staged.DeltaSteamTemp, -1000.0f, 1000.0f)) return;
-  if (!apply_save_float_arg(request, "DeltaPipeTemp", staged.DeltaPipeTemp, -1000.0f, 1000.0f)) return;
-  if (!apply_save_float_arg(request, "DeltaWaterTemp", staged.DeltaWaterTemp, -1000.0f, 1000.0f)) return;
-  if (!apply_save_float_arg(request, "DeltaTankTemp", staged.DeltaTankTemp, -1000.0f, 1000.0f)) return;
-  if (!apply_save_float_arg(request, "DeltaACPTemp", staged.DeltaACPTemp, -1000.0f, 1000.0f)) return;
-  if (!apply_save_float_arg(request, "SetSteamTemp", staged.SetSteamTemp, 0.0f, 150.0f)) return;
-  if (!apply_save_float_arg(request, "SetPipeTemp", staged.SetPipeTemp, 0.0f, 150.0f)) return;
-  if (!apply_save_float_arg(request, "SetWaterTemp", staged.SetWaterTemp, 0.0f, 150.0f)) return;
-  if (!apply_save_float_arg(request, "SetTankTemp", staged.SetTankTemp, 0.0f, 150.0f)) return;
-  if (!apply_save_float_arg(request, "SetACPTemp", staged.SetACPTemp, 0.0f, 150.0f)) return;
-  if (!apply_save_float_arg(request, "SuvidTemp", staged.SuvidTemp, 0.0f, 100.0f)) return;
-  if (!apply_save_float_arg(request, "Kp", staged.Kp, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "Ki", staged.Ki, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "Kd", staged.Kd, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "StbVoltage", staged.StbVoltage, 0.0f, 10000.0f)) return;
-  if (!apply_save_float_arg(request, "BVolt", staged.BVolt, 0.0f, 10000.0f)) return;
-  if (!apply_save_float_arg(request, "BKPower", staged.BKPower, 0.0f, 10000.0f)) return;
-  if (!apply_save_u8_arg(request, "DistTimeF", staged.DistTimeF, 0, 255)) return;
-  if (!apply_save_float_arg(request, "MaxPressureValue", staged.MaxPressureValue, 0.0f, 10000.0f)) return;
-  if (!apply_save_u16_arg(request, "StepperStepMl", staged.StepperStepMl, 0, 65535)) return;
-  if (!apply_save_u16_arg(request, "StepperStepMlI2C", staged.StepperStepMlI2C, 0, 65535)) return;
+  for (const SaveU16Field &f : kSaveU16Fields) {
+    if (!apply_save_u16_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) return;
+  }
   if (request->hasArg("stepperstepml")) {
     if (request->hasArg("StepperStepMl")) {
       send_save_parse_error(request, "stepperstepml", NUMERIC_PARSE_INVALID_ARGUMENT);
@@ -2237,55 +2260,34 @@ void handleSave(AsyncWebServerRequest *request) {
     staged.StepperStepMl = (uint16_t)(stepsPer100Ml / 100);
   }
 
-  update_checkbox_arg(request, "useflevel", staged.UseHLS, fullSetupForm);
-  update_checkbox_arg(request, "usepressure", staged.UsePreccureCorrect, fullSetupForm);
-  update_checkbox_arg(request, "useautospeed", staged.useautospeed, fullSetupForm);
-  update_checkbox_arg(request, "useDetector", staged.useDetector, fullSetupForm);
-  update_checkbox_arg(request, "ChangeProgramBuzzer", staged.ChangeProgramBuzzer, fullSetupForm);
-  update_checkbox_arg(request, "UseBuzzer", staged.UseBuzzer, fullSetupForm);
-  update_checkbox_arg(request, "UseBBuzzer", staged.UseBBuzzer, fullSetupForm);
-  update_checkbox_arg(request, "UseWS", staged.UseWS, fullSetupForm);
-  update_checkbox_arg(request, "UseST", staged.UseST, fullSetupForm);
-  update_checkbox_arg(request, "CheckPower", staged.CheckPower, fullSetupForm);
+  for (const SaveFloatField &f : kSaveFloatFields) {
+    if (!apply_save_float_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) return;
+  }
 
-  if (!apply_save_u8_arg(request, "autospeed", staged.autospeed, 0, 99)) return;
-  if (!apply_save_float_arg(request, "DistTemp", staged.DistTemp, 0.0f, 150.0f)) return;
-  if (!apply_save_u8_arg(request, "TimeZone", staged.TimeZone, 0, 23)) return;
-  if (!apply_save_u8_arg(request, "LogPeriod", staged.LogPeriod, 1, 255)) return;
-  if (!apply_save_float_arg(request, "HeaterR", staged.HeaterResistant, CONTROL_HEATER_R_MIN, CONTROL_HEATER_R_MAX)) return;
-  if (!apply_save_float_arg(request, "MainsVoltage", staged.MainsVoltage, 0.0f, 1000.0f)) return;
-  if (!apply_save_float_arg(request, "NbkIn", staged.NbkIn, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "NbkDelta", staged.NbkDelta, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "NbkDM", staged.NbkDM, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "NbkDP", staged.NbkDP, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "NbkSteamT", staged.NbkSteamT, 0.0f, 150.0f)) return;
-  if (!apply_save_float_arg(request, "NbkOwPress", staged.NbkOwPress, 0.0f, 100000.0f)) return;
-  if (!apply_save_float_arg(request, "NbkTn", staged.NbkTn, 0.0f, 150.0f)) return;
+  for (const SaveU8Field &f : kSaveU8Fields) {
+    if (!apply_save_u8_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) return;
+  }
+
+  for (const SaveCheckboxField &f : kSaveCheckboxFields) {
+    update_checkbox_arg(request, f.name, staged.*f.member, fullSetupForm);
+  }
 
   if (request->hasArg("videourl")) copyStringSafe(staged.videourl, request->arg("videourl"));
   if (request->hasArg("blynkauth")) copyStringSafe(staged.blynkauth, request->arg("blynkauth"));
   if (request->hasArg("tgtoken")) copyStringSafe(staged.tg_token, request->arg("tgtoken"));
   if (request->hasArg("tgchatid")) copyStringSafe(staged.tg_chat_id, request->arg("tgchatid"));
-  if (request->hasArg("SteamColor")) copyStringSafe(staged.SteamColor, request->arg("SteamColor"));
-  if (request->hasArg("PipeColor")) copyStringSafe(staged.PipeColor, request->arg("PipeColor"));
-  if (request->hasArg("WaterColor")) copyStringSafe(staged.WaterColor, request->arg("WaterColor"));
-  if (request->hasArg("TankColor")) copyStringSafe(staged.TankColor, request->arg("TankColor"));
-  if (request->hasArg("ACPColor")) copyStringSafe(staged.ACPColor, request->arg("ACPColor"));
 
-  if (!apply_save_bool01_arg(request, "rele1", staged.rele1)) return;
-  if (!apply_save_bool01_arg(request, "rele2", staged.rele2)) return;
-  if (!apply_save_bool01_arg(request, "rele3", staged.rele3)) return;
-  if (!apply_save_bool01_arg(request, "rele4", staged.rele4)) return;
+  for (const SaveColorField &f : kSaveColorFields) {
+    if (request->hasArg(f.name)) copyStringSafe(staged.*f.member, request->arg(f.name));
+  }
 
-  if (!apply_save_ds_addr_arg(request, "SteamAddr", dsSnapshot, staged.SteamAdress, PROFILE_SENSOR_RESET_STEAM, sensorResetMask)) return;
-  if (!apply_save_ds_addr_arg(request, "PipeAddr", dsSnapshot, staged.PipeAdress, PROFILE_SENSOR_RESET_PIPE, sensorResetMask)) return;
-  if (!apply_save_ds_addr_arg(request, "WaterAddr", dsSnapshot, staged.WaterAdress, PROFILE_SENSOR_RESET_WATER, sensorResetMask)) return;
-  if (!apply_save_ds_addr_arg(request, "TankAddr", dsSnapshot, staged.TankAdress, PROFILE_SENSOR_RESET_TANK, sensorResetMask)) return;
-  if (!apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, PROFILE_SENSOR_RESET_ACP, sensorResetMask)) return;
+  for (const SaveBool01Field &f : kSaveBool01Fields) {
+    if (!apply_save_bool01_arg(request, f.name, staged.*f.member)) return;
+  }
 
-  if (!apply_save_float_arg(request, "ColDiam", staged.ColDiam, 0.1f, 10.0f)) return;
-  if (!apply_save_float_arg(request, "ColHeight", staged.ColHeight, 0.01f, 10.0f)) return;
-  if (!apply_save_u8_arg(request, "PackDens", staged.PackDens, 0, 100)) return;
+  for (const SaveDsAddrField &f : kSaveDsAddrFields) {
+    if (!apply_save_ds_addr_arg(request, f.name, dsSnapshot, staged.*f.member, f.resetBit, sensorResetMask)) return;
+  }
 
   const bool hasSwitchMode = modeRequested &&
       (sourceProfileMode != static_cast<int>(requestedMode) ||
@@ -2339,7 +2341,7 @@ void handleSave(AsyncWebServerRequest *request) {
   }
 
   get_task_stack_usage();
-  send_save_operation_accepted(request, operationId);
+  send_operation_accepted(request, operationId);
   // is_reboot обрабатывается в loop() — рестарт выполнится после отправки ответа.
 }
 
@@ -2890,7 +2892,7 @@ void calibrate_command(AsyncWebServerRequest *request) {
         request, 503, "application/json", build_error_envelope(code, nullptr, code));
     return;
   }
-  send_i2c_operation_accepted(request, operationId);
+  send_operation_accepted(request, operationId);
 }
 
 void get_data_log(AsyncWebServerRequest *request, String fn) {
@@ -3155,6 +3157,55 @@ static void abort_http_request(void* requestPtr) {
   }
 }
 
+// Общая часть трёх http_sync_request_*: открыть соединение, дождаться готовности,
+// при необходимости выставить заголовок Content-Type, отправить запрос и дождаться
+// завершения (readyState() == 4). При неудаче на любом шаге сама печатает диагностику,
+// зовёт abort_http_request() и возвращает false — в этом случае вызывающая сторона
+// обязана вернуть "<ERR>", не трогая общий объект дальше. При успехе возвращает true.
+static bool http_sync_request_connect_and_send(const String& method, const String& url,
+                                               const String& body, const String& contentType,
+                                               bool alwaysSetContentTypeHeader, bool alwaysSendBody,
+                                               uint32_t timeoutMs) {
+  if (!sharedHttpRequest.open(method.c_str(), url.c_str())) {
+    Serial.println("HTTP " + method + " open() failed, readyState = " + String(sharedHttpRequest.readyState()));
+    return false;
+  }
+
+  unsigned long startTime = millis();
+  while (sharedHttpRequest.readyState() < 1) {
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
+      Serial.println("Timeout: readyState never reached 1");
+      abort_http_request(&sharedHttpRequest);
+      return false;
+    }
+    vTaskDelay(25 / portTICK_PERIOD_MS);
+  }
+  vTaskDelay(150 / portTICK_PERIOD_MS);
+  if (alwaysSetContentTypeHeader || contentType.length() > 0) {
+    sharedHttpRequest.setReqHeader("Content-Type", getValue(contentType, ':', 1).c_str());
+  }
+  const bool sent = (alwaysSendBody || body.length() > 0) ? sharedHttpRequest.send(body) : sharedHttpRequest.send();
+  if (!sent) {
+    Serial.println("HTTP " + method + " send() failed");
+    abort_http_request(&sharedHttpRequest);
+    return false;
+  }
+
+  vTaskDelay(150 / portTICK_PERIOD_MS);
+  // Таймаут для ожидания завершения запроса (readyState == 4)
+  startTime = millis();
+  while (sharedHttpRequest.readyState() != 4) {
+    if (millis() - startTime > timeoutMs) { // Общий таймаут
+      Serial.println("Timeout: sharedHttpRequest not completed within " + String(timeoutMs / 1000) + " seconds");
+      abort_http_request(&sharedHttpRequest);
+      return false;
+    }
+    vTaskDelay(25 / portTICK_PERIOD_MS);
+  }
+  vTaskDelay(60 / portTICK_PERIOD_MS);
+  return true;
+}
+
 String http_sync_request_get(String url) {
   HttpRequestLockGuard lockGuard;
   if (!lockGuard.acquired) {
@@ -3165,38 +3216,9 @@ String http_sync_request_get(String url) {
   request.setDebug(false);
   const uint32_t timeoutMs = 8000;
   request.setTimeout(8); // Таймаут восемь секунд (внутренний по отсутствию активности)
-  if (!request.open("GET", url.c_str())) {
-    Serial.println("HTTP GET open() failed, readyState = " + String(request.readyState()));
+  if (!http_sync_request_connect_and_send("GET", url, "", "", false, false, timeoutMs)) {
     return "<ERR>";
   }
-  
-  unsigned long startTime = millis();
-  while (request.readyState() < 1) {
-    if (millis() - startTime > timeoutMs) { // Общий таймаут
-      Serial.println("Timeout: readyState never reached 1");
-      abort_http_request(&request);
-      return "<ERR>";
-    }
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-  }
-  vTaskDelay(150 / portTICK_PERIOD_MS);
-  if (!request.send()) {
-    Serial.println("HTTP GET send() failed");
-    abort_http_request(&request);
-    return "<ERR>";
-  }
-  vTaskDelay(150 / portTICK_PERIOD_MS);
-  // Таймаут для ожидания завершения запроса (readyState == 4)
-  startTime = millis();
-  while (request.readyState() != 4) {
-    if (millis() - startTime > timeoutMs) { // Общий таймаут
-      Serial.println("Timeout: request not completed within 8 seconds");
-      abort_http_request(&request);
-      return "<ERR>";
-    }
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-  }
-  vTaskDelay(60 / portTICK_PERIOD_MS);
   if (request.responseHTTPcode() >= 0) {
     if (request.responseHTTPcode() != 200) {
       Serial.print(F("responseHTTPcode = "));
@@ -3216,7 +3238,7 @@ String http_sync_request_get(String url) {
     Serial.println(request.responseHTTPcode());
     Serial.println("Content " + url + " download error (2)");
     return "<ERR>";
-  }  
+  }
   return "";
 }
 
@@ -3231,39 +3253,9 @@ String http_sync_request_post(String url, String body, String ContentType) {
   const uint32_t timeoutMs = 8000;
   request.setTimeout(8);  //Таймаут восемь секунд (внутренний по отсутствию активности)
 
-  if (!request.open("POST", url.c_str())) {  //URL
-    Serial.println("HTTP POST open() failed, readyState = " + String(request.readyState()));
+  if (!http_sync_request_connect_and_send("POST", url, body, ContentType, true, true, timeoutMs)) {
     return "<ERR>";
   }
-  unsigned long startTime = millis();
-  while (request.readyState() < 1) {
-    if (millis() - startTime > timeoutMs) { // Общий таймаут
-      Serial.println("Timeout: readyState never reached 1");
-      abort_http_request(&request);
-      return "<ERR>";
-    }
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-  }
-  vTaskDelay(150 / portTICK_PERIOD_MS);
-  request.setReqHeader("Content-Type", getValue(ContentType, ':', 1).c_str());
-  if (!request.send(body)) {
-    Serial.println("HTTP POST send() failed");
-    abort_http_request(&request);
-    return "<ERR>";
-  }
-
-  vTaskDelay(150 / portTICK_PERIOD_MS);
-  // Таймаут для ожидания завершения запроса (readyState == 4)
-  startTime = millis();
-  while (request.readyState() != 4) {
-    if (millis() - startTime > timeoutMs) { // Общий таймаут
-      Serial.println("Timeout: request not completed within 8 seconds");
-      abort_http_request(&request);
-      return "<ERR>";
-    }
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-  }
-  vTaskDelay(60 / portTICK_PERIOD_MS);
   if (request.responseHTTPcode() >= 0) {
     return request.responseText();
   } else {
@@ -3286,42 +3278,9 @@ String http_sync_request_custom(const String& method, const String& url, const S
   const uint32_t timeoutMs = 4000;
   request.setTimeout(3);  //Таймаут три секунды (внутренний по отсутствию активности)
 
-  if (!request.open(method.c_str(), url.c_str())) {  //URL
-    Serial.println("HTTP " + method + " open() failed, readyState = " + String(request.readyState()));
+  if (!http_sync_request_connect_and_send(method, url, body, contentType, false, false, timeoutMs)) {
     return "<ERR>";
   }
-  unsigned long startTime = millis();
-  while (request.readyState() < 1) {
-    if (millis() - startTime > timeoutMs) { // Общий таймаут
-      Serial.println("Timeout: readyState never reached 1");
-      abort_http_request(&request);
-      return "<ERR>";
-    }
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-  }
-  vTaskDelay(150 / portTICK_PERIOD_MS);
-  if (contentType.length() > 0) {
-    request.setReqHeader("Content-Type", getValue(contentType, ':', 1).c_str());
-  }
-  const bool sent = body.length() > 0 ? request.send(body) : request.send();
-  if (!sent) {
-    Serial.println("HTTP " + method + " send() failed");
-    abort_http_request(&request);
-    return "<ERR>";
-  }
-
-  vTaskDelay(150 / portTICK_PERIOD_MS);
-  // Таймаут для ожидания завершения запроса (readyState == 4)
-  startTime = millis();
-  while (request.readyState() != 4) {
-    if (millis() - startTime > timeoutMs) { // Общий таймаут
-      Serial.println("Timeout: request not completed within 4 seconds");
-      abort_http_request(&request);
-      return "<ERR>";
-    }
-    vTaskDelay(25 / portTICK_PERIOD_MS);
-  }
-  vTaskDelay(60 / portTICK_PERIOD_MS);
   if (request.responseHTTPcode() > 0) {
     return request.responseText();
   }

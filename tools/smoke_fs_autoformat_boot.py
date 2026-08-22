@@ -406,9 +406,21 @@ require(
 )
 
 setup_body = body(samovar_text, "void setup()")
+# P8 owner note (2026-08-22): setup() now delegates the WiFi/Blynk/Telegram/OTA
+# connect sequence to setup_connect_wifi_and_notify() (Samovar.ino) instead of
+# inlining it. The token-order and side-effect-inventory checks below care about
+# the real boot sequence, not which function happens to contain each line, so we
+# splice the callee's body in at its call site before scanning - same strictness,
+# just reassembled the way the firmware actually executes it.
+wifi_connect_body = body(samovar_text, "static void setup_connect_wifi_and_notify()")
+expanded_setup_body = setup_body
+if setup_body and wifi_connect_body:
+    expanded_setup_body = setup_body.replace(
+        "setup_connect_wifi_and_notify();", wifi_connect_body, 1
+    )
 if setup_body:
     ordered(
-        setup_body,
+        expanded_setup_body,
         [
             "SamSetup = startupProfile;",
             'print_nvs_stats("after config load");',
@@ -448,7 +460,7 @@ if setup_body:
         'report_degraded_boot("filesystem", "mount failed");',
         "filesystem unrecoverable-mount gate",
     )
-    fs_call = setup_body.find("const FsInitResult fsInitResult = FS_init();")
+    fs_call = expanded_setup_body.find("const FsInitResult fsInitResult = FS_init();")
     require(fs_call >= 0, "setup filesystem mount call is missing")
     startup_side_effect_patterns = (
         (
@@ -477,9 +489,9 @@ if setup_body:
         ),
     )
     if fs_call >= 0:
-        pre_mount_setup = setup_body[:fs_call]
+        pre_mount_setup = expanded_setup_body[:fs_call]
         for label, pattern in startup_side_effect_patterns:
-            matches = list(re.finditer(pattern, setup_body))
+            matches = list(re.finditer(pattern, expanded_setup_body))
             require(matches, f"setup side-effect inventory has no {label} tokens")
             for match in matches:
                 position = match.start()
@@ -493,13 +505,13 @@ if setup_body:
                 f"pre-mount setup prefix contains forbidden {label} side effect",
             )
     for direct_startup_token in ("esp_log_level_set", "pinMode(0, INPUT)"):
-        position = setup_body.find(direct_startup_token)
+        position = expanded_setup_body.find(direct_startup_token)
         require(
             position < 0 or fs_call < position,
             f"filesystem gate must precede {direct_startup_token}",
         )
     require(
-        setup_body.count('Serial.println(F("Samovar started"));') == 1,
+        expanded_setup_body.count('Serial.println(F("Samovar started"));') == 1,
         "Samovar started diagnostic must occur exactly once",
     )
 

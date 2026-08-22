@@ -1141,16 +1141,7 @@ static int lua_wrapper_set_power(lua_State *lua_state) {
   SamovarCommands command = SAMOVAR_NONE;
 
   if (a && !PowerOn) {
-    if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-      command = SAMOVAR_BEER;
-    } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-      command = SAMOVAR_BK;
-    } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
-      command = SAMOVAR_NBK;
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
-      command = SAMOVAR_DISTILLATION;
-    } else
-      command = SAMOVAR_POWER;
+    command = mode_power_on_command(Samovar_Mode);
   } else if (!a && PowerOn)
     command = SAMOVAR_POWER;
 
@@ -1219,14 +1210,8 @@ static int lua_wrapper_set_next_program(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
   if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
-  SamovarCommands command = SAMOVAR_NONE;
-  if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
-    command = SAMOVAR_START;
-  } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-    command = SAMOVAR_BEER_NEXT;
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-    command = SAMOVAR_DIST_NEXT;
-  }
+  if (!PowerOn) return 0;
+  SamovarCommands command = mode_start_command(Samovar_Mode);
   if (command != SAMOVAR_NONE) {
     if (!queue_samovar_command(command, pdMS_TO_TICKS(100))) {
       return luaL_error(lua_state, "Samovar command queue busy");
@@ -2038,7 +2023,6 @@ String get_global_variables() {
   Variables += "ProgramLen = " + String(ProgramLen) + "\r\n";
   //  Variables += "startval = " + String(startval) + "\r\n";
   //  Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
-  //  Variables += "prev_time_ms = " + String(prev_time_ms) + "\r\n";
   Variables += "ActualVolumePerHour = " + String(ActualVolumePerHour) + "\r\n";
   //  Variables += "CurrrentStepperSpeed = " + String(CurrrentStepperSpeed) + "\r\n";
   //  Variables += "CurrrentStepps = " + String(CurrrentStepps) + "\r\n";

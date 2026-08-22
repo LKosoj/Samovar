@@ -13,6 +13,7 @@
 проверка воды) в теле check_alarm_suvid больше не вызывается; и кламп уставки
 SuvidTemp в WebServer.ino снижен со 150 до 100°.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -178,21 +179,31 @@ if webserver_text:
         errors.append(str(exc))
         handle_save_body = ""
     if handle_save_body:
-        suvid_clamp_marker = 'apply_save_float_arg(request, "SuvidTemp"'
-        idx = handle_save_body.find(suvid_clamp_marker)
-        if idx < 0:
-            errors.append("handleSave lost the SuvidTemp save clamp call")
+        # handleSave больше не вызывает apply_save_float_arg/apply_save_u16_arg с
+        # литеральным именем поля — они теперь берутся из общих таблиц kSaveFloatFields
+        # / kSaveU16Fields. Проверяем сам generic-цикл и границы SuvidTemp/SuvidHoldMinutes
+        # прямо в таблицах.
+        if "for (const SaveFloatField &f : kSaveFloatFields)" not in handle_save_body:
+            errors.append("handleSave lost the generic float save loop (SuvidTemp clamp)")
+        if "for (const SaveU16Field &f : kSaveU16Fields)" not in handle_save_body:
+            errors.append("handleSave lost the generic uint16 save loop (SuvidHoldMinutes)")
+
+        suvid_temp_match = re.search(
+            r'\{"SuvidTemp",\s*&SetupEEPROM::SuvidTemp,\s*([^,]+),\s*([^}]+)\}',
+            webserver_text,
+        )
+        if not suvid_temp_match:
+            errors.append("kSaveFloatFields lost the SuvidTemp entry")
         else:
-            line_end = handle_save_body.find(";", idx)
-            suvid_clamp_line = handle_save_body[idx:line_end if line_end >= 0 else idx + 120]
-            if "0.0f" not in suvid_clamp_line:
-                errors.append("SuvidTemp clamp lost its 0.0f lower bound")
-            if "100.0f" not in suvid_clamp_line:
-                errors.append("SuvidTemp clamp must cap at 100.0f (setpoint can't exceed 100°)")
-            if "150.0f" in suvid_clamp_line:
-                errors.append("SuvidTemp clamp still allows the old 150.0f upper bound")
-        if 'apply_save_u16_arg(request, "SuvidHoldMinutes", staged.SuvidHoldMinutes, 0, 65535)' not in handle_save_body:
-            errors.append("handleSave must stage the SuvidHoldMinutes uint16 setting")
+            low = suvid_temp_match.group(1).strip()
+            high = suvid_temp_match.group(2).strip()
+            if low != "0.0f":
+                errors.append(f"SuvidTemp clamp lost its 0.0f lower bound (got {low})")
+            if high != "100.0f":
+                errors.append(f"SuvidTemp clamp must cap at 100.0f, not the old 150.0f (got {high})")
+
+        if '{"SuvidHoldMinutes", &SetupEEPROM::SuvidHoldMinutes, 0, 65535}' not in webserver_text:
+            errors.append("kSaveU16Fields must stage the SuvidHoldMinutes uint16 setting")
 
 setup_text = read_text("data_raw/setup.htm")
 if setup_text:

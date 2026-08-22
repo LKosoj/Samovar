@@ -1396,7 +1396,7 @@ def static_checks() -> list[str]:
     queue_index = handle_save.find("queue_profile_operation")
     if prepare_index < 0 or queue_index < 0 or prepare_index > queue_index:
         errors.append("default mode program is not validated before queue publication")
-    if "beginResponse(301" in handle_save or "send_save_operation_accepted" not in handle_save:
+    if "beginResponse(301" in handle_save or "send_operation_accepted" not in handle_save:
         errors.append("/save retains redirect or lacks operation acceptance")
     if "wProgramCount == 1" not in handle_save:
         errors.append("/save does not preserve explicit-program idle policy")

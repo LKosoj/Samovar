@@ -102,6 +102,26 @@ inline void mode_reduce_power_for_water_alarm_by_volts(const String& alarmMessag
 #endif
 }
 
+// [П6] БК и дистилляция реагируют на критическую (пред-аварийную) температуру воды
+// идентично: гудок и предупреждение — безусловно, снижение мощности — опционально
+// (SAMOVAR_USE_POWER), затем пауза перед повторной реакцией. Ректификация (alarm.h)
+// и НБК (nbk.h) в этой точке различаются по существу (другой текст/уровень сообщения
+// при снижении мощности, НБК вообще не снижает мощность и держит вдвое более длинную
+// паузу) - туда этот хелпер не переносим.
+inline void mode_handle_water_pre_alarm_if_due() {
+  if (mode_water_pre_alarm_due()) {
+    set_buzzer(true);
+    //Если уже реагировали - надо подождать 30 секунд, так как процесс инерционный
+    SendMsg(("Критическая температура воды!"), WARNING_MSG);
+
+#ifdef SAMOVAR_USE_POWER
+    //Попробуем снизить мощность на 5 В/шагов регулятора, чтобы исключить перегрев колонны.
+    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, 5);
+#endif
+    mode_set_alarm_pause_ms(30000);
+  }
+}
+
 inline void mode_update_water_valve_by_setpoint() {
 #ifdef USE_WATER_VALVE
   if (WaterSensor.avgTemp >= SamSetup.SetWaterTemp + 1) {

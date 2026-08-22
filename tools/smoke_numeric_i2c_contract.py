@@ -29,10 +29,10 @@ require_ordered_tokens(
     patch_body,
     [
         "I2CStepperDevice parsed = current;",
-        'parse_i2c_stepper_u8(request, "mode", 1, 3, parsed.mode, errorField)',
-        'parse_i2c_stepper_u8(request, "relayMask", 0, 15, parsed.relayMask, errorField)',
-        'parse_i2c_stepper_u8(request, "sensorFlags", 0, 7, parsed.sensorFlags, errorField)',
-        'parse_i2c_stepper_u16(request, "stepsPerMl", 1, UINT16_MAX, parsed.stepsPerMl, errorField)',
+        'parse_i2c_stepper_bounded<uint8_t>(request, "mode", 1, 3, parsed.mode, errorField, parse_bounded_uint8)',
+        'parse_i2c_stepper_bounded<uint8_t>(request, "relayMask", 0, 15, parsed.relayMask, errorField, parse_bounded_uint8)',
+        'parse_i2c_stepper_bounded<uint8_t>(request, "sensorFlags", 0, 7, parsed.sensorFlags, errorField, parse_bounded_uint8)',
+        'parse_i2c_stepper_bounded<uint16_t>(request, "stepsPerMl", 1, UINT16_MAX, parsed.stepsPerMl, errorField, parse_bounded_uint16)',
         "hasRelay != hasState",
         'command == "status" || command == "stop" || command == "calfinish"',
         'command == "calstart"',
@@ -60,7 +60,7 @@ require_ordered_tokens(
         "OperationId operationId = 0;",
         "queue_pending_i2cstepper(",
         "pendingCmd, operationId)",
-        "send_i2c_operation_accepted(request, operationId);",
+        "send_operation_accepted(request, operationId);",
     ],
     errors,
 )

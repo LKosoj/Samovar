@@ -119,7 +119,7 @@ void check_alarm() {
   } else {
     if (acceleration_heater) {
       //выключаем разгонный тэн
-      digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+      heater_boost_output_off();
       acceleration_heater = false;
     }
   }
@@ -319,7 +319,7 @@ void check_alarm() {
         apply_program_power_row(program[0].Power);
 #else
         set_current_power_mode_value(POWER_WORK_MODE);
-        digitalWrite(RELE_CHANNEL4, !SamSetup.rele4);
+        heater_boost_output_off();
 #endif
     }
   }

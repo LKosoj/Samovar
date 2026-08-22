@@ -166,7 +166,6 @@ uint8_t temprature_sens_read();
 #define POWER_WORK_MODE F("0")
 #define POWER_SPEED_MODE F("1")
 #define POWER_SLEEP_MODE F("2")
-#define POWER_ERROR_MODE F("3")
 //**************************************************************************************************************
 
 #ifdef SAMOVAR_USE_SEM_AVR
@@ -652,7 +651,6 @@ constexpr int16_t SAMOVAR_STARTVAL_BEER_WAIT_MALT = 2002; // ожидание з
 constexpr int16_t SAMOVAR_STARTVAL_NBK_START      = 4000; // запуск, первая строка программы ещё не выбрана
 constexpr int16_t SAMOVAR_STARTVAL_NBK_RUNNING    = 4001; // программа НБК идёт (после первой строки прогрева)
 volatile int currentstepcnt = 0;                                // Текущее количество шагов шагового двигателя
-volatile unsigned long prev_time_ms;                            // Предыдущее время
 volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
 volatile uint16_t CurrrentStepperSpeed;                         // Скорость шагового двигателя
 volatile uint16_t I2CStepperSpeed;                              // Скорость шагового двигателя
@@ -686,7 +684,6 @@ volatile float WthdrwTimeAll;                                   // Оставш�
 volatile float WthdrwTime;                                      // Время отбора текущей строки программы
 String WthdrwTimeAllS;                                          // Оставшееся время отбора строкой
 String WthdrwTimeS;                                             // Время отбора текущей строки программы строкой
-String jsonstr;                                                 // Строка, содержащая json ответ для страницы
 int bk_pwm;                                                     // Значение PWM насоса при работе с БК
 uint32_t chipId = 0;                                            // Идентификатор ESP32
 //String vr;                                                      // Причина перезагрузки ESP32

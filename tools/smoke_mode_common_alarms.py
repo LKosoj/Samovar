@@ -160,6 +160,17 @@ if mode_common:
             ],
         ),
         (
+            "inline void mode_handle_water_pre_alarm_if_due",
+            [
+                "if (mode_water_pre_alarm_due()) {",
+                "set_buzzer(true);",
+                "SendMsg((\"Критическая температура воды!\"), WARNING_MSG);",
+                "#ifdef SAMOVAR_USE_POWER",
+                "mode_reduce_power_for_water_alarm_by_volts(",
+                "mode_set_alarm_pause_ms(30000);",
+            ],
+        ),
+        (
             "inline void mode_update_water_valve_by_setpoint",
             [
                 "#ifdef USE_WATER_VALVE",
@@ -203,6 +214,26 @@ if mode_common:
             body = ""
         for token in tokens:
             require_token(signature, body, token)
+
+    try:
+        body = extract_function_body(mode_common, "inline void mode_handle_water_pre_alarm_if_due")
+    except ValueError as exc:
+        errors.append(str(exc))
+        body = ""
+    require_ordered_tokens(
+        "mode_handle_water_pre_alarm_if_due message before optional power reduction",
+        body,
+        [
+            "set_buzzer(true);",
+            "SendMsg((\"Критическая температура воды!\"), WARNING_MSG);",
+            "#ifdef SAMOVAR_USE_POWER",
+            "mode_reduce_power_for_water_alarm_by_volts(",
+            "mode_set_alarm_pause_ms(30000);",
+        ],
+        errors,
+    )
+    if "#else" in body:
+        errors.append("mode_handle_water_pre_alarm_if_due must not have a dead #else branch")
 
     try:
         body = extract_function_body(mode_common, "inline ModeHeatingStartResult mode_begin_heating_session")
@@ -298,9 +329,7 @@ for name, text, signature, ordered in [
             "mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)",
             "mode_update_water_pump_pid(SamSetup.SetACPTemp);",
             "mode_request_water_flow_emergency_if_needed();",
-            "mode_water_pre_alarm_due()",
-            "mode_reduce_power_for_water_alarm_by_volts(",
-            "mode_set_alarm_pause_ms(30000);",
+            "mode_handle_water_pre_alarm_if_due();",
             "mode_update_water_valve_by_setpoint();",
         ],
     ),
@@ -315,9 +344,7 @@ for name, text, signature, ordered in [
             "set_pump_pwm(bk_pwm);",
             "mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, false)",
             "mode_request_water_flow_emergency_if_needed();",
-            "mode_water_pre_alarm_due()",
-            "mode_reduce_power_for_water_alarm_by_volts(",
-            "mode_set_alarm_pause_ms(30000);",
+            "mode_handle_water_pre_alarm_if_due();",
         ],
     ),
     (

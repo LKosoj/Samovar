@@ -537,7 +537,7 @@ if save_body:
             "prepare_default_program_for_mode(",
             "queue_profile_operation(",
             "wProgramCount == 1,",
-            "send_save_operation_accepted(request, operationId);",
+            "send_operation_accepted(request, operationId);",
         ],
         errors,
     )
@@ -610,9 +610,23 @@ if samovar_file.exists():
     except ValueError as exc:
         errors.append(str(exc))
         loop_body = ""
+    try:
+        # P8: pending_lua_* обрабатываются в отдельной tick_apply_pending_lua_commands()
+        # (Samovar.ino), вызываемой из loop() на месте прежнего инлайн-блока USE_LUA.
+        # Конкатенация тела loop() с телом этой функции сохраняет прежние проверки,
+        # но наличие вызова из loop() надо проверить отдельно: без него функция
+        # осталась бы мёртвым кодом, а проверки ниже всё равно нашли бы свои токены.
+        if "tick_apply_pending_lua_commands();" not in loop_body:
+            raise ValueError("loop() does not call tick_apply_pending_lua_commands()")
+        loop_body_with_lua = loop_body + extract_function_body(
+            samovar_text, "static void tick_apply_pending_lua_commands()"
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        loop_body_with_lua = ""
     require_ordered_tokens(
         "pending_lua_reload_flag loop contract",
-        loop_body,
+        loop_body_with_lua,
         [
             "locked && pending_lua_reload_flag",
             "pending_lua_reload_flag = false;",
@@ -625,7 +639,7 @@ if samovar_file.exists():
     )
     require_ordered_tokens(
         "pending_lua_start_flag loop contract",
-        loop_body,
+        loop_body_with_lua,
         [
             "locked && pending_lua_start_flag",
             "hasPendingLuaStart = true;",
@@ -638,7 +652,7 @@ if samovar_file.exists():
     )
     require_ordered_tokens(
         "pending_lua_file_flag loop contract",
-        loop_body,
+        loop_body_with_lua,
         [
             "locked && pending_lua_file_flag",
             "luaFile = pending_lua_file;",

@@ -147,7 +147,16 @@ if commit_body:
 if handle_save_body:
     if re.search(r"\bSamSetup\.SetWaterTemp\s*=", handle_save_body):
         errors.append("handleSave must not write SamSetup.SetWaterTemp directly")
-    require_token("handleSave staged SetWaterTemp", handle_save_body, 'apply_save_float_arg(request, "SetWaterTemp", staged.SetWaterTemp')
+    # handleSave стейджит SetWaterTemp через общую таблицу kSaveFloatFields (generic-цикл),
+    # а не построчным apply_save_float_arg(..., "SetWaterTemp", ...). Проверяем и цикл,
+    # и сам инициализатор поля в таблице.
+    require_token(
+        "handleSave staged SetWaterTemp",
+        handle_save_body,
+        "for (const SaveFloatField &f : kSaveFloatFields)",
+    )
+    if '{"SetWaterTemp", &SetupEEPROM::SetWaterTemp, 0.0f, 150.0f}' not in web:
+        errors.append("kSaveFloatFields missing the SetWaterTemp entry")
 
 if errors:
     print("pump PWM nonblocking smoke failed:")

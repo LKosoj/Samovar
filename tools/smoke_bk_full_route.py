@@ -96,16 +96,13 @@ static void set_current_power_mode_value(int mode) {
 }
 static void digitalWrite(int, bool) {}
 static const int RELE_CHANNEL4 = 4;
+static void heater_boost_output_off() { digitalWrite(RELE_CHANNEL4, !SamSetup.rele4); }
 static void mode_clear_alarm_pause_if_expired() {}
 static bool mode_check_powered_cooling_sensors(const char*) { return true; }
 static void mode_stop_cooling_pump_if_started() {}
 static void mode_request_overheat_emergency_if_needed() {}
 static void mode_request_water_flow_emergency_if_needed() {}
-static bool mode_water_pre_alarm_due() { return false; }
-static void set_buzzer(bool) {}
-static const int WARNING_MSG = 1;
-static void SendMsg(const char*, int) {}
-static void mode_set_alarm_pause_ms(uint32_t) {}
+static void mode_handle_water_pre_alarm_if_due() {}
 static void bk_finish() { finishCalls++; }
 
 @BK_PROC@

@@ -147,7 +147,17 @@ if samovar_text:
         ],
     )
     try:
-        body = extract_function_body(samovar_text, "void loop()")
+        # P8: pending_lua_* обрабатываются в отдельной tick_apply_pending_lua_commands()
+        # (Samovar.ino), вызываемой из loop() на месте прежнего инлайн-блока USE_LUA.
+        # Конкатенация тела loop() с телом этой функции сохраняет прежние проверки,
+        # но наличие вызова из loop() надо проверить отдельно: без него функция
+        # осталась бы мёртвым кодом, а проверки ниже всё равно нашли бы свои токены.
+        loop_body = extract_function_body(samovar_text, "void loop()")
+        if "tick_apply_pending_lua_commands();" not in loop_body:
+            raise ValueError("loop() does not call tick_apply_pending_lua_commands()")
+        body = loop_body + extract_function_body(
+            samovar_text, "static void tick_apply_pending_lua_commands()"
+        )
     except ValueError as exc:
         errors.append(str(exc))
         body = ""

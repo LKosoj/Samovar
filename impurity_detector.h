@@ -107,10 +107,11 @@ inline void detector_reset_sampling() {
   detector_bg_threshold = 0.0f;
 }
 
-/**
- * Инициализация детектора
- */
-void init_impurity_detector() {
+// Сброс истории температур и накопителей детектора: применяется при инициализации,
+// полном сбросе и смене датчика-источника (пар/царга). Очищает буферы истории и
+// времени выборки, обнуляет статистику окна и lastSampleTime — для немедленного
+// начала сбора данных.
+inline void detector_reset_history() {
   memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
   memset(impurityDetector.sampleTime, 0, sizeof(impurityDetector.sampleTime));
   impurityDetector.historyIndex = 0;
@@ -121,17 +122,32 @@ void init_impurity_detector() {
   impurityDetector.historyMax = 0.0f;
   impurityDetector.lastSampleTime = 0;
   impurityDetector.currentTrend = 0;
-  impurityDetector.detectorStatus = 0;
   impurityDetector.criticalConfirm = 0;
-  impurityDetector.correctionFactor = 1.0f;
-  impurityDetector.lastCorrectionTime = 0;
   impurityDetector.tempVariance = 0.0f;
   detector_reset_sampling();
+}
+
+// Полный сброс состояния детектора поверх detector_reset_history(): дополнительно
+// обнуляет статус, коэффициент коррекции, время последней коррекции (задаёт
+// вызывающий — 0 при инициализации, millis() при полном сбросе) и состояние
+// стабилизации пара / выбора датчика.
+inline void detector_reset_full(unsigned long lastCorrectionTimeValue) {
+  detector_reset_history();
+  impurityDetector.detectorStatus = 0;
+  impurityDetector.correctionFactor = 1.0f;
+  impurityDetector.lastCorrectionTime = lastCorrectionTimeValue;
   detector_steam_stable_since = 0;
   detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
   detector_steam_stability_span = 0.0f;
   detector_steam_stability_variance = 0.0f;
   detector_last_pipe_sensor = -1; // [M-29] сброс выбора датчика
+}
+
+/**
+ * Инициализация детектора
+ */
+void init_impurity_detector() {
+  detector_reset_full(0);
 }
 
 void reset_heat_loss_calculation() {
@@ -145,28 +161,7 @@ void reset_heat_loss_calculation() {
  * Полный сброс состояния (вызывается при смене программы или ручной установке Т тела)
  */
 void reset_impurity_detector() {
-  // Очищаем историю температур полностью
-  memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
-  memset(impurityDetector.sampleTime, 0, sizeof(impurityDetector.sampleTime));
-  impurityDetector.historySize = 0;
-  impurityDetector.historyIndex = 0;
-  impurityDetector.historySum = 0.0f;
-  impurityDetector.historySumSquares = 0.0f;
-  impurityDetector.historyMin = 0.0f;
-  impurityDetector.historyMax = 0.0f;
-  impurityDetector.lastSampleTime = 0; // Сбрасываем время последней выборки для немедленного начала сбора данных
-  impurityDetector.currentTrend = 0;
-  impurityDetector.detectorStatus = 0;
-  impurityDetector.criticalConfirm = 0;
-  impurityDetector.correctionFactor = 1.0f;
-  impurityDetector.lastCorrectionTime = millis();
-  impurityDetector.tempVariance = 0.0f;
-  detector_reset_sampling();
-  detector_steam_stable_since = 0;
-  detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
-  detector_steam_stability_span = 0.0f;
-  detector_steam_stability_variance = 0.0f;
-  detector_last_pipe_sensor = -1; // [M-29] сброс выбора датчика — при следующем цикле определится заново
+  detector_reset_full(millis());
 }
 
 // Вызывается при старте новой строки программы
@@ -655,20 +650,12 @@ void process_impurity_detector() {
   // При фактической смене источника датчика — очищаем историю тренда,
   // чтобы линейная регрессия не считалась по смешанным данным двух датчиков
   if (sensorChanged) {
-    memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
-    impurityDetector.historyIndex = 0;
-    impurityDetector.historySize = 0;
-    impurityDetector.historySum = 0.0f;
-    impurityDetector.historySumSquares = 0.0f;
-    impurityDetector.historyMin = 0.0f;
-    impurityDetector.historyMax = 0.0f;
-    impurityDetector.currentTrend = 0;
-    impurityDetector.criticalConfirm = 0;
-    impurityDetector.tempVariance = 0.0f;
-    memset(impurityDetector.sampleTime, 0, sizeof(impurityDetector.sampleTime));
-    // Накопитель усреднения и замер фона привязаны к истории: новый датчик — новый фон
-    detector_reset_sampling();
-    impurityDetector.lastSampleTime = 0; // [fix M-29] немедленный старт сбора с нового датчика
+    // [fix M-29] detector_reset_history() тот же сброс истории/накопителей, что при
+    // инициализации и полном сбросе, включая lastSampleTime = 0 — немедленный старт
+    // сбора с нового датчика. detectorStatus/correctionFactor/lastCorrectionTime и
+    // detector_steam_*/detector_last_pipe_sensor намеренно НЕ трогаются: это состояние
+    // строки программы и выбора датчика, а не истории.
+    detector_reset_history();
     // Короткий грейс-период: дать буферу заполниться свежими данными (30 сек)
     unsigned long detector_new_grace_until = now + 30000UL;
     if (detector_grace_until == 0 || (int32_t)(detector_grace_until - detector_new_grace_until) < 0) {

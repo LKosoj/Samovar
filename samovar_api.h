@@ -171,6 +171,7 @@ inline void force_heater_output_off_locked(bool requestSleep);
 inline bool heater_safety_latched();
 inline bool heater_power_on();
 inline bool heater_enable_outputs(uint8_t outputs);
+inline void heater_boost_output_off();
 inline void notify_power_worker();
 inline void set_power_worker_ready(bool ready);
 inline void tick_power_transition();

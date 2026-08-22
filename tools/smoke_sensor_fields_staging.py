@@ -185,22 +185,39 @@ if apply_save_ds_body:
 
 handle_save_body = functions.get("void handleSave", "")
 if handle_save_body:
+    # handleSave больше не вызывает apply_save_ds_addr_arg построчно по имени сенсора:
+    # один generic-цикл по kSaveDsAddrFields делает это для всех пяти. Порядок
+    # Steam/Pipe/Water/Tank/ACP проверяется отдельно ниже, на самой таблице.
     require_ordered_tokens(
         "handleSave snapshots DS registry before DS parsing",
         handle_save_body,
         [
             "DSAddressSnapshot dsSnapshot;",
             "copy_ds_address_snapshot(dsSnapshot);",
-            'apply_save_ds_addr_arg(request, "SteamAddr", dsSnapshot, staged.SteamAdress, PROFILE_SENSOR_RESET_STEAM, sensorResetMask)',
-            'apply_save_ds_addr_arg(request, "PipeAddr", dsSnapshot, staged.PipeAdress, PROFILE_SENSOR_RESET_PIPE, sensorResetMask)',
-            'apply_save_ds_addr_arg(request, "WaterAddr", dsSnapshot, staged.WaterAdress, PROFILE_SENSOR_RESET_WATER, sensorResetMask)',
-            'apply_save_ds_addr_arg(request, "TankAddr", dsSnapshot, staged.TankAdress, PROFILE_SENSOR_RESET_TANK, sensorResetMask)',
-            'apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, PROFILE_SENSOR_RESET_ACP, sensorResetMask)',
+            "for (const SaveDsAddrField &f : kSaveDsAddrFields)",
+            "apply_save_ds_addr_arg(request, f.name, dsSnapshot, staged.*f.member, f.resetBit, sensorResetMask)",
         ],
         errors,
     )
     for token in ["DScnt", "DSAddr["]:
         forbid_token("handleSave DS parsing live globals", handle_save_body, token)
+
+ds_table_match = re.search(r"kSaveDsAddrFields\[\]\s*=\s*\{(.*?)\};", web_text, re.S)
+if not ds_table_match:
+    errors.append("kSaveDsAddrFields table not found in WebServer.ino")
+else:
+    require_ordered_tokens(
+        "kSaveDsAddrFields keeps Steam/Pipe/Water/Tank/ACP order",
+        ds_table_match.group(1),
+        [
+            '{"SteamAddr", &SetupEEPROM::SteamAdress, PROFILE_SENSOR_RESET_STEAM}',
+            '{"PipeAddr", &SetupEEPROM::PipeAdress, PROFILE_SENSOR_RESET_PIPE}',
+            '{"WaterAddr", &SetupEEPROM::WaterAdress, PROFILE_SENSOR_RESET_WATER}',
+            '{"TankAddr", &SetupEEPROM::TankAdress, PROFILE_SENSOR_RESET_TANK}',
+            '{"ACPAddr", &SetupEEPROM::ACPAdress, PROFILE_SENSOR_RESET_ACP}',
+        ],
+        errors,
+    )
 
 clear_body = functions.get("static void clear_ds_sensor_runtime", "")
 if clear_body:

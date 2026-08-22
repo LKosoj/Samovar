@@ -55,18 +55,37 @@ if handle_save:
             "const SAMOVAR_MODE sourceMode = Samovar_Mode;",
             "SetupEEPROM staged = SamSetup;",
             "uint8_t sensorResetMask = 0;",
-            'apply_save_u16_arg(request, "SteamDelay", staged.SteamDelay, 0, 65535)',
-            'apply_save_float_arg(request, "SetPipeTemp", staged.SetPipeTemp, 0.0f, 150.0f)',
-            'apply_save_ds_addr_arg(request, "ACPAddr", dsSnapshot, staged.ACPAdress, PROFILE_SENSOR_RESET_ACP, sensorResetMask)',
-            'apply_save_u8_arg(request, "PackDens", staged.PackDens, 0, 100)',
+            "for (const SaveU16Field &f : kSaveU16Fields)",
+            "apply_save_u16_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)",
+            "for (const SaveFloatField &f : kSaveFloatFields)",
+            "apply_save_float_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)",
+            "for (const SaveU8Field &f : kSaveU8Fields)",
+            "apply_save_u8_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)",
+            "for (const SaveDsAddrField &f : kSaveDsAddrFields)",
+            "apply_save_ds_addr_arg(request, f.name, dsSnapshot, staged.*f.member, f.resetBit, sensorResetMask)",
             "const bool hasSwitchMode = modeRequested",
             "prepare_program_for_mode(",
             "prepare_default_program_for_mode(",
             "queue_profile_operation(",
-            "send_save_operation_accepted(request, operationId);",
+            "send_operation_accepted(request, operationId);",
         ],
         errors,
     )
+    # handleSave больше не содержит построчных вызовов apply_save_*_arg с
+    # литеральными именами полей — они теперь берутся из общих таблиц
+    # (kSaveU16Fields и т.д.), которые save_param_name_allowed тоже читает.
+    # Здесь фиксируем, что конкретные поля из плана П9 действительно попали
+    # в свои таблицы с ожидаемыми границами (иначе staging для них молча
+    # исчезнет при рефакторинге, а generic-цикл этого не покажет).
+    field_initializers = {
+        "SteamDelay": '{"SteamDelay", &SetupEEPROM::SteamDelay, 0, 65535}',
+        "SetPipeTemp": '{"SetPipeTemp", &SetupEEPROM::SetPipeTemp, 0.0f, 150.0f}',
+        "ACPAddr": '{"ACPAddr", &SetupEEPROM::ACPAdress, PROFILE_SENSOR_RESET_ACP}',
+        "PackDens": '{"PackDens", &SetupEEPROM::PackDens, 0, 100}',
+    }
+    for field_name, initializer in field_initializers.items():
+        if initializer not in web_text:
+            errors.append(f"save field table missing initializer for {field_name}: {initializer}")
     require_ordered_tokens(
         "explicit WProgram is validated before publication",
         handle_save,
@@ -159,9 +178,28 @@ if loop and loop.count("process_profile_operation();") != 1:
     errors.append("loop must call process_profile_operation exactly once")
 
 if save_allowlist:
-    for name in ("fullsetup", "mode", "WProgram", "SteamDelay", "PackDens"):
-        if f'name == "{name}"' not in save_allowlist:
-            errors.append(f"save allowlist missing {name}")
+    # save_param_name_allowed больше не хардкодит литералы name == "...": оно перебирает
+    # те же таблицы, что применяет handleSave. Проверяем, что оно действительно читает
+    # каждую таблицу/массив имён, и что старой захардкоженной цепочки сравнений нет.
+    for source in (
+        "kSaveU16Fields", "kSaveFloatFields", "kSaveU8Fields", "kSaveCheckboxFields",
+        "kSaveBool01Fields", "kSaveColorFields", "kSaveDsAddrFields",
+        "kSaveMiscStringNames", "kSaveSpecialNames",
+    ):
+        if source not in save_allowlist:
+            errors.append(f"save allowlist does not consult {source}")
+    if re.search(r'name\s*==\s*"', save_allowlist):
+        errors.append("save allowlist still hardcodes a literal name == \"...\" comparison")
+    for name, table in (
+        ("fullsetup", "kSaveSpecialNames"),
+        ("mode", "kSaveSpecialNames"),
+        ("WProgram", "kSaveSpecialNames"),
+        ("SteamDelay", "kSaveU16Fields"),
+        ("PackDens", "kSaveU8Fields"),
+    ):
+        table_match = re.search(rf"{table}\[\]\s*=\s*\{{(.*?)\}};", web_text, re.S)
+        if not table_match or f'"{name}"' not in table_match.group(1):
+            errors.append(f"save allowlist source {table} missing {name}")
 
 for name, parse_body, parser in (
     ("parse_save_long_arg", parse_long, "parse_bounded_long"),

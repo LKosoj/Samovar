@@ -292,12 +292,7 @@ BLYNK_WRITE(V12) {
   }
   if (!PowerOn) return;
   if (state) {
-    SamovarCommands command = SAMOVAR_START;
-    if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-      command = SAMOVAR_BEER_NEXT;
-    } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      command = SAMOVAR_DIST_NEXT;
-    }
+    SamovarCommands command = mode_start_command(Samovar_Mode);
     if (!queue_samovar_command(command)) {
       SendMsg("Очередь команд занята: команда Blynk V12 не поставлена", WARNING_MSG);
     }
@@ -330,15 +325,7 @@ BLYNK_WRITE(V3) {
 BLYNK_WRITE(V4) {
   if (mode_switch_in_progress()) return;
   SamovarCommands command = SAMOVAR_POWER;
-  if (Samovar_Mode == SAMOVAR_BEER_MODE && !PowerOn) {
-    command = SAMOVAR_BEER;
-  } else if (Samovar_Mode == SAMOVAR_BK_MODE && !PowerOn) {
-    command = SAMOVAR_BK;
-  } else if (Samovar_Mode == SAMOVAR_NBK_MODE && !PowerOn) {
-    command = SAMOVAR_NBK;
-  } else if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE && !PowerOn) {
-    command = SAMOVAR_DISTILLATION;
-  }
+  if (!PowerOn) command = mode_power_on_command(Samovar_Mode);
   if (!queue_samovar_command(command)) {
     SendMsg("Очередь команд занята: команда Blynk V4 не поставлена", WARNING_MSG);
   }

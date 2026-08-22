@@ -104,13 +104,6 @@ inline bool copy_program_wait_type_text(String& text, TickType_t timeout = pdMS_
   return true;
 }
 
-inline bool program_wait_type_is(ProgramWaitType waitType, bool& matches, TickType_t timeout = pdMS_TO_TICKS(50)) {
-  ProgramWaitType currentType = PROGRAM_WAIT_NONE;
-  if (!copy_program_wait_type(currentType, timeout)) return false;
-  matches = (currentType == waitType);
-  return true;
-}
-
 inline bool set_program_wait_type(ProgramWaitType waitType, TickType_t timeout = pdMS_TO_TICKS(50)) {
   bool locked = runtime_state_lock(timeout);
   if (!locked) return false;
@@ -123,14 +116,6 @@ inline bool copy_session_description(String& description, TickType_t timeout = p
   bool locked = runtime_state_lock(timeout);
   if (!locked) return false;
   description = SessionDescription;
-  runtime_state_unlock(true);
-  return true;
-}
-
-inline bool set_session_description_value(const String& description, TickType_t timeout = pdMS_TO_TICKS(50)) {
-  bool locked = runtime_state_lock(timeout);
-  if (!locked) return false;
-  SessionDescription = description;
   runtime_state_unlock(true);
   return true;
 }
@@ -194,14 +179,6 @@ inline bool set_lua_status_value(const String& status, TickType_t timeout = pdMS
   bool locked = runtime_state_lock(timeout);
   if (!locked) return false;
   Lua_status = status;
-  runtime_state_unlock(true);
-  return true;
-}
-
-inline bool copy_lua_status(String& status, TickType_t timeout = pdMS_TO_TICKS(50)) {
-  bool locked = runtime_state_lock(timeout);
-  if (!locked) return false;
-  status = Lua_status;
   runtime_state_unlock(true);
   return true;
 }

@@ -45,7 +45,7 @@ for file_name, signature in checks:
     require_token(
         f"{file_name} uses common PWR_FACTOR-aware reduction helper",
         body,
-        "mode_reduce_power_for_water_alarm_by_volts(",
+        "mode_handle_water_pre_alarm_if_due();",
     )
     if "target_power_volt - 5 * PWR_FACTOR" in body or "target_power_volt - 5" in body:
         errors.append(f"{file_name} contains raw power reduction instead of helper")
@@ -113,25 +113,14 @@ if bk_text:
             errors,
         )
 
-        require_ordered_tokens(
-            "BK.h water pre-alarm sends message unconditionally before power reduction",
+        # [П6] Message-before-power-reduction ordering and the dead-#else check for the
+        # water pre-alarm now live in smoke_mode_common_alarms.py, against the shared
+        # mode_handle_water_pre_alarm_if_due() body - BK.h only needs to call it.
+        require_token(
+            "BK.h water pre-alarm uses the shared helper",
             bk_alarm_body,
-            [
-                "mode_water_pre_alarm_due()",
-                "SendMsg((\"Критическая температура воды!\")",
-                "#ifdef SAMOVAR_USE_POWER",
-                "mode_reduce_power_for_water_alarm_by_volts(",
-            ],
-            errors,
+            "mode_handle_water_pre_alarm_if_due();",
         )
-
-        pre_alarm_start = bk_alarm_body.find("mode_water_pre_alarm_due()")
-        pause_call = bk_alarm_body.find("mode_set_alarm_pause_ms(30000)")
-        if pre_alarm_start >= 0 and pause_call > pre_alarm_start:
-            if "#else" in bk_alarm_body[pre_alarm_start:pause_call]:
-                errors.append("BK.h water pre-alarm still has a dead #else branch")
-        else:
-            errors.append("BK.h water pre-alarm range not found for #else check")
 
 # [П4.4] distiller.h: BOOST heater is gated off exactly once, on the first row
 # transition where the program starts supplying its own Power.

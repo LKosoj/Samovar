@@ -35,6 +35,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from smoke_helpers import extract_braced_block_after
+
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "data_raw" / "calibrate.htm"
 WEBSERVER = ROOT / "WebServer.ino"
@@ -311,13 +313,30 @@ def check_server_contract() -> list[str]:
     errors = []
     text = WEBSERVER.read_text(encoding="utf-8", errors="ignore")
 
-    if 'name == "kstepperspd"' in text:
+    # /save's allowlist is table-driven (kSaveU16Fields et al. feeding
+    # save_param_name_allowed(), see smoke_save_param_allowlist_sync.py) rather than a
+    # hardcoded `name == "..."` chain, so check the same source of truth instead of a
+    # literal comparison that no longer exists in the file.
+    start = text.find("struct SaveFloatField")
+    region = ""
+    if start < 0:
+        errors.append("WebServer.ino: SaveFloatField table declaration not found")
+    else:
+        try:
+            _, end = extract_braced_block_after(
+                text, "static bool save_param_name_allowed(const String& name) {", start
+            )
+            region = text[start:end]
+        except ValueError as exc:
+            errors.append(str(exc))
+
+    if region and '"kstepperspd"' in region:
         errors.append(
             "WebServer.ino now allows kstepperspd in /save - calibrate.htm deliberately "
             "does not send it; revisit tools/smoke_calibrate_save.py"
         )
-    for param in ('name == "StepperStepMl"', 'name == "StepperStepMlI2C"'):
-        if param not in text:
+    for param in ("StepperStepMl", "StepperStepMlI2C"):
+        if region and f'"{param}"' not in region:
             errors.append(f"WebServer.ino: /save no longer allows {param}")
     if "staged.StepperStepMl = (uint16_t)(stepsPer100Ml / 100);" not in text:
         errors.append(

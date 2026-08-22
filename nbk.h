@@ -44,7 +44,6 @@ float nbk_dP = 0; // dП — шаг регулирования подачи
 float nbk_Tb = 0; // Тб — текущая температура барды
 float nbk_Tn = NBK_TN_DEFAULT; // Тн — нижний предел температуры барды
 float nbk_Tp = 0; // Тп — температура пара
-float nbk_Tvody = 0; // Тводы — температура воды
 float nbk_dD = 0; // dД — поправка к Тн по давлению (используется при #define USE_NBK_DELTA_PRESSURE)
 float nbk_dT = NBK_DT_DEFAULT; // Допустимая просадка Т барды (dT)
 float nbk_Tp_lim = NBK_TP_DEFAULT; // Предел температуры пара на этапе Работа
