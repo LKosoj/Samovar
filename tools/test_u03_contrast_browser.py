@@ -27,10 +27,14 @@ PROGRAM_FIXTURES = {
         "H;100;0.1;0;0;120", "B;200;0.2;1;0;120", "C;300;0.3;2;0;120",
         "T;400;0.4;3;0;120", "P;60;0;4;0;120",
     )),
+    # Строки обязаны проходить check_program() из beer.htm, иначе getProgram()
+    # уходит в "Ошибка программы" и ни одной .prgline на странице не появляется:
+    # B - кипячение (температура не задаётся, задаётся время), W/L - без времени
+    # и температуры, M/C/F/A - температура без времени.
     "beer.htm": "\n".join((
-        "P;65;10;0^0^0^0;0", "M;66;0;0^0^0^0;0", "B;100;10;0^0^0^0;0",
-        "C;20;0;0^0^0^0;1", "W;0;10;0^0^0^0;0", "F;25;10;0^0^0^0;0",
-        "A;65;10;0^0^0^0;0", "L;0;0;0^0^0^0;0",
+        "P;65;10;0^0^0^0;0", "M;66;0;0^0^0^0;0", "B;0;10;0^0^0^0;0",
+        "C;20;0;0^0^0^0;1", "W;0;0;0^0^0^0;0", "F;25;0;0^0^0^0;0",
+        "A;65;0;0^0^0^0;0", "L;0;0;0^0^0^0;0",
     )),
     "distiller.htm": "\n".join((
         "T;80;0;120", "S;30;1;120", "A;20;2;120", "P;90;3;120", "R;40;4;120",
@@ -87,7 +91,8 @@ BROWSER_TEST = r'''async page => {
     PrgType: "", Status: "Готов", Lstatus: "", TimeRemaining: 0, TotalTime: 0,
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
-    PowerOn: 0, StepperStepMl: 111, ProgNum: 0
+    PowerOn: 0, StepperStepMl: 111, ProgNum: 0,
+    heaterAlarmLatched: 0, latestMessageSequence: 0
   };
   const i2cMixer = {
     present: 1, address: 16, role: 1, mode: 1, caps: 25, status: 0, error: 0,

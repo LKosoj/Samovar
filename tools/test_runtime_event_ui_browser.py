@@ -82,32 +82,40 @@ INDEPENDENT_CONTEXT_TEST = r'''async page => {
     }
     const cursor = Number(match[1]);
     trace.push(cursor);
+    // Первый ответ вкладка тратит на бутстрап курсора (на свежей загрузке
+    // app.js прыгает на конец кольца, а не переигрывает бэклог), поэтому
+    // событие в нём не показывается: отдаём пустое кольцо и держим курсор на
+    // нуле, а сами события начинаем со второго опроса.
     let event = {};
-    if (cursor === 0) event = { Msg: 'first-message', msglvl: 2, messageSequence: 1 };
-    else if (cursor === 1) event = { LogMsg: 'second-log', messageSequence: 2 };
-    else if (cursor === 2) event = { Msg: 'third-message', msglvl: 1, messageSequence: 3 };
+    if (trace.length > 1) {
+      if (cursor === 0) event = { Msg: 'first-message', msglvl: 2, messageSequence: 1 };
+      else if (cursor === 1) event = { LogMsg: 'second-log', messageSequence: 2 };
+      else if (cursor === 2) event = { Msg: 'third-message', msglvl: 1, messageSequence: 3 };
+    }
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(Object.assign({ crnt_tm: '12:00:00' }, event))
+      body: JSON.stringify(Object.assign(
+        { crnt_tm: '12:00:00', heaterAlarmLatched: 0, latestMessageSequence: 0 }, event
+      ))
     });
   };
   await page.route('**/ajax*', handler);
   await page.goto(baseUrl + '/event_harness.htm', { waitUntil: 'load' });
   const browserCalls = await page.evaluate(async interval => {
     window.__independentCalls = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       await SamovarApp.pollAjax(function () {}, {
         message: (text, level) => window.__independentCalls.push({ type: 'message', text, level }),
         log: text => window.__independentCalls.push({ type: 'log', text }),
         connection: function () {}
       });
-      if (i !== 3) await new Promise(resolve => setTimeout(resolve, interval));
+      if (i !== 4) await new Promise(resolve => setTimeout(resolve, interval));
     }
     return window.__independentCalls;
   }, delayMs);
   const events = browserCalls.map(call => call.text);
-  if (JSON.stringify(trace) !== JSON.stringify([0, 1, 2, 3])) {
+  if (JSON.stringify(trace) !== JSON.stringify([0, 0, 1, 2, 3])) {
     throw new Error('independent cursor trace: ' + JSON.stringify(trace));
   }
   if (JSON.stringify(events) !== JSON.stringify([
@@ -135,7 +143,8 @@ BROWSER_TEST = r'''async page => {
     PrgType: '', Status: 'Готов', Lstatus: '', TimeRemaining: 0, TotalTime: 0,
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
-    PowerOn: 0, StepperStepMl: 111
+    PowerOn: 0, StepperStepMl: 111,
+    heaterAlarmLatched: 0, latestMessageSequence: 0
   };
   const columnFixture = {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
@@ -214,9 +223,28 @@ BROWSER_TEST = r'''async page => {
     });
   }
 
-  async function openHarness(current) {
+  async function openHarness(current, bootstrapSequence) {
     await current.goto(baseUrl + '/event_harness.htm', { waitUntil: 'load' });
     await current.waitForFunction(() => window.SamovarApp && SamovarApp.pollAjax);
+    // Первый успешный ответ /ajax после загрузки страницы app.js тратит на
+    // бутстрап курсора: он не переигрывает бэклог кольца, а прыгает на его
+    // конец (latestMessageSequence) и событие из этого ответа не показывает.
+    // Отдаём такой ответ отдельным маршрутом, чтобы сценарии ниже видели ровно
+    // свои запросы. По умолчанию кольцо пустое (курсор остаётся на нуле);
+    // bootstrapSequence задаёт стартовый курсор там, где сценарию нужен
+    // непустой хвост кольца (проверка обёртки UINT32).
+    const startSequence = bootstrapSequence === undefined ? 0 : bootstrapSequence;
+    const bootstrapRoute = route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        crnt_tm: '12:00:00', heaterAlarmLatched: 0, latestMessageSequence: startSequence
+      })
+    });
+    await current.route('**/ajax*', bootstrapRoute);
+    await current.evaluate(() => SamovarApp.pollAjax(function () {}, {
+      message: function () {}, log: function () {}, connection: function () {}
+    }));
+    await current.unroute('**/ajax*', bootstrapRoute);
   }
 
   async function pollWithSinks(current, config) {
@@ -322,7 +350,12 @@ BROWSER_TEST = r'''async page => {
       },
       { result: false, rejection: null, calls: [{ type: 'connection', error: true }] },
       { result: false, rejection: null, calls: [{ type: 'connection', error: true }] },
-      { result: false, rejection: null, calls: [{ type: 'connection', error: true }] },
+      // HTTP 503 - это "контроллер занят" (мьютекс/снапшот), а не обрыв связи:
+      // app.js молча считает такие ответы отдельным счётчиком и НЕ дёргает
+      // connection-сток, поэтому индикатор связи не мигает на каждом коротком
+      // захвате замка. Предупреждение появится лишь после offlineThreshold
+      // подряд идущих 503.
+      { result: false, rejection: null, calls: [] },
       { result: false, rejection: null, calls: [{ type: 'connection', error: true }] },
       { result: false, rejection: null, calls: [{ type: 'connection', error: true }] },
       {
@@ -534,14 +567,17 @@ BROWSER_TEST = r'''async page => {
         : { Msg: 'wrapped-sequence', msglvl: 2, messageSequence: 1 };
       await fulfillJson(route, withEvent(event));
     });
-    await openHarness(wrapPage);
+    // Курсор ставим на MAX-1, иначе бутстрап оставил бы ноль и приход
+    // sequence = MAX сам по себе выглядел бы разрывом - проверка обёртки
+    // 4294967295 -> 1 до неё бы просто не дошла.
+    await openHarness(wrapPage, 4294967294);
     await wrapPage.evaluate(async () => {
       await SamovarApp.pollAjax(function () {});
       await SamovarApp.pollAjax(function () {});
     });
     const wrapWarning = await wrapPage.evaluate(warning =>
       document.getElementById('messages').textContent.includes(warning), gapWarning);
-    expect(JSON.stringify(wrapState.trace) === JSON.stringify([0, 4294967295]),
+    expect(JSON.stringify(wrapState.trace) === JSON.stringify([4294967294, 4294967295]),
       'wrap cursor trace: ' + JSON.stringify(wrapState.trace));
     expect(!wrapWarning, 'UINT32 wrap produced a false gap warning');
   }
@@ -722,7 +758,10 @@ BROWSER_TEST = r'''async page => {
         history: history
       };
     }, { messageText, logText });
-    expect(JSON.stringify(state.trace) === JSON.stringify([0, 1]),
+    // Три запроса, а не два: первый ответ страница тратит на бутстрап курсора
+    // (кольцо в фикстуре пустое, latestMessageSequence = 0, поэтому курсор
+    // остаётся нулевым), сообщение приходит вторым запросом, лог - третьим.
+    expect(JSON.stringify(state.trace) === JSON.stringify([0, 0, 1]),
       file + ' MESSAGE/CONSOLE cursor trace: ' + JSON.stringify(state.trace));
     expect(result.messageCount === 1 && result.logCount === 1 && result.updateErrors === 0 &&
       result.audioPlayCount === 1 && result.audioPauseCount === 0 &&
@@ -832,10 +871,13 @@ BROWSER_TEST = r'''async page => {
           .filter(args => args[0] === '12:00:02; chart-log').length,
         sharedHistory: localStorage.getItem('samovarHistoryV2')
       }));
-    expect(JSON.stringify(state.trace) === JSON.stringify([0, 1]),
+    // Первый ответ уходит на бутстрап курсора (кольцо пустое), поэтому запросов
+    // три, а рендер вызывается на каждом ответе - включая бутстрапный.
+    expect(JSON.stringify(state.trace) === JSON.stringify([0, 0, 1]),
       'chart cursor trace: ' + JSON.stringify(state.trace));
     expect(state.maxActive === 1, 'chart concurrent telemetry requests: ' + state.maxActive);
     expect(JSON.stringify(chartState.rendererCalls) === JSON.stringify([
+      { crnt_tm: '12:00:01', messageSequence: 1 },
       { crnt_tm: '12:00:01', messageSequence: 1 },
       { crnt_tm: '12:00:02', messageSequence: 2 }
     ]), 'chart renderer calls: ' + JSON.stringify(chartState.rendererCalls));

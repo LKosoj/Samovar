@@ -42,24 +42,21 @@ bool close_data_log() {
 }
 
 bool request_data_log_close() {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) {
+  PendingCommandLockGuard guard;
+  if (!guard) {
     Serial.println(F("data log close request failed: command busy"));
     return false;
   }
   pending_log_close_flag = true;
   pending_log_flush_flag = false;
   pending_log_flush_seq = 0;
-  pending_command_unlock(true);
   return true;
 }
 
 bool data_log_close_pending() {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return true;
-  const bool pending = pending_log_close_flag;
-  pending_command_unlock(true);
-  return pending;
+  PendingCommandLockGuard guard;
+  if (!guard) return true;
+  return pending_log_close_flag;
 }
 
 void process_pending_data_log_ops() {
@@ -67,8 +64,8 @@ void process_pending_data_log_ops() {
   bool hasPendingLogFlush = false;
   uint32_t logFlushSeq = 0;
   {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (!locked) {
+    PendingCommandLockGuard guard;
+    if (!guard) {
       Serial.println(F("data log pending ops skipped: command busy"));
       return;
     }
@@ -78,21 +75,19 @@ void process_pending_data_log_ops() {
       logFlushSeq = pending_log_flush_seq;
       hasPendingLogFlush = true;
     }
-    pending_command_unlock(true);
   }
 
   if (hasPendingLogClose) {
     if (!close_data_log()) {
       return;
     }
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked) {
+    PendingCommandLockGuard guard;
+    if (guard) {
       pending_log_close_flag = false;
       pending_log_flush_flag = false;
       pending_log_flush_seq = 0;
       log_flush_seq = log_write_seq;
     }
-    pending_command_unlock(locked);
     return;
   }
 
@@ -100,8 +95,8 @@ void process_pending_data_log_ops() {
     if (!flush_data_log()) {
       return;
     }
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked) {
+    PendingCommandLockGuard guard;
+    if (guard) {
       if (log_flush_seq < logFlushSeq) {
         log_flush_seq = logFlushSeq;
       }
@@ -110,7 +105,6 @@ void process_pending_data_log_ops() {
         pending_log_flush_seq = 0;
       }
     }
-    pending_command_unlock(locked);
   }
 }
 
@@ -329,8 +323,8 @@ bool create_data() {
   {
     // Конечный таймаут: этот лок берётся уже под log_file_lock, и бесконечное ожидание
     // здесь превращало любую задержку соседней задачи в вечную взаимную блокировку.
-    bool pendingLocked = pending_command_lock(pdMS_TO_TICKS(2000));
-    if (!pendingLocked) {
+    PendingCommandLockGuard pendingGuard(pdMS_TO_TICKS(2000));
+    if (!pendingGuard) {
       fileToAppend.close();
       log_file_unlock(true);
       Serial.println(F("data log create failed: pending mutex unavailable"));
@@ -339,7 +333,6 @@ bool create_data() {
     pending_log_close_flag = false;
     pending_log_flush_flag = false;
     pending_log_flush_seq = 0;
-    pending_command_unlock(true);
   }
   data_log_ready = true;
   log_file_unlock(true);

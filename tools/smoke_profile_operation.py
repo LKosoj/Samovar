@@ -213,6 +213,20 @@ static bool pending_command_lock(TickType_t) {
 
 static void pending_command_unlock(bool) {}
 
+struct PendingCommandLockGuard {
+  bool acquired;
+  explicit PendingCommandLockGuard(TickType_t timeout = 0)
+      : acquired(pending_command_lock(timeout)) {}
+  ~PendingCommandLockGuard() { pending_command_unlock(acquired); }
+  PendingCommandLockGuard(const PendingCommandLockGuard&) = delete;
+  PendingCommandLockGuard& operator=(const PendingCommandLockGuard&) = delete;
+  void release() {
+    pending_command_unlock(acquired);
+    acquired = false;
+  }
+  explicit operator bool() const { return acquired; }
+};
+
 // Единственный вызов каждой лежит во вклеенном теле (WebServer.ino:173/174),
 // поэтому со `static` мутация, убравшая вызов, роняла бы компилятор вместо
 // assert-а - см. группу предикатов cleanupReady ниже.

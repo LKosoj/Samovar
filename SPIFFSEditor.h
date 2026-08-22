@@ -392,13 +392,12 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
                 if (mode_switch_in_progress()) {
                     request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
                 } else {
-                    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-                    if (locked && !mode_switch_in_progress()) {
+                    PendingCommandLockGuard guard;
+                    if (guard && !mode_switch_in_progress()) {
                         pending_lua_reload_flag = true;
                     } else {
                         request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
                     }
-                    pending_command_unlock(locked);
                 }
             }
 #endif

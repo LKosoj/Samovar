@@ -707,6 +707,20 @@ static bool pending_command_lock(TickType_t) {
 }
 
 static void pending_command_unlock(bool) { unlockCalls++; }
+
+struct PendingCommandLockGuard {
+  bool acquired;
+  explicit PendingCommandLockGuard(TickType_t timeout = 0)
+      : acquired(pending_command_lock(timeout)) {}
+  ~PendingCommandLockGuard() { pending_command_unlock(acquired); }
+  PendingCommandLockGuard(const PendingCommandLockGuard&) = delete;
+  PendingCommandLockGuard& operator=(const PendingCommandLockGuard&) = delete;
+  void release() {
+    pending_command_unlock(acquired);
+    acquired = false;
+  }
+  explicit operator bool() const { return acquired; }
+};
 static bool mode_switch_in_progress() { return modeSwitchInProgress; }
 
 static OperationError execute_pending_i2c_stepper(
@@ -1077,7 +1091,7 @@ for name, kind, slot, flag in queue_specs:
         f"{name} atomic reserve/publication",
         queue,
         [
-            "pending_command_lock(pdMS_TO_TICKS(50))",
+            "PendingCommandLockGuard guard;",
             "mode_switch_in_progress()",
             "operation_store_reserve_locked(",
             kind,
@@ -1086,7 +1100,6 @@ for name, kind, slot, flag in queue_specs:
             "__sync_synchronize();",
             f"{flag} = true;",
             "operationId = reservedId;",
-            "pending_command_unlock(true);",
         ],
         errors,
     )
@@ -1095,7 +1108,7 @@ for name, kind, slot, flag in queue_specs:
     publication_at = queue.find("command.operationId = reservedId;")
     if publication_at >= 0 and any(
         token in queue[publication_at:queue.find(f"{flag} = true;", publication_at)]
-        for token in ("return ", "pending_command_unlock")
+        for token in ("return ", "guard.release()")
     ):
         errors.append(f"{name} can fail between reserve and DTO publication")
 
@@ -1118,14 +1131,13 @@ require_ordered_tokens(
     process,
     [
         "if (pending_i2c_operation_result.pending)",
-        "pending_command_lock(pdMS_TO_TICKS(50))",
+        "PendingCommandLockGuard guard;",
         "operation_store_finish_locked(",
         "clear_pending_i2c_operation_locked(",
         "pending_i2c_operation_result = {};",
         "return;",
         "mode_switch_in_progress()",
         "operation_store_mark_running_locked(",
-        "pending_command_unlock(true);",
         "publish_pending_i2c_result(",
     ],
     errors,
@@ -1175,7 +1187,7 @@ for name, executor in (
     ("pump", pump_execute),
     ("i2c calibration", i2c_cal_execute),
 ):
-    if "pending_command_lock(" in executor:
+    if "pending_command_lock(" in executor or "PendingCommandLockGuard" in executor:
         errors.append(f"{name} executor performs hardware/NVS under pending lock")
     require_ordered_tokens(
         f"{name} config transaction",

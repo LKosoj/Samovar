@@ -60,7 +60,8 @@ BROWSER_TEST = r'''async page => {
     PrgType: '', Status: 'Готов', Lstatus: '', TimeRemaining: 0, TotalTime: 0,
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
-    PowerOn: 0, StepperStepMl: 111
+    PowerOn: 0, StepperStepMl: 111,
+    heaterAlarmLatched: 0, latestMessageSequence: 0
   };
   const columnFixture = {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
@@ -148,6 +149,21 @@ BROWSER_TEST = r'''async page => {
           });
         }
         return result;
+      };
+      window.__u06FirstRender = function () {
+        // Сценариям связи нужен уже обработанный первый успешный опрос: пока он
+        // в полёте, ответ 200 вызовет setConnectionOk и погасит выставленный
+        // вручную offline. Ждём запись render в трассе, а не фиксированную паузу.
+        return new Promise(function (resolve, reject) {
+          const started = performance.now();
+          (function tick() {
+            if (window.__u06Trace.some(function (entry) { return entry.type === 'render'; })) return resolve();
+            if (performance.now() - started > 5000) {
+              return reject(new Error('первый успешный опрос /ajax не дошёл за 5 с'));
+            }
+            setTimeout(tick, 5);
+          })();
+        });
       };
       Object.defineProperty(window, 'SamovarApp', {
         configurable: true,
@@ -497,7 +513,7 @@ BROWSER_TEST = r'''async page => {
         if (remainingCount === 0) window.__pause = false;
       }
     });
-    await new Promise(resolve => setTimeout(resolve, 25));
+    await window.__u06FirstRender();
     function state() {
       return {
         green: document.getElementById('GreenT').style.cssText,
@@ -574,7 +590,7 @@ BROWSER_TEST = r'''async page => {
       threshold: 3, storeMessageHistory: true,
       dynamicThemeTitle: false, implicitSystemTheme: false
     });
-    await new Promise(resolve => setTimeout(resolve, 25));
+    await window.__u06FirstRender();
     SamovarApp.setConnectionError();
     SamovarApp.setConnectionError();
     SamovarApp.setConnectionError();
@@ -593,16 +609,24 @@ BROWSER_TEST = r'''async page => {
     const loopTimers = [];
     const requests = [];
     const logs = [];
+    // heaterAlarmLatched/latestMessageSequence обязательны в каждом успешном
+    // ответе /ajax: без них validateHeaterTelemetry() бракует весь ответ, и ни
+    // рендера, ни продвижения курсора не происходит. latestMessageSequence=0 в
+    // первом ответе оставляет курсор на нуле, поэтому бутстрап не проглатывает
+    // сообщение с messageSequence=1.
     const plans = [
-      { kind: 'deferred', body: { crnt_tm: '12:00:00' } },
+      { kind: 'deferred', body: { crnt_tm: '12:00:00', heaterAlarmLatched: 0, latestMessageSequence: 0 } },
       { kind: 'http' },
       { kind: 'malformed' },
       { kind: 'reject' },
       { kind: 'timeout' },
-      { kind: 'json', body: { crnt_tm: '12:00:01', Msg: 'first', msglvl: 2, messageSequence: 1 } },
-      { kind: 'json', body: { crnt_tm: '12:00:02', Msg: 'third', msglvl: 1, messageSequence: 3 } },
-      { kind: 'json', body: { crnt_tm: '12:00:03', LogMsg: 'fourth-log', messageSequence: 4 } },
-      { kind: 'json', body: { crnt_tm: '12:00:04' } }
+      { kind: 'json', body: { crnt_tm: '12:00:01', Msg: 'first', msglvl: 2, messageSequence: 1,
+        heaterAlarmLatched: 0, latestMessageSequence: 1 } },
+      { kind: 'json', body: { crnt_tm: '12:00:02', Msg: 'third', msglvl: 1, messageSequence: 3,
+        heaterAlarmLatched: 0, latestMessageSequence: 3 } },
+      { kind: 'json', body: { crnt_tm: '12:00:03', LogMsg: 'fourth-log', messageSequence: 4,
+        heaterAlarmLatched: 0, latestMessageSequence: 4 } },
+      { kind: 'json', body: { crnt_tm: '12:00:04', heaterAlarmLatched: 0, latestMessageSequence: 4 } }
     ];
     let active = 0;
     let maxActive = 0;

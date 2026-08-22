@@ -55,14 +55,10 @@ bool i2c_stepper_mode_supported(const I2CStepperDevice& dev);
 // а перезагрузка/сброс Wi-Fi становятся недостижимы никаким другим путём.
 static bool queue_pending_flag(volatile bool& flag, bool bypassBarrier = false) {
   if (!bypassBarrier && mode_switch_in_progress()) return false;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return false;
-  if ((!bypassBarrier && mode_switch_in_progress()) || flag) {
-    pending_command_unlock(true);
-    return false;
-  }
+  PendingCommandLockGuard guard;
+  if (!guard) return false;
+  if ((!bypassBarrier && mode_switch_in_progress()) || flag) return false;
   flag = true;
-  pending_command_unlock(true);
   return true;
 }
 
@@ -72,31 +68,25 @@ static const uint8_t LOG_FLUSH_BUSY = 2;
 
 static uint8_t schedule_log_flush_if_needed() {
   if (log_flush_seq >= log_write_seq) return LOG_FLUSH_READY;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return LOG_FLUSH_BUSY;
+  PendingCommandLockGuard guard;
+  if (!guard) return LOG_FLUSH_BUSY;
   uint32_t writeSeq = log_write_seq;
   if (log_flush_seq < writeSeq) {
     pending_log_flush_seq = writeSeq;
     pending_log_flush_flag = true;
-    pending_command_unlock(true);
     return LOG_FLUSH_QUEUED;
   }
-  pending_command_unlock(true);
   return LOG_FLUSH_READY;
 }
 
 static bool queue_pending_nbk(const ControlNbkCommand& value) {
   if (mode_switch_in_progress()) return false;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return false;
-  if (mode_switch_in_progress() || pending_pnbk_flag) {
-    pending_command_unlock(true);
-    return false;
-  }
+  PendingCommandLockGuard guard;
+  if (!guard) return false;
+  if (mode_switch_in_progress() || pending_pnbk_flag) return false;
   pending_pnbk_value = value;
   __sync_synchronize();
   pending_pnbk_flag = true;
-  pending_command_unlock(true);
   return true;
 }
 
@@ -107,16 +97,12 @@ static bool queue_pending_nbk(const ControlNbkCommand& value) {
 // Поэтому здесь обычная String& (pending_lua_str/pending_lua_file объявлены не volatile).
 bool queue_pending_string(volatile bool& flag, String& valueSlot, const String& value) {
   if (mode_switch_in_progress()) return false;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return false;
-  if (mode_switch_in_progress() || flag) {
-    pending_command_unlock(true);
-    return false;
-  }
+  PendingCommandLockGuard guard;
+  if (!guard) return false;
+  if (mode_switch_in_progress() || flag) return false;
   valueSlot = value;
   __sync_synchronize();
   flag = true;
-  pending_command_unlock(true);
   return true;
 }
 #endif
@@ -168,16 +154,14 @@ static OperationError queue_profile_operation(
     }
   }
 
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return OPERATION_ERROR_LOCK_BUSY;
+  PendingCommandLockGuard guard;
+  if (!guard) return OPERATION_ERROR_LOCK_BUSY;
   if (profile_operation_phase_load() != PROFILE_OPERATION_EMPTY) {
-    pending_command_unlock(true);
     return OPERATION_ERROR_LOCK_BUSY;
   }
   if (mode_switch_in_progress() ||
       (requireProgramIdle && program_update_session_active()) ||
       Samovar_Mode != sourceMode) {
-    pending_command_unlock(true);
     return OPERATION_ERROR_CANCELLED;
   }
 
@@ -185,7 +169,6 @@ static OperationError queue_profile_operation(
   const OperationError reserveError = operation_store_reserve_locked(
       operationStore, kind, reservedId);
   if (reserveError != OPERATION_ERROR_NONE) {
-    pending_command_unlock(true);
     return reserveError;
   }
 
@@ -219,7 +202,6 @@ static OperationError queue_profile_operation(
   }
   profile_operation_phase_store(PROFILE_OPERATION_QUEUED);
   operationId = reservedId;
-  pending_command_unlock(true);
   return OPERATION_ERROR_NONE;
 }
 
@@ -269,18 +251,16 @@ static void send_operation_accepted(
 
 static OperationError queue_pending_i2cpump(
     PendingI2CPumpCmd command, OperationId& operationId) {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return OPERATION_ERROR_LOCK_BUSY;
+  PendingCommandLockGuard guard;
+  if (!guard) return OPERATION_ERROR_LOCK_BUSY;
   if (mode_switch_in_progress() || pending_i2cpump_flag ||
       i2c_stepper_config_busy(i2cStepperPump)) {
-    pending_command_unlock(true);
     return OPERATION_ERROR_LOCK_BUSY;
   }
   OperationId reservedId = 0;
   const OperationError reserveError = operation_store_reserve_locked(
       operationStore, OPERATION_KIND_I2C_PUMP, reservedId);
   if (reserveError != OPERATION_ERROR_NONE) {
-    pending_command_unlock(true);
     return reserveError;
   }
   command.operationId = reservedId;
@@ -288,20 +268,18 @@ static OperationError queue_pending_i2cpump(
   __sync_synchronize();
   pending_i2cpump_flag = true;
   operationId = reservedId;
-  pending_command_unlock(true);
   return OPERATION_ERROR_NONE;
 }
 
 static OperationError queue_pending_i2cstepper(
     PendingI2CStepperCmd command, OperationId& operationId) {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return OPERATION_ERROR_LOCK_BUSY;
+  PendingCommandLockGuard guard;
+  if (!guard) return OPERATION_ERROR_LOCK_BUSY;
   I2CStepperDevice& device = command.device_sel == 0
       ? i2cStepperMixer
       : i2cStepperPump;
   if (mode_switch_in_progress() || pending_i2cstepper_flag ||
       command.device_sel > 1 || i2c_stepper_config_busy(device)) {
-    pending_command_unlock(true);
     return command.device_sel > 1
         ? OPERATION_ERROR_INTERNAL
         : OPERATION_ERROR_LOCK_BUSY;
@@ -310,7 +288,6 @@ static OperationError queue_pending_i2cstepper(
   const OperationError reserveError = operation_store_reserve_locked(
       operationStore, OPERATION_KIND_I2C_STEPPER, reservedId);
   if (reserveError != OPERATION_ERROR_NONE) {
-    pending_command_unlock(true);
     return reserveError;
   }
   command.operationId = reservedId;
@@ -318,27 +295,24 @@ static OperationError queue_pending_i2cstepper(
   __sync_synchronize();
   pending_i2cstepper_flag = true;
   operationId = reservedId;
-  pending_command_unlock(true);
   return OPERATION_ERROR_NONE;
 }
 
 static OperationError queue_pending_i2ccal(
     PendingI2CCalCmd command, OperationId& operationId) {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return OPERATION_ERROR_LOCK_BUSY;
+  PendingCommandLockGuard guard;
+  if (!guard) return OPERATION_ERROR_LOCK_BUSY;
   const bool calibrationStateValid = command.is_finish
       ? I2CPumpCalibrating && startval != SAMOVAR_STARTVAL_CALIBRATION
       : startval == SAMOVAR_STARTVAL_IDLE && !I2CPumpCalibrating;
   if (mode_switch_in_progress() || pending_i2ccal_flag || pending_local_cal_flag ||
       !calibrationStateValid || i2c_stepper_config_busy(i2cStepperPump)) {
-    pending_command_unlock(true);
     return OPERATION_ERROR_LOCK_BUSY;
   }
   OperationId reservedId = 0;
   const OperationError reserveError = operation_store_reserve_locked(
       operationStore, OPERATION_KIND_CALIBRATION, reservedId);
   if (reserveError != OPERATION_ERROR_NONE) {
-    pending_command_unlock(true);
     return reserveError;
   }
   command.operationId = reservedId;
@@ -346,27 +320,24 @@ static OperationError queue_pending_i2ccal(
   __sync_synchronize();
   pending_i2ccal_flag = true;
   operationId = reservedId;
-  pending_command_unlock(true);
   return OPERATION_ERROR_NONE;
 }
 
 static OperationError queue_pending_local_cal(
     PendingLocalCalCmd command, OperationId& operationId) {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return OPERATION_ERROR_LOCK_BUSY;
+  PendingCommandLockGuard guard;
+  if (!guard) return OPERATION_ERROR_LOCK_BUSY;
   const bool calibrationStateValid = command.is_finish
       ? startval == SAMOVAR_STARTVAL_CALIBRATION && !I2CPumpCalibrating
       : startval == SAMOVAR_STARTVAL_IDLE && !I2CPumpCalibrating;
   if (mode_switch_in_progress() || pending_local_cal_flag || pending_i2ccal_flag ||
       !calibrationStateValid) {
-    pending_command_unlock(true);
     return OPERATION_ERROR_LOCK_BUSY;
   }
   OperationId reservedId = 0;
   const OperationError reserveError = operation_store_reserve_locked(
       operationStore, OPERATION_KIND_CALIBRATION, reservedId);
   if (reserveError != OPERATION_ERROR_NONE) {
-    pending_command_unlock(true);
     return reserveError;
   }
   command.operationId = reservedId;
@@ -374,7 +345,6 @@ static OperationError queue_pending_local_cal(
   __sync_synchronize();
   pending_local_cal_flag = true;
   operationId = reservedId;
-  pending_command_unlock(true);
   return OPERATION_ERROR_NONE;
 }
 
@@ -1537,8 +1507,8 @@ static bool pending_mode_control_commands_locked() {
 }
 
 static bool discard_pending_mode_control_commands(bool& cancelled) {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return false;
+  PendingCommandLockGuard guard;
+  if (!guard) return false;
   cancelled = pending_mode_control_commands_locked();
   pending_rescan_ds_flag = false;
   pending_stop_self_test_flag = false;
@@ -1546,10 +1516,7 @@ static bool discard_pending_mode_control_commands(bool& cancelled) {
   pending_water_temp_flag = false;
   pending_pump_speed_flag = false;
   pending_nbkopt_flag = false;
-  if (!cancel_queued_i2c_operations_locked(cancelled)) {
-    pending_command_unlock(true);
-    return false;
-  }
+  if (!cancel_queued_i2c_operations_locked(cancelled)) return false;
   pending_pnbk_flag = false;
 #ifdef SAMOVAR_USE_POWER
   pending_voltage_flag = false;
@@ -1562,17 +1529,14 @@ static bool discard_pending_mode_control_commands(bool& cancelled) {
   pending_lua_file = "";
   pending_lua_str = "";
 #endif
-  pending_command_unlock(true);
   return true;
 }
 
 static bool mode_control_queues_idle() {
   if (!samovar_command_queue_idle(pdMS_TO_TICKS(50))) return false;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return false;
-  const bool idle = !pending_mode_control_commands_locked();
-  pending_command_unlock(true);
-  return idle;
+  PendingCommandLockGuard guard;
+  if (!guard) return false;
+  return !pending_mode_control_commands_locked();
 }
 
 static void stop_local_mode_actuators() {

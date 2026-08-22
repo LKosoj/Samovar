@@ -610,7 +610,7 @@ def static_checks() -> list[str]:
         for token in ('beginResponse(503,', 'beginResponse(404,', 'beginResponse(200,'):
             require(token in lookup, f"lookup missing {token}", errors)
         copy_index = lookup.find("operation_store_copy_locked")
-        unlock_index = lookup.find("pending_command_unlock(true);", copy_index)
+        unlock_index = lookup.find("guard.release();", copy_index)
         serialize_index = lookup.find(found_json, unlock_index)
         require(0 <= copy_index < unlock_index < serialize_index,
                 "lookup does not copy under lock and serialize after unlock", errors)

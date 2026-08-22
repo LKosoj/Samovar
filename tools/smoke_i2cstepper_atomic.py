@@ -169,7 +169,7 @@ if samovar_text:
                 "pending_local_cal_flag",
                 "pending_i2ccal_flag",
                 "operation_store_mark_running_locked(",
-                "pending_command_unlock(true);",
+                "guard.release();",
                 "execute_pending_i2c_stepper(stepperCommand)",
                 "publish_pending_i2c_result(",
             ],

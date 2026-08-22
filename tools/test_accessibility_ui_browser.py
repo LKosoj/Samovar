@@ -41,15 +41,15 @@ BROWSER_TEST = r'''async page => {
   const themes = focused ? ["light"] : ["light", "dark"];
   const activationKinds = focused ? ["Enter"] : ["click", "Enter", "Space"];
   const actionFamilies = {
-    "index.htm": {history:true,messages:true,rows:"H;0;0;0;0;0",details:["Descr","WProgram"],tabs:3,theme:"shared"},
-    "beer.htm": {history:true,messages:true,rows:"W;0;0;;0",details:["WProgram","Descr"],tabs:3,theme:"shared"},
-    "distiller.htm": {history:true,messages:true,rows:"T;100;0;0",details:["Descr","WProgram"],tabs:3,theme:"shared"},
-    "bk.htm": {history:true,messages:true,tabs:2,theme:"shared"},
-    "nbk.htm": {history:true,messages:true,details:["WProgram","Descr"],tabs:3,theme:"shared"},
+    "index.htm": {history:true,messages:true,rows:"H;0;0;0;0;0",details:["Descr","WProgram"],tabs:3,theme:true},
+    "beer.htm": {history:true,messages:true,rows:"W;0;0;;0",details:["WProgram","Descr"],tabs:3,theme:true},
+    "distiller.htm": {history:true,messages:true,rows:"T;100;0;0",details:["Descr","WProgram"],tabs:3,theme:true},
+    "bk.htm": {history:true,messages:true,tabs:2,theme:true},
+    "nbk.htm": {history:true,messages:true,details:["WProgram","Descr"],tabs:3,theme:true},
     "program.htm": {messages:true,rows:"0;1;0;H;0"},
-    "setup.htm": {rescan:true,tabs:6,theme:"local"},
-    "chart.htm": {messages:true,theme:"shared"},
-    "i2cstepper.htm": {theme:"local"},
+    "setup.htm": {rescan:true,tabs:6,theme:true},
+    "chart.htm": {messages:true,theme:true},
+    "i2cstepper.htm": {theme:true},
     "brewxml.htm": {}
   };
   const ajaxFixture = {
@@ -62,7 +62,8 @@ BROWSER_TEST = r'''async page => {
     heap:200000,rssi:-50,fr_bt:300000,UseBBuzzer:false,PauseOn:0,PrgType:"",
     Status:"Готов",Lstatus:"",TimeRemaining:0,TotalTime:0,alc:0,stm_alc:0,ISspd:0,
     wp_spd:0,i2c_pump_present:0,i2c_pump_running:0,i2c_pump_remaining_ml:0,
-    i2c_pump_speed:0,PowerOn:0,StepperStepMl:100
+    i2c_pump_speed:0,PowerOn:0,StepperStepMl:100,
+    heaterAlarmLatched:0,latestMessageSequence:0
   };
   const i2cFixture = {
     present:1,address:16,role:1,mode:1,caps:25,status:0,error:0,relayMask:0,
@@ -539,15 +540,14 @@ BROWSER_TEST = r'''async page => {
           }
           for (let index=0; index<(families.tabs || 0); index++) {
             const selector = `.tablinks[aria-pressed]:nth-of-type(${index+1})`;
-            await countCall(file === "setup.htm" ? "window" : "SamovarApp", "openTab",
-              selector, kind);
+            await countCall("SamovarApp", "openTab", selector, kind);
             await checkTabState(selector);
           }
           if (families.theme) {
             const themeBefore = await page.evaluate(() =>
               document.documentElement.getAttribute("data-theme")
             );
-            await countCall(families.theme === "shared" ? "SamovarApp" : "window", "toggleTheme", ".theme-toggle", kind);
+            await countCall("SamovarApp", "toggleTheme", ".theme-toggle", kind);
             const themeState = await page.evaluate(() => {
               const target = document.querySelector(".theme-toggle");
               return {

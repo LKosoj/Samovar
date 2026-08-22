@@ -428,7 +428,7 @@ require_ordered_tokens(
     "profile queue checks the mode barrier under the pending-command lock",
     setup_save,
     [
-        "pending_command_lock(pdMS_TO_TICKS(50))",
+        "PendingCommandLockGuard guard;",
         "profile_operation_phase_load() != PROFILE_OPERATION_EMPTY",
         "mode_switch_in_progress()",
         "operation_store_reserve_locked(",

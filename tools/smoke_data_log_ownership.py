@@ -102,8 +102,8 @@ if fs_ino:
             "request_data_log_close queues close under pending lock",
             request_close_body,
             [
-                "bool locked = pending_command_lock",
-                "if (!locked)",
+                "PendingCommandLockGuard guard;",
+                "if (!guard)",
                 "return false;",
                 "pending_log_close_flag = true;",
                 "pending_log_flush_flag = false;",
@@ -184,8 +184,8 @@ if webserver_ino:
             schedule_body,
             [
                 "if (log_flush_seq >= log_write_seq) return LOG_FLUSH_READY;",
-                "bool locked = pending_command_lock",
-                "if (!locked) return LOG_FLUSH_BUSY;",
+                "PendingCommandLockGuard guard;",
+                "if (!guard) return LOG_FLUSH_BUSY;",
                 "pending_log_flush_flag = true;",
                 "return LOG_FLUSH_QUEUED;",
             ],

@@ -166,16 +166,16 @@ if samovar_text:
             "pending Lua start flag is cleared only after request success",
             body,
             [
-                "if (locked && pending_lua_start_flag) {",
+                "if (guard && pending_lua_start_flag) {",
                 "hasPendingLuaStart = true;",
                 "if (start_lua_script()) {",
-                "if (locked && pending_lua_start_flag) {",
+                "if (guard && pending_lua_start_flag) {",
                 "pending_lua_start_flag = false;",
             ],
             errors,
         )
         try:
-            start_body, _ = extract_braced_block_after(body, "if (locked && pending_lua_start_flag)")
+            start_body, _ = extract_braced_block_after(body, "if (guard && pending_lua_start_flag)")
             if "pending_lua_start_flag = false;" in start_body:
                 errors.append("pending_lua_start_flag is cleared before Lua start request succeeds")
         except ValueError as exc:
@@ -184,17 +184,17 @@ if samovar_text:
             "pending Lua file flag is cleared only after queue success",
             body,
             [
-                "if (locked && pending_lua_file_flag) {",
+                "if (guard && pending_lua_file_flag) {",
                 "luaFile = pending_lua_file;",
                 "hasPendingLuaFile = true;",
                 "if (run_lua_script(luaFile)) {",
-                "if (locked && pending_lua_file_flag && pending_lua_file == luaFile) {",
+                "if (guard && pending_lua_file_flag && pending_lua_file == luaFile) {",
                 "pending_lua_file_flag = false;",
             ],
             errors,
         )
         try:
-            file_body, _ = extract_braced_block_after(body, "if (locked && pending_lua_file_flag)")
+            file_body, _ = extract_braced_block_after(body, "if (guard && pending_lua_file_flag)")
             if "pending_lua_file_flag = false;" in file_body:
                 errors.append("pending_lua_file_flag is cleared before Lua job is queued")
         except ValueError as exc:
@@ -203,17 +203,17 @@ if samovar_text:
             "pending Lua inline flag is cleared only after queue success",
             body,
             [
-                "if (locked && pending_lua_flag) {",
+                "if (guard && pending_lua_flag) {",
                 "lstr = pending_lua_str;",
                 "hasPendingLuaString = true;",
                 "if (run_lua_string(lstr).length() == 0) {",
-                "if (locked && pending_lua_flag && pending_lua_str == lstr) {",
+                "if (guard && pending_lua_flag && pending_lua_str == lstr) {",
                 "pending_lua_flag = false;",
             ],
             errors,
         )
         try:
-            inline_body, _ = extract_braced_block_after(body, "if (locked && pending_lua_flag)")
+            inline_body, _ = extract_braced_block_after(body, "if (guard && pending_lua_flag)")
             if "pending_lua_flag = false;" in inline_body:
                 errors.append("pending_lua_flag is cleared before Lua inline job is queued")
         except ValueError as exc:

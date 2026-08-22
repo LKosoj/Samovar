@@ -35,3 +35,6 @@ AGENTS.md
 AGENTS.md
 .cli-proxy/runtime/
 __pycache__/
+# Артефакты браузерных гейтов: playwright-cli пишет сюда снимок страницы
+# и лог консоли на каждый прогон tools/test_*_browser.py
+.playwright-cli/

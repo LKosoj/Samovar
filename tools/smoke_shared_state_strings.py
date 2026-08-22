@@ -175,12 +175,11 @@ if web_text:
             "queue_profile_operation copies validated POD under pending lock",
             queue_body,
             [
-                "pending_command_lock",
+                "PendingCommandLockGuard guard;",
                 "operation_store_reserve_locked(",
                 "reset_profile_operation_slot();",
                 "active_profile_operation.program = *programDraft;",
                 "profile_operation_phase_store(PROFILE_OPERATION_QUEUED);",
-                "pending_command_unlock(true);",
             ],
             errors,
         )

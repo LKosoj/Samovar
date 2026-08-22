@@ -7,6 +7,31 @@
 extern portMUX_TYPE timerMux;
 extern portMUX_TYPE waterPulseMux;
 
+// ПОРЯДОК ЗАХВАТА ЗАМКОВ.
+// Если задаче нужно держать два замка одновременно, брать их можно только
+// сверху вниз по этому списку. Обратный порядок в двух разных задачах даёт
+// взаимную блокировку: каждая держит то, чего ждёт другая, и обе стоят вечно.
+// Снаружи - долгие внешние операции (обмен по UART, HTTP, файл), внутри -
+// короткие копирования переменных. Проверяется tools/smoke_lock_order.py;
+// таблица ниже - единственный источник правды, тест читает ранги отсюда.
+//
+//   LOCK_ORDER: 10  RMVK_UART        xSemaphore                   обмен по UART с регулятором РМВК
+//   LOCK_ORDER: 15  AVR              xSemaphoreAVR                обмен по UART с регулятором СЕМ
+//   LOCK_ORDER: 20  HTTP_REQUEST     httpRequestLock              один исходящий HTTP-запрос за раз
+//   LOCK_ORDER: 30  LUA_STATE        xLuaSemaphore                состояние интерпретатора Lua
+//   LOCK_ORDER: 40  MQTT             xMqttSemaphore               публикация в MQTT
+//   LOCK_ORDER: 50  LOG_FILE         xLogFileSemaphore            файл журнала на ФС
+//   LOCK_ORDER: 60  PENDING_COMMAND  xPendingCommandSemaphore     очередь отложенных команд
+//   LOCK_ORDER: 70  CMD_QUEUE        samovar_command_queue_mutex  очередь команд самовара
+//   LOCK_ORDER: 80  I2C              xI2CSemaphore                шина I2C
+//   LOCK_ORDER: 90  MSG              xMsgSemaphore                отправка сообщений
+//   LOCK_ORDER: 100 RUNTIME_STATE    xRuntimeStateSemaphore       копирование переменных состояния
+//
+// Известные вложенности (все идут сверху вниз, порядок соблюдён):
+//   LOG_FILE > PENDING_COMMAND  - FS.ino, create_data_log()
+//   LUA_STATE > RUNTIME_STATE   - lua.h, load_lua_script()/do_lua_script()
+//   AVR > RUNTIME_STATE         - power_regulator_sem.h, triggerPowerStatus()
+
 inline bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
   return xRuntimeStateSemaphore && xSemaphoreTake(xRuntimeStateSemaphore, timeout) == pdTRUE;
 }
@@ -44,45 +69,61 @@ inline void pending_command_unlock(bool locked) {
   if (locked) xSemaphoreGive(xPendingCommandSemaphore);
 }
 
+// RAII-страж замка отложенных команд: берёт замок в конструкторе, отдаёт в
+// деструкторе. Нужен, чтобы ни один ранний return не мог оставить замок
+// захваченным. release() - для мест, где под замком только снимают данные, а
+// долгую работу (SendMsg, ответ HTTP, обращение к железу) делают уже без него.
+struct PendingCommandLockGuard {
+  bool acquired;
+
+  explicit PendingCommandLockGuard(TickType_t timeout = pdMS_TO_TICKS(50))
+      : acquired(pending_command_lock(timeout)) {}
+  ~PendingCommandLockGuard() { pending_command_unlock(acquired); }
+
+  PendingCommandLockGuard(const PendingCommandLockGuard&) = delete;
+  PendingCommandLockGuard& operator=(const PendingCommandLockGuard&) = delete;
+
+  void release() {
+    pending_command_unlock(acquired);
+    acquired = false;
+  }
+
+  explicit operator bool() const { return acquired; }
+};
+
 bool mode_switch_in_progress();
 
 template <typename T>
 inline bool queue_pending_value(volatile bool& flag, volatile T& valueSlot, T value) {
   if (mode_switch_in_progress()) return false;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return false;
-  if (mode_switch_in_progress() || flag) {
-    pending_command_unlock(true);
-    return false;
-  }
+  PendingCommandLockGuard guard;
+  if (!guard) return false;
+  if (mode_switch_in_progress() || flag) return false;
   valueSlot = value;
   __sync_synchronize();
   flag = true;
-  pending_command_unlock(true);
   return true;
 }
 
 template <typename T>
 inline bool take_pending_value(volatile bool& flag, volatile T& valueSlot, T& out) {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  PendingCommandLockGuard guard;
   bool has = false;
-  if (locked && flag) {
+  if (guard && flag) {
     out = valueSlot;
     flag = false;
     has = true;
   }
-  pending_command_unlock(locked);
   return has;
 }
 
 inline bool take_pending_flag(volatile bool& flag) {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  PendingCommandLockGuard guard;
   bool has = false;
-  if (locked && flag) {
+  if (guard && flag) {
     flag = false;
     has = true;
   }
-  pending_command_unlock(locked);
   return has;
 }
 

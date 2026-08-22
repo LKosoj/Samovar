@@ -42,7 +42,8 @@ BROWSER_TEST = r'''async page => {
     PrgType: "", Status: "Готов", Lstatus: "",
     TimeRemaining: 0, TotalTime: 0, alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0,
     i2c_pump_present: 0, i2c_pump_running: 0, i2c_pump_remaining_ml: 0,
-    i2c_pump_speed: 0, PowerOn: 0, StepperStepMl: 111
+    i2c_pump_speed: 0, PowerOn: 0, StepperStepMl: 111,
+    heaterAlarmLatched: 0, latestMessageSequence: 0
   };
   const columnFixture = {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,

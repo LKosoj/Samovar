@@ -711,7 +711,7 @@ def main() -> int:
             errors.append(f"pre-existing query/event helper changed: {signature}")
     operation_prefix = send_ajax[:send_ajax.find("  const uint32_t messageCursor = query.value;")]
     if hashlib.sha256(operation_prefix.encode("utf-8")).hexdigest() != (
-        "137ca05f30bc28569b0aa63c511343a4dcd7c9e8948d9420f02d82cd1ca40351"
+        "36a1e2ced5eaa7a8ca2542442ee1a53c06e6cec7b163200811c7bde95b9163fd"
     ):
         errors.append("operation/query branch is not byte-identical to A-05 baseline")
 

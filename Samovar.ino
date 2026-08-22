@@ -430,8 +430,8 @@ static void set_profile_operation_terminal(
 }
 
 static void publish_profile_operation_terminal() {
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return;
+  PendingCommandLockGuard guard;
+  if (!guard) return;
   bool publishFailed = false;
   if (profile_operation_phase_load() == PROFILE_OPERATION_TERMINAL_PENDING) {
     const OperationError finishError = operation_store_finish_locked(
@@ -446,7 +446,7 @@ static void publish_profile_operation_terminal() {
       publishFailed = true;
     }
   }
-  pending_command_unlock(true);
+  guard.release();
   if (publishFailed) {
     SendMsg(
         "Операция профиля: terminal state не опубликован; требуется перезагрузка.",
@@ -463,8 +463,8 @@ static void process_profile_operation() {
   }
 
   if (profile_operation_phase_load() == PROFILE_OPERATION_QUEUED) {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (!locked) return;
+    PendingCommandLockGuard guard;
+    if (!guard) return;
     bool transitionFailed = false;
     if (profile_operation_phase_load() == PROFILE_OPERATION_QUEUED) {
       const OperationError runningError = operation_store_mark_running_locked(
@@ -493,7 +493,7 @@ static void process_profile_operation() {
         }
       }
     }
-    pending_command_unlock(true);
+    guard.release();
     if (transitionFailed) {
       SendMsg(
           "Операция профиля: record недоступен при запуске; требуется перезагрузка.",
@@ -1223,8 +1223,8 @@ static bool cancel_queued_i2c_operations_locked(bool& cancelled) {
 
 static void process_pending_i2c_operations() {
   if (pending_i2c_operation_result.pending) {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (!locked) return;
+    PendingCommandLockGuard guard;
+    if (!guard) return;
     if (pending_i2c_operation_matches_locked(
             pending_i2c_operation_result.id)) {
       const OperationError finishError = operation_store_finish_locked(
@@ -1238,7 +1238,6 @@ static void process_pending_i2c_operations() {
         pending_i2c_operation_result = {};
       }
     }
-    pending_command_unlock(true);
     return;
   }
 
@@ -1248,8 +1247,8 @@ static void process_pending_i2c_operations() {
   PendingLocalCalCmd localCalibrationCommand{};
   PendingI2CCalCmd i2cCalibrationCommand{};
   OperationId operationId = 0;
-  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-  if (!locked) return;
+  PendingCommandLockGuard guard;
+  if (!guard) return;
   if (!mode_switch_in_progress()) {
     if (pending_i2cstepper_flag) {
       owner = PENDING_I2C_OPERATION_STEPPER;
@@ -1274,7 +1273,7 @@ static void process_pending_i2c_operations() {
       owner = PENDING_I2C_OPERATION_NONE;
     }
   }
-  pending_command_unlock(true);
+  guard.release();
   if (owner == PENDING_I2C_OPERATION_NONE) return;
 
   OperationError result = OPERATION_ERROR_INTERNAL;
@@ -1599,12 +1598,11 @@ void triggerSysTicker(void *parameter) {
 
       bool rescanDs = false;
       {
-        bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-        if (locked && pending_rescan_ds_flag) {
+        PendingCommandLockGuard guard;
+        if (guard && pending_rescan_ds_flag) {
           pending_rescan_ds_flag = false;
           rescanDs = !mode_switch_in_progress();
         }
-        pending_command_unlock(locked);
       }
       if (rescanDs) {
         if (samovar_process_active()) {
@@ -2629,12 +2627,12 @@ static void tick_alarm_button() {
 static void tick_process_recovery_commands() {
   {
     bool hasPendingResetWifi = false;
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_reset_wifi_flag) {
+    PendingCommandLockGuard guard;
+    if (guard && pending_reset_wifi_flag) {
       pending_reset_wifi_flag = false;
       hasPendingResetWifi = true;
     }
-    pending_command_unlock(locked);
+    guard.release();
     if (hasPendingResetWifi) {
       delay(200);
       menu_reset_wifi();
@@ -2642,12 +2640,12 @@ static void tick_process_recovery_commands() {
   }
   {
     bool hasPendingReboot = false;
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && is_reboot) {
+    PendingCommandLockGuard guard;
+    if (guard && is_reboot) {
       is_reboot = false;
       hasPendingReboot = true;
     }
-    pending_command_unlock(locked);
+    guard.release();
     if (hasPendingReboot) {
       delay(200);
       ESP.restart();
@@ -2665,11 +2663,11 @@ static void tick_reap_stale_operations() {
     if ((int32_t)(nowMs - lastReapMs) >= 1000) {
       lastReapMs = nowMs;
       bool reaped = false;
-      bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-      if (locked) {
+      PendingCommandLockGuard guard;
+      if (guard) {
         reaped = operation_store_reap_stale_locked(operationStore, nowMs);
       }
-      pending_command_unlock(locked);
+      guard.release();
       if (reaped) {
         SendMsg("Просроченная операция принудительно завершена (reaper)", ALARM_MSG);
       }
@@ -2731,12 +2729,11 @@ static void tick_apply_pending_lua_commands() {
 #ifdef USE_LUA
   bool hasPendingLuaReload = false;
   {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_lua_reload_flag) {
+    PendingCommandLockGuard guard;
+    if (guard && pending_lua_reload_flag) {
       pending_lua_reload_flag = false;
       hasPendingLuaReload = true;
     }
-    pending_command_unlock(locked);
   }
   if (hasPendingLuaReload) {
     load_lua_script();
@@ -2744,39 +2741,35 @@ static void tick_apply_pending_lua_commands() {
 
   bool hasPendingLuaStart = false;
   {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_lua_start_flag) {
+    PendingCommandLockGuard guard;
+    if (guard && pending_lua_start_flag) {
       hasPendingLuaStart = true;
     }
-    pending_command_unlock(locked);
   }
   if (hasPendingLuaStart) {
     if (start_lua_script()) {
-      bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-      if (locked && pending_lua_start_flag) {
+      PendingCommandLockGuard guard;
+      if (guard && pending_lua_start_flag) {
         pending_lua_start_flag = false;
       }
-      pending_command_unlock(locked);
     }
   }
 
   bool hasPendingLuaFile = false;
   String luaFile;
   {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_lua_file_flag) {
+    PendingCommandLockGuard guard;
+    if (guard && pending_lua_file_flag) {
       luaFile = pending_lua_file;
       hasPendingLuaFile = true;
     }
-    pending_command_unlock(locked);
   }
   if (hasPendingLuaFile) {
     if (run_lua_script(luaFile)) {
-      bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-      if (locked && pending_lua_file_flag && pending_lua_file == luaFile) {
+      PendingCommandLockGuard guard;
+      if (guard && pending_lua_file_flag && pending_lua_file == luaFile) {
         pending_lua_file_flag = false;
       }
-      pending_command_unlock(locked);
     }
   }
 
@@ -2784,20 +2777,18 @@ static void tick_apply_pending_lua_commands() {
   bool hasPendingLuaString = false;
   String lstr;
   {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_lua_flag) {
+    PendingCommandLockGuard guard;
+    if (guard && pending_lua_flag) {
       lstr = pending_lua_str;
       hasPendingLuaString = true;
     }
-    pending_command_unlock(locked);
   }
   if (hasPendingLuaString) {
     if (run_lua_string(lstr).length() == 0) {
-      bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-      if (locked && pending_lua_flag && pending_lua_str == lstr) {
+      PendingCommandLockGuard guard;
+      if (guard && pending_lua_flag && pending_lua_str == lstr) {
         pending_lua_flag = false;
       }
-      pending_command_unlock(locked);
     }
   }
 #endif
@@ -2810,12 +2801,11 @@ static void tick_apply_pending_pnbk() {
   bool hasPendingPnbk = false;
   ControlNbkCommand pnbk = {};
   {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_pnbk_flag) {
+    PendingCommandLockGuard guard;
+    if (guard && pending_pnbk_flag) {
       pnbk = pending_pnbk_value;
       hasPendingPnbk = true;
     }
-    pending_command_unlock(locked);
   }
   if (hasPendingPnbk) {
     bool pnbkDone = !PowerOn;
@@ -2861,9 +2851,8 @@ static void tick_apply_pending_pnbk() {
       }
     }
     if (pnbkDone) {
-      bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-      if (locked) pending_pnbk_flag = false;
-      pending_command_unlock(locked);
+      PendingCommandLockGuard guard;
+      if (guard) pending_pnbk_flag = false;
     }
   }
 }
@@ -3622,7 +3611,8 @@ void send_ajax_json(AsyncWebServerRequest *request) {
 
   if (query.kind == RUNTIME_AJAX_QUERY_OPERATION) {
     const OperationId operationId = query.value;
-    if (!pending_command_lock(pdMS_TO_TICKS(50))) {
+    PendingCommandLockGuard guard;
+    if (!guard) {
       char body[96];
       snprintf(body, sizeof(body),
                "{\"operationId\":%lu,\"error\":\"%s\"}",
@@ -3638,7 +3628,7 @@ void send_ajax_json(AsyncWebServerRequest *request) {
     OperationRecord record{};
     const OperationError lookupError =
         operation_store_copy_locked(operationStore, operationId, record);
-    pending_command_unlock(true);
+    guard.release();
 
     if (lookupError != OPERATION_ERROR_NONE) {
       char body[96];

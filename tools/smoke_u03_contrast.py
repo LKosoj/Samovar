@@ -310,6 +310,46 @@ def verify_mandatory_fixes() -> None:
         raise AssertionError("message_0 foreground/background ownership")
 
 
+def relative_luminance(color: str) -> float:
+    text = color.strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{3}", text):
+        text = "#" + "".join(channel * 2 for channel in text[1:])
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", text):
+        raise AssertionError(f"opaque #rgb or #rrggbb color required, got {color!r}")
+    channels = []
+    for offset in (1, 3, 5):
+        value = int(text[offset:offset + 2], 16) / 255
+        channels.append(value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def contrast_ratio(first: str, second: str) -> float:
+    high, low = sorted((relative_luminance(first), relative_luminance(second)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+def verify_button_contrast() -> None:
+    """Кнопка и её hover красятся токенами, а текст на них всегда
+    --text-on-accent. Полупрозрачный фон здесь запрещён: итоговый цвет зависит
+    от подложки, и на светлой форме белый текст на #3498db97 давал 1.96 при
+    норме WCAG 4.5. Браузерный гейт u03 этого не ловит - на #power кнопке
+    inline-стиль перебивает .button:hover."""
+    style = read_page("style.css")
+    values = {}
+    for token in ("accent", "accent-hover", "text-on-accent"):
+        found = re.findall(rf"--{token}:\s*([^;]+);", style)
+        if len(found) != 1:
+            raise AssertionError(f"data/style.css: --{token} declaration cardinality={len(found)}")
+        values[token] = found[0].strip()
+    foreground = values["text-on-accent"]
+    for token in ("accent", "accent-hover"):
+        ratio = contrast_ratio(values[token], foreground)
+        if ratio < 4.5:
+            raise AssertionError(
+                f"data/style.css: --{token} vs --text-on-accent contrast {ratio:.2f} < 4.5"
+            )
+
+
 def verify_chart_palette() -> None:
     text = read_page("chart.js")
     colors = re.findall(r"\{ key: '[^']+', label: '[^']+', color: '([^']+)' \}", text)
@@ -338,6 +378,7 @@ def main() -> int:
     try:
         verify_source_boundary()
         verify_mandatory_fixes()
+        verify_button_contrast()
         verify_chart_palette()
         verify_canonical_gzip()
     except (AssertionError, OSError, ValueError, RuntimeError) as error:

@@ -119,7 +119,7 @@ if queue:
         "queue_profile_operation atomically reserves and publishes POD",
         queue,
         [
-            "bool locked = pending_command_lock(pdMS_TO_TICKS(50));",
+            "PendingCommandLockGuard guard;",
             "profile_operation_phase_load() != PROFILE_OPERATION_EMPTY",
             "mode_switch_in_progress()",
             "requireProgramIdle && program_update_session_active()",
@@ -129,7 +129,6 @@ if queue:
             "active_profile_operation.programAction = programAction;",
             "profile_operation_phase_store(PROFILE_OPERATION_QUEUED);",
             "operationId = reservedId;",
-            "pending_command_unlock(true);",
         ],
         errors,
     )
