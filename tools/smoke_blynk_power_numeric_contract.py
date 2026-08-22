@@ -35,7 +35,6 @@ blynk = strip_cpp_comments(read_text("Blynk.ino"))
 power = strip_cpp_comments(read_text("power_regulator.h"))
 api = strip_cpp_comments(read_text("samovar_api.h"))
 kvic_src = strip_cpp_comments(read_text("power_regulator_kvic.h"))
-rmvk_src = strip_cpp_comments(read_text("power_regulator_rmvk.h"))
 sem_src = strip_cpp_comments(read_text("power_regulator_sem.h"))
 
 for forbidden in (".asInt()", ".asFloat()"):

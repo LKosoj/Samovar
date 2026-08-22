@@ -668,12 +668,17 @@ inline String regulator_mode_text(SafetyRegulatorMode mode) {
   return String();
 }
 
-#ifdef SAMOVAR_USE_SEM_AVR
-#include "power_regulator_sem.h"
-#elif defined(SAMOVAR_USE_RMVK)
-#include "power_regulator_rmvk.h"
-#elif defined(SAMOVAR_USE_POWER)
+// Вложенность условий та же, что была до разнесения по файлам: SAMOVAR_USE_POWER,
+// внутри SAMOVAR_USE_RMVK, и только под ним SAMOVAR_USE_SEM_AVR. Поэтому
+// SAMOVAR_USE_SEM_AVR без SAMOVAR_USE_RMVK даёт KVIC, а не SEM - не менять порядок.
+#ifdef SAMOVAR_USE_POWER
+#ifndef SAMOVAR_USE_RMVK
 #include "power_regulator_kvic.h"
+#elif defined(SAMOVAR_USE_SEM_AVR)
+#include "power_regulator_sem.h"
+#else
+#include "power_regulator_rmvk.h"
+#endif
 #endif
 
 // ВНИМАНИЕ: #ifndef __SAMOVAR_DEBUG ниже отключает не печать, а САМУ защитную

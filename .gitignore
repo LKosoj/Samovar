@@ -34,3 +34,4 @@ AGENTS.md
 /.cli-proxy
 AGENTS.md
 .cli-proxy/runtime/
+__pycache__/
