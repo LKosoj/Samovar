@@ -1,0 +1,16 @@
+    <div id="I2CPump" class="tabcontent" aria-hidden="true">
+      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <div class="text">
+          <label for="i2c_speed">Скорость отбора (л/ч):</label>
+          <input id='i2c_speed' type='text' inputmode='decimal' value='0' style="width: 6em;">
+        </div>
+        <div class="text" style="margin-top: 0.5em;">
+          <label for="i2c_volume">Объём (мл):</label>
+          <input id='i2c_volume' type='text' inputmode='decimal' value='0' style="width: 6em;">
+        </div>
+        <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 1em;">
+          <input type='button' class="button" value="Отправить" onclick='SamovarApp.sendI2cPump();'>
+          <input type='button' class="button" value="Стоп" onclick='SamovarApp.stopI2cPump();'>
+        </div>
+      </div>
+    </div>

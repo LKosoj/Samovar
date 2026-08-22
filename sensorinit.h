@@ -216,29 +216,6 @@ void pressure_sensor_get() {
 //***************************************************************************************************************
 void DS_getvalue(void) {
 
-  //  SteamSensor.avgTemp += 0.1;
-  //  PipeSensor.avgTemp = 50;
-  //  WaterSensor.avgTemp += 0.1;
-  //  if (WaterSensor.avgTemp > 4) WaterSensor.avgTemp = 25;
-  //  if (SteamSensor.avgTemp < 20) SteamSensor.avgTemp = 20;
-  //  else {
-  //    if (!boil_started)SteamSensor.avgTemp += 1;
-  //    else SteamSensor.avgTemp += 0.001;
-  //  }
-  //  if (TankSensor.avgTemp < 85) TankSensor.avgTemp = 85;
-  //  else {
-  //    if (!boil_started)TankSensor.avgTemp += 0.2;
-  //    else TankSensor.avgTemp += 0.001;
-  //  }
-  //
-  //    SteamSensor.avgTemp += SamSetup.DeltaSteamTemp;
-  //    PipeSensor.avgTemp += SamSetup.DeltaPipeTemp;
-  //    WaterSensor.avgTemp += SamSetup.DeltaWaterTemp;
-  //    TankSensor.avgTemp += SamSetup.DeltaTankTemp;
-  //    ACPSensor.avgTemp += SamSetup.DeltaACPTemp;
-  //
-  //  return;
-
   float ss, ps, ws, ts, acp;
   float correctT = 0;
 
@@ -267,17 +244,6 @@ void DS_getvalue(void) {
   }
 
 #endif
-
-  //    float randNumber;
-  //    randNumber = random(100) / float(500);
-  //    if (TankSensor.avgTemp < 87) TankSensor.avgTemp = 89;
-  //    if (WaterSensor.avgTemp < 47) WaterSensor.avgTemp = 49;
-  //    static float coef = 0;
-  //    coef = heater_state ? 0.1 + randNumber : -0.1 - randNumber;
-  //    //if (coef > 0.5) coef = 0.5;
-  //    //if (coef < -0.5) coef = -0.5;
-  //    ts = TankSensor.avgTemp + coef;
-  //    ws = WaterSensor.avgTemp + coef;
 
   sensors.requestTemperatures();
 
@@ -381,7 +347,6 @@ void scan_ds_adress() {
 
   sensors.setWaitForConversion(false);  // работаем в асинхронном режиме
   sensors.requestTemperatures();
-  //delay(750);
 
 #ifdef __SAMOVAR_DEBUG
   Serial.print("1 Sensor Resolution: ");  // пишем разрешение для датчика 0
@@ -424,7 +389,6 @@ void sensor_init(void) {
     Serial.println((String)BME_STRING + " not found");
 #endif
     bmefound = false;
-    //Serial.println(F("Could not find a valid BME680 sensor, check wiring!"));
   } else {
 #ifdef USE_BME680
     // Set up oversampling and filter initialization
@@ -462,10 +426,8 @@ void sensor_init(void) {
   writeString("Found " + (String)dsSnapshot.count + "         ", 4);
 
   //Для шагового двигателя устанавливаем режим работы - следовать до позиции
-  //  stepper.setRunMode(FOLLOW_POS);
   // установка макс. скорости в шагах/сек
   stepper.setMaxSpeed(STEPPER_MAX_SPEED);
-  //stepper.setSpeed(0);
   //Драйвер выключится по достижении позиции
   stepper.autoPower(true);
 #ifdef STEPPER_REVERSE
@@ -485,7 +447,6 @@ void sensor_init(void) {
   xSemaphoreAVR = xSemaphoreCreateBinaryStatic(&xSemaphoreBufferAVR);
   xSemaphoreGive(xSemaphoreAVR);
   Serial2.setTimeout(500);
-  //Serial2.setRxBufferSize(12);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 #define USE_SERIAL
 #endif
@@ -552,11 +513,6 @@ void sensor_init(void) {
 #endif
 
   reset_sensor_counter();
-  //  regulator.hysteresis = 0.3;
-  //  regulator.k = 0.3;
-  //  regulator.dT = 4000;    //система инерционная, считаем скорость раз в четыре секунды
-  //  regulator.setLimits(0, WindowSize);
-  //  regulator.setDirection(REVERSE);
   heaterPID.SetSampleTime(1000);
   heaterPID.SetOutputLimits(0, 100);
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
@@ -566,7 +522,6 @@ void sensor_init(void) {
 void reset_sensor_counter(void) {
   stopService();
   stepper_safe_set_max_speed(0);
-  //stepper.setSpeed(0);
   stepper_safe_stop_reset();
   set_capacity(0);
   alarm_h_min = 0;

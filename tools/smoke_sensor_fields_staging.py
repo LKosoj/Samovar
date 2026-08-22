@@ -133,14 +133,16 @@ if address_list_body:
 
 setup_body = functions.get("String setupKeyProcessor", "")
 if setup_body:
-    for token in [
-        "get_DSAddressList(getDSAddress(SamSetup.SteamAdress))",
-        "get_DSAddressList(getDSAddress(SamSetup.PipeAdress))",
-        "get_DSAddressList(getDSAddress(SamSetup.WaterAdress))",
-        "get_DSAddressList(getDSAddress(SamSetup.TankAdress))",
-        "get_DSAddressList(getDSAddress(SamSetup.ACPAdress))",
-    ]:
-        require_token("setupKeyProcessor persisted DS addresses", setup_body, token)
+    if "get_DSAddressList(getDSAddress(SamSetup.*f.member))" not in setup_body:
+        errors.append("setupKeyProcessor persisted DS addresses: table-driven lookup not found")
+    for var_name, member in (
+        ("SteamAddr", "SteamAdress"), ("PipeAddr", "PipeAdress"),
+        ("WaterAddr", "WaterAdress"), ("TankAddr", "TankAdress"),
+        ("ACPAddr", "ACPAdress"),
+    ):
+        initializer = f'{{"{var_name}", &SetupEEPROM::{member}}}'
+        if initializer not in web_text:
+            errors.append(f"setupKeyProcessor DS address table missing initializer for {var_name}: {initializer}")
     for token in [
         "SteamSensor.Sensor",
         "PipeSensor.Sensor",

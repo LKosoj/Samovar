@@ -4,12 +4,22 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
 # Сборка: сюда build_web_assets.py кладёт .gz. Содержимое читаем из источника,
 # продукты сжатия - отсюда.
 BUILD = ROOT / "data"
+
+
+def read_page(name: str) -> str:
+    """Страницы могут содержать <!--#include--> (data_raw/partials/) - разворачиваем
+    той же функцией, что использует сама сборка, а не копией её логики."""
+    return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
+
+
 MODE_PAGES = {
     "index.htm": 3,
     "beer.htm": 3,
@@ -59,7 +69,7 @@ def function_body(source: str, name: str) -> str:
 
 def main() -> int:
     app = (DATA / "app.js").read_text(encoding="utf-8")
-    pages = {name: (DATA / name).read_text(encoding="utf-8") for name in ALL_PAGES}
+    pages = {name: read_page(name) for name in ALL_PAGES}
 
     require(len(re.findall(r"\bfunction\s+startTelemetryPage\s*\(", app)) == 1,
             "app.js must define exactly one startTelemetryPage")

@@ -15,7 +15,6 @@ from test_numeric_input_ui_browser import QuietHandler, render_site, run_cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_CLI = Path("/tmp/samovar-playwright-cli-0.1.17/node_modules/.bin/playwright-cli")
 UPLOAD_CASES = (
     ("beer.htm", "loadFile", "beer.txt"),
     ("program.htm", "loadFile", "program.txt"),
@@ -776,8 +775,8 @@ def main() -> int:
     parser.add_argument("--focused", action="store_true")
     args = parser.parse_args()
     cli = shutil.which("playwright-cli")
-    if not cli or Path(cli).resolve() != EXPECTED_CLI.resolve():
-        print(f"stable playwright-cli is required at {EXPECTED_CLI}", file=sys.stderr)
+    if not cli:
+        print("playwright-cli is required for the U-05 browser gate", file=sys.stderr)
         return 2
 
     error: str | None = None

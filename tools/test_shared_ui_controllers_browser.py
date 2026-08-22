@@ -802,10 +802,6 @@ def main() -> int:
     if not cli:
         print("playwright-cli is required for the shared controller browser gate", file=sys.stderr)
         return 2
-    version = subprocess.run([cli, "--version"], capture_output=True, text=True).stdout.strip()
-    if version != "0.1.17":
-        print(f"playwright-cli 0.1.17 is required, got {version or 'unknown'}", file=sys.stderr)
-        return 2
 
     primary_error = None
     cleanup_errors: list[str] = []

@@ -2,15 +2,11 @@
 #include "esp_log.h"
 #include "driver/uart.h"
 #include <Arduino.h>
-//#include "app_config.h"
-//#include "sdkconfig.h"
-//#include "driver/gpio.h"
 #include "mod_rmvk.h"
 #include "Samovar.h"
 #include "samovar_api.h"
 
 #define BUF_SIZE (1024)
-#define RD_BUF_SIZE (BUF_SIZE)
 
 StaticSemaphore_t xSemaphoreBuffer;
 rmvk_t rmvk;
@@ -59,8 +55,6 @@ uint8_t RMVK_cmd(
   String s;
   if ( xSemaphore != NULL )
   {
-    //Serial.print("cmd = ");
-    //Serial.println(cmd);
     if ( xSemaphoreTake( xSemaphore, ( TickType_t ) ((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE)
     {
       size_t copyLen = strnlen(cmd, sizeof(cmd_buf) - 2);
@@ -85,8 +79,6 @@ uint8_t RMVK_cmd(
       len = uart_read_bytes(RMVK_UART, buf, sizeof(buf) - 1, RMVK_DEFAULT_READ_TIMEOUT / portTICK_RATE_MS);
       if (len < 0) len = 0;
       buf[len] = '\0';
-      //Serial.print("buf = ");
-      //Serial.println((const char *)&buf);
       xSemaphoreGive( xSemaphore );
       if (len > 0) {
         const char* response = (const char *)&buf;
@@ -145,7 +137,6 @@ uint16_t RMVK_get_in_voltge() {
 
 uint16_t RMVK_get_out_voltge() {
 	  char cmd[] = "AT+VO?";
-	  //    char cmd[]="AT+VI?";
 		  uint8_t ret = RMVK_cmd(cmd, RMVK_INT, false, 0);
 	  if (ret != RMVK_ERROR) {
 	    rmvk.VO = ret;

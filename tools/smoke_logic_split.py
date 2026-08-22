@@ -50,6 +50,9 @@ headers = {
     "power_regulator.h": strip_cpp_comments(read_text("power_regulator.h")),
     "selftest.h": strip_cpp_comments(read_text("selftest.h")),
 }
+headers["power_regulator_kvic.h"] = strip_cpp_comments(read_text("power_regulator_kvic.h"))
+headers["power_regulator_rmvk.h"] = strip_cpp_comments(read_text("power_regulator_rmvk.h"))
+headers["power_regulator_sem.h"]  = strip_cpp_comments(read_text("power_regulator_sem.h"))
 
 require_ordered(
     "logic.h split include order",
@@ -84,13 +87,14 @@ moved_functions = {
     },
     "power_regulator.h": {
         "set_power": ("ActuatorCommandResult", 1),
-        "clear_serial_in_buff": ("void", 1),
-        "triggerPowerStatus": ("void", 2),
         "check_power_error": ("void", 1),
         "get_current_power": ("void", 1),
         "set_current_power": ("ActuatorCommandResult", 1),
         "set_power_mode": ("void", 1),
     },
+    "power_regulator_kvic.h": {"triggerPowerStatus": ("void", 1)},
+    "power_regulator_rmvk.h": {"triggerPowerStatus": ("void", 1)},
+    "power_regulator_sem.h": {"triggerPowerStatus": ("void", 1), "clear_serial_in_buff": ("void", 1)},
     "selftest.h": {
         "start_self_test": ("void", 1),
         "stop_self_test": ("void", 1),

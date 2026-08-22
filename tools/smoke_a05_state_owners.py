@@ -52,6 +52,22 @@ def production_section(source: str) -> str:
         source,
         "static void jsonPrintEscaped(Print &out, const String &value)",
     )
+    json_field_float = extract_function_body(
+        source,
+        "static inline void jsonFieldFloat(Print &out, bool &first, const char *key, float value, int decimals)",
+    )
+    json_field_string = extract_function_body(
+        source,
+        "static inline void jsonFieldString(Print &out, bool &first, const char *key, const String &value)",
+    )
+    json_field_bool = extract_function_body(
+        source,
+        "static inline void jsonFieldBool(Print &out, bool &first, const char *key, bool value)",
+    )
+    json_field_raw = extract_function_body(
+        source,
+        "static inline void jsonFieldRaw(Print &out, bool &first, const char *key, T value)",
+    )
     return f"""
 {snapshot}
 
@@ -61,6 +77,23 @@ static inline void jsonAddKey(Print &out, bool &first, const char *key) {{
 
 static void jsonPrintEscaped(Print &out, const String &value) {{
 {json_escape}
+}}
+
+static inline void jsonFieldFloat(Print &out, bool &first, const char *key, float value, int decimals) {{
+{json_field_float}
+}}
+
+static inline void jsonFieldString(Print &out, bool &first, const char *key, const String &value) {{
+{json_field_string}
+}}
+
+static inline void jsonFieldBool(Print &out, bool &first, const char *key, bool value) {{
+{json_field_bool}
+}}
+
+template <typename T>
+static inline void jsonFieldRaw(Print &out, bool &first, const char *key, T value) {{
+{json_field_raw}
 }}
 
 static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(

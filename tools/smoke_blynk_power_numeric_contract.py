@@ -34,6 +34,9 @@ def function_body(source: str, signature: str) -> str:
 blynk = strip_cpp_comments(read_text("Blynk.ino"))
 power = strip_cpp_comments(read_text("power_regulator.h"))
 api = strip_cpp_comments(read_text("samovar_api.h"))
+kvic_src = strip_cpp_comments(read_text("power_regulator_kvic.h"))
+rmvk_src = strip_cpp_comments(read_text("power_regulator_rmvk.h"))
+sem_src = strip_cpp_comments(read_text("power_regulator_sem.h"))
 
 for forbidden in (".asInt()", ".asFloat()"):
     if forbidden in blynk:
@@ -107,15 +110,12 @@ if "hexToDec(" in api:
     errors.append("samovar_api.h still declares hexToDec")
 
 trigger_signature = "void triggerPowerStatus(void *parameter)"
-first_trigger = power.find(trigger_signature)
-second_trigger = power.find(trigger_signature, first_trigger + len(trigger_signature))
-if first_trigger < 0 or second_trigger < 0:
-    errors.append("power_regulator.h must keep both triggerPowerStatus feature branches")
-    kvic_body = ""
-    sem_body = ""
-else:
-    kvic_body = function_body(power[first_trigger:], trigger_signature)
-    sem_body = function_body(power[second_trigger:], trigger_signature)
+if trigger_signature not in kvic_src:
+    errors.append("power_regulator_kvic.h must keep the KVIC triggerPowerStatus branch")
+if trigger_signature not in sem_src:
+    errors.append("power_regulator_sem.h must keep the SEM triggerPowerStatus branch")
+kvic_body = function_body(kvic_src, trigger_signature)
+sem_body = function_body(sem_src, trigger_signature)
 
 require_ordered_tokens(
     "KVIC response transaction",
@@ -151,15 +151,17 @@ for tokens in (
 ):
     require_ordered_tokens("SEM response transaction", sem_body, tokens, errors)
 
+if "inline void commit_kvic_power_response" not in kvic_src:
+    errors.append("power_regulator_kvic.h missing response contract token: inline void commit_kvic_power_response")
 for token in (
-    "inline void commit_kvic_power_response",
     "inline void commit_sem_power_mode_response",
     "inline void commit_sem_current_power_response",
     "inline void commit_sem_target_power_response",
-    "POWER_RESPONSE_ERROR_INTERVAL_MS",
 ):
-    if token not in power:
-        errors.append(f"power_regulator.h missing response contract token: {token}")
+    if token not in sem_src:
+        errors.append(f"power_regulator_sem.h missing response contract token: {token}")
+if "POWER_RESPONSE_ERROR_INTERVAL_MS" not in power:
+    errors.append("power_regulator.h missing response contract token: POWER_RESPONSE_ERROR_INTERVAL_MS")
 
 manifest_text = read_text("tools/static_analysis_sources.json")
 try:

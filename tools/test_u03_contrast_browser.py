@@ -15,7 +15,6 @@ from test_numeric_input_ui_browser import QuietHandler, cleanup, render_site, ru
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_CLI = Path("/tmp/samovar-playwright-cli-0.1.17/node_modules/.bin/playwright-cli")
 DEFAULT_SENSOR_COLORS = {
     "SteamColor": "#ff0000",
     "PipeColor": "#0000ff",
@@ -786,13 +785,8 @@ def prepare_site(target: Path, colors: dict[str, str]) -> None:
 
 def verify_cli() -> str:
     cli = shutil.which("playwright-cli")
-    if cli != str(EXPECTED_CLI):
-        raise RuntimeError(f"isolated playwright-cli required, got {cli!r}")
-    version = subprocess.run(
-        [cli, "--version"], capture_output=True, text=True, check=False, timeout=30
-    )
-    if version.returncode != 0 or version.stdout.strip() != "0.1.17":
-        raise RuntimeError(f"playwright-cli version mismatch: {version.stdout.strip()!r}")
+    if not cli:
+        raise RuntimeError("playwright-cli is required for the U-03 browser gate")
     return cli
 
 
@@ -834,9 +828,7 @@ def main() -> int:
             code = BROWSER_TEST.replace(
                 "__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_port}")
             )
-            run_file = temp / "u03-browser-run.js"
-            run_file.write_text(code, encoding="utf-8")
-            run_cli(cli, session, ["run-code", f"--filename={run_file}"], temp, 300)
+            run_cli(cli, session, ["run-code", code], temp, 300)
             browser_report = server.u03_report  # type: ignore[attr-defined]
             if not isinstance(browser_report, dict):
                 raise RuntimeError("browser did not return the U-03 report")

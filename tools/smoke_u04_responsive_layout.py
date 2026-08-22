@@ -8,6 +8,8 @@ import zlib
 from html.parser import HTMLParser
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
 from smoke_u03_contrast import canonical_gzip, verify_chart_palette, verify_mandatory_fixes
 
 
@@ -16,6 +18,12 @@ DATA = ROOT / "data_raw"
 # Сборка: сюда build_web_assets.py кладёт .gz. Содержимое читаем из источника,
 # продукты сжатия - отсюда.
 BUILD = ROOT / "data"
+
+
+def read_page(name: str) -> str:
+    """Разворачивает <!--#include--> (data_raw/partials/) той же функцией, что
+    использует сама сборка - не копией её логики."""
+    return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
 FROZEN_SHA256 = {
     "app.js": "29d3e0d773fafdd6caec3650f53bfad46afd7dd92c287986cfb0a67b67e6d092",
     "chart.js": "6ca38396b9a9c0ed8ac1333b310bac0d4b52997a6c8d5a587b9c9a3864131e6b",
@@ -69,9 +77,9 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def structure_digest(path: Path) -> str:
+def structure_digest(name: str) -> str:
     parser = ContractParser()
-    parser.feed(path.read_text(encoding="utf-8"))
+    parser.feed(read_page(name))
     payload = json.dumps(
         parser.parts, ensure_ascii=False, separators=(",", ":")
     ).encode("utf-8")
@@ -99,8 +107,8 @@ def require_rule(
 
 
 def verify_markup(errors: list[str]) -> None:
-    setup = (DATA / "setup.htm").read_text(encoding="utf-8")
-    chart = (DATA / "chart.htm").read_text(encoding="utf-8")
+    setup = read_page("setup.htm")
+    chart = read_page("chart.htm")
 
     if re.search(r"min-width\s*:\s*1024(?:\s*;|\s*['\"])", setup, re.I):
         errors.append("data/setup.htm: unitless min-width:1024 remains")
@@ -183,7 +191,7 @@ def verify_frozen_contract(errors: list[str]) -> None:
         if actual != expected:
             errors.append(f"data/{name}: frozen SHA changed: {actual}")
     for name, expected in STRUCTURE_SHA256.items():
-        actual = structure_digest(DATA / name)
+        actual = structure_digest(name)
         if actual != expected:
             errors.append(f"data/{name}: DOM/text/control/action structure changed: {actual}")
     try:

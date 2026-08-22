@@ -13,6 +13,16 @@ DATA = ROOT / "data_raw"
 # продукты сжатия - отсюда.
 BUILD = ROOT / "data"
 
+
+def read_page(name: str) -> str:
+    """Разворачивает <!--#include--> (data_raw/partials/) той же функцией, что
+    использует сама сборка - не копией её логики. Импорт лениво (внутри функции):
+    build_web_assets.py сам импортирует canonical_gzip из этого модуля, а прямой
+    импорт на уровне модуля дал бы цикл."""
+    from build_web_assets import resolve_includes
+    return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
+
+
 SENSOR_TOKENS = ("SteamColor", "PipeColor", "WaterColor", "TankColor", "ACPColor")
 SENSOR_PAGES = (
     "index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm",
@@ -233,7 +243,7 @@ def verify_source_boundary() -> None:
             raise AssertionError(f"frozen data/{name} changed: {actual}")
 
     for name, expected in NORMALIZED_SHA256.items():
-        text = (DATA / name).read_text(encoding="utf-8")
+        text = read_page(name)
         if name == "style.css":
             text = normalize_style(text)
         elif name == "chart.js":
@@ -246,7 +256,7 @@ def verify_source_boundary() -> None:
 
 
 def verify_mandatory_fixes() -> None:
-    index = (DATA / "index.htm").read_text(encoding="utf-8")
+    index = read_page("index.htm")
     if index.count("l.style.color = '#8B0000';") != 1:
         raise AssertionError("data/index.htm: active row foreground cardinality")
     if index.count("e[q].style.color = '#8B0000';") != 1:
@@ -255,13 +265,13 @@ def verify_mandatory_fixes() -> None:
         raise AssertionError("data/index.htm: unverified active row red remains")
 
     for name in DELTA_PAGES:
-        text = (DATA / name).read_text(encoding="utf-8")
+        text = read_page(name)
         if 'style="color: black;"' in text:
             raise AssertionError(f"data/{name}: DeltaTemp still uses black")
         if text.count('style="color: var(--text-strong);"') != 1:
             raise AssertionError(f"data/{name}: DeltaTemp theme color cardinality")
 
-    program = (DATA / "program.htm").read_text(encoding="utf-8")
+    program = read_page("program.htm")
     for literal in ("background: #fafafa;", "background: #fff;", "background: #eee;"):
         if literal in program:
             raise AssertionError(f"data/program.htm: fixed audit surface remains: {literal}")
@@ -278,7 +288,7 @@ def verify_mandatory_fixes() -> None:
         'style="text-decoration-line: underline; text-decoration-color: %{token}%;"'
     )
     for name in SENSOR_PAGES:
-        text = (DATA / name).read_text(encoding="utf-8")
+        text = read_page(name)
         target_template = (
             full_target_template if name == "setup.htm" else short_target_template
         )
@@ -289,7 +299,7 @@ def verify_mandatory_fixes() -> None:
             if f'style="color: %{token}%;"' in text:
                 raise AssertionError(f"data/{name}: {token} remains a foreground")
 
-    style = (DATA / "style.css").read_text(encoding="utf-8")
+    style = read_page("style.css")
     if style.count("#file-input {\n  padding: 0;\n  border: 1px solid #ddd;\n") != 1:
         raise AssertionError("data/style.css: file input baseline border changed")
     expected_message = (
@@ -301,7 +311,7 @@ def verify_mandatory_fixes() -> None:
 
 
 def verify_chart_palette() -> None:
-    text = (DATA / "chart.js").read_text(encoding="utf-8")
+    text = read_page("chart.js")
     colors = re.findall(r"\{ key: '[^']+', label: '[^']+', color: '([^']+)' \}", text)
     if len(colors) != 6 or len(set(colors)) != 6:
         raise AssertionError("chart series palette must contain six distinct colors")

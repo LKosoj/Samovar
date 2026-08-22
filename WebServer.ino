@@ -101,6 +101,10 @@ static bool queue_pending_nbk(const ControlNbkCommand& value) {
 }
 
 #ifdef USE_LUA
+// Не инстанс queue_pending_value<String>: valueSlot там volatile T&, а у класса
+// String (WString.h ядра ESP32) нет ни одного volatile-квалифицированного метода,
+// в т.ч. operator= — volatile String& не скомпилируется на valueSlot = value.
+// Поэтому здесь обычная String& (pending_lua_str/pending_lua_file объявлены не volatile).
 bool queue_pending_string(volatile bool& flag, String& valueSlot, const String& value) {
   if (mode_switch_in_progress()) return false;
   bool locked = pending_command_lock(pdMS_TO_TICKS(50));
@@ -947,15 +951,6 @@ static void send_cached_static_file(
 void WebServerInit(void) {
   FS_register_web_handlers();
 
-//  HeaderFreeMiddleware spiffsHeaderFree;
-//  spiffsHeaderFree.keep("If-Modified-Since");
-//  spiffsHeaderFree.keep("Host");
-//  // Add any other headers you need to keep
-//
-//  // Then either add it globally
-//  server.addMiddleware(&spiffsHeaderFree);
-
-
   server.on("/", HTTP_GET | HTTP_POST, [](AsyncWebServerRequest* request) {
     request->redirect("/index.htm");
   });
@@ -974,13 +969,6 @@ void WebServerInit(void) {
       send_cached_static_file(request, entry.path, entry.cacheControl);
     });
   }
-
-  //  server.serveStatic("/style.css", SPIFFS, "/style.css");
-  //  server.serveStatic("/Red_light.gif", SPIFFS, "/Red_light.gif");
-  //  server.serveStatic("/Green.png", SPIFFS, "/Green.png");
-  //  server.serveStatic("/minus.png", SPIFFS, "/minus.png");
-  //  server.serveStatic("/plus.png", SPIFFS, "/plus.png");
-  //  server.serveStatic("/favicon.ico", SPIFFS, "/favicon.ico");
 
   server.serveStatic("/alarm.mp3", SPIFFS, "/alarm.mp3");
   server.serveStatic("/resetreason.css", SPIFFS, "/resetreason.css").setCacheControl("max-age=1");
@@ -1009,16 +997,7 @@ void WebServerInit(void) {
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
-  //server.serveStatic("/edit", SPIFFS, "/edit.htm");
   // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
-
-  //#ifdef USE_LUA
-  //  server.serveStatic("/btn_button1.lua", SPIFFS, "/btn_button1.lua");
-  //  server.serveStatic("/btn_button2.lua", SPIFFS, "/btn_button2.lua");
-  //  server.serveStatic("/btn_button3.lua", SPIFFS, "/btn_button3.lua");
-  //  server.serveStatic("/btn_button4.lua", SPIFFS, "/btn_button4.lua");
-  //  server.serveStatic("/btn_button5.lua", SPIFFS, "/btn_button5.lua");
-  //#endif
 
   server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_index_page(request);
@@ -1109,16 +1088,11 @@ void WebServerInit(void) {
 #endif
 
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
-    //Serial.println("SAVE");
     handleSave(request);
   });
 
   headerFilter.filter("If-Modified-Since");
-  //  DefaultHeaders::Instance().addHeader("Cache-Control", "no-cache");
-  //  DefaultHeaders::Instance().addHeader("Pragma", "no-cache");
-  //  DefaultHeaders::Instance().addHeader("Expires", "Thu, 01 Jan 1970 00:00:00 UTC");
-  //  DefaultHeaders::Instance().addHeader("Last-Modified", "Mon, 03 Jan 2050 00:00:00 UTC");
-  
+
   server.on("/distiller.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_mode_specific_htm(request, "/distiller.htm", SAMOVAR_DISTILLATION_MODE);
   });
@@ -1259,96 +1233,212 @@ String indexKeyProcessorWithSnapshots(const String &var, const String &descripti
   return indexKeyProcessor(var);
 }
 
+struct GetFloat2Field { const char* var; float SetupEEPROM::* member; };
+struct GetFloat2NanSafeField { const char* var; float SetupEEPROM::* member; };
+struct GetFloat3Field { const char* var; float SetupEEPROM::* member; };
+struct GetFloatDirectField { const char* var; float SetupEEPROM::* member; };
+struct GetU16Field { const char* var; uint16_t SetupEEPROM::* member; };
+struct GetU8Field { const char* var; uint8_t SetupEEPROM::* member; };
+struct GetCheckboxField { const char* var; bool SetupEEPROM::* member; };
+struct GetModeSelectField { const char* var; SAMOVAR_MODE mode; };
+struct GetRelaySelectField { const char* var; bool SetupEEPROM::* member; bool expected; };
+struct GetColToleranceField { const char* var; float SetupEEPROM::* member; float target; };
+struct GetDsAddrField { const char* var; uint8_t (SetupEEPROM::* member)[8]; };
+struct GetColorField { const char* var; char (SetupEEPROM::* member)[20]; };
+
+static const GetFloat2Field kGetFloat2Fields[] = {
+    {"DeltaSteamTemp", &SetupEEPROM::DeltaSteamTemp},
+    {"DeltaPipeTemp", &SetupEEPROM::DeltaPipeTemp},
+    {"DeltaWaterTemp", &SetupEEPROM::DeltaWaterTemp},
+    {"DeltaTankTemp", &SetupEEPROM::DeltaTankTemp},
+    {"DeltaACPTemp", &SetupEEPROM::DeltaACPTemp},
+    {"SetSteamTemp", &SetupEEPROM::SetSteamTemp},
+    {"SuvidTemp", &SetupEEPROM::SuvidTemp},
+    {"DistTemp", &SetupEEPROM::DistTemp},
+};
+
+static const GetFloat2NanSafeField kGetFloat2NanSafeFields[] = {
+    {"SetPipeTemp", &SetupEEPROM::SetPipeTemp},
+    {"SetWaterTemp", &SetupEEPROM::SetWaterTemp},
+    {"SetTankTemp", &SetupEEPROM::SetTankTemp},
+    {"SetACPTemp", &SetupEEPROM::SetACPTemp},
+};
+
+static const GetFloat3Field kGetFloat3Fields[] = {
+    {"Kp", &SetupEEPROM::Kp},
+    {"Ki", &SetupEEPROM::Ki},
+    {"Kd", &SetupEEPROM::Kd},
+    {"HeaterR", &SetupEEPROM::HeaterResistant},
+};
+
+static const GetFloatDirectField kGetFloatDirectFields[] = {
+    {"StbVoltage", &SetupEEPROM::StbVoltage},
+    {"MainsVoltage", &SetupEEPROM::MainsVoltage},
+    {"BVolt", &SetupEEPROM::BVolt},
+    {"BKPower", &SetupEEPROM::BKPower},
+    {"MaxPressureValue", &SetupEEPROM::MaxPressureValue},
+    {"NbkIn", &SetupEEPROM::NbkIn},
+    {"NbkDelta", &SetupEEPROM::NbkDelta},
+    {"NbkDM", &SetupEEPROM::NbkDM},
+    {"NbkDP", &SetupEEPROM::NbkDP},
+    {"NbkSteamT", &SetupEEPROM::NbkSteamT},
+    {"NbkOwPress", &SetupEEPROM::NbkOwPress},
+    {"NbkTn", &SetupEEPROM::NbkTn},
+};
+
+static const GetU16Field kGetU16Fields[] = {
+    {"SuvidHoldMinutes", &SetupEEPROM::SuvidHoldMinutes},
+    {"StepperStepMl", &SetupEEPROM::StepperStepMl},
+    {"StepperStepMlI2C", &SetupEEPROM::StepperStepMlI2C},
+    {"SteamDelay", &SetupEEPROM::SteamDelay},
+    {"PipeDelay", &SetupEEPROM::PipeDelay},
+    {"WaterDelay", &SetupEEPROM::WaterDelay},
+    {"TankDelay", &SetupEEPROM::TankDelay},
+    {"ACPDelay", &SetupEEPROM::ACPDelay},
+};
+
+static const GetU8Field kGetU8Fields[] = {
+    {"TimeZone", &SetupEEPROM::TimeZone},
+    {"LogPeriod", &SetupEEPROM::LogPeriod},
+    {"DistTimeF", &SetupEEPROM::DistTimeF},
+    {"autospeed", &SetupEEPROM::autospeed},
+    {"PackDens", &SetupEEPROM::PackDens},
+};
+
+static const GetCheckboxField kGetCheckboxFields[] = {
+    {"Checked", &SetupEEPROM::UsePreccureCorrect},
+    {"FLChecked", &SetupEEPROM::UseHLS},
+    {"UASChecked", &SetupEEPROM::useautospeed},
+    {"UASDetectorChecked", &SetupEEPROM::useDetector},
+    {"CPBuzz", &SetupEEPROM::ChangeProgramBuzzer},
+    {"CUBuzz", &SetupEEPROM::UseBuzzer},
+    {"CUBBuzz", &SetupEEPROM::UseBBuzzer},
+    {"UseWS", &SetupEEPROM::UseWS},
+    {"UseST", &SetupEEPROM::UseST},
+    {"ChckPwr", &SetupEEPROM::CheckPower},
+};
+
+static const GetModeSelectField kGetModeSelectFields[] = {
+    {"RECT", SAMOVAR_RECTIFICATION_MODE},
+    {"DIST", SAMOVAR_DISTILLATION_MODE},
+    {"BEER", SAMOVAR_BEER_MODE},
+    {"BK", SAMOVAR_BK_MODE},
+    {"NBK", SAMOVAR_NBK_MODE},
+    {"SUVID", SAMOVAR_SUVID_MODE},
+    {"LUA_MODE", SAMOVAR_LUA_MODE},
+};
+
+static const GetRelaySelectField kGetRelaySelectFields[] = {
+    {"RAL", &SetupEEPROM::rele1, false},
+    {"RAH", &SetupEEPROM::rele1, true},
+    {"RBL", &SetupEEPROM::rele2, false},
+    {"RBH", &SetupEEPROM::rele2, true},
+    {"RCL", &SetupEEPROM::rele3, false},
+    {"RCH", &SetupEEPROM::rele3, true},
+    {"RDL", &SetupEEPROM::rele4, false},
+    {"RDH", &SetupEEPROM::rele4, true},
+};
+
+static const GetColToleranceField kGetColToleranceFields[] = {
+    {"ColDiam_1.5", &SetupEEPROM::ColDiam, 1.5f},
+    {"ColDiam_2.0", &SetupEEPROM::ColDiam, 2.0f},
+    {"ColDiam_3.0", &SetupEEPROM::ColDiam, 3.0f},
+    {"ColHeight_0.50", &SetupEEPROM::ColHeight, 0.50f},
+    {"ColHeight_0.75", &SetupEEPROM::ColHeight, 0.75f},
+    {"ColHeight_1.00", &SetupEEPROM::ColHeight, 1.00f},
+    {"ColHeight_1.25", &SetupEEPROM::ColHeight, 1.25f},
+    {"ColHeight_1.50", &SetupEEPROM::ColHeight, 1.50f},
+    {"ColHeight_1.75", &SetupEEPROM::ColHeight, 1.75f},
+    {"ColHeight_2.00", &SetupEEPROM::ColHeight, 2.00f},
+    {"ColHeight_2.25", &SetupEEPROM::ColHeight, 2.25f},
+    {"ColHeight_2.50", &SetupEEPROM::ColHeight, 2.50f},
+};
+
+static const GetDsAddrField kGetDsAddrFields[] = {
+    {"SteamAddr", &SetupEEPROM::SteamAdress},
+    {"PipeAddr", &SetupEEPROM::PipeAdress},
+    {"WaterAddr", &SetupEEPROM::WaterAdress},
+    {"TankAddr", &SetupEEPROM::TankAdress},
+    {"ACPAddr", &SetupEEPROM::ACPAdress},
+};
+
+static const GetColorField kGetColorFields[] = {
+    {"SteamColor", &SetupEEPROM::SteamColor},
+    {"PipeColor", &SetupEEPROM::PipeColor},
+    {"WaterColor", &SetupEEPROM::WaterColor},
+    {"TankColor", &SetupEEPROM::TankColor},
+    {"ACPColor", &SetupEEPROM::ACPColor},
+};
+
 String setupKeyProcessor(const String &var) {
   static String s;
   s = "";
-  if (var == "DeltaSteamTemp") {
-    s = format_float(SamSetup.DeltaSteamTemp, 2);
-    return s;
-  } else if (var == "DeltaPipeTemp") {
-    s = format_float(SamSetup.DeltaPipeTemp, 2);
-    return s;
-  } else if (var == "DeltaWaterTemp") {
-    s = format_float(SamSetup.DeltaWaterTemp, 2);
-    return s;
-  } else if (var == "DeltaTankTemp") {
-    s = format_float(SamSetup.DeltaTankTemp, 2);
-    return s;
-  } else if (var == "DeltaACPTemp") {
-    s = format_float(SamSetup.DeltaACPTemp, 2);
-    return s;
-  } else if (var == "SetSteamTemp") {
-    s = format_float(SamSetup.SetSteamTemp, 2);
-    return s;
-  } else if (var == "SetPipeTemp") {
-    float setPipeTemp = isnan(SamSetup.SetPipeTemp) ? 0 : SamSetup.SetPipeTemp;
-    s = format_float(setPipeTemp, 2);
-    return s;
-  } else if (var == "SetWaterTemp") {
-    float setWaterTemp = isnan(SamSetup.SetWaterTemp) ? 0 : SamSetup.SetWaterTemp;
-    s = format_float(setWaterTemp, 2);
-    return s;
-  } else if (var == "SetTankTemp") {
-    float setTankTemp = isnan(SamSetup.SetTankTemp) ? 0 : SamSetup.SetTankTemp;
-    s = format_float(setTankTemp, 2);
-    return s;
-  } else if (var == "SetACPTemp") {
-    float setACPTemp = isnan(SamSetup.SetACPTemp) ? 0 : SamSetup.SetACPTemp;
-    s = format_float(setACPTemp, 2);
-    return s;
-  } else if (var == "SuvidTemp") {
-    s = format_float(SamSetup.SuvidTemp, 2);
-    return s;
-  } else if (var == "SuvidHoldMinutes") {
-    s = String(SamSetup.SuvidHoldMinutes);
-    return s;
-  } else if (var == "StepperStepMl") {
-    s = SamSetup.StepperStepMl;
-    return s;
-  } else if (var == "StepperStepMlI2C") {
-    s = SamSetup.StepperStepMlI2C;
-    return s;
-  } else if (var == "WProgram") {
+  for (const GetFloat2Field &f : kGetFloat2Fields) {
+    if (var == f.var) {
+      s = format_float(SamSetup.*f.member, 2);
+      return s;
+    }
+  }
+  for (const GetFloat2NanSafeField &f : kGetFloat2NanSafeFields) {
+    if (var == f.var) {
+      float v = isnan(SamSetup.*f.member) ? 0 : SamSetup.*f.member;
+      s = format_float(v, 2);
+      return s;
+    }
+  }
+  for (const GetFloat3Field &f : kGetFloat3Fields) {
+    if (var == f.var) {
+      s = format_float(SamSetup.*f.member, 3);
+      return s;
+    }
+  }
+  for (const GetFloatDirectField &f : kGetFloatDirectFields) {
+    if (var == f.var) {
+      s = SamSetup.*f.member;
+      return s;
+    }
+  }
+  for (const GetU16Field &f : kGetU16Fields) {
+    if (var == f.var) {
+      s = SamSetup.*f.member;
+      return s;
+    }
+  }
+  for (const GetU8Field &f : kGetU8Fields) {
+    if (var == f.var) {
+      s = SamSetup.*f.member;
+      return s;
+    }
+  }
+  for (const GetCheckboxField &f : kGetCheckboxFields) {
+    if (var == f.var) return (SamSetup.*f.member) ? "checked='true'" : "";
+  }
+  for (const GetModeSelectField &f : kGetModeSelectFields) {
+    if (var == f.var) return (SAMOVAR_MODE)SamSetup.Mode == f.mode ? "selected" : "";
+  }
+  for (const GetRelaySelectField &f : kGetRelaySelectFields) {
+    if (var == f.var) return (SamSetup.*f.member == f.expected) ? "selected" : "";
+  }
+  for (const GetColToleranceField &f : kGetColToleranceFields) {
+    if (var == f.var) return (abs(SamSetup.*f.member - f.target) < 0.01f) ? "selected" : "";
+  }
+  for (const GetDsAddrField &f : kGetDsAddrFields) {
+    if (var == f.var) return get_DSAddressList(getDSAddress(SamSetup.*f.member));
+  }
+  for (const GetColorField &f : kGetColorFields) {
+    if (var == f.var) {
+      s = SamSetup.*f.member;
+      return s;
+    }
+  }
+  if (var == "WProgram") {
     return serialize_program_for_mode(Samovar_Mode);
-  } else if (var == "Kp") {
-    s = format_float(SamSetup.Kp, 3);
-    return s;
-  } else if (var == "Ki") {
-    s = format_float(SamSetup.Ki, 3);
-    return s;
-  } else if (var == "Kd") {
-    s = format_float(SamSetup.Kd, 3);
-    return s;
-  } else if (var == "StbVoltage") {
-    s = SamSetup.StbVoltage;
-    return s;
-  } else if (var == "SteamDelay") {
-    s = SamSetup.SteamDelay;
-    return s;
-  } else if (var == "PipeDelay") {
-    s = SamSetup.PipeDelay;
-    return s;
-  } else if (var == "WaterDelay") {
-    s = SamSetup.WaterDelay;
-    return s;
-  } else if (var == "TankDelay") {
-    s = SamSetup.TankDelay;
-    return s;
-  } else if (var == "ACPDelay") {
-    s = SamSetup.ACPDelay;
-    return s;
-  } else if (var == "TimeZone") {
-    s = SamSetup.TimeZone;
-    return s;
-  } else if (var == "LogPeriod") {
-    s = SamSetup.LogPeriod;
-    return s;
-  } else if (var == "HeaterR") {
-    s = format_float(SamSetup.HeaterResistant, 3);
-    return s;
-  } else if (var == "MainsVoltage") {
-    s = SamSetup.MainsVoltage;
-    return s;
+#ifdef IGNORE_HEAD_LEVEL_SENSOR_SETTING
+  } else if (var == "IgnFL") {
+    return F("style="
+             "display: none"
+             "");
+#endif
   } else if (var == "videourl") {
     s = SamSetup.videourl;
     return s;
@@ -1361,193 +1451,16 @@ String setupKeyProcessor(const String &var) {
   } else if (var == "tgchatid") {
     s = SamSetup.tg_chat_id;
     return s;
-  } else if (var == "BVolt") {
-    s = SamSetup.BVolt;
-    return s;
-  } else if (var == "BKPower") {
-    s = SamSetup.BKPower;
-    return s;
-  } else if (var == "DistTimeF") {
-    s = SamSetup.DistTimeF;
-    return s;
-  } else if (var == "MaxPressureValue") {
-    s = SamSetup.MaxPressureValue;
-    return s;
-  } else if (var == "NbkIn") {
-    s = SamSetup.NbkIn;
-    return s;
-  } else if (var == "NbkDelta") {
-    s = SamSetup.NbkDelta;
-    return s;
-  } else if (var == "NbkDM") {
-    s = SamSetup.NbkDM;
-    return s;
-  } else if (var == "NbkDP") {
-    s = SamSetup.NbkDP;
-    return s;
-  } else if (var == "NbkSteamT") {
-    s = SamSetup.NbkSteamT;
-    return s;
-  } else if (var == "NbkOwPress") {
-    s = SamSetup.NbkOwPress;
-    return s;
-  } else if (var == "NbkTn") {
-    s = SamSetup.NbkTn;
-    return s;
-  } else if (var == "Checked") {
-    if (SamSetup.UsePreccureCorrect) return "checked='true'";
-    else
-      return "";
-  } else if (var == "FLChecked") {
-    if (SamSetup.UseHLS) return "checked='true'";
-    else
-      return "";
-#ifdef IGNORE_HEAD_LEVEL_SENSOR_SETTING
-  } else if (var == "IgnFL") {
-    return F("style="
-             "display: none"
-             "");
-#endif
-  } else if (var == "UASChecked") {
-    if (SamSetup.useautospeed) return "checked='true'";
-    else
-      return "";
-  } else if (var == "UASDetectorChecked") {
-    if (SamSetup.useDetector) return "checked='true'";
-    else
-      return "";
-  } else if (var == "CPBuzz") {
-    if (SamSetup.ChangeProgramBuzzer) return "checked='true'";
-    else
-      return "";
-  } else if (var == "CUBuzz") {
-    if (SamSetup.UseBuzzer) return "checked='true'";
-    else
-      return "";
-  } else if (var == "CUBBuzz") {
-    if (SamSetup.UseBBuzzer) return "checked='true'";
-    else
-      return "";
-  } else if (var == "UseWS") {
-    if (SamSetup.UseWS) return "checked='true'";
-    else
-      return "";
-  } else if (var == "UseST") {
-    if (SamSetup.UseST) return "checked='true'";
-    else
-      return "";
-  } else if (var == "ChckPwr") {
-    if (SamSetup.CheckPower) return "checked='true'";
-    else
-      return "";
-  } else if (var == "autospeed") {
-    s = SamSetup.autospeed;
-    return s;
-  } else if (var == "DistTemp") {
-    s = format_float(SamSetup.DistTemp, 2);
-    return s;
-  } else if (var == "SteamColor") {
-    s = SamSetup.SteamColor;
-    return s;
-  } else if (var == "PipeColor") {
-    s = SamSetup.PipeColor;
-    return s;
-  } else if (var == "WaterColor") {
-    s = SamSetup.WaterColor;
-    return s;
-  } else if (var == "TankColor") {
-    s = SamSetup.TankColor;
-    return s;
-  } else if (var == "ACPColor") {
-    s = SamSetup.ACPColor;
-    return s;
-  } else if (var == "RECT" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE)
-    return "selected";
-  else if (var == "DIST" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_DISTILLATION_MODE)
-    return "selected";
-  else if (var == "BEER" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BEER_MODE)
-    return "selected";
-  else if (var == "BK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_BK_MODE)
-    return "selected";
-  else if (var == "NBK" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_NBK_MODE)
-    return "selected";
-  else if (var == "SUVID" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_SUVID_MODE)
-    return "selected";
-  else if (var == "LUA_MODE" && (SAMOVAR_MODE)SamSetup.Mode == SAMOVAR_LUA_MODE)
-    return "selected";
-  else if (var == "RAL" && !SamSetup.rele1)
-    return "selected";
-  else if (var == "RAH" && SamSetup.rele1)
-    return "selected";
-  else if (var == "RBL" && !SamSetup.rele2)
-    return "selected";
-  else if (var == "RBH" && SamSetup.rele2)
-    return "selected";
-  else if (var == "RCL" && !SamSetup.rele3)
-    return "selected";
-  else if (var == "RCH" && SamSetup.rele3)
-    return "selected";
-  else if (var == "RDL" && !SamSetup.rele4)
-    return "selected";
-  else if (var == "RDH" && SamSetup.rele4)
-    return "selected";
-  else if (var == "SteamAddr")
-    return get_DSAddressList(getDSAddress(SamSetup.SteamAdress));
-  else if (var == "PipeAddr")
-    return get_DSAddressList(getDSAddress(SamSetup.PipeAdress));
-  else if (var == "WaterAddr")
-    return get_DSAddressList(getDSAddress(SamSetup.WaterAdress));
-  else if (var == "TankAddr")
-    return get_DSAddressList(getDSAddress(SamSetup.TankAdress));
-  else if (var == "ACPAddr")
-    return get_DSAddressList(getDSAddress(SamSetup.ACPAdress));
-  else if (var == "ColDiam")
+  } else if (var == "ColDiam") {
     return String(SamSetup.ColDiam, 1);
-  else if (var == "ColDiam_1.5") {
-    if (abs(SamSetup.ColDiam - 1.5f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColDiam_2.0") {
-    if (abs(SamSetup.ColDiam - 2.0f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColDiam_3.0") {
-    if (abs(SamSetup.ColDiam - 3.0f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight")
+  } else if (var == "ColHeight") {
     return String(SamSetup.ColHeight, 2);
-  else if (var == "ColHeight_0.50") {
-    if (abs(SamSetup.ColHeight - 0.50f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_0.75") {
-    if (abs(SamSetup.ColHeight - 0.75f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_1.00") {
-    if (abs(SamSetup.ColHeight - 1.00f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_1.25") {
-    if (abs(SamSetup.ColHeight - 1.25f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_1.50") {
-    if (abs(SamSetup.ColHeight - 1.50f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_1.75") {
-    if (abs(SamSetup.ColHeight - 1.75f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_2.00") {
-    if (abs(SamSetup.ColHeight - 2.00f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_2.25") {
-    if (abs(SamSetup.ColHeight - 2.25f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "ColHeight_2.50") {
-    if (abs(SamSetup.ColHeight - 2.50f) < 0.01f) return "selected";
-    else return "";
-  } else if (var == "PackDens")
-    return String(SamSetup.PackDens);
-  else if (var == "I2CStepperTab")
+  } else if (var == "I2CStepperTab") {
     // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
     return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
-  else if (var == "I2CPumpTab")
+  } else if (var == "I2CPumpTab") {
     return i2c_stepper_cache.pump_present ? "inline-block" : "none";
+  }
   return "";
 }
 
@@ -2194,16 +2107,6 @@ void handleSave(AsyncWebServerRequest *request) {
         build_error_envelope("argument", "WProgram", "WProgram must be a text parameter"));
     return;
   }
-  /*
-       int params = request->params();
-        for(int i=0;i<params;i++){
-          AsyncWebParameter* p = request->getParam(i);
-          Serial.print(p->name().c_str());
-          Serial.print("=");
-          Serial.println(p->value().c_str());
-        }
-        //return;
-  */
 
   const SAMOVAR_MODE sourceMode = Samovar_Mode;
   const int sourceProfileMode = SamSetup.Mode;
@@ -3029,7 +2932,6 @@ void get_web_interface() {
     updateFile("minus.png", SAVE_FILE_OVERRIDE);
     updateFile("plus.png", SAVE_FILE_OVERRIDE);
 
-    //s += get_web_file("style.css", SAVE_FILE_OVERRIDE);
     updateFile("style.css.gz", SAVE_FILE_OVERRIDE);
 
     updateFile("beer.htm", SAVE_FILE_OVERRIDE);
@@ -3040,7 +2942,6 @@ void get_web_interface() {
     updateFile("chart.htm", SAVE_FILE_OVERRIDE);
     updateFile("distiller.htm", SAVE_FILE_OVERRIDE);
     updateFile("i2cstepper.htm.gz", SAVE_FILE_OVERRIDE);
-    //s += get_web_file("edit.htm", SAVE_FILE_OVERRIDE);
     updateFile("edit.htm.gz", SAVE_FILE_OVERRIDE);
 
     updateFile("program.htm", SAVE_FILE_OVERRIDE);
@@ -3112,8 +3013,6 @@ String get_web_file(String fn, get_web_type type) {
       if (!write_web_file_atomic("/" + fn, s)) {
         return "<ERR>";
       }
-      //Serial.print("responseText = ");
-      //Serial.println(s);
     }
     Serial.println("Done (L=" + String(s.length()) + ")");
   }

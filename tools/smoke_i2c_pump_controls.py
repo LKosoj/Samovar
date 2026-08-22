@@ -46,9 +46,18 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
 PAGES = ["index.htm", "bk.htm", "beer.htm", "distiller.htm", "nbk.htm"]
+
+
+def read_page(name: str) -> str:
+    """Разворачивает <!--#include--> (data_raw/partials/) той же функцией, что
+    использует сама сборка - не копией её логики."""
+    return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
 
 DRIVER = r'''
 "use strict";
@@ -324,8 +333,7 @@ def run_driver(app_js_path: Path) -> subprocess.CompletedProcess:
 def check_pages_static() -> list[str]:
     errors = []
     for name in PAGES:
-        path = DATA / name
-        text = path.read_text(encoding="utf-8", errors="ignore")
+        text = read_page(name)
         if not re.search(
             r"class=\"tablinks\"[^>]*onclick=\"SamovarApp\.openTab\(event,\s*'I2CPump'\);\"[^>]*"
             r"style=\"display:\s*%I2CPumpTab%;\"",

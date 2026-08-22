@@ -14,7 +14,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_web_assets import COMPRESS, SOURCE, TARGET, canonical_gzip, check_no_placeholders
+from build_web_assets import (
+    COMPRESS,
+    SOURCE,
+    TARGET,
+    canonical_gzip,
+    check_no_placeholders,
+    resolve_includes,
+)
 
 
 def main() -> int:
@@ -37,7 +44,11 @@ def main() -> int:
         errors.append(f"data/{missing}: источник есть, а в сборке нет - забыли пересобрать?")
 
     for name in sorted(sources):
-        source = (SOURCE / name).read_bytes()
+        try:
+            source = resolve_includes(name, (SOURCE / name).read_bytes())
+        except ValueError as exc:
+            errors.append(str(exc))
+            continue
         if name in COMPRESS:
             error = check_no_placeholders(name, source)
             if error:

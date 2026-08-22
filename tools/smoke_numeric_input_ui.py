@@ -5,6 +5,9 @@ from pathlib import Path
 
 from smoke_helpers import extract_function_body, require_ordered_tokens
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
@@ -16,6 +19,16 @@ def read(path: Path) -> str:
         errors.append(f"missing file: {path.relative_to(ROOT)}")
         return ""
     return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def read_page(name: str) -> str:
+    """Разворачивает <!--#include--> (data_raw/partials/) той же функцией, что
+    использует сама сборка - не копией её логики."""
+    path = DATA / name
+    if not path.exists():
+        errors.append(f"missing file: {path.relative_to(ROOT)}")
+        return ""
+    return resolve_includes(name, path.read_bytes()).decode("utf-8")
 
 
 def body(source: str, signature: str) -> str:
@@ -92,7 +105,7 @@ for token in [
     if token not in processor:
         errors.append(f"server-rendered power maximum missing token: {token}")
 
-setup = read(DATA / "setup.htm")
+setup = read_page("setup.htm")
 setup_submit = body(setup, "async function submitSetupForm")
 require_ordered_tokens(
     "setup validates before POST and preserves server errors",
@@ -138,7 +151,7 @@ page_contracts = {
     "nbk.htm": ["sendPowerCommand('Voltage'", "sendNumericCommand('pnbk'", "value < 8000"],
 }
 for page, tokens in page_contracts.items():
-    text = read(DATA / page)
+    text = read_page(page)
     for token in ["Number('%HeaterMaxPower%')", *tokens]:
         if token not in text:
             errors.append(f"{page} missing numeric UI token: {token}")

@@ -11,6 +11,9 @@ import tempfile
 import threading
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
@@ -955,8 +958,11 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
         return "0"
 
     for path in target.glob("*.htm"):
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        path.write_text(token_pattern.sub(replace_token, text), encoding="utf-8")
+        # Разворачиваем <!--#include--> той же функцией, что использует сама сборка,
+        # ДО подстановки %ПЛЕЙСХОЛДЕРОВ% - иначе served-копия покажет браузеру голый
+        # HTML-комментарий вместо разметки/JS партиала.
+        resolved = resolve_includes(path.name, path.read_bytes()).decode("utf-8", errors="ignore")
+        path.write_text(token_pattern.sub(replace_token, resolved), encoding="utf-8")
 
     program = target / "program.htm"
     invalid = target / "program_invalid.htm"

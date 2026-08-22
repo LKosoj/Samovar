@@ -62,6 +62,30 @@ inline bool queue_pending_value(volatile bool& flag, volatile T& valueSlot, T va
   return true;
 }
 
+template <typename T>
+inline bool take_pending_value(volatile bool& flag, volatile T& valueSlot, T& out) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  bool has = false;
+  if (locked && flag) {
+    out = valueSlot;
+    flag = false;
+    has = true;
+  }
+  pending_command_unlock(locked);
+  return has;
+}
+
+inline bool take_pending_flag(volatile bool& flag) {
+  bool locked = pending_command_lock(pdMS_TO_TICKS(50));
+  bool has = false;
+  if (locked && flag) {
+    flag = false;
+    has = true;
+  }
+  pending_command_unlock(locked);
+  return has;
+}
+
 inline ProgramType program_type_at(uint8_t index) {
   if (index >= PROGRAM_MAX) return PROGRAM_TYPE_NONE;
   return program[index].WType;

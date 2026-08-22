@@ -20,6 +20,9 @@ def read_text(name: str) -> str:
 mod_rmv = read_text("mod_rmv.ino")
 mod_rmvk = read_text("mod_rmvk.h")
 power = read_text("power_regulator.h")
+power_kvic = read_text("power_regulator_kvic.h")
+power_rmvk = read_text("power_regulator_rmvk.h")
+power_sem = read_text("power_regulator_sem.h")
 stab = read_text("Stab-avr/Stab-avr.ino")
 sem_uart = read_text("Stab-avr/SEM_AVR/SEM_AVR_UART.ino")
 
@@ -72,11 +75,12 @@ for signature in (
 if re.search(r"\brmvkFn\s*\(", mod_rmv + "\n" + mod_rmvk):
     errors.append("dead rmvkFn must not be defined or declared")
 
-power_code = strip_cpp_comments(power)
+power_all = power + power_kvic + power_rmvk + power_sem
+power_code = strip_cpp_comments(power_all)
 if '"AT+' in power_code:
     errors.append("power_regulator.h must not use ASCII AT literals for SEM_AVR Samovar power commands")
 
-if 'SEM_AVR_SAMOVAR_AT_PREFIX = "\\xD0\\x90\\xD0\\xA2"' not in power:
+if 'SEM_AVR_SAMOVAR_AT_PREFIX = "\\xD0\\x90\\xD0\\xA2"' not in power_all:
     errors.append("power_regulator.h missing explicit SEM_AVR legacy UTF-8 A/T prefix")
 
 for name, text in {

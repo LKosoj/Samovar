@@ -1,0 +1,17 @@
+      var plusIcon = document.createElement("img");
+      plusIcon.src = 'plus.png';
+      plusIcon.width = 20;
+      plusIcon.alt = "";
+      plus.appendChild(plusIcon);
+      dl.appendChild(plus);
+
+      var minus = document.createElement("button");
+      minus.type = "button";
+      minus.className = "program-row-action";
+      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
+      var minusIcon = document.createElement("img");
+      minusIcon.src = 'minus.png';
+      minusIcon.width = 20;
+      minusIcon.alt = "";
+      minus.appendChild(minusIcon);
+      dl.appendChild(minus);

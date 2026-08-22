@@ -98,10 +98,8 @@ if samovar_ino.exists():
             "/ajax exposes numeric ProgramNum without localized status parsing",
             telemetry_writer,
             [
-                'jsonAddKey(out, first, "ProgramNum")',
-                "out.print(snapshot.programIndex + 1)",
-                'jsonAddKey(out, first, "ProgramIndex")',
-                "out.print(snapshot.programIndex)",
+                'jsonFieldRaw(out, first, "ProgramNum", snapshot.programIndex + 1)',
+                'jsonFieldRaw(out, first, "ProgramIndex", snapshot.programIndex)',
             ],
             errors,
         )
@@ -549,29 +547,12 @@ mode_registry_file = ROOT / "mode_registry.h"
 if mode_registry_file.exists():
     mode_registry_text = mode_registry_file.read_text(encoding="utf-8", errors="ignore")
     try:
-        owner_body = extract_function_body(mode_registry_text, "inline bool mode_is_program_owner")
-    except ValueError as exc:
-        errors.append(str(exc))
-        owner_body = ""
-    for token in [
-        "SAMOVAR_RECTIFICATION_MODE",
-        "SAMOVAR_DISTILLATION_MODE",
-        "SAMOVAR_BEER_MODE",
-        "SAMOVAR_BK_MODE",
-        "SAMOVAR_NBK_MODE",
-        "SAMOVAR_SUVID_MODE",
-        "SAMOVAR_LUA_MODE",
-    ]:
-        if token not in owner_body:
-            errors.append(f"program owner helper missing mode: {token}")
-    try:
         active_body = extract_function_body(mode_registry_text, "inline bool program_update_session_active")
     except ValueError as exc:
         errors.append(str(exc))
         active_body = ""
     for token in [
         "PowerOn",
-        "mode_is_program_owner(Samovar_Mode)",
         "mode_status_session_active(SamovarStatusInt)",
         "mode_startval_session_active(startval)",
     ]:

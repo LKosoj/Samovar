@@ -1026,7 +1026,7 @@ def run_source_contracts() -> None:
             errors.append(f"strict /ajax contract token missing: {token}")
     if telemetry_capture.count("copy_ajax_runtime_snapshot(") != 1:
         errors.append("telemetry capture must own exactly one runtime event snapshot call")
-    if 'jsonAddKey(out, first, "Lstatus")' not in telemetry_writer:
+    if 'jsonFieldString(out, first, "Lstatus"' not in telemetry_writer:
         errors.append("telemetry writer no longer ends with the existing Lstatus field")
     if ajax.find("writeAjaxTelemetryFields(out, snapshot)") > ajax.find(
         "sendRuntimeEventResponse("

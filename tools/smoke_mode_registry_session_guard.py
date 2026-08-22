@@ -17,7 +17,7 @@ SUVID/LUA сознательно НЕ трогаются (асимметрия) 
 
 Тест вытаскивает РЕАЛЬНЫЕ тела mode_apply_power_on_command,
 mode_ops_by_power_on_command, program_update_session_active,
-mode_is_program_owner, mode_status_session_active, mode_startval_session_active
+mode_status_session_active, mode_startval_session_active
 из mode_registry.h через extract_function_body и компилирует их в харнесс с
 собственной МИНИМАЛЬНОЙ (синтетической, не реальной) таблицей mode_registry()/
 mode_registry_count() - тестируется общая логика guard/isNewSession, которая не
@@ -36,7 +36,6 @@ from smoke_helpers import extract_function_body, strip_cpp_comments
 ROOT = Path(__file__).resolve().parents[1]
 
 FUNCTIONS = [
-    "inline bool mode_is_program_owner(SAMOVAR_MODE mode)",
     "inline bool mode_status_session_active(int16_t status)",
     "inline bool mode_startval_session_active(int16_t value)",
     "inline bool program_update_session_active()",

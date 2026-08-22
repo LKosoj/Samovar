@@ -107,13 +107,43 @@ require_ordered_tokens(
     ],
     errors,
 )
-for signature in (
-    "inline bool apply_regulator_mode_blocking",
-    "inline bool apply_regulator_voltage_blocking",
-):
-    body = function_body(power, signature)
-    require(signature, body, ("powerGeneration", "heater_uart_enqueue"))
-    forbid(signature, body, ("heater_safety_latched()", "Serial2.print"))
+power_kvic = read_source("power_regulator_kvic.h")
+power_rmvk = read_source("power_regulator_rmvk.h")
+power_sem = read_source("power_regulator_sem.h")
+
+# Epoch-carrying UART commit differs per backend: KVIC/SEM still funnel through
+# heater_uart_enqueue (SEM via sem_avr_write_samovar_command, which wraps it in the
+# same file); RMVK-only calls the RMVK_* protocol functions directly. Checking the
+# combined pre-split text let dead KVIC text satisfy the RMVK-only build - see
+# AGENTS.md "Инварианты, которые выглядят как дефект" note on this file.
+backend_epoch_commit = {
+    "power_regulator_kvic.h": (
+        power_kvic,
+        {
+            "inline bool apply_regulator_mode_blocking": ("powerGeneration", "heater_uart_enqueue"),
+            "inline bool apply_regulator_voltage_blocking": ("powerGeneration", "heater_uart_enqueue"),
+        },
+    ),
+    "power_regulator_rmvk.h": (
+        power_rmvk,
+        {
+            "inline bool apply_regulator_mode_blocking": ("powerGeneration", "RMVK_set_on"),
+            "inline bool apply_regulator_voltage_blocking": ("powerGeneration", "RMVK_set_out_voltge"),
+        },
+    ),
+    "power_regulator_sem.h": (
+        power_sem,
+        {
+            "inline bool apply_regulator_mode_blocking": ("powerGeneration", "sem_avr_write_samovar_command"),
+            "inline bool apply_regulator_voltage_blocking": ("powerGeneration", "sem_avr_write_samovar_command"),
+        },
+    ),
+}
+for label, (source, sig_map) in backend_epoch_commit.items():
+    for signature, required_tokens in sig_map.items():
+        body = function_body(source, signature)
+        require(f"{label}: {signature}", body, required_tokens)
+        forbid(f"{label}: {signature}", body, ("heater_safety_latched()", "Serial2.print"))
 
 rmvk_cmd = function_body(rmvk, "uint8_t RMVK_cmd(")
 require(
@@ -144,8 +174,9 @@ require(
         "terminate_sleep_fault_locked",
     ),
 )
-if power.count("process_pending_power_request();") < 2:
-    errors.append("both triggerPowerStatus variants must run the regulator worker")
+power_backends_combined = power_kvic + power_rmvk + power_sem
+if power_backends_combined.count("process_pending_power_request();") != 3:
+    errors.append("all three backend triggerPowerStatus variants must run the regulator worker")
 terminate_sleep = function_body(power, "inline void terminate_sleep_fault_locked")
 require(
     "terminal SLEEP failure",

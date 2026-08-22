@@ -15,8 +15,6 @@
 // Подключение библиотек
 //**************************************************************************************************************
 
-//#define Serial2 Serial
-
 // CONFIG_ASYNC_TCP_RUNNING_CORE вынесен в platformio.ini (build_flags) — только оттуда
 // он доходит до отдельного TU библиотеки Async_TCP. Локальный #define здесь был мёртвым.
 
@@ -89,9 +87,6 @@ struct AjaxTelemetrySnapshot;
 #include "runtime_event_log.h"
 #include "runtime_helpers.h"
 
-#ifndef __SAMOVAR_DEBUG
-#define ARDUINOTRACE_ENABLE 0  // Disable all traces
-#endif
 #include <ArduinoTrace.h>
 
 #ifdef __SAMOVAR_NOT_USE_WDT
@@ -134,7 +129,6 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 #include "mod_rmvk.h"
 
-//#include "font.h"
 #include "logic.h"
 
 #ifdef USE_UPDATE_OTA
@@ -171,8 +165,6 @@ SimpleStringQueue msg_q(5, 200);
 #include "suvid.h"
 #include "SPIFFSEditor.h"
 
-//#include <HTTPClient.h>
-//HTTPClient client;
 //**************************************************************************************************************
 // Инициализация сенсоров и функции работы с сенсорами
 //**************************************************************************************************************
@@ -631,6 +623,264 @@ static void refresh_i2c_stepper_cache(I2CStepperDevice& device) {
   i2c_stepper_config_end(device);
 }
 
+// [T6] Вынесенные блоки тела triggerSysTicker() — размещены здесь (а не в общем
+// блоке tick_*-хелперов loop() ниже по файлу), чтобы автогенерация прототипов
+// Arduino видела их определения раньше вызова, без ручных прототипов.
+static void tick_update_clock_strings() {
+  // [C-1] Формируем строки времени в локалах, под замком только присваиваем глобалам.
+  String localCrt = NTP.getFormattedDate();
+  String uptime = format_uptime((unsigned long)(millis() / 1000UL));
+  String localStrCrt = NTP.getFormattedTime() + "     " + uptime;
+  snprintf(tst, sizeof(tst), "%s   %s",
+           NTP.getFormattedTime().c_str(),
+           uptime.c_str());
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (locked) {
+    Crt = localCrt;
+    StrCrt = localStrCrt;
+    runtime_state_unlock(true);
+  }
+}
+
+static void tick_publish_log_line(const String &baseLine) {
+  if (baseLine.length() > 0) {
+    String s = baseLine;
+    s += ",";
+    s += format_float(ACPSensor.avgTemp, 3);
+    s += ",";
+    s += format_float(ActualVolumePerHour, 3);
+    s += ",";
+    s += (String)current_power_volt;
+    s += ",";
+    s += format_float(WFflowRate, 2);
+
+    s += ",";
+    s += format_float(get_alcohol(TankSensor.avgTemp), 2);
+    s += ",";
+    // Для ректификации используем температуру пара, для дистилляции - температуру куба
+    s += format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2);
+    s += ",";
+    s += format_float(pressure_value, 2);
+
+    // ПУНКТ 5: Расширенное логирование v.4
+    // Расчет ФЧ (целевого)
+    float vaporSpeed = 0;
+#ifdef SAMOVAR_USE_POWER
+    float netPower = (float)current_power_p - CurrentHeatLoss;
+    if (netPower < 0) netPower = 0;
+    // Скорость испарения мл/час (используем константу из column_math.h)
+    vaporSpeed = netPower * EVAPORATION_FACTOR; 
+#endif
+    if (ActualVolumePerHour > 0.001f) {
+      CalculatedTargetFR = (vaporSpeed / (ActualVolumePerHour * 1000.0f)) - 1.0f;
+    } else {
+      CalculatedTargetFR = 0;
+    }
+    if (CalculatedTargetFR < 0) CalculatedTargetFR = 0;
+
+    s += ","; s += format_float(CalculatedTargetFR, 2); // 14: target_fr
+    s += ","; s += format_float(CalculatedTargetFR, 2); // 15: actual_fr (в данной системе они совпадают)
+    s += ","; s += format_float(impurityDetector.currentTrend, 3); // 16: temp_delta
+    s += ","; s += String(impurityDetector.detectorStatus); // 17: alarm_state
+    // event_code: 0=норм, 1=пауза
+    // event_code используется только для критических событий
+    uint8_t eventCode = program_Wait ? 1 : 0;
+    s += ","; s += String(eventCode); // 18: event_code
+    s += ","; s += String(SamSetup.PackDens); // 19: packing_density
+    s += ","; s += format_float(SamSetup.ColHeight, 2); // 20: col_height
+    s += ","; s += format_float(SamSetup.ColDiam, 1);   // 21: col_diameter
+    s += ","; s += format_float(CurrentHeatLoss, 0);    // 22: heat_loss
+    
+    // Тип программы: H=головы, B=тело, C=предзахлеб, T=хвосты, P=пауза, пусто=нет программы
+    String programType = "";
+    ProgramType logProgramType = current_program_type();
+    if (!program_type_empty(logProgramType)) {
+      programType = program_type_to_string(logProgramType);
+    }
+    s += ","; s += programType; // 23: program_type
+    
+    // Режим работы: 0=ректификация, 1=дистилляция, 2=пиво, 3=БК, 4=НБК, 5=сувид, 6=Lua
+    s += ","; s += String((int)Samovar_Mode); // 24: mode
+
+#ifdef USE_MQTT
+    MqttSendMsg(s, "log", 4);
+#endif
+  }
+}
+
+static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
+  //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
+  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+    float wp;
+    if (program[ProgramNum].Time > 0 && begintime > 0) {
+      wp = float(millis() - begintime) / 1000 / 60 / program[ProgramNum].Time;
+    } else
+      wp = 0;
+    if (wp < 0) wp = 0;
+    if (wp > 1) wp = 1;
+    //прогресс переводим в проценты
+    WthdrwlProgress = wp * 100;
+    WthdrwTime = program[ProgramNum].Time * (1 - wp);
+
+    WthdrwTimeAll = WthdrwTime;
+    for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
+      WthdrwTimeAll += program[i].Time;
+    }
+
+    // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.
+    String h, m;
+    int hi, mi;
+    hi = WthdrwTime / 60;
+    mi = WthdrwTime - hi * 60;
+    if (hi < 10) h = "0";
+    else
+      h = "";
+    h += (String)hi;
+    if (mi < 10) m = "0";
+    else
+      m = "";
+    m += (String)mi;
+    String localTimeS = h + ":" + m;
+
+    hi = WthdrwTimeAll / 60;
+    mi = WthdrwTimeAll - hi * 60;
+    if (hi < 10) h = "0";
+    else
+      h = "";
+    h += (String)hi;
+    if (mi < 10) m = "0";
+    else
+      m = "";
+    m += (String)mi;
+    String localTimeAllS = h + ":" + m;
+
+    {
+      bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+      if (locked) {
+        WthdrwTimeS = localTimeS;
+        WthdrwTimeAllS = localTimeAllS;
+        runtime_state_unlock(true);
+      }
+    }
+
+  }
+  //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
+  else if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE && (TargetStepps > 0 || tickerProgramType == 'P')) {
+    //считаем прогресс
+    float wp;
+
+    //считаем время для текущей строки программы
+    if (tickerProgramType == 'P') {
+      if (program[ProgramNum].Time > 0) {
+        WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
+        if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
+        wp = 1 - (WthdrwTime / program[ProgramNum].Time);
+      } else {
+        WthdrwTime = 0;
+        wp = 0;
+      }
+    } else {
+      wp = (float)CurrrentStepps / (float)TargetStepps;
+      WthdrwTime = program[ProgramNum].Time * (1 - wp);
+    }
+
+    //суммируем время текущей строки программы и всех следующих за ней
+    WthdrwTimeAll = WthdrwTime;
+
+    for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
+      WthdrwTimeAll += program[i].Time;
+    }
+
+    // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.
+    String h, m;
+    unsigned int mi;
+    if (WthdrwTime < 10) h = "0";
+    else
+      h = "";
+    h += (String)((unsigned int)WthdrwTime);
+    mi = (unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60);
+    if (mi < 10) m = "0";
+    else
+      m = "";
+    m += (String)mi;
+    String localTimeS = h + ":" + m;
+
+    if (WthdrwTimeAll < 10) h = "0";
+    else
+      h = "";
+    h += (String)((unsigned int)WthdrwTimeAll);
+    mi = (unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60);
+    if (mi < 10) m = "0";
+    else
+      m = "";
+    m += (String)mi;
+    String localTimeAllS = h + ":" + m;
+
+    {
+      bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+      if (locked) {
+        WthdrwTimeS = localTimeS;
+        WthdrwTimeAllS = localTimeAllS;
+        runtime_state_unlock(true);
+      }
+    }
+
+    //прогресс переводим в проценты
+    WthdrwlProgress = wp * 100;
+  } else {
+    WthdrwlProgress = 0;
+    // [C-1] Сброс под замком.
+    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+    if (locked) {
+      WthdrwTimeS = "";
+      WthdrwTimeAllS = "";
+      runtime_state_unlock(true);
+    }
+  }
+}
+
+#ifdef USE_WATERSENSOR
+static void tick_update_water_flow(uint16_t waterPulses, unsigned long &oldTime) {
+  if (waterPulses < 3) waterPulses = 0;
+  WFflowRate = ((1000.0 / (millis() - oldTime)) * waterPulses) / WF_CALIBRATION;
+  WFflowMilliLitres = WFflowRate * 100 / 6;
+  WFtotalMilliLitres += WFflowMilliLitres;
+
+  if (mode_water_flow_demanded() && waterPulses == 0) {
+    WFAlarmCount++;
+  } else {
+    WFAlarmCount = 0;
+  }
+
+  oldTime = millis();
+}
+#endif
+
+static void tick_report_sensor_errors() {
+  //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
+  if (SteamSensor.ErrCount > 10) {
+    SteamSensor.ErrCount = -110;
+    SendMsg(("Ошибка датчика температуры пара!"), ALARM_MSG);
+  }
+  if (PipeSensor.ErrCount > 10) {
+    PipeSensor.ErrCount = -110;
+    SendMsg(("Ошибка датчика температуры царги!"), ALARM_MSG);
+  }
+  if (WaterSensor.ErrCount > 10) {
+    WaterSensor.ErrCount = -110;
+    SendMsg(("Ошибка датчика температуры воды!"), ALARM_MSG);
+  }
+  if (TankSensor.ErrCount > 10) {
+    TankSensor.ErrCount = -110;
+    SendMsg(("Ошибка датчика температуры куба!"), ALARM_MSG);
+  }
+  if (ACPSensor.ErrCount > 10) {
+    ACPSensor.ErrCount = -110;
+    SendMsg(("Ошибка датчика температуры в ТСА!"), ALARM_MSG);
+  }
+}
+
+
 // [W-4] Отложенная команда /i2cstepper (I2C из async недопустим).
 //        staged — приватная копия конфига с применёнными args; не трогаем глобал до loop.
 //        device_sel: 0=mixer, 1=pump.
@@ -1056,12 +1306,6 @@ static void process_pending_i2c_operations() {
 ControlNbkCommand pending_pnbk_value = {};
 volatile bool pending_pnbk_flag = false;
 
-// void reset_migration_flag(); // Только для тестирования миграции
-
-#ifdef __SAMOVAR_DEBUG
-//LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
-//CORE_DEBUG_LEVEL ARDUHAL_LOG_LEVEL_VERBOSE
-#endif
 
 #ifdef USE_WEB_SERIAL
 static const size_t WEBSERIAL_COMMAND_MAX = 32;
@@ -1116,7 +1360,6 @@ void recvMsg(uint8_t *data, size_t len) {
 
 void stopService(void) {
 #if (defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3))
-  //timerEnd(timer);
   timerWrite(timer, 0);
 #else  // ESP_ARDUINO_VERSION_MAJOR >= 3
   timerAlarmDisable(timer);
@@ -1380,22 +1623,7 @@ void triggerSysTicker(void *parameter) {
       refresh_i2c_stepper_cache(i2cStepperMixer);
       refresh_i2c_stepper_cache(i2cStepperPump);
 
-      // [C-1] Формируем строки времени в локалах, под замком только присваиваем глобалам.
-      {
-        String localCrt = NTP.getFormattedDate();
-        //String localStrCrt = localCrt.substring(6) + "   " + NTP.getUptimeString();
-        String uptime = format_uptime((unsigned long)(millis() / 1000UL));
-        String localStrCrt = NTP.getFormattedTime() + "     " + uptime;
-        snprintf(tst, sizeof(tst), "%s   %s",
-                 NTP.getFormattedTime().c_str(),
-                 uptime.c_str());
-        bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-        if (locked) {
-          Crt = localCrt;
-          StrCrt = localStrCrt;
-          runtime_state_unlock(true);
-        }
-      }
+      tick_update_clock_strings();
 
       process_pending_data_log_ops();
       // Снимок состояния пишется вне гейта отбора: он нужен и когда сессия ещё не
@@ -1407,68 +1635,7 @@ void triggerSysTicker(void *parameter) {
         if (tcntST >= SamSetup.LogPeriod) {
           tcntST = 0;
           String s = append_data();  //Записываем данные в память ESP32;
-          if (s.length() > 0) {
-            s += ",";
-            s += format_float(ACPSensor.avgTemp, 3);
-            s += ",";
-            s += format_float(ActualVolumePerHour, 3);
-            s += ",";
-            s += (String)current_power_volt;
-            s += ",";
-            s += format_float(WFflowRate, 2);
-
-            s += ",";
-            s += format_float(get_alcohol(TankSensor.avgTemp), 2);
-            s += ",";
-            // Для ректификации используем температуру пара, для дистилляции - температуру куба
-            s += format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2);
-            s += ",";
-            s += format_float(pressure_value, 2);
-
-            // ПУНКТ 5: Расширенное логирование v.4
-            // Расчет ФЧ (целевого)
-            float vaporSpeed = 0;
-#ifdef SAMOVAR_USE_POWER
-            float netPower = (float)current_power_p - CurrentHeatLoss;
-            if (netPower < 0) netPower = 0;
-            // Скорость испарения мл/час (используем константу из column_math.h)
-            vaporSpeed = netPower * EVAPORATION_FACTOR; 
-#endif
-            if (ActualVolumePerHour > 0.001f) {
-              CalculatedTargetFR = (vaporSpeed / (ActualVolumePerHour * 1000.0f)) - 1.0f;
-            } else {
-              CalculatedTargetFR = 0;
-            }
-            if (CalculatedTargetFR < 0) CalculatedTargetFR = 0;
-
-            s += ","; s += format_float(CalculatedTargetFR, 2); // 14: target_fr
-            s += ","; s += format_float(CalculatedTargetFR, 2); // 15: actual_fr (в данной системе они совпадают)
-            s += ","; s += format_float(impurityDetector.currentTrend, 3); // 16: temp_delta
-            s += ","; s += String(impurityDetector.detectorStatus); // 17: alarm_state
-            // event_code: 0=норм, 1=пауза
-            // event_code используется только для критических событий
-            uint8_t eventCode = program_Wait ? 1 : 0;
-            s += ","; s += String(eventCode); // 18: event_code
-            s += ","; s += String(SamSetup.PackDens); // 19: packing_density
-            s += ","; s += format_float(SamSetup.ColHeight, 2); // 20: col_height
-            s += ","; s += format_float(SamSetup.ColDiam, 1);   // 21: col_diameter
-            s += ","; s += format_float(CurrentHeatLoss, 0);    // 22: heat_loss
-            
-            // Тип программы: H=головы, B=тело, C=предзахлеб, T=хвосты, P=пауза, пусто=нет программы
-            String programType = "";
-            ProgramType logProgramType = current_program_type();
-            if (!program_type_empty(logProgramType)) {
-              programType = program_type_to_string(logProgramType);
-            }
-            s += ","; s += programType; // 23: program_type
-            
-            // Режим работы: 0=ректификация, 1=дистилляция, 2=пиво, 3=БК, 4=НБК, 5=сувид, 6=Lua
-            s += ","; s += String((int)Samovar_Mode); // 24: mode
-
-#ifdef USE_MQTT
-            MqttSendMsg(s, "log", 4);
-#endif
-          }
+          tick_publish_log_line(s);
         }
       }
 
@@ -1477,135 +1644,8 @@ void triggerSysTicker(void *parameter) {
 
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
-      //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
       ProgramType tickerProgramType = current_program_type();
-      if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-        float wp;
-        if (program[ProgramNum].Time > 0 && begintime > 0) {
-          wp = float(millis() - begintime) / 1000 / 60 / program[ProgramNum].Time;
-        } else
-          wp = 0;
-        if (wp < 0) wp = 0;
-        if (wp > 1) wp = 1;
-        //прогресс переводим в проценты
-        WthdrwlProgress = wp * 100;
-        WthdrwTime = program[ProgramNum].Time * (1 - wp);
-
-        WthdrwTimeAll = WthdrwTime;
-        for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
-          WthdrwTimeAll += program[i].Time;
-        }
-
-        // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.
-        String h, m;
-        int hi, mi;
-        hi = WthdrwTime / 60;
-        mi = WthdrwTime - hi * 60;
-        if (hi < 10) h = "0";
-        else
-          h = "";
-        h += (String)hi;
-        if (mi < 10) m = "0";
-        else
-          m = "";
-        m += (String)mi;
-        String localTimeS = h + ":" + m;
-
-        hi = WthdrwTimeAll / 60;
-        mi = WthdrwTimeAll - hi * 60;
-        if (hi < 10) h = "0";
-        else
-          h = "";
-        h += (String)hi;
-        if (mi < 10) m = "0";
-        else
-          m = "";
-        m += (String)mi;
-        String localTimeAllS = h + ":" + m;
-
-        {
-          bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-          if (locked) {
-            WthdrwTimeS = localTimeS;
-            WthdrwTimeAllS = localTimeAllS;
-            runtime_state_unlock(true);
-          }
-        }
-
-      }
-      //Считаем прогресс отбора для текущей строки программы и время до конца завершения строки и всего отбора (режим ректификации)
-      else if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE && (TargetStepps > 0 || tickerProgramType == 'P')) {
-        //считаем прогресс
-        float wp;
-
-        //считаем время для текущей строки программы
-        if (tickerProgramType == 'P') {
-          if (program[ProgramNum].Time > 0) {
-            WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
-            if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
-            wp = 1 - (WthdrwTime / program[ProgramNum].Time);
-          } else {
-            WthdrwTime = 0;
-            wp = 0;
-          }
-        } else {
-          wp = (float)CurrrentStepps / (float)TargetStepps;
-          WthdrwTime = program[ProgramNum].Time * (1 - wp);
-        }
-
-        //суммируем время текущей строки программы и всех следующих за ней
-        WthdrwTimeAll = WthdrwTime;
-
-        for (uint8_t i = ProgramNum + 1; i < ProgramLen; i++) {
-          WthdrwTimeAll += program[i].Time;
-        }
-
-        // [C-1] Формируем строки в локалах, под замком только присваиваем глобалам.
-        String h, m;
-        unsigned int mi;
-        if (WthdrwTime < 10) h = "0";
-        else
-          h = "";
-        h += (String)((unsigned int)WthdrwTime);
-        mi = (unsigned int)((WthdrwTime - (unsigned int)(WthdrwTime)) * 60);
-        if (mi < 10) m = "0";
-        else
-          m = "";
-        m += (String)mi;
-        String localTimeS = h + ":" + m;
-
-        if (WthdrwTimeAll < 10) h = "0";
-        else
-          h = "";
-        h += (String)((unsigned int)WthdrwTimeAll);
-        mi = (unsigned int)((WthdrwTimeAll - (unsigned int)(WthdrwTimeAll)) * 60);
-        if (mi < 10) m = "0";
-        else
-          m = "";
-        m += (String)mi;
-        String localTimeAllS = h + ":" + m;
-
-        {
-          bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-          if (locked) {
-            WthdrwTimeS = localTimeS;
-            WthdrwTimeAllS = localTimeAllS;
-            runtime_state_unlock(true);
-          }
-        }
-
-        //прогресс переводим в проценты
-        WthdrwlProgress = wp * 100;
-      } else {
-        WthdrwlProgress = 0;
-        // [C-1] Сброс под замком.
-        bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-        if (locked) {
-          WthdrwTimeS = "";
-          WthdrwTimeAllS = "";
-          runtime_state_unlock(true);
-        }
-      }
+      tick_update_withdrawal_progress(tickerProgramType);
 
 
       vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -1613,43 +1653,11 @@ void triggerSysTicker(void *parameter) {
 #ifdef USE_WATERSENSOR
 
       uint16_t waterPulses = water_pulse_count_take();
-
-      if (waterPulses < 3) waterPulses = 0;
-      WFflowRate = ((1000.0 / (millis() - oldTime)) * waterPulses) / WF_CALIBRATION;
-      WFflowMilliLitres = WFflowRate * 100 / 6;
-      WFtotalMilliLitres += WFflowMilliLitres;
-
-      if (mode_water_flow_demanded() && waterPulses == 0) {
-        WFAlarmCount++;
-      } else {
-        WFAlarmCount = 0;
-      }
-
-      oldTime = millis();
+      tick_update_water_flow(waterPulses, oldTime);
       vTaskDelay(5 / portTICK_PERIOD_MS);
 #endif
 
-      //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
-      if (SteamSensor.ErrCount > 10) {
-        SteamSensor.ErrCount = -110;
-        SendMsg(("Ошибка датчика температуры пара!"), ALARM_MSG);
-      }
-      if (PipeSensor.ErrCount > 10) {
-        PipeSensor.ErrCount = -110;
-        SendMsg(("Ошибка датчика температуры царги!"), ALARM_MSG);
-      }
-      if (WaterSensor.ErrCount > 10) {
-        WaterSensor.ErrCount = -110;
-        SendMsg(("Ошибка датчика температуры воды!"), ALARM_MSG);
-      }
-      if (TankSensor.ErrCount > 10) {
-        TankSensor.ErrCount = -110;
-        SendMsg(("Ошибка датчика температуры куба!"), ALARM_MSG);
-      }
-      if (ACPSensor.ErrCount > 10) {
-        ACPSensor.ErrCount = -110;
-        SendMsg(("Ошибка датчика температуры в ТСА!"), ALARM_MSG);
-      }
+      tick_report_sensor_errors();
 
       // [C-2/2a] Продвигаем FSM и обновляем кэш SamovarStatus раз в секунду.
       // Все переходы в tick_status_fsm() оперируют секундными интервалами,
@@ -1969,7 +1977,6 @@ static void setup_wifi_stack_defaults() {
   WiFi.setAutoReconnect(true);
 
   Wire.begin(LCD_SDA, LCD_SCL);
-  //Wire.begin();
 
   lcd_found = (check_I2C_device(LCD_ADDRESS) == LCD_ADDRESS);
 
@@ -2071,19 +2078,13 @@ static void setup_init_menu_display_and_chip_id() {
   setupMenu();
   writeString(F("      Samovar "), 1);
   writeString("     Version " + (String)SAMOVAR_VERSION, 2);
-  //delay(2000);
   writeString(F("Connecting to WI-FI"), 3);
 
-  //Serial.print("Reset reason: ");
-  //Serial.println(vr);
   for (uint8_t i = 0; i < 17; i = i + 8) {
     chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
   }
-  //uint8_t *MAC = ESP.getEfuseMac();
-  //Serial.printf("%02x%02x%02x%02x%02x%02x\n", MAC[5], MAC[4], MAC[3], MAC[2], MAC[1], MAC[0]);
 
   Serial.printf("ESP32 Chip model = %s Rev %d\n", ESP.getChipModel(), ESP.getChipRevision());
-  //Serial.printf("This chip has %d cores\n", ESP.getChipCores());
   Serial.print("Chip ID: ");
   Serial.println(chipId);
 }
@@ -2160,7 +2161,6 @@ static void setup_finalize_boot_display() {
     Serial.println("I2C Stepper Pump/Filling v2");
   }
   used_byte = SPIFFS.usedBytes();
-  //Serial.println(sizeof(SamSetup));
 
   SamovarStatus.reserve(80);
 }
@@ -2180,7 +2180,6 @@ static void setup_report_degraded_boot() {
 
 static void setup_connect_wifi_and_notify() {
   String StIP;
-  //esp_wifi_set_ps( WIFI_PS_NONE );
 
   if (!wifiAP) {
     AsyncWiFiManagerParameter custom_blynk_token("blynk", "blynk token", SamSetup.blynkauth, 33, "blynk token");
@@ -2255,12 +2254,10 @@ static void setup_connect_wifi_and_notify() {
 #endif
   }
 
-  //connectWiFi();
   writeString(F("Connected"), 4);
 
 #ifdef SAMOVAR_USE_BLYNK
   if (SamSetup.blynkauth[0] != 0 && !wifiAP) {
-    //Blynk.begin(auth, ssid, password);
     writeString(F("Connecting to Blynk "), 3);
     writeString(F("               "), 4);
 #ifdef __SAMOVAR_DEBUG
@@ -2435,11 +2432,6 @@ void setup() {
   Serial.println("Using lower level function:");
   Serial.println(esp_get_idf_version());
 #endif
-  //delay(2000);
-  //  dac_output_disable(DAC_CHANNEL_1);
-  //  dac_output_disable(DAC_CHANNEL_2);
-  //  touch_pad_isr_deregister();
-  //  touch_pad_deinit();
 #if defined(ARDUINO_ESP32S3_DEV)
 #else
   touch_pad_intr_disable();
@@ -2549,8 +2541,6 @@ void setup() {
   }
 #endif
 
-  //WiFi.hostByName(ntpServerName, timeServerIP);
-
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
@@ -2570,26 +2560,6 @@ void setup() {
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
     1);               /* Core where the task should run */
-
-  //  //Запускаем таск для чтения давления
-  //  xTaskCreatePinnedToCore(
-  //    triggerGetBMP,      /* Function to implement the task */
-  //    "GetBMPTicker",     /* Name of the task */
-  //    1400,               /* Stack size in words */
-  //    NULL,               /* Task input parameter */
-  //    1,                  /* Priority of the task */
-  //    &GetBMPTask,        /* Task handle. */
-  //    0);                 /* Core where the task should run */
-
-  //  //write reset reason
-  //  if (!SPIFFS.exists("/resetreason.css")) {
-  //    File f = SPIFFS.open("/resetreason.css", FILE_WRITE);
-  //    f.close();
-  //  }
-  //  File f1 = SPIFFS.open("/resetreason.css", FILE_APPEND);
-  //  f1.println(vr);
-  //  f1.close();
-  //  vr.replace(",",";");
 
   setup_start_ntp();
 
@@ -2708,33 +2678,14 @@ static void tick_reap_stale_operations() {
 }
 
 static void tick_apply_pending_self_test_stop() {
-  bool hasPendingStopSelfTest = false;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_stop_self_test_flag) {
-      pending_stop_self_test_flag = false;
-      hasPendingStopSelfTest = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingStopSelfTest) {
+  if (take_pending_flag(pending_stop_self_test_flag)) {
     stop_self_test();
   }
 }
 
 static void tick_apply_pending_mixer() {
-  bool hasPendingMixer = false;
   bool mixerOn = false;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_mixer_flag) {
-      mixerOn = pending_mixer_on;
-      pending_mixer_flag = false;
-      hasPendingMixer = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingMixer) {
+  if (take_pending_value(pending_mixer_flag, pending_mixer_on, mixerOn)) {
     if (set_mixer(mixerOn) == ACTUATOR_COMMAND_FAILED) {
       SendMsg("Команда мешалки не выполнена: исполнитель не подтвердил состояние", ALARM_MSG);
     }
@@ -2742,69 +2693,30 @@ static void tick_apply_pending_mixer() {
 }
 
 static void tick_apply_pending_water_temp() {
-  bool hasPendingWaterTemp = false;
   uint16_t waterTemp = 0;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_water_temp_flag) {
-      waterTemp = pending_water_temp_value;
-      pending_water_temp_flag = false;
-      hasPendingWaterTemp = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingWaterTemp) {
+  if (take_pending_value(pending_water_temp_flag, pending_water_temp_value, waterTemp)) {
     set_water_temp(waterTemp);
   }
 }
 
 static void tick_apply_pending_pump_speed() {
-  bool hasPendingPumpSpeed = false;
   uint16_t pumpSpeedSteps = 0;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_pump_speed_flag) {
-      pumpSpeedSteps = pending_pump_speed_steps;
-      pending_pump_speed_flag = false;
-      hasPendingPumpSpeed = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingPumpSpeed) {
+  if (take_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)) {
     set_pump_speed(pumpSpeedSteps, true);
   }
 }
 
 static void tick_apply_pending_voltage() {
 #ifdef SAMOVAR_USE_POWER
-  bool hasPendingVoltage = false;
   float voltage = 0;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_voltage_flag) {
-      voltage = pending_voltage_value;
-      pending_voltage_flag = false;
-      hasPendingVoltage = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingVoltage) {
+  if (take_pending_value(pending_voltage_flag, pending_voltage_value, voltage)) {
     set_current_power(voltage);
   }
 #endif
 }
 
 static void tick_apply_pending_nbkopt() {
-  bool hasPendingNbkOpt = false;
-  {
-    bool locked = pending_command_lock(pdMS_TO_TICKS(50));
-    if (locked && pending_nbkopt_flag) {
-      pending_nbkopt_flag = false;
-      hasPendingNbkOpt = true;
-    }
-    pending_command_unlock(locked);
-  }
-  if (hasPendingNbkOpt) {
+  if (take_pending_flag(pending_nbkopt_flag)) {
     if (PowerOn) {
       nbk_Mo = nbk_M;
       nbk_Po = nbk_P;
@@ -3187,6 +3099,29 @@ static void jsonPrintEscaped(Print &out, const String &value) {
   }
 }
 
+static inline void jsonFieldFloat(Print &out, bool &first, const char *key, float value, int decimals) {
+  jsonAddKey(out, first, key);
+  out.print(format_float(value, decimals));
+}
+
+static inline void jsonFieldString(Print &out, bool &first, const char *key, const String &value) {
+  jsonAddKey(out, first, key);
+  out.print('"');
+  jsonPrintEscaped(out, value);
+  out.print('"');
+}
+
+static inline void jsonFieldBool(Print &out, bool &first, const char *key, bool value) {
+  jsonAddKey(out, first, key);
+  out.print(value ? 1 : 0);
+}
+
+template <typename T>
+static inline void jsonFieldRaw(Print &out, bool &first, const char *key, T value) {
+  jsonAddKey(out, first, key);
+  out.print(value);
+}
+
 static bool runtimeEventWrite(Print& out, const char* value, size_t length) {
   return out.write(reinterpret_cast<const uint8_t*>(value), length) == length;
 }
@@ -3562,220 +3497,123 @@ static void writeAjaxTelemetryFields(
   bool first = true;
   out.print('{');
 
-  jsonAddKey(out, first, "bme_temp");
-  out.print(format_float(snapshot.bmeTemp, 3));
-  jsonAddKey(out, first, "bme_pressure");
-  out.print(format_float(snapshot.bmePressure, 3));
-  jsonAddKey(out, first, "start_pressure");
-  out.print(format_float(snapshot.startPressure, 3));
-  jsonAddKey(out, first, "crnt_tm");
-  out.print('"');
-  jsonPrintEscaped(out, snapshot.crt);
-  out.print('"');
-  jsonAddKey(out, first, "stm");
-  out.print('"');
-  jsonPrintEscaped(out, snapshot.uptime);
-  out.print('"');
-  jsonAddKey(out, first, "SteamTemp");
-  out.print(format_float(snapshot.steamTemp, 3));
-  jsonAddKey(out, first, "PipeTemp");
-  out.print(format_float(snapshot.pipeTemp, 3));
-  jsonAddKey(out, first, "WaterTemp");
-  out.print(format_float(snapshot.waterTemp, 3));
-  jsonAddKey(out, first, "TankTemp");
-  out.print(format_float(snapshot.tankTemp, 3));
-  jsonAddKey(out, first, "ACPTemp");
-  out.print(format_float(snapshot.acpTemp, 3));
-  jsonAddKey(out, first, "DetectorTrend");
-  out.print(format_float(snapshot.detectorTrend, 3));
-  jsonAddKey(out, first, "DetectorStatus");
-  out.print(snapshot.detectorStatus);
-  jsonAddKey(out, first, "DetectorSteamSpan");
-  out.print(format_float(snapshot.detectorSteamSpan, 4));
-  jsonAddKey(out, first, "DetectorSteamVariance");
-  out.print(format_float(snapshot.detectorSteamVariance, 6));
-  jsonAddKey(out, first, "DetectorSteamStableSeconds");
-  out.print(snapshot.detectorSteamStableSeconds);
-  jsonAddKey(out, first, "DetectorSteamStabilityReason");
-  out.print(snapshot.detectorSteamStabilityReason);
-  jsonAddKey(out, first, "DetectorSteamSpanThreshold");
-  out.print(format_float(DETECTOR_STEAM_STABLE_SPAN, 3));
-  jsonAddKey(out, first, "DetectorSteamVarianceThreshold");
-  out.print(format_float(DETECTOR_STEAM_STABLE_VARIANCE, 6));
-  jsonAddKey(out, first, "DetectorRecoveryThreshold");
-  out.print(format_float(snapshot.detectorRecoveryThreshold, 4));
-  jsonAddKey(out, first, "DetectorRecoveryReady");
-  out.print(snapshot.detectorRecoveryReady ? 1 : 0);
-  jsonAddKey(out, first, "BoilingDetected");
-  out.print(snapshot.boilingDetected ? 1 : 0);
-  jsonAddKey(out, first, "BoilingEvidence");
-  out.print(snapshot.boilingEvidence);
-  jsonAddKey(out, first, "BoilingPrecisionSensorConfigured");
-  out.print(snapshot.boilingPrecisionSensorConfigured ? 1 : 0);
-  jsonAddKey(out, first, "useautospeed");
-  out.print(snapshot.useAutoSpeed);
+  jsonFieldFloat(out, first, "bme_temp", snapshot.bmeTemp, 3);
+  jsonFieldFloat(out, first, "bme_pressure", snapshot.bmePressure, 3);
+  jsonFieldFloat(out, first, "start_pressure", snapshot.startPressure, 3);
+  jsonFieldString(out, first, "crnt_tm", snapshot.crt);
+  jsonFieldString(out, first, "stm", snapshot.uptime);
+  jsonFieldFloat(out, first, "SteamTemp", snapshot.steamTemp, 3);
+  jsonFieldFloat(out, first, "PipeTemp", snapshot.pipeTemp, 3);
+  jsonFieldFloat(out, first, "WaterTemp", snapshot.waterTemp, 3);
+  jsonFieldFloat(out, first, "TankTemp", snapshot.tankTemp, 3);
+  jsonFieldFloat(out, first, "ACPTemp", snapshot.acpTemp, 3);
+  jsonFieldFloat(out, first, "DetectorTrend", snapshot.detectorTrend, 3);
+  jsonFieldRaw(out, first, "DetectorStatus", snapshot.detectorStatus);
+  jsonFieldFloat(out, first, "DetectorSteamSpan", snapshot.detectorSteamSpan, 4);
+  jsonFieldFloat(out, first, "DetectorSteamVariance", snapshot.detectorSteamVariance, 6);
+  jsonFieldRaw(out, first, "DetectorSteamStableSeconds", snapshot.detectorSteamStableSeconds);
+  jsonFieldRaw(out, first, "DetectorSteamStabilityReason", snapshot.detectorSteamStabilityReason);
+  jsonFieldFloat(out, first, "DetectorSteamSpanThreshold", DETECTOR_STEAM_STABLE_SPAN, 3);
+  jsonFieldFloat(out, first, "DetectorSteamVarianceThreshold", DETECTOR_STEAM_STABLE_VARIANCE, 6);
+  jsonFieldFloat(out, first, "DetectorRecoveryThreshold", snapshot.detectorRecoveryThreshold, 4);
+  jsonFieldBool(out, first, "DetectorRecoveryReady", snapshot.detectorRecoveryReady);
+  jsonFieldBool(out, first, "BoilingDetected", snapshot.boilingDetected);
+  jsonFieldRaw(out, first, "BoilingEvidence", snapshot.boilingEvidence);
+  jsonFieldBool(out, first, "BoilingPrecisionSensorConfigured", snapshot.boilingPrecisionSensorConfigured);
+  jsonFieldBool(out, first, "useautospeed", snapshot.useAutoSpeed);
   jsonAddKey(out, first, "version");
   out.print('"');
   out.print(SAMOVAR_VERSION);
   out.print('"');
-  jsonAddKey(out, first, "boot_degraded");
-  out.print(bootDegraded ? 1 : 0);
-  jsonAddKey(out, first, "boot_degraded_reason");
-  out.print('"');
-  jsonPrintEscaped(out, bootDegradedReason);
-  out.print('"');
-  jsonAddKey(out, first, "VolumeAll");
-  out.print(snapshot.volumeAll);
-  jsonAddKey(out, first, "ActualVolumePerHour");
-  out.print(format_float(snapshot.actualVolumePerHour, 3));
-  jsonAddKey(out, first, "PowerOn");
-  out.print(snapshot.powerOn);
-  jsonAddKey(out, first, "PauseOn");
-  out.print(snapshot.pauseOn);
-  jsonAddKey(out, first, "WthdrwlProgress");
-  out.print(snapshot.withdrawalProgress);
-  jsonAddKey(out, first, "TargetStepps");
-  out.print(snapshot.targetSteps);
-  jsonAddKey(out, first, "CurrrentStepps");
-  out.print(snapshot.currentSteps);
-  jsonAddKey(out, first, "WthdrwlStatus");
-  out.print(snapshot.withdrawalStatus);
-  jsonAddKey(out, first, "ProgramNum");
-  out.print(snapshot.programIndex + 1);
-  jsonAddKey(out, first, "ProgramIndex");
-  out.print(snapshot.programIndex);
-  jsonAddKey(out, first, "CurrrentSpeed");
-  out.print(snapshot.currentSpeed);
-  jsonAddKey(out, first, "UseBBuzzer");
-  out.print(snapshot.useBrowserBuzzer);
-  jsonAddKey(out, first, "StepperStepMl");
-  out.print(snapshot.stepperStepMl);
-  jsonAddKey(out, first, "BodyTemp_Steam");
-  out.print(format_float(snapshot.steamBodyTemp, 3));
-  jsonAddKey(out, first, "BodyTemp_Pipe");
-  out.print(format_float(snapshot.pipeBodyTemp, 3));
-  jsonAddKey(out, first, "mixer");
-  out.print(snapshot.mixer);
-  jsonAddKey(out, first, "ISspd");
-  out.print(format_float(snapshot.i2cStepperSpeed, 3));
-  jsonAddKey(out, first, "i2c_stepper_present");
-  out.print(snapshot.i2cStepperPresent ? 1 : 0);
-  jsonAddKey(out, first, "i2c_mixer_present");
-  out.print(snapshot.i2cMixerPresent ? 1 : 0);
-  jsonAddKey(out, first, "i2c_pump_present");
-  out.print(snapshot.i2cPumpPresent ? 1 : 0);
+  jsonFieldBool(out, first, "boot_degraded", bootDegraded);
+  jsonFieldString(out, first, "boot_degraded_reason", bootDegradedReason);
+  jsonFieldRaw(out, first, "VolumeAll", snapshot.volumeAll);
+  jsonFieldFloat(out, first, "ActualVolumePerHour", snapshot.actualVolumePerHour, 3);
+  jsonFieldBool(out, first, "PowerOn", snapshot.powerOn);
+  jsonFieldBool(out, first, "PauseOn", snapshot.pauseOn);
+  jsonFieldRaw(out, first, "WthdrwlProgress", snapshot.withdrawalProgress);
+  jsonFieldRaw(out, first, "TargetStepps", snapshot.targetSteps);
+  jsonFieldRaw(out, first, "CurrrentStepps", snapshot.currentSteps);
+  jsonFieldRaw(out, first, "WthdrwlStatus", snapshot.withdrawalStatus);
+  jsonFieldRaw(out, first, "ProgramNum", snapshot.programIndex + 1);
+  jsonFieldRaw(out, first, "ProgramIndex", snapshot.programIndex);
+  jsonFieldRaw(out, first, "CurrrentSpeed", snapshot.currentSpeed);
+  jsonFieldBool(out, first, "UseBBuzzer", snapshot.useBrowserBuzzer);
+  jsonFieldRaw(out, first, "StepperStepMl", snapshot.stepperStepMl);
+  jsonFieldFloat(out, first, "BodyTemp_Steam", snapshot.steamBodyTemp, 3);
+  jsonFieldFloat(out, first, "BodyTemp_Pipe", snapshot.pipeBodyTemp, 3);
+  jsonFieldBool(out, first, "mixer", snapshot.mixer);
+  jsonFieldFloat(out, first, "ISspd", snapshot.i2cStepperSpeed, 3);
+  jsonFieldBool(out, first, "i2c_stepper_present", snapshot.i2cStepperPresent);
+  jsonFieldBool(out, first, "i2c_mixer_present", snapshot.i2cMixerPresent);
+  jsonFieldBool(out, first, "i2c_pump_present", snapshot.i2cPumpPresent);
 
   if (snapshot.i2cPumpPresent) {
-    jsonAddKey(out, first, "i2c_pump_speed");
-    out.print(snapshot.i2cPumpSpeed);
-    jsonAddKey(out, first, "i2c_pump_target_ml");
-    out.print(format_float(snapshot.i2cPumpTargetMl, 1));
-    jsonAddKey(out, first, "i2c_pump_remaining_ml");
-    out.print(format_float(snapshot.i2cPumpRemainingMl, 1));
-    jsonAddKey(out, first, "i2c_pump_running");
-    out.print(snapshot.i2cPumpRunning ? 1 : 0);
+    jsonFieldRaw(out, first, "i2c_pump_speed", snapshot.i2cPumpSpeed);
+    jsonFieldFloat(out, first, "i2c_pump_target_ml", snapshot.i2cPumpTargetMl, 1);
+    jsonFieldFloat(out, first, "i2c_pump_remaining_ml", snapshot.i2cPumpRemainingMl, 1);
+    jsonFieldBool(out, first, "i2c_pump_running", snapshot.i2cPumpRunning);
   } else {
-    jsonAddKey(out, first, "i2c_pump_speed");
-    out.print(0);
-    jsonAddKey(out, first, "i2c_pump_target_ml");
-    out.print(0);
-    jsonAddKey(out, first, "i2c_pump_remaining_ml");
-    out.print(0);
-    jsonAddKey(out, first, "i2c_pump_running");
-    out.print(0);
+    jsonFieldRaw(out, first, "i2c_pump_speed", 0);
+    jsonFieldRaw(out, first, "i2c_pump_target_ml", 0);
+    jsonFieldRaw(out, first, "i2c_pump_remaining_ml", 0);
+    jsonFieldRaw(out, first, "i2c_pump_running", 0);
   }
 
-  jsonAddKey(out, first, "heap");
-  out.print(snapshot.freeHeap);
-  jsonAddKey(out, first, "rssi");
-  out.print(snapshot.rssi);
-  jsonAddKey(out, first, "fr_bt");
-  out.print(snapshot.freeFsBytes);
-  jsonAddKey(out, first, "PrgType");
-  out.print('"');
-  jsonPrintEscaped(out, snapshot.programType);
-  out.print('"');
+  jsonFieldRaw(out, first, "heap", snapshot.freeHeap);
+  jsonFieldRaw(out, first, "rssi", snapshot.rssi);
+  jsonFieldRaw(out, first, "fr_bt", snapshot.freeFsBytes);
+  jsonFieldString(out, first, "PrgType", snapshot.programType);
 
 #ifdef SAMOVAR_USE_POWER
-  jsonAddKey(out, first, "current_power_volt");
-  out.print(format_float(snapshot.currentPowerVolt, 1));
-  jsonAddKey(out, first, "target_power_volt");
-  out.print(format_float(snapshot.targetPowerVolt, 1));
-  jsonAddKey(out, first, "current_power_mode");
-  out.print('"');
-  jsonPrintEscaped(out, snapshot.currentPowerMode);
-  out.print('"');
-  jsonAddKey(out, first, "current_power_p");
-  out.print(snapshot.currentPower);
+  jsonFieldFloat(out, first, "current_power_volt", snapshot.currentPowerVolt, 1);
+  jsonFieldFloat(out, first, "target_power_volt", snapshot.targetPowerVolt, 1);
+  jsonFieldString(out, first, "current_power_mode", snapshot.currentPowerMode);
+  jsonFieldRaw(out, first, "current_power_p", snapshot.currentPower);
 #else
-  jsonAddKey(out, first, "current_power_volt");
-  out.print(0);
-  jsonAddKey(out, first, "target_power_volt");
-  out.print(0);
+  jsonFieldRaw(out, first, "current_power_volt", 0);
+  jsonFieldRaw(out, first, "target_power_volt", 0);
   jsonAddKey(out, first, "current_power_mode");
   out.print('"');
   out.print(0);
   out.print('"');
-  jsonAddKey(out, first, "current_power_p");
-  out.print(0);
+  jsonFieldRaw(out, first, "current_power_p", 0);
 #endif
 
 #ifdef USE_WATER_PUMP
-  jsonAddKey(out, first, "wp_spd");
-  out.print(snapshot.waterPumpSpeed);
+  jsonFieldRaw(out, first, "wp_spd", snapshot.waterPumpSpeed);
 #endif
 #ifdef USE_WATERSENSOR
-  jsonAddKey(out, first, "WFflowRate");
-  out.print(format_float(snapshot.waterFlowRate, 2));
-  jsonAddKey(out, first, "WFtotalMl");
-  out.print(snapshot.waterFlowTotalMl);
+  jsonFieldFloat(out, first, "WFflowRate", snapshot.waterFlowRate, 2);
+  jsonFieldRaw(out, first, "WFtotalMl", snapshot.waterFlowTotalMl);
 #endif
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
-  jsonAddKey(out, first, "prvl");
-  out.print(format_float(snapshot.pressure, 2));
+  jsonFieldFloat(out, first, "prvl", snapshot.pressure, 2);
 #endif
 
   if (snapshot.hasAlcohol) {
-    jsonAddKey(out, first, "alc");
-    out.print(format_float(snapshot.alcohol, 2));
-    jsonAddKey(out, first, "stm_alc");
-    out.print(format_float(snapshot.steamAlcohol, 2));
+    jsonFieldFloat(out, first, "alc", snapshot.alcohol, 2);
+    jsonFieldFloat(out, first, "stm_alc", snapshot.steamAlcohol, 2);
   }
   if (snapshot.hasTimePrediction) {
-    jsonAddKey(out, first, "RowPredictionAvailable");
-    out.print(snapshot.rowPredictionAvailable ? 1 : 0);
-    jsonAddKey(out, first, "ProcessPredictionAvailable");
-    out.print(snapshot.processPredictionAvailable ? 1 : 0);
-    jsonAddKey(out, first, "RowPredictionReason");
-    out.print(snapshot.distRowPredictionReason);
-    jsonAddKey(out, first, "ProcessPredictionReason");
-    out.print(snapshot.distProcessPredictionReason);
+    jsonFieldBool(out, first, "RowPredictionAvailable", snapshot.rowPredictionAvailable);
+    jsonFieldBool(out, first, "ProcessPredictionAvailable", snapshot.processPredictionAvailable);
+    jsonFieldRaw(out, first, "RowPredictionReason", snapshot.distRowPredictionReason);
+    jsonFieldRaw(out, first, "ProcessPredictionReason", snapshot.distProcessPredictionReason);
     if (snapshot.rowPredictionAvailable) {
-      jsonAddKey(out, first, "TimeRemaining");
-      out.print(String(snapshot.timeRemaining));
-      jsonAddKey(out, first, "RowTotalTime");
-      out.print(String(snapshot.rowPredictedTotalTime));
+      jsonFieldRaw(out, first, "TimeRemaining", String(snapshot.timeRemaining));
+      jsonFieldRaw(out, first, "RowTotalTime", String(snapshot.rowPredictedTotalTime));
     }
     if (snapshot.processPredictionAvailable) {
-      jsonAddKey(out, first, "ProcessTimeRemaining");
-      out.print(String(snapshot.processRemainingTime));
-      jsonAddKey(out, first, "TotalTime");
-      out.print(String(snapshot.totalTime));
+      jsonFieldRaw(out, first, "ProcessTimeRemaining", String(snapshot.processRemainingTime));
+      jsonFieldRaw(out, first, "TotalTime", String(snapshot.totalTime));
     }
   }
 
-  jsonAddKey(out, first, "Status");
-  out.print('"');
-  jsonPrintEscaped(out, snapshot.status);
-  out.print('"');
-  jsonAddKey(out, first, "Lstatus");
-  out.print('"');
-  jsonPrintEscaped(out, snapshot.luaStatus);
-  out.print('"');
-  jsonAddKey(out, first, "heaterAlarmLatched");
-  out.print(snapshot.heaterAlarmLatched ? 1 : 0);
-  jsonAddKey(out, first, "latestMessageSequence");
-  out.print(snapshot.latestMessageSequence);
+  jsonFieldString(out, first, "Status", snapshot.status);
+  jsonFieldString(out, first, "Lstatus", snapshot.luaStatus);
+  jsonFieldBool(out, first, "heaterAlarmLatched", snapshot.heaterAlarmLatched);
+  jsonFieldRaw(out, first, "latestMessageSequence", snapshot.latestMessageSequence);
 }
 
 void send_ajax_json(AsyncWebServerRequest *request) {
@@ -3958,10 +3796,6 @@ void apply_config_runtime() {
   // bool-поле не проверяем через isnan()
 #endif
 
-
-  //  pump_regulator.Kp = SamSetup.Kp;
-  //  pump_regulator.Ki = SamSetup.Ki;
-  //  pump_regulator.Kd = SamSetup.Kd;
 
 #ifdef USE_WATER_PUMP
   pump_regulator.setpoint = SamSetup.SetWaterTemp;  // сообщаем регулятору температуру, которую он должен поддерживать

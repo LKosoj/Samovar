@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "control_numeric_input.h"
 NVS = ROOT / "NVS_Manager.ino"
+PROFILE_FIELDS = ROOT / "profile_setup_fields.h"
 SETUP_PAGE = ROOT / "data_raw" / "setup.htm"
 PROGRAM_PAGE = ROOT / "data_raw" / "program.htm"
 
@@ -59,13 +60,17 @@ def main() -> int:
 
     # Заводское значение обязано совпадать с тем, что реально пишется в NVS: иначе
     # свежее устройство и устройство с испорченной записью считают разную мощность.
-    nvs_match = re.search(r"candidate\.HeaterResistant = ([0-9.]+);", read(NVS))
+    # Заводское значение живёт в таблице полей профиля (profile_setup_fields.h),
+    # откуда его разворачивает set_default_setup_profile в NVS_Manager.ino.
+    nvs_match = re.search(r"candidate\.HeaterResistant = ([0-9.]+)", read(PROFILE_FIELDS))
+    if re.search(r"candidate\.HeaterResistant = ([0-9.]+)", read(NVS)):
+        errors.append("NVS_Manager.ino: заводское значение HeaterResistant задано в обход profile_setup_fields.h")
     if not nvs_match:
-        errors.append("NVS_Manager.ino: не найдено заводское значение HeaterResistant")
+        errors.append("profile_setup_fields.h: не найдено заводское значение HeaterResistant")
     elif float(nvs_match.group(1)) != default:
         errors.append(
             f"заводское сопротивление разъехалось: control_numeric_input.h говорит "
-            f"{default:g} Ом, NVS_Manager.ino пишет {nvs_match.group(1)} Ом"
+            f"{default:g} Ом, profile_setup_fields.h пишет {nvs_match.group(1)} Ом"
         )
 
     # --- никто не принимает решение о доверии самостоятельно ---------------------

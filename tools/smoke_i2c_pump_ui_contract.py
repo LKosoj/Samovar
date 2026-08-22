@@ -5,6 +5,9 @@ from pathlib import Path
 
 from smoke_helpers import extract_function_body
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
@@ -22,7 +25,9 @@ RENDER_CALL = "SamovarApp.renderI2cPumpStatus(myObj);"
 
 
 def read_text(path):
-  return path.read_text(encoding="utf-8", errors="ignore")
+  # Разворачиваем <!--#include--> той же функцией, что использует сама сборка;
+  # для файлов без директив это no-op.
+  return resolve_includes(path.name, path.read_bytes()).decode("utf-8", errors="ignore")
 
 
 def check_app(errors):

@@ -1,11 +1,4 @@
-<!DOCTYPE html>
-<html lang="ru">
-
-<head>
-  <meta charset='utf-8'>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Cache-Control" content="no-cache">
-  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+<!--#include head_boilerplate.htm-->
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
@@ -13,41 +6,8 @@
   <script src="app.js"></script>
   <script>
     // ==================== POWER UNIT ===================================================================
-    function setPowerUnit () {
-      let setPowerLabel;
-      let setPowerButton;
-      let powerCurrent;
-      let powerTarget;
-      let powerUnit;
-      if (pwr_unit === 'P') {
-        setPowerLabel = 'Мощность регулятора: ';
-        setPowerButton = 'Установить мощность';
-        powerCurrent = 'Текущая мощн.: ';
-        powerTarget = 'Целевая мощн.: ';
-        powerUnit = ' Вт';
-        document.getElementById('current_power_line').style = 'visibility: hidden';
-      } else if (pwr_unit === 'V') {
-        setPowerLabel = 'Напряжение регулятора: ';
-        setPowerButton = 'Установить напряжение';
-        powerCurrent = 'Текущее напр.: ';
-        powerTarget = 'Целевое напр.: ';
-        powerUnit = ' V';
-        document.getElementById('current_power_line').style = 'visibility: visible';
-      } else {
-        document.getElementById('PWR').style =
-          'visibility: hidden;position: fixed;';
-      }
-      document.getElementById('set_power_label').innerHTML = setPowerLabel;
-      document.getElementById('SetVoltage').value = setPowerButton;
-      document.getElementById('power_current').innerHTML = powerCurrent;
-      document.getElementById('power_target').innerHTML = powerTarget;
-      document.getElementById('power_unit_current').innerHTML = powerUnit;
-      document.getElementById('power_unit_target').innerHTML = powerUnit;
-    }
-
-    var pwr_unit = "%pwr_unit%";
-    var powerInputMax = Number('%HeaterMaxPower%');
-    var _lnIdx = 0;
+<!--#include power_unit_hidden.htm-->
+<!--#include power_unit_runtime_vars.htm-->
 
     function loadFile (e) {
       var file = e;
@@ -292,24 +252,7 @@
       plus.type = "button";
       plus.className = "program-row-action";
       plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','W;0;0;;0')");
-      var plusIcon = document.createElement("img");
-      plusIcon.src = 'plus.png';
-      plusIcon.width = 20;
-      plusIcon.alt = "";
-      plus.appendChild(plusIcon);
-      dl.appendChild(plus);
-
-      var minus = document.createElement("button");
-      minus.type = "button";
-      minus.className = "program-row-action";
-      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
-      var minusIcon = document.createElement("img");
-      minusIcon.src = 'minus.png';
-      minusIcon.width = 20;
-      minusIcon.alt = "";
-      minus.appendChild(minusIcon);
-      dl.appendChild(minus);
-
+<!--#include plus_minus_icons.htm-->
       if (!obj) {
         var prg = document.getElementById("prg");
         prg.appendChild(dl);
@@ -499,71 +442,12 @@
       <input type='button' class="tablinks" onclick="location.href='/i2cstepper.htm';" value="I2CStepper" style="display: %I2CStepperTab%;">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" style="display: %I2CPumpTab%;" aria-pressed="false">
     </div>
-    <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
+<!--#include main_status_header.htm-->
 
-      <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
-        <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
-          <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
-            <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
-              <div>v. </div>
-              <div id='version'></div>
-            </div>
-          </div>
-
-          <div style="width: 21px; display: flex; flex-direction: column; justify-content: center; align-items: center">
-            <div id="connection_indicator">
-              <img src="Green.png" style="margin: 0 !important; width: 20px">
-            </div>
-          </div>
-
-          <div class="messages_box" style="display: none;" id="messagesBox">
-            <button type="button" class="messages-clear" style="position: absolute; top: 0; right: 0.5em; cursor: pointer" onclick='SamovarApp.clearMessages()' aria-controls="messages">
-              [x] очистить
-            </button>
-            <div class="messages_array" id="messages"></div>
-          </div>
-        </div>
-        <div style="display: flex; flex-direction: column; align-items: center; font-weight: bold;">
-          Работа: <span id='stm'></span>
-        </div>
-      </div>
-
-
-      <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-
-        <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-          <div class="text" style="text-decoration-line: underline; text-decoration-color: %PipeColor%;">
-            Т в царге: &nbsp;&nbsp;
-            <span id='PipeTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="text-decoration-line: underline; text-decoration-color: %SteamColor%;">
-            Т пара: &nbsp;&nbsp;
-            <span id='SteamTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
+<!--#include temps_pipe_steam.htm-->
         </div>
 
-        <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
-          <div class="text" style="text-decoration-line: underline; text-decoration-color: %WaterColor%;">
-            Т воды: &nbsp;&nbsp;
-            <span id='WaterTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="text-decoration-line: underline; text-decoration-color: %TankColor%;">
-            Т в кубе: &nbsp;&nbsp;
-            <span id='TankTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-          <div class="text" style="text-decoration-line: underline; text-decoration-color: %ACPColor%;">
-            Т в ТСА: &nbsp;&nbsp;
-            <span id='ACPTemp' style="font-size: xx-large;"></span>
-            &#176;C
-          </div>
-        </div>
-
-      </div>
+<!--#include temps_water_tank_acp.htm-->
 
       <div class="container_row" style="margin-top: 1em; background-color: var(--bg-status); padding-top: 0.5em; padding-bottom: 0.5em;">
         <span style="padding-left: 1em; font-size: 1.5em; font-weight: bold; color: var(--text-status)">
@@ -746,40 +630,8 @@
 
       </div>
 
-      <div style="visibility: hidden" id="lua_btn">
-        <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-          <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-            <div class="container_row" style="justify-content: space-around; align-items: center; display: block;" id="lua_btn_ln"></div>
-            <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">
-              <label for="lua_str_i">Lua:</label>
-              <input name='lua_str_i' id='lua_str_i' type='text' value='' style='padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;'>
-              <input type="button" name="lua_str_b" value="Выполнить Lua" class="button" onclick="SamovarApp.runLuaString();" style='margin-bottom: 20px; margin-right: 100;'>
-            </div>
-            <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
-          </div>
-        </div>
-      </div>
+<!--#include lua_field.htm-->
     </div>
 
-    <div id="I2CPump" class="tabcontent" aria-hidden="true">
-      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
-        <div class="text">
-          <label for="i2c_speed">Скорость отбора (л/ч):</label>
-          <input id='i2c_speed' type='text' inputmode='decimal' value='0' style="width: 6em;">
-        </div>
-        <div class="text" style="margin-top: 0.5em;">
-          <label for="i2c_volume">Объём (мл):</label>
-          <input id='i2c_volume' type='text' inputmode='decimal' value='0' style="width: 6em;">
-        </div>
-        <div class="container_row" style="justify-content: space-around; align-items: center; margin-top: 1em;">
-          <input type='button' class="button" value="Отправить" onclick='SamovarApp.sendI2cPump();'>
-          <input type='button' class="button" value="Стоп" onclick='SamovarApp.stopI2cPump();'>
-        </div>
-      </div>
-    </div>
-
-  </form>
-  <img src="Red_light.gif" style="width: 0; height: 0; visibility: hidden;">
-</body>
-
-</html>
+<!--#include i2cpump_tab.htm-->
+<!--#include mode_page_footer.htm-->

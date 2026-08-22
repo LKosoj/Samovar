@@ -229,7 +229,6 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 // Флаг USE_CRASH_HANDLER теперь берется из user_config_override.h
 
 #ifdef USE_LittleFS
-//#pragma message ("USE LITTLEFS")
 #ifdef ESP_ARDUINO_VERSION
 #include <LittleFS.h>
 #define SPIFFS LittleFS
@@ -304,8 +303,6 @@ LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 
 
-#define DRIVER_STEP_TIME 4
-
 // Прерывание шагового двигателя должно работать и во время записи в файл: на это время
 // ESP32 отключает кэш флеш-памяти и вместе с ним все прерывания, у которых нет флага
 // ESP_INTR_FLAG_IRAM. Без флага мотор замирает на всё время записи (стирание сектора -
@@ -364,7 +361,6 @@ PCF8591 analog_expander(&Wire, USE_ANALOG_EXPANDER, LCD_SDA, LCD_SCL);
 double Input, Output, Setpoint;
 double Kp, Ki, Kd;
 
-//Relay relay(RELAY_PIN, RELAY_PERIOD);
 PID heaterPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 int periodInSeconds = 6;
 
@@ -391,7 +387,6 @@ GButton nbkls(LUA_PIN);
 LiquidMenu main_menu1(lcd);
 
 #ifdef USE_WEB_SERIAL
-//WebSerialClass WebSerial;
 #endif
 
 DNSServer dns;
@@ -481,7 +476,6 @@ struct SetupEEPROM {
   float MainsVoltage;                                          //Номинальное напряжение сети, В
   float SuvidTemp;                                             //Уставка термостата Су-вид; 0 = не задано (дефолт в suvid-логике)
   uint16_t SuvidHoldMinutes;                                   //Выдержка Су-вид в полосе уставки; 0 = бессрочный термостат
-  //Serial.println(sizeof(SamSetup));
 };
 
 struct ImpurityDetector {
@@ -567,7 +561,6 @@ const float EVAPORATION_FACTOR = 4.8f;
 //**************************************************************************************************************
 uint8_t DScnt = 0;
 uint8_t STcnt = 0;                                              // Счетчик для записи текущего статуса
-//uint8_t tcnt = 0;
 bool bmefound = true;
 volatile bool PowerOn = false;                                  // Индикатор включенного питания
 volatile bool PauseOn = false;                                  // Индикатор постановки отбора на паузу

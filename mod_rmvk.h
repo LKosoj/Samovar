@@ -15,7 +15,6 @@
 #endif
 
 #define RMVK_BAUD_RATE 9600
-#define RMVK_TASK_DELAY 5000
 #define RMVK_TXD TXD2
 #define RMVK_RXD RXD2
 uart_port_t RMVK_UART = UART_NUM_1;

@@ -7,6 +7,7 @@
 #include "Samovar.h"
 #include "samovar_api.h"
 #include "profile_store.h"
+#include "profile_setup_fields.h"
 
 static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
 static const char* const SAMOVAR_PROFILE_KEY = "profile";
@@ -41,80 +42,25 @@ static bool encode_setup_payload(
     const SetupEEPROM& candidate,
     uint8_t* payload) {
   CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V2> writer(payload);
+#define SAMOVAR_PUT_U8(name) writer.put_u8(candidate.name)
+#define SAMOVAR_PUT_BOOL(name) writer.put_bool(candidate.name)
+#define SAMOVAR_PUT_U16(name) writer.put_u16(candidate.name)
+#define SAMOVAR_PUT_FLOAT(name) writer.put_float(candidate.name)
+#define SAMOVAR_PUT_I32_MODE(name) writer.put_i32(int32_t(candidate.name))
+#define SAMOVAR_PUT_BYTES_U8(name) writer.put_bytes(candidate.name, sizeof(candidate.name))
+#define SAMOVAR_PUT_BYTES_CHAR(name) writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.name), sizeof(candidate.name))
+#define SAMOVAR_ENCODE_FIELD(kind, name, size, deflt, scope) SAMOVAR_PUT_##kind(name) &&
   const bool encoded =
-      writer.put_u8(candidate.flag) &&
-      writer.put_float(candidate.DeltaSteamTemp) &&
-      writer.put_float(candidate.DeltaPipeTemp) &&
-      writer.put_float(candidate.DeltaWaterTemp) &&
-      writer.put_float(candidate.DeltaTankTemp) &&
-      writer.put_u16(candidate.StepperStepMl) &&
-      writer.put_float(candidate.SetSteamTemp) &&
-      writer.put_float(candidate.SetPipeTemp) &&
-      writer.put_float(candidate.SetWaterTemp) &&
-      writer.put_float(candidate.SetTankTemp) &&
-      writer.put_bool(candidate.UsePreccureCorrect) &&
-      writer.put_u16(candidate.SteamDelay) &&
-      writer.put_u16(candidate.PipeDelay) &&
-      writer.put_u16(candidate.WaterDelay) &&
-      writer.put_u16(candidate.TankDelay) &&
-      writer.put_u8(candidate.TimeZone) &&
-      writer.put_float(candidate.HeaterResistant) &&
-      writer.put_u8(candidate.LogPeriod) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.SteamColor), sizeof(candidate.SteamColor)) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.PipeColor), sizeof(candidate.PipeColor)) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.WaterColor), sizeof(candidate.WaterColor)) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.TankColor), sizeof(candidate.TankColor)) &&
-      writer.put_bool(candidate.rele1) &&
-      writer.put_bool(candidate.rele2) &&
-      writer.put_bool(candidate.rele3) &&
-      writer.put_bool(candidate.rele4) &&
-      writer.put_bytes(candidate.SteamAdress, sizeof(candidate.SteamAdress)) &&
-      writer.put_bytes(candidate.PipeAdress, sizeof(candidate.PipeAdress)) &&
-      writer.put_bytes(candidate.WaterAdress, sizeof(candidate.WaterAdress)) &&
-      writer.put_bytes(candidate.TankAdress, sizeof(candidate.TankAdress)) &&
-      writer.put_bool(candidate.useautospeed) &&
-      writer.put_bool(candidate.useDetector) &&
-      writer.put_u8(candidate.autospeed) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.blynkauth), sizeof(candidate.blynkauth)) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.videourl), sizeof(candidate.videourl)) &&
-      writer.put_float(candidate.DistTemp) &&
-      writer.put_i32(int32_t(candidate.Mode)) &&
-      writer.put_bytes(candidate.ACPAdress, sizeof(candidate.ACPAdress)) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.ACPColor), sizeof(candidate.ACPColor)) &&
-      writer.put_float(candidate.DeltaACPTemp) &&
-      writer.put_float(candidate.SetACPTemp) &&
-      writer.put_u16(candidate.ACPDelay) &&
-      writer.put_float(candidate.Kp) &&
-      writer.put_float(candidate.Ki) &&
-      writer.put_float(candidate.Kd) &&
-      writer.put_float(candidate.StbVoltage) &&
-      writer.put_bool(candidate.ChangeProgramBuzzer) &&
-      writer.put_bool(candidate.UseBuzzer) &&
-      writer.put_bool(candidate.CheckPower) &&
-      writer.put_bool(candidate.UseBBuzzer) &&
-      writer.put_bool(candidate.UseWS) &&
-      writer.put_float(candidate.BVolt) &&
-      writer.put_bool(candidate.UseST) &&
-      writer.put_u8(candidate.DistTimeF) &&
-      writer.put_bool(candidate.UseHLS) &&
-      writer.put_float(candidate.MaxPressureValue) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.tg_token), sizeof(candidate.tg_token)) &&
-      writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.tg_chat_id), sizeof(candidate.tg_chat_id)) &&
-      writer.put_float(candidate.NbkIn) &&
-      writer.put_float(candidate.NbkDelta) &&
-      writer.put_float(candidate.NbkDM) &&
-      writer.put_float(candidate.NbkDP) &&
-      writer.put_float(candidate.NbkSteamT) &&
-      writer.put_float(candidate.NbkOwPress) &&
-      writer.put_float(candidate.ColDiam) &&
-      writer.put_float(candidate.ColHeight) &&
-      writer.put_u8(candidate.PackDens) &&
-      writer.put_u16(candidate.StepperStepMlI2C) &&
-      writer.put_float(candidate.NbkTn) &&
-      writer.put_float(candidate.BKPower) &&
-      writer.put_float(candidate.MainsVoltage) &&
-      writer.put_float(candidate.SuvidTemp) &&
-      writer.put_u16(candidate.SuvidHoldMinutes);
+      SAMOVAR_PROFILE_FIELDS(SAMOVAR_ENCODE_FIELD)
+      true;
+#undef SAMOVAR_ENCODE_FIELD
+#undef SAMOVAR_PUT_BYTES_CHAR
+#undef SAMOVAR_PUT_BYTES_U8
+#undef SAMOVAR_PUT_I32_MODE
+#undef SAMOVAR_PUT_FLOAT
+#undef SAMOVAR_PUT_U16
+#undef SAMOVAR_PUT_BOOL
+#undef SAMOVAR_PUT_U8
   return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V2 &&
          writer.finish();
 }
@@ -124,79 +70,29 @@ static bool decode_setup_payload_fields(
     CanonicalProfileReader<PayloadSize>& reader,
     SetupEEPROM& decoded) {
   int32_t mode = 0;
+#define SAMOVAR_GET_U8(name) reader.get_u8(decoded.name)
+#define SAMOVAR_GET_BOOL(name) reader.get_bool(decoded.name)
+#define SAMOVAR_GET_U16(name) reader.get_u16(decoded.name)
+#define SAMOVAR_GET_FLOAT(name) reader.get_float(decoded.name)
+#define SAMOVAR_GET_I32_MODE(name) reader.get_i32(mode)
+#define SAMOVAR_GET_BYTES_U8(name) reader.get_bytes(decoded.name, sizeof(decoded.name))
+#define SAMOVAR_GET_BYTES_CHAR(name) reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.name), sizeof(decoded.name))
+#define SAMOVAR_DECODE_TERM_ALL(kind, name) SAMOVAR_GET_##kind(name) &&
+#define SAMOVAR_DECODE_TERM_V2ONLY(kind, name)
+#define SAMOVAR_DECODE_FIELD(kind, name, size, deflt, scope) SAMOVAR_DECODE_TERM_##scope(kind, name)
   const bool decodedFields =
-      reader.get_u8(decoded.flag) &&
-      reader.get_float(decoded.DeltaSteamTemp) &&
-      reader.get_float(decoded.DeltaPipeTemp) &&
-      reader.get_float(decoded.DeltaWaterTemp) &&
-      reader.get_float(decoded.DeltaTankTemp) &&
-      reader.get_u16(decoded.StepperStepMl) &&
-      reader.get_float(decoded.SetSteamTemp) &&
-      reader.get_float(decoded.SetPipeTemp) &&
-      reader.get_float(decoded.SetWaterTemp) &&
-      reader.get_float(decoded.SetTankTemp) &&
-      reader.get_bool(decoded.UsePreccureCorrect) &&
-      reader.get_u16(decoded.SteamDelay) &&
-      reader.get_u16(decoded.PipeDelay) &&
-      reader.get_u16(decoded.WaterDelay) &&
-      reader.get_u16(decoded.TankDelay) &&
-      reader.get_u8(decoded.TimeZone) &&
-      reader.get_float(decoded.HeaterResistant) &&
-      reader.get_u8(decoded.LogPeriod) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.SteamColor), sizeof(decoded.SteamColor)) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.PipeColor), sizeof(decoded.PipeColor)) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.WaterColor), sizeof(decoded.WaterColor)) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.TankColor), sizeof(decoded.TankColor)) &&
-      reader.get_bool(decoded.rele1) &&
-      reader.get_bool(decoded.rele2) &&
-      reader.get_bool(decoded.rele3) &&
-      reader.get_bool(decoded.rele4) &&
-      reader.get_bytes(decoded.SteamAdress, sizeof(decoded.SteamAdress)) &&
-      reader.get_bytes(decoded.PipeAdress, sizeof(decoded.PipeAdress)) &&
-      reader.get_bytes(decoded.WaterAdress, sizeof(decoded.WaterAdress)) &&
-      reader.get_bytes(decoded.TankAdress, sizeof(decoded.TankAdress)) &&
-      reader.get_bool(decoded.useautospeed) &&
-      reader.get_bool(decoded.useDetector) &&
-      reader.get_u8(decoded.autospeed) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.blynkauth), sizeof(decoded.blynkauth)) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.videourl), sizeof(decoded.videourl)) &&
-      reader.get_float(decoded.DistTemp) &&
-      reader.get_i32(mode) &&
-      reader.get_bytes(decoded.ACPAdress, sizeof(decoded.ACPAdress)) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.ACPColor), sizeof(decoded.ACPColor)) &&
-      reader.get_float(decoded.DeltaACPTemp) &&
-      reader.get_float(decoded.SetACPTemp) &&
-      reader.get_u16(decoded.ACPDelay) &&
-      reader.get_float(decoded.Kp) &&
-      reader.get_float(decoded.Ki) &&
-      reader.get_float(decoded.Kd) &&
-      reader.get_float(decoded.StbVoltage) &&
-      reader.get_bool(decoded.ChangeProgramBuzzer) &&
-      reader.get_bool(decoded.UseBuzzer) &&
-      reader.get_bool(decoded.CheckPower) &&
-      reader.get_bool(decoded.UseBBuzzer) &&
-      reader.get_bool(decoded.UseWS) &&
-      reader.get_float(decoded.BVolt) &&
-      reader.get_bool(decoded.UseST) &&
-      reader.get_u8(decoded.DistTimeF) &&
-      reader.get_bool(decoded.UseHLS) &&
-      reader.get_float(decoded.MaxPressureValue) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.tg_token), sizeof(decoded.tg_token)) &&
-      reader.get_bytes(reinterpret_cast<uint8_t*>(decoded.tg_chat_id), sizeof(decoded.tg_chat_id)) &&
-      reader.get_float(decoded.NbkIn) &&
-      reader.get_float(decoded.NbkDelta) &&
-      reader.get_float(decoded.NbkDM) &&
-      reader.get_float(decoded.NbkDP) &&
-      reader.get_float(decoded.NbkSteamT) &&
-      reader.get_float(decoded.NbkOwPress) &&
-      reader.get_float(decoded.ColDiam) &&
-      reader.get_float(decoded.ColHeight) &&
-      reader.get_u8(decoded.PackDens) &&
-      reader.get_u16(decoded.StepperStepMlI2C) &&
-      reader.get_float(decoded.NbkTn) &&
-      reader.get_float(decoded.BKPower) &&
-      reader.get_float(decoded.MainsVoltage) &&
-      reader.get_float(decoded.SuvidTemp);
+      SAMOVAR_PROFILE_FIELDS(SAMOVAR_DECODE_FIELD)
+      true;
+#undef SAMOVAR_DECODE_FIELD
+#undef SAMOVAR_DECODE_TERM_V2ONLY
+#undef SAMOVAR_DECODE_TERM_ALL
+#undef SAMOVAR_GET_BYTES_CHAR
+#undef SAMOVAR_GET_BYTES_U8
+#undef SAMOVAR_GET_I32_MODE
+#undef SAMOVAR_GET_FLOAT
+#undef SAMOVAR_GET_U16
+#undef SAMOVAR_GET_BOOL
+#undef SAMOVAR_GET_U8
   if (!decodedFields) return false;
   decoded.Mode = int(mode);
   return true;
@@ -443,81 +339,9 @@ void print_nvs_stats(const char* context) {
 void set_default_setup_profile(SetupEEPROM& candidate) {
   candidate = {};
 
-  candidate.flag = 2;
-  candidate.Mode = SAMOVAR_RECTIFICATION_MODE;
-  candidate.TimeZone = 3;
-  candidate.HeaterResistant = 15.2;
-  candidate.LogPeriod = 3;
-  candidate.SetSteamTemp = 0;
-  candidate.SetPipeTemp = 0;
-  candidate.SetWaterTemp = 0;
-  candidate.SetTankTemp = 0;
-  candidate.SetACPTemp = 0;
-  candidate.DistTemp = DEFAULT_DIST_TEMP;
-  candidate.DeltaSteamTemp = 0.1;
-  candidate.DeltaPipeTemp = 0.2;
-  candidate.DeltaWaterTemp = 0;
-  candidate.DeltaTankTemp = 0;
-  candidate.DeltaACPTemp = 0;
-  candidate.SteamDelay = 20;
-  candidate.PipeDelay = 20;
-  candidate.WaterDelay = 20;
-  candidate.TankDelay = 20;
-  candidate.ACPDelay = 20;
-  candidate.StepperStepMl = STEPPER_STEP_ML;
-  candidate.StepperStepMlI2C = I2C_STEPPER_STEP_ML_DEFAULT;
-  candidate.useautospeed = false;
-  candidate.useDetector = false;
-  candidate.autospeed = 0;
-  candidate.UseWS = true;
-  candidate.Kp = 150.0;
-  candidate.Ki = 1.4;
-  candidate.Kd = 1.4;
-  candidate.StbVoltage = 100.0;
-  candidate.BVolt = 230.0;
-#ifndef SAMOVAR_USE_SEM_AVR
-  candidate.BKPower = 45.0f;
-#else
-  candidate.BKPower = 200.0f;
-#endif
-  candidate.MainsVoltage = 230.0f;
-  candidate.CheckPower = false;
-  candidate.UseST = true;
-  candidate.rele1 = false;
-  candidate.rele2 = false;
-  candidate.rele3 = false;
-  candidate.rele4 = false;
-  memset(candidate.SteamAdress, 255, sizeof(candidate.SteamAdress));
-  memset(candidate.PipeAdress, 255, sizeof(candidate.PipeAdress));
-  memset(candidate.WaterAdress, 255, sizeof(candidate.WaterAdress));
-  memset(candidate.TankAdress, 255, sizeof(candidate.TankAdress));
-  memset(candidate.ACPAdress, 255, sizeof(candidate.ACPAdress));
-  copyStringSafe(candidate.SteamColor, "#ff0000");
-  copyStringSafe(candidate.PipeColor, "#0000ff");
-  copyStringSafe(candidate.WaterColor, "#00bfff");
-  copyStringSafe(candidate.TankColor, "#008000");
-  copyStringSafe(candidate.ACPColor, "#800080");
-  candidate.blynkauth[0] = '\0';
-  candidate.videourl[0] = '\0';
-  candidate.tg_token[0] = '\0';
-  candidate.tg_chat_id[0] = '\0';
-  candidate.UsePreccureCorrect = true;
-  candidate.ChangeProgramBuzzer = false;
-  candidate.UseBuzzer = false;
-  candidate.UseBBuzzer = false;
-  candidate.DistTimeF = 16;
-  candidate.UseHLS = true;
-  candidate.MaxPressureValue = 0;
-  candidate.NbkIn = 0;
-  candidate.NbkDelta = 0;
-  candidate.NbkDM = 0;
-  candidate.NbkDP = 0;
-  candidate.NbkSteamT = 0;
-  candidate.NbkOwPress = 0;
-  candidate.ColDiam = 2.0f;
-  candidate.ColHeight = 0.5f;
-  candidate.PackDens = 80;
-  candidate.SuvidHoldMinutes = 0;
+#define SAMOVAR_DEFAULT_FIELD(kind, name, size, deflt, scope) deflt;
+  SAMOVAR_PROFILE_FIELDS(SAMOVAR_DEFAULT_FIELD)
+#undef SAMOVAR_DEFAULT_FIELD
 }
 
 PersistResult save_profile_nvs(const SetupEEPROM& candidate) {

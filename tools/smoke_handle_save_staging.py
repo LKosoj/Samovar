@@ -219,9 +219,14 @@ for name, parse_body, parser in (
         )
 
 if setup_processor:
+    if re.search(r"\bSamSetup\.[A-Za-z_][A-Za-z0-9_]*\s*=(?!=)", setup_processor):
+        errors.append("setupKeyProcessor mutates a SamSetup field directly")
+    if re.search(r"\bSamSetup\.\*[A-Za-z0-9_.]+\s*=(?!=)", setup_processor):
+        errors.append("setupKeyProcessor mutates a SamSetup field via member pointer")
     for field in ("SetPipeTemp", "SetWaterTemp", "SetTankTemp", "SetACPTemp"):
-        if re.search(rf"\bSamSetup\.{field}\s*=", setup_processor):
-            errors.append(f"setupKeyProcessor mutates SamSetup.{field}")
+        initializer = f'{{"{field}", &SetupEEPROM::{field}}}'
+        if initializer not in web_text:
+            errors.append(f"setupKeyProcessor nan-safe table missing initializer for {field}: {initializer}")
 
 if errors:
     print("handleSave staging smoke failed:")

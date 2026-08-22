@@ -14,7 +14,6 @@ from test_numeric_input_ui_browser import QuietHandler, cleanup, render_site, ru
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_CLI = Path("/tmp/samovar-playwright-cli-0.1.17/node_modules/.bin/playwright-cli")
 
 
 BROWSER_TEST = r'''async page => {
@@ -601,13 +600,8 @@ class ReportHandler(QuietHandler):
 
 def verify_cli() -> str:
     cli = shutil.which("playwright-cli")
-    if cli != str(EXPECTED_CLI):
-        raise RuntimeError(f"isolated playwright-cli required, got {cli!r}")
-    version = subprocess.run(
-        [cli, "--version"], capture_output=True, text=True, check=False, timeout=30
-    )
-    if version.returncode != 0 or version.stdout.strip() != "0.1.17":
-        raise RuntimeError(f"playwright-cli version mismatch: {version.stdout.strip()!r}")
+    if not cli:
+        raise RuntimeError("playwright-cli is required for the U-04 browser gate")
     return cli
 
 

@@ -100,16 +100,6 @@ inline SamovarCommands mode_start_command(SAMOVAR_MODE mode) {
   return ops != nullptr ? ops->startCommand : SAMOVAR_START;
 }
 
-inline bool mode_is_program_owner(SAMOVAR_MODE mode) {
-  return mode == SAMOVAR_RECTIFICATION_MODE ||
-         mode == SAMOVAR_DISTILLATION_MODE ||
-         mode == SAMOVAR_BEER_MODE ||
-         mode == SAMOVAR_BK_MODE ||
-         mode == SAMOVAR_NBK_MODE ||
-         mode == SAMOVAR_SUVID_MODE ||
-         mode == SAMOVAR_LUA_MODE;
-}
-
 inline bool mode_status_session_active(int16_t status) {
   if (status > SAMOVAR_STATUS_IDLE && status < SAMOVAR_STATUS_DISTILLATION) return true;  // ректификация — спец-диапазон
   const ModeOps* ops = mode_registry();
@@ -129,7 +119,7 @@ inline bool mode_startval_session_active(int16_t value) {
 }
 
 inline bool program_update_session_active() {
-  if (PowerOn && mode_is_program_owner(Samovar_Mode)) return true;
+  if (PowerOn) return true;
   if (mode_status_session_active(SamovarStatusInt)) return true;
   if (mode_startval_session_active(startval)) return true;
   return false;

@@ -848,7 +848,6 @@ void check_mixer_state() {
  * @param dir true — реверс, false — прямое вращение
  */
 ActuatorCommandResult set_mixer_state(bool state, bool dir) {
-  //Serial.println("State = " + String(state) + "; DIR = " + String(dir) + "; alarm_c_min = " + String(alarm_c_min) + "; alarm_c_low_min = " + String(alarm_c_low_min));
   if (state) {
     bool mixerRelayEnabled = false;
     bool mixerStepperStarted = false;
@@ -953,7 +952,6 @@ void set_heater_state(float setpoint, float temp) {
     heater_state = true;
 #ifdef SAMOVAR_USE_POWER
     vTaskDelay(5 / portTICK_PERIOD_MS);
-    //set_power_mode(POWER_SPEED_MODE);
     set_current_power(SamSetup.BVolt);
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
@@ -1062,11 +1060,8 @@ void setHeaterPosition(bool state) {
   } else {
 #ifdef SAMOVAR_USE_POWER
     if (!current_power_mode_is(POWER_SLEEP_MODE)) {
-      //delay(200); 5.13
       set_power_mode(POWER_SLEEP_MODE);
     }
-    //Устанавливаем заданное напряжение
-    //set_current_power(0);
 #else
     set_current_power_mode_value(POWER_WORK_MODE);
     digitalWrite(RELE_CHANNEL1, !SamSetup.rele1);

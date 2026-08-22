@@ -9,11 +9,20 @@ from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
 # Сборка: сюда build_web_assets.py кладёт .gz. Содержимое читаем из источника,
 # продукты сжатия - отсюда.
 BUILD = ROOT / "data"
+
+
+def read_page(name: str) -> str:
+    """Разворачивает <!--#include--> (data_raw/partials/) той же функцией, что
+    использует сама сборка - не копией её логики."""
+    return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
 PAGES = (
     "index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm",
     "program.htm", "setup.htm", "chart.htm", "calibrate.htm",
@@ -123,7 +132,7 @@ def digest(path: Path) -> str:
 
 
 def parse_page(name: str) -> tuple[str, MarkupParser]:
-    source = (DATA / name).read_text(encoding="utf-8")
+    source = read_page(name)
     parser = MarkupParser()
     parser.feed(source)
     return source, parser
@@ -319,7 +328,7 @@ def check_scripts(errors: list[str]) -> None:
     # setup.htm and i2cstepper.htm no longer keep local copies of openTab/applyTheme; they
     # delegate to the shared, already ARIA-verified app.js implementations above. Confirm the
     # delegation wiring is actually present instead of re-checking duplicated logic.
-    setup = (DATA / "setup.htm").read_text(encoding="utf-8")
+    setup = read_page("setup.htm")
     if "SamovarApp.openTab(" not in setup:
         errors.append("data/setup.htm: tab buttons do not delegate to SamovarApp.openTab")
     if "SamovarApp.initTheme(" not in setup or "SamovarApp.toggleTheme(" not in setup:

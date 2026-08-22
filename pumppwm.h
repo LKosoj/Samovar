@@ -53,7 +53,6 @@ ActuatorCommandResult set_pump_pwm(float duty) {
   if (duty == 0) pump_started = false;
   pump_pwm.write(duty);
   water_pump_speed = duty;
-  //MsgLog = duty;
   return ACTUATOR_COMMAND_APPLIED;
 }
 

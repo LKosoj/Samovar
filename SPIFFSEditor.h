@@ -111,7 +111,6 @@ static void loadExcludeList(fs::FS &_fs, const char *filename) {
   static char linebuf[SPIFFS_MAXLENGTH_FILEPATH];
   fs::File excludeFile = _fs.open(filename, "r");
   if (!excludeFile) {
-    //addExclude("/*.js.gz");
     return;
   }
 #ifdef ESP32
@@ -184,8 +183,6 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
           return false;
         }
         if (p[0] != '/') p = "/" + p;
-        //        request->_tempFile = _fs.open(request->arg("edit"), "r");
-        //request->_tempFile = _fs.open(p, "r");
         fs::FS& ref = const_cast <fs::FS&>(_fs);
         request->_tempFile = ref.open(p, "r");
         if (!request->_tempFile) {
@@ -204,7 +201,6 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
           return false;
         }
         if (p[0] != '/') p = "/" + p;
-        //request->_tempFile = _fs.open(p, "r");
         fs::FS& ref = const_cast <fs::FS&>(_fs);
         request->_tempFile = ref.open(p, "r");
         if (!request->_tempFile) {
@@ -217,7 +213,6 @@ bool SPIFFSEditor::canHandle(AsyncWebServerRequest *request) const {
         }
 #endif
       }
-//      request->addInterestingHeader("If-Modified-Since");
       return true;
     }
     else if (request->method() == HTTP_POST)

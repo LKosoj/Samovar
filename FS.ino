@@ -127,18 +127,6 @@ String formatBytes(size_t bytes) {
   }
 }
 
-//String get_edit_script(){
-//  File f = SPIFFS.open("/edit.htm");
-//  if (f) {
-//    //нашли файл со скриптом, выполняем
-//    String s;
-//    s = f.readString();
-//    f.close();
-//    return s;
-//  }
-//  return "";
-//}
-
 // Инициализация FFS
 FsInitResult FS_init(void) {
   bool formatted = false;
@@ -156,14 +144,6 @@ FsInitResult FS_init(void) {
   }
 
   total_byte = SPIFFS.totalBytes();
-
-  //  {
-  //    File dir = SPIFFS.open("/");
-  //    while (dir.openNextFile()) {
-  //      String fileName = dir.name();
-  //      //size_t fileSize = dir.size();
-  //    }
-  //  }
 
   return formatted ? FS_INIT_FORMATTED : FS_INIT_OK;
 }

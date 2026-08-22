@@ -619,48 +619,6 @@ inline void tick_power_transition() {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef SAMOVAR_USE_POWER
 
-void clear_serial_in_buff() { // Быстрая очистка буфера (максимум 100 символов)
-  uint8_t cleared = 0;
-  while (Serial2.available() && cleared < 100) {
-      Serial2.read();
-      cleared++;
-  }
-}
-
-#ifdef SAMOVAR_USE_SEM_AVR
-static constexpr const char* SEM_AVR_SAMOVAR_AT_PREFIX = "\xD0\x90\xD0\xA2";
-
-static inline void sem_avr_print_samovar_command(const char* suffix) {
-  // SEM_AVR distinguishes Samovar power commands from RMVK voltage commands by
-  // the legacy UTF-8 Cyrillic A/T prefix bytes. Keep the bytes explicit.
-  Serial2.print(SEM_AVR_SAMOVAR_AT_PREFIX);
-  Serial2.print(suffix);
-}
-
-static inline bool sem_avr_write_samovar_command(
-  const char* suffix,
-  uint64_t powerGeneration,
-  bool energizing
-) {
-  char command[POWER_UART_COMMAND_MAX];
-  const int length = snprintf(
-    command,
-    sizeof(command),
-    "%s%s",
-    SEM_AVR_SAMOVAR_AT_PREFIX,
-    suffix
-  );
-  return length > 0 && (size_t)length < sizeof(command) &&
-         heater_uart_enqueue(
-           UART_NUM_2,
-           command,
-           (size_t)length,
-           powerGeneration,
-           energizing
-         );
-}
-#endif
-
 static constexpr uint32_t POWER_RESPONSE_ERROR_INTERVAL_MS = 5000;
 
 static inline void report_power_response_error(
@@ -695,198 +653,41 @@ static inline void mark_power_regulator_online() {
   last_reg_online = millis();
 }
 
-static inline void commit_kvic_power_response(const PowerRegulatorTelemetry& parsed) {
-  // Ток валиден по факту разбора пакета; target/mode применяем только если валидны
-  // (best-effort). reg_online держим по факту получения пакета.
-  current_power_volt = parsed.currentValue;
-  if (parsed.hasTarget) target_power_volt = parsed.targetValue;
-  if (parsed.hasMode) set_current_power_mode_value(String(parsed.mode));
-  mark_power_regulator_online();
-}
-
-static inline void commit_sem_power_mode_response(char mode) {
-  set_current_power_mode_value(String(mode));
-  mark_power_regulator_online();
-}
-
-static inline void commit_sem_current_power_response(uint16_t value) {
-  current_power_volt = value;
-  mark_power_regulator_online();
-}
-
-static inline void commit_sem_target_power_response(uint16_t value) {
-  // Транзиентный «0» от +VS? игнорируем (HEAD-семантика): не обнуляем уставку,
-  // но связь считаем живой.
-  if (value != 0) target_power_volt = value;
-  mark_power_regulator_online();
-}
-
-#ifndef SAMOVAR_USE_RMVK
-void triggerPowerStatus(void *parameter) {
-  static String buffer;
-  const uint16_t MAX_BUFFER_SIZE = 50; // Ограничение размера буфера (5 пакетов по 9 символов + запас)
-  while (true) {
-    process_pending_power_request();
-    ulTaskNotifyTake(pdTRUE, 500 / portTICK_PERIOD_MS);
-    buffer = "";
-    uint16_t readCount = 0;
-    // Читаем данные с ограничением размера буфера
-    while (Serial2.available() && readCount < MAX_BUFFER_SIZE) {
-        char c = Serial2.read();
-        buffer += c;
-        readCount++;
-    }
-    // Если накопилось больше лимита - оставляем только последние символы
-    if (buffer.length() > MAX_BUFFER_SIZE) {
-        buffer = buffer.substring(buffer.length() - MAX_BUFFER_SIZE);
-    }
-
-    // Если в буфере есть данные
-    if (buffer.length() >= 9) { // Минимум 9 символов для полного пакета (T1234567\r)
-        // Находим все позиции \r в буфере
-        int crPositions[5]; // Массив для позиций \r (максимум 5 пакетов)
-        int crCount = 0;
-        for (int i = 0; i < buffer.length() && crCount < 5; i++) {
-            if (buffer.charAt(i) == '\r') {
-                crPositions[crCount] = i;
-                crCount++;
-            }
-        }
-
-        // Проверяем пакеты от последнего к первому
-        bool packetFound = false;
-        for (int i = crCount - 1; i >= 0 && !packetFound; i--) {
-            int crPos = crPositions[i];
-            // Проверяем, что перед \r есть минимум 8 символов
-            if (crPos >= 8) {
-                // Берем 8 символов перед \r (формат T1234567)
-                String data = buffer.substring(crPos - 8, crPos);
-
-                PowerRegulatorTelemetry parsed = {};
-                NumericParseResult result = parse_kvic_power_response(data.c_str(), parsed);
-                if (result.ok()) {
-                    commit_kvic_power_response(parsed);
-                    packetFound = true;
 #ifdef __SAMOVAR_DEBUG
-                    Serial.println("KVIC: " + data);
-#endif
-                } else {
-                    report_power_response_error("KVIC", result);
-                }
-            }
-        }
-    }
-    // Если давно не было ответа от регулятора — считаем его оффлайн.
-    // Таймаут с запасом, т.к. запросы идут пачкой и с задержками.
-    if (reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL) {
-      reg_online = false;
-    }
-  }
-}
+  #define POWER_DEBUG_LOG(...) do { __VA_ARGS__; } while (0)
 #else
-void triggerPowerStatus(void *parameter) {
-  String resp;
-  while (true) {
-    process_pending_power_request();
-    if (PowerOn) {
+  #define POWER_DEBUG_LOG(...) do {} while (0)
+#endif
+
+inline String regulator_mode_text(SafetyRegulatorMode mode) {
+  switch (mode) {
+    case SAFETY_REGULATOR_MODE_SLEEP: return String(POWER_SLEEP_MODE);
+    case SAFETY_REGULATOR_MODE_SPEED: return String(POWER_SPEED_MODE);
+    case SAFETY_REGULATOR_MODE_WORK: return String(POWER_WORK_MODE);
+  }
+  return String();
+}
+
 #ifdef SAMOVAR_USE_SEM_AVR
-      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
-        vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        clear_serial_in_buff();
-        vTaskDelay(5 / portTICK_RATE_MS);
-        sem_avr_print_samovar_command("+SS?\r");
-        for (int i = 0; i < 2; i++) {
-          vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
-          if (Serial2.available()) {
-            resp = Serial2.readStringUntil('\r');
-            char mode = '\0';
-            NumericParseResult result = parse_sem_power_mode_response(resp.c_str(), mode);
-            if (result.ok()) commit_sem_power_mode_response(mode);
-            else report_power_response_error("SEM +SS?", result);
-#ifdef __SAMOVAR_DEBUG
-            if (result.ok()) WriteConsoleLog("CPM=" + get_current_power_mode_value());
-#endif
-            break;
-          }
-        }
-        xSemaphoreGive(xSemaphoreAVR);
-      }
-      vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
-      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
-        vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        clear_serial_in_buff();
-        vTaskDelay(5 / portTICK_RATE_MS);
-        sem_avr_print_samovar_command("+VO?\r");
-        for (int i = 0; i < 2; i++) {
-          vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
-          if (Serial2.available()) {
-            resp = Serial2.readStringUntil('\r');
-#ifdef __SAMOVAR_DEBUG
-            WriteConsoleLog("CPV=" + resp);
-#endif
-            uint16_t value = 0;
-            NumericParseResult result = parse_sem_power_value_response(
-                resp.c_str(), SamSetup.HeaterResistant, value, /*telemetry=*/true);
-            if (result.ok()) commit_sem_current_power_response(value);
-            else report_power_response_error("SEM +VO?", result);
-            break;
-          }
-        }
-        xSemaphoreGive(xSemaphoreAVR);
-      }
-      vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
-      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
-        vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        clear_serial_in_buff();
-        vTaskDelay(5 / portTICK_RATE_MS);
-        sem_avr_print_samovar_command("+VS?\r");
-        for (int i = 0; i < 2; i++) {
-          vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
-          if (Serial2.available()) {
-            resp = Serial2.readStringUntil('\r');
-#ifdef __SAMOVAR_DEBUG
-            WriteConsoleLog("TPV=" + resp);
-#endif
-            uint16_t value = 0;
-            NumericParseResult result = parse_sem_power_value_response(
-                resp.c_str(), SamSetup.HeaterResistant, value, /*telemetry=*/true);
-            if (result.ok()) commit_sem_target_power_response(value);
-            else report_power_response_error("SEM +VS?", result);
-            break;
-          }
-        }
-        xSemaphoreGive(xSemaphoreAVR);
-      }
-      vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
-#else
-      current_power_volt = RMVK_get_out_voltge();
-      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-      uint16_t v = RMVK_get_store_out_voltge();
-      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-      rmvk.on = RMVK_get_state() > 0;
-      if (v != 0) {
-        target_power_volt = v;
-      }
-#endif
-    }
-    // Если давно не было ответа от регулятора — считаем его оффлайн.
-    // Таймаут с запасом, т.к. запросы идут пачкой и с задержками.
-    if (reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 5000UL) {
-      reg_online = false;
-    }
-    ulTaskNotifyTake(pdTRUE, RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
-  }
-}
+#include "power_regulator_sem.h"
+#elif defined(SAMOVAR_USE_RMVK)
+#include "power_regulator_rmvk.h"
+#elif defined(SAMOVAR_USE_POWER)
+#include "power_regulator_kvic.h"
 #endif
 
+// ВНИМАНИЕ: #ifndef __SAMOVAR_DEBUG ниже отключает не печать, а САМУ защитную
+// проверку связи с регулятором (см. AGENTS.md/T4) - НЕ сворачивать в POWER_DEBUG_LOG.
 void check_power_error() {
 #ifndef __SAMOVAR_DEBUG
   if (SamSetup.CheckPower && PowerOn) {
     // 1) Потеря связи с регулятором: отключаем нагрев при длительном отсутствии ответа.
     // [L-10] Аварийный таймаут здесь — 15000 мс.
-    // В triggerPowerStatus() reg_online сбрасывается с разными таймаутами намеренно:
-    //   Serial2-ветка (#ifndef SAMOVAR_USE_RMVK): 15000 мс (пакеты идут пассивно, нужен запас);
-    //   RMVK-ветка   (#else):                      5000 мс (опрос активный, детект быстрее).
+    // В triggerPowerStatus() reg_online сбрасывается с разными таймаутами намеренно;
+    // функция разнесена по бэкендам:
+    //   power_regulator_kvic.h: 15000 мс (пакеты идут пассивно, нужен запас);
+    //   power_regulator_rmvk.h:  5000 мс (опрос активный, детект быстрее);
+    //   power_regulator_sem.h:   5000 мс (опрос активный, детект быстрее).
     // Таймаут здесь (15000 мс) выставлен с запасом поверх обоих значений.
     if (!reg_online && last_reg_online > 0 && (millis() - last_reg_online) > 15000UL && !current_power_mode_is(POWER_SLEEP_MODE)) {
       power_err_cnt++;
@@ -955,115 +756,6 @@ inline bool regulator_mode_from_string(const String& modeText, SafetyRegulatorMo
     return true;
   }
   return false;
-}
-
-inline String regulator_mode_text(SafetyRegulatorMode mode) {
-  switch (mode) {
-    case SAFETY_REGULATOR_MODE_SLEEP: return String(POWER_SLEEP_MODE);
-    case SAFETY_REGULATOR_MODE_SPEED: return String(POWER_SPEED_MODE);
-    case SAFETY_REGULATOR_MODE_WORK: return String(POWER_WORK_MODE);
-  }
-  return String();
-}
-
-inline bool apply_regulator_voltage_blocking(float Volt, uint64_t powerGeneration) {
-#ifdef __SAMOVAR_DEBUG
-  WriteConsoleLog("Set current power =" + (String)Volt);
-#endif
-  vTaskDelay(100 / portTICK_PERIOD_MS);
-#ifdef SAMOVAR_USE_RMVK
-#ifndef SAMOVAR_USE_SEM_AVR
-  if (RMVK_set_out_voltge(Volt, powerGeneration) == RMVK_ERROR) return false;
-#else
-  if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 3) / portTICK_RATE_MS)) == pdTRUE) {
-    String Cmd;
-    int V = Volt;
-    if (V < 100) Cmd = "0";
-    else
-      Cmd = "";
-    Cmd = Cmd + (String)V;
-    vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-    const bool queued = sem_avr_write_samovar_command(
-      (String("+VS=") + Cmd + "\r").c_str(),
-      powerGeneration,
-      true
-    );
-    vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-    xSemaphoreGive(xSemaphoreAVR);
-    if (!queued) return false;
-  } else return false;
-#endif
-#else
-  String hexString = String((int)(Volt * 10), HEX);
-  const String command = "S" + hexString + "\r";
-  if (!heater_uart_enqueue(
-        UART_NUM_2,
-        command.c_str(),
-        command.length(),
-        powerGeneration,
-        true
-      )) return false;
-#endif
-  target_power_volt = Volt;
-  return true;
-}
-
-inline bool apply_regulator_mode_blocking(SafetyRegulatorMode mode, uint64_t powerGeneration) {
-  const String Mode = regulator_mode_text(mode);
-  if (Mode.length() == 0) return false;
-  vTaskDelay(50 / portTICK_PERIOD_MS);
-#ifdef SAMOVAR_USE_RMVK
-  if (mode == SAFETY_REGULATOR_MODE_SLEEP) {
-#ifdef SAMOVAR_USE_SEM_AVR
-    if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 3) / portTICK_RATE_MS)) == pdTRUE) {
-      vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-      const bool queued = sem_avr_write_samovar_command("+ON=0\r", 0, false);
-      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-      xSemaphoreGive(xSemaphoreAVR);
-      if (!queued) return false;
-    } else return false;
-#else
-    if (RMVK_set_on(0, 0) == RMVK_ERROR) return false;
-#endif
-  } else if (mode == SAFETY_REGULATOR_MODE_SPEED) {
-#ifdef __SAMOVAR_DEBUG
-    WriteConsoleLog("Set power mode=" + Mode);
-#endif
-#ifdef SAMOVAR_USE_SEM_AVR
-    if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT * 7) / portTICK_RATE_MS)) == pdTRUE) {
-      vTaskDelay(RMVK_READ_DELAY / 6 / portTICK_PERIOD_MS);
-      const bool queued = sem_avr_write_samovar_command(
-        "+ON=1\r", powerGeneration, true
-      );
-      vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-      xSemaphoreGive(xSemaphoreAVR);
-      if (!queued) return false;
-    } else return false;
-#else
-    if (RMVK_set_on(1, powerGeneration) == RMVK_ERROR) return false;
-    vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-    if (RMVK_set_out_voltge(MAX_VOLTAGE, powerGeneration) == RMVK_ERROR) return false;
-    vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
-#endif
-  }
-#else
-  const String command = "M" + Mode + "\r";
-  if (!heater_uart_enqueue(
-        UART_NUM_2,
-        command.c_str(),
-        command.length(),
-        powerGeneration,
-        mode != SAFETY_REGULATOR_MODE_SLEEP
-      )) return false;
-  vTaskDelay(300 / portTICK_PERIOD_MS);
-#endif
-  set_current_power_mode_value(Mode);
-  if (mode == SAFETY_REGULATOR_MODE_SLEEP) {
-    target_power_volt = 0;
-    current_power_volt = 0;
-    current_power_p = 0;
-  }
-  return true;
 }
 
 inline ActuatorCommandResult set_current_power(float Volt, uint64_t* generation) {

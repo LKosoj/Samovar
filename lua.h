@@ -2010,23 +2010,12 @@ bool start_lua_script() {
 
 String get_global_variables() {
   String Variables;
-  //  Variables = "bme_temp = " + String(bme_temp) + "\r\n";
-  //  Variables += "start_pressure = " + String(start_pressure) + "\r\n";
   Variables += "bme_pressure = " + String(bme_pressure) + "\r\n";
-  //  Variables += "bme_prev_pressure = " + String(bme_prev_pressure) + "\r\n";
-  //  Variables += "bme_humidity = " + String(bme_humidity) + "\r\n";
-  //  Variables += "SamovarStatus = \"" + SamovarStatus + "\"\r\n";
   Variables += "capacity_num = " + String(capacity_num) + "\r\n";
   Variables += "SamovarStatusInt = " + String(SamovarStatusInt) + "\r\n";
-  //  Variables += "prev_ProgramNum = " + String(prev_ProgramNum) + "\r\n";
   Variables += "ProgramNum = " + String(ProgramNum) + "\r\n";
   Variables += "ProgramLen = " + String(ProgramLen) + "\r\n";
-  //  Variables += "startval = " + String(startval) + "\r\n";
-  //  Variables += "currentstepcnt = " + String(currentstepcnt) + "\r\n";
   Variables += "ActualVolumePerHour = " + String(ActualVolumePerHour) + "\r\n";
-  //  Variables += "CurrrentStepperSpeed = " + String(CurrrentStepperSpeed) + "\r\n";
-  //  Variables += "CurrrentStepps = " + String(CurrrentStepps) + "\r\n";
-  //  Variables += "TargetStepps = " + String(TargetStepps) + "\r\n";
   Variables += "WthdrwlProgress = " + String(WthdrwlProgress) + "\r\n";
   Variables += "PowerOn = " + String(PowerOn) + "\r\n";
   Variables += "PauseOn = " + String(PauseOn) + "\r\n";
@@ -2040,28 +2029,18 @@ String get_global_variables() {
   } else {
     Variables += "program_Wait_Type = \"" + programWaitTypeText + "\"\r\n";
   }
-  //  Variables += "begintime = " + String(begintime) + "\r\n";
-  //  Variables += "t_min = " + String(t_min) + "\r\n";
-  //  Variables += "alarm_t_min = " + String(alarm_t_min) + "\r\n";
-  //  Variables += "alarm_h_min = " + String(alarm_h_min) + "\r\n";
-  //  Variables += "WFpulseCount = " + String(WFpulseCount) + "\r\n";
 #ifdef USE_WATERSENSOR
   Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
   Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
   Variables += "WFflowRate = " + String(WFflowRate) + "\r\n";
 #endif
-  //  Variables += "WFAlarmCount = " + String(WFAlarmCount) + "\r\n";
-  //  Variables += "acceleration_temp = " + String(acceleration_temp) + "\r\n";
   Variables += "WthdrwTimeAll = " + String(WthdrwTimeAll) + "\r\n";
   Variables += "WthdrwTime = " + String(WthdrwTime) + "\r\n";
   Variables += "WthdrwTimeAllS = \"" + WthdrwTimeAllS + "\"\r\n";
   Variables += "WthdrwTimeS = \"" + WthdrwTimeS + "\"\r\n";
   Variables += "pump_started = " + String(pump_started) + "\r\n";
   Variables += "heater_state = " + String(heater_state) + "\r\n";
-  //  Variables += "ofl = \"" + ofl + "\"\r\n";
   Variables += "mixer_status = " + String(mixer_status) + "\r\n";
-  //  Variables += "bk_pwm = " + String(bk_pwm) + "\r\n";
-  //  Variables += "chipId = " + String(chipId) + "\r\n";
   Variables += "alarm_event = " + String(alarm_event) + "\r\n";
   Variables += "acceleration_heater = " + String(acceleration_heater) + "\r\n";
   Variables += "valve_status = " + String(valve_status) + "\r\n";
@@ -2075,8 +2054,6 @@ String get_global_variables() {
   Variables += "program_time = " + String(hasCurrentProgram ? currentProgram.Time : 0) + "\r\n";
   Variables += "program_capacity_num = " + String(hasCurrentProgram ? currentProgram.capacity_num : 0) + "\r\n";
 
-  //  Variables += "loop_lua_fl = " + String(loop_lua_fl) + "\r\n";
-  //  Variables += "show_lua_script = " + String(show_lua_script) + "\r\n";
   Variables += "SamSetup_Mode = " + String(SamSetup.Mode) + "\r\n";
   Variables += "test_num_val = " + String(test_num_val) + "\r\n";
   Variables += "test_str_val = \"" + test_str_val + "\"\r\n";

@@ -114,11 +114,6 @@ LiquidScreen setup_program_back(lql_setup_program_reset_wifi, lql_setup_program_
 
 LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
-//LiquidMenu setup_menu(lcd);
-
-
-//LiquidSystem menu(main_menu, setup_menu, 1);
-
 #define LCD_UPDATE_TIMEOUT 200
 
 const char* get_power_text(){
@@ -163,7 +158,6 @@ const char* get_welcomeStr4(){
 
 void reset_focus() {
   if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    //return;
     do {
       main_menu1.switch_focus();
     } while (main_menu1.is_callable(1));
@@ -235,7 +229,6 @@ void set_menu_screen(uint8_t param) {
       main_screen5.hide(true);
       setup_program_settings.hide(true);
       setup_program_back.hide(true);
-      //main_menu1.switch_focus();
       change_screen(&setup_temp_screen);
       break;
     case 2:  //основное меню после включения колонны
@@ -250,7 +243,6 @@ void set_menu_screen(uint8_t param) {
       main_screen2.hide(false);
       main_screen4.hide(false);
       main_screen5.hide(true);
-      //main_menu1.switch_focus();
       change_screen(&main_screen);
       break;
     case 3:  //основное меню до включения колонны
@@ -265,7 +257,6 @@ void set_menu_screen(uint8_t param) {
       main_screen2.hide(true);
       main_screen4.hide(false);
       main_screen5.hide(true);
-      //main_menu1.switch_focus();
       change_screen(&main_screen);
       break;
     case 4:  //меню установки программ
@@ -280,19 +271,9 @@ void set_menu_screen(uint8_t param) {
       main_screen5.hide(true);
       setup_program_settings.hide(false);
       setup_program_back.hide(false);
-      //main_menu1.switch_focus();
       change_screen(&setup_program_settings);
       break;
   }
-  /*
-      if ((param == 3 || param == 2) && Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-      main_screen.hide(true);
-      main_screen1.hide(true);
-      main_screen2.hide(true);
-      main_screen5.hide(false);
-      change_screen(&main_screen5);
-    }
-  */
 }
 
 void menu_setup() {
@@ -562,11 +543,6 @@ void setupMenu() {
   lcd.backlight();
   lcd.clear();
 
-  //  setup_program_settings.add_line(lql_setup_program_Temp);
-  //  setup_program_settings.add_line(lql_setup_program_Power);
-  //  setup_program_settings.set_displayLineCount(6);
-
-  //setup_temp_screen.set_displayLineCount(4);
   lql_steam_temp.set_decimalPlaces(2);
   lql_setup_pipe_temp.set_decimalPlaces(2);
   lql_setup_water_temp.set_decimalPlaces(2);
@@ -666,9 +642,6 @@ void setupMenu() {
   main_menu1.add_screen(main_screen4);
   main_menu1.add_screen(main_screen5);
 
-  //setup_menu.add_screen(setup_temp_screen);
-  //setup_menu.add_screen(setup_stepper_settings);
-  //setup_menu.add_screen(setup_back_screen);
   main_menu1.add_screen(setup_temp_screen);
   main_menu1.add_screen(setup_set_temp_screen);
   main_menu1.add_screen(setup_stepper_settings);
@@ -687,14 +660,12 @@ void encoder_getvalue() {
 
   bool updscreen = true;
 
-  //encoder.tick();
   // Check all the buttons
   if (encoder.isRight()) {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
     if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
       menu_calibrate();
-      //updscreen = false;
       return;
     }
     if (!main_menu1.is_callable(1)) {
@@ -709,7 +680,6 @@ void encoder_getvalue() {
     multiplier = 1;
     //Если калибровка - энкодером регулируем скорость шагового двигателя
     if (startval == SAMOVAR_STARTVAL_CALIBRATION) {
-      //updscreen = false;
       menu_calibrate_down();
       return;
     }
@@ -745,13 +715,6 @@ void encoder_getvalue() {
     if (CurMin == 120) {
       menu_reset_lcd();
     }
-
-
-    //    tcnt++;
-    //    if (tcnt == 3) {
-    //      tcnt = 0;
-    //      BME_getvalue(false);
-    //    }
 
     if (updscreen) menu_softUpdate();
 

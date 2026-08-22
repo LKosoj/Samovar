@@ -5,6 +5,9 @@ from pathlib import Path
 
 from smoke_helpers import extract_function_body, strip_cpp_comments
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
 
@@ -49,7 +52,9 @@ COMMAND_TOKENS = ["OK", "BUSY", "IGNORED", "POWER_OFF", "BAD_REQUEST"]
 def read_text(path):
   if not path.exists():
     return None
-  return path.read_text(encoding="utf-8", errors="ignore")
+  # Разворачиваем <!--#include--> той же функцией, что использует сама сборка;
+  # для файлов без директив (WebServer.ino, COMPRESS-файлы) это no-op.
+  return resolve_includes(path.name, path.read_bytes()).decode("utf-8", errors="ignore")
 
 
 def line_of(text, offset):

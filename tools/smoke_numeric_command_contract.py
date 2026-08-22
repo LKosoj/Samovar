@@ -100,9 +100,9 @@ require_ordered_tokens(
     "typed pending command consumption",
     loop_body_with_pending,
     [
-        "waterTemp = pending_water_temp_value;",
+        "take_pending_value(pending_water_temp_flag, pending_water_temp_value, waterTemp)",
         "set_water_temp(waterTemp);",
-        "pumpSpeedSteps = pending_pump_speed_steps;",
+        "take_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)",
         "set_pump_speed(pumpSpeedSteps, true);",
         "pnbk = pending_pnbk_value;",
         "pnbk.kind == CONTROL_NBK_INCREMENT",

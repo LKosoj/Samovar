@@ -213,13 +213,8 @@ void check_alarm() {
 #endif
 
   if (mode_should_open_cooling(false, true, true)) {
-    if (sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP - 5)) {
-      set_buzzer(true);
-      open_valve(true, true);
-    } else if (TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP && PowerOn) {
-      set_buzzer(true);
-      open_valve(true, true);
-    }
+    set_buzzer(true);
+    open_valve(true, true);
   }
 
   if (mode_should_close_cooling(SamSetup.SetWaterTemp - DELTA_T_CLOSE_VALVE, true)) {

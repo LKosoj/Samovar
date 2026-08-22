@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import functools
 import http.server
+import io
 import json
 import os
 import shutil
@@ -10,6 +11,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import resolve_includes
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
@@ -153,6 +156,24 @@ BROWSER_TEST = r'''async page => {
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
   def log_message(self, format, *args):
     pass
+
+  def send_head(self):
+    # data_raw/*.htm может содержать <!--#include--> - серверу отдаём тот же
+    # развёрнутый текст, что и build_web_assets.py кладёт в data/, а не
+    # голый HTML-комментарий вместо разметки/JS партиала.
+    path = self.translate_path(self.path)
+    if path.endswith(".htm") and os.path.isfile(path):
+      try:
+        data = resolve_includes(os.path.basename(path), Path(path).read_bytes())
+      except ValueError as exc:
+        self.send_error(500, str(exc))
+        return None
+      self.send_response(200)
+      self.send_header("Content-type", "text/html; charset=utf-8")
+      self.send_header("Content-Length", str(len(data)))
+      self.end_headers()
+      return io.BytesIO(data)
+    return super().send_head()
 
 
 def run_cli(cli, session, arguments, cwd, timeout, check=True):

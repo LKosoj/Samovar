@@ -12,7 +12,6 @@ import threading
 from pathlib import Path
 
 from test_accessibility_ui_browser import (
-    EXPECTED_CLI,
     QuietHandler,
     render_site,
     run_cli,
@@ -178,8 +177,8 @@ BROWSER_TEST = r'''async page => {
 
 def main() -> int:
     cli = shutil.which("playwright-cli")
-    if not cli or Path(cli).resolve() != EXPECTED_CLI.resolve():
-        print(f"stable playwright-cli is required at {EXPECTED_CLI}", file=sys.stderr)
+    if not cli:
+        print("playwright-cli is required for the mode logic browser gate", file=sys.stderr)
         return 1
 
     error = None

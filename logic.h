@@ -272,7 +272,6 @@ PumpCalibrationResult pump_calibrate(int stpspeed) {
     //крутим двигатель, пока не остановят
     if (!stepper_safe_get_state()) stepper_safe_set_current(0);
     stepper_safe_set_max_speed(stpspeed);
-    //stepper.setSpeed(stpspeed);
     stepper_safe_set_target(999999999);
     startService();
   }
@@ -292,7 +291,6 @@ void pause_withdrawal(bool Pause) {
     stepper_safe_stop();
   } else {
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
-    //stepper.setSpeed(CurrrentStepperSpeed);
     stepper_safe_set_current(CurrrentStepps);
     stepper_safe_set_target(TargetStepps);
     startService();
@@ -352,7 +350,6 @@ void set_pump_speed(float pumpspeed, bool continue_process, bool updateBase) {
   stopService();
   stepper_safe_set_max_speed(CurrrentStepperSpeed);
   stepper_safe_set_target(stepper_safe_get_target());
-  //stepper.setSpeed(CurrrentStepperSpeed);
   //Пересчитываем время отбора этой строки программы на текущую скорость
   if (ActualVolumePerHour == 0) program[ProgramNum].Time = 65535;
   else
@@ -787,7 +784,6 @@ void run_program(uint8_t num) {
     CurrrentStepperSpeed = (uint16_t)get_speed_from_rate(program[num].Speed);
     CurrentBaseSpeedRate = program[num].Speed;  // [П3-1] новая база для детектора при старте строки
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
-    //stepper.setSpeed(get_speed_from_rate(program[num].Speed));
     TargetStepps = (uint32_t)program[num].Volume * (uint32_t)SamSetup.StepperStepMl;
     stepper_safe_set_current(0);
     stepper_safe_set_target(TargetStepps);
@@ -831,7 +827,6 @@ void run_program(uint8_t num) {
     stopService();
     stepper_safe_set_max_speed(0);
     CurrrentStepperSpeed = 0;
-    //stepper.setSpeed(-1);
     stepper_safe_stop_reset();
   }
 
@@ -1020,13 +1015,6 @@ float get_alcohol(float t) {
 void set_boiling() {
   //Учитываем задержку измерения Т кипения
   if (!boil_started) {
-    //    if (abs(TankSensor.avgTemp - b_t_temp_prev) > 0.1) {
-    //      b_t_temp_prev = TankSensor.avgTemp;
-    //      b_t_time_min = millis();
-    //    } else if ((millis() - b_t_time_min) > 6 * 1000) {
-    //6 секунд не было изменения температуры куба
-    //d_s_temp_finish = 0;
-    //d_s_time_min = 0;
     //началось кипение, запоминаем Т кипения
     boil_started = true;
     //Проверяем наличие датчика куба (Т >= 2 означает наличие датчика)
@@ -1041,7 +1029,6 @@ void set_boiling() {
 #ifdef USE_WATER_PUMP
     wp_count = -10;
 #endif
-    //    }
   }
 }
 
@@ -1217,8 +1204,6 @@ bool column_wetting() {
       min_voltage_time = 0;
       wetting_started = true;
       voltage_decrease_started = false;
-      //set_power_mode(POWER_WORK_MODE);
-      //vTaskDelay(2000 / portTICK_PERIOD_MS);
       if (target_power_volt > 40) {
         initial_voltage = target_power_volt;
       } else {
