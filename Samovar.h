@@ -486,7 +486,8 @@ struct SetupEEPROM {
 };
 
 struct ImpurityDetector {
-  float tempHistory[30];        // Кольцевой буфер (60 сек при опросе раз в 2 сек)
+  float tempHistory[30];        // Кольцевой буфер усреднённых замеров (окно = 30 * DETECTOR_SAMPLE_INTERVAL_MS)
+  uint32_t sampleTime[30];      // millis() каждого замера: регрессия считается по фактическому времени
   uint8_t historyIndex;         // Текущий индекс в буфере
   uint8_t historySize;          // Фактически заполненный размер
   double historySum;            // Сумма заполненного окна
@@ -496,11 +497,10 @@ struct ImpurityDetector {
   unsigned long lastSampleTime; // Время последнего замера
   float currentTrend;           // Текущий тренд (°C/мин)
   uint8_t detectorStatus;       // Статус: 0=Stable, 1=Correction, 2=Breakthrough
+  uint8_t criticalConfirm;      // Сколько замеров подряд тренд держится выше критического порога
   float correctionFactor;       // Коэффициент коррекции скорости (0.7-1.0)
   unsigned long lastCorrectionTime; // Время последней корректировки
-  float tempStdDev;             // Дисперсия температуры за период
-  uint8_t consecutiveRises;     // Счетчик последовательных повышений температуры
-  float lastTemp;               // Предыдущее значение температуры для отслеживания последовательных повышений
+  float tempVariance;           // Дисперсия температуры в окне истории (именно дисперсия, не СКО)
 };
 
 struct DSSensor {
@@ -552,6 +552,12 @@ DSSensor PipeSensor;                                           //сенсор т
 DSSensor WaterSensor;                                          //сенсор температуры охлаждающей воды или флегмы
 DSSensor TankSensor;                                           //сенсор температуры в кубе
 DSSensor ACPSensor;                                            //сенсор температуры в ТСА
+
+// Номер цикла опроса DS18B20: инкрементируется в конце DS_getvalue().
+// Нужен потребителям, которым важно отличить НОВОЕ показание от повторного чтения
+// того же значения (детектор примесей усредняет показания между своими замерами,
+// а вызывается он на порядок чаще, чем обновляются датчики).
+volatile uint32_t DSUpdateCounter = 0;
 
 WProgram program[PROGRAM_MAX];                                 //массив строк для записи программы отбора.
 

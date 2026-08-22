@@ -48,6 +48,8 @@ SIGNATURES = {
         "float get_adaptive_threshold(float baseThreshold, float variance, float volumePerHour, ProgramType processPhase)",
         "impurity_detector.h",
     ),
+    "detector_base_warning_threshold": ("inline float detector_base_warning_threshold()", "impurity_detector.h"),
+    "detector_warning_threshold": ("inline float detector_warning_threshold()", "impurity_detector.h"),
     "detector_current_recovery_threshold": ("inline float detector_current_recovery_threshold()", "impurity_detector.h"),
     "detector_trend_settled": ("inline bool detector_trend_settled()", "impurity_detector.h"),
 }
@@ -107,15 +109,19 @@ struct DSSensor {
 struct SetupEEPROM {
   bool useautospeed = true;
   uint16_t StepperStepMl = 1000;
-  uint8_t PackDens = 80;
   uint8_t autospeed = 5;
 };
+
+// Порог предупреждения больше не зависит от плотности насадки: пока фон не набран,
+// берётся дефолт, дальше - измеренный шум тренда.
+static const float DETECTOR_DEFAULT_WARNING_TREND = 0.04f;
+static float detector_bg_threshold = 0.0f;
 
 struct ImpurityDetector {
   float correctionFactor = 1.0f;
   unsigned long lastCorrectionTime = 0;
   float currentTrend = 0;
-  float tempStdDev = 0;
+  float tempVariance = 0;
 };
 
 enum ProgramWaitType : uint8_t { PROGRAM_WAIT_NONE = 0, PROGRAM_WAIT_STEAM, PROGRAM_WAIT_PIPE, PROGRAM_WAIT_DETECTOR };
@@ -231,6 +237,8 @@ static void set_pump_speed(float pumpspeed, bool continue_process, bool updateBa
 @PROGRAM_TYPE_AT_BODY@
 @IS_FIRST_BODY_PROGRAM_AFTER_HEADS_BODY@
 @GET_ADAPTIVE_THRESHOLD_BODY@
+@DETECTOR_BASE_WARNING_THRESHOLD_BODY@
+@DETECTOR_WARNING_THRESHOLD_BODY@
 @DETECTOR_CURRENT_RECOVERY_THRESHOLD_BODY@
 @DETECTOR_TREND_SETTLED_BODY@
 @SET_PUMP_SPEED_BODY@
@@ -264,6 +272,7 @@ static void reset_fixture() {
   CurrrentStepperSpeed = 100;
   ActualVolumePerHour = 0;
   CurrentBaseSpeedRate = 0;
+  detector_bg_threshold = 0.0f;
   t_min = 0;
   RowStopPauseCount = 0;
   fake_millis_value = 100000;
@@ -397,6 +406,31 @@ static void test_first_body_after_heads_topologies() {
   SteamSensor.avgTemp = 86.0f;
   withdrawal();
   check(setBodyTempCalls == 1, "H;P;B: set_body_temp() должен был вызваться (единый критерий, П3-8)");
+
+  // Топология B первой строкой: голов перед телом нет, автокоррекция Т тела не положена -
+  // колонна прошла штатную стабилизацию до старта программы, и Т тела ей можно доверять.
+  reset_fixture();
+  program[0].WType = 'B';
+  ProgramNum = 0;
+  ProgramLen = 1;
+  SteamSensor.BodyTemp = 85.0f;
+  SteamSensor.SetTemp = 0.5f;
+  SteamSensor.avgTemp = 86.0f;
+  withdrawal();
+  check(setBodyTempCalls == 0, "B первой строкой: set_body_temp() вызываться не должен");
+  check(program_Wait, "B первой строкой: превышение Т должно давать обычную паузу по датчику");
+
+  // Топология P;B: строка паузы перед телом голов не заменяет.
+  reset_fixture();
+  program[0].WType = 'P';
+  program[1].WType = 'B';
+  ProgramNum = 1;
+  ProgramLen = 2;
+  SteamSensor.BodyTemp = 85.0f;
+  SteamSensor.SetTemp = 0.5f;
+  SteamSensor.avgTemp = 86.0f;
+  withdrawal();
+  check(setBodyTempCalls == 0, "P;B: set_body_temp() вызываться не должен - голов не было");
 }
 
 static void test_trace_h_b_c_t_with_noise_pause_and_recovery() {
@@ -634,6 +668,14 @@ def build_harness() -> str:
             "get_adaptive_threshold",
             "static float get_adaptive_threshold(float baseThreshold, float variance, float volumePerHour, ProgramType processPhase) ",
         ),
+    )
+    harness = harness.replace(
+        "@DETECTOR_BASE_WARNING_THRESHOLD_BODY@",
+        wrap("detector_base_warning_threshold", "static float detector_base_warning_threshold() "),
+    )
+    harness = harness.replace(
+        "@DETECTOR_WARNING_THRESHOLD_BODY@",
+        wrap("detector_warning_threshold", "static float detector_warning_threshold() "),
     )
     harness = harness.replace(
         "@DETECTOR_CURRENT_RECOVERY_THRESHOLD_BODY@",

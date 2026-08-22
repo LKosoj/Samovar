@@ -28,7 +28,7 @@ STYLE_TOKEN_ALLOWLIST = (
 )
 NORMALIZED_SHA256 = {
     "style.css": "c2e2bfc57ea49cf1d67318a71892c0205938635a45c2c17c1d7c1daedfe8f32d",
-    "index.htm": "6a63d3040668bafe8b9342f29612b5a6864a067a0de045518cb8c0da5b6e469e",
+    "index.htm": "d7e5f63f577f2e596e91a984a683c0de0f0b7a063bf7a69fccc6504f509b7e28",
     "beer.htm": "976dd5558dc63ac0bf72ee123777768205be147c7ed18a09153c36cdd2544398",
     "distiller.htm": "6330a1719723ba5a76f45e9f2f90cb9244968ae1e23766b2afd1b6b49e0a6fae",
     "bk.htm": "0913598d673b5b571b87201a93413ee6a17c32f493925a04362b6abad1465033",

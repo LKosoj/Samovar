@@ -259,8 +259,10 @@ TimePredictorFixture timePredictor{99.9f, 12.9f, 44.9f, 22.9f, true, true};
 bool bootDegraded = false;
 String bootDegradedReason = "";
 
-static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
-static const float DETECTOR_STEAM_STABLE_VARIANCE = 0.000625f;
+static const float DETECTOR_SENSOR_QUANT_C = 0.0625f;
+static const float DETECTOR_STEAM_STABLE_SPAN = DETECTOR_SENSOR_QUANT_C * 3.0f;
+static const float DETECTOR_STEAM_STABLE_VARIANCE =
+    DETECTOR_SENSOR_QUANT_C * DETECTOR_SENSOR_QUANT_C;
 float detector_steam_stability_span = 0.025f;
 float detector_steam_stability_variance = 0.000313f;
 uint8_t detector_steam_stability_reason = 0;
@@ -514,7 +516,7 @@ EXPECTED_DEFAULT = (
     '"ACPTemp":30.000,"DetectorTrend":0.125,"DetectorStatus":2,'
     '"DetectorSteamSpan":0.0250,"DetectorSteamVariance":0.000313,'
     '"DetectorSteamStableSeconds":123,"DetectorSteamStabilityReason":0,'
-    '"DetectorSteamSpanThreshold":0.100,"DetectorSteamVarianceThreshold":0.000625,'
+    '"DetectorSteamSpanThreshold":0.188,"DetectorSteamVarianceThreshold":0.003906,'
     '"DetectorRecoveryThreshold":0.1234,"DetectorRecoveryReady":1,'
     '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
     '"useautospeed":1,"version":"6.27",'

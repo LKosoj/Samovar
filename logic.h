@@ -749,7 +749,7 @@ void run_program(uint8_t num) {
   
   ProgramNum = num;
   if (ProgramNum < PROGRAM_MAX && !program_type_empty(program[ProgramNum].WType)) {
-    detector_on_program_start(program[ProgramNum].WType);
+    detector_on_program_start();
   }
   
   // Сбрасываем детектор только если нужно

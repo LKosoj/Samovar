@@ -27,6 +27,44 @@ def telemetry_contract_ok(samovar_source: str, index_source: str) -> bool:
         token in index_source for token in ui_tokens
     )
 
+def stability_gate_ok(detector_source: str) -> bool:
+    """Гейт 10-минутной стабилизации первой строки тела работает по ВЫБРАННОМУ датчику.
+
+    Раньше он стоял под условием !usePipeSensor: при уходе контроля на царгу
+    (Т куба >= 92.5) защита первой строки тела после голов молча отключалась.
+    is_steam_stable() считает диапазон и дисперсию по истории детектора, а история
+    ведётся по detectorTemp, поэтому проверка применима к обоим датчикам и параметра
+    не принимает — передать "не тот" датчик больше нельзя по сигнатуре.
+    """
+    try:
+        body = extract_function_body(detector_source, "void process_impurity_detector()")
+    except ValueError:
+        return False
+    gate = "if (is_first_body_program_after_heads(currentProgram, currentType)) {"
+    if gate not in body:
+        return False
+    if "usePipeSensor && is_first_body_program_after_heads" in body:
+        return False
+    return "if (!is_steam_stable()) {" in body
+
+
+def stability_thresholds_ok(detector_source: str) -> bool:
+    """Пороги стабилизации выражены через квант датчика, а не абстрактными долями градуса.
+
+    Прежние 0.1 °C размаха и дисперсия 0.000625 (СКО 0.4 кванта) лежали НИЖЕ шума
+    квантования DS18B20: температура, дышащая между двумя соседними квантами, давала
+    дисперсию 0.000977, гейт не проходил никогда, и детектор на первой строке тела
+    молча не включался.
+    """
+    span = "static const float DETECTOR_STEAM_STABLE_SPAN = DETECTOR_SENSOR_QUANT_C * 3.0f;"
+    variance = (
+        "static const float DETECTOR_STEAM_STABLE_VARIANCE =\n"
+        "    DETECTOR_SENSOR_QUANT_C * DETECTOR_SENSOR_QUANT_C;"
+    )
+    quant = "static const float DETECTOR_SENSOR_QUANT_C = 0.0625f;"
+    return all(token in detector_source for token in (span, variance, quant))
+
+
 HARNESS = r'''
 #include <cmath>
 #include <cstdint>
@@ -34,13 +72,14 @@ HARNESS = r'''
 
 struct Detector {
   float tempHistory[30];
+  uint32_t sampleTime[30];
   uint8_t historyIndex;
   uint8_t historySize;
   double historySum;
   double historySumSquares;
   float historyMin;
   float historyMax;
-  float tempStdDev;
+  float tempVariance;
 };
 
 static Detector impurityDetector = {};
@@ -56,15 +95,15 @@ static DetectorSteamStabilityReason detector_steam_stability_reason =
     DETECTOR_STEAM_FILLING;
 static float detector_steam_stability_span = 0.0f;
 static float detector_steam_stability_variance = 0.0f;
-static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
+static const float DETECTOR_SENSOR_QUANT_C = 0.0625f;
+static const float DETECTOR_STEAM_STABLE_SPAN = DETECTOR_SENSOR_QUANT_C * 3.0f;
 static const float DETECTOR_STEAM_STABLE_VARIANCE =
-    DETECTOR_STEAM_STABLE_DELTA * DETECTOR_STEAM_STABLE_DELTA * 0.25f;
+    DETECTOR_SENSOR_QUANT_C * DETECTOR_SENSOR_QUANT_C;
 static const uint32_t DETECTOR_STEAM_STABLE_MS = 600000UL;
 static uint32_t fakeNow = 1000;
 static uint32_t millis() { return fakeNow; }
-static uint8_t check_consecutive_rises(float) { return 0; }
-static float calculate_temperature_variance() { return 0.0f; }
 
+@VARIANCE_FUNCTION@
 @UPDATE_FUNCTION@
 @FUNCTION@
 
@@ -93,7 +132,7 @@ static void load(const float* values, uint8_t count) {
 }
 
 int main() {
-  for (uint8_t i = 0; i < 30; i++) update_detector_history(77.0f + i * 0.01f);
+  for (uint8_t i = 0; i < 30; i++) update_detector_history(77.0f + i * 0.01f, i * 4000U);
   check(impurityDetector.historySize == 30, "кольцо должно заполниться 30 точками");
   check(std::fabs(impurityDetector.historyMin - 77.0f) < 0.0001f,
         "кольцо должно хранить минимум");
@@ -103,7 +142,7 @@ int main() {
         "кольцо должно поддерживать сумму");
   check(std::fabs(impurityDetector.historySumSquares - 178540.7555f) < 0.1f,
         "кольцо должно поддерживать сумму квадратов");
-  update_detector_history(78.0f);
+  update_detector_history(78.0f, 30U * 4000U);
   check(std::fabs(impurityDetector.historyMin - 77.01f) < 0.0001f,
         "перезапись старейшего минимума должна обновить минимум");
   check(std::fabs(impurityDetector.historyMax - 78.0f) < 0.0001f,
@@ -116,46 +155,78 @@ int main() {
   float stable[30];
   for (uint8_t i = 0; i < 30; i++) stable[i] = 78.00f + (i % 3) * 0.01f;
   load(stable, 29);
-  check(!is_steam_stable(78.01f), "29 точек недостаточно для полного окна");
+  check(!is_steam_stable(), "29 точек недостаточно для полного окна");
   check(detector_steam_stability_reason == DETECTOR_STEAM_FILLING,
         "29 точек должны сообщать FILLING");
   load(stable, 30);
-  check(!is_steam_stable(78.01f), "первое стабильное окно только запускает выдержку");
+  check(!is_steam_stable(), "первое стабильное окно только запускает выдержку");
   check(detector_steam_stability_reason == DETECTOR_STEAM_HOLDING,
         "стабильное окно должно сообщать причину HOLDING");
   fakeNow += DETECTOR_STEAM_STABLE_MS - 1;
-  check(!is_steam_stable(78.01f), "599.999 секунд недостаточно");
+  check(!is_steam_stable(), "599.999 секунд недостаточно");
   fakeNow += 1;
-  check(is_steam_stable(78.01f), "600 секунд стабильного окна должны дать READY");
+  check(is_steam_stable(), "600 секунд стабильного окна должны дать READY");
 
   float rangeHigh[30];
   for (uint8_t i = 0; i < 30; i++) rangeHigh[i] = 78.00f + (i % 3) * 0.01f;
-  rangeHigh[17] = 78.11f;
+  rangeHigh[17] = 78.25f; // размах 0.25 > 3 квантов (0.1875)
   load(rangeHigh, 30);
-  check(!is_steam_stable(78.04f), "широкий диапазон должен сбрасывать стабильность");
+  check(!is_steam_stable(), "широкий диапазон должен сбрасывать стабильность");
   check(detector_steam_stability_reason == DETECTOR_STEAM_RANGE_HIGH,
         "телеметрия должна объяснять превышенный диапазон");
   check(detector_steam_stable_since == 0, "выброс должен сбросить непрерывную выдержку");
 
   float varianceHigh[30];
-  for (uint8_t i = 0; i < 30; i++) varianceHigh[i] = i < 15 ? 78.00f : 78.09f;
+  for (uint8_t i = 0; i < 30; i++) varianceHigh[i] = i < 15 ? 78.00f : 78.15f;
   load(varianceHigh, 30);
-  check(!is_steam_stable(78.09f), "шумное окно должно отклоняться по дисперсии");
+  check(!is_steam_stable(), "шумное окно должно отклоняться по дисперсии");
   check(detector_steam_stability_reason == DETECTOR_STEAM_VARIANCE_HIGH,
         "телеметрия должна объяснять высокую дисперсию");
 
+  float varianceEdge[30];
+  // разброс ровно в один квант вокруг среднего: дисперсия 0.000977 - именно тот случай,
+  // на котором старый порог 0.000625 отклонял стабильный пар навсегда
+  for (uint8_t i = 0; i < 30; i++) varianceEdge[i] = i < 15 ? 78.00f : 78.0625f;
+  load(varianceEdge, 30);
+  detector_steam_stable_since = 0;
+  check(!is_steam_stable(), "дыхание в один квант только запускает выдержку");
+  check(detector_steam_stability_reason == DETECTOR_STEAM_HOLDING,
+        "дыхание в один квант не должно отклоняться как шум");
+
+  // На четырёх точках дисперсия - не оценка шума, а случайность: адаптивный порог
+  // не должен на неё реагировать, пока окно не набрало минимум пять замеров.
+  float tiny[5] = {78.0f, 78.5f, 79.0f, 78.2f, 78.9f};
+  load(tiny, 4);
+  check(detector_history_variance() == 0.0f,
+        "меньше 5 точек: дисперсия должна быть нулевой");
+  // На неполном окне дисперсия считается по фактическому числу точек. Делить на 30
+  // нельзя: дисперсия завысится в разы и адаптивный порог задерётся на старте строки.
+  load(tiny, 5);
+  check(std::fabs(detector_history_variance() - 0.1496f) < 0.0005f,
+        "на пяти точках дисперсия должна считаться по этим пяти точкам (0.1496)");
+
+  // Инкрементальные суммы копят ошибку округления, и разность может уйти в минус.
+  // Отрицательная дисперсия ушла бы и в телеметрию, и в адаптивный порог, снизив его
+  // ниже базового - ровно там, где детектор должен становиться осторожнее.
+  float flat[30];
+  for (uint8_t i = 0; i < 30; i++) flat[i] = 78.0f;
+  load(flat, 30);
+  impurityDetector.historySumSquares -= 1e-9;  // имитация накопленной ошибки
+  check(detector_history_variance() >= 0.0f,
+        "дисперсия не должна становиться отрицательной из-за ошибки округления");
+
   impurityDetector.historySize = 4;
-  check(!is_steam_stable(78.0f), "неполное окно не должно считаться стабильным");
+  check(!is_steam_stable(), "неполное окно не должно считаться стабильным");
   check(detector_steam_stability_reason == DETECTOR_STEAM_FILLING,
         "неполное окно должно сообщать FILLING");
 
   load(stable, 30);
   fakeNow = UINT32_MAX - 300000U;
-  check(!is_steam_stable(78.01f), "выдержка до переполнения должна стартовать");
+  check(!is_steam_stable(), "выдержка до переполнения должна стартовать");
   fakeNow += DETECTOR_STEAM_STABLE_MS - 1U;
-  check(!is_steam_stable(78.01f), "переполнение millis не должно сокращать выдержку");
+  check(!is_steam_stable(), "переполнение millis не должно сокращать выдержку");
   fakeNow += 1U;
-  check(is_steam_stable(78.01f), "выдержка должна завершиться после wraparound");
+  check(is_steam_stable(), "выдержка должна завершиться после wraparound");
 
   if (failures != 0) return 1;
   std::cout << "rectification steam stability window passed\n";
@@ -194,16 +265,61 @@ def main() -> int:
     if any(telemetry_contract_ok(*mutant) for mutant in telemetry_mutants):
         print("FAIL: мутация recovery-телеметрии пережила контракт", file=sys.stderr)
         return 1
-    body = extract_function_body(source, "bool is_steam_stable(float steamTemp)")
-    function = "bool is_steam_stable(float steamTemp) {" + body + "}"
+    if not stability_gate_ok(source):
+        print(
+            "FAIL: гейт стабилизации первой строки тела должен работать по выбранному датчику",
+            file=sys.stderr,
+        )
+        return 1
+    gate_mutants = (
+        source.replace(
+            "if (is_first_body_program_after_heads(currentProgram, currentType)) {",
+            "if (!usePipeSensor && is_first_body_program_after_heads(currentProgram, currentType)) {",
+            1,
+        ),
+        source.replace("if (!is_steam_stable()) {", "if (false) {", 1),
+    )
+    if any(stability_gate_ok(mutant) for mutant in gate_mutants):
+        print("FAIL: мутация гейта стабилизации пережила контракт", file=sys.stderr)
+        return 1
+    if not stability_thresholds_ok(source):
+        print(
+            "FAIL: пороги стабилизации должны считаться от кванта датчика",
+            file=sys.stderr,
+        )
+        return 1
+    threshold_mutants = (
+        source.replace(
+            "static const float DETECTOR_STEAM_STABLE_SPAN = DETECTOR_SENSOR_QUANT_C * 3.0f;",
+            "static const float DETECTOR_STEAM_STABLE_SPAN = 0.1f;",
+            1,
+        ),
+        source.replace(
+            "static const float DETECTOR_STEAM_STABLE_VARIANCE =\n"
+            "    DETECTOR_SENSOR_QUANT_C * DETECTOR_SENSOR_QUANT_C;",
+            "static const float DETECTOR_STEAM_STABLE_VARIANCE = 0.000625f;",
+            1,
+        ),
+    )
+    if any(stability_thresholds_ok(mutant) for mutant in threshold_mutants):
+        print("FAIL: мутация порогов стабилизации пережила контракт", file=sys.stderr)
+        return 1
+    body = extract_function_body(source, "bool is_steam_stable()")
+    function = "bool is_steam_stable() {" + body + "}"
     update_body = extract_function_body(
-        source, "void update_detector_history(float columnTemp)"
+        source, "void update_detector_history(float columnTemp, uint32_t sampleMillis)"
     )
     update_function = (
-        "void update_detector_history(float columnTemp) {" + update_body + "}"
+        "void update_detector_history(float columnTemp, uint32_t sampleMillis) {"
+        + update_body
+        + "}"
     )
-    harness = HARNESS.replace("@UPDATE_FUNCTION@", update_function).replace(
-        "@FUNCTION@", function
+    variance_body = extract_function_body(source, "float detector_history_variance()")
+    variance_function = "float detector_history_variance() {" + variance_body + "}"
+    harness = (
+        HARNESS.replace("@VARIANCE_FUNCTION@", variance_function)
+        .replace("@UPDATE_FUNCTION@", update_function)
+        .replace("@FUNCTION@", function)
     )
     with tempfile.TemporaryDirectory(prefix="samovar-steam-stability-") as temp_dir:
         temp = Path(temp_dir)

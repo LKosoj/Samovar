@@ -250,7 +250,14 @@
                 'Стабилизация пара: расширенная телеметрия недоступна в этой версии прошивки.';
             }
             
-            if (myObj.DetectorStatus == 0) {
+            // На головах детектор только наблюдает: тренд считается и пишется в лог,
+            // но скоростью не управляет (см. impurity_detector.h). Отдельная подпись
+            // нужна, чтобы "Стабильно" не читалось как "детектор следит за проскоком".
+            if (myObj.PrgType === 'H') {
+              detStatus.innerHTML = '👁 Головы: только наблюдение';
+              detStatus.style.color = SamovarApp.cssVar('--detector-ok-text');
+              detBlock.style.backgroundColor = SamovarApp.cssVar('--detector-ok-bg');
+            } else if (myObj.DetectorStatus == 0) {
               detStatus.innerHTML = '✅ Стабильно';
               detStatus.style.color = SamovarApp.cssVar('--detector-ok-text');
               detBlock.style.backgroundColor = SamovarApp.cssVar('--detector-ok-bg');

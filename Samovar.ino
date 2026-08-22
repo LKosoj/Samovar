@@ -3468,7 +3468,7 @@ static void writeAjaxTelemetryFields(
   jsonAddKey(out, first, "DetectorSteamStabilityReason");
   out.print(snapshot.detectorSteamStabilityReason);
   jsonAddKey(out, first, "DetectorSteamSpanThreshold");
-  out.print(format_float(DETECTOR_STEAM_STABLE_DELTA * 2.0f, 3));
+  out.print(format_float(DETECTOR_STEAM_STABLE_SPAN, 3));
   jsonAddKey(out, first, "DetectorSteamVarianceThreshold");
   out.print(format_float(DETECTOR_STEAM_STABLE_VARIANCE, 6));
   jsonAddKey(out, first, "DetectorRecoveryThreshold");

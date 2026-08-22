@@ -227,7 +227,7 @@ bool column_wetting();
 void init_impurity_detector();
 void reset_heat_loss_calculation();
 void reset_impurity_detector();
-void detector_on_program_start(ProgramType wtype);
+void detector_on_program_start();
 void detector_on_auto_resume();
 void detector_on_manual_resume();
 void process_impurity_detector();

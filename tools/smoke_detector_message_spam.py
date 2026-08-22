@@ -53,7 +53,7 @@ struct ImpurityDetector {
   float correctionFactor = 1.0f;
   unsigned long lastCorrectionTime = 0;
   float currentTrend = 0;
-  float tempStdDev = 0;
+  float tempVariance = 0;
 };
 
 static ImpurityDetector impurityDetector;

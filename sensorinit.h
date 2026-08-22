@@ -324,6 +324,8 @@ void DS_getvalue(void) {
   TankSensor.avgTemp = SamSetup.DeltaTankTemp;
   ACPSensor.avgTemp = SamSetup.DeltaACPTemp;
 #endif
+
+  DSUpdateCounter++;
 }
 
 void scan_ds_adress() {

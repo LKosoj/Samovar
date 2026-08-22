@@ -64,13 +64,27 @@ static bool copy_program_wait_type(ProgramWaitType& out) { out = currentWaitType
 
 static int updateDetectorHistoryCalls = 0;
 static float lastHistoryTemp = 0;
-static void update_detector_history(float columnTemp) { updateDetectorHistoryCalls++; lastHistoryTemp = columnTemp; }
+static uint32_t lastHistoryTime = 0;
+static void update_detector_history(float columnTemp, uint32_t sampleMillis) {
+  updateDetectorHistoryCalls++;
+  lastHistoryTemp = columnTemp;
+  lastHistoryTime = sampleMillis;
+}
 
 static float trendFixture = 0;
 static int calculateTrendCalls = 0;
 static float calculate_temperature_trend() { calculateTrendCalls++; return trendFixture; }
 
-// ---- Реальный код под тестом (extract_braced_block_after) ----
+// Накопитель усреднения и счётчик опроса датчиков - те же имена, что в прошивке
+static const uint32_t DETECTOR_SAMPLE_INTERVAL_MS = 4000UL;
+static volatile uint32_t DSUpdateCounter = 0;
+static double detector_avg_sum = 0.0;
+static uint16_t detector_avg_count = 0;
+static uint32_t detector_last_ds_counter = 0;
+
+// ---- Реальный код под тестом (extract_function_body / extract_braced_block_after) ----
+@SAMPLE_TICK_FUNCTION@
+
 static void detector_pause_tick() {
 @PAUSE_BRANCH_BODY@
 }
@@ -96,6 +110,11 @@ static void reset_fixture() {
   lastHistoryTemp = 0;
   trendFixture = 0;
   calculateTrendCalls = 0;
+  lastHistoryTime = 0;
+  DSUpdateCounter = 0;
+  detector_avg_sum = 0.0;
+  detector_avg_count = 0;
+  detector_last_ds_counter = 0;
 }
 
 // Сценарий 1: детекторная пауза (program_Wait && тип == PROGRAM_WAIT_DETECTOR) -
@@ -106,13 +125,14 @@ static void test_detector_pause_samples() {
   currentWaitTypeFixture = PROGRAM_WAIT_DETECTOR;
   detector_last_pipe_sensor = 0;  // источник - пар
   SteamSensor.avgTemp = 91.5f;
-  impurityDetector.lastSampleTime = 0;  // now(100000) - 0 >= 2000
+  impurityDetector.lastSampleTime = 0;  // now(100000) - 0 >= DETECTOR_SAMPLE_INTERVAL_MS
   trendFixture = 0.42f;
 
   detector_pause_tick();
 
   check(updateDetectorHistoryCalls == 1, "детекторная пауза: update_detector_history должен был вызваться");
   check(lastHistoryTemp == 91.5f, "детекторная пауза: в историю должна была попасть текущая Т пара");
+  check(lastHistoryTime == fake_millis_value, "детекторная пауза: точка должна получить метку времени");
   check(calculateTrendCalls == 1, "детекторная пауза: calculate_temperature_trend должен был вызваться");
   check(impurityDetector.currentTrend == 0.42f, "детекторная пауза: currentTrend должен был обновиться");
   check(impurityDetector.lastSampleTime == fake_millis_value, "детекторная пауза: lastSampleTime должен был обновиться");
@@ -156,10 +176,98 @@ static void test_manual_pause_does_not_sample_even_with_stale_detector_wait_type
   check(impurityDetector.lastSampleTime == 0, "ручная пауза: lastSampleTime не должен был обновиться");
 }
 
+// Сценарий 4: усреднение. Между точками истории показания датчика копятся, а в историю
+// ложится их среднее - именно это даёт дробное значение между квантами DS18B20.
+static void test_samples_are_averaged() {
+  reset_fixture();
+  program_Wait = true;
+  currentWaitTypeFixture = PROGRAM_WAIT_DETECTOR;
+  detector_last_pipe_sensor = 0;
+  impurityDetector.lastSampleTime = fake_millis_value;  // интервал ещё не истёк
+
+  SteamSensor.avgTemp = 78.0f;
+  DSUpdateCounter = 1;
+  detector_pause_tick();
+  SteamSensor.avgTemp = 78.5f;
+  DSUpdateCounter = 2;
+  detector_pause_tick();
+  check(updateDetectorHistoryCalls == 0, "усреднение: до истечения интервала точка не пишется");
+
+  fake_millis_value += DETECTOR_SAMPLE_INTERVAL_MS;
+  SteamSensor.avgTemp = 79.0f;
+  DSUpdateCounter = 3;
+  detector_pause_tick();
+  check(updateDetectorHistoryCalls == 1, "усреднение: по истечении интервала точка должна лечь в историю");
+  check(lastHistoryTemp > 78.49f && lastHistoryTemp < 78.51f,
+        "усреднение: в историю должно попасть среднее трёх чтений (78.5), а не последнее");
+}
+
+// Сценарий 5: одно и то же показание датчика не должно попадать в среднее дважды.
+// Детектор вызывается из loop() сотни раз в секунду, датчик обновляется раз в секунду.
+static void test_repeated_reads_are_not_double_counted() {
+  reset_fixture();
+  program_Wait = true;
+  currentWaitTypeFixture = PROGRAM_WAIT_DETECTOR;
+  detector_last_pipe_sensor = 0;
+  impurityDetector.lastSampleTime = fake_millis_value;
+
+  SteamSensor.avgTemp = 78.0f;
+  DSUpdateCounter = 1;
+  for (int i = 0; i < 50; i++) detector_pause_tick();  // счётчик датчика не менялся
+  SteamSensor.avgTemp = 79.0f;
+  DSUpdateCounter = 2;
+  detector_pause_tick();
+
+  fake_millis_value += DETECTOR_SAMPLE_INTERVAL_MS;
+  DSUpdateCounter = 3;
+  detector_pause_tick();
+  check(updateDetectorHistoryCalls == 1, "повторные чтения: точка должна лечь ровно одна");
+  check(lastHistoryTemp > 78.65f && lastHistoryTemp < 78.68f,
+        "повторные чтения: 50 одинаковых вызовов не должны перевесить среднее (ожидается 78.667)");
+}
+
+// Сценарий 6: накопитель обнуляется после каждой точки. Если этого не делать, окно
+// усреднения растёт бесконечно и новые показания тонут в старых.
+static void test_accumulator_resets_between_samples() {
+  reset_fixture();
+  program_Wait = true;
+  currentWaitTypeFixture = PROGRAM_WAIT_DETECTOR;
+  detector_last_pipe_sensor = 0;
+  impurityDetector.lastSampleTime = fake_millis_value;
+
+  // первая точка: усреднение по трём чтениям около 78
+  SteamSensor.avgTemp = 78.0f;
+  DSUpdateCounter = 1;
+  detector_pause_tick();
+  SteamSensor.avgTemp = 78.0f;
+  DSUpdateCounter = 2;
+  detector_pause_tick();
+  fake_millis_value += DETECTOR_SAMPLE_INTERVAL_MS;
+  SteamSensor.avgTemp = 78.0f;
+  DSUpdateCounter = 3;
+  detector_pause_tick();
+  check(updateDetectorHistoryCalls == 1, "сброс накопителя: первая точка должна лечь");
+
+  // вторая точка: только новые чтения около 90, старые 78 не должны в неё попасть
+  SteamSensor.avgTemp = 90.0f;
+  DSUpdateCounter = 4;
+  detector_pause_tick();
+  fake_millis_value += DETECTOR_SAMPLE_INTERVAL_MS;
+  SteamSensor.avgTemp = 90.0f;
+  DSUpdateCounter = 5;
+  detector_pause_tick();
+  check(updateDetectorHistoryCalls == 2, "сброс накопителя: вторая точка должна лечь");
+  check(lastHistoryTemp > 89.99f && lastHistoryTemp < 90.01f,
+        "сброс накопителя: во вторую точку должны попасть только новые чтения (90.0)");
+}
+
 int main() {
   test_detector_pause_samples();
+  test_accumulator_resets_between_samples();
   test_non_detector_pause_does_not_sample();
   test_manual_pause_does_not_sample_even_with_stale_detector_wait_type();
+  test_samples_are_averaged();
+  test_repeated_reads_are_not_double_counted();
 
   if (failures != 0) return 1;
   std::cout << "detector pause trend sampling behaviour checks passed\n";
@@ -171,7 +279,12 @@ int main() {
 def build_harness() -> str:
     detector_source = (ROOT / "impurity_detector.h").read_text(encoding="utf-8")
     body, _ = extract_braced_block_after(detector_source, PAUSE_BRANCH_TOKEN)
-    return HARNESS_TEMPLATE.replace("@PAUSE_BRANCH_BODY@", body)
+    signature = "bool detector_sample_tick(float detectorTemp, uint32_t now)"
+    tick_body = extract_function_body(detector_source, signature)
+    tick_function = signature + " {" + tick_body + "}"
+    return HARNESS_TEMPLATE.replace("@SAMPLE_TICK_FUNCTION@", tick_function).replace(
+        "@PAUSE_BRANCH_BODY@", body
+    )
 
 
 def compile_and_run(harness: str) -> int:

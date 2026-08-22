@@ -25,16 +25,65 @@ static float detector_steam_stability_span = 0.0f;
 static float detector_steam_stability_variance = 0.0f;
 // Минимальное число точек истории для критического тренда
 static const uint8_t DETECTOR_MIN_HISTORY_CRITICAL = 10;
-// Порог стабильности пара и окно стабилизации
-static const float DETECTOR_STEAM_STABLE_DELTA = 0.05f;
+
+// Шаг квантования DS18B20 в 12-битном режиме (sensorinit.h: setResolution(addr, 12)).
+// Датчик физически не может выдать изменение мельче этого значения, поэтому все пороги,
+// связанные с шумом температуры, считаются от него, а не от абстрактных долей градуса.
+static const float DETECTOR_SENSOR_QUANT_C = 0.0625f;
+
+// Интервал между точками истории. Показания DS обновляются раз в секунду
+// (triggerSysTicker), в одну точку усредняются все чтения за интервал: усреднение
+// четырёх чтений снижает шум наклона примерно вчетверо, а окно 30 * 4 с = 2 минуты
+// делает порог 0.04 °C/мин измеримым (за 58-секундное окно он был мельче кванта датчика).
+static const uint32_t DETECTOR_SAMPLE_INTERVAL_MS = 4000UL;
+
+// Порог стабильности пара и окно стабилизации. Раньше здесь стояли 0.1 °C размаха и
+// дисперсия 0.000625 (СКО 0.4 кванта) — ниже собственного шума квантования: температура,
+// «дышащая» между двумя соседними квантами, давала дисперсию 0.000977 и гейт не проходил
+// НИКОГДА, из-за чего детектор на первой строке тела молча не включался.
+static const float DETECTOR_STEAM_STABLE_SPAN = DETECTOR_SENSOR_QUANT_C * 3.0f;
 static const float DETECTOR_STEAM_STABLE_VARIANCE =
-    DETECTOR_STEAM_STABLE_DELTA * DETECTOR_STEAM_STABLE_DELTA * 0.25f;
+    DETECTOR_SENSOR_QUANT_C * DETECTOR_SENSOR_QUANT_C;
 static const uint32_t DETECTOR_STEAM_STABLE_MS = 600000UL; // 10 минут
+
+// Порог предупреждения. Раньше базовое значение задавалось вручную через плотность
+// насадки: 0.03 + (100 - PackDens) * 0.0005, то есть весь диапазон настройки двигал порог
+// на ±25%, тогда как автоматические поправки в get_adaptive_threshold дают разброс в разы.
+// Теперь база измеряется: детектор набирает собственный фоновый шум тренда на спокойном
+// участке строки и ставит порог по нему. DEFAULT используется, пока фон не набран.
+static const float DETECTOR_DEFAULT_WARNING_TREND = 0.04f;
+static const float DETECTOR_MIN_WARNING_TREND = 0.02f;
+static const float DETECTOR_MAX_WARNING_TREND = 0.15f;
+// Сколько замеров фона набрать (60 * 4 с = 4 минуты) и сколько сигм заложить в порог
+static const uint16_t DETECTOR_BG_SAMPLES = 60;
+static const float DETECTOR_BG_SIGMA_K = 4.0f;
+
+// Сколько замеров подряд тренд должен держаться выше критического порога, чтобы отбор
+// был остановлен. Критическая ветка — единственная, которая ничем не фильтровалась:
+// одиночный щелчок кванта датчика посреди окна даёт наклон 0.094 °C/мин и этого хватало
+// для паузы отбора при плотности насадки от 85%.
+static const uint8_t DETECTOR_CRITICAL_CONFIRM = 2;
+
 static const float HEAT_LOSS_MIN_DELTA_T = 15.0f;
 
 // [M-29] Предыдущее состояние источника датчика (для детекции смены)
 // -1 = не инициализировано, 0 = пар, 1 = царга
 static int8_t detector_last_pipe_sensor = -1;
+
+// Накопитель усреднения между точками истории: сумма показаний и их количество.
+// detector_last_ds_counter отсекает повторные чтения одного и того же значения —
+// process_impurity_detector() вызывается из loop() сотни раз в секунду, а датчик
+// обновляется раз в секунду.
+static double detector_avg_sum = 0.0;
+static uint16_t detector_avg_count = 0;
+static uint32_t detector_last_ds_counter = 0;
+
+// Замер фонового шума тренда на спокойном участке строки: сумма, сумма квадратов,
+// счётчик. detector_bg_threshold = 0 означает «фон ещё не набран, порог берём дефолтный».
+static double detector_bg_sum = 0.0;
+static double detector_bg_sumsq = 0.0;
+static uint16_t detector_bg_count = 0;
+static float detector_bg_threshold = 0.0f;
 
 // [П3-1] Базовая скорость отбора текущей строки программы для детектора примесей.
 // Обновляется при старте строки (run_program) и внешних/пользовательских вызовах
@@ -47,11 +96,23 @@ volatile float CurrentBaseSpeedRate = 0.0f;
 // при смене строки и при срабатывании лимита (авто-снижение скорости).
 volatile uint8_t RowStopPauseCount = 0;
 
+// Сброс накопителя усреднения и замера фона. Оба привязаны к истории: если история
+// очищена, усреднять и калиброваться надо заново.
+inline void detector_reset_sampling() {
+  detector_avg_sum = 0.0;
+  detector_avg_count = 0;
+  detector_bg_sum = 0.0;
+  detector_bg_sumsq = 0.0;
+  detector_bg_count = 0;
+  detector_bg_threshold = 0.0f;
+}
+
 /**
  * Инициализация детектора
  */
 void init_impurity_detector() {
   memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
+  memset(impurityDetector.sampleTime, 0, sizeof(impurityDetector.sampleTime));
   impurityDetector.historyIndex = 0;
   impurityDetector.historySize = 0;
   impurityDetector.historySum = 0.0f;
@@ -61,11 +122,11 @@ void init_impurity_detector() {
   impurityDetector.lastSampleTime = 0;
   impurityDetector.currentTrend = 0;
   impurityDetector.detectorStatus = 0;
+  impurityDetector.criticalConfirm = 0;
   impurityDetector.correctionFactor = 1.0f;
   impurityDetector.lastCorrectionTime = 0;
-  impurityDetector.tempStdDev = 0.0f;
-  impurityDetector.consecutiveRises = 0;
-  impurityDetector.lastTemp = 0.0f;
+  impurityDetector.tempVariance = 0.0f;
+  detector_reset_sampling();
   detector_steam_stable_since = 0;
   detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
   detector_steam_stability_span = 0.0f;
@@ -86,6 +147,7 @@ void reset_heat_loss_calculation() {
 void reset_impurity_detector() {
   // Очищаем историю температур полностью
   memset(impurityDetector.tempHistory, 0, sizeof(impurityDetector.tempHistory));
+  memset(impurityDetector.sampleTime, 0, sizeof(impurityDetector.sampleTime));
   impurityDetector.historySize = 0;
   impurityDetector.historyIndex = 0;
   impurityDetector.historySum = 0.0f;
@@ -95,11 +157,11 @@ void reset_impurity_detector() {
   impurityDetector.lastSampleTime = 0; // Сбрасываем время последней выборки для немедленного начала сбора данных
   impurityDetector.currentTrend = 0;
   impurityDetector.detectorStatus = 0;
+  impurityDetector.criticalConfirm = 0;
   impurityDetector.correctionFactor = 1.0f;
   impurityDetector.lastCorrectionTime = millis();
-  impurityDetector.tempStdDev = 0.0f;
-  impurityDetector.consecutiveRises = 0;
-  impurityDetector.lastTemp = 0.0f;
+  impurityDetector.tempVariance = 0.0f;
+  detector_reset_sampling();
   detector_steam_stable_since = 0;
   detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
   detector_steam_stability_span = 0.0f;
@@ -108,12 +170,8 @@ void reset_impurity_detector() {
 }
 
 // Вызывается при старте новой строки программы
-void detector_on_program_start(ProgramType wtype) {
-  if (wtype == 'H') {
-    detector_grace_until = millis() + 60000UL; // 60 сек для голов
-  } else {
-    detector_grace_until = millis() + 30000UL; // общий грейс-период
-  }
+void detector_on_program_start() {
+  detector_grace_until = millis() + 30000UL; // общий грейс-период
   detector_manual_override_until = 0;
   detector_steam_stable_since = 0;
   detector_steam_stability_reason = DETECTOR_STEAM_FILLING;
@@ -136,10 +194,24 @@ void detector_on_auto_resume() {
 }
 
 /**
+ * Дисперсия температуры в окне истории.
+ * Считается по инкрементальным суммам, которые ведёт update_detector_history():
+ * отдельный цикл по буферу для той же величины больше не нужен.
+ */
+float detector_history_variance() {
+  const uint8_t n = impurityDetector.historySize;
+  if (n < 5) return 0.0f; // Нужно минимум 5 точек для расчета
+
+  const double mean = impurityDetector.historySum / n;
+  double variance = impurityDetector.historySumSquares / n - mean * mean;
+  if (variance < 0.0) variance = 0.0; // защита от накопленной ошибки округления
+  return static_cast<float>(variance);
+}
+
+/**
  * Проверка стабилизации температуры пара по скользящему диапазону и дисперсии.
  */
-bool is_steam_stable(float steamTemp) {
-  (void)steamTemp;
+bool is_steam_stable() {
   const uint32_t now = millis();
   const uint8_t count = impurityDetector.historySize;
   if (count < 30) {
@@ -150,15 +222,12 @@ bool is_steam_stable(float steamTemp) {
     return false;
   }
 
-  const double mean = impurityDetector.historySum / count;
-  double variance =
-      impurityDetector.historySumSquares / count - mean * mean;
-  if (variance < 0.0f) variance = 0.0f;
+  const float variance = detector_history_variance();
   detector_steam_stability_span =
       impurityDetector.historyMax - impurityDetector.historyMin;
-  detector_steam_stability_variance = static_cast<float>(variance);
+  detector_steam_stability_variance = variance;
 
-  if (detector_steam_stability_span > DETECTOR_STEAM_STABLE_DELTA * 2.0f) {
+  if (detector_steam_stability_span > DETECTOR_STEAM_STABLE_SPAN) {
     detector_steam_stable_since = 0;
     detector_steam_stability_reason = DETECTOR_STEAM_RANGE_HIGH;
     return false;
@@ -183,59 +252,11 @@ inline uint32_t detector_steam_stable_seconds() {
 }
 
 /**
- * Расчет дисперсии температуры за период (фильтрация выбросов)
- * Используется дисперсия
- * Значение дисперсии пропорционально stdDev^2
- */
-float calculate_temperature_variance() {
-  uint8_t n = impurityDetector.historySize;
-  if (n < 5) return 0.0f; // Нужно минимум 5 точек для расчета
-
-  // Вычисляем среднее значение
-  float mean = 0.0f;
-  for (uint8_t i = 0; i < n; i++) {
-    uint8_t idx = (impurityDetector.historyIndex - n + i + 30) % 30;
-    mean += impurityDetector.tempHistory[idx];
-  }
-  mean /= n;
-
-  // Вычисляем дисперсию
-  float variance = 0.0f;
-  for (uint8_t i = 0; i < n; i++) {
-    uint8_t idx = (impurityDetector.historyIndex - n + i + 30) % 30;
-    float diff = impurityDetector.tempHistory[idx] - mean;
-    variance += diff * diff;
-  }
-  variance /= n;
-
-  // Возвращаем дисперсию
-  // Для сравнения используем порог в квадрате: если stdDev > 0.1, то variance > 0.01
-  return variance;
-}
-
-/**
- * Проверка на последовательные повышения температуры (фильтрация выбросов)
- * Возвращает количество последовательных повышений (>= 0.02°C)
- */
-uint8_t check_consecutive_rises(float currentTemp) {
-  if (impurityDetector.lastTemp > 0.0f && currentTemp > impurityDetector.lastTemp + 0.02f) {
-    // Температура повысилась на более чем 0.02°C
-    impurityDetector.consecutiveRises++;
-  } else {
-    // Температура не повысилась или повысилась недостаточно
-    impurityDetector.consecutiveRises = 0;
-  }
-  impurityDetector.lastTemp = currentTemp;
-  return impurityDetector.consecutiveRises;
-}
-
-/**
  * Добавление температуры в историю
+ * @param columnTemp - усреднённое показание за интервал между замерами
+ * @param sampleMillis - момент замера, по нему считается наклон в calculate_temperature_trend
  */
-void update_detector_history(float columnTemp) {
-  // Проверяем последовательные повышения для фильтрации выбросов
-  check_consecutive_rises(columnTemp);
-
+void update_detector_history(float columnTemp, uint32_t sampleMillis) {
   if (impurityDetector.historySize == 30) {
     const float replaced =
         impurityDetector.tempHistory[impurityDetector.historyIndex];
@@ -243,6 +264,7 @@ void update_detector_history(float columnTemp) {
     impurityDetector.historySumSquares -= replaced * replaced;
   }
   impurityDetector.tempHistory[impurityDetector.historyIndex] = columnTemp;
+  impurityDetector.sampleTime[impurityDetector.historyIndex] = sampleMillis;
   impurityDetector.historyIndex = (impurityDetector.historyIndex + 1) % 30;
   if (impurityDetector.historySize < 30) impurityDetector.historySize++;
   impurityDetector.historySum += columnTemp;
@@ -259,16 +281,9 @@ void update_detector_history(float columnTemp) {
     if (value > impurityDetector.historyMax) impurityDetector.historyMax = value;
   }
 
-  // Пересчитываем дисперсию (реже, чем каждое обновление - для оптимизации)
-  // Вычисляем раз в 10 секунд (каждые 5 обновлений при обновлении раз в 2 сек)
-  static uint8_t varianceUpdateCounter = 0;
-  if (impurityDetector.historySize >= 5) {
-    varianceUpdateCounter++;
-    if (varianceUpdateCounter >= 5) { // Каждые 10 секунд
-      impurityDetector.tempStdDev = calculate_temperature_variance(); // Храним variance, не stdDev
-      varianceUpdateCounter = 0;
-    }
-  }
+  // Дисперсия считается из тех же инкрементальных сумм за O(1), поэтому обновляется
+  // каждый замер (раньше был отдельный цикл по буферу и счётчик "раз в 5 обновлений").
+  impurityDetector.tempVariance = detector_history_variance();
 }
 
 /**
@@ -276,13 +291,20 @@ void update_detector_history(float columnTemp) {
  */
 float calculate_temperature_trend() {
   uint8_t n = impurityDetector.historySize;
-  if (n < 5) return 0.0f; // Нужно минимум 5 точек (10 сек) для расчета тренда
+  if (n < 5) return 0.0f; // Нужно минимум 5 точек для расчета тренда
+
+  const uint8_t oldest = (impurityDetector.historyIndex - n + 30) % 30;
+  const uint32_t baseTime = impurityDetector.sampleTime[oldest];
 
   float sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
   for (uint8_t i = 0; i < n; i++) {
     // Индекс в кольцевом буфере: от самого старого к самому новому
-    uint8_t idx = (impurityDetector.historyIndex - n + i + 30) % 30;
-    float x = i * 2.0f; // Опрос каждые 2 секунды
+    uint8_t idx = (oldest + i) % 30;
+    // Секунды от начала окна по ФАКТИЧЕСКОМУ времени замера. Раньше здесь стояло
+    // x = i * 2.0f — предположение "точки идут ровно через 2 секунды". Реальный шаг
+    // плавает (загруженный веб-сервер, запись на файловую систему), и наклон искажался.
+    // Разность беззнаковых корректна и при переполнении millis().
+    float x = static_cast<float>(impurityDetector.sampleTime[idx] - baseTime) / 1000.0f;
     float y = impurityDetector.tempHistory[idx];
 
     sumX += x;
@@ -296,6 +318,68 @@ float calculate_temperature_trend() {
 
   float slope = (n * sumXY - sumX * sumY) / denominator;
   return slope * 60.0f; // Изменение в минуту
+}
+
+/**
+ * Один такт сбора данных: накопить показание датчика и, если интервал истёк,
+ * положить в историю усреднённое значение и пересчитать тренд.
+ * @return true, если добавлена новая точка (тренд пересчитан)
+ *
+ * Усреднение здесь — ключевая часть: показания DS18B20 квантованы шагом 0.0625 °C,
+ * и на коротком окне тренд получался ступенчатым (либо ровно 0, либо сразу ~0.09 °C/мин).
+ * Среднее нескольких чтений даёт дробное значение между квантами.
+ */
+bool detector_sample_tick(float detectorTemp, uint32_t now) {
+  // Одно и то же показание датчика не должно попадать в среднее несколько раз:
+  // детектор вызывается из loop() сотни раз в секунду, датчик обновляется раз в секунду.
+  const uint32_t dsCounter = DSUpdateCounter;
+  if (dsCounter != detector_last_ds_counter) {
+    detector_last_ds_counter = dsCounter;
+    detector_avg_sum += detectorTemp;
+    detector_avg_count++;
+  }
+
+  if (now - impurityDetector.lastSampleTime < DETECTOR_SAMPLE_INTERVAL_MS) return false;
+
+  // Если новых чтений датчика не было (сбои опроса), берём текущее значение как есть.
+  const float sample = (detector_avg_count > 0)
+                           ? static_cast<float>(detector_avg_sum / detector_avg_count)
+                           : detectorTemp;
+  detector_avg_sum = 0.0;
+  detector_avg_count = 0;
+
+  update_detector_history(sample, now);
+  impurityDetector.currentTrend = calculate_temperature_trend();
+  impurityDetector.lastSampleTime = now;
+  return true;
+}
+
+/**
+ * Замер фонового шума тренда. Пока детектор спокоен, копим среднее и разброс
+ * собственных показаний тренда, а по набору статистики выставляем порог
+ * предупреждения = средний фон + DETECTOR_BG_SIGMA_K сигм. Это заменяет ручной
+ * ввод плотности насадки: разброс учитывает и шум датчика, и то, как дышит колонна.
+ */
+void detector_update_background() {
+  if (detector_bg_count >= DETECTOR_BG_SAMPLES) return; // фон уже набран
+  if (impurityDetector.historySize < 30) return;        // окно ещё не заполнено
+
+  const double trend = impurityDetector.currentTrend;
+  detector_bg_sum += trend;
+  detector_bg_sumsq += trend * trend;
+  detector_bg_count++;
+  if (detector_bg_count < DETECTOR_BG_SAMPLES) return;
+
+  const double mean = detector_bg_sum / detector_bg_count;
+  double variance = detector_bg_sumsq / detector_bg_count - mean * mean;
+  if (variance < 0.0) variance = 0.0;
+  // Падающая температура не должна занижать порог, поэтому средний фон снизу режем нулём.
+  const double base = (mean > 0.0 ? mean : 0.0) + DETECTOR_BG_SIGMA_K * sqrt(variance);
+
+  float threshold = static_cast<float>(base);
+  if (threshold < DETECTOR_MIN_WARNING_TREND) threshold = DETECTOR_MIN_WARNING_TREND;
+  if (threshold > DETECTOR_MAX_WARNING_TREND) threshold = DETECTOR_MAX_WARNING_TREND;
+  detector_bg_threshold = threshold;
 }
 
 /**
@@ -331,12 +415,11 @@ float get_adaptive_threshold(float baseThreshold, float variance, float volumePe
   }
 
   // 3. Корректировка на основе фазы процесса
-  // Головы: более чувствительный (порог * 0.9)
   // Тело: стандартный порог
-  // Хвосты: менее чувствительный (порог * 1.2)
-  if (processPhase == 'H') {
-    adaptiveThreshold *= 0.9f; // Головы - более чувствительный
-  } else if (processPhase == 'T') {
+  // Хвосты: менее чувствительный (больше примесей ожидается)
+  // Головы ('H') сюда не попадают - на них детектор только наблюдает
+  // (см. process_impurity_detector)
+  if (processPhase == 'T') {
     adaptiveThreshold *= 1.2f; // Хвосты - менее чувствительный (больше примесей ожидается)
   }
   // "B" (тело) и "C" (предзахлеб) - без изменений
@@ -352,6 +435,13 @@ float get_adaptive_threshold(float baseThreshold, float variance, float volumePe
 bool is_first_body_program_after_heads(uint8_t currentProgram, ProgramType currentType) {
   // Текущая программа должна быть B или C
   if (currentProgram >= PROGRAM_MAX || (currentType != 'B' && currentType != 'C')) {
+    return false;
+  }
+
+  // Тело первой строкой программы: голов перед ним нет по определению. Ниже цикл дал бы
+  // тот же ответ (i стартует с -1 и сразу проваливает условие), но намерение читалось бы
+  // только вместе с типом счётчика. Проверка явная, чтобы это не приходилось выводить.
+  if (currentProgram == 0) {
     return false;
   }
 
@@ -399,18 +489,36 @@ inline void apply_row_stop_pause_policy() {
 }
 
 /**
- * [П3-4] Порог восстановления тренда (дублирует формулу adaptive-порога из
- * process_impurity_detector — рефакторить рабочую функцию не трогаем).
+ * Базовый порог предупреждения (°C/мин) до адаптивных поправок.
+ * Пока фон не набран — фиксированный дефолт, дальше — измеренный шум тренда.
+ */
+inline float detector_base_warning_threshold() {
+  return (detector_bg_threshold > 0.0f) ? detector_bg_threshold
+                                        : DETECTOR_DEFAULT_WARNING_TREND;
+}
+
+/**
+ * Полный порог предупреждения с адаптивными поправками.
+ * Единственное место, где он считается: и рабочая логика в process_impurity_detector,
+ * и порог восстановления для withdrawal() зовут именно эту функцию. Раньше формула
+ * была продублирована, и правка в одном месте разводила пороги реакции и возврата.
+ */
+inline float detector_warning_threshold() {
+  const ProgramType currentType = program_type_at(ProgramNum);
+  const float currentVolumePerHour = (CurrentBaseSpeedRate > 0) ? CurrentBaseSpeedRate : 0.24f;
+  const ProgramType processPhase = !program_type_empty(currentType) ? currentType : 'B';
+  return get_adaptive_threshold(detector_base_warning_threshold(),
+                                impurityDetector.tempVariance,
+                                currentVolumePerHour, processPhase);
+}
+
+/**
+ * [П3-4] Порог восстановления тренда.
  * Используется withdrawal() для проверки "тренд устоялся" перед резюме
  * после паузы, поставленной детектором.
  */
 inline float detector_current_recovery_threshold() {
-  const uint8_t currentProgram = ProgramNum;
-  const ProgramType currentType = program_type_at(currentProgram);
-  float baseWarningThreshold = 0.03f + (100 - SamSetup.PackDens) * 0.0005f;
-  float currentVolumePerHour = (CurrentBaseSpeedRate > 0) ? CurrentBaseSpeedRate : 0.24f;
-  ProgramType processPhase = !program_type_empty(currentType) ? currentType : 'B';
-  float warningThreshold = get_adaptive_threshold(baseWarningThreshold, impurityDetector.tempStdDev, currentVolumePerHour, processPhase);
+  const float warningThreshold = detector_warning_threshold();
   return warningThreshold - warningThreshold * 0.15f;
 }
 
@@ -457,12 +565,7 @@ void process_impurity_detector() {
     if (isDetectorOwnPause) {
       bool usePipeSensor = (detector_last_pipe_sensor == 1);
       float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
-      unsigned long now = millis();
-      if (now - impurityDetector.lastSampleTime >= 2000) {
-        update_detector_history(detectorTemp);
-        impurityDetector.currentTrend = calculate_temperature_trend();
-        impurityDetector.lastSampleTime = now;
-      }
+      detector_sample_tick(detectorTemp, millis());
       return;
     }
     return;
@@ -560,9 +663,11 @@ void process_impurity_detector() {
     impurityDetector.historyMin = 0.0f;
     impurityDetector.historyMax = 0.0f;
     impurityDetector.currentTrend = 0;
-    impurityDetector.consecutiveRises = 0;
-    impurityDetector.lastTemp = 0.0f;
-    impurityDetector.tempStdDev = 0.0f;
+    impurityDetector.criticalConfirm = 0;
+    impurityDetector.tempVariance = 0.0f;
+    memset(impurityDetector.sampleTime, 0, sizeof(impurityDetector.sampleTime));
+    // Накопитель усреднения и замер фона привязаны к истории: новый датчик — новый фон
+    detector_reset_sampling();
     impurityDetector.lastSampleTime = 0; // [fix M-29] немедленный старт сбора с нового датчика
     // Короткий грейс-период: дать буферу заполниться свежими данными (30 сек)
     unsigned long detector_new_grace_until = now + 30000UL;
@@ -573,44 +678,54 @@ void process_impurity_detector() {
 
   float detectorTemp = usePipeSensor ? PipeSensor.avgTemp : SteamSensor.avgTemp;
 
-  // Сбор данных каждые 2 секунды
-  if (now - impurityDetector.lastSampleTime >= 2000) {
-    update_detector_history(detectorTemp);
-    impurityDetector.currentTrend = calculate_temperature_trend();
-    impurityDetector.lastSampleTime = now;
-  }
+  // Сбор данных: показания усредняются, точка ложится в историю раз в интервал
+  const bool trendUpdated = detector_sample_tick(detectorTemp, now);
 
-  // Грейс-период после старта строки/продолжения: не реагируем
-  if (detector_grace_until > 0 && (int32_t)(now - detector_grace_until) < 0) {
+  // Головы: детектор только наблюдает. Рост Т пара на головах - штатный процесс
+  // (лёгкие фракции выводятся, пар очищается, Т идёт к спиртовой полке), а не
+  // проскок примесей, поэтому управлять по нему скоростью нельзя.
+  // История и тренд выше уже обновлены - телеметрия и лог перегона остаются живыми.
+  // correctionFactor держим равным 1.0: скорость на головах задаёт только строка
+  // программы (run_program), детектор её не трогает.
+  if (currentType == 'H') {
     impurityDetector.detectorStatus = 0;
+    impurityDetector.correctionFactor = 1.0f;
+    impurityDetector.criticalConfirm = 0;
     return;
   }
 
-  // Для первой программы тела/предзахлеба после голов: ждать стабилизацию пара 10 минут
-  if (!usePipeSensor && is_first_body_program_after_heads(currentProgram, currentType)) {
-    if (!is_steam_stable(SteamSensor.avgTemp)) {
+  // Грейс-период после старта строки/продолжения: не реагируем.
+  // Подтверждения критики обнуляем: пока детектор молчит, накопленные замеры
+  // относятся к прошлому состоянию колонны и не должны сработать сразу после грейса.
+  if (detector_grace_until > 0 && (int32_t)(now - detector_grace_until) < 0) {
+    impurityDetector.detectorStatus = 0;
+    impurityDetector.criticalConfirm = 0;
+    return;
+  }
+
+  // Для первой программы тела/предзахлеба после голов: ждать стабилизацию 10 минут.
+  // Проверка идёт по ТОМУ ЖЕ датчику, что выбран выше (пар или царга): is_steam_stable()
+  // считает диапазон и дисперсию по истории детектора, а история ведётся по detectorTemp.
+  // Раньше здесь стояло условие !usePipeSensor, и при уходе контроля на царгу
+  // (Т куба >= 92.5) защита первой строки тела молча отключалась.
+  if (is_first_body_program_after_heads(currentProgram, currentType)) {
+    if (!is_steam_stable()) {
       impurityDetector.detectorStatus = 0;
       return;
     }
   }
 
-  // Базовый порог на основе плотности насадки (PackDens)
-  // Для плотной насадки (100%) порог ниже, для разреженной (60%) выше.
-  float baseWarningThreshold = 0.03f + (100 - SamSetup.PackDens) * 0.0005f;
+  // Замер фона: пока детектор спокоен и никто не вмешивался в скорость, копим
+  // статистику собственного шума тренда. Из неё берётся базовый порог — вместо
+  // ручной плотности насадки. Считаем только по новым точкам, иначе за секунду
+  // набралось бы столько "замеров", сколько раз вызвался loop().
+  if (trendUpdated && impurityDetector.detectorStatus == 0 &&
+      impurityDetector.correctionFactor >= 1.0f && !program_Wait && !PauseOn) {
+    detector_update_background();
+  }
 
-  // Получаем текущие параметры процесса
-  // [П3-1] База берется из CurrentBaseSpeedRate (актуальная скорость строки с учетом
-  // резюме после паузы), а не из program[].Speed, которое больше не ратчетится.
-  float currentVolumePerHour = (CurrentBaseSpeedRate > 0) ? CurrentBaseSpeedRate : 0.24f; // Дефолтное значение
-  ProgramType processPhase = !program_type_empty(currentType) ? currentType : 'B'; // По умолчанию тело
-
-  // Адаптивный порог с учетом дисперсии, скорости отбора и фазы процесса
-  float warningThreshold = get_adaptive_threshold(
-    baseWarningThreshold,
-    impurityDetector.tempStdDev,
-    currentVolumePerHour,
-    processPhase
-  );
+  // Порог предупреждения с адаптивными поправками (дисперсия, скорость отбора, фаза)
+  float warningThreshold = detector_warning_threshold();
 
   float criticalThreshold = warningThreshold * 2.5f;
 
@@ -619,26 +734,20 @@ void process_impurity_detector() {
   float correctionThreshold = warningThreshold + hysteresis;  // Порог для снижения скорости
   float recoveryThreshold = warningThreshold - hysteresis;    // Порог для восстановления скорости
 
-  // Фильтрация выбросов: учитываем только устойчивые тренды
-  // Игнорируем единичные всплески, если нет 3+ последовательных повышений
-  bool isValidTrend = true;
-  if (impurityDetector.consecutiveRises < 3 && impurityDetector.currentTrend > correctionThreshold) {
-    // Тренд есть, но нет устойчивой последовательности повышений
-    // Снижаем чувствительность на 30% для таких случаев
-    correctionThreshold *= 1.3f;
-    if (impurityDetector.currentTrend < correctionThreshold) {
-      isValidTrend = false; // Игнорируем этот тренд как выброс
+  // Подтверждение критического тренда. Считаем ТОЛЬКО по новым точкам: одиночный
+  // выброс (щелчок кванта датчика, скачок атмосферного давления) даёт наклон около
+  // 0.09 °C/мин и раньше этого хватало, чтобы мгновенно остановить отбор.
+  bool hasCriticalHistory = (impurityDetector.historySize >= DETECTOR_MIN_HISTORY_CRITICAL);
+  if (trendUpdated) {
+    if (hasCriticalHistory && impurityDetector.currentTrend > criticalThreshold) {
+      if (impurityDetector.criticalConfirm < 255) impurityDetector.criticalConfirm++;
+    } else {
+      impurityDetector.criticalConfirm = 0;
     }
   }
 
-  // Реакция на тренд (только если тренд валидный или критический)
-  bool allowCriticalPause = true;
-  if (currentType == 'H') {
-    allowCriticalPause = false; // На головах только коррекция скорости, без критической паузы
-  }
-
-  bool hasCriticalHistory = (impurityDetector.historySize >= DETECTOR_MIN_HISTORY_CRITICAL);
-  if (allowCriticalPause && hasCriticalHistory && impurityDetector.currentTrend > criticalThreshold) {
+  // Реакция на тренд
+  if (impurityDetector.criticalConfirm >= DETECTOR_CRITICAL_CONFIRM) {
     // КРИТИЧЕСКИЙ ПРОСКОК: Ставим на ПАУЗУ (всегда реагируем на критический)
     // Но только если нет ручной паузы пользователя
     bool isDetectorPause = (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR);
@@ -656,14 +765,14 @@ void process_impurity_detector() {
       set_buzzer(true);
       SendMsg("Детектор: Критический тренд! Пауза отбора. (тренд: " +
               String(impurityDetector.currentTrend, 3) + ", variance: " +
-              String(impurityDetector.tempStdDev, 4) + ")", ALARM_MSG);
+              String(impurityDetector.tempVariance, 4) + ")", ALARM_MSG);
       RowStopPauseCount++;
       apply_row_stop_pause_policy();
     } else if (isDetectorPause && impurityDetector.detectorStatus != 2) {
       // Пауза уже установлена детектором, но статус почему-то не 2 - восстанавливаем
       impurityDetector.detectorStatus = 2; // Breakthrough
     }
-  } else if (isValidTrend && impurityDetector.currentTrend > correctionThreshold) {
+  } else if (impurityDetector.currentTrend > correctionThreshold) {
     // ПРЕДУПРЕЖДЕНИЕ: Постепенно снижаем скорость
     // Но только если нет ручной паузы пользователя
     // И не устанавливаем статус "коррекция", если пауза уже установлена детектором
@@ -680,7 +789,7 @@ void process_impurity_detector() {
         set_body_temp();
         SendMsg("Детектор: Установка новой Т тела (первая программа тела, тренд " +
                 String(impurityDetector.currentTrend, 3) + ", variance: " +
-                String(impurityDetector.tempStdDev, 4) + ")", WARNING_MSG);
+                String(impurityDetector.tempVariance, 4) + ")", WARNING_MSG);
         // Не снижаем скорость сразу, дадим детектору время адаптироваться к новой Т тела
         impurityDetector.lastCorrectionTime = now;
         return; // Выходим, чтобы не применять снижение скорости в этом цикле
@@ -719,7 +828,7 @@ void process_impurity_detector() {
         if (factorChanged) {
           SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
                   ", порог: " + String(warningThreshold, 3) + ", variance: " +
-                  String(impurityDetector.tempStdDev, 4) + ")", NOTIFY_MSG);
+                  String(impurityDetector.tempVariance, 4) + ")", NOTIFY_MSG);
         }
       }
     }
