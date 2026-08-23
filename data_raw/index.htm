@@ -15,6 +15,9 @@
       
     var current_progNum = 0;
     var totalTime = 0;
+    var HeaterPowerOn = false;
+    // Отбор идёт? Кнопка 'start' по этому признаку меняет и надпись, и текст подтверждения.
+    var WithdrawalActive = false;
 
     // ==================== POWER UNIT ===================================================================
 <!--#include power_unit_margin.htm-->
@@ -145,11 +148,11 @@
           } else {
             bootDegradedBanner.style.display = 'none';
           }
-          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
-          document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
-          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
-          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
-          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
+          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(1);
+          document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(1);
+          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(1);
+          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(1);
+          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(1);
           document.getElementById('bme_pressure').innerHTML = myObj.bme_pressure.toFixed(1);
           if (myObj.hasOwnProperty('prvl')) {
             pressureLabel = 'В колонне: ';
@@ -279,9 +282,10 @@
           }
 
           var dt = myObj.PipeTemp - myObj.SteamTemp;
-          document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
+          document.getElementById('DeltaTemp').innerHTML = dt.toFixed(1);
 
-          if (myObj.WthdrwlStatus > 0) {
+          WithdrawalActive = myObj.WthdrwlStatus > 0;
+          if (WithdrawalActive) {
             document.getElementById('start').value = "Следующая программа"
           } else {
             document.getElementById('start').value = "Начать отбор"
@@ -302,7 +306,8 @@
 
           var powerstr;
           var powerstyle;
-          if (myObj.PowerOn == 1) {
+          HeaterPowerOn = myObj.PowerOn == 1;
+          if (HeaterPowerOn) {
             powerstr = 'Выключить нагрев';
             powerstyle = SamovarApp.cssVar('--state-danger-bg');
           } else {
@@ -465,7 +470,7 @@
         <div class="flex_row_center"><label id="index-program-col-type" class="tooltip">Тип<span class="tooltiptext">Для режима Пауза время паузы в секундах задается в поле "Объем"</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-volume" class="tooltip">Выход<span class="tooltiptext">Объем в мл</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-speed" class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label></div>
-        <div class="flex_row_center"><label id="index-program-col-container" class="tooltip">Тара<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label></div>
+        <div class="flex_row_center"><label id="index-program-col-container" class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-power" class="tooltip">${programPwrLabel}</label></div>
         <div class="flex_row_center"><label class="tooltip">Время</label></div>
       </div>`);
@@ -536,7 +541,8 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false
+        implicitSystemTheme: false,
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp']
       });
     };
 
@@ -682,8 +688,8 @@
 
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
-          <input id='power' type='button' name='power' value='Включить нагрев' onclick='if (this.value == "Выключить нагрев" && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;' class="button">
-          <input id='start' type='button' name='start' value='Начать отбор' onclick='SamovarApp.sendCommand("start=1");' class="button">
+          <input id='power' type='button' name='power' value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;' class="button">
+          <input id='start' type='button' name='start' value='Начать отбор' style="margin-right: 2em;" onclick='if (WithdrawalActive && !confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;' class="button">
           <input id='pause' type='button' name='pause' value='Пауза' onclick='SamovarApp.sendCommand("pause=1");' class="button">
         </div>
         <div class="container_row" style="justify-content: space-around; align-items: center;">

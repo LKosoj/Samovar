@@ -849,6 +849,18 @@ void change_samovar_mode() {
     Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
   }
   Samovar_CR_Mode = Samovar_Mode;
+  // [WP7 п.5] Раньше SamSetup.Mode подтягивался К Samovar_Mode при КАЖДОЙ отдаче страницы
+  // (send_index_page/send_mode_specific_htm) - записью Samovar_Mode прямо из веб-задачи
+  // (async_tcp, другое ядро, произвольный момент, в т.ч. при активном процессе). Но
+  // mode_dispatch_alarm() (SysTicker) выбирает набор аварийных проверок по Samovar_Mode, а
+  // mode_dispatch_loop() - по SamovarStatusInt; открытие "не той" страницы во время работы
+  // молча переключало часть аварийного надзора на чужой режим. Направление синхронизации
+  // развёрнуто: change_samovar_mode() уже вызывается ровно в момент старта режима
+  // (mode_registry.h::mode_apply_power_on_command) и при загрузке (Samovar.ino) - здесь
+  // Samovar_Mode достоверен, и SamSetup.Mode подтягивается К НЕМУ, а не наоборот. Веб-
+  // обработчики страниц больше НЕ пишут Samovar_Mode вообще (см. send_index_page/
+  // send_mode_specific_htm ниже).
+  SamSetup.Mode = (int)Samovar_Mode;
 }
 
 const char* get_index_page_path() {
@@ -874,31 +886,22 @@ void send_index_template_response(AsyncWebServerRequest *request, const char *sp
 }
 
 void send_index_page(AsyncWebServerRequest *request) {
-  // Главная страница должна соответствовать сохранённому режиму (SamSetup.Mode).
-  // Samovar_Mode может временно расходиться (например, после web_command без обновления SamSetup).
-  {
-    uint16_t cfgMode = SamSetup.Mode;
-    if (cfgMode > (uint16_t)SAMOVAR_LUA_MODE) {
-      cfgMode = (uint16_t)SAMOVAR_RECTIFICATION_MODE;
-    }
-    Samovar_Mode = (SAMOVAR_MODE)cfgMode;
-  }
-  change_samovar_mode();
+  // [WP7 п.5] Раньше здесь Samovar_Mode принудительно перезаписывался значением
+  // SamSetup.Mode на каждой отдаче страницы - см. change_samovar_mode() выше про причину
+  // удаления и куда перенесена синхронизация. Живой Samovar_Mode уже корректен без этой
+  // записи: страница просто показывает текущий активный режим как есть.
   send_index_template_response(request, get_index_page_path(), "no-cache, no-store, must-revalidate");
 }
 
 // Прямой GET /distiller.htm|beer.htm|… иначе отдаётся через serveStatic без шаблонизатора — %WProgram% не подставляется, в UI «тип программы» пустой.
 void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode) {
-  uint16_t m = SamSetup.Mode;
-  if (m > (uint16_t)SAMOVAR_LUA_MODE) {
-    m = (uint16_t)SAMOVAR_RECTIFICATION_MODE;
-  }
-  if (m != (uint16_t)requiredMode) {
+  // [WP7 п.5] Редирект теперь сверяется с живым Samovar_Mode (а не с SamSetup.Mode) и
+  // ничего в него не пишет - см. change_samovar_mode(). Если открыта страница чужого
+  // активного режима, пользователя просто отправляют на /index.htm.
+  if (Samovar_Mode != requiredMode) {
     request->redirect("/index.htm");
     return;
   }
-  Samovar_Mode = (SAMOVAR_MODE)m;
-  change_samovar_mode();
   send_index_template_response(request, spiffsPath, "no-cache, no-store, must-revalidate");
 }
 
@@ -945,12 +948,18 @@ void WebServerInit(void) {
   server.serveStatic("/data_old.csv", SPIFFS, "/data_old.csv").setCacheControl("max-age=1");
   server.serveStatic("/prg.csv", SPIFFS, "/prg.csv").setCacheControl("max-age=1");
   server.serveStatic("/state.csv", SPIFFS, "/state.csv").setCacheControl("max-age=1");
-  server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
+  // [WP7 п.35] .addMiddleware(&headerFilter) на динамических (шаблонизированных) страницах:
+  // без него ESPAsyncWebServer может ответить браузеру 304 по If-Modified-Since от статичного
+  // .htm-файла на диске, даже когда подставляемые в шаблон живые значения уже другие -
+  // пользователь правит вчерашние настройки, думая что видит текущие. headerFilter
+  // вырезает этот заголовок из запроса, так и не подключённый к обработчикам изначально.
+  // На /style.css и прочую статику (js/css/картинки) он НЕ вешается - их кэшировать нужно.
+  server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.on("/chart.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_index_template_response(request, "/chart.htm", "max-age=1");
-  });
-  server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor).setCacheControl("no-store");
-  server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
+  }).addMiddleware(&headerFilter);
+  server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor).setCacheControl("no-store").addMiddleware(&headerFilter);
+  server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm").setCacheControl("max-age=800");
   server.on("/pong.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "text/html; charset=utf-8",
@@ -964,14 +973,14 @@ void WebServerInit(void) {
   server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt").setCacheControl("max-age=1");
-  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1");
-  server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor);
-  server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1");
+  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
+  server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor).addMiddleware(&headerFilter);
+  server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
   // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
 
   server.on("/index.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_index_page(request);
-  });
+  }).addMiddleware(&headerFilter);
 
   server.on("/rrlog", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/resetreason.css", String());
@@ -1065,16 +1074,16 @@ void WebServerInit(void) {
 
   server.on("/distiller.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_mode_specific_htm(request, "/distiller.htm", SAMOVAR_DISTILLATION_MODE);
-  });
+  }).addMiddleware(&headerFilter);
   server.on("/beer.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_mode_specific_htm(request, "/beer.htm", SAMOVAR_BEER_MODE);
-  });
+  }).addMiddleware(&headerFilter);
   server.on("/bk.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_mode_specific_htm(request, "/bk.htm", SAMOVAR_BK_MODE);
-  });
+  }).addMiddleware(&headerFilter);
   server.on("/nbk.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_mode_specific_htm(request, "/nbk.htm", SAMOVAR_NBK_MODE);
-  });
+  }).addMiddleware(&headerFilter);
 
   // Автоматическая раздача всех файлов из SPIFFS
   server.serveStatic("/", SPIFFS, "/");
@@ -1095,18 +1104,40 @@ void WebServerInit(void) {
 #endif
 }
 
+// [WP7 п.21] Экранирование пользовательских строк для HTML-контекста (в отличие от
+// json_write_escaped из string_utils.h, который экранирует для JSON/<script>). Описание
+// программы и цвета датчиков подставляются шаблонизатором в страницу как есть; значение
+// вида "</textarea><h1>" рвёт разметку у ВСЕХ, кто потом откроет страницу, а почини это
+// может только повторная отправка корректного значения. '&' экранируем первым, чтобы не
+// задвоить экранирование уже вставленных сущностей.
+static String html_escape(const String &s) {
+  String out;
+  out.reserve(s.length());
+  for (unsigned int i = 0; i < s.length(); i++) {
+    switch (s.charAt(i)) {
+      case '&': out += F("&amp;"); break;
+      case '<': out += F("&lt;"); break;
+      case '>': out += F("&gt;"); break;
+      case '"': out += F("&quot;"); break;
+      case '\'': out += F("&#39;"); break;
+      default: out += s.charAt(i); break;
+    }
+  }
+  return out;
+}
+
 String indexKeyProcessor(const String &var) {
-  if (var == "SteamColor") return (String)SamSetup.SteamColor;
+  if (var == "SteamColor") return html_escape((String)SamSetup.SteamColor);
   else if (var == "v")
     return SAMOVAR_VERSION;
   else if (var == "PipeColor")
-    return (String)SamSetup.PipeColor;
+    return html_escape((String)SamSetup.PipeColor);
   else if (var == "WaterColor")
-    return (String)SamSetup.WaterColor;
+    return html_escape((String)SamSetup.WaterColor);
   else if (var == "TankColor")
-    return (String)SamSetup.TankColor;
+    return html_escape((String)SamSetup.TankColor);
   else if (var == "ACPColor")
-    return (String)SamSetup.ACPColor;
+    return html_escape((String)SamSetup.ACPColor);
   else if (var == "SteamHide") {
     if (SteamSensor.avgTemp > 0) return "false";
     else return "true";
@@ -1130,9 +1161,9 @@ String indexKeyProcessor(const String &var) {
   } else if (var == "Descr") {
     String description;
     if (!copy_session_description(description)) return F("Runtime state busy");
-    return description;
+    return html_escape(description);
   } else if (var == "videourl")
-    return (String)SamSetup.videourl;
+    return html_escape((String)SamSetup.videourl);
   else if (var == "PWM_LV")
     return (String)(PWM_LOW_VALUE * 10);
   else if (var == "PWM_V")
@@ -1198,7 +1229,7 @@ bool copy_lua_button_list_cache(String &buttonList) {
 }
 
 String indexKeyProcessorWithSnapshots(const String &var, const String &description, const String &luaButtonList) {
-  if (var == "Descr") return description;
+  if (var == "Descr") return html_escape(description);
   if (var == "btn_list") return toJsonString(luaButtonList);
   return indexKeyProcessor(var);
 }
@@ -1384,7 +1415,20 @@ String setupKeyProcessor(const String &var) {
     if (var == f.var) return (SamSetup.*f.member) ? "checked='true'" : "";
   }
   for (const GetModeSelectField &f : kGetModeSelectFields) {
-    if (var == f.var) return (SAMOVAR_MODE)SamSetup.Mode == f.mode ? "selected" : "";
+    if (var == f.var) {
+      // [WP17 п.45] Режим, недоступный в этой сборке (нет регулятора мощности для
+      // НБК, нет USE_LUA для Lua-режима) - не должен появляться в списке выбора.
+      // [fix] Если недоступный режим — это уже СОХРАНЁННЫЙ режим
+      // пользователя, его нужно не только скрыть, но и оставить выбранным
+      // ("hidden selected") - иначе ни один <option> не помечен selected, браузер сам
+      // выберет первый пункт списка ("Ректификация"), и сохранение ЛЮБОЙ другой
+      // настройки молча подменит режим пользователя (форма /setup.htm
+      // отправляется целиком). Браузеры показывают текст выбранного <option>
+      // в закрытом <select> даже если у него есть hidden - в списке выбора он при этом не появится.
+      const bool isCurrentMode = (SAMOVAR_MODE)SamSetup.Mode == f.mode;
+      if (!mode_available_in_build(f.mode)) return isCurrentMode ? "hidden selected" : "hidden";
+      return isCurrentMode ? "selected" : "";
+    }
   }
   for (const GetRelaySelectField &f : kGetRelaySelectFields) {
     if (var == f.var) return (SamSetup.*f.member == f.expected) ? "selected" : "";
@@ -1397,7 +1441,9 @@ String setupKeyProcessor(const String &var) {
   }
   for (const GetColorField &f : kGetColorFields) {
     if (var == f.var) {
-      s = SamSetup.*f.member;
+      // [WP7 п.21] Цвета датчиков редактируются пользователем и подставляются в
+      // value='%...%'/style="..." без своих кавычек - см. html_escape().
+      s = html_escape(String(SamSetup.*f.member));
       return s;
     }
   }
@@ -1410,16 +1456,16 @@ String setupKeyProcessor(const String &var) {
              "");
 #endif
   } else if (var == "videourl") {
-    s = SamSetup.videourl;
+    s = html_escape(String(SamSetup.videourl));
     return s;
   } else if (var == "blynkauth") {
-    s = SamSetup.blynkauth;
+    s = html_escape(String(SamSetup.blynkauth));
     return s;
   } else if (var == "tgtoken") {
-    s = SamSetup.tg_token;
+    s = html_escape(String(SamSetup.tg_token));
     return s;
   } else if (var == "tgchatid") {
-    s = SamSetup.tg_chat_id;
+    s = html_escape(String(SamSetup.tg_chat_id));
     return s;
   } else if (var == "ColDiam") {
     return String(SamSetup.ColDiam, 1);
@@ -1634,31 +1680,21 @@ void stop_active_process_for_mode() {
     return;
   }
 
-  switch (Samovar_Mode) {
-    case SAMOVAR_RECTIFICATION_MODE:
-      run_program(PROGRAM_END);
-      break;
-    case SAMOVAR_DISTILLATION_MODE:
-      distiller_finish();
-      break;
-    case SAMOVAR_BEER_MODE:
-      beer_finish();
-      break;
-    case SAMOVAR_BK_MODE:
-      bk_finish();
-      break;
-    case SAMOVAR_NBK_MODE:
-      nbk_finish();
-      break;
-    case SAMOVAR_SUVID_MODE:
-    case SAMOVAR_LUA_MODE:
-    default:
-      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
-      startval = SAMOVAR_STARTVAL_IDLE;
-      ProgramNum = 0;
-      set_power(false);
-      break;
+  // [WP17 п.40] Раньше здесь был switch(Samovar_Mode), заново перечислявший режимы
+  // (имена функций завершения совпадали с .finish в mode_registry.h у DIST/BEER/BK/NBK
+  // случайно - реестр их не читал). Теперь читаем .stopProcess из реестра; у RECT это
+  // отдельная функция (run_program(PROGRAM_END) - не то же самое, что .finish==nullptr,
+  // который используется для команды SAMOVAR_POWER), у SUVID/LUA — nullptr, и они, как и
+  // прежде, идут по общей ветке ниже.
+  const ModeOps* ops = mode_ops_by_mode(Samovar_Mode);
+  if (ops != nullptr && ops->stopProcess != nullptr) {
+    ops->stopProcess();
+    return;
   }
+  SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+  startval = SAMOVAR_STARTVAL_IDLE;
+  ProgramNum = 0;
+  set_power(false);
 }
 
 // Провал смены режима больше не запирает автомат в терминальной фазе: нагрев
@@ -1855,6 +1891,23 @@ static bool apply_save_u16_arg(AsyncWebServerRequest *request, const char *name,
   return true;
 }
 
+// [WP7 п.38] Раньше строковые настройки (токен Telegram и т.п.) при превышении размера
+// буфера молча усекались copyStringSafe: пользователь видел "сохранено", а токен на деле
+// был обрезан и уведомления переставали работать. Числовые поля честно отвечают 400 при
+// выходе за границы (apply_save_u8_arg/u16_arg выше) - делаем строковые единообразными:
+// значение длиннее буфера (N включает место под '\0') отклоняется с тем же кодом ошибки.
+template <size_t N>
+static bool apply_save_string_arg(AsyncWebServerRequest *request, const char *name, char (&target)[N]) {
+  if (!request->hasArg(name)) return true;
+  const AsyncWebParameter *param = get_request_param(request, name);
+  if (!param || param->isFile() || param->value().length() >= N) {
+    send_save_parse_error(request, name, NUMERIC_PARSE_OUT_OF_RANGE);
+    return false;
+  }
+  copyStringSafe(target, param->value());
+  return true;
+}
+
 static bool apply_save_bool01_arg(AsyncWebServerRequest *request, const char *name, bool& target) {
   if (!request->hasArg(name)) return true;
   if (request_param_count(request, name) != 1) {
@@ -1950,7 +2003,12 @@ static const SaveFloatField kSaveFloatFields[] = {
     {"BVolt", &SetupEEPROM::BVolt, 0.0f, 10000.0f},
     {"BKPower", &SetupEEPROM::BKPower, 0.0f, 10000.0f},
     {"MaxPressureValue", &SetupEEPROM::MaxPressureValue, 0.0f, 10000.0f},
-    {"DistTemp", &SetupEEPROM::DistTemp, 0.0f, 150.0f},
+    // [WP7 п.11] Нижняя граница поднята с 0: условие окончания - TankSensor.avgTemp >=
+    // DistTemp (distiller.h/BK.h/alarm.h) - при DistTemp=0 выполняется на первой же
+    // секунде и обрывает дистилляцию/БК/ректификацию без внятной причины в сообщении.
+    // 30°C заведомо ниже любой рабочей температуры куба, но выше комнатной - случайно
+    // ввести ноль (или пустое поле, парсящееся в 0) больше не получится незаметно.
+    {"DistTemp", &SetupEEPROM::DistTemp, 30.0f, 150.0f},
     {"HeaterR", &SetupEEPROM::HeaterResistant, CONTROL_HEATER_R_MIN, CONTROL_HEATER_R_MAX},
     {"MainsVoltage", &SetupEEPROM::MainsVoltage, 0.0f, 1000.0f},
     {"NbkIn", &SetupEEPROM::NbkIn, 0.0f, 100000.0f},
@@ -2097,8 +2155,28 @@ void handleSave(AsyncWebServerRequest *request) {
         send_save_parse_error(request, "mode", result.error);
         return;
       }
-      modeRequested = true;
       requestedMode = (SAMOVAR_MODE)requestedModeValue;
+      // [WP17 п.45] Режим существует в enum (allowedModes выше), но может быть не
+      // скомпилирован в этой сборке (НБК без регулятора мощности, Lua без USE_LUA) -
+      // раньше это отбивалось только в момент СТАРТА режима, без внятного сообщения
+      // на сохранении настроек.
+      // [fix] Отбиваем только РЕАЛЬНУЮ попытку переключиться на недоступный режим.
+      // Форма /setup.htm отправляется целиком - сохранение ЛЮБОЙ другой настройки
+      // тоже присылает поле mode с уже сохранённым значением; если этот уже
+      // сохранённый режим стал недоступен (сменили прошивку), отбивать такую
+      // повторную присылку нельзя - иначе пользователь не сможет сохранить
+      // вообще ничего, пока не переключит режим.
+      if (!mode_available_in_build(requestedMode) &&
+          requestedMode != (SAMOVAR_MODE)sourceProfileMode) {
+        const char* reason = mode_unavailable_reason(requestedMode);
+        send_no_store_response(
+            request, 400, "application/json",
+            build_error_envelope(
+                "not_allowed", "mode",
+                reason ? String(reason) : String("Режим недоступен в этой сборке прошивки")));
+        return;
+      }
+      modeRequested = true;
     }
   }
 
@@ -2139,10 +2217,10 @@ void handleSave(AsyncWebServerRequest *request) {
     update_checkbox_arg(request, f.name, staged.*f.member, fullSetupForm);
   }
 
-  if (request->hasArg("videourl")) copyStringSafe(staged.videourl, request->arg("videourl"));
-  if (request->hasArg("blynkauth")) copyStringSafe(staged.blynkauth, request->arg("blynkauth"));
-  if (request->hasArg("tgtoken")) copyStringSafe(staged.tg_token, request->arg("tgtoken"));
-  if (request->hasArg("tgchatid")) copyStringSafe(staged.tg_chat_id, request->arg("tgchatid"));
+  if (!apply_save_string_arg(request, "videourl", staged.videourl)) return;
+  if (!apply_save_string_arg(request, "blynkauth", staged.blynkauth)) return;
+  if (!apply_save_string_arg(request, "tgtoken", staged.tg_token)) return;
+  if (!apply_save_string_arg(request, "tgchatid", staged.tg_chat_id)) return;
 
   for (const SaveColorField &f : kSaveColorFields) {
     if (request->hasArg(f.name)) copyStringSafe(staged.*f.member, request->arg(f.name));
@@ -2759,12 +2837,14 @@ void get_data_log(AsyncWebServerRequest *request, String fn) {
     request->send(503, "text/plain", "BUSY");
     return;
   }
-  AsyncWebServerResponse *response;
-  if (SPIFFS.exists("/" + fn)) {
-    response = request->beginResponse(SPIFFS, "/" + fn, String(), true);
-  } else {
-    response = request->beginResponse(400, "text/plain", "");
+  // [WP7 п.36] Раньше заголовки вложения (Content-Disposition: attachment) уходили ВМЕСТЕ
+  // с 400 при отсутствующем файле - браузер молча скачивал пустой файл вместо показа
+  // сообщения об ошибке. Теперь при отсутствии файла заголовки вложения не отправляются.
+  if (!SPIFFS.exists("/" + fn)) {
+    request->send(400, "text/plain", "Log file not found: " + fn);
+    return;
   }
+  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/" + fn, String(), true);
   response->addHeader(F("Content-Type"), F("application/octet-stream"));
   response->addHeader(F("Content-Description"), F("File Transfer"));
   response->addHeader(F("Content-Disposition"), "attachment; filename=\"" + fn + "\"");
@@ -2778,12 +2858,14 @@ static void normalize_web_if_version_string(String& v) {
   v.replace("\r", "");
 }
 
-static bool write_web_file_atomic(const String& path, const String& content) {
+// [WP7 п.20] write_web_file_atomic разложен на стадии (stage/commit/discard), чтобы
+// get_web_interface() могла сперва скачать ВЕСЬ набор файлов интерфейса во временные
+// имена и только потом, одним заходом, переименовать всё разом - см. комментарий там же.
+// write_web_file_stage: скачанное содержимое кладётся в path+".tmp" и перепроверяется
+// чтением с диска. Финальный файл (path) не трогается вообще.
+static bool write_web_file_stage(const String& path, const String& content) {
   String tmpPath = path + ".tmp";
-  String backupPath = path + ".bak";
-
   SPIFFS.remove(tmpPath);
-  SPIFFS.remove(backupPath);
 
   File wf = SPIFFS.open(tmpPath, FILE_WRITE);
   if (!wf) {
@@ -2813,6 +2895,16 @@ static bool write_web_file_atomic(const String& path, const String& content) {
     SPIFFS.remove(tmpPath);
     return false;
   }
+  return true;
+}
+
+// write_web_file_commit: устанавливает уже подготовленный path+".tmp" на место path
+// (бэкап старого файла на время переименования, откат при неудаче) - короткая операция
+// над файловой системой, без сети. Требует, чтобы write_web_file_stage() уже отработала.
+static bool write_web_file_commit(const String& path) {
+  String tmpPath = path + ".tmp";
+  String backupPath = path + ".bak";
+  SPIFFS.remove(backupPath);
 
   bool hadFinal = SPIFFS.exists(path);
   if (hadFinal && !SPIFFS.rename(path, backupPath)) {
@@ -2834,6 +2926,17 @@ static bool write_web_file_atomic(const String& path, const String& content) {
     SPIFFS.remove(backupPath);
   }
   return true;
+}
+
+// Убирает недокачанный/неподтверждённый path+".tmp" - вызывается для очистки мусора,
+// если весь набор файлов интерфейса не скачался (см. get_web_interface()).
+static void discard_web_file_stage(const String& path) {
+  SPIFFS.remove(path + ".tmp");
+}
+
+static bool write_web_file_atomic(const String& path, const String& content) {
+  if (!write_web_file_stage(path, content)) return false;
+  return write_web_file_commit(path);
 }
 
 static bool web_file_content_empty_invalid(const String& fn, get_web_type type, const String& content) {
@@ -2880,31 +2983,57 @@ void get_web_interface() {
       }
     };
 
-    updateFile("index.htm", SAVE_FILE_OVERRIDE);
-    updateFile("Green.png", SAVE_FILE_OVERRIDE);
-    updateFile("Red_light.gif", SAVE_FILE_OVERRIDE);
-    updateFile("alarm.mp3", SAVE_FILE_OVERRIDE);
-    updateFile("favicon.ico", SAVE_FILE_OVERRIDE);
-    updateFile("minus.png", SAVE_FILE_OVERRIDE);
-    updateFile("plus.png", SAVE_FILE_OVERRIDE);
+    // [WP7 п.20] Раньше каждый файл интерфейса ставился на место сразу после скачивания -
+    // сам файл при этом атомарен (write_web_file_atomic), но НАБОР целиком - нет. Обрыв
+    // связи на середине оставлял новую index.htm со старым app.js.gz (или наоборот):
+    // интерфейс не работает, а версия локально не отмечена как обновлённая, поэтому то же
+    // самое повторяется на каждой следующей перезагрузке, пока обрыв не прекратится.
+    // Теперь весь список ниже сначала СКАЧИВАЕТСЯ во временные "*.tmp" (готовые файлы уже
+    // проверены чтением с диска, но на месте ничего не заменено), и только если скачался
+    // весь набор - следует короткая серия переименований, которая ставит всё разом.
+    // Компромисс: пока идёт скачивание, на диске одновременно живут СТАРЫЙ рабочий набор
+    // и НОВЫЙ "*.tmp" - на SPIFFS ESP32 (места мало) это требует места примерно на ещё один
+    // комплект этих файлов сверх обычного. Это не полная транзакция (сама commit-серия
+    // переименований - не одна атомарная операция ФС), но окно риска сокращается с
+    // "сколько длится скачивание всего набора по сети" до "сколько длится серия
+    // переименований на месте", и при нехватке места/обрыве во время скачивания старый
+    // набор остаётся полностью нетронутым и рабочим (раньше частично перезаписывался).
+    static const char* const kWebOverrideFiles[] = {
+        "index.htm", "Green.png", "Red_light.gif", "alarm.mp3", "favicon.ico",
+        "minus.png", "plus.png",
+        "style.css.gz",
+        "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm", "calibrate.htm",
+        "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
+        "program.htm", "setup.htm",
+        "app.js.gz", "chart.js.gz",
+    };
+    static const size_t kWebOverrideFileCount = sizeof(kWebOverrideFiles) / sizeof(kWebOverrideFiles[0]);
 
-    updateFile("style.css.gz", SAVE_FILE_OVERRIDE);
+    size_t stagedCount = 0;
+    for (size_t i = 0; i < kWebOverrideFileCount; i++) {
+      String overrideFn = kWebOverrideFiles[i];
+      String content = get_web_file(overrideFn, GET_CONTENT);
+      if (content == "<ERR>" || !write_web_file_stage("/" + overrideFn, content)) {
+        Serial.println("WEB interface update failed staging " + overrideFn);
+        updateOk = false;
+        break;
+      }
+      stagedCount++;
+    }
 
-    updateFile("beer.htm", SAVE_FILE_OVERRIDE);
-    updateFile("bk.htm", SAVE_FILE_OVERRIDE);
-    updateFile("nbk.htm", SAVE_FILE_OVERRIDE);
-    updateFile("brewxml.htm", SAVE_FILE_OVERRIDE);
-    updateFile("calibrate.htm", SAVE_FILE_OVERRIDE);
-    updateFile("chart.htm", SAVE_FILE_OVERRIDE);
-    updateFile("distiller.htm", SAVE_FILE_OVERRIDE);
-    updateFile("i2cstepper.htm.gz", SAVE_FILE_OVERRIDE);
-    updateFile("edit.htm.gz", SAVE_FILE_OVERRIDE);
-
-    updateFile("program.htm", SAVE_FILE_OVERRIDE);
-    updateFile("setup.htm", SAVE_FILE_OVERRIDE);
-
-    updateFile("app.js.gz", SAVE_FILE_OVERRIDE);
-    updateFile("chart.js.gz", SAVE_FILE_OVERRIDE);
+    if (updateOk) {
+      for (size_t i = 0; i < kWebOverrideFileCount; i++) {
+        String overrideFn = kWebOverrideFiles[i];
+        if (!write_web_file_commit("/" + overrideFn)) {
+          Serial.println("WEB interface update failed installing " + overrideFn);
+          updateOk = false;
+        }
+      }
+    } else {
+      for (size_t i = 0; i < stagedCount; i++) {
+        discard_web_file_stage("/" + String(kWebOverrideFiles[i]));
+      }
+    }
 
     updateFile("beer.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("bk.lua", SAVE_FILE_IF_NOT_EXIST);

@@ -435,7 +435,17 @@ static OperationError commit_profile_operation() {
   if (hasSettings) apply_config_runtime();
 #ifdef USE_LUA
   if (modeChange) {
+    // [WP10 п.31] lua_type_script - String, которую задача do_lua_script() читает
+    // без своей копии (lua.h, WriteConsoleLog внутри lua_state_lock при периодическом
+    // прогоне). Присваивание String может пересоздать буфер (старый освобождается,
+    // новый выделяется) - без защиты do_lua_script() мог прочитать буфер, который в
+    // этот момент уже уничтожен. Берём/отдаём xLuaSemaphore ТОЛЬКО вокруг самого
+    // присваивания и отдаём ДО load_lua_script(): она сама берёт тот же лок внутри,
+    // а он не рекурсивный (обычный мьютекс) - держать его здесь было бы мгновенным
+    // самовзаимоблокированием.
+    bool luaTypeLocked = lua_state_lock(portMAX_DELAY);
     lua_type_script = get_lua_mode_name();
+    lua_state_unlock(luaTypeLocked);
     load_lua_script();
   }
 #endif
@@ -795,6 +805,11 @@ static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
       if (program[ProgramNum].Time > 0) {
         WthdrwTime = (t_min - millis()) / (float)1000 / 60 / 60;
         if (WthdrwTime > program[ProgramNum].Time) WthdrwTime = program[ProgramNum].Time;
+        // [П34] Если пауза уже просрочена (t_min в прошлом), WthdrwTime уходит в минус,
+        // а wp - выше 1: далее приводится к unsigned int (:821-822 ниже по коду) и
+        // отдаётся в веб как WthdrwlProgress (:850, до 100%) - зеркальный нижний кламп
+        // к верхнему клампу строкой выше.
+        if (WthdrwTime < 0) WthdrwTime = 0;
         wp = 1 - (WthdrwTime / program[ProgramNum].Time);
       } else {
         WthdrwTime = 0;
@@ -802,6 +817,11 @@ static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
       }
     } else {
       wp = (float)CurrrentStepps / (float)TargetStepps;
+      // [П34] Зеркально BEER-ветке (:740-742): CurrrentStepps > TargetStepps даёт wp > 1,
+      // а WthdrwTime = Time * (1 - wp) уходит в минус - приведение отрицательного float
+      // к unsigned int (:821-822) ниже по коду - неопределённое поведение.
+      if (wp < 0) wp = 0;
+      if (wp > 1) wp = 1;
       WthdrwTime = program[ProgramNum].Time * (1 - wp);
     }
 
@@ -1553,6 +1573,13 @@ void triggerGetClock(void *parameter) {
   }
 }
 
+// [П4] "Пульс" SysTicker: инкрементируется первой строкой внешнего while(true) в
+// triggerSysTicker(). Наблюдатель tick_check_systicker_liveness() (см. ниже, рядом
+// с tick_check_stack_headroom()) следит, что пульс не замирает дольше порога - иначе
+// mode_dispatch_alarm() внутри этого же таска перестаёт вызываться, а loop() и веб на
+// другом ядре продолжают отвечать, маскируя зависшую задачу надзора.
+static volatile uint32_t sysTickerHeartbeat = 0;
+
 //Запускаем таск для получения температур и различных проверок
 void triggerSysTicker(void *parameter) {
   uint8_t CurMinST = 0;
@@ -1564,6 +1591,10 @@ void triggerSysTicker(void *parameter) {
 #endif
 
   while (true) {
+    // [П4] Инкремент - именно во внешнем цикле, а не внутри секундного гейта ниже:
+    // зависание внутри гейта (например, на xSemaphoreTake(xI2CSemaphore, ...) или в
+    // DS_getvalue()) не должно быть неотличимо от штатной секундной паузы.
+    sysTickerHeartbeat++;
     CurMinST = (millis() / 1000);
 
     // раз в секунду обновляем время на дисплее, запрашиваем значения давления, напряжения и датчика потока
@@ -1939,12 +1970,16 @@ static void setup_disable_watchdogs() {
 }
 
 static void setup_create_semaphores_and_queue() {
-  xRuntimeStateSemaphore = xSemaphoreCreateBinaryStatic(&xRuntimeStateSemaphoreBuffer);
+  // [WP10 п.23] Мьютекс вместо двоичного семафора: у мьютекса есть владелец (только
+  // взявшая его задача может отдать), и приоритетное наследование (низкоприоритетная
+  // задача-держатель не застревает вытесненной, пока её ждёт высокоприоритетная).
+  // xSemaphoreCreateMutexStatic() возвращает уже СВОБОДНЫЙ мьютекс - в отличие от
+  // xSemaphoreCreateBinaryStatic() (создаёт взятый), поэтому лишний Give сразу после
+  // создания здесь не нужен и был бы отпусканием невзятого мьютекса.
+  xRuntimeStateSemaphore = xSemaphoreCreateMutexStatic(&xRuntimeStateSemaphoreBuffer);
   runtime_event_init(runtimeEventRing);
-  xSemaphoreGive(xRuntimeStateSemaphore);
 
-  xPendingCommandSemaphore = xSemaphoreCreateBinaryStatic(&xPendingCommandSemaphoreBuffer);
-  xSemaphoreGive(xPendingCommandSemaphore);
+  xPendingCommandSemaphore = xSemaphoreCreateMutexStatic(&xPendingCommandSemaphoreBuffer);
 
   if (!init_samovar_command_queue()) {
     // Fail-open: очередь/мьютекс команд не создались — samovar_command_queue остаётся
@@ -1968,8 +2003,7 @@ static void setup_create_semaphores_and_queue() {
   xLuaSemaphore = xSemaphoreCreateMutexStatic(&xLuaSemaphoreBuffer);
 #endif
 
-  xI2CSemaphore = xSemaphoreCreateBinaryStatic(&xI2CSemaphoreBuffer);
-  xSemaphoreGive(xI2CSemaphore);
+  xI2CSemaphore = xSemaphoreCreateMutexStatic(&xI2CSemaphoreBuffer);
 }
 
 static void setup_wifi_stack_defaults() {
@@ -2442,8 +2476,9 @@ void setup() {
   touch_pad_intr_disable();
 #endif
 
-  xMsgSemaphore = xSemaphoreCreateBinaryStatic(&xMsgSemaphoreBuffer);
-  xSemaphoreGive(xMsgSemaphore);
+  // [WP10 п.23] См. комментарий в setup_create_semaphores_and_queue(): мьютекс уже
+  // свободен после создания, лишний Give здесь не нужен.
+  xMsgSemaphore = xSemaphoreCreateMutexStatic(&xMsgSemaphoreBuffer);
   setup_create_semaphores_and_queue();
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
@@ -2576,6 +2611,33 @@ void setup() {
   state_snapshot_report_pending();
 }
 
+// [П24] Таблица дополнительно наблюдаемых задач для tick_check_stack_headroom().
+// Хранится УКАЗАТЕЛЬ на хэндл, а не сам хэндл: часть задач создаётся уже после
+// формирования таблицы (или не создаётся вовсе при выключенном фиче-макросе), и на
+// этот момент хэндл ещё/навсегда остаётся NULL - это не ошибка, просто задача не
+// существует, и такую запись нужно молча пропустить.
+struct StackWatchEntry {
+  TaskHandle_t* handle;
+  const char* name;
+};
+
+static const StackWatchEntry stackWatchTable[] = {
+  { &SysTickerTask1, "SysTicker" },
+  { &GetClockTask1, "GetClockTicker" },
+  // GetBMPTask (Samovar.h) нигде не создаётся - хэндл всегда NULL и естественно
+  // отфильтруется проверкой ниже.
+  { &GetBMPTask, "GetBMPTask" },
+#ifdef SAMOVAR_USE_POWER
+  { &PowerStatusTask, "PowerStatusTask" },
+#endif
+#ifdef ALARM_BTN_PIN
+  { &EmergencyButtonTask, "EmergencyButtonTask" },
+#endif
+#ifdef USE_LUA
+  { &DoLuaScriptTask, "DoLuaScriptTask" },
+#endif
+};
+
 static void tick_check_stack_headroom() {
   // Проверка переполнения стека. Порог в БАЙТАХ: uxTaskGetStackHighWaterMark в ESP-IDF
   // считает байты, поэтому прежние 325 срабатывали тогда, когда на отсечку нагрева и
@@ -2584,6 +2646,54 @@ static void tick_check_stack_headroom() {
   if (uxTaskGetStackHighWaterMark(NULL) < 1024) {
     request_emergency_stop("Аварийное отключение: критически малый остаток стека");
     SendMsg("Стек переполнился. Перезагрузка", ALARM_MSG);
+    vTaskDelay(5000);
+    ESP.restart();
+  }
+
+  // [П24] Раньше проверялся только стек текущей задачи (loop()). PowerStatusTask (3072 -
+  // самый маленький из рабочих стеков, и именно он на путях отказа регулятора строит
+  // длинные String), SysTicker, GetClockTicker и EmergencyButtonTask не проверялись вовсе.
+  // Текст причины собираем ЗДЕСЬ, на стеке loop() (эта функция всегда вызывается из
+  // loop(), не из проверяемой задачи) - если бы конкатенацию String делала сама
+  // задача с уже критически малым остатком стека, это её бы и добило.
+  for (size_t i = 0; i < sizeof(stackWatchTable) / sizeof(stackWatchTable[0]); i++) {
+    TaskHandle_t handle = *stackWatchTable[i].handle;
+    if (handle == nullptr) continue;
+    if (uxTaskGetStackHighWaterMark(handle) < 1024) {
+      request_emergency_stop(String("Аварийное отключение: критически малый остаток стека задачи ") + stackWatchTable[i].name);
+      SendMsg(String("Стек задачи ") + stackWatchTable[i].name + " переполнился. Перезагрузка", ALARM_MSG);
+      vTaskDelay(5000);
+      ESP.restart();
+    }
+  }
+}
+
+// [П4] Наблюдатель живучести SysTicker: без него зависание задачи (например, на
+// xSemaphoreTake(xI2CSemaphore, 1000) при полуживой шине I2C или внутри DS_getvalue())
+// молча останавливает mode_dispatch_alarm() - проверки перегрева/воды/датчиков/давления
+// перестают выполняться при включённом нагреве, а loop() и веб на другом ядре продолжают
+// отвечать, маскируя проблему снаружи. esp_task_wdt тут не годится: единственное место в
+// репозитории, где он реально используется - вендоренный AsyncTCP.cpp, и там он дважды
+// принудительно выключен, плюс на ядре Arduino-ESP32 3.x (ESP-IDF 5.x) поменялась сигнатура
+// esp_task_wdt_init. Поэтому вместо watchdog - счётчик пульса sysTickerHeartbeat.
+static void tick_check_systicker_liveness() {
+  // Порог 10 секунд: внутри одной секундной итерации SysTicker легитимно может провести
+  // несколько секунд - там до двух таймаутов xSemaphoreTake по 1000 мс (шаговый двигатель,
+  // датчики) плюс время конверсии DS18B20. 10 с даёт запас и не даёт ложных срабатываний
+  // на штатных задержках шины.
+  static uint32_t lastHeartbeat = sysTickerHeartbeat;
+  static unsigned long lastChangeMs = millis();
+
+  uint32_t currentHeartbeat = sysTickerHeartbeat;
+  if (currentHeartbeat != lastHeartbeat) {
+    lastHeartbeat = currentHeartbeat;
+    lastChangeMs = millis();
+    return;
+  }
+
+  if (millis() - lastChangeMs > 10000) {
+    request_emergency_stop("Аварийное отключение: задача надзора SysTicker зависла");
+    SendMsg("Задача надзора SysTicker зависла. Перезагрузка", ALARM_MSG);
     vTaskDelay(5000);
     ESP.restart();
   }
@@ -2866,6 +2976,7 @@ static void tick_apply_pending_pnbk() {
 
 void loop() {
   tick_check_stack_headroom();
+  tick_check_systicker_liveness();
   tick_reload_stepper_timer();
 
   tick_ota();
@@ -3649,6 +3760,34 @@ void apply_config_runtime() {
   Samovar_Mode = (SAMOVAR_MODE)SamSetup.Mode;
   change_samovar_mode();
 
+  // [WP17 п.45 tail] Номер режима валиден (проверка выше), но валидный режим может быть
+  // НЕ скомпилирован в этой сборке (НБК без регулятора мощности, Lua без USE_LUA) -
+  // mode_available_in_build()/mode_unavailable_reason() читают ту же таблицу реестра, что
+  // и WebServer.ino handleSave (там - отказ сохранения; здесь другая ситуация: значение уже
+  // применяется в рантайме на старте/из меню, отбить нечем). Samovar_Mode при этом уже
+  // равен настроенному значению (строка выше) - и остаётся таким: ПОДМЕНЯТЬ его на другой,
+  // доступный режим НЕЛЬЗЯ, это та же молчаливая подмена настройки, которую handleSave как
+  // раз чинит; пользователь должен узнать правду и переключить сам. Запуска недоступного
+  // режима это не открывает: и mode_dispatch_loop(), и nbk.h run_nbk_program() отбивают
+  // старт независимо (см. smoke_mode_build_availability). apply_config_runtime() вызывается
+  // на КАЖДОЕ применение профиля (не только когда режим реально сменился), поэтому сообщение
+  // не шлём повторно, пока режим не изменится - тот же приём "один раз на смену состояния",
+  // что и noDZ_message_sent (nbk.h) / pressure_alarm_sent (Samovar.ino, triggerSysTicker).
+  // Обе точки вызова apply_config_runtime() в setup() и здесь же в рантайме идут ПОСЛЕ
+  // xMsgSemaphore = xSemaphoreCreateMutexStatic(...) в setup() - SendMsg безопасен.
+  static int modeUnavailableWarnedFor = -1;  // ни один SAMOVAR_MODE не равен -1
+  if (!mode_available_in_build(Samovar_Mode)) {
+    if ((int)Samovar_Mode != modeUnavailableWarnedFor) {
+      const char* reason = mode_unavailable_reason(Samovar_Mode);
+      SendMsg(String("Режим из настроек не активирован: ") +
+                  (reason ? reason : "недоступен в этой сборке прошивки"),
+              ALARM_MSG);
+      modeUnavailableWarnedFor = (int)Samovar_Mode;
+    }
+  } else {
+    modeUnavailableWarnedFor = -1;
+  }
+
   if ((uint8_t)SamSetup.videourl[0] == 0xFF) SamSetup.videourl[0] = '\0';
 #ifdef SAMOVAR_USE_BLYNK
   if (strlen(SamSetup.videourl) > 0) Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
@@ -3690,7 +3829,15 @@ void apply_config_runtime() {
 
   if (isnan(SamSetup.SetWaterTemp) || SamSetup.SetWaterTemp == 0) SamSetup.SetWaterTemp = TARGET_WATER_TEMP;
   if (isnan(SamSetup.SetACPTemp) || SamSetup.SetACPTemp == 0) SamSetup.SetACPTemp = 43;
-  if (isnan(SamSetup.DistTemp) || SamSetup.DistTemp <= 0) SamSetup.DistTemp = DEFAULT_DIST_TEMP;
+  // [П11-фикс 23.08] Серверный минимум DistTemp поднят с 0 до 30 (WebServer.ino,
+  // kSaveFloatFields) - условие окончания (TankSensor.avgTemp >= DistTemp) при малых
+  // значениях завершает дистилляцию/БК/ректификацию почти мгновенно. Но профиль в NVS у
+  // уже обновившихся пользователей мог сохранить DistTemp из старого диапазона (0; 30) -
+  // такое значение не ловилось проверкой "<= 0" и оставалось миной до первого запуска
+  // процесса. Подтягиваем его так же, как уже подтягивался <=0 и NaN - к тому же самому
+  // рабочему дефолту DEFAULT_DIST_TEMP, а не к голому новому минимуму 30: 30°C - это
+  // нижняя граница поля ввода, а не осмысленная рабочая температура окончания.
+  if (isnan(SamSetup.DistTemp) || SamSetup.DistTemp < 30.0f) SamSetup.DistTemp = DEFAULT_DIST_TEMP;
   if (isnan(SamSetup.DistTimeF)) {
     SamSetup.DistTimeF = 16;
   }

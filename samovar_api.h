@@ -364,8 +364,51 @@ inline void check_alarm_lua();
 #define SAMOVAR_LUA_ALARM_FN nullptr
 #endif
 
+// [WP17 п.45] Признак "режим доступен в этой сборке прошивки" для
+// mode_registry_table(): НБК управляет мощностью через регулятор
+// (SAMOVAR_USE_POWER, см. nbk.h run_nbk_program), Lua-режим требует USE_LUA.
+// Без этих макросов оба режима оставались выбираемыми и сохраняемыми в
+// любой сборке, а отказ обнаруживался только в момент старта (nbk.h) или
+// не обнаруживался вовсе (Lua) - см. mode_available_in_build() в
+// mode_registry.h.
+#ifdef SAMOVAR_USE_POWER
+#define SAMOVAR_NBK_BUILD_AVAILABLE true
+#else
+#define SAMOVAR_NBK_BUILD_AVAILABLE false
+#endif
+#ifdef USE_LUA
+#define SAMOVAR_LUA_BUILD_AVAILABLE true
+#else
+#define SAMOVAR_LUA_BUILD_AVAILABLE false
+#endif
+
 #ifdef USE_MQTT
 void MqttSendMsg(const String &Str, const char *chart, int version = 3);
 #endif
 
+// [WP12] ПОЧЕМУ include здесь, в самом конце файла (порядок строк - часть
+// контракта): mode_registry.h строит таблицу режимов (mode_registry_table) и
+// её функции (mode_alarm_beer, mode_alarm_nbk, mode_button_press_beer) по
+// ИМЕНИ ссылаются на функции, которые реально ОПРЕДЕЛЕНЫ не здесь, а в других
+// заголовках - alarm.h, distiller.h, beer.h, BK.h, nbk.h, suvid.h, logic.h,
+// mode_common.h, lua.h. Эти заголовки сами подключают samovar_api.h (им
+// нужны отсюда перечисления/типы) - обратный #include ИЗ них СЮДА воссоздал
+// бы цикл (A подключает B, B подключает A). Цикл разорван форвард-
+// декларациями (объявление функции БЕЗ тела - "сигнатура известна, код
+// появится позже"): все функции, нужные mode_registry.h, уже объявлены ВЫШЕ
+// в этом файле (см. пометки [P7 п.3a/F1], [P2 п.8], [P8] по тексту выше).
+// К моменту, когда компилятор доходит до этой строки, сигнатуры уже видны, а
+// тела подтянутся позже - все .ino этого проекта склеиваются в ОДНУ единицу
+// трансляции (см. AGENTS.md), и alarm.h/distiller.h/.../mode_common.h/lua.h
+// включаются дальше по сборке.
+//
+// ЧТО СЛОМАЕТСЯ, если тронуть порядок:
+// - Передвинуть эту строку ВЫШЕ любой форвард-декларации из списка выше ->
+//   ошибка компиляции "was not declared in this scope" ВНУТРИ mode_registry.h,
+//   хотя причина - здесь, в samovar_api.h, и найти её по этой ошибке трудно.
+// - Убрать любую из форвард-деклараций выше или переставить её НИЖЕ этой
+//   строки - та же ошибка.
+// - Новый код в этот файл можно добавлять только ДО этой строки: после неё
+//   не должно быть ничего, кроме этого include.
+// Инвариант проверяет tools/smoke_mode_registry_include_order.py.
 #include "mode_registry.h"

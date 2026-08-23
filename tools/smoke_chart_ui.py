@@ -102,8 +102,11 @@ if chart_js:
     for token in ["cdn.amcharts.com", "am4core", "am4charts", "reloadFrequency", "dataSource"]:
         if token in chart_js:
             errors.append(f"data_raw/chart.js contains forbidden chart dependency/reload token: {token}")
-    if not re.search(r"fetch\(url,\s*\{\s*cache:\s*['\"]no-store['\"]\s*\}\)", chart_js):
-        errors.append("data_raw/chart.js initial CSV load is not explicit no-store fetch")
+    if not re.search(
+        r"fetch\(url,\s*\{\s*cache:\s*['\"]no-store['\"],\s*signal:\s*ctrl\.signal\s*\}\)",
+        chart_js,
+    ):
+        errors.append("data_raw/chart.js initial CSV load is not explicit no-store, aborted fetch")
 
 if webserver:
     if 'server.on("/data.csv", (WebRequestMethodComposite)(HTTP_GET | HTTP_HEAD)' not in webserver:

@@ -34,6 +34,10 @@ struct { // Структура для статистики
 
 uint16_t nbk_column_inertia = NBK_COLUMN_INERTIA_DEFAULT; // Инерция колонны (Ин)
 float nbk_overflow_pressure = NBK_OVERFLOW_PRESSURE_DEFAULT; // Давление захлёба (Дз)
+// [П7] Счётчик неудачных чтений датчика давления, по образцу DSSensor.ErrCount
+// (alarm.h). Растёт в обеих ветках чтения (XGZ/1-Wire, sensorinit.h) при
+// неудаче, обнуляется при успехе - см. nbk_pressure_stale() ниже.
+int pressure_err_count = 0;
 float nbk_M = 0; // М — текущая мощность, Вт
 float nbk_M_max = 3200; // Максимальная мощность ТЭН-а в режиме НБК
 float nbk_Mo = 0;   // Мо — оптимальная мощность, Вт
@@ -56,7 +60,6 @@ bool nbk_opt_in_progress = false;
 uint32_t nbk_work_next_time = 0;
 uint32_t nbk_overheat_start_time = 0;
 bool nbk_work_in_pause = false;
-bool workrun = true; // флаг необходимости снижения мощности в Работе после захлёба
 uint8_t nbk_work_pause_stage = 0;
 float nbk_Mo_temp = 0,
       nbk_Po_temp = 0; // временное хранилище на случай пропуска оптимизации
@@ -67,6 +70,7 @@ bool nbk_pause_overflow_repeat_latched = false; // [T1] подавление п�
 float nbk_Po_ceiling = 0; // [T2] потолок повышающей коррекции подачи в Работе
 uint8_t nbk_high_temp_ticks = 0; // [T2] счётчик тиков подряд с Тб выше Тн+dT
 uint32_t nbk_dry_steam_start_time = 0; // [T3] отсчёт времени перегрева пара на Ручной настройке
+uint32_t nbk_pressure_stale_start_time = 0; // [П7] отсчёт устойчивой потери показаний ДД
 bool nbk_work_entry_overflow_pending = false; // [T8] вход в Работу сразу после захлёба в конце Оптимизации
 bool nbk_safe_waiting = false;
 bool nbk_safe_wait_feed_stopped = false;
@@ -87,6 +91,7 @@ struct NbkSessionConfig {
 };
 
 static NbkSessionConfig nbkSessionConfig = {};
+static const char* nbkSessionConfigError = ""; // [П70в] какое поле сорвало старт
 static bool nbkHeaterResistanceInputValid = true;
 static bool nbkMainsVoltageInputValid = true;
 static bool nbkPreserveStartupInputValidity = false;
@@ -114,25 +119,28 @@ inline void nbk_capture_runtime_input_validity(
 
 inline bool nbk_capture_session_config() {
   const float heaterResistance = SamSetup.HeaterResistant;
-  const bool configValid =
-      SamSetup.NbkIn > 1 &&
-      SamSetup.NbkDelta > 0 &&
-      SamSetup.NbkTn > 0 &&
-      SamSetup.NbkOwPress > 1 &&
-      SamSetup.NbkDM > 1 &&
-      SamSetup.NbkDP > 0 &&
-      SamSetup.NbkSteamT > 80 &&
-      SamSetup.NbkSteamT <= 97 &&
-      nbkMainsVoltageInputValid &&
-      nbkHeaterResistanceInputValid &&
-      SamSetup.MainsVoltage > 0 &&
-      SamSetup.MainsVoltage < 1000 &&
-      heaterResistance >= CONTROL_HEATER_R_MIN &&
-      heaterResistance <= CONTROL_HEATER_R_MAX;
-  if (!configValid) {
+  // [П70в] Раньше все 12 полей сворачивались в один configValid - оператор
+  // получал общее "некорректные настройки" без указания, что именно поправить.
+  // Проверяем по очереди и запоминаем первое сломанное поле; пороги и порядок
+  // условий не меняются, только форма записи.
+  const char* reason = nullptr;
+  if (!(SamSetup.NbkIn > 1)) reason = "инерция колонны Ин";
+  else if (!(SamSetup.NbkDelta > 0)) reason = "поправка dT";
+  else if (!(SamSetup.NbkTn > 0)) reason = "температура куба Тн";
+  else if (!(SamSetup.NbkOwPress > 1)) reason = "давление захлёба ДД";
+  else if (!(SamSetup.NbkDM > 1)) reason = "шаг мощности dM";
+  else if (!(SamSetup.NbkDP > 0)) reason = "шаг подачи dП";
+  else if (!(SamSetup.NbkSteamT > 80 && SamSetup.NbkSteamT <= 97)) reason = "предел температуры пара Тп";
+  else if (!nbkMainsVoltageInputValid) reason = "напряжение сети (ввод не распознан)";
+  else if (!nbkHeaterResistanceInputValid) reason = "сопротивление ТЭНа (ввод не распознан)";
+  else if (!(SamSetup.MainsVoltage > 0 && SamSetup.MainsVoltage < 1000)) reason = "напряжение сети вне диапазона";
+  else if (!(heaterResistance >= CONTROL_HEATER_R_MIN && heaterResistance <= CONTROL_HEATER_R_MAX)) reason = "сопротивление ТЭНа вне диапазона";
+  if (reason != nullptr) {
+    nbkSessionConfigError = reason;
     nbkSessionConfig = {};
     return false;
   }
+  nbkSessionConfigError = "";
   nbkSessionConfig.columnInertia = SamSetup.NbkIn;
   nbkSessionConfig.deltaT = SamSetup.NbkDelta;
   nbkSessionConfig.tankTemp = SamSetup.NbkTn;
@@ -199,11 +207,41 @@ void handle_nbk_stage_work();
 void handle_overflow(const String& msg, bool finish = true, uint32_t pause_ms = 0, bool graceful = false);
 inline bool nbk_close_data_log();
 
+// [П7] «Несвежие» показания ДД — порог 10 подряд неудач, как у температурных
+// датчиков (sensor_reading_valid в alarm.h). pressure_err_count наращивается
+// по-разному в зависимости от того, какой датчик давления выбран в
+// Samovar_ini.h (sensorinit.h):
+// - без USE_PRESSURE_XGZ/_MPX/_1WIRE вовсе — счётчик нигде не трогается,
+//   здесь всегда false.
+// - USE_PRESSURE_XGZ: use_pressure_sensor==true, только если сенсор отозвался
+//   при инициализации; pressure_sensor_get() начинается с `if
+//   (!use_pressure_sensor) return;`, так что при неудачной инициализации
+//   счётчик не растёт. Если инициализация удалась — растёт при реальных
+//   сбоях чтения (I2C/семафор) и сбрасывается в 0 при успехе.
+// - USE_PRESSURE_MPX: use_pressure_sensor всегда true, но сама ветка чтения
+//   в pressure_sensor_get() не умеет отличать удачное чтение АЦП от
+//   неудачного и pressure_err_count вообще не трогает — здесь тоже всегда
+//   false, независимо от того, подключён ли физически датчик.
+// - USE_PRESSURE_1WIRE: use_pressure_sensor принудительно true при
+//   инициализации НЕЗАВИСИМО от того, отвечает ли физический датчик, а
+//   чтение в DS_getvalue() (не pressure_sensor_get()!) не имеет ранней
+//   проверки use_pressure_sensor и честно наращивает счётчик при каждой
+//   неудаче — устойчивый обрыв (в т.ч. если провод вообще не подключён, а
+//   макрос всё равно включён) даёт аварийный останов НБК через ~60 с. Судя
+//   по всему, это намеренное fail-safe поведение для этой конфигурации.
+inline bool nbk_pressure_stale() {
+  return pressure_err_count > 10;
+}
+
 bool overflow(){
   if (PowerOn) {
    #ifdef USE_HEAD_LEVEL_SENSOR
       if (head_level_sensor_holded()) return true;
    #endif
+    // [П7] Без свежих данных ДД нельзя отличить «всё хорошо» от «идёт
+    // захлёб» — безопаснее остановить рост мощности/подачи, как при
+    // реальном захлёбе.
+    if (nbk_pressure_stale()) return true;
     if (pressure_value >= nbk_overflow_pressure) return true;
   }
   return false;
@@ -215,6 +253,9 @@ inline const char* nbk_overflow_source() {
    #ifdef USE_HEAD_LEVEL_SENSOR
       if (head_level_sensor_holded()) return "ДЗ";
    #endif
+    // [П7] Отдельный текст: несвежие данные — не то же самое, что реальный
+    // захлёб по ДД, сообщение не должно врать оператору.
+    if (nbk_pressure_stale()) return "нет данных ДД";
     if (pressure_value >= nbk_overflow_pressure) return "ДД";
   }
   return "?";
@@ -631,7 +672,7 @@ void handle_nbk_stage_optimization() {
        run_nbk_program(ProgramNum + 1);
        return;
      }
-     if (overflow() && !workrun) { // Если захлёб по ДЗ или ДД
+     if (overflow()) { // Если захлёб по ДЗ или ДД
         if (nbk_Mo == 0 && nbk_Po == 0) {
           // Если захлёб на первых же итерациях  (когда Мо или По равны нулю)
           handle_overflow("Заданные параметры " + String(PWR_MSG) + " и Скорость слишком велики — оптимизация невозможна. Останов.", true, 0);
@@ -862,14 +903,12 @@ void handle_nbk_stage_work() {
     if (safety_deadline_expired(millis(), nbk_work_next_time)) {
     if (nbk_work_pause_stage == 1) {
       // После 3*Ин: После этого Мо=Мо-dM/10. М=Мо, П=По,
-      if (workrun) {
-        if (nbk_overflow_happened) { // снижаем Mo/Po только если пауза вызвана захлёбом, а не вмешательством пользователя
-          nbk_Mo -= nbk_dM / 10.0; // на 1/10 шага убавляем мощность
-          nbk_Po -= nbk_dP / 10.0; // на 1/10 шага убавляем подачу;
-        }
+      if (nbk_overflow_happened && !nbk_work_entry_overflow_pending) { // снижаем Mo/Po только если пауза вызвана захлёбом в самой Работе, а не входом в неё сразу после захлёба в конце Оптимизации (там уже снижено)
+        nbk_Mo -= nbk_dM / 10.0; // на 1/10 шага убавляем мощность
+        nbk_Po -= nbk_dP / 10.0; // на 1/10 шага убавляем подачу;
       }
-      nbk_overflow_happened = false; // сброс флага в любом случае (workrun или нет)
-      if (!workrun) workrun = true; //если был захлеб в конце оптимизации после первой паузы, Mo не снижаем
+      nbk_overflow_happened = false; // сброс флага в любом случае
+      nbk_work_entry_overflow_pending = false; // одноразовый, потребили
       if (nbk_Mo < 0) nbk_Mo = 0;
       if (nbk_Po < 0) nbk_Po = 0;
       if (!nbk_schedule_actuator_command(
@@ -917,6 +956,71 @@ inline void nbk_cancel_program_start(const String& message) {
   ProgramNum = 0;
 }
 
+// [П9] Возобновление Работы НБК после безопасного ожидания, вызванного сбоем
+// подтверждения приводов ПОСРЕДИ Работы (не при первом входе в неё - для этого
+// есть отдельная явная ветка WType=='W' в run_nbk_program). Работа - последняя
+// строка программы: обычный run_nbk_program(ProgramNum+1) уходит прямиком в
+// nbk_finish() и теряет весь накопленный nbk_Mo/nbk_Po. Возобновляем ЖИВЫМИ
+// nbk_Mo/nbk_Po (а не program[].Power/Speed), без автозапуска - только по
+// повторному нажатию "Следующая программа" и только если причина устранена.
+inline void nbk_resume_work_after_safe_wait() {
+  if (heater_safety_latched()) {
+    SendMsg("Возобновление Работы НБК невозможно: авария зафиксирована.", ALARM_MSG);
+    return;
+  }
+  if (!nbkSessionConfig.valid) {
+    SendMsg("Возобновление Работы НБК невозможно: нет снимка конфигурации сессии.", ALARM_MSG);
+    return;
+  }
+  if (!nbk_stage_sensors_valid('W')) return; // сообщение об ошибке датчика формирует сама функция
+  if (nbkActuatorCommand.active) {
+    SendMsg("Возобновление Работы НБК отклонено: предыдущая команда приводов ещё выполняется.", WARNING_MSG);
+    return;
+  }
+  tick_nbk_safe_wait();
+  if (nbk_safe_wait_result == ACTUATOR_COMMAND_PENDING) {
+    SendMsg("Работа НБК ожидает завершения выключения нагрева.", WARNING_MSG);
+    return;
+  }
+  if (nbk_safe_wait_result != ACTUATOR_COMMAND_APPLIED) {
+    SendMsg("Возобновление Работы НБК недоступно: останов насоса не был подтверждён.", ALARM_MSG);
+    return;
+  }
+  set_power(true);
+  if (!PowerOn) {
+    nbk_enter_safe_wait("Нагрев НБК не включён при попытке возобновления Работы.");
+    return;
+  }
+  nbk_safe_waiting = false;
+  nbk_safe_wait_feed_stopped = false;
+  nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+  if (!nbk_schedule_actuator_command(
+          nbk_Mo,
+          nbk_Po,
+          NBK_ACTUATOR_WORK_DEADLINE,
+          uint32_t(nbk_column_inertia) * 1000,
+          nbk_opt_iter)) {
+    nbk_enter_safe_wait("Возобновление Работы НБК: параметры не приняты приводами.");
+    return;
+  }
+  // [Дефект 2] nbk_enter_safe_wait() при входе в безопасное
+  // ожидание НЕ трогает состояние паузы захлёба (оно просто замораживается как
+  // было). Без явного сброса здесь handle_nbk_stage_work() на следующем тике
+  // снова войдёт в ветку nbk_work_pause_stage==1 и повторно отправит уже
+  // отправленную команду nbk_Mo/nbk_Po. Раз команда выше принята приводами -
+  // пауза по захлёбу завершена, возвращаемся в обычный цикл Работы (как при
+  // штатном выходе из stage==2): снимаем флаг паузы и обнуляем её стадию и
+  // накопленные флаги захлёба, чтобы они не «дожили» из старой паузы.
+  nbk_work_in_pause = false;
+  nbk_work_pause_stage = 0;
+  nbk_overflow_happened = false;
+  nbk_pause_overflow_repeat_latched = false;
+#ifdef SAMOVAR_USE_POWER
+  SendMsg("Работа НБК возобновлена: М=" + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) +
+          ", П=" + String(nbk_Po,1) + " л/ч", NOTIFY_MSG);
+#endif
+}
+
 // Смена программы
 void run_nbk_program(uint8_t num, bool workConfirmed) {
  // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
@@ -962,6 +1066,14 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
   if (num == 0) {
     nbk_overheat_start_time = 0;
     nbk_dry_steam_start_time = 0; // [Ревью П1, находка 2] симметрично nbk_overheat_start_time
+    nbk_pressure_stale_start_time = 0; // [П7] симметрично
+  }
+  // [П9] "Следующая программа" во время безопасного ожидания на строке Работы -
+  // это просьба возобновить, а не перейти к несуществующей следующей строке.
+  if (nbk_safe_waiting && num == uint16_t(ProgramNum) + 1 &&
+      ProgramNum < ProgramLen && program[ProgramNum].WType == 'W') {
+    nbk_resume_work_after_safe_wait();
+    return;
   }
   if (num >= PROGRAM_END || num >= NBK_PROGRAM_MAX) {
     nbk_finish();
@@ -1050,7 +1162,8 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
   }
   if (num == 0) {
     if (!nbk_capture_session_config()) {
-      nbk_cancel_program_start("Запуск НБК отклонён: некорректные настройки НБК или питания.");
+      nbk_cancel_program_start(
+          "Запуск НБК отклонён: некорректная настройка - " + String(nbkSessionConfigError) + ".");
       nbk_close_data_log();
       return;
     }
@@ -1064,7 +1177,6 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
   }
  // Сообщение о переходе между этапами
   if (ProgramNum == 0) {
-    //PowerOn=true;//TODO костыль 2 от незапуска по кнопке Включить нагрев
     time_speed = millis();
     stats.startTime = millis();
     stats.avgSpeed = 0;
@@ -1072,6 +1184,7 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
     stats.totalVolume = 0;
     stats.activeVolume = 0;
     stats.activeFeedMs = 0;
+    nbk_work_entry_overflow_pending = false; // [П8] сброс на старте сессии
     if (!create_data()) {
       nbk_cancel_program_start("Ошибка создания файла лога. Старт НБК отменён.");
       return;
@@ -1091,7 +1204,6 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
   }
   // при переходе на Разгон
   if (program[ProgramNum].WType == 'H') {
-    workrun = false; // сброс флага необходимости снижения мощности в Работе после захлёба
     begintime = 0;
     set_power(true);   // Если М и П не заданы в строке, то умолчания:М = разгонная П = 1 л/ч
     if (!PowerOn) {
@@ -1156,6 +1268,7 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
   if (SamovarStatusInt != SAMOVAR_STATUS_NBK || !PowerOn || startval < SAMOVAR_STARTVAL_NBK_RUNNING) {
     nbk_overheat_start_time = 0;
     nbk_dry_steam_start_time = 0; // [Ревью П1, находка 2] симметрично nbk_overheat_start_time
+    nbk_pressure_stale_start_time = 0; // [П7] симметрично
     return false;
   }
   if (heater_safety_latched()) { //если авария - в НБК не делаем ничего
@@ -1205,6 +1318,20 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
       }
     } else {
       nbk_overheat_start_time = 0; // сброс счетчика времени, ситуация выправилась
+    }
+
+    // [П7] Устойчивая потеря показаний ДД дольше 60 с — отдельный аварийный
+    // останов по аналогии с "Недостаточное охлаждение" выше: пока данные
+    // несвежие, overflow() уже трактует это как захлёб (с. выше), но отказ
+    // датчика сам по себе не должен молча удерживать процесс бесконечно.
+    if (nbk_pressure_stale()) {
+      if (nbk_pressure_stale_start_time == 0) nbk_pressure_stale_start_time = millis();
+      if (millis() - nbk_pressure_stale_start_time > 60000) {//ждем 60 сек
+        request_emergency_stop("Отказ датчика давления! Нет показаний более 60 секунд. Останов.");
+        return true;
+      }
+    } else {
+      nbk_pressure_stale_start_time = 0; // сброс счетчика времени, показания снова свежие
     }
 
   return false;

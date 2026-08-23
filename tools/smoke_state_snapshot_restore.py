@@ -60,6 +60,18 @@ class Print {
   virtual size_t write(const uint8_t* buffer, size_t size) = 0;
 };
 
+// string_utils.h (2026-08) зовёт Serial.println(F(...)) при нехватке памяти в
+// JsonStringPrint - объявляем здесь, ДО #include "string_utils.h" в HARNESS ниже, а не
+// рядом с остальными моками (которые идут уже после этого #include).
+class String;
+struct FakeSerial {
+  void print(const String&) {}
+  void println(const String&) {}
+  void print(const char*) {}
+  void println(const char*) {}
+};
+static FakeSerial Serial;
+
 class String {
  public:
   String() = default;
@@ -82,6 +94,12 @@ class String {
   char charAt(size_t index) const { return value_.at(index); }
   void reserve(size_t size) { value_.reserve(size); }
   const std::string& std_str() const { return value_; }
+
+  // concat() атомарен, как у настоящего Arduino String: JsonStringPrint (string_utils.h,
+  // 2026-08) зовёт его напрямую, чтобы честно вернуть неуспех при нехватке памяти. В
+  // этом мок-хосте память не кончается, поэтому обе перегрузки всегда успешны.
+  bool concat(char c) { value_ += c; return true; }
+  bool concat(const char* s, size_t len) { value_.append(s, len); return true; }
 
   int indexOf(char needle, int from) const {
     if (from < 0) from = 0;
@@ -286,13 +304,7 @@ static void log_file_unlock(bool locked) {
   if (locked) logFileLockDepth--;
 }
 
-struct FakeSerial {
-  void print(const String&) {}
-  void println(const String&) {}
-  void print(const char*) {}
-  void println(const char*) {}
-};
-static FakeSerial Serial;
+// Serial уже объявлен в ARDUINO_STUB (нужен там раньше - до #include "string_utils.h").
 
 static int sendMsgCalls = 0;
 static MESSAGE_TYPE lastMsgType = NONE_MSG;

@@ -49,6 +49,10 @@ for signature, required, forbidden in [
     ("static int lua_wrapper_set_mixer_pump_target", ["lua_check_index_arg"], ["uint8_t a = luaL_checkinteger", "lua_check_int32_arg"]),
     ("static int lua_wrapper_set_i2c_rele_state", ["lua_check_index_arg"], ["uint8_t a = luaL_checkinteger", "lua_check_int32_arg"]),
     ("static int lua_wrapper_get_i2c_rele_state", ["lua_check_index_arg"], ["uint8_t a = luaL_checkinteger", "lua_check_int32_arg"]),
+    # [П28] Раньше luaL_checknumber(...) в uint8_t усекал номер таймера ПО МОДУЛЮ
+    # 256 ДО проверки диапазона (setTimer(266,...) тихо писал в lua_timer[9]).
+    ("static int lua_wrapper_set_timer", ["lua_check_index_arg"], ["uint8_t a = luaL_checknumber"]),
+    ("static int lua_wrapper_get_timer", ["lua_check_index_arg"], ["uint8_t a = luaL_checknumber"]),
 ]:
     callback = body(LUA, signature)
     for token in required:
@@ -241,6 +245,7 @@ def run_behavioral_harness() -> tuple[int, str, str]:
         "static int lua_wrapper_set_num_variable(lua_State *lua_state)",
         "static int lua_wrapper_delay(lua_State *lua_state)",
         "static int lua_wrapper_set_str_variable(lua_State *lua_state)",
+        "static int lua_wrapper_get_str_variable(lua_State *lua_state)",
         "static int lua_wrapper_set_object(lua_State *lua_state)",
         "static int lua_wrapper_set_lua_status(lua_State *lua_state)",
         "static int lua_wrapper_exp_pinMode(lua_State *lua_state)",
@@ -256,6 +261,8 @@ def run_behavioral_harness() -> tuple[int, str, str]:
         "static int lua_wrapper_set_i2c_rele_state(lua_State *lua_state)",
         "static int lua_wrapper_get_i2c_rele_state(lua_State *lua_state)",
         "static int lua_wrapper_set_current_power(lua_State *lua_state)",
+        "static int lua_wrapper_set_timer(lua_State *lua_state)",
+        "static int lua_wrapper_get_timer(lua_State *lua_state)",
     ]
     callbacks = "\n".join(definition(LUA, signature) for signature in callback_signatures)
     harness = r'''
@@ -484,8 +491,21 @@ bool fake_string_setter(const String& value) {
   return stringSetterResult;
 }
 
+// [П25] busy-геттер для getStrVariable: getter может отказать (например,
+// runtime_state_lock занят), и тогда lua_wrapper_get_str_variable зовёт
+// luaL_error - именно тот путь, на котором раньше утекали String c/Var.
+bool stringGetterResult = true;
+int stringGetterCalls = 0;
+std::string fakeGetterValue;
+
+bool fake_string_getter(String& value) {
+  stringGetterCalls++;
+  if (stringGetterResult) value = fakeGetterValue;
+  return stringGetterResult;
+}
+
 static const LuaStrVariableDescriptor lua_str_variables[] = {
-  {"SamovarStatus", nullptr, fake_string_setter, LUA_VAR_WRITE,
+  {"SamovarStatus", fake_string_getter, fake_string_setter, LUA_VAR_RW,
    "SamovarStatus busy"},
   {"test_str_val", nullptr, fake_string_setter, LUA_VAR_WRITE, nullptr},
 };
@@ -498,10 +518,17 @@ static const LuaStrVariableDescriptor* find_lua_str_variable(
   return nullptr;
 }
 
+#ifndef LUA_OBJECT_STORE_MAX_KEYS
+#define LUA_OBJECT_STORE_MAX_KEYS 32
+#endif
+
 struct LuaObjectFake {
   int putCalls = 0;
   std::string lastKey;
   std::string lastValue;
+
+  bool has(const String&) { return false; }
+  int size() { return 0; }
 
   void put(const String& key, const String& value) {
     putCalls++;
@@ -525,6 +552,11 @@ bool set_lua_status_value(const String& value) {
 int vTaskDelayCalls = 0;
 TickType_t lastDelayTicks = 0;
 void vTaskDelay(TickType_t ticks) { vTaskDelayCalls++; lastDelayTicks = ticks; }
+
+// [П28] setTimer/getTimer читают/пишут этот массив по индексу 1..10.
+unsigned long fakeMillisValue = 0;
+unsigned long millis() { return fakeMillisValue; }
+unsigned long lua_timer[10] = {0};
 
 bool semaphoreAvailable = true;
 int semaphoreTakeCount = 0;
@@ -712,6 +744,7 @@ void register_callbacks(lua_State* state) {
   lua_register(state, "delay", lua_wrapper_delay);
   lua_register(state, "setNumVariable", lua_wrapper_set_num_variable);
   lua_register(state, "setStrVariable", lua_wrapper_set_str_variable);
+  lua_register(state, "getStrVariable", lua_wrapper_get_str_variable);
   lua_register(state, "setObject", lua_wrapper_set_object);
   lua_register(state, "setLuaStatus", lua_wrapper_set_lua_status);
   lua_register(state, "exp_pinMode", lua_wrapper_exp_pinMode);
@@ -727,6 +760,8 @@ void register_callbacks(lua_State* state) {
   lua_register(state, "set_i2c_rele_state", lua_wrapper_set_i2c_rele_state);
   lua_register(state, "get_i2c_rele_state", lua_wrapper_get_i2c_rele_state);
   lua_register(state, "setCurrentPower", lua_wrapper_set_current_power);
+  lua_register(state, "setTimer", lua_wrapper_set_timer);
+  lua_register(state, "getTimer", lua_wrapper_get_timer);
   set_number_global(state, "INPUT", INPUT);
   set_number_global(state, "OUTPUT", OUTPUT);
   set_number_global(state, "INPUT_PULLUP", INPUT_PULLUP);
@@ -1259,6 +1294,32 @@ void test_power(lua_State* state) {
   check(powerCalls == 3, "negative-infinite power reached set_current_power");
 }
 
+// [П28] Раньше luaL_checknumber в uint8_t усекал номер таймера ДО проверки
+// диапазона: setTimer(266,...) 266 % 256 == 10 - проходило "валидную" проверку
+// 1..10 и тихо писало в lua_timer[9]. lua_check_index_arg проверяет диапазон
+// на полном значении ДО усечения - 266 обязан быть отвергнут luaL_error'ом,
+// а lua_timer[9] остаться нетронутым.
+void test_timer(lua_State* state) {
+  for (unsigned long& value : lua_timer) value = 0;
+  fakeMillisValue = 1000;
+
+  const unsigned long before9 = lua_timer[9];
+  run_chunk(state, "setTimer(266, 5)", false);
+  check_last_error_contains("Invalid timer", "setTimer(266,...) did not report a range error");
+  check(lua_timer[9] == before9,
+        "setTimer(266,...) truncated 266 to 10 (266 mod 256) and wrote lua_timer[9]");
+
+  run_chunk(state, "setTimer(10, 5)", true, 0);
+  check(lua_timer[9] == fakeMillisValue + 5000, "setTimer(10,...) did not arm the 10th timer");
+
+  run_chunk(state, "return getTimer(266)", false);
+  check_last_error_contains("Invalid timer", "getTimer(266) did not report a range error");
+
+  lua_Number result = -1;
+  run_chunk(state, "return getTimer(10)", true, 1, &result);
+  check(result == 5, "getTimer(10) did not read back the timer armed by setTimer(10,...)");
+}
+
 void check_strings_destroyed(const char* message) {
   check(liveStringCount == 0, message);
 }
@@ -1330,6 +1391,21 @@ void test_string_callbacks(lua_State* state) {
   check(lastStringValue == "ready", "descriptor success lost value");
   check_strings_destroyed("descriptor success retained Arduino String");
 
+  // [П25] luaL_error - longjmp: раньше String c/Var в lua_wrapper_get_str_variable
+  // жили ПРЯМО в кадре, где вызывался luaL_error, и их деструкторы не успевали
+  // отработать. Проверяем ветку отказа геттера (busy) и успешную ветку.
+  stringGetterCalls = 0;
+  stringGetterResult = false;
+  run_chunk(state, "return getStrVariable('SamovarStatus')", false);
+  check_last_error_contains("SamovarStatus busy", "get descriptor busy error text");
+  check(stringGetterCalls == 1, "busy getter was not reached");
+  check_strings_destroyed("busy getStrVariable retained Arduino String");
+
+  stringGetterResult = true;
+  fakeGetterValue = "ready-value";
+  run_chunk(state, "return getStrVariable('SamovarStatus')", true, 1);
+  check_strings_destroyed("successful getStrVariable retained Arduino String");
+
   run_chunk(state, "setObject('key','value')", true, 0);
   check(luaObject.putCalls == 1 && luaObject.lastKey == "key" &&
             luaObject.lastValue == "value",
@@ -1387,6 +1463,7 @@ int main() {
   test_i2c_wrappers(state);
   test_pump(state);
   test_power(state);
+  test_timer(state);
   test_string_callbacks(state);
   test_longjmp_allocations(state);
   lua_close(state);

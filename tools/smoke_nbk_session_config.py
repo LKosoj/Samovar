@@ -15,6 +15,8 @@ HARNESS = r'''
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <set>
+#include <string>
 
 #define NBK_COLUMN_INERTIA_DEFAULT 180
 #define NBK_OVERFLOW_PRESSURE_DEFAULT 40
@@ -51,6 +53,7 @@ struct NbkSessionConfig {
 @STATE_BODY@
 };
 static NbkSessionConfig nbkSessionConfig = {};
+static const char* nbkSessionConfigError = "";
 static bool nbkHeaterResistanceInputValid = true;
 static bool nbkMainsVoltageInputValid = true;
 static bool nbkPreserveStartupInputValidity = false;
@@ -93,11 +96,14 @@ static SetupProbe config_a() {
 static SetupProbe config_b() {
   return {330, 0.9f, 96.8f, 55, 170, 1.2f, 95, 240, 20};
 }
-static void expect_rejected(SetupProbe invalid, const char* message) {
+static void expect_rejected(SetupProbe invalid, const char* message, const char* expectedReasonSubstring) {
   SamSetup = config_a();
   check(nbk_capture_session_config(), "valid baseline должен фиксироваться");
   SamSetup = invalid;
   check(!nbk_capture_session_config() && !nbkSessionConfig.valid, message);
+  const std::string reason = nbkSessionConfigError;
+  check(reason.find(expectedReasonSubstring) != std::string::npos,
+        (std::string(message) + ": nbkSessionConfigError должен называть конкретное поле").c_str());
 }
 
 int main() {
@@ -145,31 +151,56 @@ int main() {
 
   SetupProbe invalid = config_a();
   invalid.NbkIn = 1;
-  expect_rejected(invalid, "NbkIn<=1 должен отклонять старт");
+  expect_rejected(invalid, "NbkIn<=1 должен отклонять старт", "инерция колонны");
   invalid = config_a(); invalid.NbkDelta = 0;
-  expect_rejected(invalid, "NbkDelta<=0 должен отклонять старт");
+  expect_rejected(invalid, "NbkDelta<=0 должен отклонять старт", "поправка dT");
   invalid = config_a(); invalid.NbkTn = 0;
-  expect_rejected(invalid, "NbkTn<=0 должен отклонять старт");
+  expect_rejected(invalid, "NbkTn<=0 должен отклонять старт", "температура куба");
   invalid = config_a(); invalid.NbkOwPress = 1;
-  expect_rejected(invalid, "NbkOwPress<=1 должен отклонять старт");
+  expect_rejected(invalid, "NbkOwPress<=1 должен отклонять старт", "давление захлёба");
   invalid = config_a(); invalid.NbkDM = 1;
-  expect_rejected(invalid, "NbkDM<=1 должен отклонять старт");
+  expect_rejected(invalid, "NbkDM<=1 должен отклонять старт", "шаг мощности");
   invalid = config_a(); invalid.NbkDP = 0;
-  expect_rejected(invalid, "NbkDP<=0 должен отклонять старт");
+  expect_rejected(invalid, "NbkDP<=0 должен отклонять старт", "шаг подачи");
   invalid = config_a(); invalid.NbkSteamT = 80;
-  expect_rejected(invalid, "NbkSteamT<=80 должен отклонять старт");
+  expect_rejected(invalid, "NbkSteamT<=80 должен отклонять старт", "температуры пара");
   invalid = config_a(); invalid.NbkSteamT = 98;
-  expect_rejected(invalid, "NbkSteamT>97 должен отклонять старт без clamp");
+  expect_rejected(invalid, "NbkSteamT>97 должен отклонять старт без clamp", "температуры пара");
   invalid = config_a(); invalid.MainsVoltage = 0;
-  expect_rejected(invalid, "MainsVoltage<=0 должен отклонять старт");
+  expect_rejected(invalid, "MainsVoltage<=0 должен отклонять старт", "напряжение сети вне диапазона");
   invalid = config_a(); invalid.MainsVoltage = 1000;
-  expect_rejected(invalid, "повреждённый MainsVoltage не должен подменяться 230В");
+  expect_rejected(invalid, "повреждённый MainsVoltage не должен подменяться 230В", "напряжение сети вне диапазона");
   invalid = config_a(); invalid.HeaterResistant = 1;
-  expect_rejected(invalid, "недоверенное HeaterResistance должно отклонять старт");
+  expect_rejected(invalid, "недоверенное HeaterResistance должно отклонять старт", "сопротивление ТЭНа вне диапазона");
   invalid = config_a(); invalid.HeaterResistant = 66;
-  expect_rejected(invalid, "слишком большое HeaterResistance должно отклонять старт без default");
+  expect_rejected(invalid, "слишком большое HeaterResistance должно отклонять старт без default", "сопротивление ТЭНа вне диапазона");
   invalid = config_a(); invalid.HeaterResistant = std::numeric_limits<float>::quiet_NaN();
-  expect_rejected(invalid, "NaN HeaterResistance должен отклонять старт без default");
+  expect_rejected(invalid, "NaN HeaterResistance должен отклонять старт без default", "сопротивление ТЭНа вне диапазона");
+
+  // [П70в] РАЗНЫЕ поля обязаны давать РАЗНЫЙ текст причины (не общее "плохая
+  // конфигурация НБК") - иначе field-specific сообщение не выполняет свою задачу.
+  {
+    auto capture_reason = [](SetupProbe broken) -> std::string {
+      SamSetup = config_a();
+      nbk_capture_session_config();
+      SamSetup = broken;
+      nbk_capture_session_config();
+      return nbkSessionConfigError;
+    };
+    std::set<std::string> distinctReasons;
+    SetupProbe c;
+    c = config_a(); c.NbkIn = 1; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.NbkDelta = 0; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.NbkTn = 0; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.NbkOwPress = 1; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.NbkDM = 1; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.NbkDP = 0; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.NbkSteamT = 80; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.MainsVoltage = 0; distinctReasons.insert(capture_reason(c));
+    c = config_a(); c.HeaterResistant = 1; distinctReasons.insert(capture_reason(c));
+    check(distinctReasons.size() == 9,
+          "разные поля обязаны давать РАЗНЫЙ текст причины отказа (нашли меньше 9 уникальных)");
+  }
 
   SamSetup = config_a();
   nbk_preserve_startup_input_validity(1, 230);

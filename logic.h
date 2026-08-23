@@ -57,7 +57,13 @@ float get_liquid_rate_by_step(int StepperSpeed) {
 float get_speed_from_rate(float volume_per_hour) {
   ActualVolumePerHour = volume_per_hour;
   float v = round(SamSetup.StepperStepMl * volume_per_hour * 1000 / 3.6) / 1000.00;
-  return (v < 1) ? 1 : v;  // Минимальная скорость 1
+  if (v < 1) return 1;      // Минимальная скорость 1
+  // [П6] Верхний зажим по образцу i2c_stepper_steps_from_rate (I2CStepper.h) - иначе
+  // результат кастуется в uint16_t на вызывающей стороне и переполняется по кругу:
+  // оператор задаёт скорость выше физического предела насоса, а мотор молча едет
+  // с произвольной заниженной скоростью вместо ошибки/предупреждения.
+  if (v > 65535) return 65535;
+  return v;
 }
 
 #include "impurity_detector.h"
@@ -511,18 +517,60 @@ void stop_process(String reason) {
   SendMsg(reason, NOTIFY_MSG);
 }
 
-// Продвигает FSM статуса и обновляет кэш SamovarStatus.
-// Вызывается из секундного гейта triggerSysTicker (core 0) — раз в секунду.
-// Веб и Blynk читают кэш SamovarStatus напрямую под runtime_state_lock.
-String tick_status_fsm() {
-  // Строим статус в локальную переменную; под замком — только финальное присваивание кэша.
+// Решает переходы FSM статуса: применяет ровно одно из шести присваиваний
+// SamovarStatusInt за тик (если условие подошло). Текст статуса не строит - см.
+// format_status_fsm_text(), которая содержит дословно те же условия и вызывается
+// раньше (из tick_status_fsm()), поэтому видит состояние ДО перехода - точно так
+// же, как раньше, когда текст и переход собирались в одной ветке.
+// stepperState/nbkTransitionActive читаются РОВНО ОДИН РАЗ за тик в tick_status_fsm()
+// и передаются сюда тем же значением, что и в format_status_fsm_text() - иначе между
+// двумя отдельными вызовами stepper_safe_get_state()/nbk_transition_active() состояние
+// (двигателем управляет прерывание) могло бы разойтись между текстом и переходом.
+void decide_status_fsm(bool stepperState, bool nbkTransitionActive) {
+  if (!PowerOn && SamovarStatusInt == SAMOVAR_STATUS_IDLE) {
+    // "Выключено" - переход не требуется.
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && !PauseOn && !program_Wait) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && program_Wait) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_AUTOPAUSE;
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_DONE) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_PROGRAM_DONE;
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_CALIBRATION) {
+    SamovarStatusInt = SAMOVAR_STATUS_RECT_CALIBRATION;
+  } else if (PauseOn) {
+    SamovarStatusInt = SAMOVAR_STATUS_PAUSED;
+  } else if (PowerOn && Samovar_Mode == SAMOVAR_SUVID_MODE) {
+    // Сувид живёт со статусом 0 - переход не требуется (см. smoke_suvid_mode_fixes.py).
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_IDLE && !stepperState) {
+    // [PKG-B п.2] При активном nbk-переходе (в т.ч. мягком финише FINISH_WAIT: нагрев ещё
+    // включён, startval=0) НЕ захватываем статус 50 — иначе finishOwnerValid (требует
+    // SamovarStatusInt==0) ложнеет и мягкий финиш срывается в аварийное отключение нагрева.
+    // nbk_transition_active() истинна только в режиме НБК, ректификацию это не затрагивает.
+    if (SamovarStatusInt != SAMOVAR_STATUS_RECT_STABILIZING && SamovarStatusInt != SAMOVAR_STATUS_RECT_STABLE && !nbkTransitionActive && Samovar_Mode != SAMOVAR_LUA_MODE) {
+      SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
+    }
+    // LUA-заглушка / "Разгон завершен" / "Стабилизация завершена" - только текст,
+    // переход не требуется.
+  }
+  // else: catch-all (mode_status_by_status) - переход не требуется.
+}
+
+// Формирует текст статуса FSM по текущим runtime-переменным. Условия здесь -
+// дословная копия ветвления decide_status_fsm(), но без побочных эффектов на
+// SamovarStatusInt. Вызывается из tick_status_fsm() ДО decide_status_fsm() -
+// поэтому видит SamovarStatusInt ещё СТАРЫМ (как раньше, когда текст и переход
+// собирались в одной ветке: строка текста читалась до присваивания состояния).
+// stepperState/nbkTransitionActive - см. комментарий у decide_status_fsm(): то же самое
+// значение за тик, прочитанное один раз в tick_status_fsm().
+String format_status_fsm_text(bool stepperState, bool nbkTransitionActive) {
+  // Строим статус в локальную переменную; под замком (в tick_status_fsm) — только
+  // финальное присваивание кэша.
   String local;
   // Если питание выключено и нет активного режима - показываем "Выключено"
   if (!PowerOn && SamovarStatusInt == SAMOVAR_STATUS_IDLE) {
     local = F("Выключено");
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && !PauseOn && !program_Wait) {
     local = "Прг №" + String(ProgramNum + 1);
-    SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_RUNNING && program_Wait) {
     int s = 0;
     // [C-13] overflow-safe: t_min ещё в будущем если (int32_t)(t_min - millis()) > 10.
@@ -538,16 +586,12 @@ String tick_status_fsm() {
       SendMsg("Не удалось прочитать тип автоматической паузы.", WARNING_MSG);
     }
     local = "Прг №" + String(ProgramNum + 1) + " пауза " + waitTypeText + ". Продолжение через " + (String)s + " сек.";
-    SamovarStatusInt = SAMOVAR_STATUS_RECT_AUTOPAUSE;
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_RECT_DONE) {
     local = F("Выполнение программы завершено");
-    SamovarStatusInt = SAMOVAR_STATUS_RECT_PROGRAM_DONE;
   } else if (PowerOn && startval == SAMOVAR_STARTVAL_CALIBRATION) {
     local = F("Калибровка");
-    SamovarStatusInt = SAMOVAR_STATUS_RECT_CALIBRATION;
   } else if (PauseOn) {
     local = F("Пауза");
-    SamovarStatusInt = SAMOVAR_STATUS_PAUSED;
   } else if (PowerOn && Samovar_Mode == SAMOVAR_SUVID_MODE) {
     // Сувид — термостат без колонны и шаговика: ветка «Разгон колонны» ниже к нему неприменима.
     local = "Сувид; Поддерж. Т=" + String(suvid_target_temp()) + "°; Тек: " + String(TankSensor.avgTemp) + "°";
@@ -558,14 +602,13 @@ String tick_status_fsm() {
     }
     int32_t suvidRemainSec = suvid_hold_remaining_sec();
     if (suvidRemainSec >= 0) local += "; Выдержка: " + format_uptime((unsigned long)suvidRemainSec);
-  } else if (PowerOn && startval == SAMOVAR_STARTVAL_IDLE && !stepper_safe_get_state()) {
+  } else if (PowerOn && startval == SAMOVAR_STARTVAL_IDLE && !stepperState) {
     // [PKG-B п.2] При активном nbk-переходе (в т.ч. мягком финише FINISH_WAIT: нагрев ещё
     // включён, startval=0) НЕ захватываем статус 50 — иначе finishOwnerValid (требует
     // SamovarStatusInt==0) ложнеет и мягкий финиш срывается в аварийное отключение нагрева.
     // nbk_transition_active() истинна только в режиме НБК, ректификацию это не затрагивает.
-    if (SamovarStatusInt != SAMOVAR_STATUS_RECT_STABILIZING && SamovarStatusInt != SAMOVAR_STATUS_RECT_STABLE && !nbk_transition_active() && Samovar_Mode != SAMOVAR_LUA_MODE) {
+    if (SamovarStatusInt != SAMOVAR_STATUS_RECT_STABILIZING && SamovarStatusInt != SAMOVAR_STATUS_RECT_STABLE && !nbkTransitionActive && Samovar_Mode != SAMOVAR_LUA_MODE) {
       local = F("Разгон колонны");
-      SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
     } else if (Samovar_Mode == SAMOVAR_LUA_MODE) {
       // LUA исключён из «Разгона колонны» выше: сценарий колонны ему неприменим,
       // но текст статуса всё равно нужен - иначе local останется пустым.
@@ -578,6 +621,24 @@ String tick_status_fsm() {
   } else {
     mode_status_by_status(SamovarStatusInt, local);
   }
+  return local;
+}
+
+// Продвигает FSM статуса и обновляет кэш SamovarStatus.
+// Вызывается из секундного гейта triggerSysTicker (core 0) — раз в секунду.
+// Веб и Blynk читают кэш SamovarStatus напрямую под runtime_state_lock.
+String tick_status_fsm() {
+  // Текст строим ДО перехода состояния - как раньше, когда обе вещи собирались в
+  // одной ветке (текст читал то же состояние, которое эта же ветка затем меняла).
+  // [фикс двойного чтения] stepper_safe_get_state()/nbk_transition_active() читаются
+  // РОВНО ОДИН РАЗ за тик и передаются как параметры в format_status_fsm_text()/
+  // decide_status_fsm() - иначе между двумя отдельными вызовами (двигателем управляет
+  // прерывание, значение может смениться между ними) текст статуса и переход состояния
+  // могли бы разойтись, выбрав разные ветки одного и того же каскада.
+  bool stepperState = stepper_safe_get_state();
+  bool nbkTransitionActive = nbk_transition_active();
+  String local = format_status_fsm_text(stepperState, nbkTransitionActive);
+  decide_status_fsm(stepperState, nbkTransitionActive);
 
   if (SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || (SamovarStatusInt == SAMOVAR_STATUS_BEER && PowerOn)) {
     // [C-2/2c] WthdrwTimeS/WthdrwTimeAllS пишутся SysTicker под замком → читаем под
@@ -746,9 +807,14 @@ void run_program(uint8_t num) {
 #ifdef SAMOVAR_USE_POWER
   apply_program_power_row(program[num].Power);
   vTaskDelay(500 / portTICK_PERIOD_MS);
-  // [L-7] alarm_c_low_min = millis() — запоминается момент старта строки предзахлёба;
-  // интервал TIME_C добавляется позже в check_alarm() при срабатывании.
-  if (program[num].WType == 'C' && alarm_c_low_min == 0) alarm_c_low_min = millis();
+  // [П16] alarm_c_low_min - АБСОЛЮТНАЯ метка millis() срока наступления (см.
+  // соглашение beer.h:31 и ветку check_alarm(), alarm.h: "alarm_c_low_min = millis()
+  // + 1000 * 60 * TIME_C"). Раньше здесь писался момент СТАРТА строки, а читающая
+  // сторона трактует поле как момент НАСТУПЛЕНИЯ - условие в check_alarm()
+  // срабатывало почти сразу после старта, и выдержка TIME_C минут перед подъёмом
+  // напряжения фактически не работала. Формат записи - как во второй ветке того же
+  // check_alarm(), чтобы читатели поля трактовали его одинаково.
+  if (program[num].WType == 'C' && alarm_c_low_min == 0) alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
 #endif
   p_s = "Программа: старт строки  №" + (String)(num + 1);
   if (program_type_one_of(program[num].WType, "HBTC")) {
@@ -762,6 +828,15 @@ void run_program(uint8_t num) {
     //устанавливаем параметры для текущей программы отбора
     set_capacity(program[num].capacity_num);
     CurrrentStepperSpeed = (uint16_t)get_speed_from_rate(program[num].Speed);
+    // [П6] get_speed_from_rate() зажимает результат по верхней границе молча (это
+    // общая функция, дергается и из автоматики детектора); здесь же есть контекст
+    // (номер строки программы), поэтому предупреждаем оператора явно - иначе на
+    // экране останется введённое им число, а насос поедет на пределе.
+    if (CurrrentStepperSpeed >= 65535) {
+      SendMsg("Программа: скорость строки №" + (String)(num + 1) + " (" + (String)program[num].Speed +
+                  " л/ч) превышает предел насоса, ограничена до " + (String)get_liquid_rate_by_step(CurrrentStepperSpeed) + " л/ч.",
+              WARNING_MSG);
+    }
     CurrentBaseSpeedRate = program[num].Speed;  // [П3-1] новая база для детектора при старте строки
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
     TargetStepps = (uint32_t)program[num].Volume * (uint32_t)SamSetup.StepperStepMl;

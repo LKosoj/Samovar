@@ -12,9 +12,41 @@ inline float suvid_target_temp() {
   return SamSetup.SuvidTemp > 0 ? SamSetup.SuvidTemp : 60.0f;
 }
 
+// [П15] Максимальное время на выход в рабочую полосу ±HEAT_DELTA от уставки.
+// Если за это время выдержка так и не началась - скорее всего сломан ТЭН,
+// врёт датчик куба или загрузка слишком велика для нагревателя. Значение по
+// аналогии с BEER_BOIL_TIMEOUT_MS в beer.h (тот же класс оборудования - большой
+// бак, а не бытовая мультиварка), ориентировочное, подлежит проверке на реальном
+// оборудовании.
+// Раньше по этому таймауту уходило только предупреждение, и нагрев продолжал
+// работать: при отказе датчика куба (застывшее заниженное показание) термостат
+// держит ТЭН включённым бесконечно, потому что уставка по такому показанию
+// недостижима в принципе. Близнецы в beer.h (BEER_BOIL_TIMEOUT_MS,
+// BEER_COOL_TIMEOUT_MS) в такой ситуации останавливают процесс -
+// здесь теперь то же самое: сообщение + штатное выключение нагрева.
+#define SUVID_REACH_TIMEOUT_MS (60UL * 60UL * 1000UL)
+
+// Через сколько повторять команду выключения, если нагрев всё ещё включён.
+// SAMOVAR_POWER - ПЕРЕКЛЮЧАТЕЛЬ (Samovar.ino: set_power(!PowerOn)), а очередь команд
+// общая на всё устройство: чужая команда (веб, Lua, другой режим), разобранная в том
+// же проходе loop(), способна вернуть нагрев обратно. Считать "команда поставлена" за
+// "нагрев выключен" поэтому нельзя - иначе одна такая гонка оставила бы ТЭН включённым
+// до конца сессии, без повторных попыток и без второго сообщения. Интервал заметно
+// больше периода тика (1 с), чтобы обычная задержка исполнения не порождала лишних
+// переключений.
+#define SUVID_STOP_RETRY_MS (10UL * 1000UL)
+
 // Выдержка Сувида учитывает только подтверждённое время внутри полосы
-// setpoint±HEAT_DELTA. active остаётся взведённым между выходами из полосы,
-// чтобы накопленное время не терялось; inBand отделяет текущий зачёт интервала.
+// setpoint±HEAT_DELTA. active означает, что температура хотя бы раз вошла в
+// полосу ("выдержка началась") - выставляется независимо от SuvidHoldMinutes
+// (0 = бессрочный термостат, см. Samovar.h), иначе при бессрочном режиме
+// проверка отклонения ниже никогда бы не включалась. active остаётся
+// взведённым между выходами из полосы, чтобы накопленное время не терялось;
+// inBand отделяет текущий зачёт интервала. sessionStartMs — момент начала
+// текущей сессии нагрева, нужен только для таймаута "не вышли на режим";
+// sessionStartMsSet - отдельный флаг, а не "sessionStartMs == 0" в качестве
+// признака "ещё не установлен" - millis() тоже может быть ровно 0 (см.
+// аналогичную пару suvidDeviation.active/sinceMs чуть ниже).
 struct SuvidHoldState {
   bool active;
   bool fired;
@@ -22,6 +54,11 @@ struct SuvidHoldState {
   bool completionWarningSent;
   uint32_t accumulatedMs;
   uint32_t lastTickMs;
+  uint32_t sessionStartMs;
+  bool sessionStartMsSet;
+  bool reachTimeoutMsgSent;
+  bool reachTimeoutStopQueued;
+  uint32_t reachTimeoutStopMs;
 };
 static SuvidHoldState suvidHold;
 
@@ -70,7 +107,7 @@ inline void check_alarm_suvid() {
   if (!PowerOn) {
     suvidHeaterOn = false;  // холодный старт следующей сессии: не наследовать состояние реле
     heater_state = false;
-    suvidHold = {false, false, false, false, 0, 0};
+    suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};
     suvidDeviation = {false, false, 0};
     return;
   }
@@ -81,47 +118,84 @@ inline void check_alarm_suvid() {
   setHeaterPosition(suvidHeaterOn);
 
   const uint32_t now = millis();
+  if (!suvidHold.sessionStartMsSet) {
+    suvidHold.sessionStartMs = now;
+    suvidHold.sessionStartMsSet = true;
+  }
   const float deviation = fabsf(TankSensor.avgTemp - setpoint);
-  if (deviation > 2.0f) {
-    if (!suvidDeviation.active) {
-      suvidDeviation.active = true;
-      suvidDeviation.sinceMs = now;
+  const bool inHoldBand = deviation <= HEAT_DELTA;
+
+  // Взводим active независимо от SuvidHoldMinutes (см. комментарий у struct
+  // SuvidHoldState) - это единственное место, где выясняется, что выдержка
+  // "началась".
+  if (!suvidHold.active && inHoldBand) {
+    suvidHold.active = true;
+    suvidHold.inBand = true;
+    suvidHold.lastTickMs = now;
+  } else if (suvidHold.active) {
+    if (inHoldBand) {
+      if (suvidHold.inBand) suvidHold.accumulatedMs += now - suvidHold.lastTickMs;
+      suvidHold.inBand = true;
+      suvidHold.lastTickMs = now;
+    } else {
+      suvidHold.inBand = false;
     }
-    if (!suvidDeviation.warningSent &&
-        (uint32_t)(now - suvidDeviation.sinceMs) >= 60000UL) {
-      SendMsg("Сувид: температура отклоняется от уставки более чем на 2° уже 60 сек.", WARNING_MSG);
-      suvidDeviation.warningSent = true;
+  }
+
+  // [П15] Отклонение проверяем только ПОСЛЕ начала выдержки. До этого момента
+  // идёт обычный разогрев, когда большое отклонение - норма (вода ещё
+  // греется), а не авария. Раньше проверка шла с самого включения питания,
+  // поэтому каждая сессия начиналась с ложной тревоги - пользователи
+  // привыкали её игнорировать и рисковали пропустить настоящий отказ
+  // ТЭНа/датчика. Пока выдержка не началась - следим за таймаутом ниже.
+  if (suvidHold.active) {
+    if (deviation > 2.0f) {
+      if (!suvidDeviation.active) {
+        suvidDeviation.active = true;
+        suvidDeviation.sinceMs = now;
+      }
+      if (!suvidDeviation.warningSent &&
+          (uint32_t)(now - suvidDeviation.sinceMs) >= 60000UL) {
+        SendMsg("Сувид: температура отклоняется от уставки более чем на 2° уже 60 сек.", WARNING_MSG);
+        suvidDeviation.warningSent = true;
+      }
+    } else {
+      suvidDeviation = {false, false, 0};
     }
-  } else {
-    suvidDeviation = {false, false, 0};
+  } else if ((uint32_t)(now - suvidHold.sessionStartMs) >= SUVID_REACH_TIMEOUT_MS) {
+    // Сообщение - один раз (ALARM_MSG, а не WARNING_MSG: нагрев принудительно
+    // выключается, пользователь должен узнать об этом наверняка). Команда выключения -
+    // до тех пор, пока нагрев фактически не выключился: неудачная постановка (очередь
+    // занята) повторяется на следующем тике, успешная - через SUVID_STOP_RETRY_MS, если
+    // нагрев всё ещё включён. Штатное выключение, а не request_emergency_stop:
+    // это отказ оборудования или конфигурации, а не мгновенная опасность -
+    // аварийная защёлка потребовала бы ручного сброса (см. beer_abort_config_error
+    // в beer.h, тот же класс ситуации).
+    if (!suvidHold.reachTimeoutMsgSent) {
+      SendMsg("Сувид: не вышли на рабочую температуру за 60 минут, нагрев выключается. Проверьте ТЭН, датчик куба и объём загрузки.", ALARM_MSG);
+      set_buzzer(true);
+      suvidHold.reachTimeoutMsgSent = true;
+    }
+    // Управление доходит сюда только при PowerOn (иначе возврат выше), то есть нагрев
+    // всё ещё включён: повторяем, пока он действительно не выключится.
+    if (!suvidHold.reachTimeoutStopQueued ||
+        (uint32_t)(now - suvidHold.reachTimeoutStopMs) >= SUVID_STOP_RETRY_MS) {
+      if (queue_samovar_command(SAMOVAR_POWER)) {
+        suvidHold.reachTimeoutStopQueued = true;
+        suvidHold.reachTimeoutStopMs = now;
+      }
+    }
   }
 
   const uint32_t holdMs = (uint32_t)SamSetup.SuvidHoldMinutes * 60000UL;
-  const bool inHoldBand = deviation <= HEAT_DELTA;
-  if (holdMs > 0 && !suvidHold.fired) {
-    if (!suvidHold.active && inHoldBand) {
-      suvidHold.active = true;
-      suvidHold.inBand = true;
-      suvidHold.lastTickMs = now;
-    } else if (suvidHold.active) {
-      if (inHoldBand) {
-        if (suvidHold.inBand) suvidHold.accumulatedMs += now - suvidHold.lastTickMs;
-        suvidHold.inBand = true;
-        suvidHold.lastTickMs = now;
-      } else {
-        suvidHold.inBand = false;
-      }
-    }
-
-    if (suvidHold.active && suvidHold.accumulatedMs >= holdMs) {
-      set_buzzer(true);
-      if (queue_samovar_command(SAMOVAR_POWER)) {
-        SendMsg("Сувид: выдержка завершена, нагрев выключен.", NOTIFY_MSG);
-        suvidHold.fired = true;
-      } else if (!suvidHold.completionWarningSent) {
-        SendMsg("Сувид: выдержка завершена, но штатное выключение не поставлено: очередь команд занята.", WARNING_MSG);
-        suvidHold.completionWarningSent = true;
-      }
+  if (holdMs > 0 && !suvidHold.fired && suvidHold.active && suvidHold.accumulatedMs >= holdMs) {
+    set_buzzer(true);
+    if (queue_samovar_command(SAMOVAR_POWER)) {
+      SendMsg("Сувид: выдержка завершена, нагрев выключен.", NOTIFY_MSG);
+      suvidHold.fired = true;
+    } else if (!suvidHold.completionWarningSent) {
+      SendMsg("Сувид: выдержка завершена, но штатное выключение не поставлено: очередь команд занята.", WARNING_MSG);
+      suvidHold.completionWarningSent = true;
     }
   }
 }

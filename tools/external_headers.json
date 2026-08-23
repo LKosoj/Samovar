@@ -1,0 +1,12 @@
+{
+  "headers": {
+    "FS.h": "Arduino ESP32 core: файловая система, ставится вместе с фреймворком",
+    "PCF8591.h": "библиотека Arduino (АЦП/ЦАП по I2C), подтягивается PlatformIO из lib_deps",
+    "driver/uart.h": "ESP-IDF: драйвер UART",
+    "esp32/rom/rtc.h": "ESP-IDF: ROM-функции RTC (причина перезагрузки)",
+    "esp_log.h": "ESP-IDF: журналирование",
+    "freertos/FreeRTOS.h": "FreeRTOS в составе ESP-IDF",
+    "hal/uart_ll.h": "ESP-IDF: низкоуровневый слой UART",
+    "soc/rtc_wdt.h": "ESP-IDF: сторожевой таймер RTC"
+  }
+}

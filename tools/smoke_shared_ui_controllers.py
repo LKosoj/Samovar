@@ -67,6 +67,30 @@ def function_body(source: str, name: str) -> str:
     raise AssertionError(f"unterminated function {name}")
 
 
+def check_stale_reading_coverage():
+    """Каждое температурное показание страницы должно приглушаться при обрыве связи.
+
+    Ровно этот пропуск (bme_temp остался ярким на index/beer, когда остальные
+    цифры погасли) прошёл мимо текстовых проверок выше: они видят, что общий
+    механизм подключён, но не видят, что страница забыла перечислить показание.
+    bme_pressure исключён сознательно - он не приглушается ни на одной странице.
+    """
+    # Список страниц берём из ALL_PAGES, а не своей копией: седьмая страница
+    # с телеметрией должна попадать под проверку сама, без правки этого теста.
+    for page in ALL_PAGES:
+        text = (ROOT / "data_raw" / page).read_text(encoding="utf-8")
+        listed = re.search(r"staleReadingIds:\s*\[([^\]]*)\]", text)
+        require(listed is not None, f"{page}: страница не передаёт staleReadingIds")
+        declared = set(re.findall(r"['\"]([A-Za-z_]+)['\"]", listed.group(1)))
+        shown = set(re.findall(
+            r"getElementById\(['\"]([A-Za-z_]*(?:Temp|temp)[A-Za-z_]*)['\"]\)"
+            r"\.(?:innerHTML|innerText|textContent)\s*=",
+            text))
+        missing = sorted(shown - declared)
+        require(not missing,
+                f"{page}: показания приглушаются не полностью, забыты {missing}")
+
+
 def main() -> int:
     app = (DATA / "app.js").read_text(encoding="utf-8")
     pages = {name: read_page(name) for name in ALL_PAGES}
@@ -89,7 +113,18 @@ def main() -> int:
     require(option_keys == [
         "threshold", "onReady", "connectionIds", "storeMessageHistory",
         "dynamicThemeTitle", "implicitSystemTheme", "onLastMessageRemoved",
+        "onConnectionChange", "staleReadingIds",
     ], f"unexpected telemetry option allowlist: {option_keys}")
+    # Приглушение устаревших показаний живёт в app.js (общее для всех страниц),
+    # а не копией на каждой странице - иначе часы из общего партиала замирают
+    # без пометки там, где копию забыли.
+    require("function applyStaleVisuals" in app,
+            "stale-reading dimming must live in the shared controller")
+    require("applyStaleVisuals(true)" in app and "applyStaleVisuals(false)" in app,
+            "applyStaleVisuals must be driven by both connection transitions")
+    require("staleReadingIds должен быть массивом строк" in app,
+            "staleReadingIds must be validated")
+    check_stale_reading_coverage()
     require("Неизвестная опция telemetry lifecycle" in start_body,
             "unknown lifecycle options must fail loudly")
     require("typeof renderFn !== 'function'" in start_body,

@@ -48,6 +48,10 @@
     var pwr_unit = "%pwr_unit%";
     var powerInputMax = Number('%HeaterMaxPower%');
     var _lnIdx = 0;
+    var HeaterPowerOn = false;
+    // предел прошивки: program_io.h program_parse_beer_device - время вкл/выкл мешалки
+    // хранится в uint16_t (0..UINT16_MAX)
+    var MIXER_MAX_SECONDS = 65535;
 
     function loadFile (e) {
       var file = e;
@@ -139,11 +143,11 @@
           document.getElementById('version').textContent = myObj.version;
           document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
           document.getElementById('stm').textContent = myObj.stm;
-          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
-          document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
-          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
-          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(3);
-          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(3);
+          document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(1);
+          document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(1);
+          document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(1);
+          document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(1);
+          document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(1);
           document.getElementById('WthdrwlProgress').innerHTML = myObj.WthdrwlProgress;
           if (myObj.PrgType === "P") myObj.PrgType = "Пауза; "
           else if (myObj.PrgType === "M") myObj.PrgType = "Темп. закладки солода; "
@@ -179,7 +183,8 @@
 
           var powerstr;
           var powerstyle;
-          if (myObj.PowerOn == 1) {
+          HeaterPowerOn = myObj.PowerOn == 1;
+          if (HeaterPowerOn) {
             powerstr = 'Выключить нагрев';
             powerstyle = SamovarApp.cssVar('--state-danger-bg');
           } else {
@@ -355,26 +360,23 @@
         intValue = 0;
       }
       
-      const MAX_VALUE = 0x7fff; // 32767
-      if (intValue > MAX_VALUE) {
-        intValue = MAX_VALUE;
+      if (intValue > MIXER_MAX_SECONDS) {
+        intValue = MIXER_MAX_SECONDS;
       }
       
       inputElement.value = intValue;
     }
     
     function popup_ok(){
+     validateMixerInput(document.getElementById("m_time"));
+     validateMixerInput(document.getElementById("m_pause"));
+     const mTime = SamovarApp.readNumericInput('m_time', { integer: true, min: 0, max: MIXER_MAX_SECONDS, label: 'Время включения мешалки' });
+     if (!mTime) return;
+     const mPause = SamovarApp.readNumericInput('m_pause', { integer: true, min: 0, max: MIXER_MAX_SECONDS, label: 'Время паузы мешалки' });
+     if (!mPause) return;
      document.getElementById("popup").style.display = "none";
      document.getElementById("overlay").classList.remove("show");
-     validateMixerInput(document.getElementById("m_time"));
-     if (document.getElementById("m_time").value > 14400) {
-      document.getElementById("m_time").value = 0;
-     }
-     validateMixerInput(document.getElementById("m_pause"));
-     if (document.getElementById("m_pause").value > 14400) {
-      document.getElementById("m_pause").value = 0;
-     }
-     document.getElementById("pmixer" + document.getElementById("m_p_id").value).value = document.getElementById("m_type").value + "^" + document.getElementById("m_direction").value + "^" + document.getElementById("m_time").value + "^" + document.getElementById("m_pause").value;
+     document.getElementById("pmixer" + document.getElementById("m_p_id").value).value = document.getElementById("m_type").value + "^" + document.getElementById("m_direction").value + "^" + mTime.text + "^" + mPause.text;
      calc_program();
     }
 
@@ -458,7 +460,8 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false
+        implicitSystemTheme: false,
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp']
       });
     };
 
@@ -504,7 +507,7 @@
       <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
         <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
           <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
+            <div>Samovar</div> <span id='crnt_tm' style="font-size: 0.8em;"></span>
             <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
               <div>v. </div>
               <div id='version'></div>
@@ -620,7 +623,7 @@
       </section>
 
       <div>
-        <input id='power' type='button' name='power' class="button" value='Включить нагрев' onclick='if (this.value == "Выключить нагрев" && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;'>
+        <input id='power' type='button' name='power' class="button" value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;'>
         <input id='start' type='button' name='start' class="button" value='Следующая программа' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;'>
         <input id='chart' type='button' name='chart' class="button" value='График' onclick='javascript:location.href="chart.htm"'>
         <input id='setup' type='button' name='setup' class="button" value='Настройки' onclick='javascript:location.href="setup.htm"'>
@@ -699,8 +702,8 @@
         <div style="font-size: 18px; margin-left: 15px;">
           <label for="m_type">&nbsp;&nbsp;Тип устройства&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
           <label for="m_direction">Направление вращения&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
-          <label for="m_time" class="tooltip">Вкл сек<span class="tooltiptext">Максимальное время - 14400 сек (4 часа)</span></label>
-          <label for="m_pause" class="tooltip">Выкл сек<span class="tooltiptext">Максимальное время - 14400 сек (4 часа)</span></label>
+          <label for="m_time" class="tooltip">Вкл сек<span class="tooltiptext">Максимальное время - 65535 сек (18 ч 12 мин)</span></label>
+          <label for="m_pause" class="tooltip">Выкл сек<span class="tooltiptext">Максимальное время - 65535 сек (18 ч 12 мин)</span></label>
         </div>
         <div id="popup_mesh" class="modalline">
           <select id="m_type" style="margin-left: 4px !important;"><option value="0">Выключено</option><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select>

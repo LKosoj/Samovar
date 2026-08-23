@@ -154,6 +154,14 @@ void FS_register_web_handlers(void) {
   server.addHandler(&events);
 
   // DIY device: /edit stays local-network only and intentionally unauthenticated.
+  // Решение владельца от 23.08.2026 (подтверждено): аутентификации в /edit и во всём
+  // веб-интерфейсе нет и намеренно не будет без отдельного нового решения владельца.
+  // Следствие: любой, кто оказался в локальной сети устройства (Wi-Fi/Ethernet), может
+  // анонимно включить нагрев, изменить программу перегонки и загрузить или удалить
+  // файлы через редактор - без пароля и без предупреждения. Поэтому устройство
+  // рассчитано ТОЛЬКО на доверенную домашнюю сеть и не должно выставляться в интернет
+  // (проброс портов, DMZ и т.п.) - это ответственность того, кто его разворачивает, а
+  // не прошивки. Добавлять аутентификацию по собственной инициативе не нужно.
   server.addHandler(new SPIFFSEditor(SPIFFS));
 
   server.onNotFound([](AsyncWebServerRequest * request) {
@@ -176,6 +184,12 @@ void FS_register_web_handlers(void) {
       Serial.printf("UNKNOWN");
     Serial.printf(" http://%s%s\n", request->host().c_str(), request->url().c_str());
 
+#ifdef __SAMOVAR_DEBUG
+    // Полный дамп заголовков/параметров - это ~45 мс блокировки веб-задачи на КАЖДЫЙ
+    // промах по адресу (а промахи обычны и в штатной работе, например favicon от
+    // старой вкладки браузера). На горячем пути во время перегона это заметно тормозит
+    // интерфейс, поэтому дамп идёт только в отладочной сборке - тот же флаг уже
+    // используется чуть ниже в onFileUpload()/onRequestBody() для той же цели.
     if (request->contentLength()) {
       Serial.printf("_CONTENT_TYPE: %s\n", request->contentType().c_str());
       Serial.printf("_CONTENT_LENGTH: %u\n", request->contentLength());
@@ -199,6 +213,7 @@ void FS_register_web_handlers(void) {
         Serial.printf("_GET[%s]: %s\n", p->name().c_str(), p->value().c_str());
       }
     }
+#endif
 
     request->send(404);
   });

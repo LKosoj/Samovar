@@ -249,6 +249,10 @@ loop = function_body(samovar, "void loop()")
 # но сама по себе не докажет, что loop() эту функцию вызывает, поэтому вызов проверяем явно.
 if "tick_check_stack_headroom();" not in loop:
     errors.append("low-stack fail closed: loop() не вызывает tick_check_stack_headroom()")
+# П4: наблюдатель живучести SysTicker тоже обязан вызываться из loop() - иначе
+# зависание задачи надзора (mode_dispatch_alarm) никем не замечается.
+if "tick_check_systicker_liveness();" not in loop:
+    errors.append("systicker liveness watchdog: loop() не вызывает tick_check_systicker_liveness()")
 stack_headroom_body = function_body(samovar, "static void tick_check_stack_headroom()")
 loop_with_stack_check = loop + stack_headroom_body
 require_ordered_tokens(
@@ -261,6 +265,12 @@ require_ordered_tokens(
         "request_emergency_stop(\"Аварийное отключение: критически малый остаток стека\")",
         "SendMsg(\"Стек переполнился. Перезагрузка\"",
         "vTaskDelay(5000)",
+        # П24: проверка текущей задачи (loop()) - это только первая часть функции;
+        # дальше идёт обход таблицы остальных наблюдаемых задач (SysTicker,
+        # GetClockTicker, PowerStatusTask, ...), см. tools/smoke_stack_headroom_all_tasks.py.
+        "for (size_t i = 0; i < sizeof(stackWatchTable) / sizeof(stackWatchTable[0]); i++)",
+        "if (handle == nullptr) continue;",
+        "if (uxTaskGetStackHighWaterMark(handle) < 1024)",
     ],
     errors,
 )
@@ -295,19 +305,118 @@ for signature in ("static int lua_wrapper_pinMode", "static int lua_wrapper_digi
 
 # Mode publication waits for explicit owner cleanup and log close completion;
 # old-mode dispatch is barred throughout the cleanup phase.
+#
+# [WP17 п.40] stop_active_process_for_mode() used to be a handwritten
+# switch(Samovar_Mode) with one case per mode (RECT/DIST/BEER/BK/NBK), each calling
+# its own finish-style function; SUVID/LUA fell through to a shared default reset.
+# That switch is gone - the function now looks up mode_ops_by_mode(Samovar_Mode)
+# and calls ops->stopProcess() when the registry provides one, falling back to the
+# same generic reset otherwise. The protection that must survive the rewrite: every
+# mode's active process really does get torn down on a mode switch. Expressed now
+# as two parts - (1) the function actually dispatches through the registry and
+# still has the generic fallback, and (2) the registry table wires stopProcess to
+# a real, mode-specific finish function for every mode that owns its own process.
 stop_mode = function_body(webserver, "void stop_active_process_for_mode")
-require(
-    "explicit mode cleanup",
+require_ordered_tokens(
+    "stop_active_process_for_mode dispatches through the mode registry",
     stop_mode,
-    (
-        "case SAMOVAR_RECTIFICATION_MODE",
-        "run_program(PROGRAM_END)",
-        "distiller_finish()",
-        "beer_finish()",
-        "bk_finish()",
-        "nbk_finish()",
-    ),
+    [
+        "mode_ops_by_mode(Samovar_Mode)",
+        "ops != nullptr && ops->stopProcess != nullptr",
+        "ops->stopProcess();",
+        "return;",
+        "SamovarStatusInt = SAMOVAR_STATUS_IDLE;",
+        "startval = SAMOVAR_STARTVAL_IDLE;",
+        "ProgramNum = 0;",
+        "set_power(false);",
+    ],
+    errors,
 )
+
+# mode_registry.h table: stopProcess per mode. Field is matched by NAME (index
+# into struct ModeOps's real member order), not a fixed position - the struct has
+# grown before (12 -> 16 fields) and a position-pinned check silently reads the
+# wrong field instead of failing loudly when it grows again.
+def parse_modeops_field_names(source: str) -> list[str]:
+    match = re.search(r"struct\s+ModeOps\s*\{", source)
+    if match is None:
+        raise ValueError("mode_registry.h: struct ModeOps not found")
+    start = match.end()
+    end = source.find("};", start)
+    if end < 0:
+        raise ValueError("mode_registry.h: struct ModeOps closing '};' not found")
+    names = []
+    for stmt in source[start:end].split(";"):
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        m = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*$", stmt)
+        if not m:
+            raise ValueError(f"mode_registry.h: struct ModeOps: cannot parse member from {stmt!r}")
+        names.append(m.group(1))
+    return names
+
+
+try:
+    modeops_field_names = parse_modeops_field_names(mode_registry)
+    stop_process_idx = modeops_field_names[1:].index("stopProcess")  # row text excludes leading `mode`
+except ValueError as exc:
+    errors.append(str(exc))
+    stop_process_idx = None
+
+if stop_process_idx is not None:
+    registry_table = function_body(
+        mode_registry, "inline const ModeOps* mode_registry_table(size_t& count)"
+    )
+    registry_rows = dict(
+        re.findall(r"\{\s*(SAMOVAR_[A-Z_]+_MODE)\s*,([^{}]*)\}", registry_table)
+    )
+    # RECT is special - it has no .finish in the table (that slot stays nullptr;
+    # .finish there is reserved for the SAMOVAR_POWER command path), so its
+    # stopProcess is a dedicated wrapper around run_program(PROGRAM_END), not a
+    # *_finish function like the other four.
+    EXPECTED_STOP_PROCESS = {
+        "SAMOVAR_RECTIFICATION_MODE": "mode_stop_process_rectification",
+        "SAMOVAR_DISTILLATION_MODE": "distiller_finish",
+        "SAMOVAR_BEER_MODE": "beer_finish",
+        "SAMOVAR_BK_MODE": "bk_finish",
+        "SAMOVAR_NBK_MODE": "nbk_finish",
+    }
+    for mode, expected_fn in EXPECTED_STOP_PROCESS.items():
+        rest = registry_rows.get(mode)
+        if rest is None:
+            errors.append(f"mode_registry table: row for {mode} not found")
+            continue
+        fields = [f.strip() for f in rest.split(",")]
+        if len(fields) <= stop_process_idx:
+            errors.append(f"mode_registry table: row for {mode} too short: {rest}")
+            continue
+        actual_fn = fields[stop_process_idx]
+        if actual_fn != expected_fn:
+            errors.append(
+                f"mode_registry table: {mode} stopProcess = {actual_fn!r}, "
+                f"expected {expected_fn!r}"
+            )
+    require(
+        "mode_stop_process_rectification wraps run_program(PROGRAM_END)",
+        function_body(mode_registry, "inline void mode_stop_process_rectification()"),
+        ("run_program(PROGRAM_END);",),
+    )
+    # SUVID/LUA deliberately have no per-mode process to tear down - stopProcess
+    # stays nullptr and they fall through to the generic reset above, same as the
+    # old switch's shared `case SAMOVAR_SUVID_MODE: case SAMOVAR_LUA_MODE: default:`.
+    for mode in ("SAMOVAR_SUVID_MODE", "SAMOVAR_LUA_MODE"):
+        rest = registry_rows.get(mode)
+        if rest is None:
+            errors.append(f"mode_registry table: row for {mode} not found")
+            continue
+        fields = [f.strip() for f in rest.split(",")]
+        actual = fields[stop_process_idx] if len(fields) > stop_process_idx else "<missing>"
+        if actual != "nullptr":
+            errors.append(
+                f"mode_registry table: {mode} stopProcess must remain nullptr (falls "
+                f"through to the generic reset), got {actual!r}"
+            )
 force_complete_mode_switch = function_body(
     webserver, "static ModeSwitchResult force_complete_mode_switch_failed(const char* warning)")
 require_ordered_tokens(

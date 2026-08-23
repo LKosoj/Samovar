@@ -6,10 +6,13 @@
 отключён. Если в обработчик попадёт хоть один вызов или литерал из флеша, прошивка
 упадёт с "Cache disabled but cached memory region accessed" ровно в момент записи лога.
 
-Проверка работает по собранным прошивкам, поэтому не подходит под маску smoke_*.py
-и запускается вручную после сборки:
+Проверка работает по собранным прошивкам, поэтому не подходит под маску smoke_*.py.
+Список окружений обязателен и не берётся из того, что случайно лежит в .pio/build -
+иначе "собрали одно окружение, проверили одно и сказали OK". В CI вызывается по разу
+на каждое окружение из матрицы сборки (все 7 - USE_STEPPER_IRAM_ISR определён
+безусловно в Samovar.h и действует на все окружения platformio.ini одинаково).
 
-    pio run -e Samovar && python3 tools/check_stepper_isr_iram.py
+    pio run -e Samovar && python3 tools/check_stepper_isr_iram.py Samovar
 """
 import argparse
 import re
@@ -86,6 +89,8 @@ def isr_body(objdump: Path, elf: Path) -> list[str] | None:
 
 def check_env(env_name: str) -> tuple[bool, str]:
     elf = BUILD_DIR / env_name / "firmware.elf"
+    if not elf.exists():
+        return False, f"{env_name}: не найден {elf} - окружение не собрано"
     prefix = toolchain_prefix(env_name)
     objdump = Path(str(prefix) + "objdump")
     nm = Path(str(prefix) + "nm")
@@ -132,16 +137,14 @@ def check_env(env_name: str) -> tuple[bool, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("environments", nargs="*", help="окружения; по умолчанию все собранные в .pio/build")
+    parser.add_argument(
+        "environments",
+        nargs="+",
+        help="имена окружений platformio.ini для проверки (обязательны, без умолчаний по .pio/build)",
+    )
     args = parser.parse_args()
 
     environments = args.environments
-    if not environments:
-        environments = sorted(p.name for p in BUILD_DIR.glob("*") if (p / "firmware.elf").exists())
-    if not environments:
-        print("Нет собранных прошивок в .pio/build - сначала выполните pio run", file=sys.stderr)
-        return 2
-
     failed = False
     for env_name in environments:
         ok, message = check_env(env_name)

@@ -85,15 +85,39 @@ inline bool json_write_escaped(Print& out, const char* text, size_t length) {
 
 /** Тонкий Print-приёмник поверх String - мост между потоковым json_write_escaped()
     и функциями, которым нужна String (toJsonString, spiffsEditorJsonEscape).
-    write() всегда возвращает полный size: String растёт сама, частичной записи быть
-    не может - поэтому в этих двух функциях возврат json_write_escaped() не проверяется. */
+    concat() у Arduino String атомарен: при нехватке памяти под reserve()/realloc()
+    строка не трогается и concat() возвращает false, частичной записи внутри одного
+    вызова concat() не бывает. Поэтому write() ниже зовёт concat() напрямую (а не
+    operator+=, который этот результат отбрасывает) и честно возвращает фактическое
+    число дописанных байт (0 при немедленном отказе) - toJsonString и
+    spiffsEditorJsonEscape обязаны проверять возврат json_write_escaped().
+    write(buffer, size) копирует данные через локальный буфер с явным нулевым байтом,
+    а не зовёт String::concat(cstr, size) напрямую на чужом buffer: реальная
+    String::concat(const char*, unsigned) в ядре Arduino-ESP32 (WString.cpp) всегда
+    делает memcpy_P(dst, cstr, length + 1) - читает на один байт БОЛЬШЕ, чем size,
+    рассчитывая на нулевой терминатор сразу после данных. write() - переопределение
+    виртуального Print::write(), buffer сюда может прийти от любого вызывающего кода
+    без гарантии терминатора (например, char unicodeEscape[6] в json_write_escaped
+    без завершающего нуля) - без копии в терминированный буфер это было бы чтением за
+    границей массива. */
 class JsonStringPrint : public Print {
  public:
   explicit JsonStringPrint(String& target) : target_(target) {}
-  size_t write(uint8_t value) override { target_ += static_cast<char>(value); return 1; }
+  size_t write(uint8_t value) override {
+    return target_.concat(static_cast<char>(value)) ? 1 : 0;
+  }
   size_t write(const uint8_t* buffer, size_t size) override {
-    for (size_t i = 0; i < size; i++) target_ += static_cast<char>(buffer[i]);
-    return size;
+    size_t written = 0;
+    while (written < size) {
+      char chunk[64];
+      size_t n = size - written;
+      if (n > sizeof(chunk) - 1) n = sizeof(chunk) - 1;
+      memcpy(chunk, buffer + written, n);
+      chunk[n] = '\0';
+      if (!target_.concat(chunk, n)) break;
+      written += n;
+    }
+    return written;
   }
  private:
   String& target_;
@@ -105,7 +129,9 @@ inline String toJsonString(const String& s) {
   out.reserve(s.length() + 8);
   out += '"';
   JsonStringPrint sink(out);
-  json_write_escaped(sink, s.c_str(), s.length());
+  if (!json_write_escaped(sink, s.c_str(), s.length())) {
+    Serial.println(F("toJsonString: строка обрезана, не хватило памяти"));
+  }
   out += '"';
   return out;
 }

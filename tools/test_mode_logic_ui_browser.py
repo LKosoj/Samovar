@@ -56,6 +56,11 @@ BROWSER_TEST = r'''async page => {
     window.Audio = function() {
       this.play = () => Promise.resolve(); this.pause = () => {};
     };
+    window.__confirmMessages = [];
+    window.confirm = function (message) {
+      window.__confirmMessages.push(message);
+      return false;
+    };
   });
   await page.route("**/ajax*", route => {
     const operationMatch = route.request().url().match(/[?&]operationId=([^&]+)/);
@@ -88,7 +93,37 @@ BROWSER_TEST = r'''async page => {
       })
     });
   });
+  const commandPosts = [];
+  await page.route("**/command", route => {
+    const request = route.request();
+    if (request.method() === "POST") commandPosts.push(request.postData() || "");
+    return route.fulfill({status:200,contentType:"text/plain",body:"OK"});
+  });
   function expect(value, message) { if (!value) failures.push(message); }
+  // П46: на bk/distiller/nbk надпись кнопки решает не только текст подтверждения,
+  // но и само значение (0/1) команды. Портим ТОЛЬКО надпись (как будто страница не
+  // успела обновиться) при реальном PowerOn=1 и проверяем, что и подтверждение,
+  // и отправленная команда следуют реальному состоянию, а не разметке.
+  async function checkPowerStaleLabel(cmdPrefix, pageLabel) {
+    await page.evaluate(() => {
+      window.__confirmMessages.length = 0;
+      window.confirm = function (message) {
+        window.__confirmMessages.push(message);
+        return true;
+      };
+      document.getElementById("power").value = "Включить нагрев";
+    });
+    const before = commandPosts.length;
+    await page.locator("#power").click();
+    const confirms = await page.evaluate(() => window.__confirmMessages.slice());
+    expect(confirms.length === 1 && confirms[0] === "Выключить нагрев?",
+           pageLabel + " power button skipped/changed the confirm when the label was stale " +
+           "(decision must follow real PowerOn state, not markup text)");
+    expect(commandPosts.length === before + 1 &&
+           commandPosts[commandPosts.length - 1] === cmdPrefix + "0",
+           pageLabel + " power button sent the wrong command value for a stale label " +
+           "(command must follow real PowerOn state, not markup text)");
+  }
   for (const viewport of [{width:390,height:844},{width:1440,height:900}]) {
     await page.setViewportSize(viewport);
     for (const theme of ["light","dark"]) {
@@ -109,11 +144,25 @@ BROWSER_TEST = r'''async page => {
       await page.waitForFunction(() =>
         document.getElementById("detector_steam_stability").textContent.includes("недоступна")
       );
-      expect((await page.locator("#SteamTemp").textContent()).trim() === "78.100",
+      expect((await page.locator("#SteamTemp").textContent()).trim() === "78.1",
              "legacy detector payload stopped core telemetry rendering");
       expect((await page.locator("#detector_trend").textContent()).includes("0.012"),
              "legacy detector payload stopped detector trend rendering");
       legacyDetectorPayload = false;
+
+      // П46: PowerOn=1 -> реальное состояние "нагрев включён". Портим ТОЛЬКО
+      // надпись на кнопке (как будто страница не успела обновиться) и проверяем,
+      // что решение "спрашивать подтверждение выключения" всё равно принимается
+      // по реальному состоянию, а не по надписи в разметке.
+      await page.evaluate(() => {
+        document.getElementById("power").value = "Включить нагрев";
+        window.__confirmMessages.length = 0;
+      });
+      await page.locator("#power").click();
+      const indexConfirms = await page.evaluate(() => window.__confirmMessages.slice());
+      expect(indexConfirms.length === 1 && indexConfirms[0] === "Выключить нагрев?",
+             "index power button skipped/changed the confirm when the label was stale " +
+             "(decision must follow real PowerOn state, not markup text)");
 
       await page.goto(baseUrl + "/distiller.htm", {waitUntil:"load"});
       await page.waitForFunction(() =>
@@ -123,6 +172,7 @@ BROWSER_TEST = r'''async page => {
              "row remaining forecast missing");
       expect((await page.locator("#ProcessTimeRemaining").textContent()).trim() === "32",
              "process remaining forecast missing");
+      await checkPowerStaleLabel("distiller=", "distiller");
 
       await page.goto(baseUrl + "/bk.htm", {waitUntil:"load"});
       await page.waitForFunction(() =>
@@ -133,6 +183,13 @@ BROWSER_TEST = r'''async page => {
              "BK boiling evidence missing");
       expect(await boiling.getAttribute("data-precision") === "precise",
              "BK precise evidence is not marked");
+      await checkPowerStaleLabel("startbk=", "BK");
+
+      await page.goto(baseUrl + "/nbk.htm", {waitUntil:"load"});
+      await page.waitForFunction(() =>
+        document.getElementById("Status").textContent === "Работа"
+      );
+      await checkPowerStaleLabel("startnbk=", "NBK");
 
       await page.goto(baseUrl + "/beer.htm", {waitUntil:"load"});
       expect((await page.locator("body").textContent()).includes(
@@ -159,6 +216,36 @@ BROWSER_TEST = r'''async page => {
       const beerWPost = beerProgramPosts[beerProgramPosts.length - 1] || "";
       expect(beerProgramPosts.length === beerPostCount + 1 && beerWPost.includes("W;0;0;0^0^0^0;4"),
              "Beer W row with sensor 4 was not sent to /program");
+
+      // П46: та же проверка реального состояния для кнопки нагрева на beer.htm.
+      await page.evaluate(() => {
+        document.getElementById("power").value = "Включить нагрев";
+        window.__confirmMessages.length = 0;
+      });
+      await page.locator("#power").click();
+      const beerConfirms = await page.evaluate(() => window.__confirmMessages.slice());
+      expect(beerConfirms.length === 1 && beerConfirms[0] === "Выключить нагрев?",
+             "beer power button skipped/changed the confirm when the label was stale " +
+             "(decision must follow real PowerOn state, not markup text)");
+
+      // П54: время мешалки свыше предела прошивки (uint16_t Volume/Power в
+      // program_io.h program_parse_beer_device, 0..65535 сек) не должно молча
+      // превращаться в 0 - поле обязано остаться в допустимых границах, а предел
+      // должен быть виден пользователю в подсказке до ввода.
+      const mixerCheck = await page.evaluate(() => {
+        const el = document.getElementById("m_time");
+        el.value = "70000";
+        validateMixerInput(el);
+        return { clamped: el.value, maxConst: MIXER_MAX_SECONDS };
+      });
+      expect(mixerCheck.maxConst === 65535,
+             "beer mixer max seconds does not match the firmware uint16_t bound (program_io.h)");
+      expect(mixerCheck.clamped === "65535",
+             "beer mixer time above the firmware limit did not clamp to the real max " +
+             "(silent zeroing / data loss regression)");
+      const mixerTooltip = await page.locator('label[for="m_time"] .tooltiptext').textContent();
+      expect(mixerTooltip.includes("65535"),
+             "beer mixer tooltip does not show the real firmware limit before input");
 
       await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});
       expect(await page.locator("#SuvidTemp").count() === 1 &&

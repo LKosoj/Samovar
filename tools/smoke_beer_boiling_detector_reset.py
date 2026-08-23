@@ -174,6 +174,8 @@ static unsigned long beerSkipConfirmDeadlineMs = 0;
 
 static unsigned long beerStageIdleAccumMs = 0;
 static unsigned long beerStageIdleSinceMs = 0;
+static unsigned long beerBoilActiveAccumMs = 0;  // [П13] см. beer.h - таймаут разгона до кипения
+static unsigned long beerMixerPauseSinceMs = 0;  // [Дефект 2 code review] см. beer.h
 
 static int startAutoTuneCalls = 0;
 void StartAutoTune() { startAutoTuneCalls++; }
@@ -246,6 +248,8 @@ static void reset_fixture() {
   beerSkipConfirmDeadlineMs = 0;
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
+  beerBoilActiveAccumMs = 0;
+  beerMixerPauseSinceMs = 0;
 }
 
 // Состояние "после кипения": детектор уже накопил полную стабильную серию.

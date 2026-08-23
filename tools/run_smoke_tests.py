@@ -27,6 +27,7 @@ def run_smoke_tests(
         return 1
 
     failures: list[str] = []
+    skipped: list[str] = []
     for index, path in enumerate(ordered_tests, start=1):
         relative_path = path.relative_to(root)
         print(f"[{index}/{len(ordered_tests)}] {relative_path}", file=output, flush=True)
@@ -55,13 +56,28 @@ def run_smoke_tests(
         if result.stdout:
             print(result.stdout, end="" if result.stdout.endswith("\n") else "\n", file=output)
         if result.returncode == 0:
-            print("PASS", file=output)
+            # SMOKE_SKIP: конвенция для тестов, которые не могут выполнить
+            # часть проверок (нет node/g++ и т.п.). Раньше такой ранний выход
+            # с кодом 0 неотличим от настоящего PASS в сводке - теперь считаем
+            # его отдельно, чтобы пропуск не "растворялся" в passed.
+            if "SMOKE_SKIP:" in result.stdout:
+                skipped.append(str(relative_path))
+                print("SKIP", file=output)
+            else:
+                print("PASS", file=output)
         else:
             failures.append(str(relative_path))
             print(f"FAIL (exit {result.returncode})", file=output)
 
-    passed = len(ordered_tests) - len(failures)
-    print(f"Smoke summary: {passed} passed, {len(failures)} failed", file=output)
+    passed = len(ordered_tests) - len(failures) - len(skipped)
+    print(
+        f"Smoke summary: {passed} passed, {len(failures)} failed, {len(skipped)} skipped",
+        file=output,
+    )
+    if skipped:
+        print("Skipped tests:", file=output)
+        for name in skipped:
+            print(f" - {name}", file=output)
     if failures:
         print("Failed tests:", file=output)
         for name in failures:

@@ -71,10 +71,11 @@ static float lastPumpSpeed = 0;
 static void set_pump_speed(float speed, bool, bool) { setPumpSpeedCalls++; lastPumpSpeed = speed; }
 
 static int sendMsgCalls = 0;
-static void SendMsg(const String& message, MESSAGE_TYPE) { sendMsgCalls++; (void)message; }
+static MESSAGE_TYPE lastMsgType = NONE_MSG;
+static void SendMsg(const String& message, MESSAGE_TYPE type) { sendMsgCalls++; lastMsgType = type; (void)message; }
 
 // ---- Реальный код под тестом (extract_function_body / extract_braced_block_after) ----
-inline void apply_detector_speed_correction(float baseSpeedRate) {
+inline bool apply_detector_speed_correction(float baseSpeedRate) {
 @APPLY_DETECTOR_SPEED_CORRECTION_BODY@
 }
 
@@ -102,6 +103,7 @@ static void reset_counters() {
   setPumpSpeedCalls = 0;
   sendMsgCalls = 0;
   lastPumpSpeed = 0;
+  lastMsgType = NONE_MSG;
 }
 
 int main() {
@@ -148,6 +150,19 @@ int main() {
   check(setPumpSpeedCalls == 0, "до истечения интервала насос не трогаем");
   check(sendMsgCalls == 0, "до истечения интервала сообщений нет");
 
+  // [П32] Целевая скорость ниже 1 шага - set_pump_speed() (logic.h) её молча отверг бы.
+  // Коэффициент меняется (factorChanged=true), но базовая скорость настолько мала,
+  // что физически снижать уже некуда. Насос трогать нельзя, и врать про "снижение
+  // скорости" тоже нельзя - нужно правдивое сообщение об исчерпании защиты.
+  reset_counters();
+  CurrentBaseSpeedRate = 0.05f;  // get_speed_from_rate(0.05) = 0.5 -> target = 0.5*0.95 = 0.475 < 1
+  impurityDetector.correctionFactor = 1.0f;
+  impurityDetector.lastCorrectionTime = 0;
+  apply_speed_correction(400000, 0.02f);
+  check(setPumpSpeedCalls == 0, "цель ниже 1 шага - команду насосу слать нельзя");
+  check(sendMsgCalls == 1, "об исчерпании защиты нужно сообщить ровно один раз");
+  check(lastMsgType == WARNING_MSG, "исчерпание защиты - это WARNING, а не бодрое NOTIFY про снижение");
+
   if (failures != 0) return 1;
   std::cout << "detector message anti-spam behaviour checks passed\n";
   return 0;
@@ -162,7 +177,7 @@ def build_harness(detector_source: str) -> str:
         "  if (now - impurityDetector.lastCorrectionTime > correctionInterval) {" + block + "}"
     )
     speed_correction_body = extract_function_body(
-        detector_source, "inline void apply_detector_speed_correction(float baseSpeedRate)"
+        detector_source, "inline bool apply_detector_speed_correction(float baseSpeedRate)"
     )
     harness = HARNESS_TEMPLATE.replace("@APPLY_DETECTOR_SPEED_CORRECTION_BODY@", speed_correction_body)
     return harness.replace("@CORRECTION_BLOCK@", wrapped)

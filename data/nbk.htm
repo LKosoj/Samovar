@@ -14,6 +14,7 @@
     
     // ==================== POWER UNIT ===================================================================
     var programPwrLabel = 'Напряжение';
+    var HeaterPowerOn = false;
     function setPowerUnit () {
       let setPowerLabel;
       let setPowerButton;
@@ -137,7 +138,7 @@
 
     function setNBKCommand () {
       let cmd = "startnbk=";
-      if (document.getElementById('power').value == "Выключить нагрев") {
+      if (HeaterPowerOn) {
         if (!confirm("Выключить нагрев?")) return false;
         cmd = cmd + "0";
       } else {
@@ -153,6 +154,17 @@
     };
 
 
+
+    // Параметр pnbk команды /command (POST) использует значения 0..9000 как коды: 0 - стоп,
+    // 8000 - уменьшить скорость на шаг подачи, 9000 - увеличить (см. control_numeric_input.h,
+    // parse_control_nbk). Это НЕ значения скорости - поле "Скорость" их и не приняло бы
+    // (там абсолютная скорость ограничена < 8000). Именованные константы вместо "магических"
+    // 8000/9000 в разметке, чтобы не путать код команды со значением.
+    const NBK_SPEED_STEP_DOWN = 8000;
+    const NBK_SPEED_STEP_UP = 9000;
+    function nbkSpeedStep (down) {
+      SamovarApp.sendCommand('pnbk=' + (down ? NBK_SPEED_STEP_DOWN : NBK_SPEED_STEP_UP));
+    }
 
     async function sendSpeed () {
       return await SamovarApp.sendNumericCommand('pnbk', 'Set_speed', {
@@ -224,7 +236,8 @@
 
           let powerstr;
           let powerstyle;
-          if (myObj.PowerOn == 1) {
+          HeaterPowerOn = myObj.PowerOn == 1;
+          if (HeaterPowerOn) {
             powerstr = 'Выключить нагрев';
             powerstyle = SamovarApp.cssVar('--state-danger-bg');
           } else {
@@ -249,7 +262,8 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false
+        implicitSystemTheme: false,
+        staleReadingIds: ['SteamTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp']
       });
     };
 
@@ -294,7 +308,7 @@
       <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
         <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
           <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
+            <div>Samovar</div> <span id='crnt_tm' style="font-size: 0.8em;"></span>
             <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
               <div>v. </div>
               <div id='version'></div>
@@ -407,12 +421,13 @@
 
       <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 2em; align-items: center; padding-top: 0.5em; padding-bottom: 0.5em;">
         <div class="container_row" style="justify-content: center; align-items: flex-end;">
-          <input id='pmmn' type='button' name='pmmn' class="button" value='--' onclick='SamovarApp.sendCommand("pnbk=8000");'>
+          <input id='pmmn' type='button' name='pmmn' class="button" value='--' title='Уменьшить скорость на шаг подачи (%NbkDP% л/ч)' onclick='nbkSpeedStep(true);'>
           <div style="display:flex; flex-direction: column; align-items: center;">
             <label for="Set_speed" id='set_speed_label' style="font-weight: bold; font-size: 1.1em;">Скорость</label>
             <input name='Set_speed' id='Set_speed' type='text' inputmode='decimal' size="7" value=''>
+            <span class="text" style="font-size: 0.75em;">шаг --/++: %NbkDP% л/ч</span>
           </div>
-          <input id='pmpl' type='button' name='pmpl' value='++' onclick='SamovarApp.sendCommand("pnbk=9000");' class="button">
+          <input id='pmpl' type='button' name='pmpl' value='++' title='Увеличить скорость на шаг подачи (%NbkDP% л/ч)' onclick='nbkSpeedStep(false);' class="button">
         </div>
         <input id='Send_speed' type='button' value='Установить' onclick='sendSpeed();' class="button" style="margin-right: 1em;">
       </div>

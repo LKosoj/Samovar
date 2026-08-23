@@ -113,8 +113,11 @@ class WorkflowContract(unittest.TestCase):
         release_build = job_section(release, "build")
         errors: list[str] = []
 
-        if job_names(firmware) != ["build", "static-analysis", "static-analysis-force", "smoke"]:
+        if job_names(firmware) != ["build", "static-analysis", "static-analysis-force", "smoke", "browser-ui"]:
             errors.append("firmware CI job topology changed")
+        browser_ui_build = job_section(firmware, "browser-ui")
+        if "continue-on-error" in browser_ui_build:
+            errors.append("browser-ui job must stay blocking (continue-on-error is forbidden)")
         if job_names(release) != ["build", "release"]:
             errors.append("release job topology changed")
         for marker in ('branches: ["master", "main"]', "tags:\n      - '*'", "branches: [master]"):

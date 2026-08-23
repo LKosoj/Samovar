@@ -89,7 +89,7 @@ int main() {
 
 def main() -> int:
     if shutil.which("g++") is None:
-        print("lua caret escape smoke skipped: g++ not available")
+        print("SMOKE_SKIP: g++ not available - compiled behavioral check was not run")
         return 0
 
     source = STRING_UTILS.read_text(encoding="utf-8", errors="ignore")

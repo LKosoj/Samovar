@@ -360,12 +360,21 @@ def check_page_markup() -> list[str]:
 
 
 def main() -> int:
+    # Текстовые проверки (markup/server contract) не требуют node - раньше
+    # они шли ПОСЛЕ проверки node и при его отсутствии не выполнялись вовсе,
+    # а весь тест тихо считался пройденным (return 0). Теперь они выполняются
+    # всегда, а отсутствие node лишь пропускает поведенческую часть на Node.
+    errors = check_page_markup() + check_server_contract()
+
     node = shutil.which("node")
     if not node:
-        print("calibrate save smoke skipped: node not available")
+        print("SMOKE_SKIP: node not available - Node behavioral driver was not run")
+        if errors:
+            print("calibrate save smoke failed:")
+            for error in errors:
+                print(f" - {error}")
+            return 1
         return 0
-
-    errors = check_page_markup() + check_server_contract()
 
     with tempfile.TemporaryDirectory(prefix="samovar-calibrate-save-") as tmp:
         driver = Path(tmp) / "driver.js"

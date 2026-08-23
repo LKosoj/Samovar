@@ -54,13 +54,14 @@ webserver_ino = read_text("WebServer.ino")
 api_h = read_text("samovar_api.h")
 
 if fs_ino:
+    fs_ino_code = strip_cpp_comments(fs_ino)
     for token in [
         "static File fileToAppend;",
         "static volatile bool data_log_ready = false;",
         "bool request_data_log_close()",
         "void process_pending_data_log_ops()",
     ]:
-        if token not in fs_ino:
+        if token not in fs_ino_code:
             errors.append(f"FS.ino missing data-log ownership token: {token}")
 
     try:
@@ -225,8 +226,9 @@ if webserver_ino:
         errors.append(str(exc))
 
 if api_h:
+    api_h_code = strip_cpp_comments(api_h)
     for token in ["bool request_data_log_close();", "void process_pending_data_log_ops();"]:
-        if token not in api_h:
+        if token not in api_h_code:
             errors.append(f"samovar_api.h missing data-log API: {token}")
     for token in ["bool flush_data_log();", "bool close_data_log();"]:
         if token in api_h:
@@ -262,11 +264,20 @@ for path in ROOT.rglob("*"):
             continue
         if rel.as_posix() == "Samovar.ino":
             try:
-                ticker_body = extract_function_body(text, "void triggerSysTicker(void *parameter)")
+                # strip_comments=False: ticker_body ниже должен быть буквальной
+                # подстрокой text, чтобы text.replace(ticker_body, "") вырезал
+                # именно его - со снятыми комментариями replace ничего не найдёт.
+                # Но САМ подсчёт вызовов ведём по очищенной копии - иначе
+                # "// append_data();" всё ещё содержит подстроку-токен и
+                # закомментированный вызов считается за настоящий.
+                ticker_body = extract_function_body(
+                    text, "void triggerSysTicker(void *parameter)", strip_comments=False
+                )
             except ValueError:
                 errors.append("Samovar.ino append_data call found but triggerSysTicker body was not parsed")
                 continue
-            if len(re.findall(r"(?<![A-Za-z0-9_])append_data\s*\(", ticker_body)) != 1:
+            ticker_body_code = strip_cpp_comments(ticker_body)
+            if len(re.findall(r"(?<![A-Za-z0-9_])append_data\s*\(", ticker_body_code)) != 1:
                 errors.append("Samovar.ino must call append_data exactly once inside triggerSysTicker")
             outside_ticker = text.replace(ticker_body, "")
             if re.search(r"(?<![A-Za-z0-9_])append_data\s*\(", outside_ticker):

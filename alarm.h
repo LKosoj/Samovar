@@ -24,9 +24,27 @@ inline bool sensor_configured(const DSSensor& sensor) {
   return sensor.Sensor[0] != 0xFF;
 }
 
+// [П18] avgTemp/ErrCount пишутся из задачи опроса датчиков, а читаются здесь
+// (аварийный надзор) как согласованная пара. Раздельные обращения к полям могут
+// разъехаться (torn read): либо ложный останов на исправном датчике, либо, хуже,
+// "показание валидно" на только что отказавшем. Лок сюда брать нельзя - аварийный
+// путь обязан отработать всегда, а не ждать чужой захват. Вместо лока - seqlock без
+// отдельного счётчика версии: читаем пару дважды подряд и доверяем ей, только если
+// оба раза совпало; иначе запись пересеклась с окном чтения - повторяем. Запись
+// идёт раз в секунду, поэтому на практике сходится с первой попытки.
 inline bool sensor_reading_valid(const DSSensor& sensor) {
-  return sensor.ErrCount >= 0 && sensor.ErrCount <= 10 &&
-         sensor.avgTemp >= 2.0f && sensor.avgTemp < 126.0f;
+  for (uint8_t attempt = 0; attempt < 4; attempt++) {
+    int e1 = sensor.ErrCount;
+    float t1 = sensor.avgTemp;
+    int e2 = sensor.ErrCount;
+    float t2 = sensor.avgTemp;
+    if (e1 == e2 && t1 == t2) {
+      int errCount = e1;
+      float avgTemp = t1;
+      return errCount >= 0 && errCount <= 10 && avgTemp >= 2.0f && avgTemp < 126.0f;
+    }
+  }
+  return false;  // не удалось согласовать снимок - трактуем как невалидное показание (fail-safe)
 }
 
 inline bool sensor_valid(const DSSensor& sensor) {
@@ -38,7 +56,19 @@ inline bool optional_sensor_failed(const DSSensor& sensor) {
 }
 
 inline bool sensor_temp_at_least(const DSSensor& sensor, float temp) {
-  return sensor_configured(sensor) && sensor_reading_valid(sensor) && sensor.avgTemp >= temp;
+  if (!sensor_configured(sensor)) return false;
+  for (uint8_t attempt = 0; attempt < 4; attempt++) {
+    int e1 = sensor.ErrCount;
+    float t1 = sensor.avgTemp;
+    int e2 = sensor.ErrCount;
+    float t2 = sensor.avgTemp;
+    if (e1 == e2 && t1 == t2) {
+      int errCount = e1;
+      float avgTemp = t1;
+      return errCount >= 0 && errCount <= 10 && avgTemp >= 2.0f && avgTemp < 126.0f && avgTemp >= temp;
+    }
+  }
+  return false;
 }
 
 inline void request_emergency_stop(const String& reason) {
@@ -77,6 +107,12 @@ inline void perform_emergency_stop() {
   if (Samovar_Mode == SAMOVAR_NBK_MODE) nbk_emergency_finish();
 
   set_power(false);
+  // [П67] Решение владельца от 23.08.2026: воду охлаждения при аварийном останове
+  // ЗАКРЫВАЕМ (не оставляем открытой). Мотив - защита от залива помещения при
+  // обрыве шланга/отказе клапана, который сам мог стать причиной этой аварии.
+  // Известный побочный эффект: при останове именно по перегреву горячая колонна
+  // остаётся без дефлегмации, и пар какое-то время идёт в помещение. Компромисс
+  // осознанный; менять поведение без нового решения владельца нельзя.
   open_valve(false, true);
   stopService();
   set_stepper_target(0, 0, 0);

@@ -49,9 +49,11 @@
     var powerInputMax = Number('%HeaterMaxPower%');
     var _lnIdx = 0;
 
+    var HeaterPowerOn = false;
+
     function setDistCommand () {
       var cmd = "distiller=";
-      if (document.getElementById('power').value == "Выключить нагрев") {
+      if (HeaterPowerOn) {
         if (!confirm("Выключить нагрев?")) return false;
         cmd = cmd + "0";
       } else {
@@ -311,7 +313,8 @@
 
           var powerstr;
           var powerstyle;
-          if (myObj.PowerOn == 1) {
+          HeaterPowerOn = myObj.PowerOn == 1;
+          if (HeaterPowerOn) {
             powerstr = 'Выключить нагрев';
             powerstyle = SamovarApp.cssVar('--state-danger-bg');
           } else {
@@ -336,7 +339,8 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false
+        implicitSystemTheme: false,
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp']
       });
     };
 
@@ -382,7 +386,7 @@
       <div class="container_row" style="justify-content: space-between; font-size: 1em; margin-bottom: 0.5em;">
         <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center; font-weight: bold">
           <div style="display: flex; flex-direction: column; justify-content: flex-start; align-items: center">
-            <div>Samovar</div> <span id='crnt_tm' style="height: 0; visibility: hidden"></span>
+            <div>Samovar</div> <span id='crnt_tm' style="font-size: 0.8em;"></span>
             <div style="display: flex; flex-direction: row; justify-content: flex-start; align-items: center;">
               <div>v. </div>
               <div id='version'></div>

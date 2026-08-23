@@ -42,6 +42,9 @@ jobs:
       - name: Build firmware (${{ matrix.env_name }})
         run: python -m platformio run -e ${{ matrix.env_name }}
 
+      - name: Verify stepper ISR stays in IRAM (${{ matrix.env_name }})
+        run: python tools/check_stepper_isr_iram.py ${{ matrix.env_name }}
+
       - name: Generate and validate build metadata
         run: |
           DIRTY=false
@@ -79,9 +82,8 @@ jobs:
         run: python tools/run_cppcheck.py --timeout 300
 
   static-analysis-force:
-    name: Static Analysis (cppcheck --force, extended)
+    name: Static Analysis (cppcheck --force, extended, baseline-gated)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,8 +98,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cppcheck
 
-      - name: Run cppcheck (force, all configurations)
-        run: python tools/run_cppcheck.py --force --timeout 600 --report cppcheck-extended.txt
+      - name: Run cppcheck (force, all configurations, gated on new findings)
+        run: python tools/check_cppcheck_baseline.py --timeout 900 --report cppcheck-extended.txt
 
       - name: Upload extended cppcheck report
         if: always()
@@ -121,3 +123,41 @@ jobs:
 
       - name: Run all smoke tests
         run: python tools/run_smoke_tests.py --timeout 60
+
+  browser-ui:
+    name: Browser UI tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Playwright CLI and browser
+        env:
+          # playwright и @playwright/cli зафиксированы на версиях, которые
+          # УКАЗЫВАЮТ друг на друга: @playwright/cli@0.1.1 сам требует
+          # playwright@1.59.0-alpha-1771104257000 (см. его package.json). Если
+          # версии не совпадают, npm ставит две разные копии playwright (свежую
+          # верхнеуровневую и старую вложенную внутрь @playwright/cli), у них
+          # разные ожидаемые сборки Chromium - "npx playwright install" скачает
+          # браузер для одной версии, а playwright-cli на старте будет искать
+          # браузер для другой и упадёт с "Executable doesn't exist". Проверено
+          # локально: при совпадении версий npm ставит ОДНУ копию, и скачанный
+          # Chromium (ревизия r1212) - именно та, что нужна playwright-cli.
+          PLAYWRIGHT_VERSION: "1.59.0-alpha-1771104257000"
+          PLAYWRIGHT_CLI_VERSION: "0.1.1"
+        run: |
+          npm install -g playwright@$PLAYWRIGHT_VERSION @playwright/cli@$PLAYWRIGHT_CLI_VERSION
+          npx playwright install --with-deps chromium
+
+      - name: Run browser UI tests
+        run: python tools/run_browser_tests.py --timeout 240

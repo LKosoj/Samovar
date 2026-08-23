@@ -536,11 +536,17 @@ inline float get_detector_correction_step() {
 
 // Пересчёт и применение скорости насоса под текущий correctionFactor детектора.
 // Общий код для веток коррекции и восстановления скорости в process_impurity_detector().
-inline void apply_detector_speed_correction(float baseSpeedRate) {
-  if (baseSpeedRate > 0) {
-    float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-    set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true, false);
-  }
+// [fix П32] Возвращает, ПРИМЕНИЛАСЬ ли скорость фактически. set_pump_speed() (logic.h)
+// молча отвергает значение ниже 1 шага/с и ничего не сообщает о факте отказа - здесь
+// тот же порог проверяется заранее, чтобы вызывающий код не считал коррекцию успешной,
+// когда насос её не принял.
+inline bool apply_detector_speed_correction(float baseSpeedRate) {
+  if (baseSpeedRate <= 0) return false;
+  float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
+  float targetStepSpeed = baseStepSpeed * impurityDetector.correctionFactor;
+  if (targetStepSpeed < 1.0f) return false;  // тот же порог отказа, что и в set_pump_speed()
+  set_pump_speed(targetStepSpeed, true, false);
+  return true;
 }
 
 /**
@@ -817,15 +823,20 @@ void process_impurity_detector() {
         // проверки сообщение уходило каждые 5-25 сек до конца строки (спам на хвостах).
         const bool factorChanged = impurityDetector.correctionFactor != previousFactor;
 
-        // Применяем новую скорость
+        // Применяем новую скорость и сообщаем оператору правду о результате:
+        // насос мог отвергнуть слишком малое значение (уже на минимуме) - тогда
+        // это не "снижение скорости", а исчерпание защиты.
         if (factorChanged) {
-          apply_detector_speed_correction(CurrentBaseSpeedRate);
-        }
-
-        if (factorChanged) {
-          SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
-                  ", порог: " + String(warningThreshold, 3) + ", variance: " +
-                  String(impurityDetector.tempVariance, 4) + ")", NOTIFY_MSG);
+          bool speedApplied = apply_detector_speed_correction(CurrentBaseSpeedRate);
+          if (speedApplied) {
+            SendMsg("Детектор: Снижение скорости (тренд " + String(impurityDetector.currentTrend, 3) +
+                    ", порог: " + String(warningThreshold, 3) + ", variance: " +
+                    String(impurityDetector.tempVariance, 4) + ")", NOTIFY_MSG);
+          } else {
+            SendMsg("Детектор: скорость уже на минимуме, дальнейшее снижение невозможно (тренд " +
+                    String(impurityDetector.currentTrend, 3) + ", variance: " +
+                    String(impurityDetector.tempVariance, 4) + ")", WARNING_MSG);
+          }
         }
       }
     }

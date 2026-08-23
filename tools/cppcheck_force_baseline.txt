@@ -1,0 +1,31 @@
+# Cppcheck --force (все конфигурации #ifdef + категория information) baseline: уже
+# известные и осознанно принятые находки. tools/check_cppcheck_baseline.py роняет CI
+# только на находках, которых здесь нет. Формат строки - ровно как в выводе cppcheck:
+# {file}:{line}:{column}: {severity}: {message} [{id}]
+#
+# 23.08.2026: этот файл был пуст с пометкой "находок нет" по СЛУЧАЙНОЙ причине - у
+# check_cppcheck_baseline.py был дефект: он разбирал только stdout процесса cppcheck,
+# а сами находки (warning/style/performance/portability/information) cppcheck пишет
+# в stderr. Проверка была немой заглушкой независимо от содержимого этого файла: даже
+# внесённый в код реальный баг (null pointer dereference, проверено мутацией) не делал
+# CI красным. Исправлено - теперь разбираются оба потока (tools/check_cppcheck_baseline.py).
+#
+# После исправления реальный прогон дал 11 строк, из которых:
+#   - 10 x missingInclude - cppcheck не может найти заголовки ESP-IDF/Arduino
+#     (esp_log.h, driver/uart.h и т.п.), потому что static-analysis и
+#     static-analysis-force job'ы в CI не устанавливают PlatformIO/фреймворк (только
+#     apt install cppcheck) - путей -I до этих заголовков принципиально нет. Это не
+#     находка о коде, а недонастройка окружения; категория отключена явно флагом
+#     --suppress=missingInclude в tools/run_cppcheck.py (cppcheck перестаёт проверять
+#     резолвятся ли #include платформы - сам код по-прежнему анализируется).
+#   - 1 x checkersReport ("Active checkers: N/592...") - служебный самоотчёт cppcheck о
+#     том, сколько его внутренних чекеров сработало на этом прогоне; N не привязан ни к
+#     одной строке кода проекта и может меняться при любом изменении анализируемого
+#     кода или версии cppcheck, так что закрепить его в baseline как "принятую находку"
+#     нельзя - он никогда не совпадёт с самим собой. Отфильтрован в
+#     tools/check_cppcheck_baseline.py (NOISE_ID_PATTERN) до сравнения с этим файлом.
+#
+# Настоящих находок категорий warning/performance/portability/information (то есть
+# сообщений о самом коде, а не о недонастройке запуска или служебной телеметрии
+# инструмента) на 23.08.2026 нет. Baseline пуст осознанно, а не по случайности разбора
+# потоков.

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 from pathlib import Path
 
@@ -136,8 +137,24 @@ if withdrawal_body:
         errors.append("logic.h:void withdrawal writes Speed through live ProgramNum instead of currentProgram snapshot")
     if "program[currentProgram].Speed = actualRate;" in withdrawal_body:
         errors.append("logic.h:void withdrawal must not ratchet program[].Speed on resume (use CurrentBaseSpeedRate)")
-    if "CurrentBaseSpeedRate" not in withdrawal_body:
-        errors.append("logic.h:void withdrawal missing CurrentBaseSpeedRate usage")
+    # withdrawal() no longer assigns CurrentBaseSpeedRate itself - it resumes at
+    # CurrrentStepperSpeed via set_pump_speed(..., true), and set_pump_speed()
+    # (updateBase param, default true) is the one that writes CurrentBaseSpeedRate.
+    # Check the real call site, not a comment mentioning the variable name.
+    base_speed_call = re.search(
+        r"set_pump_speed\(\s*CurrrentStepperSpeed\s*,\s*true\s*(?:,\s*(true|false)\s*)?\)",
+        withdrawal_body,
+    )
+    if not base_speed_call:
+        errors.append(
+            "logic.h:void withdrawal missing set_pump_speed(CurrrentStepperSpeed, true) call "
+            "that refreshes CurrentBaseSpeedRate on resume"
+        )
+    elif base_speed_call.group(1) == "false":
+        errors.append(
+            "logic.h:void withdrawal calls set_pump_speed with updateBase=false - "
+            "CurrentBaseSpeedRate is no longer refreshed on resume"
+        )
 
 detector_text = read_text("impurity_detector.h")
 if detector_text:

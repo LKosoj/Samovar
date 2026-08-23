@@ -10,6 +10,8 @@
 <!--#include power_unit_hidden.htm-->
 <!--#include power_unit_runtime_vars.htm-->
 
+    var HeaterPowerOn = false;
+
     function check_program (str) {
       var arrayOfStrings = str.split("\n");
       var prevcnt = 0;
@@ -64,7 +66,7 @@
 
     function setBKCommand () {
       var cmd = "startbk=";
-      if (document.getElementById('power').value == "Выключить нагрев") {
+      if (HeaterPowerOn) {
         if (!confirm("Выключить нагрев?")) return false;
         cmd = cmd + "0";
       } else {
@@ -153,7 +155,8 @@
 
           var powerstr;
           var powerstyle;
-          if (myObj.PowerOn == 1) {
+          HeaterPowerOn = myObj.PowerOn == 1;
+          if (HeaterPowerOn) {
             powerstr = 'Выключить нагрев';
             powerstyle = SamovarApp.cssVar('--state-danger-bg');
           } else {
@@ -191,7 +194,8 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false
+        implicitSystemTheme: false,
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp']
       });
     };
 

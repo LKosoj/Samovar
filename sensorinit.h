@@ -199,7 +199,14 @@ void pressure_sensor_get() {
       pressure_value = raw_pressure_value / 133.32; //переводим паскали в мм. рт. столба
       pressure_value = (old_pressure_value + pressure_value) / 2;
       old_pressure_value = pressure_value;
+      pressure_err_count = 0; // [П7]
+    } else {
+      // [П7] чтение не удалось - старое pressure_value остаётся, но факт неудачи учитываем
+      if (pressure_err_count < INT32_MAX) pressure_err_count++;
     }
+  } else {
+    // [П7] семафор I2C не захвачен - тоже неудачное чтение
+    if (pressure_err_count < INT32_MAX) pressure_err_count++;
   }
 #elif defined(USE_PRESSURE_MPX)
   pressure_value = (analogRead(LUA_PIN) - 36.7) / 12;
@@ -253,9 +260,15 @@ void DS_getvalue(void) {
   if (pv > -120) {
     pressure_value = pv;
     use_pressure_sensor = true;
+    pressure_err_count = 0; // [П7]
   } else {
     //pressure_value = -1;
     //use_pressure_sensor = false;
+    // [П7] обрыв 1-Wire - раньше эта ветка была пуста, защита от захлёба
+    // молча снималась (overflow() сравнивал по старому pressure_value).
+    // use_pressure_sensor НЕ восстанавливаем в false - это навсегда сняло бы
+    // защиту после одного сбоя. Считаем неудачу вместо этого.
+    if (pressure_err_count < INT32_MAX) pressure_err_count++;
   }
 
 #endif
@@ -270,7 +283,11 @@ void DS_getvalue(void) {
       sensor.PrevTemp = sensor.avgTemp;
       sensor.ErrCount = 0;
     } else {
-      if (sensor.PrevTemp > 0) sensor.ErrCount++;
+      // [П17] Раньше счётчик рос только если PrevTemp>0 - датчик, ни разу не
+      // ответивший с самого старта (PrevTemp==0), никогда не набирал ErrCount,
+      // и защита держалась лишь на побочном эффекте avgTemp==0. Считаем любой
+      // неудачный цикл, с насыщением, чтобы не переполнить int.
+      if (sensor.ErrCount < INT32_MAX) sensor.ErrCount++;
     }
   }
 

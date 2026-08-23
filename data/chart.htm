@@ -84,6 +84,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
           document.getElementById('rssi').innerHTML = myObj.rssi;
           document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
           SamovarApp.setSoundEnabled(!!myObj.UseBBuzzer);
+          setPowerButtons(myObj.PowerOn == 1);
           appendChartPoint(myObj);
 
           var dt = myObj.PipeTemp - myObj.SteamTemp;
@@ -124,7 +125,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
           }
         });
         chart.loadCsv('data.csv').catch(function (err) {
-          if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true);
+          if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true, retryChartLoad);
         });
       } catch (err) {
         chartBlock.textContent = 'График недоступен: ' + err;
@@ -132,6 +133,16 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
     }
     function templateBool (value) {
       return String(value).toLowerCase() === 'true';
+    }
+    function retryChartLoad () {
+      if (!chart) return;
+      chart.loadCsv('data.csv').catch(function (err) {
+        if (chart) chart.setStatus('Ошибка загрузки графика: ' + err, true, retryChartLoad);
+      });
+    }
+    function setPowerButtons (powerOn) {
+      document.getElementById('power_on').style.display = powerOn ? 'none' : '';
+      document.getElementById('power_off').style.display = powerOn ? '' : 'none';
     }
     document.addEventListener('DOMContentLoaded', function () {
       SamovarApp.startTelemetryPage(renderTelemetry, {
@@ -143,7 +154,8 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
         implicitSystemTheme: true,
         onLastMessageRemoved: function(remainingCount) {
           if (remainingCount === 0) IsCalmingPause = false;
-        }
+        },
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp']
       });
     });
   </script>
@@ -242,6 +254,8 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
         <span>Статус: <span id='Status'></span></span>
       </div>
     </div>
+    <input id='power_on' type='button' name='power_on' value='Включить нагрев' onclick='SamovarApp.sendCommand("power=1"); return false;' class="button">
+    <input id='power_off' type='button' name='power_off' value='Выключить нагрев' style="display: none;" onclick='if (!confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;' class="button">
     <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="index.htm"' class="button">
     <input id='getlog' type='button' name='getlog' value='Сохранить лог' onclick='javascript:window.open("/getlog")' class="button">
     <input id='getoldlog' type='button' name='getoldlog' value='Сохранить старый лог' onclick='javascript:window.open("/getoldlog")' class="button">

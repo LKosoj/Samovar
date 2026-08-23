@@ -30,7 +30,11 @@ if alarm_text:
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
-    for token in ["sensor.ErrCount <= 10", "sensor.avgTemp >= 2.0f", "sensor.avgTemp < 126.0f"]:
+    # [П18] Пороги теперь сравниваются с локальным согласованным снимком (errCount/
+    # avgTemp), а не с sensor.ErrCount/sensor.avgTemp напрямую - см. seqlock-приём
+    # в alarm.h (защита от torn read между записью из задачи опроса датчиков и
+    # чтением из аварийного надзора).
+    for token in ["errCount <= 10", "avgTemp >= 2.0f", "avgTemp < 126.0f"]:
         if token not in body:
             errors.append(f"sensor_reading_valid contract missing: {token}")
     try:

@@ -315,7 +315,7 @@ def check_tick_status_fsm_lua_branch() -> list[str]:
     errors: list[str] = []
     logic_source = (ROOT / "logic.h").read_text(encoding="utf-8")
     try:
-        body = extract_function_body(logic_source, "String tick_status_fsm()")
+        body = extract_function_body(logic_source, "String format_status_fsm_text")
     except ValueError as exc:
         errors.append(str(exc))
         return errors

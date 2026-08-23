@@ -637,12 +637,12 @@
         </div>
         <input id="mixer_relayMask" type="hidden" value="0">
         <div class="container_row i2c-actions">
-          <input id="mixer_apply" type="button" class="button" value="Применить" onclick="sendDevice('mixer','apply');">
+          <input id="mixer_apply" type="button" class="button" value="Применить" title="Передать настройки устройству сразу, без сохранения в его память: слетят при перезапуске платы I2CStepper." onclick="sendDevice('mixer','apply');">
           <input id="mixer_run_toggle" type="button" class="button state-button state-off" value="Запустить мешалку" onclick="toggleDevice('mixer');">
-          <input id="mixer_save" type="button" class="button" value="Сохранить" onclick="sendDevice('mixer','save');">
+          <input id="mixer_save" type="button" class="button" value="Сохранить" title="Передать настройки устройству и записать их в его энергонезависимую память: сохранятся после перезапуска платы I2CStepper." onclick="sendDevice('mixer','save');">
         </div>
         <div id="mixer_relay_block">
-          <h2>Реле</h2>
+          <h2>Реле <span style="font-size: 0.6em; font-weight: normal;" title="Прошивка Самовара не знает назначения этих реле - это вспомогательные выходы платы I2CStepper, подписывает их пользователь сам при подключении.">(назначение не передаётся прошивкой)</span></h2>
           <div class="container_row i2c-actions">
             <input id="mixerRelay1" type="button" class="button state-button state-off" value="R1: выключено" onclick="toggleRelay('mixer',1);">
             <input id="mixerRelay2" type="button" class="button state-button state-off" value="R2: выключено" onclick="toggleRelay('mixer',2);">
@@ -686,14 +686,14 @@
         </div>
         <input id="pump_relayMask" type="hidden" value="0">
         <div class="container_row i2c-actions">
-          <input id="pump_apply" type="button" class="button" value="Применить" onclick="sendDevice('pump','apply');">
+          <input id="pump_apply" type="button" class="button" value="Применить" title="Передать настройки устройству сразу, без сохранения в его память: слетят при перезапуске платы I2CStepper." onclick="sendDevice('pump','apply');">
           <input id="pump_run_toggle" type="button" class="button state-button state-off" value="Запустить насос" onclick="toggleDevice('pump');">
-          <input id="pump_save" type="button" class="button" value="Сохранить" onclick="sendDevice('pump','save');">
+          <input id="pump_save" type="button" class="button" value="Сохранить" title="Передать настройки устройству и записать их в его энергонезависимую память: сохранятся после перезапуска платы I2CStepper." onclick="sendDevice('pump','save');">
           <input id="pump_calstart" type="button" class="button" value="Калибровка старт" onclick="sendDevice('pump','calstart');">
           <input id="pump_calfinish" type="button" class="button" value="100 мл стоп" onclick="sendDevice('pump','calfinish');">
         </div>
         <div id="pump_relay_block">
-          <h2>Реле</h2>
+          <h2>Реле <span style="font-size: 0.6em; font-weight: normal;" title="Прошивка Самовара не знает назначения этих реле - это вспомогательные выходы платы I2CStepper, подписывает их пользователь сам при подключении.">(назначение не передаётся прошивкой)</span></h2>
           <div class="container_row i2c-actions">
             <input id="pumpRelay1" type="button" class="button state-button state-off" value="R1: выключено" onclick="toggleRelay('pump',1);">
             <input id="pumpRelay2" type="button" class="button state-button state-off" value="R2: выключено" onclick="toggleRelay('pump',2);">

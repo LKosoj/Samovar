@@ -111,12 +111,19 @@ if beer:
         body = ""
     if body:
         require_token(
-            "beer mash/boil finish uses fractional minutes and subtracts idle time",
+            # [П1] Формула переехала в beer_stage_elapsed_ms() (общий хелпер,
+            # каждое слагаемое приводится к float ОТДЕЛЬНО до вычитания) -
+            # раньше здесь был инлайновый (float)(millis() - begintime -
+            # beerStageIdleAccumMs), который заворачивался в ~4.29e9 мс, если
+            # накопленный простой обгонял прошедшее время.
+            "beer mash/boil finish uses fractional minutes via beer_stage_elapsed_ms",
             body,
-            "(float)(millis() - begintime - beerStageIdleAccumMs) / 60000.0f >= program[ProgramNum].Time",
+            "beer_stage_elapsed_ms(millis()) / 60000.0f >= program[ProgramNum].Time",
         )
         if "/ 1000 / 60 >= program[ProgramNum].Time" in body:
             errors.append("beer pause finish condition still uses integer-minute division")
+        if "(float)(millis() - begintime - beerStageIdleAccumMs)" in body:
+            errors.append("beer pause finish condition still uses the overflow-prone inline cast formula")
 
         require_token(
             "beer M/P/F hysteresis uses own constant, not the sensor's SetTemp",
@@ -146,12 +153,19 @@ if beer:
             errors.append(str(exc))
             boil_block = ""
         if boil_block:
-            require_ordered_tokens(
-                "hop reminder fires only when the next row continues boiling",
+            # [П68] Условие "следующая строка тоже 'B'" снято намеренно:
+            # flame-out (внесение хмеля на выключение варки, без второй
+            # строки 'B') - штатный приём. От повторного срабатывания
+            # защищает флаг msgfl (взводится при входе в строку).
+            require_token(
+                "hop reminder still fires (msgfl-guarded)",
                 boil_block,
-                ["program_type_at(ProgramNum + 1) == 'B'", "HopStepperStep();"],
-                errors,
+                "HopStepperStep();",
             )
+            if "program_type_at(ProgramNum + 1) == 'B'" in boil_block:
+                errors.append(
+                    "hop reminder still requires the next row to be 'B' (flame-out on the last boil row broken, see П68)"
+                )
 
             require_token(
                 "beer boiling relay-only path scales heater duty by SamSetup.BVolt",

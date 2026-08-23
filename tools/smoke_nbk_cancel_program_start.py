@@ -182,6 +182,7 @@ def check_site(
     expect_close_log: bool,
     expect_warn_log_close_failed: bool,
     offset: int = 0,
+    call_contains: list[str] | None = None,
 ) -> None:
     try:
         block, _ = extract_braced_block_after(run_body, anchor, offset)
@@ -189,9 +190,16 @@ def check_site(
         errors.append(f"[{label}] {exc}")
         return
 
-    call = f'nbk_cancel_program_start("{message}");'
-    if call not in block:
-        errors.append(f"[{label}] missing exact nbk_cancel_program_start call: {call}")
+    if call_contains is not None:
+        # [П70в] сообщение C собирается из nbkSessionConfigError, а не один
+        # литерал - проверяем ключевые фрагменты вместо точного вызова.
+        for fragment in call_contains:
+            if fragment not in block:
+                errors.append(f"[{label}] missing fragment in nbk_cancel_program_start call: {fragment}")
+    else:
+        call = f'nbk_cancel_program_start("{message}");'
+        if call not in block:
+            errors.append(f"[{label}] missing exact nbk_cancel_program_start call: {call}")
 
     if expect_close_log and "nbk_close_data_log();" not in block:
         errors.append(f"[{label}] missing nbk_close_data_log() tail")
@@ -237,12 +245,19 @@ def run_structural_part() -> list[str]:
     )
 
     # C: некорректный снимок конфигурации НБК - лог закрывается явно.
+    # [П70в] сообщение теперь называет конкретное сорвавшееся поле
+    # (nbkSessionConfigError), а не общую фразу.
     check_site(
         errors, run_body, "C",
         "if (!nbk_capture_session_config()) {",
-        "Запуск НБК отклонён: некорректные настройки НБК или питания.",
+        "",
         expect_close_log=True,
         expect_warn_log_close_failed=False,
+        call_contains=[
+            "nbk_cancel_program_start(",
+            '"Запуск НБК отклонён: некорректная настройка - "',
+            "String(nbkSessionConfigError)",
+        ],
     )
 
     # D: не удалось создать файл лога - закрывать нечего, хвоста нет.

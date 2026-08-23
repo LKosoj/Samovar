@@ -84,7 +84,7 @@ if text:
         "updateProgramTemplateBaseline();",
         "return true;",
         "restoreProgramTemplateSelect(selectObject);",
-        'alert("Ошибка загрузки шаблона программы: " + err);',
+        'SamovarApp.showRequestError("Ошибка загрузки шаблона программы: " + err);',
         "return false;",
       ],
       errors,

@@ -24,12 +24,22 @@ ARDUINO_STUB = r'''
 #include <cstdio>
 #include <string>
 
+#define F(text) (text)
+
 class Print {
  public:
   virtual ~Print() {}
   virtual size_t write(uint8_t value) = 0;
   virtual size_t write(const uint8_t* buffer, size_t size) = 0;
 };
+
+// string_utils.h (2026-08) зовёт Serial.println(F(...)) при нехватке памяти в
+// JsonStringPrint - минимальная заглушка, вывод в этих тестах не проверяется.
+class String;
+struct FakeSerial {
+  void println(const char*) {}
+};
+static FakeSerial Serial;
 
 class String {
  public:
@@ -52,6 +62,12 @@ class String {
   const char* c_str() const { return value_.c_str(); }
   char charAt(size_t index) const { return value_.at(index); }
   void reserve(size_t size) { value_.reserve(size); }
+
+  // concat() атомарен, как у настоящего Arduino String: JsonStringPrint зовёт его
+  // напрямую, чтобы честно вернуть неуспех при нехватке памяти. В этом мок-хосте
+  // память не кончается, поэтому обе перегрузки всегда успешны.
+  bool concat(char c) { value_ += c; return true; }
+  bool concat(const char* s, size_t len) { value_.append(s, len); return true; }
 
   String& operator+=(const String& other) {
     value_ += other.value_;

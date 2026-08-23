@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import re
 import subprocess
 import sys
@@ -9,6 +10,16 @@ from smoke_helpers import extract_function_body, require_ordered_tokens
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Мутационные проверки (см. load_lua_script()/lua-lock ниже) не должны трогать
+# рабочее дерево Samovar.ino - его параллельно правят другие агенты. Переменная
+# окружения позволяет подставить мутированную КОПИЮ файла из /tmp вместо
+# реального; без неё поведение не меняется - читается обычный Samovar.ino.
+SAMOVAR_INO_PATH = (
+    Path(os.environ["SAMOVAR_INO_OVERRIDE"])
+    if os.environ.get("SAMOVAR_INO_OVERRIDE")
+    else (ROOT / "Samovar.ino")
+)
 
 
 def source_slice(source: str, start_token: str, end_token: str) -> str:
@@ -27,7 +38,7 @@ def extract_last_function_body(source: str, signature: str) -> str:
 
 
 def build_harness() -> str:
-    samovar = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+    samovar = SAMOVAR_INO_PATH.read_text(encoding="utf-8")
     web = (ROOT / "WebServer.ino").read_text(encoding="utf-8")
     api = (ROOT / "samovar_api.h").read_text(encoding="utf-8")
 
@@ -71,6 +82,7 @@ def build_harness() -> str:
 #define portEXIT_CRITICAL(mux) do { (void)(mux); } while (0)
 
 using TickType_t = int;
+static const TickType_t portMAX_DELAY = -1;
 using portMUX_TYPE = int;
 
 class String {
@@ -174,6 +186,19 @@ static int persistCalls = 0;
 static int programCommitCalls = 0;
 static int programClearCalls = 0;
 static int runtimeLockCalls = 0;
+// [WP10 п.31] lua_type_script пишется под замком Lua: читатель - задача
+// do_lua_script() на другом ядре. Счётчики нужны, чтобы тест ловил снятие
+// замка, а не только сам факт присваивания.
+static int luaStateLockCalls = 0;
+static int luaStateUnlockCalls = 0;
+static bool luaLockHeld = false;
+// Заглушка load_lua_script() (см. ниже) фиксирует ЭТИМ флагом состояние
+// luaLockHeld В МОМЕНТ СВОЕГО ВЫЗОВА - иначе проверка "замок отпущен до
+// load_lua_script()" смотрела бы на luaLockHeld уже ПОСЛЕ возврата из
+// commit_profile_operation(), когда замок в любом случае отпущен, и не поймала
+// бы перестановку load_lua_script() внутрь замка (взаимоблокировка в реальном
+// не рекурсивном мьютексе).
+static bool luaLockHeldDuringLoad = false;
 static int applyConfigCalls = 0;
 static int sensorApplyCalls = 0;
 static int resetCalls = 0;
@@ -251,6 +276,17 @@ bool runtime_state_lock(TickType_t) {
 
 static void runtime_state_unlock(bool) {}
 
+bool lua_state_lock(TickType_t) {
+  luaStateLockCalls++;
+  luaLockHeld = true;
+  return true;
+}
+
+void lua_state_unlock(bool) {
+  luaStateUnlockCalls++;
+  luaLockHeld = false;
+}
+
 PersistResult save_profile_nvs(const SetupEEPROM&) {
   persistCalls++;
   return persistResult;
@@ -302,7 +338,10 @@ String get_lua_mode_name(bool = true) {
   }
 }
 
-void load_lua_script() { luaLoadCalls++; }
+void load_lua_script() {
+  luaLoadCalls++;
+  if (luaLockHeld) luaLockHeldDuringLoad = true;
+}
 
 static SafetyModeSwitchState modeSwitchState = {
     SAFETY_MODE_SWITCH_IDLE, 0, false};
@@ -466,6 +505,10 @@ static void reset_fixture() {
   programCommitCalls = 0;
   programClearCalls = 0;
   runtimeLockCalls = 0;
+  luaStateLockCalls = 0;
+  luaStateUnlockCalls = 0;
+  luaLockHeld = false;
+  luaLockHeldDuringLoad = false;
   applyConfigCalls = 0;
   sensorApplyCalls = 0;
   resetCalls = 0;
@@ -890,6 +933,16 @@ static void test_mode_change_reloads_lua_script_of_new_mode() {
     check(lua_type_script.value() != previousScript &&
               lua_type_script.value() == get_lua_mode_name().value(),
           "mode change did not refresh lua_type_script to the new mode script");
+    // [WP10 п.31] Запись обязана идти под замком Lua - её читает задача
+    // do_lua_script() на другом ядре, а String при присваивании освобождает
+    // старый буфер. И замок обязан быть отпущен до load_lua_script(), которая
+    // берёт его сама: мьютекс не рекурсивен, иначе мгновенная взаимоблокировка.
+    check(luaStateLockCalls >= 1,
+          "lua_type_script was written without taking the Lua lock");
+    check(luaStateLockCalls == luaStateUnlockCalls,
+          "Lua lock taken and released an unequal number of times");
+    check(!luaLockHeldDuringLoad,
+          "Lua lock was still held when load_lua_script() ran (deadlock risk)");
   }
 }
 
@@ -1265,7 +1318,7 @@ int main() {
 
 def static_checks() -> list[str]:
     errors: list[str] = []
-    samovar = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+    samovar = SAMOVAR_INO_PATH.read_text(encoding="utf-8")
     web = (ROOT / "WebServer.ino").read_text(encoding="utf-8")
     api = (ROOT / "samovar_api.h").read_text(encoding="utf-8")
     selftest = (ROOT / "selftest.h").read_text(encoding="utf-8")

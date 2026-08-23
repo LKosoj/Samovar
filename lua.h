@@ -63,6 +63,11 @@ inline void lua_report_timeout_if_fired() {
 }
 
 inline String lua_exec_locked(String& script, bool collect_garbage = false) {
+  // [П27] lua.Lua_dostring делает lua_pcall(..., LUA_MULTRET, ...) - возвращаемые
+  // чанком значения остаются на стеке навсегда. Запоминаем высоту стека до вызова
+  // и восстанавливаем после - как это уже сделано в lua_exec_chunk_locked.
+  lua_State* L = lua.GetState();
+  int base = lua_gettop(L);
   lua_install_timeout_hook_locked();
   String result = lua.Lua_dostring(&script);
   lua_remove_timeout_hook_locked();
@@ -75,8 +80,9 @@ inline String lua_exec_locked(String& script, bool collect_garbage = false) {
   // __gc-финализатор повесит задачу Lua - принятое ограничение, а не защищённый
   // watchdog'ом случай.
   if (collect_garbage) {
-    lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
+    lua_gc(L, LUA_GCCOLLECT, 0);
   }
+  lua_settop(L, base);
   return result;
 }
 
@@ -158,6 +164,29 @@ inline void lua_install_constants_locked() {
   lua_set_number_global_locked("ACTUATOR_COMMAND_FAILED", ACTUATOR_COMMAND_FAILED);
 }
 
+// [П3] Lua может поднять канал нагрева сырым digitalWrite, минуя PowerOn.
+// Запоминаем этот факт здесь, чтобы аварийный надзор (перегрев, отказ датчиков)
+// работал и в этом случае - иначе скрипт греет без единого шанса на отсечку.
+// Раздельно по каналу (RELE_CHANNEL1 - основной ТЭН, RELE_CHANNEL4 - разгонный):
+// "поднят" значит записан РАВНО тот уровень, что C++-тракт считает включённым
+// (SamSetup.rele1/rele4 - см. power_regulator.h heater_outputs_enable_locked).
+static bool luaHeaterChannel1Raised = false;
+static bool luaHeaterChannel4Raised = false;
+inline bool lua_heater_channel_raised() { return luaHeaterChannel1Raised || luaHeaterChannel4Raised; }
+
+inline void lua_set_heater_channel_raised(int pin, bool raised) {
+  if (pin == RELE_CHANNEL1) luaHeaterChannel1Raised = raised;
+  else if (pin == RELE_CHANNEL4) luaHeaterChannel4Raised = raised;
+}
+
+// level - сырое значение, ушедшее в digitalWrite(pin, level) (без инверсии по
+// releN - см. комментарий в lua_wrapper_digitalWrite). "Включено" - совпадение
+// с SamSetup.releN этого канала, как и в C++-тракте.
+inline void lua_track_heater_channel_write(int pin, int level) {
+  const bool onLevel = (pin == RELE_CHANNEL1) ? SamSetup.rele1 : SamSetup.rele4;
+  lua_set_heater_channel_raised(pin, (level != 0) == onLevel);
+}
+
 // [P8] lua_sethook выше вооружает только ГЛАВНЫЙ lua_State. Код внутри
 // coroutine.resume исполняется в СВОЁМ lua_State и хуком главного состояния не
 // покрыт - зависший `while true do end` внутри корутины watchdog не прервёт
@@ -178,7 +207,13 @@ static int lua_wrapper_arm_coroutine_watchdog(lua_State* lua_state) {
 // coroutine.wrap оборачивает оригинальный resume, а не подменённый глобальный,
 // и пробрасывает ошибку (в т.ч. "chunk timeout") через error(msg, 0) - как это
 // делает штатный coroutine.wrap.
+// [П2] Пользовательский скрипт живёт в том же _G, что и armCoroutineWatchdog -
+// без укрытия он мог бы написать `armCoroutineWatchdog = function() end` и
+// обойти сторож. Захватываем C-функцию в локальную переменную прелюдии (тот же
+// приём, что уже применён к originalCreate/originalResume) и в конце убираем
+// глобальное имя - дальнейшие переопределения глобали замыканий уже не касаются.
 static const char* const LUA_COROUTINE_WATCHDOG_PRELUDE = R"lua(
+local armCoroutineWatchdog = armCoroutineWatchdog
 local originalCreate = coroutine.create
 local originalResume = coroutine.resume
 coroutine.create = function(f)
@@ -199,6 +234,11 @@ coroutine.resume = function(co, ...)
   armCoroutineWatchdog(co)
   return originalResume(co, ...)
 end
+-- ВАЖНО: именно _G.armCoroutineWatchdog, а не голое имя - после `local
+-- armCoroutineWatchdog = armCoroutineWatchdog` выше голое имя уже указывает на
+-- локальную переменную (ту, что замкнули функции выше), и `armCoroutineWatchdog
+-- = nil` обнулил бы ИМЕННО её, а не глобаль.
+_G.armCoroutineWatchdog = nil
 )lua";
 
 // Исполняется один раз при инициализации Lua-состояния (см. lua_init(), сразу
@@ -219,6 +259,7 @@ inline bool lua_install_coroutine_watchdog_locked() {
   return true;
 }
 
+
 /**
  * @brief Надзор за режимом Lua (mode_registry.h::mode_dispatch_alarm, SysTicker,
  * core 0, 1 Гц). В отличие от check_alarm_suvid (suvid.h) все три датчика тут
@@ -227,7 +268,9 @@ inline bool lua_install_coroutine_watchdog_locked() {
 inline void check_alarm_lua() {
   mode_clear_alarm_pause_if_expired();
 
-  if (PowerOn) {
+  // [П3] Lua мог поднять канал нагрева сырым digitalWrite мимо PowerOn -
+  // в этом случае надзор датчиков обязан работать так же, как при PowerOn.
+  if (PowerOn || lua_heater_channel_raised()) {
     if (optional_sensor_failed(WaterSensor) && process_sensor_failed("Lua", "воды")) return;
     if (optional_sensor_failed(ACPSensor) && process_sensor_failed("Lua", "ТСА")) return;
     if (optional_sensor_failed(TankSensor) && process_sensor_failed("Lua", "куба")) return;
@@ -257,6 +300,29 @@ String script1, script2;
 int script1_ref = LUA_NOREF;
 int script2_ref = LUA_NOREF;
 extern String lua_script_list_cache;
+
+// [П30] Падающий режимный скрипт раньше перезапускался планировщиком раз в
+// секунду безусловно и забивал журнал повторяющимся "ERR in <режим>.lua: ..."
+// вечно. Порог подряд идущих неуспешных прогонов, после которого периодический
+// цикл останавливается и печатается ОДНО итоговое сообщение вместо потока ERR.
+#ifndef LUA_PERIODIC_FAILURE_STOP_THRESHOLD
+#define LUA_PERIODIC_FAILURE_STOP_THRESHOLD 5
+#endif
+// [Fix] script1 (общий script.lua) и script2 (режимный скрипт) падают независимо -
+// счётчик один на оба заставлял ошибку в пользовательском script.lua тушить
+// исправно работающий режимный скрипт. Счётчики раздельные; script1 при
+// достижении порога не глушит планировщик (loop_lua_fl), а просто перестаёт
+// запускаться сам, пока его не перезагрузят через load_lua_script().
+static volatile uint8_t lua_periodic_failure_count_script1 = 0;
+static volatile uint8_t lua_periodic_failure_count_script2 = 0;
+static volatile bool lua_script1_disabled = false;
+
+// [П26] Ключи setObject/getObject раньше копились в luaObj без предела -
+// хранилище растёт бесконечно, пока не сменится режимный скрипт. Предел числа
+// РАЗНЫХ ключей (обновление существующего ключа лимит не расходует).
+#ifndef LUA_OBJECT_STORE_MAX_KEYS
+#define LUA_OBJECT_STORE_MAX_KEYS 32
+#endif
 
 SimpleMap<String, String> *luaObj = new SimpleMap<String, String>([](String &a, String &b) -> int {
   if (a == b) return 0;      // a and b are equal
@@ -933,6 +999,7 @@ inline bool lua_pin_is_heater_channel(int pin) {
   return pin == RELE_CHANNEL1 || pin == RELE_CHANNEL4;
 }
 
+
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   int a = lua_check_truncated_arg(lua_state, 1);
@@ -977,8 +1044,12 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
       // каналы и сам их не подаст, пока защёлка не снята. Lua пишет сырым значением
       // мимо releN-инверсии, поэтому по b нельзя отличить "включить" от "выключить";
       // запись игнорируется молча — luaL_error убил бы весь чанк (общий lua_pcall).
-    } else if (a != WATER_PUMP_PIN) digitalWrite(a, b);
-    else {
+      // [П3] C++-тракт уже физически погасил канал - снимаем и наш учёт "поднят".
+      lua_set_heater_channel_raised(a, false);
+    } else if (a != WATER_PUMP_PIN) {
+      digitalWrite(a, b);
+      if (lua_pin_is_heater_channel(a)) lua_track_heater_channel_write(a, b);
+    } else {
 #ifdef USE_WATER_PUMP
       if (b == LOW) {
         water_pump_speed = 0;
@@ -1319,9 +1390,24 @@ static int lua_wrapper_set_str_variable(lua_State *lua_state) {
 static int lua_wrapper_set_object(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
-  String Var = lua_to_string_arg(lua_state, 1);
-  String Val = lua_to_string_arg(lua_state, 2);
-  luaObj->put(Var, Val);
+  // [П26] luaL_error - longjmp мимо деструкторов живых String (см. П25 у
+  // lua_wrapper_get/set_str_variable) - прячем Var/Val во вложенный блок и
+  // зовём luaL_error только после его закрытия.
+  bool limitExceeded = false;
+  {
+    String Var = lua_to_string_arg(lua_state, 1);
+    String Val = lua_to_string_arg(lua_state, 2);
+    // Обновление уже существующего ключа лимит не расходует - has() отличает
+    // "ключа нет" от "значение пустая строка", чего get() не умеет.
+    if (luaObj->has(Var) || luaObj->size() < LUA_OBJECT_STORE_MAX_KEYS) {
+      luaObj->put(Var, Val);
+    } else {
+      limitExceeded = true;
+    }
+  }
+  if (limitExceeded) {
+    return luaL_error(lua_state, "setObject: key limit reached (%d)", (int)LUA_OBJECT_STORE_MAX_KEYS);
+  }
   return 0;
 }
 
@@ -1380,8 +1466,11 @@ static int lua_wrapper_set_pump_pwm(lua_State *lua_state) {
 
 static int lua_wrapper_set_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  uint8_t a = luaL_checknumber(lua_state, 1);
-  if (a < 1 || a > 10) return 0;
+  // [П28] luaL_checknumber(...) в uint8_t усекал номер таймера ПО МОДУЛЮ 256 ДО
+  // проверки диапазона (setTimer(266,...) тихо писал в lua_timer[9]).
+  // lua_check_index_arg проверяет диапазон ДО усечения, как и в остальных
+  // 15 обёртках-селекторах этого файла.
+  int32_t a = lua_check_index_arg(lua_state, 1, 1, 10, "timer");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
   a--;
   uint16_t b = luaL_checknumber(lua_state, 2);
@@ -1391,37 +1480,49 @@ static int lua_wrapper_set_timer(lua_State *lua_state) {
 
 static int lua_wrapper_get_timer(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
-  uint8_t a = luaL_checknumber(lua_state, 1);
+  // [П28] см. lua_wrapper_set_timer - тот же сдвиг проверки диапазона раньше усечения.
+  int32_t a = lua_check_index_arg(lua_state, 1, 1, 10, "timer") - 1;
   uint16_t b;
-  if (a < 1 || a > 10) b = 0;
+  if (lua_timer[a] == 0) b = 0;
   else {
-    a--;
-    if (lua_timer[a] == 0) b = 0;
-    else {
-      long l;
-      l = lua_timer[a] - millis();
-      if (l <= 0) {
-        b = 0;
-        lua_timer[a] = 0;
-      } else b = l / 1000;
-    }
+    long l;
+    l = lua_timer[a] - millis();
+    if (l <= 0) {
+      b = 0;
+      lua_timer[a] = 0;
+    } else b = l / 1000;
   }
   lua_pushnumber(lua_state, (lua_Number)b);
   return 1;
 }
 
 static int lua_wrapper_get_str_variable(lua_State *lua_state) {
-  String c;
-  String Var = lua_to_string_arg(lua_state, 1);
-  const LuaStrVariableDescriptor* descriptor = find_lua_str_variable(Var);
-  if (descriptor && (descriptor->access & LUA_VAR_READ) && descriptor->getter) {
-    if (!descriptor->getter(c)) return luaL_error(lua_state, descriptor->busy_error ? descriptor->busy_error : "Lua string variable busy");
-  } else if (Var.length() > 0) {
-    WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var);
-    return 0;
+  // [П25] luaL_error - это longjmp: если он вызван, пока String c/Var ещё живы
+  // в этом кадре стека, их деструкторы не выполнятся (утечка). Как и в
+  // lua_wrapper_set_str_variable/lua_wrapper_set_lua_status, прячем String во
+  // вложенный блок и зовём luaL_error только после его закрытия.
+  const char* errorMessage = nullptr;
+  int pushCount = 0;
+  {
+    String c;
+    String Var = lua_to_string_arg(lua_state, 1);
+    const LuaStrVariableDescriptor* descriptor = find_lua_str_variable(Var);
+    if (descriptor && (descriptor->access & LUA_VAR_READ) && descriptor->getter) {
+      if (!descriptor->getter(c)) {
+        errorMessage = descriptor->busy_error ? descriptor->busy_error : "Lua string variable busy";
+      } else {
+        lua_pushstring(lua_state, c.c_str());
+        pushCount = 1;
+      }
+    } else if (Var.length() > 0) {
+      WriteConsoleLog("UNDEF GET STRING LUA VAR " + Var);
+    } else {
+      lua_pushstring(lua_state, c.c_str());
+      pushCount = 1;
+    }
   }
-  lua_pushstring(lua_state, c.c_str());
-  return 1;
+  if (errorMessage) return luaL_error(lua_state, "%s", errorMessage);
+  return pushCount;
 }
 
 static int lua_wrapper_http_request(lua_State *lua_state) {
@@ -1828,6 +1929,20 @@ String run_lua_string(String lstr) {
 }
 
 void load_lua_script() {
+  // [П30] Отредактированный/перезагруженный скрипт заслуживает новую попытку -
+  // оба счётчика подряд идущих неудачных периодических прогонов сбрасываются
+  // всегда, и script1 (если был отключён из-за своих ошибок) снова разрешён.
+  lua_periodic_failure_count_script1 = 0;
+  lua_periodic_failure_count_script2 = 0;
+  lua_script1_disabled = false;
+  // [П26] Хранилище setObject чистим только когда сменился РЕЖИМНЫЙ скрипт -
+  // простая перезагрузка того же script2 (правка через веб) обязана сохранить
+  // накопленное состояние прогона (например tank_filled/total_volume).
+  static String lua_last_loaded_type_script;
+  if (lua_last_loaded_type_script != lua_type_script) {
+    luaObj->clear();
+    lua_last_loaded_type_script = lua_type_script;
+  }
   String s1 = get_lua_script("script.lua");
   String s2 = get_lua_script(lua_type_script);
   String btnList = get_lua_script_list();
@@ -1955,7 +2070,7 @@ void do_lua_script(void *parameter) {
 
       bool periodicFailed = false;
       bool periodicTimedOut = false;
-      if (local_s1.length() > 0 && lua_chunk_ref_valid(local_script1_ref)) {
+      if (local_s1.length() > 0 && lua_chunk_ref_valid(local_script1_ref) && !lua_script1_disabled) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
           WriteConsoleLog(local_s1);
@@ -1967,6 +2082,15 @@ void do_lua_script(void *parameter) {
         if (sr.length() > 0) {
           periodicFailed = true;
           WriteConsoleLog("ERR in script.lua: " + sr);
+          lua_periodic_failure_count_script1++;
+          if (lua_periodic_failure_count_script1 >= LUA_PERIODIC_FAILURE_STOP_THRESHOLD) {
+            WriteConsoleLog("script.lua остановлен после " + String(lua_periodic_failure_count_script1) +
+                             " ошибок подряд, см. предыдущие ERR");
+            lua_script1_disabled = true;
+            lua_periodic_failure_count_script1 = 0;
+          }
+        } else {
+          lua_periodic_failure_count_script1 = 0;
         }
       }
       vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -1983,6 +2107,15 @@ void do_lua_script(void *parameter) {
         if (sr.length() > 0) {
           periodicFailed = true;
           WriteConsoleLog("ERR in " + lua_type_script + ": " + sr);
+          lua_periodic_failure_count_script2++;
+          if (lua_periodic_failure_count_script2 >= LUA_PERIODIC_FAILURE_STOP_THRESHOLD) {
+            WriteConsoleLog("режимный скрипт (" + lua_type_script + ") остановлен после " + String(lua_periodic_failure_count_script2) +
+                             " ошибок подряд, см. предыдущие ERR");
+            loop_lua_fl = false;
+            lua_periodic_failure_count_script2 = 0;
+          }
+        } else {
+          lua_periodic_failure_count_script2 = 0;
         }
       } else {
         lua_gc(lua.GetState(), LUA_GCCOLLECT, 0);
@@ -2006,6 +2139,38 @@ bool start_lua_script() {
     return false;
   }
   return true;
+}
+
+// [П29] test_str_val приходит из Lua (setStrVariable) без санитизации: кавычка
+// или перевод строки в значении ломают компиляцию ВСЕХ кнопочных скриптов до
+// перезагрузки (склеивается в текст прелюдии, а не передаётся как Lua-строка).
+inline String lua_escape_prelude_string(const String& value) {
+  String escaped;
+  escaped.reserve(value.length());
+  for (unsigned int i = 0; i < value.length(); i++) {
+    char c = value[i];
+    switch (c) {
+      case '"': escaped += "\\\""; break;
+      case '\\': escaped += "\\\\"; break;
+      case '\n': escaped += "\\n"; break;
+      case '\r': escaped += "\\r"; break;
+      default: escaped += c; break;
+    }
+  }
+  return escaped;
+}
+
+// [П29] String(float) на NaN/Inf даёт текст "nan"/"inf" - в прелюдии это имя
+// НЕОПРЕДЕЛЁННОЙ Lua-глобали (компиляция пройдёт, значение станет nil), и
+// скрипт упадёт позже и в другом, менее очевидном месте. Датчик температуры
+// на отказе может отдать NaN - здесь превращаем его в валидное Lua-выражение,
+// которое даёт настоящие NaN/Inf (Lua собран с плавающим lua_Number - см.
+// libraries/ESP-Arduino-Lua/src/lua/luaconf.h: LUA_FLOAT_TYPE == LUA_FLOAT_FLOAT,
+// оператор "/" в Lua - всегда вещественное деление, даже для целого lua_Number).
+inline String lua_prelude_number(float value) {
+  if (isnan(value)) return "(0/0)";
+  if (isinf(value)) return value > 0 ? "(1/0)" : "(-1/0)";
+  return String(value);
 }
 
 String get_global_variables() {
@@ -2056,13 +2221,13 @@ String get_global_variables() {
 
   Variables += "SamSetup_Mode = " + String(SamSetup.Mode) + "\r\n";
   Variables += "test_num_val = " + String(test_num_val) + "\r\n";
-  Variables += "test_str_val = \"" + test_str_val + "\"\r\n";
+  Variables += "test_str_val = \"" + lua_escape_prelude_string(test_str_val) + "\"\r\n";
 
-  Variables += "SteamTemp = " + String(SteamSensor.avgTemp) + "\r\n";
-  Variables += "PipeTemp = " + String(PipeSensor.avgTemp) + "\r\n";
-  Variables += "WaterTemp = " + String(WaterSensor.avgTemp) + "\r\n";
-  Variables += "TankTemp = " + String(TankSensor.avgTemp) + "\r\n";
-  Variables += "ACPTemp = " + String(ACPSensor.avgTemp) + "\r\n";
+  Variables += "SteamTemp = " + lua_prelude_number(SteamSensor.avgTemp) + "\r\n";
+  Variables += "PipeTemp = " + lua_prelude_number(PipeSensor.avgTemp) + "\r\n";
+  Variables += "WaterTemp = " + lua_prelude_number(WaterSensor.avgTemp) + "\r\n";
+  Variables += "TankTemp = " + lua_prelude_number(TankSensor.avgTemp) + "\r\n";
+  Variables += "ACPTemp = " + lua_prelude_number(ACPSensor.avgTemp) + "\r\n";
 
   String currentPowerMode;
   if (!copy_current_power_mode_value(currentPowerMode)) {

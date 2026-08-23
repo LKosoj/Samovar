@@ -5,11 +5,25 @@
   <script src="app.js"></script>
   <script>
     function sendbutton (command) {
-      return SamovarApp.sendCommand(command).then(function (ok) {
-        if (!ok) alert('Команда не принята.');
-        return ok;
-      });
+      // SamovarApp.sendCommand уже показывает ошибку через showRequestError -
+      // отдельный alert() тут был бы вторым, конкурирующим способом её показать.
+      return SamovarApp.sendCommand(command);
     };
+
+    function confirmLeaveIfDirty () {
+      var setupForm = document.getElementById('setupform');
+      if (setupForm && setupForm.dataset.dirty === 'true') {
+        return confirm('Есть несохранённые изменения настроек. Уйти со страницы без сохранения?');
+      }
+      return true;
+    }
+
+    function confirmSelfTest () {
+      var message = 'Самотестирование: включится подача воды (насос или откроется клапан), ' +
+        'запустится перистальтический насос отбора, сервопривод последовательно пройдёт ' +
+        '5 положений ёмкостей. Продолжить?';
+      if (confirm(message)) sendbutton('startst');
+    }
 
     async function set_program () {
       try {
@@ -42,10 +56,29 @@
 
     function loadFile (e) {
       var file = e;
+      if (!file) return;
       var reader = new FileReader();
       reader.onload = function() {
-        var data = JSON.parse(reader.result);
-        mapJson(data);
+        var data;
+        try {
+          data = JSON.parse(reader.result);
+        } catch (err) {
+          SamovarApp.showRequestError('Файл настроек повреждён или не в формате JSON: ' + err.message);
+          return;
+        }
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+          SamovarApp.showRequestError('Файл не в формате настроек Самовара (ожидался JSON-объект).');
+          return;
+        }
+        var errors = mapJson(data);
+        if (errors.length > 0) {
+          SamovarApp.showRequestError('Настройки загружены в форму, но есть ошибки: ' + errors.join('; '));
+        } else {
+          SamovarApp.showRequestError('Настройки загружены в форму, нажмите «Сохранить», чтобы применить.');
+        }
+      };
+      reader.onerror = function() {
+        SamovarApp.showRequestError('Не удалось прочитать файл настроек.');
       };
       reader.readAsText(file, "UTF-8");
     }
@@ -53,17 +86,32 @@
     function mapJson (data) {
       var inputs = Array.prototype.slice.call(document.querySelectorAll('form input, form select'));
 
-      for( var i = 0; i < inputs.length; i++){ 
-        if ( inputs[i].name === "StepperStepMl") { 
-            inputs.splice(i, 1); 
+      for( var i = 0; i < inputs.length; i++){
+        if ( inputs[i].name === "StepperStepMl") {
+            inputs.splice(i, 1);
         }
       }
+      var appliedAny = false;
       Object.keys(data).map(function(dataItem) {
         inputs.map(function(inputItem) {
-          if (inputItem.name === dataItem && inputItem.type == 'checkbox') {inputItem.checked = data[dataItem]; return true;}
-          return (inputItem.name === dataItem) ? (inputItem.value = data[dataItem]) : false;
+          if (inputItem.name === dataItem && inputItem.type == 'checkbox') {inputItem.checked = data[dataItem]; appliedAny = true; return true;}
+          if (inputItem.name === dataItem) { inputItem.value = data[dataItem]; appliedAny = true; return true; }
+          return false;
         });
       });
+      // Прямое присваивание .value/.checked не порождает событий 'input'/'change',
+      // поэтому форма сама по себе не помечается изменённой - делаем это явно,
+      // только если реально подставили хотя бы одно поле (см. markSetupDirty()).
+      if (appliedAny && typeof window.markSetupDirty === 'function') window.markSetupDirty();
+      // Поля с числовой схемой (setupNumericSchema) проверяем на диапазон/тип, чтобы
+      // сообщить пользователю о конкретной некорректной строке файла, а не молчать.
+      var errors = [];
+      setupNumericSchema.forEach(function (rule) {
+        if (!Object.prototype.hasOwnProperty.call(data, rule.name)) return;
+        var result = SamovarApp.validateNumericInput(rule.name, rule);
+        if (!result.ok) errors.push(result.error);
+      });
+      return errors;
     }
 
     function SaveFormToFile (form) {
@@ -92,7 +140,7 @@
 
     const setupNumericSchema = [
       { name: 'mode', integer: true, min: 0, max: 6 },
-      { name: 'DistTemp', min: 0, max: 150 },
+      { name: 'DistTemp', min: 30, max: 150 },
       { name: 'DistTimeF', integer: true, min: 0, max: 255 },
       { name: 'ColDiam', min: 0.1, max: 10 },
       { name: 'ColHeight', min: 0.01, max: 10 },
@@ -186,12 +234,31 @@
       setupForm.dataset.dirty = 'false';
       setupForm.dataset.editRevision = '0';
       setupForm.addEventListener('submit', submitSetupForm);
-      function markSetupDirty() {
+      function markSetupDirty(event) {
+        // Сам выбор файла в <input type="file" id="fileToLoad"> тоже порождает
+        // 'change' на форме, но это ещё не правка настроек - реальные поля
+        // проставляет mapJson() (см. ниже) и сама решает, когда помечать форму
+        // изменённой. Иначе показ (даже неудачного) диалога выбора файла уже
+        // без причины взводил бы предупреждение "есть несохранённые изменения".
+        if (event && event.target && event.target.id === 'fileToLoad') return;
         setupForm.dataset.editRevision = String(Number(setupForm.dataset.editRevision) + 1);
         setupForm.dataset.dirty = 'true';
       }
+      window.markSetupDirty = markSetupDirty;
       setupForm.addEventListener('input', markSetupDirty);
       setupForm.addEventListener('change', markSetupDirty);
+
+      // П52: браузерное предупреждение при уходе со страницы (закрытие вкладки,
+      // обновление, переход по адресу, кнопка "назад") - работает для НЕсохранённых
+      // изменений формы. Для переходов по внутренним ссылкам (кнопки ниже) это же
+      // событие не гарантированно показывает диалог во всех браузерах (особенно
+      // мобильных), поэтому они дополнительно защищены confirmLeaveIfDirty().
+      window.addEventListener('beforeunload', function (event) {
+        if (setupForm.dataset.dirty === 'true') {
+          event.preventDefault();
+          event.returnValue = '';
+        }
+      });
 
       // Обновление отображения плотности насадки при изменении слайдера
       var packDensSlider = document.getElementById('PackDens');
@@ -314,12 +381,15 @@
           </h2>
         </div>
       </div>
-      <div 
-        style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
+      <div
+        style="border: 1px dashed #bbb; display: flex; flex-direction: column; margin-bottom: 1em;  margin-top: 1em; padding: 1em; align-items: center;"
         >
-        <input id='selftest' type='button' name='selftest' value='Самотестирование' onclick='sendbutton("startst")' class="button"
+        <input id='selftest' type='button' name='selftest' value='Самотестирование' onclick='confirmSelfTest()' class="button"
           title="Включится насос (или откроется клапан) воды, запустится перистальтический насос отбора, сервопривод перейдет по 5 позициям."
         >
+        <p style="margin: 0.5em 0 0; font-size: 0.85em; color: var(--text-main); text-align: center;">
+          Внимание: включится подача воды (насос или клапан), запустится перистальтический насос отбора, сервопривод пройдёт 5 положений ёмкостей.
+        </p>
       </div>
     </div>
 
@@ -416,7 +486,7 @@
         <h2><label for="StepperStepMlI2C">Количество шагов I2C насоса:</label> <input id="StepperStepMlI2C" name='StepperStepMlI2C' type='text' inputmode='decimal' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
       </div>
       <div style="margin: 0 auto; width: 200px;">
-        <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='javascript:location.href="calibrate.htm"' class="button">
+        <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='if (confirmLeaveIfDirty()) location.href="calibrate.htm"' class="button">
       </div>
     </div>
 
@@ -556,8 +626,8 @@
     </div>
     <div class="setup-actions">
       <input id='save' type='submit' name='save' value='Сохранить' class="button">
-      <input id='return' type='button' name='return' value='На главную' onclick='javascript:location.href="index.htm"' class="button">
-      <input id='edit' type='button' name='edit' value='Редактор' onclick='javascript:location.href="/edit"' class="button">
+      <input id='return' type='button' name='return' value='На главную' onclick='if (confirmLeaveIfDirty()) location.href="index.htm"' class="button">
+      <input id='edit' type='button' name='edit' value='Редактор' onclick='if (confirmLeaveIfDirty()) location.href="/edit"' class="button">
     </div>
   </form>
 </body>

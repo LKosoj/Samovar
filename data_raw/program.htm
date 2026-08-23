@@ -147,7 +147,7 @@ function displayColumnParams() {
 }
 
 function applyRecommendedSpeeds() {
-  if (!columnParams) { alert('Параметры не загружены'); return; }
+  if (!columnParams) { SamovarApp.showRequestError('Параметры колонны не загружены.'); return; }
   const p = columnParams;
   const programLines = document.getElementById('prg').childNodes;
   let appliedCount = 0;
@@ -223,7 +223,7 @@ async function getProgramFromFile(selectObject, options){
   var fn = getProgramTemplateFile(value);
   var skipConfirm = options && options.skipConfirm;
   if (!fn) {
-    alert("Неизвестный шаблон программы.");
+    SamovarApp.showRequestError("Неизвестный шаблон программы.");
     restoreProgramTemplateSelect(selectObject);
     return false;
   }
@@ -247,7 +247,7 @@ async function getProgramFromFile(selectObject, options){
     return true;
   } catch (err) {
     restoreProgramTemplateSelect(selectObject);
-    alert("Ошибка загрузки шаблона программы: " + err);
+    SamovarApp.showRequestError("Ошибка загрузки шаблона программы: " + err);
     return false;
   }
 }
@@ -558,9 +558,9 @@ function calc_program(){
     e.insertAdjacentHTML("afterbegin", `<div class="flex_row" style="font-size:18px; margin-bottom: 0.5em; margin-top: 0.5em" id="hdr">
       &nbsp;&nbsp;&nbsp;<label class="tooltip">№<span class="tooltiptext">Номер строки программы</span></label>
       &nbsp;&nbsp;<label id="program-col-container" class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label>
-      &nbsp;<label id="program-col-speed" class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час. Для строки с типом "Пауза" - время паузы в секундах</span></label>
+      &nbsp;<label id="program-col-speed" class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час. Для строки с типом "Пауза" - время паузы в секундах (в программе Самовара это значение передаётся в поле "Объём")</span></label>
       &nbsp;<label id="program-col-percent" class="tooltip">Процент<span class="tooltiptext">Процент от объема фракции данного типа</span></label>&nbsp;&nbsp;&nbsp;
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-type" class="tooltip">Тип<span class="tooltiptext">Тип программы. Для режима Пауза время паузы в секундах задается в поле "Скорость"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-type" class="tooltip">Тип<span class="tooltiptext">Тип программы. Для строки "Пауза" время паузы в секундах задаётся в поле "Скорость" (в программе Самовара оно хранится в поле "Объём")</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-power" class="tooltip">${programPwrLabel}<span class="tooltiptext">Напряжение или мощность на регуляторе (зависит от типа используемого регулятора)</span></label>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-output" class="tooltip">Выход<span class="tooltiptext">Объем отбираемой фракции в данной строке программы</span></label>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-time" class="tooltip">Время<span class="tooltiptext">Время, необходимое на отбор фракции в данной строке программы</span></label></div>`);
@@ -581,15 +581,17 @@ async function set_program(){
   if (!volume) return;
   calc_program();
   if (programerr) {
-    alert(programErrorMessage + "\nПрограмма не установлена.");
+    SamovarApp.showRequestError(programErrorMessage + " Программа не установлена.");
     return;
   }
   try {
+    // postProgram() уже показывает причину отказа через showRequestError - повторный
+    // alert() с тем же текстом был бы вторым, конкурирующим способом её показать.
     let result = await SamovarApp.postProgram(document.forms.mainform);
-    if (!result.ok) { alert(result.err || 'Программа не установлена'); return; }
-    alert("Программа сохранена.");
+    if (!result.ok) return;
+    SamovarApp.notify("Программа сохранена.", 2);
   } catch (e) {
-    alert('Ошибка сети: ' + e);
+    SamovarApp.showRequestError('Ошибка сети: ' + e);
   }
 };
 

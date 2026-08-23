@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 COOLING_PUMP_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_pump(bool active)"
 COOLING_OUTPUTS_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_outputs(bool active)"
 COOLING_DEMAND_SIGNATURE = "inline bool beer_cooling_pump_demanded()"
+ELAPSED_SIGNATURE = "inline float beer_stage_elapsed_ms(unsigned long nowMs)"
 
 HARNESS_TEMPLATE = r'''
 #include <iostream>
@@ -26,6 +27,9 @@ enum ActuatorCommandResult {
   ACTUATOR_COMMAND_FAILED,
 };
 
+// [П13] Таймаут остывания 'C' - то же значение, что и в beer.h.
+#define BEER_COOL_TIMEOUT_MS (60UL * 60UL * 1000UL)
+
 struct WProgram { float Temp = 0; };
 static WProgram program[1];
 static unsigned char ProgramNum = 0;
@@ -34,9 +38,11 @@ static bool PowerOn = true;
 static bool beerCoolingPumpActive = false;
 static bool beerManualPause = false;
 static unsigned long begintime = 0;
+static unsigned long beerStageIdleAccumMs = 0;
 static float temp = 0;
 static float tempDelta = 0.3f;
-unsigned long millis() { return 1000; }
+static unsigned long fakeMillis = 1000;
+unsigned long millis() { return fakeMillis; }
 
 static ActuatorCommandResult pumpResult = ACTUATOR_COMMAND_APPLIED;
 static int pumpCalls = 0;
@@ -76,6 +82,8 @@ void run_beer_program(unsigned char) { runBeerCalls++; }
 
 @COOLING_OUTPUTS@
 
+@ELAPSED@
+
 static void run_f_branch() {
 @F_BRANCH@
 }
@@ -99,6 +107,8 @@ static void reset_fixture() {
   beerCoolingPumpActive = false;
   beerManualPause = false;
   begintime = 0;
+  beerStageIdleAccumMs = 0;
+  fakeMillis = 1000;
   temp = 25;
   tempDelta = 0.3f;
   pumpResult = ACTUATOR_COMMAND_APPLIED;
@@ -222,6 +232,66 @@ int main() {
   check(valve_status && beerCoolingPumpActive && emergencyCalls == 1 && runBeerCalls == 0,
         "C перешёл после неподтверждённого закрытия клапана");
 
+  // [П14] Мягкий пуск насоса охлаждения (pumppwm.h::set_pump_pwm) рассчитан
+  // на вызов КАЖДЫЙ тик, пока охлаждение должно быть активно - иначе
+  // скважность насоса застревает на стартовом значении. Два тика подряд при
+  // температуре выше цели должны дать ДВА вызова set_pump_pwm, а не один.
+  reset_fixture();
+  temp = 25;  // выше цели (20) на обоих тиках
+  run_c_branch();
+  run_c_branch();
+  check(pumpCalls == 2,
+        "РЕГРЕСС: C должен звать включение охлаждения каждый тик (мягкий пуск насоса), а не один раз на входе в строку");
+  check(begintime != 0 && valve_status && beerCoolingPumpActive && runBeerCalls == 0,
+        "C не должен был перейти дальше между двумя тиками с температурой выше цели");
+
+  reset_fixture();
+  temp = 25;
+  run_f_branch();
+  run_f_branch();
+  check(pumpCalls == 2,
+        "РЕГРЕСС: F должен звать включение охлаждения каждый тик (мягкий пуск насоса), а не один раз на входе в диапазон температур");
+
+  // [П13] Таймаут остывания: если за BEER_COOL_TIMEOUT_MS куб не остыл до
+  // цели, C должен аварийно остановить варку (снять мощность), а не ждать
+  // бесконечно.
+  reset_fixture();
+  temp = 25;  // никогда не достигает цели (20)
+  fakeMillis = 1000;
+  run_c_branch();  // begintime = 1000
+  check(begintime == 1000, "фикстура таймаута: begintime должен был выставиться на первом тике");
+  fakeMillis = 1000 + BEER_COOL_TIMEOUT_MS;
+  run_c_branch();
+  check(abortCalls == 1 && runBeerCalls == 0,
+        "РЕГРЕСС: C должен был аварийно остановить варку по истечении таймаута остывания");
+
+  // Ручная пауза копит простой (beerStageIdleAccumMs) - активное время
+  // остывания не идёт, пока варка на паузе, поэтому таймаут не должен
+  // сработать раньше срока за счёт времени простоя.
+  reset_fixture();
+  temp = 25;
+  fakeMillis = 1000;
+  run_c_branch();  // begintime = 1000
+  beerStageIdleAccumMs = BEER_COOL_TIMEOUT_MS;  // как будто весь интервал был на паузе
+  fakeMillis = 1000 + BEER_COOL_TIMEOUT_MS;
+  run_c_branch();
+  check(abortCalls == 0,
+        "РЕГРЕСС: время ручной паузы не должно засчитываться в таймаут остывания");
+
+  // [Дефект 1 code review] Стык: таймаут истёк И температура достигла цели
+  // на ОДНОМ и том же тике - успех должен победить, а не авария (симметрично
+  // ветке 'B', где isBoilingStarted проверяется в if, а накопление таймаута -
+  // в else, поэтому оба события структурно не могут совпасть).
+  reset_fixture();
+  temp = 25;  // выше цели, пока не наступит тик истечения таймаута
+  fakeMillis = 1000;
+  run_c_branch();  // begintime = 1000
+  fakeMillis = 1000 + BEER_COOL_TIMEOUT_MS;
+  temp = 20;  // цель достигнута РОВНО на тике истечения таймаута
+  run_c_branch();
+  check(abortCalls == 0 && runBeerCalls == 1,
+        "РЕГРЕСС: достижение цели одновременно с истечением таймаута остывания должно перейти на следующую строку, а не аварийно остановить варку");
+
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -256,6 +326,7 @@ def main() -> int:
         helper = extract_function_body(beer, COOLING_PUMP_SIGNATURE)
         demand_helper = extract_function_body(beer, COOLING_DEMAND_SIGNATURE)
         outputs_helper = extract_function_body(beer, COOLING_OUTPUTS_SIGNATURE)
+        elapsed_helper = extract_function_body(beer, ELAPSED_SIGNATURE)
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
@@ -266,6 +337,8 @@ def main() -> int:
         "@COOLING_DEMAND@", f"{COOLING_DEMAND_SIGNATURE} {{\n{demand_helper}\n}}"
     ).replace(
         "@COOLING_OUTPUTS@", f"{COOLING_OUTPUTS_SIGNATURE} {{\n{outputs_helper}\n}}"
+    ).replace(
+        "@ELAPSED@", f"{ELAPSED_SIGNATURE} {{\n{elapsed_helper}\n}}"
     ).replace("@F_BRANCH@", f_branch).replace("@C_BRANCH@", c_branch)
     code, output = compile_and_run(harness)
     sys.stdout.write(output)

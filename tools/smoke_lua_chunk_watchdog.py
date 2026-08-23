@@ -262,6 +262,17 @@ int main() {
     check(false, "failed to pre-create persistent coroutines outside any hook window");
   }
 
+  // [П2] Готовим сценарий (d): "злонамеренный" скрипт переопределяет глобальную
+  // armCoroutineWatchdog ничего не делающей заглушкой, а затем создаёт новую
+  // корутину. Прелюдия обязана использовать захваченную ЛОКАЛЬНУЮ копию, а не
+  // подменённую глобаль - иначе вооружение тихо отключится. Создаём тоже ВНЕ
+  // хук-окна, чтобы хук не достался корутине по наследству от lua_newthread.
+  if (luaL_dostring(L,
+          "armCoroutineWatchdog = function() end\n"
+          "_G.persistent_bypass_wrap = coroutine.wrap(function() while true do end end)\n") != LUA_OK) {
+    check(false, "failed to pre-create bypass-attempt coroutine outside any hook window");
+  }
+
   // (a) [P8 finding 3] `while true do end` внутри coroutine.resume() обязан
   // прерываться по тому же таймауту, что и главный lua_State - иначе watchdog
   // не покрывает корутины вовсе (подтверждено экспериментом ревьюера).
@@ -316,11 +327,27 @@ int main() {
   check(global_number(L, "coro_wrap_v1") == 9, "coroutine.wrap() first call returned a wrong value");
   check(global_number(L, "coro_wrap_v2") == 200, "coroutine.wrap() second call returned a wrong value");
 
+  // (d) [П2] Подмена глобали armCoroutineWatchdog не должна снимать вооружение:
+  // прелюдия держит свою копию функции в локальной переменной. Корутина,
+  // созданная ПОСЛЕ подмены глобали, обязана всё равно поймать таймаут.
+  luaTimeoutFired = false;
+  uint32_t elapsedCoroBypassMs = 0;
+  const int rcCoroBypass = run_chunk_no_report(
+      L,
+      "local ok, err = pcall(_G.persistent_bypass_wrap)\n"
+      "_G.coro_bypass_ok = ok\n"
+      "_G.coro_bypass_err = tostring(err)\n",
+      &elapsedCoroBypassMs);
+  check_coroutine_watchdog_tripped(
+      L, rcCoroBypass, "coro_bypass_ok", "coro_bypass_err",
+      "coroutine.wrap(infinite loop) created after armCoroutineWatchdog override");
+
   lua_close(L);
   if (failures != 0) return 1;
   std::cout << "elapsed_trip_ms=" << elapsedTripMs << "\n";
   std::cout << "elapsed_coro_resume_ms=" << elapsedCoroResumeMs << "\n";
   std::cout << "elapsed_coro_wrap_ms=" << elapsedCoroWrapMs << "\n";
+  std::cout << "elapsed_coro_bypass_ms=" << elapsedCoroBypassMs << "\n";
   return 0;
 }
 '''
@@ -513,7 +540,7 @@ def main() -> int:
         # lua_State. Проверяем для ОБОИХ вариантов таймаута (small/large), той
         # же логикой границ, что и для верхнеуровневого случая выше.
         for label, out, bound_ms in (("small", out_small, small_ms), ("large", out_large, large_ms)):
-            for metric in ("elapsed_coro_resume_ms", "elapsed_coro_wrap_ms"):
+            for metric in ("elapsed_coro_resume_ms", "elapsed_coro_wrap_ms", "elapsed_coro_bypass_ms"):
                 elapsed = parse_metric(out, metric)
                 if not (bound_ms <= elapsed < bound_ms + 300):
                     print(

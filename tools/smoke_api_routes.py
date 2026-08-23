@@ -743,7 +743,7 @@ if spiffs_file.exists():
     # отложенное закрытие журнала (close идёт тиком SysTicker уже после того, как
     # samovar_process_active() стала ложной — иначе осталось бы окно гонки).
     gate_marker = "samovar_process_active() || data_log_close_pending()"
-    post_error_marker = "request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR).length() > 0"
+    post_error_marker = "if (uploadError.length() > 0) {"
     post_error_index = spiffs_text.find(post_error_marker)
     if post_error_index < 0:
         errors.append(f"SPIFFSEditor POST upload error response missing: {post_error_marker}")
@@ -782,7 +782,7 @@ if spiffs_file.exists():
         # handleRequest. Гейт обязан стоять ДО открытия файла на запись, иначе
         # перестановка гейта после _fs.open(p, "w") пройдёт незамеченной.
         upload_gate_index = upload_body.find(gate_marker)
-        upload_open_index = upload_body.find('_fs.open(p, "w")')
+        upload_open_index = upload_body.find('_fs.open(tmpPath, "w")')
         if upload_gate_index < 0:
             errors.append("SPIFFSEditor upload is not gated by samovar_process_active()/data_log_close_pending()")
         elif upload_open_index < 0 or upload_gate_index > upload_open_index:

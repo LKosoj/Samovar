@@ -149,6 +149,15 @@ class JsonStringPrint : public Print {
   String& target_;
 };
 
+// Минимальный двойник Arduino Serial.println(F(...)): concat() в этом тесте никогда не
+// отказывает (std::string сам растёт), поэтому диагностика не печатается - заглушка
+// нужна только для компиляции реальных тел toJsonString/spiffsEditorJsonEscape.
+struct SerialStub {
+  void println(const char* s) { (void)s; }
+};
+static SerialStub Serial;
+static inline const char* F(const char* s) { return s; }
+
 @DEFINITIONS@
 
 static String wrapQuoted(const String& raw) {

@@ -72,6 +72,14 @@ class JsonStringPrint : public Print {
   String& target_;
 };
 
+// string_utils.h (2026-08) зовёт Serial.println(F(...)) при нехватке памяти в
+// JsonStringPrint - минимальная заглушка, вывод в этом тесте не проверяется.
+#define F(text) (text)
+struct FakeSerial {
+  void println(const char*) {}
+};
+static FakeSerial Serial;
+
 __JSON_WRITE_ESCAPED__
 
 __STRING_UTILS__

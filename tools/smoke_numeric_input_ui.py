@@ -3,7 +3,7 @@ import re
 import sys
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens
+from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens, strip_cpp_comments
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_web_assets import resolve_includes
@@ -133,6 +133,111 @@ for field in [
 ]:
     if f"name: '{field}'" not in setup:
         errors.append(f"setup numeric schema missing {field}")
+
+# [23.08.2026] П11 поднял серверный минимум DistTemp с 0 до 30 в WebServer.ino
+# (kSaveFloatFields), но клиентская схема setupNumericSchema не была обновлена
+# одновременно - ноль проходил браузерную проверку и падал на сервере с
+# малопонятной ошибкой "Invalid DistTemp", валя заодно СОХРАНЕНИЕ ЦЕЛИКОМ (форма
+# setup.htm одна на все поля, apply_save_settings отбивается при первом же
+# провале). Проверки выше ловят только НАЛИЧИЕ поля в схеме, не совпадение
+# границ - расхождение такого рода не ловилось. Ниже границы min/max сверяются
+# из РЕАЛЬНОГО содержимого обоих файлов (а не из скопированного списка полей).
+def _resolve_numeric_bound(token: str, named_constants: dict) -> float | None:
+    token = token.strip().rstrip("fF")
+    try:
+        return float(token)
+    except ValueError:
+        return named_constants.get(token)
+
+
+def _parse_server_field_bounds(source: str, table_token: str, named_constants: dict) -> dict:
+    block, _ = extract_braced_block_after(source, table_token)
+    block = strip_cpp_comments(block)
+    bounds = {}
+    for m in re.finditer(
+        r'\{\s*"([A-Za-z0-9_]+)"\s*,\s*&SetupEEPROM::[A-Za-z0-9_]+\s*,\s*([^,]+?)\s*,\s*([^}]+?)\s*\}',
+        block,
+    ):
+        name, raw_min, raw_max = m.group(1), m.group(2), m.group(3)
+        bounds[name] = (
+            _resolve_numeric_bound(raw_min, named_constants),
+            _resolve_numeric_bound(raw_max, named_constants),
+        )
+    return bounds
+
+
+def _extract_bracket_block(source: str, token: str) -> str:
+    start = source.find(token)
+    if start < 0:
+        raise ValueError(f"block token not found: {token}")
+    open_idx = source.find("[", start)
+    if open_idx < 0:
+        raise ValueError(f"block opening bracket not found: {token}")
+    depth = 0
+    for index in range(open_idx, len(source)):
+        if source[index] == "[":
+            depth += 1
+        elif source[index] == "]":
+            depth -= 1
+            if depth == 0:
+                return source[open_idx + 1:index]
+    raise ValueError(f"block is not closed: {token}")
+
+
+def _parse_client_schema_bounds(source: str) -> dict:
+    schema_text = _extract_bracket_block(source, "const setupNumericSchema")
+    bounds = {}
+    for m in re.finditer(
+        r"\{\s*name:\s*'([A-Za-z0-9_]+)'\s*,(?:\s*integer:\s*true\s*,)?\s*"
+        r"min:\s*(-?[\d.]+)\s*,\s*max:\s*(-?[\d.]+)\s*\}",
+        schema_text,
+    ):
+        bounds[m.group(1)] = (float(m.group(2)), float(m.group(3)))
+    return bounds
+
+
+_control_numeric_input = read(ROOT / "control_numeric_input.h")
+_named_float_constants = {
+    m.group(1): float(m.group(2))
+    for m in re.finditer(
+        r"static\s+const\s+float\s+([A-Za-z0-9_]+)\s*=\s*(-?[\d.]+)f?\s*;",
+        _control_numeric_input,
+    )
+}
+
+_server_field_bounds: dict = {}
+for _table_token in ("kSaveFloatFields[] = {", "kSaveU8Fields[] = {", "kSaveU16Fields[] = {"):
+    _server_field_bounds.update(_parse_server_field_bounds(web, _table_token, _named_float_constants))
+_client_field_bounds = _parse_client_schema_bounds(setup)
+
+# autospeed: сервер допускает 0..99 (kSaveU8Fields), клиент ограничивает ввод 0..20 -
+# расхождение УЖЕ было в HEAD до сегодняшней правки DistTemp (не в этом diff), решение
+# по нему остаётся за владельцем. Если когда-нибудь границы сведут, эта запись должна
+# исчезнуть - assert ниже не даст ей молча протухнуть в "разрешение", которое ничего
+# не разрешает.
+_KNOWN_LEGACY_BOUND_MISMATCHES = {"autospeed"}
+
+for _name, (_smin, _smax) in _server_field_bounds.items():
+    if _name not in _client_field_bounds:
+        continue
+    _cmin, _cmax = _client_field_bounds[_name]
+    if _smin is None or _smax is None:
+        errors.append(f"setup numeric schema bound check: cannot resolve server bound for {_name}")
+        continue
+    _bounds_match = abs(_smin - _cmin) <= 1e-9 and abs(_smax - _cmax) <= 1e-9
+    if _name in _KNOWN_LEGACY_BOUND_MISMATCHES:
+        if _bounds_match:
+            errors.append(
+                f"{_name} bounds now match server/client - remove it from "
+                "_KNOWN_LEGACY_BOUND_MISMATCHES"
+            )
+        continue
+    if not _bounds_match:
+        errors.append(
+            f"setup numeric schema bound mismatch for {_name}: "
+            f"server=({_smin}, {_smax}) client=({_cmin}, {_cmax})"
+        )
+
 if "this.value = this.value.replace(',', '.')" in setup:
     errors.append("setup still normalizes every text field during typing")
 for token in [

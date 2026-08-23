@@ -16,6 +16,8 @@ HARNESS = r'''
 #include <iostream>
 
 @HEAT_DELTA@
+@REACH_TIMEOUT@
+@STOP_RETRY@
 
 struct Setup { float SuvidTemp; uint16_t SuvidHoldMinutes; };
 static Setup SamSetup{};
@@ -33,10 +35,11 @@ static bool lastHeater = false;
 static void setHeaterPosition(bool value) { heaterCalls++; lastHeater = value; }
 static int messages = 0;
 static int warnings = 0;
-static void SendMsg(const char*, int type) { messages++; if (type == 1) warnings++; }
+static int alarms = 0;
+static void SendMsg(const char*, int type) { messages++; if (type == 1) warnings++; if (type == 0) alarms++; }
 static int buzzerCalls = 0;
 static void set_buzzer(bool) { buzzerCalls++; }
-enum { SAMOVAR_POWER = 1, NOTIFY_MSG = 2, WARNING_MSG = 1 };
+enum { SAMOVAR_POWER = 1, ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
 static int queueCalls = 0;
 static bool queueSucceeds = true;
 static bool queue_samovar_command(int) { queueCalls++; return queueSucceeds; }
@@ -54,7 +57,7 @@ static void reset(uint16_t hold = 0) {
   PowerOn = false; tick();
   SamSetup = {60.0f, hold}; TankSensor.avgTemp = 60.0f; PowerOn = true;
   suvidHold = {}; suvidDeviation = {}; fakeMillis = 0; heaterCalls = 0;
-  lastHeater = false; messages = 0; warnings = 0; buzzerCalls = 0;
+  lastHeater = false; messages = 0; warnings = 0; alarms = 0; buzzerCalls = 0;
   queueCalls = 0; queueSucceeds = true; heater_state = false;
 }
 static void test_symmetric_band() {
@@ -83,18 +86,110 @@ static void test_hold_counts_only_band_time() {
         "two confirmed 30-second in-band intervals must complete one-minute hold");
 }
 static void test_zero_hold_is_indefinite() {
+  // [П15] avgTemp==setpoint сразу после reset() - полоса входа достигается на первом же
+  // тике. active теперь взводится независимо от SuvidHoldMinutes (иначе проверка
+  // отклонения ниже не включилась бы никогда при бессрочном термостате) - но
+  // завершение (queueCalls) по-прежнему не должно наступать без заданной выдержки.
   reset(0); for (int i = 0; i < 100; i++) { fakeMillis += 1000; tick(); }
-  check(!suvidHold.active && queueCalls == 0,
-        "SuvidHoldMinutes=0 must keep an indefinite thermostat without completion");
+  check(suvidHold.active,
+        "REGRESSION П15: reaching the band must start hold tracking even with SuvidHoldMinutes=0 - "
+        "otherwise the deviation check never arms for an indefinite thermostat");
+  check(queueCalls == 0,
+        "SuvidHoldMinutes=0 must keep an indefinite thermostat without an auto-shutoff completion");
 }
-static void test_deviation_warning_is_continuous() {
+static void test_no_deviation_warning_before_hold_starts() {
+  // [П15, ГЛАВНЫЙ РЕГРЕСС] Разогрев: температура ни разу не попадала в полосу
+  // ±HEAT_DELTA, значит "выдержка" ещё не началась. Раньше отклонение проверялось
+  // с самого включения питания - каждая сессия начиналась с ложной тревоги.
   reset(); TankSensor.avgTemp = 62.1f; tick();
-  fakeMillis = 59999; tick(); check(warnings == 0, "warning must not fire before 60 seconds");
-  fakeMillis = 60000; tick(); check(warnings == 1, "continuous >2C deviation must warn at 60 seconds");
-  fakeMillis = 120000; tick(); check(warnings == 1, "continuous deviation must warn only once");
-  TankSensor.avgTemp = 61.0f; fakeMillis = 121000; tick();
-  TankSensor.avgTemp = 62.1f; fakeMillis = 122000; tick();
-  fakeMillis = 182000; tick(); check(warnings == 2, "return to tolerance must re-arm warning");
+  fakeMillis = 60000; tick();
+  fakeMillis = 600000; tick();
+  check(warnings == 0,
+        "REGRESSION П15: heat-up deviation before the hold ever starts must not warn (false alarm every session)");
+  check(!suvidHold.active, "hold must stay inactive while temperature never entered the band");
+}
+static void test_deviation_warning_after_hold_starts() {
+  // Разогрев завершился (температура дошла до уставки - выдержка началась), после
+  // чего температура снова уходит за пределы 2° - это уже реальный повод для тревоги
+  // (например, отказ ТЭНа или датчика посреди выдержки), и её по-прежнему нужно ловить.
+  reset(); fakeMillis = 1000; tick();
+  check(suvidHold.active, "reaching the band must start the hold");
+  TankSensor.avgTemp = 62.1f; fakeMillis = 2000; tick();
+  check(warnings == 0, "deviation warning must not fire on the very first out-of-tolerance tick");
+  fakeMillis = 61999; tick(); check(warnings == 0, "warning must not fire before 60 seconds of deviation");
+  fakeMillis = 62000; tick();
+  check(warnings == 1, "REGRESSION П15: deviation after the hold has started must still warn at 60 seconds");
+  fakeMillis = 123000; tick(); check(warnings == 1, "continuous deviation must warn only once");
+  TankSensor.avgTemp = 60.0f; fakeMillis = 124000; tick();
+  TankSensor.avgTemp = 62.1f; fakeMillis = 125000; tick();
+  fakeMillis = 185000; tick(); check(warnings == 2, "return to tolerance must re-arm warning");
+}
+static void test_reach_timeout_stops_heating_when_hold_never_starts() {
+  // [П15] Выдержка так и не началась (сломанный ТЭН, врущий датчик, слишком
+  // большая загрузка). Раньше отсюда уходило только предупреждение, а ТЭН
+  // продолжал греть: при застывшем заниженном показании куба уставка недостижима
+  // в принципе, и термостат держал бы нагрев вечно. Теперь останавливаем, как
+  // beer.h по BEER_BOIL_TIMEOUT_MS.
+  reset(); TankSensor.avgTemp = 62.1f; tick();
+  fakeMillis = SUVID_REACH_TIMEOUT_MS - 1000; tick();
+  check(alarms == 0 && queueCalls == 0, "reach timeout must not fire before the deadline");
+  fakeMillis = SUVID_REACH_TIMEOUT_MS; tick();
+  check(alarms == 1,
+        "REGRESSION П15: failing to reach the hold band within the timeout must raise an alarm");
+  check(warnings == 0, "reach timeout must not be a mere warning: it switches the heater off");
+  check(queueCalls == 1,
+        "REGRESSION: reach timeout must queue the power-off command, not just talk about it");
+  check(buzzerCalls == 1, "reach timeout must call the buzzer once");
+  // SAMOVAR_POWER - переключатель, и чужая команда в общей очереди может вернуть нагрев
+  // обратно. Пока нагрев фактически включён (PowerOn), попытка повторяется - но не чаще
+  // SUVID_STOP_RETRY_MS, чтобы обычная задержка исполнения не порождала лишних команд.
+  fakeMillis = SUVID_REACH_TIMEOUT_MS + SUVID_STOP_RETRY_MS - 1000; tick();
+  check(queueCalls == 1, "a queued stop must not be repeated before the retry delay");
+  check(alarms == 1, "the alarm must not repeat");
+  fakeMillis = SUVID_REACH_TIMEOUT_MS + SUVID_STOP_RETRY_MS; tick();
+  check(queueCalls == 2,
+        "REGRESSION: heating still on after the retry delay means the toggle was undone - try again");
+  check(alarms == 1, "retries must stay silent: one alarm per session");
+}
+static void test_reach_timeout_state_clears_once_the_heater_is_off() {
+  // Нагрев действительно выключился - состояние сессии сбрасывается, попытки прекращаются,
+  // а следующая сессия отсчитывает свой таймаут с нуля.
+  reset(); TankSensor.avgTemp = 62.1f; tick();
+  fakeMillis = SUVID_REACH_TIMEOUT_MS; tick();
+  check(queueCalls == 1 && alarms == 1, "the timeout must fire once");
+  PowerOn = false; fakeMillis = SUVID_REACH_TIMEOUT_MS + 1000; tick();
+  check(queueCalls == 1, "no attempts once the heater is off");
+  check(!suvidHold.reachTimeoutMsgSent && !suvidHold.reachTimeoutStopQueued,
+        "REGRESSION: a finished session must not carry the timeout flags into the next one");
+  PowerOn = true; fakeMillis = SUVID_REACH_TIMEOUT_MS + 2000; tick();
+  check(queueCalls == 1 && alarms == 1,
+        "a fresh session must start its own timeout, not fire immediately");
+  fakeMillis = SUVID_REACH_TIMEOUT_MS + 2000 + SUVID_REACH_TIMEOUT_MS; tick();
+  check(queueCalls == 2 && alarms == 2, "the fresh session must fire after its own full timeout");
+}
+static void test_reach_timeout_retries_while_the_command_queue_is_busy() {
+  // Очередь команд может быть занята: единственная неудачная попытка не должна
+  // оставить ТЭН включённым навсегда - повторяем до успеха, а сообщение шлём один раз.
+  reset(); TankSensor.avgTemp = 62.1f; queueSucceeds = false; tick();
+  fakeMillis = SUVID_REACH_TIMEOUT_MS; tick();
+  check(alarms == 1 && queueCalls == 1, "first attempt must alarm and try to stop");
+  fakeMillis = SUVID_REACH_TIMEOUT_MS + 1000; tick();
+  check(queueCalls == 2, "REGRESSION: a busy queue must not abandon the power-off attempt");
+  check(alarms == 1, "the alarm must not repeat on every retry");
+  queueSucceeds = true;
+  fakeMillis = SUVID_REACH_TIMEOUT_MS + 2000; tick();
+  check(queueCalls == 3, "the retry must go through once the queue frees up");
+  fakeMillis = SUVID_REACH_TIMEOUT_MS + 3000; tick();
+  check(queueCalls == 3, "no further attempts after the command is accepted");
+}
+static void test_reach_timeout_does_not_fire_once_the_hold_started() {
+  // Выдержка началась вовремя - таймаут выхода на режим больше не относится к делу,
+  // даже если сессия давно длиннее SUVID_REACH_TIMEOUT_MS.
+  reset(); tick();
+  check(suvidHold.active, "reaching the band must start the hold");
+  fakeMillis = SUVID_REACH_TIMEOUT_MS + 600000; tick();
+  check(alarms == 0 && queueCalls == 0,
+        "REGRESSION: the reach timeout must not stop a session that already reached the band");
 }
 static void test_timers_wrap_across_uint32_max() {
   reset(1);
@@ -110,6 +205,7 @@ static void test_timers_wrap_across_uint32_max() {
         "hold must complete after the remaining in-band interval across wrap");
 
   reset();
+  tick();  // avgTemp == setpoint на этот момент - выдержка стартует до скачка millis
   TankSensor.avgTemp = 62.1f;
   fakeMillis = UINT32_MAX - 30000U;
   tick();
@@ -128,7 +224,12 @@ static void test_queue_failure_is_explicit_without_fallback() {
 }
 int main() {
   test_symmetric_band(); test_hold_counts_only_band_time(); test_zero_hold_is_indefinite();
-  test_deviation_warning_is_continuous(); test_timers_wrap_across_uint32_max();
+  test_no_deviation_warning_before_hold_starts(); test_deviation_warning_after_hold_starts();
+  test_reach_timeout_stops_heating_when_hold_never_starts();
+  test_reach_timeout_state_clears_once_the_heater_is_off();
+  test_reach_timeout_retries_while_the_command_queue_is_busy();
+  test_reach_timeout_does_not_fire_once_the_hold_started();
+  test_timers_wrap_across_uint32_max();
   test_queue_failure_is_explicit_without_fallback();
   return failures == 0 ? 0 : 1;
 }
@@ -154,10 +255,11 @@ def main():
         raise ValueError("thermostat anchor missing")
     snippet = body[start:]
     require_ordered_tokens("Suvid S1-S3 order", snippet, [
-        "if (!PowerOn)", "suvidHold = {false, false, false, false, 0, 0};",
-        "setpoint - HEAT_DELTA", "setpoint + HEAT_DELTA", "deviation > 2.0f",
-        "now - suvidDeviation.sinceMs", "holdMs > 0", "inHoldBand",
-        "suvidHold.accumulatedMs", "queue_samovar_command(SAMOVAR_POWER)",
+        "if (!PowerOn)", "suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};",
+        "setpoint - HEAT_DELTA", "setpoint + HEAT_DELTA",
+        "inHoldBand", "suvidHold.active", "deviation > 2.0f",
+        "now - suvidDeviation.sinceMs", "SUVID_REACH_TIMEOUT_MS",
+        "holdMs > 0", "suvidHold.accumulatedMs", "queue_samovar_command(SAMOVAR_POWER)",
     ], errors)
     if "program[" in snippet:
         errors.append("Suvid hold must not read the shared program buffer")
@@ -167,7 +269,10 @@ def main():
         for error in errors: print(f"FAIL: {error}", file=sys.stderr)
         return 1
     heat = next(line.strip() for line in ini.splitlines() if line.startswith("#define HEAT_DELTA"))
-    code = HARNESS.replace("@HEAT_DELTA@", heat)
+    reach_timeout = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_REACH_TIMEOUT_MS"))
+    stop_retry = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_STOP_RETRY_MS"))
+    code = HARNESS.replace("@HEAT_DELTA@", heat).replace("@REACH_TIMEOUT@", reach_timeout)
+    code = code.replace("@STOP_RETRY@", stop_retry)
     code = code.replace("@HOLD_STATE@", definition(source, "struct SuvidHoldState") + "\nstatic SuvidHoldState suvidHold;")
     code = code.replace("@DEVIATION_STATE@", definition(source, "struct SuvidDeviationState") + "\nstatic SuvidDeviationState suvidDeviation;")
     code = code.replace("@BODY@", snippet)

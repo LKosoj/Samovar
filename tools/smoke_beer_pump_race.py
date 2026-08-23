@@ -146,6 +146,8 @@ void setHeaterPosition(bool state) { heaterOutput = state; setHeaterPositionCall
 static bool beerManualPause = false;
 static unsigned long beerStageIdleAccumMs = 0;
 static unsigned long beerStageIdleSinceMs = 0;
+static unsigned long beerBoilActiveAccumMs = 0;
+static unsigned long beerMixerPauseSinceMs = 0;  // [Дефект 2 code review] см. beer.h
 static uint8_t beerSkipConfirmProgramNum = 0xFF;
 static unsigned long begintime = 0;
 
@@ -224,6 +226,8 @@ static void reset_fixture() {
   beerManualPause = false;
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
+  beerBoilActiveAccumMs = 0;
+  beerMixerPauseSinceMs = 0;
   beerSkipConfirmProgramNum = 0xFF;
   begintime = 0;
   startval = 5;
@@ -392,6 +396,73 @@ static void test_schedule_state_commits_only_after_applied_start() {
         "первая успешная попытка ошибочно получила реверс после FAILED");
 }
 
+// [Дефект 2 code review] alarm_c_low_min/alarm_c_min - АБСОЛЮТНЫЕ метки
+// millis(), а check_mixer_state() вообще не вызывается, пока строка на
+// ручной паузе (см. гейт в beer_stage_tick()). beerMixerPauseSinceMs -
+// момент, когда гейт впервые обнаружил паузу (симметрично
+// beerStageIdleSinceMs) - тесты ниже выставляют его напрямую, как это
+// сделал бы гейт, не поднимая весь beer_stage_tick().
+//
+// Короткая пауза (короче остатка ON-фазы) не должна "недокручивать" её -
+// суммарное активное время работы мешалки за цикл должно остаться равным
+// program[].Volume.
+static void test_mixer_schedule_absorbs_short_pause_without_shortening_on_phase() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;  // только мешалка (бит 0), без насоса
+  program[0].Volume = 100;         // 100 c включённого состояния
+  program[0].Power = 50;           // 50 c паузы мешалки после
+
+  fakeMillis = 1000;
+  check_mixer_state();  // старт цикла
+  check(mixer_status && alarm_c_low_min == 101000 && alarm_c_min == 151000,
+        "фикстура короткой паузы: цикл мешалки не стартовал как ожидалось");
+
+  // Пауза началась через 50с после старта (50с ОСТАЁТСЯ до конца ON-фазы) и
+  // длится 30с - короче остатка фазы.
+  beerMixerPauseSinceMs = 51000;
+  fakeMillis = 81000;  // снятие паузы через 30с
+  check_mixer_state();
+  check(mixer_status,
+        "РЕГРЕСС: короткая пауза внутри ON-фазы преждевременно выключила мешалку");
+  check(alarm_c_low_min == 131000 && alarm_c_min == 181000,
+        "РЕГРЕСС: метки цикла мешалки не сдвинулись на длительность паузы");
+  check(beerMixerPauseSinceMs == 0,
+        "метка начала простоя мешалки не сброшена после компенсации");
+
+  // Оставшиеся 50с активного времени ON-фазы (без учёта паузы) должны
+  // довести цикл ровно до сдвинутой метки - не раньше и не позже.
+  fakeMillis = 131000;
+  check_mixer_state();
+  check(!mixer_status && alarm_c_low_min == 0 && alarm_c_min == 181000,
+        "РЕГРЕСС: суммарное время работы мешалки за цикл разошлось с заданным в программе (Volume)");
+}
+
+// Долгая пауза (длиннее остатка всего цикла ON+OFF) не должна "сворачивать"
+// цикл - т.е. не должна давать эффект "обе метки в прошлом -> цикл
+// считается завершённым и тут же перезапускается с нуля".
+static void test_mixer_schedule_does_not_collapse_after_long_pause() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  program[0].Volume = 100;
+  program[0].Power = 50;
+
+  fakeMillis = 1000;
+  check_mixer_state();  // старт цикла
+  check(mixer_status && alarm_c_low_min == 101000 && alarm_c_min == 151000,
+        "фикстура длинной паузы: цикл мешалки не стартовал как ожидалось");
+
+  // Пауза началась за 9с до конца ON-фазы и длится 500с - намного дольше
+  // остатка всего цикла (ON+OFF = 150с).
+  beerMixerPauseSinceMs = 91000;
+  fakeMillis = 591000;
+  const int stepCountBeforeResume = currentstepcnt;
+  check_mixer_state();
+  check(alarm_c_low_min == 601000 && alarm_c_min == 651000,
+        "РЕГРЕСС: метки цикла мешалки не сдвинулись на всю длительность длинной паузы");
+  check(currentstepcnt == stepCountBeforeResume,
+        "РЕГРЕСС: длинная пауза свернула цикл мешалки - расписание посчитало его завершённым и перезапустило с нуля");
+}
+
 // [Находка] beer_finish() во время активного 'C'/'F' обязан сбросить
 // beerCoolingPumpActive, иначе он остаётся true до следующего старта пива.
 static void test_beer_finish_resets_cooling_pump_flag() {
@@ -440,6 +511,8 @@ int main() {
   test_failed_start_rollback_latches_and_stops_schedule_retry();
   test_failed_pump_rollback_latches_and_stops_schedule_retry();
   test_schedule_state_commits_only_after_applied_start();
+  test_mixer_schedule_absorbs_short_pause_without_shortening_on_phase();
+  test_mixer_schedule_does_not_collapse_after_long_pause();
   test_beer_finish_resets_cooling_pump_flag();
   test_beer_finish_then_external_mixer_off_mutes_pump();
   if (failures != 0) return 1;
@@ -616,18 +689,20 @@ def main() -> int:
     errors: list[str] = []
     try:
         stage_body = extract_function_body(beer_source, "void beer_stage_tick()")
-        f_branch, _ = extract_braced_block_after(
-            stage_body, "if (currentType == 'F') {"
-        )
+        # [П12] Локальную паузу внутри ветки 'F' заменили единой точкой входа
+        # выше по функции (гейтит M/P/B/C/F одним вызовом) - см.
+        # smoke_beer_manual_pause_gates_all_outputs.py для её поведения.
+        # Здесь только текстово проверяем, что эта точка входа существует и
+        # использует тот же контракт beer_pause_fermentation_outputs().
         pause_branch, _ = extract_braced_block_after(
-            f_branch, "if (beerManualPause) {"
+            stage_body, "if (beerManualPause && (currentType == 'M'"
         )
         require_ordered_tokens(
-            "beer F pause",
+            "beer manual pause gate",
             pause_branch,
             [
                 "if (!beer_pause_fermentation_outputs()) {",
-                'beer_abort_config_error("Ошибка паузы F: не удалось выключить исполнитель");',
+                'beer_abort_config_error("Ошибка ручной паузы: не удалось выключить исполнитель");',
                 "return;",
             ],
             errors,
@@ -763,6 +838,26 @@ def main() -> int:
         print("FAIL: mixer rollback emergency mutation survived smoke", file=sys.stderr)
         sys.stderr.write(output)
         return 1
+    # [Дефект 2 code review] Мутация: отключаем компенсацию паузы в
+    # check_mixer_state() (как будто фикс не применён) - метки
+    # alarm_c_min/alarm_c_low_min больше не сдвигаются при выходе из паузы,
+    # и один из новых тестов (свёртка цикла после длинной паузы) обязан упасть.
+    mixer_pause_mutant = harness.replace(
+        "if (beerMixerPauseSinceMs > 0) {",
+        "if (false && beerMixerPauseSinceMs > 0) {",
+        1,
+    )
+    if mixer_pause_mutant == harness:
+        print("FAIL: could not build mixer pause compensation mutation", file=sys.stderr)
+        return 1
+    returncode, output = compile_and_run(
+        mixer_pause_mutant, "mixer pause compensation mutation", show_output=False
+    )
+    if returncode == 0 or "свернула цикл мешалки" not in output:
+        print("FAIL: mixer pause compensation mutation survived smoke", file=sys.stderr)
+        sys.stderr.write(output)
+        return 1
+
     print("Beer mixer result mutations were rejected as expected")
     return 0
 

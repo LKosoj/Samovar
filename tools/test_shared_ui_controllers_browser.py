@@ -267,7 +267,8 @@ BROWSER_TEST = r'''async page => {
         expect(state.attribute === expected.attribute && state.glyph === expected.glyph &&
           state.title === expected.title,
           scenario + ' theme mismatch: ' + JSON.stringify(state));
-        const expectedPrecision = file === 'nbk.htm' ? '78.1' : '78.123';
+        const onePrecisionPages = ['nbk.htm', 'index.htm', 'beer.htm'];
+        const expectedPrecision = onePrecisionPages.includes(file) ? '78.1' : '78.123';
         expect(state.steam === expectedPrecision,
           scenario + ' telemetry precision mismatch: ' + state.steam);
         expect(ajaxRequests.length - ajaxStart === 1,

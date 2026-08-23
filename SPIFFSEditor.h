@@ -9,6 +9,8 @@
 
 static const char *SPIFFS_EDITOR_UPLOAD_ERROR_ATTR = "spiffs_upload_error";
 static const char *SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE = "process_active";
+static const char *SPIFFS_EDITOR_UPLOAD_BAD_NAME = "bad_name";
+static const char *SPIFFS_EDITOR_UPLOAD_WRITE_FAILED = "write_failed";
 #ifdef USE_LUA
 extern volatile bool pending_lua_reload_flag;
 static const char *SPIFFS_EDITOR_LUA_RELOAD_BUSY = "lua_reload_busy";
@@ -46,7 +48,9 @@ static String spiffsEditorJsonEscape(const String& value) {
   String escaped;
   escaped.reserve(value.length());
   JsonStringPrint sink(escaped);
-  json_write_escaped(sink, value.c_str(), value.length());
+  if (!json_write_escaped(sink, value.c_str(), value.length())) {
+    Serial.println(F("spiffsEditorJsonEscape: строка обрезана, не хватило памяти"));
+  }
   return escaped;
 }
 
@@ -297,8 +301,11 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
     if (request->hasParam("path", true)) {
       String p = request->getParam("path", true)->value();
       if (p[0] != '/') p = "/" + p;
-      _fs.remove(p);
-      request->send(200, "", "DELETE: " + request->getParam("path", true)->value());
+      if (_fs.remove(p)) {
+        request->send(200, "", "DELETE: " + request->getParam("path", true)->value());
+      } else {
+        request->send(500, "text/plain", "DELETE FAILED: " + p);
+      }
     } else
       request->send(404);
   } else if (request->method() == HTTP_POST) {
@@ -308,7 +315,16 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
       // handleUpload() не может ответить клиенту сам, поэтому лишь помечает запрос
       // причиной отказа. Любая непустая причина (идёт процесс или барьер смены
       // режима для .lua) означает 503 BUSY.
-      if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR).length() > 0) {
+      String uploadError = request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR);
+      if (uploadError == SPIFFS_EDITOR_UPLOAD_BAD_NAME) {
+        request->send(400, "text/plain", "BAD NAME: " + p);
+        return;
+      }
+      if (uploadError == SPIFFS_EDITOR_UPLOAD_WRITE_FAILED) {
+        request->send(500, "text/plain", "WRITE FAILED: " + p);
+        return;
+      }
+      if (uploadError.length() > 0) {
         request->send(503, "text/plain", "BUSY");
         return;
       }
@@ -342,8 +358,77 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
   }
 }
 
+// Белый список расширений загрузки через /edit - защита от СЛУЧАЙНОЙ порчи, а не от
+// злоумышленника (аутентификации в устройстве нет по решению владельца, см. FS.ino).
+// Список продиктован реальным составом data_raw/: Lua-скрипты режимов и кнопок,
+// текстовые программы дистилляции, и ассеты веб-интерфейса (htm/js/css/картинки/звук).
+// Страницы интерфейса СОЗНАТЕЛЬНО не исключены: редактор - штатный способ починить
+// устройство (перезалить index.htm/app.js после порчи), и списком имён конкретных
+// файлов эту возможность было бы легко отнять по ошибке. Отсекаем только заведомо
+// постороннее: имя без расширения или с чужим расширением, ".." или второй '/' внутри
+// имени (редактор работает с плоским списком файлов), и имя длиннее
+// SPIFFS_MAXLENGTH_FILEPATH (не влезет в /.exclude.files).
+// tools/build_web_assets.py при сборке кладёт в data/ (то, что реально прошивается)
+// сжатые app.js.gz/chart.js.gz/edit.htm.gz/i2cstepper.htm.gz/style.css.gz вместо
+// сырых файлов - сервер сам подставляет .gz, если рядом нет несжатого файла. Смотрим
+// на расширение ДО .gz (для app.js.gz - на "js"), а не добавляем "gz" в allowed:
+// иначе прошёл бы любой файл вида *.exe.gz - последний дот стал бы дырой в белом
+// списке вместо самого белого списка.
+static bool spiffsEditorNameAllowed(const String &path) {
+  if (path.length() == 0 || (int)path.length() >= SPIFFS_MAXLENGTH_FILEPATH) return false;
+  if (path.indexOf("..") >= 0) return false;
+  if (path.indexOf('/', 1) >= 0) return false;
+  int dot = path.lastIndexOf('.');
+  if (dot < 0 || dot == (int)path.length() - 1) return false;
+  String ext = path.substring(dot + 1);
+  ext.toLowerCase();
+  if (ext == "gz") {
+    String withoutGz = path.substring(0, dot);
+    int innerDot = withoutGz.lastIndexOf('.');
+    if (innerDot < 0 || innerDot == (int)withoutGz.length() - 1) return false;
+    ext = withoutGz.substring(innerDot + 1);
+    ext.toLowerCase();
+  }
+  static const char *const allowed[] = {
+    "lua", "htm", "js", "css", "txt", "png", "gif", "ico", "mp3"
+  };
+  for (size_t i = 0; i < sizeof(allowed) / sizeof(allowed[0]); i++) {
+    if (ext == allowed[i]) return true;
+  }
+  return false;
+}
+
+// Атомарная публикация загруженного файла: переименовывает уже дозаписанный и
+// закрытый tmpPath поверх finalPath. Тот же приём, что write_web_file_atomic() в
+// WebServer.ino:2789 - через backup и rename, а не прямую перезапись, чтобы обрыв
+// соединения или нехватка места между двумя rename() не оставили устройство совсем
+// без finalPath.
+static bool spiffsEditorFinalizeUpload(fs::FS &fs, const String &tmpPath, const String &finalPath) {
+  String backupPath = finalPath + ".bak";
+  fs.remove(backupPath);
+  bool hadFinal = fs.exists(finalPath);
+  if (hadFinal && !fs.rename(finalPath, backupPath)) {
+    fs.remove(tmpPath);
+    return false;
+  }
+  if (!fs.rename(tmpPath, finalPath)) {
+    fs.remove(tmpPath);
+    if (hadFinal) fs.rename(backupPath, finalPath);
+    return false;
+  }
+  if (hadFinal) fs.remove(backupPath);
+  return true;
+}
+
 void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
-  if (!index) {
+    String p = filename;
+    if (filename[0] != '/') p = "/" + filename;
+    // Пишем во временный файл, а не сразу в целевой: обрыв соединения или нехватка
+    // места на середине загрузки не должны уничтожать рабочий файл под тем же именем.
+    // Переименование в целевое имя - только после успешного final-чанка, см.
+    // spiffsEditorFinalizeUpload().
+    const String tmpPath = p + ".tmp";
+    if (!index) {
       // Тот же гейт, что на DELETE/PUT (активный процесс или ещё не закрытый
       // журнал): при нём файл на запись не открываем, иначе запись чанков из
       // async_tcp гоняется с журналом перегонки. Причину читает handleRequest и
@@ -353,27 +438,41 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
         request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE);
         return;
       }
-      String p = filename;
-      if (filename[0] != '/') p = "/" + filename;
-      request->_tempFile = _fs.open(p, "w");
+      if (!spiffsEditorNameAllowed(p)) {
+        request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_BAD_NAME);
+        return;
+      }
+      request->_tempFile = _fs.open(tmpPath, "w");
     }
     // Процесс может стартовать на ядре 0 уже ПОСЛЕ первого чанка: тогда запись
     // оставшихся чанков снова гонялась бы с журналом перегонки. Перепроверяем
     // гейт на каждом чанке — если процесс поднялся в ходе загрузки, прекращаем
-    // запись (закрываем файл, следующие чанки отбрасываются) и помечаем запрос
-    // для ответа 503. Частично записанный файл — издержка потоковой записи в сам
-    // целевой файл, а не гонка.
+    // запись, удаляем недописанный временный файл (целевой файл ещё не тронут) и
+    // помечаем запрос для ответа 503.
     if (request->_tempFile && (samovar_process_active() || data_log_close_pending())) {
       request->_tempFile.close();
+      _fs.remove(tmpPath);
       request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE);
       return;
     }
     if (request->_tempFile) {
         if (len) {
-            request->_tempFile.write(data, len);
+            size_t written = request->_tempFile.write(data, len);
+            if (written != len) {
+                // На заполненной памяти write() отдаёт меньше len - без этой проверки
+                // клиент получал бы "UPLOADED", а на диске лежал бы обрезок.
+                request->_tempFile.close();
+                _fs.remove(tmpPath);
+                request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_WRITE_FAILED);
+                return;
+            }
         }
         if (final) {
             request->_tempFile.close();
+            if (!spiffsEditorFinalizeUpload(_fs, tmpPath, p)) {
+                request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_WRITE_FAILED);
+                return;
+            }
 #ifdef USE_LUA
             if (getValue(filename, '.', 1) == "lua") {
                 if (mode_switch_in_progress()) {

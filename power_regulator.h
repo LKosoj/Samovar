@@ -315,6 +315,7 @@ inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand) {
     bool blockedOffTransition = false;
     bool blockedExclusiveOwner = false;
     bool blockedModeSwitch = false;
+    bool blockedOnStartPending = false; // [П70а] идущий ON-переход - раньше эта причина была неотслеживаемой
 #ifndef SAMOVAR_USE_POWER
     bool updatePowerMode = false;
 #endif
@@ -326,6 +327,11 @@ inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand) {
     blockedOffTransition = power_transition_phase_is_off(powerTransition.transition.phase);
     blockedExclusiveOwner = heaterSafetyState.exclusiveOwnerActive;
     blockedModeSwitch = mode_switch_barrier_active;
+    // [Дефект 1] Условие входа в ветку включения ниже требует !PowerOn && !pending -
+    // если нагрев уже включён (PowerOn==true), а фаза перехода ON_*_WAIT ещё не
+    // завершилась, повторный set_power(true) должен быть тихим no-op "уже включено",
+    // а не ложным предупреждением про "уже выполняется команда включения".
+    blockedOnStartPending = !PowerOn && power_transition_start_pending_locked();
     if (workerReady && !heaterSafetyState.emergencyLatched &&
         !heaterSafetyState.exclusiveOwnerActive && !mode_switch_barrier_active && !PowerOn &&
         !power_transition_start_pending_locked() &&
@@ -361,12 +367,16 @@ inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand) {
     portEXIT_CRITICAL(&emergencyStopMux);
     if (!started) {
       // Причина отказа — конкретным сообщением (раньше отказ был молчаливым).
-      // alreadyOn / start_pending — идемпотентные ветки, не сообщаем.
+      // alreadyOn — идемпотентная ветка, не сообщаем. start_pending [П70а]
+      // раньше тоже была неотслеживаемой (PowerOn уже false, а фаза
+      // ON_*_WAIT ещё не сброшена тиком перехода — например, гонка с
+      // параллельным выключением) - теперь получает своё сообщение.
       if (!workerReady) SendMsg("Нагрев отклонён: задача регулятора не запущена", ALARM_MSG);
       else if (blockedEmergency) SendMsg("Нагрев заблокирован аварийной защитой, требуется перезагрузка", ALARM_MSG);
       else if (blockedOffTransition) SendMsg("Нагрев отклонён: выполняется выключение нагрева, повторите позже", WARNING_MSG);
       else if (blockedExclusiveOwner) SendMsg("Нагрев отклонён: активна эксклюзивная операция (самотест/калибровка)", WARNING_MSG);
       else if (blockedModeSwitch) SendMsg("Нагрев отклонён: идёт переключение режима", WARNING_MSG);
+      else if (blockedOnStartPending) SendMsg("Нагрев отклонён: команда включения уже выполняется, повторите позже", WARNING_MSG);
       return ACTUATOR_COMMAND_FAILED;
     }
 #ifndef SAMOVAR_USE_POWER

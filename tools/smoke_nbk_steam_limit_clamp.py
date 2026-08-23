@@ -23,7 +23,7 @@ if body:
         [
             "SamSetup.NbkSteamT > 80",
             "SamSetup.NbkSteamT <= 97",
-            "if (!configValid)",
+            "if (reason != nullptr)",
             "return false;",
             "nbkSessionConfig.steamTempLimit = SamSetup.NbkSteamT;",
         ],

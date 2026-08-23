@@ -37,6 +37,15 @@ constexpr float PROGRAM_DIST_THRESHOLD_MAX = 150.0f;
 constexpr float PROGRAM_POWER_MAX = 52900.0f;
 constexpr float PROGRAM_POWER_MIN = -PROGRAM_POWER_MAX;
 
+// [fix П33] «Время» строки программы пива (мин): выдержка температурной паузы ('P')
+// или момент внесения хмеля от начала кипячения ('B') — см. program_parse_beer_row()
+// и beer.h. До этой правки поле не имело верхней границы и принимало значения вплоть
+// до FLT_MAX (~3.4e38), которые дальше портят экран и расчёты (beer_stage_elapsed_ms()
+// делится на это значение). Потолок в 24 часа с большим запасом покрывает любой
+// реальный этап варки (мэш-паузы обычно до нескольких часов, кипячение — до пары часов).
+constexpr float PROGRAM_TIME_MIN = 0.0f;
+constexpr float PROGRAM_TIME_MAX = 1440.0f;
+
 struct ProgramDraft {
   WProgram rows[PROGRAM_MAX];
   uint8_t len;
@@ -137,6 +146,10 @@ inline void program_commit(const ProgramDraft& draft) {
     program[i] = draft.rows[i];
   }
   for (uint8_t i = draft.len; i < PROGRAM_END; i++) {
+    // Обнуляем строку целиком, а не только WType - иначе capacity_num/Power
+    // от прошлой, более длинной программы остаются висеть в "удалённом" слоте
+    // и могут быть ошибочно применены (см. run_dist_program()).
+    program[i] = {};
     program[i].WType = PROGRAM_TYPE_NONE;
   }
   ProgramLen = draft.len;
@@ -343,9 +356,8 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
             tokTemp && tokTime && tokDevice && tokSensor &&
             !tokExtra &&
             parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, PROGRAM_TEMP_MAX, temp).ok() &&
-            parse_finite_float(tokTime, timeMin).ok() &&
-            parse_bounded_long(tokSensor, 0, 4, sensor).ok() &&
-            timeMin >= 0.0f;
+            parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
+            parse_bounded_long(tokSensor, 0, 4, sensor).ok();
 
   long devType = 0;
   long speed = 0;

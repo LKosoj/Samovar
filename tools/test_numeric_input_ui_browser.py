@@ -259,11 +259,11 @@ BROWSER_TEST = r'''async page => {
       form.dispatchEvent(new Event("input", { bubbles: true }));
       const maxOk = await submit();
       setBoundary("min");
-      form.elements.DistTemp.value = "1,5";
+      form.elements.DistTemp.value = "30,5";
       form.dispatchEvent(new Event("input", { bubbles: true }));
       const commaOk = await submit();
       const commaBody = window.__numericRequests.at(-1).body;
-      const commaSent = commaBody.some(entry => entry[0] === "DistTemp" && entry[1] === "1.5");
+      const commaSent = commaBody.some(entry => entry[0] === "DistTemp" && entry[1] === "30.5");
       const invalid = ["", "garbage", "NaN", "Inf", "1e999", "1e-40", "-1", "151"];
       const beforeInvalid = window.__numericRequests.length;
       for (const value of invalid) {

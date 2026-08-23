@@ -25,14 +25,14 @@ def read_page(name: str) -> str:
     использует сама сборка - не копией её логики."""
     return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
 FROZEN_SHA256 = {
-    "app.js": "29d3e0d773fafdd6caec3650f53bfad46afd7dd92c287986cfb0a67b67e6d092",
-    "chart.js": "6ca38396b9a9c0ed8ac1333b310bac0d4b52997a6c8d5a587b9c9a3864131e6b",
+    "app.js": "45633765356354e5190c85efe59e6678c2c76c47d183453d7224ef180963d00b",
+    "chart.js": "9b66709460fe6c65c43d06cfcd73fb78f7e2e5dc9b75e6c626670a9256cc2e98",
     "edit.htm": "26b7e41df2a0a0197a14b9cf129f808fd001e760df4ed7c16df7a35a10b03ce6",
     "edit.htm.gz": "86e2801e2370cd45420ed84005194b752cc22198e7ab85faa33129bd28a50cac",
 }
 STRUCTURE_SHA256 = {
-    "setup.htm": "8bd56dd4e82a1c98ba64cf17aedeb6f4571218b2df52864bfbdb6b224991ef11",
-    "chart.htm": "c536a344fbc7c6aedd0bbfc4fb0475b63c37f817d4535ae7874b4813d89793fd",
+    "setup.htm": "2728c1ce224f775ac32ffe9115e931b8a2b66aa5ffeb1343365a295fa4602b03",
+    "chart.htm": "e071d491c243cb74553900e36b34e65e3364da3aa1ff998d151f608c7bc2387c",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")
 

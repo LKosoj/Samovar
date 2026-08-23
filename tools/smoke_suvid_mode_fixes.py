@@ -62,7 +62,7 @@ if lua_text:
 logic_text = strip_cpp_comments(read_text("logic.h"))
 if logic_text:
     try:
-        body = extract_function_body(logic_text, "String tick_status_fsm")
+        body = extract_function_body(logic_text, "String format_status_fsm_text")
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
@@ -141,7 +141,7 @@ if suvid_text:
             "if (!PowerOn) {",
             "suvidHeaterOn = false;",
             "heater_state = false;",
-        "suvidHold = {false, false, false, false, 0, 0};",
+        "suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};",
         "suvidDeviation = {false, false, 0};",
             "return;",
             "heater_state = suvidHeaterOn;",

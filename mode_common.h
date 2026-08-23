@@ -5,6 +5,13 @@
 #include "samovar_api.h"
 #include "safety_transition.h"
 
+// [П3] lua_heater_channel_raised() определена в lua.h (только когда USE_LUA
+// подключает его в этой единице трансляции). Без Lua канал нагрева никогда
+// не поднимается мимо PowerOn - подставляем заглушку false.
+#ifndef USE_LUA
+inline bool lua_heater_channel_raised() { return false; }
+#endif
+
 inline void mode_clear_alarm_pause_if_expired() {
   if (alarm_t_min > 0 && safety_deadline_expired(millis(), alarm_t_min)) alarm_t_min = 0;
 }
@@ -62,7 +69,9 @@ inline void mode_request_water_flow_emergency_if_needed() {
 // аварийный останов с перечнем превысивших датчиков. Общий блок четырёх режимов
 // (дистилляция, БК, пиво-охлаждение, сувид).
 inline void mode_request_overheat_emergency_if_needed() {
-  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && PowerOn) {
+  // [П3] Lua мог поднять канал нагрева сырым digitalWrite мимо PowerOn -
+  // отсечка по перегреву обязана сработать и тогда.
+  if ((WaterSensor.avgTemp >= MAX_WATER_TEMP || sensor_temp_at_least(ACPSensor, MAX_ACP_TEMP)) && (PowerOn || lua_heater_channel_raised())) {
     String s = "";
     if (WaterSensor.avgTemp >= MAX_WATER_TEMP)
       s = s + " Воды";

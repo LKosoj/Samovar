@@ -81,8 +81,54 @@ MODES_WITHOUT_BUTTON = (
 )
 
 
+def parse_modeops_field_names(source: str) -> list[str]:
+    """Ordered member names of struct ModeOps, as declared in mode_registry.h.
+
+    Row fields are matched by NAME (index into this list), not by a fixed
+    position/count - struct ModeOps grew from 12 to 16 members (tick/stopProcess/
+    buildAvailable/unavailableReason appended after startBusyName), so any
+    position pinned to the OLD layout silently reads the wrong field instead of
+    failing loudly. Reading by name makes the check self-adjusting.
+    """
+    match = re.search(r"struct\s+ModeOps\s*\{", source)
+    if match is None:
+        raise ValueError("mode_registry.h: struct ModeOps not found")
+    start = match.end()
+    end = source.find("};", start)
+    if end < 0:
+        raise ValueError("mode_registry.h: struct ModeOps closing '};' not found")
+    names = []
+    for stmt in source[start:end].split(";"):
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        m = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*$", stmt)
+        if not m:
+            raise ValueError(f"mode_registry.h: struct ModeOps: cannot parse member from {stmt!r}")
+        names.append(m.group(1))
+    return names
+
+
 def check_table_rows(source: str, errors: list[str]) -> None:
     code = strip_cpp_comments(source)
+    try:
+        field_names = parse_modeops_field_names(code)
+    except ValueError as exc:
+        errors.append(str(exc))
+        return
+    if not field_names or field_names[0] != "mode":
+        errors.append(f"struct ModeOps: expected first field 'mode', got {field_names[:1]!r}")
+        return
+    # The row regex below captures everything AFTER the leading `mode` field
+    # (already matched separately), so row fields line up with field_names[1:].
+    rest_field_names = field_names[1:]
+    try:
+        button_idx = rest_field_names.index("buttonPressAction")
+        busy_idx = rest_field_names.index("startBusyName")
+    except ValueError as exc:
+        errors.append(f"struct ModeOps: {exc}")
+        return
+
     try:
         table_body = extract_function_body(
             code, "inline const ModeOps* mode_registry_table(size_t& count)"
@@ -98,10 +144,13 @@ def check_table_rows(source: str, errors: list[str]) -> None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
         fields = [f.strip() for f in rest.split(",")]
-        if len(fields) < 2:
-            errors.append(f"mode_registry table: row for {mode} has too few fields: {rest}")
+        if len(fields) != len(rest_field_names):
+            errors.append(
+                f"mode_registry table: row for {mode} has {len(fields)} fields, expected "
+                f"{len(rest_field_names)} (per struct ModeOps): {rest}"
+            )
             continue
-        button_fn, busy_name = fields[-2], fields[-1]
+        button_fn, busy_name = fields[button_idx], fields[busy_idx]
         if button_fn != expected_fn:
             errors.append(
                 f"mode_registry table: {mode} buttonPressAction = {button_fn!r}, "
@@ -124,11 +173,17 @@ def check_table_rows(source: str, errors: list[str]) -> None:
             errors.append(f"mode_registry table: row for {mode} not found")
             continue
         fields = [f.strip() for f in rest.split(",")]
-        if fields[-2:] != ["nullptr", "nullptr"]:
+        if len(fields) != len(rest_field_names):
+            errors.append(
+                f"mode_registry table: row for {mode} has {len(fields)} fields, expected "
+                f"{len(rest_field_names)} (per struct ModeOps): {rest}"
+            )
+            continue
+        if fields[button_idx] != "nullptr" or fields[busy_idx] != "nullptr":
             errors.append(
                 f"mode_registry table: {mode} не обслуживает основную кнопку, "
                 "buttonPressAction/startBusyName должны быть nullptr, получено "
-                f"{fields[-2:]}"
+                f"{[fields[button_idx], fields[busy_idx]]}"
             )
 
 

@@ -84,6 +84,12 @@ function freshEnv() {
     getComputedStyle: function () {
       return { getPropertyValue: function () { return ""; } };
     },
+    // Тосты аварий (message_0) теперь спрашивают подтверждение перед скрытием
+    // (см. app.js removeLastMessage), чтобы случайный тап не гасил сирену вместе
+    // с сообщением. В headless-браузере confirm() нет - эмулируем реального
+    // пользователя, который подтверждает закрытие, чтобы сценарий по-прежнему
+    // проверял поведение removeLastMessage() после подтверждённого закрытия.
+    confirm: function () { return true; },
     console: console,
     setTimeout: setTimeout,
     clearTimeout: clearTimeout,

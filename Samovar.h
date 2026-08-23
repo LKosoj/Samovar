@@ -82,6 +82,16 @@
 #include <WebSerial.h>
 #endif
 
+// --- Отключённая подсистема: клапан для регулировки напора охлаждающей воды (~11 строк в Samovar.ino и mode_common.h) ---
+// Флаг: USE_WATER_VALVE. Нигде не определён: ни в одном из 7 окружений platformio.ini (включая всю его git-историю),
+// ни в user_config_override.h; в Samovar_ini.h есть только закомментированный пример (см. `#define USE_WATER_VALVE`).
+// Включать: раскомментировать строку в Samovar_ini.h или добавить #define в user_config_override.h.
+// Взаимоисключение: если включён USE_WATER_PUMP (напор регулируется насосом), строка ниже
+// принудительно гасит USE_WATER_VALVE — одновременно два способа регулировки не работают.
+// Собирается: похоже, что да — WATER_PUMP_PIN, WaterSensor.avgTemp и SamSetup.SetWaterTemp,
+// которые использует код под флагом, в текущей прошивке на месте (используются и без флага).
+// Реальная сборка с флагом не проверялась — окружения для неё нет.
+// Опция известна с 2021 года (коммит 00c8f164), ни разу не включалась ни в одном окружении.
 #ifdef USE_WATER_PUMP
 #undef USE_WATER_VALVE
 #endif
@@ -226,7 +236,17 @@ StaticSemaphore_t xSemaphoreBufferAVR;
 
 #define USE_LittleFS
 
-// Флаг USE_CRASH_HANDLER теперь берется из user_config_override.h
+// --- Отключённая подсистема: обработчик сбоев — сохранение причины перезагрузки и диагностики в LittleFS (~185 строк в crash_handler.h и crash_handler.ino) ---
+// Флаг: USE_CRASH_HANDLER. Нигде не определён: ни в одном из 7 окружений platformio.ini,
+// ни в Samovar_ini.h, ни в user_config_override.h. Комментарий на этом месте раньше (до
+// коммита 61020d96, 2026-01-07) утверждал, что флаг «теперь берётся из user_config_override.h» —
+// это оказалось неверно: строку #define туда так и не добавили, флаг стал недостижим. До этого
+// коммита прямо здесь была строка `//#define USE_CRASH_HANDLER`, которую и требовалось раскомментировать.
+// Включать: добавить `#define USE_CRASH_HANDLER` в user_config_override.h — в Samovar_ini.h
+// этой опции никогда не было, добавлять её туда для включения не обязательно.
+// Собирается: похоже, что да — код в crash_handler.ino использует только штатные ESP32/Arduino
+// API (SPIFFS-алиас, esp_reset_reason(), ESP.*, функции FreeRTOS) и не ссылается на переменные
+// или функции, отсутствующие в текущей прошивке. Реальная сборка с флагом не проверялась.
 
 #ifdef USE_LittleFS
 #ifdef ESP_ARDUINO_VERSION
@@ -314,6 +334,16 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 // и флаг там задаётся при сборке IDF (CONFIG_GPTIMER_ISR_IRAM_SAFE), а не из скетча.
 #define USE_STEPPER_IRAM_ISR
 
+// --- Отключённая подсистема: плавный разгон/торможение шагового двигателя (~24 строки в Samovar.h, Samovar.ino, selftest.h) ---
+// Флаг: USE_STEPPER_ACCELERATION. Нигде не определён: ни в одном из 7 окружений platformio.ini,
+// ни в user_config_override.h; в Samovar_ini.h есть только закомментированный пример (см. `#define USE_STEPPER_ACCELERATION`).
+// Включать: раскомментировать строку в Samovar_ini.h или добавить #define в user_config_override.h —
+// и ОБЯЗАТЕЛЬНО закомментировать `#define USE_STEPPER_IRAM_ISR` чуть выше в этом файле: с 21.08.2026
+// (коммит cf62d3f3) он включён безусловно и несовместим с этим флагом — см. #error ниже.
+// Собирается: с выключенным USE_STEPPER_IRAM_ISR — похоже, что да: stepper.setAcceleration(),
+// timerMux, timer, stepper.getPeriod(), которые использует код под флагом, в прошивке на месте.
+// Без этой правки сборка гарантированно упадёт на #error ниже, а не «просто соберётся».
+// Опция известна с 2024 года (коммит e3398e7d), ни разу не включалась ни в одном окружении.
 #if defined(USE_STEPPER_IRAM_ISR) && defined(USE_STEPPER_ACCELERATION)
 #error "USE_STEPPER_IRAM_ISR несовместим с USE_STEPPER_ACCELERATION: в режиме с ускорением тикер вызывает из прерывания пересчёт профиля (setTarget), который лежит во флеше. Закомментируйте одну из двух строк."
 #endif
@@ -342,6 +372,16 @@ GButton btn(BTN_PIN);
 GButton alarm_btn(ALARM_BTN_PIN);
 #endif
 
+// --- Отключённая подсистема: смачивание насадки колонны перед разгоном ректификации (~165 строк в Samovar.h, alarm.h, logic.h, samovar_api.h, sensorinit.h) ---
+// Флаг: COLUMN_WETTING. Нигде не определён: ни в одном из 7 окружений platformio.ini,
+// ни в user_config_override.h; в Samovar_ini.h есть только закомментированный пример (см. `#define COLUMN_WETTING`).
+// Включать: раскомментировать строку в Samovar_ini.h или добавить #define в user_config_override.h
+// (дополнительное условие — USE_HEAD_LEVEL_SENSOR — уже выполнено, он включён по умолчанию).
+// Собирается: похоже, что да — SamSetup.UseHLS, head_level_sensor_holded(), target_power_volt,
+// SendMsg и другие имена, которые использует column_wetting() в logic.h, в прошивке на месте.
+// Судя по меткам [L-36]/[L-36fix] в logic.h и sensorinit.h, код правили совсем недавно, хотя он
+// не участвует ни в одной сборке — это не заброшенный код, а незавершённая функция.
+// Опция известна с 2024 года (коммит d2cb97c3), ни разу не включалась ни в одном окружении.
 #ifdef COLUMN_WETTING
 #ifndef USE_HEAD_LEVEL_SENSOR
 #undef COLUMN_WETTING
@@ -498,13 +538,18 @@ struct ImpurityDetector {
 
 struct DSSensor {
   DeviceAddress Sensor;                                        //адрес датчика температуры
-  float avgTemp;                                               //средняя температура с датчика
+  // [П18] avgTemp/ErrCount пишутся из задачи опроса датчиков (DS_getvalue(),
+  // sensorinit.h), а читаются как согласованная пара из аварийного надзора
+  // (alarm.h::sensor_reading_valid и др.) и из других задач (веб). volatile - чтобы
+  // компилятор не закэшировал/не переставил местами эти обращения между повторными
+  // чтениями (см. seqlock-приём в alarm.h).
+  volatile float avgTemp;                                      //средняя температура с датчика
   float SetTemp;                                               //уставка по температуре, при достижении которой требуется реакция
   float BodyTemp;                                              //температура, с которой начался отбор тела
   uint16_t Delay;                                              //Время задержки включения насоса в секундах при выходе температуры за значение уставки
   float PrevTemp;                                              //Предыдущая температура
   float Start_Pressure;                                        //Стартовое давление при начале отбора
-  int ErrCount;                                                //Счетчик ошибок для оповещения о не возможности провести чтение с датчика
+  volatile int ErrCount;                                       //Счетчик ошибок для оповещения о не возможности провести чтение с датчика
   float LogPrevTemp;                                           //Хранение предыдущей температуры для записи лога
   float StartProgTemp;                                         //Хранение температуры, которая была на начало строки программы
 };
@@ -592,6 +637,7 @@ bool mixer_status;                                              // Статус 
 bool beerManualPause;                  // Ручная пауза пива (НЕ PauseOn — тот только для ректификации)
 unsigned long beerStageIdleAccumMs;    // Накопленное время простоя текущей строки (вне гистерезиса на 'P' и/или ручная пауза)
 unsigned long beerStageIdleSinceMs;    // Момент начала текущего простоя, 0 = простоя нет сейчас
+unsigned long beerBoilActiveAccumMs;   // [П13] Накопленное АКТИВНОЕ время разгона до кипения на строке 'B' (пауза не тикает)
 volatile bool alarm_event;                                      // Признак срабатывания кнопки тревоги
 bool acceleration_heater;                                       // Признак включенного разгонного тэна
 bool send_mqtt;                                                 // Отправлять данные в облако

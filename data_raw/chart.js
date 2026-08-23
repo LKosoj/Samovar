@@ -9,7 +9,14 @@
     { key: 'Pressure', label: 'Давление', color: '#a66e00' },
     { key: 'ProgNum', label: 'Строка программы', color: '#777777' }
   ];
+  // Давление живёт в единицах мм рт.ст. (около 760) - на общей шкале с температурами
+  // (десятки градусов) оно сплющивает все линии температур в полосу у нижнего края.
+  // Переносим его на отдельную шкалу справа средствами уже существующего самописного
+  // canvas-графика (внешней библиотеки графиков в проекте нет). Список вынесен из SERIES
+  // отдельной константой, чтобы не менять форму объектов SERIES (её пинит смоук-тест U-03).
+  const RIGHT_AXIS_SERIES = { Pressure: true };
   const MAX_RENDER_POINTS = 600;
+  const LOAD_TIMEOUT_MS = 15000;
 
   function parseNumber(value) {
     if (value === undefined || value === null || value === '') return null;
@@ -96,7 +103,8 @@
       swatch.className = 'chart-legend-swatch';
       swatch.style.backgroundColor = series.color;
       item.appendChild(swatch);
-      item.appendChild(document.createTextNode(series.label));
+      var labelText = series.label + (RIGHT_AXIS_SERIES[series.key] ? ' (шкала справа)' : '');
+      item.appendChild(document.createTextNode(labelText));
       legend.appendChild(item);
     });
     wrap.appendChild(canvas);
@@ -136,12 +144,10 @@
     return { min: min - pad, max: max + pad };
   }
 
-  function drawGrid(ctx, area, bounds, textColor, gridColor) {
+  function drawGrid(ctx, area, bounds, secondaryBounds, secondaryColor, textColor, gridColor) {
     ctx.strokeStyle = gridColor;
-    ctx.fillStyle = textColor;
     ctx.lineWidth = 1;
     ctx.font = '12px sans-serif';
-    ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     for (let i = 0; i <= 4; i++) {
       const y = area.top + area.height * i / 4;
@@ -149,8 +155,18 @@
       ctx.moveTo(area.left, y);
       ctx.lineTo(area.left + area.width, y);
       ctx.stroke();
-      const value = bounds.max - (bounds.max - bounds.min) * i / 4;
-      ctx.fillText(value.toFixed(1), area.left - 8, y);
+      if (bounds) {
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'right';
+        const value = bounds.max - (bounds.max - bounds.min) * i / 4;
+        ctx.fillText(value.toFixed(1), area.left - 8, y);
+      }
+      if (secondaryBounds) {
+        ctx.fillStyle = secondaryColor || textColor;
+        ctx.textAlign = 'left';
+        const value2 = secondaryBounds.max - (secondaryBounds.max - secondaryBounds.min) * i / 4;
+        ctx.fillText(value2.toFixed(1), area.left + area.width + 8, y);
+      }
     }
   }
 
@@ -181,6 +197,7 @@
     this.parent = document.getElementById(elementId);
     if (!this.parent) throw new Error('Chart container not found: ' + elementId);
     this.rows = [];
+    this.loading = false;
     this.autoRefresh = true;
     this.lastDate = '';
     this.options = options || {};
@@ -191,9 +208,21 @@
     window.addEventListener('resize', this.draw.bind(this));
   }
 
-  SamovarChart.prototype.setStatus = function (text, isError) {
-    this.status.textContent = text || '';
+  // retryFn - необязательный обработчик кнопки "Повторить" для сообщений об ошибке;
+  // без него график ведёт себя как раньше (просто текст статуса).
+  SamovarChart.prototype.setStatus = function (text, isError, retryFn) {
+    this.status.innerHTML = '';
     this.status.className = isError ? 'chart-status chart-status-error' : 'chart-status';
+    this.status.appendChild(document.createTextNode(text || ''));
+    if (isError && retryFn) {
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'button';
+      retryBtn.style.marginLeft = '0.6em';
+      retryBtn.textContent = 'Повторить';
+      retryBtn.addEventListener('click', retryFn);
+      this.status.appendChild(retryBtn);
+    }
   };
 
   SamovarChart.prototype.setData = function (rows) {
@@ -202,16 +231,46 @@
     this.draw();
   };
 
+  // Загрузка графика была единственным местом в проекте без ограничения времени
+  // ожидания: при обрыве связи fetch мог висеть бесконечно, и страница навсегда
+  // оставалась на "Загрузка графика...". Таймаут и повторная попытка сделаны так же,
+  // как в app.js (AbortController + showRequestError-подобное сообщение с кнопкой).
   SamovarChart.prototype.loadCsv = async function (url) {
+    // Вторая загрузка поверх незавершённой первой дала бы две гонки за this.rows,
+    // поэтому повторные вызовы (кнопка "Повторить", автообновление) отбиваются.
+    if (this.loading) return false;
+    this.loading = true;
+    const self = this;
+    const retry = function () { self.loadCsv(url); };
     this.setStatus('Загрузка графика...', false);
-    const resp = await fetch(url, { cache: 'no-store' });
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, LOAD_TIMEOUT_MS);
+    let resp;
+    try {
+      resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+    } catch (err) {
+      const timedOut = err && err.name === 'AbortError';
+      this.setStatus(
+        'Ошибка загрузки графика: ' + (timedOut ? 'превышено время ожидания.' : err),
+        true, retry
+      );
+      this.loading = false;
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!resp.ok) {
-      this.setStatus('Ошибка загрузки графика: HTTP ' + resp.status, true);
+      this.setStatus('Ошибка загрузки графика: HTTP ' + resp.status, true, retry);
+      this.loading = false;
       return false;
     }
-    const text = await resp.text();
-    this.setData(parseCsv(text));
-    this.setStatus(this.rows.length ? 'Загружено точек: ' + this.rows.length : 'Нет данных графика.', false);
+    try {
+      const text = await resp.text();
+      this.setData(parseCsv(text));
+      this.setStatus(this.rows.length ? 'Загружено точек: ' + this.rows.length : 'Нет данных графика.', false);
+    } finally {
+      this.loading = false;
+    }
     return true;
   };
 
@@ -251,20 +310,30 @@
     const gridColor = styles.getPropertyValue('--border-soft').trim() || '#ccc';
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
-    const area = { left: 54, top: 18, width: width - 74, height: height - 58 };
     const rows = decimate(this.rows);
     const visibleSeries = SERIES.filter(function (series) { return !this.hiddenSeries[series.key]; }, this);
-    const bounds = valueBounds(rows, visibleSeries.map(function (series) { return series.key; }));
-    if (!bounds) {
+    // Раздельные шкалы: primary - температуры и номер строки программы (левая ось),
+    // secondary - давление, у него совсем другой порядок значений (около 760).
+    const primarySeries = visibleSeries.filter(function (series) { return !RIGHT_AXIS_SERIES[series.key]; });
+    const secondarySeries = visibleSeries.filter(function (series) { return RIGHT_AXIS_SERIES[series.key]; });
+    const bounds = valueBounds(rows, primarySeries.map(function (series) { return series.key; }));
+    const secondaryBounds = valueBounds(rows, secondarySeries.map(function (series) { return series.key; }));
+    const rightMargin = secondaryBounds ? 54 : 20;
+    const area = { left: 54, top: 18, width: width - 54 - rightMargin, height: height - 58 };
+    if (!bounds && !secondaryBounds) {
       ctx.fillStyle = textColor;
       ctx.font = '16px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Нет данных для графика', width / 2, height / 2);
       return;
     }
-    drawGrid(ctx, area, bounds, textColor, gridColor);
-    visibleSeries.forEach(function (series) {
+    const secondaryColor = secondarySeries.length ? secondarySeries[0].color : null;
+    drawGrid(ctx, area, bounds, secondaryBounds, secondaryColor, textColor, gridColor);
+    primarySeries.forEach(function (series) {
       drawSeries(ctx, rows, area, bounds, series);
+    });
+    secondarySeries.forEach(function (series) {
+      drawSeries(ctx, rows, area, secondaryBounds, series);
     });
     ctx.fillStyle = textColor;
     ctx.font = '12px sans-serif';

@@ -212,6 +212,28 @@ void check_alarm_distiller() {
 }
 
 void run_dist_program(uint8_t num) {
+  // [fix П10] Ёмкость и напряжение строки num-1 (той, что только что завершилась)
+  // применяются ЗДЕСЬ, ДО проверки границ ниже. Раньше этот блок стоял после
+  // проверки и не выполнялся для завершающего вызова run_dist_program(ProgramLen) -
+  // в результате параметры ПОСЛЕДНЕЙ строки программы никогда не применялись,
+  // и хвосты отбора продолжали течь в ёмкость предпоследней строки.
+  // num > 0 НЕ гарантирует, что num-1 - реальная строка текущей программы: помимо
+  // distiller_proc() (где ProgramNum < ProgramLen), сюда приходит и
+  // SAMOVAR_DIST_NEXT из веб-интерфейса (Samovar.ino, case SAMOVAR_DIST_NEXT),
+  // который вызывает run_dist_program(ProgramNum + 1) без проверки границ - при
+  // повторном нажатии после завершения программы num-1 указывает на строку ЗА
+  // пределами ProgramLen (данные от прошлой, более длинной программы, а при
+  // ProgramLen == PROGRAM_MAX - вовсе за границей массива program[]). Поэтому
+  // явно проверяем num - 1 < ProgramLen ниже.
+  if (num > 0 && num - 1 < ProgramLen) {
+    if (!program_type_empty(program[num - 1].WType)) {
+      set_capacity(program[num - 1].capacity_num);
+#ifdef SAMOVAR_USE_POWER
+      apply_program_power_row(program[num - 1].Power);
+#endif
+    }
+  }
+
   // Проверяем, что номер программы не превышает количество программ
   if (num >= ProgramLen || program_type_empty(program[num].WType)) {
     // Программы закончились - устанавливаем ProgramNum = ProgramLen, чтобы условие ProgramNum < ProgramLen стало ложным
@@ -248,15 +270,6 @@ void run_dist_program(uint8_t num) {
   PipeSensor.StartProgTemp = PipeSensor.avgTemp;
   WaterSensor.StartProgTemp = WaterSensor.avgTemp;
   TankSensor.StartProgTemp = TankSensor.avgTemp;
-
-  if (num > 0) {
-    set_capacity(program[num - 1].capacity_num);
-    if (!program_type_empty(program[num - 1].WType)) {
-#ifdef SAMOVAR_USE_POWER
-      apply_program_power_row(program[num - 1].Power);
-#endif
-    }
-  }
 
 #ifdef SAMOVAR_USE_POWER
   // [П4.4] BOOST горит с самого старта дистилляции (см. distiller_proc()) и без

@@ -21,7 +21,7 @@
   const RUNTIME_BUSY_WARNING = 'Контроллер временно занят, статус обновится при следующем опросе.';
   const TELEMETRY_OPTION_KEYS = [
     'threshold', 'onReady', 'connectionIds', 'storeMessageHistory',
-    'dynamicThemeTitle', 'implicitSystemTheme', 'onLastMessageRemoved'
+    'dynamicThemeTitle', 'implicitSystemTheme', 'onLastMessageRemoved', 'onConnectionChange', 'staleReadingIds'
   ];
 
   let offlineCounter = 0;
@@ -47,6 +47,9 @@
   let dynamicThemeTitle = false;
   let implicitSystemTheme = false;
   let onLastMessageRemoved = null;
+  let onConnectionChange = null;
+  let staleReadingIds = [];
+  let clockStale = false;
 
   function byId(id) {
     return document.getElementById(id);
@@ -342,6 +345,32 @@
     setConnectionIcon('Green.png');
   }
 
+  // Обрыв связи: часы и показания приглушаются, чтобы старые цифры
+  // не принимали за живые. Часы обрабатываются здесь для всех страниц,
+  // список приглушаемых показаний страница задаёт через staleReadingIds.
+  function applyStaleVisuals(offline) {
+    const clock = byId('crnt_tm');
+    if (offline) {
+      if (clockStale) return;
+      clockStale = true;
+      if (clock) {
+        clock.textContent = 'Нет связи, данные от ' + clock.textContent;
+        clock.style.opacity = '0.6';
+      }
+      staleReadingIds.forEach(function (id) {
+        const el = byId(id);
+        if (el) el.style.opacity = '0.4';
+      });
+    } else {
+      clockStale = false;
+      if (clock) clock.style.opacity = '';
+      staleReadingIds.forEach(function (id) {
+        const el = byId(id);
+        if (el) el.style.opacity = '';
+      });
+    }
+  }
+
   function setConnectionError() {
     if (offlineCounter < offlineThreshold) {
       offlineCounter++;
@@ -353,6 +382,8 @@
       isOffline = true;
       if (connectionIds) offlineCounter = 0;
       else offlineCounter++;
+      applyStaleVisuals(true);
+      if (onConnectionChange) onConnectionChange(true);
     }, 100);
   }
 
@@ -361,6 +392,8 @@
     isOffline = false;
     if (!connectionIds && offlineCounter >= offlineThreshold) playSound(false);
     offlineCounter = 0;
+    applyStaleVisuals(false);
+    if (onConnectionChange) onConnectionChange(false);
   }
 
   function getHistory() {
@@ -418,8 +451,18 @@
   function renderMessage(entry, index) {
     const content = escapeHtml(entry.time) + '  ' + escapeHtml(entry.msg);
     if (index === messages.length - 1) {
-      return '<button type="button" class="' + escapeHtml(entry.cssClass) +
-        ' message-dismiss" onclick="SamovarApp.removeLastMessage()">' + content + '</button>';
+      // Раньше вся строка была кнопкой-самоудалением - случайный тычок в аварийное
+      // сообщение (например, при захлёбе, который живёт только в тексте, без latch)
+      // гасил его вместе с сиреной незаметно для пользователя. Теперь удаляет только
+      // отдельный крестик, а removeLastMessage() дополнительно спрашивает подтверждение
+      // для аварийных сообщений.
+      return '<div align="left" class="' + escapeHtml(entry.cssClass) +
+        '" style="display: flex; justify-content: space-between; align-items: center; gap: 0.5em;">' +
+        '<span>' + content + '</span>' +
+        '<button type="button" class="message-dismiss" aria-label="Скрыть последнее сообщение" ' +
+        'style="flex: 0 0 auto; background: transparent; border: 0; color: inherit; font: inherit; ' +
+        'font-size: 1.2em; line-height: 1; cursor: pointer; padding: 0 0.3em;" ' +
+        'onclick="SamovarApp.removeLastMessage()">✕</button></div>';
     }
     return '<div align="left" class="' + escapeHtml(entry.cssClass) + '">' + content + '</div>';
   }
@@ -444,6 +487,14 @@
 
   function removeLastMessage() {
     if (messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    // message_0 - аварийный уровень (level 0). Такое сообщение может быть единственным
+    // источником сирены (см. showMessages/heaterAlarmLatched): просим подтверждение,
+    // чтобы случайный тычок не гасил аварию молча.
+    if (last.cssClass === 'message_0' &&
+        !confirm('Скрыть аварийное сообщение «' + last.msg + '»?')) {
+      return;
+    }
     messages.pop();
     if (onLastMessageRemoved) onLastMessageRemoved(messages.length);
     showMessages();
@@ -765,6 +816,15 @@
         typeof pageOptions.onLastMessageRemoved !== 'function') {
       throw new Error('onLastMessageRemoved должен быть функцией.');
     }
+    if (pageOptions.onConnectionChange !== undefined &&
+        typeof pageOptions.onConnectionChange !== 'function') {
+      throw new Error('onConnectionChange должен быть функцией.');
+    }
+    if (pageOptions.staleReadingIds !== undefined &&
+        (!Array.isArray(pageOptions.staleReadingIds) ||
+         pageOptions.staleReadingIds.some(function (id) { return typeof id !== 'string'; }))) {
+      throw new Error('staleReadingIds должен быть массивом строк.');
+    }
     if (pageOptions.connectionIds !== undefined) {
       const ids = pageOptions.connectionIds;
       if (!ids || Object.keys(ids).length !== 2 ||
@@ -782,6 +842,8 @@
     telemetryPageStarted = true;
     storeMessageHistory = pageOptions.storeMessageHistory !== false;
     onLastMessageRemoved = pageOptions.onLastMessageRemoved || null;
+    onConnectionChange = pageOptions.onConnectionChange || null;
+    staleReadingIds = pageOptions.staleReadingIds || [];
     init({
       threshold: pageOptions.threshold || 3,
       connectionIds: pageOptions.connectionIds,

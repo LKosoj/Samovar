@@ -30,7 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, strip_cpp_comments
+from smoke_helpers import extract_braced_block_after, extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,7 +48,7 @@ HARNESS_TEMPLATE = r'''
 #define INPUT 0
 #define OUTPUT 1
 
-struct SamSetupType { bool rele2; bool rele3; };
+struct SamSetupType { bool rele1; bool rele2; bool rele3; bool rele4; };
 static SamSetupType SamSetup;
 
 static int lastPin = -1;
@@ -85,6 +85,24 @@ inline bool heater_safety_latched() { return g_heaterSafetyLatched; }
 
 inline bool lua_pin_is_heater_channel(int pin) {
 @HEATER_PREDICATE_BODY@
+}
+
+// [П3] Реальные тела учёта "поднят ли heater-канал сырым digitalWrite мимо
+// PowerOn" — та же extract_function_body, что и остальной харнесс, а не
+// переписанная логика.
+static bool luaHeaterChannel1Raised = false;
+static bool luaHeaterChannel4Raised = false;
+
+inline bool lua_heater_channel_raised() {
+@HEATER_RAISED_BODY@
+}
+
+inline void lua_set_heater_channel_raised(int pin, bool raised) {
+@SET_HEATER_RAISED_BODY@
+}
+
+inline void lua_track_heater_channel_write(int pin, int level) {
+@TRACK_HEATER_WRITE_BODY@
 }
 
 static void run_digital_write(int a, int b) {
@@ -232,6 +250,50 @@ int main() {
   expect_pinmode_raw(LUA_PIN, OUTPUT, "pinMode LUA_PIN (защёлка взведена)");
   g_heaterSafetyLatched = false;
 
+  // [П3] digitalWrite на heater-канал мимо PowerOn обязан поднимать флаг учёта
+  // (lua_heater_channel_raised()), чтобы аварийный надзор не остался слепым.
+  // Проверяем ОБЕ полярности releN — флаг должен ориентироваться на реальный
+  // уровень "включено" (SamSetup.releN), а не на сырое HIGH/LOW.
+  g_heaterSafetyLatched = false;
+  SamSetup.rele1 = true;
+  luaHeaterChannel1Raised = false;
+  luaHeaterChannel4Raised = false;
+  run_digital_write(RELE_CHANNEL1, HIGH);
+  check(lua_heater_channel_raised(), "RELE_CHANNEL1 releN=true: HIGH обязан поднять флаг raised");
+  run_digital_write(RELE_CHANNEL1, LOW);
+  check(!lua_heater_channel_raised(), "RELE_CHANNEL1 releN=true: LOW обязан снять флаг raised");
+
+  SamSetup.rele1 = false;
+  run_digital_write(RELE_CHANNEL1, LOW);
+  check(lua_heater_channel_raised(), "RELE_CHANNEL1 releN=false: LOW - это ВКЛ, флаг обязан подняться");
+  run_digital_write(RELE_CHANNEL1, HIGH);
+  check(!lua_heater_channel_raised(), "RELE_CHANNEL1 releN=false: HIGH - это ВЫКЛ, флаг обязан снятья");
+
+  // Два канала независимы, но lua_heater_channel_raised() - это ИЛИ по обоим:
+  // пока поднят хотя бы один, надзор обязан быть включён.
+  SamSetup.rele1 = true;
+  SamSetup.rele4 = true;
+  run_digital_write(RELE_CHANNEL1, HIGH);
+  run_digital_write(RELE_CHANNEL4, HIGH);
+  check(lua_heater_channel_raised(), "оба канала подняты: флаг обязан быть true");
+  run_digital_write(RELE_CHANNEL1, LOW);
+  check(lua_heater_channel_raised(), "RELE_CHANNEL4 всё ещё поднят: флаг не должен упасть");
+  run_digital_write(RELE_CHANNEL4, LOW);
+  check(!lua_heater_channel_raised(), "оба канала сняты: флаг обязан стать false");
+
+  // Защёлка аварийного отключения: C++-тракт уже погасил канал физически -
+  // запись подавляется, и учёт обязан это отразить (иначе надзор продолжит
+  // думать, что канал ещё поднят, хотя пин молчит).
+  SamSetup.rele1 = true;
+  run_digital_write(RELE_CHANNEL1, HIGH);
+  check(lua_heater_channel_raised(), "подготовка: RELE_CHANNEL1 должен быть поднят перед проверкой защёлки");
+  g_heaterSafetyLatched = true;
+  writeCalls = 0;
+  run_digital_write(RELE_CHANNEL1, HIGH);
+  check(writeCalls == 0, "защёлка взведена: запись на пин обязана быть подавлена (проверено выше, дублируем инвариант)");
+  check(!lua_heater_channel_raised(), "защёлка взведена: учёт обязан сброситься в false вместе с реальным пином");
+  g_heaterSafetyLatched = false;
+
   if (failures != 0) return 1;
   std::cout << "lua_wrapper_digitalWrite/lua_wrapper_pinMode raw relay contract checks passed\n";
   return 0;
@@ -269,6 +331,13 @@ def build_harness() -> str:
     predicate_anchor = "inline bool lua_pin_is_heater_channel(int pin)"
     predicate_body, _ = extract_braced_block_after(code, predicate_anchor)
     predicate_body = predicate_body.replace("\r\n", "\n")
+    heater_raised_body = extract_function_body(code, "inline bool lua_heater_channel_raised()")
+    set_heater_raised_body = extract_function_body(
+        code, "inline void lua_set_heater_channel_raised(int pin, bool raised)"
+    )
+    track_heater_write_body = extract_function_body(
+        code, "inline void lua_track_heater_channel_write(int pin, int level)"
+    )
     body = extract_gated_whitelist(
         code,
         "if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN",
@@ -280,6 +349,9 @@ def build_harness() -> str:
         "lua_wrapper_pinMode",
     )
     harness = HARNESS_TEMPLATE.replace("@HEATER_PREDICATE_BODY@", predicate_body)
+    harness = harness.replace("@HEATER_RAISED_BODY@", heater_raised_body)
+    harness = harness.replace("@SET_HEATER_RAISED_BODY@", set_heater_raised_body)
+    harness = harness.replace("@TRACK_HEATER_WRITE_BODY@", track_heater_write_body)
     harness = harness.replace("@BODY@", body)
     harness = harness.replace("@PINMODE_BODY@", pinmode_body)
     return harness

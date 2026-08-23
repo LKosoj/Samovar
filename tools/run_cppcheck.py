@@ -7,11 +7,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from runner_utils import positive_timeout, subprocess_output
+from check_local_includes import ExternalHeadersError, check_includes
+from runner_utils import SOURCE_SUFFIXES, positive_timeout, subprocess_output
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "tools" / "static_analysis_sources.json"
-SOURCE_SUFFIXES = {".h", ".ino"}
 DEFAULT_TIMEOUT_SECONDS = 300.0
 
 
@@ -95,6 +95,19 @@ def cppcheck_command(analysis_units: list[str], force: bool) -> list[str]:
         "--inline-suppr",
         "--error-exitcode=1",
         "--suppress=missingIncludeSystem",
+        # missingInclude ищет заголовки платформы ESP-IDF/Arduino (esp_log.h,
+        # driver/uart.h и т.п.) по -I путям, которых этому запуску никто не передаёт -
+        # ни job static-analysis, ни static-analysis-force не устанавливают
+        # PlatformIO/фреймворк (только apt install cppcheck), поэтому пути принципиально
+        # недоступны без отдельного шага сборки окружения. Без -I категория гарантированно
+        # находит один и тот же 'заголовок не найден' на каждом прогоне - это не находка о
+        # коде, а недонастройка окружения.
+        # Глушим её здесь, но НЕ теряем: полезную половину (включён заголовок, которого нет
+        # в репозитории и который не заявлен внешним) проверяет check_local_includes ниже в
+        # main() - по тексту, а не по сборке, поэтому она видит и include под #ifdef,
+        # который не взведён ни в одном окружении и потому не попадает ни в одну из семи
+        # сборок.
+        "--suppress=missingInclude",
         "--language=c++",
         "--template={file}:{line}:{column}: {severity}: {message} [{id}]",
     ]
@@ -169,10 +182,19 @@ def main() -> int:
     timed_out = False
     try:
         analysis_units = validate_manifest(ROOT, load_manifest(MANIFEST_PATH))
+        include_problems = check_includes(ROOT)
+        if include_problems:
+            for problem in include_problems:
+                print(problem, file=sys.stderr)
+            print(
+                f"local include check failed: {len(include_problems)} problem(s)",
+                file=sys.stderr,
+            )
+            return 1
         command = cppcheck_command(analysis_units, args.force)
         print(f"Cppcheck command: {shlex.join(command)}", flush=True)
         returncode, stdout, stderr, timed_out = run_cppcheck(command, ROOT, args.timeout)
-    except (ManifestError, OSError) as error:
+    except (ManifestError, ExternalHeadersError, OSError) as error:
         stderr = str(error)
 
     if stdout:

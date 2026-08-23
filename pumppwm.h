@@ -27,12 +27,23 @@ void init_pump_pwm(uint8_t pin, int freq) {
 ActuatorCommandResult set_pump_pwm(float duty) {
   duty = constrain(duty, 0, 1023);
 
+  // [П14] Раньше решение "держать соло на стартовом значении или писать
+  // полную мощность" принималось по глобальному bk_pwm (уставка водяного
+  // насоса режима БК), а не по duty - аргументу ЭТОГО вызова. Для БК это
+  // было незаметно (BK.h всегда вызывает set_pump_pwm(bk_pwm), т.е. duty ==
+  // bk_pwm), но для остальных вызывающих (Пиво, самотест) плавный пуск
+  // либо сходился не к запрошенной мощности, а к произвольному оставшемуся
+  // с прошлого режима bk_pwm, либо (когда bk_pwm случайно равен дефолту
+  // PWM_LOW_VALUE * 40 = 400, выставленному sensorinit.h при старте)
+  // пропускался целиком - насос сразу получал полную мощность, минуя
+  // защитный стартовый порог. Сравниваем и пишем duty - тогда поведение
+  // определяется тем, что реально запросил вызывающий, а не наследием БК.
 	  if (!pump_started && duty > 0) {
 	    wp_count = 0;
 	    pump_pwm.write(PWM_START_VALUE * 10);
 	    water_pump_speed = PWM_START_VALUE * 10;
 	    pump_started = true;
-	    if (bk_pwm != PWM_LOW_VALUE * 40) {
+	    if (duty != PWM_LOW_VALUE * 40) {
 	      return ACTUATOR_COMMAND_APPLIED;
 	    }
 	    pump_pwm.write(duty);
@@ -40,9 +51,9 @@ ActuatorCommandResult set_pump_pwm(float duty) {
 	    return ACTUATOR_COMMAND_APPLIED;
 	  }
   if (duty > 0 && wp_count < 10 && pump_started) {
-    if (bk_pwm != PWM_LOW_VALUE * 40) {
-      pump_pwm.write(bk_pwm);
-      water_pump_speed = bk_pwm;
+    if (duty != PWM_LOW_VALUE * 40) {
+      pump_pwm.write(duty);
+      water_pump_speed = duty;
     } else {
       pump_pwm.write(PWM_START_VALUE * 10);
       water_pump_speed = PWM_START_VALUE * 10;

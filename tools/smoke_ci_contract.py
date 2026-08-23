@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import yaml
 from pathlib import Path
 from unittest.mock import patch
 
@@ -379,17 +380,28 @@ class WorkflowContractTests(unittest.TestCase):
     def test_ci_uses_bounded_shared_runners_and_always_uploads_extended_report(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "firmware-ci.yml").read_text(encoding="utf-8")
         blocking = self._job_block(workflow, "static-analysis")
-        extended = self._job_block(workflow, "static-analysis-force")
         smoke = self._job_block(workflow, "smoke")
         self.assertEqual(workflow.count("python tools/run_smoke_tests.py"), 1)
-        self.assertEqual(workflow.count("python tools/run_cppcheck.py"), 2)
         self.assertIn("run: python tools/run_cppcheck.py --timeout 300", blocking)
         self.assertNotIn("--force", blocking)
         self.assertNotIn("continue-on-error", blocking)
-        self.assertIn("continue-on-error: true", extended)
-        self.assertEqual(workflow.count("continue-on-error: true"), 1)
+        self.assertIn("run: python tools/run_smoke_tests.py --timeout 60", smoke)
+
+    def test_extended_cppcheck_is_baseline_gated_not_ignored(self) -> None:
+        # Раньше этот job был помечен `continue-on-error: true` и не мог упасть вообще:
+        # находки уезжали только в артефакт, который никто не обязан открывать. Теперь
+        # он падает по-настоящему, но только на находках, которых нет в
+        # tools/cppcheck_force_baseline.txt (осознанное решение, а не немота).
+        workflow = (ROOT / ".github" / "workflows" / "firmware-ci.yml").read_text(encoding="utf-8")
+        extended = self._job_block(workflow, "static-analysis-force")
+        self.assertNotIn("continue-on-error", extended)
+        self.assertNotIn("continue-on-error", workflow)
         self.assertIn(
-            "run: python tools/run_cppcheck.py --force --timeout 600 --report cppcheck-extended.txt",
+            # 600 -> 900: замер 2026-08-23 показал ~334с в один поток на всех 8 .ino-юнитов
+            # (600 давало только ~1.8x запаса); 900 закладывает ~2.7x запас на более медленный/
+            # менее многоядерный раннер CI. Это не ослабление проверки - порог находок в baseline
+            # не менялся, только бюджет времени под измеренную длительность.
+            "run: python tools/check_cppcheck_baseline.py --timeout 900 --report cppcheck-extended.txt",
             extended,
         )
         upload = extended[extended.index("- name: Upload extended cppcheck report") :]
@@ -397,7 +409,63 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("uses: actions/upload-artifact@v4", upload)
         self.assertIn("path: cppcheck-extended.txt", upload)
         self.assertIn("if-no-files-found: error", upload)
-        self.assertIn("run: python tools/run_smoke_tests.py --timeout 60", smoke)
+        self.assertTrue((ROOT / "tools" / "cppcheck_force_baseline.txt").exists())
+
+    def test_ci_verifies_stepper_isr_iram_for_every_build_matrix_environment(self) -> None:
+        # check_stepper_isr_iram.py раньше не вызывался ни одним job'ом и брал список
+        # окружений из того, что случайно лежит в .pio/build - собрали одно, проверили
+        # одно, сказали "OK". Теперь он вызывается внутри job'а build с явным именем
+        # окружения текущей ячейки матрицы, поэтому покрытие не может молча просесть:
+        # если окружение уйдёт из матрицы сборки, вместе с ним пропадёт и его сборка.
+        workflow = (ROOT / ".github" / "workflows" / "firmware-ci.yml").read_text(encoding="utf-8")
+        build = self._job_block(workflow, "build")
+        self.assertIn(
+            "run: python tools/check_stepper_isr_iram.py ${{ matrix.env_name }}",
+            build,
+        )
+        build_step_index = build.index("run: python -m platformio run -e ${{ matrix.env_name }}")
+        isr_step_index = build.index("run: python tools/check_stepper_isr_iram.py ${{ matrix.env_name }}")
+        self.assertLess(build_step_index, isr_step_index, "ISR-проверка должна идти после сборки")
+
+    def test_ci_runs_real_browser_ui_tests_not_just_source_text_gates(self) -> None:
+        # 11 файлов tools/test_*_browser.py раньше не запускал ни один сценарий CI - их
+        # подменяли smoke_*.py-проверки, ищущие строки-маркеры в исходнике самого теста.
+        # Такой "гейт" остаётся зелёным, даже если браузерный тест падает на первом шаге.
+        #
+        # Раньше эта проверка сама была таким же "гейтом": искала слово "playwright" в
+        # тексте всего job'а, а оно там есть всегда - хотя бы в имени job'а
+        # ("Browser UI tests (Playwright)"), даже если шаг установки браузера убрать
+        # целиком. Теперь она разбирает YAML по структуре (список шагов job'а и их
+        # команды), а не ищет слова в сыром тексте.
+        with (ROOT / ".github" / "workflows" / "firmware-ci.yml").open(encoding="utf-8") as stream:
+            workflow = yaml.safe_load(stream)
+        job = workflow["jobs"]["browser-ui"]
+        steps = job["steps"]
+
+        self.assertNotIn("continue-on-error", job, "пометка 'не ронять сборку' на уровне job'а недопустима")
+        for step in steps:
+            self.assertNotIn(
+                "continue-on-error",
+                step,
+                f"шаг {step.get('name')!r} не должен быть помечен continue-on-error",
+            )
+
+        run_commands = [step["run"] for step in steps if "run" in step]
+        install_commands = [command for command in run_commands if "playwright install" in command]
+        self.assertTrue(install_commands, "не найден шаг, устанавливающий браузер Playwright")
+
+        test_commands = [
+            command for command in run_commands if command == "python tools/run_browser_tests.py --timeout 240"
+        ]
+        self.assertEqual(
+            len(test_commands),
+            1,
+            "не найден (или изменён) шаг, реально запускающий tools/run_browser_tests.py",
+        )
+
+        install_index = run_commands.index(install_commands[0])
+        test_index = run_commands.index(test_commands[0])
+        self.assertLess(install_index, test_index, "браузер должен ставиться раньше, чем запускаются тесты")
 
     @staticmethod
     def _job_block(workflow: str, job_name: str) -> str:
@@ -421,6 +489,93 @@ class FirmwareDefaultsContractTests(unittest.TestCase):
         self.assertIn("candidate = {};", function)
         self.assertNotIn("memset(&candidate", function)
         self.assertIn("--std=c++11", cppcheck_command(["NVS_Manager.ino"], force=False))
+
+
+class BrowserTestRunnerTests(unittest.TestCase):
+    def test_discovers_every_known_browser_test_file(self) -> None:
+        import run_browser_tests
+
+        discovered = {path.name for path in run_browser_tests.discover_browser_tests(ROOT)}
+        # Зафиксированный на 2026-08-23 список - если файл переименуют/удалят из tools/,
+        # тест должен покраснеть, а не молча перестать его запускать.
+        expected = {
+            "test_accessibility_ui_browser.py",
+            "test_i2c_operation_results_browser.py",
+            "test_i2c_pump_ui_browser.py",
+            "test_mode_logic_ui_browser.py",
+            "test_numeric_input_ui_browser.py",
+            "test_profile_operation_ui_browser.py",
+            "test_program_clear_ui_browser.py",
+            "test_runtime_event_ui_browser.py",
+            "test_setup_guards_browser.py",
+            "test_setup_mode_hidden_selected_browser.py",
+            "test_shared_ui_controllers_browser.py",
+            "test_u03_contrast_browser.py",
+            "test_u04_responsive_layout_browser.py",
+        }
+        self.assertEqual(discovered, expected)
+
+
+class StepperIsrCliTests(unittest.TestCase):
+    def test_environments_argument_is_required_not_defaulted_from_build_dir(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "tools/check_stepper_isr_iram.py"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("required", result.stderr)
+
+    def test_unbuilt_environment_fails_loudly_instead_of_being_silently_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            import check_stepper_isr_iram as stepper_check
+
+            with patch.object(stepper_check, "BUILD_DIR", root / ".pio" / "build"):
+                ok, message = stepper_check.check_env("NoSuchEnvironment")
+            self.assertFalse(ok)
+            self.assertIn("не найден", message)
+            self.assertIn("не собрано", message)
+
+
+class CppcheckBaselineTests(unittest.TestCase):
+    def test_parse_findings_extracts_only_real_finding_lines(self) -> None:
+        import check_cppcheck_baseline as baseline_check
+
+        stdout = "\n".join([
+            "Checking Samovar.ino: SAMOVAR_USE_BLYNK;ESP32...",
+            "5/8 files checked 62% done",
+            "Samovar.h:120:3: warning: Variable 'x' is assigned a value that is never used [unreadVariable]",
+            "lua.h:42:1: information: Include file not found [missingInclude]",
+        ])
+        findings = baseline_check.parse_findings(stdout)
+        self.assertEqual(
+            findings,
+            [
+                "Samovar.h:120:3: warning: Variable 'x' is assigned a value that is never used [unreadVariable]",
+                "lua.h:42:1: information: Include file not found [missingInclude]",
+            ],
+        )
+
+    def test_only_findings_outside_baseline_are_new(self) -> None:
+        import check_cppcheck_baseline as baseline_check
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline_path = Path(temp_dir) / "baseline.txt"
+            baseline_path.write_text(
+                "# comment\nSamovar.h:1:1: style: known [knownId]\n", encoding="utf-8",
+            )
+            with patch.object(baseline_check, "BASELINE_PATH", baseline_path):
+                baseline = baseline_check.load_baseline(baseline_check.BASELINE_PATH)
+            self.assertEqual(baseline, {"Samovar.h:1:1: style: known [knownId]"})
+            findings = [
+                "Samovar.h:1:1: style: known [knownId]",
+                "lua.h:2:2: warning: brand new [newId]",
+            ]
+            new_findings = sorted(set(findings) - baseline)
+            self.assertEqual(new_findings, ["lua.h:2:2: warning: brand new [newId]"])
 
 
 if __name__ == "__main__":

@@ -14,9 +14,24 @@
 #define STABLE_WINDOWS_REQUIRED 5 // Кол-во стабильных окон подряд для фиксации кипения
 #define MAX_TREND_ABS_PER_SEC 0.02 // Макс. модуль тренда в °C/с для стабильности
 
+// [П13] Таймауты-предохранители для строк 'B' и 'C': если физический процесс
+// не продвигается (не удаётся зафиксировать кипение / не удаётся остыть до
+// цели), варка не должна греть/лить воду бесконечно. Значения ориентировочные,
+// подлежат проверке на реальном оборудовании.
+#define BEER_BOIL_TIMEOUT_MS (60UL * 60UL * 1000UL)  // макс. время разгона до кипения на строке 'B'
+#define BEER_COOL_TIMEOUT_MS (60UL * 60UL * 1000UL)  // макс. время остывания на строке 'C'
+
 #ifndef BEER_TEMP_HYSTERESIS
 #define BEER_TEMP_HYSTERESIS 0.3f  // [P2 п.2] Ширина гистерезиса вокруг уставки для M/P/F (было: controlSensor->SetTemp — чужая величина датчика)
 #endif
+
+// [Дефект 2 code review] Момент начала текущего непрерывного простоя ручной
+// паузы для расписания мешалки (check_mixer_state()), 0 = простоя нет сейчас.
+// Симметрично beerStageIdleSinceMs/beerStageIdleAccumMs, но своим накопителем:
+// alarm_c_min/alarm_c_low_min - АБСОЛЮТНЫЕ метки millis(), не относительное
+// время, поэтому компенсация - это сдвиг обеих меток при выходе из паузы
+// (см. check_mixer_state()), а не вычитание из прошедшего времени.
+static unsigned long beerMixerPauseSinceMs = 0;
 
 struct BoilingDetector {
     float tempHistory[TEMP_HISTORY_SIZE];
@@ -122,6 +137,8 @@ inline ActuatorCommandResult beer_safe_lua_outputs() {
   return set_mixer_state(false, false);
 }
 
+// [П12] Имя осталось историческим: функция вызывается из единой точки входа
+// ручной паузы для всех типов строк (M/P/B/C/F), не только для 'F'.
 inline bool beer_pause_fermentation_outputs() {
   return beer_safe_lua_outputs() == ACTUATOR_COMMAND_APPLIED;
 }
@@ -402,6 +419,8 @@ void run_beer_program(uint8_t num) {
   if (program[ProgramNum].WType == 'B' &&
       (ProgramNum == 0 || program_type_at(ProgramNum - 1) != 'B')) {
     resetBoilingDetector();
+    // [П13] Новое (несмежное) кипячение - таймаут разгона до кипения тоже с нуля.
+    beerBoilActiveAccumMs = 0;
   }
 
   if (program[ProgramNum].WType == 'A') {
@@ -454,6 +473,11 @@ void run_beer_program(uint8_t num) {
   alarm_c_low_min = 0;  //мешалка вкл
   alarm_c_min = 0;  //мешалка пауза
   currentstepcnt = 0; //счетчик циклов мешалки
+  // [Дефект 2 code review] Метки нового цикла мешалки не переживают переход
+  // строки - если тут остался незакрытый простой с предыдущей строки (не
+  // должен, т.к. переход возможен только вне паузы), не даём ему сдвинуть
+  // свежевыставленные alarm_c_min/alarm_c_low_min.
+  beerMixerPauseSinceMs = 0;
 
   // [P2 п.5+6] Накопитель простоя считается только для текущей строки P/B.
   beerStageIdleAccumMs = 0;
@@ -491,11 +515,16 @@ void beer_finish() {
   }
   // Сброс детектора кипения при завершении процесса
   resetBoilingDetector();
+  // [П13] Накопитель таймаута разгона до кипения не переживает завершение процесса.
+  beerBoilActiveAccumMs = 0;
   heater_state = false;
   // [P2 п.5+6] Ручная пауза и накопитель простоя строки не переживают завершение процесса.
   beerManualPause = false;
   beerStageIdleAccumMs = 0;
   beerStageIdleSinceMs = 0;
+  // [Дефект 2 code review] Останов возможен ПРЯМО во время ручной паузы -
+  // не оставляем метку начала простоя мешалки протухать до следующей варки.
+  beerMixerPauseSinceMs = 0;
   // [P2 п.9] Ожидание подтверждения пропуска охлаждения не переживает завершение процесса;
   // begintime=0 также защищает от протухшего значения при новом запуске.
   beerSkipConfirmProgramNum = 0xFF;
@@ -527,14 +556,17 @@ inline void beer_check_cooling_limits() {
 }
 
 /**
- * @brief Обновляет накопитель простоя строки P/B: время ручной паузы, а также
+ * @brief Обновляет накопитель простоя строки P/B/C: время ручной паузы, а также
  *        время вне полосы гистерезиса на 'P', не должно засчитываться в
  *        выдержку строки (см. проверки в beer_stage_tick()).
  */
 inline void beer_update_stage_idle(ProgramType currentType, float temp, float tempDelta, unsigned long nowMs) {
   bool idleNow = false;
-  if (currentType == 'P' || currentType == 'B') {
-    if (beerManualPause) {
+  if (currentType == 'P' || currentType == 'B' || currentType == 'C') {
+    // [П1] begintime > 0: пока строка ещё не стартовала, паузу не копим -
+    // иначе накопитель простоя может обогнать реально прошедшее время
+    // (см. beer_stage_elapsed_ms ниже).
+    if (beerManualPause && begintime > 0) {
       idleNow = true;
     } else if (currentType == 'P' && begintime > 0 &&
                (temp < program[ProgramNum].Temp - tempDelta || temp > program[ProgramNum].Temp + tempDelta)) {
@@ -548,6 +580,25 @@ inline void beer_update_stage_idle(ProgramType currentType, float temp, float te
     beerStageIdleSinceMs = 0;
   }
 }
+
+/**
+ * @brief [П1] Прошедшее активное время текущей строки P/B/C в миллисекундах:
+ *        millis() минус момент старта строки минус накопленный простой.
+ *        Каждое слагаемое приводится к float ОТДЕЛЬНО, до вычитания (как в
+ *        logic.h::get_beer_status_text) - иначе, если накопленный простой
+ *        (beerStageIdleAccumMs) больше прошедшего с begintime времени,
+ *        беззнаковое вычитание unsigned long заворачивается в ~4.29e9 мс и
+ *        любой порог по времени "проходит" мгновенно. Результат не может
+ *        быть отрицательным.
+ * @param nowMs Текущее значение millis()
+ * @return Прошедшее активное время строки, мс (>= 0)
+ */
+inline float beer_stage_elapsed_ms(unsigned long nowMs) {
+  float elapsed = (float)nowMs - (float)begintime - (float)beerStageIdleAccumMs;
+  if (elapsed < 0) elapsed = 0;
+  return elapsed;
+}
+
 
 /**
  * @brief Проверяет и управляет состоянием процесса затирания, включая нагрев, охлаждение, паузы и кипячение.
@@ -579,6 +630,28 @@ void beer_stage_tick() {
   tempDelta = BEER_TEMP_HYSTERESIS;
   ProgramType currentType = current_program_type();
   beer_update_stage_idle(currentType, temp, tempDelta, nowMs);
+
+  // [П12] Единая точка входа ручной паузы: гейтит ВСЕ варочные строки
+  // (M/P/B/C/F) одним вызовом - выключает нагрев/клапан/насос/мешалку и не
+  // даёт строке продвинуться дальше, пока пауза активна. Вызывается ПОСЛЕ
+  // beer_update_stage_idle() (простой строки продолжает копиться), но ДО
+  // разбора по типам строки ниже - локальные проверки beerManualPause в
+  // ветках M/P/F/B стали недостижимы и убраны. 'L' (Lua) и 'A' (автотюнинг)
+  // сюда намеренно не входят - см. отчёт по П12.
+  if (beerManualPause && (currentType == 'M' || currentType == 'P' || currentType == 'B' ||
+                           currentType == 'C' || currentType == 'F')) {
+    // [Дефект 2 code review] check_mixer_state() тоже не вызывается, пока
+    // строка на этом гейте - её метки alarm_c_min/alarm_c_low_min (АБСОЛЮТНОЕ
+    // millis(), без накопителя простоя типа beerStageIdleAccumMs) иначе сдвигаются
+    // паузой. Запоминаем момент начала простоя один раз на весь непрерывный
+    // простой (симметрично beerStageIdleSinceMs) - компенсация применяется при
+    // выходе из паузы, см. beerMixerPauseSinceMs и check_mixer_state().
+    if (beerMixerPauseSinceMs == 0) beerMixerPauseSinceMs = nowMs;
+    if (!beer_pause_fermentation_outputs()) {
+      beer_abort_config_error("Ошибка ручной паузы: не удалось выключить исполнитель");
+    }
+    return;
+  }
 
   //Обрабатываем программу
 
@@ -654,33 +727,28 @@ void beer_stage_tick() {
 
   //Если режим Засыпь солода или Пауза
   if (currentType == 'M' || currentType == 'P') {
-    // [P2 п.6] Ручная пауза держит нагрев выключенным, не трогая ПИД/таймеры.
-    if (beerManualPause) setHeaterPosition(false); else set_heater_state(program[ProgramNum].Temp, temp);
+    // [П12] Ручная пауза обрабатывается единой точкой входа выше по функции.
+    set_heater_state(program[ProgramNum].Temp, temp);
   }
 
   //Если режим Брага
   if (currentType == 'F') {
-    if (beerManualPause) {
-      if (!beer_pause_fermentation_outputs()) {
-        beer_abort_config_error("Ошибка паузы F: не удалось выключить исполнитель");
-      }
-      return;
-    }
+    // [П12] Ручная пауза обрабатывается единой точкой входа выше по функции.
     //Если температура меньше целевой - греем, иначе охлаждаем.
     if (temp < program[ProgramNum].Temp - tempDelta) {
       if ((valve_status || beer_cooling_pump_demanded()) &&
           beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       //Поддерживаем целевую температуру
-      // [P2 п.6] Ручная пауза держит нагрев выключенным, не трогая ПИД/таймеры.
       set_heater_state(program[ProgramNum].Temp, temp);
     } else if (temp > program[ProgramNum].Temp + tempDelta) {
-      {
-        if (!valve_status || !beer_cooling_pump_demanded()) {
-          //Отключаем нагреватель
-          setHeaterPosition(false);
-          if (beer_set_cooling_outputs(true) != ACTUATOR_COMMAND_APPLIED) return;
-        }
-      }
+      //Отключаем нагреватель
+      setHeaterPosition(false);
+      // [П14] Мягкий пуск насоса охлаждения (pumppwm.h::set_pump_pwm)
+      // рассчитан на вызов КАЖДЫЙ тик, пока охлаждение должно быть активно -
+      // раньше beer_set_cooling_outputs(true) звался один раз на входе в
+      // этот диапазон температур, из-за чего скважность насоса застревала
+      // на стартовом значении.
+      if (beer_set_cooling_outputs(true) != ACTUATOR_COMMAND_APPLIED) return;
     } else {
       //Так как находимся в пределах температурной уставки, не нужно ни греть, ни охлаждать
       //Отключаем нагреватель
@@ -715,12 +783,28 @@ void beer_stage_tick() {
       setHeaterPosition(false);
       if (beer_set_cooling_outputs(true) != ACTUATOR_COMMAND_APPLIED) return;
       begintime = millis();
+    } else if (temp > program[ProgramNum].Temp) {
+      // [П14] Мягкий пуск насоса охлаждения (pumppwm.h::set_pump_pwm)
+      // рассчитан на вызов КАЖДЫЙ тик, пока охлаждение ещё нужно - раньше
+      // beer_set_cooling_outputs(true) звался один раз на входе в строку, из-за
+      // чего скважность насоса застревала на стартовом значении. Гейт по
+      // temp > program[].Temp, чтобы не включать охлаждение повторно на том
+      // же тике, где ниже температура уже упала и мы его выключаем.
+      if (beer_set_cooling_outputs(true) != ACTUATOR_COMMAND_APPLIED) return;
     }
     if (temp <= program[ProgramNum].Temp) {
       //Если температура упала
       if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
       //запускаем следующую программу
       run_beer_program(ProgramNum + 1);
+    } else if (beer_stage_elapsed_ms(millis()) >= BEER_COOL_TIMEOUT_MS) {
+      // [П13] Таймаут остывания: датчик куба может врать, охлаждающая вода
+      // может быть перекрыта или недостаточна, либо program[].Temp недостижим
+      // при текущих условиях. else-ветка от достижения цели (как в 'B') -
+      // если температура упала до цели ровно на тике истечения таймаута,
+      // это успех, а не авария.
+      beer_abort_config_error("Не удалось охладить куб до целевой температуры за 60 минут. Проверьте датчик куба, подачу охлаждающей воды и клапан охлаждения.");
+      return;
     }
   }
 
@@ -735,17 +819,25 @@ void beer_stage_tick() {
         msgfl = true;
         begintime = millis();
         SendMsg(("Начался режим кипячения"), NOTIFY_MSG);
+      } else {
+        // [П13] Таймаут разгона до кипения: тик сюда попадает, только если
+        // строка не на ручной паузе (см. единую точку входа выше), поэтому
+        // накопитель растёт исключительно активное время. Не удалось
+        // зафиксировать начало кипения за BEER_BOIL_TIMEOUT_MS - вероятно,
+        // датчик куба врёт, объём жидкости мал, не закрыта крышка, либо
+        // порог кипения (MIN_BOILING_TEMP) недостижим из-за низкого давления.
+        beerBoilActiveAccumMs += 1000;
+        if (beerBoilActiveAccumMs >= BEER_BOIL_TIMEOUT_MS) {
+          beer_abort_config_error("Не удалось зафиксировать начало кипения за 60 минут. Проверьте датчик куба, объём жидкости, крышку и достижимость порога кипения (низкое давление).");
+          return;
+        }
       }
     }
 
     //Греем до температуры кипения, исходя из того, что датчик в кубе врет не сильно
     if (begintime == 0) {
-      // [P2 п.6] Ручная пауза держит нагрев выключенным при разгоне до кипения.
-      if (!beerManualPause) set_heater_state(BOILING_TEMP + 5, temp);
-    } else if (beerManualPause) {
-      // [P2 п.6] Ручная пауза во время уже идущего кипячения — выключаем нагрев.
-      setHeaterPosition(false);
-      heater_state = false;
+      // [П12] Ручная пауза обрабатывается единой точкой входа выше по функции.
+      set_heater_state(BOILING_TEMP + 5, temp);
     } else {
       //Иначе поддерживаем температуру
       heater_state = true;
@@ -766,9 +858,11 @@ void beer_stage_tick() {
     }
 
     //Проверяем, что еще нужно держать паузу. За 30 секунд до окончания шлем сообщение
-    // [P2 п.11] Напоминание про хмель уместно, только если следующая строка — тоже кипячение
-    // ('B'): иначе (переход на охлаждение/паузу и т.п.) хмель сыпать уже поздно/не нужно.
-    if (begintime > 0 && msgfl && program_type_at(ProgramNum + 1) == 'B' && ((float)(millis() - begintime - beerStageIdleAccumMs) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {  // [C-13] overflow-safe: вычитание до каста
+    // [П68] Условие на тип следующей строки снято: flame-out (внесение хмеля
+    // на выключение варки, без второй строки 'B' после текущей) - штатный
+    // приём, а не ошибка программы. От повторного срабатывания защищает
+    // флаг msgfl (взводится при входе в строку, гасится ниже).
+    if (begintime > 0 && msgfl && (beer_stage_elapsed_ms(millis()) / 1000 / 60 + 0.5 >= program[ProgramNum].Time)) {
       set_buzzer(true);
       msgfl = false;
       SendMsg(("Засыпьте хмель!"), NOTIFY_MSG);
@@ -780,7 +874,7 @@ void beer_stage_tick() {
   }
 
   //Проверяем, что еще нужно держать паузу
-  if (begintime > 0 && (currentType == 'B' || currentType == 'P') && ((float)(millis() - begintime - beerStageIdleAccumMs) / 60000.0f >= program[ProgramNum].Time)) {
+  if (begintime > 0 && (currentType == 'B' || currentType == 'P') && (beer_stage_elapsed_ms(millis()) / 60000.0f >= program[ProgramNum].Time)) {
     //Запускаем следующую программу
     run_beer_program(ProgramNum + 1);
   }
@@ -796,6 +890,19 @@ void beer_stage_tick() {
  */
 void check_mixer_state() {
   if (heater_safety_latched()) return;
+  // [Дефект 2 code review] alarm_c_min/alarm_c_low_min - АБСОЛЮТНЫЕ метки
+  // millis(); вызов этой функции целиком пропускается, пока строка на ручной
+  // паузе (см. гейт в beer_stage_tick()), поэтому при выходе из паузы обе
+  // метки нужно сдвинуть на длительность простоя - иначе расписание мешалки
+  // "плывёт": короткая пауза недокручивает фазу цикла, длинная - обе метки
+  // оказываются в прошлом, и цикл считается завершённым и тут же
+  // перезапускается с нуля, теряя часть выдержки.
+  if (beerMixerPauseSinceMs > 0) {
+    const unsigned long mixerIdleMs = millis() - beerMixerPauseSinceMs;
+    if (alarm_c_low_min > 0) alarm_c_low_min += mixerIdleMs;
+    if (alarm_c_min > 0) alarm_c_min += mixerIdleMs;
+    beerMixerPauseSinceMs = 0;
+  }
   if (program[ProgramNum].capacity_num > 0) {
     //обрабатываем время включения и управляем мешалкой и насосом
 

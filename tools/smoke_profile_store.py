@@ -773,6 +773,10 @@ for token, signature in [
         "template <size_t PayloadSize>\nstatic bool decode_setup_payload_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
     ),
     (
+        "decode_setup_payload_v2only_fields(",
+        "template <size_t PayloadSize>\nstatic bool decode_setup_payload_v2only_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
+    ),
+    (
         "decode_setup_payload(",
         "static bool decode_setup_payload(const uint8_t* payload, SetupEEPROM& candidate)",
     ),
@@ -2566,10 +2570,19 @@ decode_fields_body = function_body(
     nvs_text,
     "template <size_t PayloadSize>\nstatic bool decode_setup_payload_fields(",
 )
+decode_v2only_body = function_body(
+    nvs_text,
+    "template <size_t PayloadSize>\nstatic bool decode_setup_payload_v2only_fields(",
+)
 require(bool(encode_body), "field-wise SetupEEPROM encoder is missing")
 require(bool(decode_body), "field-wise SetupEEPROM decoder is missing")
 require(bool(decode_fields_body), "shared field-wise SetupEEPROM decoder is missing")
-for body, label in [(encode_body, "encoder"), (decode_fields_body, "decoder")]:
+require(bool(decode_v2only_body), "V2-only field-wise SetupEEPROM decoder is missing")
+for body, label in [
+    (encode_body, "encoder"),
+    (decode_fields_body, "decoder"),
+    (decode_v2only_body, "V2-only decoder"),
+]:
     for forbidden in ["memcpy(payload, &candidate", "memcpy(&candidate", "sizeof(SetupEEPROM)"]:
         require(forbidden not in body, f"{label} uses raw SetupEEPROM representation")
 require("CanonicalProfile" in encode_body, "encoder does not use canonical field codec")
@@ -2598,9 +2611,25 @@ else:
         total_size == 517,
         f"profile_setup_fields.h SIZE column sums to {total_size} bytes, expected 517",
     )
+    # decode_setup_payload_fields() и decode_setup_payload_v2only_fields() читают
+    # ОДИН И ТОТ ЖЕ курсор reader двумя последовательными проходами по одному и
+    # тому же списку: первый проход потребляет байты только ALL-полей (V2ONLY
+    # пропускает без чтения), второй - только V2ONLY (ALL пропускает без чтения).
+    # Это корректно лишь тогда, когда V2ONLY-поля образуют смежный хвост списка
+    # СРАЗУ после всех ALL-полей: если найдётся ALL-поле, идущее в списке ПОСЛЕ
+    # V2ONLY-поля, первый проход остановится раньше нужного смещения, а второй
+    # прочитает не те байты. Один явный, названный особый случай (существующий
+    # V2ONLY-хвост) - это нормально; интерливинг ALL/V2ONLY - нет.
     v2only_fields = [row[1] for row in profile_field_rows if row[4] == "V2ONLY"]
+    scopes = [row[4] for row in profile_field_rows]
+    first_v2only = next((i for i, scope in enumerate(scopes) if scope == "V2ONLY"), None)
     require(
-        v2only_fields == ["SuvidHoldMinutes"],
+        first_v2only is None or all(scope == "V2ONLY" for scope in scopes[first_v2only:]),
+        "V2ONLY fields in profile_setup_fields.h must form a contiguous tail after "
+        f"all ALL fields (decode reads them in two passes over one cursor): {scopes!r}",
+    )
+    require(
+        v2only_fields[:1] == ["SuvidHoldMinutes"] if v2only_fields else False,
         f"unexpected V2ONLY field set in profile_setup_fields.h: {v2only_fields!r}",
     )
 if encode_body:
@@ -2613,10 +2642,25 @@ if decode_fields_body:
         "SAMOVAR_PROFILE_FIELDS(SAMOVAR_DECODE_FIELD)" in decode_fields_body,
         "decoder does not dispatch through the shared SAMOVAR_PROFILE_FIELDS X-macro",
     )
+if decode_v2only_body:
     require(
-        "reader.get_u16(decoded.SuvidHoldMinutes)" in decode_body,
-        "V2 decoder must decode SuvidHoldMinutes after the V1 field prefix",
+        "SAMOVAR_PROFILE_FIELDS(SAMOVAR_V2ONLY_FIELD)" in decode_v2only_body,
+        "V2-only decoder does not dispatch through the shared SAMOVAR_PROFILE_FIELDS "
+        "X-macro (a hand-written per-field read would silently miss the next V2-only "
+        "field added to the list)",
     )
+if decode_body:
+    require(
+        "decode_setup_payload_v2only_fields(reader, decoded)" in decode_body,
+        "V2 decoder must decode V2-only fields via the shared X-macro pass, not a "
+        "hand-written field-specific call",
+    )
+    for name in v2only_fields:
+        require(
+            name not in decode_body,
+            f"V2 decoder references {name} by name instead of going through the "
+            "shared V2-only X-macro pass",
+        )
 
 finish_autotune_body = function_body(beer_text, "void FinishAutoTune()")
 if finish_autotune_body:
@@ -2676,7 +2720,7 @@ if setup_body:
             "set_default_setup_profile(startupProfile)",
             "save_profile_nvs(startupProfile)",
             "SamSetup = startupProfile",
-            "xMsgSemaphore = xSemaphoreCreateBinaryStatic",
+            "xMsgSemaphore = xSemaphoreCreateMutexStatic",
             "WiFi.mode(WIFI_STA)",
             "WebServerInit()",
         ],

@@ -1,4 +1,4 @@
-def extract_function_body(source: str, signature: str) -> str:
+def extract_function_body(source: str, signature: str, *, strip_comments: bool = True) -> str:
     start = source.find(signature)
     if start < 0:
         raise ValueError(f"function not found: {signature}")
@@ -55,7 +55,8 @@ def extract_function_body(source: str, signature: str) -> str:
         elif char == "}":
             depth -= 1
             if depth == 0:
-                return source[brace + 1:index]
+                body = source[brace + 1:index]
+                return strip_cpp_comments(body) if strip_comments else body
     raise ValueError(f"function body is not closed: {signature}")
 
 
@@ -125,7 +126,9 @@ def strip_cpp_comments(source: str) -> str:
     return "".join(result)
 
 
-def extract_braced_block_after(source: str, token: str, offset: int = 0) -> tuple[str, int]:
+def extract_braced_block_after(
+    source: str, token: str, offset: int = 0, *, strip_comments: bool = True
+) -> tuple[str, int]:
     start = source.find(token, offset)
     if start < 0:
         raise ValueError(f"block token not found: {token}")
@@ -139,7 +142,8 @@ def extract_braced_block_after(source: str, token: str, offset: int = 0) -> tupl
         elif source[index] == "}":
             depth -= 1
             if depth == 0:
-                return source[brace + 1:index], index + 1
+                block = source[brace + 1:index]
+                return (strip_cpp_comments(block) if strip_comments else block), index + 1
     raise ValueError(f"block is not closed: {token}")
 
 
