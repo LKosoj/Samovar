@@ -57,73 +57,67 @@ static inline void commit_sem_target_power_response(uint16_t value) {
   mark_power_regulator_online();
 }
 
-void triggerPowerStatus(void *parameter) {
+// Общий скелет одного обмена с регулятором: взять семафор, прочистить буфер,
+// отправить команду (print), дождаться ответа максимум 2 попытками и разобрать
+// его (handle). Пост-задержка после блока выполняется ВСЕГДА, даже если семафор
+// занять не удалось — это сохранено намеренно.
+template <typename SendFn, typename Handle>
+static inline void sem_query_response(SendFn print, Handle handle) {
   String resp;
+  if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
+    vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
+    clear_serial_in_buff();
+    vTaskDelay(5 / portTICK_RATE_MS);
+    print();
+    for (int i = 0; i < 2; i++) {
+      vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\r');
+        handle(resp);
+        break;
+      }
+    }
+    xSemaphoreGive(xSemaphoreAVR);
+  }
+  vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
+}
+
+void triggerPowerStatus(void *parameter) {
   while (true) {
     process_pending_power_request();
     if (PowerOn) {
-      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
-        vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        clear_serial_in_buff();
-        vTaskDelay(5 / portTICK_RATE_MS);
-        sem_avr_print_samovar_command("+SS?\r");
-        for (int i = 0; i < 2; i++) {
-          vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
-          if (Serial2.available()) {
-            resp = Serial2.readStringUntil('\r');
-            char mode = '\0';
-            NumericParseResult result = parse_sem_power_mode_response(resp.c_str(), mode);
-            if (result.ok()) commit_sem_power_mode_response(mode);
-            else report_power_response_error("SEM +SS?", result);
-            POWER_DEBUG_LOG(if (result.ok()) WriteConsoleLog("CPM=" + get_current_power_mode_value()));
-            break;
-          }
+      sem_query_response(
+        [] { sem_avr_print_samovar_command("+SS?\r"); },
+        [](const String& resp) {
+          char mode = '\0';
+          NumericParseResult result = parse_sem_power_mode_response(resp.c_str(), mode);
+          if (result.ok()) commit_sem_power_mode_response(mode);
+          else report_power_response_error("SEM +SS?", result);
+          POWER_DEBUG_LOG(if (result.ok()) WriteConsoleLog("CPM=" + get_current_power_mode_value()));
         }
-        xSemaphoreGive(xSemaphoreAVR);
-      }
-      vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
-      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
-        vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        clear_serial_in_buff();
-        vTaskDelay(5 / portTICK_RATE_MS);
-        sem_avr_print_samovar_command("+VO?\r");
-        for (int i = 0; i < 2; i++) {
-          vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
-          if (Serial2.available()) {
-            resp = Serial2.readStringUntil('\r');
-            POWER_DEBUG_LOG(WriteConsoleLog("CPV=" + resp));
-            uint16_t value = 0;
-            NumericParseResult result = parse_sem_power_value_response(
-                resp.c_str(), SamSetup.HeaterResistant, value, /*telemetry=*/true);
-            if (result.ok()) commit_sem_current_power_response(value);
-            else report_power_response_error("SEM +VO?", result);
-            break;
-          }
+      );
+      sem_query_response(
+        [] { sem_avr_print_samovar_command("+VO?\r"); },
+        [](const String& resp) {
+          POWER_DEBUG_LOG(WriteConsoleLog("CPV=" + resp));
+          uint16_t value = 0;
+          NumericParseResult result = parse_sem_power_value_response(
+              resp.c_str(), SamSetup.HeaterResistant, value, /*telemetry=*/true);
+          if (result.ok()) commit_sem_current_power_response(value);
+          else report_power_response_error("SEM +VO?", result);
         }
-        xSemaphoreGive(xSemaphoreAVR);
-      }
-      vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
-      if (xSemaphoreTake(xSemaphoreAVR, (TickType_t)((RMVK_DEFAULT_READ_TIMEOUT) / portTICK_RATE_MS)) == pdTRUE) {
-        vTaskDelay(RMVK_READ_DELAY / 10 / portTICK_PERIOD_MS);
-        clear_serial_in_buff();
-        vTaskDelay(5 / portTICK_RATE_MS);
-        sem_avr_print_samovar_command("+VS?\r");
-        for (int i = 0; i < 2; i++) {
-          vTaskDelay(RMVK_READ_DELAY / portTICK_RATE_MS);
-          if (Serial2.available()) {
-            resp = Serial2.readStringUntil('\r');
-            POWER_DEBUG_LOG(WriteConsoleLog("TPV=" + resp));
-            uint16_t value = 0;
-            NumericParseResult result = parse_sem_power_value_response(
-                resp.c_str(), SamSetup.HeaterResistant, value, /*telemetry=*/true);
-            if (result.ok()) commit_sem_target_power_response(value);
-            else report_power_response_error("SEM +VS?", result);
-            break;
-          }
+      );
+      sem_query_response(
+        [] { sem_avr_print_samovar_command("+VS?\r"); },
+        [](const String& resp) {
+          POWER_DEBUG_LOG(WriteConsoleLog("TPV=" + resp));
+          uint16_t value = 0;
+          NumericParseResult result = parse_sem_power_value_response(
+              resp.c_str(), SamSetup.HeaterResistant, value, /*telemetry=*/true);
+          if (result.ok()) commit_sem_target_power_response(value);
+          else report_power_response_error("SEM +VS?", result);
         }
-        xSemaphoreGive(xSemaphoreAVR);
-      }
-      vTaskDelay(RMVK_READ_DELAY / 5 / portTICK_PERIOD_MS);
+      );
     }
     // Если давно не было ответа от регулятора — считаем его оффлайн.
     // Таймаут с запасом, т.к. запросы идут пачкой и с задержками.

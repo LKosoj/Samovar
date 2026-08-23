@@ -534,6 +534,15 @@ inline float get_detector_correction_step() {
   return pct / 100.0f;
 }
 
+// Пересчёт и применение скорости насоса под текущий correctionFactor детектора.
+// Общий код для веток коррекции и восстановления скорости в process_impurity_detector().
+inline void apply_detector_speed_correction(float baseSpeedRate) {
+  if (baseSpeedRate > 0) {
+    float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
+    set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true, false);
+  }
+}
+
 /**
  * Основная логика работы детектора
  */
@@ -734,10 +743,14 @@ void process_impurity_detector() {
   }
 
   // Реакция на тренд
+  // Пауза детектора не меняется ни одной из веток ниже раньше своего чтения
+  // (program_Wait выставляется только внутри критической ветки, уже после
+  // использования isDetectorPause), а сами ветки взаимоисключающие - поэтому
+  // значение можно посчитать один раз до цепочки if/else if.
+  bool isDetectorPause = (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR);
   if (impurityDetector.criticalConfirm >= DETECTOR_CRITICAL_CONFIRM) {
     // КРИТИЧЕСКИЙ ПРОСКОК: Ставим на ПАУЗУ (всегда реагируем на критический)
     // Но только если нет ручной паузы пользователя
-    bool isDetectorPause = (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR);
     if (!program_Wait && !PauseOn) {
       if (!set_program_wait_type(PROGRAM_WAIT_DETECTOR, pdMS_TO_TICKS(500))) {
         SendMsg("Детектор: не удалось установить тип паузы.", WARNING_MSG);
@@ -763,7 +776,6 @@ void process_impurity_detector() {
     // ПРЕДУПРЕЖДЕНИЕ: Постепенно снижаем скорость
     // Но только если нет ручной паузы пользователя
     // И не устанавливаем статус "коррекция", если пауза уже установлена детектором
-    bool isDetectorPause = (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR);
     if (!PauseOn && !isDetectorPause) {
       impurityDetector.detectorStatus = 1; // Correction
 
@@ -806,10 +818,8 @@ void process_impurity_detector() {
         const bool factorChanged = impurityDetector.correctionFactor != previousFactor;
 
         // Применяем новую скорость
-        float baseSpeedRate = CurrentBaseSpeedRate;
-        if (factorChanged && baseSpeedRate > 0) {
-          float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true, false);
+        if (factorChanged) {
+          apply_detector_speed_correction(CurrentBaseSpeedRate);
         }
 
         if (factorChanged) {
@@ -823,7 +833,6 @@ void process_impurity_detector() {
     // СТАБИЛЬНО: Плавное восстановление скорости (используется гистерезис)
     // НЕ сбрасываем detectorStatus в 0, если пауза была установлена детектором
     // Статус должен оставаться 2 (критический проскок), пока пауза активна
-    bool isDetectorPause = (program_Wait && currentWaitType == PROGRAM_WAIT_DETECTOR);
     if (!isDetectorPause) {
       impurityDetector.detectorStatus = 0; // Stable - только если пауза НЕ от детектора
     }
@@ -836,11 +845,7 @@ void process_impurity_detector() {
         impurityDetector.lastCorrectionTime = now;
 
         // Применяем новую скорость
-        float baseSpeedRate = CurrentBaseSpeedRate;
-        if (baseSpeedRate > 0) {
-          float baseStepSpeed = get_speed_from_rate(baseSpeedRate);
-          set_pump_speed(baseStepSpeed * impurityDetector.correctionFactor, true, false);
-        }
+        apply_detector_speed_correction(CurrentBaseSpeedRate);
       }
     }
   }

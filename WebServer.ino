@@ -2275,14 +2275,18 @@ void web_command(AsyncWebServerRequest *request) {
   float voltage = 0.0f;
 #endif
   NumericParseResult parseResult = numeric_parse_result(NUMERIC_PARSE_OK);
+  String commandKeySuffix;
   if (action == "mixer" || action == "distiller" ||
       action == "startbk" || action == "startnbk") {
     parseResult = parse_exact_bool(actionParam->value().c_str(), boolValue);
+    commandKeySuffix = boolValue ? "=1" : "=0";
   } else if (action == "watert") {
     parseResult = parse_control_water_pwm(actionParam->value().c_str(), waterPwm);
+    commandKeySuffix = "=" + String(waterPwm);
   } else if (action == "pumpspeed") {
     parseResult = parse_control_rate_steps(
         actionParam->value().c_str(), SamSetup.StepperStepMl, pumpSpeedSteps);
+    commandKeySuffix = "=" + String(pumpSpeedSteps);
   } else if (action == "pnbk") {
     parseResult = parse_control_nbk(
         actionParam->value().c_str(), SamSetup.StepperStepMlI2C, nbkCommand);
@@ -2290,6 +2294,8 @@ void web_command(AsyncWebServerRequest *request) {
         SamSetup.StepperStepMlI2C == 0) {
       parseResult = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
     }
+    commandKeySuffix = "=" + String(uint8_t(nbkCommand.kind));
+    commandKeySuffix += ":" + String(nbkCommand.stepSpeed);
   }
 #ifdef SAMOVAR_USE_POWER
   else if (action == "voltage") {
@@ -2305,6 +2311,12 @@ void web_command(AsyncWebServerRequest *request) {
     if (parseResult.ok()) {
       parseResult = parse_control_power(actionParam->value().c_str(), maxValue, voltage);
     }
+    commandKeySuffix = "=" + String(voltage, 6);
+  }
+#endif
+#ifdef USE_LUA
+  else if (action == "lua" || action == "luastr") {
+    commandKeySuffix = "=" + actionParam->value();
   }
 #endif
   if (!parseResult.ok()) {
@@ -2313,27 +2325,7 @@ void web_command(AsyncWebServerRequest *request) {
   }
 
   String commandKey = action;
-  if (action == "mixer" || action == "distiller" ||
-      action == "startbk" || action == "startnbk") {
-    commandKey += boolValue ? "=1" : "=0";
-  } else if (action == "watert") {
-    commandKey += "=" + String(waterPwm);
-  } else if (action == "pumpspeed") {
-    commandKey += "=" + String(pumpSpeedSteps);
-  } else if (action == "pnbk") {
-    commandKey += "=" + String(uint8_t(nbkCommand.kind));
-    commandKey += ":" + String(nbkCommand.stepSpeed);
-  }
-#ifdef SAMOVAR_USE_POWER
-  else if (action == "voltage") {
-    commandKey += "=" + String(voltage, 6);
-  }
-#endif
-#ifdef USE_LUA
-  else if (action == "lua" || action == "luastr") {
-    commandKey += "=" + actionParam->value();
-  }
-#endif
+  commandKey += commandKeySuffix;
 
   bool bypassThrottle = action == "reset" || action == "reboot" || action == "resetwifi";
   if (!bypassThrottle && commandKey.length() > 0 && commandKey == last_command_key && millis() - last_command_time < 1500) {

@@ -73,7 +73,11 @@ static void set_pump_speed(float speed, bool, bool) { setPumpSpeedCalls++; lastP
 static int sendMsgCalls = 0;
 static void SendMsg(const String& message, MESSAGE_TYPE) { sendMsgCalls++; (void)message; }
 
-// ---- Реальный код под тестом (extract_braced_block_after) ----
+// ---- Реальный код под тестом (extract_function_body / extract_braced_block_after) ----
+inline void apply_detector_speed_correction(float baseSpeedRate) {
+@APPLY_DETECTOR_SPEED_CORRECTION_BODY@
+}
+
 static void apply_speed_correction(unsigned long now, float warningThreshold) {
 @CORRECTION_BLOCK@
 }
@@ -157,7 +161,11 @@ def build_harness(detector_source: str) -> str:
         "  const unsigned long correctionInterval = correctionIntervalFixture;\n"
         "  if (now - impurityDetector.lastCorrectionTime > correctionInterval) {" + block + "}"
     )
-    return HARNESS_TEMPLATE.replace("@CORRECTION_BLOCK@", wrapped)
+    speed_correction_body = extract_function_body(
+        detector_source, "inline void apply_detector_speed_correction(float baseSpeedRate)"
+    )
+    harness = HARNESS_TEMPLATE.replace("@APPLY_DETECTOR_SPEED_CORRECTION_BODY@", speed_correction_body)
+    return harness.replace("@CORRECTION_BLOCK@", wrapped)
 
 
 def check_detector_switch(detector_source: str, web_source: str) -> list[str]:

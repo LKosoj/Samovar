@@ -85,9 +85,9 @@ if mode_registry:
         row = mode_registry[row_start:row_end + 1]
         require_token("mode_registry.h LUA row", row, "SAMOVAR_LUA_ALARM_FN")
         fields = [f.strip() for f in row.strip("{}").rstrip(",").split(",")]
-        if len(fields) != 10:
+        if len(fields) != 12:
             errors.append(
-                f"mode_registry.h LUA row: expected 10 fields, found {len(fields)}: {row}"
+                f"mode_registry.h LUA row: expected 12 fields, found {len(fields)}: {row}"
             )
         else:
             # Field 8 (index 7, 0-based) is `alarm`.
@@ -100,6 +100,13 @@ if mode_registry:
                 errors.append(
                     "mode_registry.h LUA row: finish/status fields must remain nullptr "
                     f"(got finish={fields[8]!r}, status={fields[9]!r})"
+                )
+            # buttonPressAction/startBusyName (fields 11-12) must stay nullptr:
+            # режим Lua не обслуживает основную кнопку.
+            if fields[10] != "nullptr" or fields[11] != "nullptr":
+                errors.append(
+                    "mode_registry.h LUA row: buttonPressAction/startBusyName must remain nullptr "
+                    f"(got buttonPressAction={fields[10]!r}, startBusyName={fields[11]!r})"
                 )
 
 # --- samovar_api.h macro definitions -------------------------------------------------------

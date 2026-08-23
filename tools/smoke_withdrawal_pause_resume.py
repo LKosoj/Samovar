@@ -40,6 +40,10 @@ SIGNATURES = {
     ),
     "withdrawal": ("void withdrawal(void)", "logic.h"),
     "program_type_at": ("inline ProgramType program_type_at(uint8_t index)", "runtime_helpers.h"),
+    "program_type_one_of": (
+        "inline bool program_type_one_of(ProgramType type, const char *allowedTypes)",
+        "program_types.h",
+    ),
     "is_first_body_program_after_heads": (
         "bool is_first_body_program_after_heads(uint8_t currentProgram, ProgramType currentType)",
         "impurity_detector.h",
@@ -86,6 +90,7 @@ using ProgramType = char;
 constexpr ProgramType PROGRAM_TYPE_NONE = '\0';
 constexpr uint8_t PROGRAM_MAX = 10;
 inline bool program_type_empty(ProgramType type) { return type == PROGRAM_TYPE_NONE; }
+@PROGRAM_TYPE_ONE_OF_BODY@
 
 struct WProgram {
   ProgramType WType = PROGRAM_TYPE_NONE;
@@ -654,6 +659,13 @@ def build_harness() -> str:
     harness = harness.replace(
         "@PROGRAM_TYPE_AT_BODY@",
         wrap("program_type_at", "static ProgramType program_type_at(uint8_t index) "),
+    )
+    harness = harness.replace(
+        "@PROGRAM_TYPE_ONE_OF_BODY@",
+        wrap(
+            "program_type_one_of",
+            "static bool program_type_one_of(ProgramType type, const char *allowedTypes) ",
+        ),
     )
     harness = harness.replace(
         "@IS_FIRST_BODY_PROGRAM_AFTER_HEADS_BODY@",

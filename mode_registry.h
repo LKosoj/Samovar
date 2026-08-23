@@ -17,6 +17,8 @@ struct ModeOps {
   ModeVoidFn alarm;
   ModeVoidFn finish;
   ModeStatusFn status;
+  ModeVoidFn buttonPressAction;  // короткое нажатие при PowerOn == true; nullptr — режим кнопку не обслуживает
+  const char* startBusyName;     // имя режима для сообщения об занятой очереди команд
 };
 
 inline void mode_alarm_nbk() {
@@ -28,21 +30,25 @@ inline void mode_alarm_beer() {
   mode_request_water_flow_emergency_if_needed();
 }
 
+inline void mode_button_press_beer() {
+  run_beer_program(ProgramNum + 1);
+}
+
 // Единственное место, где объявлена таблица режимов и её размер. mode_registry()
 // и mode_registry_count() читают её только отсюда — количество строк больше не
 // может разойтись с фактическим размером массива.
 inline const ModeOps* mode_registry_table(size_t& count) {
   static const ModeOps ops[] = {
-    {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr},
-    {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text},
-    {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text},
+    {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr, nullptr, nullptr},
+    {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text, distiller_finish, "дистилляции"},
+    {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text, mode_button_press_beer, "пива"},
     // [P7 п.2] startCommand=SAMOVAR_NONE: у БК нет своего "следующая программа"/старт-действия
     // через SAMOVAR_START (это команда ректификации) - веб-экшен action=start для БК не должен
     // молча дёргать чужой (ректификационный) старт. SUVID/LUA намеренно НЕ трогаем (асимметрия).
-    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text},
-    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text},
-    {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr},
-    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr},
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text, bk_finish, "БК"},
+    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text, nbk_finish, "НБК"},
+    {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr, nullptr, nullptr},
+    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr, nullptr, nullptr},
   };
   count = sizeof(ops) / sizeof(ops[0]);
   return ops;
@@ -175,6 +181,18 @@ inline bool mode_finish_by_status(int16_t status) {
   if (ops == nullptr || ops->finish == nullptr) return false;
   ops->finish();
   return true;
+}
+
+inline void mode_dispatch_button_press() {
+  const ModeOps* ops = mode_ops_by_mode(Samovar_Mode);
+  if (ops == nullptr || ops->buttonPressAction == nullptr) return;
+  if (!PowerOn) {
+    if (!queue_samovar_command(ops->powerOnCommand)) {
+      SendMsg(String("Очередь команд занята: старт ") + ops->startBusyName + " не поставлен", WARNING_MSG);
+    }
+  } else {
+    ops->buttonPressAction();
+  }
 }
 
 inline bool mode_status_by_status(int16_t status, String& text) {

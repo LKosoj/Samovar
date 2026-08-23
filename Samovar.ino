@@ -2913,31 +2913,7 @@ void loop() {
         }
       }
     } else if (mainButtonPressed) {
-      if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE) {
-        //если дистилляция включаем или выключаем
-        if (!PowerOn) {
-          if (!queue_samovar_command(mode_power_on_command(Samovar_Mode))) SendMsg("Очередь команд занята: старт дистилляции не поставлен", WARNING_MSG);
-        } else
-          distiller_finish();
-      } else if (Samovar_Mode == SAMOVAR_BK_MODE) {
-        //если дистилляция включаем или выключаем
-        if (!PowerOn) {
-          if (!queue_samovar_command(mode_power_on_command(Samovar_Mode))) SendMsg("Очередь команд занята: старт БК не поставлен", WARNING_MSG);
-        } else
-          bk_finish();
-      } else if (Samovar_Mode == SAMOVAR_NBK_MODE) {
-        //если НБК включаем или выключаем
-        if (!PowerOn) {
-          if (!queue_samovar_command(mode_power_on_command(Samovar_Mode))) SendMsg("Очередь команд занята: старт НБК не поставлен", WARNING_MSG);
-        } else
-          nbk_finish();
-      } else if (Samovar_Mode == SAMOVAR_BEER_MODE) {
-        //если пиво включаем или двигаем программу
-        if (!PowerOn) {
-          if (!queue_samovar_command(mode_power_on_command(Samovar_Mode))) SendMsg("Очередь команд занята: старт пива не поставлен", WARNING_MSG);
-        } else
-          run_beer_program(ProgramNum + 1);
-      }
+      mode_dispatch_button_press();
     }
   }
 #endif

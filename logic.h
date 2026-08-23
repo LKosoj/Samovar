@@ -162,12 +162,12 @@ void withdrawal(void) {
   auto handlePauseBySensor = [&](DSSensor& sensor, ProgramWaitType waitType, const char* sensorLabel) -> bool {
     float c_temp = sensor.BodyTemp;  // датчик уже приведён к шкале с учетом настройки коррекции давления
     //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура вышла за пределы или корректируем пределы
-    if ((currentType == 'B' || currentType == 'C') && (sensor.avgTemp >= c_temp + sensor.SetTemp) && sensor.BodyTemp > 0) {
+    if (program_type_one_of(currentType, "BC") && (sensor.avgTemp >= c_temp + sensor.SetTemp) && sensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
       //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
       if (hasTwoNextPrograms && currentType == 'C' &&
-          (program_type_at(currentProgram + 1) == 'B' || program_type_at(currentProgram + 1) == 'C' || program_type_at(currentProgram + 1) == 'P') &&
-          (program_type_at(currentProgram + 2) == 'B' || program_type_at(currentProgram + 2) == 'C')) {
+          program_type_one_of(program_type_at(currentProgram + 1), "BCP") &&
+          program_type_one_of(program_type_at(currentProgram + 2), "BC")) {
         set_body_temp();
       }
       //Если это первая строка с телом после голов (в т.ч. через строки паузы P) - корректируем Т тела
@@ -201,7 +201,7 @@ void withdrawal(void) {
     // другого сенсора и "(Детектор)"), снимала чужую паузу, а соответствующая ветка тут
     // же ставила её снова → осцилляция каждые Delay сек (спам, зуммер, пуски насоса).
     // [C-13] overflow-safe: t_min > 0 — сентинель "таймер установлен"; (int32_t)(millis()-t_min) >= 0 — истёк
-    } else if ((currentType == 'B' || currentType == 'C') && sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && currentWaitType == waitType) {
+    } else if (program_type_one_of(currentType, "BC") && sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && currentWaitType == waitType) {
       //продолжаем отбор
       SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
       t_min = 0;
@@ -490,7 +490,7 @@ String get_beer_status_text() {
     local = local + "Выполнение Lua скрипта";
   }
 
-  if (PowerOn && (currentType == 'P' || currentType == 'B') && begintime > 0) {
+  if (PowerOn && program_type_one_of(currentType, "PB") && begintime > 0) {
     // [P2 п.5+6] Прогресс считается по времени "в работе": простой (ручная
     // пауза и/или выход за гистерезис на 'P') не засчитывается в выдержку строки.
     float elapsedMs = (float)(millis() - begintime) - (float)beerStageIdleAccumMs;
@@ -680,7 +680,7 @@ inline bool validate_rect_program_startable(String& errorMessage) {
   for (uint8_t i = 0; i < ProgramLen && i < PROGRAM_END; i++) {
     ProgramType t = program[i].WType;
     if (program_type_empty(t)) break;
-    if ((t == 'H' || t == 'B' || t == 'C' || t == 'T') && program[i].Volume == 0 && program[i].Temp == 0) {
+    if (program_type_one_of(t, "HBCT") && program[i].Volume == 0 && program[i].Temp == 0) {
       errorMessage = "Ошибка программы: строка " + String(i + 1) + " никогда не завершится (не заданы объём и температура)";
       return false;
     }
@@ -705,44 +705,24 @@ void run_program(uint8_t num) {
   }
 
   // Проверяем смену типа программы для сброса детектора
-  // Сбрасываем детектор только при переходе:
+  // Сбрасываем детектор при переходе между "накоплением тела" (B/C) и остальными типами:
   // - H (головы) -> B/C (тело/предзахлеб)
   // - B/C (тело/предзахлеб) -> T (хвосты)
-  // НЕ сбрасываем при переходе B <-> C (между телом и предзахлебом)
-  bool needReset = false;
-  
+  // НЕ сбрасываем при переходе B <-> C (между телом и предзахлебом - оба входят в накопление тела)
+  bool needReset = true;
+
   if (num < PROGRAM_MAX && !program_type_empty(program[num].WType)) {
     ProgramType currentType = program[num].WType;
-    
-    // Проверяем предыдущую программу, если она существует
+
     if (num > 0 && !program_type_empty(program[num - 1].WType)) {
       ProgramType prevType = program[num - 1].WType;
-      
-      // Переход с голов на тело/предзахлеб
-      if (prevType == 'H' && (currentType == 'B' || currentType == 'C')) {
-        needReset = true;
-      }
-      // Переход с тела/предзахлеба на хвосты
-      else if ((prevType == 'B' || prevType == 'C') && currentType == 'T') {
-        needReset = true;
-      }
-      // Переход с любого другого типа на тело/предзахлеб (если не было B/C)
-      else if (prevType != 'B' && prevType != 'C' && (currentType == 'B' || currentType == 'C')) {
-        needReset = true;
-      }
-      // Переход с тела/предзахлеба на любой другой тип (кроме B/C)
-      else if ((prevType == 'B' || prevType == 'C') && currentType != 'B' && currentType != 'C') {
-        needReset = true;
-      }
-      // Переход B <-> C - НЕ сбрасываем (needReset остается false)
-    } else {
-      // Первый запуск или предыдущая программа не определена - всегда сбрасываем
-      needReset = true;
+      bool prevWasBodyPick = program_type_one_of(prevType, "BC");
+      bool currentIsBodyPick = program_type_one_of(currentType, "BC");
+      needReset = (prevWasBodyPick != currentIsBodyPick);
     }
-  } else {
-    // Если тип текущей программы не определен - сбрасываем
-    needReset = true;
+    // иначе — первая строка программы или предыдущая не определена: сбрасываем (needReset остаётся true)
   }
+  // иначе — тип текущей строки не определён: сбрасываем (needReset остаётся true)
   
   ProgramNum = num;
   if (ProgramNum < PROGRAM_MAX && !program_type_empty(program[ProgramNum].WType)) {
@@ -771,8 +751,8 @@ void run_program(uint8_t num) {
   if (program[num].WType == 'C' && alarm_c_low_min == 0) alarm_c_low_min = millis();
 #endif
   p_s = "Программа: старт строки  №" + (String)(num + 1);
-  if (program[num].WType == 'H' || program[num].WType == 'B' || program[num].WType == 'T' || program[num].WType == 'C') {
-    if (program[num].WType == 'H' || program[num].WType == 'T') {
+  if (program_type_one_of(program[num].WType, "HBTC")) {
+    if (program_type_one_of(program[num].WType, "HT")) {
       SteamSensor.BodyTemp = 0;
       PipeSensor.BodyTemp = 0;
       WaterSensor.BodyTemp = 0;
@@ -810,7 +790,7 @@ void run_program(uint8_t num) {
     //Считаем, что колонна стабильна
     //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
     //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
-    if ((program[num].WType == 'B' || program[num].WType == 'C') && SteamSensor.BodyTemp == 0) {
+    if (program_type_one_of(program[num].WType, "BC") && SteamSensor.BodyTemp == 0) {
       set_body_temp();
     }
   } else if (program[num].WType == 'P') {
@@ -874,7 +854,7 @@ float get_temp_by_pressure(float start_pressure, float start_temp, float current
 void set_body_temp() {
   reset_impurity_detector();
   ProgramType currentType = current_program_type();
-  if (currentType == 'B' || currentType == 'C' || currentType == 'P') {
+  if (program_type_one_of(currentType, "BCP")) {
     SteamSensor.Start_Pressure = bme_pressure;
     SteamSensor.BodyTemp = SteamSensor.avgTemp;
     PipeSensor.BodyTemp = PipeSensor.avgTemp;

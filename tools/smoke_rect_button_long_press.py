@@ -59,10 +59,7 @@ def validate_source(source: str) -> list[str]:
             "if (!mode_switch_in_progress())",
             "if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE)",
             "else if (mainButtonPressed)",
-            "if (Samovar_Mode == SAMOVAR_DISTILLATION_MODE)",
-            "else if (Samovar_Mode == SAMOVAR_BK_MODE)",
-            "else if (Samovar_Mode == SAMOVAR_NBK_MODE)",
-            "else if (Samovar_Mode == SAMOVAR_BEER_MODE)",
+            "mode_dispatch_button_press();",
         ],
         errors,
     )
