@@ -32,6 +32,7 @@ APP_JS = ROOT / "data_raw" / "app.js"
 STRING_UTILS = ROOT / "string_utils.h"
 
 CPP_HARNESS = r"""
+#include <cstdint>
 #include <string>
 #include <cstdio>
 
@@ -50,6 +51,28 @@ class String {
   const char* c_str() const { return v.c_str(); }
   std::string v;
 };
+
+// Минимальный двойник Arduino Print: json_write_escaped() пишет только через
+// двухаргументный write(buffer, size).
+class Print {
+ public:
+  virtual ~Print() {}
+  virtual size_t write(const uint8_t* buffer, size_t size) = 0;
+};
+
+// Тонкий Print-приёмник поверх String - копия JsonStringPrint из string_utils.h.
+class JsonStringPrint : public Print {
+ public:
+  explicit JsonStringPrint(String& target) : target_(target) {}
+  size_t write(const uint8_t* buffer, size_t size) override {
+    for (size_t i = 0; i < size; i++) target_ += static_cast<char>(buffer[i]);
+    return size;
+  }
+ private:
+  String& target_;
+};
+
+__JSON_WRITE_ESCAPED__
 
 __STRING_UTILS__
 
@@ -273,11 +296,19 @@ def run_cpp(errors):
     utils = STRING_UTILS.read_text(encoding="utf-8", errors="ignore")
     try:
         json_body = extract_function_body(utils, "inline String toJsonString(const String& s)")
+        json_write_escaped_body = extract_function_body(
+            utils,
+            "inline bool json_write_escaped(Print& out, const char* text, size_t length)",
+        )
     except Exception as exc:
         errors.append(f"string_utils.h: не найдено тело toJsonString(): {exc}")
         return
 
     program = CPP_HARNESS.replace(
+        "__JSON_WRITE_ESCAPED__",
+        "static bool json_write_escaped(Print& out, const char* text, size_t length) {\n"
+        + json_write_escaped_body + "\n}",
+    ).replace(
         "__STRING_UTILS__",
         "static String toJsonString(const String& s) {\n" + json_body + "\n}",
     ).replace(

@@ -48,6 +48,26 @@ struct String : std::string {
   char charAt(size_t i) const { return (*this)[i]; }
 };
 
+// Минимальный двойник Arduino Print: json_write_escaped() пишет только через
+// двухаргументный write(buffer, size).
+class Print {
+ public:
+  virtual ~Print() {}
+  virtual size_t write(const uint8_t* buffer, size_t size) = 0;
+};
+
+// Тонкий Print-приёмник поверх String - копия JsonStringPrint из string_utils.h.
+class JsonStringPrint : public Print {
+ public:
+  explicit JsonStringPrint(String& target) : target_(target) {}
+  size_t write(const uint8_t* buffer, size_t size) override {
+    for (size_t i = 0; i < size; i++) target_ += static_cast<char>(buffer[i]);
+    return size;
+  }
+ private:
+  String& target_;
+};
+
 struct RecordedResponse {
   bool sent = false;
   uint16_t status = 0;
@@ -126,6 +146,8 @@ static void send_no_store_response(AsyncWebServerRequest* request,
   request->response.body = body;
   request->response.cacheControl = "no-store";
 }
+
+@JSON_WRITE_ESCAPED@
 
 @JSON_UTILS@
 
@@ -282,6 +304,14 @@ int main() {
 '''
     string_utils = (ROOT / "string_utils.h").read_text(encoding="utf-8", errors="ignore")
     web_server = WEB_SERVER.read_text(encoding="utf-8", errors="ignore")
+    json_write_escaped = (
+        "static bool json_write_escaped(Print& out, const char* text, size_t length) {\n"
+        + extract_function_body(
+            string_utils,
+            "inline bool json_write_escaped(Print& out, const char* text, size_t length)",
+        )
+        + "\n}"
+    )
     json_utils = "static String toJsonString(const String& s) {\n" + extract_function_body(
         string_utils, "inline String toJsonString(const String& s)"
     ) + "\n}"
@@ -296,7 +326,8 @@ int main() {
         + "\n}"
     )
     return (
-        template.replace("@JSON_UTILS@", json_utils)
+        template.replace("@JSON_WRITE_ESCAPED@", json_write_escaped)
+        .replace("@JSON_UTILS@", json_utils)
         .replace("@ERROR_ENVELOPE@", envelope)
         .replace("@HANDLER_BODY@", handler)
     )

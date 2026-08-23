@@ -127,6 +127,15 @@ inline bool take_pending_flag(volatile bool& flag) {
   return has;
 }
 
+template <typename T>
+inline bool assign_locked_runtime_field(T& destination, const T& value, TickType_t timeout = pdMS_TO_TICKS(50)) {
+  bool locked = runtime_state_lock(timeout);
+  if (!locked) return false;
+  destination = value;
+  runtime_state_unlock(true);
+  return true;
+}
+
 inline ProgramType program_type_at(uint8_t index) {
   if (index >= PROGRAM_MAX) return PROGRAM_TYPE_NONE;
   return program[index].WType;
@@ -178,11 +187,7 @@ inline bool set_program_wait_type(ProgramWaitType waitType, TickType_t timeout =
 }
 
 inline bool copy_session_description(String& description, TickType_t timeout = pdMS_TO_TICKS(50)) {
-  bool locked = runtime_state_lock(timeout);
-  if (!locked) return false;
-  description = SessionDescription;
-  runtime_state_unlock(true);
-  return true;
+  return assign_locked_runtime_field(description, SessionDescription, timeout);
 }
 
 inline bool copy_mqtt_session_description(String& description, TickType_t timeout = pdMS_TO_TICKS(500)) {
@@ -241,11 +246,7 @@ inline bool reset_lua_message_cursor(TickType_t timeout = pdMS_TO_TICKS(50)) {
 }
 
 inline bool set_lua_status_value(const String& status, TickType_t timeout = pdMS_TO_TICKS(50)) {
-  bool locked = runtime_state_lock(timeout);
-  if (!locked) return false;
-  Lua_status = status;
-  runtime_state_unlock(true);
-  return true;
+  return assign_locked_runtime_field(Lua_status, status, timeout);
 }
 
 enum RuntimeAjaxQueryKind : uint8_t {
@@ -300,11 +301,7 @@ inline RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
 }
 
 inline bool copy_current_power_mode_value(String& mode, TickType_t timeout = pdMS_TO_TICKS(50)) {
-  bool locked = runtime_state_lock(timeout);
-  if (!locked) return false;
-  mode = current_power_mode;
-  runtime_state_unlock(true);
-  return true;
+  return assign_locked_runtime_field(mode, current_power_mode, timeout);
 }
 
 inline String get_current_power_mode_value() {

@@ -211,6 +211,21 @@ void pressure_sensor_get() {
 }
 #endif
 
+// Дельта своя у каждого датчика (SamSetup.DeltaSteamTemp/.../DeltaACPTemp).
+// Порядок обязан совпадать с sensorList (Samovar.h): Steam,Pipe,Water,Tank,ACP.
+struct SensorDeltaField {
+  DSSensor* sensor;
+  float SetupEEPROM::*delta;
+};
+
+static const SensorDeltaField kSensorDeltaFields[DS_SENSOR_COUNT] = {
+    {sensorList[0], &SetupEEPROM::DeltaSteamTemp},
+    {sensorList[1], &SetupEEPROM::DeltaPipeTemp},
+    {sensorList[2], &SetupEEPROM::DeltaWaterTemp},
+    {sensorList[3], &SetupEEPROM::DeltaTankTemp},
+    {sensorList[4], &SetupEEPROM::DeltaACPTemp},
+};
+
 //***************************************************************************************************************
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
@@ -247,40 +262,16 @@ void DS_getvalue(void) {
 
   sensors.requestTemperatures();
 
-  if (ss > -10) {
-    SteamSensor.avgTemp = ss + SamSetup.DeltaSteamTemp;
-    SteamSensor.PrevTemp = SteamSensor.avgTemp;
-    SteamSensor.ErrCount = 0;
-  } else {
-    if (SteamSensor.PrevTemp > 0) SteamSensor.ErrCount++;
-  }
-  if (ps > -10) {
-    PipeSensor.avgTemp = ps + SamSetup.DeltaPipeTemp;
-    PipeSensor.PrevTemp = PipeSensor.avgTemp;
-    PipeSensor.ErrCount = 0;
-  } else {
-    if (PipeSensor.PrevTemp > 0) PipeSensor.ErrCount++;
-  }
-  if (ws > -10) {
-    WaterSensor.avgTemp = ws + SamSetup.DeltaWaterTemp;
-    WaterSensor.PrevTemp = WaterSensor.avgTemp;
-    WaterSensor.ErrCount = 0;
-  } else {
-    if (WaterSensor.PrevTemp > 0) WaterSensor.ErrCount++;
-  }
-  if (ts > -10) {
-    TankSensor.avgTemp = ts + SamSetup.DeltaTankTemp;
-    TankSensor.PrevTemp = TankSensor.avgTemp;
-    TankSensor.ErrCount = 0;
-  } else {
-    if (TankSensor.PrevTemp > 0) TankSensor.ErrCount++;
-  }
-  if (acp > -10) {
-    ACPSensor.avgTemp = acp + SamSetup.DeltaACPTemp;
-    ACPSensor.PrevTemp = ACPSensor.avgTemp;
-    ACPSensor.ErrCount = 0;
-  } else {
-    if (ACPSensor.PrevTemp > 0) ACPSensor.ErrCount++;
+  const float raw[DS_SENSOR_COUNT] = {ss, ps, ws, ts, acp};
+  for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++) {
+    DSSensor& sensor = *kSensorDeltaFields[i].sensor;
+    if (raw[i] > -10) {
+      sensor.avgTemp = raw[i] + SamSetup.*kSensorDeltaFields[i].delta;
+      sensor.PrevTemp = sensor.avgTemp;
+      sensor.ErrCount = 0;
+    } else {
+      if (sensor.PrevTemp > 0) sensor.ErrCount++;
+    }
   }
 
 #ifdef __SAMOVAR_DEBUG1
@@ -548,16 +539,8 @@ void reset_sensor_counter(void) {
   old_pressure_value = 0.0;
 
   ProgramNum = 0;
-  SteamSensor.BodyTemp = 0;
-  PipeSensor.BodyTemp = 0;
-  WaterSensor.BodyTemp = 0;
-  TankSensor.BodyTemp = 0;
-  ACPSensor.BodyTemp = 0;
-  SteamSensor.PrevTemp = 0;
-  PipeSensor.PrevTemp = 0;
-  WaterSensor.PrevTemp = 0;
-  TankSensor.PrevTemp = 0;
-  ACPSensor.PrevTemp = 0;
+  for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++) sensorList[i]->BodyTemp = 0;
+  for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++) sensorList[i]->PrevTemp = 0;
 
 
   ActualVolumePerHour = 0;

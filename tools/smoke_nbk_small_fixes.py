@@ -93,8 +93,7 @@ if nbk:
             run_body,
             [
                 "if (num > 0 && !PowerOn) {",
-                "ProgramNum = 0;",
-                "startval = SAMOVAR_STARTVAL_IDLE;",
+                "nbk_cancel_program_start(",
                 "ProgramNum = num;",
             ],
             errors,

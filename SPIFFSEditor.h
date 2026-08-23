@@ -45,21 +45,8 @@ static ExcludeList *excludes = NULL;
 static String spiffsEditorJsonEscape(const String& value) {
   String escaped;
   escaped.reserve(value.length());
-  for (size_t i = 0; i < value.length(); i++) {
-    char c = value[i];
-    if (c == '"' || c == '\\') {
-      escaped += '\\';
-      escaped += c;
-    } else if (c == '\n') {
-      escaped += "\\n";
-    } else if (c == '\r') {
-      escaped += "\\r";
-    } else if (c == '\t') {
-      escaped += "\\t";
-    } else {
-      escaped += c;
-    }
-  }
+  JsonStringPrint sink(escaped);
+  json_write_escaped(sink, value.c_str(), value.length());
   return escaped;
 }
 

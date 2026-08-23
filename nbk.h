@@ -905,6 +905,17 @@ void handle_nbk_stage_work() {
   }
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
+// [П2] Общая часть шести идентичных отказов старта/перехода строки НБК:
+// alarm-сообщение + возврат в IDLE (mode_cancel_process_start, как в beer.h) +
+// сброс текущей строки программы. Закрытие лога (nbk_close_data_log /
+// mode_warn_log_close_failed) вызывающий код добавляет явно ПОСЛЕ этого
+// хелпера — у площадок разный хвост (два разных текста WARNING при занятости
+// лога, C/F vs E) и не у всех он вообще есть (A/B/D) — сводить это в один bool
+// нельзя, не теряя различие сообщений.
+inline void nbk_cancel_program_start(const String& message) {
+  mode_cancel_process_start(message);
+  ProgramNum = 0;
+}
 
 // Смена программы
 void run_nbk_program(uint8_t num, bool workConfirmed) {
@@ -1030,27 +1041,16 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
     return;
   }
   if (!PowerOn && power_transition_active()) {
-    SendMsg("Выключение нагрева ещё не завершено. Старт НБК отменён.", ALARM_MSG);
-    ProgramNum = 0;
-    startval = SAMOVAR_STARTVAL_IDLE;
-    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+    nbk_cancel_program_start("Выключение нагрева ещё не завершено. Старт НБК отменён.");
     return;
   }
   if (num > 0 && !PowerOn) { // [T5] нагрев уже выключен (не переходный процесс) — переход строки НБК запрещён
-    SendMsg("Нагрев НБК выключен. Переход к строке №" + String(num + 1) + " отменён.", ALARM_MSG);
-    ProgramNum = 0;
-    startval = SAMOVAR_STARTVAL_IDLE;
-    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+    nbk_cancel_program_start("Нагрев НБК выключен. Переход к строке №" + String(num + 1) + " отменён.");
     return;
   }
   if (num == 0) {
     if (!nbk_capture_session_config()) {
-      SendMsg(
-          "Запуск НБК отклонён: некорректные настройки НБК или питания.",
-          ALARM_MSG);
-      ProgramNum = 0;
-      startval = SAMOVAR_STARTVAL_IDLE;
-      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+      nbk_cancel_program_start("Запуск НБК отклонён: некорректные настройки НБК или питания.");
       nbk_close_data_log();
       return;
     }
@@ -1073,20 +1073,14 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
     stats.activeVolume = 0;
     stats.activeFeedMs = 0;
     if (!create_data()) {
-      SendMsg("Ошибка создания файла лога. Старт НБК отменён.", ALARM_MSG);
-      ProgramNum = 0;
-      startval = SAMOVAR_STARTVAL_IDLE;
-      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+      nbk_cancel_program_start("Ошибка создания файла лога. Старт НБК отменён.");
       return;
     }
     SendMsg("Запуск программы НБК. Прогрев", NOTIFY_MSG);
     #ifdef USE_MQTT
     String sessionDescription;
     if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
-      SendMsg("Описание сессии занято. Старт НБК отменён.", ALARM_MSG);
-      ProgramNum = 0;
-      startval = SAMOVAR_STARTVAL_IDLE;
-      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+      nbk_cancel_program_start("Описание сессии занято. Старт НБК отменён.");
       mode_warn_log_close_failed();
       return;
     }
@@ -1101,10 +1095,7 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
     begintime = 0;
     set_power(true);   // Если М и П не заданы в строке, то умолчания:М = разгонная П = 1 л/ч
     if (!PowerOn) {
-      SendMsg("Нагрев НБК не включён. Старт отменён.", ALARM_MSG);
-      ProgramNum = 0;
-      startval = SAMOVAR_STARTVAL_IDLE;
-      SamovarStatusInt = SAMOVAR_STATUS_IDLE;
+      nbk_cancel_program_start("Нагрев НБК не включён. Старт отменён.");
       nbk_close_data_log();
       return;
     }

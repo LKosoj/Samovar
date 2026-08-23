@@ -3,12 +3,18 @@ import re
 import sys
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens
+from smoke_helpers import (
+    extract_braced_block_after,
+    extract_function_body,
+    require_ordered_tokens,
+    strip_cpp_comments,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SENSORINIT = ROOT / "sensorinit.h"
 SAMOVAR = ROOT / "Samovar.ino"
 WEB = ROOT / "WebServer.ino"
+HEADER = ROOT / "Samovar.h"
 
 errors = []
 
@@ -38,6 +44,7 @@ def forbid_pattern(name: str, body: str, pattern: str) -> None:
 sensor_text = read_file(SENSORINIT)
 samovar_text = read_file(SAMOVAR)
 web_text = read_file(WEB)
+header_text = read_file(HEADER)
 
 functions = {}
 for file_name, source, signature in [
@@ -233,19 +240,65 @@ if apply_fields_body:
         "apply_setup_sensor_fields copies addresses before resets",
         apply_fields_body,
         [
-            "CopyDSAddress(SamSetup.SteamAdress, SteamSensor.Sensor);",
-            "CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);",
-            "CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);",
-            "CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);",
-            "CopyDSAddress(SamSetup.ACPAdress, ACPSensor.Sensor);",
-            "if ((resetMask & PROFILE_SENSOR_RESET_STEAM) != 0) clear_ds_sensor_runtime(SteamSensor);",
+            "CopyDSAddress(SamSetup.*kSensorSetupFields[i].address, sensorList[i]->Sensor);",
+            "resetMask & kSensorSetupFields[i].resetBit",
+            "clear_ds_sensor_runtime(*sensorList[i]);",
         ],
         errors,
     )
 
+# Связка «поле профиля <-> датчик» больше не записана в каждой строке кода: она держится
+# на том, что порядок kSensorSetupFields совпадает с sensorList. Перепутанный порядок
+# записал бы адрес чужого датчика и раздал бы чужие уставки, поэтому проверяем его явно.
+require_ordered_tokens(
+    "kSensorSetupFields order matches sensorList",
+    samovar_text,
+    [
+        "kSensorSetupFields[DS_SENSOR_COUNT] = {",
+        "&SetupEEPROM::SteamAdress, PROFILE_SENSOR_RESET_STEAM, &SetupEEPROM::SetSteamTemp,",
+        "&SetupEEPROM::SteamDelay, \"Ошибка датчика температуры пара!\"},",
+        "&SetupEEPROM::PipeAdress, PROFILE_SENSOR_RESET_PIPE, &SetupEEPROM::SetPipeTemp,",
+        "&SetupEEPROM::PipeDelay, \"Ошибка датчика температуры царги!\"},",
+        "&SetupEEPROM::WaterAdress, PROFILE_SENSOR_RESET_WATER, &SetupEEPROM::SetWaterTemp,",
+        "&SetupEEPROM::WaterDelay, \"Ошибка датчика температуры воды!\"},",
+        "&SetupEEPROM::TankAdress, PROFILE_SENSOR_RESET_TANK, &SetupEEPROM::SetTankTemp,",
+        "&SetupEEPROM::TankDelay, \"Ошибка датчика температуры куба!\"},",
+        "&SetupEEPROM::ACPAdress, PROFILE_SENSOR_RESET_ACP, &SetupEEPROM::SetACPTemp,",
+        "&SetupEEPROM::ACPDelay, \"Ошибка датчика температуры в ТСА!\"},",
+    ],
+    errors,
+)
+
+# Сам sensorList - вторая половина той же связки: kSensorSetupFields[i] осмыслен только
+# вместе с sensorList[i]. Массив раздаёт адреса, уставки и тексты аварий пяти датчикам
+# сразу (Samovar.ino, FS.ino, sensorinit.h), поэтому перестановка строк здесь молча
+# применила бы настройки «воды» к кубу. Длину пиним тоже: значение больше пяти оставит
+# в хвосте nullptr, который циклы разыменуют.
+require_ordered_tokens(
+    "Samovar.h sensorList keeps Steam/Pipe/Water/Tank/ACP order",
+    strip_cpp_comments(header_text),
+    [
+        "static const uint8_t DS_SENSOR_COUNT = 5;",
+        "DSSensor* const sensorList[DS_SENSOR_COUNT] = {",
+        "&SteamSensor, &PipeSensor, &WaterSensor, &TankSensor, &ACPSensor};",
+    ],
+    errors,
+)
+
 apply_config_body = functions.get("void apply_config_runtime()", "")
 if apply_config_body:
     require_token("apply_config_runtime sensor field apply", apply_config_body, "apply_setup_sensor_fields(0);")
+    # Уставка и задержка берутся из разных полей таблицы; перепутать их местами компилятор
+    # позволит молча (uint16_t приводится к float), поэтому пиним обе строки цикла.
+    require_ordered_tokens(
+        "apply_config_runtime applies setpoint and delay per sensor",
+        apply_config_body,
+        [
+            "sensorList[i]->SetTemp = SamSetup.*kSensorSetupFields[i].setTemp;",
+            "sensorList[i]->Delay = SamSetup.*kSensorSetupFields[i].delay;",
+        ],
+        errors,
+    )
     for token in [
         "CopyDSAddress(SamSetup.SteamAdress, SteamSensor.Sensor)",
         "CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor)",

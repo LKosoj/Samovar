@@ -309,18 +309,39 @@ static void clear_ds_sensor_runtime(DSSensor& sensor) {
   sensor.ErrCount = 0;
 }
 
-static void apply_setup_sensor_fields(uint8_t resetMask) {
-  CopyDSAddress(SamSetup.SteamAdress, SteamSensor.Sensor);
-  CopyDSAddress(SamSetup.PipeAdress, PipeSensor.Sensor);
-  CopyDSAddress(SamSetup.WaterAdress, WaterSensor.Sensor);
-  CopyDSAddress(SamSetup.TankAdress, TankSensor.Sensor);
-  CopyDSAddress(SamSetup.ACPAdress, ACPSensor.Sensor);
+// Всё, что перечисляется по пяти датчикам DS18B20 сразу: адрес в профиле, бит сброса
+// показаний, уставка, задержка и текст аварии. Порядок строк обязан совпадать с
+// sensorList (Samovar.h): Steam,Pipe,Water,Tank,ACP - связка «поле профиля <-> датчик»
+// держится только на нём, поэтому его пинит smoke_sensor_fields_staging.py.
+struct SensorSetupField {
+  uint8_t (SetupEEPROM::*address)[8];
+  uint8_t resetBit;
+  float SetupEEPROM::*setTemp;
+  uint16_t SetupEEPROM::*delay;
+  const char* errorMessage;
+};
 
-  if ((resetMask & PROFILE_SENSOR_RESET_STEAM) != 0) clear_ds_sensor_runtime(SteamSensor);
-  if ((resetMask & PROFILE_SENSOR_RESET_PIPE) != 0) clear_ds_sensor_runtime(PipeSensor);
-  if ((resetMask & PROFILE_SENSOR_RESET_WATER) != 0) clear_ds_sensor_runtime(WaterSensor);
-  if ((resetMask & PROFILE_SENSOR_RESET_TANK) != 0) clear_ds_sensor_runtime(TankSensor);
-  if ((resetMask & PROFILE_SENSOR_RESET_ACP) != 0) clear_ds_sensor_runtime(ACPSensor);
+static const SensorSetupField kSensorSetupFields[DS_SENSOR_COUNT] = {
+    {&SetupEEPROM::SteamAdress, PROFILE_SENSOR_RESET_STEAM, &SetupEEPROM::SetSteamTemp,
+     &SetupEEPROM::SteamDelay, "Ошибка датчика температуры пара!"},
+    {&SetupEEPROM::PipeAdress, PROFILE_SENSOR_RESET_PIPE, &SetupEEPROM::SetPipeTemp,
+     &SetupEEPROM::PipeDelay, "Ошибка датчика температуры царги!"},
+    {&SetupEEPROM::WaterAdress, PROFILE_SENSOR_RESET_WATER, &SetupEEPROM::SetWaterTemp,
+     &SetupEEPROM::WaterDelay, "Ошибка датчика температуры воды!"},
+    {&SetupEEPROM::TankAdress, PROFILE_SENSOR_RESET_TANK, &SetupEEPROM::SetTankTemp,
+     &SetupEEPROM::TankDelay, "Ошибка датчика температуры куба!"},
+    {&SetupEEPROM::ACPAdress, PROFILE_SENSOR_RESET_ACP, &SetupEEPROM::SetACPTemp,
+     &SetupEEPROM::ACPDelay, "Ошибка датчика температуры в ТСА!"},
+};
+
+static void apply_setup_sensor_fields(uint8_t resetMask) {
+  // Два прохода, а не один: сперва все пять адресов, только потом сбросы. Порядок
+  // «адреса до сбросов» был в исходном коде и зафиксирован smoke-тестом.
+  for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++)
+    CopyDSAddress(SamSetup.*kSensorSetupFields[i].address, sensorList[i]->Sensor);
+
+  for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++)
+    if ((resetMask & kSensorSetupFields[i].resetBit) != 0) clear_ds_sensor_runtime(*sensorList[i]);
 }
 
 static OperationError commit_profile_operation() {
@@ -858,25 +879,11 @@ static void tick_update_water_flow(uint16_t waterPulses, unsigned long &oldTime)
 
 static void tick_report_sensor_errors() {
   //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
-  if (SteamSensor.ErrCount > 10) {
-    SteamSensor.ErrCount = -110;
-    SendMsg(("Ошибка датчика температуры пара!"), ALARM_MSG);
-  }
-  if (PipeSensor.ErrCount > 10) {
-    PipeSensor.ErrCount = -110;
-    SendMsg(("Ошибка датчика температуры царги!"), ALARM_MSG);
-  }
-  if (WaterSensor.ErrCount > 10) {
-    WaterSensor.ErrCount = -110;
-    SendMsg(("Ошибка датчика температуры воды!"), ALARM_MSG);
-  }
-  if (TankSensor.ErrCount > 10) {
-    TankSensor.ErrCount = -110;
-    SendMsg(("Ошибка датчика температуры куба!"), ALARM_MSG);
-  }
-  if (ACPSensor.ErrCount > 10) {
-    ACPSensor.ErrCount = -110;
-    SendMsg(("Ошибка датчика температуры в ТСА!"), ALARM_MSG);
+  for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++) {
+    if (sensorList[i]->ErrCount > 10) {
+      sensorList[i]->ErrCount = -110;
+      SendMsg(kSensorSetupFields[i].errorMessage, ALARM_MSG);
+    }
   }
 }
 
@@ -3047,21 +3054,9 @@ static inline void jsonAddKey(Print &out, bool &first, const char *key) {
 }
 
 static void jsonPrintEscaped(Print &out, const String &value) {
-  for (size_t i = 0; i < value.length(); i++) {
-    char c = value[i];
-    if (c == '\"' || c == '\\') {
-      out.print('\\');
-      out.print(c);
-    } else if (c == '\n') {
-      out.print("\\n");
-    } else if (c == '\r') {
-      out.print("\\r");
-    } else if (c == '\t') {
-      out.print("\\t");
-    } else {
-      out.print(c);
-    }
-  }
+  // Результат осознанно отбрасывается: вызывающий jsonFieldString и раньше не проверял
+  // ошибок записи, а сигнатура этой функции - void.
+  json_write_escaped(out, value.c_str(), value.length());
 }
 
 static inline void jsonFieldFloat(Print &out, bool &first, const char *key, float value, int decimals) {
@@ -3092,55 +3087,7 @@ static bool runtimeEventWrite(Print& out, const char* value, size_t length) {
 }
 
 static bool runtimeEventWriteEscaped(Print& out, const String& value) {
-  static const char hexDigits[] = "0123456789ABCDEF";
-  size_t plainStart = 0;
-  for (size_t index = 0; index < value.length(); index++) {
-    const char character = value[index];
-    const uint8_t byte = static_cast<uint8_t>(character);
-    const char* escaped = nullptr;
-    size_t escapedLength = 0;
-    char unicodeEscape[6];
-    if (character == '"') {
-      escaped = "\\\"";
-      escapedLength = 2;
-    } else if (character == '\\') {
-      escaped = "\\\\";
-      escapedLength = 2;
-    } else if (character == '\n') {
-      escaped = "\\n";
-      escapedLength = 2;
-    } else if (character == '\r') {
-      escaped = "\\r";
-      escapedLength = 2;
-    } else if (character == '\t') {
-      escaped = "\\t";
-      escapedLength = 2;
-    } else if (character == '\b') {
-      escaped = "\\b";
-      escapedLength = 2;
-    } else if (character == '\f') {
-      escaped = "\\f";
-      escapedLength = 2;
-    } else if (byte < 0x20) {
-      unicodeEscape[0] = '\\';
-      unicodeEscape[1] = 'u';
-      unicodeEscape[2] = '0';
-      unicodeEscape[3] = '0';
-      unicodeEscape[4] = hexDigits[byte >> 4];
-      unicodeEscape[5] = hexDigits[byte & 0x0F];
-      escaped = unicodeEscape;
-      escapedLength = sizeof(unicodeEscape);
-    }
-    if (!escaped) continue;
-    if (index > plainStart &&
-        !runtimeEventWrite(out, value.c_str() + plainStart, index - plainStart)) {
-      return false;
-    }
-    if (!runtimeEventWrite(out, escaped, escapedLength)) return false;
-    plainStart = index + 1;
-  }
-  return plainStart == value.length() ||
-         runtimeEventWrite(out, value.c_str() + plainStart, value.length() - plainStart);
+  return json_write_escaped(out, value.c_str(), value.length());
 }
 
 static bool runtimeEventWriteUnsigned(Print& out, uint32_t value) {
@@ -3685,16 +3632,10 @@ void saveConfigCallback() {
 void apply_config_runtime() {
   nbk_capture_runtime_input_validity(
       SamSetup.HeaterResistant, SamSetup.MainsVoltage);
-  SteamSensor.SetTemp = SamSetup.SetSteamTemp;
-  PipeSensor.SetTemp = SamSetup.SetPipeTemp;
-  WaterSensor.SetTemp = SamSetup.SetWaterTemp;
-  TankSensor.SetTemp = SamSetup.SetTankTemp;
-  ACPSensor.SetTemp = SamSetup.SetACPTemp;
-  SteamSensor.Delay = SamSetup.SteamDelay;
-  PipeSensor.Delay = SamSetup.PipeDelay;
-  WaterSensor.Delay = SamSetup.WaterDelay;
-  TankSensor.Delay = SamSetup.TankDelay;
-  ACPSensor.Delay = SamSetup.ACPDelay;
+  for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++) {
+    sensorList[i]->SetTemp = SamSetup.*kSensorSetupFields[i].setTemp;
+    sensorList[i]->Delay = SamSetup.*kSensorSetupFields[i].delay;
+  }
   if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
   if (SamSetup.autospeed >= 100) SamSetup.autospeed = 0;
   apply_setup_sensor_fields(0);

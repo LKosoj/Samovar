@@ -43,6 +43,11 @@ static bool rmvk_parse_uint8_response(const char* response, uint8_t& value) {
   return true;
 }
 
+static void rmvk_mark_online() {
+  reg_online = true;
+  last_reg_online = millis();
+}
+
 uint8_t RMVK_cmd(
   const char* cmd,
   rmvk_res_t res,
@@ -140,8 +145,7 @@ uint16_t RMVK_get_out_voltge() {
 		  uint8_t ret = RMVK_cmd(cmd, RMVK_INT, false, 0);
 	  if (ret != RMVK_ERROR) {
 	    rmvk.VO = ret;
-	    reg_online = true;
-	    last_reg_online = millis();
+	    rmvk_mark_online();
 	  }
 	  return rmvk.VO;
 }
@@ -151,8 +155,7 @@ uint16_t RMVK_get_store_out_voltge() {
 		  uint8_t ret = RMVK_cmd(cmd, RMVK_INT, false, 0);
 	  if (ret != RMVK_ERROR) {
 	    rmvk.VS = ret;
-	    reg_online = true;
-	    last_reg_online = millis();
+	    rmvk_mark_online();
 	  }
 	  return rmvk.VS;
 	}
@@ -161,8 +164,7 @@ uint16_t RMVK_get_store_out_voltge() {
 		  uint8_t ret = RMVK_cmd(cmd, RMVK_ON, false, 0);
 	  if (ret != RMVK_ERROR) {
 	    rmvk.on = ret > 0;
-	    reg_online = true;
-	    last_reg_online = millis();
+	    rmvk_mark_online();
 	  }
 	  return rmvk.on;
 }

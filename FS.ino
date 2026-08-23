@@ -14,6 +14,11 @@ static volatile bool data_log_ready = false;
 // из SysTicker; подробности - у process_state_snapshot() ниже.
 static const uint8_t STATE_SNAPSHOT_PERIOD_S = 30;
 
+// ACPSensor сознательно не пишется в data.csv (заголовок "...,Tank,Pressure"),
+// поэтому циклы лога идут по первым четырём элементам sensorList
+// (Steam,Pipe,Water,Tank), а не по всем DS_SENSOR_COUNT.
+static const uint8_t DS_LOGGED_SENSOR_COUNT = 4;
+
 bool flush_data_log() {
   bool locked = log_file_lock(pdMS_TO_TICKS(500));
   if (!locked) {
@@ -298,14 +303,8 @@ bool create_data() {
 
   fileToWrite.close();
 
-  SteamSensor.PrevTemp = 0;
-  PipeSensor.PrevTemp = 0;
-  WaterSensor.PrevTemp = 0;
-  TankSensor.PrevTemp = 0;
-  SteamSensor.LogPrevTemp = 0;
-  PipeSensor.LogPrevTemp = 0;
-  WaterSensor.LogPrevTemp = 0;
-  TankSensor.LogPrevTemp = 0;
+  for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) sensorList[i]->PrevTemp = 0;
+  for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) sensorList[i]->LogPrevTemp = 0;
   bme_prev_pressure = 0;
   prev_ProgramNum = PROGRAM_END;
   // Не обнуляем, а взводим: снимок новой сессии нужен сразу, иначе перезагрузка в
@@ -505,40 +504,37 @@ String append_data() {
   // сессия не запущена, а программа уже набрана.
 
   //Если значения лога совпадают с предыдущим - в файл писать не будем
-  float steamTemp = SteamSensor.avgTemp;
-  float pipeTemp = PipeSensor.avgTemp;
-  float waterTemp = WaterSensor.avgTemp;
-  float tankTemp = TankSensor.avgTemp;
+  const float sensorTemp[DS_LOGGED_SENSOR_COUNT] = {
+      SteamSensor.avgTemp, PipeSensor.avgTemp, WaterSensor.avgTemp, TankSensor.avgTemp};
   float pressure = bme_pressure;
   uint8_t programNum = ProgramNum;
   uint8_t changedField = 0;
 
-  if (steamTemp != SteamSensor.LogPrevTemp) {
-    changedField = 1;
-  } else if (pipeTemp != PipeSensor.LogPrevTemp) {
-    changedField = 2;
-  } else if (waterTemp != WaterSensor.LogPrevTemp) {
-    changedField = 3;
-  } else if (tankTemp != TankSensor.LogPrevTemp) {
-    changedField = 4;
-  } else if (bme_prev_pressure != pressure) {
-    changedField = 5;
+  // Побеждает первое изменившееся поле: сперва четыре датчика по порядку
+  // (Steam,Pipe,Water,Tank), потом давление, потом номер программы.
+  for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
+    if (sensorTemp[i] != sensorList[i]->LogPrevTemp) {
+      changedField = i + 1;
+      break;
+    }
+  }
+  if (changedField == 0) {
+    if (bme_prev_pressure != pressure) {
+      changedField = 5;
 #ifdef WRITE_PROGNUM_IN_LOG
-  } else if (prev_ProgramNum != programNum) {
-    changedField = 6;
+    } else if (prev_ProgramNum != programNum) {
+      changedField = 6;
 #endif
+    }
   }
 
   if (changedField > 0) {
     String str;
-    str = Crt + ",";
-    str += format_float(steamTemp, 3);
-    str += ",";
-    str += format_float(pipeTemp, 3);
-    str += ",";
-    str += format_float(waterTemp, 3);
-    str += ",";
-    str += format_float(tankTemp, 3);
+    str = Crt;
+    for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
+      str += ",";
+      str += format_float(sensorTemp[i], 3);
+    }
     str += ",";
     str += format_float(pressure, 2);
 
@@ -571,10 +567,12 @@ String append_data() {
     __sync_add_and_fetch(&log_write_seq, 1);
 
     switch (changedField) {
-      case 1: SteamSensor.LogPrevTemp = steamTemp; break;
-      case 2: PipeSensor.LogPrevTemp = pipeTemp; break;
-      case 3: WaterSensor.LogPrevTemp = waterTemp; break;
-      case 4: TankSensor.LogPrevTemp = tankTemp; break;
+      case 1:
+      case 2:
+      case 3:
+      case 4:
+        sensorList[changedField - 1]->LogPrevTemp = sensorTemp[changedField - 1];
+        break;
       case 5: bme_prev_pressure = pressure; break;
 #ifdef WRITE_PROGNUM_IN_LOG
       case 6: prev_ProgramNum = programNum; break;

@@ -34,7 +34,11 @@ def extract_struct(source: str, name: str) -> str:
     raise ValueError(f"struct is not closed: {name}")
 
 
-def production_section(source: str) -> str:
+def production_section(source: str, string_utils_source: str) -> str:
+    json_write_escaped = extract_function_body(
+        string_utils_source,
+        "inline bool json_write_escaped(Print& out, const char* text, size_t length)",
+    )
     snapshot = extract_struct(source, "AjaxTelemetrySnapshot")
     capture = extract_function_body(
         source,
@@ -73,6 +77,10 @@ def production_section(source: str) -> str:
 
 static inline void jsonAddKey(Print &out, bool &first, const char *key) {{
 {json_key}
+}}
+
+inline bool json_write_escaped(Print& out, const char* text, size_t length) {{
+{json_write_escaped}
 }}
 
 static void jsonPrintEscaped(Print &out, const String &value) {{
@@ -170,6 +178,10 @@ class Print {
   void print(char value) { bytes.push_back(value); }
   void print(const char* value) { bytes += value; }
   void print(const String& value) { bytes += value.str(); }
+  size_t write(const uint8_t* buffer, size_t size) {
+    bytes.append(reinterpret_cast<const char*>(buffer), size);
+    return size;
+  }
   template <typename T>
   typename std::enable_if<std::is_integral<T>::value, void>::type print(T value) {
     std::ostringstream out;
@@ -607,6 +619,7 @@ def compile_matrix(section: str, name: str, defines: list[str]) -> str:
 def main() -> int:
     errors: list[str] = []
     samovar = read("Samovar.ino")
+    string_utils = read("string_utils.h")
     try:
         snapshot = extract_struct(samovar, "AjaxTelemetrySnapshot")
         capture = extract_function_body(
@@ -618,7 +631,7 @@ def main() -> int:
         send_ajax = extract_function_body(
             samovar, "void send_ajax_json(AsyncWebServerRequest *request)"
         )
-        section = production_section(samovar)
+        section = production_section(samovar, string_utils)
     except ValueError as error:
         print(f"A-05 state owners smoke failed: {error}")
         return 1

@@ -116,6 +116,25 @@ LiquidScreen setup_back_screen(lql_back_line, lql_time);
 
 #define LCD_UPDATE_TIMEOUT 200
 
+// RAII-страж замка LCD/I2C: берёт xI2CSemaphore на LCD_UPDATE_TIMEOUT мс в
+// конструкторе, отдаёт в деструкторе. Если лок не взят - acquired остаётся
+// false и вызывающий код просто пропускает обновление экрана (прежнее
+// поведение сохранено). Забыть xSemaphoreGive здесь невозможно, а захват
+// виден tools/smoke_lock_order.py прямо в теле функции - слепой зоны для
+// вложенных замков больше нет.
+struct LcdLockGuard {
+  bool acquired;
+
+  explicit LcdLockGuard(TickType_t timeout = (TickType_t)(LCD_UPDATE_TIMEOUT / portTICK_RATE_MS))
+      : acquired(xSemaphoreTake(xI2CSemaphore, timeout) == pdTRUE) {}
+  ~LcdLockGuard() { if (acquired) xSemaphoreGive(xI2CSemaphore); }
+
+  LcdLockGuard(const LcdLockGuard&) = delete;
+  LcdLockGuard& operator=(const LcdLockGuard&) = delete;
+
+  explicit operator bool() const { return acquired; }
+};
+
 const char* get_power_text(){
   return power_text_ptr;
 }
@@ -157,61 +176,49 @@ const char* get_welcomeStr4(){
 }
 
 void reset_focus() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+  LcdLockGuard lcdLock;
+  if (lcdLock) {
     do {
       main_menu1.switch_focus();
     } while (main_menu1.is_callable(1));
-    xSemaphoreGive(xI2CSemaphore);
   }
 }
 
 void change_screen(LiquidScreen* screen) {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.change_screen(screen);
-    xSemaphoreGive(xI2CSemaphore);
-  }
+  LcdLockGuard lcdLock;
+  if (lcdLock) main_menu1.change_screen(screen);
 }
 
 void menu_update() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.update();
-    xSemaphoreGive(xI2CSemaphore);
-  }
+  LcdLockGuard lcdLock;
+  if (lcdLock) main_menu1.update();
 }
 
 void menu_softUpdate() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.softUpdate();
-    xSemaphoreGive(xI2CSemaphore);
-  }
+  LcdLockGuard lcdLock;
+  if (lcdLock) main_menu1.softUpdate();
 }
 
 void menu_previous_screen() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.previous_screen();
-    xSemaphoreGive(xI2CSemaphore);
-  }
+  LcdLockGuard lcdLock;
+  if (lcdLock) main_menu1.previous_screen();
 }
 
 void menu_next_screen() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.next_screen();
-    xSemaphoreGive(xI2CSemaphore);
-  }
+  LcdLockGuard lcdLock;
+  if (lcdLock) main_menu1.next_screen();
 }
 
 void menu_switch_focus() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
-    main_menu1.switch_focus();
-    xSemaphoreGive(xI2CSemaphore);
-  }
+  LcdLockGuard lcdLock;
+  if (lcdLock) main_menu1.switch_focus();
 }
 
 void menu_reset_lcd() {
-  if ( xSemaphoreTake( xI2CSemaphore, ( TickType_t ) (LCD_UPDATE_TIMEOUT / portTICK_RATE_MS)) == pdTRUE) {
+  LcdLockGuard lcdLock;
+  if (lcdLock) {
     lcd.begin(20, 4);
     lcd.init();
-    xSemaphoreGive(xI2CSemaphore);
   }
 }
 

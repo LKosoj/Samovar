@@ -493,8 +493,15 @@ def compile_and_run(source_text: str, prefix: str) -> None:
             raise SystemExit(result.returncode)
 
 
-def run_checked_writer_harness(samovar_text: str) -> None:
+def run_checked_writer_harness(samovar_text: str, string_utils_text: str) -> None:
     definitions: list[str] = []
+    json_write_escaped_signature = (
+        "inline bool json_write_escaped(Print& out, const char* text, size_t length)"
+    )
+    definitions.append(
+        f"{json_write_escaped_signature} {{\n"
+        f"{extract_function_body(string_utils_text, json_write_escaped_signature)}\n}}"
+    )
     signatures = [
         "static bool runtimeEventWrite(Print& out, const char* value, size_t length)",
         "static bool runtimeEventWriteEscaped(Print& out, const String& value)",
@@ -939,6 +946,7 @@ def run_source_contracts() -> None:
     runtime = read("runtime_helpers.h")
     samovar_h = read("Samovar.h")
     samovar = read("Samovar.ino")
+    string_utils = read("string_utils.h")
     lua = read("lua.h")
     static_sources = read("tools/static_analysis_sources.json")
 
@@ -1122,7 +1130,7 @@ def run_source_contracts() -> None:
             print(f"FAIL: {error}", file=sys.stderr)
         raise SystemExit(1)
     run_query_dispatch_harness(samovar, header)
-    run_checked_writer_harness(samovar)
+    run_checked_writer_harness(samovar, string_utils)
     print("runtime event backend source contracts passed")
 
 

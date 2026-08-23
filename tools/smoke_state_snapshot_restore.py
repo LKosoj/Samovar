@@ -50,6 +50,16 @@ ARDUINO_STUB = r'''
 
 #define F(text) (text)
 
+// Минимальный Print: string_utils.h с 2026-08 требует его как тип приёмника
+// для json_write_escaped()/JsonStringPrint. Обе перегрузки write() чисто
+// виртуальные — JsonStringPrint обязана реализовать каждую.
+class Print {
+ public:
+  virtual ~Print() {}
+  virtual size_t write(uint8_t value) = 0;
+  virtual size_t write(const uint8_t* buffer, size_t size) = 0;
+};
+
 class String {
  public:
   String() = default;

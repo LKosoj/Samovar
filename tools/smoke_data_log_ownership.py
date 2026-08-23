@@ -3,7 +3,7 @@ import sys
 import re
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, require_ordered_tokens
+from smoke_helpers import extract_function_body, require_ordered_tokens, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
@@ -84,14 +84,16 @@ if fs_ino:
         create_body = extract_function_body(fs_ino, "bool create_data()")
         if re.search(r"(?<![A-Za-z0-9_])append_data\s*\(", create_body):
             errors.append("create_data must not call append_data directly")
+        # strip_cpp_comments: закомментированная строка кода всё ещё содержит
+        # текст токена как подстроку, поэтому голая проверка "token in create_body"
+        # не поймает случай "закомментировали один из двух циклов сброса".
+        create_body_code = strip_cpp_comments(create_body)
         for token in [
-            "SteamSensor.LogPrevTemp = 0;",
-            "PipeSensor.LogPrevTemp = 0;",
-            "WaterSensor.LogPrevTemp = 0;",
-            "TankSensor.LogPrevTemp = 0;",
+            "for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) sensorList[i]->PrevTemp = 0;",
+            "for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) sensorList[i]->LogPrevTemp = 0;",
             "pending_log_close_flag = false;",
         ]:
-            if token not in create_body:
+            if token not in create_body_code:
                 errors.append(f"create_data missing log-state reset: {token}")
     except ValueError as exc:
         errors.append(str(exc))

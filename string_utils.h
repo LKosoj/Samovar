@@ -38,48 +38,74 @@ inline String expandLuaCaretEscapes(const String& s) {
   return out;
 }
 
+/** Записывает [text, text+length) в out как содержимое JSON-строки (без внешних кавычек):
+    экранирует " \ и управляющие байты <0x20 (\b \f \n \r \t — именованно, остальные —
+    \u00XX), плюс '<' -> \u003c (иначе "</script>" внутри <script>-блока рвёт HTML-страницу).
+    DEL (0x7F) и байты >=0x80 (продолжения многобайтных UTF-8-последовательностей, в т.ч.
+    кириллицы) не трогает - RFC 8259 требует эскейпить только U+0000..U+001F, а порезать
+    байт посередине UTF-8-символа испортило бы кодировку.
+    Возвращает false при первой же неполной записи в out - вызывающий код (потоковые
+    ответы) обязан прервать формирование ответа. */
+inline bool json_write_escaped(Print& out, const char* text, size_t length) {
+  static const char hexDigits[] = "0123456789ABCDEF";
+  size_t plainStart = 0;
+  for (size_t index = 0; index < length; index++) {
+    const char character = text[index];
+    const uint8_t byte = static_cast<uint8_t>(character);
+    const char* escaped = nullptr;
+    size_t escapedLength = 0;
+    char unicodeEscape[6];
+    if (character == '"') { escaped = "\\\""; escapedLength = 2; }
+    else if (character == '\\') { escaped = "\\\\"; escapedLength = 2; }
+    else if (character == '<') { escaped = "\\u003c"; escapedLength = 6; }
+    else if (character == '\n') { escaped = "\\n"; escapedLength = 2; }
+    else if (character == '\r') { escaped = "\\r"; escapedLength = 2; }
+    else if (character == '\t') { escaped = "\\t"; escapedLength = 2; }
+    else if (character == '\b') { escaped = "\\b"; escapedLength = 2; }
+    else if (character == '\f') { escaped = "\\f"; escapedLength = 2; }
+    else if (byte < 0x20) {
+      unicodeEscape[0] = '\\'; unicodeEscape[1] = 'u';
+      unicodeEscape[2] = '0'; unicodeEscape[3] = '0';
+      unicodeEscape[4] = hexDigits[byte >> 4];
+      unicodeEscape[5] = hexDigits[byte & 0x0F];
+      escaped = unicodeEscape; escapedLength = sizeof(unicodeEscape);
+    }
+    if (!escaped) continue;
+    if (index > plainStart &&
+        out.write(reinterpret_cast<const uint8_t*>(text + plainStart), index - plainStart)
+            != index - plainStart) return false;
+    if (out.write(reinterpret_cast<const uint8_t*>(escaped), escapedLength) != escapedLength)
+      return false;
+    plainStart = index + 1;
+  }
+  return plainStart == length ||
+         out.write(reinterpret_cast<const uint8_t*>(text + plainStart), length - plainStart)
+             == length - plainStart;
+}
+
+/** Тонкий Print-приёмник поверх String - мост между потоковым json_write_escaped()
+    и функциями, которым нужна String (toJsonString, spiffsEditorJsonEscape).
+    write() всегда возвращает полный size: String растёт сама, частичной записи быть
+    не может - поэтому в этих двух функциях возврат json_write_escaped() не проверяется. */
+class JsonStringPrint : public Print {
+ public:
+  explicit JsonStringPrint(String& target) : target_(target) {}
+  size_t write(uint8_t value) override { target_ += static_cast<char>(value); return 1; }
+  size_t write(const uint8_t* buffer, size_t size) override {
+    for (size_t i = 0; i < size; i++) target_ += static_cast<char>(buffer[i]);
+    return size;
+  }
+ private:
+  String& target_;
+};
+
 /** JSON-строка (включая внешние кавычки) для вставки в <script type="application/json"> или JSON.parse. */
 inline String toJsonString(const String& s) {
   String out;
   out.reserve(s.length() + 8);
   out += '"';
-  for (unsigned int i = 0; i < s.length(); i++) {
-    char c = s.charAt(i);
-    switch (c) {
-      case '\\':
-        out += "\\\\";
-        break;
-      case '"':
-        out += "\\\"";
-        break;
-      case '\b':
-        out += "\\b";
-        break;
-      case '\f':
-        out += "\\f";
-        break;
-      case '\n':
-        out += "\\n";
-        break;
-      case '\r':
-        out += "\\r";
-        break;
-      case '\t':
-        out += "\\t";
-        break;
-      case '<':
-        // В HTML внутри <script> последовательность "</script>" закрывает тег и ломает разбор страницы.
-        out += "\\u003c";
-        break;
-      default:
-        if ((unsigned char)c < 0x20u) {
-          out += ' ';
-        } else {
-          out += c;
-        }
-        break;
-    }
-  }
+  JsonStringPrint sink(out);
+  json_write_escaped(sink, s.c_str(), s.length());
   out += '"';
   return out;
 }

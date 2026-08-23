@@ -546,6 +546,16 @@ DSSensor WaterSensor;                                          //сенсор т
 DSSensor TankSensor;                                           //сенсор температуры в кубе
 DSSensor ACPSensor;                                            //сенсор температуры в ТСА
 
+// Индексируемый доступ к пяти датчикам выше без переименования/удаления самих
+// глобальных объектов (на них завязано 349 обращений вида SteamSensor.avgTemp
+// по всей прошивке и 22 smoke-теста). Порядок индексов ЖЁСТКО зафиксирован и
+// совпадает с PROFILE_SENSOR_RESET_* (Samovar.ino), kSaveDsAddrFields/
+// kGetDsAddrFields (WebServer.ino) и колонками CSV-лога (FS.ino):
+// Steam=0, Pipe=1, Water=2, Tank=3, ACP=4. Менять порядок нельзя.
+static const uint8_t DS_SENSOR_COUNT = 5;
+DSSensor* const sensorList[DS_SENSOR_COUNT] = {
+    &SteamSensor, &PipeSensor, &WaterSensor, &TankSensor, &ACPSensor};
+
 // Номер цикла опроса DS18B20: инкрементируется в конце DS_getvalue().
 // Нужен потребителям, которым важно отличить НОВОЕ показание от повторного чтения
 // того же значения (детектор примесей усредняет показания между своими замерами,

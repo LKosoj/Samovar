@@ -437,10 +437,16 @@ inline uint32_t get_stepper_status(void) {
   return stepper_safe_get_target();
 }
 
+// Приоритет: если у mixer есть CAP_RELAY и он на связи — используем его,
+// иначе — pump с CAP_RELAY. Единая точка бизнес-правила выбора реле-устройства.
+inline I2CStepperDevice* select_relay_capable_device() {
+  if (i2c_stepper_refresh(i2cStepperMixer) && (i2cStepperMixer.caps & I2CSTEPPER_CAP_RELAY)) return &i2cStepperMixer;
+  if (i2c_stepper_refresh(i2cStepperPump) && (i2cStepperPump.caps & I2CSTEPPER_CAP_RELAY)) return &i2cStepperPump;
+  return nullptr;
+}
+
 inline bool set_mixer_pump_target(uint8_t on) {
-  I2CStepperDevice* dev = nullptr;
-  if (i2c_stepper_refresh(i2cStepperMixer) && (i2cStepperMixer.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperMixer;
-  else if (i2c_stepper_refresh(i2cStepperPump) && (i2cStepperPump.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperPump;
+  I2CStepperDevice* dev = select_relay_capable_device();
   if (!dev) return false;
   if (!i2c_stepper_config_begin(*dev)) return false;
   if (on) dev->relayMask |= 0x01;
@@ -451,23 +457,21 @@ inline bool set_mixer_pump_target(uint8_t on) {
 }
 
 inline uint8_t get_mixer_pump_status(void) {
-  if (i2c_stepper_refresh(i2cStepperMixer) && (i2cStepperMixer.caps & I2CSTEPPER_CAP_RELAY)) return bitRead(i2cStepperMixer.relayMask, 0);
-  if (i2c_stepper_refresh(i2cStepperPump) && (i2cStepperPump.caps & I2CSTEPPER_CAP_RELAY)) return bitRead(i2cStepperPump.relayMask, 0);
-  return 0xFF;
+  I2CStepperDevice* dev = select_relay_capable_device();
+  if (!dev) return 0xFF;
+  return bitRead(dev->relayMask, 0);
 }
 
 inline uint8_t get_i2c_rele_state(uint8_t r) {
   if (r < 1 || r > 4) return 0xFF;
-  if (i2c_stepper_refresh(i2cStepperMixer) && (i2cStepperMixer.caps & I2CSTEPPER_CAP_RELAY)) return bitRead(i2cStepperMixer.relayMask, r - 1);
-  if (i2c_stepper_refresh(i2cStepperPump) && (i2cStepperPump.caps & I2CSTEPPER_CAP_RELAY)) return bitRead(i2cStepperPump.relayMask, r - 1);
-  return 0xFF;
+  I2CStepperDevice* dev = select_relay_capable_device();
+  if (!dev) return 0xFF;
+  return bitRead(dev->relayMask, r - 1);
 }
 
 inline bool set_i2c_rele_state(uint8_t r, bool s) {
   if (r < 1 || r > 4) return false;
-  I2CStepperDevice* dev = nullptr;
-  if (i2c_stepper_refresh(i2cStepperMixer) && (i2cStepperMixer.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperMixer;
-  else if (i2c_stepper_refresh(i2cStepperPump) && (i2cStepperPump.caps & I2CSTEPPER_CAP_RELAY)) dev = &i2cStepperPump;
+  I2CStepperDevice* dev = select_relay_capable_device();
   if (!dev) return false;
   if (!i2c_stepper_config_begin(*dev)) return false;
   if (s) dev->relayMask |= (1 << (r - 1));
