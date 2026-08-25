@@ -557,10 +557,15 @@ void process_impurity_detector() {
   // useDetector действует на все типы строк (H/B/C/T), а не только на головы.
   if (!SamSetup.useautospeed || !SamSetup.useDetector) {
     impurityDetector.detectorStatus = 0;
-    impurityDetector.correctionFactor = 1.0f;
     // [T05] Применяем сброшенный correctionFactor к скорости насоса, иначе накопленная
     // ранее коррекция навсегда останется в скорости после выключения детектора/автоскорости.
-    apply_detector_speed_correction(CurrentBaseSpeedRate);
+    // Только по факту сброса: process_impurity_detector() зовётся из loop() (~200 раз в
+    // секунду), а когда коррекции уже нет, переставлять насосу ту же скорость незачем -
+    // это перезапись периода таймера степпера на каждом обороте без единого изменения.
+    if (impurityDetector.correctionFactor != 1.0f) {
+      impurityDetector.correctionFactor = 1.0f;
+      apply_detector_speed_correction(CurrentBaseSpeedRate);
+    }
     return;
   }
 
@@ -587,9 +592,12 @@ void process_impurity_detector() {
   // Любой другой статус, кроме активного отбора (10) — сброс
   if (SamovarStatusInt != SAMOVAR_STATUS_RECT_WITHDRAWAL) {
     impurityDetector.detectorStatus = 0;
-    impurityDetector.correctionFactor = 1.0f;
-    // [T05] см. пояснение выше: применяем сброс correctionFactor к скорости насоса
-    apply_detector_speed_correction(CurrentBaseSpeedRate);
+    // [T05] см. пояснение выше: применяем сброс correctionFactor к скорости насоса -
+    // один раз, по факту сброса, а не на каждом обороте loop().
+    if (impurityDetector.correctionFactor != 1.0f) {
+      impurityDetector.correctionFactor = 1.0f;
+      apply_detector_speed_correction(CurrentBaseSpeedRate);
+    }
     return;
   }
 

@@ -150,10 +150,36 @@ static void test_status_reset_calls_apply_correction() {
   check(!reachedTailStatusReset, "сброс по статусу: должен быть ранний return");
 }
 
+// Сценарий 4: сброс - событие, а не состояние. process_impurity_detector() зовётся
+// из loop() (~200 раз в секунду); пока коррекции нет, переставлять насосу ту же
+// скорость незачем - это перезапись периода таймера степпера на каждом обороте.
+static void test_reset_applies_once_not_every_tick() {
+  reset_fixture(0.7f, 60.0f);
+  SamSetup.useautospeed = true;
+  SamSetup.useDetector = false;
+
+  autospeed_off_tick();
+  check(setPumpSpeedCallCount == 1, "первый тик после выключения детектора обязан снять коррекцию");
+
+  for (int i = 0; i < 50; i++) autospeed_off_tick();
+  check(setPumpSpeedCallCount == 1,
+        "РЕГРЕСС: снятая коррекция переприменяется на каждом обороте loop() - скорость насоса переставляется впустую");
+
+  // Та же проверка для ветки сброса по статусу, причём с самого начала без коррекции:
+  // ни одного обращения к насосу быть не должно.
+  reset_fixture(1.0f, 80.0f);
+  SamovarStatusInt = 99;
+  for (int i = 0; i < 50; i++) status_reset_tick();
+  check(setPumpSpeedCallCount == 0,
+        "РЕГРЕСС: сброс по статусу без накопленной коррекции не должен трогать насос вообще");
+  SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
+}
+
 int main() {
   test_autospeed_off_resets_pump_speed();
   test_autospeed_off_resets_pump_speed_proportionally();
   test_status_reset_calls_apply_correction();
+  test_reset_applies_once_not_every_tick();
 
   if (failures != 0) return 1;
   std::cout << "detector correctionFactor reset applies to pump speed checks passed\n";

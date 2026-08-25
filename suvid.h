@@ -24,7 +24,7 @@ inline float suvid_target_temp() {
 // недостижима в принципе. Близнецы в beer.h (BEER_BOIL_TIMEOUT_MS,
 // BEER_COOL_TIMEOUT_MS) в такой ситуации останавливают процесс -
 // здесь теперь то же самое: сообщение + штатное выключение нагрева.
-#define SUVID_REACH_TIMEOUT_MS (60UL * 60UL * 1000UL)
+#define SUVID_REACH_TIMEOUT_MS (120UL * 60UL * 1000UL)
 
 // [T24.1] Полоса зачёта выдержки шире полосы регулирования (HEAT_DELTA): из-за
 // тепловой инерции бака температура колеблется вокруг уставки сильнее, чем
@@ -83,6 +83,13 @@ static SuvidDeviationState suvidDeviation;
 // в сборке без SAMOVAR_USE_POWER содержит блокирующую vTaskDelay(50), недопустимую
 // внутри 1-секундного тика надзора.
 static volatile bool suvidHeaterOn = false;
+
+// Какое состояние уже отдано нагревателю: -1 - ещё ни разу в этой сессии режима.
+// loop() крутится ~200 раз в секунду, а термостат меняет решение раз в секунду
+// (check_alarm_suvid, SysTicker) - без этой памяти setHeaterPosition() дёргался бы
+// на каждом обороте, каждый раз занимая мьютекс состояния и (в сборке с регулятором)
+// переотправляя ту же уставку мощности. Применяем только по факту изменения.
+static int8_t suvidHeaterApplied = -1;
 
 // Остаток выдержки в секундах; -1, если отсчёт не идёт (см. tick_status_fsm в logic.h).
 inline int32_t suvid_hold_remaining_sec() {
@@ -189,7 +196,7 @@ inline void check_alarm_suvid() {
     // аварийная защёлка потребовала бы ручного сброса (см. beer_abort_config_error
     // в beer.h, тот же класс ситуации).
     if (!suvidHold.reachTimeoutMsgSent) {
-      SendMsg("Сувид: не вышли на рабочую температуру за 60 минут, нагрев выключается. Проверьте ТЭН, датчик куба и объём загрузки.", ALARM_MSG);
+      SendMsg("Сувид: не вышли на рабочую температуру за 120 минут, нагрев выключается. Проверьте ТЭН, датчик куба и объём загрузки.", ALARM_MSG);
       set_buzzer(true);
       suvidHold.reachTimeoutMsgSent = true;
     }
@@ -225,6 +232,15 @@ inline void check_alarm_suvid() {
  *        аварийного надзора.
  */
 inline void suvid_tick() {
-  if (Samovar_Mode != SAMOVAR_SUVID_MODE) return;
-  setHeaterPosition(suvidHeaterOn);
+  if (Samovar_Mode != SAMOVAR_SUVID_MODE) {
+    // Вышли из режима: следующая сессия Сувида обязана применить состояние заново,
+    // даже если оно совпадает с тем, что мы отдавали в прошлый раз (чужой режим
+    // успел переставить реле).
+    suvidHeaterApplied = -1;
+    return;
+  }
+  const bool desired = suvidHeaterOn;
+  if (suvidHeaterApplied == (int8_t)desired) return;
+  suvidHeaterApplied = (int8_t)desired;
+  setHeaterPosition(desired);
 }

@@ -163,12 +163,19 @@ if suvid_text:
     except ValueError as exc:
         errors.append(str(exc))
         tick_body = ""
+    # Применяем состояние ТОЛЬКО по его изменению: loop() крутится ~200 раз в
+    # секунду, термостат меняет решение раз в секунду (check_alarm_suvid). Выход из
+    # режима обязан забыть применённое состояние - иначе возврат в Сувид оставит
+    # реле в том виде, в каком его бросил чужой режим.
     require_ordered_tokens(
-        "suvid_tick applies the thermostat state only in Suvid mode",
+        "suvid_tick applies the thermostat state only in Suvid mode and only on change",
         tick_body,
         [
-            "if (Samovar_Mode != SAMOVAR_SUVID_MODE) return;",
-            "setHeaterPosition(suvidHeaterOn);",
+            "if (Samovar_Mode != SAMOVAR_SUVID_MODE) {",
+            "suvidHeaterApplied = -1;",
+            "return;",
+            "suvidHeaterApplied == (int8_t)desired",
+            "setHeaterPosition(desired);",
         ],
         errors,
     )

@@ -61,7 +61,7 @@ bool isBoilingStarted(float) { return boilingReached; }
 
 // [П13] Таймаут разгона до кипения задействован извлечённым кодом
 // (см. tools/smoke_beer_boil_cooling_timeout.py про его поведение отдельно).
-#define BEER_BOIL_TIMEOUT_MS (60UL * 60UL * 1000UL)
+#define BEER_BOIL_TIMEOUT_MS (120UL * 60UL * 1000UL)
 static unsigned long beerBoilActiveAccumMs = 0;
 static int abortCalls = 0;
 void beer_abort_config_error(const char*) { abortCalls++; }

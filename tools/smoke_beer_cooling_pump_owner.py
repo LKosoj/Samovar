@@ -28,7 +28,7 @@ enum ActuatorCommandResult {
 };
 
 // [П13] Таймаут остывания 'C' - то же значение, что и в beer.h.
-#define BEER_COOL_TIMEOUT_MS (60UL * 60UL * 1000UL)
+#define BEER_COOL_TIMEOUT_MS (120UL * 60UL * 1000UL)
 
 struct WProgram { float Temp = 0; };
 static WProgram program[1];

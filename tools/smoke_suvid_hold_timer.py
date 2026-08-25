@@ -29,6 +29,9 @@ static Tank TankSensor{};
 // [T24.3] Термостат живёт на уровне файла (suvid.h), виден и check_alarm_suvid(),
 // и suvid_tick() - здесь так же, как в продакшене.
 static bool suvidHeaterOn = false;
+// Память последнего применённого состояния нагревателя: suvid_tick() трогает реле
+// только по изменению (loop() крутится ~200 раз/с, термостат решает раз в секунду).
+static int8_t suvidHeaterApplied = -1;
 
 static bool PowerOn = true;
 static bool heater_state = false;
@@ -82,6 +85,7 @@ static void reset(uint16_t hold = 0) {
   suvidHold = {}; suvidDeviation = {}; fakeMillis = 0; heaterCalls = 0;
   lastHeater = false; messages = 0; warnings = 0; alarms = 0; buzzerCalls = 0;
   queueCalls = 0; queueSucceeds = true; heater_state = false; lastQueuedCommand = -1;
+  suvidHeaterApplied = -1;
 }
 static void test_symmetric_band() {
   reset(); TankSensor.avgTemp = 60.0f + HEAT_DELTA + 0.1f; tick();
@@ -271,6 +275,30 @@ static void test_hold_band_survives_temperature_ripple() {
         "REGRESSION T24.1: a +-1.5C ripple inside SUVID_HOLD_BAND_C must count at least "
         "95% of elapsed time toward the hold");
 }
+static void test_tick_applies_heater_only_on_change() {
+  // loop() зовёт suvid_tick() ~200 раз в секунду, а термостат (check_alarm_suvid,
+  // SysTicker) меняет решение не чаще раза в секунду. Каждый вызов setHeaterPosition()
+  // занимает мьютекс состояния и переотправляет уставку мощности - применять надо
+  // только по факту изменения.
+  reset();
+  TankSensor.avgTemp = 60.0f - HEAT_DELTA - 0.1f;  // термостат просит нагрев
+  fakeMillis = 1000; tick();
+  check(heaterCalls == 1 && lastHeater, "first tick must apply the heater state");
+  for (int i = 0; i < 50; i++) suvid_tick_body();  // обороты loop() без нового решения
+  check(heaterCalls == 1,
+        "REGRESSION: unchanged thermostat state must not be re-applied on every loop() pass");
+  TankSensor.avgTemp = 60.0f + HEAT_DELTA + 0.1f;  // термостат снял нагрев
+  fakeMillis = 2000; tick();
+  check(heaterCalls == 2 && !lastHeater, "a changed thermostat state must be applied");
+  for (int i = 0; i < 50; i++) suvid_tick_body();
+  check(heaterCalls == 2, "the new state must be applied once as well");
+  // Смена режима: возврат в Сувид обязан применить состояние заново - чужой режим мог
+  // переставить реле, а память suvid_tick() об этом не знает.
+  Samovar_Mode = SAMOVAR_SUVID_MODE + 1; suvid_tick_body();
+  Samovar_Mode = SAMOVAR_SUVID_MODE; suvid_tick_body();
+  check(heaterCalls == 3,
+        "REGRESSION: returning to Suvid mode must re-apply the heater state from scratch");
+}
 static void test_tick_respects_mode_guard() {
   // [T24.3] suvid_tick() применяет состояние термостата к нагревателю ТОЛЬКО в
   // режиме Сувид - смена режима не должна дёргать чужой нагреватель тем
@@ -295,6 +323,7 @@ int main() {
   test_timers_wrap_across_uint32_max();
   test_queue_failure_is_explicit_without_fallback();
   test_hold_band_survives_temperature_ripple();
+  test_tick_applies_heater_only_on_change();
   test_tick_respects_mode_guard();
   return failures == 0 ? 0 : 1;
 }
