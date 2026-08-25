@@ -11,15 +11,20 @@
 Глубина анализа (сознательное ограничение, не молчаливое):
   1. вложенность внутри одной функции - точно, с учётом областей видимости
      RAII-стражей и глубины скобок для ручных lock/unlock;
-  2. вложенность через ОДИН уровень вызова - если под замком вызвана функция,
-     которая сама берёт замок напрямую.
-Цепочки вызовов длиннее одного уровня тест не разворачивает: транзитивное
-замыкание в этом проекте протекает через крупные функции и даёт ложные пары.
-Такие места перечислены в комментарии "Известные вложенности" в runtime_helpers.h.
+  2. вложенность через ЛЮБОЕ число уровней вызова - если под замком вызвана функция,
+     которая сама берёт замок напрямую или вызывает (вглубь, рекурсивно) что-то, что
+     его берёт. Обход графа вызовов защищён от циклов (каждая функция разворачивается
+     не больше раза на цепочку) и ограничен явной глубиной MAX_CALL_DEPTH - предел не
+     молчаливый: если обход в него упёрся, это печатается в конце отчёта отдельной
+     строкой с именами функций, которые стоит проверить дополнительно вручную.
+Известные (проверенные) вложенности перечислены в комментарии "Известные вложенности"
+в runtime_helpers.h - это документация для человека, а не то, что ограничивает обход.
 """
 import re
 import sys
 from pathlib import Path
+
+from smoke_helpers import extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
@@ -244,6 +249,57 @@ for path in source_files():
         if tags:
             direct_tags.setdefault(name, set()).update(tags)
 
+# граф вызовов: функция -> имена функций, вызванных в её теле (по всем файлам сразу;
+# короткие имена без учёта перегрузок/пространств имён - ложные срабатывания только
+# расширяют проверку лишними связями, а не пропускают настоящие)
+call_graph: dict[str, set[str]] = {}
+for path in source_files():
+    lines = read(path).splitlines()
+    for name, start, end in parse_functions(lines):
+        callees: set[str] = set()
+        for line in lines[start:end + 1]:
+            stripped = line.strip()
+            if stripped.startswith("//") or stripped.startswith("*"):
+                continue
+            for callee in CALL_RE.findall(line):
+                if callee != name:
+                    callees.add(callee)
+        if callees:
+            call_graph.setdefault(name, set()).update(callees)
+
+# Обход графа вызовов вглубь: не только тело функции и не только один уровень вызова.
+# Предел явный (не молчаливый) - если обход в него упёрся, это фиксируется в
+# depth_limit_hit и печатается отдельной строкой в конце отчёта.
+MAX_CALL_DEPTH = 6
+depth_limit_hit: set[str] = set()
+reachable_cache: dict[str, set[str]] = {}
+
+
+def reachable_tags(start: str) -> set[str]:
+    """Все теги, достижимые из start по call_graph: свои прямые захваты плюс захваты
+    всех вызываемых (рекурсивно, вглубь) функций. visited защищает от зацикливания на
+    рекурсии/циклах вызовов - каждая функция разворачивается не больше одного раза."""
+    if start in reachable_cache:
+        return reachable_cache[start]
+    tags: set[str] = set(direct_tags.get(start, ()))
+    visited = {start}
+    frontier = [(callee, 1) for callee in call_graph.get(start, ())]
+    while frontier:
+        name, depth = frontier.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        tags.update(direct_tags.get(name, ()))
+        if depth >= MAX_CALL_DEPTH:
+            if call_graph.get(name):
+                depth_limit_hit.add(start)
+            continue
+        for callee in call_graph.get(name, ()):
+            if callee not in visited:
+                frontier.append((callee, depth + 1))
+    reachable_cache[start] = tags
+    return tags
+
 # ---- 4. сам анализ вложенности ---------------------------------------------
 observed: dict[tuple[str, str], set[str]] = {}
 for path in source_files():
@@ -269,7 +325,7 @@ for path in source_files():
                     observed.setdefault((held_tag, tag), set()).add(where)
         if held:
             for callee in CALL_RE.findall(line):
-                for tag in direct_tags.get(callee, ()):
+                for tag in reachable_tags(callee):
                     for held_tag, _held_depth, _held_kind, _held_name in held:
                         if held_tag != tag:
                             observed.setdefault((held_tag, tag), set()).add(f"{where} через {callee}()")
@@ -300,6 +356,160 @@ for (outer, inner), places in sorted(observed.items()):
             f"внутри берут {inner} (ранг {rank_by_tag[inner]}); по таблице LOCK_ORDER "
             f"{inner} должен браться раньше. Места: {', '.join(sorted(places))}"
         )
+
+if depth_limit_hit:
+    print(
+        f"Обход графа вызовов упёрся в предел глубины ({MAX_CALL_DEPTH} уровней) для: "
+        f"{', '.join(sorted(depth_limit_hit))} - дальше по цепочке не развернуто, "
+        "проверьте эти функции дополнительно вручную."
+    )
+
+# ---- 5. отдельная проверка: спинлок configMux (T29) -------------------------
+# НЕ участвует в иерархии LOCK_ORDER выше и не переиспользует её код: configMux
+# - это portMUX_TYPE (спинлок FreeRTOS: отключает прерывания/планировщик на
+# ядре), а не SemaphoreHandle_t/мьютекс, ранжирование мьютексов на спинлоки не
+# распространяется. Проверяем независимо:
+#   (а) каждая известная точка чтения/записи SamSetup/program[] обёрнута РОВНО
+#       в portENTER_CRITICAL(&configMux)/portEXIT_CRITICAL(&configMux), без
+#       лишнего кода между скобкой и целью;
+#   (б) ни в одной critical section с &configMux по всему дереву исходников
+#       нет запрещённой операции (String, SPIFFS, NVS, delay/vTaskDelay, Wire,
+#       WiFi, xSemaphoreTake, malloc/new) - спинлок глушит прерывания, любая
+#       блокирующая или аллоцирующая операция внутри - путь к зависанию.
+
+CONFIGMUX_ENTER = "portENTER_CRITICAL(&configMux);"
+CONFIGMUX_EXIT = "portEXIT_CRITICAL(&configMux);"
+
+# (файл, сигнатура функции, обёрнутая целевая строка)
+CONFIGMUX_SITES = [
+    ("Samovar.ino", "static OperationError commit_profile_operation()",
+     "SamSetup = active_profile_operation.settings;"),
+    ("Samovar.ino", "static void setup_connect_wifi_and_notify()",
+     "SamSetup = profileCandidate;"),
+    ("WebServer.ino", "void handleSave(AsyncWebServerRequest *request)",
+     "SetupEEPROM staged = SamSetup;"),
+    ("beer.h", "void FinishAutoTune()",
+     "SamSetup = profileCandidate;"),
+    ("logic.h", "PumpCalibrationResult pump_calibrate(int stpspeed)",
+     "SamSetup = profileCandidate;"),
+    ("Menu.ino", "void setup_go_back()",
+     "SamSetup = menuSetupCandidate;"),
+    ("program_io.h",
+     "inline String program_serialize_rows(uint8_t start, uint8_t end, ProgramRowSerializer serializer)",
+     "memcpy(snapshot, program, sizeof(snapshot));"),
+]
+
+# здесь под спинлок обёрнуто ВСЁ тело целиком - разрывать нельзя, иначе новое
+# число строк (ProgramLen) может оказаться в паре со старым содержимым program[].
+WHOLE_BODY_CONFIGMUX_SITES = [
+    ("program_io.h", "inline void program_commit(const ProgramDraft& draft)"),
+    ("program_io.h", "inline void program_clear()"),
+]
+
+
+def extract_last_function_body(source: str, signature: str) -> str:
+    """extract_function_body берёт ПЕРВОЕ вхождение сигнатуры в тексте - для
+    функций с forward-декларацией (например commit_profile_operation()) это
+    декларация, а не определение. rfind находит настоящее определение, не
+    ломая случаи без декларации (там rfind и find совпадают)."""
+    start = source.rfind(signature)
+    if start < 0:
+        raise ValueError(f"function not found: {signature}")
+    return extract_function_body(source[start:], signature)
+
+
+def check_configmux_wrapped(where: str, body: str, target: str) -> list[str]:
+    found: list[str] = []
+    idx = body.find(target)
+    if idx < 0:
+        return [f"{where}: не найдена целевая строка {target!r}"]
+    before, after = body[:idx], body[idx + len(target):]
+    enter_pos = before.rfind(CONFIGMUX_ENTER)
+    if enter_pos < 0:
+        found.append(f"{where}: {target!r} не обёрнута {CONFIGMUX_ENTER}")
+    else:
+        gap = before[enter_pos + len(CONFIGMUX_ENTER):].strip()
+        if gap:
+            found.append(f"{where}: между {CONFIGMUX_ENTER} и {target!r} лишний код: {gap!r}")
+    exit_pos = after.find(CONFIGMUX_EXIT)
+    if exit_pos < 0:
+        found.append(f"{where}: {target!r} не обёрнута {CONFIGMUX_EXIT}")
+    else:
+        gap = after[:exit_pos].strip()
+        if gap:
+            found.append(f"{where}: между {target!r} и {CONFIGMUX_EXIT} лишний код: {gap!r}")
+    return found
+
+
+def check_configmux() -> list[str]:
+    found: list[str] = []
+
+    for filename, signature, target in CONFIGMUX_SITES:
+        path = ROOT / filename
+        if not path.exists():
+            found.append(f"{filename}: файл не найден")
+            continue
+        try:
+            body = extract_last_function_body(read(path), signature)
+        except ValueError as exc:
+            found.append(f"{filename}: {exc}")
+            continue
+        found.extend(check_configmux_wrapped(f"{filename}::{signature}", body, target))
+
+    for filename, signature in WHOLE_BODY_CONFIGMUX_SITES:
+        path = ROOT / filename
+        if not path.exists():
+            found.append(f"{filename}: файл не найден")
+            continue
+        try:
+            body = extract_last_function_body(read(path), signature).strip()
+        except ValueError as exc:
+            found.append(f"{filename}: {exc}")
+            continue
+        if not body.startswith(CONFIGMUX_ENTER):
+            found.append(f"{filename}::{signature}: тело должно начинаться с {CONFIGMUX_ENTER}")
+        if not body.endswith(CONFIGMUX_EXIT):
+            found.append(f"{filename}::{signature}: тело должно заканчиваться {CONFIGMUX_EXIT}")
+
+    region_re = re.compile(re.escape(CONFIGMUX_ENTER) + r"(.*?)" + re.escape(CONFIGMUX_EXIT), re.S)
+    forbidden_in_configmux = [
+        (re.compile(r"\bString\b"), "String (аллокация)"),
+        (re.compile(r"\bSPIFFS\b"), "SPIFFS"),
+        (re.compile(r"\bPreferences\b|\bnvs_"), "NVS/Preferences"),
+        (re.compile(r"\bvTaskDelay\s*\("), "vTaskDelay"),
+        (re.compile(r"\bdelay\s*\("), "delay"),
+        (re.compile(r"\bWire\."), "Wire (I2C)"),
+        (re.compile(r"\bWiFi\."), "WiFi"),
+        (re.compile(r"\bxSemaphoreTake\s*\("), "xSemaphoreTake"),
+        (re.compile(r"\bmalloc\s*\(|\bnew\s+"), "malloc/new"),
+    ]
+
+    region_total = 0
+    for path in source_files():
+        text = strip_cpp_comments(read(path))
+        for match in region_re.finditer(text):
+            region_total += 1
+            region = match.group(1)
+            where = f"{path.relative_to(ROOT)}"
+            for pattern, label in forbidden_in_configmux:
+                if pattern.search(region):
+                    found.append(
+                        f"{where}: внутри critical section &configMux найдена запрещённая "
+                        f"операция ({label}): {region.strip()!r}"
+                    )
+
+    expected_regions = len(CONFIGMUX_SITES) + len(WHOLE_BODY_CONFIGMUX_SITES)
+    if region_total != expected_regions:
+        found.append(
+            f"найдено {region_total} critical section(s) с &configMux в исходниках, а в "
+            f"CONFIGMUX_SITES/WHOLE_BODY_CONFIGMUX_SITES описано {expected_regions} - список "
+            "известных точек в smoke_lock_order.py разошёлся с кодом"
+        )
+
+    return found
+
+
+errors.extend(check_configmux())
 
 if errors:
     print("Lock order smoke check failed:")

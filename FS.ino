@@ -19,6 +19,12 @@ static const uint8_t STATE_SNAPSHOT_PERIOD_S = 30;
 // (Steam,Pipe,Water,Tank), а не по всем DS_SENSOR_COUNT.
 static const uint8_t DS_LOGGED_SENSOR_COUNT = 4;
 
+// Порог уборки data_old.csv в append_data(). Поднят с прежних 400 байт: проверка теперь
+// выполняется ДО попытки записи (см. enforce_data_log_free_space_budget), а не только
+// после её успеха, поэтому запас должен покрывать саму предстоящую запись, а не только
+// то, что уже произошло.
+static const uint32_t DATA_LOG_CLEANUP_THRESHOLD_BYTES = 16384;
+
 bool flush_data_log() {
   bool locked = log_file_lock(pdMS_TO_TICKS(500));
   if (!locked) {
@@ -110,19 +116,6 @@ void process_pending_data_log_ops() {
         pending_log_flush_seq = 0;
       }
     }
-  }
-}
-
-//format bytes
-String formatBytes(size_t bytes) {
-  if (bytes < 1024) {
-    return String(bytes) + "B";
-  } else if (bytes < (1024 * 1024)) {
-    return String(bytes / 1024.0) + "KB";
-  } else if (bytes < (1024 * 1024 * 1024)) {
-    return String(bytes / 1024.0 / 1024.0) + "MB";
-  } else {
-    return String(bytes / 1024.0 / 1024.0 / 1024.0) + "GB";
   }
 }
 
@@ -401,12 +394,17 @@ static String state_snapshot_header() {
   out += ";TT=" + format_float(program[row].Temp, 2);
   out += ";TC=" + format_float(TankSensor.avgTemp, 2);
   out += ";TS=" + format_float(SteamSensor.avgTemp, 2);
+  out += ";SH=" + String(suvidHold.accumulatedMs / 1000UL);
   // Время - последним полем: строку собирают вне этого файла, её содержимое не под
   // нашим контролем, и разделитель внутри неё не должен ломать разбор остальных полей.
   out += ";T=" + WthdrwTimeS;
   return out;
 }
 
+// Неатомарная запись /state.csv - осознанное решение владельца от 24.08.2026: снимок
+// пишется раз в 30 секунд (STATE_SNAPSHOT_PERIOD_S), его потеря не опаснее самого сбоя
+// питания, а временный файл с последующим переименованием удвоил бы износ флеша и время
+// такта.
 bool write_state_snapshot() {
   const String header = state_snapshot_header();
   const String programText = serialize_program_for_mode(Samovar_Mode);
@@ -475,6 +473,12 @@ static bool state_snapshot_uint8(const String& header, const char* key, uint8_t&
   return parse_bounded_uint8(raw.c_str(), 0, 255, value).ok();
 }
 
+static bool state_snapshot_uint32(const String& header, const char* key, uint32_t& value) {
+  String raw;
+  if (!state_snapshot_field(header, key, raw)) return false;
+  return parse_bounded_uint32(raw.c_str(), 0, 0xFFFFFFFFUL, value).ok();
+}
+
 bool read_state_snapshot(StateSnapshot& snapshot) {
   snapshot = StateSnapshot{};
   bool locked = log_file_lock(pdMS_TO_TICKS(500));
@@ -507,8 +511,56 @@ bool read_state_snapshot(StateSnapshot& snapshot) {
   state_snapshot_uint8(header, "L", snapshot.programLen);
   uint8_t power = 0;
   if (state_snapshot_uint8(header, "H", power)) snapshot.powerOn = power != 0;
+  state_snapshot_uint32(header, "SH", snapshot.suvidHoldAccumulatedSec);
   snapshot.programText = programText;
   return true;
+}
+
+// Проверка свободного места и уборка data_old.csv. Раньше жила только на пути успешной
+// записи в append_data() - именно там, где она недостижима сильнее всего: у почти
+// заполненного диска запись становится частичной, а старое условие успеха (written != 0)
+// принимало и её. Теперь append_data() вызывает эту функцию ДО попытки записи, поэтому
+// уборка/предупреждение срабатывают независимо от того, чем закончится сама запись.
+static void enforce_data_log_free_space_budget() {
+  static bool memory_warning_sent = false;
+  // usedBytes() у LittleFS не читает готовое число, а обходит все служебные записи ФС.
+  // Раз в секунду это лишняя нагрузка на ядро 0, за которым следит сторожевой таймер,
+  // поэтому полный пересчёт делаем раз в десять записей, а между ними used_byte ведёт
+  // бухгалтерию по фактически записанному в append_data() - так порог уборки не
+  // срабатывает с опозданием.
+  static uint8_t space_check_countdown = 0;
+  if (space_check_countdown == 0) {
+    space_check_countdown = 10;
+    used_byte = SPIFFS.usedBytes();
+  } else {
+    space_check_countdown--;
+  }
+  // total_byte - used_byte считается в uint32_t: без ограничения оценка сверху дала бы
+  // при вычитании огромное «свободно» и отключила бы и уборку, и предупреждение.
+  if (total_byte - used_byte < DATA_LOG_CLEANUP_THRESHOLD_BYTES) {
+    //Кончилось место, удалим старый файл. Надо было сохранять раньше
+    bool cleanupLocked = log_file_lock(pdMS_TO_TICKS(50));
+    if (cleanupLocked) {
+      if (SPIFFS.exists("/data_old.csv")) {
+        if (!SPIFFS.remove("/data_old.csv")) {
+          Serial.println(F("data log cleanup failed: remove data_old.csv"));
+        }
+      }
+      log_file_unlock(true);
+    } else {
+      Serial.println(F("data log cleanup skipped: file busy"));
+    }
+  }
+  vTaskDelay(10 / portTICK_PERIOD_MS);
+  if (total_byte - used_byte < 50) {
+    if (!memory_warning_sent) {
+      SendMsg("Заканчивается память! Всего: " + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
+      memory_warning_sent = true;
+    }
+  } else {
+    // Сбрасываем флаг, если память освободилась
+    memory_warning_sent = false;
+  }
 }
 
 String append_data() {
@@ -544,6 +596,10 @@ String append_data() {
   }
 
   if (changedField > 0) {
+    // Первым действием - до захвата лока, до проверки файла, до самой записи - чтобы
+    // уборка/предупреждение о месте срабатывали на любой ветке раннего выхода ниже.
+    enforce_data_log_free_space_budget();
+
     String str;
     str = Crt;
     for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
@@ -574,7 +630,10 @@ String append_data() {
       return "";
     }
     size_t written = fileToAppend.println(str);
-    if (written == 0) {
+    // println(const String&) ядра ESP32 = print(s) (пишет s.length() байт) + println()
+    // (2 байта "\r\n"). written != 0 принимал и частичную запись при почти полном диске -
+    // теперь успехом считается только запись строки целиком.
+    if (written != str.length() + 2) {
       log_file_unlock(true);
       Serial.println(F("data log append failed: write data.csv"));
       return "";
@@ -596,48 +655,11 @@ String append_data() {
     }
     log_file_unlock(true);
 
-    {
-      static bool memory_warning_sent = false;
-      // usedBytes() у LittleFS не читает готовое число, а обходит все служебные записи ФС.
-      // Раз в секунду это лишняя нагрузка на ядро 0, за которым следит сторожевой таймер,
-      // поэтому полный пересчёт делаем раз в десять записей, а между ними ведём оценку по
-      // фактически записанному — так порог уборки не срабатывает с опозданием.
-      static uint8_t space_check_countdown = 0;
-      if (space_check_countdown == 0) {
-        space_check_countdown = 10;
-        used_byte = SPIFFS.usedBytes();
-      } else {
-        space_check_countdown--;
-        used_byte += written;
-        // total_byte - used_byte считается в uint32_t: без ограничения оценка сверху дала бы
-        // при вычитании огромное «свободно» и отключила бы и уборку, и предупреждение.
-        if (used_byte > total_byte) used_byte = total_byte;
-      }
-      if (total_byte - used_byte < 400) {
-        //Кончилось место, удалим старый файл. Надо было сохранять раньше
-        bool cleanupLocked = log_file_lock(pdMS_TO_TICKS(50));
-        if (cleanupLocked) {
-          if (SPIFFS.exists("/data_old.csv")) {
-            if (!SPIFFS.remove("/data_old.csv")) {
-              Serial.println(F("data log cleanup failed: remove data_old.csv"));
-            }
-          }
-          log_file_unlock(true);
-        } else {
-          Serial.println(F("data log cleanup skipped: file busy"));
-        }
-      }
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-      if (total_byte - used_byte < 50) {
-        if (!memory_warning_sent) {
-          SendMsg("Заканчивается память! Всего: " + String(total_byte) + ", использовано: " + String(used_byte), ALARM_MSG);
-          memory_warning_sent = true;
-        }
-      } else {
-        // Сбрасываем флаг, если память освободилась
-        memory_warning_sent = false;
-      }
-    }
+    // Пороговое решение (уборка/предупреждение) уже принято в enforce_data_log_free_space_budget()
+    // выше по функции - здесь только бухгалтерия по факту записанного, до следующего полного
+    // пересчёта used_byte = SPIFFS.usedBytes().
+    used_byte += written;
+    if (used_byte > total_byte) used_byte = total_byte;
 
     return str;
   }

@@ -4,6 +4,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -668,13 +669,22 @@ def run_cli_report(
     )
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0 or "### Error" in result.stdout:
+    # Настоящие заголовки playwright-cli печатаются ТОЛЬКО в начале строки.
+    # Тот же текст может случайно оказаться внутри блока "### Ran Playwright
+    # code", которым CLI эхом печатает наш же исполненный JS вместе с
+    # комментариями - substring/rfind без привязки к началу строки однажды
+    # поймал свой же комментарий как признак заблокировавшего скрипт диалога.
+    if result.returncode != 0 or re.search(r"(?m)^### Error\b", result.stdout):
         raise RuntimeError("playwright-cli run-code failed")
-    marker = "### Result\n"
-    start = result.stdout.rfind(marker)
-    if start < 0:
+    if re.search(r"(?m)^### Modal state\b", result.stdout):
+        raise RuntimeError(
+            "playwright-cli run-code failed: '### Modal state' marker in output "
+            "(a dialog blocked the script and was never handled)"
+        )
+    matches = list(re.finditer(r"(?m)^### Result\n", result.stdout))
+    if not matches:
         raise RuntimeError("playwright-cli result marker missing")
-    start += len(marker)
+    start = matches[-1].end()
     end = result.stdout.find("\n### Ran Playwright code", start)
     encoded = result.stdout[start : end if end >= 0 else None].strip()
     try:
@@ -708,11 +718,17 @@ def run_cli_filechooser(
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
     modal = "- [File chooser]: can be handled by upload"
+    # "### Result" здесь - тоже провал: этот вызов обязан застать открытый
+    # системный диалог выбора файла (см. modal выше), а не тихо завершиться
+    # результатом. Оба маркера ("### Error"/"### Result") якорим на начало
+    # строки по той же причине, что и в run_cli_report() выше - иначе можно
+    # словить собственный комментарий, эхом напечатанный CLI в блоке
+    # "### Ran Playwright code".
     if (
         result.returncode != 0
-        or "### Error" in result.stdout
+        or re.search(r"(?m)^### Error\b", result.stdout)
         or result.stdout.count(modal) != 1
-        or "### Result" in result.stdout
+        or re.search(r"(?m)^### Result\b", result.stdout)
     ):
         raise RuntimeError("playwright-cli filechooser trigger contract failed")
 

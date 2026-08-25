@@ -58,17 +58,12 @@ class String {
   String& operator+=(const char* text) { value_ += (text ? text : ""); return *this; }
   String& operator+=(const String& other) { value_ += other.value_; return *this; }
   String& operator+=(int v) { value_ += std::to_string(v); return *this; }
+  size_t length() const { return value_.size(); }
   const std::string& value() const { return value_; }
 
  private:
   std::string value_;
 };
-
-static String operator+(const char* lhs, const String& rhs) {
-  return String(std::string(lhs ? lhs : "") + rhs.value());
-}
-
-enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
 
 struct DSSensor {
   float avgTemp = 0.0f;
@@ -109,8 +104,6 @@ static String format_float(float v, int d) {
 static bool log_file_lock(TickType_t timeout = pdMS_TO_TICKS(50)) { (void)timeout; return true; }
 static void log_file_unlock(bool locked) { (void)locked; }
 
-static void vTaskDelay(int ticks) { (void)ticks; }
-
 struct SerialStub {
   void println(const char* text) { (void)text; }
 };
@@ -119,23 +112,16 @@ static SerialStub Serial;
 struct FileStub {
   bool ok = true;
   operator bool() const { return ok; }
-  size_t println(const String& text) { (void)text; return 1; }
+  // println(const String&) ядра ESP32 = print(s) (s.length() байт) + println() ("\r\n",
+  // 2 байта) - тот же расчёт, что и в новом условии успеха внутри append_data().
+  size_t println(const String& text) { return text.length() + 2; }
 };
 static FileStub fileToAppend;
 
-struct SpiffsStub {
-  uint32_t usedBytes() { return used_byte; }
-  bool exists(const char*) { return false; }
-  bool remove(const char*) { return true; }
-};
-static SpiffsStub SPIFFS;
-
-static int sendMsgCalls = 0;
-static void SendMsg(const String& text, MESSAGE_TYPE type) {
-  (void)text;
-  (void)type;
-  sendMsgCalls++;
-}
+// Бюджет свободного места - предмет отдельного теста
+// (smoke_append_data_space_budget.py); здесь достаточно заглушки, не наблюдающей за
+// SPIFFS/локом, чтобы не размывать фокус этого теста (порядок колонок CSV).
+static void enforce_data_log_free_space_budget() {}
 
 String append_data() {
 @BODY@
@@ -164,7 +150,6 @@ static void reset_fixture() {
   ProgramNum = 3;
   prev_ProgramNum = 3;
   data_log_ready = true;
-  sendMsgCalls = 0;
 }
 
 static std::vector<std::string> split_csv(const std::string& csv) {

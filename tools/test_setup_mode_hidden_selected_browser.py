@@ -105,6 +105,27 @@ BROWSER_TEST = r'''async page => {
     body: JSON.stringify({ operationId: 1, state: "succeeded", error: "none" })
   }));
 
+  // После успешного сохранения submitSetupForm() (data_raw/setup.htm) штатно уводит
+  // браузер на "/" - это НАСТОЯЩЕЕ поведение интерфейса, проверяемое (c) шагом не
+  // трогает и трогать не должно. Но QuietHandler ниже резолвит <!--#include--> и
+  // %токены% только для путей, оканчивающихся на ".htm" - запрос "/" (каталог) уходит
+  // в стандартный http.server, который отдаёт index.htm СЫРЫМ, без партиала
+  // main_status_header.htm (там живёт #connection_indicator). Из-за этого
+  // SamovarApp.startTelemetryPage() (data_raw/app.js) бросает pageerror "Не найден
+  // обязательный #connection_indicator", и он ПЛАВАЮЩЕ (гонка с моментом проверки
+  // errors.length ниже) попадает в этот же массив errors - тест падает не из-за
+  // setup.htm, а из-за жизненного цикла ЧУЖОЙ страницы, которую этот тест не проверяет.
+  // Чинить сам QuietHandler здесь нельзя (это дало бы index.htm уйти в реальные
+  // /ajax-запросы, которые в этом тесте не замоканы, - новые чужие ошибки вместо
+  // старой) и снимать сбор ошибок после ухода с setup.htm тоже не вариант (усложняет
+  // и ослабляет гарантию для настоящих ошибок setup.htm перед самой отправкой).
+  // Поэтому просто подменяем ответ на "/" болванкой без единого <script> - переход
+  // по-прежнему происходит по-настоящему, но грузить чужой JS этому тесту незачем.
+  await page.route(baseUrl + "/", route => route.fulfill({
+    status: 200, contentType: "text/html; charset=utf-8",
+    body: "<!doctype html><title>stub</title>"
+  }));
+
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
 
   // Прочие числовые поля формы заполнены "нулевым" заглушечным дефолтом рендера этого
@@ -196,8 +217,29 @@ def run_cli(cli, session, arguments, cwd, timeout, check=True):
     )
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if check and (result.returncode != 0 or "### Error" in result.stdout):
-        raise RuntimeError(f"playwright-cli {' '.join(arguments[:1])} failed")
+    if check:
+        command = arguments[0] if arguments else ""
+
+        def has_marker(marker):
+            # Настоящие заголовки playwright-cli ("### Error"/"### Modal state"/
+            # "### Result") печатаются ТОЛЬКО в начале строки. Тот же текст может
+            # случайно оказаться внутри блока "### Ran Playwright code" - туда CLI
+            # эхом печатает наш же исполненный JS, включая комментарии. Проверка
+            # substring без привязки к началу строки однажды поймала свой же
+            # комментарий как признак заблокировавшего скрипт диалога.
+            return result.stdout.startswith(marker) or ("\n" + marker) in result.stdout
+
+        if result.returncode != 0:
+            raise RuntimeError(f"playwright-cli {command} failed (exit {result.returncode})")
+        if has_marker("### Error"):
+            raise RuntimeError(f"playwright-cli {command} failed: '### Error' marker in output")
+        if has_marker("### Modal state"):
+            raise RuntimeError(
+                f"playwright-cli {command} failed: '### Modal state' marker in output "
+                "(a dialog blocked the script and was never handled)"
+            )
+        if command == "run-code" and not has_marker("### Result"):
+            raise RuntimeError(f"playwright-cli {command} failed: '### Result' marker missing from output")
     return result.returncode
 
 

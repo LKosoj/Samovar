@@ -134,7 +134,7 @@ BLYNK_READ(V14) {
   if (inReadHandler) return;
   inReadHandler = true;
   // [C-2] Читаем кэш SamovarStatus под замком; FSM продвигает его раз в секунду
-  // из секундного гейта triggerSysTicker (core 0) через get_Samovar_Status().
+  // из секундного гейта triggerSysTicker (core 0) через tick_status_fsm().
   {
     String statusCopy;
     bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
@@ -194,18 +194,28 @@ BLYNK_WRITE(V16) {
 
 BLYNK_WRITE(V17) {
   if (mode_switch_in_progress()) return;
-  uint16_t stepSpeed = 0;
-  // [PKG-F] Ноль снова останавливает насос, как на HEAD: param.asFloat()==0 шёл через
-  // set_pump_speed(get_speed_from_rate(0)) до внедрения строгого парсера, который
-  // отвергает rate<=0. Нулевой вход обрабатываем ДО строгого парсера.
+  // Ноль останавливает отбор напрямую через stopService(), в обход set_pump_speed():
+  // get_speed_from_rate(0) зажимает результат до 1 (минимальная скорость мотора), а
+  // set_pump_speed(1, true) внутри себя зовёт stopService() и тут же startService() -
+  // насос не останавливается, а ползёт на минимальной скорости. Нулевой вход разбираем
+  // ДО строгого парсера, который rate<=0 просто отвергает как недопустимое значение.
+  // Тот же статус, что проверяет set_pump_speed() (logic.h) - шаговый мотор ещё
+  // используют калибровка насоса, HopStepperStep() и самотест, V17=0 не должен
+  // обрывать их вне отбора. После остановки обнуляем скорость/производительность,
+  // как и другие точки остановки отбора (WebServer.ino, alarm.h, I2CStepper.h).
   float rate = 0.0f;
   NumericParseResult result = parse_finite_float(param.asStr(), rate);
   if (result.ok() && rate == 0.0f) {
-    stepSpeed = (uint16_t)get_speed_from_rate(0);
-  } else {
-    result = parse_control_rate_steps(
-        param.asStr(), SamSetup.StepperStepMl, stepSpeed);
+    if (SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL || SamovarStatusInt == SAMOVAR_STATUS_RECT_AUTOPAUSE || SamovarStatusInt == SAMOVAR_STATUS_PAUSED) {
+      stopService();
+      CurrrentStepperSpeed = 0;
+      ActualVolumePerHour = 0;
+    }
+    return;
   }
+  uint16_t stepSpeed = 0;
+  result = parse_control_rate_steps(
+      param.asStr(), SamSetup.StepperStepMl, stepSpeed);
   if (!result.ok()) {
     report_blynk_numeric_error(17, result);
     return;

@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BREWXML_PAGE = ROOT / "data_raw" / "brewxml.htm"
 INDEX_PAGE = ROOT / "data_raw" / "index.htm"
+LUA_FIELD_PARTIAL = ROOT / "data_raw" / "partials" / "lua_field.htm"
 
 errors = []
 
@@ -19,6 +20,7 @@ def read_text(path):
 
 brewxml = read_text(BREWXML_PAGE)
 index = read_text(INDEX_PAGE)
+lua_field_partial = read_text(LUA_FIELD_PARTIAL)
 
 if brewxml:
   if re.search(r"<[A-Za-z][^>]*\bclassName\s*=", brewxml):
@@ -37,6 +39,10 @@ if index:
     errors.append("data_raw/index.htm still contains invalid #FFF; color token")
   if "margin-right: 100;" in index:
     errors.append("data_raw/index.htm still has unitless margin-right: 100")
+  if "<!--#include lua_field.htm-->" not in index:
+    errors.append("data_raw/index.htm does not include the shared lua_field.htm partial")
+  if 'id="lua_str_d"' in index:
+    errors.append("data_raw/index.htm still has its own hand-written copy of the Lua field block")
   for token in [
     "for (let z = 0; z < varr.length; z++)",
     "let bckg = \"#fff\"",
@@ -44,6 +50,12 @@ if index:
   ]:
     if token not in index:
       errors.append(f"data_raw/index.htm missing HTML cleanup token: {token}")
+
+if lua_field_partial:
+  if "margin-right: 100;" in lua_field_partial:
+    errors.append("data_raw/partials/lua_field.htm still has unitless margin-right: 100")
+  if "margin-right: 100px;" not in lua_field_partial:
+    errors.append("data_raw/partials/lua_field.htm missing fixed margin-right: 100px")
 
 program = read_text(ROOT / "data_raw" / "program.htm")
 if program:

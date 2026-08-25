@@ -177,28 +177,16 @@
 
     function renderTelemetry(myObj) {
         {
-          document.getElementById('version').textContent = myObj.version;
-          document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
-          document.getElementById('stm').textContent = myObj.stm;
           document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(1);
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(1);
           document.getElementById('TankTemp').innerHTML = myObj.TankTemp.toFixed(1);
           document.getElementById('ACPTemp').innerHTML = myObj.ACPTemp.toFixed(1);
           document.getElementById('Status').textContent = myObj.Status;
-          document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
           document.getElementById('opt_power_volt').innerHTML = myObj.current_power_volt;
-          document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
-          document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
-          document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
           document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
           document.getElementById('ISspd').innerHTML = myObj.ISspd.toFixed(1);
           document.getElementById('opt_ISspd').innerHTML = myObj.ISspd.toFixed(1);
-          document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
-          document.getElementById('heap').innerHTML = myObj.heap;
-          document.getElementById('rssi').innerHTML = myObj.rssi;
-          document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
-          SamovarApp.setSoundEnabled(!!myObj.UseBBuzzer);
           // console.log('Pressure: ', myObj.prvl)
           if (myObj.hasOwnProperty('prvl')) {
             document.getElementById('pressure_value').innerHTML = myObj.prvl.toFixed(1);
@@ -212,37 +200,23 @@
             document.getElementById('BragaTemp_block').style = "display: none"
           }
 
-          if (myObj.Lstatus) {
-            if (myObj.Lstatus != "") {
-              document.getElementById('Lstatus').textContent = myObj.Lstatus;
-            }
-          }
-
           if (myObj.WFflowRate === undefined) {
             document.getElementById('flowsensor').style = 'visibility: hidden; position: fixed;';
           } else {
             document.getElementById('flowsensor').style = '';
           }
 
-          if (myObj.wp_spd === undefined) {
-          } else {
-            document.getElementById('add_param').innerHTML = "; ШИМ насоса воды: " + myObj.wp_spd;
-          }
-
+          SamovarApp.renderTelemetryCommon(myObj);
           SamovarApp.renderI2cPumpStatus(myObj);
-
-          let powerstr;
-          let powerstyle;
-          HeaterPowerOn = myObj.PowerOn == 1;
-          if (HeaterPowerOn) {
-            powerstr = 'Выключить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-danger-bg');
+          if (myObj.PowerOn == 1) {
+            document.getElementById('power').value = 'Выключить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-danger-bg');
+            HeaterPowerOn = true;
           } else {
-            powerstr = 'Включить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-active-bg');
+            document.getElementById('power').value = 'Включить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-active-bg');
+            HeaterPowerOn = false;
           }
-          document.getElementById('power').value = powerstr;
-          document.getElementById('power').style.backgroundColor = powerstyle;
 
         }
     };
@@ -260,7 +234,7 @@
         storeMessageHistory: true,
         dynamicThemeTitle: false,
         implicitSystemTheme: false,
-        staleReadingIds: ['SteamTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp']
+        staleReadingIds: ['SteamTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp', 'power']
       });
     };
 
@@ -351,7 +325,7 @@
         <div id='VoltH2' class="container_row" style="justify-content: center; margin-top: 0.5em;">
           <div class="flex_row">
             <label class="text" id='set_power_label' for="Voltage"></label>&nbsp;&nbsp;
-            <input name='Voltage' id='Voltage' size='4' type='text' value=''>
+            <input name='Voltage' id='Voltage' size='4' type='text' inputmode='decimal' value=''>
           </div>
           <div class="flex_row" style="padding-bottom: 0.5em;">
             <input id='SetVoltage' type='button' name='SetVoltage' onclick='sendvoltage();' class="button">
@@ -427,10 +401,10 @@
       
       <div class="prg" id="prg">
         <div class="prgline" id="hdr"><label class="tooltip">№</label><label class="tooltip" style="display:inline-block;text-align:center;width:190px;">Тип программы</label><span style="display:inline-block;width:120px;">&nbsp;</span><label class="tooltip" id="nbk-program-col-speed" style="width:120px;display:inline-block;text-align:center;">Скорость</label><span style="display:inline-block;width:45px;">&nbsp;</span><label class="tooltip" id="programPwrLabel" style="width:140px;display:inline-block;text-align:center;"></label></div>
-        <div class="prgline" id="prgln1" style="background-color: #FF6347; color: #17212B;"><label id="nbk-program-row-1" class="prglabel" style="background-color: #FF6347; color: #17212B;">01</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Прогрев</label><input type="hidden" name="ptype1" value="H"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed1" type="text" name="pspeed1" aria-labelledby="nbk-program-row-1 nbk-program-col-speed" onchange="calc_program();" style="background-color:#FF6347;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower1" type="text" name="ppower1" aria-labelledby="nbk-program-row-1 programPwrLabel" onchange="calc_program();" style="background-color:#FF6347;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
-        <div class="prgline" id="prgln2" style="background-color: #FFFF00; color: #17212B;"><label id="nbk-program-row-2" class="prglabel" style="background-color: #FFFF00; color: #17212B;">02</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Настройка</label><input type="hidden" name="ptype2" value="S"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed2" type="text" name="pspeed2" aria-labelledby="nbk-program-row-2 nbk-program-col-speed" onchange="calc_program();" style="background-color: #FFFF00;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower2" type="text" name="ppower2" aria-labelledby="nbk-program-row-2 programPwrLabel" onchange="calc_program();" style="background-color: #FFFF00;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
-        <div class="prgline" id="prgln3" style="background-color: #00BFFF; color: #17212B;"><label id="nbk-program-row-3" class="prglabel" style="background-color: #00BFFF; color: #17212B;">03</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Оптимизация</label><input type="hidden" name="ptype3" value="O"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed3" type="text" name="pspeed3" aria-labelledby="nbk-program-row-3 nbk-program-col-speed" onchange="calc_program();" style="background-color: #00BFFF;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower3" type="text" name="ppower3" aria-labelledby="nbk-program-row-3 programPwrLabel" onchange="calc_program();" style="background-color: #00BFFF;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
-        <div class="prgline" id="prgln4" style="background-color: #98FB98; color: #17212B;"><label id="nbk-program-row-4" class="prglabel" style="background-color: #98FB98; color: #17212B;">04</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Работа</label><input type="hidden" name="ptype4" value="W"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed4" type="text" name="pspeed4" aria-labelledby="nbk-program-row-4 nbk-program-col-speed" onchange="calc_program();" style="background-color: #98FB98;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower4" type="text" name="ppower4" aria-labelledby="nbk-program-row-4 programPwrLabel" onchange="calc_program();" style="background-color: #98FB98;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
+        <div class="prgline" id="prgln1" style="background-color: #FF6347; color: #17212B;"><label id="nbk-program-row-1" class="prglabel" style="background-color: #FF6347; color: #17212B;">01</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Прогрев</label><input type="hidden" name="ptype1" value="H"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed1" type="text" name="pspeed1" inputmode="decimal" aria-labelledby="nbk-program-row-1 nbk-program-col-speed" onchange="calc_program();" style="background-color:#FF6347;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower1" type="text" name="ppower1" inputmode="decimal" aria-labelledby="nbk-program-row-1 programPwrLabel" onchange="calc_program();" style="background-color:#FF6347;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
+        <div class="prgline" id="prgln2" style="background-color: #FFFF00; color: #17212B;"><label id="nbk-program-row-2" class="prglabel" style="background-color: #FFFF00; color: #17212B;">02</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Настройка</label><input type="hidden" name="ptype2" value="S"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed2" type="text" name="pspeed2" inputmode="decimal" aria-labelledby="nbk-program-row-2 nbk-program-col-speed" onchange="calc_program();" style="background-color: #FFFF00;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower2" type="text" name="ppower2" inputmode="decimal" aria-labelledby="nbk-program-row-2 programPwrLabel" onchange="calc_program();" style="background-color: #FFFF00;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
+        <div class="prgline" id="prgln3" style="background-color: #00BFFF; color: #17212B;"><label id="nbk-program-row-3" class="prglabel" style="background-color: #00BFFF; color: #17212B;">03</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Оптимизация</label><input type="hidden" name="ptype3" value="O"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed3" type="text" name="pspeed3" inputmode="decimal" aria-labelledby="nbk-program-row-3 nbk-program-col-speed" onchange="calc_program();" style="background-color: #00BFFF;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower3" type="text" name="ppower3" inputmode="decimal" aria-labelledby="nbk-program-row-3 programPwrLabel" onchange="calc_program();" style="background-color: #00BFFF;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
+        <div class="prgline" id="prgln4" style="background-color: #98FB98; color: #17212B;"><label id="nbk-program-row-4" class="prglabel" style="background-color: #98FB98; color: #17212B;">04</label>&nbsp;&nbsp;&nbsp;<label style="width:200px;display:inline-block;color:#17212B;">Работа</label><input type="hidden" name="ptype4" value="W"><span style="display:inline-block;width:85px;">&nbsp;</span><input id="pspeed4" type="text" name="pspeed4" inputmode="decimal" aria-labelledby="nbk-program-row-4 nbk-program-col-speed" onchange="calc_program();" style="background-color: #98FB98;color:#17212B;border-color:#17212B;text-align:center;width:80px;"><span style="display:inline-block;width:70px;">&nbsp;</span><input id="ppower4" type="text" name="ppower4" inputmode="decimal" aria-labelledby="nbk-program-row-4 programPwrLabel" onchange="calc_program();" style="background-color: #98FB98;color:#17212B;border-color:#17212B;text-align:center;width:80px;"></div>
       </div>      
       
       

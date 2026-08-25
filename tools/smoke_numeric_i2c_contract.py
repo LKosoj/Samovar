@@ -77,28 +77,28 @@ require_ordered_tokens(
         "OperationId operationId = 0;",
         "queue_pending_i2cpump(",
         "command, operationId)",
-        'send_no_store_response(request, 200, "text/plain", "OK");',
+        "send_operation_accepted(request, operationId);",
     ],
     errors,
 )
 # The stop branch and the speed/volume branch both end with the identical
-# `send_no_store_response(request, 200, "text/plain", "OK");` literal, so an
-# ordered-token scan over the whole pump_body would happily skip a mutated/
-# missing stop-branch reply and match the untouched one further down in the
+# `send_operation_accepted(request, operationId);` call, so an ordered-token
+# scan over the whole pump_body would happily skip a mutated/missing
+# stop-branch reply and match the untouched one further down in the
 # speed/volume branch instead. Scope the check to just the `if (stopCount ==
 # 1) { ... }` block so a mutation there cannot hide behind the other branch.
 if pump_body:
     try:
         stop_branch_body, _ = extract_braced_block_after(pump_body, "if (stopCount == 1)")
         require_ordered_tokens(
-            "I2C pump stop branch answers OK once queued",
+            "I2C pump stop branch answers with the operation id once queued",
             stop_branch_body,
             [
                 "command.is_stop = true;",
                 "OperationId operationId = 0;",
                 "queue_pending_i2cpump(",
                 "command, operationId)",
-                'send_no_store_response(request, 200, "text/plain", "OK");',
+                "send_operation_accepted(request, operationId);",
             ],
             errors,
         )

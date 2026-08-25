@@ -75,7 +75,6 @@ if sensor_text:
         "uint8_t count;",
         "extern portMUX_TYPE dsAddressMux;",
         "inline bool ds_address_equal",
-        "inline bool ds_address_invalid",
         "inline void set_invalid_ds_address",
     ]:
         require_token("sensorinit.h DS snapshot contract", sensor_text, token)

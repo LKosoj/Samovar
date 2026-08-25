@@ -77,6 +77,11 @@ def executor_fake_headers() -> dict[str, str]:
             int xSemaphoreTake(SemaphoreHandle_t, TickType_t);
             void xSemaphoreGive(SemaphoreHandle_t);
             void vTaskDelay(TickType_t);
+            // [Ревью 24.08, ошибка 1] i2c_stepper_send_command() теперь считает общий
+            // дедлайн по millis() - объявление нужно ДО #include "I2CStepper.h" ниже
+            // по файлу; определение - там же, где остальные millis()-фейки этого
+            // харнесса (см. fakeMillis).
+            uint32_t millis();
 
             #define pdTRUE 1
             #define portTICK_RATE_MS 1
@@ -96,6 +101,11 @@ def executor_fake_headers() -> dict[str, str]:
              private:
               std::string value_;
             };
+
+            inline String operator+(String lhs, const String& rhs) {
+              lhs += rhs;
+              return lhs;
+            }
             """
         ),
         "Wire.h": textwrap.dedent(
@@ -163,14 +173,39 @@ def executor_fake_headers() -> dict[str, str]:
             void stepper_safe_set_motion(uint16_t speed, uint8_t direction,
                                          uint32_t target);
             void stepper_safe_stop_reset();
+            void stepper_safe_reverse(bool val);
             uint32_t stepper_safe_get_target();
             float get_liquid_volume_by_step(int steps);
             float get_speed_from_rate(float rate);
+
+            enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100 };
+            extern SemaphoreHandle_t xMsgSemaphore;
+            // report_degraded_boot() в реальной прошивке static в Samovar.ino - I2CStepper.h
+            // повторяет это же объявление, поэтому стаб обязан совпадать по linkage.
+                        """
+        ),
+        # [Ревью 24.08, находка 5] i2c_stepper_send_command() теперь считает дедлайн через
+        # safety_deadline_after/safety_deadline_expired (safety_transition.h) вместо ручного
+        # millis()+N. Реальный samovar_api.h подключает safety_transition.h - фейк повторяет
+        # ту же цепочку, иначе изолированная сборка этого харнесса не увидит символы.
+        "safety_transition.h": textwrap.dedent(
+            r"""
+            #pragma once
+            #include <cstdint>
+
+            inline bool safety_deadline_expired(uint32_t now, uint32_t deadline) {
+              return (int32_t)(now - deadline) >= 0;
+            }
+
+            inline uint32_t safety_deadline_after(uint32_t now, uint32_t delayMs) {
+              return now + delayMs;
+            }
             """
         ),
         "samovar_api.h": textwrap.dedent(
             r"""
             #pragma once
+            #include "safety_transition.h"
 
             enum PersistResult : uint8_t {
               PERSIST_OK = 0,
@@ -187,6 +222,7 @@ def executor_fake_headers() -> dict[str, str]:
             PersistResult save_profile_nvs(const SetupEEPROM& candidate);
             PumpCalibrationResult pump_calibrate(int speed);
             void WriteConsoleLog(const String& message);
+            void SendMsg(const String& m, MESSAGE_TYPE msg_type);
             """
         ),
     }
@@ -263,6 +299,9 @@ volatile float I2CPumpTargetMl = 0;
 bool I2CPumpCalibrating = false;
 uint8_t use_I2C_dev = 0;
 SemaphoreHandle_t xI2CSemaphore = 1;
+// 0/NULL как в реальной прошивке до setup(): xMsgSemaphore ещё не создан, поэтому
+// i2c_stepper_note_refresh_failure() идёт по ветке report_degraded_boot().
+SemaphoreHandle_t xMsgSemaphore = 0;
 FakeWire Wire;
 FakeI2C2 I2C2;
 
@@ -288,6 +327,10 @@ static int calibrationCalls = 0;
 int xSemaphoreTake(SemaphoreHandle_t, TickType_t) { return pdTRUE; }
 void xSemaphoreGive(SemaphoreHandle_t) {}
 void vTaskDelay(TickType_t) {}
+// [Ревью 24.08, ошибка 1] i2c_stepper_send_command() внутри вызывает millis() для
+// общего дедлайна - executor-харнесс не варьирует время, поэтому стаб просто
+// постоянно возвращает 0 (это не ломает деадлайн: (int32_t)(0 - (0+3000)) < 0).
+uint32_t millis() { return 0; }
 
 void fake_wire_begin(uint8_t) {
   bus.txHasRegister = false;
@@ -335,10 +378,12 @@ void stopService() {}
 void startService() {}
 void stepper_safe_set_motion(uint16_t, uint8_t, uint32_t) {}
 void stepper_safe_stop_reset() {}
+void stepper_safe_reverse(bool) {}
 uint32_t stepper_safe_get_target() { return 0; }
 float get_liquid_volume_by_step(int) { return 0; }
 float get_speed_from_rate(float) { return 0; }
 void WriteConsoleLog(const String&) {}
+void SendMsg(const String&, MESSAGE_TYPE) {}
 
 PersistResult save_profile_nvs(const SetupEEPROM&) {
   persistCalls++;
@@ -662,6 +707,11 @@ def build_lifecycle_harness() -> str:
                 samovar_source,
                 "static void process_pending_i2c_operations()",
             ),
+            wrapped(
+                "static void tick_reap_stale_operations()",
+                samovar_source,
+                "static void tick_reap_stale_operations()",
+            ),
         )
     )
     harness = r'''
@@ -723,6 +773,20 @@ struct PendingCommandLockGuard {
 };
 static bool mode_switch_in_progress() { return modeSwitchInProgress; }
 
+// Фейки для реального тела tick_reap_stale_operations(): millis() двигает тест
+// вручную (без реального времени), SendMsg/ALARM_MSG - заглушки лога тревог.
+// millis() без static - её объявление в фейковом Arduino.h (внешняя линковка)
+// уже увидел настоящий I2CStepper.h выше по файлу (i2c_stepper_send_command).
+static uint32_t fakeMillis = 0;
+uint32_t millis() { return fakeMillis; }
+static const int ALARM_MSG = 0;
+static void SendMsg(const char*, int) {}
+// [Ревью 24.08, ошибка 1] process_pending_i2c_operations() теперь зовёт
+// feedLoopWDT() (см. Samovar.ino) - здесь просто считаем вызовы, поведение
+// самого сторожа этот тест не проверяет (см. smoke_loop_budget_vs_watchdog.py).
+static int feedLoopWDTCalls = 0;
+static void feedLoopWDT() { feedLoopWDTCalls++; }
+
 static OperationError execute_pending_i2c_stepper(
     const PendingI2CStepperCmd&) {
   executorCalls[PENDING_I2C_OPERATION_STEPPER]++;
@@ -779,6 +843,7 @@ static void reset_fixture() {
   pendingLockResults.clear();
   modeSwitchInProgress = false;
   unlockCalls = 0;
+  feedLoopWDTCalls = 0;
   for (size_t index = 0; index < 5; index++) {
     executorResults[index] = OPERATION_ERROR_NONE;
     executorCalls[index] = 0;
@@ -931,11 +996,78 @@ static void test_clear_targets_only_matching_owner() {
         "clear changed an unrelated owner");
 }
 
+// T15/A1+A2: реапер (tick_reap_stale_operations) лечит карточку на складе, но канал,
+// который эту карточку держал, обязан освобождаться отдельным циклом. fakeMillis
+// продвигается вручную: сперва "наблюдение" (реапер впервые видит операцию), затем
+// скачок за OPERATION_STALE_TIMEOUT_MS - естественный путь протухания, тот же, что
+// использует прошивка. A2 продолжает по времени ПОСЛЕ A1: одноразовый alarm-латч
+// (static alarmEmitted внутри operation_store_reap_stale_locked) к этому моменту уже
+// взведён, и tick_reap_stale_operations() увидит reaped == false - канал обязан
+// освободиться всё равно, а не по значению reaped (это отличает исправление от
+// реализации, ошибочно завязанной на reaped).
+static void test_reaper_frees_stale_i2c_channel() {
+  reset_fixture();
+
+  // A1: первая протухшая операция за весь процесс - reaped вернётся true.
+  const OperationId pumpId = queue_fixture(PENDING_I2C_OPERATION_PUMP);
+  fakeMillis += 1000;
+  tick_reap_stale_operations();
+  check(pending_i2cpump_flag,
+        "A1 setup: reaper тронул ещё активный (не протухший) канал");
+  fakeMillis += OPERATION_STALE_TIMEOUT_MS + 1000;
+  tick_reap_stale_operations();
+  check(record_for(pumpId).state == OPERATION_STATE_FAILED &&
+            record_for(pumpId).error == OPERATION_ERROR_STALE_REAPED,
+        "A1 setup: карточка не протухла естественным путём (test bug)");
+  check(!pending_i2cpump_flag && pending_i2cpump_buf.operationId == 0,
+        "A1: канал не освобождён после протухания карточки реапером");
+
+  // A2: второй канал протухает ПОСЛЕ первого - alarmEmitted уже true, reaped
+  // будет false, но канал обязан освободиться тем же безусловным циклом.
+  const OperationId stepperId = queue_fixture(PENDING_I2C_OPERATION_STEPPER);
+  fakeMillis += 1000;
+  tick_reap_stale_operations();
+  check(pending_i2cstepper_flag,
+        "A2 setup: reaper тронул ещё активный (не протухший) канал");
+  fakeMillis += OPERATION_STALE_TIMEOUT_MS + 1000;
+  tick_reap_stale_operations();
+  check(record_for(stepperId).state == OPERATION_STATE_FAILED &&
+            record_for(stepperId).error == OPERATION_ERROR_STALE_REAPED,
+        "A2 setup: вторая карточка не протухла естественным путём (test bug)");
+  check(!pending_i2cstepper_flag && pending_i2cstepper_buf.operationId == 0,
+        "A2: второй канал не освобождён, хотя alarm-латч уже не взводится "
+        "повторно (реализация ошибочно завязана на reaped)");
+}
+
+// T15/B: искусственно выставленное несовпадение id опубликованного результата с
+// владельцем канала. Планировщик честно предупредил: живого сценария для этого в
+// однопоточном loop() нет (публикация и применение результата идут в одном
+// проходе, реапер зовётся позже) - это защита на будущее, id разводится руками,
+// а не воспроизведение реального отказа.
+static void test_publish_mismatch_result_is_discarded() {
+  reset_fixture();
+  const OperationId ownedId = queue_fixture(PENDING_I2C_OPERATION_PUMP);
+  process_pending_i2c_operations();
+  check(pending_i2c_operation_result.pending &&
+            pending_i2c_operation_result.id == ownedId,
+        "fixture: draft result was not published for owned id");
+
+  // Подменяем владельца канала уже опубликованного результата - искусственное
+  // расхождение id, а не реальная гонка.
+  pending_i2cpump_buf.operationId = ownedId + 1;
+  process_pending_i2c_operations();
+  check(!pending_i2c_operation_result.pending,
+        "mismatched id result was not discarded - stays pending forever and "
+        "blocks all further I2C dispatch");
+}
+
 int main() {
   test_each_owner_lifecycle();
   test_mode_barrier_and_discard();
   test_terminal_retry_has_no_duplicate_side_effect();
   test_clear_targets_only_matching_owner();
+  test_reaper_frees_stale_i2c_channel();
+  test_publish_mismatch_result_is_discarded();
   if (failures != 0) return 1;
   std::cout << "lifecycle harness passed\n";
   return 0;

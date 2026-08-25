@@ -41,28 +41,65 @@ BROWSER_TEST = r'''async page => {
   });
   page.on("pageerror", error => errors.push("pageerror: " + error.message));
 
-  function waitForUrlIncludes(fragment, timeoutMs) {
+  // Кнопка "На главную" (см. checkGuardedButton ниже) реально уводит на
+  // index.htm - там app.js сразу (без задержки) начинает опрашивать /ajax
+  // (см. startPollLoop). Этот тест проверяет только confirmLeaveIfDirty(), а
+  // не телеметрию index.htm, но без мока запрос 404-ит и браузер сам пишет
+  // "Failed to load resource" в консоль как ошибку - отдаём минимально
+  // валидную заглушку, чтобы не путать эту тестируемую здесь функциональность
+  // с посторонним шумом.
+  await page.route("**/ajax*", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      version: "test", crnt_tm: "12:00:00", Status: "Готов", PowerOn: 0,
+      heaterAlarmLatched: 0, latestMessageSequence: 0
+    })
+  }));
+
+  // ВНИМАНИЕ: этот код исполняется в Node-окружении playwright-cli (снаружи
+  // page.evaluate), а не в браузере - там нет глобального setTimeout
+  // (проверено эмпирически: "setTimeout is not defined"), поэтому паузы
+  // делаем через page.waitForTimeout(), которая живёт на самом page.
+  async function waitForUrlIncludes(fragment, timeoutMs) {
     const start = Date.now();
-    return new Promise(resolve => {
-      (function poll() {
-        if (page.url().includes(fragment)) return resolve(true);
-        if (Date.now() - start > timeoutMs) return resolve(false);
-        setTimeout(poll, 50);
-      })();
-    });
+    while (!page.url().includes(fragment)) {
+      if (Date.now() - start > timeoutMs) return false;
+      await page.waitForTimeout(50);
+    }
+    return true;
   }
 
-  async function waitForRequestError(timeoutMs) {
+  // loadFile() (см. setup.htm) читает файл через FileReader асинхронно и
+  // вызывает SamovarApp.showRequestError() только внутри reader.onload, уже
+  // ПОСЛЕ того, как сам loadFile() синхронно вернул управление. Опрос "текст
+  // в #request_error непустой и виден" без привязки к КОНКРЕТНОМУ вызову -
+  // настоящая гонка (не выдуманная): под нагрузкой первый же опрос может
+  // застать ещё не обновившийся текст ПРЕДЫДУЩЕГО loadFile(), а не текст,
+  // который вот-вот выставит текущий. SamovarApp уже считает ревизию
+  // (currentRequestErrorRevision(), см. app.js) на каждый show/clear -
+  // ждём именно её изменения относительно снимка, снятого непосредственно
+  // перед вызовом loadFile() (см. каждый вызов ниже), а не просто "что-то
+  // появилось". Опрос с паузой между итерациями - это только частота
+  // проверки состояния, а не сама синхронизация (само условие - событие
+  // "ревизия изменилась", не "прошло N миллисекунд").
+  async function waitForRequestError(previousRevision, timeoutMs) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const state = await page.evaluate(() => {
         const el = document.getElementById("request_error");
-        return el ? { text: el.textContent, visible: getComputedStyle(el).display !== "none" } : null;
+        return el
+          ? {
+              text: el.textContent,
+              visible: getComputedStyle(el).display !== "none",
+              revision: SamovarApp.currentRequestErrorRevision(),
+            }
+          : null;
       });
-      if (state && state.visible && state.text) return state;
-      await new Promise(r => setTimeout(r, 50));
+      if (state && state.revision !== previousRevision && state.visible && state.text) return state;
+      await page.waitForTimeout(20);
     }
-    throw new Error("request_error did not appear within " + timeoutMs + "ms");
+    throw new Error("request_error did not change (revision " + previousRevision + ") within " + timeoutMs + "ms");
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -99,6 +136,16 @@ BROWSER_TEST = r'''async page => {
 
   // ---------- П52: внутренние кнопки перехода ----------
   async function checkGuardedButton(buttonId, targetFragment, revealTabId) {
+    // Перед первым вызовом форма setup.htm ещё "грязная" после проверки
+    // preventedDirty выше (та проверка нарочно её не сбрасывает - dirty
+    // должен сохраняться, это и проверяется). Сбрасываем здесь же, иначе вот
+    // этот page.goto ниже - реальная навигация с текущей (грязной) страницы -
+    // сам напорется на нативный beforeunload и зависнет на незакрытом диалоге
+    // ещё до того, как дойдёт до кнопок, которые эта функция должна проверять.
+    await page.evaluate(() => {
+      const existingForm = document.getElementById("setupform");
+      if (existingForm) existingForm.dataset.dirty = "false";
+    });
     // Свежая "грязная" форма, отказ в confirm() -> остаёмся на странице.
     await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
     await page.evaluate(() => {
@@ -114,15 +161,24 @@ BROWSER_TEST = r'''async page => {
       window.confirm = function () { window.__confirmCalls++; return false; };
       document.getElementById(id).click();
     }, buttonId);
-    await new Promise(r => setTimeout(r, 300));
     const callsAfterCancel = await page.evaluate(() => window.__confirmCalls);
     if (callsAfterCancel !== 1) throw new Error(buttonId + ": confirm() was not called on a dirty form (calls=" + callsAfterCancel + ")");
     if (page.url().includes(targetFragment)) throw new Error(buttonId + ": navigated away despite confirm() cancel");
 
     // Тот же "грязный" confirm(), но подтверждаем -> должны уйти.
+    // Нативный beforeunload-диалог (WP23) уже отдельно проверен выше
+    // (preventedDirty) - он не имеет отношения к этому шагу: тут проверяется
+    // именно confirmLeaveIfDirty() (app-level confirm). Реальная навигация
+    // после accept всё равно триггерит нативный beforeunload, а он будет
+    // смотреть на dataset.dirty - без сброса тест зависнет на втором, уже не
+    // относящемся к этой проверке незакрытом диалоге.
     await page.evaluate(id => {
       window.__confirmCalls = 0;
-      window.confirm = function () { window.__confirmCalls++; return true; };
+      window.confirm = function () {
+        window.__confirmCalls++;
+        document.getElementById("setupform").dataset.dirty = "false";
+        return true;
+      };
       document.getElementById(id).click();
     }, buttonId);
     const navigatedAccept = await waitForUrlIncludes(targetFragment, 5000);
@@ -133,13 +189,21 @@ BROWSER_TEST = r'''async page => {
     if (revealTabId) {
       await page.evaluate(id => { document.getElementById(id).style.display = "block"; }, revealTabId);
     }
-    await page.evaluate(id => {
+    // На чистой форме confirmLeaveIfDirty() не вызывает confirm() вовсе и сразу
+    // делает real-навигацию - значит window.__confirmCalls нужно прочитать
+    // ПРЯМО в этом же evaluate (синхронно после click(), до навигации), а не
+    // отдельным evaluate() после ожидания перехода: та навигация уже реальна,
+    // и второй evaluate может выполниться уже на новой странице, где
+    // window.__confirmCalls никогда не объявлялась (undefined !== 0 - ложный
+    // сигнал "confirm() был вызван", хотя на самом деле это просто чтение не
+    // того документа).
+    const callsClean = await page.evaluate(id => {
       window.__confirmCalls = 0;
       window.confirm = function () { window.__confirmCalls++; return false; };
       document.getElementById(id).click();
+      return window.__confirmCalls;
     }, buttonId);
     const navigatedClean = await waitForUrlIncludes(targetFragment, 5000);
-    const callsClean = await page.evaluate(() => window.__confirmCalls);
     if (!navigatedClean) throw new Error(buttonId + ": clean form did not navigate to " + targetFragment);
     if (callsClean !== 0) throw new Error(buttonId + ": clean form still called confirm()");
   }
@@ -154,49 +218,200 @@ BROWSER_TEST = r'''async page => {
   // ---------- П55: loadFile показывает результат ----------
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
 
-  await page.evaluate(() => {
+  const badJsonRevision = await page.evaluate(() => {
+    const revision = SamovarApp.currentRequestErrorRevision();
     const file = new File(["not json"], "bad.txt", { type: "text/plain" });
     loadFile(file);
+    return revision;
   });
-  const badJsonState = await waitForRequestError(3000);
+  const badJsonState = await waitForRequestError(badJsonRevision, 3000);
   if (!/JSON|формат/i.test(badJsonState.text)) {
     throw new Error("bad JSON did not produce a readable error: " + badJsonState.text);
   }
   passed.push("loadFile reports unreadable/invalid JSON via showRequestError");
 
-  await page.evaluate(() => {
+  const arrayRevision = await page.evaluate(() => {
+    const revision = SamovarApp.currentRequestErrorRevision();
     const file = new File(["[1,2,3]"], "array.txt", { type: "text/plain" });
     loadFile(file);
+    return revision;
   });
-  const arrayState = await waitForRequestError(3000);
+  const arrayState = await waitForRequestError(arrayRevision, 3000);
   if (!/формат/i.test(arrayState.text)) {
     throw new Error("non-object JSON did not produce a format error: " + arrayState.text);
   }
   passed.push("loadFile rejects non-object JSON via showRequestError");
 
-  await page.evaluate(() => {
+  const outOfRangeRevision = await page.evaluate(() => {
+    const revision = SamovarApp.currentRequestErrorRevision();
     const file = new File([JSON.stringify({ DistTemp: "999" })], "outofrange.txt", { type: "text/plain" });
     loadFile(file);
+    return revision;
   });
-  const outOfRangeState = await waitForRequestError(3000);
-  if (!/DistTemp/.test(outOfRangeState.text)) {
-    throw new Error("out-of-range field was not named in the error: " + outOfRangeState.text);
+  const outOfRangeState = await waitForRequestError(outOfRangeRevision, 3000);
+  // T35 п.4а: с этой правки validateNumericInput() называет поле человеческой
+  // подписью из DOM (см. fieldLabelFromDom в app.js), а не техническим именем
+  // "DistTemp" - раньше здесь проверялось ровно наоборот. Проверка не ослаблена:
+  // по-прежнему требует, чтобы конкретное поле было названо в тексте ошибки, и
+  // дополнительно теперь требует ОТСУТСТВИЯ технического имени - это то самое
+  // поведение, ради которого писалась правка.
+  if (!/Ректификация/.test(outOfRangeState.text)) {
+    throw new Error("out-of-range field was not named by its human label in the error: " + outOfRangeState.text);
+  }
+  if (/DistTemp/.test(outOfRangeState.text)) {
+    throw new Error("out-of-range error must not leak the technical field name: " + outOfRangeState.text);
   }
   const distTempApplied = await page.evaluate(() => document.getElementById("DistTemp").value);
   if (distTempApplied !== "999") throw new Error("out-of-range value was not mapped into the form field");
   passed.push("loadFile reports the specific out-of-range field via showRequestError");
 
-  await page.evaluate(() => {
+  const okRevision = await page.evaluate(() => {
+    const revision = SamovarApp.currentRequestErrorRevision();
     const file = new File([JSON.stringify({ DistTemp: "80" })], "good.txt", { type: "text/plain" });
     loadFile(file);
+    return revision;
   });
-  const okState = await waitForRequestError(3000);
+  const okState = await waitForRequestError(okRevision, 3000);
   if (!/загружен/i.test(okState.text) || !/Сохранить/.test(okState.text)) {
     throw new Error("success path did not explain that Save is still required: " + okState.text);
   }
   const distTempOk = await page.evaluate(() => document.getElementById("DistTemp").value);
   if (distTempOk !== "80") throw new Error("valid value was not mapped into the form field");
   passed.push("loadFile reports success and reminds to press Save");
+
+  // ---------- T35 п.4б: showSetupSaveError переключает вкладку на ту, где
+  // находится ошибочное поле, и не молчит, когда /save отвечает 400 ----------
+
+  // showSetupSaveError() (см. setup.htm) - глобальная function-декларация в
+  // обычном (не module, без "use strict") <script>, поэтому доступна как
+  // window.showSetupSaveError - вызываем её напрямую с настоящим Response, тем
+  // же приёмом, что и loadFile() выше, а не гоняем весь /save по сети: тут
+  // проверяется именно эта функция, а не серверная часть (она уже отдельно
+  // запинена server-side smoke-тестом на WebServer.ino).
+  //
+  // Предыдущий шаг (loadFile с валидным DistTemp) помечает форму "грязной"
+  // (markSetupDirty) - обычная навигация page.goto ниже иначе напорется на
+  // нативный beforeunload-диалог и зависнет (см. тот же приём в
+  // checkGuardedButton выше).
+  await page.evaluate(() => {
+    const f = document.getElementById("setupform");
+    if (f) f.dataset.dirty = "false";
+  });
+  await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+
+  const fieldErrorResult = await page.evaluate(async () => {
+    const form = document.getElementById("setupform");
+    const revisionBefore = SamovarApp.currentRequestErrorRevision();
+    const body = JSON.stringify({
+      error: "range", field: "NbkDelta", message: "Invalid NbkDelta", fields: ["NbkDelta"]
+    });
+    const response = new Response(body, { status: 400, headers: { "Content-Type": "application/json" } });
+    await showSetupSaveError(form, response);
+    function tabLinkFor(name) {
+      const links = document.getElementsByClassName("tablinks");
+      for (let i = 0; i < links.length; i++) {
+        const onclick = links[i].getAttribute("onclick") || "";
+        if (onclick.indexOf("'" + name + "'") !== -1) return links[i];
+      }
+      return null;
+    }
+    const nbkLink = tabLinkFor("NBK");
+    const mainLink = tabLinkFor("Main");
+    return {
+      revisionBefore: revisionBefore,
+      nbkDisplay: document.getElementById("NBK").style.display,
+      nbkAriaHidden: document.getElementById("NBK").getAttribute("aria-hidden"),
+      mainDisplay: document.getElementById("Main").style.display,
+      mainAriaHidden: document.getElementById("Main").getAttribute("aria-hidden"),
+      nbkLinkActive: !!nbkLink && nbkLink.className.indexOf("active") !== -1,
+      nbkLinkPressed: nbkLink && nbkLink.getAttribute("aria-pressed"),
+      mainLinkActive: !!mainLink && mainLink.className.indexOf("active") !== -1,
+      mainLinkPressed: mainLink && mainLink.getAttribute("aria-pressed"),
+      activeElementId: document.activeElement && document.activeElement.id,
+    };
+  });
+  if (fieldErrorResult.nbkDisplay !== "block" || fieldErrorResult.nbkAriaHidden !== "false") {
+    throw new Error("showSetupSaveError(field=NbkDelta) did not reveal the NBK tab: " + JSON.stringify(fieldErrorResult));
+  }
+  if (fieldErrorResult.mainDisplay === "block" || fieldErrorResult.mainAriaHidden === "false") {
+    throw new Error("showSetupSaveError(field=NbkDelta) left the previously active Main tab visible: " + JSON.stringify(fieldErrorResult));
+  }
+  if (!fieldErrorResult.nbkLinkActive || fieldErrorResult.nbkLinkPressed !== "true") {
+    throw new Error("showSetupSaveError(field=NbkDelta) did not highlight the NBK tab button: " + JSON.stringify(fieldErrorResult));
+  }
+  if (fieldErrorResult.mainLinkActive || fieldErrorResult.mainLinkPressed !== "false") {
+    throw new Error("showSetupSaveError(field=NbkDelta) left the Main tab button highlighted: " + JSON.stringify(fieldErrorResult));
+  }
+  if (fieldErrorResult.activeElementId !== "NbkDelta") {
+    throw new Error("showSetupSaveError(field=NbkDelta) did not focus the erroring field: " + JSON.stringify(fieldErrorResult));
+  }
+  const fieldErrorState = await waitForRequestError(fieldErrorResult.revisionBefore, 3000);
+  if (fieldErrorState.text.indexOf("NbkDelta") !== -1) {
+    throw new Error("save error message must show the human label, not the technical field name: " + fieldErrorState.text);
+  }
+  if (!/Дельта/.test(fieldErrorState.text)) {
+    throw new Error("save error message did not name the field by its human label: " + fieldErrorState.text);
+  }
+  passed.push("showSetupSaveError switches to the erroring field's tab, highlights it and shows a human label");
+
+  // Структурная ошибка (нет body.field - например "занято"/недоступен режим) -
+  // поведение обязано остаться прежним: без переключения вкладки, просто текст
+  // ошибки. Свежая страница -> активна Main (см. style="display: block;" по
+  // умолчанию), проверяем, что она НЕ переключилась на NBK.
+  await page.evaluate(() => {
+    const f = document.getElementById("setupform");
+    if (f) f.dataset.dirty = "false";
+  });
+  await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+  const structuralErrorResult = await page.evaluate(async () => {
+    const form = document.getElementById("setupform");
+    const revisionBefore = SamovarApp.currentRequestErrorRevision();
+    const body = JSON.stringify({ error: "busy", message: "Занято другой операцией" });
+    const response = new Response(body, { status: 400, headers: { "Content-Type": "application/json" } });
+    await showSetupSaveError(form, response);
+    return {
+      revisionBefore: revisionBefore,
+      mainDisplay: document.getElementById("Main").style.display,
+      nbkDisplay: document.getElementById("NBK").style.display,
+    };
+  });
+  if (structuralErrorResult.mainDisplay !== "block" || structuralErrorResult.nbkDisplay === "block") {
+    throw new Error("a structural error (no field) must not switch tabs: " + JSON.stringify(structuralErrorResult));
+  }
+  const structuralErrorState = await waitForRequestError(structuralErrorResult.revisionBefore, 3000);
+  if (!/Занято другой операцией/.test(structuralErrorState.text)) {
+    throw new Error("structural error text was not shown unchanged: " + structuralErrorState.text);
+  }
+  passed.push("showSetupSaveError leaves tab switching untouched for structural errors (no field)");
+
+  // Обычное переключение по клику не должно было сломаться - openTab(evt, ...)
+  // с настоящим evt (currentTarget) обязан работать так же, как раньше.
+  await page.evaluate(() => {
+    const f = document.getElementById("setupform");
+    if (f) f.dataset.dirty = "false";
+  });
+  await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+  const clickResult = await page.evaluate(() => {
+    const links = document.getElementsByClassName("tablinks");
+    let tempLink = null;
+    for (let i = 0; i < links.length; i++) {
+      if ((links[i].getAttribute("onclick") || "").indexOf("'Temp'") !== -1) { tempLink = links[i]; break; }
+    }
+    tempLink.click();
+    return {
+      tempDisplay: document.getElementById("Temp").style.display,
+      mainDisplay: document.getElementById("Main").style.display,
+      tempLinkActive: tempLink.className.indexOf("active") !== -1,
+      tempLinkPressed: tempLink.getAttribute("aria-pressed"),
+    };
+  });
+  if (clickResult.tempDisplay !== "block" || clickResult.mainDisplay === "block") {
+    throw new Error("a normal click on a tab button no longer switches tabs (regression): " + JSON.stringify(clickResult));
+  }
+  if (!clickResult.tempLinkActive || clickResult.tempLinkPressed !== "true") {
+    throw new Error("a normal click on a tab button no longer highlights it (regression): " + JSON.stringify(clickResult));
+  }
+  passed.push("normal click-driven tab switching still works (no regression from evt==null handling)");
 
   if (errors.length > 0) throw new Error(errors.join("\n"));
   return { passed: passed };
@@ -208,6 +423,19 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
     pass
 
   def send_head(self):
+    # "/edit" в реальной прошивке отдаёт SPIFFSEditor.h (см. FS.ino) - отдельный
+    # обработчик, не файл из data_raw. Этот тест проверяет только то, что
+    # confirmLeaveIfDirty() пускает/не пускает на эту навигацию (см. WP52),
+    # а не содержимое редактора - поэтому здесь достаточно отдать безобидную
+    # заглушку 200, чтобы реальный переход не сыпал 404 console error'ами,
+    # которых тест (справедливо) не ожидает ни от одной другой страницы.
+    if self.path == "/edit" or self.path.startswith("/edit?"):
+      data = b"<!doctype html><title>edit stub</title>"
+      self.send_response(200)
+      self.send_header("Content-type", "text/html; charset=utf-8")
+      self.send_header("Content-Length", str(len(data)))
+      self.end_headers()
+      return io.BytesIO(data)
     path = self.translate_path(self.path)
     if path.endswith(".htm") and os.path.isfile(path):
       try:
@@ -235,8 +463,29 @@ def run_cli(cli, session, arguments, cwd, timeout, check=True):
   )
   if result.stdout:
     print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-  if check and (result.returncode != 0 or "### Error" in result.stdout):
-    raise RuntimeError(f"playwright-cli {' '.join(arguments[:1])} failed")
+  if check:
+    command = arguments[0] if arguments else ""
+
+    def has_marker(marker):
+      # Настоящие заголовки playwright-cli ("### Error"/"### Modal state"/
+      # "### Result") печатаются ТОЛЬКО в начале строки. Тот же текст может
+      # случайно оказаться внутри блока "### Ran Playwright code" - туда CLI
+      # эхом печатает наш же исполненный JS, включая комментарии. Проверка
+      # substring без привязки к началу строки однажды поймала свой же
+      # комментарий как признак заблокировавшего скрипт диалога.
+      return result.stdout.startswith(marker) or ("\n" + marker) in result.stdout
+
+    if result.returncode != 0:
+      raise RuntimeError(f"playwright-cli {command} failed (exit {result.returncode})")
+    if has_marker("### Error"):
+      raise RuntimeError(f"playwright-cli {command} failed: '### Error' marker in output")
+    if has_marker("### Modal state"):
+      raise RuntimeError(
+        f"playwright-cli {command} failed: '### Modal state' marker in output "
+        "(a dialog blocked the script and was never handled)"
+      )
+    if command == "run-code" and not has_marker("### Result"):
+      raise RuntimeError(f"playwright-cli {command} failed: '### Result' marker missing from output")
   return result.returncode
 
 

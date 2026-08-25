@@ -61,7 +61,6 @@ if web_server and "static asyncHTTPrequest sharedHttpRequest;" not in web_server
 
 for signature, name in (
     ("String http_sync_request_get(String url)", "http_sync_request_get"),
-    ("String http_sync_request_post(String url, String body, String ContentType)", "http_sync_request_post"),
 ):
     request_body = body(web_server, signature, name)
     if not request_body:

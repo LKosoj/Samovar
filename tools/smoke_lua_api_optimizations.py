@@ -170,17 +170,26 @@ if lua_text:
         errors.append("Lua wrappers must convert arguments through lua_to_string_arg only")
 
     try:
-        body = extract_function_body(lua_text, "void load_lua_script")
+        body = extract_function_body(lua_text, "bool load_lua_script")
     except ValueError as exc:
         errors.append(str(exc))
         body = ""
     for token in [
         'lua_compile_chunk_locked(s1, "@script.lua", script1_ref)',
         "lua_compile_chunk_locked(s2, modeChunkName.c_str(), script2_ref)",
-        "runtime_state_lock(portMAX_DELAY)",
+        # [T30a] Было runtime_state_lock(portMAX_DELAY) - loop() уже держит
+        # xLuaSemaphore к этому месту (lua_locked выше), поэтому второй лок
+        # ждём ограниченно, дефолтом runtime_state_lock() (pdMS_TO_TICKS(50)).
+        "bool locked = runtime_state_lock();",
     ]:
         if token not in body:
             errors.append(f"load_lua_script missing compiled reload token: {token}")
+    if "runtime_state_lock(portMAX_DELAY)" in body:
+        errors.append(
+            "T30a: load_lua_script() снова ждёт RUNTIME_STATE portMAX_DELAY - "
+            "loop() может зависнуть, вызывается из switch_samovar_mode()/"
+            "tick_apply_pending_lua_commands()"
+        )
 
     try:
         body = extract_function_body(lua_text, "void do_lua_script")

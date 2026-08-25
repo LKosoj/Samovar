@@ -563,9 +563,13 @@ if mode_registry_file.exists():
     except ValueError as exc:
         errors.append(str(exc))
         status_active_body = ""
+    # [T40 А3] Раньше здесь были две зашитые проверки (спец-диапазон ректификации
+    # + ручное сравнение activeStatus) - обе свёрнуты в mode_status_belongs(),
+    # которая читает границы из полей таблицы (statusRangeLow/High) вместо
+    # сравнения с константами по месту (та же функция теперь используется и в
+    # mode_ops_by_status()/mode_dispatch_loop()).
     for token in [
-        "status > SAMOVAR_STATUS_IDLE && status < SAMOVAR_STATUS_DISTILLATION",
-        "ops[i].activeStatus > SAMOVAR_STATUS_IDLE && ops[i].activeStatus == status",
+        "mode_status_belongs(&ops[i], status)",
     ]:
         if token not in status_active_body:
             errors.append(f"mode_status_session_active missing token: {token}")
@@ -613,7 +617,11 @@ if samovar_file.exists():
             "pending_lua_reload_flag = false;",
             "hasPendingLuaReload = true;",
             "if (hasPendingLuaReload) {",
-            "load_lua_script();",
+            "if (!load_lua_script()) {",
+            # Возврат заявки прямой записью флага, а не через queue_pending_flag():
+            # тот отбил бы её при смене режима и при занятом локе - перезагрузка
+            # скрипта потерялась бы молча.
+            "pending_lua_reload_flag = true;",
         ],
         errors,
     )

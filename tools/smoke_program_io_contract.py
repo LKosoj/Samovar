@@ -223,13 +223,9 @@ if program_io:
     forbid_token("beer serializer keeps fractional time", body, "(int)row.Time")
 
 wrappers = [
-    ("logic.h", logic, "ProgramParseResult set_program", "return program_parse_lines(WProgram, rect_program_parse_spec());"),
     ("logic.h", logic, "String get_program", "program_serialize_rows(s, k, program_append_rect_row)"),
-    ("distiller.h", distiller, "ProgramParseResult set_dist_program", "return program_parse_lines(WProgram, dist_program_parse_spec());"),
     ("distiller.h", distiller, "String get_dist_program", "program_serialize_rows(0, PROGRAM_END, program_append_dist_row)"),
-    ("beer.h", beer, "ProgramParseResult set_beer_program", "return program_parse_lines(WProgram, beer_program_parse_spec());"),
     ("beer.h", beer, "String get_beer_program", "program_serialize_rows(0, PROGRAM_END, program_append_beer_row)"),
-    ("nbk.h", nbk, "ProgramParseResult set_nbk_program", "return program_parse_lines(WProgram, nbk_program_parse_spec());"),
     ("nbk.h", nbk, "String get_nbk_program", "program_serialize_rows(0, PROGRAM_END, program_append_nbk_row)"),
 ]
 
@@ -312,7 +308,6 @@ if sensorinit:
 
 if samovar_api:
     for token in [
-        "ProgramParseResult set_nbk_program(const String& WProgram);",
         "ProgramParseResult prepare_default_program_for_mode(SAMOVAR_MODE mode, ProgramDraft& draft);",
         "ProgramParseResult load_default_program_for_mode(SAMOVAR_MODE mode);",
     ]:

@@ -21,6 +21,12 @@ def require_token(name: str, text: str, token: str) -> None:
         errors.append(f"{name} missing token: {token}")
 
 
+def forbid(name: str, source: str, tokens: tuple[str, ...]) -> None:
+    for token in tokens:
+        if token in source:
+            errors.append(f"{name} contains forbidden token: {token}")
+
+
 checks = [
     ("distiller.h", "void check_alarm_distiller"),
     ("BK.h", "void check_alarm_bk"),
@@ -122,8 +128,42 @@ if bk_text:
             "mode_handle_water_pre_alarm_if_due();",
         )
 
-# [П4.4] distiller.h: BOOST heater is gated off exactly once, on the first row
-# transition where the program starts supplying its own Power.
+        # [T16 fix] set_current_power() is asynchronous (it only enqueues a request for
+        # the background regulator task; the mode changes tens-hundreds of ms later via
+        # vTaskDelay inside apply_regulator_mode_blocking()). Checking
+        # current_power_mode_is(POWER_SLEEP_MODE) right after the call always observes
+        # the still-old mode, so the warning must compare BKPower against
+        # power_work_mode_threshold() synchronously BEFORE calling set_current_power().
+        require_ordered_tokens(
+            "BK.h check_alarm_bk warns synchronously before set_current_power parks the regulator asleep",
+            bk_alarm_body,
+            [
+                "SamSetup.BKPower < power_work_mode_threshold()",
+                "WARNING_MSG",
+                "set_current_power(SamSetup.BKPower);",
+            ],
+            errors,
+        )
+        # The comparison must be gated by boilingNow (true only on the single tick
+        # boiling is first detected - see the [П4.1] comment above) so the warning
+        # fires once per heating cycle instead of every ~10ms tick while
+        # POWER_SPEED_MODE and the outer SteamSensor/PipeSensor condition stay true
+        # during the async wait for the regulator to actually leave POWER_SPEED_MODE.
+        require_token(
+            "BK.h check_alarm_bk gates the BKPower warning on the one-shot boilingNow flag",
+            bk_alarm_body,
+            "if (boilingNow && SamSetup.BKPower < power_work_mode_threshold())",
+        )
+        forbid(
+            "BK.h check_alarm_bk",
+            bk_alarm_body,
+            ("current_power_mode_is(POWER_SLEEP_MODE)",),
+        )
+
+# [П4.4/T21-1] distiller.h: BOOST heater is gated off exactly once, on the first
+# row transition (num > 0), regardless of the leaving row's Power - Power == 0
+# means "pass-through, don't touch the regulator", not "no power set", so it must
+# not block the gate. See smoke_dist_boost_gate.py for the behavioral check.
 # [П4.6] distiller.h: sessionStartTime (not the per-row timePredictor.startTime)
 # must back the session-wide "Общее время" figures.
 distiller_text = strip_cpp_comments(read_text("distiller.h"))
@@ -138,11 +178,6 @@ if distiller_text:
             "run_dist_program latches distBoostGated",
             run_dist_program_body,
             "distBoostGated = true;",
-        )
-        require_token(
-            "run_dist_program gates on the previous row's Power",
-            run_dist_program_body,
-            "program[num - 1].Power != 0",
         )
         require_ordered_tokens(
             "run_dist_program applies the power row before latching the BOOST gate",

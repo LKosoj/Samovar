@@ -157,6 +157,10 @@ static SetupEEPROM SamSetup;
 static ImpurityDetector impurityDetector;
 static int16_t SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
 static int16_t startval = SAMOVAR_STARTVAL_RECT_RUNNING;
+// [T09] Реальные тела withdrawal()/pause_withdrawal() теперь гейтятся этими
+// флагами (post-emergency guard) - без них харнесс не соберётся.
+static bool PowerOn = true;
+static bool alarm_event = false;
 static bool program_Pause = false;
 static bool program_Wait = false;
 static bool PauseOn = false;

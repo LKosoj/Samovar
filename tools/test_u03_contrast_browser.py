@@ -83,7 +83,7 @@ BROWSER_TEST = r'''async page => {
     PipeTemp: 77.9, WaterTemp: 20.2, TankTemp: 82.3, ACPTemp: 40.1,
     bme_pressure: 760, start_pressure: 759.5, prvl: 1.2, VolumeAll: 1,
     ActualVolumePerHour: 100, WthdrwlProgress: 10, CurrrentSpeed: 0.1,
-    CurrrentStepps: 10, TargetStepps: 20, WthdrwlStatus: 0, ProgramNum: 0,
+    CurrrentStepps: 10, TargetStepps: 20, WthdrwlStatus: 0, ProgramNum: 3,
     DetectorTrend: 0, DetectorStatus: 0, useautospeed: false,
     current_power_volt: 0, target_power_volt: 0, current_power_mode: "0",
     current_power_p: 0, WFtotalMl: 0, WFflowRate: 0, bme_temp: 24,
@@ -91,7 +91,7 @@ BROWSER_TEST = r'''async page => {
     PrgType: "", Status: "Готов", Lstatus: "", TimeRemaining: 0, TotalTime: 0,
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
-    PowerOn: 0, StepperStepMl: 111, ProgNum: 0,
+    PowerOn: 0, StepperStepMl: 111,
     heaterAlarmLatched: 0, latestMessageSequence: 0
   };
   const i2cMixer = {
@@ -344,6 +344,9 @@ BROWSER_TEST = r'''async page => {
   }
 
   async function verifyChart(label) {
+    // Живая точка приходит из /ajax через appendAjaxPoint(); ждём, пока она
+    // догонит 2 CSV-строки, чтобы не гоняться за таймингом сети.
+    await page.waitForFunction(() => window.chart && chart.rows && chart.rows.length >= 3, null, { timeout: 3000 }).catch(() => {});
     const value = await page.evaluate(() => {
       const metrics = browserMetrics();
       const canvas = document.querySelector(".chart-canvas");
@@ -367,13 +370,15 @@ BROWSER_TEST = r'''async page => {
         }
         pixelColors = unique.size;
       }
+      const lastRow = window.chart && chart.rows.length ? chart.rows[chart.rows.length - 1] : null;
       return {
         rows: window.chart && chart.rows ? chart.rows.length : 0, swatches,
         grid: grid && background ? {
           foreground: metrics.rgb(grid), background: metrics.rgb(background),
           ratio: metrics.ratio(grid, background), threshold: 3
         } : null,
-        pixelColors
+        pixelColors,
+        lastProgNum: lastRow ? lastRow.ProgNum : null
       };
     });
     if (value.rows < 2 || value.pixelColors < 2) addFailure(label, ".chart-canvas", "real-data-draw", { detail: JSON.stringify(value) });
@@ -382,6 +387,14 @@ BROWSER_TEST = r'''async page => {
       if (!series.ratio || series.ratio + 1e-9 < series.threshold) addFailure(label, ".chart-legend-swatch:nth-of-type(" + (index + 1) + ")", "canvas-series", series);
     });
     if (!value.grid || !value.grid.ratio || value.grid.ratio + 1e-9 < value.grid.threshold) addFailure(label, ".chart-canvas", "canvas-grid", value.grid || { detail: "missing grid color" });
+    // ajaxToRow() обязана брать номер программы из реального поля контракта
+    // /ajax - ProgramNum (Samovar.ino:3561), а не из несуществующего ProgNum,
+    // иначе живая точка на графике всегда пустая (undefined -> null).
+    if (value.lastProgNum !== ajaxFixture.ProgramNum) {
+      addFailure(label, ".chart-canvas", "ajax-prognum-field", {
+        detail: "row.ProgNum=" + value.lastProgNum + " expected ajaxFixture.ProgramNum=" + ajaxFixture.ProgramNum
+      });
+    }
   }
 
   function rememberParity(key, theme, value, requests) {
@@ -451,23 +464,32 @@ BROWSER_TEST = r'''async page => {
         await page.locator("#Prog").waitFor({ state: "visible" });
       }
       const found = await page.evaluate((fileName) => {
+        // enhanceTooltips() (app.js) выносит .tooltiptext из .tooltip в соседнюю
+        // .tooltip-wrap и ставит кнопку .tooltip-trigger - настоящую подсказку теперь
+        // открывает клик по триггеру, а не hover на .tooltip. На nbk.htm подсказки
+        // "голые" (без текста), enhanceTooltips() их пропускает и триггер не создаётся -
+        // тогда, как и раньше, меряем контраст самой подписи .tooltip.
         const metrics = browserMetrics();
-        const selector = fileName === "nbk.htm" ? "#Prog .tooltip" : ".tooltip";
-        const owners = Array.from(document.querySelectorAll(selector)).filter(metrics.visible);
-        const owner = owners.find(element => element.querySelector(".tooltiptext")) ||
-          (fileName === "nbk.htm" ? owners[0] : null);
+        const scope = fileName === "nbk.htm" ? "#Prog " : "";
+        const triggers = Array.from(document.querySelectorAll(scope + ".tooltip-trigger")).filter(metrics.visible);
+        if (triggers.length) {
+          triggers[0].dataset.u03Tooltip = "1";
+          return { exists: true, hasText: true };
+        }
+        const owners = Array.from(document.querySelectorAll(scope + ".tooltip")).filter(metrics.visible);
+        const owner = owners[0];
         if (!owner) return { exists: false };
         owner.dataset.u03Tooltip = "1";
-        return { exists: true, hasText: Boolean(owner.querySelector(".tooltiptext")) };
+        return { exists: true, hasText: false };
       }, file);
       const label = "tooltip/" + theme + "/" + file;
       report.stateCases.push(label);
       if (!found.exists) addFailure(label, ".tooltip", "visible", { detail: "missing tooltip owner" });
       else {
-        await page.hover('[data-u03-tooltip="1"]');
+        if (found.hasText) await page.locator('[data-u03-tooltip="1"]').click();
         const value = await page.evaluate((hasText) => {
-          const owner = document.querySelector('[data-u03-tooltip="1"]');
-          const element = hasText ? owner.querySelector(".tooltiptext") : owner;
+          const el = document.querySelector('[data-u03-tooltip="1"]');
+          const element = hasText ? el.parentNode.querySelector(".tooltiptext") : el;
           return { visibility: getComputedStyle(element).visibility, metric: browserMetrics().textMetric(element) };
         }, found.hasText);
         if (value.visibility !== "visible" || !value.metric.ratio || value.metric.ratio + 1e-9 < value.metric.threshold) addFailure(label, ".tooltiptext", "visible", value.metric);

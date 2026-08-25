@@ -44,7 +44,7 @@ float nbk_Mo = 0;   // Мо — оптимальная мощность, Вт
 float nbk_dM = NBK_DM_DEFAULT; // dM — шаг регулирования мощности
 float nbk_P = 0;    // П — текущая подача браги, л/ч
 float nbk_Po = 0;   // По — оптимальная подача, л/ч
-float nbk_dP = 0; // dП — шаг регулирования подачи
+float nbk_dP = NBK_DP_DEFAULT; // dП — шаг регулирования подачи
 float nbk_Tb = 0; // Тб — текущая температура барды
 float nbk_Tn = NBK_TN_DEFAULT; // Тн — нижний предел температуры барды
 float nbk_Tp = 0; // Тп — температура пара
@@ -574,7 +574,8 @@ void handle_nbk_stage_manual() { //Если захлёб, выводим соо�
   bool hasOverflow = overflow();
   if (hasOverflow && !manual_overflow) {
       const float candidateP = nbk_P / 3;
-      const float candidateM = toPower(target_power_volt) / 2;
+      // [T14 п.1] Нижняя граница в ваттном домене НБК - симметрично волюм. клэмпу.
+      const float candidateM = max(toPower(target_power_volt) / 2, toPower(power_work_mode_threshold()));
       if (!nbk_schedule_actuator_command(
               candidateM,
               candidateP,
@@ -887,8 +888,9 @@ void handle_nbk_stage_work() {
       }
       nbk_work_pause_stage = 1;
       nbk_overflow_happened = true;
+      // [T14 п.8] Нижняя граница в ваттном домене НБК - тот же паттерн, что в п.1/п.29.
       if (!nbk_schedule_actuator_command(
-              nbk_Mo / 2,
+              max(nbk_Mo / 2, toPower(power_work_mode_threshold())),
               nbk_P,
               NBK_ACTUATOR_WORK_DEADLINE,
               uint32_t(NBK_MULT_PAUSE_OVERFLOW) *
@@ -909,7 +911,8 @@ void handle_nbk_stage_work() {
       }
       nbk_overflow_happened = false; // сброс флага в любом случае
       nbk_work_entry_overflow_pending = false; // одноразовый, потребили
-      if (nbk_Mo < 0) nbk_Mo = 0;
+      // [T14 п.8] Нижняя граница - была 0 (та же ловушка SLEEP-схлопывания, что в п.1).
+      if (nbk_Mo < toPower(power_work_mode_threshold())) nbk_Mo = toPower(power_work_mode_threshold());
       if (nbk_Po < 0) nbk_Po = 0;
       if (!nbk_schedule_actuator_command(
               nbk_Mo,
@@ -1588,8 +1591,9 @@ void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool gra
       request_emergency_stop("");
     }
   } else if (pause_ms > 0) { // Для этапа W: пауза и переход к восстановлению
+    // [T14 п.8] Первый захлёб в Работе — тот же кламп, что и при повторном захлёбе в паузе (см. выше).
     if (!nbk_schedule_actuator_command(
-            nbk_Mo / 2,
+            max(nbk_Mo / 2, toPower(power_work_mode_threshold())),
             candidateP,
             NBK_ACTUATOR_WORK_DEADLINE,
             pause_ms,
@@ -1604,12 +1608,6 @@ void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool gra
     nbk_pause_overflow_repeat_latched = false; // [T1] новая пауза W — не подавлять первое сообщение о повторном захлёбе
   }
 }
-
-
-ProgramParseResult set_nbk_program(const String& WProgram) {
-  return program_parse_lines(WProgram, nbk_program_parse_spec());
-}
-
 
 String get_nbk_program() {
   return program_serialize_rows(0, PROGRAM_END, program_append_nbk_row);

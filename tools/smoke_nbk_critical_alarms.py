@@ -198,13 +198,17 @@ if alarm_text:
         errors.append(str(exc))
         body = ""
 
+    # [T13] Останов I2C-насоса теперь идёт через attempt_i2c_pump_emergency_stop()
+    # (проверяет подтверждение и взводит латч при отказе), а не "слепым"
+    # set_stepper_target(0, 0, 0) с отброшенным результатом - см.
+    # tools/smoke_i2c_pump_stop_latch.py.
     require_ordered_tokens(
         "perform_emergency_stop calls NBK cleanup before generic hardware stop",
         body,
         [
             "if (Samovar_Mode == SAMOVAR_NBK_MODE) nbk_emergency_finish();",
             "set_power(false);",
-            "set_stepper_target(0, 0, 0);",
+            "attempt_i2c_pump_emergency_stop();",
         ],
         errors,
     )

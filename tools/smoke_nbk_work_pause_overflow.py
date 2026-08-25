@@ -36,6 +36,7 @@ HARNESS_TEMPLATE = r'''
 #include <string>
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+static float max(float left, float right) { return left > right ? left : right; }
 
 #define NBK_MULT_PAUSE_OVERFLOW 2
 
@@ -70,6 +71,12 @@ uint32_t nbk_work_next_time = 0;
 enum NbkActuatorDeadlineTarget : uint8_t {
   NBK_ACTUATOR_WORK_DEADLINE = 2,
 };
+
+// [T14 п.1/п.8] Нижняя граница - в этом харнессе оставляем toPower() тождественной
+// (unit-конвертация волюм<->ватт для НБК проверяется отдельно, в
+// smoke_nbk_session_config.py); важно только само наличие клэмпа.
+float power_work_mode_threshold() { return 40.0f; }
+float toPower(float value) { return value; }
 
 static bool overflowFlag = false;
 bool overflow() { return overflowFlag; }
@@ -142,10 +149,11 @@ static void reset_fixture(float mo) {
 static void test_repeat_overflow_for(float mo) {
   reset_fixture(mo);
   overflowFlag = true;
+  const float expectedPower = max(mo / 2.0f, power_work_mode_threshold());
   for (int tick = 0; tick < 5; tick++) {
     run_pause_overflow_tick();
     check(scheduleCalls == tick + 1, "повторный захлёб должен принимать новую составную команду");
-    check(lastPower == mo / 2.0f, "составная команда должна снижать мощность nbk_Mo/2");
+    check(lastPower == expectedPower, "составная команда должна снижать мощность nbk_Mo/2, но не ниже порога WORK");
     check(lastSpeed == nbk_P, "повторный захлёб не должен подменять текущую подачу");
     check(nbk_work_pause_stage == 1, "во время повторного захлёба стадия паузы должна оставаться 1");
     check(nbk_overflow_happened, "флаг nbk_overflow_happened обязан быть выставлен во время повторного захлёба");
@@ -167,6 +175,15 @@ static void test_repeat_overflow_for(float mo) {
 int main() {
   test_repeat_overflow_for(100.0f);
   test_repeat_overflow_for(260.0f);
+
+  // [T14 п.1/п.8, ПИНИМ] nbk_Mo=50 -> nbk_Mo/2=25, ниже порога WORK (40) - без
+  // клэмпа команда ушла бы приводам с 25 Вт, а set_current_power() ниже по
+  // цепочке молча схлопнул бы это в SLEEP (нагрев погас бы посреди паузы).
+  reset_fixture(50.0f);
+  overflowFlag = true;
+  run_pause_overflow_tick();
+  check(lastPower == 40.0f, "РЕГРЕСС: составная команда обязана клэмпиться к порогу WORK, а не уходить ниже него");
+
   if (failures != 0) return 1;
   std::cout << "nbk work-pause repeat-overflow behaviour checks passed\n";
   return 0;

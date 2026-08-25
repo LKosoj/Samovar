@@ -390,6 +390,16 @@ nvs_harness = (
         static const float DEFAULT_DIST_TEMP = 98.0f;
         static const uint16_t STEPPER_STEP_ML = 100;
         static const uint16_t I2C_STEPPER_STEP_ML_DEFAULT = 200;
+        // Зеркало NBK_*_DEFAULT из nbk.h (Н1, SOLUTIONS_2026-08-24.md): харнесс
+        // собирает profile_setup_fields.h изолированно, без nbk.h, поэтому
+        // константы дублируются здесь по тому же приёму, что DEFAULT_DIST_TEMP выше.
+        static const float NBK_COLUMN_INERTIA_DEFAULT = 180;
+        static const float NBK_DT_DEFAULT = 0.5;
+        static const float NBK_DM_DEFAULT = 100;
+        static const float NBK_DP_DEFAULT = 0.5;
+        static const float NBK_TP_DEFAULT = 81;
+        static const float NBK_OVERFLOW_PRESSURE_DEFAULT = 40;
+        static const float NBK_TN_DEFAULT = 98.5;
 
         template <size_t Size>
         static void copyStringSafe(char (&destination)[Size], const char* source) {
@@ -895,6 +905,11 @@ nvs_harness += textwrap.dedent(
     // GPIO-побочный эффект здесь не нужен, поэтому мок-заглушка.
     static void apply_loaded_relay_polarity_off() {}
 
+    // Блок теперь заканчивается startup-задержкой (перенесена сюда, чтобы не удлинять
+    // окно неверной полярности реле, см. Samovar.ino) - заглушки, без реального FreeRTOS.
+    static const int portTICK_PERIOD_MS = 1;
+    static void vTaskDelay(int) {}
+
     // Стирание legacy-остатков (сам его механизм проверяет
     // smoke_nvs_legacy_cleanup_contract.py). Здесь важно только УСЛОВИЕ вызова:
     // очистка допустима исключительно после миграции с успешной записью нового
@@ -920,6 +935,26 @@ nvs_harness += textwrap.dedent(
     __attribute__((unused)) static FakeSerial Serial;
     #define F(literal) (literal)
     static void nbk_preserve_startup_input_validity(float, float) {}
+
+    // [T28] Извлечённый блок теперь зовёт sanitize_setup_profile_ranges() внутри
+    // `if (migratedFromLegacy)` (см. Samovar.ino) - она чинит ~30 числовых полей
+    // мигрированного профиля по тем же таблицам, что и форма /save. Эта проверка
+    // тестирует РЕШЕНИЕ о загрузке/миграции/дефолтах профиля, а не диапазонную
+    // починку саму по себе (её отдельно и поведенчески проверяет
+    // tools/smoke_sanitize_setup_profile_ranges.py на настоящих
+    // kSaveFloatFields/kSaveU8Fields) - здесь достаточно заглушки "ничего не чинить",
+    // чтобы не менять уже существующие ожидания этого теста по report_degraded_boot.
+    class String {
+     public:
+      String() {}
+      String(const char* source) : value(source ? source : "") {}
+      size_t length() const { return value.size(); }
+      const char* c_str() const { return value.c_str(); }
+      String operator+(const String& other) const { return String((value + other.value).c_str()); }
+     private:
+      std::string value;
+    };
+    static bool sanitize_setup_profile_ranges(SetupEEPROM&, String&) { return false; }
     ''') + heater_trust_definitions + textwrap.dedent(
     r'''
 
@@ -1859,17 +1894,17 @@ nvs_harness += (
           0x00, 0x00, 0x00, 0x00,  // [396-399] MaxPressureValue
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [400-449] tg_token
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [450-463] tg_chat_id
-          0x00, 0x00, 0x00, 0x00,  // [464-467] NbkIn
-          0x00, 0x00, 0x00, 0x00,  // [468-471] NbkDelta
-          0x00, 0x00, 0x00, 0x00,  // [472-475] NbkDM
-          0x00, 0x00, 0x00, 0x00,  // [476-479] NbkDP
-          0x00, 0x00, 0x00, 0x00,  // [480-483] NbkSteamT
-          0x00, 0x00, 0x00, 0x00,  // [484-487] NbkOwPress
+          0x00, 0x00, 0x34, 0x43,  // [464-467] NbkIn
+          0x00, 0x00, 0x00, 0x3F,  // [468-471] NbkDelta
+          0x00, 0x00, 0xC8, 0x42,  // [472-475] NbkDM
+          0x00, 0x00, 0x00, 0x3F,  // [476-479] NbkDP
+          0x00, 0x00, 0xA2, 0x42,  // [480-483] NbkSteamT
+          0x00, 0x00, 0x20, 0x42,  // [484-487] NbkOwPress
           0x00, 0x00, 0x00, 0x40,  // [488-491] ColDiam
           0x00, 0x00, 0x00, 0x3F,  // [492-495] ColHeight
           0x50,  // [496-496] PackDens
           0xC8, 0x00,  // [497-498] StepperStepMlI2C
-          0x00, 0x00, 0x00, 0x00,  // [499-502] NbkTn
+          0x00, 0x00, 0xC5, 0x42,  // [499-502] NbkTn
           0x00, 0x00, 0x34, 0x42,  // [503-506] BKPower
           0x00, 0x00, 0x66, 0x43,  // [507-510] MainsVoltage
           0x00, 0x00, 0x00, 0x00,  // [511-514] SuvidTemp
@@ -1935,17 +1970,17 @@ nvs_harness += (
           0x00, 0x00, 0x00, 0x00,  // [396-399] MaxPressureValue
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [400-449] tg_token
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [450-463] tg_chat_id
-          0x00, 0x00, 0x00, 0x00,  // [464-467] NbkIn
-          0x00, 0x00, 0x00, 0x00,  // [468-471] NbkDelta
-          0x00, 0x00, 0x00, 0x00,  // [472-475] NbkDM
-          0x00, 0x00, 0x00, 0x00,  // [476-479] NbkDP
-          0x00, 0x00, 0x00, 0x00,  // [480-483] NbkSteamT
-          0x00, 0x00, 0x00, 0x00,  // [484-487] NbkOwPress
+          0x00, 0x00, 0x34, 0x43,  // [464-467] NbkIn
+          0x00, 0x00, 0x00, 0x3F,  // [468-471] NbkDelta
+          0x00, 0x00, 0xC8, 0x42,  // [472-475] NbkDM
+          0x00, 0x00, 0x00, 0x3F,  // [476-479] NbkDP
+          0x00, 0x00, 0xA2, 0x42,  // [480-483] NbkSteamT
+          0x00, 0x00, 0x20, 0x42,  // [484-487] NbkOwPress
           0x00, 0x00, 0x00, 0x40,  // [488-491] ColDiam
           0x00, 0x00, 0x00, 0x3F,  // [492-495] ColHeight
           0x50,  // [496-496] PackDens
           0xC8, 0x00,  // [497-498] StepperStepMlI2C
-          0x00, 0x00, 0x00, 0x00,  // [499-502] NbkTn
+          0x00, 0x00, 0xC5, 0x42,  // [499-502] NbkTn
           0x00, 0x00, 0x48, 0x43,  // [503-506] BKPower
           0x00, 0x00, 0x66, 0x43,  // [507-510] MainsVoltage
           0x00, 0x00, 0x00, 0x00,  // [511-514] SuvidTemp
@@ -2222,6 +2257,12 @@ pid_harness = (
 
         #include <string>
         #include <vector>
+
+        // [T29] FinishAutoTune() теперь пишет SamSetup под спинлоком configMux.
+        using portMUX_TYPE = int;
+        static portMUX_TYPE configMux = 0;
+        #define portENTER_CRITICAL(mux) do { (void)(mux); } while (0)
+        #define portEXIT_CRITICAL(mux) do { (void)(mux); } while (0)
         '''
     )
     + "\n"

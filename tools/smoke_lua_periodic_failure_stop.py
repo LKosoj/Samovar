@@ -48,7 +48,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = [
     "inline bool lua_chunk_ref_valid(int ref)",
     "void do_lua_script(void *parameter)",
-    "void load_lua_script()",
+    "bool load_lua_script()",
 ]
 
 HARNESS_TEMPLATE = r'''
@@ -128,15 +128,43 @@ static FakeLuaObj* luaObj = &luaObjectFake;
 static std::vector<std::string> consoleLog;
 static void WriteConsoleLog(const String& message) { consoleLog.push_back(message.value_); }
 
+// --- пользовательское уведомление при авто-отключении script1 (T18) -------
+enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100 };
+static std::vector<std::string> sendMsgLog;
+static void SendMsg(const String& message, MESSAGE_TYPE) { sendMsgLog.push_back(message.value_); }
+// Берём адрес SendMsg безусловно - если мутация уберёт единственный
+// production-вызов SendMsg(...), это не должно превращаться в ошибку
+// компиляции ("defined but not used" под -Werror маскирует мутацию вместо
+// того, чтобы её ловил assert ниже).
+static void (*sendMsgUsedMarker)(const String&, MESSAGE_TYPE) = SendMsg;
+
 // --- прочие примитивы окружения -------------------------------------------
 static bool ota_running = false;
 static bool show_lua_script = false;
 static bool luaLastExecutionTimedOut = false;
-static bool lua_state_lock(TickType_t) { return true; }
+// T17 п.1: load_lua_script() раньше блокировался НАВСЕГДА (portMAX_DELAY) -
+// теперь ждёт максимум 300 мс и возвращает false, если лок занят, НЕ трогая
+// lua_runtime_ready (занятый лок - штатная ситуация, а не отказ рантайма).
+static bool lockAvailable = true;
+static bool lua_state_lock(TickType_t) { return lockAvailable; }
 static void lua_state_unlock(bool) {}
 struct FakeRuntimeLock { bool operator()(TickType_t) const { return true; } };
-static bool runtime_state_lock(TickType_t) { return true; }
+// [T30a] Было portMAX_DELAY - таймаут сделан конечным (дефолт pdMS_TO_TICKS(50)),
+// вызов теперь без аргумента; мок принимает необязательный timeout как есть.
+static bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) { (void)timeout; return true; }
 static void runtime_state_unlock(bool) {}
+// [T30a] Отложенная заявка commit_profile_operation() на смену имени скрипта -
+// применяется первым делом внутри load_lua_script(). Этот тест её не проверяет
+// (см. smoke_lua_type_script_lock.py); символ нужен только для компиляции
+// РЕАЛЬНОГО тела load_lua_script() как есть.
+static bool lua_type_script_pending = false;
+// [Дефект 1] do_lua_script() каждый оборот while(1) проверяет зависшую
+// заявку и просит loop() перечитать скрипт через этот флаг (не трогая
+// lua_type_script напрямую). Этот тест её не проверяет (см.
+// smoke_lua_type_script_lock.py); символ нужен только для компиляции
+// РЕАЛЬНОГО тела do_lua_script() как есть - lua_type_script_pending здесь
+// всегда false, так что флаг не взводится.
+static bool pending_lua_reload_flag = false;
 static void reset_lua_message_cursor() {}
 struct FakeLuaWrapper { void* GetState() { return nullptr; } };
 static FakeLuaWrapper lua;
@@ -178,6 +206,11 @@ static String script1, script2;
 static int script1_ref = 7;
 static int script2_ref = 8;
 static String lua_type_script = "beer.lua";
+// [T30a] get_lua_mode_name() нужна только для компиляции РЕАЛЬНОГО тела
+// load_lua_script() как есть; здесь заявки на смену имени никогда нет
+// (lua_type_script_pending всегда false), так что возвращаемое значение не
+// используется этим тестом.
+static String get_lua_mode_name() { return lua_type_script; }
 
 // --- очереди результатов lua_exec_chunk_locked - РАЗДЕЛЬНЫЕ по script1 и
 // script2 (различаем вызовы по ref) - иначе общий FIFO навязывал бы порядок
@@ -223,7 +256,17 @@ struct StopIteration {};
 struct SafetyCapHit {};
 static int periodicIterationsCompleted = 0;
 static int periodicIterationsTarget = 1000000;
-static void finish_beer_lua_periodic_result(bool, bool) {
+// T18: do_lua_script() раньше делил ОДНУ пару periodicFailed/periodicTimedOut
+// между script1 и script2 - ошибка в пустяковом script.lua протекала в
+// finish_beer_lua_periodic_result() и ошибочно обрывала идущий пивной job.
+// Здесь записываем КАЖДЫЙ полученный аргумент, чтобы явно проверить: во время
+// script1-only сбоев periodicFailed всегда false, а во время script2-only
+// сбоев - true.
+static std::vector<bool> periodicFailedLog;
+static std::vector<bool> periodicTimedOutLog;
+static void finish_beer_lua_periodic_result(bool periodicFailed, bool periodicTimedOut) {
+  periodicFailedLog.push_back(periodicFailed);
+  periodicTimedOutLog.push_back(periodicTimedOut);
   periodicIterationsCompleted++;
   // Останавливаем прогон досрочно и в случае, если цикл уже выключен - иначе
   // харнесс завис бы в ветке "lua_active=false" (vTaskDelay(50)) навсегда,
@@ -262,6 +305,7 @@ static int count_occurrences(const std::string& needle) {
 
 static void reset_fixture() {
   consoleLog.clear();
+  sendMsgLog.clear();
   ota_running = false;
   show_lua_script = false;
   luaLastExecutionTimedOut = false;
@@ -283,11 +327,14 @@ static void reset_fixture() {
   script2CallCount = 0;
   takeLuaJobReturn = false;
   oneShotJobResult.clear();
+  lockAvailable = true;
   lua_periodic_failure_count_script1 = 0;
   lua_periodic_failure_count_script2 = 0;
   lua_script1_disabled = false;
   periodicIterationsCompleted = 0;
   periodicIterationsTarget = 1000000;
+  periodicFailedLog.clear();
+  periodicTimedOutLog.clear();
   oneShotJobsCompleted = 0;
   oneShotJobsTarget = 1000000;
   vTaskDelayCalls = 0;
@@ -321,6 +368,17 @@ static void test_five_script1_failures_disable_script1_without_stopping_loop() {
         "exactly one final stop message naming script.lua must be logged");
   check(count_occurrences("режимный скрипт") == 0,
         "a script1-only failure must never be reported as a mode-script (режимный скрипт) failure");
+  // T18: пользователь должен увидеть предупреждение на экране/в уведомлениях,
+  // а не только в консольном логе - иначе отключение script1 незаметно для
+  // владельца до тех пор, пока он сам не откроет консоль.
+  check(sendMsgLog.size() == 1, "script1 auto-disable must send exactly one user-visible WARNING_MSG notification");
+  // T18: script1-only сбои НЕ ДОЛЖНЫ протекать в periodicFailed - иначе они
+  // ошибочно обрывают идущий пивной job через finish_beer_lua_periodic_result().
+  check(periodicFailedLog.size() == 7, "finish_beer_lua_periodic_result must be called once per periodic run");
+  bool anyFailedDuringScript1OnlyFailures = false;
+  for (bool value : periodicFailedLog) anyFailedDuringScript1OnlyFailures = anyFailedDuringScript1OnlyFailures || value;
+  check(!anyFailedDuringScript1OnlyFailures,
+        "a script1 (script.lua)-only failure must never be reported to finish_beer_lua_periodic_result() as periodicFailed=true");
 }
 
 static void test_five_script2_failures_stop_the_loop() {
@@ -337,6 +395,12 @@ static void test_five_script2_failures_stop_the_loop() {
   check(count_occurrences("ERR in beer.lua: boom") == 5, "each of the 5 failed script2 runs must log its own ERR");
   check(count_occurrences("режимный скрипт (beer.lua) остановлен после") == 1,
         "exactly one final stop message naming the mode script must be logged");
+  // T18: script2 (режимный/пивной скрипт) сбои ОБЯЗАНЫ по-прежнему доходить
+  // до finish_beer_lua_periodic_result() как periodicFailed=true - иначе
+  // реально упавший пивной job перестанет корректно завершаться ошибкой.
+  check(periodicFailedLog.size() == 5, "finish_beer_lua_periodic_result must be called once per periodic run");
+  check(periodicFailedLog.back(),
+        "a script2 (mode script) failure must still be reported to finish_beer_lua_periodic_result() as periodicFailed=true");
 }
 
 static void test_success_between_failures_resets_script1_counter() {
@@ -365,6 +429,17 @@ static void test_success_between_failures_resets_script2_counter() {
   check(loop_lua_fl, "a success between failures must reset script2's streak - 8 failures split by 1 success must not stop the loop");
   check(lua_periodic_failure_count_script2 == 4, "script2's streak after its own reset must count only the 4 failures since the last success");
   check(count_occurrences("остановлен") == 0, "script2 must not be stopped when its streak never reaches the threshold");
+}
+
+static void test_load_lua_script_busy_lock_returns_false_and_preserves_readiness() {
+  reset_fixture();
+  lockAvailable = false;
+  lua_runtime_ready = true;
+  bool result = load_lua_script();
+  check(!result, "load_lua_script() must return false when the Lua lock is busy");
+  check(lua_runtime_ready,
+        "a busy Lua lock is an expected, transient state, not a runtime failure - "
+        "load_lua_script() must not force lua_runtime_ready to false on this path");
 }
 
 static void test_load_lua_script_resets_both_counters_and_reenables_script1() {
@@ -397,11 +472,13 @@ static void test_oneshot_job_failure_does_not_touch_either_counter() {
 }
 
 int main() {
+  (void)sendMsgUsedMarker;
   try {
     test_five_script1_failures_disable_script1_without_stopping_loop();
     test_five_script2_failures_stop_the_loop();
     test_success_between_failures_resets_script1_counter();
     test_success_between_failures_resets_script2_counter();
+    test_load_lua_script_busy_lock_returns_false_and_preserves_readiness();
     test_load_lua_script_resets_both_counters_and_reenables_script1();
     test_oneshot_job_failure_does_not_touch_either_counter();
   } catch (const SafetyCapHit&) {

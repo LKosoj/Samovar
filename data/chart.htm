@@ -9,42 +9,11 @@
   <link rel="stylesheet" href="style.css">
   <title>Самовар</title>
 
-  <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
   <script src="app.js"></script>
   <script src="chart.js"></script>
 
   <!-- Chart code -->
   <script>
-// ==================== LUA BUTTONS ==================================================================
-function AddLuaButtons() {
-  var btn_list = '';
-  var _luaBtnEl = document.getElementById('samovar_lua_btn_list');
-  if (_luaBtnEl) {
-    try {
-      var _parsed = JSON.parse(_luaBtnEl.textContent || '""');
-      if (typeof _parsed === 'string') btn_list = _parsed;
-    } catch (_e) {
-      btn_list = '';
-    }
-  }
-  if (btn_list !== '') {
-    let btn_arr = btn_list.split(',');
-    for (z = 0; z < btn_arr.length; z++) {
-      if (btn_arr[z] !== '') {
-        let arr = btn_arr[z].split('|');
-        let btn = document.createElement('input');
-        btn.type = 'submit';
-        btn.name = 'luabtn' + z;
-        btn.value = arr[1];
-        btn.className = 'button';
-        btn.setAttribute('onclick', 'run_lua("' + arr[0] + '");');
-        document.getElementById('lua_btn_ln').appendChild(btn);
-        document.getElementById('lua_btn').style = 'visibility: visible';
-      }
-    }
-  }
-}
-
 var IsCalmingPause = false; //признак паузы при отборе (чтобы не повторять вывод сообщения каждые 2 секунды)
 
     var chart;
@@ -146,7 +115,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
     }
     document.addEventListener('DOMContentLoaded', function () {
       SamovarApp.startTelemetryPage(renderTelemetry, {
-        threshold: 1,
+        threshold: 3,
         onReady: initChart,
         connectionIds: { online: 'GreenT', offline: 'RedT' },
         storeMessageHistory: false,
@@ -155,7 +124,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
         onLastMessageRemoved: function(remainingCount) {
           if (remainingCount === 0) IsCalmingPause = false;
         },
-        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp']
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp', 'power_on', 'power_off']
       });
     });
   </script>
@@ -255,7 +224,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
       </div>
     </div>
     <input id='power_on' type='button' name='power_on' value='Включить нагрев' onclick='SamovarApp.sendCommand("power=1"); return false;' class="button">
-    <input id='power_off' type='button' name='power_off' value='Выключить нагрев' style="display: none;" onclick='if (!confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;' class="button">
+    <input id='power_off' type='button' name='power_off' value='Выключить нагрев' style="display: none;" onclick='if (!confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=0"); return false;' class="button">
     <input id='return' type='button' name='return' value='Назад' onclick='javascript:location.href="index.htm"' class="button">
     <input id='getlog' type='button' name='getlog' value='Сохранить лог' onclick='javascript:window.open("/getlog")' class="button">
     <input id='getoldlog' type='button' name='getoldlog' value='Сохранить старый лог' onclick='javascript:window.open("/getoldlog")' class="button">

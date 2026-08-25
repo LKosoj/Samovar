@@ -243,7 +243,13 @@ BROWSER_TEST = r'''async page => {
       expect(mixerCheck.clamped === "65535",
              "beer mixer time above the firmware limit did not clamp to the real max " +
              "(silent zeroing / data loss regression)");
-      const mixerTooltip = await page.locator('label[for="m_time"] .tooltiptext').textContent();
+      // enhanceTooltips() (app.js) вставляет после label новый сосед .tooltip-wrap
+      // (сам label остаётся на месте - иначе ломается CSS-рамка фокуса чекбокса), и
+      // .tooltiptext лежит внутри этой обёртки. Комбинатор соседства должен быть именно
+      // + (непосредственный сосед), а не ~ (любой последующий) - иначе селектор находит
+      // ЕЩЁ и .tooltip-wrap соседнего поля m_pause (та же подсказка дальше по DOM) и
+      // Playwright падает по strict-mode violation "resolved to 2 elements".
+      const mixerTooltip = await page.locator('label[for="m_time"] + .tooltip-wrap .tooltiptext').textContent();
       expect(mixerTooltip.includes("65535"),
              "beer mixer tooltip does not show the real firmware limit before input");
 

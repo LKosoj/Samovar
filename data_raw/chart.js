@@ -80,7 +80,7 @@
       Water: data.WaterTemp,
       Tank: data.TankTemp,
       Pressure: data.bme_pressure,
-      ProgNum: data.ProgNum
+      ProgNum: data.ProgramNum
     });
   }
 

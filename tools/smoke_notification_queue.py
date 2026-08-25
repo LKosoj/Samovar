@@ -301,6 +301,26 @@ struct BlynkProbe {
   }
 } Blynk;
 
+// Заглушка RAII-стража замка Blynk (runtime_helpers.h): библиотека Blynk не
+// потокобезопасна, консьюмер уведомлений обязан брать замок и пропускать доставку,
+// если его держит loop().
+bool blynkLockAvailable = true;
+int blynkLockTakes = 0;
+#ifndef pdMS_TO_TICKS
+#define pdMS_TO_TICKS(x) (x)
+#endif
+struct BlynkLockGuard {
+  bool acquired;
+  explicit BlynkLockGuard(TickType_t) : acquired(blynkLockAvailable) {
+    blynkLockTakes++;
+    actions.push_back(acquired ? "blynk_lock" : "blynk_lock_busy");
+  }
+  ~BlynkLockGuard() {}
+  BlynkLockGuard(const BlynkLockGuard&) = delete;
+  BlynkLockGuard& operator=(const BlynkLockGuard&) = delete;
+  explicit operator bool() const { return acquired; }
+};
+
 String urlEncode(const String& value) { return value; }
 
 String http_sync_request_get(String) {
@@ -356,6 +376,8 @@ void resetProbe() {
   blynkWriteCalls = 0;
   telegramResponse = "OK";
   blynkConnected = true;
+  blynkLockAvailable = true;
+  blynkLockTakes = 0;
   SamSetup.tg_token[0] = '\0';
   SamSetup.tg_chat_id[0] = '\0';
   SamSetup.blynkauth[0] = '\0';
@@ -447,7 +469,7 @@ void checkIntegrationPaths() {
             codes == std::vector<std::string>({
                 "notify_telegram_delivery_failed"}) &&
             actions == std::vector<std::string>({
-                "give", "telegram", "blynk_check", "blynk_write",
+                "give", "telegram", "blynk_lock", "blynk_check", "blynk_write",
                 "log:notify_telegram_delivery_failed"}),
         "Telegram failure must not skip connected Blynk before its diagnostic");
 
@@ -459,7 +481,7 @@ void checkIntegrationPaths() {
   check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 0 &&
             codes == std::vector<std::string>({"notify_blynk_disconnected"}) &&
             actions == std::vector<std::string>({
-                "give", "telegram", "blynk_check",
+                "give", "telegram", "blynk_lock", "blynk_check",
                 "log:notify_blynk_disconnected"}),
         "Blynk disconnect must be diagnosed after successful Telegram");
 
@@ -473,7 +495,7 @@ void checkIntegrationPaths() {
             codes == std::vector<std::string>({
                 "notify_telegram_delivery_failed", "notify_blynk_disconnected"}) &&
             actions == std::vector<std::string>({
-                "give", "telegram", "blynk_check",
+                "give", "telegram", "blynk_lock", "blynk_check",
                 "log:notify_telegram_delivery_failed",
                 "log:notify_blynk_disconnected"}),
         "both diagnostics must follow both failed integration attempts");
@@ -484,8 +506,23 @@ void checkIntegrationPaths() {
   runConsumerBlock();
   check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 1 &&
             codes.empty() && actions == std::vector<std::string>({
-                "give", "telegram", "blynk_check", "blynk_write"}),
+                "give", "telegram", "blynk_lock", "blynk_check", "blynk_write"}),
         "successful integrations must not emit diagnostics");
+
+  // Замок Blynk держит loop(): доставка пропускается, но такт не блокируется и
+  // пользователь узнаёт об этом из журнала (notify_blynk_lock_busy).
+  resetProbe();
+  configureIntegrations();
+  msg_q.empty = false;
+  blynkLockAvailable = false;
+  runConsumerBlock();
+  check(telegramCalls == 1 && blynkLockTakes == 1 && blynkCheckCalls == 0 &&
+            blynkWriteCalls == 0 &&
+            codes == std::vector<std::string>({"notify_blynk_lock_busy"}) &&
+            actions == std::vector<std::string>({
+                "give", "telegram", "blynk_lock_busy",
+                "log:notify_blynk_lock_busy"}),
+        "busy Blynk lock must skip delivery and log it once");
 }
 
 int main() {

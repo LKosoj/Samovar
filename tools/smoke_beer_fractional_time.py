@@ -26,6 +26,14 @@ ARDUINO_STUB = r'''
 
 #define F(text) (text)
 
+// [T29] program_io.h (program_commit/program_clear/program_serialize_rows) защищает
+// program[]/ProgramLen спинлоком configMux - минимальная заглушка, семантика
+// критической секции здесь не проверяется (см. tools/smoke_lock_order.py).
+using portMUX_TYPE = int;
+static portMUX_TYPE configMux = 0;
+#define portENTER_CRITICAL(mux) do { (void)(mux); } while (0)
+#define portEXIT_CRITICAL(mux) do { (void)(mux); } while (0)
+
 class Print {
  public:
   virtual ~Print() {}

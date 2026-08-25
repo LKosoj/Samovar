@@ -8,28 +8,41 @@
 (WEB_UPDATE_VERSION) и сверялась с ней же - устройство сходилось к тому, что зашито
 в него самого, и новый UI требовал перепрошивки. Отменено владельцем 16.07.2026.
 
-[WP7 п.20] Второй регресс, который чинит этот файл сейчас: набор файлов интерфейса
-кладётся во временные "*.tmp" (write_web_file_stage) и переставляется на место одной
-короткой серией переименований (write_web_file_commit) только если ВЕСЬ набор
-скачался - иначе временные файлы подчищаются (discard_web_file_stage), а старый
-рабочий набор остаётся нетронутым. Раньше каждый файл менялся на месте сразу же:
-обрыв связи на середине оставлял новую index.htm со старым app.js.gz - сочетание
-файлов на диске становилось нерабочим, а раз маркер версии не переписывался, это
-повторялось на каждой следующей перезагрузке.
+[WP7 п.20] Второй регресс: набор файлов интерфейса сначала кладётся во временные
+"*.tmp" (write_web_file_stage) и переставляется на место одной короткой серией
+переименований (write_web_file_commit) только если ВЕСЬ набор скачался - иначе
+временные файлы подчищаются (discard_web_file_stage), а старый рабочий набор остаётся
+нетронутым.
+
+[T20] Третий регресс - обнаруженный при аудите 24.08.2026 и починенный этим же файлом:
+схема из [WP7 п.20] держит на диске ОДНОВРЕМЕННО старый рабочий комплект и новый набор
+во временных "*.tmp" - пик занятого места (942080 байт) физически не помещается в
+раздел spiffs (786432 байта, partitions.csv). Обновление было невозможно в принципе,
+а не только в теории "мало места". Починка: каждый файл интерфейса теперь качается и
+ставится на место атомарно ПО ОТДЕЛЬНОСТИ (write_web_file_atomic, тот же приём
+"*.tmp" + переименование, что и раньше, но применённый к одному файлу, а не ко всему
+набору разом) - пик места сокращается до одного лишнего файла сверх обычного комплекта
+(573440 байт, запас 212992). Отдельно добавлен гейт: если свежий SPIFFS.totalBytes() -
+SPIFFS.usedBytes() меньше WEB_UPDATE_FREE_SPACE_MARGIN_BYTES, обновление не начинается
+вовсе.
 
 Тест пинит СОГЛАСИЕ, а не числа:
   1. версия берётся из сети, а не из константы прошивки;
   2. качаем только когда серверная и локальная разошлись;
-  3. набор файлов интерфейса сначала весь ставится в очередь (stage), и только потом
-     ставится на место (commit) одним проходом - ни один файл не подменяется раньше,
-     чем скачан весь набор;
-  4. при неполной закачке временные файлы подчищаются (discard), а установка (commit)
-     не выполняется вовсе;
-  5. маркер версии пишется последним и только если весь список доехал;
+  3. набор файлов интерфейса ставится ОДНИМ проходом через updateFile(fn,
+     SAVE_FILE_OVERRIDE) (write_web_file_atomic внутри get_web_file), с явным break при
+     первой же неудаче - остатки набора не докачиваются вслепую;
+  4. двухфазной схемы (stage/commit/discard всего набора разом) в get_web_interface()
+     больше нет - на диске никогда не живут одновременно два полных комплекта;
+  5. маркер версии пишется последним и только если весь список доехал (в том числе
+     набор из kWebOverrideFiles[]);
   6. список качаемого покрывает ровно data/ - иначе новый файл в data_raw/ молча
      не доедет до устройств, а это ровно то, что чинил весь этот механизм;
   7. пользовательские файлы (*.lua, program_*.txt) по-прежнему качаются только если
      их ещё нет на устройстве - иначе обновление затрёт то, что человек правил под себя.
+  8. гейт свободного места проверяется до начала закачки набора, а в kWebOverrideFiles[]
+     общие ресурсы (картинки/звук/стили/скрипты) идут раньше HTML-страниц - при обрыве
+     связи риск нерабочей одной страницы ниже риска нерабочего общего ресурса.
 """
 import re
 import sys
@@ -94,46 +107,40 @@ def main() -> int:
             "устройство будет перекачивать весь список на каждой загрузке"
         )
 
-    # --- 3/4. набор файлов интерфейса: сначала stage всего набора, потом единый commit,
-    #          при неполном stage - discard без commit -------------------------------
-    stage_loop = re.search(
-        r"for\s*\([^)]*\)\s*\{[^}]*write_web_file_stage\(", body
-    )
-    commit_loop = re.search(
-        r"if\s*\(updateOk\)\s*\{\s*for\s*\([^)]*\)\s*\{[^}]*write_web_file_commit\(",
+    # --- 3/4. набор файлов интерфейса ставится ОДНИМ проходом через SAVE_FILE_OVERRIDE,
+    #          двухфазной схемы (stage весь набор / commit весь набор / discard) нет ---
+    override_loop = re.search(
+        r"for\s*\([^)]*\)\s*\{[^}]*updateFile\([^)]*SAVE_FILE_OVERRIDE\)[^}]*\}",
         body,
     )
-    discard_block = re.search(
-        r"else\s*\{[^}]*for\s*\([^)]*\)\s*\{[^}]*discard_web_file_stage\(", body
-    )
-    if not stage_loop:
+    if not override_loop:
         errors.append(
-            "get_web_interface: набор файлов интерфейса больше не скачивается во "
-            "временные имена (write_web_file_stage) - файлы снова подменяются на "
-            "месте по одному, обрыв связи оставит несовместимую смесь старых и новых"
+            "get_web_interface: набор файлов интерфейса больше не ставится одним "
+            "циклом через updateFile(fn, SAVE_FILE_OVERRIDE) - см. kWebOverrideFiles[]"
         )
-    if not commit_loop:
+    elif "if (!updateOk) break;" not in override_loop.group(0):
         errors.append(
-            "get_web_interface: установка набора (write_web_file_commit) не "
-            "выполняется единым проходом под if (updateOk) - частично скачанный "
-            "набор может частично же и установиться"
+            "get_web_interface: цикл по kWebOverrideFiles[] не прерывается по "
+            "!updateOk (break) - неудачная закачка одного файла не остановит попытки "
+            "качать остальные"
         )
-    elif stage_loop and commit_loop.start() < stage_loop.start():
-        errors.append(
-            "get_web_interface: commit идёт раньше stage - часть файлов встанет "
-            "на место раньше, чем весь набор подтвердит успешную закачку"
-        )
-    if not discard_block:
-        errors.append(
-            "get_web_interface: при неполной закачке набора временные "
-            "*.tmp-файлы (discard_web_file_stage) не подчищаются - мусор "
-            "останется на SPIFFS, где и так мало места"
-        )
+    for removed_call in (
+        "write_web_file_stage(",
+        "write_web_file_commit(",
+        "discard_web_file_stage(",
+    ):
+        if removed_call in body:
+            errors.append(
+                f"get_web_interface: остался вызов {removed_call} - вернулась "
+                "двухфазная схема (весь набор во временные файлы, потом коммит "
+                "разом), пик места для неё (942080 байт) не помещается в раздел "
+                "spiffs (786432 байта)"
+            )
 
     # --- 5. маркер пишется последним и только при полном успехе ---------------
     marker = body.find('write_web_file_atomic("/version.txt"')
     last_download = body.rfind("updateFile(")
-    commit_pos = commit_loop.start() if commit_loop else -1
+    override_pos = override_loop.start() if override_loop else -1
     if marker == -1:
         errors.append("get_web_interface: маркер версии не записывается")
     else:
@@ -143,11 +150,11 @@ def main() -> int:
                 "пользовательских файлов - оборвавшееся обновление притворится "
                 "успешным и не повторится"
             )
-        if commit_pos != -1 and marker < commit_pos:
+        if override_pos != -1 and marker < override_pos:
             errors.append(
                 "get_web_interface: маркер версии пишется до установки набора "
-                "файлов интерфейса - оборвавшееся обновление притворится "
-                "успешным и не повторится"
+                "файлов интерфейса (kWebOverrideFiles) - оборвавшееся обновление "
+                "притворится успешным и не повторится"
             )
     if "if (updateOk) {" not in body:
         errors.append(
@@ -220,6 +227,40 @@ def main() -> int:
                 "перестанет обновляться, а маркер версии всё равно запишется "
                 "как успех"
             )
+
+    # --- 8. гейт свободного места стоит раньше закачки, ресурсы - раньше страниц ---
+    margin_pos = body.find("WEB_UPDATE_FREE_SPACE_MARGIN_BYTES")
+    if margin_pos == -1:
+        errors.append(
+            "get_web_interface: нет гейта свободного места "
+            "(WEB_UPDATE_FREE_SPACE_MARGIN_BYTES) - обновление на почти полном "
+            "диске начнёт качать файлы, которым физически некуда встать"
+        )
+    elif override_loop and margin_pos > override_loop.start():
+        errors.append(
+            "get_web_interface: гейт свободного места проверяется после начала "
+            "закачки набора файлов интерфейса - место может кончиться уже "
+            "во время обновления"
+        )
+
+    RESOURCE_NAMES = [
+        "Green.png", "Red_light.gif", "alarm.mp3", "favicon.ico",
+        "minus.png", "plus.png", "style.css.gz", "app.js.gz", "chart.js.gz",
+    ]
+    PAGE_NAMES = [
+        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm", "calibrate.htm",
+        "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
+        "program.htm", "setup.htm",
+    ]
+    resource_positions = [override_names.index(n) for n in RESOURCE_NAMES if n in override_names]
+    page_positions = [override_names.index(n) for n in PAGE_NAMES if n in override_names]
+    if resource_positions and page_positions and max(resource_positions) > min(page_positions):
+        errors.append(
+            "get_web_interface: в kWebOverrideFiles[] общий ресурс идёт после "
+            "HTML-страницы - при обрыве связи риск нерабочей одной страницы должен "
+            "быть ниже риска нерабочего общего ресурса, от которого зависят все "
+            "страницы разом"
+        )
 
     if errors:
         print("web interface update smoke failed:")

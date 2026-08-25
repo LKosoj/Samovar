@@ -16,7 +16,7 @@ SIGNATURES = [
     "inline void finish_beer_lua_periodic_result(bool periodicFailed, bool periodicTimedOut)",
     "inline bool request_beer_lua_job(uint32_t& ticket)",
     "inline LuaBeerJobResult beer_lua_job_result(uint32_t ticket)",
-    "inline bool request_beer_lua_stop(uint32_t ticket)",
+    "inline ActuatorCommandResult request_beer_lua_stop(uint32_t ticket)",
 ]
 
 HARNESS_TEMPLATE = r'''
@@ -51,11 +51,24 @@ enum LuaBeerJobResult : uint8_t {
   LUA_BEER_JOB_FAILED_INIT,
   LUA_BEER_JOB_FAILED_RUNTIME,
   LUA_BEER_JOB_FAILED_TIMEOUT,
+  // [Дефект 2] занятый RUNTIME_STATE на короткий миг чтения/записи - не то же
+  // самое, что настоящий сбой job'а.
+  LUA_BEER_JOB_LOCK_BUSY,
+};
+
+// [Дефект 2] единый результат исполнительной команды (safety_transition.h) -
+// используется вместо голого bool, чтобы отличить временную занятость лока
+// от настоящей ошибки согласования тикета.
+enum ActuatorCommandResult : uint8_t {
+  ACTUATOR_COMMAND_ACCEPTED = 0,
+  ACTUATOR_COMMAND_PENDING,
+  ACTUATOR_COMMAND_APPLIED,
+  ACTUATOR_COMMAND_FAILED,
 };
 
 static bool lockAvailable = true;
 static TickType_t lastLockTimeout = 0;
-bool runtime_state_lock(TickType_t timeout) {
+bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
   lastLockTimeout = timeout;
   return lockAvailable;
 }
@@ -150,24 +163,83 @@ static void test_periodic_failures_are_terminal() {
         "periodic timeout must publish FAILED_TIMEOUT terminal state");
 }
 
+static void test_script1_only_failure_reported_as_not_failed_does_not_fail_job() {
+  // T18: do_lua_script() (lua.h) раньше делил ОДНУ пару periodicFailed/
+  // periodicTimedOut между общим script.lua (script1) и режимным/пивным
+  // скриптом (script2) - ошибка в пустяковом script.lua протекала сюда как
+  // periodicFailed=true и ошибочно обрывала идущий пивной job. Правильное
+  // поведение do_lua_script() - при сбое ТОЛЬКО script1 звать эту функцию с
+  // periodicFailed=false (проверено отдельно, на реальном do_lua_script(), в
+  // smoke_lua_periodic_failure_stop.py). Здесь фиксируем ответственность
+  // finish_beer_lua_periodic_result() за свою половину контракта: получив
+  // periodicFailed=false, она обязана публиковать успешный, а не проваленный
+  // терминальный статус.
+  uint32_t ticket = start_running_job();
+  finish_beer_lua_periodic_result(false, false);
+  check(beer_lua_job_result(ticket) == LUA_BEER_JOB_SUCCEEDED,
+        "periodicFailed=false (e.g. a script1-only failure correctly excluded by do_lua_script()) "
+        "must publish SUCCEEDED, not a FAILED_* terminal state");
+}
+
 static void test_stop_is_latched_and_terminal() {
   reset_fixture();
   uint32_t ticket = 0;
   check(request_beer_lua_job(ticket), "Beer job setup for stop must succeed");
-  check(request_beer_lua_stop(ticket), "Beer job stop must latch under production lock");
-  check(lastLockTimeout == portMAX_DELAY,
-        "Beer job stop must wait for runtime lock instead of losing stop request");
+  check(request_beer_lua_stop(ticket) == ACTUATOR_COMMAND_APPLIED,
+        "Beer job stop must latch under production lock");
+  // [T30a] Было lastLockTimeout == portMAX_DELAY - request_beer_lua_stop()
+  // достижима из loop() через beer.h, поэтому ждать RUNTIME_STATE вечно
+  // нельзя; таймаут теперь конечный (дефолт runtime_state_lock()).
+  check(lastLockTimeout != portMAX_DELAY,
+        "Beer job stop must wait for runtime lock with a bounded timeout, not portMAX_DELAY");
   check(SetScriptOff && !loop_lua_fl && !lua_start_requested,
         "Beer job stop must block queued and future periodic execution");
   check(beer_lua_job_result(ticket) == LUA_BEER_JOB_STOPPED,
         "Beer job stop must publish STOPPED terminal state");
 }
 
+// [Дефект 2] Занятый лок - временная помеха, не сбой job'а: caller (beer.h)
+// не должен аварийно прекращать варку, а обязан повторить попытку позже.
+// Никакие поля job'а (SetScriptOff/loop_lua_fl/lua_start_requested/тикет) не
+// должны меняться - job всё ещё RUNNING, повторный опрос не должен спутать
+// PENDING с ошибкой.
+static void test_stop_lock_busy_is_pending_without_side_effects() {
+  uint32_t ticket = start_running_job();
+  const bool scriptOffBefore = SetScriptOff;
+  const bool loopLuaFlBefore = loop_lua_fl;
+  const bool startRequestedBefore = lua_start_requested;
+  lockAvailable = false;
+  check(request_beer_lua_stop(ticket) == ACTUATOR_COMMAND_PENDING,
+        "Beer job stop must report ACTUATOR_COMMAND_PENDING when RUNTIME_STATE is busy, not a failure");
+  check(SetScriptOff == scriptOffBefore && loop_lua_fl == loopLuaFlBefore &&
+            lua_start_requested == startRequestedBefore,
+        "Beer job stop must not touch queued/periodic state while the lock is busy");
+  lockAvailable = true;
+  check(beer_lua_job_result(ticket) == LUA_BEER_JOB_RUNNING,
+        "Beer job must remain RUNNING after a lock-busy stop attempt - not silently aborted");
+}
+
+// [Дефект 2] Чужой тикет - настоящая ошибка согласования (не временная
+// помеха) - обязана вернуть ACTUATOR_COMMAND_FAILED, а не PENDING (иначе
+// caller будет бесконечно повторять заведомо обречённую попытку).
+static void test_stop_wrong_ticket_is_failed() {
+  reset_fixture();
+  uint32_t ticket = 0;
+  check(request_beer_lua_job(ticket), "Beer job setup for wrong-ticket stop must succeed");
+  check(request_beer_lua_stop(ticket + 1) == ACTUATOR_COMMAND_FAILED,
+        "Beer job stop with a foreign ticket must report ACTUATOR_COMMAND_FAILED");
+  check(!SetScriptOff && loop_lua_fl && lua_start_requested,
+        "Beer job stop with a foreign ticket must not touch the unrelated running job's state");
+}
+
 int main() {
   test_init_failure_blocks_job();
   test_compile_failure_blocks_job();
   test_periodic_failures_are_terminal();
+  test_script1_only_failure_reported_as_not_failed_does_not_fail_job();
   test_stop_is_latched_and_terminal();
+  test_stop_lock_busy_is_pending_without_side_effects();
+  test_stop_wrong_ticket_is_failed();
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -224,7 +296,7 @@ def main() -> int:
     errors: list[str] = []
     try:
         init_body = extract_function_body(lua, "void lua_init()")
-        load_body = extract_function_body(lua, "void load_lua_script()")
+        load_body = extract_function_body(lua, "bool load_lua_script()")
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
@@ -240,10 +312,32 @@ def main() -> int:
         ["lua_compile_chunk_locked", "lua_compile_chunk_locked", "const bool ready = lua_boot_init_ready", "lua_runtime_ready = ready;"],
         errors,
     )
-    if "runtime_state_lock(portMAX_DELAY)" not in extract_function_body(
-        lua, "inline bool request_beer_lua_stop(uint32_t ticket)"
-    ):
-        errors.append("Beer Lua stop must latch with portMAX_DELAY")
+    beer_stop_body = extract_function_body(
+        lua, "inline ActuatorCommandResult request_beer_lua_stop(uint32_t ticket)"
+    )
+    # [T30a] Было runtime_state_lock(portMAX_DELAY) - вызывается из beer.h при
+    # смене строки программы, достижимо из loop(). Отказ уже обрабатывался
+    # штатно (return false), поэтому таймаут заменён на дефолтный,
+    # ограниченный runtime_state_lock() (pdMS_TO_TICKS(50)).
+    if "bool locked = runtime_state_lock();" not in beer_stop_body:
+        errors.append("Beer Lua stop must wait on runtime_state_lock() with a bounded default timeout")
+    if "portMAX_DELAY" in beer_stop_body:
+        errors.append(
+            "T30a: request_beer_lua_stop() снова ждёт RUNTIME_STATE portMAX_DELAY - "
+            "loop() может зависнуть через beer.h при смене строки программы"
+        )
+    # [Дефект 2] Занятый лок и чужой тикет обязаны различаться - иначе caller
+    # (beer.h) не сможет отличить временную помеху от настоящего сбоя.
+    if "return ACTUATOR_COMMAND_PENDING;" not in beer_stop_body:
+        errors.append(
+            "[Дефект 2] request_beer_lua_stop() обязана вернуть "
+            "ACTUATOR_COMMAND_PENDING на занятом локе, а не сливать это с реальным сбоем"
+        )
+    if "return ACTUATOR_COMMAND_FAILED;" not in beer_stop_body:
+        errors.append(
+            "[Дефект 2] request_beer_lua_stop() обязана вернуть "
+            "ACTUATOR_COMMAND_FAILED на чужом тикете (это настоящая ошибка, не помеха)"
+        )
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)
@@ -271,6 +365,27 @@ def main() -> int:
             "periodicFailed ? LUA_BEER_JOB_FAILED_RUNTIME : LUA_BEER_JOB_SUCCEEDED;",
             "periodicFailed ? LUA_BEER_JOB_SUCCEEDED : LUA_BEER_JOB_SUCCEEDED;",
             "periodic runtime error must publish FAILED_RUNTIME terminal state",
+        ),
+        (
+            "periodicFailed ? LUA_BEER_JOB_FAILED_RUNTIME : LUA_BEER_JOB_SUCCEEDED;",
+            "periodicFailed ? LUA_BEER_JOB_FAILED_RUNTIME : LUA_BEER_JOB_FAILED_RUNTIME;",
+            "must publish SUCCEEDED, not a FAILED_* terminal state",
+        ),
+        # [Дефект 2] МУТАЦИЯ 1: занятый лок снова сливается с реальной ошибкой -
+        # тест обязан упасть (caller не сможет отличить помеху от сбоя и
+        # аварийно прервёт варку на любой микро-задержке лока).
+        (
+            "if (!locked) return ACTUATOR_COMMAND_PENDING;",
+            "if (!locked) return ACTUATOR_COMMAND_FAILED;",
+            "must report ACTUATOR_COMMAND_PENDING when RUNTIME_STATE is busy, not a failure",
+        ),
+        # [Дефект 2] МУТАЦИЯ 2: чужой тикет становится "временной помехой" -
+        # тест обязан упасть (caller будет бесконечно повторять заведомо
+        # обречённую попытку остановки чужого/устаревшего job'а).
+        (
+            "    runtime_state_unlock(true);\n    return ACTUATOR_COMMAND_FAILED;",
+            "    runtime_state_unlock(true);\n    return ACTUATOR_COMMAND_PENDING;",
+            "must report ACTUATOR_COMMAND_FAILED",
         ),
     ]
     for old, new, expected in mutations:

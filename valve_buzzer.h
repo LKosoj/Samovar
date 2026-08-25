@@ -6,6 +6,11 @@
 
 ActuatorCommandResult open_valve(bool Val, bool msg = true) {
   if (Val) {
+    // Во время смены режима приводами распоряжается только процедура переключения:
+    // иначе аварийный надзор (SysTicker) и stop_local_mode_actuators() из loop()
+    // дёргают RELE_CHANNEL3 наперегонки, а valve_status не даёт mode_actuators_idle()
+    // сойтись — переключение срывается в принудительное завершение по дедлайну.
+    if (mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED;
     digitalWrite(RELE_CHANNEL3, SamSetup.rele3);
     valve_status = true;
     if (msg) {

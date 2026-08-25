@@ -48,6 +48,10 @@ static constexpr float POWER_WORK_MODE_THRESHOLD = 100.0f;
 static constexpr float POWER_WORK_MODE_THRESHOLD = 40.0f;
 #endif
 
+// Единая точка правды для порога WORK↔SLEEP - см. forward-декларацию в
+// samovar_api.h (нужна раньше по тексту .ino-конкатенации).
+inline float power_work_mode_threshold() { return POWER_WORK_MODE_THRESHOLD; }
+
 #ifdef SAMOVAR_USE_POWER
 static bool powerWorkerReady = false;
 #endif
@@ -881,6 +885,17 @@ inline void set_power_mode(String Mode) {
 }
 
 inline void process_pending_power_request() {
+  // [T14 п.29] Повтор отложенной записи кэша режима регулятора (см.
+  // arm_pending_power_mode_retry() в runtime_helpers.h): предыдущая попытка
+  // проиграла гонку за лок runtime-состояния, само значение не потеряно.
+  // Независимо от заявки на смену режима регулятора ниже - снимаем, только
+  // если повтор записи удался.
+  if (pending_power_mode_retry_armed()) {
+    if (set_current_power_mode_value(regulator_mode_text(pending_power_mode_retry_value()))) {
+      clear_pending_power_mode_retry();
+    }
+  }
+
   SafetyRegulatorRequestSnapshot snapshot = {};
   bool hasRequest = false;
   bool notifyWorker = false;

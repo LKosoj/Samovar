@@ -296,10 +296,26 @@ inline void check_alarm_lua() {
 
 unsigned long lua_timer[10];  //10 таймеров для lua
 String lua_type_script;
+// [T30a] commit_profile_operation() не смог мгновенно взять xLuaSemaphore, чтобы
+// безопасно переписать lua_type_script (String - реаллокация буфера под чтением
+// do_lua_script() была бы use-after-free). Заявка не теряется: load_lua_script()
+// применяет её первым делом под тем же локом, ДО чтения lua_type_script - тем же
+// приёмом, каким pending_lua_reload_flag переживает занятый лок (Samovar.ino).
+// [Дефект 1] load_lua_script() вызывается только при старте, по
+// pending_lua_reload_flag и до 10 раз из switch_samovar_mode() - если ВСЕ эти
+// попытки упёрлись в занятый лок, заявка виснет навсегда. do_lua_script()
+// (см. ниже) страхует это: каждый оборот цикла замечает зависший флаг и
+// просит loop() перечитать скрипт через pending_lua_reload_flag - тот же
+// приём, а не прямое присваивание lua_type_script (см. комментарий там же).
+volatile bool lua_type_script_pending = false;
 String script1, script2;
 int script1_ref = LUA_NOREF;
 int script2_ref = LUA_NOREF;
 extern String lua_script_list_cache;
+// Определена в Samovar.ino (после точки, где подключается lua.h) - тот же
+// флаг, которым SPIFFSEditor.h и tick_apply_pending_lua_commands() уже
+// договариваются о перезагрузке скрипта.
+extern volatile bool pending_lua_reload_flag;
 
 // [П30] Падающий режимный скрипт раньше перезапускался планировщиком раз в
 // секунду безусловно и забивал журнал повторяющимся "ERR in <режим>.lua: ..."
@@ -353,6 +369,10 @@ enum LuaBeerJobResult : uint8_t {
   LUA_BEER_JOB_FAILED_INIT,
   LUA_BEER_JOB_FAILED_RUNTIME,
   LUA_BEER_JOB_FAILED_TIMEOUT,
+  // [Дефект 2] RUNTIME_STATE занят на короткий миг чтения/записи - это НЕ то
+  // же самое, что настоящий сбой job'а (чужой тикет, ошибка инициализации).
+  // Вызывающий обязан повторить попытку позже, а не считать варку сорванной.
+  LUA_BEER_JOB_LOCK_BUSY,
 };
 
 volatile bool lua_runtime_ready = false;
@@ -543,25 +563,41 @@ inline bool request_beer_lua_job(uint32_t& ticket) {
 
 inline LuaBeerJobResult beer_lua_job_result(uint32_t ticket) {
   bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-  if (!locked) return LUA_BEER_JOB_FAILED_RUNTIME;
+  // [Дефект 2] Раньше занятый лок отдавался как LUA_BEER_JOB_FAILED_RUNTIME -
+  // caller (beer.h) не отличал это от настоящего провала job'а и аварийно
+  // прерывал варку. beer_stage_tick() опрашивает этот результат раз в секунду,
+  // пока строка 'L' активна - LOCK_BUSY просто откладывает решение на
+  // следующий опрос, тикет при этом не трогаем.
+  if (!locked) return LUA_BEER_JOB_LOCK_BUSY;
   const LuaBeerJobResult result = ticket == lua_beer_job_ticket
       ? lua_beer_job_result : LUA_BEER_JOB_FAILED_RUNTIME;
   runtime_state_unlock(true);
   return result;
 }
 
-inline bool request_beer_lua_stop(uint32_t ticket) {
-  bool locked = runtime_state_lock(portMAX_DELAY);
-  if (!locked || ticket != lua_beer_job_ticket) {
-    runtime_state_unlock(locked);
-    return false;
+inline ActuatorCommandResult request_beer_lua_stop(uint32_t ticket) {
+  // [T30a] Было runtime_state_lock(portMAX_DELAY) - вызывается из beer.h при переходе
+  // между строками программы (достижимо из loop()). Дефолтные pdMS_TO_TICKS(50),
+  // как и везде в этом файле для RUNTIME_STATE.
+  // [Дефект 2] Раньше занятый лок сливался с "чужой тикет" в один false, и
+  // caller (beer.h) на любом false аварийно прекращал варку пива. Это разные
+  // исходы: занятый лок - временная помеха (ACTUATOR_COMMAND_PENDING, caller
+  // не меняет состояние и повторит попытку сам), чужой тикет - настоящая
+  // ошибка согласования (ACTUATOR_COMMAND_FAILED). beerLuaStage.phase при
+  // PENDING остаётся прежним - job всё ещё RUNNING с валидным тикетом, поэтому
+  // повторный опрос (beer_lua_job_result) не спутает его с ошибкой.
+  bool locked = runtime_state_lock();
+  if (!locked) return ACTUATOR_COMMAND_PENDING;
+  if (ticket != lua_beer_job_ticket) {
+    runtime_state_unlock(true);
+    return ACTUATOR_COMMAND_FAILED;
   }
   SetScriptOff = true;
   loop_lua_fl = false;
   lua_start_requested = false;
   lua_beer_job_result = LUA_BEER_JOB_STOPPED;
   runtime_state_unlock(true);
-  return true;
+  return ACTUATOR_COMMAND_APPLIED;
 }
 
 inline bool beer_lua_job_idle(uint32_t ticket) {
@@ -1473,7 +1509,7 @@ static int lua_wrapper_set_timer(lua_State *lua_state) {
   int32_t a = lua_check_index_arg(lua_state, 1, 1, 10, "timer");
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
   a--;
-  uint16_t b = luaL_checknumber(lua_state, 2);
+  uint16_t b = static_cast<uint16_t>(lua_check_int32_arg(lua_state, 2, 0, 65535, "timer duration"));
   lua_timer[a] = millis() + b * 1000;
   return 0;
 }
@@ -1893,6 +1929,9 @@ String get_lua_script(String fn) {
   f = SPIFFS.open(fn);
   if (f) {
     //нашли файл со скриптом, загружаем
+    // readString() читает файл целиком в ОЗУ. Запрос заведомо большого файла (например
+    // /lua?script=data.csv) может уронить контроллер по нехватке памяти - ограничение
+    // размера здесь сознательно не введено (осознанный выбор владельца).
     s = f.readString();
     s.trim();
     f.close();
@@ -1928,7 +1967,20 @@ String run_lua_string(String lstr) {
   return sr;
 }
 
-void load_lua_script() {
+bool load_lua_script() {
+  // [T30a] Заявка на смену lua_type_script (commit_profile_operation() отложил её,
+  // не сумев взять лок мгновенно) применяется ПЕРВЫМ делом, до чтения lua_type_script
+  // ниже - иначе get_lua_script(lua_type_script) прочитал бы ещё старое имя.
+  if (lua_type_script_pending) {
+    bool typeScriptLocked = lua_state_lock(pdMS_TO_TICKS(300));
+    if (!typeScriptLocked) {
+      WriteConsoleLog(F("Lua reload busy"));
+      return false;
+    }
+    lua_type_script = get_lua_mode_name();
+    lua_type_script_pending = false;
+    lua_state_unlock(true);
+  }
   // [П30] Отредактированный/перезагруженный скрипт заслуживает новую попытку -
   // оба счётчика подряд идущих неудачных периодических прогонов сбрасываются
   // всегда, и script1 (если был отключён из-за своих ошибок) снова разрешён.
@@ -1948,21 +2000,30 @@ void load_lua_script() {
   String btnList = get_lua_script_list();
   String modeChunkName = "@" + lua_type_script;
 
-  bool lua_locked = lua_state_lock(portMAX_DELAY);
+  bool lua_locked = lua_state_lock(pdMS_TO_TICKS(300));
   if (!lua_locked) {
     WriteConsoleLog(F("Lua reload busy"));
-    lua_runtime_ready = false;
-    return;
+    return false;
   }
   String script1Error = lua_compile_chunk_locked(s1, "@script.lua", script1_ref);
   String script2Error = lua_compile_chunk_locked(s2, modeChunkName.c_str(), script2_ref);
-  bool locked = runtime_state_lock(portMAX_DELAY);
-  if (locked) {
-    script1 = s1;
-    script2 = s2;
-    lua_script_list_cache = btnList;
-    runtime_state_unlock(true);
+  // [T30a] Было runtime_state_lock(portMAX_DELAY) - loop() дошёл сюда, уже удерживая
+  // xLuaSemaphore (lua_locked выше), поэтому бесконечное ожидание ВТОРОГО лока было
+  // тем же риском, что и исходный баг. RUNTIME_STATE - самый внутренний лок
+  // (LOCK_ORDER 100, см. таблицу выше) и берётся здесь только под LUA_STATE для
+  // короткого копирования String - как и везде в этом файле, ждём его дефолтные
+  // pdMS_TO_TICKS(50); на отказ реагируем как на занятый xLuaSemaphore чуть выше -
+  // не теряем заявку, а просто просим повторить попытку позже.
+  bool locked = runtime_state_lock();
+  if (!locked) {
+    lua_state_unlock(lua_locked);
+    WriteConsoleLog(F("Lua reload busy"));
+    return false;
   }
+  script1 = s1;
+  script2 = s2;
+  lua_script_list_cache = btnList;
+  runtime_state_unlock(true);
   lua_state_unlock(lua_locked);
   if (script1Error.length() > 0) WriteConsoleLog("ERR in script.lua: " + script1Error);
   if (script2Error.length() > 0) WriteConsoleLog("ERR in " + lua_type_script + ": " + script2Error);
@@ -1970,6 +2031,7 @@ void load_lua_script() {
                      lua_coroutine_watchdog_ready &&
                      script1Error.length() == 0 && script2Error.length() == 0;
   lua_runtime_ready = ready;
+  return true;
 }
 
 //Запускаем таск для запуска скрипта
@@ -1979,6 +2041,21 @@ void do_lua_script(void *parameter) {
   unsigned long last_periodic_lua_start = 0;
   //String glv;
   while (1) {
+    // [Дефект 1] Заявка commit_profile_operation() на смену lua_type_script
+    // могла зависнуть навсегда, если switch_samovar_mode() исчерпал все 10
+    // попыток load_lua_script() при занятом локе. Сама эту заявку НЕ разбираем -
+    // прямое присваивание lua_type_script здесь обновило бы только имя для
+    // диагностики (WriteConsoleLog ниже), а script2/script2_ref (реальный
+    // исполняемый код) остались бы от СТАРОГО режима: имя новое, скрипт
+    // старый - несогласованное состояние хуже исходного зависания. Вместо
+    // этого просим loop() перечитать скрипт целиком тем же путём, каким это
+    // уже делает tick_apply_pending_lua_commands() (Samovar.ino) - она сама
+    // повторяет попытку, пока load_lua_script() не подтвердит успех. Проверка
+    // не требует лока (volatile bool, запись атомарна).
+    if (lua_type_script_pending) {
+      pending_lua_reload_flag = true;
+    }
+
     // Приостанавливаем выполнение Lua скриптов во время OTA обновления
     if (ota_running) {
       vTaskDelay(500 / portTICK_PERIOD_MS);  // Увеличиваем задержку во время OTA
@@ -2068,8 +2145,6 @@ void do_lua_script(void *parameter) {
         }
       }
 
-      bool periodicFailed = false;
-      bool periodicTimedOut = false;
       if (local_s1.length() > 0 && lua_chunk_ref_valid(local_script1_ref) && !lua_script1_disabled) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
@@ -2077,10 +2152,8 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua_exec_chunk_locked(local_script1_ref);
-        periodicTimedOut = periodicTimedOut || luaLastExecutionTimedOut;
         sr.trim();
         if (sr.length() > 0) {
-          periodicFailed = true;
           WriteConsoleLog("ERR in script.lua: " + sr);
           lua_periodic_failure_count_script1++;
           if (lua_periodic_failure_count_script1 >= LUA_PERIODIC_FAILURE_STOP_THRESHOLD) {
@@ -2088,6 +2161,7 @@ void do_lua_script(void *parameter) {
                              " ошибок подряд, см. предыдущие ERR");
             lua_script1_disabled = true;
             lua_periodic_failure_count_script1 = 0;
+            SendMsg("Общий скрипт script.lua отключён после повторных ошибок", WARNING_MSG);
           }
         } else {
           lua_periodic_failure_count_script1 = 0;
@@ -2095,6 +2169,8 @@ void do_lua_script(void *parameter) {
       }
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
+      bool periodicFailed = false;
+      bool periodicTimedOut = false;
       if (local_s2.length() > 0 && lua_chunk_ref_valid(local_script2_ref)) {
         if (show_lua_script) {
           WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
@@ -2102,7 +2178,7 @@ void do_lua_script(void *parameter) {
           WriteConsoleLog(F("--END LUA SCRIPT--"));
         }
         sr = lua_exec_chunk_locked(local_script2_ref, true);
-        periodicTimedOut = periodicTimedOut || luaLastExecutionTimedOut;
+        periodicTimedOut = luaLastExecutionTimedOut;
         sr.trim();
         if (sr.length() > 0) {
           periodicFailed = true;
@@ -2277,6 +2353,21 @@ String get_lua_mode_name(bool filename) {
     } else {
       fl = "suvid";
     }
+  } else if (Samovar_CR_Mode == SAMOVAR_LUA_MODE) {
+    // У SAMOVAR_LUA_MODE (в отличие от остальных режимов) нет своего "режимного"
+    // скрипта - в mode_registry.h у него tick == nullptr (нет встроенной
+    // автоматики), вся логика этого режима живёт в общем /script.lua. Раньше он
+    // молча падал в финальный else ниже и получал "rectificat" - т.е. пользователь,
+    // выбравший режим Lua, дополнительно к своему script.lua получал ЕЩЁ и
+    // rectificat.lua (штатный доп-скрипт заполнения куба насосом для ректификации,
+    // do_lua_script() выполняет его периодически независимо от активного режима) -
+    // реальное управление насосом без ведома пользователя. Пустая строка здесь
+    // безопасна для обоих потребителей: get_lua_script("") у пустого/несуществующего
+    // имени возвращает "" (SPIFFS.open("/") открывается как директория, но
+    // readString() на директории отдаёт "" - без ошибки и без побочных эффектов), а
+    // load_lua_script()/do_lua_script() трактуют пустой script2 как "режимного
+    // скрипта нет" и просто его не запускают.
+    fl = "";
   } else {
     if (filename) {
       fl = "/rectificat" + String(LUA_RECT) + ".lua";

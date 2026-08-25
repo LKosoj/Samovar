@@ -190,6 +190,8 @@ uint16_t RMVK_set_on(uint16_t state, uint64_t powerGeneration) {
   else state = 0;
   snprintf(cmd, sizeof(cmd), "AT+ON=%d", state);
   ret = RMVK_cmd(cmd, RMVK_ON, state > 0, powerGeneration);
+  // Ответ, не совпавший с запрошенным состоянием, — отказ регулятора, а не успех.
+  if (ret == RMVK_ERROR || ret != state) return RMVK_ERROR;
   return ret;
 }
 uint16_t RMVK_select_mem(uint16_t sm) {

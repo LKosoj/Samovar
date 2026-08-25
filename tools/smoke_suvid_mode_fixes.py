@@ -140,15 +140,43 @@ if suvid_text:
         [
             "if (!PowerOn) {",
             "suvidHeaterOn = false;",
-            "heater_state = false;",
+            "set_heater_state_flag(false);",
         "suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};",
         "suvidDeviation = {false, false, 0};",
             "return;",
-            "heater_state = suvidHeaterOn;",
+        ],
+        errors,
+    )
+    # [T24.3] Применение состояния термостата к нагревателю (heater_state,
+    # setHeaterPosition()) переехало из check_alarm_suvid() (SysTicker, core 0 -
+    # setHeaterPosition() без SAMOVAR_USE_POWER блокируется на vTaskDelay(50),
+    # недопустимо внутри 1-секундного тика надзора) в отдельную suvid_tick(),
+    # вызываемую из loop() (core 1).
+    if "setHeaterPosition" in body:
+        errors.append(
+            "check_alarm_suvid must not apply heater state directly anymore "
+            "(setHeaterPosition moved to suvid_tick())"
+        )
+
+    try:
+        tick_body = extract_function_body(suvid_text, "inline void suvid_tick()")
+    except ValueError as exc:
+        errors.append(str(exc))
+        tick_body = ""
+    require_ordered_tokens(
+        "suvid_tick applies the thermostat state only in Suvid mode",
+        tick_body,
+        [
+            "if (Samovar_Mode != SAMOVAR_SUVID_MODE) return;",
             "setHeaterPosition(suvidHeaterOn);",
         ],
         errors,
     )
+    if "heater_state = suvidHeaterOn;" in tick_body:
+        errors.append(
+            "suvid_tick must not duplicate heater_state assignment - "
+            "setHeaterPosition() already sets it"
+        )
 
     require_ordered_tokens(
         "suvid sensor guard: water/ACP optional, tank mandatory",

@@ -217,8 +217,9 @@ void menu_switch_focus() {
 void menu_reset_lcd() {
   LcdLockGuard lcdLock;
   if (lcdLock) {
+    // lcd.init() убран: внутри библиотеки он сам зовёт Wire.begin()/begin(),
+    // это вторая задержка ~1 с и сброс настроек шины, выставленных в setup().
     lcd.begin(20, 4);
-    lcd.init();
   }
 }
 
@@ -297,7 +298,11 @@ void setup_go_back() {
 
   const PersistResult persistResult = save_profile_nvs(menuSetupCandidate);
   if (persistResult == PERSIST_OK) {
+    // [T29] см. configMux в Samovar.ino - без спинлока async_tcp мог бы
+    // прочитать SamSetup наполовину скопированной.
+    portENTER_CRITICAL(&configMux);
     SamSetup = menuSetupCandidate;
+    portEXIT_CRITICAL(&configMux);
     apply_config_runtime();
   } else {
     menuSetupCandidate = SamSetup;
@@ -540,12 +545,47 @@ void samovar_reset() {
   power_text_ptr = (char *)"ON";
   reset_focus();
   set_menu_screen(3);
+  // [Решение владельца 25.08] Сброс завершает процесс ШТАТНОЙ командой режима, а не
+  // гасит приводы поимённо: в реестре (mode_registry.h) поле .stopProcess так и описано -
+  // "принудительная остановка активного процесса (смена режима/сброс)". У пива это
+  // beer_finish() (нагрев, охлаждение с насосом и клапаном, мешалка, Lua-job по тикету),
+  // у ректификации run_program(PROGRAM_END), у дистилляции/БК/НБК - их finish. Раньше
+  // сюда приходили сразу на reset_sensor_counter(), то есть мимо завершения: мешалка и
+  // Lua-job варки продолжали работать при статусе "простой".
+  // Процесс не активен - функция дёшево чистит статус/startval/ProgramNum и выходит.
+  stop_active_process_for_mode();
+#ifdef USE_LUA
+  // Та же пара вызовов, что делает смена режима (mode_switch.h::switch_samovar_mode):
+  // штатный finish мог выйти раньше времени (занят лок, job ещё не подтвердил остановку),
+  // и тогда Lua надо добить. Тикет здесь не сверяем - сбрасывается весь процесс.
+  // Отличие от смены режима: та повторяет stop_active_process_for_mode() на следующих
+  // тиках (фаза STOP_REQUESTED, дедлайн 30 с), а сброс зовёт один раз и сразу
+  // финализирует. Ретрай ему и не нужен: приводы и нагрев сняты в любом случае
+  // (beer_safe_lua_outputs() стоит до всех ранних выходов beer_finish()), хвост
+  // состояния доводит beer_reset_stage_state() из reset_process_state() ниже, а
+  // уведомление - проверка сразу за этим блоком.
+  if (!request_lua_mode_stop()) SendMsg("Не удалось остановить Lua: runtime lock занят.", WARNING_MSG);
+#endif
+  // Штатное завершение могло выйти раньше своего уведомления: у варки job Lua
+  // подтверждает остановку лишь на следующем тике, и beer_finish() возвращается,
+  // не дойдя до stop_process("Программа затирания завершена"). Тогда внешние
+  // интеграции (MQTT/Telegram/веб) не получили бы о завершении процесса НИЧЕГО.
+  // Признак "не дошёл" - процесс всё ещё числится активным: хвост любого finish
+  // (у пива, дистилляции, БК - через stop_process(); у НБК - своими строками)
+  // обязательно ставит SamovarStatusInt и startval в IDLE. Поэтому дубля с их
+  // собственным уведомлением здесь не бывает, а при сбросе без активного процесса
+  // (setup(), смена профиля) stop_active_process_for_mode() ставит IDLE сам - и
+  // сообщения тоже не будет.
+  if (SamovarStatusInt != SAMOVAR_STATUS_IDLE || startval != SAMOVAR_STARTVAL_IDLE) {
+    SendMsg("Процесс остановлен сбросом: завершение не подтвердилось", WARNING_MSG);
+  }
   reset_sensor_counter();
 }
 
 void setupMenu() {
 
-  lcd.init();
+  // lcd.init() убран: внутри библиотеки он сам зовёт Wire.begin()/begin(),
+  // это вторая задержка ~1 с и сброс настроек шины, выставленных в setup().
   lcd.begin(LCD_COLUMNS, LCD_ROWS);
   lcd.backlight();
   lcd.clear();
@@ -719,8 +759,10 @@ void encoder_getvalue() {
   CurMin = (millis() / 1000);
   if (OldMin != CurMin) {
     //периодически инициализируем дисплей, так как он может слетать из-за рассинхронизации I2C
-    if (CurMin == 120) {
+    static uint32_t next_lcd_reset_ms = LCD_RESET_PERIOD_MS;
+    if ((int32_t)(millis() - next_lcd_reset_ms) >= 0) {
       menu_reset_lcd();
+      next_lcd_reset_ms += LCD_RESET_PERIOD_MS;
     }
 
     if (updscreen) menu_softUpdate();

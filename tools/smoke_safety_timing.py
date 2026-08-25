@@ -48,6 +48,7 @@ nbk = read_source("nbk.h")
 samovar = read_source("Samovar.ino")
 menu = read_source("Menu.ino")
 webserver = read_source("WebServer.ino")
+mode_switch = read_source("mode_switch.h")
 beer = read_source("beer.h")
 distiller = read_source("distiller.h")
 bk = read_source("BK.h")
@@ -66,6 +67,7 @@ safety_transition_source = read_source("safety_transition.h")
 for name, source in (
     ("safety_transition.h", safety_transition_source),
     ("WebServer.ino", webserver),
+    ("mode_switch.h", mode_switch),
 ):
     forbid(
         name,
@@ -198,6 +200,24 @@ require_ordered_tokens(
     ],
     errors,
 )
+
+# RELE_CHANNEL2 на некоторых платах сидит на strapping-выводе, подтянутом вверх при
+# сбросе (см. Samovar_pin.h) - уровни реле должны стать безопасными раньше вообще
+# всего остального в setup(), в частности раньше Serial.begin(), который к выводам
+# питания отношения не имеет. Startup-задержка стоит ПОСЛЕ apply_loaded_relay_polarity_off():
+# если бы она шла сразу за init_power_outputs_safe_off(), окно неверного уровня на
+# платах с releN=true держалось бы все 500+ мс вместо десятков миллисекунд чтения профиля.
+require_ordered_tokens(
+    "safe relay levels first in setup(), startup delay after polarity window closes",
+    setup,
+    [
+        "init_power_outputs_safe_off();",
+        "Serial.begin(115200);",
+        "apply_loaded_relay_polarity_off();",
+        "vTaskDelay(500 / portTICK_PERIOD_MS);",
+    ],
+    errors,
+)
 set_power = function_body(power, "inline ActuatorCommandResult set_power(bool On, bool enqueueResetCommand)")
 require(
     "heater ON worker and reservation gate",
@@ -316,7 +336,7 @@ for signature in ("static int lua_wrapper_pinMode", "static int lua_wrapper_digi
 # as two parts - (1) the function actually dispatches through the registry and
 # still has the generic fallback, and (2) the registry table wires stopProcess to
 # a real, mode-specific finish function for every mode that owns its own process.
-stop_mode = function_body(webserver, "void stop_active_process_for_mode")
+stop_mode = function_body(mode_switch, "void stop_active_process_for_mode")
 require_ordered_tokens(
     "stop_active_process_for_mode dispatches through the mode registry",
     stop_mode,
@@ -418,7 +438,7 @@ if stop_process_idx is not None:
                 f"through to the generic reset), got {actual!r}"
             )
 force_complete_mode_switch = function_body(
-    webserver, "static ModeSwitchResult force_complete_mode_switch_failed(const char* warning)")
+    mode_switch, "static ModeSwitchResult force_complete_mode_switch_failed(const char* warning)")
 require_ordered_tokens(
     "force-complete releases the barrier on every failure path",
     force_complete_mode_switch,
@@ -426,7 +446,7 @@ require_ordered_tokens(
         "portENTER_CRITICAL(&emergencyStopMux)",
         "force_heater_output_off_locked(true)",
         "safety_mode_switch_complete(modeSwitchState)",
-        "mode_switch_barrier_active = false",
+        "clear_mode_switch_barrier_locked()",
         "portEXIT_CRITICAL(&emergencyStopMux)",
         "notify_power_worker()",
         "SendMsg(warning, WARNING_MSG)",
@@ -435,7 +455,7 @@ require_ordered_tokens(
     errors,
 )
 
-switch_mode = function_body(webserver, "ModeSwitchResult switch_samovar_mode")
+switch_mode = function_body(mode_switch, "ModeSwitchResult switch_samovar_mode")
 require_ordered_tokens(
     "deferred mode switch",
     switch_mode,
@@ -472,7 +492,7 @@ require_ordered_tokens(
         "if (commitError != OPERATION_ERROR_NONE)",
         "force_complete_mode_switch_failed(",
         "safety_mode_switch_complete",
-        "mode_switch_barrier_active = false",
+        "clear_mode_switch_barrier_locked()",
         "return MODE_SWITCH_SUCCEEDED",
     ],
     errors,
@@ -482,8 +502,19 @@ forbid(
     switch_mode,
     ("safety_mode_switch_fail(", "safety_mode_switch_failed(", "SAFETY_MODE_SWITCH_FAILED"),
 )
-for signature in ("inline void mode_dispatch_alarm", "inline void mode_dispatch_loop"):
-    require(signature, function_body(mode_registry, signature), ("if (mode_switch_in_progress()) return",))
+# Барьер смены режима глушит только режимный тик (mode_dispatch_loop), а не
+# аварийный надзор (mode_dispatch_alarm) - см. mode_registry.h. Аварийный надзор
+# обязан идти всегда, поэтому проверки разведены: require для loop, forbid для alarm.
+require(
+    "mode_dispatch_loop",
+    function_body(mode_registry, "inline void mode_dispatch_loop"),
+    ("if (mode_switch_in_progress()) return",),
+)
+forbid(
+    "mode_dispatch_alarm must never skip on the mode-switch barrier",
+    function_body(mode_registry, "inline void mode_dispatch_alarm"),
+    ("mode_switch_in_progress()",),
+)
 
 logic = read_source("logic.h")
 rect_finish_start = logic.find("if (num >= PROGRAM_MAX)")
@@ -556,7 +587,7 @@ require(
 )
 require(
     "actuator cleanup",
-    webserver,
+    mode_switch,
     (
         "stop_local_mode_actuators",
         "stop_i2c_mode_actuator",
@@ -568,7 +599,7 @@ require(
 )
 require_ordered_tokens(
     "external actuator stop precedes Lua-idle publication gate",
-    function_body(webserver, "static bool tick_mode_actuator_cleanup"),
+    function_body(mode_switch, "static bool tick_mode_actuator_cleanup"),
     [
         "stop_i2c_mode_actuator(i2cStepperMixer, false)",
         "stop_i2c_mode_actuator(",
@@ -927,7 +958,7 @@ int main() {
   if (safety_regulator_request_status(workerOk.regulator, workerOkGeneration) != SAFETY_REGULATOR_REQUEST_APPLIED) return 50;
 
   // Publication waits for explicit log request, all transitions, and owner idle.
-  SafetyModeSwitchState modeSwitch = {SAFETY_MODE_SWITCH_IDLE, 0, false};
+  SafetyModeSwitchState modeSwitch = {SAFETY_MODE_SWITCH_IDLE, 0, false, false, 0};
   if (!safety_mode_switch_begin(modeSwitch, 4)) return 51;
   safety_mode_switch_wait_cleanup(modeSwitch);
   if (safety_mode_switch_cleanup_ready(modeSwitch, false, false, false, false, false, false, true, true, true, true)) return 52;
@@ -942,8 +973,14 @@ int main() {
   // The barrier must always be releasable: there is no SAFETY_MODE_SWITCH_FAILED dead
   // phase to park in any more. safety_mode_switch_complete() resets to IDLE from
   // WAIT_CLEANUP unconditionally, and a fresh begin() is accepted right after.
+  // Завершение обязано оставлять структуру чистой: иначе счётчик попыток
+  // перечитывания Lua-скрипта доживёт до следующей смены режима и та упадёт
+  // в принудительный провал раньше положенных десяти попыток.
+  modeSwitch.commitDone = true;
+  modeSwitch.luaReloadAttempts = 5;
   safety_mode_switch_complete(modeSwitch);
   if (modeSwitch.phase != SAFETY_MODE_SWITCH_IDLE || modeSwitch.logCloseRequested) return 59;
+  if (modeSwitch.commitDone || modeSwitch.luaReloadAttempts != 0) return 61;
   if (!safety_mode_switch_begin(modeSwitch, 7) ||
       modeSwitch.phase != SAFETY_MODE_SWITCH_STOP_REQUESTED) return 60;
   return 0;

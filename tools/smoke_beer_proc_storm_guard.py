@@ -111,6 +111,17 @@ void set_power(bool state) {
 static int runBeerProgramCalls = 0;
 void run_beer_program(uint8_t) { runBeerProgramCalls++; }
 
+// [Ревью 24.08, дефект 2] beer_proc() теперь ретраит зависший beer_finish()
+// (PENDING на request_beer_lua_stop()) - см. смежный тест
+// smoke_beer_lua_stage.py на само beer_finish(). Здесь достаточно фейка: он
+// считает вызовы и, как настоящий beer_finish(), гасит флаг, если "смог".
+static bool beerFinishPending = false;
+static int beerFinishCalls = 0;
+void beer_finish() {
+  beerFinishCalls++;
+  beerFinishPending = false;
+}
+
 #define portTICK_PERIOD_MS 1
 void vTaskDelay(int) {}
 
@@ -143,6 +154,8 @@ static void reset_fixture() {
   setPowerSucceeds = true;
   setPowerCalls = 0;
   runBeerProgramCalls = 0;
+  beerFinishPending = false;
+  beerFinishCalls = 0;
 }
 
 // [P2 п.4] Защёлка безопасности нагрева взведена: старт должен быть отменён
@@ -197,10 +210,31 @@ static void test_no_latch_and_power_success_starts_program() {
   check(runBeerProgramCalls == 1, "РЕГРЕСС: штатный старт должен был запустить run_beer_program(0)");
 }
 
+// [Ревью 24.08, дефект 2] beerFinishPending взведён (зависший beer_finish()
+// из-за занятого лока на request_beer_lua_stop()) - beer_proc() обязан
+// сначала повторить finish и НЕ трогать обычную последовательность старта
+// (иначе, если startval застрял на BEER_START при активной строке 'L' и
+// PowerOn ещё true, сигнал завершения варки был бы потерян насовсем).
+static void test_finish_pending_retries_before_normal_start() {
+  reset_fixture();
+  beerFinishPending = true;
+
+  beer_proc();
+
+  check(beerFinishCalls == 1, "РЕГРЕСС: beer_proc() не повторил зависший beer_finish()");
+  check(beerFinishPending == false, "beer_finish() должен был снять флаг после успешного повтора");
+  check(cancelProcessStartCalls == 0, "РЕГРЕСС: повтор finish не должен доходить до обычной ветки старта");
+  check(resetBoilingDetectorCalls == 0, "РЕГРЕСС: повтор finish не должен доходить до resetBoilingDetector()");
+  check(createDataCalls == 0, "РЕГРЕСС: повтор finish не должен доходить до create_data()");
+  check(setPowerCalls == 0, "РЕГРЕСС: повтор finish не должен доходить до set_power()");
+  check(runBeerProgramCalls == 0, "РЕГРЕСС: повтор finish не должен запускать run_beer_program()");
+}
+
 int main() {
   test_safety_latch_blocks_start_before_reset_and_create_data();
   test_power_on_failure_cancels_start_with_message();
   test_no_latch_and_power_success_starts_program();
+  test_finish_pending_retries_before_normal_start();
   if (failures != 0) return 1;
   std::cout << "beer.h beer_proc storm guard behaviour checks passed\n";
   return 0;

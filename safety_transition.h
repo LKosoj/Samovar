@@ -133,6 +133,8 @@ struct SafetyModeSwitchState {
   SafetyModeSwitchPhase phase;
   uint8_t requestedMode;
   bool logCloseRequested;
+  bool commitDone;
+  uint8_t luaReloadAttempts;
 };
 
 typedef int (*SafetyUartEnqueueFn)(void* context, const char* data, size_t length);
@@ -414,6 +416,8 @@ inline bool safety_mode_switch_begin(SafetyModeSwitchState& state, uint8_t reque
   if (state.phase != SAFETY_MODE_SWITCH_IDLE) return state.requestedMode == requestedMode;
   state.requestedMode = requestedMode;
   state.logCloseRequested = false;
+  state.commitDone = false;
+  state.luaReloadAttempts = 0;
   state.phase = SAFETY_MODE_SWITCH_STOP_REQUESTED;
   return true;
 }
@@ -450,4 +454,8 @@ inline void safety_mode_switch_complete(SafetyModeSwitchState& state) {
   state.phase = SAFETY_MODE_SWITCH_IDLE;
   state.requestedMode = 0;
   state.logCloseRequested = false;
+  // Сброс симметричен begin(): завершение обязано оставлять структуру чистой,
+  // иначе счётчик попыток перечитывания Lua доживёт до следующей смены режима.
+  state.commitDone = false;
+  state.luaReloadAttempts = 0;
 }

@@ -105,6 +105,19 @@ void check_alarm_bk() {
               : BOILING_EVIDENCE_PIPE);
     }
 #ifdef SAMOVAR_USE_POWER
+    // [T16] set_current_power() асинхронна (кладёт заявку фоновой задаче регулятора),
+    // поэтому спрашивать режим сразу после неё бесполезно - он ещё старый. Проверяем
+    // причину заранее: значение ниже рабочего порога усыпит регулятор и молча остановит
+    // нагрев. Гейт boilingNow (см. комментарий выше: true только в тот единственный тик,
+    // когда кипение обнаружено впервые) не даёт предупреждению спамить журнал, пока
+    // регулятор асинхронно не выйдет из POWER_SPEED_MODE - без него внешний if выше
+    // перезаходил бы сюда на каждом тике, т.к. SteamSensor/PipeSensor держат порог долго.
+    if (boilingNow && SamSetup.BKPower < power_work_mode_threshold()) {
+      SendMsg("БК: заданная мощность (" + String(SamSetup.BKPower, 1) +
+              ") ниже рабочего порога регулятора (" +
+              String(power_work_mode_threshold(), 1) +
+              ") - регулятор уснёт и нагрев остановится.", WARNING_MSG);
+    }
     set_current_power(SamSetup.BKPower);
 #else
     set_current_power_mode_value(POWER_WORK_MODE);

@@ -148,11 +148,13 @@ if registry_source:
                 continue
             fields = [field.strip() for field in rest.split(",")]
             # Поля строки после mode: activeStatus, startvalRangeLow, startvalRangeHigh,
-            # pagePath, powerOnCommand, startCommand, alarm, finish, status.
-            if len(fields) < 7:
+            # statusRangeLow, statusRangeHigh, pagePath, powerOnCommand, startCommand,
+            # alarm, finish, status. [T40 А3] Добавились statusRangeLow/High - сдвинули
+            # powerOnCommand/startCommand с 4/5 на 6/7.
+            if len(fields) < 9:
                 errors.append(f"mode_registry row for {mode} has too few fields")
                 continue
-            power_on, start = fields[4], fields[5]
+            power_on, start = fields[6], fields[7]
             if power_on != expected_power_on or start != expected_start:
                 errors.append(
                     f"mode_registry command map changed for {mode}: "

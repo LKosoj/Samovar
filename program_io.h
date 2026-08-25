@@ -6,6 +6,13 @@
 #include "Samovar.h"
 #include "numeric_parse.h"
 
+// [T29] program[]/ProgramLen читаются/пишутся из разных задач (async_tcp/Blynk
+// против loop()) - защищены тем же спинлоком, что и SamSetup (configMux,
+// определён в Samovar.ino). program_io.h подключается (через beer.h/logic.h/
+// sensorinit.h) РАНЬШЕ строки с определением configMux - здесь только extern,
+// как и для dsAddressMux в sensorinit.h.
+extern portMUX_TYPE configMux;
+
 // --- Щедрые физические границы числовых полей исполняемой программы -----------
 // Пределы намеренно ШИРОКИЕ: отбрасывают только физически бессмысленные значения
 // (напр. Power=1e38, Temp=-500), не отвергая ни одной легитимной пользовательской
@@ -142,6 +149,10 @@ inline void program_reset_draft(ProgramDraft& draft) {
 }
 
 inline void program_commit(const ProgramDraft& draft) {
+  // [T29] Нельзя разрывать: иначе читатель (program_serialize_rows() из
+  // async_tcp/Blynk) увидит новое число строк (ProgramLen) со старым
+  // содержимым program[] или наоборот.
+  portENTER_CRITICAL(&configMux);
   for (uint8_t i = 0; i < draft.len; i++) {
     program[i] = draft.rows[i];
   }
@@ -153,13 +164,19 @@ inline void program_commit(const ProgramDraft& draft) {
     program[i].WType = PROGRAM_TYPE_NONE;
   }
   ProgramLen = draft.len;
+  portEXIT_CRITICAL(&configMux);
 }
 
 inline void program_clear() {
+  // [T29] Тот же риск рваного чтения, что и в program_commit() - program_clear()
+  // тоже вызывается из commit_profile_operation() (loop()) параллельно с
+  // читателями program[] из async_tcp/Blynk.
+  portENTER_CRITICAL(&configMux);
   for (uint8_t i = 0; i < PROGRAM_END; i++) {
     program[i].WType = PROGRAM_TYPE_NONE;
   }
   ProgramLen = 0;
+  portEXIT_CRITICAL(&configMux);
 }
 
 inline size_t program_trim_line_right(char* line) {
@@ -510,10 +527,17 @@ inline ProgramParseResult program_parse_lines(
 }
 
 inline String program_serialize_rows(uint8_t start, uint8_t end, ProgramRowSerializer serializer) {
+  // [T29] Снимок под спинлоком: String-конкатенация (аллокации) внутри
+  // portENTER_CRITICAL запрещена, поэтому копируем фиксированный массив под
+  // защитой, а строку собираем уже снаружи, из снимка.
+  WProgram snapshot[PROGRAM_MAX];
+  portENTER_CRITICAL(&configMux);
+  memcpy(snapshot, program, sizeof(snapshot));
+  portEXIT_CRITICAL(&configMux);
   String out = "";
   for (uint8_t i = start; i < end; i++) {
-    if (program_type_empty(program[i].WType)) break;
-    serializer(out, program[i]);
+    if (program_type_empty(snapshot[i].WType)) break;
+    serializer(out, snapshot[i]);
   }
   return out;
 }

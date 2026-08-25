@@ -25,14 +25,14 @@ def read_page(name: str) -> str:
     использует сама сборка - не копией её логики."""
     return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
 FROZEN_SHA256 = {
-    "app.js": "45633765356354e5190c85efe59e6678c2c76c47d183453d7224ef180963d00b",
-    "chart.js": "9b66709460fe6c65c43d06cfcd73fb78f7e2e5dc9b75e6c626670a9256cc2e98",
+    "app.js": "0b543b3ae8cf2d2cb71e439bfa5c24a3b7ce4ec551230c25fd508e7cba571ddc",
+    "chart.js": "7e2719aa5defb5c38822808cb13b7fa9937c0fbb34412a39500d576788658d05",
     "edit.htm": "26b7e41df2a0a0197a14b9cf129f808fd001e760df4ed7c16df7a35a10b03ce6",
     "edit.htm.gz": "86e2801e2370cd45420ed84005194b752cc22198e7ab85faa33129bd28a50cac",
 }
 STRUCTURE_SHA256 = {
-    "setup.htm": "2728c1ce224f775ac32ffe9115e931b8a2b66aa5ffeb1343365a295fa4602b03",
-    "chart.htm": "e071d491c243cb74553900e36b34e65e3364da3aa1ff998d151f608c7bc2387c",
+    "setup.htm": "4060783d3c9cb383fc087af4dc03cdc1bcf102f493ea9230009ea97d6ce1bcc0",
+    "chart.htm": "b36518f00dec20e8bb7e0cd34116bdd0935253fb3e9fb0dc7d394cd48c0a445c",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")
 
@@ -158,10 +158,8 @@ def verify_markup(errors: list[str]) -> None:
 
 def verify_css(errors: list[str]) -> None:
     css = (DATA / "style.css").read_text(encoding="utf-8")
-    mobile_start = css.find("@media (max-width: 600px)")
-    if mobile_start < 0:
+    if "@media (max-width: 600px)" not in css:
         errors.append("data/style.css: existing 600px breakpoint missing")
-        mobile_start = 0
     requirements = (
         ("#setupform", ("min-width:0", "box-sizing:border-box"), 0),
         (".setup-long-input", ("max-width:100%",), 0),
@@ -173,7 +171,14 @@ def verify_css(errors: list[str]) -> None:
         ("#chartdiv", ("min-width:0", "max-width:100%", "box-sizing:border-box"), 0),
         (".chart-panel", ("min-width:0", "max-width:100%", "box-sizing:border-box"), 0),
         (".chart-canvas", ("max-width:100%", "box-sizing:border-box"), 0),
-        (".tooltip .tooltiptext", ("max-width:calc(100vw-1em)",), mobile_start),
+        # [код-ревью 24.08 #1] Старое "max-width:calc(100vw-1em)" в 600px-блоке было
+        # частью самого бага (конфликтовало с "calc(100vw-2em)" из 900px-блока) и
+        # удалено вместе с фиксом; правило теперь в 900px-блоке и использует
+        # position:fixed (как .popup) - под запрет "hides, clips, or fixes" ниже
+        # попадёт любая проверка этого правила через require_rule, так что здесь
+        # его больше не пиновать. Реальная защита от переполнения теперь - браузерный
+        # checkTooltipFit в tools/test_u04_responsive_layout_browser.py (меряет
+        # boundingBox в живом DOM на program.htm/index.htm/distiller.htm/setup.htm).
     )
     for selector, declarations, start in requirements:
         require_rule(errors, css, selector, declarations, start)

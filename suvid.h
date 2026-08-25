@@ -26,6 +26,13 @@ inline float suvid_target_temp() {
 // здесь теперь то же самое: сообщение + штатное выключение нагрева.
 #define SUVID_REACH_TIMEOUT_MS (60UL * 60UL * 1000UL)
 
+// [T24.1] Полоса зачёта выдержки шире полосы регулирования (HEAT_DELTA): из-за
+// тепловой инерции бака температура колеблется вокруг уставки сильнее, чем
+// успевает отработать релейный термостат, и зачёт времени по HEAT_DELTA
+// постоянно прерывался бы. Термостат (suvidHeaterOn ниже) по-прежнему
+// работает по HEAT_DELTA - меняется только критерий "засчитывать ли время".
+#define SUVID_HOLD_BAND_C 2.0f
+
 // Через сколько повторять команду выключения, если нагрев всё ещё включён.
 // SAMOVAR_POWER - ПЕРЕКЛЮЧАТЕЛЬ (Samovar.ino: set_power(!PowerOn)), а очередь команд
 // общая на всё устройство: чужая команда (веб, Lua, другой режим), разобранная в том
@@ -65,6 +72,14 @@ static SuvidHoldState suvidHold;
 struct SuvidDeviationState { bool active; bool warningSent; uint32_t sinceMs; };
 static SuvidDeviationState suvidDeviation;
 
+// [T24.3] Релейный термостат с гистерезисом HEAT_DELTA (Samovar_ini.h). Раньше жил
+// как static-переменная внутри check_alarm_suvid() - теперь виден также suvid_tick()
+// (Samovar.ino: loop()), которая переносит фактическое применение состояния на
+// нагреватель из надзорной задачи (SysTicker, core 0) в loop() (core 1): setHeaterPosition()
+// в сборке без SAMOVAR_USE_POWER содержит блокирующую vTaskDelay(50), недопустимую
+// внутри 1-секундного тика надзора.
+static volatile bool suvidHeaterOn = false;
+
 // Остаток выдержки в секундах; -1, если отсчёт не идёт (см. tick_status_fsm в logic.h).
 inline int32_t suvid_hold_remaining_sec() {
   if (!suvidHold.active || SamSetup.SuvidHoldMinutes == 0) return -1;
@@ -102,11 +117,9 @@ inline void check_alarm_suvid() {
   mode_request_overheat_emergency_if_needed();
   mode_request_water_flow_emergency_if_needed();
 
-  // Релейный термостат с гистерезисом HEAT_DELTA (Samovar_ini.h).
-  static bool suvidHeaterOn = false;
   if (!PowerOn) {
     suvidHeaterOn = false;  // холодный старт следующей сессии: не наследовать состояние реле
-    heater_state = false;
+    set_heater_state_flag(false);
     suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};
     suvidDeviation = {false, false, 0};
     return;
@@ -114,8 +127,8 @@ inline void check_alarm_suvid() {
   const float setpoint = suvid_target_temp();
   if (TankSensor.avgTemp <= setpoint - HEAT_DELTA) suvidHeaterOn = true;
   else if (TankSensor.avgTemp >= setpoint + HEAT_DELTA) suvidHeaterOn = false;
-  heater_state = suvidHeaterOn;  // для строки статуса и mode_actuators_idle()
-  setHeaterPosition(suvidHeaterOn);
+  // Фактическое применение к нагревателю (heater_state, setHeaterPosition()) -
+  // в suvid_tick() (loop(), core 1), не здесь: см. комментарий у suvidHeaterOn выше.
 
   const uint32_t now = millis();
   if (!suvidHold.sessionStartMsSet) {
@@ -123,7 +136,7 @@ inline void check_alarm_suvid() {
     suvidHold.sessionStartMsSet = true;
   }
   const float deviation = fabsf(TankSensor.avgTemp - setpoint);
-  const bool inHoldBand = deviation <= HEAT_DELTA;
+  const bool inHoldBand = deviation <= SUVID_HOLD_BAND_C;
 
   // Взводим active независимо от SuvidHoldMinutes (см. комментарий у struct
   // SuvidHoldState) - это единственное место, где выясняется, что выдержка
@@ -149,7 +162,7 @@ inline void check_alarm_suvid() {
   // привыкали её игнорировать и рисковали пропустить настоящий отказ
   // ТЭНа/датчика. Пока выдержка не началась - следим за таймаутом ниже.
   if (suvidHold.active) {
-    if (deviation > 2.0f) {
+    if (deviation > SUVID_HOLD_BAND_C) {
       if (!suvidDeviation.active) {
         suvidDeviation.active = true;
         suvidDeviation.sinceMs = now;
@@ -198,4 +211,16 @@ inline void check_alarm_suvid() {
       suvidHold.completionWarningSent = true;
     }
   }
+}
+
+/**
+ * @brief [T24.3] Применяет к нагревателю состояние, вычисленное термостатом
+ *        check_alarm_suvid() (SysTicker, core 0). Вызывается из loop() (core 1),
+ *        а не из надзорной задачи: setHeaterPosition() в сборке без SAMOVAR_USE_POWER
+ *        блокируется на vTaskDelay(50), что недопустимо внутри 1-секундного тика
+ *        аварийного надзора.
+ */
+inline void suvid_tick() {
+  if (Samovar_Mode != SAMOVAR_SUVID_MODE) return;
+  setHeaterPosition(suvidHeaterOn);
 }

@@ -273,17 +273,14 @@ void run_dist_program(uint8_t num) {
 
 #ifdef SAMOVAR_USE_POWER
   // [П4.4] BOOST горит с самого старта дистилляции (см. distiller_proc()) и без
-  // явного гашения — до конца сессии. Гасим один раз, когда программа впервые
-  // начинает сама управлять мощностью (Power предыдущей строки задан).
-  if (num > 0 && !distBoostGated && program[num - 1].Power != 0) {
+  // явного гашения — до конца сессии. Гасим один раз при первом переходе между
+  // строками программы (num > 0), независимо от Power покидаемой строки: Power == 0
+  // означает "не трогать регулятор" (сквозной режим), а не "мощность не задана".
+  if (num > 0 && !distBoostGated) {
     heater_boost_output_off();
     distBoostGated = true;
   }
 #endif
-}
-
-ProgramParseResult set_dist_program(const String& WProgram) {
-  return program_parse_lines(WProgram, dist_program_parse_spec());
 }
 
 String get_dist_program() {

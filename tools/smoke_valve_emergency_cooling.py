@@ -40,6 +40,7 @@ struct SetupEEPROM { bool rele3; };
 static SetupEEPROM SamSetup;
 
 static bool valve_status = false;
+static bool mode_switch_barrier_active = false;
 
 enum { WARNING_MSG = 1, NOTIFY_MSG = 2 };
 enum ActuatorCommandResult {
@@ -81,6 +82,7 @@ static void reset_fixture(bool rele3, bool latched) {
   SamSetup.rele3 = rele3;
   g_heaterLatched = latched;
   valve_status = false;
+  mode_switch_barrier_active = false;
   sendMsgCalls = 0;
   digitalWriteCalls = 0;
   lastDigitalWritePin = -1;

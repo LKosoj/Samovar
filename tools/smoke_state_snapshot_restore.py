@@ -35,6 +35,7 @@ EXTRACTED = [
     ("FS.ino", "void state_snapshot_mark_saved()"),
     ("FS.ino", "static bool state_snapshot_field(const String& header, const char* key, String& value)"),
     ("FS.ino", "static bool state_snapshot_uint8(const String& header, const char* key, uint8_t& value)"),
+    ("FS.ino", "static bool state_snapshot_uint32(const String& header, const char* key, uint32_t& value)"),
     ("FS.ino", "bool read_state_snapshot(StateSnapshot& snapshot)"),
     ("Samovar.ino", "static void restore_state_snapshot()"),
     ("Samovar.ino", "static void state_snapshot_report_pending()"),
@@ -49,6 +50,14 @@ ARDUINO_STUB = r'''
 #include <string>
 
 #define F(text) (text)
+
+// [T29] program_io.h (program_commit/program_clear/program_serialize_rows) защищает
+// program[]/ProgramLen спинлоком configMux - минимальная заглушка, семантика
+// критической секции здесь не проверяется (см. tools/smoke_lock_order.py).
+using portMUX_TYPE = int;
+static portMUX_TYPE configMux = 0;
+#define portENTER_CRITICAL(mux) do { (void)(mux); } while (0)
+#define portEXIT_CRITICAL(mux) do { (void)(mux); } while (0)
 
 // Минимальный Print: string_utils.h с 2026-08 требует его как тип приёмника
 // для json_write_escaped()/JsonStringPrint. Обе перегрузки write() чисто
@@ -205,6 +214,12 @@ struct FakeSensor { float avgTemp = 0; };
 static FakeSensor TankSensor;
 static FakeSensor SteamSensor;
 
+// [T24.2] state_snapshot_header() читает suvidHold.accumulatedMs напрямую (suvid.h - не
+// затрагиваемый этим тестом файл), поэтому здесь достаточно минимального стенда с тем
+// же полем.
+struct FakeSuvidHold { uint32_t accumulatedMs = 0; };
+static FakeSuvidHold suvidHold;
+
 static int liquidVolumeFixture = 0;
 static int get_liquid_volume() { return liquidVolumeFixture; }
 
@@ -212,6 +227,15 @@ static String format_float(float value, int decimals) {
   char buffer[32] = {0};
   std::snprintf(buffer, sizeof(buffer), "%.*f", decimals, static_cast<double>(value));
   return String(buffer);
+}
+
+// [T24.2] restore_state_snapshot() зовёт настоящий format_uptime() (time_utils.h) для
+// приписки про накопленную выдержку Сувида - этот файл его не затрагивает, минимальный мок
+// с той же сигнатурой достаточен для проверки, что приписка вообще формируется.
+static int formatUptimeCalls = 0;
+static String format_uptime(unsigned long seconds) {
+  formatUptimeCalls++;
+  return String(seconds);
 }
 
 // ---- Мок файловой системы: один файл в памяти ----
@@ -380,6 +404,7 @@ static void reset_world() {
   writeSnapshotCalls = 0;
   sendMsgCalls = 0;
   consoleLogCalls = 0;
+  formatUptimeCalls = 0;
   lastMsgText = String();
   pendingStateSnapshotNotice = String();
   state_snapshot_program_hash = 0;
@@ -528,7 +553,8 @@ int main() {
   logFileLockAvailable = true;
   check(logFileLockDepth == 0, "лок обязан отпускаться на всех путях");
 
-  // 11. Заголовок снимка несёт режим, статус, строку и признак нагрева.
+  // 11. Заголовок снимка несёт режим, статус, строку, признак нагрева и (T24.2)
+  // накопленную выдержку Сувида.
   reset_world();
   seed_rect_program();
   Samovar_Mode = SAMOVAR_NBK_MODE;
@@ -536,6 +562,7 @@ int main() {
   ProgramNum = 2;
   PowerOn = true;
   startval = 4001;
+  suvidHold.accumulatedMs = 754000;  // [T24.2] 754 полных секунды выдержки
   const String header = state_snapshot_header();
   String field;
   check(state_snapshot_field(header, "M", field) && field == String("4"), "режим обязан быть в снимке");
@@ -543,7 +570,57 @@ int main() {
   check(state_snapshot_field(header, "P", field) && field == String("3"), "номер строки 1-based");
   check(state_snapshot_field(header, "L", field) && field == String("3"), "длина программы обязана быть в снимке");
   check(state_snapshot_field(header, "H", field) && field == String("1"), "признак нагрева обязан быть в снимке");
+  check(state_snapshot_field(header, "SH", field) && field == String("754"),
+        "[T24.2] накопленная выдержка Сувида (сек) обязана быть в снимке");
   check(!state_snapshot_field(header, "ZZ", field), "несуществующее поле не должно находиться");
+  suvidHold.accumulatedMs = 0;
+
+  // 12. [T24.2] Файл прежнего формата (записан до появления ключа SH) обязан
+  // читаться успешно, а накопленная выдержка - молча остаться нулевой.
+  reset_world();
+  seed_rect_program();
+  SPIFFS.data = "P=2;M=1;S=2001;W=1;L=3;H=1;V=1000;TT=62.00;TC=61.50;TS=95.00;T=00:05:00\n";
+  SPIFFS.present = true;
+  StateSnapshot legacyNoSh;
+  check(read_state_snapshot(legacyNoSh), "снимок старого формата (без SH) обязан читаться");
+  check(legacyNoSh.mode == 1, "режим старого снимка должен разбираться как обычно");
+  check(legacyNoSh.suvidHoldAccumulatedSec == 0,
+        "[T24.2] без ключа SH накопленная выдержка обязана молча остаться 0");
+
+  // 12б. [T24.2] Значение SH обязано доезжать до структуры без искажений, а мусор в
+  // нём - не отвергать снимок целиком (поле необязательное, как P/L/H).
+  reset_world();
+  seed_rect_program();
+  SPIFFS.data = "P=2;M=1;S=2001;W=1;L=3;H=1;V=1000;SH=321;T=00:05:00\n";
+  SPIFFS.present = true;
+  StateSnapshot withSh;
+  check(read_state_snapshot(withSh), "снимок с ключом SH обязан читаться");
+  check(withSh.suvidHoldAccumulatedSec == 321,
+        "[T24.2] значение SH обязано доезжать до структуры как есть");
+
+  reset_world();
+  seed_rect_program();
+  SPIFFS.data = "P=2;M=1;S=2001;W=1;L=3;H=1;V=1000;SH=99999999999;T=00:05:00\n";
+  SPIFFS.present = true;
+  StateSnapshot overflowSh;
+  check(read_state_snapshot(overflowSh), "переполнение SH не должно отвергать снимок целиком");
+  check(overflowSh.suvidHoldAccumulatedSec == 0,
+        "[T24.2] непарсящееся SH обязано оставлять выдержку нулевой");
+
+  // 13. [T24.2] Восстановление в режиме Сувид с ненулевой выдержкой в снимке добавляет
+  // информационную приписку про накопленную выдержку (в живой suvidHold ничего не
+  // пишем - check_alarm_suvid() всё равно обнулит его на первом же тике при !PowerOn).
+  reset_world();
+  Samovar_Mode = SAMOVAR_SUVID_MODE;
+  ProgramLen = 0;
+  ProgramNum = 0;
+  PowerOn = true;
+  SPIFFS.data = "M=5;P=1;L=0;H=1;SH=321\n";
+  SPIFFS.present = true;
+  restore_state_snapshot();
+  check(pendingStateSnapshotNotice.length() > 0, "Сувид: прерванная сессия тоже требует предупреждения");
+  check(formatUptimeCalls == 1,
+        "[T24.2] приписка про накопленную выдержку Сувида обязана форматироваться через format_uptime");
 
   if (failures != 0) return 1;
   std::cout << "state snapshot restore behaviour checks passed\n";

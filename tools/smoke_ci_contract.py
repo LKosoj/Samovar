@@ -496,7 +496,7 @@ class BrowserTestRunnerTests(unittest.TestCase):
         import run_browser_tests
 
         discovered = {path.name for path in run_browser_tests.discover_browser_tests(ROOT)}
-        # Зафиксированный на 2026-08-23 список - если файл переименуют/удалят из tools/,
+        # Зафиксированный на 2026-08-24 список - если файл переименуют/удалят из tools/,
         # тест должен покраснеть, а не молча перестать его запускать.
         expected = {
             "test_accessibility_ui_browser.py",
@@ -506,10 +506,14 @@ class BrowserTestRunnerTests(unittest.TestCase):
             "test_numeric_input_ui_browser.py",
             "test_profile_operation_ui_browser.py",
             "test_program_clear_ui_browser.py",
+            "test_program_file_validation_browser.py",
+            "test_program_focus_redraw_browser.py",
+            "test_program_percent_input_browser.py",
             "test_runtime_event_ui_browser.py",
             "test_setup_guards_browser.py",
             "test_setup_mode_hidden_selected_browser.py",
             "test_shared_ui_controllers_browser.py",
+            "test_stale_telemetry_dimming_browser.py",
             "test_u03_contrast_browser.py",
             "test_u04_responsive_layout_browser.py",
         }

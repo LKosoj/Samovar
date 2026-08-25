@@ -35,6 +35,7 @@ BEER_SAFE_LUA_OUTPUTS_SIGNATURE = "inline ActuatorCommandResult beer_safe_lua_ou
 COOLING_PUMP_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_pump(bool active)"
 COOLING_OUTPUTS_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_outputs(bool active)"
 BEER_PAUSE_F_OUTPUTS_SIGNATURE = "inline bool beer_pause_fermentation_outputs()"
+BEER_RESET_STAGE_STATE_SIGNATURE = "inline void beer_reset_stage_state()"
 BEER_FINISH_SIGNATURE = "void beer_finish()"
 
 HARNESS_TEMPLATE = r'''
@@ -142,6 +143,9 @@ static bool heater_state = true;
 static bool heaterOutput = true;
 static int setHeaterPositionCalls = 0;
 void setHeaterPosition(bool state) { heaterOutput = state; setHeaterPositionCalls++; }
+// [T28a] beer_finish() больше не пишет heater_state напрямую - вызывает
+// set_heater_state_flag() (единственная точка записи, см. beer.h).
+void set_heater_state_flag(bool state) { heater_state = state; }
 
 static bool beerManualPause = false;
 static unsigned long beerStageIdleAccumMs = 0;
@@ -150,6 +154,11 @@ static unsigned long beerBoilActiveAccumMs = 0;
 static unsigned long beerMixerPauseSinceMs = 0;  // [Дефект 2 code review] см. beer.h
 static uint8_t beerSkipConfirmProgramNum = 0xFF;
 static unsigned long begintime = 0;
+// [Ревью 24.08, дефект 2] beer_finish() гасит этот флаг на каждом входе (см.
+// beer.h) - в этом харнессе beerLuaStage.phase всегда IDLE (гонка насоса/
+// мешалки не завязана на Lua-стадию), поэтому взвод PENDING-веткой сюда не
+// доходит, но символ обязан существовать для компиляции реального тела.
+static bool beerFinishPending = false;
 
 constexpr int16_t SAMOVAR_STARTVAL_IDLE = 0;
 static int16_t startval = 5;
@@ -177,6 +186,8 @@ ActuatorCommandResult set_mixer_state(bool state, bool dir);
 @COOLING_OUTPUTS_BODY@
 
 @BEER_SAFE_LUA_OUTPUTS_BODY@
+
+@BEER_RESET_STAGE_STATE_BODY@
 
 @BEER_FINISH_BODY@
 
@@ -629,6 +640,8 @@ def build_harness(beer_source: str) -> str:
     cooling_outputs_fn = "inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {" + cooling_outputs_body + "}"
     safe_outputs_body = extract_function_body(beer_source, BEER_SAFE_LUA_OUTPUTS_SIGNATURE)
     safe_outputs_fn = "inline ActuatorCommandResult beer_safe_lua_outputs() {" + safe_outputs_body + "}"
+    reset_stage_body = extract_function_body(beer_source, BEER_RESET_STAGE_STATE_SIGNATURE)
+    reset_stage_fn = "inline void beer_reset_stage_state() {" + reset_stage_body + "}"
     finish_body = extract_function_body(beer_source, BEER_FINISH_SIGNATURE)
     finish_fn = "void beer_finish() {" + finish_body + "}"
     harness = HARNESS_TEMPLATE.replace("@CHECK_MIXER_STATE_BODY@", check_mixer_fn)
@@ -636,6 +649,7 @@ def build_harness(beer_source: str) -> str:
     harness = harness.replace("@COOLING_PUMP_BODY@", cooling_pump_fn)
     harness = harness.replace("@COOLING_OUTPUTS_BODY@", cooling_outputs_fn)
     harness = harness.replace("@BEER_SAFE_LUA_OUTPUTS_BODY@", safe_outputs_fn)
+    harness = harness.replace("@BEER_RESET_STAGE_STATE_BODY@", reset_stage_fn)
     harness = harness.replace("@BEER_FINISH_BODY@", finish_fn)
     return harness
 

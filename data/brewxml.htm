@@ -56,27 +56,42 @@ function compare( a, b ) {
 
 function loadBeerXML(e) {
 	var file = e;
-	var type = "";
-	
+	if (!file) return;
+
 	var readtype = new FileReader();
 	readtype.onload = function () {
 	    if (readtype.result.indexOf("namerecipe") > 0){
-		        type = "bm";
-			var file = e;
 			var reader = new FileReader();
 			reader.onload = function () {
-    		   get_brewmate_info(reader.result);
+				try {
+					get_brewmate_info(reader.result);
+				} catch (err) {
+					is_program = false;
+					SamovarApp.showRequestError('Файл рецепта повреждён или не в формате BrewMate: ' + err.message);
+				}
+			};
+			reader.onerror = function () {
+				SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
 			};
 			reader.readAsText(file, "windows-1251");
 	    } else {
-	        type = "bx";
-			var file = e;
     		var reader = new FileReader();
 			reader.onload = function () {
-       			get_brew_info(reader.result);
+				try {
+					get_brew_info(reader.result);
+				} catch (err) {
+					is_program = false;
+					SamovarApp.showRequestError('Файл рецепта повреждён или не в формате BeerXML: ' + err.message);
+				}
+			};
+			reader.onerror = function () {
+				SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
 			};
 			reader.readAsText(file, "UTF-8");
 	    }
+	};
+	readtype.onerror = function () {
+		SamovarApp.showRequestError('Не удалось прочитать файл рецепта.');
 	};
 	readtype.readAsText(file, "UTF-8");
 }
@@ -90,6 +105,10 @@ function parseXml(xml, arrayTags) {
         if (!dom.loadXML(xml)) throw dom.parseError.reason + " " + dom.parseError.srcText;
     }
     else throw new Error("cannot parse xml string!");
+
+    if (dom.getElementsByTagName && dom.getElementsByTagName("parsererror").length > 0) {
+        throw new Error("файл повреждён, это не корректный XML.");
+    }
 
     function parseNode(xmlNode, result) {
         if (xmlNode.nodeName == "#text") {
@@ -151,11 +170,17 @@ function check_value(val, type){
 
 function get_brew_info(xml){
 	let recipe = parseXml(xml);
+	if (!recipe.RECIPES || !recipe.RECIPES.RECIPE) {
+		throw new Error("не найден обязательный узел RECIPES/RECIPE (это не файл BeerXML).");
+	}
 	get_recipe(recipe);
 }
 
 function get_brewmate_info(xml){
 	let recipe = parseXml(xml);
+	if (!recipe.recipe) {
+		throw new Error("не найден обязательный узел recipe (это не файл BrewMate).");
+	}
 	//show main info
 	recipe.RECIPES = Object.create(null);
 	recipe.RECIPES.RECIPE = Object.create(null);
@@ -448,7 +473,47 @@ function get_recipe(recipe){
     }
 
     program = program + "C;" + pt + ";0;1^-1^2^3;0\nF;" + pt + ";0;1^-1^2^3;0";
+
+    var err = validateBeerProgramText(program);
+    if (err) {
+        is_program = false;
+        throw new Error("рецепт не даёт корректную программу (" + err + ")");
+    }
     is_program = true;
+}
+
+// Ограничения соответствуют разбору формата beer на прошивке (program_io.h, program_types.h):
+// PROGRAM_MAX = CAPACITY_NUM*2 = 20 строк, допустимые типы строки - allowedTypes формата beer,
+// температура - PROGRAM_TEMP_MIN..MAX, время шага - PROGRAM_TIME_MIN..MAX (в минутах).
+var BEER_PROGRAM_MAX_ROWS = 20;
+var BEER_PROGRAM_TYPES = "MPBCFWLA";
+
+function validateBeerProgramText(text) {
+  var lines = text.split("\n");
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  if (lines.length === 0) return "в рецепте нет ни одного шага";
+  if (lines.length > BEER_PROGRAM_MAX_ROWS) {
+    return "шагов " + lines.length + ", максимум " + BEER_PROGRAM_MAX_ROWS;
+  }
+  for (var i = 0; i < lines.length; i++) {
+    var n = i + 1;
+    var f = lines[i].split(";");
+    if (f.length !== 5) {
+      return "шаг " + n + ": повреждена структура строки программы";
+    }
+    if (f[0].length !== 1 || BEER_PROGRAM_TYPES.indexOf(f[0]) === -1) {
+      return "шаг " + n + ": неизвестный тип «" + f[0] + "»";
+    }
+    var temp = Number(f[1]);
+    if (!Number.isFinite(temp) || temp < 0 || temp > 150) {
+      return "шаг " + n + ": температура «" + f[1] + "» не число от 0 до 150 (проверьте STEP_TEMP/PRIMARY_TEMP в файле рецепта)";
+    }
+    var time = Number(f[2]);
+    if (!Number.isFinite(time) || time < 0 || time > 1440) {
+      return "шаг " + n + ": время «" + f[2] + "» не число от 0 до 1440 минут (проверьте STEP_TIME/BOIL_TIME в файле рецепта)";
+    }
+  }
+  return "";
 }
 
 async function set_program(){

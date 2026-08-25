@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
 
 web = (ROOT / "WebServer.ino").read_text(encoding="utf-8", errors="ignore")
+mode_switch = (ROOT / "mode_switch.h").read_text(encoding="utf-8", errors="ignore")
 samovar = (ROOT / "Samovar.ino").read_text(encoding="utf-8", errors="ignore")
 samovar_h = (ROOT / "Samovar.h").read_text(encoding="utf-8", errors="ignore")
 api = (ROOT / "samovar_api.h").read_text(encoding="utf-8", errors="ignore")
@@ -53,7 +54,7 @@ if queue_body:
             errors.append(f"compound profile transaction missing validator: {token}")
 
 try:
-    change_body = extract_function_body(web, "void change_samovar_mode() {")
+    change_body = extract_function_body(mode_switch, "void change_samovar_mode() {")
 except ValueError as exc:
     errors.append(str(exc))
     change_body = ""

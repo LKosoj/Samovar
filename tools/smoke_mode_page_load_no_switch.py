@@ -26,6 +26,7 @@ from smoke_helpers import extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_SERVER = ROOT / "WebServer.ino"
+MODE_SWITCH = ROOT / "mode_switch.h"
 
 ASSIGNS_SAMOVAR_MODE = re.compile(r"Samovar_Mode\s*=")
 
@@ -33,6 +34,7 @@ ASSIGNS_SAMOVAR_MODE = re.compile(r"Samovar_Mode\s*=")
 def main() -> int:
     errors: list[str] = []
     source = WEB_SERVER.read_text(encoding="utf-8")
+    mode_switch_source = MODE_SWITCH.read_text(encoding="utf-8")
 
     for signature in (
         "void send_index_page(AsyncWebServerRequest *request)",
@@ -53,14 +55,14 @@ def main() -> int:
 
     try:
         change_body = strip_cpp_comments(
-            extract_function_body(source, "void change_samovar_mode()")
+            extract_function_body(mode_switch_source, "void change_samovar_mode()")
         )
     except ValueError as exc:
-        errors.append(f"WebServer.ino: не найдено тело change_samovar_mode(): {exc}")
+        errors.append(f"mode_switch.h: не найдено тело change_samovar_mode(): {exc}")
         change_body = ""
     if change_body and "SamSetup.Mode = " not in change_body and "SamSetup.Mode=" not in change_body:
         errors.append(
-            "WebServer.ino: change_samovar_mode() больше не синхронизирует "
+            "mode_switch.h: change_samovar_mode() больше не синхронизирует "
             "SamSetup.Mode - синхронизация в момент старта режима "
             "(mode_registry.h/Samovar.ino зовут change_samovar_mode()) потерялась, "
             "а без неё вернётся старый способ через веб-обработчики"

@@ -383,6 +383,11 @@ bool overflow() { return test_overflow; }
 const char* nbk_overflow_source() { return "ДЗ"; }
 
 float fromPower(float value) { return value; }
+// [T14 п.1/п.8] Нижняя граница - toPower() тождественна, unit-конвертация
+// проверяется отдельно (smoke_nbk_session_config.py); важен сам факт клэмпа.
+float power_work_mode_threshold() { return 40.0f; }
+float toPower(float value) { return value; }
+static float max(float left, float right) { return left > right ? left : right; }
 
 static uint32_t fakeMillis = 1000;
 uint32_t millis() { return fakeMillis; }

@@ -3,6 +3,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1016,17 +1017,32 @@ def run_cli_capture(
     )
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if result.returncode != 0 or "### Error" in result.stdout:
-        raise RuntimeError(f"playwright-cli {' '.join(arguments[:1])} failed")
+    command = arguments[0] if arguments else ""
+
+    # Настоящие заголовки playwright-cli ("### Error"/"### Modal state"/
+    # "### Result") печатаются ТОЛЬКО в начале строки. Тот же текст может
+    # случайно оказаться внутри блока "### Ran Playwright code" - туда CLI
+    # эхом печатает наш же исполненный JS, включая комментарии. Проверка
+    # substring без привязки к началу строки однажды поймала свой же
+    # комментарий как признак заблокировавшего скрипт диалога.
+    def has_marker(marker: str) -> bool:
+        return result.stdout.startswith(marker) or ("\n" + marker) in result.stdout
+
+    if result.returncode != 0 or has_marker("### Error"):
+        raise RuntimeError(f"playwright-cli {command} failed")
+    if has_marker("### Modal state"):
+        raise RuntimeError(
+            f"playwright-cli {command} failed: '### Modal state' marker in output "
+            "(a dialog blocked the script and was never handled)"
+        )
     return result.stdout
 
 
 def parse_cli_result(output: str) -> object:
-    marker = "### Result\n"
-    if marker not in output:
+    match = re.search(r"(?m)^### Result\n(.*)$", output)
+    if not match:
         raise RuntimeError("playwright-cli result payload is missing")
-    payload = output.split(marker, 1)[1].splitlines()[0]
-    return json.loads(payload)
+    return json.loads(match.group(1))
 
 
 def cleanup(

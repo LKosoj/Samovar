@@ -152,7 +152,9 @@ for token in ["String d", ".toInt()", "getValue("]:
         errors.append(f"WebSerial contains legacy parser: {token}")
 
 expected_hashes = {
-    "program_io.h": "bc5f6025da6783bc228a580116f02c198fcff83b2c3e7f79d8867e13293547b9",
+    # [T29] хэш обновлён: program_commit()/program_clear()/program_serialize_rows()
+    # теперь защищены спинлоком configMux (см. tools/smoke_lock_order.py).
+    "program_io.h": "d16285cf721f1ec41315d85a1bb673d5df231b4450a389825be4ddc0de02832c",
     "program_types.h": "8e9a8a991b6d4a1e10ddcaf574c7e48cfe2f1cdb20e12601b040f28075466f12",
 }
 for name, expected in expected_hashes.items():

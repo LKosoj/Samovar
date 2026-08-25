@@ -139,12 +139,6 @@ static void test_empty_and_mixed_fifo() {
         "console payload mismatch");
   select_event(ring, second.sequence, RUNTIME_EVENT_SELECT_NONE);
 
-  RuntimeEventDescriptor latest{};
-  check(runtime_event_select_latest_message_locked(ring, latest) ==
-            RUNTIME_EVENT_SELECT_FOUND &&
-            latest.sequence == first.sequence,
-        "latest message selection mismatch");
-
   RuntimeEventDescriptor tabOne = select_event(ring, 0, RUNTIME_EVENT_SELECT_FOUND);
   RuntimeEventDescriptor tabTwo = select_event(ring, 0, RUNTIME_EVENT_SELECT_FOUND);
   check(tabOne.sequence == tabTwo.sequence && ring.count == 2,

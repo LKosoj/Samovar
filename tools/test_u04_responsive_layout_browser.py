@@ -50,18 +50,18 @@ BROWSER_TEST = r'''async page => {
   };
   const DESKTOP_GEOMETRY_TOLERANCE = 0.5;
   const DESKTOP_GEOMETRY_BASELINE = {
-    "setup/Main": { form: {x:290,y:25,width:860,height:1417.55}, panel: {x:320,y:165,width:800,height:1193.55}, actions: {x:386,y:1358.55,width:668,height:54}, save: {x:396,y:1368.55,width:200,height:44}, return: {x:620,y:1368.55,width:200,height:44}, edit: {x:844,y:1368.55,width:200,height:44} },
+    "setup/Main": { form: {x:290,y:25,width:860,height:1447.83}, panel: {x:320,y:165,width:800,height:1223.83}, actions: {x:386,y:1388.83,width:668,height:54}, save: {x:396,y:1398.83,width:200,height:44}, return: {x:620,y:1398.83,width:200,height:44}, edit: {x:844,y:1398.83,width:200,height:44} },
     "setup/Temp": { form: {x:290,y:25,width:860,height:1718.81}, panel: {x:320,y:165,width:800,height:1494.81}, actions: {x:386,y:1659.81,width:668,height:54}, save: {x:396,y:1669.81,width:200,height:44}, return: {x:620,y:1669.81,width:200,height:44}, edit: {x:844,y:1669.81,width:200,height:44} },
     "setup/Pump": { form: {x:290,y:25,width:860,height:440.69}, panel: {x:320,y:165,width:800,height:216.69}, actions: {x:386,y:381.69,width:668,height:54}, save: {x:396,y:391.69,width:200,height:44}, return: {x:620,y:391.69,width:200,height:44}, edit: {x:844,y:391.69,width:200,height:44} },
-    "setup/Beer": { form: {x:290,y:25,width:860,height:681.8}, panel: {x:320,y:165,width:800,height:457.8}, actions: {x:386,y:622.8,width:668,height:54}, save: {x:396,y:632.8,width:200,height:44}, return: {x:620,y:632.8,width:200,height:44}, edit: {x:844,y:632.8,width:200,height:44} },
+    "setup/Beer": { form: {x:290,y:25,width:860,height:682.84}, panel: {x:320,y:165,width:800,height:458.84}, actions: {x:386,y:623.84,width:668,height:54}, save: {x:396,y:633.84,width:200,height:44}, return: {x:620,y:633.84,width:200,height:44}, edit: {x:844,y:633.84,width:200,height:44} },
     "setup/NBK": { form: {x:290,y:25,width:860,height:697.8}, panel: {x:320,y:165,width:800,height:473.8}, actions: {x:386,y:638.8,width:668,height:54}, save: {x:396,y:648.8,width:200,height:44}, return: {x:620,y:648.8,width:200,height:44}, edit: {x:844,y:648.8,width:200,height:44} },
-    "setup/Other": { form: {x:290,y:25,width:860,height:1437.75}, panel: {x:320,y:165,width:800,height:1213.75}, actions: {x:386,y:1378.75,width:668,height:54}, save: {x:396,y:1388.75,width:200,height:44}, return: {x:620,y:1388.75,width:200,height:44}, edit: {x:844,y:1388.75,width:200,height:44} },
-    "setup/main-longest-mode": { form: {x:290,y:25,width:860,height:1417.55}, panel: {x:320,y:165,width:800,height:1193.55}, actions: {x:386,y:1358.55,width:668,height:54}, save: {x:396,y:1368.55,width:200,height:44}, return: {x:620,y:1368.55,width:200,height:44}, edit: {x:844,y:1368.55,width:200,height:44} },
-    "setup/other-long-values": { form: {x:290,y:25,width:860,height:1437.75}, panel: {x:320,y:165,width:800,height:1213.75}, actions: {x:386,y:1378.75,width:668,height:54}, save: {x:396,y:1388.75,width:200,height:44}, return: {x:620,y:1388.75,width:200,height:44}, edit: {x:844,y:1388.75,width:200,height:44} },
-    "setup/other-empty-values": { form: {x:290,y:25,width:860,height:1437.75}, panel: {x:320,y:165,width:800,height:1213.75}, actions: {x:386,y:1378.75,width:668,height:54}, save: {x:396,y:1388.75,width:200,height:44}, return: {x:620,y:1388.75,width:200,height:44}, edit: {x:844,y:1388.75,width:200,height:44} },
-    "setup/validation-error": { form: {x:290,y:25,width:860,height:1501.3}, panel: {x:320,y:248.75,width:800,height:1193.55}, actions: {x:386,y:1442.3,width:668,height:54}, save: {x:396,y:1452.3,width:200,height:44}, return: {x:620,y:1452.3,width:200,height:44}, edit: {x:844,y:1452.3,width:200,height:44} },
-    "setup/request-error": { form: {x:290,y:25,width:860,height:1501.3}, panel: {x:320,y:248.75,width:800,height:1193.55}, actions: {x:386,y:1442.3,width:668,height:54}, save: {x:396,y:1452.3,width:200,height:44}, return: {x:620,y:1452.3,width:200,height:44}, edit: {x:844,y:1452.3,width:200,height:44} },
-    "setup/visible-tooltip": { form: {x:290,y:25,width:860,height:1417.55}, panel: {x:320,y:165,width:800,height:1193.55}, actions: {x:386,y:1358.55,width:668,height:54}, save: {x:396,y:1368.55,width:200,height:44}, return: {x:620,y:1368.55,width:200,height:44}, edit: {x:844,y:1368.55,width:200,height:44} },
+    "setup/Other": { form: {x:290,y:25,width:860,height:1439.84}, panel: {x:320,y:165,width:800,height:1215.84}, actions: {x:386,y:1380.84,width:668,height:54}, save: {x:396,y:1390.84,width:200,height:44}, return: {x:620,y:1390.84,width:200,height:44}, edit: {x:844,y:1390.84,width:200,height:44} },
+    "setup/main-longest-mode": { form: {x:290,y:25,width:860,height:1447.83}, panel: {x:320,y:165,width:800,height:1223.83}, actions: {x:386,y:1388.83,width:668,height:54}, save: {x:396,y:1398.83,width:200,height:44}, return: {x:620,y:1398.83,width:200,height:44}, edit: {x:844,y:1398.83,width:200,height:44} },
+    "setup/other-long-values": { form: {x:290,y:25,width:860,height:1439.84}, panel: {x:320,y:165,width:800,height:1215.84}, actions: {x:386,y:1380.84,width:668,height:54}, save: {x:396,y:1390.84,width:200,height:44}, return: {x:620,y:1390.84,width:200,height:44}, edit: {x:844,y:1390.84,width:200,height:44} },
+    "setup/other-empty-values": { form: {x:290,y:25,width:860,height:1439.84}, panel: {x:320,y:165,width:800,height:1215.84}, actions: {x:386,y:1380.84,width:668,height:54}, save: {x:396,y:1390.84,width:200,height:44}, return: {x:620,y:1390.84,width:200,height:44}, edit: {x:844,y:1390.84,width:200,height:44} },
+    "setup/validation-error": { form: {x:290,y:25,width:860,height:1531.58}, panel: {x:320,y:248.75,width:800,height:1223.83}, actions: {x:386,y:1472.58,width:668,height:54}, save: {x:396,y:1482.58,width:200,height:44}, return: {x:620,y:1482.58,width:200,height:44}, edit: {x:844,y:1482.58,width:200,height:44} },
+    "setup/request-error": { form: {x:290,y:25,width:860,height:1531.58}, panel: {x:320,y:248.75,width:800,height:1223.83}, actions: {x:386,y:1472.58,width:668,height:54}, save: {x:396,y:1482.58,width:200,height:44}, return: {x:620,y:1482.58,width:200,height:44}, edit: {x:844,y:1482.58,width:200,height:44} },
+    "setup/visible-tooltip": { form: {x:290,y:25,width:860,height:1447.83}, panel: {x:320,y:165,width:800,height:1223.83}, actions: {x:386,y:1388.83,width:668,height:54}, save: {x:396,y:1398.83,width:200,height:44}, return: {x:620,y:1398.83,width:200,height:44}, edit: {x:844,y:1398.83,width:200,height:44} },
     "chart/messages-hidden": { chartdiv: {x:8,y:8,width:1424,height:500}, panel: {x:8,y:8,width:1424,height:568.36}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:290,y:533,width:860,height:695.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
     "chart/messages-short": { chartdiv: {x:8,y:8,width:1424,height:500}, panel: {x:8,y:8,width:1424,height:568.36}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:290,y:533,width:860,height:695.42}, host: {x:208,y:22,width:600,height:109.83}, messages: {x:208,y:22,width:600,height:109.83} },
     "chart/messages-long": { chartdiv: {x:8,y:8,width:1424,height:500}, panel: {x:8,y:8,width:1424,height:568.36}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:290,y:533,width:860,height:695.42}, host: {x:208,y:22,width:600,height:341.83}, messages: {x:208,y:22,width:600,height:341.83} },
@@ -75,7 +75,7 @@ BROWSER_TEST = r'''async page => {
   const report = {
     expectedCells: 168, cells: [], failures: [], consoleProblems: [],
     expectedConsoleEvents: [], pageErrors: [], lifecycleProblems: [],
-    requestTraces: [], desktopGeometry: {}
+    requestTraces: [], desktopGeometry: {}, tooltipFitCells: [], tooltipFitBlocked: []
   };
   let scenario = "startup";
   let requests = [];
@@ -85,7 +85,7 @@ BROWSER_TEST = r'''async page => {
     PipeTemp: 77.9, WaterTemp: 20.2, TankTemp: 82.3, ACPTemp: 40.1,
     bme_pressure: 760, start_pressure: 759.5, prvl: 1.2, VolumeAll: 1,
     ActualVolumePerHour: 100, WthdrwlProgress: 10, CurrrentSpeed: 0.1,
-    CurrrentStepps: 10, TargetStepps: 20, WthdrwlStatus: 0, ProgramNum: 0,
+    CurrrentStepps: 10, TargetStepps: 20, WthdrwlStatus: 0, ProgramNum: 3,
     DetectorTrend: 0, DetectorStatus: 0, useautospeed: false,
     current_power_volt: 0, target_power_volt: 0, current_power_mode: "0",
     current_power_p: 0, WFtotalMl: 0, WFflowRate: 0, bme_temp: 24,
@@ -93,7 +93,7 @@ BROWSER_TEST = r'''async page => {
     PrgType: "", Status: "Готов", Lstatus: "", TimeRemaining: 0, TotalTime: 0,
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
-    PowerOn: 0, StepperStepMl: 111, ProgNum: 0,
+    PowerOn: 0, StepperStepMl: 111,
     heaterAlarmLatched: 0, latestMessageSequence: 0
   };
   const csvFixture = [
@@ -129,6 +129,17 @@ BROWSER_TEST = r'''async page => {
   });
   await page.route("**/ajax?messageCursor=*", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(ajaxFixture)
+  }));
+  // program.htm/index.htm/distiller.htm (проверка подсказок на fit, ниже) на загрузке
+  // сами запрашивают параметры колонки - без фикстуры это настоящий 404 от тестового
+  // статического сервера. Та же фикстура, что в test_u03_contrast_browser.py.
+  await page.route("**/ajax_col_params?*", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({
+      floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
+      theoreticalPlates: 20, headsFlowMlH: 100, bodyFlowMinMlH: 200,
+      bodyFlowMaxMlH: 400, bodyEndFlowMlH: 300, tailsFlowMlH: 150,
+      headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000
+    })
   }));
   await page.route("**/data.csv", route => route.fulfill({
     status: 200, contentType: "text/csv", body: csvFixture
@@ -264,9 +275,13 @@ BROWSER_TEST = r'''async page => {
         checkInside(mode, mode.parentElement, '#Main select[name="mode"]');
       }
       if (cell.state === "visible-tooltip") {
-        const tip = document.querySelector("#Main .tooltip .tooltiptext");
-        checkInside(tip, null, ".tooltip .tooltiptext");
-        checkNotClipped(tip, ".tooltip .tooltiptext");
+        // enhanceTooltips() (app.js) переносит .tooltiptext либо в соседнюю .tooltip-wrap
+        // (когда .tooltip - это <label>), либо оставляет внутри самого контейнера с классом
+        // .tooltip-anchor (когда .tooltip - это h2/div, как первая подсказка на Main) -
+        // .tooltiptext в #Main всегда одна открытая, ищем по обоим вариантам сразу.
+        const tip = document.querySelector("#Main .tooltip-wrap .tooltiptext, #Main .tooltip-anchor .tooltiptext");
+        checkInside(tip, null, ".tooltip-wrap/.tooltip-anchor .tooltiptext");
+        checkNotClipped(tip, ".tooltip-wrap/.tooltip-anchor .tooltiptext");
       }
       const error = document.getElementById("request_error");
       if (error && getComputedStyle(error).display !== "none") checkInside(error, null, "#request_error");
@@ -464,9 +479,10 @@ BROWSER_TEST = r'''async page => {
       });
     } else if (state === "visible-tooltip") {
       await openSetupTab("Main");
-      await page.locator("#Main .tooltip").first().hover();
+      // Подсказка открывается кликом по кнопке-триггеру (enhanceTooltips в app.js), не hover-ом.
+      await page.locator("#Main .tooltip-trigger").first().click();
       await page.waitForFunction(() => {
-        const tip = document.querySelector("#Main .tooltip .tooltiptext");
+        const tip = document.querySelector("#Main .tooltip-wrap .tooltiptext, #Main .tooltip-anchor .tooltiptext");
         return tip && getComputedStyle(tip).visibility === "visible";
       });
     }
@@ -582,6 +598,121 @@ BROWSER_TEST = r'''async page => {
   if (report.expectedConsoleEvents.length !== 8) {
     throw new Error("expected HTTP 500 console cardinality=" + report.expectedConsoleEvents.length + ", expected 8");
   }
+
+  // [код-ревью 24.08 #1] Подсказка (.tooltiptext) не должна вылезать за границы экрана
+  // ни при каком положении её метки в строке. 168-матрица выше гоняет только
+  // setup.htm/chart.htm (и там - только один тултип на вкладке Main), а сюда попадают
+  // именно страницы из находки (program.htm - колонки "Мощность" и "Скорость",
+  // index.htm, distiller.htm) плюс остальные вкладки setup.htm, где подсказок больше
+  // всего. На 320px требуем помещение в экран у КАЖДОЙ найденной подсказки; на 1280px -
+  // только санity, что подсказка ещё не оторвалась от метки на весь экран (эти три
+  // страницы раньше вообще не попадали в u04, широкий экран для них не проверялся).
+  async function checkTooltipFit(page_, file, viewport, tabLabel) {
+    // enhanceTooltips() (app.js) ставит на каждую содержательную .tooltip кнопку
+    // .tooltip-trigger и выносит .tooltiptext рядом с ней внутрь общей .tooltip-wrap -
+    // подсказку открывает клик по триггеру, а не hover, поэтому и метим/кликаем именно
+    // триггер; текст подсказки для лога берём у исходной .tooltip (соседа триггера).
+    const owners = await page_.evaluate(() => {
+      const list = Array.from(document.querySelectorAll(".tooltip-trigger")).filter(
+        el => el.offsetParent !== null);
+      list.forEach((el, index) => { el.dataset.tooltipFitProbe = String(index); });
+      return list.map((el, index) => {
+        const labelEl = el.parentNode.querySelector(".tooltip");
+        return { index, label: (labelEl ? labelEl.textContent : "").trim().slice(0, 40) };
+      });
+    });
+    for (const owner of owners) {
+      const selector = '[data-tooltip-fit-probe="' + owner.index + '"]';
+      const scenario = "tooltip-fit/" + viewport.name + "/" + file + (tabLabel ? "/" + tabLabel : "") + "/" + owner.label;
+      report.tooltipFitCells.push(scenario);
+      try {
+        await page_.locator(selector).first().click();
+      } catch (clickError) {
+        // Отдельный, не связанный с этой правкой баг: на index.htm/distiller.htm при 320px
+        // соседние подписи заголовков колонок программы перекрывают друг друга и блокируют
+        // реальный клик (Playwright пишет "... subtree intercepts pointer events"). Он
+        // воспроизводится один в один и на СТАРОМ style.css (до фикса подсказок, там тем же
+        // образом ломался hover) - значит это не регрессия текущего изменения и чинить его
+        // здесь не в рамках этой находки. Подделывать клик через force:true нельзя: реальный
+        // курсор в этом месте достаётся соседней подписи, а не этой, и .tooltiptext у ЭТОГО
+        // элемента так и останется visibility:hidden - force просто спрячет проблему, а не
+        // проверит фикс.
+        report.tooltipFitBlocked.push({ scenario, detail: String(clickError).slice(0, 200) });
+        continue;
+      }
+      await page_.waitForFunction(sel => {
+        const tip = document.querySelector(sel).parentNode.querySelector(".tooltiptext");
+        return tip && getComputedStyle(tip).visibility === "visible";
+      }, selector);
+      const rect = await page_.evaluate(sel => {
+        const box = document.querySelector(sel).parentNode.querySelector(".tooltiptext").getBoundingClientRect();
+        return { x: box.x, width: box.width, right: box.right };
+      }, selector);
+      if (rect.x < -0.5 || rect.right > viewport.width + 0.5) {
+        report.failures.push({
+          scenario, page: file, viewport: viewport.name, theme: "light", state: "tooltip-fit",
+          kind: "tooltip-overflow", selector, rect, ancestorRect: null,
+          detail: "label=" + owner.label + " x=" + rect.x + " right=" + rect.right + " viewport=" + viewport.width
+        });
+      }
+    }
+    await page_.evaluate(() => document.querySelectorAll("[data-tooltip-fit-probe]").forEach(
+      el => delete el.dataset.tooltipFitProbe));
+    return owners.length;
+  }
+  function requireTooltipsFound(count, file, viewport, tabLabel) {
+    // Без этой проверки ноль найденных подсказок (например, если таблица
+    // программы спрятана под вкладкой и её забыли открыть) молча "проходит":
+    // цикл просто не делает итераций, а старая проверка суммировала счётчик
+    // по ВСЕМ страницам сразу, и program.htm одна перекрывала недостачу.
+    if (count < 1) {
+      throw new Error("tooltip-fit: 0 подсказок найдено на " + file +
+        " (" + viewport.name + (tabLabel ? "/" + tabLabel : "") + ")");
+    }
+  }
+  const tooltipFitPages = ["program.htm", "index.htm", "distiller.htm"];
+  const tooltipFitViewports = [
+    { name: "320x800", width: 320, height: 800 },
+    { name: "1280x800", width: 1280, height: 800 }
+  ];
+  for (const file of tooltipFitPages) {
+    for (const viewport of tooltipFitViewports) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await goto(file, "light");
+      if (file === "program.htm") {
+        await page.waitForTimeout(200);
+      } else {
+        // index.htm/distiller.htm держат таблицу программы под вкладкой "Программа" -
+        // без её открытия .tooltip остаются offsetParent===null (тот же приём, что
+        // и openSetupTab ниже для setup.htm).
+        await page.locator('input.tablinks[value="Программа"]').click();
+        await page.locator("#Prog").waitFor({ state: "visible" });
+        await page.waitForTimeout(200);
+      }
+      const count = await checkTooltipFit(page, file, viewport);
+      requireTooltipsFound(count, file, viewport);
+    }
+  }
+  // setup.htm: 320px по всем вкладкам (широкий экран для первого тултипа Main уже
+  // проверен выше самой 168-матрицей, сценарий setup/*/visible-tooltip).
+  // Не у каждой вкладки есть подсказки (Temp/Pump/NBK - вообще без .tooltip в разметке),
+  // поэтому здесь требуем не "не ноль на каждой вкладке", а точную сумму по всем
+  // вкладкам сразу - так и легитимно пустые вкладки не мешают, и потеря покрытия
+  // (например, если openSetupTab перестанет открывать нужную панель) не спрячется
+  // за одной непустой вкладкой Main.
+  await page.setViewportSize({ width: 320, height: 800 });
+  let setupTooltipTotal = 0;
+  for (const tab of setupTabs) {
+    await goto("setup.htm", "light");
+    await openSetupTab(tab);
+    setupTooltipTotal += await checkTooltipFit(page, "setup.htm", { name: "320x800", width: 320 }, tab);
+  }
+  const SETUP_TOOLTIP_TOTAL_EXPECTED = 10;
+  if (setupTooltipTotal !== SETUP_TOOLTIP_TOTAL_EXPECTED) {
+    throw new Error("tooltip-fit: setup.htm суммарно нашёл " + setupTooltipTotal +
+      " подсказок по всем вкладкам, ожидалось " + SETUP_TOOLTIP_TOTAL_EXPECTED);
+  }
+
   await page.request.post(baseUrl + "/__u04_report", { data: report });
   await page.unrouteAll({ behavior: "ignoreErrors" });
   return { cells: report.cells.length, failures: report.failures.length };
@@ -656,6 +787,14 @@ def main() -> int:
             cleanup_errors = cleanup(cli, session, server, thread)
 
     if browser_report is not None:
+        blocked = browser_report.get("tooltipFitBlocked")
+        if isinstance(blocked, list) and blocked:
+            for item in blocked:
+                print(
+                    "U-04 responsive browser note (pre-existing, out of scope, not a fit failure): "
+                    f"{item.get('scenario')} hover blocked: {item.get('detail')}",
+                    file=sys.stderr,
+                )
         failures = browser_report.get("failures")
         console_problems = browser_report.get("consoleProblems")
         page_errors = browser_report.get("pageErrors")

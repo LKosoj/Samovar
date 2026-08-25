@@ -131,9 +131,6 @@
 
     function renderTelemetry(myObj) {
         {
-          document.getElementById('version').textContent = myObj.version;
-          document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
-          document.getElementById('stm').textContent = myObj.stm;
           document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
           document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(3);
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(3);
@@ -159,23 +156,8 @@
             myObj.BoilingEvidence === 1 || myObj.BoilingEvidence === 2
               ? 'precise'
               : 'estimated';
-          document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
-          document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
-          document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
-          document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
           document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl;
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
-          document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
-          document.getElementById('heap').innerHTML = myObj.heap;
-          document.getElementById('rssi').innerHTML = myObj.rssi;
-          document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
-          SamovarApp.setSoundEnabled(!!myObj.UseBBuzzer);
-
-          if (myObj.Lstatus) {
-            if (myObj.Lstatus != "") {
-              document.getElementById('Lstatus').textContent = myObj.Lstatus;
-            }
-          }
 
           var dt = myObj.PipeTemp - myObj.SteamTemp;
           document.getElementById('DeltaTemp').innerHTML = dt.toFixed(3);
@@ -186,25 +168,17 @@
             document.getElementById('flowsensor').style = '';
           }
 
-          if (myObj.wp_spd === undefined) {
-          } else {
-            document.getElementById('add_param').innerHTML = "; ШИМ насоса воды: " + myObj.wp_spd;
-          }
-
+          SamovarApp.renderTelemetryCommon(myObj);
           SamovarApp.renderI2cPumpStatus(myObj);
-
-          var powerstr;
-          var powerstyle;
-          HeaterPowerOn = myObj.PowerOn == 1;
-          if (HeaterPowerOn) {
-            powerstr = 'Выключить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-danger-bg');
+          if (myObj.PowerOn == 1) {
+            document.getElementById('power').value = 'Выключить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-danger-bg');
+            HeaterPowerOn = true;
           } else {
-            powerstr = 'Включить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-active-bg');
+            document.getElementById('power').value = 'Включить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-active-bg');
+            HeaterPowerOn = false;
           }
-          document.getElementById('power').value = powerstr;
-          document.getElementById('power').style.backgroundColor = powerstyle;
 
         }
     };
@@ -235,7 +209,7 @@
         storeMessageHistory: true,
         dynamicThemeTitle: false,
         implicitSystemTheme: false,
-        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp']
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp', 'power']
       });
     };
 
@@ -449,7 +423,7 @@
             <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">
               <label for="lua_str_i">Lua:</label>
               <input name='lua_str_i' id='lua_str_i' type='text' value='' style='padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;'>
-              <input type="button" name="lua_str_b" value="Выполнить Lua" class="button" onclick="SamovarApp.runLuaString();" style='margin-bottom: 20px; margin-right: 100;'>
+              <input type="button" name="lua_str_b" value="Выполнить Lua" class="button" onclick="SamovarApp.runLuaString();" style='margin-bottom: 20px; margin-right: 100px;'>
             </div>
             <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
           </div>

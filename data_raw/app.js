@@ -121,10 +121,24 @@
     return String(value === undefined || value === null ? '' : value).replace(',', '.');
   }
 
+  function fieldLabelFromDom(name) {
+    if (!name || typeof document === 'undefined' || !document.querySelector) return null;
+    const source = document.querySelector('label[for="' + name + '"]');
+    if (!source || typeof source.cloneNode !== 'function') return null;
+    const clone = source.cloneNode(true);
+    if (typeof clone.querySelectorAll === 'function') {
+      const tooltips = clone.querySelectorAll('.tooltiptext');
+      for (let i = 0; i < tooltips.length; i++) tooltips[i].remove();
+    }
+    const text = (clone.textContent || '').trim();
+    return text || null;
+  }
+
   function validateNumericInput(inputOrId, options) {
     const input = typeof inputOrId === 'string' ? byId(inputOrId) : inputOrId;
     const spec = options || {};
-    const label = spec.label || (input && (input.name || input.id)) || 'Значение';
+    const fieldName = input && (input.name || input.id);
+    const label = spec.label || fieldLabelFromDom(fieldName) || fieldName || 'Значение';
     if (!input) {
       return { ok: false, error: 'Не найдено поле «' + label + '».' };
     }
@@ -317,10 +331,20 @@
       tab.style.display = 'block';
       tab.setAttribute('aria-hidden', 'false');
     }
-    if (evt && evt.currentTarget) {
-      evt.currentTarget.className += ' active';
-      if (evt.currentTarget.hasAttribute('aria-pressed')) {
-        evt.currentTarget.setAttribute('aria-pressed', 'true');
+    let activeLink = evt && evt.currentTarget;
+    if (!activeLink) {
+      for (let i = 0; i < tablinks.length; i++) {
+        const onclickAttr = tablinks[i].getAttribute && tablinks[i].getAttribute('onclick');
+        if (onclickAttr && onclickAttr.indexOf("'" + tabName + "'") !== -1) {
+          activeLink = tablinks[i];
+          break;
+        }
+      }
+    }
+    if (activeLink) {
+      activeLink.className += ' active';
+      if (activeLink.hasAttribute('aria-pressed')) {
+        activeLink.setAttribute('aria-pressed', 'true');
       }
     }
   }
@@ -597,6 +621,143 @@
       : 'Не подключён';
     remaining.textContent = present ? data.i2c_pump_remaining_ml : '0';
     speed.textContent = present ? data.i2c_pump_speed : '0';
+  }
+
+  // ==================== Подсказки (tooltip) ====================
+  // Раньше подсказка открывалась по :hover/:focus-within и текст .tooltiptext лежал
+  // внутри <label> - на телефоне подсказка была недоступна вообще, а тап по ней
+  // засчитывался как тап по подписи (переключал чекбокс) и читался диктором как часть
+  // названия поля. Ниже - разовое "улучшение" уже отрисованной разметки: находим
+  // .tooltip с текстом подсказки, выносим текст наружу и добавляем кнопку-триггер,
+  // открывающую её по клику/тапу. enhanceTooltips() идемпотентна (метит обработанные
+  // контейнеры в dataset) - её безопасно перевызывать после каждой перерисовки таблицы
+  // программы (там .tooltip создаются заново).
+  var tooltipIdSeq = 0;
+  var openTooltipTrigger = null;
+
+  function closeOpenTooltip() {
+    if (!openTooltipTrigger) return;
+    var trigger = openTooltipTrigger;
+    openTooltipTrigger = null;
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.parentNode.classList.remove('tooltip-open');
+  }
+
+  function toggleTooltip(trigger) {
+    var wasOpen = openTooltipTrigger === trigger;
+    closeOpenTooltip();
+    if (!wasOpen) {
+      trigger.parentNode.classList.add('tooltip-open');
+      trigger.setAttribute('aria-expanded', 'true');
+      openTooltipTrigger = trigger;
+    }
+  }
+
+  function enhanceTooltip(container) {
+    if (container.dataset.tooltipEnhanced) return;
+    var textEl = container.querySelector('.tooltiptext');
+    if (!textEl) return; // "голая" подсказка без текста (только пунктирное подчёркивание) - не трогаем
+    container.dataset.tooltipEnhanced = '1';
+
+    tooltipIdSeq += 1;
+    var textId = 'tooltip-text-' + tooltipIdSeq;
+    textEl.id = textId;
+    textEl.setAttribute('role', 'tooltip');
+
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'tooltip-trigger';
+    trigger.setAttribute('aria-label', 'Показать пояснение');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-describedby', textId);
+    trigger.textContent = '?';
+    trigger.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleTooltip(trigger);
+    });
+
+    if (container.tagName === 'LABEL') {
+      // <label for="..."> нельзя оставлять подсказку внутри: клик по ней
+      // "пробрасывается" на связанный чекбокс/поле, а скринридер зачитывает
+      // текст подсказки как часть имени поля - выносим наружу через обёртку.
+      // Сам <label> при этом НЕЛЬЗЯ перемещать в обёртку: CSS-правило
+      // "input[type=checkbox]:focus-visible + label" рисует рамку фокуса только
+      // когда label - прямой сосед чекбокса в DOM, поэтому label остаётся на месте,
+      // а обёртка с кнопкой и текстом подсказки вставляется сразу ПОСЛЕ него.
+      var wrap = document.createElement('div');
+      wrap.className = 'tooltip-wrap';
+      container.parentNode.insertBefore(wrap, container.nextSibling);
+      wrap.appendChild(trigger);
+      wrap.appendChild(textEl);
+    } else {
+      // Не <label> (h2/div на setup.htm/index.htm) - контейнер блочный, внешняя
+      // inline-block обёртка ломает поток (кнопка с подсказкой съезжают на новую
+      // строку). Ни риска подмены чекбокса, ни риска "загрязнения" имени поля
+      // здесь нет (container не связан с полем через for=) - просто добавляем
+      // кнопку и текст внутрь того же контейнера.
+      container.classList.add('tooltip-anchor');
+      container.appendChild(trigger);
+      container.appendChild(textEl);
+    }
+  }
+
+  function enhanceTooltips(root) {
+    var containers = (root || document).querySelectorAll('.tooltip');
+    for (var i = 0; i < containers.length; i++) enhanceTooltip(containers[i]);
+  }
+
+  document.addEventListener('click', function (event) {
+    if (openTooltipTrigger && !openTooltipTrigger.parentNode.contains(event.target)) {
+      closeOpenTooltip();
+    }
+  });
+  // Закрытие по Escape не делаем: в app.js уже есть жёсткое правило "один keydown-
+  // слушатель на весь файл, и это unlockAudio" (smoke_accessibility_ui.py), новый
+  // keydown-слушатель его нарушит. Повторный клик по кнопке-триггеру и клик мимо
+  // подсказки (оба уже реализованы выше) работают и с мышью, и с тачем - этого
+  // достаточно для закрытия без клавиатуры.
+
+  // ==================== Общая часть renderTelemetry ====================
+  // version/crnt_tm/stm, блок мощности, служебные показания (heap/rssi/...), звук,
+  // Lstatus и подпись насоса воды - одинаковы на index/beer/bk/nbk/distiller.htm.
+  // Формат current_power_volt/target_power_volt - единственное, что реально
+  // отличается (distiller.htm и index.htm показывают десятые), поэтому это параметр,
+  // а не отдельная копия функции. Рендер I2C-насоса и кнопку нагрева страницы
+  // вызывают сами, отдельно от этой функции: smoke_i2c_pump_ui_contract.py требует,
+  // чтобы SamovarApp.renderI2cPumpStatus(myObj) и запись
+  // document.getElementById('power').value были видны прямо в коде страницы.
+  function renderTelemetryCommon(myObj, options) {
+    var opts = options || {};
+    byId('version').textContent = myObj.version;
+    byId('crnt_tm').textContent = myObj.crnt_tm;
+    byId('stm').textContent = myObj.stm;
+
+    var voltFixed = opts.powerVoltFixed;
+    byId('current_power_volt').innerHTML = voltFixed === undefined
+      ? myObj.current_power_volt
+      : myObj.current_power_volt.toFixed(voltFixed);
+    byId('target_power_volt').innerHTML = voltFixed === undefined
+      ? myObj.target_power_volt
+      : myObj.target_power_volt.toFixed(voltFixed);
+    byId('current_power_mode').innerHTML = myObj.current_power_mode;
+    byId('current_power_p').innerHTML = myObj.current_power_p;
+
+    byId('bme_temp').innerHTML = myObj.bme_temp;
+    byId('heap').innerHTML = myObj.heap;
+    byId('rssi').innerHTML = myObj.rssi;
+    byId('fr_bt').innerHTML = myObj.fr_bt;
+    setSoundEnabled(!!myObj.UseBBuzzer);
+
+    if (myObj.Lstatus) {
+      if (myObj.Lstatus != "") {
+        byId('Lstatus').textContent = myObj.Lstatus;
+      }
+    }
+
+    if (myObj.wp_spd !== undefined) {
+      byId('add_param').textContent = "; ШИМ насоса воды: " + myObj.wp_spd;
+    }
   }
 
   async function fetchJson(url, options) {
@@ -1142,6 +1303,13 @@
         if (!volume) {
           return { ok: false, err: byId('request_error').textContent, program: '', httpStatus: 0, queued: false };
         }
+      } else if (name === 'Descr') {
+        const byteLength = new TextEncoder().encode(fields[0].value).length;
+        if (byteLength > 250) {
+          const err = 'Описание длиннее 250 байт.';
+          showRequestError(err);
+          return { ok: false, err: err, program: '', httpStatus: 0, queued: false };
+        }
       }
       body.append(name, fields[0].value);
     }
@@ -1276,8 +1444,10 @@
     clearRequestErrorIfUnchanged: clearRequestErrorIfUnchanged,
     cssVar: cssVar,
     currentRequestErrorRevision: currentRequestErrorRevision,
+    enhanceTooltips: enhanceTooltips,
     escapeHtml: escapeHtml,
     fetchJson: fetchJson,
+    fieldLabelFromDom: fieldLabelFromDom,
     init: init,
     initTheme: initTheme,
     notify: notify,
@@ -1286,6 +1456,7 @@
     postProgram: postProgram,
     readOperationAcceptance: readOperationAcceptance,
     renderI2cPumpStatus: renderI2cPumpStatus,
+    renderTelemetryCommon: renderTelemetryCommon,
     removeLastMessage: removeLastMessage,
     reportUiError: reportUiError,
     readNumericInput: readNumericInput,

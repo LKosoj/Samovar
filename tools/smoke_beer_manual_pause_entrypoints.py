@@ -19,10 +19,12 @@ enter_manual_pause() (logic.h, рядом с resume_from_pause()), которы�
      (extract_function_body, без переписывания логики) и компилируется в
      харнесс с не-static моками (pause_withdrawal, SendMsg, current_program_type):
        - beer-ветка не потеряна: в режиме пива, при startval выше порога и вне
-         автокалибровки, beerManualPause выставляется в true и отправляется
-         ровно один NOTIFY_MSG с точным текстом;
-       - автокалибровка ПИД ('A') блокирует ручную паузу отдельным WARNING_MSG,
-         beerManualPause не трогается;
+         автокалибровки/затирания, beerManualPause выставляется в true и
+         отправляется ровно один NOTIFY_MSG с точным текстом;
+       - [T23.1] автокалибровка ПИД ('A') и затирание ('L') больше не гейтятся
+         в logic.h (гейт остался только в beer.h) - обе ветки взводят
+         beerManualPause=true и шлют одно и то же предупреждающее NOTIFY_MSG
+         про применение на ближайшем шаге затирания;
        - повторный вызов при уже установленной beerManualPause не шлёт второе
          уведомление (идемпотентность подстраховки от двойного нажатия);
        - вне режима пива (ректификация) beer-ветка целиком пропускается, но
@@ -130,21 +132,37 @@ int main() {
     check(lastSendMsgType == NOTIFY_MSG, "1: уведомление должно быть NOTIFY_MSG");
   }
 
-  // Сценарий 2: автокалибровка ПИД ('A') - пауза недоступна, отдельное
-  // WARNING_MSG, beerManualPause НЕ трогается.
+  // Сценарий 2 [T23.1]: автокалибровка ПИД ('A') - раньше пауза была недоступна
+  // и beerManualPause не взводился вовсе (нажатие терялось бесследно); теперь
+  // гейт остался только в beer.h, а здесь флаг взводится и уходит предупреждение
+  // про применение на ближайшем шаге затирания.
   reset_fixture();
   Samovar_Mode = SAMOVAR_BEER_MODE;
   startval = SAMOVAR_STARTVAL_BEER_START + 1;
   programTypeStub = 'A';
   {
     enter_manual_pause();
-    check(beerManualPause == false, "2: автокалибровка ПИД не должна выставлять beerManualPause");
-    check(sendMsgCalls == 1, "2: должно быть отправлено ровно одно предупреждение");
-    check(lastSendMsgText == "Пауза недоступна во время автокалибровки ПИД.", "2: текст предупреждения должен быть точным");
-    check(lastSendMsgType == WARNING_MSG, "2: предупреждение должно быть WARNING_MSG");
+    check(beerManualPause == true, "2: автокалибровка ПИД должна выставлять beerManualPause");
+    check(sendMsgCalls == 1, "2: должно быть отправлено ровно одно уведомление");
+    check(lastSendMsgText == "Пауза будет применена на ближайшем шаге затирания.", "2: текст уведомления должен быть точным");
+    check(lastSendMsgType == NOTIFY_MSG, "2: уведомление должно быть NOTIFY_MSG");
   }
 
-  // Сценарий 3: повторный вызов при уже установленной паузе - идемпотентно,
+  // Сценарий 3 [T23.1] (симметрично сценарию 2): затирание ('L') - тот же
+  // отложенный текст, что и для 'A' (гейт в beer.h одинаковый для обеих строк).
+  reset_fixture();
+  Samovar_Mode = SAMOVAR_BEER_MODE;
+  startval = SAMOVAR_STARTVAL_BEER_START + 1;
+  programTypeStub = 'L';
+  {
+    enter_manual_pause();
+    check(beerManualPause == true, "3: затирание должно выставлять beerManualPause");
+    check(sendMsgCalls == 1, "3: должно быть отправлено ровно одно уведомление");
+    check(lastSendMsgText == "Пауза будет применена на ближайшем шаге затирания.", "3: текст уведомления должен быть точным");
+    check(lastSendMsgType == NOTIFY_MSG, "3: уведомление должно быть NOTIFY_MSG");
+  }
+
+  // Сценарий 4: повторный вызов при уже установленной паузе - идемпотентно,
   // второго уведомления быть не должно (защита от двойного нажатия кнопки).
   reset_fixture();
   Samovar_Mode = SAMOVAR_BEER_MODE;
@@ -153,11 +171,11 @@ int main() {
   beerManualPause = true;
   {
     enter_manual_pause();
-    check(beerManualPause == true, "3: beerManualPause должен остаться true");
-    check(sendMsgCalls == 0, "3: повторный вызов не должен слать уведомление снова");
+    check(beerManualPause == true, "4: beerManualPause должен остаться true");
+    check(sendMsgCalls == 0, "4: повторный вызов не должен слать уведомление снова");
   }
 
-  // Сценарий 4 (мутация "убери beer-ветку"): вне режима пива beer-ветка не
+  // Сценарий 5 (мутация "убери beer-ветку"): вне режима пива beer-ветка не
   // выполняется вовсе, но pause_withdrawal(true) всё равно вызывается
   // безусловно (её собственный guard на режим - в logic.h::pause_withdrawal).
   reset_fixture();
@@ -165,20 +183,20 @@ int main() {
   startval = SAMOVAR_STARTVAL_BEER_START + 1;
   {
     enter_manual_pause();
-    check(pauseWithdrawalCalls == 1 && lastPauseWithdrawalArg == true, "4: pause_withdrawal(true) должен быть вызван безусловно");
-    check(beerManualPause == false, "4: вне режима пива beerManualPause не должен трогаться");
-    check(sendMsgCalls == 0, "4: вне режима пива уведомлений быть не должно");
+    check(pauseWithdrawalCalls == 1 && lastPauseWithdrawalArg == true, "5: pause_withdrawal(true) должен быть вызван безусловно");
+    check(beerManualPause == false, "5: вне режима пива beerManualPause не должен трогаться");
+    check(sendMsgCalls == 0, "5: вне режима пива уведомлений быть не должно");
   }
 
-  // Сценарий 5: пиво, но сессия ЕЩЁ НЕ дошла до порога старта (startval не
+  // Сценарий 6: пиво, но сессия ЕЩЁ НЕ дошла до порога старта (startval не
   // выше SAMOVAR_STARTVAL_BEER_START) - beer-ветка тоже пропускается.
   reset_fixture();
   Samovar_Mode = SAMOVAR_BEER_MODE;
   startval = SAMOVAR_STARTVAL_BEER_START;
   {
     enter_manual_pause();
-    check(beerManualPause == false, "5: ниже порога старта beerManualPause не должен выставляться");
-    check(sendMsgCalls == 0, "5: ниже порога старта уведомлений быть не должно");
+    check(beerManualPause == false, "6: ниже порога старта beerManualPause не должен выставляться");
+    check(sendMsgCalls == 0, "6: ниже порога старта уведомлений быть не должно");
   }
 
   if (failures != 0) return 1;

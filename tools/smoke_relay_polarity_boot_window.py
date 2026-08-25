@@ -43,6 +43,12 @@ constexpr PinValue LOW = 0;
 constexpr PinValue HIGH = 1;
 constexpr int OUTPUT = 1;
 
+// Срез setup() между "SamSetup = startupProfile;" и print_nvs_stats(...) теперь
+// включает startup-задержку (перенесена туда, чтобы не удлинять окно неверной
+// полярности) - заглушки, чтобы харнесс собирался без реального FreeRTOS.
+constexpr int portTICK_PERIOD_MS = 1;
+static void vTaskDelay(int) {}
+
 constexpr int RELE_CHANNEL1 = 1;
 constexpr int RELE_CHANNEL2 = 2;
 constexpr int RELE_CHANNEL3 = 3;

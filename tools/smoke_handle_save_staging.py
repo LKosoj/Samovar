@@ -41,7 +41,7 @@ process = body(samovar_text, "static void process_profile_operation()", last=Tru
 loop = body(samovar_text, "void loop()")
 setup_processor = body(web_text, "String setupKeyProcessor(const String &var)")
 parse_long = body(web_text, "static bool parse_save_long_arg")
-parse_float = body(web_text, "static bool parse_save_float_arg")
+apply_float = body(web_text, "static bool apply_save_float_arg")
 save_allowlist = body(web_text, "static bool save_param_name_allowed")
 
 if handle_save:
@@ -64,6 +64,10 @@ if handle_save:
             "for (const SaveDsAddrField &f : kSaveDsAddrFields)",
             "apply_save_ds_addr_arg(request, f.name, dsSnapshot, staged.*f.member, f.resetBit, sensorResetMask)",
             "const bool hasSwitchMode = modeRequested",
+            "if (hasSwitchMode && PowerOn)",
+            "409",
+            "operation_error_code(OPERATION_ERROR_CANCELLED)",
+            "return;",
             "prepare_program_for_mode(",
             "prepare_default_program_for_mode(",
             "queue_profile_operation(",
@@ -71,6 +75,20 @@ if handle_save:
         ],
         errors,
     )
+    # Координатор прямо запретил реализовывать отбой смены режима при работающем
+    # нагреве через requireProgramIdle - это отдельный, самостоятельный guard 409
+    # ДО постановки операции в очередь, а не переиспользование чужого параметра.
+    switch_mode_guard_start = handle_save.find("if (hasSwitchMode && PowerOn)")
+    switch_mode_guard_end = handle_save.find("}", switch_mode_guard_start)
+    switch_mode_guard = (
+        handle_save[switch_mode_guard_start:switch_mode_guard_end]
+        if switch_mode_guard_start >= 0 and switch_mode_guard_end >= 0
+        else ""
+    )
+    if "requireProgramIdle" in switch_mode_guard:
+        errors.append(
+            "hasSwitchMode/PowerOn guard must not reuse requireProgramIdle"
+        )
     # handleSave больше не содержит построчных вызовов apply_save_*_arg с
     # литеральными именами полей — они теперь берутся из общих таблиц
     # (kSaveU16Fields и т.д.), которые save_param_name_allowed тоже читает.
@@ -200,22 +218,39 @@ if save_allowlist:
         if not table_match or f'"{name}"' not in table_match.group(1):
             errors.append(f"save allowlist source {table} missing {name}")
 
-for name, parse_body, parser in (
-    ("parse_save_long_arg", parse_long, "parse_bounded_long"),
-    ("parse_save_float_arg", parse_float, "parse_bounded_float"),
-):
-    if parse_body:
-        require_ordered_tokens(
-            name,
-            parse_body,
-            [
-                "request_param_count(request, name) != 1",
-                parser,
-                "send_save_parse_error(request, name, result.error);",
-                "return false;",
-            ],
-            errors,
-        )
+if parse_long:
+    require_ordered_tokens(
+        "parse_save_long_arg",
+        parse_long,
+        [
+            "request_param_count(request, name) != 1",
+            "parse_bounded_long",
+            "send_save_parse_error(request, name, result.error);",
+            "return false;",
+        ],
+        errors,
+    )
+
+# [T35 п.4в] Для полей-float разбор переехал из parse_save_float_arg (удалена, осталась
+# без вызывающих) в apply_save_float_arg. Ключевое отличие, ради которого делался T35:
+# она НЕ отвечает клиенту сама - иначе handleSave снова обрывался бы на первом же плохом
+# поле вместо того, чтобы назвать пользователю все сразу. Поэтому здесь не только
+# порядок токенов, но и прямой запрет на отправку ответа изнутри.
+if apply_float:
+    require_ordered_tokens(
+        "apply_save_float_arg",
+        apply_float,
+        [
+            "parse_bounded_float",
+            "if (!result.ok()) return false;",
+            "target = value;",
+        ],
+        errors,
+    )
+    if "send_save_parse_error" in apply_float:
+        errors.append(
+            "apply_save_float_arg отвечает клиенту сама: handleSave снова оборвётся на "
+            "первом плохом поле и не назовёт остальные")
 
 if setup_processor:
     if re.search(r"\bSamSetup\.[A-Za-z_][A-Za-z0-9_]*\s*=(?!=)", setup_processor):

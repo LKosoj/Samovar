@@ -18,6 +18,7 @@ HARNESS = r'''
 @HEAT_DELTA@
 @REACH_TIMEOUT@
 @STOP_RETRY@
+@HOLD_BAND@
 
 struct Setup { float SuvidTemp; uint16_t SuvidHoldMinutes; };
 static Setup SamSetup{};
@@ -25,6 +26,9 @@ struct Tank { float avgTemp; };
 static Tank TankSensor{};
 @HOLD_STATE@
 @DEVIATION_STATE@
+// [T24.3] Термостат живёт на уровне файла (suvid.h), виден и check_alarm_suvid(),
+// и suvid_tick() - здесь так же, как в продакшене.
+static bool suvidHeaterOn = false;
 
 static bool PowerOn = true;
 static bool heater_state = false;
@@ -33,20 +37,38 @@ static uint32_t millis() { return fakeMillis; }
 static int heaterCalls = 0;
 static bool lastHeater = false;
 static void setHeaterPosition(bool value) { heaterCalls++; lastHeater = value; }
+// [T28a] check_alarm_suvid() больше не пишет heater_state напрямую - вызывает
+// set_heater_state_flag() (единственная точка записи, см. beer.h).
+static void set_heater_state_flag(bool state) { heater_state = state; }
 static int messages = 0;
 static int warnings = 0;
 static int alarms = 0;
 static void SendMsg(const char*, int type) { messages++; if (type == 1) warnings++; if (type == 0) alarms++; }
 static int buzzerCalls = 0;
 static void set_buzzer(bool) { buzzerCalls++; }
-enum { SAMOVAR_POWER = 1, ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2 };
+enum { SAMOVAR_POWER = 1, ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, SAMOVAR_SUVID_MODE = 6 };
+static int Samovar_Mode = SAMOVAR_SUVID_MODE;
 static int queueCalls = 0;
 static bool queueSucceeds = true;
 static bool queue_samovar_command(int) { queueCalls++; return queueSucceeds; }
 static float suvid_target_temp() { return SamSetup.SuvidTemp > 0 ? SamSetup.SuvidTemp : 60.0f; }
 
+// [T24.3] check_alarm_suvid() и suvid_tick() - теперь две ОТДЕЛЬНЫЕ продакшен-функции,
+// обе вызываемые из loop() независимо (mode_dispatch_loop(), затем suvid_tick()).
+// Склеены в раздельные функции (не в одну), чтобы ранний return внутри
+// check_alarm_suvid_body() (ветка !PowerOn) не глушил suvid_tick_body(), как и в
+// продакшене, где это два независимых вызова.
+static void check_alarm_suvid_body() {
+@CHECK_ALARM_BODY@
+}
+
+static void suvid_tick_body() {
+@SUVID_TICK_BODY@
+}
+
 static void tick() {
-@BODY@
+  check_alarm_suvid_body();
+  suvid_tick_body();
 }
 
 static int failures = 0;
@@ -222,6 +244,39 @@ static void test_queue_failure_is_explicit_without_fallback() {
   check(queueCalls == 2 && suvidHold.fired,
         "pending completion must retry the same graceful command, not a fallback action");
 }
+static void test_hold_band_survives_temperature_ripple() {
+  // [T24.1] "Пила" +-1.5 C вокруг уставки: полоса зачёта (SUVID_HOLD_BAND_C=2.0 C)
+  // шире полосы регулирования (HEAT_DELTA=1 C) - тепловая инерция бака качает
+  // температуру сильнее, чем успевает отработать реле, и колебание в пределах
+  // +-1.5 C не должно постоянно прерывать зачёт выдержки.
+  // МУТАЦИЯ: откат SUVID_HOLD_BAND_C к 1.0 обязан уронить эту проверку -
+  // колебание +-1.5 C тогда всегда было бы вне узкой полосы, и hold.active
+  // не взвёлся бы вовсе (accumulatedMs остался бы 0).
+  reset();
+  const uint32_t totalSeconds = 200;
+  for (uint32_t s = 1; s <= totalSeconds; s++) {
+    TankSensor.avgTemp = 60.0f + ((s % 2 == 0) ? 1.5f : -1.5f);
+    fakeMillis = s * 1000U;
+    tick();
+  }
+  check(suvidHold.accumulatedMs >= (uint32_t)(totalSeconds * 1000U * 95U / 100U),
+        "REGRESSION T24.1: a +-1.5C ripple inside SUVID_HOLD_BAND_C must count at least "
+        "95% of elapsed time toward the hold");
+}
+static void test_tick_respects_mode_guard() {
+  // [T24.3] suvid_tick() применяет состояние термостата к нагревателю ТОЛЬКО в
+  // режиме Сувид - смена режима не должна дёргать чужой нагреватель тем
+  // значением, которое посчитал термостат Сувида.
+  reset();
+  fakeMillis = 1000; tick();
+  heaterCalls = 0;
+  suvidHeaterOn = true;  // avgTemp == setpoint (60), термостат этот тик не тронет
+  Samovar_Mode = SAMOVAR_SUVID_MODE + 1;  // другой режим
+  fakeMillis = 2000; tick();
+  check(heaterCalls == 0,
+        "REGRESSION T24.3: suvid_tick() must not call setHeaterPosition outside Suvid mode");
+  Samovar_Mode = SAMOVAR_SUVID_MODE;
+}
 int main() {
   test_symmetric_band(); test_hold_counts_only_band_time(); test_zero_hold_is_indefinite();
   test_no_deviation_warning_before_hold_starts(); test_deviation_warning_after_hold_starts();
@@ -231,6 +286,8 @@ int main() {
   test_reach_timeout_does_not_fire_once_the_hold_started();
   test_timers_wrap_across_uint32_max();
   test_queue_failure_is_explicit_without_fallback();
+  test_hold_band_survives_temperature_ripple();
+  test_tick_respects_mode_guard();
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -250,17 +307,24 @@ def main():
     source = (ROOT / "suvid.h").read_text(encoding="utf-8")
     ini = (ROOT / "Samovar_ini.h").read_text(encoding="utf-8")
     body = extract_function_body(source, "inline void check_alarm_suvid")
-    start = body.find("static bool suvidHeaterOn = false;")
+    # [T24.3] suvidHeaterOn переехал на уровень файла (виден также suvid_tick()) -
+    # старый якорь "static bool suvidHeaterOn = false;" внутри тела функции исчез.
+    # "if (!PowerOn) {" - следующая стабильная строка, отмечающая начало того же
+    # блока термостата/выдержки, что и раньше.
+    start = body.find("if (!PowerOn) {")
     if start < 0:
         raise ValueError("thermostat anchor missing")
     snippet = body[start:]
+    tick_body = extract_function_body(source, "inline void suvid_tick()")
     require_ordered_tokens("Suvid S1-S3 order", snippet, [
         "if (!PowerOn)", "suvidHold = {false, false, false, false, 0, 0, 0, false, false, false, 0};",
         "setpoint - HEAT_DELTA", "setpoint + HEAT_DELTA",
-        "inHoldBand", "suvidHold.active", "deviation > 2.0f",
+        "inHoldBand", "suvidHold.active", "deviation > SUVID_HOLD_BAND_C",
         "now - suvidDeviation.sinceMs", "SUVID_REACH_TIMEOUT_MS",
         "holdMs > 0", "suvidHold.accumulatedMs", "queue_samovar_command(SAMOVAR_POWER)",
     ], errors)
+    if "setHeaterPosition" not in tick_body:
+        errors.append("suvid_tick() must apply the thermostat state via setHeaterPosition")
     if "program[" in snippet:
         errors.append("Suvid hold must not read the shared program buffer")
     if "request_emergency_stop" in snippet:
@@ -271,11 +335,14 @@ def main():
     heat = next(line.strip() for line in ini.splitlines() if line.startswith("#define HEAT_DELTA"))
     reach_timeout = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_REACH_TIMEOUT_MS"))
     stop_retry = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_STOP_RETRY_MS"))
+    hold_band = next(line.strip() for line in source.splitlines() if line.startswith("#define SUVID_HOLD_BAND_C"))
     code = HARNESS.replace("@HEAT_DELTA@", heat).replace("@REACH_TIMEOUT@", reach_timeout)
     code = code.replace("@STOP_RETRY@", stop_retry)
+    code = code.replace("@HOLD_BAND@", hold_band)
     code = code.replace("@HOLD_STATE@", definition(source, "struct SuvidHoldState") + "\nstatic SuvidHoldState suvidHold;")
     code = code.replace("@DEVIATION_STATE@", definition(source, "struct SuvidDeviationState") + "\nstatic SuvidDeviationState suvidDeviation;")
-    code = code.replace("@BODY@", snippet)
+    code = code.replace("@CHECK_ALARM_BODY@", snippet)
+    code = code.replace("@SUVID_TICK_BODY@", tick_body)
     with tempfile.TemporaryDirectory(prefix="samovar-suvid-s1-s3-") as temp:
         temp_path = Path(temp)
 

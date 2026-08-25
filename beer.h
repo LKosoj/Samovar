@@ -128,6 +128,15 @@ inline ActuatorCommandResult beer_set_cooling_outputs(bool active) {
 // локальную extern-декларацию (logic.h подключается в Samovar.ino раньше beer.h).
 uint8_t beerSkipConfirmProgramNum = 0xFF;    // строка, для которой ждём подтверждения (0xFF = нет ожидания)
 unsigned long beerSkipConfirmDeadlineMs = 0; // окно подтверждения истекает после этого millis()
+// [Ревью 24.08, дефект 2] true, если последний beer_finish() не смог сразу
+// отработать из-за ACTUATOR_COMMAND_PENDING (занят лок). run_beer_program()
+// при активной строке 'L' сам получает повторный тик по кнопке "далее", а вот
+// beer_finish() извне (SAMOVAR_POWER/SAMOVAR_POWER_OFF, кнопка "стоп") зовётся
+// ОДИН раз - без этого флага PENDING тут молча терял бы сигнал завершения
+// варки насовсем (startval/SamovarStatusInt не меняются, значит beer_proc()/
+// beer_stage_tick() продолжат вести варку как ни в чём не бывало). Флаг гасится
+// каждым входом в beer_finish() и взводится заново, если снова получили PENDING.
+bool beerFinishPending = false;
 
 inline ActuatorCommandResult beer_safe_lua_outputs() {
   setHeaterPosition(false);
@@ -158,6 +167,27 @@ static inline void resetBoilingDetector() {
     boilingDetector.isBoiling = false;
     boilingDetector.lastUpdateTime = 0;
     for (int i = 0; i < TEMP_HISTORY_SIZE; i++) boilingDetector.tempHistory[i] = 0;
+}
+
+// [Решение владельца 25.08] Полный сброс СОСТОЯНИЯ варки: ни приводов, ни локов,
+// ни I2C - только поля. Вынесен из хвоста beer_finish() потому, что у того есть
+// ранние выходы (job Lua подтверждает остановку лишь на следующем тике, лок занят,
+// исполнитель не отключился), после которых хвост не выполнялся вовсе. Эту же
+// функцию зовёт reset_process_state() (sensorinit.h), поэтому после сброса процесса
+// состояние варки всегда такое же, как после штатного завершения. Без этого ручная
+// пауза beerManualPause переживала бы сброс, и следующая варка сразу вставала бы на
+// гейте строк M/P/B/C/F (beer_stage_tick), а накопители простоя/разгона и детектор
+// кипения приходили бы в новую сессию с чужими значениями.
+inline void beer_reset_stage_state() {
+  beerFinishPending = false;
+  beer_reset_lua_stage();
+  resetBoilingDetector();
+  beerBoilActiveAccumMs = 0;
+  beerManualPause = false;
+  beerStageIdleAccumMs = 0;
+  beerStageIdleSinceMs = 0;
+  beerMixerPauseSinceMs = 0;
+  beerSkipConfirmProgramNum = 0xFF;
 }
 
 /**
@@ -294,6 +324,18 @@ inline bool beer_validate_program(String& errorMessage) {
 void beer_proc() {
   if (SamovarStatusInt != SAMOVAR_STATUS_BEER) return;
 
+  // [Ревью 24.08, дефект 2] Если активная строка 'L' держит startval на
+  // SAMOVAR_STARTVAL_BEER_START (run_beer_program() не successfully добежал до
+  // бампа startval, пока job активен), а beer_finish() перед этим упёрся в
+  // PENDING - обычная ветка ниже (условие startval==BEER_START && !PowerOn)
+  // не сработает, т.к. PowerOn ещё true. Без этого ретрая тут не было бы вообще
+  // ни одного места, которое повторит зависший finish.
+  if (beerFinishPending) {
+    beer_finish();
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    return;
+  }
+
   if (startval == SAMOVAR_STARTVAL_BEER_START && !PowerOn) {
     String programError;
     if (!beer_validate_program(programError)) {
@@ -388,7 +430,22 @@ void run_beer_program(uint8_t num) {
     }
 #ifdef USE_LUA
     if (beerLuaStage.phase != BEER_LUA_STAGE_EXIT_QUEUED) {
-      if (!request_beer_lua_stop(beerLuaStage.ticket)) {
+      const ActuatorCommandResult stopResult = request_beer_lua_stop(beerLuaStage.ticket);
+      // [Дефект 2] PENDING - RUNTIME_STATE занят на короткий миг, не ошибка.
+      // Тикет и фаза (RUNNING/ENTER_QUEUED) не трогаются - job продолжает
+      // числиться активным с валидным тикетом, следующий тик run_beer_program
+      // (по кнопке "далее" или по автопереходу) повторит запрос сам. Пользователя
+      // предупреждаем без ALARM_MSG: это не авария, а "нажмите ещё раз через миг" -
+      // WARNING_MSG уже используется в этом файле для той же семантики (см. выше
+      // подтверждение пропуска охлаждения). Спама нет: PENDING сюда попадает только
+      // из явного нажатия "далее"/автоперехода, тик beer_stage_tick() для активной
+      // строки 'L' request_beer_lua_stop() повторно не зовёт (см. ветку ниже по
+      // phase == RUNNING - там опрашивается только beer_lua_job_result()).
+      if (stopResult == ACTUATOR_COMMAND_PENDING) {
+        SendMsg("Не удалось сразу остановить job Lua - блокировка занята. Повторите переход через секунду.", WARNING_MSG);
+        return;
+      }
+      if (stopResult != ACTUATOR_COMMAND_APPLIED) {
         beer_abort_config_error("Ошибка Lua: не удалось запросить остановку job");
         return;
       }
@@ -488,6 +545,11 @@ void run_beer_program(uint8_t num) {
  * @brief Завершает процесс затирания: выключает насос, нагрев, клапаны, сбрасывает состояния.
  */
 void beer_finish() {
+  // [Ревью 24.08, дефект 2] Гасим флаг оптимистично на каждый вход - если этот
+  // вызов снова упрётся в PENDING ниже, взведём заново. Если полностью пройдёт
+  // (в т.ч. когда beerLuaStage.phase уже IDLE и блок ниже не выполняется вовсе),
+  // флаг корректно останется снятым.
+  beerFinishPending = false;
   if (beerLuaStage.phase != BEER_LUA_STAGE_IDLE) {
     if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
       SendMsg("Ошибка завершения варки: не удалось отключить исполнитель", ALARM_MSG);
@@ -495,7 +557,21 @@ void beer_finish() {
     }
 #ifdef USE_LUA
     if (beerLuaStage.phase != BEER_LUA_STAGE_EXIT_QUEUED) {
-      if (!request_beer_lua_stop(beerLuaStage.ticket)) {
+      const ActuatorCommandResult stopResult = request_beer_lua_stop(beerLuaStage.ticket);
+      // [Дефект 2] PENDING - лок занят на короткий миг, не настоящая ошибка;
+      // тикет/фаза не трогаются. В отличие от run_beer_program() у beer_finish()
+      // может не быть НИКАКОГО внешнего повторного триггера (SAMOVAR_POWER/
+      // SAMOVAR_POWER_OFF и кнопка "стоп" зовут его РОВНО один раз через реестр
+      // режимов) - без beerFinishPending сигнал завершения варки терялся бы
+      // насовсем: startval/SamovarStatusInt не поменяются, и beer_proc()/
+      // beer_stage_tick() продолжат вести варку как ни в чём не бывало. Поэтому
+      // здесь не просто "return", а взвод флага - его подхватят beer_proc()/
+      // beer_stage_tick() на следующем же тике и повторят вызов сами.
+      if (stopResult == ACTUATOR_COMMAND_PENDING) {
+        beerFinishPending = true;
+        return;
+      }
+      if (stopResult != ACTUATOR_COMMAND_APPLIED) {
         SendMsg("Ошибка Lua: не удалось запросить остановку job", ALARM_MSG);
         return;
       }
@@ -513,21 +589,15 @@ void beer_finish() {
     SendMsg("Ошибка завершения варки: не удалось отключить исполнитель", ALARM_MSG);
     return;
   }
-  // Сброс детектора кипения при завершении процесса
-  resetBoilingDetector();
-  // [П13] Накопитель таймаута разгона до кипения не переживает завершение процесса.
-  beerBoilActiveAccumMs = 0;
-  heater_state = false;
-  // [P2 п.5+6] Ручная пауза и накопитель простоя строки не переживают завершение процесса.
-  beerManualPause = false;
-  beerStageIdleAccumMs = 0;
-  beerStageIdleSinceMs = 0;
-  // [Дефект 2 code review] Останов возможен ПРЯМО во время ручной паузы -
-  // не оставляем метку начала простоя мешалки протухать до следующей варки.
-  beerMixerPauseSinceMs = 0;
-  // [P2 п.9] Ожидание подтверждения пропуска охлаждения не переживает завершение процесса;
-  // begintime=0 также защищает от протухшего значения при новом запуске.
-  beerSkipConfirmProgramNum = 0xFF;
+  // Детектор кипения, накопитель таймаута разгона [П13], ручная пауза и накопители
+  // простоя строки [P2 п.5+6], метка простоя мешалки и ожидание подтверждения
+  // пропуска охлаждения [P2 п.9] не переживают завершение процесса. Все они
+  // сбрасываются одной beer_reset_stage_state(), которую зовёт и reset_process_state()
+  // (sensorinit.h) - чтобы сброс процесса приводил варку в то же состояние, даже
+  // когда сюда не дошли из-за раннего выхода выше.
+  beer_reset_stage_state();
+  set_heater_state_flag(false);
+  // begintime=0 защищает от протухшего значения при новом запуске.
   begintime = 0;
   ProgramNum = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
@@ -553,6 +623,19 @@ void beer_abort_config_error(const String& reason) {
 inline void beer_check_cooling_limits() {
   if (current_program_type() != 'C' && current_program_type() != 'F') return;
   mode_request_overheat_emergency_if_needed();
+}
+
+/**
+ * @brief Верхний предел температуры сусла в кубе - надзор на ВСЕХ типах строк
+ *        (M/P/B/L/A/C/F), в отличие от beer_check_cooling_limits(), которая
+ *        покрывает только 'C'/'F'. Порог совпадает с уставкой нагрева на
+ *        кипячении (см. set_heater_state(BOILING_TEMP + 5, temp) выше).
+ */
+inline void beer_check_wort_overheat_limit() {
+  if (!PowerOn) return;
+  if (sensor_temp_at_least(TankSensor, BOILING_TEMP + 5)) {
+    request_emergency_stop("Аварийное отключение! Превышена максимальная температура сусла");
+  }
 }
 
 /**
@@ -613,6 +696,15 @@ void beer_stage_tick() {
   const unsigned long nowMs = millis();
   if (nowMs - lastBeerTickMs < 1000) return;
   lastBeerTickMs = nowMs;
+
+  // [Ревью 24.08, дефект 2] Зависший beer_finish() (PENDING) повторяем ДО гейтов
+  // heater_safety_latched()/startval ниже - незавершённый останов по кнопке
+  // "стоп" не должен зависеть от того, латчит ли в этот момент защёлка нагрева
+  // или на какой строке программы застряли.
+  if (beerFinishPending) {
+    beer_finish();
+    return;
+  }
 
   if (heater_safety_latched()) return;
   if (startval <= SAMOVAR_STARTVAL_BEER_START) return;
@@ -685,7 +777,10 @@ void beer_stage_tick() {
       return;
     }
     const LuaBeerJobResult result = beer_lua_job_result(beerLuaStage.ticket);
-    if (result == LUA_BEER_JOB_QUEUED || result == LUA_BEER_JOB_RUNNING) {
+    // [Дефект 2] LOCK_BUSY - RUNTIME_STATE занят на короткий миг, не провал
+    // job'а: опрашиваем результат снова на следующем тике, как QUEUED/RUNNING.
+    if (result == LUA_BEER_JOB_LOCK_BUSY || result == LUA_BEER_JOB_QUEUED ||
+        result == LUA_BEER_JOB_RUNNING) {
       if (beer_safe_lua_outputs() == ACTUATOR_COMMAND_FAILED) {
         beer_abort_config_error("Ошибка Lua: не удалось выключить мешалку перед подтверждением job");
       }
@@ -695,7 +790,9 @@ void beer_stage_tick() {
       beerLuaStage.phase = BEER_LUA_STAGE_RUNNING;
       return;
     }
-    beer_abort_config_error("Ошибка Lua: job завершился без подтверждённого запуска");
+    beer_abort_config_error(result == LUA_BEER_JOB_FAILED_INIT
+        ? "Ошибка Lua: job не подтвердил запуск"
+        : "Ошибка Lua: job завершился с ошибкой");
 #else
     beer_abort_config_error("Ошибка программы: тип L требует USE_LUA");
 #endif
@@ -840,7 +937,7 @@ void beer_stage_tick() {
       set_heater_state(BOILING_TEMP + 5, temp);
     } else {
       //Иначе поддерживаем температуру
-      heater_state = true;
+      set_heater_state_flag(true);
 #ifdef SAMOVAR_USE_POWER
       //Устанавливаем заданное напряжение
       set_current_power(SamSetup.BVolt);
@@ -1056,7 +1153,7 @@ void set_heater_state(float setpoint, float temp) {
 #endif
 
   if (setpoint - temp > HEAT_DELTA && !tuning) {
-    heater_state = true;
+    set_heater_state_flag(true);
 #ifdef SAMOVAR_USE_POWER
     vTaskDelay(5 / portTICK_PERIOD_MS);
     set_current_power(SamSetup.BVolt);
@@ -1107,10 +1204,10 @@ inline void set_heater_regulator(double dutyCycle) {
   float regulatorTarget = SamSetup.StbVoltage * sqrtf((float)dutyCycle);
 #endif
 
-  heater_state = true;
+  set_heater_state_flag(true);
   set_current_power(regulatorTarget);
   if (current_power_mode_is(POWER_SLEEP_MODE)) {
-    heater_state = false;
+    set_heater_state_flag(false);
     return;
   }
   check_power_error();
@@ -1145,12 +1242,19 @@ void set_heater(double dutyCycle) {
   }
 }
 
+// Единственная точка записи heater_state. Актуацией не занимается: реле/регулятором
+// управляют вызывающие (setHeaterPosition/set_heater_regulator/прямой set_current_power)
+// по разным путям (StbVoltage/BVolt/скважность ПИД).
+void set_heater_state_flag(bool state) {
+  heater_state = state;
+}
+
 /**
  * @brief Включает или выключает нагреватель (реле).
  * @param state true — включить, false — выключить
  */
 void setHeaterPosition(bool state) {
-  heater_state = state;
+  set_heater_state_flag(state);
 
   if (state) {
 #ifdef SAMOVAR_USE_POWER
@@ -1186,14 +1290,6 @@ String get_beer_program() {
 }
 
 /**
- * @brief Устанавливает программу затирания из строки.
- * @param WProgram Строка с описанием программы
- */
-ProgramParseResult set_beer_program(const String& WProgram) {
-  return program_parse_lines(WProgram, beer_program_parse_spec());
-}
-
-/**
  * @brief Запускает автотюнинг ПИД-регулятора.
  */
 void StartAutoTune() {
@@ -1226,7 +1322,11 @@ void FinishAutoTune() {
 
   const PersistResult persistResult = save_profile_nvs(profileCandidate);
   if (persistResult == PERSIST_OK) {
+    // [T29] см. configMux в Samovar.ino - без спинлока async_tcp мог бы
+    // прочитать SamSetup наполовину скопированной.
+    portENTER_CRITICAL(&configMux);
     SamSetup = profileCandidate;
+    portEXIT_CRITICAL(&configMux);
     WriteConsoleLog("Kp = " + (String)SamSetup.Kp);
     WriteConsoleLog("Ki = " + (String)SamSetup.Ki);
     WriteConsoleLog("Kd = " + (String)SamSetup.Kd);

@@ -239,6 +239,16 @@ BROWSER_TEST = r'''async page => {
   }
 
   async function prepareSetup() {
+    // Предыдущий вызов prepareSetup() мог намеренно оставить форму "грязной"
+    // (провалившееся сохранение сценария setup/failed/400/409/503 нарочно не
+    // сбрасывает dataset.dirty - это и есть проверяемое поведение). Если не
+    // снять флаг перед уходом со страницы, здесь же и сработает нативный
+    // beforeunload-диалог (WP23 в setup.htm) - playwright-cli не умеет его
+    // обработать внутри одного run-code и зависает на незакрытом диалоге.
+    await page.evaluate(() => {
+      const existingForm = document.getElementById("setupform");
+      if (existingForm) existingForm.dataset.dirty = "false";
+    });
     await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
     await page.evaluate(() => {
       const form = document.getElementById("setupform");
@@ -543,8 +553,29 @@ def run_cli(cli, session, arguments, cwd, timeout, check=True):
   )
   if result.stdout:
     print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-  if check and (result.returncode != 0 or "### Error" in result.stdout):
-    raise RuntimeError(f"playwright-cli {' '.join(arguments[:1])} failed")
+  if check:
+    command = arguments[0] if arguments else ""
+
+    def has_marker(marker):
+      # Настоящие заголовки playwright-cli ("### Error"/"### Modal state"/
+      # "### Result") печатаются ТОЛЬКО в начале строки. Тот же текст может
+      # случайно оказаться внутри блока "### Ran Playwright code" - туда CLI
+      # эхом печатает наш же исполненный JS, включая комментарии. Проверка
+      # substring без привязки к началу строки однажды поймала свой же
+      # комментарий как признак заблокировавшего скрипт диалога.
+      return result.stdout.startswith(marker) or ("\n" + marker) in result.stdout
+
+    if result.returncode != 0:
+      raise RuntimeError(f"playwright-cli {command} failed (exit {result.returncode})")
+    if has_marker("### Error"):
+      raise RuntimeError(f"playwright-cli {command} failed: '### Error' marker in output")
+    if has_marker("### Modal state"):
+      raise RuntimeError(
+        f"playwright-cli {command} failed: '### Modal state' marker in output "
+        "(a dialog blocked the script and was never handled)"
+      )
+    if command == "run-code" and not has_marker("### Result"):
+      raise RuntimeError(f"playwright-cli {command} failed: '### Result' marker missing from output")
   return result.returncode
 
 

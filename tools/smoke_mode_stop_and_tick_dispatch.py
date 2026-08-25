@@ -22,6 +22,17 @@ switch(ops->mode), перечислявших режимы заново, пер�
      ведут себя по контракту в харнессах на g++ с мокнутыми зависимостями;
   d) мутации тел обеих функций обязаны валить содержательные assert'ы харнесса,
      а не компиляцию.
+
+[T40 А3] mode_dispatch_loop() дополнительно переведён с mode_ops_by_status()
+(строка реестра по SamovarStatusInt - второй, независимый от mode_dispatch_alarm()
+источник выбора режима) на mode_ops_current() (по Samovar_Mode - тот же источник,
+что и у alarm) + mode_status_belongs(ops, status) (принадлежит ли статус диапазону
+ЭТОГО режима). Если не принадлежит, но статус активен для какого-то ДРУГОГО режима
+(mode_status_session_active) - это рассогласование, и харнесс ниже (сценарии 5-7)
+отдельно проверяет, что WARNING_MSG уходит РОВНО один раз на устойчивое
+рассогласование (не на каждый такт) и сбрасывается/шлётся заново после разрешения -
+мутация (г) ниже нарочно снимает именно guard "уже предупредили", чтобы поймать
+регресс "предупреждение шлётся на каждом такте".
 """
 import re
 import subprocess
@@ -33,7 +44,7 @@ from smoke_helpers import extract_function_body, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "mode_registry.h"
-WEBSERVER_PATH = ROOT / "WebServer.ino"
+WEBSERVER_PATH = ROOT / "mode_switch.h"
 
 TICK_SIGNATURE = "inline void mode_dispatch_loop()"
 STOP_SIGNATURE = "void stop_active_process_for_mode()"
@@ -106,11 +117,29 @@ struct ModeOps {
   ModeVoidFn tick;
 };
 
+enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1 };
+
 static bool switchInProgress = false;
 bool mode_switch_in_progress() { return switchInProgress; }
 
-static const ModeOps* statusOps = nullptr;
-const ModeOps* mode_ops_by_status(int) { return statusOps; }
+// mode_ops_current()/mode_status_belongs()/mode_status_session_active() -
+// заменили mode_ops_by_status() (единственная зависимость старого
+// mode_dispatch_loop()) после [T40 А3]: реальные тела этих трёх функций
+// проверяются ОТДЕЛЬНЫМИ тестами (smoke_mode_registry_session_guard.py и
+// косвенно smoke_mode_command_table_single_source.py/smoke_mode_registry_*),
+// здесь они мокнуты управляемыми возвратами - как statusOps/mode_ops_by_status
+// мокался раньше.
+static const ModeOps* currentOps = nullptr;
+const ModeOps* mode_ops_current() { return currentOps; }
+
+static bool statusBelongsReturn = false;
+bool mode_status_belongs(const ModeOps*, int) { return statusBelongsReturn; }
+
+static bool statusSessionActiveReturn = false;
+bool mode_status_session_active(int) { return statusSessionActiveReturn; }
+
+static int sendMsgCalls = 0;
+void SendMsg(const char*, MESSAGE_TYPE) { sendMsgCalls++; }
 
 int SamovarStatusInt = 0;
 
@@ -132,34 +161,89 @@ static void check(bool condition, const char* message) {
   }
 }
 
-int main() {
-  // 1. mode_switch_in_progress() == true -> tick не вызывается вообще.
-  switchInProgress = true;
-  statusOps = &rowWithTick;
+static void reset_fixture() {
+  switchInProgress = false;
+  currentOps = nullptr;
+  statusBelongsReturn = false;
+  statusSessionActiveReturn = false;
+  sendMsgCalls = 0;
   tickCalls = 0;
+  SamovarStatusInt = 0;
+}
+
+int main() {
+  // 1. mode_switch_in_progress() == true -> ничего не вызывается вообще
+  //    (ни tick, ни предупреждение), даже если формально было бы рассогласование.
+  reset_fixture();
+  switchInProgress = true;
+  currentOps = &rowWithTick;
+  statusBelongsReturn = false;
+  statusSessionActiveReturn = true;
   mode_dispatch_loop();
   check(tickCalls == 0, "1: смена режима в процессе - tick не должен вызываться");
+  check(sendMsgCalls == 0, "1: смена режима в процессе - SendMsg не должен вызываться");
 
-  // 2. ops == nullptr -> без падения, ничего не вызывается.
-  switchInProgress = false;
-  statusOps = nullptr;
-  tickCalls = 0;
+  // 2. ops == nullptr (mode_ops_current не нашёл строку), статус ни для кого не
+  //    активен -> тишина, это не рассогласование.
+  reset_fixture();
+  currentOps = nullptr;
   mode_dispatch_loop();
-  check(tickCalls == 0, "2: неизвестный статус - tick не должен вызываться");
+  check(tickCalls == 0, "2: неизвестный режим, статус неактивен - tick не должен вызываться");
+  check(sendMsgCalls == 0, "2: неизвестный режим, статус неактивен - предупреждения быть не должно");
 
-  // 3. ops->tick == nullptr (эмуляция SUVID/LUA) -> ничего не вызывается.
-  switchInProgress = false;
-  statusOps = &rowWithoutTick;
-  tickCalls = 0;
+  // 3. Статус принадлежит режиму, но ops->tick == nullptr (эмуляция SUVID/LUA) ->
+  //    тишина, tick не вызывается, предупреждения нет.
+  reset_fixture();
+  currentOps = &rowWithoutTick;
+  statusBelongsReturn = true;
   mode_dispatch_loop();
   check(tickCalls == 0, "3: режим без tick в реестре - ничего не должно вызываться");
+  check(sendMsgCalls == 0, "3: статус принадлежит режиму - предупреждения нет");
 
-  // 4. Обычный случай -> tick вызывается ровно один раз.
-  switchInProgress = false;
-  statusOps = &rowWithTick;
-  tickCalls = 0;
+  // 4. Обычный случай -> tick вызывается ровно один раз, предупреждения нет.
+  reset_fixture();
+  currentOps = &rowWithTick;
+  statusBelongsReturn = true;
   mode_dispatch_loop();
   check(tickCalls == 1, "4: обычный случай - tick должен быть вызван ровно один раз");
+  check(sendMsgCalls == 0, "4: обычный случай - предупреждения нет");
+
+  // 5. Простой (idle): статус не принадлежит текущему режиму, но и ни для кого
+  //    не активен -> тишина без предупреждения (простой - не рассогласование).
+  reset_fixture();
+  currentOps = &rowWithTick;
+  statusBelongsReturn = false;
+  statusSessionActiveReturn = false;
+  mode_dispatch_loop();
+  check(tickCalls == 0, "5: простой - tick не вызывается");
+  check(sendMsgCalls == 0, "5: простой (не рассогласование) - предупреждения быть не должно");
+
+  // 6. Рассогласование (статус активен, но для другого режима) -> предупреждение
+  //    ОДИН раз, даже если тикнуть несколько тактов подряд без изменений (иначе
+  //    WARNING_MSG в цикле забьёт очередь и вытеснит настоящие аварии).
+  reset_fixture();
+  currentOps = &rowWithTick;
+  statusBelongsReturn = false;
+  statusSessionActiveReturn = true;
+  mode_dispatch_loop();
+  check(sendMsgCalls == 1, "6a: рассогласование - предупреждение должно быть отправлено");
+  mode_dispatch_loop();
+  mode_dispatch_loop();
+  check(sendMsgCalls == 1,
+        "6b: повторные такты с тем же рассогласованием НЕ должны слать предупреждение снова");
+  check(tickCalls == 0, "6c: во время рассогласования тик не идёт ни разу");
+
+  // 7. После разрешения (статус снова принадлежит режиму) флаг однократности
+  //    сбрасывается - следующее НОВОЕ рассогласование обязано предупредить снова
+  //    (приём "один раз, сброс когда разрешилось" - как noDZ_message_sent в nbk.h
+  //    / pressure_alarm_sent в Samovar.ino).
+  statusBelongsReturn = true;
+  mode_dispatch_loop();
+  check(tickCalls == 1, "7a: рассогласование разрешилось - тик пошёл");
+  statusBelongsReturn = false;
+  statusSessionActiveReturn = true;
+  mode_dispatch_loop();
+  check(sendMsgCalls == 2, "7b: новое рассогласование после разрешения предыдущего должно предупредить снова");
 
   if (failures) return 1;
   std::cout << "mode dispatch loop smoke checks passed\n";
@@ -325,8 +409,15 @@ TICK_MUTATIONS = {
         "if (mode_switch_in_progress()) return;",
         "if (!mode_switch_in_progress()) return;",
     ),
-    "снят guard ops->tick == nullptr (для SUVID/LUA вызов пойдёт через nullptr)": (
-        " || ops->tick == nullptr", ""
+    "снят guard ops->tick != nullptr (для SUVID/LUA вызов пойдёт через nullptr)": (
+        "if (ops->tick != nullptr) ops->tick();", "ops->tick();",
+    ),
+    "снят сброс dispatchMismatchWarned при разрешении рассогласования (после resolve флаг не сбрасывается - новое рассогласование не предупредит)": (
+        "\n    dispatchMismatchWarned = false;\n    if (ops->tick",
+        "\n    if (ops->tick",
+    ),
+    "не взводится dispatchMismatchWarned после отправки (предупреждение будет слаться на КАЖДОМ такте, пока держится рассогласование)": (
+        "dispatchMismatchWarned = true;", "",
     ),
 }
 

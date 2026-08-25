@@ -196,9 +196,7 @@ static OperationError queue_profile_operation(
   active_profile_operation.targetMode = static_cast<uint8_t>(targetMode);
   active_profile_operation.programAction = programAction;
   if (modeChange) {
-    portENTER_CRITICAL(&emergencyStopMux);
-    mode_switch_barrier_active = true;
-    portEXIT_CRITICAL(&emergencyStopMux);
+    mode_switch_begin();
   }
   profile_operation_phase_store(PROFILE_OPERATION_QUEUED);
   operationId = reservedId;
@@ -746,7 +744,7 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
           request, 503, "application/json", build_error_envelope(code, nullptr, code));
       return;
     }
-    send_no_store_response(request, 200, "text/plain", "OK");
+    send_operation_accepted(request, operationId);
     return;
   }
   if (stopCount != 0 || speedCount != 1 || volumeCount != 1 || request->params() != 2) {
@@ -794,7 +792,7 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
         request, 503, "application/json", build_error_envelope(code, nullptr, code));
     return;
   }
-  send_no_store_response(request, 200, "text/plain", "OK");
+  send_operation_accepted(request, operationId);
 }
 
 static void handle_column_params_request(AsyncWebServerRequest *request) {
@@ -844,25 +842,6 @@ static void handle_column_params_request(AsyncWebServerRequest *request) {
 // filter out specific headers from the incoming request
 AsyncHeaderFilterMiddleware headerFilter;
 
-void change_samovar_mode() {
-  if (!is_valid_samovar_mode(Samovar_Mode)) {
-    Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
-  }
-  Samovar_CR_Mode = Samovar_Mode;
-  // [WP7 п.5] Раньше SamSetup.Mode подтягивался К Samovar_Mode при КАЖДОЙ отдаче страницы
-  // (send_index_page/send_mode_specific_htm) - записью Samovar_Mode прямо из веб-задачи
-  // (async_tcp, другое ядро, произвольный момент, в т.ч. при активном процессе). Но
-  // mode_dispatch_alarm() (SysTicker) выбирает набор аварийных проверок по Samovar_Mode, а
-  // mode_dispatch_loop() - по SamovarStatusInt; открытие "не той" страницы во время работы
-  // молча переключало часть аварийного надзора на чужой режим. Направление синхронизации
-  // развёрнуто: change_samovar_mode() уже вызывается ровно в момент старта режима
-  // (mode_registry.h::mode_apply_power_on_command) и при загрузке (Samovar.ino) - здесь
-  // Samovar_Mode достоверен, и SamSetup.Mode подтягивается К НЕМУ, а не наоборот. Веб-
-  // обработчики страниц больше НЕ пишут Samovar_Mode вообще (см. send_index_page/
-  // send_mode_specific_htm ниже).
-  SamSetup.Mode = (int)Samovar_Mode;
-}
-
 const char* get_index_page_path() {
   return mode_page_path(Samovar_Mode);
 }
@@ -874,7 +853,10 @@ void send_index_template_response(AsyncWebServerRequest *request, const char *sp
     return;
   }
   String luaButtonList;
-  if (!copy_lua_button_list_cache(luaButtonList)) {
+  // chart.htm - страница наблюдения, кнопок Lua не выводит (нет %btn_list% и #lua_btn в
+  // разметке) - не берём мьютекс runtime_state и не копируем список впустую.
+  bool pageUsesLuaButtons = strcmp(spiffsPath, "/chart.htm") != 0;
+  if (pageUsesLuaButtons && !copy_lua_button_list_cache(luaButtonList)) {
     request->send(503, "text/plain", "Runtime state busy");
     return;
   }
@@ -887,8 +869,8 @@ void send_index_template_response(AsyncWebServerRequest *request, const char *sp
 
 void send_index_page(AsyncWebServerRequest *request) {
   // [WP7 п.5] Раньше здесь Samovar_Mode принудительно перезаписывался значением
-  // SamSetup.Mode на каждой отдаче страницы - см. change_samovar_mode() выше про причину
-  // удаления и куда перенесена синхронизация. Живой Samovar_Mode уже корректен без этой
+  // SamSetup.Mode на каждой отдаче страницы - см. change_samovar_mode() (mode_switch.h)
+  // про причину удаления и куда перенесена синхронизация. Живой Samovar_Mode уже корректен без этой
   // записи: страница просто показывает текущий активный режим как есть.
   send_index_template_response(request, get_index_page_path(), "no-cache, no-store, must-revalidate");
 }
@@ -1056,6 +1038,9 @@ void WebServerInit(void) {
           build_error_envelope("BAD_REQUEST", nullptr, "BAD_REQUEST"));
       return;
     }
+    // Имя файла (param->value()) намеренно не ограничивается по составу/расширению -
+    // осознанный выбор владельца. Соответствующая честная оговорка про readString() -
+    // у get_lua_script() (lua.h).
     if (!queue_pending_string(pending_lua_file_flag, pending_lua_file, param->value())) {
       send_no_store_response(
           request, 503, "application/json",
@@ -1471,6 +1456,11 @@ String setupKeyProcessor(const String &var) {
     return String(SamSetup.ColDiam, 1);
   } else if (var == "ColHeight") {
     return String(SamSetup.ColHeight, 2);
+  } else if (var == "BKPowerFloor") {
+    // [T16] Рабочий порог регулятора (power_work_mode_threshold()): значение
+    // BKPower ниже него уводит регулятор в спящий режим после закипания.
+    // Отдаём порог странице setup.htm для клиентской проверки (setupNumericSchema).
+    return String(power_work_mode_threshold(), 2);
   } else if (var == "I2CStepperTab") {
     // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
     return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
@@ -1518,24 +1508,6 @@ bool is_valid_samovar_mode(long mode) {
   return mode >= SAMOVAR_RECTIFICATION_MODE && mode <= SAMOVAR_LUA_MODE;
 }
 
-static SafetyModeSwitchState modeSwitchState = {SAFETY_MODE_SWITCH_IDLE, 0, false};
-
-struct ModeActuatorCleanupState {
-  bool initialized;
-  bool mixerStopped;
-  bool pumpStopped;
-  uint32_t deadline;
-};
-
-static ModeActuatorCleanupState modeActuatorCleanup = {};
-
-bool mode_switch_in_progress() {
-  portENTER_CRITICAL(&emergencyStopMux);
-  const bool active = mode_switch_barrier_active;
-  portEXIT_CRITICAL(&emergencyStopMux);
-  return active;
-}
-
 static bool pending_mode_control_commands_locked() {
   bool pending = pending_rescan_ds_flag || pending_stop_self_test_flag ||
                  pending_mixer_flag || pending_water_temp_flag ||
@@ -1562,7 +1534,11 @@ static bool discard_pending_mode_control_commands(bool& cancelled) {
   pending_water_temp_flag = false;
   pending_pump_speed_flag = false;
   pending_nbkopt_flag = false;
-  if (!cancel_queued_i2c_operations_locked(cancelled)) return false;
+  // Очистка идёт ДО КОНЦА даже при отказе I2C-ветки: ранний return оставлял
+  // pnbk/voltage/lua-флаги взведёнными, а смена режима всё равно могла завершиться
+  // по дедлайну (force_complete_mode_switch_failed) - команда старого режима
+  // применялась уже в новом. Результат I2C-ветки возвращается неизменным.
+  const bool i2cDiscarded = cancel_queued_i2c_operations_locked(cancelled);
   pending_pnbk_flag = false;
 #ifdef SAMOVAR_USE_POWER
   pending_voltage_flag = false;
@@ -1575,258 +1551,10 @@ static bool discard_pending_mode_control_commands(bool& cancelled) {
   pending_lua_file = "";
   pending_lua_str = "";
 #endif
-  return true;
+  return i2cDiscarded;
 }
 
-static bool mode_control_queues_idle() {
-  if (!samovar_command_queue_idle(pdMS_TO_TICKS(50))) return false;
-  PendingCommandLockGuard guard;
-  if (!guard) return false;
-  return !pending_mode_control_commands_locked();
-}
-
-static void stop_local_mode_actuators() {
-  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
-  digitalWrite(RELE_CHANNEL3, !SamSetup.rele3);
-  mixer_status = false;
-  valve_status = false;
-#ifdef USE_WATER_PUMP
-  set_pump_pwm(0);
-#endif
-  stopService();
-  stepper_safe_stop_reset();
-  StepperMoving = false;
-  CurrrentStepperSpeed = 0;
-  TargetStepps = 0;
-  I2CStepperSpeed = 0;
-  I2CPumpCmdSpeed = 0;
-  I2CPumpTargetSteps = 0;
-  I2CPumpTargetMl = 0;
-  heater_state = false;
-}
-
-static bool stop_i2c_mode_actuator(I2CStepperDevice& dev, bool finishCalibration) {
-  if (!i2c_stepper_config_begin(dev)) return false;
-  if (!i2c_stepper_refresh(dev, true)) {
-    i2c_stepper_config_end(dev);
-    return false;
-  }
-  bool stopped = true;
-  if (finishCalibration || (dev.status & I2CSTEPPER_STATUS_CALIBRATION)) {
-    stopped = i2c_stepper_send_command(dev, I2CSTEP_CMD_CALIBRATE_FINISH);
-  }
-  if (stopped) stopped = i2c_stepper_stop(dev);
-  if (stopped && (dev.caps & I2CSTEPPER_CAP_RELAY) && dev.relayMask != 0) {
-    dev.relayMask = 0;
-    stopped = i2c_stepper_write_config(dev) &&
-              i2c_stepper_send_command(dev, I2CSTEP_CMD_RELAY);
-  }
-  if (stopped) {
-    stopped = i2c_stepper_refresh(dev, true) &&
-              (dev.status & (I2CSTEPPER_STATUS_RUNNING | I2CSTEPPER_STATUS_CALIBRATION)) == 0 &&
-              dev.currentSpeed == 0 &&
-              (!(dev.caps & I2CSTEPPER_CAP_RELAY) || dev.relayMask == 0);
-  }
-  i2c_stepper_config_end(dev);
-  return stopped;
-}
-
-static bool mode_actuators_idle() {
-  bool idle = !valve_status && !mixer_status && !heater_state &&
-              !stepper_safe_get_state() && stepper_safe_get_target() == 0 &&
-              CurrrentStepperSpeed == 0 && I2CStepperSpeed == 0 &&
-              I2CPumpCmdSpeed == 0 && I2CPumpTargetSteps == 0 &&
-              I2CPumpTargetMl == 0 && !I2CPumpCalibrating;
-#ifdef USE_WATER_PUMP
-  idle = idle && !pump_started && water_pump_speed == 0;
-#endif
-  return idle && modeActuatorCleanup.mixerStopped &&
-         modeActuatorCleanup.pumpStopped;
-}
-
-static bool tick_mode_actuator_cleanup(bool luaIdle) {
-  stop_local_mode_actuators();
-  if (!modeActuatorCleanup.initialized) {
-    modeActuatorCleanup.initialized = true;
-    modeActuatorCleanup.mixerStopped = !(i2cStepperMixer.present || i2c_stepper_cache.mixer_present);
-    modeActuatorCleanup.pumpStopped = !(i2cStepperPump.present || i2c_stepper_cache.pump_present);
-    modeActuatorCleanup.deadline = safety_deadline_after(millis(), 30000);
-    set_capacity(0);
-  }
-  if (!modeActuatorCleanup.mixerStopped) {
-    const bool stopped = stop_i2c_mode_actuator(i2cStepperMixer, false);
-    modeActuatorCleanup.mixerStopped = luaIdle && stopped;
-  }
-  if (!modeActuatorCleanup.pumpStopped) {
-    const bool stopped = stop_i2c_mode_actuator(
-      i2cStepperPump,
-      I2CPumpCalibrating
-    );
-    modeActuatorCleanup.pumpStopped = luaIdle && stopped;
-    if (stopped) I2CPumpCalibrating = false;
-  }
-  if (!luaIdle) return false;
-  return mode_actuators_idle();
-}
-
-void stop_active_process_for_mode() {
-  if (self_test_active()) stop_self_test();
-  const bool ownerActive = heater_power_on() || SamovarStatusInt != SAMOVAR_STATUS_IDLE ||
-                           startval != SAMOVAR_STARTVAL_IDLE || ProgramNum != 0;
-  if (!ownerActive) {
-    SamovarStatusInt = SAMOVAR_STATUS_IDLE;
-    startval = SAMOVAR_STARTVAL_IDLE;
-    ProgramNum = 0;
-    return;
-  }
-
-  // [WP17 п.40] Раньше здесь был switch(Samovar_Mode), заново перечислявший режимы
-  // (имена функций завершения совпадали с .finish в mode_registry.h у DIST/BEER/BK/NBK
-  // случайно - реестр их не читал). Теперь читаем .stopProcess из реестра; у RECT это
-  // отдельная функция (run_program(PROGRAM_END) - не то же самое, что .finish==nullptr,
-  // который используется для команды SAMOVAR_POWER), у SUVID/LUA — nullptr, и они, как и
-  // прежде, идут по общей ветке ниже.
-  const ModeOps* ops = mode_ops_by_mode(Samovar_Mode);
-  if (ops != nullptr && ops->stopProcess != nullptr) {
-    ops->stopProcess();
-    return;
-  }
-  SamovarStatusInt = SAMOVAR_STATUS_IDLE;
-  startval = SAMOVAR_STARTVAL_IDLE;
-  ProgramNum = 0;
-  set_power(false);
-}
-
-// Провал смены режима больше не запирает автомат в терминальной фазе: нагрев
-// принудительно снимается, SafetyModeSwitchState возвращается в IDLE, а барьер
-// mode_switch_barrier_active снимается ровно как на успехе. Строка предупреждения
-// передаётся вызывающей стороной литералом — без промежуточного буфера, чтобы
-// длинное сообщение в UTF-8 не обрезалось молча (см. snprintf-ловушку).
-static ModeSwitchResult force_complete_mode_switch_failed(const char* warning) {
-  portENTER_CRITICAL(&emergencyStopMux);
-  force_heater_output_off_locked(true);
-  safety_mode_switch_complete(modeSwitchState);
-  mode_switch_barrier_active = false;
-  portEXIT_CRITICAL(&emergencyStopMux);
-  notify_power_worker();
-  modeActuatorCleanup = {};
-  SendMsg(warning, WARNING_MSG);
-  return MODE_SWITCH_FAILED;
-}
-
-// switch_samovar_mode вызывается только из process_profile_operation().
-ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
-  portENTER_CRITICAL(&emergencyStopMux);
-  const bool accepted = safety_mode_switch_begin(modeSwitchState, (uint8_t)requestedMode);
-  if (accepted) mode_switch_barrier_active = true;
-  portEXIT_CRITICAL(&emergencyStopMux);
-  if (!accepted) return MODE_SWITCH_PENDING;
-  tick_mode_actuator_cleanup(false);
-
-  if (modeSwitchState.phase == SAFETY_MODE_SWITCH_STOP_REQUESTED) {
-    stop_active_process_for_mode();
-
-    bool stopRequested = true;
-#ifdef USE_LUA
-    stopRequested = request_lua_mode_stop();
-#endif
-    const bool queueWasIdle = samovar_command_queue_idle(pdMS_TO_TICKS(50));
-    const bool queueDiscarded = discard_samovar_commands(pdMS_TO_TICKS(50));
-    bool pendingCancelled = false;
-    const bool pendingDiscarded = discard_pending_mode_control_commands(pendingCancelled);
-    if (!stopRequested || !queueDiscarded || !pendingDiscarded) {
-      if (safety_deadline_expired(millis(), modeActuatorCleanup.deadline)) {
-        return force_complete_mode_switch_failed(
-            !stopRequested
-                ? "Смена режима завершена принудительно: не подтвердился Lua"
-                : "Смена режима завершена принудительно: не подтвердился очередь");
-      }
-      return MODE_SWITCH_PENDING;
-    }
-    if (!queueWasIdle || pendingCancelled) {
-      SendMsg("Отложенные управляющие команды отменены сменой режима", WARNING_MSG);
-    }
-    safety_mode_switch_wait_cleanup(modeSwitchState);
-    return MODE_SWITCH_PENDING;
-  }
-
-  bool luaIdle = true;
-#ifdef USE_LUA
-  luaIdle = lua_mode_owner_idle();
-#endif
-  const bool actuatorsIdle = tick_mode_actuator_cleanup(luaIdle);
-  const bool queuesIdle = mode_control_queues_idle();
-  const bool logClosePending = data_log_close_pending();
-
-  const bool heaterPowerOn = heater_power_on();
-  const bool powerTransitionActive = power_transition_active();
-  const bool nbkTransitionActive = nbk_transition_active();
-  const bool modeHeatingActive = mode_heating_start_active();
-  const bool selfTestActive = self_test_active();
-  const bool ownerIdle = mode_runtime_owner_idle();
-
-  const bool cleanupReady = safety_mode_switch_cleanup_ready(
-        modeSwitchState,
-        heaterPowerOn,
-        powerTransitionActive,
-        nbkTransitionActive,
-        modeHeatingActive,
-        selfTestActive,
-        logClosePending,
-        ownerIdle,
-        actuatorsIdle,
-        luaIdle,
-        queuesIdle
-      );
-
-  if (safety_deadline_expired(millis(), modeActuatorCleanup.deadline) && !cleanupReady) {
-    const char* warning = "Смена режима завершена принудительно: не подтвердилась готовность";
-    if (!modeSwitchState.logCloseRequested || logClosePending) {
-      warning = "Смена режима завершена принудительно: не подтвердился лог";
-    } else if (!luaIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился Lua";
-    } else if (!queuesIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился очередь";
-    } else if (!actuatorsIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился привод";
-    } else if (heaterPowerOn) {
-      warning = "Смена режима завершена принудительно: не подтвердился нагрев";
-    } else if (powerTransitionActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился переход мощности";
-    } else if (nbkTransitionActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился переход НБК";
-    } else if (modeHeatingActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился старт нагрева";
-    } else if (selfTestActive) {
-      warning = "Смена режима завершена принудительно: не подтвердился самотест";
-    } else if (!ownerIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился владелец режима";
-    }
-    return force_complete_mode_switch_failed(warning);
-  }
-
-  if (!modeSwitchState.logCloseRequested) {
-    if (request_data_log_close()) {
-      safety_mode_switch_mark_log_close_requested(modeSwitchState);
-    }
-    return MODE_SWITCH_PENDING;
-  }
-
-  if (!cleanupReady) return MODE_SWITCH_PENDING;
-
-  const OperationError commitError = commit_profile_operation();
-  if (commitError != OPERATION_ERROR_NONE) {
-    active_profile_operation.terminalError = commitError;
-    return force_complete_mode_switch_failed(
-        "Смена режима завершена принудительно: профиль не сохранён");
-  }
-  portENTER_CRITICAL(&emergencyStopMux);
-  safety_mode_switch_complete(modeSwitchState);
-  mode_switch_barrier_active = false;
-  portEXIT_CRITICAL(&emergencyStopMux);
-  modeActuatorCleanup = {};
-  return MODE_SWITCH_SUCCEEDED;
-}
+#include "mode_switch.h"
 
 void update_checkbox_arg(AsyncWebServerRequest *request, const char* name, bool& value, bool fullSetupForm) {
   if (fullSetupForm || request->hasArg(name)) value = request->hasArg(name);
@@ -1859,36 +1587,75 @@ static bool parse_save_long_arg(AsyncWebServerRequest *request, const char *name
   return true;
 }
 
-static bool parse_save_float_arg(AsyncWebServerRequest *request, const char *name, float minValue, float maxValue, float& value) {
-  if (request_param_count(request, name) != 1) {
-    send_save_parse_error(request, name, NUMERIC_PARSE_INVALID_ARGUMENT);
-    return false;
-  }
-  const AsyncWebParameter *param = get_request_param(request, name);
-  NumericParseResult result = param && !param->isFile()
-      ? parse_bounded_float(param->value().c_str(), minValue, maxValue, value)
-      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-  if (!result.ok()) {
-    send_save_parse_error(request, name, result.error);
-    return false;
-  }
-  return true;
-}
-
+// [T35 п.4в] В отличие от parse_save_long_arg (общая, зовётся ещё и вне этих трёх
+// циклов - см. блок stepperstepml), эти три функции apply_save_*_arg
+// используются ТОЛЬКО циклами по kSaveU16Fields/kSaveFloatFields/kSaveU8Fields в
+// handleSave, поэтому не шлют ответ сами: handleSave копит имена всех неверных полей
+// вместо разрыва на первом же (request_param_count(...)!=1 для каждого параметра уже
+// проверен раньше, в самом начале handleSave, - здесь остаётся только разбор значения).
 static bool apply_save_u8_arg(AsyncWebServerRequest *request, const char *name, uint8_t& target, long minValue, long maxValue) {
   if (!request->hasArg(name)) return true;
+  const AsyncWebParameter *param = get_request_param(request, name);
   long value = 0;
-  if (!parse_save_long_arg(request, name, minValue, maxValue, value)) return false;
+  NumericParseResult result = param && !param->isFile()
+      ? parse_bounded_long(param->value().c_str(), minValue, maxValue, value)
+      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+  if (!result.ok()) return false;
   target = (uint8_t)value;
   return true;
 }
 
 static bool apply_save_u16_arg(AsyncWebServerRequest *request, const char *name, uint16_t& target, long minValue, long maxValue) {
   if (!request->hasArg(name)) return true;
+  const AsyncWebParameter *param = get_request_param(request, name);
   long value = 0;
-  if (!parse_save_long_arg(request, name, minValue, maxValue, value)) return false;
+  NumericParseResult result = param && !param->isFile()
+      ? parse_bounded_long(param->value().c_str(), minValue, maxValue, value)
+      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+  if (!result.ok()) return false;
   target = (uint16_t)value;
   return true;
+}
+
+// [T35 п.4в] Копит имена всех полей вне диапазона вместо ответа по первому же -
+// пользователь видит сразу весь список, а не отправляет форму заново на каждый отказ
+// по очереди. Приём - как в sanitize_setup_profile_ranges() (String, копящая имена через
+// запятую), только сразу в виде готовых элементов JSON-массива. Строка растёт в куче,
+// поэтому имена ограничены SAVE_RANGE_ERROR_FIELD_LIMIT; badFieldsCount считает все
+// отказы, даже сверх предела, - клиент не должен решить, что полей меньше, чем есть.
+static const uint8_t SAVE_RANGE_ERROR_FIELD_LIMIT = 8;
+
+static void collect_save_bad_field(
+    const char *name, String& badFieldsJson, String& firstBadField, uint8_t& badFieldsCount) {
+  if (badFieldsCount == 0) firstBadField = name;
+  if (badFieldsCount < SAVE_RANGE_ERROR_FIELD_LIMIT) {
+    if (badFieldsJson.length()) badFieldsJson += ",";
+    badFieldsJson += toJsonString(name);
+  }
+  badFieldsCount++;
+}
+
+// Тот же конверт, что build_error_envelope() (field/message - для обратной
+// совместимости, первое плохое поле), плюс "fields" - имена ВСЕХ полей вне диапазона.
+// build_error_envelope() саму не трогаем - она общая для остальных обработчиков и
+// запинена smoke_api_error_envelope.py.
+static String build_save_range_errors_envelope(const String& firstBadField, const String& badFieldsJson) {
+  String message = "Invalid ";
+  message += firstBadField;
+  // Единственный сборщик конверта ошибок - build_error_envelope() (см.
+  // check_single_envelope_builder в smoke_api_error_envelope.py) - второе место, которое
+  // вручную начинает JSON-объект ошибки, заводить нельзя. Здесь только дописываем
+  // ключ fields перед закрывающей скобкой её результата - но сперва проверяем, что
+  // вырезаемый символ действительно '}': если build_error_envelope() когда-нибудь
+  // допишет хвост после скобки, слепой substring() молча испортит JSON. При несовпадении
+  // отдаём исходный конверт как есть - без fields, но валидным JSON (smoke_save_range_errors.py).
+  String json = build_error_envelope("range", firstBadField.c_str(), message);
+  if (!json.length() || json.charAt(json.length() - 1) != '}') return json;
+  json = json.substring(0, json.length() - 1);
+  json += ",\"fields\":[";
+  json += badFieldsJson;
+  json += "]}";
+  return json;
 }
 
 // [WP7 п.38] Раньше строковые настройки (токен Telegram и т.п.) при превышении размера
@@ -1927,10 +1694,16 @@ static bool apply_save_bool01_arg(AsyncWebServerRequest *request, const char *na
   return true;
 }
 
+// [T35 п.4в] Как apply_save_u8_arg/apply_save_u16_arg выше - используется только циклом
+// по kSaveFloatFields, ответ на отказ шлёт вызывающий (копит поле, не обрывает сразу).
 static bool apply_save_float_arg(AsyncWebServerRequest *request, const char *name, float& target, float minValue, float maxValue) {
   if (!request->hasArg(name)) return true;
+  const AsyncWebParameter *param = get_request_param(request, name);
   float value = 0;
-  if (!parse_save_float_arg(request, name, minValue, maxValue, value)) return false;
+  NumericParseResult result = param && !param->isFile()
+      ? parse_bounded_float(param->value().c_str(), minValue, maxValue, value)
+      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+  if (!result.ok()) return false;
   target = value;
   return true;
 }
@@ -2001,7 +1774,11 @@ static const SaveFloatField kSaveFloatFields[] = {
     {"Kd", &SetupEEPROM::Kd, 0.0f, 100000.0f},
     {"StbVoltage", &SetupEEPROM::StbVoltage, 0.0f, 10000.0f},
     {"BVolt", &SetupEEPROM::BVolt, 0.0f, 10000.0f},
-    {"BKPower", &SetupEEPROM::BKPower, 0.0f, 10000.0f},
+    // [T16] Нижняя граница поднята с 0: BKPower - мощность БК (BK.h::check_alarm_bk)
+    // после закипания. Если задать её ниже рабочего порога регулятора
+    // (power_work_mode_threshold()), регулятор уйдёт в спящий режим и нагрев
+    // тихо остановится - без этой границы форма примет такое значение молча.
+    {"BKPower", &SetupEEPROM::BKPower, power_work_mode_threshold(), 10000.0f},
     {"MaxPressureValue", &SetupEEPROM::MaxPressureValue, 0.0f, 10000.0f},
     // [WP7 п.11] Нижняя граница поднята с 0: условие окончания - TankSensor.avgTemp >=
     // DistTemp (distiller.h/BK.h/alarm.h) - при DistTemp=0 выполняется на первой же
@@ -2083,6 +1860,36 @@ static bool save_param_name_allowed(const String& name) {
   for (const char* n : kSaveMiscStringNames) if (name == n) return true;
   for (const char* n : kSaveSpecialNames) if (name == n) return true;
   return false;
+}
+
+// [T28] Мигрированный из EEPROM профиль (migrate_from_eeprom() в NVS_Manager.ino)
+// проверяет только flag и Mode - остальные ~30 числовых полей уходят в NVS как есть,
+// и мусор из битого сектора молча становится рабочими настройками на годы. Переиспользуем
+// те же таблицы диапазонов, что и проверка формы /save (kSaveFloatFields/kSaveU8Fields),
+// вместо отдельного набора границ.
+bool sanitize_setup_profile_ranges(SetupEEPROM& profile, String& fixedFieldsOut) {
+  SetupEEPROM defaults{};
+  set_default_setup_profile(defaults);
+  bool changed = false;
+  for (const SaveFloatField &f : kSaveFloatFields) {
+    float v = profile.*f.member;
+    if (!isfinite(v) || v < f.minValue || v > f.maxValue) {
+      profile.*f.member = defaults.*f.member;
+      if (fixedFieldsOut.length()) fixedFieldsOut += ",";
+      fixedFieldsOut += f.name;
+      changed = true;
+    }
+  }
+  for (const SaveU8Field &f : kSaveU8Fields) {
+    long v = profile.*f.member;
+    if (v < f.minValue || v > f.maxValue) {
+      profile.*f.member = defaults.*f.member;
+      if (fixedFieldsOut.length()) fixedFieldsOut += ",";
+      fixedFieldsOut += f.name;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 void handleSave(AsyncWebServerRequest *request) {
@@ -2180,7 +1987,12 @@ void handleSave(AsyncWebServerRequest *request) {
     }
   }
 
+  // [T29] async_tcp может вытеснить loop() посреди присваивания SamSetup
+  // (commit_profile_operation() и др.) - без спинлока это чтение могло бы
+  // застать структуру наполовину скопированной.
+  portENTER_CRITICAL(&configMux);
   SetupEEPROM staged = SamSetup;
+  portEXIT_CRITICAL(&configMux);
   uint8_t sensorResetMask = 0;
   DSAddressSnapshot dsSnapshot;
   copy_ds_address_snapshot(dsSnapshot);
@@ -2188,8 +2000,20 @@ void handleSave(AsyncWebServerRequest *request) {
     staged.Mode = (int)requestedMode;
   }
 
+  // [T35 п.4в] Три цикла ниже (kSaveU16Fields/kSaveFloatFields/kSaveU8Fields) копят
+  // имена полей вне диапазона вместо ответа по первому же отказу - см. проверку
+  // badFieldsCount после цикла по kSaveU8Fields. Остальные проверки в handleSave
+  // (allowlist, дубликаты параметров, stepperstepml, цвет длиннее буфера и т.д.)
+  // остаются структурными и по-прежнему обрывают сразу - это не про диапазон значения,
+  // а про форму самого запроса.
+  String saveBadFieldsJson;
+  String saveFirstBadField;
+  uint8_t saveBadFieldsCount = 0;
+
   for (const SaveU16Field &f : kSaveU16Fields) {
-    if (!apply_save_u16_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) return;
+    if (!apply_save_u16_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) {
+      collect_save_bad_field(f.name, saveBadFieldsJson, saveFirstBadField, saveBadFieldsCount);
+    }
   }
   if (request->hasArg("stepperstepml")) {
     if (request->hasArg("StepperStepMl")) {
@@ -2206,11 +2030,22 @@ void handleSave(AsyncWebServerRequest *request) {
   }
 
   for (const SaveFloatField &f : kSaveFloatFields) {
-    if (!apply_save_float_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) return;
+    if (!apply_save_float_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) {
+      collect_save_bad_field(f.name, saveBadFieldsJson, saveFirstBadField, saveBadFieldsCount);
+    }
   }
 
   for (const SaveU8Field &f : kSaveU8Fields) {
-    if (!apply_save_u8_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) return;
+    if (!apply_save_u8_arg(request, f.name, staged.*f.member, f.minValue, f.maxValue)) {
+      collect_save_bad_field(f.name, saveBadFieldsJson, saveFirstBadField, saveBadFieldsCount);
+    }
+  }
+
+  if (saveBadFieldsCount > 0) {
+    send_no_store_response(
+        request, 400, "application/json",
+        build_save_range_errors_envelope(saveFirstBadField, saveBadFieldsJson));
+    return;
   }
 
   for (const SaveCheckboxField &f : kSaveCheckboxFields) {
@@ -2223,7 +2058,7 @@ void handleSave(AsyncWebServerRequest *request) {
   if (!apply_save_string_arg(request, "tgchatid", staged.tg_chat_id)) return;
 
   for (const SaveColorField &f : kSaveColorFields) {
-    if (request->hasArg(f.name)) copyStringSafe(staged.*f.member, request->arg(f.name));
+    if (!apply_save_string_arg(request, f.name, staged.*f.member)) return;
   }
 
   for (const SaveBool01Field &f : kSaveBool01Fields) {
@@ -2237,6 +2072,10 @@ void handleSave(AsyncWebServerRequest *request) {
   const bool hasSwitchMode = modeRequested &&
       (sourceProfileMode != static_cast<int>(requestedMode) ||
        sourceMode != requestedMode);
+  if (hasSwitchMode && PowerOn) {
+    send_no_store_response(request, 409, "text/plain", operation_error_code(OPERATION_ERROR_CANCELLED));
+    return;
+  }
   ProgramDraft programDraft{};
   const ProgramDraft* programDraftPtr = nullptr;
   if (wProgramParam) {
@@ -2346,6 +2185,7 @@ void web_command(AsyncWebServerRequest *request) {
   }
 
   bool boolValue = false;
+  bool powerValueGiven = false;
   uint16_t waterPwm = 0;
   uint16_t pumpSpeedSteps = 0;
   ControlNbkCommand nbkCommand = {};
@@ -2358,6 +2198,15 @@ void web_command(AsyncWebServerRequest *request) {
       action == "startbk" || action == "startnbk") {
     parseResult = parse_exact_bool(actionParam->value().c_str(), boolValue);
     commandKeySuffix = boolValue ? "=1" : "=0";
+  } else if (action == "power") {
+    // Пустое значение (голый power - так дёргают URL внешние интеграции и
+    // старые закладки; страницы прошивки шлют power=0/1) - это НЕ ошибка,
+    // а сигнал "использовать старое поведение-переключатель" (powerValueGiven=false).
+    if (actionParam->value().length() > 0) {
+      parseResult = parse_exact_bool(actionParam->value().c_str(), boolValue);
+      powerValueGiven = parseResult.ok();
+      commandKeySuffix = boolValue ? "=1" : "=0";
+    }
   } else if (action == "watert") {
     parseResult = parse_control_water_pwm(actionParam->value().c_str(), waterPwm);
     commandKeySuffix = "=" + String(waterPwm);
@@ -2428,9 +2277,16 @@ void web_command(AsyncWebServerRequest *request) {
       return;
     }
   } else if (action == "power") {
-    SamovarCommands command = SAMOVAR_POWER;
-    if (!PowerOn) command = mode_power_on_command(Samovar_Mode);
-    if (!queue_samovar_command(command)) {
+    SamovarCommands command = SAMOVAR_NONE;
+    if (!powerValueGiven) {
+      command = SAMOVAR_POWER;                                         // голый power: старое поведение-переключатель
+      if (!PowerOn) command = mode_power_on_command(Samovar_Mode);
+    } else if (boolValue) {
+      if (!PowerOn) command = mode_power_on_command(Samovar_Mode);      // уже включено -> no-op
+    } else {
+      command = SAMOVAR_POWER_OFF;                                     // всегда выключить
+    }
+    if (command != SAMOVAR_NONE && !queue_samovar_command(command)) {
       send_web_command_response(request, 503, "BUSY");
       return;
     }
@@ -2503,19 +2359,19 @@ void web_command(AsyncWebServerRequest *request) {
       return;
     }
   } else if (action == "distiller") {
-    SamovarCommands command = boolValue ? SAMOVAR_DISTILLATION : SAMOVAR_POWER;
+    SamovarCommands command = boolValue ? SAMOVAR_DISTILLATION : SAMOVAR_POWER_OFF;
     if (!queue_samovar_command(command)) {
       send_web_command_response(request, 503, "BUSY");
       return;
     }
   } else if (action == "startbk") {
-    SamovarCommands command = boolValue ? SAMOVAR_BK : SAMOVAR_POWER;
+    SamovarCommands command = boolValue ? SAMOVAR_BK : SAMOVAR_POWER_OFF;
     if (!queue_samovar_command(command)) {
       send_web_command_response(request, 503, "BUSY");
       return;
     }
   } else if (action == "startnbk") {
-    SamovarCommands command = boolValue ? SAMOVAR_NBK : SAMOVAR_POWER;
+    SamovarCommands command = boolValue ? SAMOVAR_NBK : SAMOVAR_POWER_OFF;
     if (!queue_samovar_command(command)) {
       send_web_command_response(request, 503, "BUSY");
       return;
@@ -2688,7 +2544,7 @@ void web_program(AsyncWebServerRequest *request) {
     const String& description = descriptionParam->value();
     if (description.length() > 250) {
       send_program_json_response(
-          request, 400, false, F("Invalid Descr: range"), String());
+          request, 400, false, F("Описание длиннее 250 байт"), String());
       return;
     }
     memcpy(descriptionValue, description.c_str(), description.length());
@@ -2837,14 +2693,26 @@ void get_data_log(AsyncWebServerRequest *request, String fn) {
     request->send(503, "text/plain", "BUSY");
     return;
   }
+  bool locked = log_file_lock();
+  if (!locked) {
+    request->send(503, "text/plain", "BUSY");
+    return;
+  }
   // [WP7 п.36] Раньше заголовки вложения (Content-Disposition: attachment) уходили ВМЕСТЕ
   // с 400 при отсутствующем файле - браузер молча скачивал пустой файл вместо показа
   // сообщения об ошибке. Теперь при отсутствии файла заголовки вложения не отправляются.
   if (!SPIFFS.exists("/" + fn)) {
+    log_file_unlock(true);
     request->send(400, "text/plain", "Log file not found: " + fn);
     return;
   }
+  // Честная граница: AsyncFileResponse открывает файл и читает его размер синхронно
+  // внутри beginResponse() ниже, а отдаёт содержимое уже асинхронно, после возврата из
+  // этой функции. Лок защищает только момент открытия (совпадение с ротацией лога), а не
+  // всю передачу целиком - держать лок на всю передачу заблокировало бы штатную запись
+  // показаний на секунды. Это осознанный размен.
   AsyncWebServerResponse *response = request->beginResponse(SPIFFS, "/" + fn, String(), true);
+  log_file_unlock(true);
   response->addHeader(F("Content-Type"), F("application/octet-stream"));
   response->addHeader(F("Content-Description"), F("File Transfer"));
   response->addHeader(F("Content-Disposition"), "attachment; filename=\"" + fn + "\"");
@@ -2858,12 +2726,18 @@ static void normalize_web_if_version_string(String& v) {
   v.replace("\r", "");
 }
 
-// [WP7 п.20] write_web_file_atomic разложен на стадии (stage/commit/discard), чтобы
-// get_web_interface() могла сперва скачать ВЕСЬ набор файлов интерфейса во временные
-// имена и только потом, одним заходом, переименовать всё разом - см. комментарий там же.
-// write_web_file_stage: скачанное содержимое кладётся в path+".tmp" и перепроверяется
-// чтением с диска. Финальный файл (path) не трогается вообще.
-static bool write_web_file_stage(const String& path, const String& content) {
+// [T20] Комплект data/ (520192 байта с округлением по блокам LittleFS) почти заполняет
+// раздел spiffs (786432 байта); прежняя двухфазная схема
+// (весь набор во временные файлы, потом коммит разом) держала на диске одновременно
+// старый рабочий комплект И новый во временных именах - пик места 942080 байт физически
+// не помещался в раздел. Теперь каждый файл интерфейса пишется атомарно ПО ОТДЕЛЬНОСТИ:
+// содержимое кладётся в path+".tmp", перепроверяется чтением с диска и только потом
+// одним переименованием ставится на место path (с бэкапом старого файла на время
+// переименования и откатом при неудаче). Пик места - один лишний файл сверх обычного
+// комплекта (самый крупный - index.htm, с блоком 53248 байт), это укладывается в раздел
+// с запасом. Обрыв на файле N оставляет 1..N-1 уже обновлёнными, N..конец - старыми:
+// интерфейс временно смешанный, но каждый отдельный файл цел, и обновление можно повторить.
+static bool write_web_file_atomic(const String& path, const String& content) {
   String tmpPath = path + ".tmp";
   SPIFFS.remove(tmpPath);
 
@@ -2895,14 +2769,7 @@ static bool write_web_file_stage(const String& path, const String& content) {
     SPIFFS.remove(tmpPath);
     return false;
   }
-  return true;
-}
 
-// write_web_file_commit: устанавливает уже подготовленный path+".tmp" на место path
-// (бэкап старого файла на время переименования, откат при неудаче) - короткая операция
-// над файловой системой, без сети. Требует, чтобы write_web_file_stage() уже отработала.
-static bool write_web_file_commit(const String& path) {
-  String tmpPath = path + ".tmp";
   String backupPath = path + ".bak";
   SPIFFS.remove(backupPath);
 
@@ -2926,17 +2793,6 @@ static bool write_web_file_commit(const String& path) {
     SPIFFS.remove(backupPath);
   }
   return true;
-}
-
-// Убирает недокачанный/неподтверждённый path+".tmp" - вызывается для очистки мусора,
-// если весь набор файлов интерфейса не скачался (см. get_web_interface()).
-static void discard_web_file_stage(const String& path) {
-  SPIFFS.remove(path + ".tmp");
-}
-
-static bool write_web_file_atomic(const String& path, const String& content) {
-  if (!write_web_file_stage(path, content)) return false;
-  return write_web_file_commit(path);
 }
 
 static bool web_file_content_empty_invalid(const String& fn, get_web_type type, const String& content) {
@@ -2983,56 +2839,40 @@ void get_web_interface() {
       }
     };
 
-    // [WP7 п.20] Раньше каждый файл интерфейса ставился на место сразу после скачивания -
-    // сам файл при этом атомарен (write_web_file_atomic), но НАБОР целиком - нет. Обрыв
-    // связи на середине оставлял новую index.htm со старым app.js.gz (или наоборот):
-    // интерфейс не работает, а версия локально не отмечена как обновлённая, поэтому то же
-    // самое повторяется на каждой следующей перезагрузке, пока обрыв не прекратится.
-    // Теперь весь список ниже сначала СКАЧИВАЕТСЯ во временные "*.tmp" (готовые файлы уже
-    // проверены чтением с диска, но на месте ничего не заменено), и только если скачался
-    // весь набор - следует короткая серия переименований, которая ставит всё разом.
-    // Компромисс: пока идёт скачивание, на диске одновременно живут СТАРЫЙ рабочий набор
-    // и НОВЫЙ "*.tmp" - на SPIFFS ESP32 (места мало) это требует места примерно на ещё один
-    // комплект этих файлов сверх обычного. Это не полная транзакция (сама commit-серия
-    // переименований - не одна атомарная операция ФС), но окно риска сокращается с
-    // "сколько длится скачивание всего набора по сети" до "сколько длится серия
-    // переименований на месте", и при нехватке места/обрыве во время скачивания старый
-    // набор остаётся полностью нетронутым и рабочим (раньше частично перезаписывался).
+    // [T20] Старая схема качала ВЕСЬ набор во временные "*.tmp" и только потом коммитила
+    // разом - пик занятого места (старый рабочий комплект + новый во временных именах)
+    // достигал 942080 байт, а раздел spiffs - всего 786432: обновление физически не
+    // помещалось. Теперь каждый файл интерфейса качается и ставится на место атомарно ПО
+    // ОТДЕЛЬНОСТИ (write_web_file_atomic - см. комментарий там же), пик места - один
+    // лишний файл сверх обычного комплекта, с запасом укладывается в раздел. Порядок
+    // ниже - сначала общие ресурсы (картинки/звук/стили/скрипты), затем HTML-страницы:
+    // при обрыве связи на файле N цикл останавливается (break), и риск временно
+    // нерабочей страницы ниже, чем риск нерабочего общего ресурса, от которого зависят
+    // все страницы разом.
     static const char* const kWebOverrideFiles[] = {
-        "index.htm", "Green.png", "Red_light.gif", "alarm.mp3", "favicon.ico",
+        "Green.png", "Red_light.gif", "alarm.mp3", "favicon.ico",
         "minus.png", "plus.png",
-        "style.css.gz",
-        "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm", "calibrate.htm",
+        "style.css.gz", "app.js.gz", "chart.js.gz",
+        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm", "calibrate.htm",
         "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
         "program.htm", "setup.htm",
-        "app.js.gz", "chart.js.gz",
     };
     static const size_t kWebOverrideFileCount = sizeof(kWebOverrideFiles) / sizeof(kWebOverrideFiles[0]);
 
-    size_t stagedCount = 0;
-    for (size_t i = 0; i < kWebOverrideFileCount; i++) {
-      String overrideFn = kWebOverrideFiles[i];
-      String content = get_web_file(overrideFn, GET_CONTENT);
-      if (content == "<ERR>" || !write_web_file_stage("/" + overrideFn, content)) {
-        Serial.println("WEB interface update failed staging " + overrideFn);
-        updateOk = false;
-        break;
-      }
-      stagedCount++;
+    // used_byte (Samovar.ino) на момент вызова ещё не инициализирован - SPIFFS.usedBytes()
+    // пересчитывается позже, в setup_finalize_boot_display(), которая выполняется ПОСЛЕ
+    // WebServerInit(). Поэтому здесь нужен свежий прямой запрос к SPIFFS, а не used_byte.
+    static const uint32_t WEB_UPDATE_FREE_SPACE_MARGIN_BYTES = 65536;
+    uint32_t freeBytes = SPIFFS.totalBytes() - SPIFFS.usedBytes();
+    if (freeBytes < WEB_UPDATE_FREE_SPACE_MARGIN_BYTES) {
+      Serial.println("WEB interface update aborted: not enough free space");
+      SendMsg("Обновление веб-интерфейса отменено: мало места на диске", ALARM_MSG);
+      updateOk = false;
     }
 
-    if (updateOk) {
-      for (size_t i = 0; i < kWebOverrideFileCount; i++) {
-        String overrideFn = kWebOverrideFiles[i];
-        if (!write_web_file_commit("/" + overrideFn)) {
-          Serial.println("WEB interface update failed installing " + overrideFn);
-          updateOk = false;
-        }
-      }
-    } else {
-      for (size_t i = 0; i < stagedCount; i++) {
-        discard_web_file_stage("/" + String(kWebOverrideFiles[i]));
-      }
+    for (size_t i = 0; i < kWebOverrideFileCount; i++) {
+      updateFile(kWebOverrideFiles[i], SAVE_FILE_OVERRIDE);
+      if (!updateOk) break;
     }
 
     updateFile("beer.lua", SAVE_FILE_IF_NOT_EXIST);
@@ -3071,6 +2911,7 @@ void get_web_interface() {
 
     if (!updateOk) {
       Serial.println("WEB interface update aborted; local version marker was not changed.");
+      SendMsg("Обновление веб-интерфейса не завершено, версия не изменилась", WARNING_MSG);
     }
   }
 }
@@ -3226,27 +3067,6 @@ String http_sync_request_get(String url) {
   return "";
 }
 
-String http_sync_request_post(String url, String body, String ContentType) {
-  HttpRequestLockGuard lockGuard;
-  if (!lockGuard.acquired) {
-    Serial.println("HTTP POST skipped: request object is busy");
-    return "<ERR>";
-  }
-  asyncHTTPrequest& request = sharedHttpRequest;
-  request.setDebug(false);
-  const uint32_t timeoutMs = 8000;
-  request.setTimeout(8);  //Таймаут восемь секунд (внутренний по отсутствию активности)
-
-  if (!http_sync_request_connect_and_send("POST", url, body, ContentType, true, true, timeoutMs)) {
-    return "<ERR>";
-  }
-  if (request.responseHTTPcode() >= 0) {
-    return request.responseText();
-  } else {
-    return "<ERR>";
-  }
-}
-
 // Вариант для Lua-обёртки: метод, тело и Content-Type задаёт скрипт, таймаут короче, чем у
 // загрузки веб-интерфейса. Тот же долгоживущий объект под тем же мьютексом, что и у
 // http_sync_request_get/post — локальный asyncHTTPrequest на стеке Lua-задачи разрушался
@@ -3259,8 +3079,8 @@ String http_sync_request_custom(const String& method, const String& url, const S
   }
   asyncHTTPrequest& request = sharedHttpRequest;
   request.setDebug(false);
-  const uint32_t timeoutMs = 4000;
-  request.setTimeout(3);  //Таймаут три секунды (внутренний по отсутствию активности)
+  const uint32_t timeoutMs = 2000;
+  request.setTimeout(2);  //Таймаут две секунды (внутренний по отсутствию активности)
 
   if (!http_sync_request_connect_and_send(method, url, body, contentType, false, false, timeoutMs)) {
     return "<ERR>";

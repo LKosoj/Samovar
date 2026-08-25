@@ -18,6 +18,17 @@
     var HeaterPowerOn = false;
     // Отбор идёт? Кнопка 'start' по этому признаку меняет и надпись, и текст подтверждения.
     var WithdrawalActive = false;
+    // Пока пользователь редактирует ячейку таблицы программы, getProgram() (полная
+    // пересборка) откладывается - иначе правка теряется или прыгает курсор. Значок
+    // использует тот же стиль "устаревших" показаний, что и staleReadingIds (app.js).
+    var programRedrawPending = false;
+
+    function setProgramStaleBadge(stale) {
+      var badge = document.getElementById('progStaleBadge');
+      if (!badge) return;
+      badge.style.display = stale ? 'inline' : 'none';
+      badge.style.color = SamovarApp.cssVar('--detector-warn-text');
+    }
 
     // ==================== POWER UNIT ===================================================================
 <!--#include power_unit_margin.htm-->
@@ -128,9 +139,9 @@
 
     function renderTelemetry(myObj) {
         {
-          document.getElementById('version').textContent = myObj.version;
-          document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
-          document.getElementById('stm').textContent = myObj.stm;
+          // version/crnt_tm/stm, блок мощности, служебные показания, звук, Lstatus,
+          // подпись насоса воды, кнопка нагрева - общая часть, вынесена в
+          // SamovarApp.renderTelemetryCommon() (app.js) и вызывается ниже одним разом.
 
           // Персистентный индикатор деградации загрузки: рендерится из каждого снимка
           // телеметрии (не только один раз), поэтому виден и тем, кто открыл страницу
@@ -253,19 +264,16 @@
           let new_progNum = Number(myObj.ProgramNum || 0);
           if (current_progNum !== new_progNum) {
             current_progNum = new_progNum;
-            getProgram()
+            var prgContainer = document.getElementById('prg');
+            if (prgContainer && prgContainer.contains(document.activeElement)) {
+              programRedrawPending = true;
+              setProgramStaleBadge(true);
+            } else {
+              getProgram();
+            }
           }
-          document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt.toFixed(1);
-          document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt.toFixed(1);
-          document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
-          document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
           document.getElementById('WFtotalMl').innerHTML = myObj.WFtotalMl / 1000;
           document.getElementById('WFflowRate').innerHTML = myObj.WFflowRate;
-          document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
-          document.getElementById('heap').innerHTML = myObj.heap;
-          document.getElementById('rssi').innerHTML = myObj.rssi;
-          document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
-          SamovarApp.setSoundEnabled(!!myObj.UseBBuzzer);
 
           let importantStatus = myObj.Status;
           if (importantStatus && importantStatus !== '') {
@@ -274,12 +282,6 @@
               IsCalmingPause = true;
             }
           };
-
-          if (myObj.Lstatus) {
-            if (myObj.Lstatus != "") {
-              document.getElementById('Lstatus').textContent = myObj.Lstatus;
-            }
-          }
 
           var dt = myObj.PipeTemp - myObj.SteamTemp;
           document.getElementById('DeltaTemp').innerHTML = dt.toFixed(1);
@@ -297,25 +299,17 @@
             document.getElementById('flowsensor').style = '';
           }
           
-          if (myObj.wp_spd === undefined) {
-          } else {
-            document.getElementById('add_param').textContent = "; ШИМ насоса воды: " + myObj.wp_spd;
-          }
-          
+          SamovarApp.renderTelemetryCommon(myObj, { powerVoltFixed: 1 });
           SamovarApp.renderI2cPumpStatus(myObj);
-
-          var powerstr;
-          var powerstyle;
-          HeaterPowerOn = myObj.PowerOn == 1;
-          if (HeaterPowerOn) {
-            powerstr = 'Выключить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-danger-bg');
+          if (myObj.PowerOn == 1) {
+            document.getElementById('power').value = 'Выключить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-danger-bg');
+            HeaterPowerOn = true;
           } else {
-            powerstr = 'Включить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-active-bg');
+            document.getElementById('power').value = 'Включить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-active-bg');
+            HeaterPowerOn = false;
           }
-          document.getElementById('power').value = powerstr;
-          document.getElementById('power').style.backgroundColor = powerstyle;
 
           var pausestr;
           var pausestyle;
@@ -379,6 +373,7 @@
       pvolume.setAttribute("aria-labelledby", "index-program-row-" + _lnIdx + " index-program-col-volume");
       pvolume.value = arr[1];
       pvolume.style = 'margin-left: 2em !important';
+      pvolume.setAttribute("inputmode", "numeric");
       pvolume.setAttribute("onchange", "calc_program();");
       dl.appendChild(pvolume);
 
@@ -389,6 +384,7 @@
       pspeed.setAttribute("aria-labelledby", "index-program-row-" + _lnIdx + " index-program-col-speed");
       pspeed.value = arr[2];
       pspeed.style = 'margin-left: 2em !important';
+      pspeed.setAttribute("inputmode", "decimal");
       pspeed.setAttribute("onchange", "calc_program();");
       dl.appendChild(pspeed);
 
@@ -410,6 +406,7 @@
       pvolt.setAttribute("aria-labelledby", "index-program-row-" + _lnIdx + " index-program-col-power");
       pvolt.value = arr[5];
       pvolt.style = 'margin-left: 2em !important';
+      pvolt.setAttribute("inputmode", "decimal");
       pvolt.setAttribute("onchange", "calc_program();");
       dl.appendChild(pvolt);
       
@@ -471,9 +468,10 @@
         <div class="flex_row_center"><label id="index-program-col-volume" class="tooltip">Выход<span class="tooltiptext">Объем в мл</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-speed" class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час</span></label></div>
         <div class="flex_row_center"><label id="index-program-col-container" class="tooltip">Ёмкость<span class="tooltiptext">Номер ёмкости (нумерация начинается от 0)</span></label></div>
-        <div class="flex_row_center"><label id="index-program-col-power" class="tooltip">${programPwrLabel}</label></div>
+        <div class="flex_row_center"><label id="index-program-col-power" class="tooltip">${programPwrLabel}<span class="tooltiptext">Мощность/напряжение регулятора для этой строки. 0 — не менять текущее значение (строка не трогает регулятор). Небольшое или отрицательное число — сдвиг от текущего значения, а не точная величина.</span></label></div>
         <div class="flex_row_center"><label class="tooltip">Время</label></div>
       </div>`);
+      SamovarApp.enhanceTooltips();
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
       for (let z = 0; z < varr.length; z++) {
@@ -538,11 +536,12 @@
           getProgram();
           setPowerUnit();
           SamovarApp.addLuaButtons();
+          SamovarApp.enhanceTooltips(); // страховка: getProgram() выше может выйти раньше своего вызова enhanceTooltips() при ошибке в WProgram
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
         implicitSystemTheme: false,
-        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp']
+        staleReadingIds: ['Main'] // общий контейнер вкладки - гасит все показания разом, включая кнопку нагрева
       });
     };
 
@@ -554,6 +553,21 @@
         }
         getProgram();
       });
+
+      var prgContainer = document.getElementById('prg');
+      if (prgContainer) {
+        // Телеметрия отложила пересборку таблицы, пока пользователь был в ячейке
+        // (см. renderTelemetry). Как только фокус ушёл из таблицы - дособираем.
+        prgContainer.addEventListener('focusout', function() {
+          setTimeout(function() {
+            if (programRedrawPending && !prgContainer.contains(document.activeElement)) {
+              programRedrawPending = false;
+              setProgramStaleBadge(false);
+              getProgram();
+            }
+          }, 0);
+        });
+      }
     });
 
   </script>
@@ -688,7 +702,7 @@
 
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
-          <input id='power' type='button' name='power' value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;' class="button">
+          <input id='power' type='button' name='power' value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=" + (HeaterPowerOn ? "0" : "1")); return false;' class="button">
           <input id='start' type='button' name='start' value='Начать отбор' style="margin-right: 2em;" onclick='if (WithdrawalActive && !confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;' class="button">
           <input id='pause' type='button' name='pause' value='Пауза' onclick='SamovarApp.sendCommand("pause=1");' class="button">
         </div>
@@ -702,7 +716,7 @@
     </div>
 
     <div id="Prog" class="tabcontent" aria-hidden="true">
-      <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:</div>
+      <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа отбора:<span id="progStaleBadge" style="display: none; margin-left: 0.5em; font-size: 0.75em; font-weight: normal;">⟳ Данные обновились, покажем после того, как вы закончите правку</span></div>
 
       <div class="prg" id="prg"></div>
       <div style="display: flex; flex-direction: row; justify-content: right; color: #555; font-size: 1.4em; font-weight: bold;">
@@ -814,19 +828,7 @@
         <span class='dvcs'>Скорость расхода воды: <span id='WFflowRate'></span> л/мин</span>
       </div>
 
-      <div style="visibility: hidden" id="lua_btn">
-        <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
-          <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-            <div class="container_row" style="justify-content: space-around; align-items: center; display: block;" id="lua_btn_ln"></div>
-            <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">
-              <label for="lua_str_i">Lua:</label>
-              <input name='lua_str_i' id='lua_str_i' type='text' value='' style='padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;'>
-              <input type="button" name="lua_str_b" value="Выполнить Lua" class="button" onclick="SamovarApp.runLuaString();" style='margin-bottom: 20px; margin-right: 100px;'>
-            </div>
-            <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
-          </div>
-        </div>
-      </div>
+<!--#include lua_field.htm-->
     </div>
 
 <!--#include i2cpump_tab.htm-->

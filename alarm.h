@@ -16,6 +16,13 @@ extern volatile bool pending_emergency_stop_flag;
 extern volatile bool pending_emergency_stop_reason_flag;
 extern char pending_emergency_stop_reason[EMERGENCY_STOP_REASON_LEN];
 
+// [T13] Латч "останов дозирующего насоса по I2C при аварии не подтверждён" -
+// взводится, когда attempt_i2c_pump_emergency_stop() не смог гарантированно
+// остановить насос (шина занята/плата не ответила), и снимается только
+// подтверждённым нулём скорости. Пока взведён, секундный тикер (Samovar.ino,
+// сразу после refresh_i2c_stepper_cache) повторяет попытку по свежему кэшу шины.
+static volatile bool i2c_pump_stop_unconfirmed = false;
+
 inline bool samovar_process_active() {
   return PowerOn || startval != SAMOVAR_STARTVAL_IDLE || SamovarStatusInt != SAMOVAR_STATUS_IDLE;
 }
@@ -85,6 +92,26 @@ inline void request_emergency_stop(const String& reason) {
   set_buzzer(true);
 }
 
+// [T13] Пытается остановить дозирующий насос по I2C с обязательным
+// подтверждением (stop_i2c_pump_confirmed). Неудача взводит латч и один раз
+// пишет код отказа в журнал; удача снимает латч. Общая точка входа для
+// perform_emergency_stop() (первая попытка) и retry_i2c_pump_stop_if_unconfirmed()
+// (повторы из секундного тикера).
+inline void attempt_i2c_pump_emergency_stop() {
+  if (stop_i2c_pump_confirmed()) {
+    i2c_pump_stop_unconfirmed = false;
+    return;
+  }
+  if (!i2c_pump_stop_unconfirmed) WriteConsoleLog(F("i2c_pump_stop_unconfirmed"));
+  i2c_pump_stop_unconfirmed = true;
+}
+
+// [T13] Повтор из секундного тикера: пока латч взведён, насос мог остаться
+// включённым - повторяем останов по свежему кэшу I2C, пока плата не подтвердит.
+inline void retry_i2c_pump_stop_if_unconfirmed() {
+  if (i2c_pump_stop_unconfirmed) attempt_i2c_pump_emergency_stop();
+}
+
 inline void perform_emergency_stop() {
   char reason[EMERGENCY_STOP_REASON_LEN];
   reason[0] = '\0';
@@ -115,10 +142,20 @@ inline void perform_emergency_stop() {
   // осознанный; менять поведение без нового решения владельца нельзя.
   open_valve(false, true);
   stopService();
-  set_stepper_target(0, 0, 0);
+  attempt_i2c_pump_emergency_stop();
 #ifdef USE_WATER_PUMP
   set_pump_pwm(0);
 #endif
+
+  // Мешалка (beer.h): обе штатные точки её выключения - beer_stage_tick() и
+  // check_mixer_state() - начинаются с проверки взведённого аварийного латча
+  // и в аварии (латч уже взведён) не выполнятся, поэтому set_mixer_state(false,...)
+  // не вызвать. Повторяем ровно ту же запись реле, что и штатное выключение
+  // (beer.h::set_mixer_state), чтобы полярность реле осталась настраиваемой.
+  digitalWrite(RELE_CHANNEL2, !SamSetup.rele2);
+  mixer_status = false;
+
+  reset_process_state();
 }
 
 bool process_sensor_failed(const char* modeName, const char* sensorName) {
@@ -186,9 +223,10 @@ void check_alarm() {
 #ifdef SAMOVAR_USE_POWER
       SendMsg((String)PWR_MSG + " снижаем с " + (String)target_power_volt, NOTIFY_MSG);
 #ifdef SAMOVAR_USE_SEM_AVR
-      set_current_power(target_power_volt - target_power_volt / 100 * 3);
+      // [T14 п.1] Нижняя граница - без неё уход ниже порога SLEEP бесшумно гасит нагрев.
+      set_current_power(max(target_power_volt - target_power_volt / 100 * 3, power_work_mode_threshold()));
 #else
-      set_current_power(target_power_volt - 1 * PWR_FACTOR);
+      set_current_power(max(target_power_volt - 1 * PWR_FACTOR, power_work_mode_threshold()));
 #endif
 #endif
       //Если уже реагировали - надо подождать 40 секунд, так как процесс инерционный
@@ -309,7 +347,8 @@ void check_alarm() {
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
       SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
-      set_current_power(target_power_volt - target_power_volt / 100 * 8);
+      // [T14 п.1] Нижняя граница - см. симметричный клэмп в reduce_power_by_volts().
+      set_current_power(max(target_power_volt - target_power_volt / 100 * 8, power_work_mode_threshold()));
     }
 #else
     //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
@@ -370,7 +409,9 @@ void check_alarm() {
     d = abs(d);
     if (d < 0.1) {
       acceleration_temp += 1;
-      if (acceleration_temp == 60 * 6) {
+      // >= вместо == : acceleration_temp доступна Lua на запись (диапазон 0..UINT16_MAX,
+      // см. lua.h) и может "перескочить" 360, тогда == никогда не станет истинным.
+      if (acceleration_temp >= 60 * 6) {
         SamovarStatusInt = SAMOVAR_STATUS_RECT_STABLE;
         acceleration_temp = 0;  // Сбрасываем счетчик после установки статуса стабилизации
         prev_stable_temp = 0;  // Сбрасываем предыдущую температуру

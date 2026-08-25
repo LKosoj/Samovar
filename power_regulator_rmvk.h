@@ -44,7 +44,9 @@ inline bool apply_regulator_mode_blocking(SafetyRegulatorMode mode, uint64_t pow
     if (RMVK_set_out_voltge(MAX_VOLTAGE, powerGeneration) == RMVK_ERROR) return false;
     vTaskDelay(RMVK_READ_DELAY / portTICK_PERIOD_MS);
   }
-  set_current_power_mode_value(Mode);
+  // [T14 п.29] Занятый лок -> false, но железо команду уже приняло: это не
+  // отказ регулятора. Повтор записи кэша откладываем на process_pending_power_request().
+  if (!set_current_power_mode_value(Mode)) arm_pending_power_mode_retry(mode);
   if (mode == SAFETY_REGULATOR_MODE_SLEEP) {
     target_power_volt = 0;
     current_power_volt = 0;

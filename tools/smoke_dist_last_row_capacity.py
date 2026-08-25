@@ -120,6 +120,12 @@ static int sendMsgCalls = 0;
 static std::string lastMsg;
 static void SendMsg(const String& message, MESSAGE_TYPE) { sendMsgCalls++; lastMsg = message.s; }
 
+// [T29] program_commit() теперь пишет program[]/ProgramLen под спинлоком configMux.
+using portMUX_TYPE = int;
+static portMUX_TYPE configMux = 0;
+#define portENTER_CRITICAL(mux) do { (void)(mux); } while (0)
+#define portEXIT_CRITICAL(mux) do { (void)(mux); } while (0)
+
 @RUN_DIST_PROGRAM_BODY@
 
 @PROGRAM_COMMIT_BODY@

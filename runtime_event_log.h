@@ -185,21 +185,6 @@ inline RuntimeEventSelectResult runtime_event_select_locked(
   return RUNTIME_EVENT_SELECT_FOUND;
 }
 
-inline RuntimeEventSelectResult runtime_event_select_latest_message_locked(
-    const RuntimeEventRing& ring, RuntimeEventDescriptor& selected) {
-  if (!runtime_event_validate_locked(ring)) return RUNTIME_EVENT_SELECT_CORRUPT;
-  bool found = false;
-  for (uint8_t offset = 0; offset < ring.count; offset++) {
-    const RuntimeEventDescriptor& descriptor =
-        ring.descriptors[runtime_event_descriptor_index(ring.oldestIndex, offset)];
-    if (descriptor.kind == RUNTIME_EVENT_MESSAGE) {
-      selected = descriptor;
-      found = true;
-    }
-  }
-  return found ? RUNTIME_EVENT_SELECT_FOUND : RUNTIME_EVENT_SELECT_NONE;
-}
-
 inline uint32_t runtime_event_latest_sequence_locked(const RuntimeEventRing& ring) {
   if (ring.count == 0 || ring.count > RUNTIME_EVENT_DESCRIPTOR_CAPACITY) return 0;
   const uint8_t newestIndex = runtime_event_descriptor_index(ring.oldestIndex, ring.count - 1);

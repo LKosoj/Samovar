@@ -195,6 +195,7 @@ input[type="file"] {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+  scroll-margin-block: 5em;
 }
 
 .file-upload-control { position: relative; }
@@ -586,13 +587,50 @@ input[type="radio"]:checked + label:after {
 }
 
 /* ==================== Подсказки ==================== */
+/* .tooltip - исходная подпись/заголовок (label/h2/div), только визуальное пунктирное
+   подчёркивание. .tooltip-wrap - обёртка, которую app.js (enhanceTooltips) ставит
+   вокруг неё же, кнопки-триггера и текста подсказки: держит position:relative и
+   открывается по клику через класс .tooltip-open (без него подсказка на телефоне была
+   недоступна вообще, см. п.5 SOLUTIONS_2026-08-24.md). */
 .tooltip {
-  position: relative;
   display: inline-block;
   border-bottom: 1px dotted currentColor;
 }
 
-.tooltip .tooltiptext {
+.tooltip-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+/* Контейнеры подсказки, у которых class="tooltip" НЕ на <label> (h2/div на
+   setup.htm/index.htm) - там оборачивать во внешний inline-block нельзя: сам
+   контейнер блочный, и обёртка ломает поток (кнопка с текстом съезжают на
+   отдельную строку). Кнопку и текст в этом случае просто добавляем внутрь
+   самого контейнера, ему только нужна точка отсчёта для position:absolute. */
+.tooltip-anchor {
+  position: relative;
+}
+
+.tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3em;
+  height: 1.3em;
+  margin-left: 0.25em;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 0.85em;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.tooltip-wrap .tooltiptext,
+.tooltip-anchor .tooltiptext {
   visibility: hidden;
   width: auto;
   min-width: 20em;
@@ -609,8 +647,8 @@ input[type="radio"]:checked + label:after {
   margin-left: -60px;
 }
 
-.tooltip:hover .tooltiptext,
-.tooltip:focus-within .tooltiptext {
+.tooltip-wrap.tooltip-open .tooltiptext,
+.tooltip-anchor.tooltip-open .tooltiptext {
   visibility: visible;
 }
 
@@ -1007,6 +1045,11 @@ details.spoiler > .spoiler-content {
 /* ==================== Адаптив ==================== */
 @media (max-width: 900px) {
   #setupform { min-width: 0; box-sizing: border-box; }
+  /* Кнопки-триггеры подсказок в шапке таблицы расчёта (program.htm, #hdr) не сжимаются
+     (fixed 1.3em), и 8 колонок с ними перестают помещаться в строку раньше, чем раньше -
+     переносим шапку на несколько строк тем же приёмом, что уже применён для узких телефонов
+     ниже (600px), просто на более широком пороге. */
+  #hdr { flex-wrap: wrap; }
   form {
     margin: 0;
     padding: 14px;
@@ -1019,7 +1062,23 @@ details.spoiler > .spoiler-content {
   .ingredients { width: 100%; }
   .popup { width: 92vw; }
   .chart-messages-host { position: static; width: 100%; margin: 0 auto; }
-  .tooltip .tooltiptext { left: auto; right: 0; margin-left: 0; box-sizing: border-box; }
+  /* Базовое left:50%/margin-left:-60px рассчитано на узкую подсказку и не спасает при
+     min-width:20em: метка бывает у любого края строки, а подсказка шире экрана. Вместо
+     привязки к метке кладём подсказку поверх страницы (тот же приём, что .popup ниже) -
+     она всегда по центру ЭКРАНА, а не по центру метки, и в экран помещается всегда. */
+  .tooltip-wrap .tooltiptext,
+  .tooltip-anchor .tooltiptext {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    min-width: 0;
+    width: 90vw;
+    max-width: calc(100vw - 2em);
+    margin: 0;
+    transform: translate(-50%, -50%);
+    box-sizing: border-box;
+  }
 }
 
 @media (max-width: 600px) {
@@ -1095,5 +1154,7 @@ details.spoiler > .spoiler-content {
     float: none;
   }
   #chartdiv { height: 60vh; }
-  .tooltip .tooltiptext { min-width: 0; width: 90vw; max-width: calc(100vw - 1em); }
+  /* Правило подсказки уже покрыто @media (max-width: 900px) выше - отдельная строка
+     здесь раньше расходилась с ним по max-width (1em против 2em) и была одной из причин
+     переполнения на узких экранах. Второй развилки не заводим. */
 }

@@ -16,17 +16,6 @@
 // Логика работы ректификационной колонны
 //**************************************************************************************************************
 
-//Получить количество разделителей
-uint8_t getDelimCount(const String& data, char separator) {
-  uint8_t cnt = 0;
-  for (char c : data) {
-    if (c == separator) {
-      ++cnt;
-    }
-  }
-  return cnt;
-}
-
 //Получить подстроку через разделитель
 String getValue(const String& data, char separator, int index) {
   int found = 0;
@@ -98,6 +87,7 @@ inline bool rect_row_transition_requested(
 
 // Функция для управления отбором
 void withdrawal(void) {
+  if (!PowerOn || alarm_event) return;
   if (startval == SAMOVAR_STARTVAL_RECT_DONE) {
     // [П3-6] Проверяем startval (core1, синхронно), не SamovarStatusInt=20 —
     // тот выставляется асинхронно из tick_status_fsm() на core0 с задержкой до ~1с.
@@ -265,7 +255,11 @@ PumpCalibrationResult pump_calibrate(int stpspeed) {
     profileCandidate.StepperStepMl = (uint16_t)stepsPerMl;
     const PersistResult persistResult = save_profile_nvs(profileCandidate);
     if (persistResult == PERSIST_OK) {
+      // [T29] см. configMux в Samovar.ino - без спинлока async_tcp мог бы
+      // прочитать SamSetup наполовину скопированной.
+      portENTER_CRITICAL(&configMux);
       SamSetup = profileCandidate;
+      portEXIT_CRITICAL(&configMux);
     } else {
       String message = "Калибровка помпы не сохранена: ";
       message += persist_result_code(persistResult);
@@ -288,6 +282,10 @@ PumpCalibrationResult pump_calibrate(int stpspeed) {
 void pause_withdrawal(bool Pause) {
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
   if (!stepper_safe_get_state() && !PauseOn) return;
+  // Возобновление отбора запрещено после аварии и при выключенном нагреве. Гейт стоит
+  // до присваивания PauseOn, иначе флаг паузы и SamovarStatusInt разъезжаются: снаружи
+  // (кнопка «Питание», Lua) питание может быть снято без аварии и без сброса статуса.
+  if (!Pause && (!PowerOn || alarm_event)) return;
   PauseOn = Pause;
   if (Pause) {
     TargetStepps = stepper_safe_get_target();
@@ -311,11 +309,14 @@ void pause_withdrawal(bool Pause) {
 void enter_manual_pause() {
   pause_withdrawal(true);
   if (Samovar_Mode == SAMOVAR_BEER_MODE && startval > SAMOVAR_STARTVAL_BEER_START) {
-    if (current_program_type() == 'A') {
-      SendMsg("Пауза недоступна во время автокалибровки ПИД.", WARNING_MSG);
-    } else if (!beerManualPause) {
+    if (!beerManualPause) {
       beerManualPause = true;
-      SendMsg("Затирание поставлено на паузу.", NOTIFY_MSG);
+      const char type = current_program_type();
+      if (type == 'A' || type == 'L') {
+        SendMsg("Пауза будет применена на ближайшем шаге затирания.", NOTIFY_MSG);
+      } else {
+        SendMsg("Затирание поставлено на паузу.", NOTIFY_MSG);
+      }
     }
   }
 }
@@ -393,8 +394,8 @@ String get_distiller_status_text() {
   }
   if (PowerOn) {
     if (dist_row_prediction_available()) {
-      local += "; Строка, осталось:" +
-          String(get_dist_remaining_time(), 1) + " мин";
+      local += "; Строка: осталось " + String(get_dist_remaining_time(), 1) +
+          " из ~" + String(get_dist_row_predicted_total_time(), 1) + " мин";
     } else {
       local += "; Прогноз строки: ожидание данных";
     }
@@ -669,17 +670,6 @@ String tick_status_fsm() {
   return local;
 }
 
-// Получить статус Самовара из кэша (без побочных эффектов на FSM).
-String get_Samovar_Status() {
-  String status;
-  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-  if (locked) {
-    status = SamovarStatus;
-    runtime_state_unlock(true);
-  }
-  return status;
-}
-
 // Установить емкость
 void set_capacity(uint8_t cap) {
   if (cap > CAPACITY_NUM) return;
@@ -696,11 +686,6 @@ void set_capacity(uint8_t cap) {
 // Переход к следующей емкости
 void next_capacity(void) {
   set_capacity(capacity_num + 1);
-}
-
-// Установить программу
-ProgramParseResult set_program(const String& WProgram) {
-  return program_parse_lines(WProgram, rect_program_parse_spec());
 }
 
 // Получить программу
@@ -895,36 +880,6 @@ void run_program(uint8_t num) {
   TargetStepps = stepper_safe_get_target();
 }
 
-//функция корректировки температуры кипения спирта в зависимости от давления
-float get_temp_by_pressure(float start_pressure, float start_temp, float current_pressure) {
-  if (start_temp == 0) return 0;
-  if (current_pressure < 10) return start_temp;
-
-  //скорректированная температура кипения спирта при текущем давлении
-  float c_temp;
-
-  if (SamSetup.UsePreccureCorrect) {
-    //идеальная температура кипения спирта при текущем давлении
-    float i_temp;
-    //температурная дельта
-    float d_temp;
-
-    i_temp = current_pressure * 0.038 + 49.27;
-
-    if (start_pressure == 0) {
-      d_temp = start_temp - 78.15;
-    } else {
-      d_temp = start_temp - start_pressure * 0.038 - 49.27;  //учитываем поправку на погрешность измерения датчиков
-    }
-    c_temp = i_temp + d_temp;  // получаем текущую температуру кипения при переданном давлении с учетом поправки
-  } else {
-    //Используем сохраненную температуру отбора тела без корректировки
-    c_temp = start_temp;
-  }
-
-  return c_temp;
-}
-
 // Установить температуру тела
 void set_body_temp() {
   reset_impurity_detector();
@@ -955,11 +910,11 @@ float get_steam_alcohol(float t) {
 
   // [L-6/M-26] avgTemp уже нормализован к 760 мм рт. ст. в DS_getvalue()
   // (sensorinit.h: correctT = (760 - bme_pressure) * 0.037, при UsePreccureCorrect).
-  // Повторный вызов get_temp_by_pressure() прибавлял бы ту же поправку ещё раз
+  // Повторный пересчёт по давлению прибавлял бы ту же поправку ещё раз
   // со знаком, противоположным первой (~0.038*(P-760)), → коррекции почти гасились
   // и спиртуозность считалась фактически по сырой температуре.
   // Решение: t1 сохраняем для ветки t > 99.84 (где вызывается get_alcohol(t1) —
-  // он тоже исправлен), get_temp_by_pressure() не вызываем — t уже в нужной шкале.
+  // он тоже исправлен), повторный пересчёт по давлению не делаем — t уже в нужной шкале.
   t1 = t;
 
   if (t >= 99 && t < 99.84) {
@@ -1050,7 +1005,7 @@ float get_steam_alcohol(float t) {
 float get_alcohol(float t) {
   if (!boil_started) return 100;
   // [L-6/M-26] avgTemp уже нормализован к 760 мм рт. ст. в DS_getvalue(),
-  // повторный пересчёт через get_temp_by_pressure() создавал двойную коррекцию.
+  // повторный пересчёт по давлению создавал бы двойную коррекцию.
   float r;
   float k;
   k = (t - 89) / 6.49;
@@ -1289,6 +1244,16 @@ bool column_wetting() {
     // 1. Датчик сработал - смачивание успешно завершено
     if (head_level_sensor_holded()) {
       SendMsg(("Насадка колонны успешно смочена!"), NOTIFY_MSG);
+      // Возвращаем базовую мощность до сброса состояния, чтобы alarm.h считал
+      // apply_program_power_row от исходной уставки, а не от сниженных 80%.
+      if (voltage_decrease_started && initial_voltage >= POWER_WORK_MODE_THRESHOLD) {
+        if (set_current_power(initial_voltage) != ACTUATOR_COMMAND_FAILED) {
+          // Регулятор применяет уставку асинхронно (задача-воркер), а apply_program_power_row()
+          // в alarm.h считает дельту от target_power_volt уже в этом такте — поэтому базу
+          // возвращаем сразу, не дожидаясь воркера.
+          target_power_volt = initial_voltage;
+        }
+      }
       reset_wetting_state();
       return true;
     }

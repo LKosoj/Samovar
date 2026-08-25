@@ -104,13 +104,6 @@ inline bool ds_address_equal(const uint8_t* left, const uint8_t* right) {
   return true;
 }
 
-inline bool ds_address_invalid(const uint8_t* address) {
-  for (uint8_t dsj = 0; dsj < 8; dsj++) {
-    if (address[dsj] != 255) return false;
-  }
-  return true;
-}
-
 inline void copy_ds_address_snapshot(DSAddressSnapshot& snapshot) {
   snapshot.count = 0;
   for (uint8_t i = 0; i < SAMOVAR_DS_ADDRESS_MAX; i++) {
@@ -247,11 +240,21 @@ void DS_getvalue(void) {
     correctT = (760 - bme_pressure) * 0.037;
   }
 
-  ss = correctT + sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
-  ps = correctT + sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
-  ws = sensors.getTempC(WaterSensor.Sensor);  // считываем температуру с датчика 2
-  ts = correctT + sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
-  acp = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
+  // [T32] Сырые показания библиотеки датчика - ДО поправки на давление и
+  // пользовательскую дельту. Нужны отдельно ниже, чтобы поймать заводской
+  // артефакт DS18B20 "85.0°C сразу после сбоя питания": под поправками он
+  // перестаёт быть равен ровно 85.0, и проверка станет мёртвой.
+  float ssRaw = sensors.getTempC(SteamSensor.Sensor);  // считываем температуру с датчика 0
+  float psRaw = sensors.getTempC(PipeSensor.Sensor);   // считываем температуру с датчика 1
+  float wsRaw = sensors.getTempC(WaterSensor.Sensor);  // считываем температуру с датчика 2
+  float tsRaw = sensors.getTempC(TankSensor.Sensor);   // считываем температуру с датчика 3
+  float acpRaw = sensors.getTempC(ACPSensor.Sensor);   // считываем температуру с датчика 4
+
+  ss = correctT + ssRaw;
+  ps = correctT + psRaw;
+  ws = wsRaw;
+  ts = correctT + tsRaw;
+  acp = acpRaw;
 
 #ifdef USE_PRESSURE_1WIRE
   float pv;
@@ -276,12 +279,33 @@ void DS_getvalue(void) {
   sensors.requestTemperatures();
 
   const float raw[DS_SENSOR_COUNT] = {ss, ps, ws, ts, acp};
+  const float rawLib[DS_SENSOR_COUNT] = {ssRaw, psRaw, wsRaw, tsRaw, acpRaw};
   for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++) {
     DSSensor& sensor = *kSensorDeltaFields[i].sensor;
     if (raw[i] > -10) {
-      sensor.avgTemp = raw[i] + SamSetup.*kSensorDeltaFields[i].delta;
-      sensor.PrevTemp = sensor.avgTemp;
-      sensor.ErrCount = 0;
+      // [T32] DS18B20 при сбое питания отдаёт заводское значение регистра
+      // 85.0°C, пока не пройдёт первое реальное измерение. 85°C - и обычная
+      // рабочая температура в кубе, поэтому отбрасываем её ТОЛЬКО если она
+      // пришла резким скачком (>10°C) относительно последнего принятого
+      // показания; иначе датчик "ослепнет" при реальном нагреве до 85°C.
+      // На артефакт проверяем rawLib (сырое, до поправки на давление И до
+      // дельты) - иначе при ненулевой дельте/поправке 85.0 "размывается" и
+      // проверка перестаёт что-либо ловить. Скачок же считаем по corrected
+      // (со всеми поправками) против avgTemp, потому что avgTemp тоже хранится
+      // с поправками. avgTemp>=2.0f - идиома "показание уже набрано" (см.
+      // [L-34] в alarm.h); пока оно не набрано (холодный старт/смена адреса
+      // датчика), скачок не проверяем - иначе avgTemp никогда не наберётся с нуля.
+      float corrected = raw[i] + SamSetup.*kSensorDeltaFields[i].delta;
+      bool isPowerOnArtifact = fabsf(rawLib[i] - 85.0f) < 0.05f &&
+                                sensor.avgTemp >= 2.0f &&
+                                fabsf(corrected - sensor.avgTemp) > 10.0f;
+      if (isPowerOnArtifact) {
+        if (sensor.ErrCount < INT32_MAX) sensor.ErrCount++;
+      } else {
+        sensor.avgTemp = corrected;
+        sensor.PrevTemp = sensor.avgTemp;
+        sensor.ErrCount = 0;
+      }
     } else {
       // [П17] Раньше счётчик рос только если PrevTemp>0 - датчик, ни разу не
       // ответивший с самого старта (PrevTemp==0), никогда не набирал ErrCount,
@@ -526,8 +550,8 @@ void sensor_init(void) {
   heaterPID.SetTunings(SamSetup.Kp, SamSetup.Ki, SamSetup.Kd);
 }
 
-//Обнуляем все счетчики
-void reset_sensor_counter(void) {
+//Сбрасывает состояние процесса (счетчики, статус, FSM, PWM) — без операций с ФС и барометром.
+void reset_process_state(void) {
   stopService();
   stepper_safe_set_max_speed(0);
   stepper_safe_stop_reset();
@@ -563,6 +587,23 @@ void reset_sensor_counter(void) {
   ActualVolumePerHour = 0;
   SamovarStatusInt = SAMOVAR_STATUS_IDLE;
   startval = SAMOVAR_STARTVAL_IDLE;
+  // [Решение владельца 25.08] Состояние варки приводится РОВНО в то же положение,
+  // что и после штатного beer_finish() - тем же самым хвостом (beer.h,
+  // beer_reset_stage_state()), а не отдельным набором присваиваний здесь.
+  // Зачем это нужно именно тут: beer_finish() имеет ранние выходы (job Lua
+  // подтверждает остановку лишь на следующем тике, лок занят, исполнитель не
+  // отключился) и в этих случаях до своего хвоста не доходит, а повторить его
+  // после сброса уже некому - mode_dispatch_loop() зовёт тик режима только пока
+  // SamovarStatusInt принадлежит режиму, здесь же он уже IDLE.
+  // Что было бы иначе: заявка beerFinishPending залипала бы навсегда и съедала
+  // следующий запуск варки (beer_proc() на первом тике повторил бы beer_finish()
+  // и молча вернул только что стартовавшую сессию в IDLE); фаза beerLuaStage
+  // оставалась бы в EXIT_QUEUED, и программа с ПЕРВОЙ строкой 'L' не запускалась
+  // бы до перезагрузки платы; ручная пауза beerManualPause переживала бы сброс, и
+  // следующая варка сразу вставала бы на гейте строк M/P/B/C/F.
+  // Это не дубль штатного завершения: внутри ни приводов, ни локов, ни I2C - только
+  // присваивания полям, как и всё остальное в этой функции.
+  beer_reset_stage_state();
   PauseOn = false;
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;
@@ -577,11 +618,6 @@ void reset_sensor_counter(void) {
 
   d_s_temp_prev = 0;
   is_self_test = false;
-
-  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
-
-  if (bme_pressure < 100) BME_getvalue(false);
-  start_pressure = bme_pressure;
 
 	  boil_started = false;
 	  boil_temp = 0;
@@ -610,6 +646,16 @@ void reset_sensor_counter(void) {
 #ifdef USE_LUA
   if (!set_lua_status_value("")) SendMsg("Не удалось сбросить Lua_status: runtime lock занят.", WARNING_MSG);
 #endif
+}
+
+//Обнуляем все счетчики
+void reset_sensor_counter(void) {
+  reset_process_state();
+
+  if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
+
+  if (bme_pressure < 100) BME_getvalue(false);
+  start_pressure = bme_pressure;
 }
 
 inline String format_float(float v, int d) {

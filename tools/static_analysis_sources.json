@@ -28,6 +28,7 @@
     "mod_rmvk.h",
     "mode_common.h",
     "mode_registry.h",
+    "mode_switch.h",
     "nbk.h",
     "numeric_parse.h",
     "operation_store.h",

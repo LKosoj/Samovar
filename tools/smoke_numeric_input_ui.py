@@ -115,8 +115,28 @@ require_ordered_tokens(
         "SamovarApp.validateNumericFields(form, setupNumericSchema)",
         "new FormData(form)",
         "if (!response.ok)",
-        "SamovarApp.responseErrorText",
+        "await showSetupSaveError(form, response);",
         "form.dataset.dirty = 'false';",
+    ],
+    errors,
+)
+
+# [T35] Разбор неуспешного ответа /save вынесен из submitSetupForm в showSetupSaveError:
+# она переключает вкладку с ошибочным полем и перечисляет ЧЕЛОВЕЧЕСКИЕ подписи всех полей
+# из "fields". Проверки прежнего текста ответа (responseErrorText) не ослаблены - они
+# переехали сюда вместе с кодом: ветка без "field" (структурные ошибки - занятость,
+# недоступный режим) обязана показывать ровно тот же текст, что и раньше.
+setup_save_error = body(setup, "async function showSetupSaveError")
+require_ordered_tokens(
+    "setup save error names every bad field and switches to its tab",
+    setup_save_error,
+    [
+        "if (!body || !body.field)",
+        "SamovarApp.responseErrorText",
+        "body.fields",
+        "SamovarApp.fieldLabelFromDom(name)",
+        "SamovarApp.openTab(null, tab.id)",
+        "SamovarApp.showRequestError(",
     ],
     errors,
 )
@@ -249,11 +269,33 @@ for token in [
         errors.append(f"setup dirty/submit contract missing token: {token}")
 
 page_contracts = {
-    "index.htm": ["sendPowerCommand('Voltage'", "sendNumericCommand('pumpspeed'"],
+    "index.htm": [
+        "sendPowerCommand('Voltage'", "sendNumericCommand('pumpspeed'",
+        # [T34.6] мобильная подсказка клавиатуры для числовых полей таблицы
+        # программы (создаются в addLine()) и полей мощности/скорости насоса.
+        'pvolume.setAttribute("inputmode", "numeric");',
+        'pspeed.setAttribute("inputmode", "decimal");',
+        'pvolt.setAttribute("inputmode", "decimal");',
+        "<input name='Voltage' id='Voltage' type='text' inputmode='decimal' value=''>",
+        "<input name='pumpspeed' id='pumpspeed' type='text' inputmode='decimal' value=''>",
+    ],
     "beer.htm": ["sendPowerCommand('Voltage'", "sendNumericCommand('watert'"],
     "bk.htm": ["sendPowerCommand('Voltage'", "sendNumericCommand('watert'"],
     "distiller.htm": ["sendPowerCommand('Voltage'"],
-    "nbk.htm": ["sendPowerCommand('Voltage'", "sendNumericCommand('pnbk'", "value < 8000"],
+    "nbk.htm": [
+        "sendPowerCommand('Voltage'", "sendNumericCommand('pnbk'", "value < 8000",
+        # [T34.6] то же самое для полей программы и напряжения/скорости на nbk.htm.
+        "<input name='Voltage' id='Voltage' size='4' type='text' inputmode='decimal' value=''>",
+        "<input name='Set_speed' id='Set_speed' type='text' inputmode='decimal' size=\"7\" value=''>",
+        'input id="pspeed1" type="text" name="pspeed1" inputmode="decimal"',
+        'input id="pspeed2" type="text" name="pspeed2" inputmode="decimal"',
+        'input id="pspeed3" type="text" name="pspeed3" inputmode="decimal"',
+        'input id="pspeed4" type="text" name="pspeed4" inputmode="decimal"',
+        'input id="ppower1" type="text" name="ppower1" inputmode="decimal"',
+        'input id="ppower2" type="text" name="ppower2" inputmode="decimal"',
+        'input id="ppower3" type="text" name="ppower3" inputmode="decimal"',
+        'input id="ppower4" type="text" name="ppower4" inputmode="decimal"',
+    ],
 }
 for page, tokens in page_contracts.items():
     text = read_page(page)
@@ -273,6 +315,17 @@ for token in [
     "heaterPowerInput.disabled = false;",
     "heaterPowerInput.value = '';",
     "heaterPowerInput.disabled = true;",
+    # [T34.6] мобильная подсказка клавиатуры для числовых полей таблицы
+    # программы и панели "Головы/Тело/Хвосты".
+    'disabled inputmode="numeric"',
+    'speed.setAttribute("inputmode", "decimal");',
+    'percent.setAttribute("inputmode", "numeric");',
+    'pvolt.setAttribute("inputmode", "decimal");',
+    "id='vless' name='vless' type='text' inputmode=\"decimal\" value='12.25'",
+    "id='vlssp' type='text' inputmode=\"decimal\" value='34'",
+    "id='vlp' type='text' inputmode=\"decimal\" value='94'",
+    "id='vlhp' type='text' inputmode=\"decimal\" value='8'",
+    "id='vltp' type='text' inputmode=\"decimal\" value='5'",
 ]:
     if token not in program:
         errors.append(f"program.htm missing numeric UI token: {token}")

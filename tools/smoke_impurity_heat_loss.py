@@ -75,13 +75,13 @@ if update_body:
     )
 
 try:
-    reset_sensor_body = extract_function_body(sensorinit, "void reset_sensor_counter(void)")
+    reset_sensor_body = extract_function_body(sensorinit, "void reset_process_state(void)")
 except ValueError as exc:
     errors.append(str(exc))
     reset_sensor_body = ""
 
 if reset_sensor_body:
-    require_token("reset_sensor_counter", reset_sensor_body, "reset_heat_loss_calculation();")
+    require_token("reset_process_state", reset_sensor_body, "reset_heat_loss_calculation();")
 
 try:
     start_body = extract_function_body(mode_common, "inline ModeHeatingStartResult mode_begin_heating_session")

@@ -27,6 +27,13 @@ void init_pump_pwm(uint8_t pin, int freq) {
 ActuatorCommandResult set_pump_pwm(float duty) {
   duty = constrain(duty, 0, 1023);
 
+  // Во время смены режима приводами распоряжается только процедура переключения (см.
+  // valve_buzzer.h::open_valve): иначе check_alarm_bk (BK.h) включает насос охлаждения
+  // наперегонки со stop_local_mode_actuators() из loop(), а mode_actuators_idle()
+  // (!pump_started && water_pump_speed == 0) не сходится — переключение срывается в
+  // принудительное завершение по дедлайну. Выключение (duty == 0) проходит всегда.
+  if (duty > 0 && mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED;
+
   // [П14] Раньше решение "держать соло на стартовом значении или писать
   // полную мощность" принималось по глобальному bk_pwm (уставка водяного
   // насоса режима БК), а не по duty - аргументу ЭТОГО вызова. Для БК это

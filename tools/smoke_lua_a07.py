@@ -1318,6 +1318,23 @@ void test_timer(lua_State* state) {
   lua_Number result = -1;
   run_chunk(state, "return getTimer(10)", true, 1, &result);
   check(result == 5, "getTimer(10) did not read back the timer armed by setTimer(10,...)");
+
+  // T17 п.15: второй аргумент setTimer (длительность в секундах) раньше шёл
+  // напрямую в luaL_checknumber(...) -> (uint16_t) без проверки диапазона -
+  // отрицательное число давало UB при приведении к uint16_t, а значение
+  // больше 65535 тихо переполнялось. lua_check_int32_arg(0..65535) обязан
+  // отвергать оба случая явной ошибкой скрипта и не трогать lua_timer.
+  const unsigned long before0 = lua_timer[0];
+  run_chunk(state, "setTimer(1, -5)", false);
+  check_last_error_contains("Invalid timer duration", "setTimer(1,-5) did not report a range error");
+  check(lua_timer[0] == before0, "setTimer(1,-5) must not write lua_timer on a rejected duration");
+
+  run_chunk(state, "setTimer(1, 99999)", false);
+  check_last_error_contains("Invalid timer duration", "setTimer(1,99999) did not report a range error");
+  check(lua_timer[0] == before0, "setTimer(1,99999) must not write lua_timer on a rejected duration");
+
+  run_chunk(state, "setTimer(1, 5)", true, 0);
+  check(lua_timer[0] == fakeMillisValue + 5000, "setTimer(1,5) did not arm timer 1 with a valid duration");
 }
 
 void check_strings_destroyed(const char* message) {

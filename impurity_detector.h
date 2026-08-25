@@ -558,6 +558,9 @@ void process_impurity_detector() {
   if (!SamSetup.useautospeed || !SamSetup.useDetector) {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
+    // [T05] Применяем сброшенный correctionFactor к скорости насоса, иначе накопленная
+    // ранее коррекция навсегда останется в скорости после выключения детектора/автоскорости.
+    apply_detector_speed_correction(CurrentBaseSpeedRate);
     return;
   }
 
@@ -585,6 +588,8 @@ void process_impurity_detector() {
   if (SamovarStatusInt != SAMOVAR_STATUS_RECT_WITHDRAWAL) {
     impurityDetector.detectorStatus = 0;
     impurityDetector.correctionFactor = 1.0f;
+    // [T05] см. пояснение выше: применяем сброс correctionFactor к скорости насоса
+    apply_detector_speed_correction(CurrentBaseSpeedRate);
     return;
   }
 

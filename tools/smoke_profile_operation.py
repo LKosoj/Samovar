@@ -41,6 +41,7 @@ def build_harness() -> str:
     samovar = SAMOVAR_INO_PATH.read_text(encoding="utf-8")
     web = (ROOT / "WebServer.ino").read_text(encoding="utf-8")
     api = (ROOT / "samovar_api.h").read_text(encoding="utf-8")
+    mode_switch = (ROOT / "mode_switch.h").read_text(encoding="utf-8")
 
     profile_defs = source_slice(
         samovar, "enum ProfileOperationFlags", "ProfileOperationSlot active_profile_operation")
@@ -60,9 +61,13 @@ def build_harness() -> str:
         "@SET_TERMINAL_BODY@": extract_function_body(samovar, "static void set_profile_operation_terminal("),
         "@PUBLISH_BODY@": extract_function_body(samovar, "static void publish_profile_operation_terminal()"),
         "@FORCE_COMPLETE_BODY@": extract_function_body(
-            web, "static ModeSwitchResult force_complete_mode_switch_failed(const char* warning)"),
-        "@SWITCH_BODY@": extract_function_body(web, "ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode)"),
+            mode_switch, "static ModeSwitchResult force_complete_mode_switch_failed(const char* warning)"),
+        "@SWITCH_BODY@": extract_function_body(mode_switch, "ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode)"),
         "@PROCESS_BODY@": extract_last_function_body(samovar, "static void process_profile_operation()"),
+        "@CLEAR_BARRIER_BODY@": extract_function_body(
+            mode_switch, "static inline void clear_mode_switch_barrier_locked()"),
+        "@MODE_SWITCH_BEGIN_BODY@": extract_function_body(mode_switch, "void mode_switch_begin()"),
+        "@MODE_SWITCH_END_BODY@": extract_function_body(mode_switch, "void mode_switch_end()"),
     }
 
     harness = r'''
@@ -173,10 +178,15 @@ volatile SAMOVAR_MODE Samovar_CR_Mode = SAMOVAR_RECTIFICATION_MODE;
 SetupEEPROM SamSetup{};
 String SessionDescription;
 String lua_type_script;
+// [T30a] commit_profile_operation() не смогла мгновенно взять xLuaSemaphore -
+// заявка на смену имени скрипта откладывается сюда, а не теряется; флаг
+// применяется первым делом внутри load_lua_script() (см. smoke_lua_type_script_lock.py).
+bool lua_type_script_pending = false;
 float BoilerVolume = 0.0f;
 bool heatLossCalculated = true;
 uint32_t heatStartMillis = 9;
 portMUX_TYPE emergencyStopMux = 0;
+portMUX_TYPE configMux = 0;  // [T29] commit_profile_operation() пишет SamSetup под этим спинлоком
 
 static std::deque<bool> pendingLockResults;
 static bool sessionActive = false;
@@ -259,6 +269,25 @@ bool mode_switch_in_progress() {
   return mode_switch_barrier_active;
 }
 
+// Non-static: как и mode_switch_in_progress() выше - единственный вызов каждого
+// call site лежит во вклеенном теле (process_profile_operation/switch_samovar_mode/
+// force_complete_mode_switch_failed), поэтому со `static` мутация, убравшая вызов,
+// роняла бы компилятор по -Werror unused-function вместо содержательного assert-а.
+void clear_mode_switch_barrier_locked() {
+@CLEAR_BARRIER_BODY@
+}
+
+// [T27b] Публичные обёртки барьера (mode_switch.h) - реальные тела вклеены как и
+// у остальных функций выше; queue_profile_operation теперь вызывает mode_switch_begin(),
+// а process_profile_operation - mode_switch_end() (трижды), поэтому харнесс обязан их предоставить.
+void mode_switch_begin() {
+@MODE_SWITCH_BEGIN_BODY@
+}
+
+void mode_switch_end() {
+@MODE_SWITCH_END_BODY@
+}
+
 bool program_update_session_active() {
   return sessionActive;
 }
@@ -338,13 +367,16 @@ String get_lua_mode_name(bool = true) {
   }
 }
 
-void load_lua_script() {
+static bool luaLoadResult = true;
+
+bool load_lua_script() {
   luaLoadCalls++;
   if (luaLockHeld) luaLockHeldDuringLoad = true;
+  return luaLoadResult;
 }
 
 static SafetyModeSwitchState modeSwitchState = {
-    SAFETY_MODE_SWITCH_IDLE, 0, false};
+    SAFETY_MODE_SWITCH_IDLE, 0, false, false, 0};
 
 struct ModeActuatorCleanupState {
   bool initialized;
@@ -513,6 +545,7 @@ static void reset_fixture() {
   sensorApplyCalls = 0;
   resetCalls = 0;
   luaLoadCalls = 0;
+  luaLoadResult = true;
   cleanupCalls = 0;
   logCloseCalls = 0;
   messageCalls = 0;
@@ -538,7 +571,7 @@ static void reset_fixture() {
   modeHeatingStartActiveResult = false;
   selfTestActiveResult = false;
   modeRuntimeOwnerIdleResult = true;
-  modeSwitchState = {SAFETY_MODE_SWITCH_IDLE, 0, false};
+  modeSwitchState = {SAFETY_MODE_SWITCH_IDLE, 0, false, false, 0};
   modeActuatorCleanup = {};
 }
 
@@ -1016,10 +1049,14 @@ static void test_transition_failures_are_fail_closed() {
   record = mutable_record_for(id);
   if (record) *record = {};
   process_profile_operation();
+  // Барьер здесь снимается сознательно: FAILED_CLOSED - это "record недоступен,
+  // операция дальше не идёт", а не аварийный тормоз. Аппарат обязан остаться
+  // управляемым (в частности, пользователь может выключить нагрев командой),
+  // хотя сама операция профиля дальше не двигается.
   check(profile_operation_phase_load() == PROFILE_OPERATION_FAILED_CLOSED &&
-            mode_switch_barrier_active && persistCalls == 0 &&
+            !mode_switch_barrier_active && persistCalls == 0 &&
             cleanupCalls == 0 && messageCalls == 1,
-        "missing record did not retain the safe fail-closed barrier");
+        "missing record must release the barrier while staying fail-closed");
   process_profile_operation();
   check(persistCalls == 0 && messageCalls == 1,
         "fail-closed missing record retried work or diagnostics");
@@ -1289,6 +1326,33 @@ static void test_log_close_request_failure_forces_completion() {
         "forced completion did not name the log as the blocker");
 }
 
+// T17 п.3: load_lua_script() ретраится внутри switch_samovar_mode() САМ, а не
+// повторным вызовом commit_profile_operation() - у неё необратимые эффекты
+// (NVS-запись, program_commit()). Без commitDone-гейта мутация вернула бы
+// persistCalls/resetCalls к количеству попыток (10), а не к одному коммиту.
+static void test_lua_reload_retry_exhausts_and_fails_once_committed() {
+  reset_fixture();
+  luaLoadResult = false;
+
+  SetupEEPROM settings{20, SAMOVAR_DISTILLATION_MODE};
+  OperationId id = 0;
+  check(queue_save(
+            settings, id, nullptr, false, true,
+            SAMOVAR_DISTILLATION_MODE) == OPERATION_ERROR_NONE,
+        "lua-retry setup queue failed");
+
+  const OperationRecord record = run_to_terminal(id, 20);
+  check(record.state == OPERATION_STATE_FAILED &&
+            record.error == OPERATION_ERROR_MODE_SWITCH_FAILED,
+        "endless Lua reload failure did not force-fail the switch after retries");
+  check(luaLoadCalls == 10,
+        "switch did not retry load_lua_script() exactly ten times before giving up");
+  check(persistCalls == 1 && resetCalls == 1 && applyConfigCalls == 1,
+        "commit side effects ran more than once while Lua reload kept retrying");
+  check(!mode_switch_barrier_active,
+        "exhausted Lua reload retries left the mode switch barrier stuck");
+}
+
 int main() {
   test_queue_failures_and_atomic_id();
   test_invalid_combinations();
@@ -1303,6 +1367,7 @@ int main() {
   test_stop_phase_reports_discarded_pending_commands();
   test_queue_rejected_while_mode_switch_barrier_is_up();
   test_log_close_request_failure_forces_completion();
+  test_lua_reload_retry_exhausts_and_fails_once_committed();
   if (failures != 0) return 1;
   std::cout << "profile operation behavioral checks passed\n";
   return 0;
@@ -1321,6 +1386,7 @@ def static_checks() -> list[str]:
     samovar = SAMOVAR_INO_PATH.read_text(encoding="utf-8")
     web = (ROOT / "WebServer.ino").read_text(encoding="utf-8")
     api = (ROOT / "samovar_api.h").read_text(encoding="utf-8")
+    mode_switch = (ROOT / "mode_switch.h").read_text(encoding="utf-8")
     selftest = (ROOT / "selftest.h").read_text(encoding="utf-8")
 
     old_symbols = (
@@ -1333,7 +1399,7 @@ def static_checks() -> list[str]:
         "queue_pending_setup_save",
         "queue_pending_program",
     )
-    production = samovar + web + api + selftest
+    production = samovar + web + api + selftest + mode_switch
     for symbol in old_symbols:
         if symbol in production:
             errors.append(f"obsolete split-operation symbol remains: {symbol}")
@@ -1435,7 +1501,7 @@ def static_checks() -> list[str]:
         process,
         [
             "if (finishError == OPERATION_ERROR_NONE)",
-            "mode_switch_barrier_active = false;",
+            "mode_switch_end();",
             "reset_profile_operation_slot();",
             "} else {",
         ],
@@ -1446,7 +1512,7 @@ def static_checks() -> list[str]:
         errors.append("profile slot reset helper has an unexpected production owner")
 
     switch = extract_function_body(
-        web, "ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode)")
+        mode_switch, "ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode)")
     if switch.count("commit_profile_operation()") != 1:
         errors.append("mode FSM does not have exactly one final owner commit")
     for forbidden in (

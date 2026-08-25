@@ -33,7 +33,7 @@ SIMPLEMAP_INCLUDE_DIR = ROOT / "libraries/SimpleMap/src"
 
 SIGNATURES = [
     "static int lua_wrapper_set_object(lua_State *lua_state)",
-    "void load_lua_script()",
+    "bool load_lua_script()",
 ]
 
 HARNESS_TEMPLATE = r'''
@@ -47,6 +47,7 @@ HARNESS_TEMPLATE = r'''
 using TickType_t = int;
 constexpr TickType_t portMAX_DELAY = -1;
 constexpr int portTICK_PERIOD_MS = 1;
+#define pdMS_TO_TICKS(ms) (ms)
 
 class String {
  public:
@@ -120,6 +121,13 @@ static uint8_t lua_periodic_failure_count_script1 = 0;  // трогается lo
 static uint8_t lua_periodic_failure_count_script2 = 0;
 static bool lua_script1_disabled = false;
 static String lua_type_script;
+// [T30a] lua_type_script_pending - отложенная заявка commit_profile_operation()
+// на смену имени скрипта, применяется первым делом внутри load_lua_script().
+// Этот тест не проверяет T30a (см. smoke_lua_type_script_lock.py) - здесь
+// заявки никогда нет, флаг нужен только чтобы РЕАЛЬНОЕ тело load_lua_script()
+// скомпилировалось как есть.
+static bool lua_type_script_pending = false;
+static String get_lua_mode_name() { return lua_type_script; }
 static String script1, script2;
 static int script1_ref = 7;
 static int script2_ref = 7;
@@ -129,7 +137,7 @@ static void WriteConsoleLog(const String& message) { consoleLog.push_back(messag
 static const char* F(const char* text) { return text; }
 static bool lua_state_lock(TickType_t) { return true; }
 static void lua_state_unlock(bool) {}
-static bool runtime_state_lock(TickType_t) { return true; }
+static bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) { (void)timeout; return true; }
 static void runtime_state_unlock(bool) {}
 static std::string getScriptStub, getScriptListStub, compileErrorStub;
 static String get_lua_script(String) { return String(getScriptStub.c_str()); }

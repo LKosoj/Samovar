@@ -11,6 +11,14 @@ struct ModeOps {
   int16_t activeStatus;
   int16_t startvalRangeLow;    // включительно
   int16_t startvalRangeHigh;   // исключительно
+  // [T40 А3] Граница диапазона SamovarStatusInt, принадлежащего режиму - читается
+  // mode_status_belongs()/mode_ops_by_status()/mode_status_session_active() вместо
+  // сравнений с константами (SAMOVAR_STATUS_DISTILLATION и т.п.) по месту. НЕ путать
+  // с startvalRange* выше: для БЕЕР/НБК startval внутри сессии пробегает диапазон
+  // (под-стадии), а SamovarStatusInt всё это время держит одно и то же значение
+  // (activeStatus) - поэтому границы разные и совпадают только у ректификации.
+  int16_t statusRangeLow;      // включительно
+  int16_t statusRangeHigh;     // исключительно
   const char* pagePath;
   SamovarCommands powerOnCommand;
   SamovarCommands startCommand;
@@ -31,6 +39,7 @@ inline void mode_alarm_nbk() {
 
 inline void mode_alarm_beer() {
   beer_check_cooling_limits();
+  beer_check_wort_overheat_limit();
   mode_request_water_flow_emergency_if_needed();
 }
 
@@ -73,19 +82,25 @@ static_assert(SAMOVAR_LUA_MODE == 6,
 // может разойтись с фактическим размером массива.
 inline const ModeOps* mode_registry_table(size_t& count) {
   static const ModeOps ops[] = {
-    {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr, nullptr, nullptr, withdrawal, mode_stop_process_rectification, true, nullptr},
-    {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text, distiller_finish, "дистилляции", distiller_proc, distiller_finish, true, nullptr},
-    {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text, mode_button_press_beer, "пива", mode_tick_beer, beer_finish, true, nullptr},
+    {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr, nullptr, nullptr, withdrawal, mode_stop_process_rectification, true, nullptr},
+    {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text, distiller_finish, "дистилляции", distiller_proc, distiller_finish, true, nullptr},
+    // statusRange у ПИВА [BEER, BEER+1) - ЭТО значение SamovarStatusInt всю сессию,
+    // а startvalRange [BEER, BEER+1000) - под-стадии внутри сессии (см. комментарий у полей).
+    {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text, mode_button_press_beer, "пива", mode_tick_beer, beer_finish, true, nullptr},
     // [P7 п.2] startCommand=SAMOVAR_NONE: у БК нет своего "следующая программа"/старт-действия
     // через SAMOVAR_START (это команда ректификации) - веб-экшен action=start для БК не должен
     // молча дёргать чужой (ректификационный) старт. SUVID/LUA намеренно НЕ трогаем (асимметрия).
-    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text, bk_finish, "БК", bk_proc, bk_finish, true, nullptr},
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text, bk_finish, "БК", bk_proc, bk_finish, true, nullptr},
     // [WP17 п.45] НБК управляет мощностью через регулятор (run_nbk_program в nbk.h
     // отказывает без SAMOVAR_USE_POWER) - buildAvailable завязан на тот же макрос,
-    // которым сама nbk.h условно компилирует код регулятора.
-    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text, nbk_finish, "НБК", nbk_proc, nbk_finish, SAMOVAR_NBK_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: нет регулятора мощности"},
-    {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, true, nullptr},
-    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, SAMOVAR_LUA_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: не включён Lua"},
+    // которым сама nbk.h условно компилирует код регулятора. statusRange [NBK, NBK+1) -
+    // как у ПИВА, SamovarStatusInt не меняется всю сессию, в отличие от startvalRange.
+    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text, nbk_finish, "НБК", nbk_proc, nbk_finish, SAMOVAR_NBK_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: нет регулятора мощности"},
+    // statusRangeLow==statusRangeHigh==0: SUVID/LUA не держат отдельного значения
+    // SamovarStatusInt (остаётся IDLE всю сессию) - диапазон пуст, ни один статус ему
+    // не принадлежит, mode_dispatch_loop() их не тикает (см. suvid_tick()/lua-команды).
+    {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, true, nullptr},
+    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, SAMOVAR_LUA_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: не включён Lua"},
   };
   count = sizeof(ops) / sizeof(ops[0]);
   return ops;
@@ -110,12 +125,28 @@ inline const ModeOps* mode_ops_by_mode(SAMOVAR_MODE mode) {
   return nullptr;
 }
 
+// [T40 А3] Единственная точка выбора режима для диспетчеризации: всегда по
+// живой Samovar_Mode, а не по SamovarStatusInt (см. mode_dispatch_alarm/
+// mode_dispatch_loop ниже - оба читают только эту функцию). Раньше alarm и loop
+// расходились: alarm уже брал mode_ops_by_mode(Samovar_Mode), а loop искал
+// строку по статусу (mode_ops_by_status) - если статус отставал от смены
+// режима, они молча работали по разным строкам таблицы.
+inline const ModeOps* mode_ops_current() {
+  return mode_ops_by_mode(Samovar_Mode);
+}
+
+// [T40 А3] Принадлежит ли статус активному диапазону ЭТОГО режима. Границы -
+// поля таблицы (statusRangeLow/High), а не сравнение с константами по месту
+// (было: `status < SAMOVAR_STATUS_DISTILLATION` зашито здесь и продублировано в
+// mode_status_session_active() ниже).
+inline bool mode_status_belongs(const ModeOps* ops, int16_t status) {
+  return ops != nullptr && status >= ops->statusRangeLow && status < ops->statusRangeHigh;
+}
+
 inline const ModeOps* mode_ops_by_status(int16_t status) {
-  if (status <= SAMOVAR_STATUS_IDLE) return nullptr;
-  if (status > SAMOVAR_STATUS_IDLE && status < SAMOVAR_STATUS_DISTILLATION) return mode_ops_by_mode(SAMOVAR_RECTIFICATION_MODE);
   const ModeOps* ops = mode_registry();
   for (size_t i = 0; i < mode_registry_count(); i++) {
-    if (ops[i].activeStatus == status) return &ops[i];
+    if (mode_status_belongs(&ops[i], status)) return &ops[i];
   }
   return nullptr;
 }
@@ -159,11 +190,13 @@ inline SamovarCommands mode_start_command(SAMOVAR_MODE mode) {
   return ops != nullptr ? ops->startCommand : SAMOVAR_START;
 }
 
+// [T40 А3] Была вторая копия той же зашитой ректификационной проверки
+// (`status < SAMOVAR_STATUS_DISTILLATION`) - теперь читает те же statusRange*
+// поля через mode_status_belongs(), что и mode_ops_by_status() выше.
 inline bool mode_status_session_active(int16_t status) {
-  if (status > SAMOVAR_STATUS_IDLE && status < SAMOVAR_STATUS_DISTILLATION) return true;  // ректификация — спец-диапазон
   const ModeOps* ops = mode_registry();
   for (size_t i = 0; i < mode_registry_count(); i++) {
-    if (ops[i].activeStatus > SAMOVAR_STATUS_IDLE && ops[i].activeStatus == status) return true;
+    if (mode_status_belongs(&ops[i], status)) return true;
   }
   return false;
 }
@@ -256,11 +289,14 @@ inline bool mode_status_by_status(int16_t status, String& text) {
 }
 
 inline void mode_dispatch_alarm() {
-  // [PKG-B п.9] Инвариант: при смене режима надзор аварий пропускается НАМЕРЕННО — реле
-  // выключены синхронно ДО входа в mode switch (барьер рубит их в emergencyStopMux).
-  // Порядок не менять: синхронное снятие реле обязано предшествовать этому skip'у.
-  if (mode_switch_in_progress()) return;
-  const ModeOps* ops = mode_ops_by_mode(Samovar_Mode);
+  // Барьер смены режима здесь НЕ проверяется - и это осознанно. Барьер поднимается
+  // в queue_profile_operation() (WebServer.ino) раньше любого выключения реле, а
+  // дедлайн смены режима - до 30 секунд (safety_deadline_after(millis(), 30000) в
+  // switch_samovar_mode()). Пропуск надзора на всё это окно оставлял бы аппарат без
+  // аварийного контроля. Аварийный надзор обязан идти ВСЕГДА, вне
+  // зависимости от смены режима; барьером можно глушить только режимный тик
+  // (см. mode_dispatch_loop() ниже) - не аварийную проверку.
+  const ModeOps* ops = mode_ops_current();
   if (ops != nullptr && ops->alarm != nullptr) ops->alarm();
 }
 
@@ -268,9 +304,31 @@ inline void mode_dispatch_alarm() {
 // (SUVID/LUA falling через default в no-op). Тик каждого режима теперь читается
 // из реестра (см. .tick в ModeOps и mode_registry_table выше) - для SUVID/LUA
 // там nullptr, поведение не меняется.
+// [T40 А3] Раньше строка бралась по SamovarStatusInt (mode_ops_by_status) - второй,
+// независимый от mode_dispatch_alarm() источник выбора режима: если Samovar_Mode уже
+// сменили, а SamovarStatusInt ещё не подтянулся (или разошёлся из-за бага), alarm и
+// loop молча работали по РАЗНЫМ строкам реестра. Теперь источник один -
+// mode_ops_current() (по Samovar_Mode, как и в alarm); статус лишь проверяется на
+// принадлежность этому режиму (mode_status_belongs). Если не принадлежит, но при этом
+// статус активен для КАКОГО-ТО режима (mode_status_session_active) - это и есть
+// рассогласование, предупреждаем один раз (не на каждом такте - иначе WARNING_MSG в
+// цикле забьёт очередь и вытеснит настоящие аварии); приём "один раз, сброс когда
+// разрешилось" - тот же, что noDZ_message_sent (nbk.h) / pressure_alarm_sent
+// (Samovar.ino, triggerSysTicker). Обычный простой (SamovarStatusInt == IDLE) - не
+// рассогласование, предупреждение не шлём.
 inline void mode_dispatch_loop() {
   if (mode_switch_in_progress()) return;
-  const ModeOps* ops = mode_ops_by_status(SamovarStatusInt);
-  if (ops == nullptr || ops->tick == nullptr) return;
-  ops->tick();
+  const ModeOps* ops = mode_ops_current();
+  static bool dispatchMismatchWarned = false;
+  if (mode_status_belongs(ops, SamovarStatusInt)) {
+    dispatchMismatchWarned = false;
+    if (ops->tick != nullptr) ops->tick();
+    return;
+  }
+  if (mode_status_session_active(SamovarStatusInt)) {
+    if (!dispatchMismatchWarned) {
+      SendMsg("Статус не принадлежит текущему режиму - тик пропущен, проверьте синхронизацию режима", WARNING_MSG);
+      dispatchMismatchWarned = true;
+    }
+  }
 }

@@ -59,6 +59,7 @@ static bool pump_started = false;
 static int bk_pwm = 0;
 static int8_t wp_count = 0;
 static uint16_t water_pump_speed = 0;
+static bool mode_switch_barrier_active = false;
 
 struct FakePwm {
   int lastWrite = -1;
@@ -84,6 +85,7 @@ static void reset_fixture() {
   wp_count = 0;
   water_pump_speed = 0;
   pump_pwm.lastWrite = -1;
+  mode_switch_barrier_active = false;
 }
 
 int main() {

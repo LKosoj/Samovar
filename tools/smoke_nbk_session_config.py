@@ -93,6 +93,14 @@ static bool near(float lhs, float rhs) {
 static SetupProbe config_a() {
   return {210, 0.7f, 97.4f, 48, 120, 0.8f, 89, 220, 16};
 }
+static SetupProbe config_defaults() {
+  // [SOLUTIONS_2026-08-24.md, Н1] заводские дефолты профиля (profile_setup_fields.h
+  // подставляет сюда NBK_*_DEFAULT из nbk.h) - после сброса к заводским настройкам
+  // старт НБК не должен отклоняться валидацией nbk_capture_session_config().
+  return {NBK_COLUMN_INERTIA_DEFAULT, NBK_DT_DEFAULT, NBK_TN_DEFAULT,
+          NBK_OVERFLOW_PRESSURE_DEFAULT, NBK_DM_DEFAULT, NBK_DP_DEFAULT,
+          NBK_TP_DEFAULT, 230, CONTROL_HEATER_R_DEFAULT};
+}
 static SetupProbe config_b() {
   return {330, 0.9f, 96.8f, 55, 170, 1.2f, 95, 240, 20};
 }
@@ -226,6 +234,15 @@ int main() {
   SamSetup.MainsVoltage = 240;
   check(nbk_capture_session_config(),
         "после явной корректировки оператором следующий старт НБК должен разрешаться");
+
+  // [SOLUTIONS_2026-08-24.md, Н1] заводские дефолты (NBK_*_DEFAULT) обязаны
+  // сами по себе проходить валидацию старта НБК - это доказывает не только
+  // "байты совпадают" (golden в smoke_profile_store.py), а что НБК реально
+  // стартует после сброса к заводским настройкам.
+  SamSetup = config_defaults();
+  nbk_capture_runtime_input_validity(SamSetup.HeaterResistant, SamSetup.MainsVoltage);
+  check(nbk_capture_session_config(),
+        "заводские дефолты NBK_*_DEFAULT должны проходить валидацию старта НБК");
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -455,7 +472,9 @@ def check_production_start_route(source: str) -> list[str]:
         return errors + [str(error)]
 
     required_registry_tokens = (
-        "{SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, \"/nbk.htm\", SAMOVAR_NBK",
+        # [T40 А3] Между startvalRangeHigh и pagePath добавились statusRangeLow/High
+        # (границы SamovarStatusInt для mode_status_belongs) - см. ModeOps в mode_registry.h.
+        "{SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1, \"/nbk.htm\", SAMOVAR_NBK",
         "SamovarStatusInt = ops->activeStatus;",
         "startval = ops->activeStatus;",
     )

@@ -281,6 +281,14 @@ BROWSER_TEST = r'''async page => {
       window.__numericStatus = 503;
       const bad503 = await submit();
       const dirty503 = form.dataset.dirty === "true";
+      // Оставленный "грязным" (dirty) после намеренно проваленных сохранений
+      // выше form.dataset - это и есть проверяемое поведение (см. dirty400/
+      // dirty503 в assert ниже). Но если его не сбросить сейчас, следующий
+      // page.goto() в главном цикле теста наткнётся на нативный диалог
+      // beforeunload (см. setup.htm) и тест зависнет на незакрытом диалоге.
+      // Сама проверка WP23 (что beforeunload вообще срабатывает) - в
+      // test_setup_guards_browser.py, здесь её ослаблять не нужно.
+      form.dataset.dirty = "false";
       return {
         count: window.__numericRequests.length, minOk, maxOk, commaOk, commaSent,
         invalidBlocked, bad400, bad503, dirty400, dirty503
@@ -467,6 +475,31 @@ BROWSER_TEST = r'''async page => {
       }
       const invalidBlocked = window.__numericRequests.length === before;
       volume.value = "1";
+      // [T27.3] Байтовый лимит Descr на клиенте: <textarea maxlength='250'> считает
+      // СИМВОЛЫ, а кириллица в UTF-8 - 2 байта на символ, поэтому 250 введённых
+      // символов браузер пропускает, а сервер (web_program(), String::length() в
+      // Arduino - это байты) отбивает как 500 байт. postProgram() должен сам
+      // посчитать РЕАЛЬНЫЕ байты (TextEncoder) и не пустить запрос на сервер.
+      // program.htm - тестовая страница без поля Descr (в отличие от index/beer/
+      // distiller/nbk.htm), поэтому поле создаётся здесь же, как numeric-browser-probe.
+      let descrField = form.querySelector('[name="Descr"]');
+      const descrCreated = !descrField;
+      if (!descrField) {
+        descrField = document.createElement("textarea");
+        descrField.name = "Descr";
+        form.appendChild(descrField);
+      }
+      descrField.value = "И".repeat(130); // 130 символов = 260 байт UTF-8 - за лимитом 250 байт
+      const beforeDescr = window.__numericRequests.length;
+      window.__numericStatus = 202;
+      const descrOverflowResult = await SamovarApp.postProgram(form);
+      const descrBlocked = window.__numericRequests.length === beforeDescr && descrOverflowResult.ok === false;
+      const descrErrorText = document.getElementById("request_error").textContent;
+      descrField.value = "И".repeat(125); // 125 символов = 250 байт - ровно на границе, разрешено
+      const descrWithinLimitResult = await SamovarApp.postProgram(form);
+      const descrWithinLimitSent = window.__numericRequests.length === beforeDescr + 1 &&
+        descrWithinLimitResult.ok === true;
+      if (descrCreated) descrField.remove();
       window.__numericStatus = 400;
       const bad400 = await SamovarApp.postProgram(form);
       window.__numericStatus = 503;
@@ -475,6 +508,7 @@ BROWSER_TEST = r'''async page => {
       return {
         initialSummary, headsShort, bothInvalid, restored, immediateHeadsUpdate,
         allowlist, invalidBlocked, bad400: bad400.ok, bad503: bad503.ok,
+        descrBlocked, descrErrorText, descrWithinLimitSent,
         heaterValue: heater.value, heaterDisabled: heater.disabled
       };
     });
@@ -499,6 +533,7 @@ BROWSER_TEST = r'''async page => {
         !result.restored || result.immediateHeadsUpdate.percent !== "9%" ||
         result.immediateHeadsUpdate.volume !== "400 мл" ||
         !result.allowlist || !result.invalidBlocked || result.bad400 || result.bad503 ||
+        !result.descrBlocked || !result.descrErrorText.includes("250") || !result.descrWithinLimitSent ||
         result.heaterValue !== "5290" || result.heaterDisabled || !state.errorVisible) {
       throw new Error("program contract mismatch: " + JSON.stringify({ result, state }));
     }
@@ -997,8 +1032,29 @@ def run_cli(cli: str, session: str, arguments: list[str], cwd: Path, timeout: in
     )
     if result.stdout:
         print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-    if check and (result.returncode != 0 or "### Error" in result.stdout):
-        raise RuntimeError(f"playwright-cli {' '.join(arguments[:1])} failed")
+    if check:
+        command = arguments[0] if arguments else ""
+
+        def has_marker(marker):
+            # Настоящие заголовки playwright-cli ("### Error"/"### Modal state"/
+            # "### Result") печатаются ТОЛЬКО в начале строки. Тот же текст может
+            # случайно оказаться внутри блока "### Ran Playwright code" - туда CLI
+            # эхом печатает наш же исполненный JS, включая комментарии. Проверка
+            # substring без привязки к началу строки однажды поймала свой же
+            # комментарий как признак заблокировавшего скрипт диалога.
+            return result.stdout.startswith(marker) or ("\n" + marker) in result.stdout
+
+        if result.returncode != 0:
+            raise RuntimeError(f"playwright-cli {command} failed (exit {result.returncode})")
+        if has_marker("### Error"):
+            raise RuntimeError(f"playwright-cli {command} failed: '### Error' marker in output")
+        if has_marker("### Modal state"):
+            raise RuntimeError(
+                f"playwright-cli {command} failed: '### Modal state' marker in output "
+                "(a dialog blocked the script and was never handled)"
+            )
+        if command == "run-code" and not has_marker("### Result"):
+            raise RuntimeError(f"playwright-cli {command} failed: '### Result' marker missing from output")
     return result.returncode
 
 

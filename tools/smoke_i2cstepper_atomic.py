@@ -56,8 +56,9 @@ if i2c_text:
             errors.append("i2c_stepper_read_block contains per-byte fallback")
 
     for signature, block_token in [
-        ("inline bool i2c_stepper_read_u16", "i2c_stepper_read_block(address, reg, data, sizeof(data))"),
-        ("inline bool i2c_stepper_read_u32", "i2c_stepper_read_block(address, reg, data, sizeof(data))"),
+        ("inline bool i2c_stepper_read_u16", "i2c_stepper_read_block(address, reg, data, sizeof(data), lockWaitMs)"),
+        ("inline bool i2c_stepper_read_u32", "i2c_stepper_read_block(address, reg, data, sizeof(data), lockWaitMs)"),
+        ("inline bool i2c_stepper_read_byte", "i2c_stepper_read_block(address, reg, &value, 1, lockWaitMs)"),
     ]:
         try:
             body = extract_function_body(i2c_text, signature)
@@ -70,7 +71,7 @@ if i2c_text:
             errors.append(f"{signature} still uses per-byte I2C2.readByte")
 
     try:
-        refresh_body = extract_function_body(i2c_text, "inline bool i2c_stepper_refresh(I2CStepperDevice& dev, bool force)")
+        refresh_body = extract_function_body(i2c_text, "inline bool i2c_stepper_refresh(I2CStepperDevice& dev, bool force, TickType_t lockWaitMs)")
     except ValueError as exc:
         errors.append(str(exc))
         refresh_body = ""
@@ -185,7 +186,7 @@ if samovar_text:
             cache_refresh_body,
             [
                 "if (!i2c_stepper_config_begin(device)) return;",
-                "i2c_stepper_refresh(device, true)",
+                "i2c_stepper_refresh(device, true, I2C_CACHE_LOCK_WAIT_MS)",
                 "i2c_stepper_cache.mixer_present = present;",
                 "i2c_stepper_cache.pump_present = present;",
                 "i2c_stepper_config_end(device);",
@@ -194,7 +195,7 @@ if samovar_text:
         )
         if cache_refresh_body.count("i2c_stepper_config_begin(device)") != 1:
             errors.append("cache refresh must claim device exactly once")
-        if cache_refresh_body.count("i2c_stepper_refresh(device, true)") != 1:
+        if cache_refresh_body.count("i2c_stepper_refresh(device, true, I2C_CACHE_LOCK_WAIT_MS)") != 1:
             errors.append("cache refresh must perform exactly one forced refresh")
         if cache_refresh_body.count("i2c_stepper_config_end(device);") != 1:
             errors.append("cache refresh must release device exactly once")

@@ -185,13 +185,65 @@ function applyRecommendedSpeeds() {
   if (appliedCount > 0) alert('Параметры применены');
 }
 
+// Ограничения соответствуют разбору формата rect на прошивке (program_io.h, program_types.h):
+// PROGRAM_MAX = CAPACITY_NUM*2 = 20 строк, номер ёмкости 0..CAPACITY_NUM, допустимые типы
+// строки - allowedTypes формата rect, скорость - PROGRAM_RATE_MIN..MAX, мощность - +-PROGRAM_POWER_MAX.
+var PROGRAM_FILE_MAX_ROWS = 20;
+var PROGRAM_FILE_TYPES = "HBCTP";
+
+function validateProgramFileText(text) {
+  var lines = text.split("\n");
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  if (lines.length === 0) return "файл пуст.";
+  if (lines.length > PROGRAM_FILE_MAX_ROWS) {
+    return "строк " + lines.length + ", максимум " + PROGRAM_FILE_MAX_ROWS + ".";
+  }
+  for (var i = 0; i < lines.length; i++) {
+    var n = i + 1;
+    var f = lines[i].split(";");
+    if (f.length !== 5) {
+      return "строка " + n + ": ожидается 5 полей через «;» (ёмкость;скорость;процент;тип;мощность), получено " + f.length + ".";
+    }
+    var cap = Number(f[0]);
+    if (!Number.isInteger(cap) || cap < 0 || cap > 10) {
+      return "строка " + n + ": номер ёмкости «" + f[0] + "» должен быть целым числом от 0 до 10.";
+    }
+    var speed = Number(f[1].replace(",", "."));
+    if (!Number.isFinite(speed) || speed <= 0 || speed > 8000) {
+      return "строка " + n + ": скорость «" + f[1] + "» должна быть числом больше 0 (не более 8000).";
+    }
+    var percent = Number(f[2].replace(",", "."));
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      return "строка " + n + ": процент «" + f[2] + "» должен быть числом от 0 до 100.";
+    }
+    if (f[3].length !== 1 || PROGRAM_FILE_TYPES.indexOf(f[3]) === -1) {
+      return "строка " + n + ": тип «" + f[3] + "» неизвестен, допустимо H/B/C/T/P.";
+    }
+    var power = Number(f[4].replace(",", "."));
+    if (!Number.isFinite(power) || power < -52900 || power > 52900) {
+      return "строка " + n + ": мощность «" + f[4] + "» должна быть числом.";
+    }
+  }
+  return "";
+}
+
 function loadFile(e) {
 	var file = e;
+	if (!file) return;
 	var reader = new FileReader();
 	reader.onload = function () {
-		document.getElementById('WProgram1').value = reader.result;
+		var text = String(reader.result);
+		var err = validateProgramFileText(text);
+		if (err) {
+			SamovarApp.showRequestError("Файл программы не принят: " + err);
+			return;
+		}
+		document.getElementById('WProgram1').value = text;
 		glcalcnum = false;
 		calc_program();
+	};
+	reader.onerror = function () {
+		SamovarApp.showRequestError('Не удалось прочитать файл программы.');
 	};
 	reader.readAsText(file, "UTF-8");
 }
@@ -425,8 +477,10 @@ function set_num(){
         rowActions[1].setAttribute("aria-label", "Удалить строку " + a.innerText);
       }
       //
-      if (e[i].childNodes[3].value.indexOf(".") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf("."));
-      if (e[i].childNodes[3].value.indexOf(",") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf(","));
+      if (e[i].childNodes[3] !== document.activeElement) {
+        if (e[i].childNodes[3].value.indexOf(".") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf("."));
+        if (e[i].childNodes[3].value.indexOf(",") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf(","));
+      }
       
       e[i].childNodes[2].value = e[i].childNodes[2].value.replace(",",".");
       e[i].childNodes[5].value = e[i].childNodes[5].value.replace(",",".");
@@ -561,9 +615,10 @@ function calc_program(){
       &nbsp;<label id="program-col-speed" class="tooltip">Скорость<span class="tooltiptext">Скорость в литрах в час. Для строки с типом "Пауза" - время паузы в секундах (в программе Самовара это значение передаётся в поле "Объём")</span></label>
       &nbsp;<label id="program-col-percent" class="tooltip">Процент<span class="tooltiptext">Процент от объема фракции данного типа</span></label>&nbsp;&nbsp;&nbsp;
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-type" class="tooltip">Тип<span class="tooltiptext">Тип программы. Для строки "Пауза" время паузы в секундах задаётся в поле "Скорость" (в программе Самовара оно хранится в поле "Объём")</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-power" class="tooltip">${programPwrLabel}<span class="tooltiptext">Напряжение или мощность на регуляторе (зависит от типа используемого регулятора)</span></label>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-power" class="tooltip">${programPwrLabel}<span class="tooltiptext">Мощность/напряжение регулятора для этой строки. 0 — не менять текущее значение (строка не трогает регулятор). Небольшое или отрицательное число — сдвиг от текущего значения, а не точная величина.</span></label>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-output" class="tooltip">Выход<span class="tooltiptext">Объем отбираемой фракции в данной строке программы</span></label>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="program-col-time" class="tooltip">Время<span class="tooltiptext">Время, необходимое на отбор фракции в данной строке программы</span></label></div>`);
+    SamovarApp.enhanceTooltips();
     var p = document.getElementById("WProgram1");
     var arr = p.value.split("\n");
     for (z=0;z<arr.length;z++){
@@ -631,15 +686,18 @@ function addLine(obj, s){
   speed.name = "speed" + _lnIdx;
   speed.setAttribute("aria-labelledby", "program-row-" + _lnIdx + " program-col-speed");
   speed.value = arr[1];
-  speed.setAttribute("oninput", "set_num();");
+  speed.setAttribute("inputmode", "decimal");
+  speed.setAttribute("onchange", "set_num();");
   dl.appendChild(speed);
-  
+
   var percent = document.createElement("input");
   percent.type = "text";
   percent.id = "percent" + _lnIdx;
   percent.name = "percent" + _lnIdx;
   percent.setAttribute("aria-labelledby", "program-row-" + _lnIdx + " program-col-percent");
   percent.value = arr[2];
+  percent.setAttribute("inputmode", "numeric");
+  percent.setAttribute("onchange", "set_num();");
   percent.setAttribute("oninput", "set_num();");
   dl.appendChild(percent);
   
@@ -651,6 +709,7 @@ function addLine(obj, s){
   pvolt.name = "pvolt" + _lnIdx;
   pvolt.setAttribute("aria-labelledby", "program-row-" + _lnIdx + " program-col-power");
   pvolt.value = arr[4];
+  pvolt.setAttribute("inputmode", "decimal");
   pvolt.setAttribute("onchange", "set_num();");
   dl.appendChild(pvolt);
   
@@ -734,6 +793,9 @@ function set_bgcolor(obj){
 
 window.onload = function() {
   SamovarApp.initTheme();
+  // страховка: calc_program() ставит свои подсказки только при успешном prep_calc(),
+  // поэтому статические подсказки (блок параметров расчёта, сводка) включаем здесь безусловно
+  SamovarApp.enhanceTooltips();
   const heaterPowerInput = document.getElementById('heaterMaxPower');
   if (heaterPowerInput) {
     // Диапазон обязан совпадать с trusted_heater_resistance() (control_numeric_input.h):
@@ -789,7 +851,7 @@ Samovar v. <span id='version'>%v%</span>
     </div>
 
     <div id="heaterPowerBlock" style="display: %pwr_unit_v_only%; margin-bottom: 10px;">
-      <label for="heaterMaxPower">Мощность ТЭНа для расчета:</label> <input type="text" id="heaterMaxPower" value="" disabled onchange="displayColumnParams()" style="width: 70px;"> Вт
+      <label for="heaterMaxPower">Мощность ТЭНа для расчета:</label> <input type="text" id="heaterMaxPower" value="" disabled inputmode="numeric" onchange="displayColumnParams()" style="width: 70px;"> Вт
     </div>
 
     <div id="columnParamsResults" style="display: none; background: var(--bg-program-example); border: 1px solid #3498db; padding: 10px; border-radius: 4px;">
@@ -812,13 +874,13 @@ Samovar v. <span id='version'>%v%</span>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div id="Prog">
 <div style="margin-bottom: 10px !important;">
-<label for="vless" class="tooltip prgline">Объем спирта-сырца</label><input id='vless' name='vless' type='text' value='12.25' oninput="set_num();"><label class="tooltip prgline">л</label>&nbsp;&nbsp;&nbsp;&nbsp;
-<label for="vlssp" class="tooltip prgline">Содержание АС в с-с<span class="tooltiptext">Содержание абсолютного спирта в спирте-сырце в &#37;</span></label><input id='vlssp' type='text' value='34' oninput="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
-<label for="vlp" class="tooltip prgline">Выход спирта<span class="tooltiptext">Прогнозируемый выход спирта в &#37;</span></label><input id='vlp' type='text' value='94' oninput="set_num();"><label class="tooltip prgline">&#37;</label>
+<label for="vless" class="tooltip prgline">Объем спирта-сырца</label><input id='vless' name='vless' type='text' inputmode="decimal" value='12.25' onchange="set_num();"><label class="tooltip prgline">л</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vlssp" class="tooltip prgline">Содержание АС в с-с<span class="tooltiptext">Содержание абсолютного спирта в спирте-сырце в &#37;</span></label><input id='vlssp' type='text' inputmode="decimal" value='34' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vlp" class="tooltip prgline">Выход спирта<span class="tooltiptext">Прогнозируемый выход спирта в &#37;</span></label><input id='vlp' type='text' inputmode="decimal" value='94' onchange="set_num();"><label class="tooltip prgline">&#37;</label>
 </div>
 <div style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">
-<label for="vlhp" class="tooltip prgline">Объем голов<span class="tooltiptext">Прогнозируемый выход голов в &#37;</span></label><input id='vlhp' type='text' value='8' oninput="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
-<label for="vltp" class="tooltip prgline">Объем хвостов<span class="tooltiptext">Прогнозируемый выход хвостов в &#37;</span></label><input id='vltp' type='text' value='5' oninput="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vlhp" class="tooltip prgline">Объем голов<span class="tooltiptext">Прогнозируемый выход голов в &#37;</span></label><input id='vlhp' type='text' inputmode="decimal" value='8' onchange="set_num();" oninput="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
+<label for="vltp" class="tooltip prgline">Объем хвостов<span class="tooltiptext">Прогнозируемый выход хвостов в &#37;</span></label><input id='vltp' type='text' inputmode="decimal" value='5' onchange="set_num();"><label class="tooltip prgline">&#37;</label>&nbsp;&nbsp;&nbsp;&nbsp;
 <label for="trest" class="tooltip prgline">Кубовый остаток<span class="tooltiptext">Прогнозируемый кубовый остаток после завершения перегонки в литрах</span></label><input id='trest' type='text' value='8' disabled><label class="tooltip prgline">л</label>
 </div>
 <label class="tooltip prgline" style="margin-top: 10px !important; padding-bottom: 0px !important; margin-bottom: 10px !important;">Информация о параметрах программы отбора

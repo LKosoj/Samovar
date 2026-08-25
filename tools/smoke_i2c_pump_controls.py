@@ -13,10 +13,16 @@ buttons do, asserting on the resulting behavior - not on source text:
 
   - sendI2cPump() must fetch GET /i2cpump with exactly `speed` and `volume`
     (server contract: WebServer.ino handle_i2c_pump_request rejects any other
-    parameter set with 400 "Invalid request: argument"). Since R6 ("Давай
-    вернем OK"), a 200 response means only "the command was accepted into
-    the queue" - a plain `text/plain "OK"`, not an operationId to poll. There
-    is no "queued but failed" state on this route anymore.
+    parameter set with 400 "Invalid request: argument"). Since T27.2, both
+    the stop branch and the speed/volume branch answer with
+    send_operation_accepted() - HTTP 202 and a JSON body
+    `{"operationId":N,"state":"queued","error":"none"}` - the same reply
+    /i2cstepper already used, so the reserved operationId is no longer
+    thrown away. The client stays deliberately fire-and-forget: requestI2cPump()
+    only inspects `resp.ok` (true for the whole 2xx range, so 202 counts as
+    success exactly like the old 200 did) and never reads the response body
+    on success, so this is a server-only contract change - no client code
+    was touched.
   - stopI2cPump() must fetch GET /i2cpump with exactly `?stop=1` - one
     parameter, nothing else (adding speed/volume alongside stop is a 400
     per the same handler).
@@ -177,7 +183,7 @@ async function scenarioSendHappyPathWithCommaDecimal() {
   const fetchImpl = makeFetch(function (url) {
     check(url === "/i2cpump?speed=2.5&volume=100",
       "sendI2cPump must submit exactly speed+volume, comma normalized to dot (got: " + url + ")");
-    return textResponse(200, "OK");
+    return jsonResponse(202, { operationId: 7, state: "queued", error: "none" });
   });
   const { app, elements } = loadApp(fetchImpl);
   setValue(elements, "i2c_speed", "2,5");
@@ -192,7 +198,7 @@ async function scenarioSendHappyPathWithCommaDecimal() {
 async function scenarioStopHappyPath() {
   const fetchImpl = makeFetch(function (url) {
     check(url === "/i2cpump?stop=1", "stopI2cPump must submit exactly ?stop=1 (got: " + url + ")");
-    return textResponse(200, "OK");
+    return jsonResponse(202, { operationId: 8, state: "queued", error: "none" });
   });
   const { app, elements } = loadApp(fetchImpl);
   const result = await app.stopI2cPump();

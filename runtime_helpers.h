@@ -17,6 +17,7 @@ extern portMUX_TYPE waterPulseMux;
 //
 //   LOCK_ORDER: 10  RMVK_UART        xSemaphore                   обмен по UART с регулятором РМВК
 //   LOCK_ORDER: 15  AVR              xSemaphoreAVR                обмен по UART с регулятором СЕМ
+//   LOCK_ORDER: 18  BLYNK            xBlynkSemaphore              обращения к библиотеке Blynk (не потокобезопасна) - самый внешний из сетевых
 //   LOCK_ORDER: 20  HTTP_REQUEST     httpRequestLock              один исходящий HTTP-запрос за раз
 //   LOCK_ORDER: 30  LUA_STATE        xLuaSemaphore                состояние интерпретатора Lua
 //   LOCK_ORDER: 40  MQTT             xMqttSemaphore               публикация в MQTT
@@ -90,6 +91,35 @@ struct PendingCommandLockGuard {
 
   explicit operator bool() const { return acquired; }
 };
+
+#ifdef SAMOVAR_USE_BLYNK
+inline bool blynk_lock(TickType_t timeout) {
+  return xBlynkSemaphore && xSemaphoreTake(xBlynkSemaphore, timeout) == pdTRUE;
+}
+
+inline void blynk_unlock(bool locked) {
+  if (locked) xSemaphoreGive(xBlynkSemaphore);
+}
+
+// RAII-страж замка Blynk: библиотека Blynk не потокобезопасна, а её дёргают из
+// tick_blynk() (loop(), core 1) и из задачи GetClockTicker. Таймаут задаётся явно
+// на каждом месте вызова (в loop() короткий - не взяли лок, пропускаем такт; в
+// GetClockTicker длиннее). Обработчики BLYNK_WRITE/BLYNK_READ в Blynk.ino вызываются
+// изнутри Blynk.run(), то есть уже под этим локом - брать его повторно там не нужно
+// (и нельзя: мьютекс нерекурсивный).
+struct BlynkLockGuard {
+  bool acquired;
+
+  explicit BlynkLockGuard(TickType_t timeout)
+      : acquired(blynk_lock(timeout)) {}
+  ~BlynkLockGuard() { blynk_unlock(acquired); }
+
+  BlynkLockGuard(const BlynkLockGuard&) = delete;
+  BlynkLockGuard& operator=(const BlynkLockGuard&) = delete;
+
+  explicit operator bool() const { return acquired; }
+};
+#endif
 
 bool mode_switch_in_progress();
 
@@ -314,15 +344,55 @@ inline bool current_power_mode_is(const String& mode) {
   return get_current_power_mode_value() == mode;
 }
 
-inline void set_current_power_mode_value(const String& mode) {
+// [T14 п.29] Возвращает признак успеха: занятый лок -> false. Это не отказ
+// регулятора (железо к этому моменту уже приняло команду) - вызывающий из
+// power_regulator_*.h взводит отложенный повтор записи через
+// arm_pending_power_mode_retry() вместо эскалации в fail-close.
+inline bool set_current_power_mode_value(const String& mode) {
   bool locked = runtime_state_lock(pdMS_TO_TICKS(500));
-  if (!locked) return;
+  if (!locked) return false;
   current_power_mode = mode;
   runtime_state_unlock(true);
+  return true;
 }
 
+// [T14 п.29] Отложенный повтор записи кэша режима регулятора. Замок runtime-
+// состояния в set_current_power_mode_value() занят максимум 500 мс - при
+// проигрыше гонки значение раньше терялось молча и уводило кэш в рассинхрон
+// с реальным состоянием регулятора. Теперь неудачную запись повторяет
+// process_pending_power_request() (power_regulator.h).
+// SAFETY_REGULATOR_MODE_SLEEP == 0 - валидное значение режима, поэтому
+// "заявки нет" кодируется отдельным флагом, а не значением 0.
+// Однопоточный доступ без лока: пишет apply_regulator_mode_blocking(), читает
+// и снимает только process_pending_power_request() - обе стороны выполняются
+// последовательно в одной задаче регулятора (см. LOCK_ORDER выше - здесь его
+// нет намеренно, конкурентного доступа не бывает).
+static SafetyRegulatorMode pendingPowerModeRetryValue = SAFETY_REGULATOR_MODE_SLEEP;
+static bool pendingPowerModeRetryArmed = false;
+
+inline void arm_pending_power_mode_retry(SafetyRegulatorMode mode) {
+  pendingPowerModeRetryValue = mode;
+  pendingPowerModeRetryArmed = true;
+}
+
+inline bool pending_power_mode_retry_armed() {
+  return pendingPowerModeRetryArmed;
+}
+
+inline SafetyRegulatorMode pending_power_mode_retry_value() {
+  return pendingPowerModeRetryValue;
+}
+
+inline void clear_pending_power_mode_retry() {
+  pendingPowerModeRetryArmed = false;
+}
+
+// [T14 п.1] Нижняя граница - порог WORK↔SLEEP: ниже него set_current_power()
+// бесшумно схлопывает мощность в SLEEP (target_power_volt = 0).
 inline float reduce_power_by_volts(float power, float volts) {
-  return power - volts * PWR_FACTOR;
+  float reduced = power - volts * PWR_FACTOR;
+  if (reduced < power_work_mode_threshold()) reduced = power_work_mode_threshold();
+  return reduced;
 }
 
 enum RuntimeEventPublishResult : uint8_t {
@@ -471,6 +541,14 @@ inline void stepper_safe_set_current(int32_t current) {
 inline void stepper_safe_set_target(int32_t target) {
   portENTER_CRITICAL(&timerMux);
   stepper.setTarget(target);
+  portEXIT_CRITICAL(&timerMux);
+}
+
+// Меняет физическую полярность вывода DIR (не трогает позицию/цель) - используется
+// для передачи направления в локальный (без I2C-платы) путь set_stepper_target().
+inline void stepper_safe_reverse(bool val) {
+  portENTER_CRITICAL(&timerMux);
+  stepper.reverse(val);
   portEXIT_CRITICAL(&timerMux);
 }
 

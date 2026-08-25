@@ -36,6 +36,11 @@ from smoke_helpers import extract_function_body, strip_cpp_comments
 ROOT = Path(__file__).resolve().parents[1]
 
 FUNCTIONS = [
+    # [T40 А3] mode_status_session_active() ниже теперь читает диапазон через
+    # mode_status_belongs() (общая для mode_ops_by_status/mode_dispatch_loop
+    # проверка "статус входит в границы режима") - её реальное тело нужно
+    # харнессу ДО mode_status_session_active(), иначе имя не объявлено.
+    "inline bool mode_status_belongs(const ModeOps* ops, int16_t status)",
     "inline bool mode_status_session_active(int16_t status)",
     "inline bool mode_startval_session_active(int16_t value)",
     "inline bool program_update_session_active()",
@@ -54,7 +59,7 @@ HARNESS_TEMPLATE = r'''
 class String;
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF};
 enum MESSAGE_TYPE {ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100};
 
 constexpr int16_t SAMOVAR_STATUS_IDLE = 0;
@@ -72,6 +77,8 @@ struct ModeOps {
   int16_t activeStatus;
   int16_t startvalRangeLow;
   int16_t startvalRangeHigh;
+  int16_t statusRangeLow;
+  int16_t statusRangeHigh;
   const char* pagePath;
   SamovarCommands powerOnCommand;
   SamovarCommands startCommand;
@@ -84,11 +91,14 @@ struct ModeOps {
 // guard/isNewSession-логики mode_apply_power_on_command, не зависящей от
 // конкретного состава реальной таблицы. Реальные BK/SUVID/LUA строки
 // проверяются отдельно, текстовым способом (см. main() ниже, отдельная
-// проверка не через этот харнесс).
+// проверка не через этот харнесс). statusRange* повторяет реальные значения
+// (см. mode_registry.h): у БК статус и startval - один диапазон, у НБК
+// startval пробегает диапазон под-стадий, а статус - одно фиксированное
+// значение всю сессию (SamovarStatusInt не меняется).
 inline const ModeOps* mode_registry() {
   static const ModeOps ops[] = {
-    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, nullptr, nullptr, nullptr},
-    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, nullptr, nullptr, nullptr},
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, nullptr, nullptr, nullptr},
+    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, nullptr, nullptr, nullptr},
   };
   return ops;
 }
@@ -248,12 +258,15 @@ def check_table_start_commands(source: str, errors: list[str]) -> None:
         return
     row = row_match.group(0)
     fields = [f.strip() for f in row.strip("{}").split(",")]
-    if len(fields) < 7:
-        errors.append(f"mode_registry.h: BK row has fewer than 7 fields: {row}")
+    # [T40 А3] Позиция startCommand сдвинулась с 6 на 8: между startvalRangeHigh
+    # и pagePath добавились два новых поля границ статуса (statusRangeLow/High) -
+    # см. ModeOps в mode_registry.h.
+    if len(fields) < 9:
+        errors.append(f"mode_registry.h: BK row has fewer than 9 fields: {row}")
         return
-    if fields[6] != "SAMOVAR_NONE":
+    if fields[8] != "SAMOVAR_NONE":
         errors.append(
-            f"mode_registry.h: BK row startCommand expected SAMOVAR_NONE, got {fields[6]!r}"
+            f"mode_registry.h: BK row startCommand expected SAMOVAR_NONE, got {fields[8]!r}"
         )
 
     for mode_name in ("SAMOVAR_SUVID_MODE", "SAMOVAR_LUA_MODE"):
@@ -263,12 +276,12 @@ def check_table_start_commands(source: str, errors: list[str]) -> None:
             continue
         row = row_match.group(0)
         fields = [f.strip() for f in row.strip("{}").split(",")]
-        if len(fields) < 7:
-            errors.append(f"mode_registry.h: {mode_name} row has fewer than 7 fields: {row}")
+        if len(fields) < 9:
+            errors.append(f"mode_registry.h: {mode_name} row has fewer than 9 fields: {row}")
             continue
-        if fields[6] != "SAMOVAR_START":
+        if fields[8] != "SAMOVAR_START":
             errors.append(
-                f"mode_registry.h: {mode_name} startCommand should stay SAMOVAR_START (asymmetry with BK), got {fields[6]!r}"
+                f"mode_registry.h: {mode_name} startCommand should stay SAMOVAR_START (asymmetry with BK), got {fields[8]!r}"
             )
 
 

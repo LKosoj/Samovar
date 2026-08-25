@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,6 +74,10 @@ enum LuaBeerJobResult : uint8_t {
   LUA_BEER_JOB_FAILED_INIT,
   LUA_BEER_JOB_FAILED_RUNTIME,
   LUA_BEER_JOB_FAILED_TIMEOUT,
+  // [Дефект 2] занятый RUNTIME_STATE на короткий миг чтения - не то же самое,
+  // что настоящий сбой job'а; beer_stage_tick() опрашивает снова на следующем
+  // такте вместо того, чтобы аварийно прерывать варку.
+  LUA_BEER_JOB_LOCK_BUSY,
 };
 enum BeerLuaStagePhase : uint8_t {
   BEER_LUA_STAGE_IDLE = 0,
@@ -208,7 +212,7 @@ void beer_abort_config_error(const String& reason) {
 }
 
 static bool acceptLuaJob = true;
-static bool acceptLuaStop = true;
+static ActuatorCommandResult luaStopResult = ACTUATOR_COMMAND_APPLIED;
 static bool luaJobIdle = false;
 static uint32_t nextTicket = 40;
 static int requestJobCalls = 0;
@@ -229,10 +233,10 @@ LuaBeerJobResult beer_lua_job_result(uint32_t ticket) {
   return luaJobResult;
 }
 
-bool request_beer_lua_stop(uint32_t ticket) {
+ActuatorCommandResult request_beer_lua_stop(uint32_t ticket) {
   requestStopCalls++;
   lastStopTicket = ticket;
-  return acceptLuaStop;
+  return luaStopResult;
 }
 
 bool beer_lua_job_idle(uint32_t ticket) {
@@ -319,7 +323,7 @@ static void reset_fixture(ProgramType sourceType) {
   abortCalls = 0;
   abortReason.clear();
   acceptLuaJob = true;
-  acceptLuaStop = true;
+  luaStopResult = ACTUATOR_COMMAND_APPLIED;
   luaJobIdle = false;
   nextTicket = 40;
   requestJobCalls = 0;
@@ -414,21 +418,97 @@ static void test_success_then_confirmed_exit_advances_once() {
 }
 
 static void test_failed_results_abort_without_advance() {
-  const LuaBeerJobResult failuresToCheck[] = {
-      LUA_BEER_JOB_FAILED_INIT,
+  // T18: FAILED_INIT (job ни разу не подтвердил запуск) обязан получать СВОЙ
+  // текст, отличный от FAILED_RUNTIME/FAILED_TIMEOUT (job запускался, но упал
+  // уже в процессе) - иначе при диагностике нельзя отличить "скрипт вообще не
+  // завёлся" от "скрипт упал на середине".
+  enter_lua_stage();
+  luaJobResult = LUA_BEER_JOB_FAILED_INIT;
+  beer_lua_stage_tick_only();
+  check(abortCalls == 1, "FAILED_INIT did not raise an orderly error");
+  check(ProgramNum == 1, "FAILED_INIT advanced ProgramNum");
+  check(abortReason.find("не подтвердил запуск") != std::string::npos,
+        "FAILED_INIT must report the 'job never confirmed start' text");
+  const std::string initReason = abortReason;
+
+  const LuaBeerJobResult genericFailures[] = {
       LUA_BEER_JOB_FAILED_RUNTIME,
       LUA_BEER_JOB_FAILED_TIMEOUT,
   };
-  for (LuaBeerJobResult result : failuresToCheck) {
+  for (LuaBeerJobResult result : genericFailures) {
     enter_lua_stage();
     luaJobResult = result;
     beer_lua_stage_tick_only();
 
     check(abortCalls == 1, "failed Lua result did not raise an orderly error");
     check(ProgramNum == 1, "failed Lua result advanced ProgramNum");
-    check(abortReason.find("job завершился") != std::string::npos,
-          "failed Lua result reported the wrong error");
+    check(abortReason.find("завершился с ошибкой") != std::string::npos,
+          "FAILED_RUNTIME/FAILED_TIMEOUT must report the generic 'job завершился с ошибкой' text");
+    check(abortReason != initReason,
+          "FAILED_RUNTIME/FAILED_TIMEOUT must not reuse FAILED_INIT's error text");
   }
+}
+
+// [Дефект 2] LOCK_BUSY - RUNTIME_STATE занят на короткий миг чтения, не
+// провал job'а: beer_stage_tick() обязан опросить снова на следующем такте,
+// как и для QUEUED/RUNNING, а не аварийно прерывать варку.
+static void test_lock_busy_result_polls_again_without_abort() {
+  enter_lua_stage();
+  luaJobResult = LUA_BEER_JOB_LOCK_BUSY;
+  heaterOutput = true;
+  valve_status = true;
+  mixer_status = true;
+  beerCoolingPumpActive = true;
+  lastPumpPwm = -1;
+
+  beer_lua_stage_tick_only();
+
+  check(ProgramNum == 1, "LOCK_BUSY result advanced ProgramNum");
+  check(beerLuaStage.phase == BEER_LUA_STAGE_ENTER_QUEUED,
+        "LOCK_BUSY result changed stage phase");
+  check(abortCalls == 0, "LOCK_BUSY result aborted the brew on a transient lock");
+  check_safe_lua_entry_outputs();
+}
+
+// [Дефект 2] request_beer_lua_stop() занятым локом (ACTUATOR_COMMAND_PENDING)
+// не должен прерывать варку - run_beer_program() обязан тихо вернуться и
+// оставить тикет/фазу как есть, чтобы следующий вызов (по кнопке или
+// автопереходу) повторил запрос сам.
+static void test_exit_stop_lock_busy_returns_quietly_without_abort() {
+  enter_lua_stage();
+  luaJobResult = LUA_BEER_JOB_SUCCEEDED;
+  beer_lua_stage_tick_only();
+  check(beerLuaStage.phase == BEER_LUA_STAGE_RUNNING,
+        "SUCCEEDED job did not enter RUNNING phase before exit test");
+
+  luaStopResult = ACTUATOR_COMMAND_PENDING;
+  run_beer_program(2);
+
+  check(abortCalls == 0, "PENDING Lua stop request aborted the brew on a transient lock");
+  check(ProgramNum == 1, "PENDING Lua stop request advanced ProgramNum");
+  check(beerLuaStage.phase == BEER_LUA_STAGE_RUNNING,
+        "PENDING Lua stop request must leave the stage phase untouched (retry expected)");
+  check(beerLuaStage.ticket == 41,
+        "PENDING Lua stop request must not drop the still-active job ticket");
+  check(requestStopCalls == 1, "PENDING Lua stop request was not attempted");
+}
+
+// [Дефект 2] Настоящий отказ (не занятый лок) обязан по-прежнему аварийно
+// прерывать варку - иначе распад PENDING/FAILED в одну сторону замаскирует
+// реальную ошибку согласования.
+static void test_exit_stop_real_failure_still_aborts() {
+  enter_lua_stage();
+  luaJobResult = LUA_BEER_JOB_SUCCEEDED;
+  beer_lua_stage_tick_only();
+
+  luaStopResult = ACTUATOR_COMMAND_FAILED;
+  run_beer_program(2);
+
+  check(abortCalls == 1, "real Lua stop failure did not raise an orderly error");
+  check(abortReason.find("не удалось запросить остановку job") != std::string::npos,
+        "real Lua stop failure must report the 'stop request failed' text");
+  check(beerLuaStage.phase == BEER_LUA_STAGE_RUNNING,
+        "real Lua stop failure must not advance the stage into EXIT_QUEUED");
 }
 
 int main() {
@@ -436,6 +516,9 @@ int main() {
   test_queue_and_running_hold_lua_program();
   test_success_then_confirmed_exit_advances_once();
   test_failed_results_abort_without_advance();
+  test_lock_busy_result_polls_again_without_abort();
+  test_exit_stop_lock_busy_returns_quietly_without_abort();
+  test_exit_stop_real_failure_still_aborts();
   if (failures != 0) return 1;
   std::cout << "Beer Lua stage transition checks passed\n";
   return 0;
@@ -526,6 +609,77 @@ def require_rejected_mutation(
 def main() -> int:
     beer_source = (ROOT / "beer.h").read_text(encoding="utf-8")
     runtime_source = (ROOT / "runtime_helpers.h").read_text(encoding="utf-8")
+
+    # [Дефект 2] beer_finish() - симметричный run_beer_program() второй вызов
+    # request_beer_lua_stop() (beer.h, завершение варки по PROGRAM_END). Сама
+    # функция трогает слишком много не связанного с Lua состояния (детектор
+    # кипения, ручную паузу, сброс нагревателя и т.д.), чтобы извлекать её
+    # целиком в этот харнесс - вместо поведенческого теста здесь только
+    # структурная проверка РЕАЛЬНОГО текста: PENDING обязан возвращаться тихо
+    # (без SendMsg/ALARM_MSG), а настоящий отказ - по-прежнему аварийно.
+    # [Ревью 24.08, дефект 2] beer_finish() зовётся ИЗВНЕ (SAMOVAR_POWER/
+    # SAMOVAR_POWER_OFF, кнопка "стоп") ровно один раз через реестр режимов -
+    # в отличие от run_beer_program() у него нет естественного повторного
+    # триггера. Поэтому PENDING здесь не просто "return", а взвод
+    # beerFinishPending - его подхватят beer_proc()/beer_stage_tick() на
+    # следующем тике и повторят вызов сами (иначе сигнал завершения варки
+    # терялся бы насовсем).
+    try:
+        finish_body = extract_function_body(beer_source, "void beer_finish() {")
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+    finish_errors: list[str] = []
+    require_ordered_tokens(
+        "beer_finish",
+        finish_body,
+        [
+            "const ActuatorCommandResult stopResult = request_beer_lua_stop(beerLuaStage.ticket);",
+            "if (stopResult == ACTUATOR_COMMAND_PENDING) {",
+            "beerFinishPending = true;",
+            "if (stopResult != ACTUATOR_COMMAND_APPLIED) {",
+            'SendMsg("Ошибка Lua: не удалось запросить остановку job", ALARM_MSG);',
+            "beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;",
+        ],
+        finish_errors,
+    )
+    if finish_errors:
+        for error in finish_errors:
+            print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+
+    # МУТАЦИЯ: сама структурная проверка выше обязана ловить откат PENDING-
+    # ветки в beer_finish() - иначе это молчаливая, никогда не срабатывающая
+    # проверка. Мутируем ТОЛЬКО извлечённое тело beer_finish() (не весь
+    # beer_source) - убираем взвод флага, оставляя тихий return (так выглядела
+    # бы регрессия к дефекту 2, где сигнал завершения варки терялся насовсем).
+    mutant_finish_body = finish_body.replace(
+        "beerFinishPending = true;\n        return;", "return;", 1
+    )
+    if mutant_finish_body == finish_body:
+        print("FAIL: could not build beer_finish() PENDING mutation", file=sys.stderr)
+        return 1
+    mutation_errors: list[str] = []
+    require_ordered_tokens(
+        "beer_finish (mutated)",
+        mutant_finish_body,
+        [
+            "const ActuatorCommandResult stopResult = request_beer_lua_stop(beerLuaStage.ticket);",
+            "if (stopResult == ACTUATOR_COMMAND_PENDING) {",
+            "beerFinishPending = true;",
+            "if (stopResult != ACTUATOR_COMMAND_APPLIED) {",
+            'SendMsg("Ошибка Lua: не удалось запросить остановку job", ALARM_MSG);',
+            "beerLuaStage.phase = BEER_LUA_STAGE_EXIT_QUEUED;",
+        ],
+        mutation_errors,
+    )
+    if not mutation_errors:
+        print(
+            "FAIL: beer_finish() PENDING mutation survived - structural check does not bite",
+            file=sys.stderr,
+        )
+        return 1
+
     try:
         harness = build_harness(beer_source, runtime_source)
     except ValueError as error:
@@ -550,16 +704,41 @@ def main() -> int:
             "did not commit Lua ProgramNum",
         ),
         (
-            'beer_abort_config_error("Ошибка Lua: job завершился без подтверждённого запуска");',
-            "return;",
-            "failed job handling",
-            "did not raise an orderly error",
+            'beer_abort_config_error(result == LUA_BEER_JOB_FAILED_INIT\n'
+            '        ? "Ошибка Lua: job не подтвердил запуск"\n'
+            '        : "Ошибка Lua: job завершился с ошибкой");',
+            'beer_abort_config_error("Ошибка Lua: job завершился с ошибкой");',
+            "FAILED_INIT distinct error text",
+            "FAILED_INIT must report the 'job never confirmed start' text",
         ),
         (
             "beerLuaStage.nextProgram = targetProgram;",
             "beerLuaStage.nextProgram = PROGRAM_END;",
             "next ProgramNum retention",
             "did not retain next ProgramNum",
+        ),
+        # [Дефект 2] МУТАЦИЯ: run_beer_program() снова сливает занятый лок с
+        # реальным отказом - тест обязан упасть (варка аварийно прервётся на
+        # любой микро-задержке RUNTIME_STATE). beer_finish() в этот харнесс не
+        # извлекается (см. комментарий выше про структурную проверку) - токен
+        # с фигурными скобками встречается в тексте харнесса только один раз.
+        (
+            'if (stopResult == ACTUATOR_COMMAND_PENDING) {\n'
+            '        SendMsg("Не удалось сразу остановить job Lua - блокировка занята. Повторите переход через секунду.", WARNING_MSG);\n'
+            '        return;\n'
+            '      }',
+            "if (false) return;",
+            "exit PENDING does not abort",
+            "PENDING Lua stop request aborted the brew on a transient lock",
+        ),
+        # [Дефект 2] МУТАЦИЯ: beer_stage_tick() перестаёт опрашивать LOCK_BUSY
+        # повторно - тест обязан упасть (варка аварийно прервётся на любой
+        # микро-задержке RUNTIME_STATE при опросе результата job'а).
+        (
+            "if (result == LUA_BEER_JOB_LOCK_BUSY || result == LUA_BEER_JOB_QUEUED ||",
+            "if (false || result == LUA_BEER_JOB_QUEUED ||",
+            "L dispatch LOCK_BUSY polls again",
+            "LOCK_BUSY result aborted the brew on a transient lock",
         ),
     ]
     for old, new, label, expected_failure in mutations:

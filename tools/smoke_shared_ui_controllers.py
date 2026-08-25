@@ -67,6 +67,20 @@ def function_body(source: str, name: str) -> str:
     raise AssertionError(f"unterminated function {name}")
 
 
+def div_span(html: str, element_id: str) -> tuple[int, int] | None:
+    """Границы <div id="element_id">...</div> в развёрнутом (после include) HTML."""
+    match = re.search(rf"<div\b[^>]*\bid=[\"']{re.escape(element_id)}[\"']", html)
+    if match is None:
+        return None
+    tag_end = html.index(">", match.start()) + 1
+    depth = 1
+    for tag in re.finditer(r"<div\b|</div>", html[tag_end:]):
+        depth += -1 if tag.group(0) == "</div>" else 1
+        if depth == 0:
+            return tag_end, tag_end + tag.start()
+    return None
+
+
 def check_stale_reading_coverage():
     """Каждое температурное показание страницы должно приглушаться при обрыве связи.
 
@@ -86,9 +100,44 @@ def check_stale_reading_coverage():
             r"getElementById\(['\"]([A-Za-z_]*(?:Temp|temp)[A-Za-z_]*)['\"]\)"
             r"\.(?:innerHTML|innerText|textContent)\s*=",
             text))
-        missing = sorted(shown - declared)
+        missing = shown - declared
+        if missing:
+            # Показание может быть накрыто не собственным id в staleReadingIds, а общим
+            # контейнером-обёрткой (index.htm: staleReadingIds: ['Main'] вместо списка полей) -
+            # такие "лишние" declared-id проверяем структурно по РАЗВЁРНУТОМУ (после include)
+            # HTML: ищем его <div id="...">...</div> и смотрим, лежит ли id забытого показания
+            # внутри границ, а не просто верим названию списка на слово.
+            resolved = read_page(page)
+            for container_id in declared - shown:
+                span = div_span(resolved, container_id)
+                if span is None:
+                    continue
+                container_html = resolved[span[0]:span[1]]
+                for field in list(missing):
+                    if re.search(rf"id=[\"']{re.escape(field)}[\"']", container_html):
+                        missing.discard(field)
         require(not missing,
-                f"{page}: показания приглушаются не полностью, забыты {missing}")
+                f"{page}: показания приглушаются не полностью, забыты {sorted(missing)}")
+
+        # Кнопка нагрева - тоже "показание": её надпись ("Включить/Выключить нагрев")
+        # читается как текущее состояние. Если при обрыве связи она осталась яркой,
+        # человек жмёт по устаревшему состоянию - ровно тот сценарий, ради которого
+        # /command?action=power перестал быть слепым переключателем (T26.1).
+        resolved = read_page(page)
+        buttons = set(re.findall(
+            r"<input[^>]*id=['\"](power[A-Za-z_]*)['\"][^>]*value=['\"][^'\"]*нагрев",
+            resolved))
+        uncovered = buttons - declared
+        for container_id in declared - buttons:
+            span = div_span(resolved, container_id)
+            if span is None:
+                continue
+            container_html = resolved[span[0]:span[1]]
+            for button in list(uncovered):
+                if re.search(rf"id=[\"']{re.escape(button)}[\"']", container_html):
+                    uncovered.discard(button)
+        require(not uncovered,
+                f"{page}: кнопка нагрева не гаснет при обрыве связи, забыты {sorted(uncovered)}")
 
 
 def main() -> int:
@@ -188,6 +237,7 @@ def main() -> int:
         "function showMessages", "function clearMessages", "function escapeHtml",
         "function applyTheme", "function toggleTheme", "function setPowerUnit",
         "Messages_Array", "sound_is_playing", "is_ALARM",
+        "function AddLuaButtons", "%btn_list%", "samovar_lua_btn_list", "threshold: 1,",
     ):
         require(marker not in chart, f"chart: duplicate shared owner remains: {marker}")
     require("SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });" in chart,
@@ -199,7 +249,7 @@ def main() -> int:
             chart.index("SamovarApp.startTelemetryPage("),
             "chart: lifecycle start left the existing DOMContentLoaded owner")
     for marker in (
-        "threshold: 1", "storeMessageHistory: false", "dynamicThemeTitle: true",
+        "threshold: 3", "storeMessageHistory: false", "dynamicThemeTitle: true",
         "implicitSystemTheme: true", "online: 'GreenT'", "offline: 'RedT'",
         "if (remainingCount === 0) IsCalmingPause = false",
         "SamovarApp.addMessage(importantStatus, 1)",

@@ -135,6 +135,11 @@ StaticSemaphore_t xLuaSemaphoreBuffer;
 SemaphoreHandle_t xI2CSemaphore = NULL;
 StaticSemaphore_t xI2CSemaphoreBuffer;
 
+#ifdef SAMOVAR_USE_BLYNK
+SemaphoreHandle_t xBlynkSemaphore = NULL;
+StaticSemaphore_t xBlynkSemaphoreBuffer;
+#endif
+
 #ifdef USE_BMP280_ALT
 #undef USE_BMP180
 #undef USE_BME280
@@ -431,7 +436,7 @@ LiquidMenu main_menu1(lcd);
 
 DNSServer dns;
 
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF};
 
 enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
 volatile SAMOVAR_MODE Samovar_Mode;
@@ -579,6 +584,7 @@ struct StateSnapshot {
   uint8_t programRow;   // номер текущей строки программы, 1-based (как в файле)
   uint8_t programLen;   // всего строк в программе
   bool powerOn;         // был ли включён нагрев - только по нему решаем, предупреждать ли
+  uint32_t suvidHoldAccumulatedSec;  // накопленная выдержка Сувида на момент снимка, сек
   String programText;   // текст программы в формате режима, пригодный для разбора
 };
 

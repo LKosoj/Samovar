@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_braced_block_after, extract_function_body
+from smoke_helpers import extract_braced_block_after, extract_function_body, require_ordered_tokens
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -318,7 +318,25 @@ def main() -> int:
     beer = (ROOT / "beer.h").read_text(encoding="utf-8")
     try:
         stage = extract_function_body(beer, "void beer_stage_tick()")
-        if "lastBeerTickMs = nowMs;\n\n  if (heater_safety_latched()) return;" not in stage:
+        # [Ревью 24.08, дефект 2] Между lastBeerTickMs = nowMs; и heater_safety_latched()
+        # теперь есть ретрай зависшего beer_finish() (PENDING на request_beer_lua_stop()) -
+        # он обязан идти ДО защёлки, иначе уже запрошенный останов застрянет, пока защёлка
+        # взведена. Порядок токенов проверяем явно вместо пиновки соседних строк подряд.
+        order_errors: list[str] = []
+        require_ordered_tokens(
+            "beer_stage_tick",
+            stage,
+            [
+                "lastBeerTickMs = nowMs;",
+                "if (beerFinishPending) {",
+                "beer_finish();",
+                "if (heater_safety_latched()) return;",
+            ],
+            order_errors,
+        )
+        if order_errors:
+            for error in order_errors:
+                print(f"FAIL: {error}", file=sys.stderr)
             print("FAIL: beer_stage_tick должен прекращать обработку после аварии исполнительного механизма", file=sys.stderr)
             return 1
         f_branch, _ = extract_braced_block_after(stage, "if (currentType == 'F') {")

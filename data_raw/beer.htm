@@ -100,9 +100,6 @@
 
     function renderTelemetry(myObj) {
         {
-          document.getElementById('version').textContent = myObj.version;
-          document.getElementById('crnt_tm').textContent = myObj.crnt_tm;
-          document.getElementById('stm').textContent = myObj.stm;
           document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(1);
           document.getElementById('PipeTemp').innerHTML = myObj.PipeTemp.toFixed(1);
           document.getElementById('WaterTemp').innerHTML = myObj.WaterTemp.toFixed(1);
@@ -118,41 +115,18 @@
           else if (myObj.PrgType === "A") myObj.PrgType = "Автотюнинг; "
           else if (myObj.PrgType === "L") myObj.PrgType = "Lua; "
           document.getElementById('Status').textContent = myObj.PrgType + myObj.Status;
-          document.getElementById('current_power_volt').innerHTML = myObj.current_power_volt;
-          document.getElementById('target_power_volt').innerHTML = myObj.target_power_volt;
-          document.getElementById('current_power_mode').innerHTML = myObj.current_power_mode;
-          document.getElementById('current_power_p').innerHTML = myObj.current_power_p;
-          document.getElementById('bme_temp').innerHTML = myObj.bme_temp;
-          document.getElementById('heap').innerHTML = myObj.heap;
-          document.getElementById('rssi').innerHTML = myObj.rssi;
-          document.getElementById('fr_bt').innerHTML = myObj.fr_bt;
-          SamovarApp.setSoundEnabled(!!myObj.UseBBuzzer);
 
-          if (myObj.wp_spd === undefined) {
-          } else {
-            document.getElementById('add_param').innerHTML = "; ШИМ насоса воды: " + myObj.wp_spd;
-          }
-
+          SamovarApp.renderTelemetryCommon(myObj);
           SamovarApp.renderI2cPumpStatus(myObj);
-
-          if (myObj.Lstatus) {
-            if (myObj.Lstatus != "") {
-              document.getElementById('Lstatus').textContent = myObj.Lstatus;
-            }
-          }
-
-          var powerstr;
-          var powerstyle;
-          HeaterPowerOn = myObj.PowerOn == 1;
-          if (HeaterPowerOn) {
-            powerstr = 'Выключить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-danger-bg');
+          if (myObj.PowerOn == 1) {
+            document.getElementById('power').value = 'Выключить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-danger-bg');
+            HeaterPowerOn = true;
           } else {
-            powerstr = 'Включить нагрев';
-            powerstyle = SamovarApp.cssVar('--state-active-bg');
+            document.getElementById('power').value = 'Включить нагрев';
+            document.getElementById('power').style.backgroundColor = SamovarApp.cssVar('--state-active-bg');
+            HeaterPowerOn = false;
           }
-          document.getElementById('power').value = powerstr;
-          document.getElementById('power').style.backgroundColor = powerstyle;
 
         }
     };
@@ -335,6 +309,7 @@
       }
       var e = document.getElementById("prg");
       e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-type" class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-temperature" class="tooltip">Темп<span class="tooltiptext">Задается для программ "Пауза", "Охлаждение", "Темп. закладки солода" и "Брага"</span></label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="beer-program-col-time" class="tooltip">Время<span class="tooltiptext">Задается для программ "Пауза", "Ожидание" и "Кипячение"</span></label>&nbsp;&nbsp;&nbsp;<label id="beer-program-col-mixer" class="tooltip">Мешалка<span class="tooltiptext">Управление мешалкой</span></label><label id="beer-program-col-sensor" class="tooltip">Датчик темп.<span class="tooltiptext">Выбор датчика температуры для управления нагревом</span></label></div>');
+      SamovarApp.enhanceTooltips();
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
       for (z = 0; z < varr.length; z++) {
@@ -400,11 +375,12 @@
           setPowerUnit();
           SamovarApp.addLuaButtons();
           getProgram();
+          SamovarApp.enhanceTooltips(); // страховка: getProgram() выше может выйти раньше своего вызова enhanceTooltips() при ошибке в WProgram; заодно ловит статичные подсказки (модалка мешалки)
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
         implicitSystemTheme: false,
-        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp']
+        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp', 'power']
       });
     };
 
@@ -507,7 +483,7 @@
       </section>
 
       <div>
-        <input id='power' type='button' name='power' class="button" value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=1"); return false;'>
+        <input id='power' type='button' name='power' class="button" value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=" + (HeaterPowerOn ? "0" : "1")); return false;'>
         <input id='start' type='button' name='start' class="button" value='Следующая программа' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;'>
         <input id='chart' type='button' name='chart' class="button" value='График' onclick='javascript:location.href="chart.htm"'>
         <input id='setup' type='button' name='setup' class="button" value='Настройки' onclick='javascript:location.href="setup.htm"'>

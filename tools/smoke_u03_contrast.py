@@ -37,20 +37,20 @@ STYLE_TOKEN_ALLOWLIST = (
     "detector-alarm-bg",
 )
 NORMALIZED_SHA256 = {
-    "style.css": "c2e2bfc57ea49cf1d67318a71892c0205938635a45c2c17c1d7c1daedfe8f32d",
-    "index.htm": "a6fbb2ead1b3242a1de2a8f26d03fe0d01ae1e240ea7b703b7415404334e4f75",
-    "beer.htm": "c4d5d62913b60fe95dffe5ef845f6466b70a7125f47a6501d1bf810d8bcb8522",
-    "distiller.htm": "eeb2e567b6f24d7b0123842cd4fe328e2db090b1ead133fdccbd71f856139709",
-    "bk.htm": "373a86c784394b0551acc4b730655a9b77433505cb1184b4f38112edc3784147",
-    "nbk.htm": "4e93fbdecf55696d9a6b3917e3170224bd5bf30259b72019cb61419e9ee954a6",
-    "setup.htm": "16497361aaf0e4f1dee346e73051f7d824eb1ed9951ff71eff6f3b601ccc35b1",
-    "chart.htm": "32736cc9f006e7c5890847723086aeec53bef61188e4b5883858e1b8895266eb",
-    "program.htm": "c315d2a647e96f131bea24c21ca42b5cadc5faf3e8c3b2dc22ff68471e854849",
+    "style.css": "2c9b179ab621163155ebc3383800a9921c56406bf8fe38dda4102c141a5365ed",
+    "index.htm": "a234d39fc7f0ba65b1f6ef6267e7b71789a10de14d7cb08a0b077673afc864b7",
+    "beer.htm": "e5e792c1e8c54cc171d7898ad27b030e5508e3552529ad59fdda96bd8d3992f0",
+    "distiller.htm": "cb4957c0384cfd4f74b98c88d61abe8841b615d15f8abca04277405f1bc0bdeb",
+    "bk.htm": "f13df2f98db2eb8d625fa59fa552f1a32e461286f1621978b6ece393da8959fd",
+    "nbk.htm": "d006d01ecba3bc9c4718310f0ad0b08cb2b912376d234b061679ff881a77fcc2",
+    "setup.htm": "75ae4dca8303737dc8c3000b5f5455a4c2d0c6ab10705a08c21f3ffa3643b4fc",
+    "chart.htm": "4723d8c547624d31b3470cec7423d8cd5011d9ee36023fd75806817ff1efa63d",
+    "program.htm": "a2f30df8deee3e9d0e666faa64f99ab31b4a8b80a36d35b92378c3422cbc469e",
     "i2cstepper.htm": "27da2e5e24dfd54b59feca755364aba5b9a5fa214a847803b30f58d7a18cb315",
-    "chart.js": "aae8513c74153e4ef5c6e29712331e9d39f9ea01b907ec2ac5ccabd1aa478e95",
+    "chart.js": "c8c182f2a9719f028dda8131114acbabc955d35aa2b7c61d2e7fedb4b669e1f3",
 }
 FROZEN_SHA256 = {
-    "app.js": "45633765356354e5190c85efe59e6678c2c76c47d183453d7224ef180963d00b",
+    "app.js": "0b543b3ae8cf2d2cb71e439bfa5c24a3b7ce4ec551230c25fd508e7cba571ddc",
     "edit.htm": "26b7e41df2a0a0197a14b9cf129f808fd001e760df4ed7c16df7a35a10b03ce6",
     "edit.htm.gz": "86e2801e2370cd45420ed84005194b752cc22198e7ab85faa33129bd28a50cac",
 }

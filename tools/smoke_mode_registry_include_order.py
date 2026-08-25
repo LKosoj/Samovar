@@ -72,6 +72,8 @@ struct ModeOps {
   int16_t activeStatus;
   int16_t startvalRangeLow;
   int16_t startvalRangeHigh;
+  int16_t statusRangeLow;
+  int16_t statusRangeHigh;
   const char* pagePath;
   SamovarCommands powerOnCommand;
   SamovarCommands startCommand;

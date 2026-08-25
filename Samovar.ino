@@ -89,9 +89,11 @@ struct AjaxTelemetrySnapshot;
 
 #include <ArduinoTrace.h>
 
+// esp_task_wdt.h нужен в ОБОИХ случаях: под __SAMOVAR_NOT_USE_WDT его зовёт
+// setup_disable_watchdogs(), без него - [T30] сторож loop() в конце setup().
+#include <esp_task_wdt.h>
 #ifdef __SAMOVAR_NOT_USE_WDT
 #include "soc/rtc_wdt.h"
-#include <esp_task_wdt.h>
 #endif
 
 #ifdef USE_LUA
@@ -137,7 +139,19 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 #ifdef SAMOVAR_USE_BLYNK
 //#define BLYNK_PRINT Serial
-//#define BLYNK_TIMEOUT_MS 888
+// [Ревью 24.08] Blynk.run() зовётся из loop() (tick_blynk) и на зависшем сокете блокирует
+// его ровно на BLYNK_TIMEOUT_MS: библиотека ставит client->setTimeout(BLYNK_TIMEOUT_MS)
+// (BlynkArduinoClient.h) и читает блокирующим readBytes(). Заводские 6000 мс не влезали в
+// бюджет ОДНОЙ итерации loop() под сторожем LOOP_WDT_TIMEOUT_S=10 с. Значение снижено до
+// 3000 мс флагом сборки -DBLYNK_TIMEOUT_MS в platformio.ini (сторожит
+// tools/smoke_loop_budget_vs_watchdog.py). Именно флагом, а не #define здесь: logic.h
+// (строка 134 выше) уже втянул BlynkSimpleEsp32.h -> BlynkConfig.h, где значение задано
+// через #ifndef, поэтому переопределение в этом месте опаздывает и не работает.
+// [Ревью 24.08, ошибка 1] Ожидание подтверждения I2C-команды в бюджет этой итерации
+// больше не суммируется: process_pending_i2c_operations() кормит сторож отдельно
+// (feedLoopWDT() сразу после операции - см. комментарий там), т.к. цепочка I2C ограничена
+// СВОИМИ таймаутами, но может быть длиннее одной итерации. 3000 мс подобраны по бюджету
+// Blynk.run() отдельно от I2C: 54 с дисконнект/3 с логин Blynk - см. platformio.ini.
 //#define BLYNK_HEARTBEAT 17
 
 #include <BlynkSimpleEsp32.h>
@@ -179,6 +193,12 @@ portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE waterPulseMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE dsAddressMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE emergencyStopMux = portMUX_INITIALIZER_UNLOCKED;
+// [T29] Защищает SamSetup (копируется присваиванием структуры, ~536 байт - не
+// атомарно) и program[]/ProgramLen от рваного чтения: writer'ы живут в loop()
+// (приоритет 1), а handleSave()/serialize_program_for_mode() читают их из
+// async_tcp (приоритет 5, вытесняет loop() в любой момент). Мьютекс не нужен -
+// копирование короткое, ждать в очереди нечего.
+portMUX_TYPE configMux = portMUX_INITIALIZER_UNLOCKED;
 QueueHandle_t samovar_command_queue = NULL;
 StaticQueue_t samovar_command_queue_buffer;
 uint8_t samovar_command_queue_storage[SAMOVAR_COMMAND_QUEUE_LENGTH * sizeof(SamovarCommandMsg)];
@@ -273,8 +293,6 @@ static void reset_profile_operation_slot() {
   active_profile_operation.programAction = PROGRAM_UPDATE_NONE;
   profile_operation_phase_store(PROFILE_OPERATION_EMPTY);
 }
-
-volatile bool mode_switch_barrier_active = false;
 
 // [W-9] Отложенное сканирование OneWire датчиков
 volatile bool pending_rescan_ds_flag = false;
@@ -398,8 +416,14 @@ static OperationError commit_profile_operation() {
     }
   }
 
-  if (modeChange) samovar_reset();
-  if (hasSettings) SamSetup = active_profile_operation.settings;
+  if (hasSettings) {
+    // [T29] handleSave() читает SamSetup из async_tcp (другая задача/ядро) под
+    // тем же спинлоком - без него присваивание структуры (~536 байт) может
+    // быть вытеснено async_tcp на середине.
+    portENTER_CRITICAL(&configMux);
+    SamSetup = active_profile_operation.settings;
+    portEXIT_CRITICAL(&configMux);
+  }
   if (modeChange) {
     Samovar_Mode = static_cast<SAMOVAR_MODE>(active_profile_operation.targetMode);
     Samovar_CR_Mode = Samovar_Mode;
@@ -432,6 +456,12 @@ static OperationError commit_profile_operation() {
   }
   runtime_state_unlock(runtimeLocked);
 
+  // Вынесено из-под runtime_state_lock: samovar_reset() берёт I2C (reset_focus(),
+  // set_menu_screen(3), reset_sensor_counter()->BME_getvalue()), а по LOCK_ORDER
+  // (runtime_helpers.h) I2C обязан браться РАНЬШЕ RUNTIME_STATE, не внутри него.
+  // Порядок относительно apply_config_runtime() ниже не изменился - сброс по-прежнему
+  // раньше.
+  if (modeChange) samovar_reset();
   if (hasSettings) apply_config_runtime();
 #ifdef USE_LUA
   if (modeChange) {
@@ -443,10 +473,22 @@ static OperationError commit_profile_operation() {
     // присваивания и отдаём ДО load_lua_script(): она сама берёт тот же лок внутри,
     // а он не рекурсивный (обычный мьютекс) - держать его здесь было бы мгновенным
     // самовзаимоблокированием.
-    bool luaTypeLocked = lua_state_lock(portMAX_DELAY);
-    lua_type_script = get_lua_mode_name();
-    lua_state_unlock(luaTypeLocked);
-    load_lua_script();
+    // [T30a] portMAX_DELAY здесь означал, что loop() (эту функцию всегда вызывает
+    // process_profile_operation() из loop(), core 1) мог зависнуть до ~40 с - ровно
+    // на столько периодический прогон do_lua_script() может удержать xLuaSemaphore
+    // (два чанка подряд под одним локом, LUA_CHUNK_TIMEOUT_MS=20000 каждый). Ждём
+    // не дольше load_lua_script() (тот же прецедент, pdMS_TO_TICKS(300)); при неудаче
+    // заявку не теряем - lua_type_script_pending применит её load_lua_script() перед
+    // чтением lua_type_script, которую switch_samovar_mode() всё равно вызывает сразу
+    // следом и повторяет, пока операция не завершится (mode-switch не станет terminal
+    // раньше, чем скрипт реально перечитается).
+    bool luaTypeLocked = lua_state_lock(pdMS_TO_TICKS(300));
+    if (luaTypeLocked) {
+      lua_type_script = get_lua_mode_name();
+      lua_state_unlock(true);
+    } else {
+      lua_type_script_pending = true;
+    }
   }
 #endif
   return persistFailed ? OPERATION_ERROR_PROFILE_PERSIST_FAILED : OPERATION_ERROR_NONE;
@@ -511,12 +553,24 @@ static void process_profile_operation() {
         if (finishError == OPERATION_ERROR_NONE) {
           if ((active_profile_operation.flags &
                PROFILE_OPERATION_MODE_CHANGE) != 0) {
-            portENTER_CRITICAL(&emergencyStopMux);
-            mode_switch_barrier_active = false;
-            portEXIT_CRITICAL(&emergencyStopMux);
+            mode_switch_end();
           }
           reset_profile_operation_slot();
         } else {
+          // Барьер смены режима - это "не трогай железо, пока меняется режим",
+          // а не аварийный тормоз. Если оставить его поднятым здесь, loop() уходит
+          // в ранний return навсегда (см. барьер-return ниже в loop()), а уже
+          // включённый нагрев при этом НЕ снимается - барьер только запрещает
+          // включение (power_regulator.h), значит аппарат продолжит греть, потеряв
+          // управление отбором. Настоящий fail-closed по нагреву обеспечивают
+          // alarm_event()/heaterSafetyState.emergencyLatched (они не зависят от
+          // барьера - см. mode_dispatch_alarm() выше), а пользователь получает
+          // ALARM_MSG "требуется перезагрузка" и может выключить нагрев командой
+          // (/command идёт мимо барьера).
+          if ((active_profile_operation.flags &
+               PROFILE_OPERATION_MODE_CHANGE) != 0) {
+            mode_switch_end();
+          }
           active_profile_operation.terminalState = OPERATION_STATE_FAILED;
           active_profile_operation.terminalError = OPERATION_ERROR_INTERNAL;
           profile_operation_phase_store(PROFILE_OPERATION_FAILED_CLOSED);
@@ -543,9 +597,7 @@ static void process_profile_operation() {
         Samovar_Mode != sourceMode) {
       if ((active_profile_operation.flags &
            PROFILE_OPERATION_MODE_CHANGE) != 0) {
-        portENTER_CRITICAL(&emergencyStopMux);
-        mode_switch_barrier_active = false;
-        portEXIT_CRITICAL(&emergencyStopMux);
+        mode_switch_end();
       }
       set_profile_operation_terminal(
           OPERATION_STATE_FAILED, OPERATION_ERROR_CANCELLED);
@@ -635,7 +687,9 @@ volatile I2CStepperCache i2c_stepper_cache = {false, false, 0, 0, 0, 0};
 static void refresh_i2c_stepper_cache(I2CStepperDevice& device) {
   if (!i2c_stepper_config_begin(device)) return;
 
-  bool present = i2c_stepper_refresh(device, true);
+  // Фоновое обновление кэша ждёт мьютекс I2C короче обычного (100 мс вместо 1000):
+  // это не пользовательская команда, и подвисание здесь не должно подвешивать SysTicker.
+  bool present = i2c_stepper_refresh(device, true, I2C_CACHE_LOCK_WAIT_MS);
   if (device.address == I2CSTEPPER_MIXER_ADDR) {
     i2c_stepper_cache.mixer_present = present;
   } else if (device.address == I2CSTEPPER_PUMP_ADDR) {
@@ -882,7 +936,7 @@ static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
 
 #ifdef USE_WATERSENSOR
 static void tick_update_water_flow(uint16_t waterPulses, unsigned long &oldTime) {
-  if (waterPulses < 3) waterPulses = 0;
+  if (waterPulses < WATER_FLOW_MIN_PULSES) waterPulses = 0;
   WFflowRate = ((1000.0 / (millis() - oldTime)) * waterPulses) / WF_CALIBRATION;
   WFflowMilliLitres = WFflowRate * 100 / 6;
   WFtotalMilliLitres += WFflowMilliLitres;
@@ -1264,6 +1318,10 @@ static void process_pending_i2c_operations() {
               pending_i2c_operation_result.id)) {
         pending_i2c_operation_result = {};
       }
+    } else {
+      // id не совпал - применять результат уже не к чему (владелец записи сменился).
+      // Раньше .pending оставался поднятым навсегда и блокировал всю диспетчеризацию.
+      pending_i2c_operation_result = {};
     }
     return;
   }
@@ -1320,6 +1378,19 @@ static void process_pending_i2c_operations() {
     case PENDING_I2C_OPERATION_NONE:
       break;
   }
+  // [Ревью 24.08, ошибка 1] Сторож loop() (esp_task_wdt, LOOP_WDT_TIMEOUT_S) считает
+  // ОДНУ итерацию целиком - три из четырёх веток switch выше идут через шину I2C
+  // (i2c_stepper_write_config()/i2c_stepper_send_command(), каждая ждёт семафор шины
+  // до I2C_LOCK_WAIT_MS, плюс confirm_i2c_candidate() -> ещё один i2c_stepper_refresh()),
+  // и уже не укладываются в бюджет вместе с остальным содержимым итерации (Blynk.run()
+  // и т.д.), см. smoke_loop_budget_vs_watchdog.py. Сброс здесь - не маскировка реального
+  // зависания: каждое ожидание внутри цепочки ограничено СВОИМ таймаутом семафора/
+  // дедлайном по millis(), то есть цепочка целиком тоже ограничена сверху, а не висит
+  // бесконечно - именно от таких (бесконечных) зависаний защищает сторож. feedLoopWDT()
+  // при выключенном сторожем (esp_task_wdt_reset() не найдёт задачу) молча вызовет
+  // log_e() - при -DCORE_DEBUG_LEVEL=0 (platformio.ini, база [env:Samovar]) это
+  // do {} while(0), спама нет (проверено по esp32-hal-misc.c/esp32-hal-log.h ядра).
+  feedLoopWDT();
   publish_pending_i2c_result(
       operationId,
       result == OPERATION_ERROR_NONE
@@ -1446,7 +1517,10 @@ bool initEmergencyButtonTask() {
     1
   );
   if (created != pdPASS || EmergencyButtonTask == nullptr) return false;
-  pinMode(ALARM_BTN_PIN, INPUT_PULLUP);
+  // На классическом ESP32 выводы 34-39 - только вход, без внутренних подтяжек (на DEVKIT
+  // аварийная кнопка сидит на GPIO35, поэтому там обязательна внешняя подтяжка). На
+  // ESP32-S3 такого ограничения нет (там ALARM_BTN_PIN=48, подтяжка реальна).
+  pinMode(ALARM_BTN_PIN, (ALARM_BTN_PIN >= 34 && ALARM_BTN_PIN <= 39) ? INPUT : INPUT_PULLUP);
   attachInterrupt(ALARM_BTN_PIN, emergencyButtonInterrupt, FALLING);
   if (digitalRead(ALARM_BTN_PIN) == LOW) xTaskNotifyGive(EmergencyButtonTask);
   return true;
@@ -1487,9 +1561,12 @@ void triggerGetClock(void *parameter) {
     if (!ota_running) {
       // Проверка и переподключение Blynk
 #ifdef SAMOVAR_USE_BLYNK
-      if (!Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
-        Blynk.connect(BLYNK_TIMEOUT_MS);
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+      {
+        BlynkLockGuard blynkLock(pdMS_TO_TICKS(500));
+        if (blynkLock && !Blynk.connected() && WiFi.status() == WL_CONNECTED && SamSetup.blynkauth[0] != 0) {
+          Blynk.connect(BLYNK_TIMEOUT_MS);
+          vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
       }
 #endif
 
@@ -1536,8 +1613,12 @@ void triggerGetClock(void *parameter) {
 
 #ifdef SAMOVAR_USE_BLYNK
         bool blynkDisconnected = false;
+        bool blynkLockBusy = false;
         if (SamSetup.blynkauth[0] != 0) {
-          if (Blynk.connected()) {
+          BlynkLockGuard blynkLock(pdMS_TO_TICKS(500));
+          if (!blynkLock) {
+            blynkLockBusy = true;
+          } else if (Blynk.connected()) {
             Blynk.virtualWrite(V26, qMsg);
           } else {
             blynkDisconnected = true;
@@ -1550,6 +1631,7 @@ void triggerGetClock(void *parameter) {
 #endif
 #ifdef SAMOVAR_USE_BLYNK
         if (blynkDisconnected) WriteConsoleLog(F("notify_blynk_disconnected"));
+        if (blynkLockBusy) WriteConsoleLog(F("notify_blynk_lock_busy"));
 #endif
       }
     }
@@ -1652,12 +1734,18 @@ void triggerSysTicker(void *parameter) {
       } else {
         DS_getvalue();
       }
+
+      //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
+      //перенесено сразу после чтения датчиков - раньше вызывалось последним в такте, после кэша I2C и записи лога
+      mode_dispatch_alarm();
+
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
       // [W-3] Обновляем кэш I2C-шагового двигателя раз в секунду из SysTicker.
       //        Выполняем здесь (не в async), так как I2C защищён xI2CSemaphore внутри функций.
       refresh_i2c_stepper_cache(i2cStepperMixer);
       refresh_i2c_stepper_cache(i2cStepperPump);
+      retry_i2c_pump_stop_if_unconfirmed();
 
       tick_update_clock_strings();
 
@@ -1674,9 +1762,6 @@ void triggerSysTicker(void *parameter) {
           tick_publish_log_line(s);
         }
       }
-
-      //проверка параметров работы колонны на критичность и аварийное выключение нагрева, в случае необходимости
-      mode_dispatch_alarm();
 
       vTaskDelay(5 / portTICK_PERIOD_MS);
 
@@ -1925,6 +2010,14 @@ static void restore_state_snapshot() {
   notice += String(snapshot.programLen);
   notice += restored ? F(", программа восстановлена") : F(", программа не восстановлена");
   notice += F(". Нагрев не возобновлён.");
+  // [T24.2] Только информационная приписка: живой suvidHold.accumulatedMs в это время
+  // уже обнулён (check_alarm_suvid() сбрасывает его каждую секунду при !PowerOn) - сюда
+  // не пишем, счётчик выдержки просто начнётся заново после включения нагрева.
+  if (Samovar_Mode == SAMOVAR_SUVID_MODE && snapshot.suvidHoldAccumulatedSec > 0) {
+    notice += F(" Накопленная выдержка Сувида на момент сбоя: ");
+    notice += format_uptime(snapshot.suvidHoldAccumulatedSec);
+    notice += F(".");
+  }
   pendingStateSnapshotNotice = notice;
 }
 
@@ -2004,6 +2097,10 @@ static void setup_create_semaphores_and_queue() {
 #endif
 
   xI2CSemaphore = xSemaphoreCreateMutexStatic(&xI2CSemaphoreBuffer);
+
+#ifdef SAMOVAR_USE_BLYNK
+  xBlynkSemaphore = xSemaphoreCreateMutexStatic(&xBlynkSemaphoreBuffer);
+#endif
 }
 
 static void setup_wifi_stack_defaults() {
@@ -2016,6 +2113,10 @@ static void setup_wifi_stack_defaults() {
   WiFi.setAutoReconnect(true);
 
   Wire.begin(LCD_SDA, LCD_SCL);
+  // Явно задаём скорость и таймаут шины: без этого используются значения по
+  // умолчанию библиотеки, которые может перебить lcd.init() внутри LCD-библиотеки.
+  Wire.setClock(100000);
+  Wire.setTimeOut(10);
 
   lcd_found = (check_I2C_device(LCD_ADDRESS) == LCD_ADDRESS);
 
@@ -2264,7 +2365,12 @@ static void setup_connect_wifi_and_notify() {
             String(custom_blynk_token.getValue()));
         const PersistResult persistResult = save_profile_nvs(profileCandidate);
         if (persistResult == PERSIST_OK) {
+          // [T29] WebServerInit()/server.begin() выше по setup() уже запустили
+          // async_tcp - тот же риск рваного чтения, что и в
+          // commit_profile_operation()/FinishAutoTune()/pump_calibrate().
+          portENTER_CRITICAL(&configMux);
           SamSetup = profileCandidate;
+          portEXIT_CRITICAL(&configMux);
         } else {
           Serial.print(F("NVS: Blynk token was not saved: "));
           Serial.println(persist_result_code(persistResult));
@@ -2296,6 +2402,9 @@ static void setup_connect_wifi_and_notify() {
   writeString(F("Connected"), 4);
 
 #ifdef SAMOVAR_USE_BLYNK
+  // Без BlynkLockGuard: это setup(), задачи (GetClockTicker) и loop() ещё не
+  // стартовали (xTaskCreatePinnedToCore ниже по коду) - конкурентного доступа
+  // к Blynk здесь быть не может.
   if (SamSetup.blynkauth[0] != 0 && !wifiAP) {
     writeString(F("Connecting to Blynk "), 3);
     writeString(F("               "), 4);
@@ -2327,6 +2436,14 @@ static void setup_connect_wifi_and_notify() {
   //Send OTA events to the browser
   ArduinoOTA.onStart([]() {
     ota_running = true;  // Устанавливаем флаг активного OTA обновления
+    // [T30] ArduinoOTA::_runUpdate() (framework-arduinoespressif32/libraries/ArduinoOTA)
+    // получает и пишет в flash ВЕСЬ образ прошивки одним синхронным вызовом изнутри
+    // ArduinoOTA.handle() (tick_ota() в loop()) - на реальном образе это легко больше 10 с,
+    // а внутрь этого цикла своего кода вставить нельзя (чужая библиотека). Сторож loop()
+    // (LOOP_WDT_TIMEOUT_S = 10, включается в конце setup()) на это время выключаем -
+    // иначе любое обновление прошивки по OTA гарантированно перезагружало бы устройство
+    // на середине передачи. onEnd()/onError() ниже включают его обратно.
+    disableLoopWDT();
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH)
       type = "Sketch";
@@ -2339,8 +2456,12 @@ static void setup_connect_wifi_and_notify() {
     
     // Отключаем другие сервисы для освобождения ресурсов
 #ifdef SAMOVAR_USE_BLYNK
-    if (Blynk.connected()) {
-      Blynk.disconnect();
+    {
+      // Колбэк ArduinoOTA вызывается из tick_ota() в loop() - таймаут как у tick_blynk().
+      BlynkLockGuard blynkLock(pdMS_TO_TICKS(20));
+      if (blynkLock && Blynk.connected()) {
+        Blynk.disconnect();
+      }
     }
 #endif
 #ifdef USE_MQTT
@@ -2349,6 +2470,10 @@ static void setup_connect_wifi_and_notify() {
   });
   ArduinoOTA.onEnd([]() {
     ota_running = false;  // Сбрасываем флаг после завершения
+    // [T30] Обратная половина disableLoopWDT() из onStart() выше - при успешном
+    // обновлении сюда обычно не доходит (ниже по _runUpdate() следует ESP.restart()),
+    // но если рестарт на этой сборке отключён, loop() обязан остаться под сторожем.
+    enableLoopWDT();
     events.send(("Update End"), "ota");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
@@ -2362,6 +2487,9 @@ static void setup_connect_wifi_and_notify() {
   });
   ArduinoOTA.onError([](ota_error_t error) {
     ota_running = false;  // Сбрасываем флаг при ошибке
+    // [T30] Неудачная OTA НЕ перезагружает устройство (см. _runUpdate()) - без этого
+    // вызова loop() остался бы без сторожа до следующей перезагрузки.
+    enableLoopWDT();
     if (error == OTA_AUTH_ERROR) events.send("Auth Failed", "ota");
     else if (error == OTA_BEGIN_ERROR)
       events.send(("Begin Failed"), "ota");
@@ -2379,10 +2507,35 @@ static void setup_connect_wifi_and_notify() {
 #endif
 }
 
+// [T30] Порог сторожа основного loop() (esp_task_wdt) в секундах - см. установку в конце
+// setup(). Аудит всех операций, достижимых из loop() (мутекс-локи, I2C, SPIFFS, mode-тики,
+// Blynk.run()), подтвердил, что ни одна из них не превышает эту величину - КРОМЕ активной
+// OTA-передачи (ArduinoOTA::_runUpdate() пишет весь образ одним синхронным вызовом), поэтому
+// сторож на время OTA-сессии выключается отдельно (см. onStart()/onEnd()/onError() выше).
+// [Ревью 24.08, предупреждение 2] esp_task_wdt_init(LOOP_WDT_TIMEOUT_S, true) ниже задаёт
+// этот порог ГЛОБАЛЬНО для esp_task_wdt, а не только для задачи loop(): в vendored sdkconfig
+// этого проекта холостая (idle) задача ядра 0 по умолчанию тоже под этим сторожем
+// (CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y) с порогом 5 с - вызов ниже молча поднимает его
+// до 10 с, то есть контроль зависания ядра 0 становится вдвое менее чувствительным. Это
+// приемлемо: ни одна задача прошивки не подписывается на сторож явно через esp_task_wdt_add()
+// (проверено поиском по исходникам) - единственный такой вызов в проекте вендорный
+// (libraries/Async_TCP/src/AsyncTCP.cpp), и он выключен через CONFIG_ASYNC_TCP_USE_WDT=0
+// (см. AsyncTCP.h) - реальный контроль остаётся только за idle-задачей ядра 0.
+constexpr uint32_t LOOP_WDT_TIMEOUT_S = 10;
+
 void setup() {
-  vTaskDelay(500 / portTICK_PERIOD_MS);
-  Serial.begin(115200);
+  // Уровни реле должны стать безопасными раньше всего остального: RELE_CHANNEL2 на
+  // некоторых платах сидит на strapping-выводе (см. Samovar_pin.h), который при сбросе
+  // подтянут вверх, поэтому окно до первого pinMode/digitalWrite нужно закрыть как можно
+  // раньше. Serial.begin() к выводам питания отношения не имеет и не должен стоять
+  // перед этим вызовом. Стартовая 500 мс задержка тоже к выводам питания не относится,
+  // но она намеренно НЕ стоит здесь: до apply_loaded_relay_polarity_off() полярность
+  // реле ещё не известна, и на платах с releN=true (активный высокий уровень) init
+  // на мгновение включает нагрев (HIGH) — если бы задержка шла сразу за init, это
+  // окно длилось бы все 500+ мс вместо десятков миллисекунд чтения профиля. Задержка
+  // перенесена вниз, сразу после apply_loaded_relay_polarity_off() (см. её комментарий).
   init_power_outputs_safe_off();
+  Serial.begin(115200);
 
   SetupEEPROM startupProfile{};
   ProfileLoadResult profileResult = load_profile_nvs(startupProfile);
@@ -2420,6 +2573,13 @@ void setup() {
     Serial.print(startupProfile.HeaterResistant, 3);
     Serial.println(F(": set the real value in setup.htm, power calculations depend on it"));
   }
+  if (migratedFromLegacy) {
+    String fixedFields;
+    if (sanitize_setup_profile_ranges(startupProfile, fixedFields)) {
+      const String reason = String("out of range, reset to defaults: ") + fixedFields;
+      report_degraded_boot("profile_migration", reason.c_str());
+    }
+  }
   if (persistStartupProfile) {
     const PersistResult persistResult = save_profile_nvs(startupProfile);
     if (persistResult != PERSIST_OK) {
@@ -2438,6 +2598,9 @@ void setup() {
   // Полярность реле теперь известна — закрываем окно из init_power_outputs_safe_off()
   // (см. её комментарий) немедленно, не дожидаясь основной инициализации реле ниже.
   apply_loaded_relay_polarity_off();
+  // Задержка стояла сразу после init_power_outputs_safe_off() (см. её комментарий) —
+  // перенесена сюда, чтобы не удлинять окно неверного уровня на платах с releN=true.
+  vTaskDelay(500 / portTICK_PERIOD_MS);
   print_nvs_stats("after config load");
   session_checkpoint_capture_pending();
 
@@ -2609,6 +2772,23 @@ void setup() {
 
   session_checkpoint_report_pending();
   state_snapshot_report_pending();
+
+  // [T30] Сторож основного loop() - строго в САМОМ КОНЦЕ setup(), а не в начале: до этой
+  // строки setup() ещё выполняет разовую инициализацию (WiFi, задачи, NVS, OTA-колбэки),
+  // которая сама может занимать больше LOOP_WDT_TIMEOUT_S секунд, и не обязана укладываться
+  // в бюджет ОДНОЙ итерации loop(), для которой сторож рассчитан (esp_task_wdt_reset()
+  // в loopTask(), ядро Arduino-ESP32, вызывается РОВНО один раз на итерацию, перед loop()).
+  // panic=true: зависший loop() перезагружает контроллер, а не тихо висит - нагрев уже
+  // выключен init_power_outputs_safe_off() (первая строка setup() выше) и полярность реле
+  // применена до первого pinMode/digitalWrite, так что перезагрузка безопаснее зависания.
+  // #ifndef __SAMOVAR_NOT_USE_WDT: setup_disable_watchdogs() (выше по setup(), под этим же
+  // макросом) - существующий отладочный рубильник всех сторожей (для работы под JTAG, где
+  // сторож ложно сработал бы на точке останова). Без этой проверки код ниже молча
+  // включил бы сторож обратно сразу после того, как разработчик его выключил.
+#ifndef __SAMOVAR_NOT_USE_WDT
+  esp_task_wdt_init(LOOP_WDT_TIMEOUT_S, true);
+  enableLoopWDT();
+#endif
 }
 
 // [П24] Таблица дополнительно наблюдаемых задач для tick_check_stack_headroom().
@@ -2725,8 +2905,12 @@ static void tick_ota() {
 
 static void tick_blynk() {
 #ifdef SAMOVAR_USE_BLYNK
-  // Отключаем Blynk во время OTA для освобождения ресурсов
-  if (!ota_running && Blynk.connected()) {
+  // Отключаем Blynk во время OTA для освобождения ресурсов. Лок короткий: не взяли -
+  // пропускаем такт (Blynk.run() позовём на следующем обороте loop()), а не ждём и не
+  // блокируем весь loop() ради Blynk. BLYNK_WRITE/BLYNK_READ в Blynk.ino выполняются
+  // изнутри Blynk.run(), т.е. уже под этим локом.
+  BlynkLockGuard blynkLock(pdMS_TO_TICKS(20));
+  if (blynkLock && !ota_running && Blynk.connected()) {
     Blynk.run();
   }
 #endif
@@ -2783,6 +2967,18 @@ static void tick_reap_stale_operations() {
       PendingCommandLockGuard guard;
       if (guard) {
         reaped = operation_store_reap_stale_locked(operationStore, nowMs);
+        // Реапер лечит только карточку на складе; канал I2C, который эту карточку держал,
+        // сам не отпускается - без этого цикла флаг зависает навсегда и канал умирает.
+        // Цикл идёт ВСЕГДА, а не по значению reaped: reaped - одноразовый признак для
+        // ALARM-сообщения (static alarmEmitted внутри operation_store_reap_stale_locked),
+        // после первой протухшей операции за сессию он больше не станет true.
+        for (size_t index = 0; index < OPERATION_STORE_CAPACITY; index++) {
+          const OperationRecord& record = operationStore.records[index];
+          if (record.state == OPERATION_STATE_FAILED &&
+              record.error == OPERATION_ERROR_STALE_REAPED) {
+            clear_pending_i2c_operation_locked(record.id);
+          }
+        }
       }
       guard.release();
       if (reaped) {
@@ -2804,6 +3000,13 @@ static void tick_apply_pending_mixer() {
     if (set_mixer(mixerOn) == ACTUATOR_COMMAND_FAILED) {
       SendMsg("Команда мешалки не выполнена: исполнитель не подтвердил состояние", ALARM_MSG);
     }
+    // [Ревью 24.08, ошибка 1] Та же природа, что в process_pending_i2c_operations()
+    // (см. комментарий там): set_mixer() -> set_mixer_state() (beer.h) при найденном
+    // I2C-приводе может подряд вызвать set_stepper_by_time() И set_mixer_pump_target() -
+    // это i2c_stepper_start()/i2c_stepper_write_config()+i2c_stepper_send_command(),
+    // то есть до двух ограниченных, но не мгновенных цепочек ожиданий за один тик.
+    // feedLoopWDT() безопасен и при выключенном сторожем - см. обоснование там же.
+    feedLoopWDT();
   }
 }
 
@@ -2853,7 +3056,13 @@ static void tick_apply_pending_lua_commands() {
     }
   }
   if (hasPendingLuaReload) {
-    load_lua_script();
+    if (!load_lua_script()) {
+      // Возврат уже принятой заявки, а не постановка новой: queue_pending_flag()
+      // отбил бы её при смене режима и при занятом локе, и перезагрузка скрипта
+      // потерялась бы молча. Запись одного volatile-флага атомарна, а снимает его
+      // только этот такт loop(), поэтому гонки нет.
+      pending_lua_reload_flag = true;
+    }
   }
 
   bool hasPendingLuaStart = false;
@@ -2966,6 +3175,12 @@ static void tick_apply_pending_pnbk() {
       } else {
         pnbkDone = true;
       }
+      // [Ревью 24.08, ошибка 1] Та же природа, что в process_pending_i2c_operations()
+      // (см. комментарий там): set_stepper_target() при обнаруженном I2C-насосе идёт
+      // через i2c_stepper_start()/i2c_stepper_stop() - ограниченную, но не мгновенную
+      // цепочку ожиданий семафора шины. feedLoopWDT() безопасен и при выключенном
+      // сторожем - см. обоснование в process_pending_i2c_operations().
+      feedLoopWDT();
     }
     if (pnbkDone) {
       PendingCommandLockGuard guard;
@@ -2974,6 +3189,9 @@ static void tick_apply_pending_pnbk() {
   }
 }
 
+// async_tcp (ядро 1, приоритет 5, см. AGENTS.md) вытесняет эту задачу (ядро 1, приоритет 1)
+// в произвольной точке - обработчик HTTP-запроса может вклиниться посреди итерации loop().
+// Общие данные с ним - только под блокировкой (LOCK_ORDER в runtime_helpers.h).
 void loop() {
   tick_check_stack_headroom();
   tick_check_systicker_liveness();
@@ -3047,6 +3265,9 @@ void loop() {
         if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
           SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
         }
+        break;
+      case SAMOVAR_POWER_OFF:
+        if (!mode_finish_by_status(SamovarStatusInt)) set_power(false);
         break;
       case SAMOVAR_RESET:
         samovar_reset();
@@ -3142,6 +3363,7 @@ void loop() {
   tick_apply_pending_pnbk();
 
   mode_dispatch_loop();
+  suvid_tick();
   session_checkpoint_tick();
 
   // Обработка энкодера
@@ -3790,8 +4012,17 @@ void apply_config_runtime() {
 
   if ((uint8_t)SamSetup.videourl[0] == 0xFF) SamSetup.videourl[0] = '\0';
 #ifdef SAMOVAR_USE_BLYNK
-  if (strlen(SamSetup.videourl) > 0) Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
-  Blynk.virtualWrite(V15, ipst);
+  // apply_config_runtime() зовётся и из setup() (до старта задач), и из loop() через
+  // process_profile_operation() - в обоих случаях в конечном счёте это контекст loop(),
+  // поэтому лок берём с тем же коротким таймаутом, что и tick_blynk(): не взяли - просто
+  // пропускаем эту пару обращений, следующее применение профиля повторит попытку.
+  {
+    BlynkLockGuard blynkLock(pdMS_TO_TICKS(20));
+    if (blynkLock) {
+      if (strlen(SamSetup.videourl) > 0) Blynk.setProperty(V20, "url", (String)SamSetup.videourl);
+      Blynk.virtualWrite(V15, ipst);
+    }
+  }
 #else
   SamSetup.blynkauth[0] = '\0';
 #endif
