@@ -34,13 +34,17 @@ inline float suvid_target_temp() {
 #define SUVID_HOLD_BAND_C 2.0f
 
 // Через сколько повторять команду выключения, если нагрев всё ещё включён.
-// SAMOVAR_POWER - ПЕРЕКЛЮЧАТЕЛЬ (Samovar.ino: set_power(!PowerOn)), а очередь команд
-// общая на всё устройство: чужая команда (веб, Lua, другой режим), разобранная в том
-// же проходе loop(), способна вернуть нагрев обратно. Считать "команда поставлена" за
-// "нагрев выключен" поэтому нельзя - иначе одна такая гонка оставила бы ТЭН включённым
-// до конца сессии, без повторных попыток и без второго сообщения. Интервал заметно
+// Очередь команд общая на всё устройство: чужая команда (веб, Lua, другой режим),
+// разобранная в том же проходе loop(), способна вернуть нагрев обратно. Считать
+// "команда поставлена" за "нагрев выключен" поэтому нельзя - иначе одна такая гонка
+// оставила бы ТЭН включённым до конца сессии, без повторных попыток и без второго
+// сообщения. Повторяется именно SAMOVAR_POWER_OFF (Samovar.ino: set_power(false)), а
+// НЕ SAMOVAR_POWER: тот - ПЕРЕКЛЮЧАТЕЛЬ (set_power(!PowerOn)), и пока первая команда
+// лежит в очереди неразобранной, вторая, вынутая следом в том же проходе loop(),
+// включила бы нагрев обратно - повтор отменял бы сам себя, причём молча
+// (reachTimeoutMsgSent уже взведён, второго сообщения не будет). Интервал заметно
 // больше периода тика (1 с), чтобы обычная задержка исполнения не порождала лишних
-// переключений.
+// попыток.
 #define SUVID_STOP_RETRY_MS (10UL * 1000UL)
 
 // Выдержка Сувида учитывает только подтверждённое время внутри полосы
@@ -193,7 +197,7 @@ inline void check_alarm_suvid() {
     // всё ещё включён: повторяем, пока он действительно не выключится.
     if (!suvidHold.reachTimeoutStopQueued ||
         (uint32_t)(now - suvidHold.reachTimeoutStopMs) >= SUVID_STOP_RETRY_MS) {
-      if (queue_samovar_command(SAMOVAR_POWER)) {
+      if (queue_samovar_command(SAMOVAR_POWER_OFF)) {
         suvidHold.reachTimeoutStopQueued = true;
         suvidHold.reachTimeoutStopMs = now;
       }
@@ -203,7 +207,7 @@ inline void check_alarm_suvid() {
   const uint32_t holdMs = (uint32_t)SamSetup.SuvidHoldMinutes * 60000UL;
   if (holdMs > 0 && !suvidHold.fired && suvidHold.active && suvidHold.accumulatedMs >= holdMs) {
     set_buzzer(true);
-    if (queue_samovar_command(SAMOVAR_POWER)) {
+    if (queue_samovar_command(SAMOVAR_POWER_OFF)) {
       SendMsg("Сувид: выдержка завершена, нагрев выключен.", NOTIFY_MSG);
       suvidHold.fired = true;
     } else if (!suvidHold.completionWarningSent) {

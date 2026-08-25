@@ -443,6 +443,17 @@ void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& fi
         return;
       }
       request->_tempFile = _fs.open(tmpPath, "w");
+      if (!request->_tempFile) {
+        // На заполненной ФС open() не создаёт файл и возвращает невалидный File.
+        // Без этой проверки все чанки ниже молча отбрасывались (условие
+        // `if (request->_tempFile)` ложно), причина отказа не выставлялась, и
+        // handleRequest отвечал "200 UPLOADED" - по факту существования СТАРОГО файла
+        // на целевом пути, которого загрузка вообще не касалась. Правка пользователя
+        // терялась без единого признака ошибки. Тот же приём, что у проверки неполной
+        // записи ниже (written != len).
+        request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_WRITE_FAILED);
+        return;
+      }
     }
     // Процесс может стартовать на ядре 0 уже ПОСЛЕ первого чанка: тогда запись
     // оставшихся чанков снова гонялась бы с журналом перегонки. Перепроверяем

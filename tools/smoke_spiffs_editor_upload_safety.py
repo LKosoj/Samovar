@@ -320,6 +320,16 @@ def run_wiring_check() -> None:
         errors,
     )
     require_ordered_tokens(
+        "handleUpload: отказ open() фиксируется причиной, а не молчанием",
+        body,
+        [
+            "_tempFile = _fs.open(tmpPath",
+            "if (!request->_tempFile) {",
+            "SPIFFS_EDITOR_UPLOAD_WRITE_FAILED",
+        ],
+        errors,
+    )
+    require_ordered_tokens(
         "handleUpload: результат write() проверяется прежде, чем файл закрывается",
         body,
         [

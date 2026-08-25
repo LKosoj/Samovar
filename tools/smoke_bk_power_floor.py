@@ -6,12 +6,16 @@ BKPower - мощность режима "бражная колонна" (БК) �
 регулятора (power_work_mode_threshold()), set_current_power() сам уводит
 регулятор в спящий режим - нагрев пропадает, процесс тихо встаёт.
 
-Три места обязаны быть согласованы:
+Четыре места обязаны быть согласованы:
   1. kSaveFloatFields в WebServer.ino - нижняя граница при сохранении формы.
   2. setupKeyProcessor() в WebServer.ino - отдаёт этот же порог странице
      (переменная шаблона %BKPowerFloor%).
   3. setupNumericSchema в data_raw/setup.htm - клиентская проверка перед
      отправкой формы читает порог с сервера, а не хардкодит число.
+  4. Samovar.ino - миграция уже сохранённого профиля. Без неё значение из
+     старого диапазона (0; порог) переживает загрузку из NVS, подставляется в
+     форму и отбивается при КАЖДОМ сохранении - а одно поле вне диапазона
+     отбивает весь запрос, поэтому настройки перестают сохраняться целиком.
 
 Тест пинит СОГЛАСИЕ (что все три места используют именно
 power_work_mode_threshold()/%BKPowerFloor%), а не число - число само по себе
@@ -23,6 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_SERVER = ROOT / "WebServer.ino"
+MAIN_SKETCH = ROOT / "Samovar.ino"
 SETUP_PAGE = ROOT / "data_raw" / "setup.htm"
 
 
@@ -38,7 +43,8 @@ def main() -> int:
 
     web = read(WEB_SERVER, errors)
     setup = read(SETUP_PAGE, errors)
-    if not web or not setup:
+    sketch = read(MAIN_SKETCH, errors)
+    if not web or not setup or not sketch:
         for error in errors:
             print(f" - {error}")
         return 1
@@ -83,6 +89,25 @@ def main() -> int:
             "data_raw/setup.htm: setupNumericSchema['BKPower'].min не читает "
             f"%BKPowerFloor% с сервера (найдено: {schema_match.group(0)}) - "
             "клиентская проверка снова разойдётся с прошивкой"
+        )
+
+    # --- (4) Samovar.ino: сохранённый профиль подтягивается к рабочему дефолту ---
+    # Проверка "<= 0" (как было) значение из диапазона (0; порог) не ловит - именно она
+    # и оставляла форму настроек несохраняемой у обновившихся пользователей.
+    migration = re.search(
+        r"if \(isnan\(SamSetup\.BKPower\)\s*\|\|\s*SamSetup\.BKPower\s*([<>=!]+)\s*(.+?)\)\s*\{",
+        sketch,
+    )
+    if migration is None:
+        errors.append(
+            "Samovar.ino: не найдена проверка сохранённого BKPower при загрузке настроек"
+        )
+    elif "power_work_mode_threshold()" not in migration.group(2):
+        errors.append(
+            "Samovar.ino: сохранённый BKPower сверяется с "
+            f"'{migration.group(1)} {migration.group(2).strip()}', а не с "
+            "power_work_mode_threshold() - значение из старого диапазона (0; порог) "
+            "переживёт загрузку и заблокирует сохранение формы настроек целиком"
         )
 
     if errors:

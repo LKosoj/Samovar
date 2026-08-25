@@ -4049,7 +4049,16 @@ void apply_config_runtime() {
     SamSetup.BVolt = 230;
   }
 
-  if (isnan(SamSetup.BKPower) || SamSetup.BKPower <= 0) {
+  // [Ревью 25.08] Серверный минимум BKPower поднят с 0 до рабочего порога регулятора
+  // (WebServer.ino, kSaveFloatFields - power_work_mode_threshold()): мощность БК ниже
+  // порога уводит регулятор в спящий режим, и нагрев после закипания тихо встаёт. Но
+  // профиль в NVS у уже обновившихся пользователей мог сохранить BKPower из старого
+  // диапазона (0; порог) - проверка "<= 0" такое значение не ловила, и форма настроек
+  // переставала сохраняться ЦЕЛИКОМ (одно поле вне диапазона отбивает весь запрос -
+  // handleSave, collect_save_bad_field), пока пользователь сам не догадается поднять
+  // мощность БК. Подтягиваем к рабочему дефолту - тем же приёмом, что уже применён к
+  // DistTemp из старого диапазона ниже.
+  if (isnan(SamSetup.BKPower) || SamSetup.BKPower < power_work_mode_threshold()) {
 #ifndef SAMOVAR_USE_SEM_AVR
     SamSetup.BKPower = 45;
 #else

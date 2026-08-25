@@ -46,11 +46,12 @@ static int alarms = 0;
 static void SendMsg(const char*, int type) { messages++; if (type == 1) warnings++; if (type == 0) alarms++; }
 static int buzzerCalls = 0;
 static void set_buzzer(bool) { buzzerCalls++; }
-enum { SAMOVAR_POWER = 1, ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, SAMOVAR_SUVID_MODE = 6 };
+enum { SAMOVAR_POWER = 1, SAMOVAR_POWER_OFF = 17, ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, SAMOVAR_SUVID_MODE = 6 };
 static int Samovar_Mode = SAMOVAR_SUVID_MODE;
 static int queueCalls = 0;
 static bool queueSucceeds = true;
-static bool queue_samovar_command(int) { queueCalls++; return queueSucceeds; }
+static int lastQueuedCommand = -1;
+static bool queue_samovar_command(int command) { queueCalls++; lastQueuedCommand = command; return queueSucceeds; }
 static float suvid_target_temp() { return SamSetup.SuvidTemp > 0 ? SamSetup.SuvidTemp : 60.0f; }
 
 // [T24.3] check_alarm_suvid() и suvid_tick() - теперь две ОТДЕЛЬНЫЕ продакшен-функции,
@@ -80,7 +81,7 @@ static void reset(uint16_t hold = 0) {
   SamSetup = {60.0f, hold}; TankSensor.avgTemp = 60.0f; PowerOn = true;
   suvidHold = {}; suvidDeviation = {}; fakeMillis = 0; heaterCalls = 0;
   lastHeater = false; messages = 0; warnings = 0; alarms = 0; buzzerCalls = 0;
-  queueCalls = 0; queueSucceeds = true; heater_state = false;
+  queueCalls = 0; queueSucceeds = true; heater_state = false; lastQueuedCommand = -1;
 }
 static void test_symmetric_band() {
   reset(); TankSensor.avgTemp = 60.0f + HEAT_DELTA + 0.1f; tick();
@@ -161,16 +162,23 @@ static void test_reach_timeout_stops_heating_when_hold_never_starts() {
   check(warnings == 0, "reach timeout must not be a mere warning: it switches the heater off");
   check(queueCalls == 1,
         "REGRESSION: reach timeout must queue the power-off command, not just talk about it");
+  check(lastQueuedCommand == SAMOVAR_POWER_OFF,
+        "REGRESSION: the stop must use the idempotent SAMOVAR_POWER_OFF, not the SAMOVAR_POWER toggle");
   check(buzzerCalls == 1, "reach timeout must call the buzzer once");
-  // SAMOVAR_POWER - переключатель, и чужая команда в общей очереди может вернуть нагрев
-  // обратно. Пока нагрев фактически включён (PowerOn), попытка повторяется - но не чаще
+  // Чужая команда в общей очереди (веб, Lua, другой режим) может вернуть нагрев обратно.
+  // Пока нагрев фактически включён (PowerOn), попытка повторяется - но не чаще
   // SUVID_STOP_RETRY_MS, чтобы обычная задержка исполнения не порождала лишних команд.
+  // Сам повтор безопасен только потому, что команда идемпотентная: с переключателем
+  // SAMOVAR_POWER вторая команда, вынутая из очереди следом за первой, включила бы
+  // нагрев обратно - повтор отменял бы сам себя (проверка lastQueuedCommand выше).
   fakeMillis = SUVID_REACH_TIMEOUT_MS + SUVID_STOP_RETRY_MS - 1000; tick();
   check(queueCalls == 1, "a queued stop must not be repeated before the retry delay");
   check(alarms == 1, "the alarm must not repeat");
   fakeMillis = SUVID_REACH_TIMEOUT_MS + SUVID_STOP_RETRY_MS; tick();
   check(queueCalls == 2,
-        "REGRESSION: heating still on after the retry delay means the toggle was undone - try again");
+        "REGRESSION: heating still on after the retry delay means the stop was lost - try again");
+  check(lastQueuedCommand == SAMOVAR_POWER_OFF,
+        "REGRESSION: retries must stay idempotent - a toggle would switch the heater back on");
   check(alarms == 1, "retries must stay silent: one alarm per session");
 }
 static void test_reach_timeout_state_clears_once_the_heater_is_off() {
@@ -321,7 +329,7 @@ def main():
         "setpoint - HEAT_DELTA", "setpoint + HEAT_DELTA",
         "inHoldBand", "suvidHold.active", "deviation > SUVID_HOLD_BAND_C",
         "now - suvidDeviation.sinceMs", "SUVID_REACH_TIMEOUT_MS",
-        "holdMs > 0", "suvidHold.accumulatedMs", "queue_samovar_command(SAMOVAR_POWER)",
+        "holdMs > 0", "suvidHold.accumulatedMs", "queue_samovar_command(SAMOVAR_POWER_OFF)",
     ], errors)
     if "setHeaterPosition" not in tick_body:
         errors.append("suvid_tick() must apply the thermostat state via setHeaterPosition")
