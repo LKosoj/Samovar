@@ -53,6 +53,7 @@ for file_name, source, signature in [
     ("sensorinit.h", sensor_text, "String get_DSAddressList"),
     ("Samovar.ino", samovar_text, "static void clear_ds_sensor_runtime"),
     ("Samovar.ino", samovar_text, "static void apply_setup_sensor_fields"),
+    ("Samovar.ino", samovar_text, "static void tick_report_sensor_errors"),
     ("Samovar.ino", samovar_text, "void apply_config_runtime()"),
     ("Samovar.ino", samovar_text, "void loop()"),
     ("WebServer.ino", web_text, "String setupKeyProcessor"),
@@ -232,6 +233,20 @@ if clear_body:
     for token in ["avgTemp = 0;", "PrevTemp = 0;", "ErrCount = 0;"]:
         require_token("clear_ds_sensor_runtime readings reset", clear_body, token)
     forbid_pattern("clear_ds_sensor_runtime address mutation", clear_body, r"\bSensor\s*\[|\.Sensor\b|CopyDSAddress\s*\(")
+
+report_errors_body = functions.get("static void tick_report_sensor_errors", "")
+if report_errors_body:
+    require_ordered_tokens(
+        "tick_report_sensor_errors stays silent without heat",
+        report_errors_body,
+        [
+            "if (!PowerOn && !lua_heater_channel_raised()) return;",
+            "if (!sensor_configured(*sensorList[i])) continue;",
+            "if (sensorList[i]->ErrCount > 10)",
+            "SendMsg(kSensorSetupFields[i].errorMessage, ALARM_MSG);",
+        ],
+        errors,
+    )
 
 apply_fields_body = functions.get("static void apply_setup_sensor_fields", "")
 if apply_fields_body:

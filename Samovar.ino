@@ -19,6 +19,10 @@
 // он доходит до отдельного TU библиотеки Async_TCP. Локальный #define здесь был мёртвым.
 
 struct AjaxTelemetrySnapshot;
+// Arduino вставляет автопрототипы сразу после Arduino.h. WebServer.ino объявляет
+// http_sync_complete_get(asyncHTTPrequest&...) — без USE_LUA тип не подтягивается
+// из lua.h, прототип ломает разбор (bool http_sync_complete_get как переменная).
+class asyncHTTPrequest;
 
 #undef CONFIG_BT_ENABLED
 #include <Arduino.h>
@@ -301,6 +305,7 @@ volatile bool pending_rescan_ds_flag = false;
 volatile bool pending_emergency_stop_flag = false;
 volatile bool pending_emergency_stop_reason_flag = false;
 char pending_emergency_stop_reason[EMERGENCY_STOP_REASON_LEN] = "";
+char latched_emergency_stop_reason[EMERGENCY_STOP_REASON_LEN] = "";
 
 struct SamovarNvsEntryBackup;
 
@@ -360,6 +365,9 @@ static void apply_setup_sensor_fields(uint8_t resetMask) {
 
   for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++)
     if ((resetMask & kSensorSetupFields[i].resetBit) != 0) clear_ds_sensor_runtime(*sensorList[i]);
+#ifdef __SAMOVAR_DEBUG
+  debug_ds_bind_runtime_sensors();
+#endif
 }
 
 static OperationError commit_profile_operation() {
@@ -952,8 +960,13 @@ static void tick_update_water_flow(uint16_t waterPulses, unsigned long &oldTime)
 #endif
 
 static void tick_report_sensor_errors() {
-  //Проверяем, что температурные датчики считывают температуру без проблем, если есть проблемы - пишем оператору
+  // ErrCount копится всегда ([П17] в DS_getvalue). В ленту — только при нагреве:
+  // в простое неподключённые датчики дают 0.0°C и не должны забивать журнал.
+  // Lua мог поднять канал нагрева мимо PowerOn — тогда пишем так же, как при PowerOn.
+  if (!PowerOn && !lua_heater_channel_raised()) return;
+
   for (uint8_t i = 0; i < DS_SENSOR_COUNT; i++) {
+    if (!sensor_configured(*sensorList[i])) continue;
     if (sensorList[i]->ErrCount > 10) {
       sensorList[i]->ErrCount = -110;
       SendMsg(kSensorSetupFields[i].errorMessage, ALARM_MSG);
@@ -2314,7 +2327,10 @@ static void setup_report_degraded_boot() {
     const String notice = String(F("Загрузка с ошибками (")) + bootDegradedReason +
                           F("). Часть функций недоступна, работаем в ограниченном режиме.");
     WriteConsoleLog(notice);
-    SendMsg(notice, ALARM_MSG);
+    // WARNING, не ALARM: это отказ конфигурации, а не авария процесса. ALARM
+    // включает зацикленную сирену в браузере, хотя оператору нужно спокойно
+    // открыть настройки и привязать датчики.
+    SendMsg(notice, WARNING_MSG);
   }
 }
 
@@ -2707,7 +2723,7 @@ void setup() {
   const BaseType_t powerTaskCreated = xTaskCreatePinnedToCore(
     triggerPowerStatus, /* Function to implement the task */
     "PowerStatusTask",  /* Name of the task */
-    3072,               /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
+    POWER_STATUS_STACK_BYTES, /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,               /* Task input parameter */
     1,                  /* Priority of the task */
     &PowerStatusTask,   /* Task handle. */
@@ -2748,7 +2764,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
     "SysTicker",      /* Name of the task */
-    6144,             /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
+    SYS_TICKER_STACK_BYTES, /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &SysTickerTask1,  /* Task handle. */
@@ -2758,7 +2774,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     triggerGetClock,  /* Function to implement the task */
     "GetClockTicker", /* Name of the task */
-    6144,             /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
+    GET_CLOCK_STACK_BYTES, /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
@@ -2830,8 +2846,8 @@ static void tick_check_stack_headroom() {
     ESP.restart();
   }
 
-  // [П24] Раньше проверялся только стек текущей задачи (loop()). PowerStatusTask (3072 -
-  // самый маленький из рабочих стеков, и именно он на путях отказа регулятора строит
+  // [П24] Раньше проверялся только стек текущей задачи (loop()). PowerStatusTask
+  // (самый маленький из рабочих стеков, и именно он на путях отказа регулятора строит
   // длинные String), SysTicker, GetClockTicker и EmergencyButtonTask не проверялись вовсе.
   // Текст причины собираем ЗДЕСЬ, на стеке loop() (эта функция всегда вызывается из
   // loop(), не из проверяемой задачи) - если бы конкатенацию String делала сама
@@ -3261,6 +3277,11 @@ void loop() {
         mode_apply_power_on_command(commandMsg.command);
         break;
       case SAMOVAR_POWER:
+        if (!PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE &&
+            !rectification_ds_sensors_assigned()) {
+          notify_rectification_sensors_unassigned();
+          break;
+        }
         if (!mode_finish_by_status(SamovarStatusInt)) set_power(!PowerOn);
         if (PowerOn && Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
           SamovarStatusInt = SAMOVAR_STATUS_RECT_ACCEL;
@@ -3409,18 +3430,14 @@ static inline void jsonFieldBool(Print &out, bool &first, const char *key, bool 
   out.print(value ? 1 : 0);
 }
 
-template <typename T>
-static inline void jsonFieldRaw(Print &out, bool &first, const char *key, T value) {
-  jsonAddKey(out, first, key);
-  out.print(value);
-}
+#include "json_field_raw.h"
 
 static bool runtimeEventWrite(Print& out, const char* value, size_t length) {
   return out.write(reinterpret_cast<const uint8_t*>(value), length) == length;
 }
 
-static bool runtimeEventWriteEscaped(Print& out, const String& value) {
-  return json_write_escaped(out, value.c_str(), value.length());
+static bool runtimeEventWriteEscaped(Print& out, const char* text, size_t length) {
+  return json_write_escaped(out, text, length);
 }
 
 static bool runtimeEventWriteUnsigned(Print& out, uint32_t value) {
@@ -3431,17 +3448,23 @@ static bool runtimeEventWriteUnsigned(Print& out, uint32_t value) {
 }
 
 static bool runtimeEventWriteSection(
-    Print& out, const RuntimeEventDescriptor& event, const String& eventText) {
+    Print& out, const RuntimeEventDescriptor& event, const String& packedTexts) {
+  if (static_cast<uint32_t>(event.offset) + event.length > packedTexts.length()) {
+    return false;
+  }
+  const char* text = packedTexts.c_str() + event.offset;
+  const size_t length = event.length;
+  if (!runtimeEventWrite(out, "{", 1)) return false;
   if (event.kind == RUNTIME_EVENT_MESSAGE) {
-    if (!runtimeEventWrite(out, ",\"Msg\":\"", sizeof(",\"Msg\":\"") - 1U) ||
-        !runtimeEventWriteEscaped(out, eventText) ||
+    if (!runtimeEventWrite(out, "\"Msg\":\"", sizeof("\"Msg\":\"") - 1U) ||
+        !runtimeEventWriteEscaped(out, text, length) ||
         !runtimeEventWrite(out, "\",\"msglvl\":", sizeof("\",\"msglvl\":") - 1U) ||
         !runtimeEventWriteUnsigned(out, event.level)) {
       return false;
     }
   } else if (event.kind == RUNTIME_EVENT_CONSOLE) {
-    if (!runtimeEventWrite(out, ",\"LogMsg\":\"", sizeof(",\"LogMsg\":\"") - 1U) ||
-        !runtimeEventWriteEscaped(out, eventText) ||
+    if (!runtimeEventWrite(out, "\"LogMsg\":\"", sizeof("\"LogMsg\":\"") - 1U) ||
+        !runtimeEventWriteEscaped(out, text, length) ||
         !runtimeEventWrite(out, "\"", 1)) {
       return false;
     }
@@ -3512,8 +3535,17 @@ static bool sendRuntimeAjaxQueryError(
 
 static bool sendRuntimeEventResponse(
     AsyncWebServerRequest* request, AsyncResponseStream* response,
-    const RuntimeEventDescriptor& event, const String& eventText) {
-  if (runtimeEventWriteSection(*response, event, eventText)) {
+    const RuntimeEventDescriptor* events, uint8_t count, const String& packedTexts) {
+  Print& out = *response;
+  bool ok = count == 0
+                ? runtimeEventWrite(out, "}", 1)
+                : runtimeEventWrite(out, ",\"events\":[", sizeof(",\"events\":[") - 1U);
+  for (uint8_t index = 0; ok && index < count; index++) {
+    if (index > 0) ok = runtimeEventWrite(out, ",", 1);
+    if (ok) ok = runtimeEventWriteSection(out, events[index], packedTexts);
+  }
+  if (ok && count > 0) ok = runtimeEventWrite(out, "]}", 2);
+  if (ok) {
     request->send(response);
     return true;
   }
@@ -3533,7 +3565,6 @@ struct AjaxTelemetrySnapshot {
   String luaStatus;
   String currentPowerMode;
   String eventText;
-  RuntimeEventDescriptor runtimeEvent;
   float bmeTemp;
   float bmePressure;
   float startPressure;
@@ -3604,15 +3635,17 @@ struct AjaxTelemetrySnapshot {
   bool hasTimePrediction;
   bool rowPredictionAvailable;
   bool processPredictionAvailable;
-  bool hasRuntimeEvent;
+  RuntimeEventDescriptor runtimeEvents[RUNTIME_EVENT_DESCRIPTOR_CAPACITY];
+  uint8_t eventCount;
   bool heaterAlarmLatched;
+  String heaterAlarmReason;
   bool boilingDetected;
   bool boilingPrecisionSensorConfigured;
   bool detectorRecoveryReady;
   uint32_t latestMessageSequence;
 };
 
-static_assert(sizeof(AjaxTelemetrySnapshot) <= 512,
+static_assert(sizeof(AjaxTelemetrySnapshot) <= 768,
               "AjaxTelemetrySnapshot exceeds its request stack budget");
 
 static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
@@ -3620,11 +3653,16 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   const RuntimeAjaxSnapshotResult snapshotResult = copy_ajax_runtime_snapshot(
       snapshot.crt, snapshot.status, snapshot.luaStatus,
       snapshot.currentPowerMode, messageCursor, snapshot.eventText,
-      snapshot.runtimeEvent, snapshot.hasRuntimeEvent,
+      snapshot.runtimeEvents, snapshot.eventCount,
       snapshot.latestMessageSequence);
   if (snapshotResult != RUNTIME_AJAX_SNAPSHOT_OK) return snapshotResult;
 
   snapshot.heaterAlarmLatched = heater_safety_latched();
+  if (snapshot.heaterAlarmLatched) {
+    snapshot.heaterAlarmReason = latched_emergency_stop_reason;
+  } else {
+    snapshot.heaterAlarmReason = "";
+  }
   snapshot.bmeTemp = bme_temp;
   snapshot.bmePressure = bme_pressure;
   snapshot.startPressure = start_pressure;
@@ -3858,6 +3896,7 @@ static void writeAjaxTelemetryFields(
   jsonFieldString(out, first, "Status", snapshot.status);
   jsonFieldString(out, first, "Lstatus", snapshot.luaStatus);
   jsonFieldBool(out, first, "heaterAlarmLatched", snapshot.heaterAlarmLatched);
+  jsonFieldString(out, first, "heaterAlarmReason", snapshot.heaterAlarmReason);
   jsonFieldRaw(out, first, "latestMessageSequence", snapshot.latestMessageSequence);
 }
 
@@ -3936,14 +3975,9 @@ void send_ajax_json(AsyncWebServerRequest *request) {
 
   Print &out = *response;
   writeAjaxTelemetryFields(out, snapshot);
-
-  if (!snapshot.hasRuntimeEvent) {
-    out.print('}');
-    request->send(response);
-    return;
-  }
   sendRuntimeEventResponse(
-      request, response, snapshot.runtimeEvent, snapshot.eventText);
+      request, response, snapshot.runtimeEvents, snapshot.eventCount,
+      snapshot.eventText);
 }
 
 void configModeCallback(AsyncWiFiManager *myWiFiManager) {

@@ -150,8 +150,15 @@ local function fillTank ()
       		setLuaStatus("Заполнение куба")
 			if not startPump() then return false end
 		else
-      if use_level_sensor and check4level() then stopFilling() end
-      if use_flow_sensor and check4volume() then stopFilling() end
+      if use_level_sensor and check4level() then
+        stopFilling()
+        return
+      end
+      if use_flow_sensor then
+        if check4volume() then stopFilling() end
+        return
+      end
+      setLuaStatus("Заполнение куба")
 		end
   else 
     sendMsg("NOTHING 2 DO: tank_filled: " .. tank_filled, -1)
@@ -179,7 +186,10 @@ local function resetFilling ()
 --RUN--------------------------------
 
 verifyVolumeTargets()
-if not use_level_sensor and not use_flow_sensor then
+if getNumVariable("SetScriptOff") + 0 == 1 then
+  stopPump()
+  setLuaStatus("Скрипт остановлен")
+elseif not use_level_sensor and not use_flow_sensor then
   stopPump()
   setLuaStatus("Ошибка: датчики заполнения отключены")
   sendMsg("Ошибка: датчики заполнения отключены.", -1)

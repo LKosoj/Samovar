@@ -57,6 +57,7 @@ BROWSER_TEST = r'''async page => {
       window.__lookupPlans = (settings.lookupPlans || []).slice();
       window.__repeatLookup = settings.repeatLookup || null;
       window.__releaseLookup = null;
+      window.alert = function () {};
       window.fetch = async (url, options) => {
         const raw = typeof url === "string" ? url : url.url;
         if (raw.startsWith("/ajax?operationId=")) {

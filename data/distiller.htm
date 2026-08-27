@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=7.00u7">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
@@ -66,7 +66,7 @@
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
     };
 
 
@@ -76,12 +76,12 @@
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          SamovarApp.notify(result.err || 'Программа не установлена', 0);
+          alert(result.err || 'Программа не установлена');
           return;
         }
-        SamovarApp.notify("Программа сохранена.", 2);
+        alert("Программа установлена");
       } catch (e) {
-        SamovarApp.notify('Ошибка сети: ' + e, 0);
+        alert('Ошибка сети: ' + e);
       }
     };
 

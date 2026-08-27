@@ -73,6 +73,8 @@ moved_functions = {
         "sensor_reading_valid": ("bool", 1),
         "sensor_valid": ("bool", 1),
         "optional_sensor_failed": ("bool", 1),
+        "rectification_ds_sensors_assigned": ("bool", 1),
+        "notify_rectification_sensors_unassigned": ("void", 1),
         "sensor_temp_at_least": ("bool", 1),
         "request_emergency_stop": ("void", 1),
         "perform_emergency_stop": ("void", 1),

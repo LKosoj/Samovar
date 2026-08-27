@@ -53,7 +53,7 @@ WRAPPERS = {
         "Samovar.ino", "static void jsonPrintEscaped(Print &out, const String &value)"
     ),
     "runtimeEventWriteEscaped": (
-        "Samovar.ino", "static bool runtimeEventWriteEscaped(Print& out, const String& value)"
+        "Samovar.ino", "static bool runtimeEventWriteEscaped(Print& out, const char* text, size_t length)"
     ),
     "spiffsEditorJsonEscape": (
         "SPIFFSEditor.h", "static String spiffsEditorJsonEscape(const String& value)"
@@ -180,7 +180,7 @@ static void emitFor(const char* label, const String& value) {
 
   String plainRuntime;
   JsonStringPrint runtimeSink(plainRuntime);
-  if (!runtimeEventWriteEscaped(runtimeSink, value)) {
+  if (!runtimeEventWriteEscaped(runtimeSink, value.c_str(), value.length())) {
     fprintf(stderr, "runtimeEventWriteEscaped вернул false для %s\n", label);
     failures++;
   }
@@ -211,7 +211,7 @@ def build_cpp_source() -> str:
         + extract_function_body(string_utils, WRAPPERS["toJsonString"][1]) + "\n}",
         "static void jsonPrintEscaped(Print &out, const String &value) {\n"
         + extract_function_body(samovar, WRAPPERS["jsonPrintEscaped"][1]) + "\n}",
-        "static bool runtimeEventWriteEscaped(Print& out, const String& value) {\n"
+        "static bool runtimeEventWriteEscaped(Print& out, const char* text, size_t length) {\n"
         + extract_function_body(samovar, WRAPPERS["runtimeEventWriteEscaped"][1]) + "\n}",
         "static String spiffsEditorJsonEscape(const String& value) {\n"
         + extract_function_body(spiffs_editor, WRAPPERS["spiffsEditorJsonEscape"][1]) + "\n}",

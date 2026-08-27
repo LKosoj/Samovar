@@ -1,5 +1,5 @@
 <!--#include head_boilerplate.htm-->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=7.00u7">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
@@ -81,21 +81,21 @@
     async function set_program () {
       document.getElementById("WProgram").value = document.getElementById("WProgram").value.replaceAll(",", ".");
       if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+        alert("Ошибка программы, проверьте её.");
         return;
       }
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
-        if (!result.ok) { SamovarApp.notify(result.err || 'Программа не установлена', 0); return; }
-        SamovarApp.notify("Программа сохранена.", 2);
+        if (!result.ok) { alert(result.err || 'Программа не установлена'); return; }
+        alert("Программа установлена");
       } catch (e) {
-        SamovarApp.notify('Ошибка сети: ' + e, 0);
+        alert('Ошибка сети: ' + e);
       }
     };
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
     };
 
     function renderTelemetry(myObj) {
@@ -133,7 +133,7 @@
 
     function calc_program () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+        alert("Ошибка программы, проверьте её.");
         return;
       }
       var t = document.getElementsByClassName("prgline");
@@ -304,7 +304,7 @@
 
     function getProgram () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+        alert("Ошибка программы, проверьте её.");
         return;
       }
       var e = document.getElementById("prg");
@@ -387,7 +387,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
-          SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+          alert("Ошибка программы, проверьте её.");
           return;
         }
         var element = document.getElementById("prg");

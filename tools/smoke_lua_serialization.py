@@ -57,7 +57,7 @@ if lua_text:
             errors.append(str(exc))
             body = ""
     forbid_tokens("run_lua_script", body, ["btn_script ="])
-    for token in ["queue_lua_script_job", "Lua busy"]:
+    for token in ["queue_lua_script_job", "Lua busy", "Lua prelude busy", "get_global_variables(prelude)"]:
         if token not in body:
             errors.append(f"run_lua_script missing queued-job contract: {token}")
 
@@ -85,6 +85,9 @@ if lua_text:
         [
             "take_lua_job",
             "lua_exec_locked",
+            "if (SetScriptOff && loop_lua_fl)",
+            "loop_lua_fl = false",
+            "request_lua_periodic_start()",
             "consume_lua_periodic_start_request",
             "lua_periodic_active",
         ],

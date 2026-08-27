@@ -9,13 +9,10 @@
     { key: 'Pressure', label: 'Давление', color: '#a66e00' },
     { key: 'ProgNum', label: 'Строка программы', color: '#777777' }
   ];
-  // Давление живёт в единицах мм рт.ст. (около 760) - на общей шкале с температурами
-  // (десятки градусов) оно сплющивает все линии температур в полосу у нижнего края.
-  // Переносим его на отдельную шкалу справа средствами уже существующего самописного
-  // canvas-графика (внешней библиотеки графиков в проекте нет). Список вынесен из SERIES
-  // отдельной константой, чтобы не менять форму объектов SERIES (её пинит смоук-тест U-03).
+  // Три шкалы как в 6.27: температуры слева, давление справа, номер программы
+  // на своей оси на всю высоту. Форму объектов SERIES не меняем (смоук U-03).
   const RIGHT_AXIS_SERIES = { Pressure: true };
-  const MAX_RENDER_POINTS = 600;
+  const PROG_AXIS_SERIES = { ProgNum: true };
   const LOAD_TIMEOUT_MS = 15000;
 
   function parseNumber(value) {
@@ -84,44 +81,60 @@
     });
   }
 
-  function createCanvas(parent, hiddenSeries) {
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function createCanvas(parent) {
     parent.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.className = 'chart-panel';
     const canvas = document.createElement('canvas');
     canvas.className = 'chart-canvas';
     canvas.height = 500;
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute(
+      'aria-label',
+      'График. Колёсико масштабирует, перетаскивание выделяет участок, двойной щелчок показывает всё.'
+    );
     const status = document.createElement('div');
     status.className = 'chart-status';
     const legend = document.createElement('div');
     legend.className = 'chart-legend';
-    SERIES.forEach(function (series) {
-      if (hiddenSeries && hiddenSeries[series.key]) return;
-      const item = document.createElement('span');
-      item.className = 'chart-legend-item';
-      const swatch = document.createElement('span');
-      swatch.className = 'chart-legend-swatch';
-      swatch.style.backgroundColor = series.color;
-      item.appendChild(swatch);
-      var labelText = series.label + (RIGHT_AXIS_SERIES[series.key] ? ' (шкала справа)' : '');
-      item.appendChild(document.createTextNode(labelText));
-      legend.appendChild(item);
-    });
+    legend.setAttribute('role', 'group');
+    legend.setAttribute('aria-label', 'Ряды графика, нажатие включает и выключает');
+    const scroll = document.createElement('div');
+    scroll.className = 'chart-scroll';
+    scroll.setAttribute('role', 'scrollbar');
+    scroll.setAttribute('aria-label', 'Видимый участок графика');
+    const thumb = document.createElement('div');
+    thumb.className = 'chart-scroll-thumb';
+    scroll.appendChild(thumb);
+    const readout = document.createElement('div');
+    readout.className = 'chart-readout';
     wrap.appendChild(canvas);
+    wrap.appendChild(scroll);
+    wrap.appendChild(readout);
     wrap.appendChild(status);
     wrap.appendChild(legend);
     parent.appendChild(wrap);
-    return { canvas: canvas, status: status };
+    return { canvas: canvas, status: status, legend: legend, scroll: scroll, thumb: thumb, readout: readout };
   }
 
-  function decimate(rows) {
-    if (rows.length <= MAX_RENDER_POINTS) return rows;
-    const step = Math.ceil(rows.length / MAX_RENDER_POINTS);
-    const result = [];
-    for (let i = 0; i < rows.length; i += step) result.push(rows[i]);
-    const last = rows[rows.length - 1];
-    if (result[result.length - 1] !== last) result.push(last);
-    return result;
+  function yFromValue(value, bounds, area) {
+    return area.top + area.height - ((value - bounds.min) / (bounds.max - bounds.min)) * area.height;
+  }
+
+  function seriesStrokeWidth(key) {
+    if (key === 'ProgNum') return 1.5;
+    if (key === 'Pressure') return 2;
+    return 3;
+  }
+
+  function seriesAxis(key) {
+    if (RIGHT_AXIS_SERIES[key]) return 'pressure';
+    if (PROG_AXIS_SERIES[key]) return 'prog';
+    return 'temp';
   }
 
   function valueBounds(rows, keys) {
@@ -171,26 +184,125 @@
   }
 
   function drawSeries(ctx, rows, area, bounds, series) {
+    if (!bounds || rows.length === 0) return;
     ctx.strokeStyle = series.color;
-    ctx.lineWidth = series.key === 'ProgNum' ? 1.5 : 2;
+    ctx.lineWidth = seriesStrokeWidth(series.key);
     ctx.beginPath();
+    const n = rows.length;
+    const cols = Math.max(1, Math.floor(area.width));
     let started = false;
-    rows.forEach(function (row, index) {
-      const value = row[series.key];
-      if (value === null) {
-        started = false;
-        return;
-      }
-      const x = rows.length === 1 ? area.left : area.left + area.width * index / (rows.length - 1);
-      const y = area.top + area.height - ((value - bounds.min) / (bounds.max - bounds.min)) * area.height;
+    function plotX(px, value) {
+      const y = yFromValue(value, bounds, area);
       if (!started) {
-        ctx.moveTo(x, y);
+        ctx.moveTo(px, y);
         started = true;
       } else {
-        ctx.lineTo(x, y);
+        ctx.lineTo(px, y);
       }
-    });
+    }
+    if (n <= cols) {
+      rows.forEach(function (row, index) {
+        const value = row[series.key];
+        if (value === null) {
+          started = false;
+          return;
+        }
+        const x = n === 1 ? area.left : area.left + area.width * index / (n - 1);
+        plotX(x, value);
+      });
+    } else {
+      // По каждому столбцу пикселя берём min и max всех точек в корзине - так
+      // видны пики всего лога, а не каждая N-я точка (лимит 600 это прятал).
+      for (let col = 0; col < cols; col++) {
+        const i0 = Math.floor(col * n / cols);
+        const i1 = Math.max(i0 + 1, Math.floor((col + 1) * n / cols));
+        let min = Infinity;
+        let max = -Infinity;
+        for (let i = i0; i < i1 && i < n; i++) {
+          const value = rows[i][series.key];
+          if (value === null) continue;
+          if (value < min) min = value;
+          if (value > max) max = value;
+        }
+        if (!Number.isFinite(min)) {
+          started = false;
+          continue;
+        }
+        const px = area.left + col + 0.5;
+        plotX(px, max);
+        if (max !== min) ctx.lineTo(px, yFromValue(min, bounds, area));
+      }
+    }
     ctx.stroke();
+  }
+
+  function formatHoverValue(key, value) {
+    if (value === null) return null;
+    if (key === 'ProgNum') return String(Math.round(value));
+    if (key === 'Pressure') return value.toFixed(2);
+    return value.toFixed(3);
+  }
+
+  function drawHoverCursor(ctx, area, x, dateText, labels, bgColor, textColor) {
+    ctx.save();
+    ctx.strokeStyle = textColor;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, area.top);
+    ctx.lineTo(x, area.top + area.height);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.font = '12px sans-serif';
+    ctx.textBaseline = 'middle';
+    const placeRight = x < area.left + area.width * 0.62;
+    const padX = 6;
+    const boxH = 18;
+    labels.sort(function (a, b) { return a.y - b.y; });
+    let lastBottom = area.top - 2;
+    labels.forEach(function (item) {
+      let y = clamp(item.y, area.top + 9, area.top + area.height - 9);
+      if (y < lastBottom + boxH) y = Math.min(area.top + area.height - 9, lastBottom + boxH);
+      lastBottom = y;
+      ctx.beginPath();
+      ctx.fillStyle = item.color;
+      ctx.arc(x, clamp(item.y, area.top, area.top + area.height), 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = bgColor;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      const tw = ctx.measureText(item.text).width;
+      const bw = tw + padX * 2;
+      let bx = placeRight ? x + 10 : x - 10 - bw;
+      bx = clamp(bx, area.left, area.left + area.width - bw);
+      const by = y - boxH / 2;
+      ctx.fillStyle = bgColor;
+      ctx.globalAlpha = 0.92;
+      ctx.fillRect(bx, by, bw, boxH);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, boxH);
+      ctx.fillStyle = item.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(item.text, bx + padX, y);
+    });
+
+    if (dateText) {
+      const tw = ctx.measureText(dateText).width;
+      const bw = tw + 10;
+      let bx = clamp(x - bw / 2, area.left, area.left + area.width - bw);
+      const by = area.top + area.height + 2;
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(bx, by, bw, 16);
+      ctx.fillStyle = textColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(dateText, bx + bw / 2, by + 1);
+    }
+    ctx.restore();
   }
 
   function SamovarChart(elementId, options) {
@@ -201,12 +313,193 @@
     this.autoRefresh = true;
     this.lastDate = '';
     this.options = options || {};
-    this.hiddenSeries = this.options.hidden || {};
-    const elements = createCanvas(this.parent, this.hiddenSeries);
+    this.hiddenSeries = Object.assign({}, this.options.hidden || {});
+    this.viewFrom = 0;
+    this.viewTo = null;
+    this.dragSelect = null;
+    this.hoverIndex = null;
+    this._plot = { left: 54, width: 1 };
+    const elements = createCanvas(this.parent);
     this.canvas = elements.canvas;
     this.status = elements.status;
+    this.legend = elements.legend;
+    this.scroll = elements.scroll;
+    this.thumb = elements.thumb;
+    this.readout = elements.readout;
+    this.renderLegend();
+    this.bindPlot();
     window.addEventListener('resize', this.draw.bind(this));
   }
+
+  SamovarChart.prototype.renderLegend = function () {
+    const self = this;
+    this.legend.innerHTML = '';
+    SERIES.forEach(function (series) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'chart-legend-item';
+      if (self.hiddenSeries[series.key]) item.classList.add('is-hidden');
+      item.setAttribute('aria-pressed', self.hiddenSeries[series.key] ? 'false' : 'true');
+      const swatch = document.createElement('span');
+      swatch.className = 'chart-legend-swatch';
+      swatch.style.backgroundColor = series.color;
+      item.appendChild(swatch);
+      var labelText = series.label;
+      if (RIGHT_AXIS_SERIES[series.key]) labelText += ' (шкала справа)';
+      else if (PROG_AXIS_SERIES[series.key]) labelText += ' (своя шкала)';
+      item.appendChild(document.createTextNode(labelText));
+      item.addEventListener('click', function () { self.toggleSeries(series.key); });
+      self.legend.appendChild(item);
+    });
+  };
+
+  SamovarChart.prototype.toggleSeries = function (key) {
+    this.hiddenSeries[key] = !this.hiddenSeries[key];
+    this.renderLegend();
+    this.draw();
+  };
+
+  SamovarChart.prototype.span = function () {
+    const n = this.rows.length;
+    if (n === 0) return { from: 0, to: 0 };
+    const from = clamp(this.viewFrom | 0, 0, n - 1);
+    const to = this.viewTo == null ? n - 1 : clamp(this.viewTo | 0, from, n - 1);
+    return { from: from, to: to };
+  };
+
+  SamovarChart.prototype.viewRows = function () {
+    const span = this.span();
+    return this.rows.slice(span.from, span.to + 1);
+  };
+
+  SamovarChart.prototype.setView = function (from, to) {
+    const n = this.rows.length;
+    if (n === 0) {
+      this.viewFrom = 0;
+      this.viewTo = null;
+      return;
+    }
+    let a = clamp(Math.min(from, to) | 0, 0, n - 1);
+    let b = clamp(Math.max(from, to) | 0, 0, n - 1);
+    if (b - a < 4) b = clamp(a + 4, 0, n - 1);
+    this.viewFrom = a;
+    this.viewTo = b >= n - 1 ? null : b;
+    this.draw();
+  };
+
+  SamovarChart.prototype.resetView = function () {
+    this.viewFrom = 0;
+    this.viewTo = null;
+    this.draw();
+  };
+
+  SamovarChart.prototype.xToIndex = function (offsetX) {
+    const span = this.span();
+    const n = Math.max(1, span.to - span.from);
+    const t = (offsetX - this._plot.left) / this._plot.width;
+    return clamp(span.from + Math.round(t * n), 0, Math.max(0, this.rows.length - 1));
+  };
+
+  SamovarChart.prototype.bindPlot = function () {
+    const self = this;
+    const canvas = this.canvas;
+    let pointer = null;
+
+    canvas.addEventListener('wheel', function (event) {
+      if (self.rows.length < 8) return;
+      event.preventDefault();
+      const span = self.span();
+      const count = span.to - span.from + 1;
+      const factor = event.deltaY < 0 ? 0.8 : 1.25;
+      const nextCount = clamp(Math.round(count * factor), 8, self.rows.length);
+      if (nextCount === count) {
+        if (factor > 1) self.resetView();
+        return;
+      }
+      const frac = clamp((event.offsetX - self._plot.left) / self._plot.width, 0, 1);
+      const center = span.from + count * frac;
+      const from = clamp(Math.round(center - nextCount * frac), 0, self.rows.length - nextCount);
+      self.setView(from, from + nextCount - 1);
+    }, { passive: false });
+
+    canvas.addEventListener('pointerdown', function (event) {
+      if (event.button !== 0) return;
+      pointer = { start: event.offsetX, end: event.offsetX };
+      canvas.setPointerCapture(event.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', function (event) {
+      if (!pointer) return;
+      pointer.end = event.offsetX;
+      if (Math.abs(pointer.end - pointer.start) > 8) {
+        self.dragSelect = { a: pointer.start, b: pointer.end };
+        self.draw();
+      }
+    });
+
+    function finishPointer() {
+      if (!pointer) return;
+      const start = pointer.start;
+      const end = pointer.end;
+      pointer = null;
+      self.dragSelect = null;
+      if (Math.abs(end - start) > 12 && self.rows.length > 4) {
+        self.setView(self.xToIndex(start), self.xToIndex(end));
+      } else {
+        self.draw();
+      }
+    }
+
+    canvas.addEventListener('pointerup', finishPointer);
+    canvas.addEventListener('pointercancel', finishPointer);
+    canvas.addEventListener('dblclick', function () { self.resetView(); });
+
+    let hoverRaf = 0;
+    canvas.addEventListener('pointermove', function (event) {
+      if (pointer) return;
+      self.hoverIndex = self.xToIndex(event.offsetX);
+      if (hoverRaf) return;
+      hoverRaf = requestAnimationFrame(function () {
+        hoverRaf = 0;
+        self.draw();
+      });
+    });
+    canvas.addEventListener('pointerleave', function () {
+      if (pointer) return;
+      self.hoverIndex = null;
+      self.draw();
+    });
+
+    this.bindScroll();
+  };
+
+  SamovarChart.prototype.bindScroll = function () {
+    const self = this;
+    const scroll = this.scroll;
+    function applyClientX(clientX) {
+      const n = self.rows.length;
+      if (n < 8) return;
+      const span = self.span();
+      const count = span.to - span.from + 1;
+      const rect = scroll.getBoundingClientRect();
+      const t = clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+      const from = clamp(Math.round(t * n - count / 2), 0, n - count);
+      self.setView(from, from + count - 1);
+    }
+    let dragging = false;
+    scroll.addEventListener('pointerdown', function (event) {
+      dragging = true;
+      scroll.setPointerCapture(event.pointerId);
+      applyClientX(event.clientX);
+    });
+    scroll.addEventListener('pointermove', function (event) {
+      if (!dragging) return;
+      applyClientX(event.clientX);
+    });
+    function stopDrag() { dragging = false; }
+    scroll.addEventListener('pointerup', stopDrag);
+    scroll.addEventListener('pointercancel', stopDrag);
+  };
 
   // retryFn - необязательный обработчик кнопки "Повторить" для сообщений об ошибке;
   // без него график ведёт себя как раньше (просто текст статуса).
@@ -228,6 +521,8 @@
   SamovarChart.prototype.setData = function (rows) {
     this.rows = rows || [];
     this.lastDate = this.rows.length ? this.rows[this.rows.length - 1].Date : '';
+    this.viewFrom = 0;
+    this.viewTo = null;
     this.draw();
   };
 
@@ -267,7 +562,11 @@
     try {
       const text = await resp.text();
       this.setData(parseCsv(text));
-      this.setStatus(this.rows.length ? 'Загружено точек: ' + this.rows.length : 'Нет данных графика.', false);
+      this.setStatus(
+        (this.rows.length ? 'Загружено точек: ' + this.rows.length + '. ' : 'Нет данных графика. ') +
+        'Колёсико и полоса снизу — масштаб, перетаскивание — участок, двойной щелчок — весь график, легенда — вкл/выкл, наведение — значения.',
+        false
+      );
     } finally {
       this.loading = false;
     }
@@ -283,8 +582,10 @@
     if (!this.autoRefresh || !data) return;
     const row = ajaxToRow(data);
     if (!row.Date || row.Date === this.lastDate) return;
+    const atEnd = this.viewTo == null || this.viewTo >= this.rows.length - 1;
     this.rows.push(row);
     this.lastDate = row.Date;
+    if (atEnd) this.viewTo = null;
     this.draw();
   };
 
@@ -310,30 +611,35 @@
     const gridColor = styles.getPropertyValue('--border-soft').trim() || '#ccc';
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
-    const rows = decimate(this.rows);
+    const rows = this.viewRows();
     const visibleSeries = SERIES.filter(function (series) { return !this.hiddenSeries[series.key]; }, this);
-    // Раздельные шкалы: primary - температуры и номер строки программы (левая ось),
-    // secondary - давление, у него совсем другой порядок значений (около 760).
-    const primarySeries = visibleSeries.filter(function (series) { return !RIGHT_AXIS_SERIES[series.key]; });
-    const secondarySeries = visibleSeries.filter(function (series) { return RIGHT_AXIS_SERIES[series.key]; });
-    const bounds = valueBounds(rows, primarySeries.map(function (series) { return series.key; }));
-    const secondaryBounds = valueBounds(rows, secondarySeries.map(function (series) { return series.key; }));
-    const rightMargin = secondaryBounds ? 54 : 20;
+    const tempSeries = visibleSeries.filter(function (series) { return seriesAxis(series.key) === 'temp'; });
+    const pressureSeries = visibleSeries.filter(function (series) { return seriesAxis(series.key) === 'pressure'; });
+    const progSeries = visibleSeries.filter(function (series) { return seriesAxis(series.key) === 'prog'; });
+    const tempBounds = valueBounds(rows, tempSeries.map(function (series) { return series.key; }));
+    const pressureBounds = valueBounds(rows, pressureSeries.map(function (series) { return series.key; }));
+    const progBounds = valueBounds(rows, progSeries.map(function (series) { return series.key; }));
+    const rightMargin = pressureBounds ? 54 : 20;
     const area = { left: 54, top: 18, width: width - 54 - rightMargin, height: height - 58 };
-    if (!bounds && !secondaryBounds) {
+    this._plot = { left: area.left, width: Math.max(1, area.width) };
+    if (!tempBounds && !pressureBounds && !progBounds) {
       ctx.fillStyle = textColor;
       ctx.font = '16px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Нет данных для графика', width / 2, height / 2);
+      this.updateChrome(rows);
       return;
     }
-    const secondaryColor = secondarySeries.length ? secondarySeries[0].color : null;
-    drawGrid(ctx, area, bounds, secondaryBounds, secondaryColor, textColor, gridColor);
-    primarySeries.forEach(function (series) {
-      drawSeries(ctx, rows, area, bounds, series);
+    const pressureColor = pressureSeries.length ? pressureSeries[0].color : null;
+    drawGrid(ctx, area, tempBounds, pressureBounds, pressureColor, textColor, gridColor);
+    tempSeries.forEach(function (series) {
+      drawSeries(ctx, rows, area, tempBounds, series);
     });
-    secondarySeries.forEach(function (series) {
-      drawSeries(ctx, rows, area, secondaryBounds, series);
+    pressureSeries.forEach(function (series) {
+      drawSeries(ctx, rows, area, pressureBounds, series);
+    });
+    progSeries.forEach(function (series) {
+      drawSeries(ctx, rows, area, progBounds, series);
     });
     ctx.fillStyle = textColor;
     ctx.font = '12px sans-serif';
@@ -344,6 +650,60 @@
       ctx.textAlign = 'right';
       ctx.fillText(rows[rows.length - 1].Date || '', area.left + area.width, area.top + area.height + 12);
     }
+    if (this.dragSelect) {
+      const a = clamp(Math.min(this.dragSelect.a, this.dragSelect.b), area.left, area.left + area.width);
+      const b = clamp(Math.max(this.dragSelect.a, this.dragSelect.b), area.left, area.left + area.width);
+      ctx.fillStyle = 'rgba(52, 152, 219, 0.18)';
+      ctx.fillRect(a, area.top, Math.max(1, b - a), area.height);
+    }
+    if (!this.dragSelect && this.hoverIndex != null && rows.length > 0) {
+      const span = this.span();
+      const hi = clamp(this.hoverIndex, span.from, span.to);
+      const local = hi - span.from;
+      const x = rows.length === 1 ? area.left : area.left + area.width * local / Math.max(1, rows.length - 1);
+      const row = this.rows[hi];
+      const axisBounds = { temp: tempBounds, pressure: pressureBounds, prog: progBounds };
+      const labels = [];
+      visibleSeries.forEach(function (series) {
+        const value = row[series.key];
+        const bounds = axisBounds[seriesAxis(series.key)];
+        const text = formatHoverValue(series.key, value);
+        if (text === null || !bounds) return;
+        labels.push({
+          y: yFromValue(value, bounds, area),
+          color: series.color,
+          text: text
+        });
+      });
+      drawHoverCursor(ctx, area, x, row.Date || '', labels, bgColor, textColor);
+    }
+    this.updateChrome(rows);
+  };
+
+  SamovarChart.prototype.updateChrome = function (viewRows) {
+    const n = this.rows.length;
+    const span = this.span();
+    if (this.thumb && n > 0) {
+      const count = span.to - span.from + 1;
+      this.thumb.style.left = (span.from / n * 100) + '%';
+      this.thumb.style.width = Math.max(2, count / n * 100) + '%';
+    }
+    if (!this.readout) return;
+    const idx = this.hoverIndex;
+    if (idx == null || !this.rows[idx]) {
+      this.readout.textContent = n
+        ? ('Точек: ' + n + (span.from === 0 && span.to === n - 1 ? '' : (', показан участок ' + (span.from + 1) + '–' + (span.to + 1))))
+        : '';
+      return;
+    }
+    const row = this.rows[idx];
+    const parts = [row.Date || ''];
+    SERIES.forEach(function (series) {
+      if (this.hiddenSeries[series.key]) return;
+      const value = row[series.key];
+      parts.push(series.label + ': ' + (value === null ? '—' : value));
+    }, this);
+    this.readout.textContent = parts.join('  ·  ');
   };
 
   window.SamovarChart = SamovarChart;

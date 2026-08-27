@@ -22,12 +22,13 @@ struct ColumnResults {
 /**
  * Расчет параметров колонны на основе "эталона" из program.htm
  * @param rawMaterial: 0=Фрукты, 1=Зерно, 2=Сахар
+ * @param diamInches: внутренний диаметр царги (1.5 / 2 / 3)
  */
-ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
+inline ColumnResults calculate_column_etalon(uint8_t rawMaterial, float diamInches) {
   ColumnResults res = {};
   
-  // 1. Конфигурация из SamSetup
-  float diamMm = SamSetup.ColDiam * 25.4f;
+  // 1. Геометрия: диаметр с калькулятора, высота и насадка из профиля
+  float diamMm = diamInches * 25.4f;
   float heightCm = SamSetup.ColHeight * 100.0f;
   float packingDensity = (float)SamSetup.PackDens / 100.0f;
   if (isnan(diamMm) || isnan(heightCm) || isnan(packingDensity) ||
@@ -104,6 +105,10 @@ ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
   res.tailsFlowMlH = res.bodyEndFlowMlH * 0.7f;
   
   return res;
+}
+
+inline ColumnResults calculate_column_etalon(uint8_t rawMaterial) {
+  return calculate_column_etalon(rawMaterial, SamSetup.ColDiam);
 }
 
 #endif

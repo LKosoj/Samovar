@@ -92,7 +92,7 @@ BROWSER_TEST = r'''async page => {
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 0, StepperStepMl: 111,
-    heaterAlarmLatched: 0, latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   };
   const i2cMixer = {
     present: 1, address: 16, role: 1, mode: 1, caps: 25, status: 0, error: 0,
@@ -464,32 +464,22 @@ BROWSER_TEST = r'''async page => {
         await page.locator("#Prog").waitFor({ state: "visible" });
       }
       const found = await page.evaluate((fileName) => {
-        // enhanceTooltips() (app.js) выносит .tooltiptext из .tooltip в соседнюю
-        // .tooltip-wrap и ставит кнопку .tooltip-trigger - настоящую подсказку теперь
-        // открывает клик по триггеру, а не hover на .tooltip. На nbk.htm подсказки
-        // "голые" (без текста), enhanceTooltips() их пропускает и триггер не создаётся -
-        // тогда, как и раньше, меряем контраст самой подписи .tooltip.
         const metrics = browserMetrics();
         const scope = fileName === "nbk.htm" ? "#Prog " : "";
-        const triggers = Array.from(document.querySelectorAll(scope + ".tooltip-trigger")).filter(metrics.visible);
-        if (triggers.length) {
-          triggers[0].dataset.u03Tooltip = "1";
-          return { exists: true, hasText: true };
-        }
         const owners = Array.from(document.querySelectorAll(scope + ".tooltip")).filter(metrics.visible);
-        const owner = owners[0];
+        const owner = owners.find(el => el.querySelector(".tooltiptext")) || owners[0];
         if (!owner) return { exists: false };
         owner.dataset.u03Tooltip = "1";
-        return { exists: true, hasText: false };
+        return { exists: true, hasText: !!owner.querySelector(".tooltiptext") };
       }, file);
       const label = "tooltip/" + theme + "/" + file;
       report.stateCases.push(label);
       if (!found.exists) addFailure(label, ".tooltip", "visible", { detail: "missing tooltip owner" });
       else {
-        if (found.hasText) await page.locator('[data-u03-tooltip="1"]').click();
+        if (found.hasText) await page.locator('[data-u03-tooltip="1"]').hover();
         const value = await page.evaluate((hasText) => {
           const el = document.querySelector('[data-u03-tooltip="1"]');
-          const element = hasText ? el.parentNode.querySelector(".tooltiptext") : el;
+          const element = hasText ? el.querySelector(".tooltiptext") : el;
           return { visibility: getComputedStyle(element).visibility, metric: browserMetrics().textMetric(element) };
         }, found.hasText);
         if (value.visibility !== "visible" || !value.metric.ratio || value.metric.ratio + 1e-9 < value.metric.threshold) addFailure(label, ".tooltiptext", "visible", value.metric);

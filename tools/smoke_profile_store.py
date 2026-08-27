@@ -16,6 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROFILE_HEADER = ROOT / "profile_store.h"
 PROFILE_SETUP_FIELDS_HEADER = ROOT / "profile_setup_fields.h"
 NVS = ROOT / "NVS_Manager.ino"
+PROFILE_DECODE_FIELDS = ROOT / "profile_decode_fields.h"
 SAMOVAR = ROOT / "Samovar.ino"
 API = ROOT / "samovar_api.h"
 
@@ -234,7 +235,9 @@ else:
     )
     compile_and_run_harness("profile_codec", harness)
 
-nvs_text = strip_cpp_comments(NVS.read_text(encoding="utf-8"))
+nvs_text = strip_cpp_comments(
+    NVS.read_text(encoding="utf-8") + "\n" + PROFILE_DECODE_FIELDS.read_text(encoding="utf-8")
+)
 profile_header_text = strip_cpp_comments(PROFILE_HEADER.read_text(encoding="utf-8"))
 samovar_text = strip_cpp_comments(SAMOVAR.read_text(encoding="utf-8"))
 api_text = strip_cpp_comments(API.read_text(encoding="utf-8"))

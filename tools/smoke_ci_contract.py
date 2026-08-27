@@ -509,6 +509,7 @@ class BrowserTestRunnerTests(unittest.TestCase):
             "test_program_file_validation_browser.py",
             "test_program_focus_redraw_browser.py",
             "test_program_percent_input_browser.py",
+            "test_program_calc_browser.py",
             "test_runtime_event_ui_browser.py",
             "test_setup_guards_browser.py",
             "test_setup_mode_hidden_selected_browser.py",

@@ -401,6 +401,54 @@ static void test_latest_sequence_helper() {
         "latest sequence did not follow ring after eviction");
 }
 
+static void test_copy_batch_after_cursor() {
+  RuntimeEventRing ring{};
+  runtime_event_init(ring);
+  check(runtime_event_append_locked(
+            ring, RUNTIME_EVENT_MESSAGE, 2, "one", 3) == RUNTIME_EVENT_APPEND_OK,
+        "batch first append failed");
+  check(runtime_event_append_locked(
+            ring, RUNTIME_EVENT_CONSOLE, 100, "two", 3) == RUNTIME_EVENT_APPEND_OK,
+        "batch second append failed");
+  check(runtime_event_append_locked(
+            ring, RUNTIME_EVENT_MESSAGE, 1, "three", 5) == RUNTIME_EVENT_APPEND_OK,
+        "batch third append failed");
+
+  RuntimeEventDescriptor events[RUNTIME_EVENT_DESCRIPTOR_CAPACITY];
+  FaultText packed;
+  uint8_t count = 99;
+  check(runtime_event_copy_batch_locked(
+            ring, 0, events, RUNTIME_EVENT_DESCRIPTOR_CAPACITY, packed, count) ==
+            RUNTIME_EVENT_SNAPSHOT_OK,
+        "batch copy from empty cursor failed");
+  check(count == 3 && packed.value() == "onetwothree",
+        "batch packed payload mismatch");
+  check(events[0].sequence == 1 && events[0].kind == RUNTIME_EVENT_MESSAGE &&
+            events[0].offset == 0 && events[0].length == 3,
+        "batch first descriptor mismatch");
+  check(events[1].sequence == 2 && events[1].kind == RUNTIME_EVENT_CONSOLE &&
+            events[1].offset == 3 && events[1].length == 3,
+        "batch second descriptor mismatch");
+  check(events[2].sequence == 3 && events[2].offset == 6 && events[2].length == 5,
+        "batch third descriptor mismatch");
+
+  packed = FaultText();
+  count = 99;
+  check(runtime_event_copy_batch_locked(
+            ring, 1, events, RUNTIME_EVENT_DESCRIPTOR_CAPACITY, packed, count) ==
+            RUNTIME_EVENT_SNAPSHOT_OK &&
+            count == 2 && packed.value() == "twothree",
+        "batch copy after first event failed");
+
+  packed = FaultText("unchanged");
+  count = 99;
+  check(runtime_event_copy_batch_locked(
+            ring, 3, events, RUNTIME_EVENT_DESCRIPTOR_CAPACITY, packed, count) ==
+            RUNTIME_EVENT_SNAPSHOT_OK &&
+            count == 0 && packed.value() == "",
+        "empty batch did not clear packed text");
+}
+
 int main() {
   test_empty_and_mixed_fifo();
   test_two_cursor_full_fifo();
@@ -410,6 +458,7 @@ int main() {
   test_reboot_stale_cursor_limitations();
   test_cursor_parser_and_size_contract();
   test_latest_sequence_helper();
+  test_copy_batch_after_cursor();
   if (failures != 0) return 1;
   std::cout << "runtime event ring smoke passed\n";
   return 0;
@@ -498,10 +547,10 @@ def run_checked_writer_harness(samovar_text: str, string_utils_text: str) -> Non
     )
     signatures = [
         "static bool runtimeEventWrite(Print& out, const char* value, size_t length)",
-        "static bool runtimeEventWriteEscaped(Print& out, const String& value)",
+        "static bool runtimeEventWriteEscaped(Print& out, const char* text, size_t length)",
         "static bool runtimeEventWriteUnsigned(Print& out, uint32_t value)",
-        "static bool runtimeEventWriteSection(\n    Print& out, const RuntimeEventDescriptor& event, const String& eventText)",
-        "static bool sendRuntimeEventResponse(\n    AsyncWebServerRequest* request, AsyncResponseStream* response,\n    const RuntimeEventDescriptor& event, const String& eventText)",
+        "static bool runtimeEventWriteSection(\n    Print& out, const RuntimeEventDescriptor& event, const String& packedTexts)",
+        "static bool sendRuntimeEventResponse(\n    AsyncWebServerRequest* request, AsyncResponseStream* response,\n    const RuntimeEventDescriptor* events, uint8_t count, const String& packedTexts)",
     ]
     lookup_signatures = [
         signatures[0],
@@ -626,7 +675,7 @@ static void test_exact_message_and_console() {
   check(runtimeEventWriteSection(messageOut, message, messageText),
         "message writer failed");
   check(messageOut.output() ==
-            ",\"Msg\":\"a\\\"b\",\"msglvl\":1,\"messageSequence\":42}",
+            "{\"Msg\":\"a\\\"b\",\"msglvl\":1,\"messageSequence\":42}",
         "message bytes mismatch");
 
   const RuntimeEventDescriptor console{UINT32_MAX, 0, 4, RUNTIME_EVENT_CONSOLE, 100};
@@ -635,7 +684,7 @@ static void test_exact_message_and_console() {
   check(runtimeEventWriteSection(consoleOut, console, consoleText),
         "console writer failed");
   check(consoleOut.output() ==
-            ",\"LogMsg\":\"x\\\\\\ny\",\"messageSequence\":4294967295}",
+            "{\"LogMsg\":\"x\\\\\\ny\",\"messageSequence\":4294967295}",
         "console bytes mismatch");
 
   std::string controlBytes;
@@ -649,7 +698,7 @@ static void test_exact_message_and_console() {
   check(runtimeEventWriteSection(controlOut, controls, controlText),
         "control-byte writer failed");
   check(controlOut.output() ==
-            ",\"LogMsg\":\""
+            "{\"LogMsg\":\""
             "\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007"
             "\\b\\t\\n\\u000B\\f\\r\\u000E\\u000F"
             "\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017"
@@ -672,21 +721,23 @@ static void test_every_short_write_fails_closed() {
   AsyncResponseStream* successStream = new AsyncResponseStream();
   successStream->addHeader("Cache-Control", "no-store");
   check(sendRuntimeEventResponse(
-            &successRequest, successStream, message, messageText),
+            &successRequest, successStream, &message, 1, messageText),
         "successful event stream selected fallback response");
   check(successRequest.sendCount == 1 && successRequest.sent == successStream &&
-            successStream->output() == successful.output() &&
+            successStream->output() ==
+                ",\"events\":[" + successful.output() + "]}" &&
             successStream->cacheControl == "no-store" &&
             AsyncResponseStream::destroyed == 0,
         "successful event stream wire mismatch");
+  const size_t responseWriteCalls = successStream->calls();
   delete successRequest.sent;
 
-  for (size_t failCall = 1; failCall <= writeCalls; failCall++) {
+  for (size_t failCall = 1; failCall <= responseWriteCalls; failCall++) {
     AsyncResponseStream::destroyed = 0;
     AsyncWebServerRequest request;
     AsyncResponseStream* failing = new AsyncResponseStream(failCall);
     failing->addHeader("Cache-Control", "no-store");
-    check(!sendRuntimeEventResponse(&request, failing, message, messageText),
+    check(!sendRuntimeEventResponse(&request, failing, &message, 1, messageText),
           "short write was accepted by response sender");
     check(request.sendCount == 1 && request.sent &&
               dynamic_cast<AsyncResponseStream*>(request.sent) == nullptr &&
@@ -1021,7 +1072,7 @@ def run_source_contracts() -> None:
         "captureAjaxTelemetrySnapshot(messageCursor, snapshot)",
         '"Runtime event snapshot unavailable"',
         "writeAjaxTelemetryFields(out, snapshot)",
-        "snapshot.runtimeEvent, snapshot.eventText",
+        "snapshot.runtimeEvents, snapshot.eventCount",
     )
     for token in required_ajax_tokens:
         if token not in ajax:
@@ -1081,6 +1132,8 @@ def run_source_contracts() -> None:
         "async function pollAjax(renderFn, sinks)",
         "fetch('/ajax?messageCursor=' + String(messageCursor)",
         "Пропущены сообщения: обнаружен разрыв последовательности.",
+        "const RUNTIME_EVENT_BATCH_LIMIT = 16;",
+        "function validateRuntimeEvents(data)",
     ):
         if token not in app:
             errors.append(f"shared UI cursor contract token missing: {token}")

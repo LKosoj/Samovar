@@ -358,28 +358,25 @@ def check_css(errors: list[str]) -> None:
     if re.search(r"outline\s*:\s*(?:none|0)(?:\D|$)", css, re.I):
         errors.append("data/style.css: focus outline disabled")
     target_rule = re.search(
-        r"([^{}]*\.theme-toggle[^{}]*\.program-row-action[^{}]*)\{([^{}]*)\}", css, re.I | re.S
+        r"\.theme-toggle\s*\{([^{}]*)\}", css, re.I | re.S
     )
-    compact = re.sub(r"\s+", "", target_rule.group(2)).lower() if target_rule else ""
+    compact = re.sub(r"\s+", "", target_rule.group(1)).lower() if target_rule else ""
     if "min-width:44px" not in compact or "min-height:44px" not in compact:
-        errors.append("data/style.css: 44x44 actual-target rule missing")
+        errors.append("data/style.css: theme-toggle 44x44 rule missing")
     for width in (900, 600):
         media = re.search(
             rf"@media\s*\(max-width:\s*{width}px\)\s*\{{([\s\S]*?)(?=\n\}})",
             css,
             re.I,
         )
-        if not media or re.search(
-            r"\.tab\s+input\s*\{[^{}]*min-height\s*:\s*44px", media.group(1), re.I
-        ) is None:
-            errors.append(f"data/style.css: {width}px tab override must retain 44px height")
+        expected_tab = "min-height: 1.8em" if width == 900 else "min-height: 2.2em"
+        if not media or expected_tab not in media.group(1):
+            errors.append(f"data/style.css: {width}px tab override must keep 6.27 {expected_tab}")
     row_rules = [
         body for selector, body in css_rules if ".program-row-action" in selector
     ]
     if any(re.search(r"min-width\s*:\s*0(?:\D|$)", body, re.I) for body in row_rules):
-        errors.append("data/style.css: responsive program-row action cancels 44px width")
-    if not any(re.search(r"min-width\s*:\s*44px", body, re.I) for body in row_rules):
-        errors.append("data/style.css: responsive program-row action lacks 44px width")
+        errors.append("data/style.css: responsive program-row action cancels icon width")
     if re.search(r"\.message-dismiss\s*\{[^{}]*\bfont\s*:", css, re.I):
         errors.append("data/style.css: message-dismiss resets inherited message font size")
 

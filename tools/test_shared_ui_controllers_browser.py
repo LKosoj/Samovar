@@ -61,7 +61,7 @@ BROWSER_TEST = r'''async page => {
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 0, StepperStepMl: 111,
-    heaterAlarmLatched: 0, latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   };
   const columnFixture = {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
@@ -610,24 +610,24 @@ BROWSER_TEST = r'''async page => {
     const loopTimers = [];
     const requests = [];
     const logs = [];
-    // heaterAlarmLatched/latestMessageSequence обязательны в каждом успешном
-    // ответе /ajax: без них validateHeaterTelemetry() бракует весь ответ, и ни
-    // рендера, ни продвижения курсора не происходит. latestMessageSequence=0 в
+    // heaterAlarmLatched/heaterAlarmReason/latestMessageSequence обязательны
+    // в каждом успешном ответе /ajax: без них validateHeaterTelemetry() бракует
+    // весь ответ. При latch=0 reason — пустая строка. latestMessageSequence=0 в
     // первом ответе оставляет курсор на нуле, поэтому бутстрап не проглатывает
     // сообщение с messageSequence=1.
     const plans = [
-      { kind: 'deferred', body: { crnt_tm: '12:00:00', heaterAlarmLatched: 0, latestMessageSequence: 0 } },
+      { kind: 'deferred', body: { crnt_tm: '12:00:00', heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0 } },
       { kind: 'http' },
       { kind: 'malformed' },
       { kind: 'reject' },
       { kind: 'timeout' },
-      { kind: 'json', body: { crnt_tm: '12:00:01', Msg: 'first', msglvl: 2, messageSequence: 1,
-        heaterAlarmLatched: 0, latestMessageSequence: 1 } },
-      { kind: 'json', body: { crnt_tm: '12:00:02', Msg: 'third', msglvl: 1, messageSequence: 3,
-        heaterAlarmLatched: 0, latestMessageSequence: 3 } },
-      { kind: 'json', body: { crnt_tm: '12:00:03', LogMsg: 'fourth-log', messageSequence: 4,
-        heaterAlarmLatched: 0, latestMessageSequence: 4 } },
-      { kind: 'json', body: { crnt_tm: '12:00:04', heaterAlarmLatched: 0, latestMessageSequence: 4 } }
+      { kind: 'json', body: { crnt_tm: '12:00:01', events: [{ Msg: 'first', msglvl: 2, messageSequence: 1 }],
+        heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 1 } },
+      { kind: 'json', body: { crnt_tm: '12:00:02', events: [{ Msg: 'third', msglvl: 1, messageSequence: 3 }],
+        heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 3 } },
+      { kind: 'json', body: { crnt_tm: '12:00:03', events: [{ LogMsg: 'fourth-log', messageSequence: 4 }],
+        heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 4 } },
+      { kind: 'json', body: { crnt_tm: '12:00:04', heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 4 } }
     ];
     let active = 0;
     let maxActive = 0;

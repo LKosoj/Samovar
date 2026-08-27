@@ -37,7 +37,7 @@ lua_text = strip_cpp_comments(lua_text_raw)
 errors: list[str] = []
 
 try:
-    global_vars_body = extract_function_body(lua_text, "String get_global_variables()")
+    global_vars_body = extract_function_body(lua_text, "bool get_global_variables(String& Variables)")
 except ValueError as exc:
     errors.append(str(exc))
     global_vars_body = ""
@@ -52,6 +52,10 @@ for token in [
 ]:
     if token not in global_vars_body:
         errors.append(f"get_global_variables() does not use: {token}")
+
+for poisoned in ["error('program_Wait_Type busy')", "error('current_power_mode busy')"]:
+    if poisoned in global_vars_body:
+        errors.append(f"get_global_variables() must not inject Lua error() on lock busy: {poisoned}")
 
 if errors:
     for error in errors:

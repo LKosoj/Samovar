@@ -225,6 +225,8 @@ inline bool sensor_reading_valid(const DSSensor& sensor);
 inline bool sensor_valid(const DSSensor& sensor);
 inline bool optional_sensor_failed(const DSSensor& sensor);
 inline bool sensor_temp_at_least(const DSSensor& sensor, float temp);
+inline bool rectification_ds_sensors_assigned();
+inline void notify_rectification_sensors_unassigned();
 #ifdef COLUMN_WETTING
 bool column_wetting();
 #endif
@@ -353,7 +355,7 @@ String run_lua_string(String lstr);
 bool load_lua_script();
 void do_lua_script(void *parameter);
 bool start_lua_script();
-String get_global_variables();
+bool get_global_variables(String& variables);
 String get_lua_mode_name(bool filename = true);
 // [P8] Определены в mode_common.h, который подключается позже lua.h -
 // нужны форвард-декларации здесь же для check_alarm_lua (lua.h).

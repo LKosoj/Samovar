@@ -53,7 +53,7 @@ BROWSER_TEST = r'''async page => {
     contentType: "application/json",
     body: JSON.stringify({
       version: "test", crnt_tm: "12:00:00", Status: "Готов", PowerOn: 0,
-      heaterAlarmLatched: 0, latestMessageSequence: 0
+      heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
     })
   }));
 

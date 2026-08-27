@@ -2,9 +2,9 @@
 """Поведенческая проверка П24: tick_check_stack_headroom() следит не только за loop().
 
 Раньше uxTaskGetStackHighWaterMark(NULL) проверял только "текущую задачу" (loop()).
-PowerStatusTask (стек 3072 - самый маленький из рабочих, и именно он на путях отказа
-регулятора строит длинные String), SysTicker (6144), GetClockTicker (6144) и
-EmergencyButtonTask (2048) не проверялись вовсе. Теперь функция дополнительно обходит
+PowerStatusTask (самый маленький из рабочих стеков, и именно он на путях отказа
+регулятора строит длинные String), SysTicker, GetClockTicker и
+EmergencyButtonTask не проверялись вовсе. Теперь функция дополнительно обходит
 таблицу stackWatchTable, храня УКАЗАТЕЛЬ на хэндл (задача может быть ещё не создана -
 такую запись нужно молча пропустить, как GetBMPTask, который нигде не создаётся).
 
@@ -174,7 +174,7 @@ static void test_low_systicker_names_systicker() {
   check(espRestartCalls == 1, "ESP.restart не вызван при низком стеке SysTicker");
 }
 
-// Мало место только у PowerStatusTask (самый маленький рабочий стек - 3072,
+// Мало место только у PowerStatusTask (самый маленький рабочий стек,
 // строит длинные String на путях отказа регулятора) -> отсечка называет именно её.
 static void test_low_power_status_names_power_status() {
   reset_fixture();

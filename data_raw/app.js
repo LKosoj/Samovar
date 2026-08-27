@@ -17,6 +17,7 @@
   const OPERATION_POLL_INTERVAL_MS = 250;
   const OPERATION_TIMEOUT_MS = 45000;
   const MAX_MESSAGE_SEQUENCE = 0xFFFFFFFF;
+  const RUNTIME_EVENT_BATCH_LIMIT = 16;
   const MESSAGE_GAP_WARNING = 'Пропущены сообщения: обнаружен разрыв последовательности.';
   const RUNTIME_BUSY_WARNING = 'Контроллер временно занят, статус обновится при следующем опросе.';
   const TELEMETRY_OPTION_KEYS = [
@@ -35,6 +36,7 @@
   let audioBlockedNotified = false;
   let alarmActive = false;
   let heaterAlarmLatched = false;
+  let connectionAlarm = false;
   let sound = null;
   let requestErrorRevision = 0;
   let programMutationPending = false;
@@ -401,6 +403,7 @@
       return;
     }
     setConnectionIcon('Red_light.gif');
+    connectionAlarm = true;
     addMessage('Обрыв связи!', 0);
     setTimeout(function () {
       isOffline = true;
@@ -412,11 +415,12 @@
   }
 
   function setConnectionOk() {
+    connectionAlarm = false;
     setConnectionIcon('Green.png');
     isOffline = false;
-    if (!connectionIds && offlineCounter >= offlineThreshold) playSound(false);
     offlineCounter = 0;
     applyStaleVisuals(false);
+    showMessages();
     if (onConnectionChange) onConnectionChange(false);
   }
 
@@ -512,9 +516,9 @@
   function removeLastMessage() {
     if (messages.length === 0) return;
     const last = messages[messages.length - 1];
-    // message_0 - аварийный уровень (level 0). Такое сообщение может быть единственным
-    // источником сирены (см. showMessages/heaterAlarmLatched): просим подтверждение,
-    // чтобы случайный тычок не гасил аварию молча.
+    // message_0 - аварийный уровень (level 0). Для аппаратной защёлки нагрева
+    // и обрыва связи сирена живёт отдельно от тоста: спрашиваем подтверждение,
+    // чтобы случайный тычок не прятал аварию молча.
     if (last.cssClass === 'message_0' &&
         !confirm('Скрыть аварийное сообщение «' + last.msg + '»?')) {
       return;
@@ -529,19 +533,22 @@
     showMessages();
   }
 
-  function updateHeaterAlarmLatched(latched) {
+  function updateHeaterAlarmLatched(latched, reason) {
     heaterAlarmLatched = latched;
+    if (latched) {
+      const present = messages.some(function (entry) { return entry.msg === reason; });
+      if (!present) pushMessage(reason, 0);
+    }
     showMessages();
   }
 
   function showMessages() {
     const box = byId('messagesBox');
     const list = byId('messages');
-    // Сирена обязана отражать текущее реальное состояние аварии (heaterAlarmLatched),
-    // а не только факт наличия сообщения в ленте - иначе бэклог-сообщение или сброс
-    // тоста могут её заглушить/включить ложно. См. FAIL-SAFE в архитектурных заметках.
-    alarmActive = heaterAlarmLatched ||
-      messages.some(function (entry) { return entry.cssClass === 'message_0'; });
+    // Сирена: аппаратная защёлка нагрева ИЛИ подтверждённый обрыв связи.
+    // Обычный message_0 (датчик ТСА, захлёб в ленте и т.п.) в тосте есть,
+    // но не крутит alarm.mp3 - иначе открытие страницы с хвостом ошибки орёт сразу.
+    alarmActive = heaterAlarmLatched || connectionAlarm;
     if (box && list) {
       if (messages.length === 0) {
         box.style.display = 'none';
@@ -623,100 +630,10 @@
     speed.textContent = present ? data.i2c_pump_speed : '0';
   }
 
-  // ==================== Подсказки (tooltip) ====================
-  // Раньше подсказка открывалась по :hover/:focus-within и текст .tooltiptext лежал
-  // внутри <label> - на телефоне подсказка была недоступна вообще, а тап по ней
-  // засчитывался как тап по подписи (переключал чекбокс) и читался диктором как часть
-  // названия поля. Ниже - разовое "улучшение" уже отрисованной разметки: находим
-  // .tooltip с текстом подсказки, выносим текст наружу и добавляем кнопку-триггер,
-  // открывающую её по клику/тапу. enhanceTooltips() идемпотентна (метит обработанные
-  // контейнеры в dataset) - её безопасно перевызывать после каждой перерисовки таблицы
-  // программы (там .tooltip создаются заново).
-  var tooltipIdSeq = 0;
-  var openTooltipTrigger = null;
-
-  function closeOpenTooltip() {
-    if (!openTooltipTrigger) return;
-    var trigger = openTooltipTrigger;
-    openTooltipTrigger = null;
-    trigger.setAttribute('aria-expanded', 'false');
-    trigger.parentNode.classList.remove('tooltip-open');
-  }
-
-  function toggleTooltip(trigger) {
-    var wasOpen = openTooltipTrigger === trigger;
-    closeOpenTooltip();
-    if (!wasOpen) {
-      trigger.parentNode.classList.add('tooltip-open');
-      trigger.setAttribute('aria-expanded', 'true');
-      openTooltipTrigger = trigger;
-    }
-  }
-
-  function enhanceTooltip(container) {
-    if (container.dataset.tooltipEnhanced) return;
-    var textEl = container.querySelector('.tooltiptext');
-    if (!textEl) return; // "голая" подсказка без текста (только пунктирное подчёркивание) - не трогаем
-    container.dataset.tooltipEnhanced = '1';
-
-    tooltipIdSeq += 1;
-    var textId = 'tooltip-text-' + tooltipIdSeq;
-    textEl.id = textId;
-    textEl.setAttribute('role', 'tooltip');
-
-    var trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'tooltip-trigger';
-    trigger.setAttribute('aria-label', 'Показать пояснение');
-    trigger.setAttribute('aria-expanded', 'false');
-    trigger.setAttribute('aria-describedby', textId);
-    trigger.textContent = '?';
-    trigger.addEventListener('click', function (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleTooltip(trigger);
-    });
-
-    if (container.tagName === 'LABEL') {
-      // <label for="..."> нельзя оставлять подсказку внутри: клик по ней
-      // "пробрасывается" на связанный чекбокс/поле, а скринридер зачитывает
-      // текст подсказки как часть имени поля - выносим наружу через обёртку.
-      // Сам <label> при этом НЕЛЬЗЯ перемещать в обёртку: CSS-правило
-      // "input[type=checkbox]:focus-visible + label" рисует рамку фокуса только
-      // когда label - прямой сосед чекбокса в DOM, поэтому label остаётся на месте,
-      // а обёртка с кнопкой и текстом подсказки вставляется сразу ПОСЛЕ него.
-      var wrap = document.createElement('div');
-      wrap.className = 'tooltip-wrap';
-      container.parentNode.insertBefore(wrap, container.nextSibling);
-      wrap.appendChild(trigger);
-      wrap.appendChild(textEl);
-    } else {
-      // Не <label> (h2/div на setup.htm/index.htm) - контейнер блочный, внешняя
-      // inline-block обёртка ломает поток (кнопка с подсказкой съезжают на новую
-      // строку). Ни риска подмены чекбокса, ни риска "загрязнения" имени поля
-      // здесь нет (container не связан с полем через for=) - просто добавляем
-      // кнопку и текст внутрь того же контейнера.
-      container.classList.add('tooltip-anchor');
-      container.appendChild(trigger);
-      container.appendChild(textEl);
-    }
-  }
-
-  function enhanceTooltips(root) {
-    var containers = (root || document).querySelectorAll('.tooltip');
-    for (var i = 0; i < containers.length; i++) enhanceTooltip(containers[i]);
-  }
-
-  document.addEventListener('click', function (event) {
-    if (openTooltipTrigger && !openTooltipTrigger.parentNode.contains(event.target)) {
-      closeOpenTooltip();
-    }
-  });
-  // Закрытие по Escape не делаем: в app.js уже есть жёсткое правило "один keydown-
-  // слушатель на весь файл, и это unlockAudio" (smoke_accessibility_ui.py), новый
-  // keydown-слушатель его нарушит. Повторный клик по кнопке-триггеру и клик мимо
-  // подсказки (оба уже реализованы выше) работают и с мышью, и с тачем - этого
-  // достаточно для закрытия без клавиатуры.
+  // Подсказки как в 6.27: CSS :hover/:focus-within на .tooltip .tooltiptext.
+  // Страницы всё ещё вызывают enhanceTooltips() после перерисовки программы.
+  function enhanceTooltip(container) {}
+  function enhanceTooltips(root) {}
 
   // ==================== Общая часть renderTelemetry ====================
   // version/crnt_tm/stm, блок мощности, служебные показания (heap/rssi/...), звук,
@@ -781,18 +698,10 @@
     }
   }
 
-  function validateRuntimeEvent(data) {
-    const hasSequence = Object.prototype.hasOwnProperty.call(data, 'messageSequence');
+  function validateRuntimeEventItem(data) {
     const hasMessage = Object.prototype.hasOwnProperty.call(data, 'Msg');
     const hasLog = Object.prototype.hasOwnProperty.call(data, 'LogMsg');
     const hasLevel = Object.prototype.hasOwnProperty.call(data, 'msglvl');
-
-    if (!hasSequence) {
-      if (hasMessage || hasLog || hasLevel) {
-        throw new Error('Некорректный контракт runtime-сообщения.');
-      }
-      return null;
-    }
     if (!Number.isInteger(data.messageSequence) ||
         data.messageSequence < 1 || data.messageSequence > MAX_MESSAGE_SEQUENCE ||
         hasMessage === hasLog) {
@@ -820,14 +729,47 @@
     };
   }
 
+  function validateRuntimeEvents(data) {
+    const hasSequence = Object.prototype.hasOwnProperty.call(data, 'messageSequence');
+    const hasMessage = Object.prototype.hasOwnProperty.call(data, 'Msg');
+    const hasLog = Object.prototype.hasOwnProperty.call(data, 'LogMsg');
+    const hasLevel = Object.prototype.hasOwnProperty.call(data, 'msglvl');
+    const hasEvents = Object.prototype.hasOwnProperty.call(data, 'events');
+    if (hasSequence || hasMessage || hasLog || hasLevel) {
+      throw new Error('Некорректный контракт runtime-сообщения.');
+    }
+    if (!hasEvents) return [];
+    if (!Array.isArray(data.events) || data.events.length > RUNTIME_EVENT_BATCH_LIMIT) {
+      throw new Error('Некорректный контракт runtime-сообщения.');
+    }
+    const events = [];
+    for (let index = 0; index < data.events.length; index++) {
+      const item = data.events[index];
+      if (!item || typeof item !== 'object') {
+        throw new Error('Некорректный контракт runtime-сообщения.');
+      }
+      events.push(validateRuntimeEventItem(item));
+    }
+    return events;
+  }
+
   function validateHeaterTelemetry(data) {
     if ((data.heaterAlarmLatched !== 0 && data.heaterAlarmLatched !== 1) ||
+        typeof data.heaterAlarmReason !== 'string' ||
         !Number.isInteger(data.latestMessageSequence) ||
         data.latestMessageSequence < 0 || data.latestMessageSequence > MAX_MESSAGE_SEQUENCE) {
-      throw new Error('Некорректный контракт heaterAlarmLatched/latestMessageSequence.');
+      throw new Error('Некорректный контракт heaterAlarmLatched/heaterAlarmReason/latestMessageSequence.');
+    }
+    const latched = data.heaterAlarmLatched === 1;
+    // heaterAlarmReason живёт вместе с защёлкой (до перезагрузки ESP).
+    // Кольцо событий может вытеснить исходный SendMsg; пустая причина при
+    // latch=1 — нарушение контракта, не «нет текста».
+    if (latched === (data.heaterAlarmReason === '')) {
+      throw new Error('Некорректный контракт heaterAlarmLatched/heaterAlarmReason/latestMessageSequence.');
     }
     return {
-      heaterAlarmLatched: data.heaterAlarmLatched === 1,
+      heaterAlarmLatched: latched,
+      reason: data.heaterAlarmReason,
       latestSequence: data.latestMessageSequence
     };
   }
@@ -891,9 +833,9 @@
         return false;
       }
 
-      let event;
+      let events;
       try {
-        event = validateRuntimeEvent(data);
+        events = validateRuntimeEvents(data);
         const heaterTelemetry = validateHeaterTelemetry(data);
         activeSinks.connection(false);
         renderFn(data);
@@ -907,18 +849,32 @@
           // (авария без защёлки, например захлёб, живёт только в тексте сообщения).
           messageCursor = heaterTelemetry.latestSequence;
           messageCursorBootstrapped = true;
-        } else if (event) {
-          if (event.sequence !== nextMessageSequence(messageCursor)) {
-            activeSinks.message(MESSAGE_GAP_WARNING, 1);
+        } else {
+          for (let index = 0; index < events.length; index++) {
+            const event = events[index];
+            const expected = nextMessageSequence(messageCursor);
+            if (event.sequence !== expected) {
+              // Кольцо на ESP начинается с 1 после перезагрузки. Вкладка при этом
+              // живёт со старым курсором (203 → 1) - это не потеря сообщений, а
+              // новый прогон. Настоящий разрыв - только прыжок вперёд: курсор
+              // вытеснен из кольца (больше 16 событий между опросами).
+              const deviceRestarted = messageCursor !== 0 && event.sequence < expected;
+              if (!deviceRestarted) {
+                activeSinks.message(MESSAGE_GAP_WARNING, 1);
+              }
+            }
+            if (event.kind === 'message') {
+              activeSinks.message(event.text, event.level);
+            } else {
+              activeSinks.log(
+                event.text,
+                Object.assign({}, data, { messageSequence: event.sequence })
+              );
+            }
+            messageCursor = event.sequence;
           }
-          if (event.kind === 'message') {
-            activeSinks.message(event.text, event.level);
-          } else {
-            activeSinks.log(event.text, data);
-          }
-          messageCursor = event.sequence;
         }
-        updateHeaterAlarmLatched(heaterTelemetry.heaterAlarmLatched);
+        updateHeaterAlarmLatched(heaterTelemetry.heaterAlarmLatched, heaterTelemetry.reason);
         return true;
       } catch (err) {
         reportUiError(err, activeSinks.message);
@@ -1050,31 +1006,40 @@
       token = token || (resp.ok ? 'OK' : '');
       const result = commandResultText(token, detail);
       const knownToken = token && Object.prototype.hasOwnProperty.call(COMMAND_TOKENS, token);
+      function report(text, level) {
+        if (options && options.acknowledge) {
+          alert(text);
+          return;
+        }
+        addMessage(text, level);
+      }
       if (knownToken && !result.ok) {
-        // Штатный отказ (BUSY/IGNORED/POWER_OFF/BAD_REQUEST) распознаём по токену раньше
-        // общей HTTP-ошибки: сервер шлёт такие ответы с кодами 429/409/503/400, и это не
-        // критический сбой связи, а обычный временный отказ команды.
         showRequestError(result.text);
-        addMessage(result.text, result.level);
+        report(result.text, result.level);
         return false;
       }
       if (!resp.ok) {
         const errorText = 'Ошибка команды HTTP ' + resp.status + ': ' + (detail || resp.statusText);
         showRequestError(errorText);
-        addMessage(errorText, 0);
+        report(errorText, 0);
         return false;
       }
       if (knownToken && result.ok) {
         clearRequestError();
-        addMessage(options && options.successMessage ? options.successMessage : result.text, 2);
+        report(options && options.successMessage ? options.successMessage : result.text, 2);
         return true;
+      }
+      if (options && options.acknowledge) {
+        alert(result.text);
+        return false;
       }
       addMessage(result.text, result.level);
       return false;
     } catch (err) {
       const errorText = 'Ошибка сети при отправке команды: ' + err;
       showRequestError(errorText);
-      addMessage(errorText, 0);
+      if (options && options.acknowledge) alert(errorText);
+      else addMessage(errorText, 0);
       return false;
     }
   }
@@ -1351,7 +1316,7 @@
     if (programMutationPending) {
       const message = 'Изменение программы уже выполняется.';
       showRequestError(message);
-      notify(message, 1);
+      alert(message);
       return false;
     }
     const body = new FormData();
@@ -1361,9 +1326,12 @@
       const resp = await fetch('/program', { method: 'POST', body: body });
       const result = await readProgramResponse(resp);
       if (!result.ok) {
-        notify(
+        const failText =
           'Очистка не принята (HTTP ' + result.httpStatus + '): ' +
-            (result.err || 'неизвестная ошибка'),
+            (result.err || 'неизвестная ошибка');
+        alert(failText);
+        notify(
+          failText,
           result.httpStatus === 400 || result.httpStatus === 409 || result.httpStatus === 503 ? 1 : 0
         );
         showRequestError('/program: HTTP ' + result.httpStatus + ' — ' + (result.err || 'очистка не принята'));
@@ -1372,11 +1340,13 @@
       if (!result.queued) throw new Error('Сервер не подтвердил постановку очистки в очередь.');
       await waitForOperation(result.operationId);
       clearRequestError();
+      alert('Программа очищена.');
       notify('Программа очищена.', 2);
       return true;
     } catch (err) {
       const message = 'Ошибка очистки программы: ' + err;
       showRequestError(message);
+      alert(message);
       notify(message, 0);
       return false;
     } finally {

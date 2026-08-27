@@ -12,6 +12,8 @@
 #include "lua.h"
 #endif
 
+#include "debug_ds_emu.h"
+
 ProgramParseResult prepare_default_program_for_mode(
     SAMOVAR_MODE mode,
     ProgramDraft& draft) {
@@ -230,6 +232,11 @@ static const SensorDeltaField kSensorDeltaFields[DS_SENSOR_COUNT] = {
 // считываем температуры с датчиков DS18B20
 //***************************************************************************************************************
 void DS_getvalue(void) {
+#ifdef __SAMOVAR_DEBUG
+  debug_ds_emulate_temperatures();
+  DSUpdateCounter++;
+  return;
+#endif
 
   float ss, ps, ws, ts, acp;
   float correctT = 0;
@@ -341,6 +348,10 @@ void scan_ds_adress() {
     dc++;
   }
 
+#ifdef __SAMOVAR_DEBUG
+  debug_ds_fill_missing_found_addresses(foundAddr, dc);
+#endif
+
   portENTER_CRITICAL(&dsAddressMux);
   DScnt = dc;
   for (uint8_t i = 0; i < SAMOVAR_DS_ADDRESS_MAX; i++) {
@@ -396,6 +407,8 @@ void scan_ds_adress() {
   Serial.print("5 Sensor Resolution: ");  // пишем разрешение для датчика 3
   Serial.print(sensors.getResolution(foundAddr[4]), DEC);
   Serial.println();
+  debug_ds_bind_runtime_sensors();
+  Serial.println(F("DS18B20 debug emulation enabled"));
 #endif
 }
 
@@ -714,15 +727,15 @@ void get_task_stack_usage() {
   Serial.println(F("=== Task Stack Usage ==="));
   // uxTaskGetStackHighWaterMark в ESP-IDF возвращает БАЙТЫ, а не слова: подпись "words"
   // завышала оставшийся запас вчетверо.
-  Serial.printf("SysTicker:        %u bytes free (of 6144)\n", uxTaskGetStackHighWaterMark(SysTickerTask1));
-  Serial.printf("GetClock:         %u bytes free (of 6144)\n", uxTaskGetStackHighWaterMark(GetClockTask1));
+  Serial.printf("SysTicker:        %u bytes free (of %u)\n", uxTaskGetStackHighWaterMark(SysTickerTask1), SYS_TICKER_STACK_BYTES);
+  Serial.printf("GetClock:         %u bytes free (of %u)\n", uxTaskGetStackHighWaterMark(GetClockTask1), GET_CLOCK_STACK_BYTES);
 #ifdef USE_LUA
   if (DoLuaScriptTask) {
-    Serial.printf("LuaScript:        %u bytes free (of 8192)\n", uxTaskGetStackHighWaterMark(DoLuaScriptTask));
+    Serial.printf("LuaScript:        %u bytes free (of %u)\n", uxTaskGetStackHighWaterMark(DoLuaScriptTask), LUA_SCRIPT_STACK_BYTES);
   }
 #endif
 #ifdef SAMOVAR_USE_POWER
-  Serial.printf("PowerStatus:      %u bytes free (of 3072)\n", uxTaskGetStackHighWaterMark(PowerStatusTask));
+  Serial.printf("PowerStatus:      %u bytes free (of %u)\n", uxTaskGetStackHighWaterMark(PowerStatusTask), POWER_STATUS_STACK_BYTES);
 #endif
   Serial.println(F("========================"));
 }

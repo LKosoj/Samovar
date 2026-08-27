@@ -69,7 +69,7 @@ def production_section(source: str, string_utils_source: str) -> str:
         "static inline void jsonFieldBool(Print &out, bool &first, const char *key, bool value)",
     )
     json_field_raw = extract_function_body(
-        source,
+        read("json_field_raw.h"),
         "static inline void jsonFieldRaw(Print &out, bool &first, const char *key, T value)",
     )
     return f"""
@@ -221,6 +221,8 @@ struct RuntimeEventDescriptor {
   uint8_t level;
 };
 
+static const uint8_t RUNTIME_EVENT_DESCRIPTOR_CAPACITY = 16;
+
 enum SAMOVAR_MODE : uint8_t {
   SAMOVAR_RECTIFICATION_MODE,
   SAMOVAR_DISTILLATION_MODE,
@@ -337,6 +339,7 @@ static int copyCalls = 0;
 static int sourceGetterCalls = 0;
 static uint32_t fakeLatestSequence = 42;
 static bool fakeHeaterAlarmLatched = false;
+char latched_emergency_stop_reason[192] = "";
 
 struct ESPFixture {
   uint32_t getFreeHeap() {
@@ -424,7 +427,7 @@ float get_steam_alcohol(float temperature) {
 
 RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
     String& crt, String& status, String& luaStatus, String& currentPowerMode,
-    uint32_t, String& eventText, RuntimeEventDescriptor& event, bool& hasEvent,
+    uint32_t, String& eventText, RuntimeEventDescriptor* events, uint8_t& eventCount,
     uint32_t& latestSequence) {
   copyCalls++;
   if (copyResult != RUNTIME_AJAX_SNAPSHOT_OK) return copyResult;
@@ -432,9 +435,15 @@ RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
   status = "run\nok";
   luaStatus = "lua\\ok";
   currentPowerMode = "auto";
-  eventText = "evt";
-  event = sourceEvent;
-  hasEvent = sourceHasEvent;
+  eventCount = sourceHasEvent ? 1 : 0;
+  if (sourceHasEvent && events) {
+    eventText = "evt";
+    events[0] = sourceEvent;
+    events[0].offset = 0;
+    events[0].length = 3;
+  } else {
+    eventText = "";
+  }
   latestSequence = fakeLatestSequence;
   return RUNTIME_AJAX_SNAPSHOT_OK;
 }
@@ -482,7 +491,7 @@ static void mutateSources() {
 int main() {
   AjaxTelemetrySnapshot first{};
   if (captureAjaxTelemetrySnapshot(6, first) != RUNTIME_AJAX_SNAPSHOT_OK) return 10;
-  if (copyCalls != 1 || !first.hasRuntimeEvent || first.runtimeEvent.sequence != 7) return 11;
+  if (copyCalls != 1 || first.eventCount != 1 || first.runtimeEvents[0].sequence != 7) return 11;
   const std::string before = serialize(first);
 
   mutateSources();
@@ -529,12 +538,13 @@ int main() {
   sourceHasEvent = false;
   AjaxTelemetrySnapshot noEvent{};
   if (captureAjaxTelemetrySnapshot(0, noEvent) != RUNTIME_AJAX_SNAPSHOT_OK ||
-      noEvent.hasRuntimeEvent) return 19;
+      noEvent.eventCount != 0) return 19;
   sourceHasEvent = true;
   sourceEvent.kind = RUNTIME_EVENT_CONSOLE;
   AjaxTelemetrySnapshot consoleEvent{};
   if (captureAjaxTelemetrySnapshot(0, consoleEvent) != RUNTIME_AJAX_SNAPSHOT_OK ||
-      consoleEvent.runtimeEvent.kind != RUNTIME_EVENT_CONSOLE) return 20;
+      consoleEvent.eventCount != 1 ||
+      consoleEvent.runtimeEvents[0].kind != RUNTIME_EVENT_CONSOLE) return 20;
 
   const int gettersBeforeFailure = sourceGetterCalls;
   copyResult = RUNTIME_AJAX_SNAPSHOT_LOCK_BUSY;
@@ -577,7 +587,7 @@ EXPECTED_DEFAULT = (
     '"rssi":-45,"fr_bt":98766,"PrgType":"B","current_power_volt":0,'
     '"target_power_volt":0,"current_power_mode":"0","current_power_p":0,'
     '"alc":44.88,"stm_alc":19.53,"Status":"run\\nok",'
-    '"Lstatus":"lua\\\\ok","heaterAlarmLatched":0,"latestMessageSequence":42'
+    '"Lstatus":"lua\\\\ok","heaterAlarmLatched":0,"heaterAlarmReason":"","latestMessageSequence":42'
 )
 
 
@@ -637,7 +647,7 @@ def main() -> int:
         return 1
 
     if not re.search(
-        r"static_assert\s*\(\s*sizeof\(AjaxTelemetrySnapshot\)\s*<=\s*512",
+        r"static_assert\s*\(\s*sizeof\(AjaxTelemetrySnapshot\)\s*<=\s*768",
         samovar,
     ):
         errors.append("AjaxTelemetrySnapshot stack budget assertion is missing")
@@ -698,9 +708,10 @@ def main() -> int:
 
     required_snapshot_members = (
         "String crt", "String status", "String luaStatus", "String currentPowerMode",
-        "String programType", "String eventText", "RuntimeEventDescriptor runtimeEvent",
-        "float currentSpeed", "bool hasRuntimeEvent",
-        "bool heaterAlarmLatched", "uint32_t latestMessageSequence",
+        "String programType", "String eventText",
+        "RuntimeEventDescriptor runtimeEvents",
+        "float currentSpeed", "uint8_t eventCount",
+        "bool heaterAlarmLatched", "String heaterAlarmReason", "uint32_t latestMessageSequence",
     )
     for token in required_snapshot_members:
         if token not in snapshot:
@@ -712,9 +723,9 @@ def main() -> int:
         "static bool sendRuntimeAjaxQueryError(":
             "d0276e7c4ab3fe8b8bee4b80c4a34e998bbb50b2178e40923f5a06eda2adf68e",
         "static bool sendRuntimeEventResponse(":
-            "4909e61379972ead1bb07a686bfa97e2cb8db1d2a05c67303553a3139df6ef8e",
+            "1721d7a14e3fa8c79967cc05c6d397c27fde8b52105f73c4bce25ab8af4f4806",
         "static bool runtimeEventWriteSection(":
-            "b1e5894de3c9241b43570cff75bb2afd91a12c11d8fcf6cf435fd933763f5616",
+            "787fcfdbed4331d45f1c919d881de9565fc0987eb80c15849aa4fe2b6b12695a",
     }
     for signature, expected in hashes.items():
         actual = hashlib.sha256(

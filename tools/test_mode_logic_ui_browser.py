@@ -41,7 +41,7 @@ BROWSER_TEST = r'''async page => {
     RowPredictionReason:2,ProcessPredictionReason:2,alc:50,stm_alc:70,ISspd:0,
     wp_spd:0,i2c_pump_present:0,i2c_pump_running:0,i2c_pump_remaining_ml:0,
     i2c_pump_speed:0,PowerOn:1,StepperStepMl:100,
-    heaterAlarmLatched:0,latestMessageSequence:0
+    heaterAlarmLatched:0,heaterAlarmReason:'',latestMessageSequence:0
   };
   const failures = [];
   const consoleProblems = [];
@@ -132,17 +132,17 @@ BROWSER_TEST = r'''async page => {
 
       await page.goto(baseUrl + "/index.htm", {waitUntil:"load"});
       await page.waitForFunction(() =>
-        document.getElementById("detector_steam_stability").textContent !== "-"
+        document.getElementById("detector_status_text").textContent.includes("ПРОСКОК")
       );
-      const detector = await page.locator("#detector_steam_stability").textContent();
-      expect(detector.includes("0.012 < 0.0200") &&
-             detector.includes("условие выполнено"),
-             "index recovery condition is not rendered");
+      expect((await page.locator("#detector_trend").textContent()).includes("0.012"),
+             "index detector trend is not rendered");
+      expect(await page.locator("#detector_steam_stability").count() === 0,
+             "index must not show steam-stability debug dump on the main screen");
 
       legacyDetectorPayload = true;
       await page.goto(baseUrl + "/index.htm", {waitUntil:"load"});
       await page.waitForFunction(() =>
-        document.getElementById("detector_steam_stability").textContent.includes("недоступна")
+        document.getElementById("detector_status_text").textContent.includes("ПРОСКОК")
       );
       expect((await page.locator("#SteamTemp").textContent()).trim() === "78.1",
              "legacy detector payload stopped core telemetry rendering");
@@ -243,13 +243,7 @@ BROWSER_TEST = r'''async page => {
       expect(mixerCheck.clamped === "65535",
              "beer mixer time above the firmware limit did not clamp to the real max " +
              "(silent zeroing / data loss regression)");
-      // enhanceTooltips() (app.js) вставляет после label новый сосед .tooltip-wrap
-      // (сам label остаётся на месте - иначе ломается CSS-рамка фокуса чекбокса), и
-      // .tooltiptext лежит внутри этой обёртки. Комбинатор соседства должен быть именно
-      // + (непосредственный сосед), а не ~ (любой последующий) - иначе селектор находит
-      // ЕЩЁ и .tooltip-wrap соседнего поля m_pause (та же подсказка дальше по DOM) и
-      // Playwright падает по strict-mode violation "resolved to 2 elements".
-      const mixerTooltip = await page.locator('label[for="m_time"] + .tooltip-wrap .tooltiptext').textContent();
+      const mixerTooltip = await page.locator('label[for="m_time"] .tooltiptext').textContent();
       expect(mixerTooltip.includes("65535"),
              "beer mixer tooltip does not show the real firmware limit before input");
 

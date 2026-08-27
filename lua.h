@@ -1865,18 +1865,23 @@ void lua_init() {
   if (f) {
     //нашли файл со скриптом, выполняем
     String script;
-    script = get_global_variables();
-    script += f.readString();
+    const String initBody = f.readString();
     f.close();
-    if (show_lua_script) {
-      WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
-      WriteConsoleLog(script);
-      WriteConsoleLog(F("--END LUA SCRIPT--"));
-    }
-    String sr = lua_exec(script);
-    if (sr.length() > 0) {
+    if (!get_global_variables(script)) {
       initOk = false;
-      WriteConsoleLog("INI ERR " + sr);
+      WriteConsoleLog(F("INI ERR prelude busy"));
+    } else {
+      script += initBody;
+      if (show_lua_script) {
+        WriteConsoleLog(F("--BEGIN LUA SCRIPT--"));
+        WriteConsoleLog(script);
+        WriteConsoleLog(F("--END LUA SCRIPT--"));
+      }
+      String sr = lua_exec(script);
+      if (sr.length() > 0) {
+        initOk = false;
+        WriteConsoleLog("INI ERR " + sr);
+      }
     }
   }
   lua_type_script = get_lua_mode_name();
@@ -1889,7 +1894,7 @@ void lua_init() {
   xTaskCreatePinnedToCore(
     do_lua_script,    /* Function to implement the task */
     "do_lua_script",  /* Name of the task */
-    8192,             /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
+    LUA_SCRIPT_STACK_BYTES, /* Stack size in bytes (в ESP-IDF это байты, а не слова) */
     NULL,             /* Task input parameter */
     1,                /* Priority of the task */
     &DoLuaScriptTask, /* Task handle. */
@@ -1941,7 +1946,14 @@ String get_lua_script(String fn) {
 
 bool run_lua_script(String fn) {
   String s = get_lua_script(fn);
-  if (s.length() > 0) s = get_global_variables() + s;
+  if (s.length() > 0) {
+    String prelude;
+    if (!get_global_variables(prelude)) {
+      WriteConsoleLog(F("Lua prelude busy"));
+      return false;
+    }
+    s = prelude + s;
+  }
   if (!queue_lua_script_job(s)) {
     WriteConsoleLog(F("Lua busy"));
     return false;
@@ -2098,6 +2110,7 @@ void do_lua_script(void *parameter) {
 
     if (SetScriptOff && loop_lua_fl) {
       loop_lua_fl = false;
+      request_lua_periodic_start();
     }
     if (loop_lua_fl && !SetScriptOff) {
       unsigned long now = millis();
@@ -2249,8 +2262,8 @@ inline String lua_prelude_number(float value) {
   return String(value);
 }
 
-String get_global_variables() {
-  String Variables;
+bool get_global_variables(String& Variables) {
+  Variables = "";
   Variables += "bme_pressure = " + String(bme_pressure) + "\r\n";
   Variables += "capacity_num = " + String(capacity_num) + "\r\n";
   Variables += "SamovarStatusInt = " + String(SamovarStatusInt) + "\r\n";
@@ -2264,12 +2277,11 @@ String get_global_variables() {
   Variables += "program_Pause = " + String(program_Pause) + "\r\n";
   Variables += "program_Wait = " + String(program_Wait) + "\r\n";
   String programWaitTypeText;
-  if (!copy_program_wait_type_text(programWaitTypeText)) {
+  if (!copy_program_wait_type_text(programWaitTypeText, pdMS_TO_TICKS(200))) {
     WriteConsoleLog(F("WARNING! program_Wait_Type busy"));
-    Variables += "error('program_Wait_Type busy')\r\n";
-  } else {
-    Variables += "program_Wait_Type = \"" + programWaitTypeText + "\"\r\n";
+    return false;
   }
+  Variables += "program_Wait_Type = \"" + programWaitTypeText + "\"\r\n";
 #ifdef USE_WATERSENSOR
   Variables += "WFflowMilliLitres = " + String(WFflowMilliLitres) + "\r\n";
   Variables += "WFtotalMilliLitres = " + String(WFtotalMilliLitres) + "\r\n";
@@ -2306,19 +2318,18 @@ String get_global_variables() {
   Variables += "ACPTemp = " + lua_prelude_number(ACPSensor.avgTemp) + "\r\n";
 
   String currentPowerMode;
-  if (!copy_current_power_mode_value(currentPowerMode)) {
+  if (!copy_current_power_mode_value(currentPowerMode, pdMS_TO_TICKS(200))) {
     WriteConsoleLog(F("WARNING! current_power_mode busy"));
-    Variables += "error('current_power_mode busy')\r\n";
-  } else {
-    Variables += "current_power_mode = \"" + currentPowerMode + "\"\r\n";
+    return false;
   }
+  Variables += "current_power_mode = \"" + currentPowerMode + "\"\r\n";
   Variables += "target_power_volt = " + String(target_power_volt) + "\r\n";
 
 #ifdef USE_WATER_PUMP
   Variables += "wp_count = " + String(wp_count) + "\r\n";
 #endif
 
-  return Variables;
+  return true;
 }
 
 String get_lua_mode_name(bool filename) {

@@ -112,6 +112,20 @@ int main() {
   check(fruit.workingPowerW < sugar.workingPowerW,
         "рабочая мощность для фруктов (pWorkFactor=0.48) должна быть меньше, чем для сахара (0.75)");
 
+  // Диаметр 1.5 / 2 / 3: мощность захлёба пропорциональна площади сечения (d^2).
+  SamSetup.ColDiam = 2.0f;
+  SamSetup.ColHeight = 0.3f;
+  SamSetup.PackDens = 60;
+  ColumnResults d15 = calculate_column_etalon(2, 1.5f);
+  ColumnResults d20 = calculate_column_etalon(2, 2.0f);
+  ColumnResults d30 = calculate_column_etalon(2, 3.0f);
+  check_near(d15.floodPowerW, d20.floodPowerW * (1.5f * 1.5f) / (2.0f * 2.0f), 1.0f,
+             "floodPowerW 1.5 дюйма масштабируется как (1.5/2)^2");
+  check_near(d30.floodPowerW, d20.floodPowerW * (3.0f * 3.0f) / (2.0f * 2.0f), 2.0f,
+             "floodPowerW 3 дюйма масштабируется как (3/2)^2");
+  check(d15.bodyFlowMaxMlH < d20.bodyFlowMaxMlH && d20.bodyFlowMaxMlH < d30.bodyFlowMaxMlH,
+        "макс. отбор тела должен расти с диаметром 1.5 < 2 < 3");
+
   if (failures != 0) return 1;
   std::cout << "column_math.h calculate_column_etalon() arithmetic checks passed\n";
   return 0;
@@ -157,13 +171,15 @@ int main() {
 def build_column_harness() -> str:
     source = (ROOT / "column_math.h").read_text(encoding="utf-8")
     struct_body, _ = extract_braced_block_after(source, "struct ColumnResults {")
-    fn_body = extract_function_body(source, "ColumnResults calculate_column_etalon(uint8_t rawMaterial)")
+    fn_body = extract_function_body(source, "inline ColumnResults calculate_column_etalon(uint8_t rawMaterial, float diamInches)")
     harness = COLUMN_HARNESS_TEMPLATE.replace(
         "@COLUMN_RESULTS_STRUCT@", "struct ColumnResults {" + struct_body + "};"
     )
     harness = harness.replace(
         "@CALCULATE_COLUMN_ETALON_BODY@",
-        "static ColumnResults calculate_column_etalon(uint8_t rawMaterial) {" + fn_body + "}",
+        "static ColumnResults calculate_column_etalon(uint8_t rawMaterial, float diamInches) {" + fn_body + "}\n"
+        "static ColumnResults calculate_column_etalon(uint8_t rawMaterial) {"
+        " return calculate_column_etalon(rawMaterial, SamSetup.ColDiam); }",
     )
     return harness
 

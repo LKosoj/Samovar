@@ -300,8 +300,9 @@ enum RuntimeAjaxSnapshotResult : uint8_t {
 
 inline RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
     String& crt, String& status, String& luaStatus, String& currentPowerMode,
-    uint32_t cursor, String& eventText, RuntimeEventDescriptor& event,
-    bool& hasEvent, uint32_t& latestSequence, TickType_t timeout = pdMS_TO_TICKS(50)) {
+    uint32_t cursor, String& eventText, RuntimeEventDescriptor* events,
+    uint8_t& eventCount, uint32_t& latestSequence,
+    TickType_t timeout = pdMS_TO_TICKS(50)) {
   bool locked = runtime_state_lock(timeout);
   if (!locked) return RUNTIME_AJAX_SNAPSHOT_LOCK_BUSY;
   crt = Crt;
@@ -309,22 +310,14 @@ inline RuntimeAjaxSnapshotResult copy_ajax_runtime_snapshot(
   luaStatus = Lua_status;
   currentPowerMode = current_power_mode;
   latestSequence = runtime_event_latest_sequence_locked(runtimeEventRing);
-  const RuntimeEventSelectResult selectResult =
-      runtime_event_select_locked(runtimeEventRing, cursor, event);
-  if (selectResult == RUNTIME_EVENT_SELECT_CORRUPT) {
+  const RuntimeEventSnapshotResult copyResult = runtime_event_copy_batch_locked(
+      runtimeEventRing, cursor, events, RUNTIME_EVENT_DESCRIPTOR_CAPACITY,
+      eventText, eventCount);
+  if (copyResult != RUNTIME_EVENT_SNAPSHOT_OK) {
     runtime_state_unlock(true);
-    return RUNTIME_AJAX_SNAPSHOT_CORRUPT;
-  }
-  hasEvent = selectResult == RUNTIME_EVENT_SELECT_FOUND;
-  if (hasEvent) {
-    const RuntimeEventSnapshotResult copyResult =
-        runtime_event_copy_text_locked(runtimeEventRing, event, eventText);
-    if (copyResult != RUNTIME_EVENT_SNAPSHOT_OK) {
-      runtime_state_unlock(true);
-      return copyResult == RUNTIME_EVENT_SNAPSHOT_NO_MEMORY
-                 ? RUNTIME_AJAX_SNAPSHOT_NO_MEMORY
-                 : RUNTIME_AJAX_SNAPSHOT_CORRUPT;
-    }
+    return copyResult == RUNTIME_EVENT_SNAPSHOT_NO_MEMORY
+               ? RUNTIME_AJAX_SNAPSHOT_NO_MEMORY
+               : RUNTIME_AJAX_SNAPSHOT_CORRUPT;
   }
   runtime_state_unlock(true);
   return RUNTIME_AJAX_SNAPSHOT_OK;

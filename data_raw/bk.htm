@@ -1,5 +1,5 @@
 <!--#include head_boilerplate.htm-->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=7.00u7">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
@@ -31,7 +31,7 @@
 
     function calc_program () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+        alert("Ошибка программы, проверьте её.");
         return;
       }
       var t = document.getElementsByClassName("prgline");
@@ -55,12 +55,12 @@
       try {
         const result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          SamovarApp.notify(result.err || 'Программа не принята.', 0);
+          alert(result.err || 'Программа не принята.');
           return;
         }
-        SamovarApp.notify('Программа сохранена.', 2);
+        alert('Программа установлена');
       } catch (e) {
-        SamovarApp.notify('Ошибка сети: ' + e, 0);
+        alert('Ошибка сети: ' + e);
       }
     };
 
@@ -84,7 +84,7 @@
     };
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
     };
 
 

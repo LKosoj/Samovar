@@ -98,9 +98,12 @@ for token in [
     "input->isFile() || input->isPost()",
     "parse_exact_enum(input->value().c_str(), allowed, 3, parsed)",
     'build_error_envelope("argument", "mat", "Invalid mat")',
+    'build_error_envelope("argument", "diam", "Invalid diam")',
+    "column_diam_allowed(parsed)",
+    "calculate_column_etalon(material, diamInches)",
 ]:
     if token not in column:
-        errors.append(f"column material gate missing: {token}")
+        errors.append(f"column material/diam gate missing: {token}")
 
 for token in ["parseLongSafe", "parseFloatSafe", ".toInt()", ".toFloat()"]:
     if token in save:

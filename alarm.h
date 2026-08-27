@@ -15,6 +15,7 @@ extern portMUX_TYPE emergencyStopMux;
 extern volatile bool pending_emergency_stop_flag;
 extern volatile bool pending_emergency_stop_reason_flag;
 extern char pending_emergency_stop_reason[EMERGENCY_STOP_REASON_LEN];
+extern char latched_emergency_stop_reason[EMERGENCY_STOP_REASON_LEN];
 
 // [T13] Латч "останов дозирующего насоса по I2C при аварии не подтверждён" -
 // взводится, когда attempt_i2c_pump_emergency_stop() не смог гарантированно
@@ -62,6 +63,18 @@ inline bool optional_sensor_failed(const DSSensor& sensor) {
   return sensor_configured(sensor) && !sensor_reading_valid(sensor);
 }
 
+inline bool rectification_ds_sensors_assigned() {
+  return sensor_configured(SteamSensor) &&
+         sensor_configured(WaterSensor) &&
+         sensor_configured(TankSensor);
+}
+
+inline void notify_rectification_sensors_unassigned() {
+  SendMsg(
+      "Датчики не назначены. Откройте настройки и привяжите датчики пара, воды и куба.",
+      WARNING_MSG);
+}
+
 inline bool sensor_temp_at_least(const DSSensor& sensor, float temp) {
   if (!sensor_configured(sensor)) return false;
   for (uint8_t attempt = 0; attempt < 4; attempt++) {
@@ -81,8 +94,20 @@ inline bool sensor_temp_at_least(const DSSensor& sensor, float temp) {
 inline void request_emergency_stop(const String& reason) {
   portENTER_CRITICAL(&emergencyStopMux);
   const bool first_alarm = emergency_trip_heater_outputs_locked();
-  if (first_alarm && reason.length() > 0) {
-    copyStringSafe(pending_emergency_stop_reason, reason);
+  if (first_alarm) {
+    // Причина живёт столько же, сколько защёлка (до перезагрузки). SendMsg в кольцо
+    // событий может вытеснить Lua/логом; оператор всё равно должен видеть, почему
+    // нагрев заблокирован.
+    const char* text = "Аварийное отключение!";
+    size_t length = sizeof("Аварийное отключение!") - 1U;
+    if (reason.length() > 0) {
+      text = reason.c_str();
+      length = reason.length();
+    }
+    if (length >= EMERGENCY_STOP_REASON_LEN) length = EMERGENCY_STOP_REASON_LEN - 1U;
+    memcpy(latched_emergency_stop_reason, text, length);
+    latched_emergency_stop_reason[length] = '\0';
+    memcpy(pending_emergency_stop_reason, latched_emergency_stop_reason, length + 1U);
     pending_emergency_stop_reason_flag = true;
   }
   pending_emergency_stop_flag = true;
@@ -170,13 +195,28 @@ void set_alarm() {
 
 void check_alarm() {
   static bool close_valve_message_sent = false;
+  static bool unassignedSensorsHandled = false;
   //сбросим паузу события безопасности
   mode_clear_alarm_pause_if_expired();
 
-  if (PowerOn) {
-    if (!sensor_valid(SteamSensor) && process_sensor_failed("Ректификация", "пара")) return;
+  if (!PowerOn) {
+    unassignedSensorsHandled = false;
+  } else if (!rectification_ds_sensors_assigned()) {
+    // Не назначены (адрес 0xFF) — это конфигурация, не отказ датчика в процессе.
+    // Сирена и аварийная защёлка здесь мешают открыть настройки. Нагрев гасим
+    // штатной командой; emergency только если очередь команд не приняла POWER_OFF.
+    if (!unassignedSensorsHandled) {
+      notify_rectification_sensors_unassigned();
+      if (!queue_samovar_command(SAMOVAR_POWER_OFF)) {
+        request_emergency_stop("Аварийное отключение! Ректификация: датчики не назначены");
+      }
+      unassignedSensorsHandled = true;
+    }
+    return;
+  } else {
+    if (optional_sensor_failed(SteamSensor) && process_sensor_failed("Ректификация", "пара")) return;
     if (!mode_check_powered_cooling_sensors("Ректификация")) return;
-    if (!sensor_valid(TankSensor) && process_sensor_failed("Ректификация", "куба")) return;
+    if (optional_sensor_failed(TankSensor) && process_sensor_failed("Ректификация", "куба")) return;
   }
 
 #ifdef SAMOVAR_USE_POWER

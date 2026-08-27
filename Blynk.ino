@@ -15,26 +15,6 @@ static inline void report_blynk_numeric_error(
   SendMsg(message, WARNING_MSG);
 }
 
-// [П3] Тривиальный BLYNK_READ: тело — ровно одна Blynk.virtualWrite(pin, expr),
-// обёрнутая в стандартный guard от повторного входа. static bool живёт внутри
-// РАЗВОРОТА макроса, поэтому у каждого пина остаётся СВОЙ независимый флаг,
-// как и раньше, а не один общий на все обработчики.
-// НЕ использовать для обработчиков с несколькими virtualWrite, с vTaskDelay
-// между записями, с побочной логикой (копирование строк под runtime_state_lock,
-// ветвления) - и для тех, чью буквальную сигнатуру "BLYNK_READ(pin)" ищут
-// smoke-тесты через extract_function_body (см. BLYNK_READ(V24) и
-// tools/smoke_program_io_contract.py - его нельзя завернуть в этот макрос).
-// expr не должен содержать запятую верхнего уровня (не в скобках) - это один
-// аргумент макроса; такое выражение оборачивать в скобки или не сворачивать.
-#define BLYNK_READ_SIMPLE(pin, expr) \
-  BLYNK_READ(pin) { \
-    static bool inReadHandler = false; \
-    if (inReadHandler) return; \
-    inReadHandler = true; \
-    Blynk.virtualWrite(pin, expr); \
-    inReadHandler = false; \
-  }
-
 #ifdef USE_LUA
 WidgetTerminal terminal(V22);
 
@@ -79,21 +59,69 @@ BLYNK_READ(V0) {
   inReadHandler = false;
 }
 
-BLYNK_READ_SIMPLE(V1, PipeSensor.avgTemp)
+BLYNK_READ(V1) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V1, PipeSensor.avgTemp);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V25, ACPSensor.avgTemp)
+BLYNK_READ(V25) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V25, ACPSensor.avgTemp);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V2, WthdrwlProgress)
+BLYNK_READ(V2) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V2, WthdrwlProgress);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V5, bme_pressure)
+BLYNK_READ(V5) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V5, bme_pressure);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V6, WaterSensor.avgTemp)
+BLYNK_READ(V6) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V6, WaterSensor.avgTemp);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V7, TankSensor.avgTemp)
+BLYNK_READ(V7) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V7, TankSensor.avgTemp);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V8, get_liquid_volume())
+BLYNK_READ(V8) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V8, get_liquid_volume());
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V9, ActualVolumePerHour)
+BLYNK_READ(V9) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V9, ActualVolumePerHour);
+  inReadHandler = false;
+}
 
 BLYNK_READ(V10) {
   static bool inReadHandler = false;
@@ -147,11 +175,29 @@ BLYNK_READ(V14) {
   inReadHandler = false;
 }
 
-BLYNK_READ_SIMPLE(V15, ipst)
+BLYNK_READ(V15) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V15, ipst);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V19, SAMOVAR_VERSION)
+BLYNK_READ(V19) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V19, SAMOVAR_VERSION);
+  inReadHandler = false;
+}
 
-BLYNK_READ_SIMPLE(V20, Samovar_Mode)
+BLYNK_READ(V20) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V20, Samovar_Mode);
+  inReadHandler = false;
+}
 
 BLYNK_READ(V24) {
   static bool inReadHandler = false;
@@ -162,15 +208,33 @@ BLYNK_READ(V24) {
 }
 
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
-BLYNK_READ_SIMPLE(V23, pressure_value)
+BLYNK_READ(V23) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V23, pressure_value);
+  inReadHandler = false;
+}
 #endif
 
 #ifdef SAMOVAR_USE_POWER
-BLYNK_READ_SIMPLE(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt)
+BLYNK_READ(V21) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt);
+  inReadHandler = false;
+}
 #endif
 
 #ifdef SAMOVAR_USE_POWER
-BLYNK_READ_SIMPLE(V16, target_power_volt)
+BLYNK_READ(V16) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  Blynk.virtualWrite(V16, target_power_volt);
+  inReadHandler = false;
+}
 
 BLYNK_WRITE(V16) {
   if (mode_switch_in_progress()) return;

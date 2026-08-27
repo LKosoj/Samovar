@@ -122,6 +122,27 @@ for script_name, script in [
             "if not startPump() then return false end",
         ],
     )
+    if script_name == "rectificat.lua":
+        require_order(
+            "rectificat.lua republishes filling status if pump already runs",
+            script,
+            [
+                "if use_level_sensor and check4level() then",
+                "stopFilling()",
+                "if use_flow_sensor then",
+                'setLuaStatus("Заполнение куба")',
+            ],
+        )
+        require_order(
+            "rectificat.lua stops pump on SetScriptOff inside the cycle script",
+            script,
+            [
+                'getNumVariable("SetScriptOff") + 0 == 1',
+                "stopPump()",
+                'setLuaStatus("Скрипт остановлен")',
+                "fillTank()",
+            ],
+        )
     for forbidden in [
         'getObject("pump_started")',
         'setObject("pump_started"',

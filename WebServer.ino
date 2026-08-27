@@ -354,33 +354,7 @@ I2CStepperDevice* select_i2c_stepper_device(AsyncWebServerRequest *request) {
   return nullptr;
 }
 
-template <typename T>
-static NumericParseResult parse_i2c_stepper_bounded(
-    AsyncWebServerRequest *request,
-    const char *name,
-    T minValue,
-    T maxValue,
-    T& target,
-    const char*& errorField,
-    NumericParseResult (*parser)(const char*, T, T, T&)) {
-  const uint8_t count = request_param_count(request, name);
-  if (count == 0) return numeric_parse_result(NUMERIC_PARSE_OK);
-  if (count != 1) {
-    errorField = name;
-    return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-  }
-  const AsyncWebParameter *param = get_request_param(request, name);
-  T parsed = 0;
-  NumericParseResult result = param && !param->isFile()
-      ? parser(param->value().c_str(), minValue, maxValue, parsed)
-      : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-  if (!result.ok()) {
-    errorField = name;
-    return result;
-  }
-  target = parsed;
-  return result;
-}
+#include "web_i2c_stepper_parse.h"
 
 static bool i2c_stepper_config_param(const String& name) {
   return name == "mode" || name == "relayMask" || name == "sensorFlags" ||
@@ -795,33 +769,68 @@ static void handle_i2c_pump_request(AsyncWebServerRequest *request) {
   send_operation_accepted(request, operationId);
 }
 
+static bool column_diam_allowed(float diamInches) {
+  return diamInches == 1.5f || diamInches == 2.0f || diamInches == 3.0f;
+}
+
 static void handle_column_params_request(AsyncWebServerRequest *request) {
   uint8_t material = 2;
-  const uint8_t count = request_param_count(request, "mat");
-  const AsyncWebParameter *input = count == 1 ? get_request_param(request, "mat") : nullptr;
-  if (count > 1 || request->params() != count ||
-      (input && (input->isFile() || input->isPost()))) {
-    send_no_store_response(
-        request, 400, "application/json",
-        build_error_envelope("argument", "mat", "Invalid mat"));
-    return;
-  }
-  if (count == 1) {
-    const int32_t allowed[] = {0, 1, 2};
-    int32_t parsed = 0;
-    NumericParseResult result = input
-        ? parse_exact_enum(input->value().c_str(), allowed, 3, parsed)
-        : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
-    if (!result.ok()) {
+  float diamInches = SamSetup.ColDiam;
+  bool haveMat = false;
+  bool haveDiam = false;
+  const size_t paramCount = request->params();
+  for (size_t index = 0; index < paramCount; index++) {
+    const AsyncWebParameter *input = request->getParam(index);
+    if (!input || input->isFile() || input->isPost()) {
       send_no_store_response(
           request, 400, "application/json",
-          build_error_envelope(numeric_parse_error_code(result.error), "mat", "Invalid mat"));
+          build_error_envelope("argument", nullptr, "Invalid request"));
       return;
     }
-    material = uint8_t(parsed);
+    if (input->name() == "mat") {
+      if (haveMat) {
+        send_no_store_response(
+            request, 400, "application/json",
+            build_error_envelope("argument", "mat", "Invalid mat"));
+        return;
+      }
+      haveMat = true;
+      const int32_t allowed[] = {0, 1, 2};
+      int32_t parsed = 0;
+      NumericParseResult result = parse_exact_enum(input->value().c_str(), allowed, 3, parsed);
+      if (!result.ok()) {
+        send_no_store_response(
+            request, 400, "application/json",
+            build_error_envelope(numeric_parse_error_code(result.error), "mat", "Invalid mat"));
+        return;
+      }
+      material = uint8_t(parsed);
+    } else if (input->name() == "diam") {
+      if (haveDiam) {
+        send_no_store_response(
+            request, 400, "application/json",
+            build_error_envelope("argument", "diam", "Invalid diam"));
+        return;
+      }
+      haveDiam = true;
+      float parsed = 0;
+      NumericParseResult result = parse_bounded_float(input->value().c_str(), 1.5f, 3.0f, parsed);
+      if (!result.ok() || !column_diam_allowed(parsed)) {
+        send_no_store_response(
+            request, 400, "application/json",
+            build_error_envelope("argument", "diam", "Invalid diam"));
+        return;
+      }
+      diamInches = parsed;
+    } else {
+      send_no_store_response(
+          request, 400, "application/json",
+          build_error_envelope("not_allowed", input->name().c_str(), "Invalid request field"));
+      return;
+    }
   }
 
-  ColumnResults res = calculate_column_etalon(material);
+  ColumnResults res = calculate_column_etalon(material, diamInches);
   String json = "{";
   json += "\"floodPowerW\":" + String(res.floodPowerW, 0) + ",";
   json += "\"workingPowerW\":" + String(res.workingPowerW, 0) + ",";
@@ -1658,22 +1667,7 @@ static String build_save_range_errors_envelope(const String& firstBadField, cons
   return json;
 }
 
-// [WP7 п.38] Раньше строковые настройки (токен Telegram и т.п.) при превышении размера
-// буфера молча усекались copyStringSafe: пользователь видел "сохранено", а токен на деле
-// был обрезан и уведомления переставали работать. Числовые поля честно отвечают 400 при
-// выходе за границы (apply_save_u8_arg/u16_arg выше) - делаем строковые единообразными:
-// значение длиннее буфера (N включает место под '\0') отклоняется с тем же кодом ошибки.
-template <size_t N>
-static bool apply_save_string_arg(AsyncWebServerRequest *request, const char *name, char (&target)[N]) {
-  if (!request->hasArg(name)) return true;
-  const AsyncWebParameter *param = get_request_param(request, name);
-  if (!param || param->isFile() || param->value().length() >= N) {
-    send_save_parse_error(request, name, NUMERIC_PARSE_OUT_OF_RANGE);
-    return false;
-  }
-  copyStringSafe(target, param->value());
-  return true;
-}
+#include "web_save_string_arg.h"
 
 static bool apply_save_bool01_arg(AsyncWebServerRequest *request, const char *name, bool& target) {
   if (!request->hasArg(name)) return true;
@@ -2254,7 +2248,8 @@ void web_command(AsyncWebServerRequest *request) {
   String commandKey = action;
   commandKey += commandKeySuffix;
 
-  bool bypassThrottle = action == "reset" || action == "reboot" || action == "resetwifi";
+  bool bypassThrottle = action == "reset" || action == "reboot" || action == "resetwifi" ||
+      action == "lua" || action == "luastr";
   if (!bypassThrottle && commandKey.length() > 0 && commandKey == last_command_key && millis() - last_command_time < 1500) {
     send_web_command_response(request, 429, "IGNORED");
     return;
@@ -2737,34 +2732,21 @@ static void normalize_web_if_version_string(String& v) {
 // комплекта (самый крупный - index.htm, с блоком 53248 байт), это укладывается в раздел
 // с запасом. Обрыв на файле N оставляет 1..N-1 уже обновлёнными, N..конец - старыми:
 // интерфейс временно смешанный, но каждый отдельный файл цел, и обновление можно повторить.
-static bool write_web_file_atomic(const String& path, const String& content) {
-  String tmpPath = path + ".tmp";
-  SPIFFS.remove(tmpPath);
-
-  File wf = SPIFFS.open(tmpPath, FILE_WRITE);
-  if (!wf) {
-    Serial.println("WEB interface write failed, open tmp: " + tmpPath);
-    SPIFFS.remove(tmpPath);
-    return false;
-  }
-
-  size_t written = wf.write((const uint8_t*)content.c_str(), content.length());
-  wf.close();
-  if (written != content.length()) {
-    Serial.println("WEB interface write failed, partial tmp: " + tmpPath);
-    SPIFFS.remove(tmpPath);
-    return false;
-  }
-
+//
+// Тело HTTP нельзя собирать в Arduino String: xbuf уже держит файл кусками (~51 КБ у
+// index.htm), а responseText() требует ещё один непрерывный блок того же размера.
+// На этом месте обновление обрывалось с "incomplete: 0/51631" при HTTP 200 — это не
+// таймаут, а отказ String::reserve(). Качаемые файлы пишутся из xbuf сразу во флеш.
+static bool commit_web_file_tmp(const String& path, const String& tmpPath, size_t expectedSize) {
   File rf = SPIFFS.open(tmpPath, FILE_READ);
   if (!rf) {
     Serial.println("WEB interface write failed, reopen tmp: " + tmpPath);
     SPIFFS.remove(tmpPath);
     return false;
   }
-  size_t tmpSize = rf.size();
+  const size_t tmpSize = rf.size();
   rf.close();
-  if (tmpSize != content.length()) {
+  if (tmpSize != expectedSize) {
     Serial.println("WEB interface write failed, tmp size: " + tmpPath);
     SPIFFS.remove(tmpPath);
     return false;
@@ -2773,7 +2755,7 @@ static bool write_web_file_atomic(const String& path, const String& content) {
   String backupPath = path + ".bak";
   SPIFFS.remove(backupPath);
 
-  bool hadFinal = SPIFFS.exists(path);
+  const bool hadFinal = SPIFFS.exists(path);
   if (hadFinal && !SPIFFS.rename(path, backupPath)) {
     Serial.println("WEB interface write failed, backup final: " + path);
     SPIFFS.remove(tmpPath);
@@ -2795,11 +2777,32 @@ static bool write_web_file_atomic(const String& path, const String& content) {
   return true;
 }
 
+static bool write_web_file_atomic(const String& path, const String& content) {
+  String tmpPath = path + ".tmp";
+  SPIFFS.remove(tmpPath);
+
+  File wf = SPIFFS.open(tmpPath, FILE_WRITE);
+  if (!wf) {
+    Serial.println("WEB interface write failed, open tmp: " + tmpPath);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+
+  const size_t written = wf.write((const uint8_t*)content.c_str(), content.length());
+  wf.close();
+  if (written != content.length()) {
+    Serial.println("WEB interface write failed, partial tmp: " + tmpPath);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+  return commit_web_file_tmp(path, tmpPath, content.length());
+}
+
 static bool web_file_content_empty_invalid(const String& fn, get_web_type type, const String& content) {
   if (content.length() != 0) {
     return false;
   }
-  if (type == GET_CONTENT || type == SAVE_FILE_OVERRIDE || type == SAVE_FILE_IF_NOT_EXIST) {
+  if (type == GET_CONTENT) {
     Serial.println("WEB interface download failed, empty body: " + fn);
     return true;
   }
@@ -2916,36 +2919,6 @@ void get_web_interface() {
   }
 }
 
-String get_web_file(String fn, get_web_type type) {
-  if (type == SAVE_FILE_IF_NOT_EXIST && SPIFFS.exists("/" + fn)) {
-    Serial.println("File " + fn + " already exist.");
-    return "";
-  }
-
-  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn + "?" + micros();
-  Serial.print("url = ");
-  Serial.println(url);
-
-  String s = http_sync_request_get(url);
-
-  if (s == "<ERR>") {
-    return s;
-  } else if (web_file_content_empty_invalid(fn, type, s)) {
-    return "<ERR>";
-  } else {
-    if (type == GET_CONTENT) {
-      return s;
-    } else {
-      if (!write_web_file_atomic("/" + fn, s)) {
-        return "<ERR>";
-      }
-    }
-    Serial.println("Done (L=" + String(s.length()) + ")");
-  }
-
-  return "";
-}
-
 // Один объект запроса на всю прошивку, живёт всё время работы.
 // Почему не локальный на стеке: lwIP не умеет отменять начатый DNS-резолв, и колбэк с
 // именем хоста приходит уже после нашего таймаута. Разрушенный объект в этот момент —
@@ -3031,6 +3004,26 @@ static bool http_sync_request_connect_and_send(const String& method, const Strin
   return true;
 }
 
+static bool http_sync_complete_get(asyncHTTPrequest& request, const String& url, uint32_t timeoutMs) {
+  request.setTimeout(timeoutMs / 1000U);
+  if (!http_sync_request_connect_and_send("GET", url, "", "", false, false, timeoutMs)) {
+    return false;
+  }
+  if (request.responseHTTPcode() < 0) {
+    Serial.print(F("responseHTTPcode = "));
+    Serial.println(request.responseHTTPcode());
+    Serial.println("Content " + url + " download error (2)");
+    return false;
+  }
+  if (request.responseHTTPcode() != 200) {
+    Serial.print(F("responseHTTPcode = "));
+    Serial.println(request.responseHTTPcode());
+    Serial.println("Content " + url + " download error");
+    return false;
+  }
+  return true;
+}
+
 String http_sync_request_get(String url) {
   HttpRequestLockGuard lockGuard;
   if (!lockGuard.acquired) {
@@ -3040,31 +3033,118 @@ String http_sync_request_get(String url) {
   asyncHTTPrequest& request = sharedHttpRequest;
   request.setDebug(false);
   const uint32_t timeoutMs = 8000;
-  request.setTimeout(8); // Таймаут восемь секунд (внутренний по отсутствию активности)
-  if (!http_sync_request_connect_and_send("GET", url, "", "", false, false, timeoutMs)) {
+  if (!http_sync_complete_get(request, url, timeoutMs)) {
     return "<ERR>";
   }
-  if (request.responseHTTPcode() >= 0) {
-    if (request.responseHTTPcode() != 200) {
-      Serial.print(F("responseHTTPcode = "));
-      Serial.println(request.responseHTTPcode());
-      Serial.println("Content " + url + " download error");
-      return "<ERR>";
-    }
-    String response = request.responseText();
-    size_t expectedLength = request.responseLength();
-    if (expectedLength > 0 && response.length() != expectedLength) {
-      Serial.println("Content " + url + " incomplete: " + String(response.length()) + "/" + String(expectedLength));
-      return "<ERR>";
-    }
-    return response;
-  } else {
-    Serial.print(F("responseHTTPcode = "));
-    Serial.println(request.responseHTTPcode());
-    Serial.println("Content " + url + " download error (2)");
+  const size_t availableBefore = request.available();
+  String response = request.responseText();
+  size_t expectedLength = request.responseLength();
+  if (expectedLength > 0 && response.length() != expectedLength) {
+    Serial.println("Content " + url + " incomplete: " + String(response.length()) + "/" + String(expectedLength));
+    Serial.println(
+        "HTTP GET body not copied to String: available=" + String(availableBefore) +
+        " heap=" + String(ESP.getFreeHeap()) +
+        " maxAlloc=" + String(ESP.getMaxAllocHeap()) +
+        " http=" + String(request.responseHTTPcode()));
     return "<ERR>";
   }
-  return "";
+  return response;
+}
+
+static bool http_sync_download_file(const String& url, const String& path) {
+  HttpRequestLockGuard lockGuard;
+  if (!lockGuard.acquired) {
+    Serial.println("HTTP GET skipped: request object is busy");
+    return false;
+  }
+  asyncHTTPrequest& request = sharedHttpRequest;
+  request.setDebug(false);
+  const uint32_t timeoutMs = 8000;
+  if (!http_sync_complete_get(request, url, timeoutMs)) {
+    return false;
+  }
+
+  const size_t expectedLength = request.responseLength();
+  const size_t available = request.available();
+  if (expectedLength == 0 || available == 0) {
+    Serial.println(
+        "Content " + url + " empty body: length=" + String(expectedLength) +
+        " available=" + String(available) +
+        " heap=" + String(ESP.getFreeHeap()) +
+        " maxAlloc=" + String(ESP.getMaxAllocHeap()));
+    return false;
+  }
+  if (expectedLength != available) {
+    Serial.println("Content " + url + " incomplete: " + String(available) + "/" + String(expectedLength));
+    return false;
+  }
+
+  String tmpPath = path + ".tmp";
+  SPIFFS.remove(tmpPath);
+  File wf = SPIFFS.open(tmpPath, FILE_WRITE);
+  if (!wf) {
+    Serial.println("WEB interface write failed, open tmp: " + tmpPath);
+    SPIFFS.remove(tmpPath);
+    return false;
+  }
+
+  uint8_t buf[512];
+  size_t total = 0;
+  while (total < expectedLength) {
+    const size_t remain = expectedLength - total;
+    const size_t chunk = remain < sizeof(buf) ? remain : sizeof(buf);
+    const size_t got = request.responseRead(buf, chunk);
+    if (got == 0) {
+      wf.close();
+      SPIFFS.remove(tmpPath);
+      Serial.println(
+          "Content " + url + " drain failed: " + String(total) + "/" + String(expectedLength) +
+          " heap=" + String(ESP.getFreeHeap()) +
+          " maxAlloc=" + String(ESP.getMaxAllocHeap()));
+      return false;
+    }
+    if (wf.write(buf, got) != got) {
+      wf.close();
+      SPIFFS.remove(tmpPath);
+      Serial.println("WEB interface write failed, partial tmp: " + tmpPath);
+      return false;
+    }
+    total += got;
+  }
+  wf.close();
+
+  if (!commit_web_file_tmp(path, tmpPath, expectedLength)) {
+    return false;
+  }
+  Serial.println("Done (L=" + String(expectedLength) + ")");
+  return true;
+}
+
+String get_web_file(String fn, get_web_type type) {
+  if (type == SAVE_FILE_IF_NOT_EXIST && SPIFFS.exists("/" + fn)) {
+    Serial.println("File " + fn + " already exist.");
+    return "";
+  }
+
+  String url = "http://web.samovar-tool.ru/" + String(SAMOVAR_VERSION) + "/" + fn + "?" + micros();
+  Serial.print("url = ");
+  Serial.println(url);
+
+  if (type != GET_CONTENT) {
+    if (!http_sync_download_file(url, "/" + fn)) {
+      return "<ERR>";
+    }
+    return "";
+  }
+
+  String s = http_sync_request_get(url);
+  if (s == "<ERR>") {
+    return s;
+  }
+  if (web_file_content_empty_invalid(fn, type, s)) {
+    return "<ERR>";
+  }
+  return s;
 }
 
 // Вариант для Lua-обёртки: метод, тело и Content-Type задаёт скрипт, таймаут короче, чем у

@@ -61,7 +61,7 @@ FIXTURE_ON = r'''{
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 1, StepperStepMl: 111,
-    heaterAlarmLatched: 0, latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   }'''
 # Тот же снимок, но нагрев уже выключен - именно это должна показать кнопка
 # ПОСЛЕ восстановления связи (доказывает, что после реконнекта состояние не

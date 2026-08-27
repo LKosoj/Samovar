@@ -32,7 +32,7 @@ if chart_htm:
         if token in chart_htm:
             errors.append(f"data_raw/chart.htm contains forbidden full-reload chart token: {token}")
 
-    if '<script src="chart.js"></script>' not in chart_htm:
+    if '<script src="chart.js' not in chart_htm:
         errors.append("data_raw/chart.htm does not load local chart.js")
     for token in [
         "function initChart ()",
@@ -65,7 +65,7 @@ if chart_htm:
     theme_pos = chart_htm.find(
         "SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });"
     )
-    chart_script_pos = chart_htm.find('<script src="chart.js"></script>')
+    chart_script_pos = chart_htm.find('<script src="chart.js')
     init_function_pos = chart_htm.find("function initChart ()")
     if not (chart_script_pos != -1 and chart_script_pos < theme_pos < init_function_pos):
         errors.append("data_raw/chart.htm parse-time shared theme call moved out of former IIFE position")
@@ -96,7 +96,7 @@ if chart_htm:
         errors.append(str(exc))
 
 if chart_js:
-    for token in ["SamovarChart", "parseCsv(text)", "MAX_RENDER_POINTS = 600", "appendAjaxPoint", "decimate(rows)"]:
+    for token in ["SamovarChart", "parseCsv(text)", "appendAjaxPoint", "drawSeries", "drawHoverCursor", "toggleSeries", "bindPlot", "resetView", "PROG_AXIS_SERIES", "updateChrome"]:
         if token not in chart_js:
             errors.append(f"data_raw/chart.js missing local renderer token: {token}")
     for token in ["cdn.amcharts.com", "am4core", "am4charts", "reloadFrequency", "dataSource"]:

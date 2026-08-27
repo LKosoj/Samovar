@@ -64,7 +64,7 @@ BROWSER_TEST = r'''async page => {
     Status:"Готов",Lstatus:"",TimeRemaining:0,TotalTime:0,alc:0,stm_alc:0,ISspd:0,
     wp_spd:0,i2c_pump_present:0,i2c_pump_running:0,i2c_pump_remaining_ml:0,
     i2c_pump_speed:0,PowerOn:0,StepperStepMl:100,
-    heaterAlarmLatched:0,latestMessageSequence:0
+    heaterAlarmLatched:0,heaterAlarmReason:'',latestMessageSequence:0
   };
   const i2cFixture = {
     present:1,address:16,role:1,mode:1,caps:25,status:0,error:0,relayMask:0,

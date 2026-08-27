@@ -234,6 +234,57 @@ inline RuntimeEventSnapshotResult runtime_event_copy_text_locked(
   return RUNTIME_EVENT_SNAPSHOT_OK;
 }
 
+template <typename Text>
+inline RuntimeEventSnapshotResult runtime_event_copy_batch_locked(
+    const RuntimeEventRing& ring, uint32_t cursor, RuntimeEventDescriptor* events,
+    uint8_t capacity, Text& packedTexts, uint8_t& count) {
+  count = 0;
+  if (!events || capacity == 0) return RUNTIME_EVENT_SNAPSHOT_CORRUPT;
+
+  RuntimeEventDescriptor collected[RUNTIME_EVENT_DESCRIPTOR_CAPACITY];
+  uint8_t collectedCount = 0;
+  uint32_t localCursor = cursor;
+  for (uint8_t index = 0; index < capacity && index < RUNTIME_EVENT_DESCRIPTOR_CAPACITY;
+       index++) {
+    RuntimeEventDescriptor selected{};
+    const RuntimeEventSelectResult selectResult =
+        runtime_event_select_locked(ring, localCursor, selected);
+    if (selectResult == RUNTIME_EVENT_SELECT_NONE) break;
+    if (selectResult != RUNTIME_EVENT_SELECT_FOUND) return RUNTIME_EVENT_SNAPSHOT_CORRUPT;
+    collected[collectedCount] = selected;
+    collectedCount++;
+    localCursor = selected.sequence;
+  }
+  if (collectedCount == 0) {
+    packedTexts = Text();
+    return RUNTIME_EVENT_SNAPSHOT_OK;
+  }
+
+  size_t totalLength = 0;
+  for (uint8_t index = 0; index < collectedCount; index++) {
+    totalLength += collected[index].length;
+  }
+
+  Text packed;
+  if (!packed.reserve(totalLength)) return RUNTIME_EVENT_SNAPSHOT_NO_MEMORY;
+  uint16_t packedOffset = 0;
+  for (uint8_t index = 0; index < collectedCount; index++) {
+    Text piece;
+    const RuntimeEventSnapshotResult copyResult =
+        runtime_event_copy_text_locked(ring, collected[index], piece);
+    if (copyResult != RUNTIME_EVENT_SNAPSHOT_OK) return copyResult;
+    if (!packed.concat(piece.c_str(), piece.length())) {
+      return RUNTIME_EVENT_SNAPSHOT_NO_MEMORY;
+    }
+    events[index] = collected[index];
+    events[index].offset = packedOffset;
+    packedOffset = static_cast<uint16_t>(packedOffset + collected[index].length);
+  }
+  packedTexts = std::move(packed);
+  count = collectedCount;
+  return RUNTIME_EVENT_SNAPSHOT_OK;
+}
+
 inline bool runtime_event_parse_cursor(const char* text, size_t length, uint32_t& cursor) {
   if (!text || length == 0 || length > 10) return false;
   uint32_t parsed = 0;

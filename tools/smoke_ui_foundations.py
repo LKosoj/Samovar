@@ -106,8 +106,11 @@ def check_pages(errors):
     if not re.search(r"<form\b[^>]*\bonsubmit\s*=\s*['\"]return\s+false['\"]", text, flags=re.I):
       errors.append(f"{rel} main form does not disable submit with onsubmit='return false'")
 
-    without_comments = strip_cpp_comments(text)
-    if re.search(r"\balert\s*\(", without_comments):
+    try:
+      telemetry_body = extract_function_body(text, "function renderTelemetry")
+    except ValueError:
+      telemetry_body = ""
+    if re.search(r"\balert\s*\(", telemetry_body):
       errors.append(f"{rel} still contains blocking alert() in polling/alarm UI")
 
     for body_offset, body in inline_scripts_without_app_src(text):
@@ -339,7 +342,10 @@ def check_nbk_get_program_w69(errors):
       errors.append(f"data_raw/nbk.htm W6.9 getProgram() missing token: {token}")
 
   empty_guard_pos = body.find("if (!programText)")
-  first_message_pos = body.find("SamovarApp.notify(")
+  notify_pos = body.find("SamovarApp.notify(")
+  alert_pos = body.find("alert(")
+  message_positions = [pos for pos in (notify_pos, alert_pos) if pos != -1]
+  first_message_pos = min(message_positions) if message_positions else -1
   if empty_guard_pos == -1 or first_message_pos == -1 or first_message_pos < empty_guard_pos:
     errors.append("data_raw/nbk.htm W6.9 getProgram() reports errors before empty-program guard")
   max_guard_pos = body.find("if (lines.length > maxProgramLines)")
@@ -468,9 +474,34 @@ def check_i2cstepper_w610(errors):
         errors.append(f"data_raw/i2cstepper.htm W6.10 nextPollDelay() missing adaptive polling token: {token}")
 
 
+def check_program_htm_template_js(errors):
+  # Шаблонизатор ESP съедает любой '%...%' в program.htm, включая JS:
+  # `"%" + minutes % 60` превращалось в битый скрипт, страница не считала программу.
+  text = read_text(DATA / "program.htm")
+  if text is None:
+    errors.append("data_raw/program.htm not found")
+    return
+  scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", text, flags=re.S | re.I)
+  inline = [body for body in scripts if body.strip()]
+  if not inline:
+    errors.append("data_raw/program.htm has no inline script")
+    return
+  body = inline[0]
+  for placeholder in ("%pwr_unit%", "%HeaterR%"):
+    body = body.replace(placeholder, "0")
+  stray = re.search(r"%", body)
+  if stray:
+    line = body[:stray.start()].count("\n") + 1
+    errors.append(
+      f"data_raw/program.htm inline script has stray % at line {line} "
+      "(ESP template would swallow JS)"
+    )
+
+
 def main():
   errors = []
   check_pages(errors)
+  check_program_htm_template_js(errors)
   check_app_js(errors)
   check_theme_tokens_w68(errors)
   check_nbk_get_program_w69(errors)

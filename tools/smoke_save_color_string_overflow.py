@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parents[1]
 errors: list[str] = []
 
 web_text = (ROOT / "WebServer.ino").read_text(encoding="utf-8", errors="ignore")
+save_string_arg_text = (ROOT / "web_save_string_arg.h").read_text(encoding="utf-8", errors="ignore")
 string_utils_text = (ROOT / "string_utils.h").read_text(encoding="utf-8", errors="ignore")
 
 
@@ -82,7 +83,7 @@ if errors:
 
 try:
     apply_body = extract_function_body(
-        web_text,
+        save_string_arg_text,
         "static bool apply_save_string_arg(AsyncWebServerRequest *request, const char *name, char (&target)[N])",
     )
 except ValueError as exc:

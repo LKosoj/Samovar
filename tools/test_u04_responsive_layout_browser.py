@@ -36,13 +36,13 @@ BROWSER_TEST = r'''async page => {
   ];
   const expectedColors = {
     light: {
-      "--accent": "#166b9d", "--bg-page": "#3498db", "--bg-form": "#fafafa",
-      "--bg-input": "#fafafa", "--text-main": "#6b6b6b", "--text-strong": "#000",
-      "--text-on-accent": "#fff", "--border-input": "#737373",
-      "--border-soft": "#737373", "--state-danger-bg": "#b00020"
+      "--accent": "#3498db", "--bg-page": "#3498db", "--bg-form": "#fafafa",
+      "--bg-input": "#fafafa", "--text-main": "#777", "--text-strong": "#000",
+      "--text-on-accent": "#fff", "--border-input": "#a9a9a9",
+      "--border-soft": "#ccc", "--state-danger-bg": "#b00020"
     },
     dark: {
-      "--accent": "#166b9d", "--bg-page": "#1a2733", "--bg-form": "#21303d",
+      "--accent": "#3498db", "--bg-page": "#1a2733", "--bg-form": "#21303d",
       "--bg-input": "#1a2733", "--text-main": "#cfd8e3", "--text-strong": "#f3f6f9",
       "--text-on-accent": "#fff", "--border-input": "#8da1b5",
       "--border-soft": "#8da1b5", "--state-danger-bg": "#b00020"
@@ -94,7 +94,7 @@ BROWSER_TEST = r'''async page => {
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 0, StepperStepMl: 111,
-    heaterAlarmLatched: 0, latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   };
   const csvFixture = [
     "Date,Steam,Pipe,Water,Tank,Pressure,ProgNum",
@@ -275,13 +275,9 @@ BROWSER_TEST = r'''async page => {
         checkInside(mode, mode.parentElement, '#Main select[name="mode"]');
       }
       if (cell.state === "visible-tooltip") {
-        // enhanceTooltips() (app.js) переносит .tooltiptext либо в соседнюю .tooltip-wrap
-        // (когда .tooltip - это <label>), либо оставляет внутри самого контейнера с классом
-        // .tooltip-anchor (когда .tooltip - это h2/div, как первая подсказка на Main) -
-        // .tooltiptext в #Main всегда одна открытая, ищем по обоим вариантам сразу.
-        const tip = document.querySelector("#Main .tooltip-wrap .tooltiptext, #Main .tooltip-anchor .tooltiptext");
-        checkInside(tip, null, ".tooltip-wrap/.tooltip-anchor .tooltiptext");
-        checkNotClipped(tip, ".tooltip-wrap/.tooltip-anchor .tooltiptext");
+        const tip = document.querySelector("#Main .tooltip .tooltiptext");
+        checkInside(tip, null, ".tooltip .tooltiptext");
+        checkNotClipped(tip, ".tooltip .tooltiptext");
       }
       const error = document.getElementById("request_error");
       if (error && getComputedStyle(error).display !== "none") checkInside(error, null, "#request_error");
@@ -348,7 +344,10 @@ BROWSER_TEST = r'''async page => {
         fail("chart-legend", ".chart-legend", document.querySelector(".chart-legend"), panel,
           "expected six existing series");
       }
-      const scripts = Array.from(document.scripts).map(script => script.getAttribute("src")).filter(Boolean);
+      const scripts = Array.from(document.scripts).map(script => {
+        const src = script.getAttribute("src");
+        return src ? src.split("?")[0] : null;
+      }).filter(Boolean);
       if (JSON.stringify(scripts) !== JSON.stringify(["app.js", "chart.js"]) ||
           form.getAttribute("action") !== "none" || document.getElementById("refresh").name !== "refresh") {
         fail("behavior-invariant", "chart.htm", form, null,
@@ -479,10 +478,9 @@ BROWSER_TEST = r'''async page => {
       });
     } else if (state === "visible-tooltip") {
       await openSetupTab("Main");
-      // Подсказка открывается кликом по кнопке-триггеру (enhanceTooltips в app.js), не hover-ом.
-      await page.locator("#Main .tooltip-trigger").first().click();
+      await page.locator("#Main .tooltip").first().hover();
       await page.waitForFunction(() => {
-        const tip = document.querySelector("#Main .tooltip-wrap .tooltiptext, #Main .tooltip-anchor .tooltiptext");
+        const tip = document.querySelector("#Main .tooltip .tooltiptext");
         return tip && getComputedStyle(tip).visibility === "visible";
       });
     }
@@ -613,12 +611,11 @@ BROWSER_TEST = r'''async page => {
     // подсказку открывает клик по триггеру, а не hover, поэтому и метим/кликаем именно
     // триггер; текст подсказки для лога берём у исходной .tooltip (соседа триггера).
     const owners = await page_.evaluate(() => {
-      const list = Array.from(document.querySelectorAll(".tooltip-trigger")).filter(
-        el => el.offsetParent !== null);
+      const list = Array.from(document.querySelectorAll(".tooltip")).filter(
+        el => el.offsetParent !== null && el.querySelector(".tooltiptext"));
       list.forEach((el, index) => { el.dataset.tooltipFitProbe = String(index); });
       return list.map((el, index) => {
-        const labelEl = el.parentNode.querySelector(".tooltip");
-        return { index, label: (labelEl ? labelEl.textContent : "").trim().slice(0, 40) };
+        return { index, label: (el.textContent || "").trim().slice(0, 40) };
       });
     });
     for (const owner of owners) {
@@ -626,7 +623,7 @@ BROWSER_TEST = r'''async page => {
       const scenario = "tooltip-fit/" + viewport.name + "/" + file + (tabLabel ? "/" + tabLabel : "") + "/" + owner.label;
       report.tooltipFitCells.push(scenario);
       try {
-        await page_.locator(selector).first().click();
+        await page_.locator(selector).first().hover();
       } catch (clickError) {
         // Отдельный, не связанный с этой правкой баг: на index.htm/distiller.htm при 320px
         // соседние подписи заголовков колонок программы перекрывают друг друга и блокируют
@@ -641,11 +638,11 @@ BROWSER_TEST = r'''async page => {
         continue;
       }
       await page_.waitForFunction(sel => {
-        const tip = document.querySelector(sel).parentNode.querySelector(".tooltiptext");
+        const tip = document.querySelector(sel).querySelector(".tooltiptext");
         return tip && getComputedStyle(tip).visibility === "visible";
       }, selector);
       const rect = await page_.evaluate(sel => {
-        const box = document.querySelector(sel).parentNode.querySelector(".tooltiptext").getBoundingClientRect();
+        const box = document.querySelector(sel).querySelector(".tooltiptext").getBoundingClientRect();
         return { x: box.x, width: box.width, right: box.right };
       }, selector);
       if (rect.x < -0.5 || rect.right > viewport.width + 0.5) {

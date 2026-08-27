@@ -51,9 +51,11 @@ if alarm_text:
         errors.append(str(exc))
         body = ""
     rectification_guards = [
-        "if (!sensor_valid(SteamSensor) && process_sensor_failed(\"Ректификация\", \"пара\")) return;",
+        "if (!rectification_ds_sensors_assigned()) {",
+        "notify_rectification_sensors_unassigned();",
+        "if (optional_sensor_failed(SteamSensor) && process_sensor_failed(\"Ректификация\", \"пара\")) return;",
         "if (!mode_check_powered_cooling_sensors(\"Ректификация\")) return;",
-        "if (!sensor_valid(TankSensor) && process_sensor_failed(\"Ректификация\", \"куба\")) return;",
+        "if (optional_sensor_failed(TankSensor) && process_sensor_failed(\"Ректификация\", \"куба\")) return;",
     ]
     for token in rectification_guards:
         if token not in body:
@@ -64,6 +66,54 @@ if alarm_text:
         rectification_guards + ["TankSensor.avgTemp >= 2"],
         errors,
     )
+    if "!sensor_valid(SteamSensor) && process_sensor_failed" in body:
+        errors.append(
+            "rectification still treats unassigned steam sensor as process emergency"
+        )
+    if "!sensor_valid(TankSensor) && process_sensor_failed" in body:
+        errors.append(
+            "rectification still treats unassigned tank sensor as process emergency"
+        )
+    try:
+        notify_body = extract_function_body(
+            alarm_text, "inline void notify_rectification_sensors_unassigned()"
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        notify_body = ""
+    if "WARNING_MSG" not in notify_body:
+        errors.append("unassigned-sensor notice must be WARNING_MSG, not a siren")
+    if "ALARM_MSG" in notify_body:
+        errors.append("unassigned-sensor notice must not use ALARM_MSG")
+
+samovar_text = strip_cpp_comments(read_text("Samovar.ino"))
+if samovar_text:
+    power_label = "case SAMOVAR_POWER:"
+    power_start = samovar_text.find(power_label)
+    power_end = samovar_text.find("case ", power_start + len(power_label)) if power_start >= 0 else -1
+    if power_start < 0 or power_end < 0:
+        errors.append("Samovar.ino: case SAMOVAR_POWER: not found")
+    else:
+        power_branch = samovar_text[power_start:power_end]
+        for token in [
+            "rectification_ds_sensors_assigned()",
+            "notify_rectification_sensors_unassigned();",
+        ]:
+            if token not in power_branch:
+                errors.append(f"SAMOVAR_POWER missing unassigned-sensor refuse: {token}")
+    try:
+        degraded_body = extract_function_body(
+            samovar_text, "static void setup_report_degraded_boot()"
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        degraded_body = ""
+    if "ALARM_MSG" in degraded_body:
+        errors.append(
+            "setup_report_degraded_boot must not publish ALARM_MSG (browser siren)"
+        )
+    if "WARNING_MSG" not in degraded_body:
+        errors.append("setup_report_degraded_boot must publish WARNING_MSG")
 
 if mode_common_text:
     try:

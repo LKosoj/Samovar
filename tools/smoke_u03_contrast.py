@@ -37,20 +37,20 @@ STYLE_TOKEN_ALLOWLIST = (
     "detector-alarm-bg",
 )
 NORMALIZED_SHA256 = {
-    "style.css": "2c9b179ab621163155ebc3383800a9921c56406bf8fe38dda4102c141a5365ed",
-    "index.htm": "a234d39fc7f0ba65b1f6ef6267e7b71789a10de14d7cb08a0b077673afc864b7",
-    "beer.htm": "e5e792c1e8c54cc171d7898ad27b030e5508e3552529ad59fdda96bd8d3992f0",
-    "distiller.htm": "cb4957c0384cfd4f74b98c88d61abe8841b615d15f8abca04277405f1bc0bdeb",
-    "bk.htm": "f13df2f98db2eb8d625fa59fa552f1a32e461286f1621978b6ece393da8959fd",
-    "nbk.htm": "d006d01ecba3bc9c4718310f0ad0b08cb2b912376d234b061679ff881a77fcc2",
-    "setup.htm": "75ae4dca8303737dc8c3000b5f5455a4c2d0c6ab10705a08c21f3ffa3643b4fc",
-    "chart.htm": "4723d8c547624d31b3470cec7423d8cd5011d9ee36023fd75806817ff1efa63d",
-    "program.htm": "a2f30df8deee3e9d0e666faa64f99ab31b4a8b80a36d35b92378c3422cbc469e",
-    "i2cstepper.htm": "27da2e5e24dfd54b59feca755364aba5b9a5fa214a847803b30f58d7a18cb315",
-    "chart.js": "c8c182f2a9719f028dda8131114acbabc955d35aa2b7c61d2e7fedb4b669e1f3",
+    "style.css": "9d8fb4b55265fd9b468dd8eb86f93f6e81f6204a816a7e108fde6440e41bf753",
+    "index.htm": "88d45d71fc9daf862b2caeb23f9cf4e339dcf854856d3a180bd02811ca142342",
+    "beer.htm": "4da34ed3c1dcbf24f60f90bcb90a53698970eb6f45e9e004c7666d17164e101d",
+    "distiller.htm": "a6ac72513a43da1a902d211687963b4c3e8b53818e1ba4205f0fed17a33d7ce0",
+    "bk.htm": "8a4554f18894bde49fddc1185703a6c8bdca42869b9ffd61289e03bb5ac58a4e",
+    "nbk.htm": "814f30a8b9bc83ad75a8ba698588f0581a17f4b0775343428560e75d23ad8ba8",
+    "setup.htm": "d79ab796807ed6e2279244299fe574edcc4a3fbfc3d85f55d6ca43858fe79a2d",
+    "chart.htm": "ea21546aff7f36f86abfaf61bfe3b7e50e395ce4d0da44119454e49aa189fd06",
+    "program.htm": "ca47f874073c4aea54fa0e2d9ba5092de95430daf56f05c2c290160473b8508e",
+    "i2cstepper.htm": "8e0b828032807735a731082df9249487684a8c9d47e95b4819b89d8d64258dcc",
+    "chart.js": "ac137ec837adba2b7309e9da934b57c538accb1378d5a33d910fd7aee66b1067",
 }
 FROZEN_SHA256 = {
-    "app.js": "0b543b3ae8cf2d2cb71e439bfa5c24a3b7ce4ec551230c25fd508e7cba571ddc",
+    "app.js": "ba1a297e24bb3fc9a64368a241bfcfe0a7cd9493a69a554445826fabeae63253",
     "edit.htm": "26b7e41df2a0a0197a14b9cf129f808fd001e760df4ed7c16df7a35a10b03ce6",
     "edit.htm.gz": "86e2801e2370cd45420ed84005194b752cc22198e7ab85faa33129bd28a50cac",
 }
@@ -329,11 +329,9 @@ def contrast_ratio(first: str, second: str) -> float:
 
 
 def verify_button_contrast() -> None:
-    """Кнопка и её hover красятся токенами, а текст на них всегда
-    --text-on-accent. Полупрозрачный фон здесь запрещён: итоговый цвет зависит
-    от подложки, и на светлой форме белый текст на #3498db97 давал 1.96 при
-    норме WCAG 4.5. Браузерный гейт u03 этого не ловит - на #power кнопке
-    inline-стиль перебивает .button:hover."""
+    """Цвета кнопок как в 6.27: --accent #3498db, hover #3498db97.
+    WCAG 4.5 для этой палитры не выполняется (белый на #3498db ~3.15) -
+    это исходный вид интерфейса, его не подменяем более тёмным --accent."""
     style = read_page("style.css")
     values = {}
     for token in ("accent", "accent-hover", "text-on-accent"):
@@ -341,13 +339,16 @@ def verify_button_contrast() -> None:
         if len(found) != 1:
             raise AssertionError(f"data/style.css: --{token} declaration cardinality={len(found)}")
         values[token] = found[0].strip()
-    foreground = values["text-on-accent"]
-    for token in ("accent", "accent-hover"):
-        ratio = contrast_ratio(values[token], foreground)
-        if ratio < 4.5:
-            raise AssertionError(
-                f"data/style.css: --{token} vs --text-on-accent contrast {ratio:.2f} < 4.5"
-            )
+    if values["accent"].lower() != "#3498db":
+        raise AssertionError(f"data/style.css: --accent must stay 6.27 #3498db, got {values['accent']}")
+    if values["accent-hover"].lower() != "#3498db97":
+        raise AssertionError(
+            f"data/style.css: --accent-hover must stay 6.27 #3498db97, got {values['accent-hover']}"
+        )
+    if values["text-on-accent"].lower() not in ("#fff", "#ffffff"):
+        raise AssertionError(
+            f"data/style.css: --text-on-accent must stay white, got {values['text-on-accent']}"
+        )
 
 
 def verify_chart_palette() -> None:

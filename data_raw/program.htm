@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache">
 <link rel="shortcut icon" href="favicon.ico" type="image/x-icon"/>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=7.00u7">
 <title>Самовар</title>
 
 <script src="app.js"></script>
@@ -14,7 +14,7 @@
 var heaterResistance = Number('%HeaterR%');
 // Должно совпадать с прошивкой: set_current_power() (power_regulator.h) клампит
 // уставку к 230 В и считает предел как 230²/R. При 220 показанные вольты не совпадут
-// с реально выставленными - расчёт занижал их примерно на 4%, а мощность на 9%.
+// с реально выставленными - расчёт занижал их примерно на 4 процента, а мощность на 9.
 var mainsVolt = 230;
 var _lnIdx = 0;
 var phv = 0;
@@ -26,6 +26,13 @@ var glcalcnum = false;
 var programTemplateBaseline = "";
 var currentProgramTemplateValue = "";
 var programTemplateLoaded = false;
+// Шаблоны: 5 полей — мощность в вольтах; 6 полей — вольты и ватты.
+// Совпадение с pwr_unit проверяет set_program.
+var loadedProgramPowerUnit = "V";
+var columnRecommendationsApplied = false;
+var unscaledProgramBody = "";
+var unscaledProgramPowerUnit = "V";
+var currentColumnDiameterValue = "";
 
 // ========== КОНФИГУРАЦИЯ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) ==========
 var columnParams = null;
@@ -50,11 +57,11 @@ function updateHeadsTailsPercent(recalculate) {
       tailsPercent = 5;
       break;
     case 1: // Зерно
-      headsPercent = 8; // Среднее от 6-10%
-      tailsPercent = 6; // Среднее от 5-7%
+      headsPercent = 8; // Среднее от 6-10
+      tailsPercent = 6; // Среднее от 5-7
       break;
     case 2: // Сахар
-      headsPercent = 12; // Среднее от 10-15%
+      headsPercent = 12; // Среднее от 10-15
       tailsPercent = 5;
       break;
     default:
@@ -77,8 +84,16 @@ async function updateColumnParams() {
     label: 'Тип сырья', integer: true, min: 0, max: 2
   });
   if (!material) return null;
+  const diamSelect = document.getElementById("coldiam");
+  const diam = SamovarApp.readNumericInput(diamSelect, {
+    label: 'Диаметр колонны', min: 1.5, max: 3
+  });
+  if (!diam) return null;
   try {
-    const response = await fetch('/ajax_col_params?mat=' + encodeURIComponent(material.text));
+    const response = await fetch(
+      '/ajax_col_params?mat=' + encodeURIComponent(material.text) +
+      '&diam=' + encodeURIComponent(diam.text)
+    );
     if (!response.ok) {
       SamovarApp.showRequestError(
         await SamovarApp.responseErrorText(response, 'Параметры колонны не загружены')
@@ -123,9 +138,8 @@ function displayColumnParams() {
   const pUnit = (pwr_unit === 'V') ? ' В' : ' Вт';
   
   if (pwr_unit === 'V') {
-    function toVolt(w) { return Math.round(mainsVolt * Math.sqrt(Math.max(0, w) / heaterMaxPwr)); }
-    setTxt('colFloodPower', toVolt(p.floodPowerW));
-    setTxt('colWorkingPower', toVolt(p.workingPowerW));
+    setTxt('colFloodPower', wattsToProgramVolts(p.floodPowerW, heaterMaxPwr));
+    setTxt('colWorkingPower', wattsToProgramVolts(p.workingPowerW, heaterMaxPwr));
     const fu = document.getElementById('floodUnit'); if (fu) fu.textContent = ' В';
     const wu = document.getElementById('workingUnit'); if (wu) wu.textContent = ' В';
   }
@@ -146,43 +160,161 @@ function displayColumnParams() {
   return true;
 }
 
-function applyRecommendedSpeeds() {
-  if (!columnParams) { SamovarApp.showRequestError('Параметры колонны не загружены.'); return; }
-  const p = columnParams;
-  const programLines = document.getElementById('prg').childNodes;
-  let appliedCount = 0;
-  
+function wattsToProgramVolts(watts, heaterMaxPwr) {
+  return Math.round(mainsVolt * Math.sqrt(Math.max(0, watts) / heaterMaxPwr));
+}
+
+function programVoltsToWatts(volts, heaterMaxPwr) {
+  var ratio = volts / mainsVolt;
+  return Math.round(heaterMaxPwr * ratio * ratio);
+}
+
+// Совпадает с PROGRAM_POWER_ABS_THRESHOLD в power_regulator.h: |P|>порога и P>0 —
+// абсолютная уставка, иначе (кроме 0) дельта. SEM_AVR — 400 Вт, иначе 40 В.
+function programPowerAbsThreshold(unit) {
+  return unit === "P" ? 400 : 40;
+}
+
+function isProgramPowerAbsolute(power, unit) {
+  return Math.abs(power) > programPowerAbsThreshold(unit) && power > 0;
+}
+
+function regulatorPowerUnit() {
+  return (pwr_unit === 'P') ? 'P' : 'V';
+}
+
+function programPowerUnitFitsRegulator() {
+  return columnRecommendationsApplied || loadedProgramPowerUnit === regulatorPowerUnit();
+}
+
+function updateProgramPowerUnitHint() {
+  const hint = document.getElementById('programPowerUnitHint');
+  if (!hint) return;
+  const regulator = regulatorPowerUnit();
+  if (programPowerUnitFitsRegulator()) {
+    hint.textContent = columnRecommendationsApplied
+      ? 'Мощность пересчитана под текущий регулятор.'
+      : (regulator === 'P'
+        ? 'Программа в ваттах, как текущий регулятор.'
+        : 'Программа в вольтах, как текущий регулятор.');
+    hint.className = 'program-summary-status is-valid';
+    return;
+  }
+  hint.textContent = regulator === 'P'
+    ? 'В файле только вольты. Нужны две колонки мощности (вольты и ватты) или «Применить рекомендации».'
+    : 'Программа в ваттах, а регулятор в вольтах. Нужны две колонки мощности или «Применить рекомендации».';
+  hint.className = 'program-summary-status is-invalid';
+}
+
+function scaleProgramSpeedsByType(programLines, typeChars, targetMlH) {
+  const rows = [];
   for (let i = 1; i < programLines.length; i++) {
     const line = programLines[i];
     if (!line || !line.querySelector) continue;
-    const type = line.querySelector('select[name^="ptype"]').value;
+    const typeEl = line.querySelector('select[name^="ptype"]');
     const speedInput = line.querySelector('input[name^="speed"]');
-    const powerInput = line.querySelector('input[name^="pvolt"]');
-    
-    let rSpeed = 0; let rPwr = 0;
-    if (type == 'H') { rSpeed = p.headsFlowMlH; rPwr = p.headsPowerW; }
-    else if (type == 'B' || type == 'C') { rSpeed = p.bodyFlowMaxMlH; rPwr = (type == 'C' ? p.floodPowerW : p.workingPowerW); }
-    else if (type == 'T') { rSpeed = p.tailsFlowMlH; rPwr = p.tailsPowerW; }
-    
-    if (rSpeed > 0) {
-      speedInput.value = (rSpeed / 1000).toFixed(3);
-      if (powerInput) {
-        if (pwr_unit === 'V') {
-          const heaterMaxPwr = Number(document.getElementById('heaterMaxPower').value);
-          if (!Number.isFinite(heaterMaxPwr) || heaterMaxPwr <= 0) {
-            SamovarApp.showRequestError('Мощность ТЭНа для расчёта колонны не задана.');
-            return;
-          }
-          powerInput.value = Math.round(mainsVolt * Math.sqrt(rPwr / heaterMaxPwr));
-        } else {
-          powerInput.value = Math.round(rPwr);
-        }
-      }
-      appliedCount++;
+    if (!typeEl || !speedInput) continue;
+    if (typeChars.indexOf(typeEl.value) < 0) continue;
+    const speed = Number(String(speedInput.value).replace(",", "."));
+    if (!Number.isFinite(speed) || speed <= 0) continue;
+    rows.push({ speedInput: speedInput, speed: speed });
+  }
+  if (rows.length === 0) return 0;
+  if (!(targetMlH > 0)) return -1;
+  let maxSpeed = 0;
+  for (let r = 0; r < rows.length; r++) {
+    if (rows[r].speed > maxSpeed) maxSpeed = rows[r].speed;
+  }
+  if (!(maxSpeed > 0)) return 0;
+  const factor = (targetMlH / 1000) / maxSpeed;
+  for (let r = 0; r < rows.length; r++) {
+    rows[r].speedInput.value = (rows[r].speed * factor).toFixed(3);
+  }
+  return rows.length;
+}
+
+function rememberUnscaledProgram(body, unit) {
+  unscaledProgramBody = body || "";
+  unscaledProgramPowerUnit = unit || "V";
+}
+
+function restoreColumnDiameterSelect(selectObject) {
+  if (currentColumnDiameterValue) selectObject.value = currentColumnDiameterValue;
+}
+
+function applyRecommendedSpeeds(options) {
+  const silent = options && options.silent;
+  if (unscaledProgramBody) {
+    document.getElementById('WProgram1').value = unscaledProgramBody;
+    loadedProgramPowerUnit = unscaledProgramPowerUnit;
+    glcalcnum = false;
+    calc_program();
+  }
+  if (!columnParams) {
+    if (!silent) SamovarApp.showRequestError('Параметры колонны не загружены.');
+    return false;
+  }
+  const p = columnParams;
+  const programLines = document.getElementById('prg').childNodes;
+  let heaterMaxPwr = 0;
+  if (pwr_unit === 'V') {
+    heaterMaxPwr = Number(document.getElementById('heaterMaxPower').value);
+    if (!Number.isFinite(heaterMaxPwr) || heaterMaxPwr <= 0) {
+      if (!silent) SamovarApp.showRequestError('Мощность ТЭНа для расчёта колонны не задана.');
+      return false;
     }
   }
+
+  const scaledHeads = scaleProgramSpeedsByType(programLines, 'H', p.headsFlowMlH);
+  const scaledBody = scaleProgramSpeedsByType(programLines, 'BC', p.bodyFlowMaxMlH);
+  const scaledTails = scaleProgramSpeedsByType(programLines, 'T', p.tailsFlowMlH);
+  if (scaledHeads < 0 || scaledBody < 0 || scaledTails < 0) {
+    if (!silent) SamovarApp.showRequestError('Параметры колонны не содержат скорость отбора.');
+    return false;
+  }
+
+  let appliedCount = 0;
+  for (let i = 1; i < programLines.length; i++) {
+    const line = programLines[i];
+    if (!line || !line.querySelector) continue;
+    const typeEl = line.querySelector('select[name^="ptype"]');
+    const powerInput = line.querySelector('input[name^="pvolt"]');
+    if (!typeEl || !powerInput) continue;
+    const type = typeEl.value;
+    let rPwr = 0;
+    if (type == 'H') rPwr = p.headsPowerW;
+    else if (type == 'C') rPwr = p.floodPowerW;
+    else if (type == 'B') rPwr = p.workingPowerW;
+    else if (type == 'T') rPwr = p.tailsPowerW;
+    else continue;
+    if (pwr_unit === 'V') {
+      powerInput.value = wattsToProgramVolts(rPwr, heaterMaxPwr);
+    } else {
+      powerInput.value = Math.round(rPwr);
+    }
+    appliedCount++;
+  }
+  loadedProgramPowerUnit = regulatorPowerUnit();
+  columnRecommendationsApplied = true;
+  updateProgramPowerUnitHint();
   set_num();
-  if (appliedCount > 0) alert('Параметры применены');
+  if (!silent && (appliedCount > 0 || scaledHeads + scaledBody + scaledTails > 0)) {
+    alert('Параметры применены');
+  }
+  return true;
+}
+
+async function onColumnDiameterChange(selectObject) {
+  if (programTemplateDirty() && !confirm("Пересчитать программу под новый диаметр? Правки скоростей будут заменены.")) {
+    restoreColumnDiameterSelect(selectObject);
+    return false;
+  }
+  currentColumnDiameterValue = selectObject.value;
+  const params = await updateColumnParams();
+  if (!params) return false;
+  applyRecommendedSpeeds({ silent: true });
+  updateProgramTemplateBaseline();
+  return true;
 }
 
 // Ограничения соответствуют разбору формата rect на прошивке (program_io.h, program_types.h):
@@ -191,18 +323,72 @@ function applyRecommendedSpeeds() {
 var PROGRAM_FILE_MAX_ROWS = 20;
 var PROGRAM_FILE_TYPES = "HBCTP";
 
+function parseProgramFileText(text) {
+  var lines = String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  var body = [];
+  for (var i = 0; i < lines.length; i++) {
+    var t = lines[i].trim();
+    if (!t || t.charAt(0) === "#") continue;
+    body.push(t);
+  }
+  var dual = body.length > 0 && body[0].split(";").length === 6;
+  return { dual: dual, body: body.join("\n") };
+}
+
+function programBodyForUnit(parsed, unit) {
+  var wantP = unit === "P";
+  var raw = parsed && parsed.body ? String(parsed.body) : "";
+  if (!raw) return "";
+  var lines = raw.split("\n");
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var f = lines[i].split(";");
+    if (f.length === 6) {
+      out.push([f[0], f[1], f[2], f[3], wantP ? f[5] : f[4]].join(";"));
+    } else {
+      out.push(lines[i]);
+    }
+  }
+  return out.join("\n");
+}
+
+function applyParsedProgramText(parsed) {
+  var unit = parsed.dual ? regulatorPowerUnit() : "V";
+  var body = programBodyForUnit(parsed, unit);
+  document.getElementById("WProgram1").value = body;
+  rememberUnscaledProgram(body, unit);
+  loadedProgramPowerUnit = unit;
+  columnRecommendationsApplied = false;
+  updateProgramPowerUnitHint();
+  glcalcnum = false;
+  calc_program();
+  return unit;
+}
+
+function validateProgramPowerField(raw, label, n) {
+  var power = Number(String(raw).replace(",", "."));
+  if (!Number.isFinite(power) || power < -52900 || power > 52900) {
+    return "строка " + n + ": " + label + " «" + raw + "» должна быть числом.";
+  }
+  return "";
+}
+
 function validateProgramFileText(text) {
-  var lines = text.split("\n");
-  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  var parsed = parseProgramFileText(text);
+  var lines = parsed.body ? parsed.body.split("\n") : [];
   if (lines.length === 0) return "файл пуст.";
   if (lines.length > PROGRAM_FILE_MAX_ROWS) {
     return "строк " + lines.length + ", максимум " + PROGRAM_FILE_MAX_ROWS + ".";
   }
+  var expectedFields = parsed.dual ? 6 : 5;
   for (var i = 0; i < lines.length; i++) {
     var n = i + 1;
     var f = lines[i].split(";");
-    if (f.length !== 5) {
-      return "строка " + n + ": ожидается 5 полей через «;» (ёмкость;скорость;процент;тип;мощность), получено " + f.length + ".";
+    if (f.length !== expectedFields) {
+      if (parsed.dual) {
+        return "строка " + n + ": ожидается 6 полей через «;» (ёмкость;скорость;процент;тип;вольты;ватты), получено " + f.length + ".";
+      }
+      return "строка " + n + ": ожидается 5 полей через «;» (ёмкость;скорость;процент;тип;вольты) или 6 (вольты и ватты), получено " + f.length + ".";
     }
     var cap = Number(f[0]);
     if (!Number.isInteger(cap) || cap < 0 || cap > 10) {
@@ -219,9 +405,11 @@ function validateProgramFileText(text) {
     if (f[3].length !== 1 || PROGRAM_FILE_TYPES.indexOf(f[3]) === -1) {
       return "строка " + n + ": тип «" + f[3] + "» неизвестен, допустимо H/B/C/T/P.";
     }
-    var power = Number(f[4].replace(",", "."));
-    if (!Number.isFinite(power) || power < -52900 || power > 52900) {
-      return "строка " + n + ": мощность «" + f[4] + "» должна быть числом.";
+    var powerErr = validateProgramPowerField(f[4], "вольты", n);
+    if (powerErr) return powerErr;
+    if (expectedFields === 6) {
+      powerErr = validateProgramPowerField(f[5], "ватты", n);
+      if (powerErr) return powerErr;
     }
   }
   return "";
@@ -233,14 +421,14 @@ function loadFile(e) {
 	var reader = new FileReader();
 	reader.onload = function () {
 		var text = String(reader.result);
+		var parsed = parseProgramFileText(text);
 		var err = validateProgramFileText(text);
 		if (err) {
 			SamovarApp.showRequestError("Файл программы не принят: " + err);
 			return;
 		}
-		document.getElementById('WProgram1').value = text;
-		glcalcnum = false;
-		calc_program();
+		applyParsedProgramText(parsed);
+		if (columnParams) applyRecommendedSpeeds({ silent: true });
 	};
 	reader.onerror = function () {
 		SamovarApp.showRequestError('Не удалось прочитать файл программы.');
@@ -287,15 +475,18 @@ async function getProgramFromFile(selectObject, options){
     var response = await fetch(fn);
     if (!response.ok) throw new Error(response.status + ': ' + (response.statusText || 'ошибка HTTP'));
     var data = await response.text();
+    var parsed = parseProgramFileText(data);
+    var err = validateProgramFileText(data);
+    if (err) throw new Error(err);
 
     updateHeadsTailsPercent(false);
-    updateColumnParams();
-    document.getElementById('WProgram1').value = data;
-    glcalcnum = false;
-    calc_program();
+    applyParsedProgramText(parsed);
     programTemplateLoaded = true;
     currentProgramTemplateValue = String(value);
+    await updateColumnParams();
+    applyRecommendedSpeeds({ silent: true });
     updateProgramTemplateBaseline();
+    updateProgramPowerUnitHint();
     return true;
   } catch (err) {
     restoreProgramTemplateSelect(selectObject);
@@ -304,16 +495,53 @@ async function getProgramFromFile(selectObject, options){
   }
 }
 
+function formatDualProgramFile(body, unit) {
+  var heaterEl = document.getElementById("heaterMaxPower");
+  var heaterMaxPwr = heaterEl ? Number(heaterEl.value) : NaN;
+  if (!Number.isFinite(heaterMaxPwr) || heaterMaxPwr <= 0) {
+    return "";
+  }
+  var lines = String(body || "").split("\n");
+  var out = "";
+  for (var i = 0; i < lines.length; i++) {
+    var t = lines[i].trim();
+    if (!t) continue;
+    var f = t.split(";");
+    if (f.length < 5) continue;
+    var power = Number(String(f[4]).replace(",", "."));
+    var volts = 0;
+    var watts = 0;
+    if (power === 0) {
+      volts = 0;
+      watts = 0;
+    } else if (!isProgramPowerAbsolute(power, unit)) {
+      volts = power;
+      watts = power;
+    } else if (unit === "V") {
+      volts = power;
+      watts = programVoltsToWatts(power, heaterMaxPwr);
+    } else {
+      watts = power;
+      volts = wattsToProgramVolts(power, heaterMaxPwr);
+    }
+    out += [f[0], f[1], f[2], f[3], volts, watts].join(";") + "\n";
+  }
+  return out;
+}
+
 function SaveProgramToFile() {
-  var filename, text;
-  filename = 'programbackup.txt';
-  text = document.getElementById('WProgram1').value;
+  var filename = "programbackup.txt";
+  var text = formatDualProgramFile(document.getElementById("WProgram1").value, loadedProgramPowerUnit);
+  if (!text) {
+    SamovarApp.showRequestError("Не задана мощность ТЭНа — нельзя записать и вольты, и ватты.");
+    return;
+  }
 
-  var pom = document.createElement('a');
-  pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-  pom.setAttribute('download', filename);
+  var pom = document.createElement("a");
+  pom.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(text));
+  pom.setAttribute("download", filename);
 
-  pom.style.display = 'none';
+  pom.style.display = "none";
   document.body.appendChild(pom);
 
   pom.click();
@@ -351,7 +579,7 @@ function get_time(tm){
 
 function formatSummaryPercent(value) {
   if (!Number.isFinite(value)) return "—";
-  return String(Math.round(value * 100) / 100) + "%";
+  return String(Math.round(value * 100) / 100) + "\u0025";
 }
 
 function formatSummaryVolume(value) {
@@ -362,7 +590,8 @@ function formatSummaryVolume(value) {
 function formatSummaryTime(value) {
   if (!Number.isFinite(value) || value < 0) return "—";
   var minutes = Math.floor(value * 60);
-  return Math.floor(minutes / 60) + " ч " + String(minutes % 60).padStart(2, "0") + " мин";
+  var remainder = minutes - 60 * Math.floor(minutes / 60);
+  return Math.floor(minutes / 60) + " ч " + String(remainder).padStart(2, "0") + " мин";
 }
 
 function distributionStatus(label, prefix, value) {
@@ -375,7 +604,7 @@ function distributionStatus(label, prefix, value) {
   }
   if (value == 100) {
     return {
-      text: prefix + ": 100% — распределено полностью",
+      text: prefix + ": 100\u0025 — распределено полностью",
       className: "program-summary-status is-valid",
       error: ""
     };
@@ -466,6 +695,7 @@ function set_num(){
     var pauseTime = 0;
     var prgc = "";
     var prgo = "";
+    var volumeErrors = [];
     for (i=1;i<e.length;i++){
       a = e[i].childNodes[0];
       a.innerText = "";
@@ -510,14 +740,21 @@ function set_num(){
       ll = (e[i].childNodes[3].value * vlc)
       prgc = prgc + e[i].childNodes[4].value + ";";
       if (e[i].childNodes[4].value == "P") {
-	    v.value = e[i].childNodes[2].value;
-	    a = v.value / 3600;
-	    prgc = prgc + v.value;
+	    var pauseSec = Math.round(Number(String(e[i].childNodes[2].value).replace(",", ".")));
+	    if (!Number.isFinite(pauseSec) || pauseSec < 0) pauseSec = 0;
+	    v.value = String(pauseSec);
+	    a = pauseSec / 3600;
+	    prgc = prgc + String(pauseSec);
       }
       else {
         v.value = ll.toFixed(3);
         a = v.value / e[i].childNodes[2].value;
-	    prgc = prgc + v.value * 1000;
+        var volumeMl = Math.round(Number(ll) * 1000);
+        if (!Number.isFinite(volumeMl) || volumeMl < 0) volumeMl = 0;
+        if (volumeMl > 65535) {
+          volumeErrors.push("Строка " + i + ": объём больше 65535 мл, разбейте строку.");
+        }
+        prgc = prgc + String(volumeMl);
       }
       prgc = prgc + ";" + e[i].childNodes[2].value + ";" + capacityNum + ";0;" + e[i].childNodes[5].value + "\n";
       t.value = get_time(a);
@@ -554,6 +791,7 @@ function set_num(){
       totalTime: sum,
       pauseTime: pauseTime
     });
+    validationErrors = volumeErrors.concat(validationErrors);
     programErrorMessage = validationErrors.join("\n");
     programerr = validationErrors.length > 0;
 //    if (!programerr) {
@@ -639,14 +877,22 @@ async function set_program(){
     SamovarApp.showRequestError(programErrorMessage + " Программа не установлена.");
     return;
   }
+  if (!programPowerUnitFitsRegulator()) {
+    updateProgramPowerUnitHint();
+    SamovarApp.showRequestError("Единицы мощности программы не совпадают с регулятором. Нажмите «Применить рекомендации».");
+    return;
+  }
   try {
     // postProgram() уже показывает причину отказа через showRequestError - повторный
     // alert() с тем же текстом был бы вторым, конкурирующим способом её показать.
     let result = await SamovarApp.postProgram(document.forms.mainform);
-    if (!result.ok) return;
-    SamovarApp.notify("Программа сохранена.", 2);
+    if (!result.ok) {
+      alert(result.err || 'Программа не установлена');
+      return;
+    }
+    alert("Программа установлена");
   } catch (e) {
-    SamovarApp.showRequestError('Ошибка сети: ' + e);
+    alert('Ошибка сети: ' + e);
   }
 };
 
@@ -811,6 +1057,11 @@ window.onload = function() {
     }
   }
   const loadProgramSelect = document.getElementById("loadprogram");
+  const diamSelect = document.getElementById("coldiam");
+  if (diamSelect) {
+    if (!diamSelect.querySelector("option[selected]")) diamSelect.value = "2.0";
+    currentColumnDiameterValue = diamSelect.value;
+  }
   if (loadProgramSelect) {
     getProgramFromFile(loadProgramSelect, { skipConfirm: true });
   }
@@ -840,6 +1091,12 @@ Samovar v. <span id='version'>%v%</span>
   <option value="1">Зерно</option>
   <option value="2">Сахар</option>
 </select>
+<label for="coldiam">Диаметр колонны</label>
+<select id="coldiam" name="coldiam" onchange="onColumnDiameterChange(this)">
+  <option value="1.5" %ColDiam_1.5%>1.5 дюйма</option>
+  <option value="2.0" %ColDiam_2.0%>2 дюйма</option>
+  <option value="3.0" %ColDiam_3.0%>3 дюйма</option>
+</select>
 </div>
 
 <!-- БЛОК ПАРАМЕТРОВ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) -->
@@ -847,7 +1104,7 @@ Samovar v. <span id='version'>%v%</span>
   <div style="border: 2px solid #3498db; background: var(--bg-program-panel); padding: 15px; border-radius: 5px;">
     <div style="color: var(--text-strong); font-weight: bold; margin-bottom: 10px;">⚙️ ПАРАМЕТРЫ ОБОРУДОВАНИЯ</div>
     <div style="font-size: 0.9em; margin-bottom: 10px; color: var(--text-main);">
-      Диаметр: <b>%ColDiam% дюйма</b> | Высота: <b>%ColHeight% м</b> | Насадка: <b>%PackDens%&#37;</b>
+      Диаметр выбран выше (1.5 / 2 / 3 дюйма). Высота: <b>%ColHeight% м</b> | Насадка: <b>%PackDens%&#37;</b>
     </div>
 
     <div id="heaterPowerBlock" style="display: %pwr_unit_v_only%; margin-bottom: 10px;">
@@ -865,6 +1122,7 @@ Samovar v. <span id='version'>%v%</span>
       </div>
       <div id="strategyNote" style="font-size: 0.85em; margin-bottom: 10px; padding: 5px; background: var(--bg-program-example);"></div>
       <input type="button" class="button" value="ПРИМЕНИТЬ РЕКОМЕНДАЦИИ" onclick="applyRecommendedSpeeds()" style="width: 100%; background: var(--accent); color: var(--text-on-accent);">
+      <p id="programPowerUnitHint" class="program-summary-status is-info" style="margin-top: 8px;">Шаблоны хранят мощность в вольтах.</p>
     </div>
   </div>
 </div>

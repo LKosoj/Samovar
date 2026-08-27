@@ -10,9 +10,11 @@
 #error This code is designed to run on ESP32 platform, not Arduino nor ESP8266! Please check your Tools->Board setting.
 #endif
 
-#define SAMOVAR_VERSION F("6.27")
+#define SAMOVAR_VERSION F("7.00")
 
 //#define __SAMOVAR_DEBUG
+// При включении: эмуляция DS18B20 (адреса + рост температур при нагреве)
+// и отключение аварийной проверки связи с регулятором напряжения.
 
 // Дефолтное значение для I2C шагов/мл (внешний насос)
 #ifndef I2C_STEPPER_STEP_ML_DEFAULT
@@ -169,6 +171,12 @@ uint8_t temprature_sens_read();
 }
 #endif
 
+#define LCD_RESET_PERIOD_MS 240000UL         //период (мс) периодического menu_reset_lcd(), 4 минуты. Раньше вычислялся как CurMin==120 (uint8_t), т.е. переполнялся каждые 256 с побочно - теперь задан явно
+
+#ifdef SAMOVAR_BUILD_LUA
+#define USE_LUA
+#endif
+
 //#define __SAMOVAR_NOT_USE_WDT
 
 //--------------------------------------------------------------------------------------------------------------
@@ -305,6 +313,11 @@ uint8_t CurMin, OldMin;
 TaskHandle_t SysTickerTask1 = NULL;
 TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t GetBMPTask = NULL;
+
+static constexpr uint32_t SYS_TICKER_STACK_BYTES = 4608;
+static constexpr uint32_t GET_CLOCK_STACK_BYTES = 4800;
+static constexpr uint32_t LUA_SCRIPT_STACK_BYTES = 8192;
+static constexpr uint32_t POWER_STATUS_STACK_BYTES = 2560;
 
 // Переменные для управления пищалкой в основном цикле
 volatile bool buzzer_active = false;     // Флаг активности пищалки

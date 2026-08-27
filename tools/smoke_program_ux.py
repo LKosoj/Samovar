@@ -24,6 +24,20 @@ if text:
     "function getProgramTemplateFile(value)",
     "function updateProgramTemplateBaseline()",
     "function programTemplateDirty()",
+    "function parseProgramFileText(text)",
+    "function programBodyForUnit(parsed, unit)",
+    "function applyParsedProgramText(parsed)",
+    "function programVoltsToWatts(volts, heaterMaxPwr)",
+    "function formatDualProgramFile(body, unit)",
+    "function programPowerUnitFitsRegulator()",
+    "function scaleProgramSpeedsByType(programLines, typeChars, targetMlH)",
+    "function wattsToProgramVolts(watts, heaterMaxPwr)",
+    'id="programPowerUnitHint"',
+    'id="coldiam"',
+    "function onColumnDiameterChange(selectObject)",
+    "function rememberUnscaledProgram(body, unit)",
+    "rememberUnscaledProgram(body, unit)",
+    "Math.round(Number(ll) * 1000)",
     "function restoreProgramTemplateSelect(selectObject)",
   ]:
     if token not in text:
@@ -75,13 +89,16 @@ if text:
         "var response = await fetch(fn);",
         "if (!response.ok) throw new Error",
         "var data = await response.text();",
+        "var parsed = parseProgramFileText(data);",
+        "var err = validateProgramFileText(data);",
         "updateHeadsTailsPercent(false);",
-        "updateColumnParams();",
-        "document.getElementById('WProgram1').value = data;",
-        "calc_program();",
+        "applyParsedProgramText(parsed);",
         "programTemplateLoaded = true;",
         "currentProgramTemplateValue = String(value);",
+        "await updateColumnParams();",
+        "applyRecommendedSpeeds({ silent: true });",
         "updateProgramTemplateBaseline();",
+        "updateProgramPowerUnitHint();",
         "return true;",
         "restoreProgramTemplateSelect(selectObject);",
         'SamovarApp.showRequestError("Ошибка загрузки шаблона программы: " + err);',
@@ -98,7 +115,8 @@ if text:
   if column_body:
     for token in [
       "SamovarApp.readNumericInput(matSelect",
-      "fetch('/ajax_col_params?mat=' + encodeURIComponent(material.text))",
+      "SamovarApp.readNumericInput(diamSelect",
+      "'&diam=' + encodeURIComponent(diam.text)",
       "if (!response.ok)",
       "SamovarApp.responseErrorText",
       "SamovarApp.showRequestError",
@@ -137,6 +155,14 @@ if text:
   ]:
     if token not in text:
       errors.append(f"data_raw/program.htm missing fraction summary token: {token}")
+
+  for name in ("program_fruit.txt", "program_grain.txt", "program_shugar.txt"):
+    tpl = (ROOT / "data_raw" / name).read_text(encoding="utf-8")
+    if "# unit=" in tpl:
+      errors.append(f"data_raw/{name} must not use a # unit= header")
+    data_lines = [ln for ln in tpl.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    if not data_lines or any(len(ln.split(";")) != 6 for ln in data_lines):
+      errors.append(f"data_raw/{name} must store both volts and watts (6 fields)")
 
 if errors:
   print("Program UX smoke check failed:")

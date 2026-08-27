@@ -97,11 +97,30 @@ def main() -> int:
     # делит на heaterMaxPwr, который сама же страница и заполняет как U**2/R, поэтому
     # U сокращается и результат равен sqrt(W*R) - но ТОЛЬКО пока обе половины берут
     # одно и то же U. Разъехавшиеся половины дают тихую ошибку в U_prefill/U_toVolt раз.
-    conversions = re.findall(r"Math\.round\(\s*mainsVolt\s*\*\s*Math\.sqrt\(", page)
-    if len(conversions) != 2:
+    if "function wattsToProgramVolts(watts, heaterMaxPwr)" not in page:
+        errors.append("data_raw/program.htm: wattsToProgramVolts() helper is missing")
+    if "function programVoltsToWatts(volts, heaterMaxPwr)" not in page:
+        errors.append("data_raw/program.htm: programVoltsToWatts() helper is missing")
+    if not re.search(
+        r"function programVoltsToWatts\(volts, heaterMaxPwr\) \{\s*"
+        r"var ratio = volts / mainsVolt;\s*"
+        r"return Math\.round\(heaterMaxPwr \* ratio \* ratio\);",
+        page,
+    ):
         errors.append(
-            "data_raw/program.htm: expected exactly two watt->volt conversion sites going through "
-            f"mainsVolt (found {len(conversions)})"
+            "data_raw/program.htm: programVoltsToWatts() must invert wattsToProgramVolts() "
+            "with mainsVolt and heaterMaxPwr"
+        )
+    conversions = re.findall(r"Math\.round\(\s*mainsVolt\s*\*\s*Math\.sqrt\(", page)
+    if len(conversions) != 1:
+        errors.append(
+            "data_raw/program.htm: expected exactly one watt->volt conversion in wattsToProgramVolts() "
+            f"(found {len(conversions)})"
+        )
+    if page.count("wattsToProgramVolts(") < 3:
+        errors.append(
+            "data_raw/program.htm: wattsToProgramVolts() must be the single formula and used from "
+            "display and apply-recommendations paths"
         )
     if not re.search(r"Math\.round\(\s*mainsVolt\s*\*\s*mainsVolt\s*/\s*heaterResistance\s*\)", page):
         errors.append(

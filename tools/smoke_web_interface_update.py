@@ -30,7 +30,8 @@ SPIFFS.usedBytes() меньше WEB_UPDATE_FREE_SPACE_MARGIN_BYTES, обновл
   1. версия берётся из сети, а не из константы прошивки;
   2. качаем только когда серверная и локальная разошлись;
   3. набор файлов интерфейса ставится ОДНИМ проходом через updateFile(fn,
-     SAVE_FILE_OVERRIDE) (write_web_file_atomic внутри get_web_file), с явным break при
+     SAVE_FILE_OVERRIDE) (http_sync_download_file внутри get_web_file: тело HTTP
+     пишется во флеш чанками, без Arduino String на весь файл), с явным break при
      первой же неудаче - остатки набора не докачиваются вслепую;
   4. двухфазной схемы (stage/commit/discard всего набора разом) в get_web_interface()
      больше нет - на диске никогда не живут одновременно два полных комплекта;
@@ -261,6 +262,36 @@ def main() -> int:
             "быть ниже риска нерабочего общего ресурса, от которого зависят все "
             "страницы разом"
         )
+
+    get_file = function_body(web, "String get_web_file(String fn, get_web_type type)", errors)
+    if get_file:
+        if "http_sync_download_file(" not in get_file:
+            errors.append(
+                "get_web_file: SAVE-файлы снова идут через http_sync_request_get()/String - "
+                "index.htm (~51 КБ) не копируется в непрерывный String при живом xbuf "
+                "и обновление обрывается с incomplete: 0/Content-Length"
+            )
+        if "responseText(" in get_file:
+            errors.append(
+                "get_web_file: responseText() вернул загрузку файлов интерфейса в String"
+            )
+
+    download = function_body(web, "static bool http_sync_download_file(const String& url, const String& path)", errors)
+    if download:
+        if "responseRead(" not in download:
+            errors.append(
+                "http_sync_download_file: нет responseRead() - тело должно стекаться "
+                "во флеш чанками, не через responseText()"
+            )
+        if "responseText(" in download:
+            errors.append(
+                "http_sync_download_file: responseText() снова держит весь файл в String"
+            )
+        if "commit_web_file_tmp(" not in download:
+            errors.append(
+                "http_sync_download_file: нет commit_web_file_tmp() - файл должен "
+                "ставиться тем же атомарным переименованием, что и маркер версии"
+            )
 
     if errors:
         print("web interface update smoke failed:")

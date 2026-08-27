@@ -35,7 +35,7 @@ BROWSER_TEST = r'''async page => {
     Status: "Готов", Lstatus: "", TimeRemaining: 0,
     TotalTime: 0, alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0, PowerOn: 0,
-    heaterAlarmLatched: 0, latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   };
   const remainingAttack = '<img src=x onerror="window.__i2cInjected=1">';
   const speedAttack = '<img src=x onerror="window.__i2cInjected=2">';

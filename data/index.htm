@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-store, max-age=0">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=7.00u7">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
@@ -88,7 +88,7 @@
 
     function calc_program () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+        alert("Ошибка программы, проверьте её.");
         return;
       }
       var t = document.getElementsByClassName("prgline");
@@ -145,24 +145,24 @@
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          SamovarApp.notify("set_program ERROR! " + (result.err || 'программа не установлена'), 0);
+          alert("set_program ERROR! " + (result.err || 'программа не установлена'));
           return;
         }
-        SamovarApp.notify("Программа сохранена.", 2);
+        alert("Программа установлена");
       } catch (e) {
-        SamovarApp.notify("set_program ERROR! " + e, 0);
+        alert("set_program ERROR! " + e);
       }
     };
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
     };
 
     async function sendpumpspeed () {
       return await SamovarApp.sendNumericCommand('pumpspeed', 'pumpspeed', {
         label: 'Скорость отбора', exclusiveMin: 0
-      }, { successMessage: 'Скорость отбора принята.' });
+      }, { successMessage: 'Скорость отбора установлена.', acknowledge: true });
     };
 
 
@@ -220,50 +220,10 @@
             detBlock.style.display = 'flex';
             const detTrend = document.getElementById('detector_trend');
             const detStatus = document.getElementById('detector_status_text');
-            const steamStability = document.getElementById('detector_steam_stability');
             const detectorTrendAvailable = Number.isFinite(myObj.DetectorTrend);
             detTrend.textContent = detectorTrendAvailable
               ? (myObj.DetectorTrend > 0 ? '+' : '') + myObj.DetectorTrend.toFixed(3) + ' °C/мин'
               : '—';
-            const stabilityTelemetryAvailable = [
-              myObj.DetectorSteamSpan,
-              myObj.DetectorSteamVariance,
-              myObj.DetectorSteamStableSeconds,
-              myObj.DetectorSteamStabilityReason,
-              myObj.DetectorSteamSpanThreshold,
-              myObj.DetectorSteamVarianceThreshold,
-              myObj.DetectorRecoveryThreshold,
-              myObj.DetectorRecoveryReady
-            ].every(Number.isFinite);
-            if (stabilityTelemetryAvailable && detectorTrendAvailable) {
-              const stabilityReasons = [
-                'наполнение окна измерений',
-                'диапазон выше порога',
-                'дисперсия выше порога',
-                'идёт непрерывная выдержка',
-                'условие выполнено'
-              ];
-              const reason = stabilityReasons[myObj.DetectorSteamStabilityReason] || 'неизвестная причина';
-              steamStability.textContent =
-                'Стабилизация пара: ' + reason +
-                '; T=' + myObj.SteamTemp.toFixed(3) + ' °C' +
-                '; диапазон=' + myObj.DetectorSteamSpan.toFixed(3) +
-                ' °C (порог ≤' + myObj.DetectorSteamSpanThreshold.toFixed(3) + ')' +
-                '; дисперсия=' + myObj.DetectorSteamVariance.toFixed(6) +
-                ' (порог ≤' + myObj.DetectorSteamVarianceThreshold.toFixed(6) + ')' +
-                '; выдержка=' + myObj.DetectorSteamStableSeconds + ' с.' +
-                '; восстановление тренда: ' +
-                myObj.DetectorTrend.toFixed(3) + ' < ' +
-                myObj.DetectorRecoveryThreshold.toFixed(4) + ' °C/мин — ' +
-                (myObj.DetectorRecoveryReady ? 'условие выполнено' : 'ожидание') +
-                (myObj.DetectorSteamStabilityReason === 4
-                  ? ''
-                  : ' Ожидается устойчивое окно диапазона и дисперсии в пределах порогов.');
-            } else {
-              steamStability.textContent =
-                'Стабилизация пара: расширенная телеметрия недоступна в этой версии прошивки.';
-            }
-            
             // На головах детектор только наблюдает: тренд считается и пишется в лог,
             // но скоростью не управляет (см. impurity_detector.h). Отдельная подпись
             // нужна, чтобы "Стабильно" не читалось как "детектор следит за проскоком".
@@ -503,7 +463,7 @@
     function getProgram () {
       _lnIdx = 0;
       if (!check_program(document.getElementById('WProgram').value)) {
-        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+        alert("Ошибка программы, проверьте её.");
         return;
       }
       var e = document.getElementById("prg");
@@ -598,7 +558,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
-          SamovarApp.notify("Ошибка программы, проверьте её.", 1);
+          alert("Ошибка программы, проверьте её.");
           return;
         }
         getProgram();
@@ -726,7 +686,6 @@
         <div style="flex: 1; padding-left: 1em;">
           <div class="text" style="font-weight: bold;">Детектор примесей:</div>
           <div id="detector_status_text" style="font-size: 1.2em;">-</div>
-          <div id="detector_steam_stability" class="text">-</div>
         </div>
         <div style="flex: 1; text-align: right; padding-right: 1em;">
           <div class="text">Тренд:</div>

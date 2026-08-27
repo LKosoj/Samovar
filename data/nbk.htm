@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-store, max-age=0">
   <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=7.00u7">
   <title>Самовар</title>
 
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
@@ -91,12 +91,12 @@
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          SamovarApp.notify(result.err || 'Программа не установлена', 0);
+          alert(result.err || 'Программа не установлена');
           return;
         }
-        SamovarApp.notify("Программа сохранена.", 2);
+        alert("Программа установлена");
       } catch (e) {
-        SamovarApp.notify('Ошибка сети: ' + e, 0);
+        alert('Ошибка сети: ' + e);
       }
     };
 
@@ -106,21 +106,21 @@
         return true;
       }
       if (!check_program(programText)) {
-        SamovarApp.notify("Ошибка в программе, проверьте её!", 1);
+        alert("Ошибка в программе, проверьте её!");
         return false;
       }
       let lines = programText.split("\n");
       let t = document.getElementsByClassName("prgline");
       const maxProgramLines = t.length - 1;
       if (lines.length > maxProgramLines) {
-        SamovarApp.notify(`Программа НБК содержит ${lines.length} строк, интерфейс поддерживает ${maxProgramLines}.`, 1);
+        alert(`Программа НБК содержит ${lines.length} строк, интерфейс поддерживает ${maxProgramLines}.`);
         return false;
       }
       const parsedLines = [];
       for (let i = 0; i < lines.length; i++) {
         let parts = lines[i].split(";");
         if (parts.length !== 3) {
-          SamovarApp.notify(`Ошибка формата программы в строке ${i+1}! Ожидается 3 значения, разделенных точкой с запятой.`, 1);
+          alert(`Ошибка формата программы в строке ${i+1}! Ожидается 3 значения, разделенных точкой с запятой.`);
           return false;
         }
         parsedLines.push(parts);
@@ -150,7 +150,7 @@
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
     };
 
 
@@ -171,11 +171,11 @@
         label: 'Скорость НБК', exclusiveMin: 0, max: 8000,
         accept: function(value) { return value < 8000; },
         acceptMessage: 'Скорость НБК должна быть меньше 8000.'
-      }, { successMessage: 'Скорость НБК принята.' });
+      }, { successMessage: 'Скорость отбора установлена.', acknowledge: true });
     };
 
     async function setOptimal () {
-      await SamovarApp.sendCommand('nbkopt', { successMessage: 'Параметры приняты.' });
+      await SamovarApp.sendCommand('nbkopt', { successMessage: 'Параметры приняты.', acknowledge: true });
     };
 
     function renderTelemetry(myObj) {
@@ -244,7 +244,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
-          SamovarApp.notify("Ошибка программы, проверьте её!", 1);
+          alert("Ошибка программы, проверьте её!");
           return;
         }
         getProgram();

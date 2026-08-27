@@ -243,7 +243,7 @@ def main() -> int:
     require("SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });" in chart,
             "chart: missing parse-time shared theme apply")
     theme_pos = chart.index("SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });")
-    require(chart.index('<script src="chart.js"></script>') < theme_pos < chart.index("function initChart"),
+    require(chart.index('<script src="chart.js') < theme_pos < chart.index("function initChart"),
             "chart: parse-time theme call moved from its former inline position")
     require(chart.index("document.addEventListener('DOMContentLoaded'") <
             chart.index("SamovarApp.startTelemetryPage("),

@@ -21,6 +21,7 @@ CASE_NAMES = (
     "validation_schema",
     "validation_commit",
     "gap",
+    "batch",
     "reload",
     "wrap",
     "reboot_discontinuity",
@@ -89,15 +90,15 @@ INDEPENDENT_CONTEXT_TEST = r'''async page => {
     // нуле, а сами события начинаем со второго опроса.
     let event = {};
     if (trace.length > 1) {
-      if (cursor === 0) event = { Msg: 'first-message', msglvl: 2, messageSequence: 1 };
-      else if (cursor === 1) event = { LogMsg: 'second-log', messageSequence: 2 };
-      else if (cursor === 2) event = { Msg: 'third-message', msglvl: 1, messageSequence: 3 };
+      if (cursor === 0) event = { events: [{ Msg: 'first-message', msglvl: 2, messageSequence: 1 }] };
+      else if (cursor === 1) event = { events: [{ LogMsg: 'second-log', messageSequence: 2 }] };
+      else if (cursor === 2) event = { events: [{ Msg: 'third-message', msglvl: 1, messageSequence: 3 }] };
     }
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(Object.assign(
-        { crnt_tm: '12:00:00', heaterAlarmLatched: 0, latestMessageSequence: 0 }, event
+        { crnt_tm: '12:00:00', heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0 }, event
       ))
     });
   };
@@ -145,7 +146,7 @@ BROWSER_TEST = r'''async page => {
     alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0,
     PowerOn: 0, StepperStepMl: 111,
-    heaterAlarmLatched: 0, latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
   };
   const columnFixture = {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
@@ -168,7 +169,19 @@ BROWSER_TEST = r'''async page => {
   }
 
   function withEvent(event) {
-    return Object.assign({}, fixture, event || {});
+    const body = Object.assign({}, fixture);
+    if (!event || Object.keys(event).length === 0) return body;
+    const payload = Object.assign({}, event);
+    ['UseBBuzzer', 'crnt_tm', 'latestMessageSequence', 'heaterAlarmLatched', 'heaterAlarmReason'].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(payload, key)) {
+        body[key] = payload[key];
+        delete payload[key];
+      }
+    });
+    if (Object.keys(payload).length) {
+      body.events = [payload];
+    }
+    return body;
   }
 
   function trackPage(current, label, expectedConsole) {
@@ -238,7 +251,7 @@ BROWSER_TEST = r'''async page => {
     const bootstrapRoute = route => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
-        crnt_tm: '12:00:00', heaterAlarmLatched: 0, latestMessageSequence: startSequence
+        crnt_tm: '12:00:00', heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: startSequence
       })
     });
     await current.route('**/ajax*', bootstrapRoute);
@@ -292,7 +305,11 @@ BROWSER_TEST = r'''async page => {
         };
         try {
           outcome.result = await SamovarApp.pollAjax(function (telemetry) {
-            record({ type: 'render', sequence: telemetry.messageSequence || 0 });
+            const batch = Array.isArray(telemetry.events) ? telemetry.events : [];
+            record({
+              type: 'render',
+              sequence: batch.length ? batch[batch.length - 1].messageSequence : 0
+            });
             if (settings.throwRender) throw new Error('planned renderer failure');
           }, sinks);
         } catch (error) {
@@ -541,6 +558,50 @@ BROWSER_TEST = r'''async page => {
     expect(presentation.orderedText.indexOf(gapWarning) < presentation.orderedText.indexOf('after-gap'),
       'gap warning must precede retained event');
     expect(presentation.audioPlayCount === 0, 'gap warning triggered alarm audio');
+  }
+
+  async function testBatchDelivery() {
+    const current = await newPage('batch');
+    const state = await routeTelemetry(current, async (route, cursor) => {
+      if (cursor === 0) {
+        await fulfillJson(route, Object.assign({}, fixture, {
+          events: [
+            { Msg: 'lua-console-pair', msglvl: 2, messageSequence: 1 },
+            { LogMsg: 'lua-log-pair', messageSequence: 2 },
+            { Msg: 'lua-operator', msglvl: 1, messageSequence: 3 }
+          ],
+          latestMessageSequence: 3
+        }));
+      } else {
+        await fulfillJson(route, withEvent({}));
+      }
+    });
+    await openHarness(current);
+    const outcomes = await pollWithSinks(current, [{}, {}]);
+    expect(JSON.stringify(state.trace) === JSON.stringify([0, 3]),
+      'batch cursor trace: ' + JSON.stringify(state.trace));
+    const expected = [
+      {
+        result: true, rejection: null, calls: [
+          { type: 'connection', error: false },
+          { type: 'render', sequence: 3 },
+          { type: 'message', text: 'lua-console-pair', level: 2 },
+          { type: 'log', text: 'lua-log-pair', sequence: 2 },
+          { type: 'message', text: 'lua-operator', level: 1 }
+        ]
+      },
+      {
+        result: true, rejection: null, calls: [
+          { type: 'connection', error: false },
+          { type: 'render', sequence: 0 }
+        ]
+      }
+    ];
+    expect(JSON.stringify(outcomes) === JSON.stringify(expected),
+      'batch exact outcomes: ' + JSON.stringify(outcomes));
+    const warning = await current.evaluate(text =>
+      document.getElementById('messages').textContent.includes(text), gapWarning);
+    expect(!warning, 'consecutive batch must not report a sequence gap');
   }
 
   async function testReload() {
@@ -837,17 +898,23 @@ BROWSER_TEST = r'''async page => {
       window.__chartAppendCalls = [];
       const nativeRendererAppend = window.appendChartPoint;
       window.appendChartPoint = function (telemetry) {
+        const batch = Array.isArray(telemetry.events) ? telemetry.events : [];
         window.__chartRendererCalls.push({
           crnt_tm: telemetry.crnt_tm,
-          messageSequence: telemetry.messageSequence
+          messageSequence: batch.length
+            ? batch[batch.length - 1].messageSequence
+            : telemetry.latestMessageSequence
         });
         return nativeRendererAppend(telemetry);
       };
       const nativeAppend = chart.appendAjaxPoint.bind(chart);
       chart.appendAjaxPoint = function (telemetry) {
+        const batch = Array.isArray(telemetry.events) ? telemetry.events : [];
         window.__chartAppendCalls.push({
           crnt_tm: telemetry.crnt_tm,
-          messageSequence: telemetry.messageSequence
+          messageSequence: batch.length
+            ? batch[batch.length - 1].messageSequence
+            : telemetry.latestMessageSequence
         });
         return nativeAppend(telemetry);
       };
@@ -898,6 +965,7 @@ BROWSER_TEST = r'''async page => {
     validation_schema: testValidationSchema,
     validation_commit: testValidationCommitOrder,
     gap: testGapAndWarningPresentation,
+    batch: testBatchDelivery,
     reload: testReload,
     wrap: testWrap,
     reboot_discontinuity: testRebootDiscontinuity,
@@ -933,7 +1001,8 @@ CASE_BROWSER_FUNCTIONS = {
     "validation_transport": ("openHarness", "pollWithSinks", "testValidationTransport"),
     "validation_schema": ("openHarness", "pollWithSinks", "testValidationSchema"),
     "validation_commit": ("openHarness", "pollWithSinks", "testValidationCommitOrder"),
-    "gap": ("openHarness", "testGapAndWarningPresentation"),
+    "gap": ("openHarness", "pollWithSinks", "testGapAndWarningPresentation"),
+    "batch": ("openHarness", "pollWithSinks", "testBatchDelivery"),
     "reload": ("openHarness", "pollWithSinks", "testReload"),
     "wrap": ("openHarness", "testWrap"),
     "reboot_discontinuity": ("openHarness", "testRebootDiscontinuity"),
@@ -953,6 +1022,7 @@ CASE_BROWSER_CALLS = {
     "validation_schema": "await testValidationSchema();",
     "validation_commit": "await testValidationCommitOrder();",
     "gap": "await testGapAndWarningPresentation();",
+    "batch": "await testBatchDelivery();",
     "reload": "await testReload();",
     "wrap": "await testWrap();",
     "reboot_discontinuity": "await testRebootDiscontinuity();",
