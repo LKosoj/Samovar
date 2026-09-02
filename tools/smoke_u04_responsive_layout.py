@@ -25,13 +25,22 @@ def read_page(name: str) -> str:
     использует сама сборка - не копией её логики."""
     return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
 FROZEN_SHA256 = {
-    "app.js": "ba1a297e24bb3fc9a64368a241bfcfe0a7cd9493a69a554445826fabeae63253",
-    "chart.js": "034546019742522290d4e611cfde19c8227ad294abe425e8029732b8ebe4bbbe",
-    "edit.htm": "26b7e41df2a0a0197a14b9cf129f808fd001e760df4ed7c16df7a35a10b03ce6",
-    "edit.htm.gz": "86e2801e2370cd45420ed84005194b752cc22198e7ab85faa33129bd28a50cac",
+    # 02.09.2026: общая функция beerRowTypeOk (правила типов строк пива) для
+    # beer.htm/check_program и brewxml.htm/validateBeerProgramText. Раскладки не касается.
+    "app.js": "a0aaeff8c62fcf9969ca157034451432bf81fbd3490cb72f53e3431b8b168705",
+    # 01.09.2026: масштаб задают две ручки под графиком вместо колёсика и рамки
+    # выделения (уменьшить масштаб на приборе было нечем).
+    "chart.js": "14954d90d9194de5ea6461812bb01c7e8ad726573be7964efa9b370643e1ae4e",
+    # 01.09.2026: панель файлов получила мобильную раскладку (до 900 px её
+    # кнопки переносились под дерево файлов и не нажимались).
+    "edit.htm": "e50cababe8cd7421a250eb9ecfdd9dcdda26ab1d5ea61b5a6ada6aff64e536bb",
+    "edit.htm.gz": "0cc91264dd1da80e76faffb7ca2c293cf2777031449f82f9edf99e49c81baa84",
 }
 STRUCTURE_SHA256 = {
-    "setup.htm": "e9d5488bcab39a019e27bc35de8db82fedc509bedb50090c47a49362e7f7fa88",
+    # 01.09.2026: подпись ползунка плотности насадки обёрнута в <span class="nowrap">,
+    # а знак процента привязан к значению неразрывным пробелом - на телефоне
+    # диапазон рвался как "80 % (60-" / "100)". Полей и подписей не добавлялось.
+    "setup.htm": "3952814153fd45155eaffcd97bbffa6001da1536dd78e01efcdd175751252637",
     "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")
@@ -164,7 +173,11 @@ def verify_css(errors: list[str]) -> None:
         ("#setupform", ("min-width:0", "box-sizing:border-box"), 0),
         (".setup-long-input", ("max-width:100%",), 0),
         ("#Main select[name=\"mode\"]", ("max-width:100%", "box-sizing:border-box"), 0),
-        ("#setupform > .message_0", ("max-width:100%", "box-sizing:border-box"), 0),
+        # Плашки сообщений (#request_error и тосты) описаны одним общим правилом
+        # на три класса - ищем его по последнему селектору списка. Раньше блочная
+        # модель чинилась только для формы настроек (#setupform > .message_0), и
+        # на program.htm тот же #request_error вылезал за форму на 22px.
+        (".message_2", ("width:100%", "box-sizing:border-box"), 0),
         (".setup-actions", ("max-width:668px", "display:flex", "box-sizing:border-box"), 0),
         (".chart-messages-host", ("max-width:600px", "box-sizing:border-box"), 0),
         (".chart-status-form .container_column", ("min-width:0", "box-sizing:border-box"), 0),

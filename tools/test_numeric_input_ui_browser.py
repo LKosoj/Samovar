@@ -49,7 +49,8 @@ BROWSER_TEST = r'''async page => {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
     theoreticalPlates: 20, headsFlowMlH: 100, bodyFlowMinMlH: 200,
     bodyFlowMaxMlH: 400, bodyEndFlowMlH: 300, tailsFlowMlH: 150,
-    headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000
+    headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000,
+    headsSpeedClamped: false, bodySpeedClamped: false
   };
   const i2cFixtures = {
     mixer: {
@@ -513,25 +514,35 @@ BROWSER_TEST = r'''async page => {
       };
     });
     const state = await requestState();
+    // Времена посчитаны для скоростей, УЖЕ приведённых к рекомендациям колонны:
+    // при загрузке шаблона applyRecommendedSpeeds({silent:true}) масштабирует
+    // скорости так, чтобы самая быстрая строка каждой фракции равнялась
+    // рекомендации из /ajax_col_params (головы 100, тело 400, хвосты 150 мл/ч
+    // в фикстуре colParams). Пропорции строк шаблона сохраняются: 0.07/0.1/0.2/
+    // 0.3/0.4 л/ч у голов превращаются в 0.018/0.025/0.050/0.075/0.100.
+    // Объёмы от масштаба не зависят и остались прежними; изменились только
+    // времена (время строки = объём / скорость).
+    // \u00a0 - неразрывный пробел: сводка склеивает число с единицей именно им,
+    // иначе на телефоне "мин" уезжает на следующую строку.
     const expectedSummary = {
-      headsAs: "8%", headsVolume: "354 мл", headsTime: "2 ч 54 мин",
+      headsAs: "8%", headsVolume: "354\u00a0мл", headsTime: "11\u00a0ч\u00a026\u00a0мин",
       headsDistribution: "По строкам: 100% — распределено полностью",
-      bodyAs: "87%", bodyVolume: "3855 мл", bodyTime: "4 ч 02 мин",
+      bodyAs: "87%", bodyVolume: "3855\u00a0мл", bodyTime: "11\u00a0ч\u00a005\u00a0мин",
       bodyDistribution: "По строкам B+C: 100% — распределено полностью",
-      tailsAs: "5%", tailsVolume: "88 мл", tailsTime: "0 ч 39 мин",
+      tailsAs: "5%", tailsVolume: "88\u00a0мл", tailsTime: "0\u00a0ч\u00a052\u00a0мин",
       tailsDistribution: "По строкам: 20% — информационно",
-      totalVolume: "4297 мл", totalTime: "7 ч 47 мин", pauseTime: "0 ч 11 мин",
+      totalVolume: "4297\u00a0мл", totalTime: "23\u00a0ч\u00a036\u00a0мин", pauseTime: "0\u00a0ч\u00a011\u00a0мин",
       valid: true
     };
     if (JSON.stringify(result.initialSummary) !== JSON.stringify(expectedSummary) ||
         result.headsShort.distribution !== "По строкам: 90% — не хватает 10%" ||
-        result.headsShort.volume !== "319 мл" || !result.headsShort.invalid ||
+        result.headsShort.volume !== "319\u00a0мл" || !result.headsShort.invalid ||
         !result.headsShort.error.includes("Головы: 90% — не хватает 10%") ||
         result.bothInvalid.bodyDistribution !== "По строкам B+C: 105% — превышение на 5%" ||
         !result.bothInvalid.error.includes("Головы: 90% — не хватает 10%") ||
         !result.bothInvalid.error.includes("Тело B+C: 105% — превышение на 5%") ||
         !result.restored || result.immediateHeadsUpdate.percent !== "9%" ||
-        result.immediateHeadsUpdate.volume !== "400 мл" ||
+        result.immediateHeadsUpdate.volume !== "400\u00a0мл" ||
         !result.allowlist || !result.invalidBlocked || result.bad400 || result.bad503 ||
         !result.descrBlocked || !result.descrErrorText.includes("250") || !result.descrWithinLimitSent ||
         result.heaterValue !== "5290" || result.heaterDisabled || !state.errorVisible) {
@@ -955,9 +966,9 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
     color_tokens = color_tokens or {}
     replacements = {
         "pwr_unit": "V",
-        "pwr_unit_v_only": "block",
         "HeaterMaxPower": "230.000000000",
         "HeaterR": "10.000000000",
+        "MainsVoltage": "230.00",
         "StepperStep": "100",
         "StepperStepMl": "100",
         "StepperStepMlI2C": "100",

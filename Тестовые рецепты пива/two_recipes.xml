@@ -1,0 +1,566 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RECIPES>
+<RECIPE>
+        <NAME>Sample&#32;Blonde&#32;Ale</NAME>
+        <VERSION>1</VERSION>
+        <TYPE>All&#32;Grain</TYPE>
+        <NOTES>This&#32;is&#32;a&#32;sample&#32;recipe&#32;from&#32;Brewfather</NOTES>
+        <STYLE>
+            <NAME>Blonde&#32;Ale</NAME>
+            <CATEGORY>Pale&#32;American&#32;Ale</CATEGORY>
+            <VERSION>1</VERSION>
+            <CATEGORY_NUMBER>18</CATEGORY_NUMBER>
+            <STYLE_LETTER>A</STYLE_LETTER>
+            <STYLE_GUIDE>BJCP&#32;&#50;&#48;&#49;&#53;</STYLE_GUIDE>
+            <TYPE>Pale&#32;Ale</TYPE>
+            <OG_MIN>1.038</OG_MIN>
+            <OG_MAX>1.054</OG_MAX>
+            <FG_MIN>1.008</FG_MIN>
+            <FG_MAX>1.013</FG_MAX>
+            <IBU_MIN>15</IBU_MIN>
+            <IBU_MAX>28</IBU_MAX>
+            <COLOR_MIN>3</COLOR_MIN>
+            <COLOR_MAX>6</COLOR_MAX>
+        </STYLE>
+        <BREWER>Brewfather</BREWER>
+        <BATCH_SIZE>23</BATCH_SIZE>
+        <BOIL_SIZE>29.5</BOIL_SIZE>
+        <BOIL_TIME>90</BOIL_TIME>
+        <EFFICIENCY>72</EFFICIENCY>
+        <OG>1.044</OG>
+        <FG>1.008</FG>
+        <ABV>4.73 %</ABV>
+        <EST_ABV>4.73 %</EST_ABV>
+        <IBU>19.8</IBU>
+        <EST_OG>1.044 SG</EST_OG>
+        <EST_FG>1.008 SG</EST_FG>
+        <EST_COLOR>4.3 SRM</EST_COLOR>
+        <CARBONATION>2.5</CARBONATION>
+        <HOPS>
+            <HOP>
+                <BF_ID>default-0a53be2d</BF_ID>
+                <NAME>Summit</NAME>
+                <VERSION>1</VERSION>
+                <ALPHA>17</ALPHA>
+                <AMOUNT>0.005</AMOUNT>
+                <USE>Boil</USE>
+                <TIME>60</TIME>
+                <FORM>Pellet</FORM>
+                <TEMPERATURE/>
+                <HOP_TEMP/>
+            </HOP>
+            <HOP>
+                <BF_ID>default-074d6898</BF_ID>
+                <NAME>Saaz</NAME>
+                <VERSION>1</VERSION>
+                <ALPHA>3.75</ALPHA>
+                <AMOUNT>0.02</AMOUNT>
+                <USE>Boil</USE>
+                <TIME>15</TIME>
+                <FORM>Pellet</FORM>
+                <TEMPERATURE/>
+                <HOP_TEMP/>
+            </HOP>
+            <HOP>
+                <BF_ID>default-620d1be4</BF_ID>
+                <NAME>Amarillo</NAME>
+                <VERSION>1</VERSION>
+                <ALPHA>9.2</ALPHA>
+                <AMOUNT>0.005</AMOUNT>
+                <USE>Boil</USE>
+                <TIME>15</TIME>
+                <FORM>Pellet</FORM>
+                <TEMPERATURE/>
+                <HOP_TEMP/>
+            </HOP>
+            <HOP>
+                <BF_ID>default-074d6898</BF_ID>
+                <NAME>Saaz</NAME>
+                <VERSION>1</VERSION>
+                <ALPHA>3.75</ALPHA>
+                <AMOUNT>0.02</AMOUNT>
+                <USE>Aroma</USE>
+                <TIME>20</TIME>
+                <FORM>Pellet</FORM>
+                <TEMPERATURE>80</TEMPERATURE>
+                <HOP_TEMP>80</HOP_TEMP>
+            </HOP>
+            <HOP>
+                <BF_ID>default-620d1be4</BF_ID>
+                <NAME>Amarillo</NAME>
+                <VERSION>1</VERSION>
+                <ALPHA>9.2</ALPHA>
+                <AMOUNT>0.005</AMOUNT>
+                <USE>Aroma</USE>
+                <TIME>20</TIME>
+                <FORM>Pellet</FORM>
+                <TEMPERATURE>80</TEMPERATURE>
+                <HOP_TEMP>80</HOP_TEMP>
+            </HOP>
+            <HOP>
+                <BF_ID>default-620d1be4</BF_ID>
+                <NAME>Amarillo</NAME>
+                <VERSION>1</VERSION>
+                <ALPHA>9.2</ALPHA>
+                <AMOUNT>0.02</AMOUNT>
+                <USE>Dry&#32;Hop</USE>
+                <TIME>10080</TIME>
+                <FORM>Pellet</FORM>
+                <TEMPERATURE/>
+                <HOP_TEMP/>
+            </HOP>
+        </HOPS>
+        <FERMENTABLES>
+            <FERMENTABLE>
+                <BF_ID>default-592f3ac</BF_ID>
+                <NAME>Pale&#32;Ale</NAME>
+                <SUPPLIER>BestMalz</SUPPLIER>
+                <ORIGIN>Germany</ORIGIN>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>2</AMOUNT>
+                <YIELD>78.26</YIELD>
+                <COLOR>2.5380711</COLOR>
+                <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+                <NOT_FERMENTABLE>false</NOT_FERMENTABLE>
+                <IBU_GAL_PER_LB>NaN</IBU_GAL_PER_LB>
+            </FERMENTABLE>
+            <FERMENTABLE>
+                <BF_ID>default-724b650</BF_ID>
+                <NAME>Pilsen</NAME>
+                <SUPPLIER>BestMalz</SUPPLIER>
+                <ORIGIN>Germany</ORIGIN>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>2</AMOUNT>
+                <YIELD>78.26</YIELD>
+                <COLOR>1.5228426</COLOR>
+                <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+                <NOT_FERMENTABLE>false</NOT_FERMENTABLE>
+                <IBU_GAL_PER_LB>NaN</IBU_GAL_PER_LB>
+            </FERMENTABLE>
+            <FERMENTABLE>
+                <BF_ID>default-1a4fffc</BF_ID>
+                <NAME>Caramel&#32;Pils</NAME>
+                <SUPPLIER>BestMalz</SUPPLIER>
+                <ORIGIN>Germany</ORIGIN>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>0.57</AMOUNT>
+                <YIELD>71.74</YIELD>
+                <COLOR>2.5380711</COLOR>
+                <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+                <NOT_FERMENTABLE>false</NOT_FERMENTABLE>
+                <IBU_GAL_PER_LB>NaN</IBU_GAL_PER_LB>
+            </FERMENTABLE>
+            <FERMENTABLE>
+                <BF_ID>default-5b92ec4</BF_ID>
+                <NAME>Pale&#32;Crystal&#32;Malt</NAME>
+                <SUPPLIER>Thomas&#32;Fawcett</SUPPLIER>
+                <ORIGIN>United&#32;Kingdom</ORIGIN>
+                <VERSION>1</VERSION>
+                <TYPE>Grain</TYPE>
+                <AMOUNT>0.1</AMOUNT>
+                <YIELD>74.4</YIELD>
+                <COLOR>38.071066</COLOR>
+                <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+                <NOT_FERMENTABLE>false</NOT_FERMENTABLE>
+                <IBU_GAL_PER_LB>NaN</IBU_GAL_PER_LB>
+            </FERMENTABLE>
+        </FERMENTABLES>
+        <MISCS>
+            <MISC>
+                <BF_ID>default-9mb13</BF_ID>
+                <NAME>Servomyces</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Other</TYPE>
+                <USE>Boil</USE>
+                <TIME>15</TIME>
+                <AMOUNT>0.0002</AMOUNT>
+                <DISPLAY_AMOUNT>0.2 g</DISPLAY_AMOUNT>
+                <AMOUNT_IS_WEIGHT>true</AMOUNT_IS_WEIGHT>
+            </MISC>
+            <MISC>
+                <BF_ID>default-8mv12</BF_ID>
+                <NAME>Whirlfloc</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Fining</TYPE>
+                <USE>Boil</USE>
+                <TIME>15</TIME>
+                <AMOUNT>0.5</AMOUNT>
+                <DISPLAY_AMOUNT>0.5 items</DISPLAY_AMOUNT>
+                <AMOUNT_IS_WEIGHT>false</AMOUNT_IS_WEIGHT>
+            </MISC>
+        </MISCS>
+        <YEASTS>
+            <YEAST>
+                <BF_ID>default-016efc</BF_ID>
+                <NAME>Safale&#32;American</NAME>
+                <VERSION>1</VERSION>
+                <TYPE>Ale</TYPE>
+                <FORM>Dry</FORM>
+                <AMOUNT>1</AMOUNT>
+                <LABORATORY>Fermentis</LABORATORY>
+                <PRODUCT_ID>US&#45;&#48;&#53;</PRODUCT_ID>
+                <DISPLAY_AMOUNT>1 pkg</DISPLAY_AMOUNT>
+                <ATTENUATION>81</ATTENUATION>
+                <MIN_TEMPERATURE>16</MIN_TEMPERATURE>
+                <MAX_TEMPERATURE>28</MAX_TEMPERATURE>
+            </YEAST>
+        </YEASTS>
+        <MASH>
+            <BF_ID>default</BF_ID>
+            <NAME>High&#32;fermentability</NAME>
+            <VERSION>1</VERSION>
+            <GRAIN_TEMP>20</GRAIN_TEMP>
+            <MASH_STEPS>
+                <MASH_STEP>
+                    <NAME>Temperature</NAME>
+                    <VERSION>1</VERSION>
+                    <TYPE>Temperature</TYPE>
+                    <STEP_TEMP>65</STEP_TEMP>
+                    <STEP_TIME>60</STEP_TIME>
+                    <INFUSE_AMOUNT>16.11</INFUSE_AMOUNT>
+                </MASH_STEP>
+            </MASH_STEPS>
+        </MASH>
+        <EQUIPMENT>
+            <NAME>Grainfather</NAME>
+            <VERSION>1</VERSION>
+            <BOIL_SIZE>29.5</BOIL_SIZE>
+            <BATCH_SIZE>23</BATCH_SIZE>
+            <TRUB_CHILLER_LOSS>1</TRUB_CHILLER_LOSS>
+            <LAUTER_DEADSPACE>3.5</LAUTER_DEADSPACE>
+            <BOIL_TIME>90</BOIL_TIME>
+            <HOP_UTILIZATION>100</HOP_UTILIZATION>
+            <EVAP_RATE>10.16949152542373</EVAP_RATE>
+            <CALC_BOIL_VOLUME>true</CALC_BOIL_VOLUME>
+        </EQUIPMENT>
+        <BF_FERMENTATION_PROFILE_ID>default</BF_FERMENTATION_PROFILE_ID>
+        <BF_FERMENTATION_PROFILE_NAME>Ale</BF_FERMENTATION_PROFILE_NAME>
+        <FERMENTATION_STAGES>1</FERMENTATION_STAGES>
+        <PRIMARY_AGE>14</PRIMARY_AGE>
+        <PRIMARY_TEMP>20</PRIMARY_TEMP>
+    </RECIPE>
+<RECIPE>
+  <NAME>Avg. Perfect Northeast IPA (NEIPA)</NAME>
+  <VERSION>1</VERSION>
+  <TYPE>All Grain</TYPE>
+  <BREWER>Kevin Quinn - (Beer Advocate Crowd-Sourced Recipe)</BREWER>
+  <DISPLAY_BATCH_SIZE>5.75 gal</DISPLAY_BATCH_SIZE>
+  <DISPLAY_BOIL_SIZE>7.5 gal</DISPLAY_BOIL_SIZE>
+  <BATCH_SIZE>21.766117735</BATCH_SIZE>
+  <BOIL_SIZE>28.39058835</BOIL_SIZE>
+  <BOIL_TIME>60</BOIL_TIME>
+  <EFFICIENCY>70</EFFICIENCY>
+  <NOTES>Fermentation Dry Hop @ 70% attenuation (1.027)&#13;
+Traditional Dry Hop after fermentation is complete.&#13;
+&#13;
+Fermentation temp: 68F</NOTES>
+  <EST_COLOR>5.2</EST_COLOR>
+  <IBU>59.26</IBU>
+  <IBU_METHOD>Tinseth</IBU_METHOD>
+  <EST_ABV>6.5</EST_ABV>
+  <EST_OG>1.062 sg</EST_OG>
+  <EST_FG>1.013 sg</EST_FG>
+  <OG>1.062</OG>
+  <FG>1.013</FG>
+  <PRIMING_SUGAR_NAME></PRIMING_SUGAR_NAME>
+  <CARBONATION_USED></CARBONATION_USED>
+  <CARBONATION>2.4</CARBONATION>
+  <BF_PRIMING_METHOD></BF_PRIMING_METHOD>
+  <BF_PRIMING_AMOUNT></BF_PRIMING_AMOUNT>
+  <BF_CO2_LEVEL>2.4</BF_CO2_LEVEL>
+  <BF_CO2_UNIT>Volumes</BF_CO2_UNIT>
+  <URL></URL>
+  <BATCH_SIZE_MODE>f</BATCH_SIZE_MODE>
+  <YEAST_STARTER>false</YEAST_STARTER>
+  <NO_CHILL_EXTRA_MINUTES></NO_CHILL_EXTRA_MINUTES>
+  <STARTING_MASH_THICKNESS>2.608442625</STARTING_MASH_THICKNESS>
+  <PITCH_RATE>0.35</PITCH_RATE>
+  <FERMENTABLES>
+   <FERMENTABLE>
+    <NAME>Pale 2-Row</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Grain</TYPE>
+    <AMOUNT>4.8761179775</AMOUNT>
+    <YIELD>80.43</YIELD>
+    <COLOR>1.8</COLOR>
+    <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+    <DIASTATIC_POWER>140</DIASTATIC_POWER>
+   </FERMENTABLE>
+   <FERMENTABLE>
+    <NAME>Wheat</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Grain</TYPE>
+    <AMOUNT>0.635029318</AMOUNT>
+    <YIELD>82.61</YIELD>
+    <COLOR>1.8</COLOR>
+    <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+    <ORIGIN>United States</ORIGIN>
+    <DIASTATIC_POWER>120</DIASTATIC_POWER>
+   </FERMENTABLE>
+   <FERMENTABLE>
+    <NAME>Flaked Oats</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Adjunct</TYPE>
+    <AMOUNT>0.635029318</AMOUNT>
+    <YIELD>71.74</YIELD>
+    <COLOR>2.2</COLOR>
+    <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+    <DIASTATIC_POWER>0</DIASTATIC_POWER>
+   </FERMENTABLE>
+   <FERMENTABLE>
+    <NAME>Honey Malt</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Grain</TYPE>
+    <AMOUNT>0.1905087954</AMOUNT>
+    <YIELD>80.43</YIELD>
+    <COLOR>25</COLOR>
+    <ADD_AFTER_BOIL>false</ADD_AFTER_BOIL>
+    <DIASTATIC_POWER>50</DIASTATIC_POWER>
+   </FERMENTABLE>
+  </FERMENTABLES>
+  <HOPS>
+   <HOP>
+    <NAME>Citra</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>12.6</ALPHA>
+    <AMOUNT>0.0283495231</AMOUNT>
+    <USE>Boil</USE>
+    <USER_HOP_USE>Boil</USER_HOP_USE>
+    <TIME>10</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+   <HOP>
+    <NAME>Galaxy</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>15.6</ALPHA>
+    <AMOUNT>0.0283495231</AMOUNT>
+    <USE>Boil</USE>
+    <USER_HOP_USE>Boil</USER_HOP_USE>
+    <TIME>10</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+   <HOP>
+    <NAME>Citra</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>12.6</ALPHA>
+    <AMOUNT>0.04252428465</AMOUNT>
+    <USE>Aroma</USE>
+    <USER_HOP_USE>Whirlpool</USER_HOP_USE>
+    <TIME>15</TIME>
+    <HOP_TEMP>76.666666666667</HOP_TEMP>
+    <FORM>Pellet</FORM>
+    <UTILIZATION>3.75</UTILIZATION>
+    <TEMPERATURE>76.666666666667</TEMPERATURE>
+   </HOP>
+   <HOP>
+    <NAME>Galaxy</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>15.6</ALPHA>
+    <AMOUNT>0.04252428465</AMOUNT>
+    <USE>Aroma</USE>
+    <USER_HOP_USE>Whirlpool</USER_HOP_USE>
+    <TIME>15</TIME>
+    <HOP_TEMP>76.666666666667</HOP_TEMP>
+    <FORM>Pellet</FORM>
+    <UTILIZATION>3.75</UTILIZATION>
+    <TEMPERATURE>76.666666666667</TEMPERATURE>
+   </HOP>
+   <HOP>
+    <NAME>Mosaic</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>11.3</ALPHA>
+    <AMOUNT>0.04252428465</AMOUNT>
+    <USE>Aroma</USE>
+    <USER_HOP_USE>Whirlpool</USER_HOP_USE>
+    <TIME>15</TIME>
+    <HOP_TEMP>76.666666666667</HOP_TEMP>
+    <FORM>Pellet</FORM>
+    <UTILIZATION>3.75</UTILIZATION>
+    <TEMPERATURE>76.666666666667</TEMPERATURE>
+   </HOP>
+   <HOP>
+    <NAME>Citra</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>12.6</ALPHA>
+    <AMOUNT>0.0283495231</AMOUNT>
+    <USE>Dry Hop</USE>
+    <USER_HOP_USE>Dry Hop</USER_HOP_USE>
+    <TIME>10080</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+   <HOP>
+    <NAME>Galaxy</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>15.6</ALPHA>
+    <AMOUNT>0.04252428465</AMOUNT>
+    <USE>Dry Hop</USE>
+    <USER_HOP_USE>Dry Hop</USER_HOP_USE>
+    <TIME>10080</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+   <HOP>
+    <NAME>Mosaic</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>11.3</ALPHA>
+    <AMOUNT>0.0283495231</AMOUNT>
+    <USE>Dry Hop</USE>
+    <USER_HOP_USE>Dry Hop</USER_HOP_USE>
+    <TIME>10080</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+   <HOP>
+    <NAME>Citra</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>12.6</ALPHA>
+    <AMOUNT>0.035436903875</AMOUNT>
+    <USE>Dry Hop</USE>
+    <USER_HOP_USE>Dry Hop</USER_HOP_USE>
+    <TIME>4320</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+   <HOP>
+    <NAME>Galaxy</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>15.6</ALPHA>
+    <AMOUNT>0.04252428465</AMOUNT>
+    <USE>Dry Hop</USE>
+    <USER_HOP_USE>Dry Hop</USER_HOP_USE>
+    <TIME>4320</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+   <HOP>
+    <NAME>Mosaic</NAME>
+    <VERSION>1</VERSION>
+    <ALPHA>11.3</ALPHA>
+    <AMOUNT>0.0283495231</AMOUNT>
+    <USE>Dry Hop</USE>
+    <USER_HOP_USE>Dry Hop</USER_HOP_USE>
+    <TIME>4320</TIME>
+    <FORM>Pellet</FORM>
+   </HOP>
+  </HOPS>
+  <MISCS>
+   <MISC>
+    <NAME>Irish Moss</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Fining</TYPE>
+    <USE>Boil</USE>
+    <TIME>15</TIME>
+    <AMOUNT>0.00246446</AMOUNT>
+    <AMOUNT_IS_WEIGHT>FALSE</AMOUNT_IS_WEIGHT>
+   </MISC>
+   <MISC>
+    <NAME>Yeast Nutrient</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Other</TYPE>
+    <USE>Boil</USE>
+    <TIME>15</TIME>
+    <AMOUNT>0.00246446</AMOUNT>
+    <AMOUNT_IS_WEIGHT>FALSE</AMOUNT_IS_WEIGHT>
+   </MISC>
+   <MISC>
+    <NAME>Calcium Chloride (dihydrate)</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Water Agent</TYPE>
+    <USE>Mash</USE>
+    <TIME>60</TIME>
+    <AMOUNT>0.004</AMOUNT>
+    <AMOUNT_IS_WEIGHT>TRUE</AMOUNT_IS_WEIGHT>
+   </MISC>
+   <MISC>
+    <NAME>Gypsum</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Water Agent</TYPE>
+    <USE>Mash</USE>
+    <TIME>60</TIME>
+    <AMOUNT>0.005</AMOUNT>
+    <AMOUNT_IS_WEIGHT>TRUE</AMOUNT_IS_WEIGHT>
+   </MISC>
+   <MISC>
+    <NAME>Lactic acid</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Water Agent</TYPE>
+    <USE>Mash</USE>
+    <TIME>60</TIME>
+    <AMOUNT>0.006</AMOUNT>
+    <AMOUNT_IS_WEIGHT>FALSE</AMOUNT_IS_WEIGHT>
+   </MISC>
+  </MISCS>
+  <MASH>
+   <NAME>Mash Steps</NAME>
+   <VERSION>1</VERSION>
+   <GRAIN_TEMP>20</GRAIN_TEMP>
+   <MASH_STEPS>
+    <MASH_STEP>
+     <NAME></NAME>
+     <VERSION>1</VERSION>
+     <TYPE>Infusion</TYPE>
+     <STEP_TIME>60</STEP_TIME>
+     <INFUSE_AMOUNT></INFUSE_AMOUNT>
+     <STEP_TEMP>66.666666666667</STEP_TEMP>
+    </MASH_STEP>
+   </MASH_STEPS>
+  </MASH>
+  <YEASTS>
+   <YEAST>
+    <NAME>London Ale III 1318</NAME>
+    <VERSION>1</VERSION>
+    <TYPE>Ale</TYPE>
+    <FORM>Liquid</FORM>
+    <AMOUNT>0.1</AMOUNT>
+    <PRODUCT_ID>1318</PRODUCT_ID>
+    <LABORATORY>Wyeast</LABORATORY>
+    <ATTENUATION>78</ATTENUATION>
+    <FLOCCULATION>High</FLOCCULATION>
+    <MIN_TEMPERATURE>17.777777777778</MIN_TEMPERATURE>
+    <MAX_TEMPERATURE>23.333333333333</MAX_TEMPERATURE>
+   </YEAST>
+  </YEASTS>
+  <WATERS>
+   <WATER>
+    <NAME>Balanced Profile</NAME>
+    <VERSION>1</VERSION>
+    <AMOUNT>21.766117735</AMOUNT>
+    <CALCIUM>100</CALCIUM>
+    <BICARBONATE>0</BICARBONATE>
+    <SULFATE>90</SULFATE>
+    <CHLORIDE>175</CHLORIDE>
+    <SODIUM>0</SODIUM>
+    <MAGNESIUM>0</MAGNESIUM>
+    <NOTES>Mash Water: &#13;
+CaCl2   (Calcium Chloride) - 3 grams&#13;
+CaSO4 (Gypsum) - 2 grams&#13;
+Campden Tablet - 1/4th of a tablet&#13;
+Lactic Acid - 5 ml (for Mash pH ~5.3)&#13;
+&#13;
+Sparge Water:&#13;
+CaCl2   (Calcium Chloride) - 2 grams&#13;
+CaSO4 (Gypsum) - 2 grams&#13;
+Campden Tablet - 1/4th of a tablet&#13;
+Lactic Acid - 1 ml </NOTES>
+   </WATER>
+  </WATERS>
+  <STYLE>
+   <NAME>Specialty IPA: New England IPA</NAME>
+   <VERSION>1</VERSION>
+   <CATEGORY>IPA</CATEGORY>
+   <CATEGORY_NUMBER>21</CATEGORY_NUMBER>
+   <STYLE_LETTER>B</STYLE_LETTER>
+   <STYLE_GUIDE>BJCP</STYLE_GUIDE>
+   <TYPE>Ale</TYPE>
+   <OG_MIN>1.06</OG_MIN>
+   <OG_MAX>1.085</OG_MAX>
+   <FG_MIN>1.01</FG_MIN>
+   <FG_MAX>1.015</FG_MAX>
+   <ABV_MIN>6</ABV_MIN>
+   <ABV_MAX>9</ABV_MAX>
+   <IBU_MIN>25</IBU_MIN>
+   <IBU_MAX>60</IBU_MAX>
+   <COLOR_MIN>3</COLOR_MIN>
+   <COLOR_MAX>7</COLOR_MAX>
+  </STYLE>
+ </RECIPE>
+</RECIPES>

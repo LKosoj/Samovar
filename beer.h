@@ -8,11 +8,12 @@
 #include "SamovarMqtt.h"
 #include "pumppwm.h"
 
-#define TEMP_HISTORY_SIZE 10  // Размер буфера истории температур (точек)
-#define BOILING_DETECT_THRESHOLD 0.08  // Порог по стандартному отклонению, °C
+#define TEMP_HISTORY_SIZE 7  // [Пиво B1] Размер децимированной истории температур (точек), было 10 точек по 1 Гц
+#define BOILING_HISTORY_INTERVAL_MS 10000UL  // [Пиво B1] Интервал между точками децимированной истории, мс - 7 точек перекрывают ~60 с при минимуме памяти
+#define BOILING_DETECT_THRESHOLD 0.08  // Порог по стандартному отклонению окна, °C
 #define MIN_BOILING_TEMP 98.0  // Минимальная температура кипения (с учетом погрешности)
-#define STABLE_WINDOWS_REQUIRED 5 // Кол-во стабильных окон подряд для фиксации кипения
-#define MAX_TREND_ABS_PER_SEC 0.02 // Макс. модуль тренда в °C/с для стабильности
+#define STABLE_WINDOWS_REQUIRED 2 // [Пиво B1] Кол-во стабильных децимированных проверок подряд (шаг 10 с) для фиксации кипения
+#define MAX_RISE_PER_WINDOW 0.12 // [Пиво B1] Макс. рост средней температуры конца окна относительно начала (~60 с), °C - заменяет MAX_TREND_ABS_PER_SEC (посекундный тренд ломался квантованием 1/16 °C)
 
 // [П13] Таймауты-предохранители для строк 'B' и 'C': если физический процесс
 // не продвигается (не удаётся зафиксировать кипение / не удаётся остыть до
@@ -39,6 +40,7 @@ struct BoilingDetector {
     uint8_t samplesFilled = 0;
     bool isBoiling = false;
     unsigned long lastUpdateTime = 0;
+    unsigned long lastSampleTime = 0;  // [Пиво B1] millis() последней добавленной децимированной точки
     uint8_t stableCount = 0;
 };
 
@@ -166,6 +168,7 @@ static inline void resetBoilingDetector() {
     boilingDetector.stableCount = 0;
     boilingDetector.isBoiling = false;
     boilingDetector.lastUpdateTime = 0;
+    boilingDetector.lastSampleTime = 0;
     for (int i = 0; i < TEMP_HISTORY_SIZE; i++) boilingDetector.tempHistory[i] = 0;
 }
 
@@ -191,31 +194,53 @@ inline void beer_reset_stage_state() {
 }
 
 /**
- * @brief Проверяет, началось ли кипение по истории температур.
- *        Алгоритм: раз в секунду добавляет измерение, после заполнения окна
- *        считает среднее, стандартное отклонение и тренд; при малой дисперсии
- *        и малом тренде фиксирует стабильность, после N стабильных окон — кипение.
+ * @brief Проверяет, началось ли кипение по децимированной истории температур.
+ *        [Пиво B1] Алгоритм: не чаще раза в BOILING_HISTORY_INTERVAL_MS (10 с)
+ *        добавляет точку в кольцевой буфер на TEMP_HISTORY_SIZE=7 точек (окно
+ *        ~60 с); после заполнения окна считает стандартное отклонение и рост
+ *        средней температуры конца окна относительно начала (по крайним
+ *        третям точек) - этим посекундный тренд (ломался квантованием датчика
+ *        1/16 °C на медленном нагреве) заменён ростом за окно в 60 с. При
+ *        малой дисперсии и малом росте фиксирует стабильность, после N
+ *        стабильных проверок подряд — кипение. [Пиво 02.09 B] Просадка ниже
+ *        MIN_BOILING_TEMP обнуляет накопленную историю (не только счётчик
+ *        стабильности), чтобы после возврата фиксация шла по новому окну.
  * @param currentTemp Текущая температура
  * @return true, если кипение началось, иначе false
  */
 bool isBoilingStarted(float currentTemp) {
     unsigned long currentTime = millis();
 
-    // Обновляем историю не чаще раза в секунду
+    // Обновляем состояние не чаще раза в секунду.
     if (currentTime - boilingDetector.lastUpdateTime < 1000) {
         return boilingDetector.isBoiling;
     }
     boilingDetector.lastUpdateTime = currentTime;
 
-    // Добавляем точку в кольцевой буфер
-    boilingDetector.tempHistory[boilingDetector.historyIndex] = currentTemp;
-    if (boilingDetector.samplesFilled < TEMP_HISTORY_SIZE) boilingDetector.samplesFilled++;
-    boilingDetector.historyIndex = (boilingDetector.historyIndex + 1) % TEMP_HISTORY_SIZE;
-
-    // До заполнения окна и/или пока ниже порога кипения — не детектируем
-    if (boilingDetector.samplesFilled < TEMP_HISTORY_SIZE || currentTemp < MIN_BOILING_TEMP) {
+    if (currentTemp < MIN_BOILING_TEMP) {
+        // [Пиво 02.09 B] Просадка ниже порога должна начинать новое окно
+        // истории, иначе после возврата температуры детектор досчитывает
+        // стабильность по старым точкам ДО просадки и фиксирует "кипит"
+        // почти мгновенно вместо нового окна ~60 с.
         boilingDetector.stableCount = 0;
+        boilingDetector.samplesFilled = 0;
+        boilingDetector.historyIndex = 0;
         return false;
+    }
+
+    // Децимация: точка в кольцевой буфер не чаще раза в BOILING_HISTORY_INTERVAL_MS.
+    bool sampleAdded = false;
+    if (boilingDetector.samplesFilled == 0 ||
+        currentTime - boilingDetector.lastSampleTime >= BOILING_HISTORY_INTERVAL_MS) {
+        boilingDetector.tempHistory[boilingDetector.historyIndex] = currentTemp;
+        boilingDetector.historyIndex = (boilingDetector.historyIndex + 1) % TEMP_HISTORY_SIZE;
+        if (boilingDetector.samplesFilled < TEMP_HISTORY_SIZE) boilingDetector.samplesFilled++;
+        boilingDetector.lastSampleTime = currentTime;
+        sampleAdded = true;
+    }
+
+    if (boilingDetector.samplesFilled < TEMP_HISTORY_SIZE || !sampleAdded) {
+        return boilingDetector.isBoiling;
     }
 
     // Средняя температура окна
@@ -231,13 +256,18 @@ bool isBoilingStarted(float currentTemp) {
     }
     float stddev = sqrtf(varSum / TEMP_HISTORY_SIZE);
 
-    // Тренд: разница между последней и самой старой точкой, сек ~ размер окна-1
-    int lastIdx = (boilingDetector.historyIndex + TEMP_HISTORY_SIZE - 1) % TEMP_HISTORY_SIZE;
-    int firstIdx = boilingDetector.historyIndex; // самая старая точка
-    float slope = (boilingDetector.tempHistory[lastIdx] - boilingDetector.tempHistory[firstIdx]) /
-                  float(TEMP_HISTORY_SIZE - 1);
+    // Рост за окно (~60 c): разница средних последней и первой трети точек.
+    const uint8_t edgePoints = TEMP_HISTORY_SIZE / 2;
+    float oldestSum = 0.0f, newestSum = 0.0f;
+    for (uint8_t i = 0; i < edgePoints; i++) {
+        uint8_t oldestIdx = (boilingDetector.historyIndex + i) % TEMP_HISTORY_SIZE;
+        uint8_t newestIdx = (boilingDetector.historyIndex + TEMP_HISTORY_SIZE - 1 - i) % TEMP_HISTORY_SIZE;
+        oldestSum += boilingDetector.tempHistory[oldestIdx];
+        newestSum += boilingDetector.tempHistory[newestIdx];
+    }
+    float rise = (newestSum - oldestSum) / edgePoints;
 
-    bool stableNow = (stddev <= BOILING_DETECT_THRESHOLD) && (fabsf(slope) <= MAX_TREND_ABS_PER_SEC);
+    bool stableNow = (stddev <= BOILING_DETECT_THRESHOLD) && (fabsf(rise) <= MAX_RISE_PER_WINDOW);
     if (stableNow) {
         if (boilingDetector.stableCount < 255) boilingDetector.stableCount++;
     } else {
@@ -401,7 +431,10 @@ void run_beer_program(uint8_t num) {
   // Не завязываемся на begintime: пока он ещё не выставлен (первый такт
   // beer_stage_tick после входа в строку 'C'), ручное "дальше" тоже должно
   // спросить подтверждение, если сусло горячее цели.
-  if (program[ProgramNum].WType == 'C') {
+  // [Пиво 02.09 A1] При старте (startval == BEER_START) подтверждение не
+  // спрашиваем: ТЭН уже включён set_power(true) в beer_proc() без управления,
+  // блокировка на первой строке 'C' держала бы его включённым бесконтрольно.
+  if (startval > SAMOVAR_STARTVAL_BEER_START && program[ProgramNum].WType == 'C') {
     const DSSensor* confirmSensor = nullptr;
     const char* confirmSensorName = "";
     if (beer_control_sensor(program[ProgramNum].TempSensor, confirmSensor, confirmSensorName) &&
@@ -465,7 +498,9 @@ void run_beer_program(uint8_t num) {
 
   if (beer_set_cooling_outputs(false) != ACTUATOR_COMMAND_APPLIED) return;
 
-  if (startval == SAMOVAR_STARTVAL_BEER_START) startval = SAMOVAR_STARTVAL_BEER_HEATING;
+  // [Пиво 02.09 A3] Повторный вход на строку 'M' тоже взводит подэтап нагрева,
+  // не только старт программы - иначе beer_stage_tick/статус не увидят "нагрев".
+  if (startval == SAMOVAR_STARTVAL_BEER_START || program[targetProgram].WType == 'M') startval = SAMOVAR_STARTVAL_BEER_HEATING;
   ProgramNum = targetProgram;
   begintime = 0;
   msgfl = true;
@@ -640,7 +675,7 @@ inline void beer_check_wort_overheat_limit() {
 
 /**
  * @brief Обновляет накопитель простоя строки P/B/C: время ручной паузы, а также
- *        время вне полосы гистерезиса на 'P', не должно засчитываться в
+ *        время ниже полосы гистерезиса (недогрев) на 'P', не должно засчитываться в
  *        выдержку строки (см. проверки в beer_stage_tick()).
  */
 inline void beer_update_stage_idle(ProgramType currentType, float temp, float tempDelta, unsigned long nowMs) {
@@ -652,7 +687,9 @@ inline void beer_update_stage_idle(ProgramType currentType, float temp, float te
     if (beerManualPause && begintime > 0) {
       idleNow = true;
     } else if (currentType == 'P' && begintime > 0 &&
-               (temp < program[ProgramNum].Temp - tempDelta || temp > program[ProgramNum].Temp + tempDelta)) {
+               // [Пиво 02.09 A4] Простой считаем только по недогреву - перегрев сверху
+               // таймер выдержки не останавливает.
+               temp < program[ProgramNum].Temp - tempDelta) {
       idleNow = true;
     }
   }
@@ -907,8 +944,9 @@ void beer_stage_tick() {
 
   //Если программа - кипячение
   if (currentType == 'B') {
-    //Если предыдущая программа была программой кипячения - просто продолжаем кипятить.
-    if (begintime == 0 && ProgramNum > 0 && program_type_at(ProgramNum - 1) == 'B') begintime = millis();
+    //Если предыдущая программа была программой кипячения и кипение уже зафиксировано детектором - просто продолжаем кипятить.
+    // [Пиво 02.09 A5] Без подтверждённого кипения - обычное ожидание ниже, а не тихое "продолжаем".
+    if (begintime == 0 && ProgramNum > 0 && program_type_at(ProgramNum - 1) == 'B' && boilingDetector.isBoiling) begintime = millis();
 
     if (begintime == 0) {
       //Определяем начало кипения
@@ -983,6 +1021,15 @@ void beer_stage_tick() {
 }
 
 /**
+ * @brief [Пиво 02.09 A2/A6] Направление мешалки по номеру фазы: Speed>0 - постоянный
+ * реверс, Speed<0 - реверс через цикл (по чётности), Speed==0 - без реверса.
+ * Общая формула для старта нового цикла и для возобновления после ручной паузы.
+ */
+inline bool beer_mixer_reverse_dir(int stepCount) {
+  return program[ProgramNum].Speed > 0 || (stepCount % 2 == 0 && program[ProgramNum].Speed < 0);
+}
+
+/**
  * @brief Управляет состоянием мешалки и насоса в зависимости от этапа программы и времени.
  */
 void check_mixer_state() {
@@ -999,6 +1046,11 @@ void check_mixer_state() {
     if (alarm_c_low_min > 0) alarm_c_low_min += mixerIdleMs;
     if (alarm_c_min > 0) alarm_c_min += mixerIdleMs;
     beerMixerPauseSinceMs = 0;
+    // [Пиво 02.09 A6] Пауза попала на фазу вращения (после сдвига меток фаза ещё
+    // впереди) - включаем мешалку заново на остаток фазы, а не ждём следующего цикла.
+    if ((int32_t)(alarm_c_low_min - millis()) > 0 && !mixer_status) {  // [C-13] overflow-safe
+      if (set_mixer_state(true, beer_mixer_reverse_dir(currentstepcnt)) == ACTUATOR_COMMAND_FAILED) return;
+    }
   }
   if (program[ProgramNum].capacity_num > 0) {
     //обрабатываем время включения и управляем мешалкой и насосом
@@ -1028,9 +1080,8 @@ void check_mixer_state() {
       alarm_c_low_min = millis() + program[ProgramNum].Volume * 1000;
       if (program[ProgramNum].Power > 0) alarm_c_min = alarm_c_low_min + program[ProgramNum].Power * 1000;
       const int candidateStepCount = currentstepcnt + 1;
-      bool dir = false;
-      if (candidateStepCount % 2 == 0 && program[ProgramNum].Speed < 0) dir = true;
-      if (set_mixer_state(true, dir) == ACTUATOR_COMMAND_FAILED) {
+      // [Пиво 02.09 A2] Speed>0 - постоянный реверс (см. beer_mixer_reverse_dir).
+      if (set_mixer_state(true, beer_mixer_reverse_dir(candidateStepCount)) == ACTUATOR_COMMAND_FAILED) {
         alarm_c_low_min = 0;
         alarm_c_min = 0;
         return;

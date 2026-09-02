@@ -977,6 +977,14 @@ int main() {
     compile_and_run(harness, "samovar-runtime-ajax-query-")
 
 
+
+def extract_uint_define(source: str, name: str):
+    """Значение `static const uintNN_t <name> = <число>;` из заголовка прошивки."""
+    match = re.search(
+        r"static\s+const\s+uint\d+_t\s+" + re.escape(name) + r"\s*=\s*(\d+)\s*;", source)
+    return int(match.group(1)) if match else None
+
+
 def run_source_contracts() -> None:
     errors: list[str] = []
 
@@ -1121,9 +1129,35 @@ def run_source_contracts() -> None:
         if token not in set_string:
             errors.append(f"Lua specialized Msg setter token missing: {token}")
 
-    lua_sizes = [path.stat().st_size for path in (ROOT / "data_raw").glob("*.lua")]
-    if not lua_sizes or max(lua_sizes) != 8803 or max(lua_sizes) > RUNTIME_MAX_TEXT_BYTES:
-        errors.append("tracked Lua size evidence no longer matches 8803/10000 contract")
+    # do_lua_script() (lua.h) под show_lua_script печатает текст задания целиком:
+    # WriteConsoleLog(local_job_script). Событие длиннее RUNTIME_EVENT_MAX_TEXT_BYTES
+    # кольцо не примет (RUNTIME_EVENT_TEXT_TOO_LONG), и скрипт в консоли молча не
+    # покажется. Поэтому каждый поставляемый .lua обязан помещаться в одно событие.
+    # Лимит читаем из runtime_event_log.h, а НЕ храним копией: со своей копией
+    # уменьшение лимита в прошивке тест бы не заметил и сверял со старым числом.
+    # Точный размер файла не пиним - он законно меняется при правке скриптов, а
+    # проверять нужно вместимость, а не текущую длину.
+    limit = extract_uint_define(read("runtime_event_log.h"), "RUNTIME_EVENT_MAX_TEXT_BYTES")
+    pool = extract_uint_define(read("runtime_event_log.h"), "RUNTIME_EVENT_TEXT_POOL_BYTES")
+    if limit is None or pool is None:
+        errors.append(
+            "runtime_event_log.h: не удалось прочитать RUNTIME_EVENT_MAX_TEXT_BYTES/"
+            "RUNTIME_EVENT_TEXT_POOL_BYTES - проверка вместимости Lua-скриптов не выполнена")
+    else:
+        if limit > pool:
+            errors.append(
+                f"runtime_event_log.h: RUNTIME_EVENT_MAX_TEXT_BYTES ({limit}) больше пула "
+                f"RUNTIME_EVENT_TEXT_POOL_BYTES ({pool}) - событие максимальной длины "
+                "не поместится в кольцо ни при каких условиях")
+        lua_files = sorted((ROOT / "data_raw").glob("*.lua"))
+        if not lua_files:
+            errors.append("data_raw/*.lua не найдены - проверка вместимости скриптов не выполнена")
+        for path in lua_files:
+            size = path.stat().st_size
+            if size > limit:
+                errors.append(
+                    f"data_raw/{path.name}: {size} байт больше RUNTIME_EVENT_MAX_TEXT_BYTES "
+                    f"({limit}) - при show_lua_script текст скрипта не попадёт в консоль")
 
     app = read("data_raw/app.js")
     for token in (
@@ -1179,9 +1213,6 @@ def run_source_contracts() -> None:
     run_query_dispatch_harness(samovar, header)
     run_checked_writer_harness(samovar, string_utils)
     print("runtime event backend source contracts passed")
-
-
-RUNTIME_MAX_TEXT_BYTES = 10000
 
 
 if __name__ == "__main__":

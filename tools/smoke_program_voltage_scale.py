@@ -1,21 +1,31 @@
 #!/usr/bin/env python3
-"""Client/firmware agreement on the mains voltage used for the watt<->volt scale.
+"""Mains-voltage wiring for the program.htm watt<->volt scale.
 
 data/program.htm shows the column power in volts when pwr_unit == 'V'. Physically
 P = U**2 / R, so with a heater rated Pmax at Umax the client must render
-U = Umax * sqrt(P / Pmax). That is only correct while the client's Umax equals the
-Umax the firmware actually clamps to in set_current_power() (power_regulator.h):
+U = Umax * sqrt(P / Pmax).
 
-    maxPower = 230**2 / HeaterResistant     (SAMOVAR_USE_SEM_AVR)
-    Volt clamped to 230                     (otherwise)
+mainsVolt used to be a hardcoded client constant that had to match the firmware's
+regulator clamp in set_current_power() (power_regulator.h). It no longer does:
+mainsVolt is now the real mains voltage from device settings (%MainsVoltage%,
+served by indexKeyProcessor in WebServer.ino), with 230 only as a fallback for
+when the substitution does not happen at all (a page served outside the firmware's
+template processor). The math
+still works with a real mains voltage because heaterMaxPwr is auto-filled as
+mainsVolt**2/R on the same page: mainsVolt cancels out of both
+wattsToProgramVolts() and programVoltsToWatts(), leaving volts = sqrt(W*R) -
+independent of mains voltage. Only the heater-power prefill itself (the honest
+max wattage the heater draws on THIS mains) depends on mainsVolt.
 
-The page used to hardcode 220 against the firmware's 230: every displayed voltage
-was ~4% low and the implied power ~9% low, so the operator set a weaker heat than
-the number on screen promised.
+set_current_power()'s 230 V clamp is a separate thing: a ceiling on the
+regulator's setpoint, not the mains voltage, and this test still pins it at 230
+so nobody quietly changes that ceiling without noticing here.
 
-This test pins the AGREEMENT, not the number: it extracts the constant from both
-sides and requires they match. Re-rating the hardware stays a one-line change on
-each side; letting the two drift apart does not.
+This test pins three things: (1) program.htm reads mainsVolt from %MainsVoltage%
+with a fallback of exactly 230; (2) power_regulator.h's setpoint clamp is still
+230 and self-consistent; (3) WebServer.ino's indexKeyProcessor actually serves
+%MainsVoltage% from SamSetup.MainsVoltage, so the substitution is not silently
+dropped back to the fallback on every request.
 """
 import re
 import sys
@@ -24,6 +34,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM_PAGE = ROOT / "data_raw" / "program.htm"
 POWER_REGULATOR = ROOT / "power_regulator.h"
+WEB_SERVER = ROOT / "WebServer.ino"
 
 
 def fail(errors):
@@ -36,7 +47,7 @@ def fail(errors):
 def main() -> int:
     errors = []
 
-    for path in (PROGRAM_PAGE, POWER_REGULATOR):
+    for path in (PROGRAM_PAGE, POWER_REGULATOR, WEB_SERVER):
         if not path.exists():
             errors.append(f"{path.relative_to(ROOT)} not found")
     if errors:
@@ -44,6 +55,7 @@ def main() -> int:
 
     page = PROGRAM_PAGE.read_text(encoding="utf-8", errors="ignore")
     regulator = POWER_REGULATOR.read_text(encoding="utf-8", errors="ignore")
+    web_server = WEB_SERVER.read_text(encoding="utf-8", errors="ignore")
 
     # --- firmware side -------------------------------------------------------
     firmware_volts = set()
@@ -87,11 +99,33 @@ def main() -> int:
             f"{sorted(firmware_volts)}"
         )
 
-    # --- client side ---------------------------------------------------------
-    page_match = re.search(r"var\s+mainsVolt\s*=\s*(\d+(?:\.\d+)?)\s*;", page)
+    # --- client side: mainsVolt comes from the device, not a literal ---------
+    # %MainsVoltage% is substituted by indexKeyProcessor (WebServer.ino) from
+    # SamSetup.MainsVoltage - the real mains voltage, not the regulator's clamp.
+    # The fallback only kicks in when the token is not substituted at all - the
+    # page opened outside the firmware's template processor (a raw data/program.htm
+    # from disk, a proxy that strips templating) or served with an empty/zero
+    # setting. It must stay exactly 230: that is the reference mains the shipped
+    # program_*.txt watt column is computed for (3480 W heater at 230 V) and the
+    # same number set_current_power() clamps the setpoint to, so an unsubstituted
+    # page still prefills the heater power with the historical value instead of a
+    # silently different one. Browser tests do NOT exercise this path -
+    # test_numeric_input_ui_browser.py render_site() substitutes "230.00".
+    page_match = re.search(
+        r"var\s+mainsVolt\s*=\s*Number\(\s*'%MainsVoltage%'\s*\)\s*\|\|\s*(\d+(?:\.\d+)?)\s*;",
+        page,
+    )
     if not page_match:
-        errors.append("data_raw/program.htm: no `var mainsVolt = ...;` declaration")
-    client_volt = float(page_match.group(1)) if page_match else None
+        errors.append(
+            "data_raw/program.htm: mainsVolt must read Number('%MainsVoltage%') || <fallback> "
+            "- found a different declaration (hardcoded literal?)"
+        )
+    fallback_volt = float(page_match.group(1)) if page_match else None
+    if fallback_volt is not None and fallback_volt != 230:
+        errors.append(
+            f"data_raw/program.htm: mainsVolt fallback is {fallback_volt:g}, expected exactly 230 "
+            "(the reference mains a page with an unsubstituted %MainsVoltage% renders against)"
+        )
 
     # Все три формулы обязаны ходить через одну константу. Это не косметика: toVolt()
     # делит на heaterMaxPwr, который сама же страница и заполняет как U**2/R, поэтому
@@ -141,16 +175,26 @@ def main() -> int:
             f"{stray_square} instead of mainsVolt**2 (220**2 = 48400, 230**2 = 52900)"
         )
 
-    # --- the invariant -------------------------------------------------------
-    if client_volt is not None and len(firmware_volts) == 1:
+    # --- firmware clamp must still be exactly 230 -----------------------------
+    # This is now an independent invariant, not one shared with the client: the
+    # clamp is a regulator setpoint ceiling, unrelated to the real mains voltage
+    # the client renders against.
+    if len(firmware_volts) == 1:
         firmware_volt = next(iter(firmware_volts))
-        if client_volt != firmware_volt:
+        if firmware_volt != 230:
             errors.append(
-                f"data_raw/program.htm renders volts against {client_volt:g} V while the firmware "
-                f"clamps to {firmware_volt:g} V: every displayed voltage is off by "
-                f"{abs(client_volt - firmware_volt) / firmware_volt * 100:.1f}% and the implied "
-                f"power by {abs(client_volt**2 - firmware_volt**2) / firmware_volt**2 * 100:.1f}%"
+                f"power_regulator.h: the setpoint clamp is {firmware_volt:g} V, expected 230 V"
             )
+
+    # --- %MainsVoltage% is actually wired up in WebServer.ino ----------------
+    if not re.search(
+        r'else if \(var == "MainsVoltage"\)\s*\n\s*return String\(SamSetup\.MainsVoltage',
+        web_server,
+    ):
+        errors.append(
+            "WebServer.ino: indexKeyProcessor does not serve \"MainsVoltage\" from "
+            "SamSetup.MainsVoltage - %MainsVoltage% in program.htm would always fall back to 230"
+        )
 
     if errors:
         return fail(errors)

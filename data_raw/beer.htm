@@ -67,12 +67,7 @@
         var noDevice = device.every(function(v) { return v === 0; });
         var scheduledDevice = device[0] >= 1 && device[0] <= 3 && device[2] > 0;
         if (!(noDevice || scheduledDevice)) return false;
-        if ((type === "M" || type === "C" || type === "F") && !(temp > 0 && time === 0)) return false;
-        if (type === "P" && !(temp > 0 && time > 0)) return false;
-        if (type === "B" && !(temp === 0 && time > 0)) return false;
-        if (type === "W" && !(temp === 0 && time === 0)) return false;
-        if (type === "L" && !(temp === 0 && time === 0 && noDevice && sensor === 0)) return false;
-        if (type === "A" && !(temp > 0 && time === 0 && noDevice)) return false;
+        if (!SamovarApp.beerRowTypeOk(type, temp, time, noDevice, sensor)) return false;
       }
       return true;
     }
@@ -81,21 +76,21 @@
     async function set_program () {
       document.getElementById("WProgram").value = document.getElementById("WProgram").value.replaceAll(",", ".");
       if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Ошибка программы, проверьте её.");
+        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
         return;
       }
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
-        if (!result.ok) { alert(result.err || 'Программа не установлена'); return; }
-        alert("Программа установлена");
+        if (!result.ok) { SamovarApp.notify(result.err || 'Программа не установлена', 0); return; }
+        SamovarApp.notify("Программа сохранена.", 2);
       } catch (e) {
-        alert('Ошибка сети: ' + e);
+        SamovarApp.notify('Ошибка сети: ' + e, 0);
       }
     };
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
     };
 
     function renderTelemetry(myObj) {
@@ -128,12 +123,23 @@
             HeaterPowerOn = false;
           }
 
+          // [Пиво 02.09 C2] Пауза пива не сводится к PauseOn (тот только для
+          // ректификации) - учитываем и BeerManualPause, как index.htm учитывает PauseOn.
+          var beerPaused = myObj.PauseOn == 1 || myObj.BeerManualPause == 1;
+          if (beerPaused) {
+            document.getElementById('pause').value = 'Продолжить';
+            document.getElementById('pause').style.backgroundColor = SamovarApp.cssVar('--state-active-bg');
+          } else {
+            document.getElementById('pause').value = 'Пауза';
+            document.getElementById('pause').style.backgroundColor = SamovarApp.cssVar('--accent');
+          }
+
         }
     };
 
     function calc_program () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Ошибка программы, проверьте её.");
+        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
         return;
       }
       var t = document.getElementsByClassName("prgline");
@@ -304,7 +310,7 @@
 
     function getProgram () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Ошибка программы, проверьте её.");
+        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
         return;
       }
       var e = document.getElementById("prg");
@@ -387,7 +393,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Ошибка программы, проверьте её.");
+          SamovarApp.notify("Ошибка программы, проверьте её.", 1);
           return;
         }
         var element = document.getElementById("prg");
@@ -485,6 +491,8 @@
       <div>
         <input id='power' type='button' name='power' class="button" value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=" + (HeaterPowerOn ? "0" : "1")); return false;'>
         <input id='start' type='button' name='start' class="button" value='Следующая программа' onclick='if (!confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;'>
+        <!-- [Пиво 02.09 C2] Пауза/продолжить - как index.htm:689 -->
+        <input id='pause' type='button' name='pause' class="button" value='Пауза' onclick='SamovarApp.sendCommand("pause=1");'>
         <input id='chart' type='button' name='chart' class="button" value='График' onclick='javascript:location.href="chart.htm"'>
         <input id='setup' type='button' name='setup' class="button" value='Настройки' onclick='javascript:location.href="setup.htm"'>
       </div>
@@ -517,7 +525,7 @@
             <p><span>&nbsp;</span></p>
             <p><span>Описание режима работы мешалки: предпоследним полем задается режим работы мешалки. 1^-1^2^3, где</span></p>
             <p><span>1 - Тип устройства - 1 - мешалка, 2 - насос, 3 - мешалка и насос одновременно</span></p>
-            <p><span>-1 - Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения (если поддерживает оборудование)</span></p>
+            <p><span>-1 - Направление вращения, если задано отрицательное значение - мешалка после паузы меняет направление вращения (если поддерживает оборудование); 1 - постоянное обратное направление (только I2C-мешалка; для релейной мешалки направление не применяется)</span></p>
             <p><span>2 - Время включения в секундах</span></p>
             <p><span>3 - Время выключения в секундах</span></p>
           </div>
@@ -531,11 +539,11 @@
         </div>
       </details>
       <hr style="margin-bottom: 20px !important; margin-top: 20px !important;">
-      <div style="margin: 0 auto; width: 200px;">
+      <div class="btn-cell" style="margin: 0 auto;">
         <input id='saveform' type='button' name='saveform' value='Сохранить программу' onclick='SaveProgramToFile();' class="button">
       </div>
 
-      <div class="file-upload-control" style="margin: 0 auto; width: 200px;">
+      <div class="file-upload-control btn-cell" style="margin: 0 auto;">
         <label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
           <i class="fa fa-cloud-upload"></i> Загрузить программу
         </label>
@@ -548,7 +556,7 @@
         <input id='clearprogram' type='button' value='Очистить программу' onclick='SamovarApp.clearProgram();' class="button">
       </div>
 
-      <div style="margin: 0 auto; margin-top: 20px !important; width: 200px;">
+      <div class="btn-cell" style="margin: 0 auto; margin-top: 20px !important;">
         <input id='loadprogram' type='button' name='loadprogram' value='Загрузить рецепт из XML' onclick='javascript:location.href="brewxml.htm"' class="button">
       </div>
       

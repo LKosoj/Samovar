@@ -345,6 +345,12 @@ void check_alarm() {
 
   //Определяем, что началось кипение - вода охлаждения начала нагреваться
   //check_boiling();
+  // [Б8] Оставлено отключённым намеренно (решение владельца): в ректификации момент
+  // кипения фиксируется раньше и надёжнее - при переходе разгон -> стабилизация
+  // set_boiling() вызывается напрямую (ниже, ветка SAMOVAR_STATUS_RECT_STABILIZING
+  // && !boil_started). Кроме того, check_boiling() (logic.h) требует valve_status
+  // (открытый клапан воды), а он открывается только при TankSensor.avgTemp >=
+  // OPEN_VALVE_TANK_TEMP (77 C) - то есть до конца разгона возвращала бы false вхолостую.
 
   //Устанавливаем ШИМ для насоса в зависимости от температуры воды
   mode_update_water_pump_pid(39.0f);
@@ -434,7 +440,20 @@ void check_alarm() {
     }
   }
 
-  if (SamovarStatusInt == SAMOVAR_STATUS_RECT_STABILIZING && !boil_started) {
+  // [Б6.4] Фиксация кипения периодическая, а не одноразовая. Обычный сценарий: колонна
+  // прогревается ДО отбора, переход RECT_ACCEL -> RECT_STABILIZING (выше) уже требует
+  // SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP, поэтому в RECT_STABILIZING кипение
+  // фиксируется сразу. Но при раннем старте отбора (оператор нажал "Старт" ДО конца
+  // стабилизации - браузер только предупреждает и просит подтверждение, не запрещает)
+  // статус RECT_STABILIZING проскакивается и сразу становится RECT_WITHDRAWAL: без разрешения
+  // фиксировать кипение и в этом статусе boil_started остался бы false до конца перегона, а
+  // get_alcohol()/get_steam_alcohol() отдавали бы заглушку 100% вместо реальной крепости.
+  // Порог по температуре пара здесь ОБЯЗАТЕЛЕН: он единственное, что не даёт зафиксировать
+  // кипение по ХОЛОДНОЙ колонне в RECT_WITHDRAWAL - иначе set_boiling() запомнит заниженную
+  // текущую температуру куба как температуру кипения, и вся спиртуозность будет неверной.
+  // В RECT_STABILIZING порог поведение не меняет (см. обоснование выше).
+  if ((SamovarStatusInt == SAMOVAR_STATUS_RECT_STABILIZING || SamovarStatusInt == SAMOVAR_STATUS_RECT_WITHDRAWAL) &&
+      !boil_started && SteamSensor.avgTemp >= CHANGE_POWER_MODE_STEAM_TEMP) {
     set_boiling();
     if (boil_started) {
       SendMsg("Спиртуозность " + format_float(alcohol_s, 1), WARNING_MSG);

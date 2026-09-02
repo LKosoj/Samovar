@@ -132,6 +132,7 @@ INDEPENDENT_CONTEXT_TEST = r'''async page => {
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const gapWarning = 'Пропущены сообщения: обнаружен разрыв последовательности.';
+  const rebootWarning = 'Контроллер перезагрузился: счёт сообщений начат заново.';
   const fixture = {
     version: 'test', crnt_tm: '12:00:00', stm: '00:01:00', SteamTemp: 78.1,
     PipeTemp: 77.9, WaterTemp: 20.2, TankTemp: 82.3, ACPTemp: 40.1,
@@ -152,7 +153,8 @@ BROWSER_TEST = r'''async page => {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
     theoreticalPlates: 20, headsFlowMlH: 100, bodyFlowMinMlH: 200,
     bodyFlowMaxMlH: 400, bodyEndFlowMlH: 300, tailsFlowMlH: 150,
-    headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000
+    headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000,
+    headsSpeedClamped: false, bodySpeedClamped: false
   };
   const problems = [];
 
@@ -659,15 +661,22 @@ BROWSER_TEST = r'''async page => {
     for (let i = 0; i < responses.length; i++) {
       await discontinuityPage.evaluate(async () => SamovarApp.pollAjax(function () {}));
     }
-    const discontinuity = await discontinuityPage.evaluate(warning => ({
+    // Откат счётчика 3 -> 1 - это перезагрузка контроллера, а не потеря сообщений:
+    // ждём предупреждение именно про перезагрузку и требуем, чтобы текст про
+    // пропущенные сообщения при этом НЕ появлялся (иначе оператор ищет потерянные
+    // события, которых не было).
+    const discontinuity = await discontinuityPage.evaluate(texts => ({
       warningCount: Array.from(document.querySelectorAll('#messages .message_1'))
-        .filter(node => node.textContent.includes(warning)).length,
+        .filter(node => node.textContent.includes(texts.reboot)).length,
+      gapWarningCount: Array.from(document.querySelectorAll('#messages .message_1'))
+        .filter(node => node.textContent.includes(texts.gap)).length,
       rebootEventCount: Array.from(document.querySelectorAll('#messages .message_2'))
         .filter(node => node.textContent.includes('new-boot-1')).length
-    }), gapWarning);
+    }), { gap: gapWarning, reboot: rebootWarning });
     expect(JSON.stringify(discontinuityState.trace) === JSON.stringify([0, 1, 2, 3]),
       'detectable reboot cursor trace: ' + JSON.stringify(discontinuityState.trace));
-    expect(discontinuity.warningCount === 1 && discontinuity.rebootEventCount === 1,
+    expect(discontinuity.warningCount === 1 && discontinuity.gapWarningCount === 0 &&
+      discontinuity.rebootEventCount === 1,
       'detectable reboot warning/event: ' + JSON.stringify(discontinuity));
   }
 
@@ -825,8 +834,13 @@ BROWSER_TEST = r'''async page => {
     // остаётся нулевым), сообщение приходит вторым запросом, лог - третьим.
     expect(JSON.stringify(state.trace) === JSON.stringify([0, 0, 1]),
       file + ' MESSAGE/CONSOLE cursor trace: ' + JSON.stringify(state.trace));
+    // Сирену крутит только аппаратная защёлка нагрева или подтверждённый обрыв
+    // связи (app.js: alarmActive = heaterAlarmLatched || connectionAlarm).
+    // Обычное аварийное сообщение (msglvl 0) видно в ленте, но alarm.mp3 не
+    // включает - иначе страница, открытая с оставшейся в кольце ошибкой, орала бы
+    // сразу при загрузке. Оба пути сирены проверяет smoke_web_alarm_cursor_bootstrap.
     expect(result.messageCount === 1 && result.logCount === 1 && result.updateErrors === 0 &&
-      result.audioPlayCount === 1 && result.audioPauseCount === 0 &&
+      result.audioPlayCount === 0 && result.audioPauseCount === 0 &&
       result.history.length === 1 && result.history[0].msg === messageText &&
       result.history[0].cssClass === 'message_0',
       file + ' default sinks/duplicates: ' + JSON.stringify(result));
@@ -856,7 +870,7 @@ BROWSER_TEST = r'''async page => {
     expect(lifecycle.historyVisible && lifecycle.historyContainsMessage &&
       lifecycle.historyRawAfterClear === '[]' && lifecycle.historyTextAfterClear === '' &&
       lifecycle.messagesHidden && lifecycle.repopulatedOnlyWithMarker &&
-      lifecycle.audioPlayCount === 1 && lifecycle.audioPauseCount === 1,
+      lifecycle.audioPlayCount === 0 && lifecycle.audioPauseCount === 0,
       file + ' clear/history/sound lifecycle: ' + JSON.stringify(lifecycle));
   }
 

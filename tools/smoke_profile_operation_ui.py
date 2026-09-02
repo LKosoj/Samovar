@@ -96,7 +96,6 @@ require_ordered_tokens(
     "programMutationPending = true;",
     "fetch('/program', { method: 'POST', body: body })",
     "await waitForOperation(result.operationId);",
-    "alert('Программа очищена.');",
     "notify('Программа очищена.', 2);",
     "programMutationPending = false;",
   ],

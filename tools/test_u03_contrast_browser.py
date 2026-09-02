@@ -43,6 +43,42 @@ PROGRAM_FIXTURES = {
 }
 
 
+# Палитра 6.27 не проходит WCAG: решением владельца от 01.09.2026 вид исходного
+# интерфейса важнее контраста, и более тёмные токены сюда не подставляются
+# (см. verify_button_contrast в tools/smoke_u03_contrast.py). Чтобы гейт при этом
+# не превратился в "всегда зелёный", здесь перечислены ЗАМЕРЕННЫЕ пары цветов этой
+# палитры и их фактический контраст. Провал принимается, только если пара есть в
+# списке И контраст не стал хуже замеренного. Любой новый цвет, любое ухудшение
+# существующего и любой провал без замера (detail вместо ratio) валят гейт.
+# Замер 01.09.2026: 1348 провалов, 11 уникальных пар.
+ACCEPTED_CONTRAST = {
+    # текст форм #777 на белой форме/панелях программы
+    ("rgb(119, 119, 119)", "rgb(250, 250, 250)"): 4.290,
+    ("rgb(119, 119, 119)", "rgb(242, 242, 242)"): 4.000,
+    ("rgb(119, 119, 119)", "rgb(247, 247, 247)"): 4.180,
+    # белый текст на синем акценте #3498db (кнопки, шапка, открытый журнал)
+    ("rgb(255, 255, 255)", "rgb(52, 152, 219)"): 3.153,
+    ("rgb(241, 241, 241)", "rgb(52, 152, 219)"): 2.792,
+    # рамки полей #a9a9a9 и вкладок #a7a7a7
+    ("rgb(169, 169, 169)", "rgb(250, 250, 250)"): 2.252,
+    ("rgb(169, 169, 169)", "rgb(247, 247, 247)"): 2.194,
+    ("rgb(167, 167, 167)", "rgb(241, 241, 241)"): 2.130,
+    ("rgb(223, 223, 223)", "rgb(242, 242, 242)"): 2.817,
+    # сетка графика #ccc и тёмный текст на нажатой зелёной кнопке
+    ("rgb(204, 204, 204)", "rgb(250, 250, 250)"): 1.539,
+    ("rgb(0, 0, 0)", "rgb(47, 125, 74)"): 4.153,
+}
+
+
+def accepted_contrast_failure(failure: dict) -> bool:
+    """Провал объясняется палитрой 6.27 и не стал хуже замеренного."""
+    floor = ACCEPTED_CONTRAST.get((failure.get("foreground"), failure.get("background")))
+    ratio = failure.get("ratio")
+    if floor is None or not isinstance(ratio, (int, float)):
+        return False
+    return ratio >= floor - 0.005
+
+
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const mainPages = [
@@ -135,7 +171,8 @@ BROWSER_TEST = r'''async page => {
       floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
       theoreticalPlates: 20, headsFlowMlH: 100, bodyFlowMinMlH: 200,
       bodyFlowMaxMlH: 400, bodyEndFlowMlH: 300, tailsFlowMlH: 150,
-      headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000
+      headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000,
+      headsSpeedClamped: false, bodySpeedClamped: false
     })
   }));
   await page.route("**/i2cstepper?device=mixer", route => route.fulfill({
@@ -856,6 +893,16 @@ def main() -> int:
 
     if browser_report is not None:
         failures = browser_report.get("failures")
+        if isinstance(failures, list):
+            accepted = [item for item in failures if accepted_contrast_failure(item)]
+            failures = [item for item in failures if not accepted_contrast_failure(item)]
+            if accepted:
+                pairs = {(item["foreground"], item["background"]) for item in accepted}
+                print(
+                    f"U-03 contrast: {len(accepted)} провалов принято как палитра 6.27 "
+                    f"({len(pairs)} пар цветов, список ACCEPTED_CONTRAST)",
+                    file=sys.stderr,
+                )
         if isinstance(failures, list) and failures:
             for failure in failures[:40]:
                 print(

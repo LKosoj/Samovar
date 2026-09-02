@@ -17,6 +17,10 @@ struct ColumnResults {
   float tailsFlowMlH;
   float maxFlowMlH; // Паспортный максимум (ФЧ=4 при захлебе)
   float theoreticalPlates;
+  // [В8] Рекомендация уже упёрлась в потолок сечения колонны - дальнейшие изменения
+  // параметров формы её не сдвинут, пока не изменится диаметр/высота/насадка.
+  bool headsSpeedClamped;
+  bool bodySpeedClamped;
 };
 
 /**
@@ -49,9 +53,12 @@ inline ColumnResults calculate_column_etalon(uint8_t rawMaterial, float diamInch
   if (res.theoreticalPlates < 1.0f) res.theoreticalPlates = 1.0f;
   
   // 3. Расчет мощности захлеба
+  // [Ф5] Коэффициент 0.58 (раньше 1.15) подогнан под практику: 2" СПН 3.5 при 1.5 м
+  // захлёбывается на 1.3-1.9 кВт, 3" - на 3.6-4.5 кВт; эталон шаблонов program_*.txt
+  // (173+3 В на ТЭНе 3480 Вт) - около 2 кВт. С 1.15 модель давала 3.8 и 8.5 кВт.
   float pDensityAdj = 1.2f - (packingDensity - 0.6f) * 0.5f;
   float pHeightAdj = pow(heightCm / 50.0f, 0.35f);
-  res.floodPowerW = crossSectionMm2 * 1.15f * pDensityAdj * pHeightAdj;
+  res.floodPowerW = crossSectionMm2 * 0.58f * pDensityAdj * pHeightAdj;
 
   // 4. Паспортный максимум (для совместимости с логами)
   // Это потенциал железа при ФЧ=4 на мощности захлеба
@@ -84,19 +91,30 @@ inline ColumnResults calculate_column_etalon(uint8_t rawMaterial, float diamInch
   
   // Ограничение скорости голов по сечению (0.08 л/ч на мм2)
   float maxHeadsSpeed = crossSectionMm2 * 0.08f;
-  if (res.headsFlowMlH > maxHeadsSpeed) res.headsFlowMlH = maxHeadsSpeed;
+  if (res.headsFlowMlH > maxHeadsSpeed) {
+    res.headsFlowMlH = maxHeadsSpeed;
+    res.headsSpeedClamped = true;
+  }
   
   // Тело (ФЧ 5-8)
-  float bodyFR_Min = 5.0f * platesRatio * frMultiplier;
-  float bodyFR_Max = 8.0f * platesRatio * frMultiplier;
+  // [Ф6] Без множителя по тарелкам: для колонны 1.5 м он опускал ФЧ тела до 1.5-2,
+  // расчётная скорость всегда упиралась в предел сечения ниже, а сырьё на неё не влияло.
+  float bodyFR_Min = 5.0f * frMultiplier;
+  float bodyFR_Max = 8.0f * frMultiplier;
   
   res.bodyFlowMaxMlH = workingVaporFlowMlH / (1.0f + bodyFR_Min);
   res.bodyFlowMinMlH = workingVaporFlowMlH / (1.0f + bodyFR_Max);
   
   // Физический предел безопасности (0.65 л/ч на мм2)
   float maxSafeSpeed = crossSectionMm2 * 0.65f;
-  if (res.bodyFlowMaxMlH > maxSafeSpeed) res.bodyFlowMaxMlH = maxSafeSpeed;
-  if (res.bodyFlowMinMlH > maxSafeSpeed) res.bodyFlowMinMlH = maxSafeSpeed;
+  if (res.bodyFlowMaxMlH > maxSafeSpeed) {
+    res.bodyFlowMaxMlH = maxSafeSpeed;
+    res.bodySpeedClamped = true;
+  }
+  if (res.bodyFlowMinMlH > maxSafeSpeed) {
+    res.bodyFlowMinMlH = maxSafeSpeed;
+    res.bodySpeedClamped = true;
+  }
   
   // Конец тела (60% от макс)
   res.bodyEndFlowMlH = res.bodyFlowMaxMlH * 0.6f;

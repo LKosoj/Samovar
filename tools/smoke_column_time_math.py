@@ -72,12 +72,12 @@ int main() {
   SamSetup.PackDens = 60;
   ColumnResults sugar = calculate_column_etalon(2);
   check_near(sugar.theoreticalPlates, 10.0f, 0.01f, "theoreticalPlates для 0.3 м/60% должно быть 10");
-  check_near(sugar.floodPowerW, 2339.10f, 1.0f, "floodPowerW для эталонного случая");
-  check_near(sugar.bodyFlowMaxMlH, 647.75f, 1.0f, "bodyFlowMaxMlH для эталонного случая (без клампа)");
-  check_near(sugar.bodyFlowMinMlH, 416.87f, 1.0f, "bodyFlowMinMlH для эталонного случая (без клампа)");
+  check_near(sugar.floodPowerW, 1179.72f, 1.0f, "floodPowerW для эталонного случая");
+  check_near(sugar.bodyFlowMaxMlH, 606.71f, 1.0f, "bodyFlowMaxMlH для эталонного случая (без клампа)");
+  check_near(sugar.bodyFlowMinMlH, 400.66f, 1.0f, "bodyFlowMinMlH для эталонного случая (без клампа)");
   check(sugar.bodyFlowMaxMlH > sugar.bodyFlowMinMlH,
         "верхняя граница потока тела должна быть больше нижней (иначе диапазон отбора вывернут наизнанку)");
-  check_near(sugar.tailsFlowMlH, 272.06f, 1.0f, "tailsFlowMlH для эталонного случая");
+  check_near(sugar.tailsFlowMlH, 254.82f, 1.0f, "tailsFlowMlH для эталонного случая");
 
   // ВАЖНО: при плотности 60% множитель (packingDensity - 0.6) обнуляется,
   // и densityImpact/pDensityAdj-коэффициент можно испортить незаметно для
@@ -87,24 +87,25 @@ int main() {
   // Эталоны посчитаны независимо на Python тем же алгоритмом (без клампов):
   //   packingDensity = 0.8; hetpFactor = 1 - (0.8-0.6)*(0.3/0.4) = 0.85;
   //   theoreticalPlates = 30*10/(30*0.85) = 11.7647...
-  //   pDensityAdj = 1.2 - (0.8-0.6)*0.5 = 1.1; floodPowerW = crossSectionMm2*1.15*1.1*pHeightAdj = 2144.18
+  //   pDensityAdj = 1.2 - (0.8-0.6)*0.5 = 1.1; floodPowerW = crossSectionMm2*0.58*1.1*pHeightAdj = 1081.41
+  //   [Ф6] ФЧ тела без множителя по тарелкам: bodyFR = 5..8 * frMultiplier
   SamSetup.ColDiam = 2.0f;
   SamSetup.ColHeight = 0.3f;
   SamSetup.PackDens = 80;
   ColumnResults sugar80 = calculate_column_etalon(2);
   check_near(sugar80.theoreticalPlates, 11.76f, 0.01f, "theoreticalPlates для 0.3 м/80% (реальный дефолт) должно быть 11.76");
-  check_near(sugar80.floodPowerW, 2144.18f, 1.0f, "floodPowerW для 80% (реальный дефолт)");
-  check_near(sugar80.bodyFlowMaxMlH, 689.20f, 1.0f, "bodyFlowMaxMlH для 80% (реальный дефолт, без клампа)");
-  check_near(sugar80.bodyFlowMinMlH, 445.67f, 1.0f, "bodyFlowMinMlH для 80% (реальный дефолт, без клампа)");
-  check_near(sugar80.tailsFlowMlH, 289.46f, 1.0f, "tailsFlowMlH для 80% (реальный дефолт)");
+  check_near(sugar80.floodPowerW, 1081.41f, 1.0f, "floodPowerW для 80% (реальный дефолт)");
+  check_near(sugar80.bodyFlowMaxMlH, 556.15f, 1.0f, "bodyFlowMaxMlH для 80% (реальный дефолт, без клампа)");
+  check_near(sugar80.bodyFlowMinMlH, 367.27f, 1.0f, "bodyFlowMinMlH для 80% (реальный дефолт, без клампа)");
+  check_near(sugar80.tailsFlowMlH, 233.58f, 1.0f, "tailsFlowMlH для 80% (реальный дефолт)");
 
   SamSetup.PackDens = 40;
   ColumnResults sugar40 = calculate_column_etalon(2);
   check_near(sugar40.theoreticalPlates, 8.70f, 0.01f, "theoreticalPlates для 0.3 м/40% должно быть 8.70");
-  check_near(sugar40.floodPowerW, 2534.03f, 1.0f, "floodPowerW для 40% (другая сторона от 60%)");
-  check_near(sugar40.bodyFlowMaxMlH, 616.39f, 1.0f, "bodyFlowMaxMlH для 40% (без клампа)");
-  check_near(sugar40.bodyFlowMinMlH, 395.26f, 1.0f, "bodyFlowMinMlH для 40% (без клампа)");
-  check_near(sugar40.tailsFlowMlH, 258.88f, 1.0f, "tailsFlowMlH для 40% (другая сторона от 60%)");
+  check_near(sugar40.floodPowerW, 1278.03f, 1.0f, "floodPowerW для 40% (другая сторона от 60%)");
+  check_near(sugar40.bodyFlowMaxMlH, 657.27f, 1.0f, "bodyFlowMaxMlH для 40% (без клампа)");
+  check_near(sugar40.bodyFlowMinMlH, 434.05f, 1.0f, "bodyFlowMinMlH для 40% (без клампа)");
+  check_near(sugar40.tailsFlowMlH, 276.05f, 1.0f, "tailsFlowMlH для 40% (другая сторона от 60%)");
 
   // Сырьё меняет рабочий коэффициент: у фруктов (0) он ниже, чем у сахара (2) -
   // рабочая мощность должна быть меньше при прочих равных настройках колонны.

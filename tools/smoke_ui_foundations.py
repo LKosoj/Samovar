@@ -106,11 +106,11 @@ def check_pages(errors):
     if not re.search(r"<form\b[^>]*\bonsubmit\s*=\s*['\"]return\s+false['\"]", text, flags=re.I):
       errors.append(f"{rel} main form does not disable submit with onsubmit='return false'")
 
-    try:
-      telemetry_body = extract_function_body(text, "function renderTelemetry")
-    except ValueError:
-      telemetry_body = ""
-    if re.search(r"\balert\s*\(", telemetry_body):
+    # Проверяем ВЕСЬ файл, а не только renderTelemetry: alert() блокирует поток
+    # страницы целиком, поэтому опрос телеметрии замирает независимо от того, из
+    # какой функции его позвали. Для сообщений есть неблокирующий SamovarApp.notify.
+    without_comments = strip_cpp_comments(text)
+    if re.search(r"\balert\s*\(", without_comments):
       errors.append(f"{rel} still contains blocking alert() in polling/alarm UI")
 
     for body_offset, body in inline_scripts_without_app_src(text):
@@ -342,10 +342,7 @@ def check_nbk_get_program_w69(errors):
       errors.append(f"data_raw/nbk.htm W6.9 getProgram() missing token: {token}")
 
   empty_guard_pos = body.find("if (!programText)")
-  notify_pos = body.find("SamovarApp.notify(")
-  alert_pos = body.find("alert(")
-  message_positions = [pos for pos in (notify_pos, alert_pos) if pos != -1]
-  first_message_pos = min(message_positions) if message_positions else -1
+  first_message_pos = body.find("SamovarApp.notify(")
   if empty_guard_pos == -1 or first_message_pos == -1 or first_message_pos < empty_guard_pos:
     errors.append("data_raw/nbk.htm W6.9 getProgram() reports errors before empty-program guard")
   max_guard_pos = body.find("if (lines.length > maxProgramLines)")
@@ -487,7 +484,7 @@ def check_program_htm_template_js(errors):
     errors.append("data_raw/program.htm has no inline script")
     return
   body = inline[0]
-  for placeholder in ("%pwr_unit%", "%HeaterR%"):
+  for placeholder in ("%pwr_unit%", "%HeaterR%", "%MainsVoltage%"):
     body = body.replace(placeholder, "0")
   stray = re.search(r"%", body)
   if stray:

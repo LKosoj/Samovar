@@ -61,6 +61,10 @@ HARNESS_TEMPLATE = r'''
 
 #include "Arduino.h"
 
+// [Б7.3] Без этого define ветвь проверки Power в validate_rect_program_startable()
+// вырезается препроцессором, и тест ничего не проверил бы.
+#define SAMOVAR_USE_POWER
+
 #define CAPACITY_NUM 10
 #include "program_types.h"
 
@@ -78,6 +82,11 @@ struct WProgram {
 static WProgram program[PROGRAM_MAX];
 static uint8_t ProgramLen = 0;
 
+struct SamSetupStruct {
+  uint16_t StepperStepMl;
+};
+static SamSetupStruct SamSetup{100};  // насос откалиброван по умолчанию
+
 @VALIDATE_BODY@
 
 static int failures = 0;
@@ -92,6 +101,9 @@ static void check(bool condition, const char* message) {
 static void reset_program() {
   for (uint8_t i = 0; i < PROGRAM_MAX; i++) program[i] = WProgram{};
   ProgramLen = 0;
+  SamSetup.StepperStepMl = 100;  // насос откалиброван, если сценарий явно не сказал иное
+  program[0].Power = 45;  // [Б7.3] абсолютная уставка выше порога 40 - сценарии
+                          // 1-5 не про Power и не должны падать на новой проверке
 }
 
 int main() {
@@ -126,6 +138,80 @@ int main() {
   ProgramLen = 2;
   String err3;
   check(validate_rect_program_startable(err3), "строка B с заданной температурой должна быть валидна");
+
+  // 4. [Б1.1] Насос не откалиброван (StepperStepMl==0) при валидной программе -> отклонить.
+  reset_program();
+  SamSetup.StepperStepMl = 0;
+  program[0].WType = 'H';
+  program[0].Volume = 500;
+  program[0].Temp = 0;
+  ProgramLen = 1;
+  String err4;
+  bool result4 = validate_rect_program_startable(err4);
+  check(!result4, "StepperStepMl==0 должен быть отклонён");
+  check(err4 == "Насос не откалиброван (шагов на мл = 0). Старт ректификации невозможен.",
+        "сообщение об ошибке должно быть про калибровку насоса");
+
+  // 5. [Б1.1] Приоритет: StepperStepMl==0 И пустая программа одновременно ->
+  //    должно вернуться именно сообщение про калибровку насоса (проверка первая).
+  reset_program();
+  SamSetup.StepperStepMl = 0;
+  String err5;
+  bool result5 = validate_rect_program_startable(err5);
+  check(!result5, "StepperStepMl==0 с пустой программой должен быть отклонён");
+  check(err5 == "Насос не откалиброван (шагов на мл = 0). Старт ректификации невозможен.",
+        "при одновременном нарушении должна побеждать проверка калибровки насоса");
+
+  // 6. [Б7.3] Power==0 в первой строке - "не трогать регулятор", для старта
+  //    ректификации недопустимо (check_alarm() не даст абсолютной уставки).
+  reset_program();
+  program[0].WType = 'H';
+  program[0].Volume = 500;
+  program[0].Power = 0;
+  ProgramLen = 1;
+  String err6;
+  check(!validate_rect_program_startable(err6), "первая строка с Power=0 должна быть отклонена");
+
+  // 7. Дельта ниже порога (30 < 40) - тоже не абсолютная уставка, отклонить.
+  reset_program();
+  program[0].WType = 'H';
+  program[0].Volume = 500;
+  program[0].Power = 30;
+  ProgramLen = 1;
+  String err7;
+  check(!validate_rect_program_startable(err7), "первая строка с Power=30 (ниже порога) должна быть отклонена");
+
+  // 8. Модуль выше порога, но значение отрицательное - не абсолютная уставка
+  //    (условие сравнивает Power с порогом напрямую, без abs()).
+  reset_program();
+  program[0].WType = 'H';
+  program[0].Volume = 500;
+  program[0].Power = -45;
+  ProgramLen = 1;
+  String err8;
+  check(!validate_rect_program_startable(err8), "первая строка с Power=-45 должна быть отклонена");
+
+  // 9. Power=45 выше порога 40 - валидная абсолютная уставка.
+  reset_program();
+  program[0].WType = 'H';
+  program[0].Volume = 500;
+  program[0].Power = 45;
+  ProgramLen = 1;
+  String err9;
+  check(validate_rect_program_startable(err9), "первая строка с Power=45 должна быть валидна");
+
+  // 10. [Пункт 3] Power РОВНО равна PROGRAM_POWER_ABS_THRESHOLD - сравнение в коде
+  //     строгое (>), значит граница НЕ абсолютная уставка и должна быть отклонена.
+  //     Константа читается из уже подключённого program_types.h, а не хардкодится -
+  //     так кейс остаётся верным для обеих веток (400 SEM_AVR / 40 остальные).
+  reset_program();
+  program[0].WType = 'H';
+  program[0].Volume = 500;
+  program[0].Power = PROGRAM_POWER_ABS_THRESHOLD;
+  ProgramLen = 1;
+  String err10;
+  check(!validate_rect_program_startable(err10),
+        "первая строка с Power==порог (строгое >) должна быть отклонена");
 
   if (failures != 0) return 1;
   std::cout << "validate_rect_program_startable behaviour checks passed\n";

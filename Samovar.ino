@@ -399,6 +399,13 @@ static OperationError commit_profile_operation() {
   }
 
   bool persistFailed = false;
+  // Текст отказа NVS отправляется ТОЛЬКО после runtime_state_unlock: SendMsg идёт
+  // в append_runtime_event(), а тот берёт тот же xRuntimeStateSemaphore - обычный,
+  // не рекурсивный мьютекс. Под своим же замком вызов честно ждал таймаут 500 мс и
+  // возвращал RUNTIME_EVENT_PUBLISH_LOCK_BUSY, то есть аварийное сообщение о
+  // расхождении ОЗУ и NVS не доходило ни до консоли, ни до интерфейса - ровно
+  // тогда, когда оно нужнее всего.
+  String persistFailureMessage;
   if (hasSettings) {
     const PersistResult persistResult = save_profile_nvs(active_profile_operation.settings);
     if (persistResult != PERSIST_OK) {
@@ -408,16 +415,16 @@ static OperationError commit_profile_operation() {
       // пользователь узнает только после неё. Запас до молчаливого усечения в
       // msg_q (200 байт на запись минус приставки SendMsg) - 23 байта при самом
       // длинном коде persist_result_code, длиннее текст делать нельзя.
-      String message = modeChange
+      persistFailureMessage = modeChange
           ? "Режим переключён, но не сохранён, перезагрузка вернёт прежний: "
           : "Настройки не сохранены: ";
-      message += persist_result_code(persistResult);
-      SendMsg(message, ALARM_MSG);
+      persistFailureMessage += persist_result_code(persistResult);
       // !modeChange: менять нечего (только настройки) - ранний возврат безопасен.
       // modeChange: применение режима в RAM обязано дойти до конца всегда - см.
       // switch_samovar_mode/force_complete_mode_switch_failed.
       if (!modeChange) {
         runtime_state_unlock(runtimeLocked);
+        SendMsg(persistFailureMessage, ALARM_MSG);
         return OPERATION_ERROR_PROFILE_PERSIST_FAILED;
       }
       persistFailed = true;
@@ -463,6 +470,7 @@ static OperationError commit_profile_operation() {
     apply_setup_sensor_fields(active_profile_operation.sensorResetMask);
   }
   runtime_state_unlock(runtimeLocked);
+  if (persistFailureMessage.length() > 0) SendMsg(persistFailureMessage, ALARM_MSG);
 
   // Вынесено из-под runtime_state_lock: samovar_reset() берёт I2C (reset_focus(),
   // set_menu_screen(3), reset_sensor_counter()->BME_getvalue()), а по LOCK_ORDER
@@ -806,7 +814,8 @@ static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
   if (Samovar_Mode == SAMOVAR_BEER_MODE) {
     float wp;
     if (program[ProgramNum].Time > 0 && begintime > 0) {
-      wp = float(millis() - begintime) / 1000 / 60 / program[ProgramNum].Time;
+      // [Пиво 02.09 C3] Вычитаем накопленный простой строки, как в get_beer_status_text.
+      wp = beer_stage_elapsed_ms(millis()) / 1000 / 60 / program[ProgramNum].Time;
     } else
       wp = 0;
     if (wp < 0) wp = 0;
@@ -1999,6 +2008,7 @@ static void restore_state_snapshot() {
   if (snapshot.mode != (uint8_t)Samovar_Mode) return;
 
   bool restored = false;
+  String programParseFailureReason;
   if (snapshot.programText.length() > 0) {
     ProgramDraft draft{};
     const ProgramParseResult result =
@@ -2009,26 +2019,42 @@ static void restore_state_snapshot() {
       // Программа в буфере и в файле совпадают - в простое снимок переписывать нечем.
       state_snapshot_mark_saved();
     } else {
+      programParseFailureReason = format_program_parse_error(result);
       Serial.print(F("state snapshot program ignored: "));
-      Serial.println(format_program_parse_error(result));
+      Serial.println(programParseFailureReason);
     }
   }
 
-  // Предупреждаем только если в снимке нагрев был включён. Иначе выключились штатно,
-  // программа просто не потерялась - тревожить владельца незачем.
-  if (!snapshot.powerOn) return;
-  String notice = F("Сессия прервана: строка ");
-  notice += String(snapshot.programRow);
-  notice += "/";
-  notice += String(snapshot.programLen);
-  notice += restored ? F(", программа восстановлена") : F(", программа не восстановлена");
-  notice += F(". Нагрев не возобновлён.");
-  // [T24.2] Только информационная приписка: живой suvidHold.accumulatedMs в это время
-  // уже обнулён (check_alarm_suvid() сбрасывает его каждую секунду при !PowerOn) - сюда
-  // не пишем, счётчик выдержки просто начнётся заново после включения нагрева.
-  if (Samovar_Mode == SAMOVAR_SUVID_MODE && snapshot.suvidHoldAccumulatedSec > 0) {
-    notice += F(" Накопленная выдержка Сувида на момент сбоя: ");
-    notice += format_uptime(snapshot.suvidHoldAccumulatedSec);
+  // В снимке была программа, но восстановить её не удалось (например, старая программа
+  // не проходит новую проверку формата) - об этом нужно предупредить НЕЗАВИСИМО от
+  // snapshot.powerOn, иначе пользователь молча получает дефолтную программу вместо своей
+  // и не понимает, куда она делась. А вот если программа восстановилась и нагрев в снимке
+  // был выключен - это штатное выключение, тревожить незачем (то прежнее поведение).
+  const bool programLost = snapshot.programText.length() > 0 && !restored;
+  if (!snapshot.powerOn && !programLost) return;
+
+  String notice;
+  if (snapshot.powerOn) {
+    notice = F("Сессия прервана: строка ");
+    notice += String(snapshot.programRow);
+    notice += "/";
+    notice += String(snapshot.programLen);
+    notice += restored ? F(", программа восстановлена") : F(", программа не восстановлена");
+    notice += F(". Нагрев не возобновлён.");
+    // [T24.2] Только информационная приписка: живой suvidHold.accumulatedMs в это время
+    // уже обнулён (check_alarm_suvid() сбрасывает его каждую секунду при !PowerOn) - сюда
+    // не пишем, счётчик выдержки просто начнётся заново после включения нагрева.
+    if (Samovar_Mode == SAMOVAR_SUVID_MODE && snapshot.suvidHoldAccumulatedSec > 0) {
+      notice += F(" Накопленная выдержка Сувида на момент сбоя: ");
+      notice += format_uptime(snapshot.suvidHoldAccumulatedSec);
+      notice += F(".");
+    }
+  } else {
+    notice = F("Программа из снимка не восстановлена, установлена программа по умолчанию.");
+  }
+  if (programLost) {
+    notice += F(" Причина: ");
+    notice += programParseFailureReason;
     notice += F(".");
   }
   pendingStateSnapshotNotice = notice;
@@ -3308,6 +3334,7 @@ void loop() {
         resume_from_pause();
         break;
       case SAMOVAR_SETBODYTEMP:
+        body_temp_row_base = 0;  // [Ф4] ручная установка - новая опора автоподъёма
         set_body_temp();
         break;
       case SAMOVAR_DISTILLATION:
@@ -3574,9 +3601,6 @@ struct AjaxTelemetrySnapshot {
   float tankTemp;
   float acpTemp;
   float detectorTrend;
-  float detectorSteamSpan;
-  float detectorSteamVariance;
-  float detectorRecoveryThreshold;
   float actualVolumePerHour;
   float steamBodyTemp;
   float pipeBodyTemp;
@@ -3601,7 +3625,6 @@ struct AjaxTelemetrySnapshot {
   uint16_t waterPumpSpeed;
 #endif
   uint32_t freeHeap;
-  uint32_t detectorSteamStableSeconds;
   int32_t rssi;
   uint32_t freeFsBytes;
   int32_t targetSteps;
@@ -3613,10 +3636,16 @@ struct AjaxTelemetrySnapshot {
   int rowPredictedTotalTime;
   int processRemainingTime;
   int16_t withdrawalStatus;
+  // [Б6.1] Числовой статус для клиентов телеметрии (SamovarStatusInt), не
+  // строковое имя status - JSON-ключ ниже называется "SamovarStatusInt" по
+  // историческим причинам, а само поле structа - statusInt: smoke_a05_state_owners.py
+  // запрещает сериализатору читать глобальные переменные напрямую и держит
+  // "SamovarStatusInt" в списке запрещённых токенов, поэтому поле структуры не
+  // может называться так же, как глобальная переменная.
+  int16_t statusInt;
   uint16_t stepperStepMl;
   uint16_t i2cPumpSpeed;
   uint8_t detectorStatus;
-  uint8_t detectorSteamStabilityReason;
   uint8_t distRowPredictionReason;
   uint8_t distProcessPredictionReason;
   uint8_t boilingEvidence;
@@ -3625,6 +3654,7 @@ struct AjaxTelemetrySnapshot {
   bool useAutoSpeed;
   bool powerOn;
   bool pauseOn;
+  bool beerPaused;  // [Пиво 02.09 C2] Ручная пауза пива (зеркалит beerManualPause) для /ajax
   bool useBrowserBuzzer;
   bool mixer;
   bool i2cStepperPresent;
@@ -3641,7 +3671,6 @@ struct AjaxTelemetrySnapshot {
   String heaterAlarmReason;
   bool boilingDetected;
   bool boilingPrecisionSensorConfigured;
-  bool detectorRecoveryReady;
   uint32_t latestMessageSequence;
 };
 
@@ -3674,13 +3703,6 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.acpTemp = ACPSensor.avgTemp;
   snapshot.detectorTrend = impurityDetector.currentTrend;
   snapshot.detectorStatus = impurityDetector.detectorStatus;
-  snapshot.detectorSteamSpan = detector_steam_stability_span;
-  snapshot.detectorSteamVariance = detector_steam_stability_variance;
-  snapshot.detectorSteamStableSeconds = detector_steam_stable_seconds();
-  snapshot.detectorSteamStabilityReason = detector_steam_stability_reason;
-  snapshot.detectorRecoveryThreshold =
-      detector_current_recovery_threshold();
-  snapshot.detectorRecoveryReady = detector_trend_settled();
   snapshot.boilingDetected = boiling_evidence != BOILING_EVIDENCE_NONE;
   snapshot.boilingEvidence = boiling_evidence;
   snapshot.boilingPrecisionSensorConfigured =
@@ -3690,6 +3712,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.actualVolumePerHour = ActualVolumePerHour;
   snapshot.powerOn = PowerOn;
   snapshot.pauseOn = PauseOn;
+  snapshot.beerPaused = beerManualPause;  // [Пиво 02.09 C2]
   snapshot.withdrawalProgress = WthdrwlProgress;
   snapshot.targetSteps = stepper_safe_get_target();
   snapshot.currentSteps = stepper_safe_get_current();
@@ -3723,6 +3746,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
 
   const SAMOVAR_MODE mode = Samovar_Mode;
   const int16_t status = SamovarStatusInt;
+  snapshot.statusInt = status;  // [Б6.1] числовой статус в телеметрии
   const ProgramType currentType = current_program_type();
   if ((mode == SAMOVAR_RECTIFICATION_MODE || mode == SAMOVAR_BEER_MODE ||
        mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE) &&
@@ -3792,14 +3816,6 @@ static void writeAjaxTelemetryFields(
   jsonFieldFloat(out, first, "ACPTemp", snapshot.acpTemp, 3);
   jsonFieldFloat(out, first, "DetectorTrend", snapshot.detectorTrend, 3);
   jsonFieldRaw(out, first, "DetectorStatus", snapshot.detectorStatus);
-  jsonFieldFloat(out, first, "DetectorSteamSpan", snapshot.detectorSteamSpan, 4);
-  jsonFieldFloat(out, first, "DetectorSteamVariance", snapshot.detectorSteamVariance, 6);
-  jsonFieldRaw(out, first, "DetectorSteamStableSeconds", snapshot.detectorSteamStableSeconds);
-  jsonFieldRaw(out, first, "DetectorSteamStabilityReason", snapshot.detectorSteamStabilityReason);
-  jsonFieldFloat(out, first, "DetectorSteamSpanThreshold", DETECTOR_STEAM_STABLE_SPAN, 3);
-  jsonFieldFloat(out, first, "DetectorSteamVarianceThreshold", DETECTOR_STEAM_STABLE_VARIANCE, 6);
-  jsonFieldFloat(out, first, "DetectorRecoveryThreshold", snapshot.detectorRecoveryThreshold, 4);
-  jsonFieldBool(out, first, "DetectorRecoveryReady", snapshot.detectorRecoveryReady);
   jsonFieldBool(out, first, "BoilingDetected", snapshot.boilingDetected);
   jsonFieldRaw(out, first, "BoilingEvidence", snapshot.boilingEvidence);
   jsonFieldBool(out, first, "BoilingPrecisionSensorConfigured", snapshot.boilingPrecisionSensorConfigured);
@@ -3814,10 +3830,14 @@ static void writeAjaxTelemetryFields(
   jsonFieldFloat(out, first, "ActualVolumePerHour", snapshot.actualVolumePerHour, 3);
   jsonFieldBool(out, first, "PowerOn", snapshot.powerOn);
   jsonFieldBool(out, first, "PauseOn", snapshot.pauseOn);
+  jsonFieldBool(out, first, "BeerManualPause", snapshot.beerPaused);  // [Пиво 02.09 C2]
   jsonFieldRaw(out, first, "WthdrwlProgress", snapshot.withdrawalProgress);
   jsonFieldRaw(out, first, "TargetStepps", snapshot.targetSteps);
   jsonFieldRaw(out, first, "CurrrentStepps", snapshot.currentSteps);
   jsonFieldRaw(out, first, "WthdrwlStatus", snapshot.withdrawalStatus);
+  // [Б6.1] Числовой статус (SamovarStatusInt) - клиентам телеметрии, помимо строкового
+  // status, нужен и числовой код без парсинга строки.
+  jsonFieldRaw(out, first, "SamovarStatusInt", snapshot.statusInt);
   jsonFieldRaw(out, first, "ProgramNum", snapshot.programIndex + 1);
   jsonFieldRaw(out, first, "ProgramIndex", snapshot.programIndex);
   jsonFieldRaw(out, first, "CurrrentSpeed", snapshot.currentSpeed);
@@ -4005,6 +4025,13 @@ void apply_config_runtime() {
   }
   if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
   if (SamSetup.autospeed >= 100) SamSetup.autospeed = 0;
+  // [Б1.2] Насос отбора не откалиброван (0 шагов/мл в NVS) - validate_rect_program_startable()
+  // блокирует СТАРТ программы, но не лечит уже загруженный профиль. Подтягиваем к
+  // заводской калибровке, как остальные поля этой функции.
+  if (SamSetup.StepperStepMl == 0) SamSetup.StepperStepMl = STEPPER_STEP_ML;
+  // [Б9] Плотность насадки вне рабочего диапазона формы - подтягиваем к заводскому
+  // дефолту (profile_setup_fields.h: PackDens=80).
+  if (SamSetup.PackDens < 60 || SamSetup.PackDens > 100) SamSetup.PackDens = 80;
   apply_setup_sensor_fields(0);
 
   // Проверка через валидатор, а не только по верхней границе: SamSetup.Mode — знаковый int

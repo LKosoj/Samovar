@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 SET_MIXER_STATE_SIGNATURE = "ActuatorCommandResult set_mixer_state(bool state, bool dir)"
 CHECK_MIXER_STATE_SIGNATURE = "void check_mixer_state()"
+BEER_MIXER_REVERSE_DIR_SIGNATURE = "inline bool beer_mixer_reverse_dir(int stepCount)"
 BEER_SAFE_LUA_OUTPUTS_SIGNATURE = "inline ActuatorCommandResult beer_safe_lua_outputs()"
 COOLING_PUMP_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_pump(bool active)"
 COOLING_OUTPUTS_SIGNATURE = "inline ActuatorCommandResult beer_set_cooling_outputs(bool active)"
@@ -176,6 +177,8 @@ static int sendMsgCalls = 0;
 void SendMsg(const char*, int) { sendMsgCalls++; }
 
 ActuatorCommandResult set_mixer_state(bool state, bool dir);
+
+@BEER_MIXER_REVERSE_DIR_BODY@
 
 @CHECK_MIXER_STATE_BODY@
 
@@ -407,6 +410,25 @@ static void test_schedule_state_commits_only_after_applied_start() {
         "первая успешная попытка ошибочно получила реверс после FAILED");
 }
 
+// [Пиво 02.09 A2] Speed>0 - постоянный реверс независимо от чётности фазы (в
+// отличие от Speed<0, где реверс только через цикл). Оба значения currentstepcnt
+// (чёт/нечёт) обязаны ловить мутацию, залипшую на старой формуле "только по чётности".
+static void test_mixer_reverse_dir_matches_speed_semantics() {
+  reset_fixture();
+
+  program[0].Speed = 1;
+  check(beer_mixer_reverse_dir(0) == true, "Speed=1 (чётная фаза) должен давать постоянный реверс");
+  check(beer_mixer_reverse_dir(1) == true, "Speed=1 (нечётная фаза) должен давать постоянный реверс");
+
+  program[0].Speed = -1;
+  check(beer_mixer_reverse_dir(0) == true, "Speed=-1 (чётная фаза) должен давать реверс через цикл");
+  check(beer_mixer_reverse_dir(1) == false, "Speed=-1 (нечётная фаза) не должен давать реверс");
+
+  program[0].Speed = 0;
+  check(beer_mixer_reverse_dir(0) == false, "Speed=0 (чётная фаза) не должен давать реверс");
+  check(beer_mixer_reverse_dir(1) == false, "Speed=0 (нечётная фаза) не должен давать реверс");
+}
+
 // [Дефект 2 code review] alarm_c_low_min/alarm_c_min - АБСОЛЮТНЫЕ метки
 // millis(), а check_mixer_state() вообще не вызывается, пока строка на
 // ручной паузе (см. гейт в beer_stage_tick()). beerMixerPauseSinceMs -
@@ -474,6 +496,108 @@ static void test_mixer_schedule_does_not_collapse_after_long_pause() {
         "РЕГРЕСС: длинная пауза свернула цикл мешалки - расписание посчитало его завершённым и перезапустило с нуля");
 }
 
+// [Пиво 02.09 A6] Пауза пришлась на фазу вращения (после сдвига меток ON-фаза
+// ещё впереди) - при выходе из паузы мешалка должна включиться заново на
+// остаток фазы, а не ждать следующего цикла.
+static void test_mixer_resumes_after_pause_mid_rotation_phase() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;  // только мешалка
+  program[0].Volume = 100;         // 100с ON-фаза
+  program[0].Power = 50;           // 50с OFF-фаза после
+  program[0].Speed = 1;            // постоянный реверс (см. beer_mixer_reverse_dir/A2)
+  mixerStepperPresent = true;
+
+  fakeMillis = 1000;
+  check_mixer_state();  // старт цикла: ON до 101000, весь цикл до 151000
+  check(mixer_status && lastStepperDirection == true,
+        "фикстура A6: цикл мешалки не стартовал с ожидаемым реверсом (Speed=1)");
+
+  // Пауза началась через 50с после старта (пришлась на ON-фазу, 50с ещё
+  // осталось) - мешалка физически выключена гейтом ручной паузы.
+  mixer_status = false;
+  lastStepperDirection = false;
+  stepperCalls = 0;
+  beerMixerPauseSinceMs = 51000;
+  fakeMillis = 81000;  // снятие паузы через 30с
+
+  check_mixer_state();
+
+  check(mixer_status == true,
+        "РЕГРЕСС (Пиво 02.09 A6): выход из паузы в фазе вращения не включил мешалку заново");
+  check(stepperCalls == 1 && lastStepperDirection == true,
+        "РЕГРЕСС (Пиво 02.09 A6): возобновление не запустило шаговик с тем же направлением, что было до паузы");
+}
+
+// [Пиво 02.09 A6] Speed=-1 (реверс через цикл, по чётности) - в отличие от
+// Speed=1 в тесте выше (где направление одинаково при любой чётности и не
+// ловит подмену currentstepcnt на currentstepcnt+1), здесь после старта
+// цикла currentstepcnt нечётный и beer_mixer_reverse_dir(currentstepcnt) !=
+// beer_mixer_reverse_dir(currentstepcnt + 1) - направление после выхода из
+// паузы обязано совпасть с направлением, с которым цикл реально стартовал.
+static void test_mixer_resumes_after_pause_direction_matches_reverse_through_cycle() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;  // только мешалка
+  program[0].Volume = 100;         // 100с ON-фаза
+  program[0].Power = 50;           // 50с OFF-фаза после
+  program[0].Speed = -1;           // реверс через цикл (по чётности)
+  mixerStepperPresent = true;
+
+  fakeMillis = 1000;
+  check_mixer_state();  // старт цикла: ON до 101000, весь цикл до 151000
+  check(currentstepcnt % 2 == 1,
+        "фикстура: currentstepcnt после старта цикла должен быть нечётным");
+  check(beer_mixer_reverse_dir(currentstepcnt) != beer_mixer_reverse_dir(currentstepcnt + 1),
+        "фикстура: currentstepcnt и currentstepcnt+1 должны давать разное направление при Speed=-1");
+  const bool dirBeforePause = lastStepperDirection;
+  check(mixer_status, "фикстура A6/Speed=-1: цикл мешалки не стартовал");
+
+  // Пауза началась через 50с после старта (пришлась на ON-фазу, 50с ещё
+  // осталось) - мешалка физически выключена гейтом ручной паузы.
+  mixer_status = false;
+  lastStepperDirection = false;
+  stepperCalls = 0;
+  beerMixerPauseSinceMs = 51000;
+  fakeMillis = 81000;  // снятие паузы через 30с
+
+  check_mixer_state();
+
+  check(mixer_status == true && lastStepperDirection == dirBeforePause,
+        "РЕГРЕСС (Пиво 02.09 A6): направление мешалки после паузы не совпало с направлением до паузы");
+}
+
+// Контроль: пауза началась уже после ON-фазы (мешалка и так штатно выключена
+// расписанием) - возобновление не должно включать мешалку раньше времени.
+static void test_mixer_does_not_resume_after_pause_in_off_phase() {
+  reset_fixture();
+  program[0].capacity_num = 0b01;
+  program[0].Volume = 100;
+  program[0].Power = 50;
+  mixerStepperPresent = true;
+
+  fakeMillis = 1000;
+  check_mixer_state();  // старт цикла: ON до 101000, весь цикл до 151000
+  check(mixer_status, "фикстура A6-контроль: цикл мешалки не стартовал");
+
+  // ON-фаза естественно завершилась ДО паузы (штатный опрос ещё шёл) -
+  // alarm_c_low_min обнулился, мешалка выключена расписанием.
+  fakeMillis = 105000;
+  check_mixer_state();
+  check(!mixer_status && alarm_c_low_min == 0 && alarm_c_min == 151000,
+        "фикстура A6-контроль: ON-фаза не завершилась естественно до паузы");
+
+  // Пауза началась уже в OFF-фазе (105000..151000).
+  stepperCalls = 0;
+  beerMixerPauseSinceMs = 110000;
+  fakeMillis = 140000;  // снятие паузы всё ещё внутри OFF-фазы (до 151000)
+
+  check_mixer_state();
+
+  check(mixer_status == false,
+        "РЕГРЕСС (Пиво 02.09 A6): выход из паузы в OFF-фазе ошибочно включил мешалку");
+  check(stepperCalls == 0,
+        "РЕГРЕСС (Пиво 02.09 A6): выход из паузы в OFF-фазе дёрнул шаговик мешалки");
+}
+
 // [Находка] beer_finish() во время активного 'C'/'F' обязан сбросить
 // beerCoolingPumpActive, иначе он остаётся true до следующего старта пива.
 static void test_beer_finish_resets_cooling_pump_flag() {
@@ -522,8 +646,12 @@ int main() {
   test_failed_start_rollback_latches_and_stops_schedule_retry();
   test_failed_pump_rollback_latches_and_stops_schedule_retry();
   test_schedule_state_commits_only_after_applied_start();
+  test_mixer_reverse_dir_matches_speed_semantics();
   test_mixer_schedule_absorbs_short_pause_without_shortening_on_phase();
   test_mixer_schedule_does_not_collapse_after_long_pause();
+  test_mixer_resumes_after_pause_mid_rotation_phase();
+  test_mixer_resumes_after_pause_direction_matches_reverse_through_cycle();
+  test_mixer_does_not_resume_after_pause_in_off_phase();
   test_beer_finish_resets_cooling_pump_flag();
   test_beer_finish_then_external_mixer_off_mutes_pump();
   if (failures != 0) return 1;
@@ -630,6 +758,8 @@ int main() {
 
 
 def build_harness(beer_source: str) -> str:
+    reverse_dir_body = extract_function_body(beer_source, BEER_MIXER_REVERSE_DIR_SIGNATURE)
+    reverse_dir_fn = "inline bool beer_mixer_reverse_dir(int stepCount) {" + reverse_dir_body + "}"
     check_mixer_body = extract_function_body(beer_source, CHECK_MIXER_STATE_SIGNATURE)
     check_mixer_fn = "void check_mixer_state() {" + check_mixer_body + "}"
     mixer_body = extract_function_body(beer_source, SET_MIXER_STATE_SIGNATURE)
@@ -644,7 +774,8 @@ def build_harness(beer_source: str) -> str:
     reset_stage_fn = "inline void beer_reset_stage_state() {" + reset_stage_body + "}"
     finish_body = extract_function_body(beer_source, BEER_FINISH_SIGNATURE)
     finish_fn = "void beer_finish() {" + finish_body + "}"
-    harness = HARNESS_TEMPLATE.replace("@CHECK_MIXER_STATE_BODY@", check_mixer_fn)
+    harness = HARNESS_TEMPLATE.replace("@BEER_MIXER_REVERSE_DIR_BODY@", reverse_dir_fn)
+    harness = harness.replace("@CHECK_MIXER_STATE_BODY@", check_mixer_fn)
     harness = harness.replace("@SET_MIXER_STATE_BODY@", mixer_fn)
     harness = harness.replace("@COOLING_PUMP_BODY@", cooling_pump_fn)
     harness = harness.replace("@COOLING_OUTPUTS_BODY@", cooling_outputs_fn)

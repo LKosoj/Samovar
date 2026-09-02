@@ -67,7 +67,8 @@ BROWSER_TEST = r'''async page => {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
     theoreticalPlates: 20, headsFlowMlH: 100, bodyFlowMinMlH: 200,
     bodyFlowMaxMlH: 400, bodyEndFlowMlH: 300, tailsFlowMlH: 150,
-    headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000
+    headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000,
+    headsSpeedClamped: false, bodySpeedClamped: false
   };
   const problems = [];
   const mutationRequests = [];
@@ -573,8 +574,13 @@ BROWSER_TEST = r'''async page => {
     'chart second connection failure mismatch: ' + JSON.stringify(connection.second));
   expect(connection.repeated.messages === 1 && connection.repeated.play === 1,
     'chart repeated offline failure duplicated alarm: ' + JSON.stringify(connection.repeated));
+  // Восстановление связи ГАСИТ сирену: тревога висит на самом обрыве, а не на
+  // тосте о нём (app.js: alarmActive = heaterAlarmLatched || connectionAlarm).
+  // Прежнее требование "pause не изменился" оставляло alarm.mp3 крутиться после
+  // возврата связи, пока оператор вручную не уберёт сообщение. То же правило
+  // проверяет scenarioConnectionLossSoundsSiren в smoke_web_alarm_cursor_bootstrap.
   expect(connection.recovered.green === '' && connection.recovered.red.includes('hidden') &&
-    connection.recovered.pause === connection.repeated.pause,
+    connection.recovered.pause === connection.repeated.pause + 1,
     'chart recovery changed alarm audio/visibility: ' + JSON.stringify(connection.recovered));
   expect(JSON.stringify(connection.afterTwoToOne) === JSON.stringify({ removed: [1], pause: true }) &&
     JSON.stringify(connection.afterOneToZero) === JSON.stringify({ removed: [1, 0], pause: false }) &&

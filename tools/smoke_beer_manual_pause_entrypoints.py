@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Регресс-проверка [Ревью] enter_manual_pause() (logic.h) и трёх точек входа
+"""Регресс-проверка [Ревью] enter_manual_pause() (logic.h) и четырёх точек входа
 ручной паузы: Samovar.ino (case SAMOVAR_PAUSE), Blynk.ino (BLYNK_WRITE(V13)),
-Menu.ino (menu_pause()).
+Menu.ino (menu_pause()), WebServer.ino (action == "pause").
 
 [Находка] Пакет П2 добавил ручную паузу пива (beerManualPause, гейтит нагрев в
 beer.h) только инлайново в Samovar.ino case SAMOVAR_PAUSE/CONTINUE. Menu.ino
@@ -13,8 +13,11 @@ enter_manual_pause() (logic.h, рядом с resume_from_pause()), которы�
 пользуются все три точки входа.
 
 Этот файл проверяет:
-  1. Текстово - все три точки входа зовут именно enter_manual_pause() (а не
-     инлайн pause_withdrawal(true) + copy-paste beer-ветки).
+  1. Текстово - Samovar.ino/Blynk.ino/Menu.ino зовут именно enter_manual_pause()
+     (а не инлайн pause_withdrawal(true) + copy-paste beer-ветки); WebServer.ino
+     (action == "pause", свой командный тракт queue_samovar_command) суммирует
+     PauseOn ИЛИ beerManualPause при выборе SAMOVAR_CONTINUE/SAMOVAR_PAUSE - без
+     этого второй клик "Пауза" в веб-интерфейсе пива снова слал SAMOVAR_PAUSE.
   2. Поведенчески - РЕАЛЬНОЕ тело enter_manual_pause() извлекается из logic.h
      (extract_function_body, без переписывания логики) и компилируется в
      харнесс с не-static моками (pause_withdrawal, SendMsg, current_program_type):
@@ -251,6 +254,7 @@ def main() -> int:
     samovar_ino = read_stripped("Samovar.ino")
     blynk_ino = read_stripped("Blynk.ino")
     menu_ino = read_stripped("Menu.ino")
+    webserver_ino = read_stripped("WebServer.ino")
 
     # --- Samovar.ino: case SAMOVAR_PAUSE зовёт enter_manual_pause() ---
     pause_start = samovar_ino.find("case SAMOVAR_PAUSE:")
@@ -286,6 +290,26 @@ def main() -> int:
         menu_pause_body = ""
     if menu_pause_body and "enter_manual_pause();" not in menu_pause_body:
         errors.append("Menu.ino menu_pause(): enter_manual_pause() not called")
+
+    # --- WebServer.ino: action == "pause" учитывает PauseOn ИЛИ beerManualPause ---
+    # [Пиво 02.09 C1] До правки веб-точка входа смотрела только на PauseOn (для пива
+    # он всегда false), поэтому второй клик на "Пауза" в веб-интерфейсе снова слал
+    # SAMOVAR_PAUSE вместо SAMOVAR_CONTINUE, и выйти из паузы с веба было нельзя.
+    pause_action_start = webserver_ino.find('action == "pause"')
+    if pause_action_start < 0:
+        errors.append('WebServer.ino: action == "pause" not found')
+    else:
+        next_marker = webserver_ino.find('action == "voltage"', pause_action_start)
+        if next_marker < 0:
+            errors.append('WebServer.ino: could not bound action == "pause" block')
+        else:
+            pause_web_block = webserver_ino[pause_action_start:next_marker]
+            require_ordered_tokens(
+                'WebServer.ino action == "pause"',
+                pause_web_block,
+                ["PauseOn", "||", "beerManualPause", "?", "SAMOVAR_CONTINUE", ":", "SAMOVAR_PAUSE"],
+                errors,
+            )
 
     if errors:
         for error in errors:

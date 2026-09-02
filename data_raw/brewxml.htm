@@ -43,8 +43,8 @@ var program = "";
   }
   
 function compare( a, b ) {
-  a1 = decimalAdjust("round",get_object_value(a.TIME));
-  b1 = decimalAdjust("round",get_object_value(b.TIME));
+  var a1 = decimalAdjust("round",get_object_value(a.TIME));
+  var b1 = decimalAdjust("round",get_object_value(b.TIME));
   if (a1 < b1){
     return 1;
   }
@@ -52,6 +52,13 @@ function compare( a, b ) {
     return -1;
   }
   return 0;
+}
+
+// [Пиво 02.09 D7] "повреждён" в тексте ошибки - только когда файл не прошёл разбор XML;
+// содержательные ошибки (нет обязательного узла, нет шагов затирания и т.п.) идут как есть.
+function formatRecipeErrorMessage(err, kind) {
+  if (err && err.xmlSyntaxError) return "Файл рецепта повреждён или не в формате " + kind + ": " + err.message;
+  return (err && err.message) ? err.message : String(err);
 }
 
 function loadBeerXML(e) {
@@ -67,7 +74,7 @@ function loadBeerXML(e) {
 					get_brewmate_info(reader.result);
 				} catch (err) {
 					is_program = false;
-					SamovarApp.showRequestError('Файл рецепта повреждён или не в формате BrewMate: ' + err.message);
+					SamovarApp.showRequestError(formatRecipeErrorMessage(err, "BrewMate"));
 				}
 			};
 			reader.onerror = function () {
@@ -81,7 +88,7 @@ function loadBeerXML(e) {
 					get_brew_info(reader.result);
 				} catch (err) {
 					is_program = false;
-					SamovarApp.showRequestError('Файл рецепта повреждён или не в формате BeerXML: ' + err.message);
+					SamovarApp.showRequestError(formatRecipeErrorMessage(err, "BeerXML"));
 				}
 			};
 			reader.onerror = function () {
@@ -107,7 +114,11 @@ function parseXml(xml, arrayTags) {
     else throw new Error("cannot parse xml string!");
 
     if (dom.getElementsByTagName && dom.getElementsByTagName("parsererror").length > 0) {
-        throw new Error("файл повреждён, это не корректный XML.");
+        // [Пиво 02.09 D7] помечаем именно синтаксическую поломку XML - только для неё
+        // сообщение получает префикс "повреждён" (formatRecipeErrorMessage)
+        var xmlErr = new Error("файл повреждён, это не корректный XML.");
+        xmlErr.xmlSyntaxError = true;
+        throw xmlErr;
     }
 
     function parseNode(xmlNode, result) {
@@ -168,12 +179,39 @@ function check_value(val, type){
   if (type == "pt") return 20;
 }
 
+// [Пиво 02.09 D1] один файл может содержать несколько RECIPE - показываем выбор,
+// если их больше одного, и разбираем выбранный узел через get_recipe(R) (D0).
+var recipeList = [];
+function presentRecipe(recipeNode) {
+  recipeList = Array.isArray(recipeNode) ? recipeNode : [recipeNode];
+  var row = document.getElementById("recipe-select-row");
+  var select = document.getElementById("recipe-select");
+  select.innerHTML = "";
+  if (recipeList.length > 1) {
+    for (var i = 0; i < recipeList.length; i++) {
+      var opt = document.createElement("option");
+      opt.value = i;
+      var nm = get_object_value(recipeList[i].NAME);
+      opt.textContent = (nm !== "Нет в рецепте") ? nm : ("Рецепт " + (i + 1));
+      select.appendChild(opt);
+    }
+    row.style.display = "";
+  } else {
+    row.style.display = "none";
+  }
+  selectRecipe(0);
+}
+function selectRecipe(idx) {
+  try { get_recipe(recipeList[idx]); }
+  catch (err) { is_program = false; SamovarApp.showRequestError(formatRecipeErrorMessage(err, "BeerXML")); }
+}
+
 function get_brew_info(xml){
 	let recipe = parseXml(xml);
 	if (!recipe.RECIPES || !recipe.RECIPES.RECIPE) {
 		throw new Error("не найден обязательный узел RECIPES/RECIPE (это не файл BeerXML).");
 	}
-	get_recipe(recipe);
+	presentRecipe(recipe.RECIPES.RECIPE);
 }
 
 function get_brewmate_info(xml){
@@ -247,23 +285,24 @@ function get_brewmate_info(xml){
 		misc.NAME = misc.miscname;
 		misc.AMOUNT = misc.miscgr;
 	}
-		
-	get_recipe(recipe);
+
+	presentRecipe(recipe.RECIPES.RECIPE);
 }
 
-function get_recipe(recipe){
+function get_recipe(R){
     is_program = false;
-    program = "M;45.00;0;1^-1^2^3;0\n";
+    program = "";
 	//show main info
-    document.getElementById("STYLE").textContent = get_object_value(recipe.RECIPES.RECIPE.STYLE.NAME);
-    document.getElementById("NAME").textContent = get_object_value(recipe.RECIPES.RECIPE.NAME);
-    document.getElementById("TYPE").textContent = get_object_value(recipe.RECIPES.RECIPE.TYPE);
-    document.getElementById("BATCH_SIZE").textContent = get_object_value(recipe.RECIPES.RECIPE.BATCH_SIZE, " л.");
-    document.getElementById("BOIL_SIZE").textContent = get_object_value(recipe.RECIPES.RECIPE.BOIL_SIZE, " л.");
-    document.getElementById("BOIL_TIME").textContent = get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME, " мин.");
-    document.getElementById("NOTES").innerHTML = get_object_value(recipe.RECIPES.RECIPE.NOTES);
-    document.getElementById("PRIMARY_TEMP").innerHTML = get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP, " &deg;С");
-    document.getElementById("FERMENTABLE_TIME").innerHTML = get_object_value(recipe.RECIPES.RECIPE.FERMENTABLE_TIME, " дней");
+    document.getElementById("STYLE").textContent = get_object_value(R.STYLE && R.STYLE.NAME);
+    document.getElementById("NAME").textContent = get_object_value(R.NAME);
+    document.getElementById("TYPE").textContent = get_object_value(R.TYPE);
+    document.getElementById("BATCH_SIZE").textContent = get_object_value(R.BATCH_SIZE, " л.");
+    document.getElementById("BOIL_SIZE").textContent = get_object_value(R.BOIL_SIZE, " л.");
+    document.getElementById("BOIL_TIME").textContent = get_object_value(R.BOIL_TIME, " мин.");
+    // [Пиво 02.09 D9] textContent вместо innerHTML - заметки из файла рецепта не должны исполняться как HTML
+    document.getElementById("NOTES").textContent = get_object_value(R.NOTES);
+    document.getElementById("PRIMARY_TEMP").textContent = get_object_value(R.PRIMARY_TEMP, " °С");
+    document.getElementById("FERMENTABLE_TIME").textContent = get_object_value(R.FERMENTABLE_TIME, " дней");
 
         
     //show ingredients
@@ -291,10 +330,11 @@ function get_recipe(recipe){
     ingr.appendChild(dl);
 
     var FERMENTABLE = [];
-    if (Array.isArray(recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE)){
-       FERMENTABLE = recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE;
-    } else {FERMENTABLE.push(recipe.RECIPES.RECIPE.FERMENTABLES.FERMENTABLE) }
-    
+    if (R.FERMENTABLES && R.FERMENTABLES.FERMENTABLE) {
+      if (Array.isArray(R.FERMENTABLES.FERMENTABLE)) FERMENTABLE = R.FERMENTABLES.FERMENTABLE;
+      else FERMENTABLE.push(R.FERMENTABLES.FERMENTABLE);
+    }
+
     //grain
     for (let ferm of FERMENTABLE){
       var dl1 = document.createElement("div");
@@ -318,10 +358,12 @@ function get_recipe(recipe){
     }
 
     //hop
+    // [Пиво 02.09 D7] хмель в рецепте не обязателен - без узла HOPS список остаётся пустым
     var HOP = [];
-    if (Array.isArray(recipe.RECIPES.RECIPE.HOPS.HOP)){
-       HOP = recipe.RECIPES.RECIPE.HOPS.HOP;
-    } else {HOP.push(recipe.RECIPES.RECIPE.HOPS.HOP) }
+    if (R.HOPS && R.HOPS.HOP) {
+      if (Array.isArray(R.HOPS.HOP)) HOP = R.HOPS.HOP;
+      else HOP.push(R.HOPS.HOP);
+    }
     for (let hop of HOP){
       var dl1 = document.createElement("div");
       dl1.className = "ingredients";
@@ -343,9 +385,10 @@ function get_recipe(recipe){
     
     //yeast
     var YEAST = [];
-    if (Array.isArray(recipe.RECIPES.RECIPE.YEASTS.YEAST)){
-       YEAST = recipe.RECIPES.RECIPE.YEASTS.YEAST;
-    } else {YEAST.push(recipe.RECIPES.RECIPE.YEASTS.YEAST) }
+    if (R.YEASTS && R.YEASTS.YEAST) {
+      if (Array.isArray(R.YEASTS.YEAST)) YEAST = R.YEASTS.YEAST;
+      else YEAST.push(R.YEASTS.YEAST);
+    }
     for (let yeast of YEAST){
       var dl1 = document.createElement("div");
       dl1.className = "ingredients";
@@ -368,9 +411,10 @@ function get_recipe(recipe){
     
     //misc
     var MISC = [];
-    if (Array.isArray(recipe.RECIPES.RECIPE.MISCS.MISC)){
-       MISC = recipe.RECIPES.RECIPE.MISCS.MISC;
-    } else if (!(recipe.RECIPES.RECIPE.MISCS.MISC === undefined)) {MISC.push(recipe.RECIPES.RECIPE.MISCS.MISC) }
+    if (R.MISCS && R.MISCS.MISC) {
+      if (Array.isArray(R.MISCS.MISC)) MISC = R.MISCS.MISC;
+      else MISC.push(R.MISCS.MISC);
+    }
     for (let misc of MISC){
       if (get_object_value(misc.TYPE) == "Flavor" || get_object_value(misc.TYPE) == "Fining"){
         var dl1 = document.createElement("div");
@@ -418,10 +462,21 @@ function get_recipe(recipe){
     dl.appendChild(dl1);
     
     //mash
+    // [Пиво 02.09 D7] без шагов затирания программу не построить - явная ошибка вместо TypeError
+    if (!R.MASH || !R.MASH.MASH_STEPS || !R.MASH.MASH_STEPS.MASH_STEP) {
+      throw new Error("в рецепте нет шагов затирания");
+    }
     var MASH = [];
-    if (Array.isArray(recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP)){
-       MASH = recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP;
-    } else {MASH.push(recipe.RECIPES.RECIPE.MASH.MASH_STEPS.MASH_STEP) }
+    if (Array.isArray(R.MASH.MASH_STEPS.MASH_STEP)){
+       MASH = R.MASH.MASH_STEPS.MASH_STEP;
+    } else {MASH.push(R.MASH.MASH_STEPS.MASH_STEP) }
+
+    // [Пиво 02.09 D4] температура первой строки M - INFUSE_TEMP первого шага затирания, иначе его STEP_TEMP, иначе 45
+    var mTemp = get_object_value(MASH[0].INFUSE_TEMP);
+    if (mTemp === "Нет в рецепте") mTemp = get_object_value(MASH[0].STEP_TEMP);
+    if (mTemp === "Нет в рецепте") mTemp = "45.00";
+    program = "M;" + mTemp + ";0;1^-1^2^3;0\n";
+
     for (let mash of MASH){
 	  var dl1 = document.createElement("div");
       dl1.className = "ingredients";
@@ -451,28 +506,32 @@ function get_recipe(recipe){
     ingr.innerHTML = "";
     ingr.appendChild(dl);
     
-    pt = check_value(get_object_value(recipe.RECIPES.RECIPE.PRIMARY_TEMP), "pt");
+    pt = check_value(get_object_value(R.PRIMARY_TEMP), "pt");
 
-    bth = decimalAdjust("round",check_value(get_object_value(recipe.RECIPES.RECIPE.BOIL_TIME), "bt"));
-    t = 0;
-    HOP.sort(compare);
+    // [Пиво 02.09 D2] в кипячение попадают только хмели с USE Boil/First Wort (Dry Hop и т.п. не варятся)
+    var boilHop = HOP.filter(function (hop) {
+      var use = get_object_value(hop.USE);
+      if (use === "Нет в рецепте") return true; // BrewMate / USE отсутствует - как раньше
+      use = String(use).trim().toLowerCase();
+      return use === "boil" || use === "first wort";
+    });
 
-    for (let hop of HOP){
-        t = decimalAdjust("round",get_object_value(hop.TIME));
-        if ((bth - t) <= 0) {
-            program = program + "B;0.00;1;1^-1^2^3;0\n";
-        }
-        else {
-            program = program + "B;0.00;" + (bth - t) + ";1^-1^2^3;0\n";
-        	bth = t;
-        }
+    // [Пиво 02.09 D3] одинаковое TIME сворачивается в одну строку B; хмель с TIME == BOIL_TIME не даёт лишнюю "B;0.00;1"
+    bth = decimalAdjust("round", check_value(get_object_value(R.BOIL_TIME), "bt"));
+    boilHop.sort(compare);
+    var lastTime = null;
+    for (var i = 0; i < boilHop.length; i++) {
+      var t = decimalAdjust("round", get_object_value(boilHop[i].TIME));
+      if (!Number.isFinite(t) || t > bth) continue;
+      if (t === lastTime) continue;
+      lastTime = t;
+      if (bth - t > 0) program = program + "B;0.00;" + (bth - t) + ";1^-1^2^3;0\n";
+      bth = t;
     }
+    if (bth > 0) program = program + "B;0.00;" + bth + ";1^-1^2^3;0\n";
 
-    if (bth > 0) {
-          program = program + "B;0.00;" + bth + ";1^-1^2^3;0\n";
-    }
-
-    program = program + "C;" + pt + ";0;1^-1^2^3;0\nF;" + pt + ";0;1^-1^2^3;0";
+    // [Пиво 02.09 D5] мешалка на кипячении/выводе не крутится
+    program = program + "C;" + pt + ";0;0^0^0^0;0\nF;" + pt + ";0;0^0^0^0;0";
 
     var err = validateBeerProgramText(program);
     if (err) {
@@ -512,6 +571,18 @@ function validateBeerProgramText(text) {
     if (!Number.isFinite(time) || time < 0 || time > 1440) {
       return "шаг " + n + ": время «" + f[2] + "» не число от 0 до 1440 минут (проверьте STEP_TIME/BOIL_TIME в файле рецепта)";
     }
+    // [Пиво 02.09 D6] структура устройства и семантика строки - общее правило SamovarApp.beerRowTypeOk
+    var device = f[3].split("^").map(Number);
+    var deviceValid = device.length === 4 && device.every(Number.isFinite);
+    var noDevice = deviceValid && device[0] === 0 && device[1] === 0 && device[2] === 0 && device[3] === 0;
+    var scheduledDevice = deviceValid && device[0] >= 1 && device[0] <= 3 && device[2] > 0;
+    if (!noDevice && !scheduledDevice) {
+      return "шаг " + n + ": повреждена структура устройства «" + f[3] + "»";
+    }
+    var sensor = Number(f[4]);
+    if (!SamovarApp.beerRowTypeOk(f[0], temp, time, noDevice, sensor)) {
+      return "шаг " + n + ": для типа «" + f[0] + "» температура/время/устройство не соответствуют правилам (temp=" + temp + ", time=" + time + ")";
+    }
   }
   return "";
 }
@@ -531,9 +602,17 @@ async function set_program(){
   }
 };
 
+// [Пиво 02.09 D8] установить программу можно только в режиме "Пиво"
+document.addEventListener("DOMContentLoaded", function () {
+  if (document.body.dataset.isBeerMode !== "true") {
+    document.getElementById("setprogram").disabled = true;
+    SamovarApp.showRequestError("Переключите режим на «Пиво», чтобы установить программу.");
+  }
+});
+
 </script>
 </head>
-<body>
+<body data-is-beer-mode="%IsBeerMode%">
 <form action='none' onsubmit='return false' name="mainform" id="mainform">
 <h1>
 <div class="message-box" style="display: none;" id="message"></div>
@@ -542,11 +621,17 @@ Samovar v. <span id='version'>%v%</span>
 
 <div class="text">Программа затирания</div>
 
-<div class="file-upload-control" style="margin: 20px auto; width: 200px;">
+<div class="file-upload-control btn-cell" style="margin: 20px auto;">
 <label for="fileToLoad" class="button custom-file-upload">
     <i class="fa fa-cloud-upload"></i>Загрузить рецепт
 </label>
 <input type="file" id="fileToLoad" accept="application/xml" onchange="loadBeerXML(this.files[0])" class="button"/>
+</div>
+
+<!-- [Пиво 02.09 D1] выбор рецепта, если в файле несколько RECIPE -->
+<div class="btn-cell" id="recipe-select-row" style="display:none; margin: 10px auto;">
+<label for="recipe-select">Рецепт в файле: </label>
+<select id="recipe-select" onchange="selectRecipe(this.value)"></select>
 </div>
 
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">

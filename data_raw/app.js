@@ -19,6 +19,7 @@
   const MAX_MESSAGE_SEQUENCE = 0xFFFFFFFF;
   const RUNTIME_EVENT_BATCH_LIMIT = 16;
   const MESSAGE_GAP_WARNING = 'Пропущены сообщения: обнаружен разрыв последовательности.';
+  const MESSAGE_REBOOT_WARNING = 'Контроллер перезагрузился: счёт сообщений начат заново.';
   const RUNTIME_BUSY_WARNING = 'Контроллер временно занят, статус обновится при следующем опросе.';
   const TELEMETRY_OPTION_KEYS = [
     'threshold', 'onReady', 'connectionIds', 'storeMessageHistory',
@@ -75,6 +76,19 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  // Правила типов строк программы «Пиво» — единый источник для beer.htm
+  // (check_program) и brewxml.htm (validateBeerProgramText); зеркало
+  // program_io.h::program_validate_beer_row_semantics.
+  function beerRowTypeOk(type, temp, time, noDevice, sensor) {
+    if (type === 'M' || type === 'C' || type === 'F') return temp > 0 && time === 0;
+    if (type === 'P') return temp > 0 && time > 0;
+    if (type === 'B') return temp === 0 && time > 0;
+    if (type === 'W') return temp === 0 && time === 0;
+    if (type === 'L') return temp === 0 && time === 0 && noDevice && sensor === 0;
+    if (type === 'A') return temp > 0 && time === 0 && noDevice;
+    return false;
   }
 
   function requestErrorElement() {
@@ -859,9 +873,11 @@
               // новый прогон. Настоящий разрыв - только прыжок вперёд: курсор
               // вытеснен из кольца (больше 16 событий между опросами).
               const deviceRestarted = messageCursor !== 0 && event.sequence < expected;
-              if (!deviceRestarted) {
-                activeSinks.message(MESSAGE_GAP_WARNING, 1);
-              }
+              // Молчать про откат счётчика нельзя: перезагрузка контроллера посреди
+              // перегонки - это событие, о котором оператор обязан узнать (нагрев
+              // снят, программа восстанавливается из снимка). Прошивка сама о старте
+              // не сообщает, поэтому единственный признак - именно откат счётчика.
+              activeSinks.message(deviceRestarted ? MESSAGE_REBOOT_WARNING : MESSAGE_GAP_WARNING, 1);
             }
             if (event.kind === 'message') {
               activeSinks.message(event.text, event.level);
@@ -1007,10 +1023,6 @@
       const result = commandResultText(token, detail);
       const knownToken = token && Object.prototype.hasOwnProperty.call(COMMAND_TOKENS, token);
       function report(text, level) {
-        if (options && options.acknowledge) {
-          alert(text);
-          return;
-        }
         addMessage(text, level);
       }
       if (knownToken && !result.ok) {
@@ -1029,17 +1041,12 @@
         report(options && options.successMessage ? options.successMessage : result.text, 2);
         return true;
       }
-      if (options && options.acknowledge) {
-        alert(result.text);
-        return false;
-      }
       addMessage(result.text, result.level);
       return false;
     } catch (err) {
       const errorText = 'Ошибка сети при отправке команды: ' + err;
       showRequestError(errorText);
-      if (options && options.acknowledge) alert(errorText);
-      else addMessage(errorText, 0);
+      addMessage(errorText, 0);
       return false;
     }
   }
@@ -1316,7 +1323,7 @@
     if (programMutationPending) {
       const message = 'Изменение программы уже выполняется.';
       showRequestError(message);
-      alert(message);
+      notify(message, 1);
       return false;
     }
     const body = new FormData();
@@ -1329,7 +1336,6 @@
         const failText =
           'Очистка не принята (HTTP ' + result.httpStatus + '): ' +
             (result.err || 'неизвестная ошибка');
-        alert(failText);
         notify(
           failText,
           result.httpStatus === 400 || result.httpStatus === 409 || result.httpStatus === 503 ? 1 : 0
@@ -1340,13 +1346,11 @@
       if (!result.queued) throw new Error('Сервер не подтвердил постановку очистки в очередь.');
       await waitForOperation(result.operationId);
       clearRequestError();
-      alert('Программа очищена.');
       notify('Программа очищена.', 2);
       return true;
     } catch (err) {
       const message = 'Ошибка очистки программы: ' + err;
       showRequestError(message);
-      alert(message);
       notify(message, 0);
       return false;
     } finally {
@@ -1407,6 +1411,7 @@
   window.SamovarApp = {
     addLuaButtons: addLuaButtons,
     addMessage: addMessage,
+    beerRowTypeOk: beerRowTypeOk,
     clearProgram: clearProgram,
     clearHistory: clearHistory,
     clearMessages: clearMessages,

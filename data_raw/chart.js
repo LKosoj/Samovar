@@ -85,6 +85,24 @@
     return Math.max(min, Math.min(max, value));
   }
 
+  // Ручка границы участка. Это не <input type="range">: две отдельные ручки на
+  // одной полосе, как у скроллбара amCharts, нужны именно как границы окна.
+  function createGrip(label) {
+    const grip = document.createElement('div');
+    grip.className = 'chart-range-grip';
+    grip.tabIndex = 0;
+    grip.setAttribute('role', 'slider');
+    grip.setAttribute('aria-label', label);
+    return grip;
+  }
+
+  function setGripValue(grip, index, total, row) {
+    grip.setAttribute('aria-valuemin', '1');
+    grip.setAttribute('aria-valuemax', String(total));
+    grip.setAttribute('aria-valuenow', String(index + 1));
+    grip.setAttribute('aria-valuetext', (row && row.Date) ? row.Date : String(index + 1));
+  }
+
   function createCanvas(parent) {
     parent.innerHTML = '';
     const wrap = document.createElement('div');
@@ -95,7 +113,7 @@
     canvas.setAttribute('role', 'img');
     canvas.setAttribute(
       'aria-label',
-      'График. Колёсико масштабирует, перетаскивание выделяет участок, двойной щелчок показывает всё.'
+      'График. Наведение показывает значения; участок задают ползунки под графиком.'
     );
     const status = document.createElement('div');
     status.className = 'chart-status';
@@ -103,22 +121,32 @@
     legend.className = 'chart-legend';
     legend.setAttribute('role', 'group');
     legend.setAttribute('aria-label', 'Ряды графика, нажатие включает и выключает');
-    const scroll = document.createElement('div');
-    scroll.className = 'chart-scroll';
-    scroll.setAttribute('role', 'scrollbar');
-    scroll.setAttribute('aria-label', 'Видимый участок графика');
-    const thumb = document.createElement('div');
-    thumb.className = 'chart-scroll-thumb';
-    scroll.appendChild(thumb);
+    const range = document.createElement('div');
+    range.className = 'chart-range';
+    range.setAttribute('role', 'group');
+    range.setAttribute('aria-label', 'Участок графика');
+    const fill = document.createElement('div');
+    fill.className = 'chart-range-fill';
+    const gripFrom = createGrip('Начало участка');
+    const gripTo = createGrip('Конец участка');
+    // Стартовый вид до первой отрисовки: участок во всю полосу, ручки по краям.
+    fill.style.width = '100%';
+    gripTo.style.left = '100%';
+    range.appendChild(fill);
+    range.appendChild(gripFrom);
+    range.appendChild(gripTo);
     const readout = document.createElement('div');
     readout.className = 'chart-readout';
     wrap.appendChild(canvas);
-    wrap.appendChild(scroll);
+    wrap.appendChild(range);
     wrap.appendChild(readout);
     wrap.appendChild(status);
     wrap.appendChild(legend);
     parent.appendChild(wrap);
-    return { canvas: canvas, status: status, legend: legend, scroll: scroll, thumb: thumb, readout: readout };
+    return {
+      canvas: canvas, status: status, legend: legend,
+      range: range, fill: fill, gripFrom: gripFrom, gripTo: gripTo, readout: readout
+    };
   }
 
   function yFromValue(value, bounds, area) {
@@ -316,15 +344,16 @@
     this.hiddenSeries = Object.assign({}, this.options.hidden || {});
     this.viewFrom = 0;
     this.viewTo = null;
-    this.dragSelect = null;
     this.hoverIndex = null;
     this._plot = { left: 54, width: 1 };
     const elements = createCanvas(this.parent);
     this.canvas = elements.canvas;
     this.status = elements.status;
     this.legend = elements.legend;
-    this.scroll = elements.scroll;
-    this.thumb = elements.thumb;
+    this.range = elements.range;
+    this.fill = elements.fill;
+    this.gripFrom = elements.gripFrom;
+    this.gripTo = elements.gripTo;
     this.readout = elements.readout;
     this.renderLegend();
     this.bindPlot();
@@ -403,60 +432,9 @@
   SamovarChart.prototype.bindPlot = function () {
     const self = this;
     const canvas = this.canvas;
-    let pointer = null;
-
-    canvas.addEventListener('wheel', function (event) {
-      if (self.rows.length < 8) return;
-      event.preventDefault();
-      const span = self.span();
-      const count = span.to - span.from + 1;
-      const factor = event.deltaY < 0 ? 0.8 : 1.25;
-      const nextCount = clamp(Math.round(count * factor), 8, self.rows.length);
-      if (nextCount === count) {
-        if (factor > 1) self.resetView();
-        return;
-      }
-      const frac = clamp((event.offsetX - self._plot.left) / self._plot.width, 0, 1);
-      const center = span.from + count * frac;
-      const from = clamp(Math.round(center - nextCount * frac), 0, self.rows.length - nextCount);
-      self.setView(from, from + nextCount - 1);
-    }, { passive: false });
-
-    canvas.addEventListener('pointerdown', function (event) {
-      if (event.button !== 0) return;
-      pointer = { start: event.offsetX, end: event.offsetX };
-      canvas.setPointerCapture(event.pointerId);
-    });
-
-    canvas.addEventListener('pointermove', function (event) {
-      if (!pointer) return;
-      pointer.end = event.offsetX;
-      if (Math.abs(pointer.end - pointer.start) > 8) {
-        self.dragSelect = { a: pointer.start, b: pointer.end };
-        self.draw();
-      }
-    });
-
-    function finishPointer() {
-      if (!pointer) return;
-      const start = pointer.start;
-      const end = pointer.end;
-      pointer = null;
-      self.dragSelect = null;
-      if (Math.abs(end - start) > 12 && self.rows.length > 4) {
-        self.setView(self.xToIndex(start), self.xToIndex(end));
-      } else {
-        self.draw();
-      }
-    }
-
-    canvas.addEventListener('pointerup', finishPointer);
-    canvas.addEventListener('pointercancel', finishPointer);
-    canvas.addEventListener('dblclick', function () { self.resetView(); });
-
     let hoverRaf = 0;
+
     canvas.addEventListener('pointermove', function (event) {
-      if (pointer) return;
       self.hoverIndex = self.xToIndex(event.offsetX);
       if (hoverRaf) return;
       hoverRaf = requestAnimationFrame(function () {
@@ -465,40 +443,82 @@
       });
     });
     canvas.addEventListener('pointerleave', function () {
-      if (pointer) return;
       self.hoverIndex = null;
       self.draw();
     });
 
-    this.bindScroll();
+    this.bindRange();
   };
 
-  SamovarChart.prototype.bindScroll = function () {
+  // Масштаб задают только две ручки под графиком: колёсико и выделение рамкой
+  // умели лишь приближать, а вернуть обзор на приборе было нечем.
+  SamovarChart.prototype.bindRange = function () {
     const self = this;
-    const scroll = this.scroll;
-    function applyClientX(clientX) {
-      const n = self.rows.length;
-      if (n < 8) return;
-      const span = self.span();
-      const count = span.to - span.from + 1;
-      const rect = scroll.getBoundingClientRect();
+    const range = this.range;
+    const MIN_SPAN = 4;
+
+    // Полоса всегда показывает ВЕСЬ лог, поэтому точка под курсором считается
+    // от полной длины, а не от видимого участка.
+    function indexAt(clientX) {
+      const rect = range.getBoundingClientRect();
       const t = clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
-      const from = clamp(Math.round(t * n - count / 2), 0, n - count);
-      self.setView(from, from + count - 1);
+      return Math.round(t * Math.max(0, self.rows.length - 1));
     }
-    let dragging = false;
-    scroll.addEventListener('pointerdown', function (event) {
-      dragging = true;
-      scroll.setPointerCapture(event.pointerId);
-      applyClientX(event.clientX);
+
+    let drag = null;
+    range.addEventListener('pointerdown', function (event) {
+      if (self.rows.length < 8) return;
+      range.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      if (event.target === self.gripFrom || event.target === self.gripTo) {
+        drag = { mode: event.target === self.gripFrom ? 'from' : 'to' };
+        return;
+      }
+      const count = self.span().to - self.span().from + 1;
+      if (event.target !== self.fill) {
+        // Щелчок мимо участка переносит окно того же размера сюда.
+        const from = clamp(indexAt(event.clientX) - Math.round(count / 2), 0, self.rows.length - count);
+        self.setView(from, from + count - 1);
+      }
+      drag = { mode: 'pan', at: indexAt(event.clientX), from: self.span().from, count: count };
     });
-    scroll.addEventListener('pointermove', function (event) {
-      if (!dragging) return;
-      applyClientX(event.clientX);
+
+    range.addEventListener('pointermove', function (event) {
+      if (!drag) return;
+      const idx = indexAt(event.clientX);
+      const span = self.span();
+      if (drag.mode === 'from') self.setView(Math.min(idx, span.to - MIN_SPAN), span.to);
+      else if (drag.mode === 'to') self.setView(span.from, Math.max(idx, span.from + MIN_SPAN));
+      else {
+        const from = clamp(drag.from + idx - drag.at, 0, self.rows.length - drag.count);
+        self.setView(from, from + drag.count - 1);
+      }
     });
-    function stopDrag() { dragging = false; }
-    scroll.addEventListener('pointerup', stopDrag);
-    scroll.addEventListener('pointercancel', stopDrag);
+
+    function stopDrag() { drag = null; }
+    range.addEventListener('pointerup', stopDrag);
+    range.addEventListener('pointercancel', stopDrag);
+    range.addEventListener('dblclick', function () { self.resetView(); });
+
+    // Ручка объявлена слайдером, значит обязана слушаться стрелок.
+    function nudge(which, delta) {
+      const span = self.span();
+      if (which === 'from') self.setView(clamp(span.from + delta, 0, span.to - MIN_SPAN), span.to);
+      else self.setView(span.from, clamp(span.to + delta, span.from + MIN_SPAN, self.rows.length - 1));
+    }
+    function onKey(which) {
+      return function (event) {
+        const step = Math.max(1, Math.round(self.rows.length / 50));
+        if (event.key === 'ArrowLeft') nudge(which, -step);
+        else if (event.key === 'ArrowRight') nudge(which, step);
+        else if (event.key === 'Home') nudge(which, -self.rows.length);
+        else if (event.key === 'End') nudge(which, self.rows.length);
+        else return;
+        event.preventDefault();
+      };
+    }
+    this.gripFrom.addEventListener('keydown', onKey('from'));
+    this.gripTo.addEventListener('keydown', onKey('to'));
   };
 
   // retryFn - необязательный обработчик кнопки "Повторить" для сообщений об ошибке;
@@ -564,7 +584,7 @@
       this.setData(parseCsv(text));
       this.setStatus(
         (this.rows.length ? 'Загружено точек: ' + this.rows.length + '. ' : 'Нет данных графика. ') +
-        'Колёсико и полоса снизу — масштаб, перетаскивание — участок, двойной щелчок — весь график, легенда — вкл/выкл, наведение — значения.',
+        'Ползунки под графиком задают участок, двойной щелчок по полосе — весь график, легенда — вкл/выкл, наведение — значения.',
         false
       );
     } finally {
@@ -650,13 +670,7 @@
       ctx.textAlign = 'right';
       ctx.fillText(rows[rows.length - 1].Date || '', area.left + area.width, area.top + area.height + 12);
     }
-    if (this.dragSelect) {
-      const a = clamp(Math.min(this.dragSelect.a, this.dragSelect.b), area.left, area.left + area.width);
-      const b = clamp(Math.max(this.dragSelect.a, this.dragSelect.b), area.left, area.left + area.width);
-      ctx.fillStyle = 'rgba(52, 152, 219, 0.18)';
-      ctx.fillRect(a, area.top, Math.max(1, b - a), area.height);
-    }
-    if (!this.dragSelect && this.hoverIndex != null && rows.length > 0) {
+    if (this.hoverIndex != null && rows.length > 0) {
       const span = this.span();
       const hi = clamp(this.hoverIndex, span.from, span.to);
       const local = hi - span.from;
@@ -683,10 +697,18 @@
   SamovarChart.prototype.updateChrome = function (viewRows) {
     const n = this.rows.length;
     const span = this.span();
-    if (this.thumb && n > 0) {
-      const count = span.to - span.from + 1;
-      this.thumb.style.left = (span.from / n * 100) + '%';
-      this.thumb.style.width = Math.max(2, count / n * 100) + '%';
+    if (this.fill) {
+      // Без данных полоса показывает пустой участок целиком: иначе обе ручки
+      // встают в ноль и накладываются друг на друга.
+      const last = Math.max(1, n - 1);
+      const from = n > 1 ? span.from / last * 100 : 0;
+      const to = n > 1 ? span.to / last * 100 : 100;
+      this.fill.style.left = from + '%';
+      this.fill.style.width = Math.max(1, to - from) + '%';
+      this.gripFrom.style.left = from + '%';
+      this.gripTo.style.left = to + '%';
+      setGripValue(this.gripFrom, span.from, n, this.rows[span.from]);
+      setGripValue(this.gripTo, span.to, n, this.rows[span.to]);
     }
     if (!this.readout) return;
     const idx = this.hoverIndex;

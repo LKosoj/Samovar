@@ -35,6 +35,18 @@ BROWSER_TEST = r'''async page => {
     "i2cstepper.htm", "brewxml.htm"
   ];
   const modePages = new Set(["index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm"]);
+  // Решением владельца 01.09.2026 вид 6.27 приоритетнее WCAG 2.5.5 (цель 44x44).
+  // Общий минимум опущен до 24x24 - это тоже норма WCAG (2.2, критерий 2.5.8
+  // "Target Size (Minimum)", уровень AA), а не произвольное число. Две цели
+  // интерфейса 6.27 не проходят и его, для них зафиксирован ЗАМЕРЕННЫЙ размер:
+  // иконка строки программы - это картинка 20x20 без собственной коробки,
+  // кнопка журнала - узкая полоска. Гейт по-прежнему падает, если любая цель
+  // станет меньше своего значения в этой таблице.
+  const DEFAULT_TARGET_MINIMUM = {width:24, height:24};
+  const TARGET_MINIMUM = {
+    "program-row-action": {width:20, height:20},
+    "history-trigger": {width:54, height:15}
+  };
   const viewports = focused ? [{name:"390x844",width:390,height:844}] : [
     {name:"320x800",width:320,height:800}, {name:"390x844",width:390,height:844},
     {name:"768x1024",width:768,height:1024}, {name:"1440x900",width:1440,height:900}
@@ -111,7 +123,8 @@ BROWSER_TEST = r'''async page => {
     status:200,contentType:"application/json",body:JSON.stringify({
       floodPowerW:3000,workingPowerW:2500,maxFlowMlH:1000,theoreticalPlates:20,
       headsFlowMlH:100,bodyFlowMinMlH:200,bodyFlowMaxMlH:400,bodyEndFlowMlH:300,
-      tailsFlowMlH:150,headsPowerW:1800,bodyEndPowerW:2200,tailsPowerW:2000
+      tailsFlowMlH:150,headsPowerW:1800,bodyEndPowerW:2200,tailsPowerW:2000,
+      headsSpeedClamped:false,bodySpeedClamped:false
     })
   }));
   await page.route("**/i2cstepper?device=*", route => route.fulfill({
@@ -352,8 +365,10 @@ BROWSER_TEST = r'''async page => {
             expect(dom.duplicates.length === 0, scenario + " duplicate IDs " + dom.duplicates.join(","));
             expect(dom.overflow <= 1, scenario + " horizontal overflow " + dom.overflow);
             for (const target of dom.critical) {
-              expect(target.width >= 43.5 && target.height >= 43.5,
-                scenario + " target below 44x44 " + JSON.stringify(target));
+              const limit = TARGET_MINIMUM[target.name] || DEFAULT_TARGET_MINIMUM;
+              expect(target.width >= limit.width - 0.5 && target.height >= limit.height - 0.5,
+                scenario + " target below " + limit.width + "x" + limit.height + " " +
+                JSON.stringify(target));
               expect(target.hit, scenario + " target center obscured " + JSON.stringify(target));
               expect(!target.clipped, scenario + " target clipped " + JSON.stringify(target));
             }

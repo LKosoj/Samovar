@@ -118,7 +118,11 @@ body {
   color: var(--text-main);
 }
 
-#chartdiv { min-width: 0; width: 100%; max-width: 100%; height: 500px; box-sizing: border-box; background: var(--bg-form); }
+/* Высоту задаёт сам холст (.chart-canvas), а не обёртка: под холстом внутри
+   .chart-panel лежат ещё полоса прокрутки, показания, статус и легенда. С
+   фиксированной высотой 500px обёртка резервировала место только под холст, и
+   легенда наезжала на форму статуса (на 390 px перекрывала строку связи). */
+#chartdiv { min-width: 0; width: 100%; max-width: 100%; box-sizing: border-box; background: var(--bg-form); }
 
 .chart-panel { min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--bg-form); border: 1px solid var(--border-soft); border-radius: var(--radius-md); padding: 0.6em; }
 
@@ -129,7 +133,6 @@ body {
   height: 500px;
   box-sizing: border-box;
   cursor: crosshair;
-  touch-action: none;
 }
 
 .chart-status {
@@ -177,22 +180,43 @@ body {
   overflow-wrap: anywhere;
 }
 
-.chart-scroll {
+/* Полоса участка: дорожка во всю длину лога, закрашенный участок - то, что
+   видно на графике, и две ручки по его краям (как у скроллбара amCharts).
+   touch-action: none нужен полосе, а не холсту: пальцем по графику страница
+   должна прокручиваться, а по полосе - тянуться участок. */
+.chart-range {
   position: relative;
-  height: 14px;
-  margin-top: 0.35em;
+  height: 20px;
+  /* Боковые поля в половину ручки: в крайних положениях ручка остаётся внутри
+     панели, а не вылезает за её рамку. Размер ручки взят под палец. */
+  margin: 0.35em 8px 0;
   background: var(--border-soft);
-  border-radius: 7px;
+  border-radius: 10px;
   cursor: pointer;
+  touch-action: none;
 }
 
-.chart-scroll-thumb {
+.chart-range-fill {
   position: absolute;
-  top: 2px;
+  top: 5px;
   height: 10px;
-  min-width: 16px;
+  min-width: 2px;
   background: var(--accent);
   border-radius: 5px;
+  cursor: move;
+}
+
+.chart-range-grip {
+  position: absolute;
+  top: 0;
+  width: 16px;
+  height: 20px;
+  margin-left: -8px;
+  box-sizing: border-box;
+  background: var(--bg-form);
+  border: 2px solid var(--accent);
+  border-radius: 5px;
+  cursor: ew-resize;
 }
 
 textarea {
@@ -233,14 +257,23 @@ input[type="file"] {
 
 .file-upload-control { position: relative; }
 
+/* Ячейка под одну кнопку. На компьютере держит ширину кнопки, на телефоне (см.
+   медиазапрос ниже) тянется во всю строку, чтобы кнопка не была уже соседних. */
+.btn-cell { width: 200px; }
+
 .program-actions { width: 450px; max-width: 100%; margin: 0 auto; box-sizing: border-box; }
+
+/* Кусок текста, который нельзя рвать переносом (диапазон "60-100" в настройках). */
+.nowrap { white-space: nowrap; }
 
 .custom-file-upload {
   border: 1px solid var(--border-soft);
   display: inline-block;
   padding: 6px 12px;
   cursor: pointer;
-  width: 177px;
+  /* Ширина по рамке: кнопка живёт в контейнере ровно 200px. */
+  width: 200px;
+  box-sizing: border-box;
   border-radius: 4px;
   margin: 10px 10px 0 10px;
   font-size: 15px;
@@ -324,6 +357,9 @@ p {
 .dvcs {
   padding: 10px;
   margin: 10px;
+  /* В подсказках есть перечисления через ";" без пробелов - браузер считает их
+     одним словом и на узком экране выносит за карточку. */
+  overflow-wrap: break-word;
 }
 
 /* ==================== Сообщения ==================== */
@@ -351,6 +387,14 @@ p {
 .message_2 {
   font-size: 1.4em;
   width: 100%;
+  /* Плашка ставится с width: 100% и своими padding/border, поэтому без
+     border-box она вылезает за форму (на 320 px - на 22 px вправо) и даёт
+     горизонтальную прокрутку всей страницы. Раньше это чинилось только для
+     формы настроек, но #request_error появляется на любой странице. */
+  box-sizing: border-box;
+  /* В текст ошибки попадают имена полей и пути без пробелов: без переноса
+     они вылезают за плашку и обрываются на её краю. */
+  overflow-wrap: break-word;
   margin-top: 0.4em;
   border: 1px solid gray;
   border-radius: var(--radius-sm);
@@ -406,6 +450,10 @@ p {
   align-items: center;
   width: 100%;
   min-width: 0;
+  /* Разметка вешает на эти блоки рамку и padding прямо в атрибуте style.
+     Без border-box они прибавляются к 100% ширины, и рамка вылезает за
+     карточку (на 320 px - на 15 px, до самого края экрана). */
+  box-sizing: border-box;
 }
 
 .container_column {
@@ -414,13 +462,12 @@ p {
   justify-content: flex-start;
   align-items: flex-start;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .setup-long-input { max-width: 100%; }
 
 #Main select[name="mode"] { max-width: 100%; box-sizing: border-box; }
-
-#setupform > .message_0 { box-sizing: border-box; max-width: 100%; }
 
 .setup-actions { display: flex; flex-wrap: wrap; justify-content: space-between; max-width: 668px; margin: 0 auto; box-sizing: border-box; }
 
@@ -517,6 +564,10 @@ p {
   top: 0.3em;
   box-shadow: var(--shadow-soft);
 }
+
+/* Боковые отступы кнопка получает от .button ниже по файлу: они прибавлялись к
+   её ширине и выносили её за контейнер на 11px. */
+.file-upload-control .custom-file-upload { margin: 10px 0 0; }
 
 a[href]:focus-visible,
 button:focus-visible,
@@ -806,6 +857,13 @@ select {
   margin-bottom: 4px !important;
 }
 
+/* Шапка таблицы программы - это flex-строка из подсказок-меток. Без переноса
+   она не помещается ни в телефон, ни в планшет (на 320 px правый край уезжал
+   на 623 px при экране 320) и тянет горизонтальную прокрутку всей страницы. */
+#hdr {
+  flex-wrap: wrap;
+}
+
 #prg,
 #Prog {
   min-width: 0;
@@ -813,8 +871,10 @@ select {
 }
 
 /* Как в 6.27: строка полей в одну линию. #hdr не трогаем — там подсказки
-   и неразрывные пробелы, nowrap раздувает ширину и даёт горизонтальную прокрутку. */
-@media (min-width: 601px) {
+   и неразрывные пробелы, nowrap раздувает ширину и даёт горизонтальную прокрутку.
+   Порог 901 px, а не 601: на планшете (768 px) поля в одну строку не помещаются
+   и та же прокрутка появляется у самих строк программы. */
+@media (min-width: 901px) {
   div.prgline:not(#hdr) {
     white-space: nowrap;
   }
@@ -1076,22 +1136,40 @@ details.spoiler > .spoiler-content {
   .tab { height: auto; flex-wrap: wrap; }
   .tab input { font-size: 1.1em; min-height: 1.8em; margin: 0.2em; }
   .text { font-size: 1.2em; }
-  .ingredients { width: 100%; }
+  .ingredients { width: auto; }
   .popup { width: 92vw; }
   .chart-messages-host { position: static; width: 100%; margin: 0 auto; }
+  /* На узком экране подсказку показываем полосой у нижнего края и снимаем её с
+     потока. При position: absolute её край отсчитывается от самой метки, поэтому
+     подсказка шириной до 90vw уезжала либо за правый край экрана (left: 0 - на
+     320 px правый край доходил до 344 px), либо за левый (right: 0 - до -223 px):
+     в CSS нельзя узнать, сколько места осталось сбоку от конкретной метки. Плюс
+     скрытая подсказка всё равно участвует в раскладке и растягивала документ,
+     давая горизонтальную прокрутку всей страницы настроек. position: fixed
+     снимает обе проблемы сразу: ширину задают два края экрана, а в scrollWidth
+     документа такая подсказка не попадает. */
   .tooltip .tooltiptext {
-    min-width: auto;
-    width: max-content;
-    max-width: 90vw;
-    left: 0;
+    position: fixed;
+    top: auto;
+    bottom: 0.5em;
+    left: 0.5em;
+    right: 0.5em;
+    width: auto;
+    min-width: 0;
+    max-width: none;
     margin-left: 0;
     box-sizing: border-box;
+    z-index: 60000;
   }
 }
 
 @media (max-width: 600px) {
   body { font-size: 13px; }
   form { padding: 8px; }
+  /* Переключатель темы (44x44) и кнопка журнала лежат абсолютом поверх формы в
+     правом верхнем углу. Без этого отступа они накрывают первую вкладку, и
+     нажатие на неё попадает в кнопку. Отступ равен высоте переключателя. */
+  .history-trigger ~ form > .tab { padding-top: 44px; box-sizing: border-box; }
   .tab { flex-direction: column; align-items: stretch; }
   .tab input { margin: 0.15em 0; width: 100%; min-height: 2.2em; }
   .container_row {
@@ -1114,13 +1192,27 @@ details.spoiler > .spoiler-content {
   #lua_btn .container_column { box-sizing: border-box; padding-left: 0 !important; }
   #lua_str_d > #lua_str_i { width: 100% !important; margin-left: 0 !important; }
   #lua_str_d > .button { margin-right: 0 !important; }
-  input[type="range"] { width: 100%; box-sizing: border-box; }
-  .button, .tabcontent input[type="button"], input[type="submit"] {
+  input[type="range"] { width: 100%; box-sizing: border-box; margin-left: 0; margin-right: 0; }
+  /* input[type="button"] перечислен явно: правило с шириной 200px выше по файлу
+     задано так же через тип, и по одному классу .button его не перебить. */
+  .button, input[type="button"], input[type="submit"] {
     width: 100%;
     box-sizing: border-box;
     margin: 0.3em 0;
+    /* Боковые отступы кнопкам задают инлайном прямо в разметке (index.htm и
+       i2cstepper.htm - "Начать отбор", nbk.htm - "Установить", chart.js -
+       "Повторить"): при ширине 100% они сдвигают кнопку из общего ряда. */
+    margin-left: 0 !important;
+    margin-right: 0 !important;
     min-height: 2.4em;
   }
+  /* Кнопку часто заворачивают в отдельный div внутри строки. Строка на телефоне
+     разворачивается в колонку, но разметка местами задаёт ей align-items: center
+     прямо в атрибуте style - тогда обёртка сжимается по тексту и кнопки выходят
+     разной ширины ("Скачать файл настроек" 191px рядом с "Перезагрузить" 194px). */
+  .container_row > div:has(> .button), .tooltip:has(> .button),
+  .text:has(> .button) { width: 100%; box-sizing: border-box; margin-left: 0; margin-right: 0; }
+  .btn-cell { width: auto; }
   .messages_box,
   .message-box { max-height: calc(100vh * 0.5); }
   .history_box {
@@ -1152,10 +1244,18 @@ details.spoiler > .spoiler-content {
     margin-left: 0 !important;
   }
   .prglabel { width: auto !important; }
+  /* Поля строки программы на телефоне переставляются в две колонки, и проценты
+     шапки перестают им соответствовать: ячейка сжимается до 26 px, а подпись
+     из неё вылезает и наезжает на соседнюю ("ТипВыСкдорётькосНапВремя").
+     Отдаём ячейкам ширину по тексту - подписи читаются и переносятся ниже. */
+  .program_header > div { width: auto !important; }
+  .program_header { gap: 0.4em; }
   .ingType, .ingName, .ingAmount,
   .mashName, .mashDescription, .mashTemp, .mashType, .mashTime {
     width: 100%;
     float: none;
+    /* Это <label>: без float он снова inline, и width: 100% игнорируется. */
+    display: block;
   }
-  #chartdiv { height: 60vh; }
+  .chart-canvas { height: 60vh; }
 }

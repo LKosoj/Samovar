@@ -59,6 +59,14 @@ int main() {
             disabled, 0, 50, SAMOVAR_STARTVAL_RECT_RUNNING, 99.0f, 78.0f),
         "нулевые объём и Temp не должны менять строку");
 
+  // [Б3] currentStartval == RECT_DONE недостижим (withdrawal() делает ранний
+  // return раньше вызова этой функции) - даже при выполненном условии по шагам
+  // переход по объёму больше не должен срабатывать в этой ветке.
+  WProgram doneRow = {'B', 100, 1.0f, 1, 0, 0, 0, 0};
+  check(!rect_row_transition_requested(
+            doneRow, 100, 100, SAMOVAR_STARTVAL_RECT_DONE, 80.0f, 77.0f),
+        "[Б3] currentStartval == RECT_DONE с выполненным условием по шагам должен вернуть false");
+
   if (failures != 0) return 1;
   std::cout << "rectification row transition snapshot checks passed\n";
   return 0;

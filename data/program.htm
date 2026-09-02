@@ -12,10 +12,14 @@
 <script>
   var pwr_unit = "%pwr_unit%";
 var heaterResistance = Number('%HeaterR%');
-// Должно совпадать с прошивкой: set_current_power() (power_regulator.h) клампит
-// уставку к 230 В и считает предел как 230²/R. При 220 показанные вольты не совпадут
-// с реально выставленными - расчёт занижал их примерно на 4 процента, а мощность на 9.
-var mainsVolt = 230;
+// Значение берётся из настроек прибора (SamSetup.MainsVoltage), запасное - 230.
+// Внимание: set_current_power() (power_regulator.h) клампит УСТАВКУ к 230 В - это
+// потолок регулятора, а не напряжение сети. В формулах wattsToProgramVolts/
+// programVoltsToWatts mainsVolt сокращается (volts = sqrt(W*R)), поэтому от него
+// зависит только автозаполнение поля "Мощность ТЭНа" - максимум, который ТЭН реально
+// отдаст при данной сети. Ранее здесь стояло 220 при клампе 230 - расчёт занижал
+// вольты примерно на 4 процента, а мощность на 9; отсюда и появился хардкод 230.
+var mainsVolt = Number('%MainsVoltage%') || 230;
 var _lnIdx = 0;
 var phv = 0;
 var ptv = 0;
@@ -154,7 +158,25 @@ function displayColumnParams() {
     ];
     strategyNote.innerHTML = notes[mat] || notes[2];
   }
-  
+
+  // [В8-UI] Бэкенд сигналит, что рекомендованная скорость упёрлась в предел
+  // сечения колонны (headsSpeedClamped/bodySpeedClamped из /ajax_col_params) -
+  // без этого примечания пользователь не поймёт, почему "Применить рекомендации"
+  // не даёт скорость выше расчётной.
+  const clampNote = document.getElementById('colSpeedClampNote');
+  if (clampNote) {
+    let clampText = '';
+    if (p.headsSpeedClamped && p.bodySpeedClamped) {
+      clampText = 'Рекомендованные скорости голов и тела упёрлись в предел сечения колонны, поднять их можно только колонной большего диаметра.';
+    } else if (p.headsSpeedClamped) {
+      clampText = 'Рекомендованная скорость голов упёрлась в предел сечения колонны, поднять её можно только колонной большего диаметра.';
+    } else if (p.bodySpeedClamped) {
+      clampText = 'Рекомендованная скорость тела упёрлась в предел сечения колонны, поднять её можно только колонной большего диаметра.';
+    }
+    clampNote.textContent = clampText;
+    clampNote.style.display = clampText ? 'block' : 'none';
+  }
+
   const resBlock = document.getElementById('columnParamsResults');
   if (resBlock) resBlock.style.display = 'block';
   return true;
@@ -169,7 +191,7 @@ function programVoltsToWatts(volts, heaterMaxPwr) {
   return Math.round(heaterMaxPwr * ratio * ratio);
 }
 
-// Совпадает с PROGRAM_POWER_ABS_THRESHOLD в power_regulator.h: |P|>порога и P>0 —
+// Совпадает с PROGRAM_POWER_ABS_THRESHOLD в program_types.h: |P|>порога и P>0 —
 // абсолютная уставка, иначе (кроме 0) дельта. SEM_AVR — 400 Вт, иначе 40 В.
 function programPowerAbsThreshold(unit) {
   return unit === "P" ? 400 : 40;
@@ -265,6 +287,26 @@ function applyRecommendedSpeeds(options) {
     }
   }
 
+  // [Ф5] Рекомендация выше того, что ТЭН может отдать: прошивка молча обрежет уставку
+  // до 230 В, и колонна пойдёт на полной мощности без единого предупреждения.
+  // Отказываем целиком до того, как что-либо в программе изменено.
+  if (pwr_unit === 'V') {
+    let recommendedMaxW = 0;
+    for (let i = 1; i < programLines.length; i++) {
+      const line = programLines[i];
+      if (!line || !line.querySelector) continue;
+      const typeEl = line.querySelector('select[name^="ptype"]');
+      const powerInput = line.querySelector('input[name^="pvolt"]');
+      if (!typeEl || !powerInput) continue;
+      const rowW = recommendedRowPowerW(typeEl.value, powerInput.value, p);
+      if (rowW > recommendedMaxW) recommendedMaxW = rowW;
+    }
+    if (recommendedMaxW > heaterMaxPwr) {
+      if (!silent) SamovarApp.showRequestError('Рекомендованная мощность ' + Math.round(recommendedMaxW) + ' Вт больше мощности ТЭНа ' + Math.round(heaterMaxPwr) + ' Вт: рекомендации не применены.');
+      return false;
+    }
+  }
+
   const scaledHeads = scaleProgramSpeedsByType(programLines, 'H', p.headsFlowMlH);
   const scaledBody = scaleProgramSpeedsByType(programLines, 'BC', p.bodyFlowMaxMlH);
   const scaledTails = scaleProgramSpeedsByType(programLines, 'T', p.tailsFlowMlH);
@@ -274,6 +316,7 @@ function applyRecommendedSpeeds(options) {
   }
 
   let appliedCount = 0;
+  let prevType = null;
   for (let i = 1; i < programLines.length; i++) {
     const line = programLines[i];
     if (!line || !line.querySelector) continue;
@@ -281,18 +324,26 @@ function applyRecommendedSpeeds(options) {
     const powerInput = line.querySelector('input[name^="pvolt"]');
     if (!typeEl || !powerInput) continue;
     const type = typeEl.value;
+    // [В2] Предзахлёб (тип C) сама автоматика прошивки подкручивает по ходу
+    // (alarm.h) - если подряд идёт вторая и следующие строки C, не сбрасываем
+    // её работу абсолютной уставкой. "0" в поле мощности программы - это
+    // команда "не трогать регулятор" (apply_program_power_row, power_regulator.h).
+    if (type == 'C' && prevType === 'C') {
+      powerInput.value = 0;
+      appliedCount++;
+      prevType = type;
+      continue;
+    }
     let rPwr = 0;
-    if (type == 'H') rPwr = p.headsPowerW;
-    else if (type == 'C') rPwr = p.floodPowerW;
-    else if (type == 'B') rPwr = p.workingPowerW;
-    else if (type == 'T') rPwr = p.tailsPowerW;
-    else continue;
+    rPwr = recommendedRowPowerW(type, powerInput.value, p);
+    if (!(rPwr > 0)) { prevType = type; continue; }
     if (pwr_unit === 'V') {
       powerInput.value = wattsToProgramVolts(rPwr, heaterMaxPwr);
     } else {
       powerInput.value = Math.round(rPwr);
     }
     appliedCount++;
+    prevType = type;
   }
   loadedProgramPowerUnit = regulatorPowerUnit();
   columnRecommendationsApplied = true;
@@ -302,6 +353,22 @@ function applyRecommendedSpeeds(options) {
     alert('Параметры применены');
   }
   return true;
+}
+
+// Рекомендованная мощность (Вт) для строки программы по её типу; 0 - строку не трогать.
+// [Ф7] Пауза с ненулевой мощностью в шаблонах - "встряска" колонны на предзахлёбной
+// мощности перед охотой за предзахлёбом, поэтому получает ту же мощность, что и первая
+// строка C. Пауза с 0 ("не трогать регулятор") остаётся нулём.
+function recommendedRowPowerW(type, currentPowerValue, p) {
+  if (type == 'H') return p.headsPowerW;
+  if (type == 'C') return p.floodPowerW;
+  if (type == 'B') return p.workingPowerW;
+  if (type == 'T') return p.tailsPowerW;
+  if (type == 'P') {
+    const currentPower = Number(String(currentPowerValue).replace(",", "."));
+    if (Number.isFinite(currentPower) && currentPower !== 0) return p.floodPowerW;
+  }
+  return 0;
 }
 
 async function onColumnDiameterChange(selectObject) {
@@ -335,16 +402,81 @@ function parseProgramFileText(text) {
   return { dual: dual, body: body.join("\n") };
 }
 
+// [Б7 + В5] Пересчёт вольт->ватт под реальный ТЭН не должен молча менять СМЫСЛ
+// строки в обе стороны:
+//  - строка, бывшая абсолютной уставкой в вольтах, обязана остаться абсолютной
+//    в ваттах (слабый ТЭН иначе тихо превращает "поставить X Вт" в "прибавить X
+//    Вт" - неконтролируемый разгон);
+//  - строка-ДЕЛЬТА обязана остаться дельтой (мощный ТЭН иначе тихо превращает
+//    "прибавить X Вт" в "поставить X Вт" - скачок регулятора на фиксированное
+//    значение вместо плавной подстройки, тот же эффект в другую сторону).
+// Дельты пересчитываются от последней АБСОЛЮТНОЙ уставки, поэтому здесь ведём
+// lastAbsoluteVolts буквально той же формулой и в том же порядке, что и
+// основной цикл ниже (programBodyForUnit) - иначе проверка мерила бы не то,
+// что реально запишется. Строка-дельта без опоры (lastAbsoluteVolts ещё null)
+// в основном цикле остаётся как есть (не пересчитывается) - здесь она тоже
+// молча пропускается, а не проверяется. Проверяем ЗАРАНЕЕ и целиком, чтобы не
+// смешивать пересчитанные и эталонные строки.
+function programTemplateWattsStayAbsolute(lines, heaterMaxPwr) {
+  var lastAbsoluteVolts = null;
+  for (var i = 0; i < lines.length; i++) {
+    var f = lines[i].split(";");
+    if (f.length !== 6) continue;
+    var volts = Number(String(f[4]).replace(",", "."));
+    if (!Number.isFinite(volts) || volts === 0) continue;
+    if (isProgramPowerAbsolute(volts, "V")) {
+      if (!isProgramPowerAbsolute(Math.round(programVoltsToWatts(volts, heaterMaxPwr)), "P")) return false;
+      lastAbsoluteVolts = volts;
+    } else if (lastAbsoluteVolts !== null) {
+      var delta = Math.round(
+        programVoltsToWatts(lastAbsoluteVolts + volts, heaterMaxPwr) -
+        programVoltsToWatts(lastAbsoluteVolts, heaterMaxPwr)
+      );
+      if (isProgramPowerAbsolute(delta, "P")) return false;
+    }
+  }
+  return true;
+}
+
 function programBodyForUnit(parsed, unit) {
   var wantP = unit === "P";
   var raw = parsed && parsed.body ? String(parsed.body) : "";
   if (!raw) return "";
+  // [В4+В5] Вольты (f[4]) - источник истины (шаблон посчитан для эталонного ТЭНа).
+  // Если ватты запрошены и реальный ТЭН известен - пересчитываем их из вольт под
+  // него, а не берём готовую шестую колонку файла. lastAbsoluteVolts - последняя
+  // абсолютная уставка выше по программе, нужна как опора для пересчёта дельт.
+  var heaterEl = document.getElementById("heaterMaxPower");
+  var heaterMaxPwr = heaterEl ? Number(heaterEl.value) : NaN;
+  var heaterKnown = Number.isFinite(heaterMaxPwr) && heaterMaxPwr > 0;
+  var lastAbsoluteVolts = null;
   var lines = raw.split("\n");
+  if (wantP && heaterKnown && !programTemplateWattsStayAbsolute(lines, heaterMaxPwr)) {
+    heaterKnown = false;
+    SamovarApp.showRequestError("Мощность ТЭНа слишком сильно отличается от эталонной, чтобы пересчитать шаблон в ватты, взяты значения шаблона для эталонного ТЭНа.");
+  }
   var out = [];
   for (var i = 0; i < lines.length; i++) {
     var f = lines[i].split(";");
     if (f.length === 6) {
-      out.push([f[0], f[1], f[2], f[3], wantP ? f[5] : f[4]].join(";"));
+      var power = wantP ? f[5] : f[4];
+      if (wantP && heaterKnown) {
+        var volts = Number(String(f[4]).replace(",", "."));
+        if (Number.isFinite(volts)) {
+          if (volts === 0) {
+            power = "0";
+          } else if (isProgramPowerAbsolute(volts, "V")) {
+            power = Math.round(programVoltsToWatts(volts, heaterMaxPwr));
+            lastAbsoluteVolts = volts;
+          } else if (lastAbsoluteVolts !== null) {
+            power = Math.round(
+              programVoltsToWatts(lastAbsoluteVolts + volts, heaterMaxPwr) -
+              programVoltsToWatts(lastAbsoluteVolts, heaterMaxPwr)
+            );
+          }
+        }
+      }
+      out.push([f[0], f[1], f[2], f[3], power].join(";"));
     } else {
       out.push(lines[i]);
     }
@@ -451,7 +583,10 @@ function updateProgramTemplateBaseline() {
 function programTemplateDirty() {
   var program = document.getElementById('WProgram1');
   if (!program) return false;
-  return programTemplateLoaded ? program.value !== programTemplateBaseline : program.value !== "";
+  // programTemplateBaseline пуст ровно до первого updateProgramTemplateBaseline()
+  // (шаблон ИЛИ программа прибора - В1), поэтому сравнение с baseline эквивалентно
+  // прежней ветке при programTemplateLoaded === false и не требует спецкейса.
+  return program.value !== programTemplateBaseline;
 }
 
 function restoreProgramTemplateSelect(selectObject) {
@@ -483,6 +618,8 @@ async function getProgramFromFile(selectObject, options){
     applyParsedProgramText(parsed);
     programTemplateLoaded = true;
     currentProgramTemplateValue = String(value);
+    const deviceNotice = document.getElementById('deviceProgramNotice');
+    if (deviceNotice) deviceNotice.style.display = 'none';
     await updateColumnParams();
     applyRecommendedSpeeds({ silent: true });
     updateProgramTemplateBaseline();
@@ -495,6 +632,13 @@ async function getProgramFromFile(selectObject, options){
   }
 }
 
+// [В5] Переводит одно значение мощности/напряжения из unit в другую единицу
+// (используется дважды - для опорной уставки и для уставки+дельты, чтобы
+// получить дельту в другой единице пересчётом, а не тем же числом).
+function convertProgramPower(value, unit, heaterMaxPwr) {
+  return unit === "V" ? programVoltsToWatts(value, heaterMaxPwr) : wattsToProgramVolts(value, heaterMaxPwr);
+}
+
 function formatDualProgramFile(body, unit) {
   var heaterEl = document.getElementById("heaterMaxPower");
   var heaterMaxPwr = heaterEl ? Number(heaterEl.value) : NaN;
@@ -503,6 +647,18 @@ function formatDualProgramFile(body, unit) {
   }
   var lines = String(body || "").split("\n");
   var out = "";
+  var lastAbsoluteNative = null;
+  var otherUnit = unit === "V" ? "P" : "V";
+  // [Б7 + В5] Эталонной колонки тут нет (это не шаблон, а текущая программа):
+  // родной столбец (unit) всегда пишет буквальное значение оператора и не может
+  // разойтись сам с собой, но столбец другой единицы (otherUnit) - пересчитанный,
+  // и может СМЕНИТЬ СМЫСЛ в обе стороны - абсолютная уставка родной единицы может
+  // стать дельтой в другой (otherUnitLosesAbsolute), а дельта родной единицы -
+  // абсолютной уставкой в другой (otherUnitGainsAbsolute). В обоих случаях второй
+  // столбец файла всё равно пишем как есть (заменить его нечем), но предупреждаем -
+  // на другом ТЭНе такой файл читать нельзя.
+  var otherUnitLosesAbsolute = false;
+  var otherUnitGainsAbsolute = false;
   for (var i = 0; i < lines.length; i++) {
     var t = lines[i].trim();
     if (!t) continue;
@@ -515,16 +671,41 @@ function formatDualProgramFile(body, unit) {
       volts = 0;
       watts = 0;
     } else if (!isProgramPowerAbsolute(power, unit)) {
-      volts = power;
-      watts = power;
+      // [В5] "+5 В"/"+5 Вт" - это дельта к предыдущей абсолютной уставке, а не
+      // готовое число в обеих единицах: пересчитываем приращение вокруг
+      // последней абсолютной уставки выше по программе (native = unit программы).
+      if (lastAbsoluteNative !== null) {
+        var other = Math.round(
+          convertProgramPower(lastAbsoluteNative + power, unit, heaterMaxPwr) -
+          convertProgramPower(lastAbsoluteNative, unit, heaterMaxPwr)
+        );
+        if (isProgramPowerAbsolute(other, otherUnit)) otherUnitGainsAbsolute = true;
+        if (unit === "V") { volts = power; watts = other; }
+        else { watts = power; volts = other; }
+      } else {
+        // Нет опоры выше по программе - число копируется в оба столбца сырьём
+        // (заменить его нечем), но пороги V и P разные: то, что дельта в родной
+        // единице, ещё не значит, что то же число ниже порога и в другой - надо
+        // проверить и эту ветку, как и три соседние.
+        if (isProgramPowerAbsolute(power, otherUnit)) otherUnitGainsAbsolute = true;
+        volts = power;
+        watts = power;
+      }
     } else if (unit === "V") {
       volts = power;
       watts = programVoltsToWatts(power, heaterMaxPwr);
+      lastAbsoluteNative = power;
+      if (!isProgramPowerAbsolute(watts, "P")) otherUnitLosesAbsolute = true;
     } else {
       watts = power;
       volts = wattsToProgramVolts(power, heaterMaxPwr);
+      lastAbsoluteNative = power;
+      if (!isProgramPowerAbsolute(volts, "V")) otherUnitLosesAbsolute = true;
     }
     out += [f[0], f[1], f[2], f[3], volts, watts].join(";") + "\n";
+  }
+  if (otherUnitLosesAbsolute || otherUnitGainsAbsolute) {
+    SamovarApp.showRequestError("В сохранённом файле смысл значения (абсолютная уставка или дельта) для " + (otherUnit === "P" ? "ватт" : "вольт") + " после пересчёта не совпадает с оригиналом - этот файл нельзя переносить на другой ТЭН.");
   }
   return out;
 }
@@ -584,17 +765,28 @@ function formatSummaryPercent(value) {
 
 function formatSummaryVolume(value) {
   if (!Number.isFinite(value) || value < 0) return "—";
-  return Math.round(value * 1000) + " мл";
+  return Math.round(value * 1000) + "\u00a0мл";
 }
 
 function formatSummaryTime(value) {
   if (!Number.isFinite(value) || value < 0) return "—";
   var minutes = Math.floor(value * 60);
   var remainder = minutes - 60 * Math.floor(minutes / 60);
-  return Math.floor(minutes / 60) + " ч " + String(remainder).padStart(2, "0") + " мин";
+  return Math.floor(minutes / 60) + "\u00a0ч\u00a0" + String(remainder).padStart(2, "0") + "\u00a0мин";
 }
 
-function distributionStatus(label, prefix, value) {
+// Проверять распределение сравнением суммы ПРОЦЕНТОВ со 100 нельзя: прибор хранит
+// объёмы строк в целых мл, поэтому программа, прочитанная с прибора и обратно
+// пересчитанная в проценты (В1: percent = (volumeMl/1000)/vlc), почти никогда не
+// даёт сумму ровно 100 - цена округления одного мл в долях зависит от размера
+// бюджета фракции (для маленького бюджета один мл - это заметная доля процента,
+// для большого - ничтожная), поэтому и фиксированный допуск в долях либо слишком
+// тесен, либо слишком щедр. isBalanced считается вызывающим кодом в тех же
+// единицах, в которых значение уходит на прибор (целые мл), с допуском в
+// половину мл на каждую участвующую строку - это ровно та неопределённость,
+// которую вносит округление объёма КАЖДОЙ строки при отправке. value по-прежнему
+// нужен только для текста/сообщения об ошибке.
+function distributionStatus(label, prefix, value, isBalanced) {
   if (!Number.isFinite(value)) {
     return {
       text: prefix + ": — — некорректное значение",
@@ -602,7 +794,7 @@ function distributionStatus(label, prefix, value) {
       error: label + ": некорректный процент"
     };
   }
-  if (value == 100) {
+  if (isBalanced) {
     return {
       text: prefix + ": 100\u0025 — распределено полностью",
       className: "program-summary-status is-valid",
@@ -654,8 +846,8 @@ function renderProgramSummary(summary) {
   setSummaryText("summaryTotalTime", formatSummaryTime(summary.totalTime));
   setSummaryText("summaryPauseTime", formatSummaryTime(summary.pauseTime));
 
-  var headsStatus = distributionStatus("Головы", "По строкам", summary.headsPercent);
-  var bodyStatus = distributionStatus("Тело B+C", "По строкам B+C", summary.bodyPercent);
+  var headsStatus = distributionStatus("Головы", "По строкам", summary.headsPercent, summary.headsBalanced);
+  var bodyStatus = distributionStatus("Тело B+C", "По строкам B+C", summary.bodyPercent, summary.bodyBalanced);
   var headsElement = document.getElementById("summaryHeadsDistribution");
   var bodyElement = document.getElementById("summaryBodyDistribution");
   headsElement.textContent = headsStatus.text;
@@ -667,6 +859,18 @@ function renderProgramSummary(summary) {
   tailsElement.className = "program-summary-status is-info";
 
   return [headsStatus.error, bodyStatus.error].filter(Boolean);
+}
+
+// Поле "Процент" в редакторе задаётся ЦЕЛЫМ числом при ручном вводе - обрезаем
+// дробную часть по первой точке/запятой, но только по СОБСТВЕННОМУ onchange поля
+// (когда оператор закончил печатать и увёл фокус). Раньше это делал set_num()
+// на КАЖДЫЙ пересчёт для ЛЮБОЙ строки таблицы, не только для той, что редактируют -
+// из-за этого дробные проценты, посчитанные при разборе программы прибора (В1) и
+// ни разу не тронутые оператором, немедленно округлялись до целых уже при первой
+// прорисовке страницы (и портили объём при отправке "Записать").
+function truncatePercentField(el) {
+  if (el.value.indexOf(".") > 0) el.value = el.value.substring(0, el.value.indexOf("."));
+  if (el.value.indexOf(",") > 0) el.value = el.value.substring(0, el.value.indexOf(","));
 }
 
 function set_num(){
@@ -693,6 +897,13 @@ function set_num(){
     var timet = 0;
     var timeb = 0;
     var pauseTime = 0;
+    // Для проверки распределения в тех же единицах, что уходят на прибор (см.
+    // distributionStatus): сумма УЖЕ округлённых до целого мл объёмов строк
+    // группы и число строк, участвовавших в сумме (нужно для допуска 0.5 мл/строку).
+    var volumeMlH = 0;
+    var volumeMlB = 0;
+    var countH = 0;
+    var countB = 0;
     var prgc = "";
     var prgo = "";
     var volumeErrors = [];
@@ -706,12 +917,6 @@ function set_num(){
         rowActions[0].setAttribute("aria-label", "Добавить строку после " + a.innerText);
         rowActions[1].setAttribute("aria-label", "Удалить строку " + a.innerText);
       }
-      //
-      if (e[i].childNodes[3] !== document.activeElement) {
-        if (e[i].childNodes[3].value.indexOf(".") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf("."));
-        if (e[i].childNodes[3].value.indexOf(",") > 0) e[i].childNodes[3].value = e[i].childNodes[3].value.substring(0, e[i].childNodes[3].value.indexOf(","));
-      }
-      
       e[i].childNodes[2].value = e[i].childNodes[2].value.replace(",",".");
       e[i].childNodes[5].value = e[i].childNodes[5].value.replace(",",".");
 
@@ -742,6 +947,10 @@ function set_num(){
       if (e[i].childNodes[4].value == "P") {
 	    var pauseSec = Math.round(Number(String(e[i].childNodes[2].value).replace(",", ".")));
 	    if (!Number.isFinite(pauseSec) || pauseSec < 0) pauseSec = 0;
+	    // [Ф8] Поле "Объём" прошивки - uint16, разборщик отбивает больше 65535 общей ошибкой.
+	    if (pauseSec > 65535) {
+	      volumeErrors.push("Строка " + i + ": пауза больше 65535 с, разбейте строку.");
+	    }
 	    v.value = String(pauseSec);
 	    a = pauseSec / 3600;
 	    prgc = prgc + String(pauseSec);
@@ -764,25 +973,38 @@ function set_num(){
       } else if (e[i].childNodes[4].value == "H") {
         volumeh = volumeh + Number(v.value);
         timeh = timeh + Number(a);
+        volumeMlH = volumeMlH + volumeMl;
+        countH++;
       } else if (e[i].childNodes[4].value == "T") {
         volumet = volumet + Number(v.value);
         timet = timet + Number(a);
       } else {
         volumeb = volumeb + Number(v.value);
         timeb = timeb + Number(a);
+        volumeMlB = volumeMlB + volumeMl;
+        countB++;
       }
       prgo = prgo + capacityNum + ";" + e[i].childNodes[2].value + ";" + e[i].childNodes[3].value + ";" + e[i].childNodes[4].value + ";" + e[i].childNodes[5].value + "\n"
     }
     document.getElementById("sum").value = get_time(sum);
+    // Цель в мл - это весь бюджет фракции целиком (phv/pbas уже посчитаны prep_calc()
+    // и это те же делители, что и vlc в цикле выше). Допуск 0.5 мл на строку -
+    // см. комментарий у distributionStatus().
+    var targetHeadsMl = Math.round(phv * 1000);
+    var targetBodyMl = Math.round(pbas * 1000);
+    var headsBalanced = Math.abs(volumeMlH - targetHeadsMl) <= 0.5 * countH;
+    var bodyBalanced = Math.abs(volumeMlB - targetBodyMl) <= 0.5 * countB;
     var validationErrors = renderProgramSummary({
       headsAs: Number(document.getElementById("vlhp").value),
       headsPercent: sumh,
       headsVolume: volumeh,
       headsTime: timeh,
+      headsBalanced: headsBalanced,
       bodyAs: 100 - Number(document.getElementById("vlhp").value) - Number(document.getElementById("vltp").value),
       bodyPercent: sumb,
       bodyVolume: volumeb,
       bodyTime: timeb,
+      bodyBalanced: bodyBalanced,
       tailsAs: Number(document.getElementById("vltp").value),
       tailsPercent: sumt,
       tailsVolume: volumet,
@@ -791,6 +1013,23 @@ function set_num(){
       totalTime: sum,
       pauseTime: pauseTime
     });
+    // [Б7.4] Первая строка программы должна быть абсолютной уставкой - иначе
+    // колонна работает по всей длине первой строки на полной мощности разгона
+    // (регулятор ещё не был выставлен программой). В прошивке это правило
+    // существует только под #ifdef SAMOVAR_USE_POWER (program_io.h) - на сборке
+    // без регулятора мощности (pwr_unit пуст, см. Samovar.h::PWR_TYPE) прошивка
+    // это не проверяет, значит и браузер не должен. Проверяем также только когда
+    // единица мощности программы совпадает с единицей регулятора - иначе
+    // пользователь получит два конкурирующих диагноза вместо одного понятного.
+    if (e.length > 1 && pwr_unit !== "" && programPowerUnitFitsRegulator()) {
+      var firstPowerInput = e[1].querySelector('input[name^="pvolt"]');
+      if (firstPowerInput) {
+        var firstPower = Number(String(firstPowerInput.value).replace(",", "."));
+        if (!isProgramPowerAbsolute(firstPower, regulatorPowerUnit())) {
+          volumeErrors.push("Строка 1: первая строка программы должна задавать абсолютную мощность/напряжение (иначе колонна останется на полной мощности разгона).");
+        }
+      }
+    }
     validationErrors = volumeErrors.concat(validationErrors);
     programErrorMessage = validationErrors.join("\n");
     programerr = validationErrors.length > 0;
@@ -887,12 +1126,12 @@ async function set_program(){
     // alert() с тем же текстом был бы вторым, конкурирующим способом её показать.
     let result = await SamovarApp.postProgram(document.forms.mainform);
     if (!result.ok) {
-      alert(result.err || 'Программа не установлена');
+      SamovarApp.notify(result.err || 'Программа не установлена', 0);
       return;
     }
-    alert("Программа установлена");
+    SamovarApp.notify("Программа сохранена.", 2);
   } catch (e) {
-    alert('Ошибка сети: ' + e);
+    SamovarApp.notify('Ошибка сети: ' + e, 0);
   }
 };
 
@@ -943,7 +1182,7 @@ function addLine(obj, s){
   percent.setAttribute("aria-labelledby", "program-row-" + _lnIdx + " program-col-percent");
   percent.value = arr[2];
   percent.setAttribute("inputmode", "numeric");
-  percent.setAttribute("onchange", "set_num();");
+  percent.setAttribute("onchange", "truncatePercentField(this); set_num();");
   percent.setAttribute("oninput", "set_num();");
   dl.appendChild(percent);
   
@@ -1037,6 +1276,66 @@ function set_bgcolor(obj){
   if (glcalcnum) set_num();
 }
 
+// ===== В1: обратное к set_num() - формат прошивки -> формат редактора =====
+// Строка прошивки (rect, program_io.h): Тип;Объём_мл;Скорость;Ёмкость;Темп;Мощность.
+// Строка редактора (WProgram1):          Ёмкость;Скорость;Процент;Тип;Мощность.
+// Ровно 6 полей и тип из HBCTP - надёжный признак rect-формата. У DIST/BEER/NBK
+// другое число полей, поэтому чужой формат отбрасывается ЦЕЛИКОМ, а не рисуется наполовину.
+function parseDeviceProgramRows(text) {
+  var lines = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  var rows = [];
+  for (var i = 0; i < lines.length; i++) {
+    var t = lines[i].trim();
+    if (!t) continue;
+    var f = t.split(";");
+    if (f.length !== 6) return null;
+    if (f[0].length !== 1 || PROGRAM_FILE_TYPES.indexOf(f[0]) === -1) return null;
+    rows.push(f);
+  }
+  return rows.length ? rows : null;
+}
+
+// Тот же делитель объёма, что использует set_num() для данного типа строки.
+function deviceProgramRowVlc(type) {
+  if (type === "H") return phv / 100;
+  if (type === "T") return ptv / 100;
+  if (type === "B" || type === "C") return pbas / 100;
+  return 0;
+}
+
+function deviceProgramRowToEditorRow(fields) {
+  var type = fields[0];
+  var percent = 0;
+  if (type !== "P") {
+    var volumeMl = Number(fields[1]);
+    var vlc = deviceProgramRowVlc(type);
+    if (isFinite(volumeMl) && isFinite(vlc) && vlc > 0) {
+      // Обратное к set_num(): ll = percent*vlc, Объём_мл = round(ll*1000).
+      percent = Math.round((volumeMl / 1000 / vlc) * 1e6) / 1e6;
+    }
+    // vlc<=0 - percent остаётся 0, сводка сама покажет нехватку процентов.
+  }
+  // Тип 'P': секунды паузы продублированы в "Объём" (округлённо) и "Скорость"
+  // (без округления) - редактор хранит паузу в колонке "Скорость", берём поле 3.
+  return [fields[3], fields[2], percent, type, fields[5]].join(";");
+}
+
+// Возвращает тело для WProgram1 или null, если пришёл не rect-формат либо пусто -
+// тогда вызывающий код откатывается на загрузку шаблона.
+function buildEditorBodyFromDeviceProgram(rawText) {
+  if (!rawText || !rawText.trim()) return null;
+  try {
+    if (!prep_calc()) return null;
+    var rows = parseDeviceProgramRows(rawText);
+    if (!rows) return null;
+    var out = [];
+    for (var i = 0; i < rows.length; i++) out.push(deviceProgramRowToEditorRow(rows[i]));
+    return out.join("\n");
+  } catch (e) {
+    return null;
+  }
+}
+
 window.onload = function() {
   SamovarApp.initTheme();
   // страховка: calc_program() ставит свои подсказки только при успешном prep_calc(),
@@ -1062,7 +1361,34 @@ window.onload = function() {
     if (!diamSelect.querySelector("option[selected]")) diamSelect.value = "2.0";
     currentColumnDiameterValue = diamSelect.value;
   }
-  if (loadProgramSelect) {
+  // В1: если прибор прислал непустую программу в rect-формате - показываем ЕЁ,
+  // а не подменяем шаблоном "Фрукты" (иначе "Записать" затирал реальную программу
+  // устройства первым же нажатием). Список шаблонов не трогаем - шаблон грузится
+  // только вручную, через onchange.
+  const deviceProgramField = document.getElementById('WProgram');
+  const deviceProgramBody = deviceProgramField
+    ? buildEditorBodyFromDeviceProgram(deviceProgramField.value)
+    : null;
+  if (deviceProgramBody) {
+    document.getElementById('WProgram1').value = deviceProgramBody;
+    loadedProgramPowerUnit = regulatorPowerUnit();
+    columnRecommendationsApplied = false;
+    glcalcnum = false;
+    calc_program();
+    updateProgramPowerUnitHint();
+    updateProgramTemplateBaseline();
+    // Точка отката для СПИСКА шаблонов зафиксирована - это не значит "шаблон загружен".
+    // Само значение списка не трогаем (шаблон грузится только вручную), но запоминаем
+    // его, чтобы restoreProgramTemplateSelect() было куда вернуть список, если оператор
+    // откроет шаблон и откажется от подмены программы прибора.
+    if (loadProgramSelect) {
+      currentProgramTemplateValue = loadProgramSelect.value;
+      programTemplateLoaded = true;
+    }
+    var deviceNotice = document.getElementById('deviceProgramNotice');
+    if (deviceNotice) deviceNotice.style.display = 'block';
+    updateColumnParams();
+  } else if (loadProgramSelect) {
     getProgramFromFile(loadProgramSelect, { skipConfirm: true });
   }
   
@@ -1099,15 +1425,17 @@ Samovar v. <span id='version'>%v%</span>
 </select>
 </div>
 
+<p id="deviceProgramNotice" class="program-summary-status is-info" style="display:none; margin: 0.5em 0;">Показана текущая программа прибора. Проценты голов/тела/хвостов пересчитаны по параметрам этой страницы - объёмы и скорости отбора при этом остаются как в приборе.</p>
+
 <!-- БЛОК ПАРАМЕТРОВ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) -->
 <div class="tabcontent" style="display: block; border-top: 1px solid #ccc; padding: 10px;">
   <div style="border: 2px solid #3498db; background: var(--bg-program-panel); padding: 15px; border-radius: 5px;">
     <div style="color: var(--text-strong); font-weight: bold; margin-bottom: 10px;">⚙️ ПАРАМЕТРЫ ОБОРУДОВАНИЯ</div>
     <div style="font-size: 0.9em; margin-bottom: 10px; color: var(--text-main);">
-      Диаметр выбран выше (1.5 / 2 / 3 дюйма). Высота: <b>%ColHeight% м</b> | Насадка: <b>%PackDens%&#37;</b>
+      Диаметр выбран выше (1.5 / 2 / 3 дюйма). Высота: <b>%ColHeight%&nbsp;м</b> | Насадка: <b>%PackDens%&#37;</b>
     </div>
 
-    <div id="heaterPowerBlock" style="display: %pwr_unit_v_only%; margin-bottom: 10px;">
+    <div id="heaterPowerBlock" style="margin-bottom: 10px;">
       <label for="heaterMaxPower">Мощность ТЭНа для расчета:</label> <input type="text" id="heaterMaxPower" value="" disabled inputmode="numeric" onchange="displayColumnParams()" style="width: 70px;"> Вт
     </div>
 
@@ -1121,6 +1449,7 @@ Samovar v. <span id='version'>%v%</span>
         Головы: <b id="colHeadsSpeed">-</b> л/ч | Тело: <b id="colBodySpeedMin">-</b>...<b id="colBodySpeedMax">-</b> л/ч | Тарелок: <b id="colTheoreticalPlates">-</b>
       </div>
       <div id="strategyNote" style="font-size: 0.85em; margin-bottom: 10px; padding: 5px; background: var(--bg-program-example);"></div>
+      <div id="colSpeedClampNote" style="display: none; font-size: 0.85em; margin-bottom: 10px; padding: 5px; background: var(--bg-program-example);"></div>
       <input type="button" class="button" value="ПРИМЕНИТЬ РЕКОМЕНДАЦИИ" onclick="applyRecommendedSpeeds()" style="width: 100%; background: var(--accent); color: var(--text-on-accent);">
       <p id="programPowerUnitHint" class="program-summary-status is-info" style="margin-top: 8px;">Шаблоны хранят мощность в вольтах.</p>
     </div>
@@ -1221,10 +1550,10 @@ Samovar v. <span id='version'>%v%</span>
 </div>
 
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
-<div style="margin: 0 auto; width: 200px;">
+<div class="btn-cell" style="margin: 0 auto;">
 <input id='saveform' type='button' name='saveform' value='Сохранить расчет' onclick='SaveProgramToFile();' class="button">
 </div>
-<div class="file-upload-control" style="margin: 0 auto; width: 200px;">
+<div class="file-upload-control btn-cell" style="margin: 0 auto;">
 <label for="fileToLoad" class="button custom-file-upload">
     <i class="fa fa-cloud-upload"></i> Загрузить расчет 
 </label>

@@ -26,7 +26,7 @@
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
     };
 
 
@@ -36,12 +36,12 @@
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          alert(result.err || 'Программа не установлена');
+          SamovarApp.notify(result.err || 'Программа не установлена', 0);
           return;
         }
-        alert("Программа установлена");
+        SamovarApp.notify("Программа сохранена.", 2);
       } catch (e) {
-        alert('Ошибка сети: ' + e);
+        SamovarApp.notify('Ошибка сети: ' + e, 0);
       }
     };
 

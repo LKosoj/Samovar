@@ -133,6 +133,20 @@
   background-color: #EEE;
   padding:5px;
 }
+@media (max-width: 900px) {
+  /* Кнопки панели не помещаются в одну строку и переносятся вниз, а панель
+     жёстко высотой 28px: перенесённые строки уходят под дерево файлов и
+     редактор, которые лежат абсолютом поверх. Нажатие на поле пути и на
+     кнопки Upload/Create/Save тогда до них не доходит. На узком экране
+     раскладываем страницу колонкой, чтобы панель занимала столько строк,
+     сколько ей нужно. */
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; }
+  #uploader, #tree, #preview { position: static; }
+  #uploader { height: auto; padding: 4px 10px; }
+  #tree { width: auto; height: 25vh; overflow: auto; }
+  #editor { position: relative; top: 0; left: 0; border-left: 0; }
+  #editor, #preview { flex: 1; min-height: 0; }
+}
 #loader { 
   position: absolute;
   top: 36%;

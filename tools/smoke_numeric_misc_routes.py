@@ -155,10 +155,17 @@ for token in ["String d", ".toInt()", "getValue("]:
         errors.append(f"WebSerial contains legacy parser: {token}")
 
 expected_hashes = {
-    # [T29] хэш обновлён: program_commit()/program_clear()/program_serialize_rows()
-    # теперь защищены спинлоком configMux (см. tools/smoke_lock_order.py).
-    "program_io.h": "d16285cf721f1ec41315d85a1bb673d5df231b4450a389825be4ddc0de02832c",
-    "program_types.h": "8e9a8a991b6d4a1e10ddcaf574c7e48cfe2f1cdb20e12601b040f28075466f12",
+    # [Б7] хэш обновлён: PROGRAM_POWER_ABS_THRESHOLD переехала из power_regulator.h
+    # в program_types.h (без изменения существующих enum/struct/inline-функций), а
+    # program_io.h::prepare_program_for_mode() под SAMOVAR_USE_POWER стал проверять,
+    # что первая строка ректификационной программы задаёт абсолютную мощность -
+    # при ошибке draft сбрасывается тем же паттерном, что и остальные reject'ы этой
+    # функции, program[] не коммитится (draft isolation A-09 не нарушена).
+    # [Ф2] хэш обновлён: разборщик строки ректификации отвергает строку H/B/C/T
+    # без объёма и температуры (никогда не завершится) - той же схемой ok=false,
+    # что и соседние проверки; draft isolation A-09 не тронута.
+    "program_io.h": "c29e7be8bf4b50fd9abe11f8b64a170b3bb233ad20b7b817bcea488656aa8c2a",
+    "program_types.h": "78a37ac7beda0a3bf50b0ad2e6682075d038a5c15f99e808c665404e22b9ed2b",
 }
 for name, expected in expected_hashes.items():
     actual = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()

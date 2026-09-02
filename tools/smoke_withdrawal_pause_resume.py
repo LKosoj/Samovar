@@ -202,6 +202,13 @@ static void detector_on_auto_resume() { detectorOnAutoResumeCalls++; }
 static int setBodyTempCalls = 0;
 static void set_body_temp() { setBodyTempCalls++; }
 
+// [Ф4] предел автоподъёма Т тела и [Ф3] отложенный захват - заглушки impurity_detector.h
+static bool bodyTempAutosetAllowedFixture = true;
+static bool body_temp_autoset_allowed() { return bodyTempAutosetAllowedFixture; }
+static bool steamStableFixture = false;
+static bool is_steam_stable() { return steamStableFixture; }
+static uint32_t body_temp_capture_deadline = 0;
+
 static int applyRowStopPausePolicyCalls = 0;
 static void apply_row_stop_pause_policy() { applyRowStopPausePolicyCalls++; }
 
@@ -294,6 +301,9 @@ static void reset_fixture() {
   resetImpurityDetectorCalls = 0;
   detectorOnAutoResumeCalls = 0;
   setBodyTempCalls = 0;
+  bodyTempAutosetAllowedFixture = true;
+  steamStableFixture = false;
+  body_temp_capture_deadline = 0;
   applyRowStopPausePolicyCalls = 0;
   menuSamovarStartCalls = 0;
   stepperState = true;
@@ -440,6 +450,98 @@ static void test_first_body_after_heads_topologies() {
   SteamSensor.avgTemp = 86.0f;
   withdrawal();
   check(setBodyTempCalls == 0, "P;B: set_body_temp() вызываться не должен - голов не было");
+}
+
+// [Ф1] Вылет за уставку (SetTemp) 0 = контроль по датчику выключен: ни паузы, ни
+// переустановки Т тела, а уже стоящая пауза этого типа снимается по таймеру.
+static void test_set_temp_zero_disables_sensor_pause() {
+  reset_fixture();
+  program[0].WType = 'H';
+  program[1].WType = 'B';
+  ProgramNum = 1;
+  ProgramLen = 2;
+  SteamSensor.BodyTemp = 85.0f;
+  SteamSensor.SetTemp = 0.0f;
+  SteamSensor.avgTemp = 86.0f;  // выше Т тела + 0
+  withdrawal();
+  check(!program_Wait, "SetTemp = 0: пауза по датчику пара ставиться не должна");
+  check(setBodyTempCalls == 0, "SetTemp = 0: set_body_temp() вызываться не должен");
+
+  // Пауза стояла, контроль выключили (SetTemp -> 0): резюме по истечении таймера.
+  reset_fixture();
+  program[0].WType = 'B';
+  program[0].Temp = 0;
+  SteamSensor.BodyTemp = 85.0f;
+  SteamSensor.SetTemp = 0.0f;
+  SteamSensor.avgTemp = 90.0f;  // сколь угодно выше - порога больше нет
+  program_Wait = true;
+  currentWaitTypeFixture = PROGRAM_WAIT_STEAM;
+  t_min = fake_millis_value - 1;
+  withdrawal();
+  check(!program_Wait, "SetTemp = 0 при стоящей паузе: резюме по таймеру должно было произойти");
+}
+
+// [Ф4] Автоподъём Т тела в первой строке тела возможен только пока пар не ушёл выше
+// опоры больше BODY_TEMP_AUTOSET_MAX_RISE - иначе обычная пауза по датчику.
+static void test_body_temp_autoset_capped() {
+  reset_fixture();
+  program[0].WType = 'H';
+  program[1].WType = 'B';
+  ProgramNum = 1;
+  ProgramLen = 2;
+  SteamSensor.BodyTemp = 85.0f;
+  SteamSensor.SetTemp = 0.5f;
+  SteamSensor.avgTemp = 86.0f;
+  bodyTempAutosetAllowedFixture = false;
+  withdrawal();
+  check(setBodyTempCalls == 0, "предел автоподъёма достигнут: set_body_temp() вызываться не должен");
+  check(program_Wait, "предел автоподъёма достигнут: превышение Т даёт обычную паузу по датчику");
+}
+
+// [Ф3] Отложенный захват Т тела: строка B/C с Т тела 0 и назначенным сроком берёт
+// Т тела при стабилизации пара или по истечении срока; без срока - никогда.
+static void test_deferred_body_temp_capture() {
+  reset_fixture();
+  program[0].WType = 'B';
+  program[0].Temp = 0;
+  SteamSensor.BodyTemp = 0.0f;
+  SteamSensor.SetTemp = 0.5f;
+  SteamSensor.avgTemp = 86.0f;
+  body_temp_capture_deadline = fake_millis_value + 1000;
+  withdrawal();
+  check(setBodyTempCalls == 0, "пар не устоялся и срок не вышел: захвата Т тела быть не должно");
+  check(!program_Wait, "Т тела 0: паузы по датчику быть не должно");
+  steamStableFixture = true;
+  withdrawal();
+  check(setBodyTempCalls == 1, "пар устоялся: Т тела должна быть захвачена");
+  check(body_temp_capture_deadline == 0, "после захвата срок должен обнулиться");
+  withdrawal();
+  check(setBodyTempCalls == 1, "повторного захвата без нового срока быть не должно");
+
+  reset_fixture();
+  program[0].WType = 'C';
+  program[0].Temp = 0;
+  SteamSensor.BodyTemp = 0.0f;
+  body_temp_capture_deadline = fake_millis_value - 1;
+  withdrawal();
+  check(setBodyTempCalls == 1, "срок вышел: Т тела должна быть захвачена и без стабилизации");
+
+  reset_fixture();
+  program[0].WType = 'B';
+  program[0].Temp = 0;
+  SteamSensor.BodyTemp = 0.0f;
+  steamStableFixture = true;
+  withdrawal();
+  check(setBodyTempCalls == 0, "без назначенного срока захвата быть не должно");
+
+  reset_fixture();
+  program[0].WType = 'H';
+  program[0].Temp = 0;
+  SteamSensor.BodyTemp = 0.0f;
+  steamStableFixture = true;
+  body_temp_capture_deadline = fake_millis_value - 1;
+  withdrawal();
+  check(setBodyTempCalls == 0, "строка голов: отложенный захват Т тела не положен");
 }
 
 static void test_trace_h_b_c_t_with_noise_pause_and_recovery() {
@@ -625,6 +727,9 @@ int main() {
   test_sensor_resume_updates_base_not_program_speed();
   test_detector_pause_resume_keeps_base_untouched();
   test_first_body_after_heads_topologies();
+  test_set_temp_zero_disables_sensor_pause();
+  test_body_temp_autoset_capped();
+  test_deferred_body_temp_capture();
   test_trace_h_b_c_t_with_noise_pause_and_recovery();
   test_detector_pause_blocks_endpoint_transition();
   test_active_manual_pause_blocks_endpoint_until_resume();
@@ -789,6 +894,35 @@ def main() -> int:
             "trace_flood_pause",
             "sensor.avgTemp >= c_temp + sensor.SetTemp",
             "sensor.avgTemp >= c_temp + sensor.SetTemp + 100.0f",
+        ),
+        # [Ф1] SetTemp 0 = контроль выключен: вход в паузу / автоподъём
+        (
+            "set_temp_zero_entry_gate",
+            "sensor.SetTemp > 0 && (sensor.avgTemp >= c_temp + sensor.SetTemp)",
+            "(sensor.avgTemp >= c_temp + sensor.SetTemp)",
+        ),
+        # [Ф1] SetTemp 0 при стоящей паузе: резюме по таймеру
+        (
+            "set_temp_zero_resume_gate",
+            "(sensor.SetTemp <= 0 || sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA)",
+            "(sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA)",
+        ),
+        # [Ф4] предел автоподъёма Т тела перестал спрашиваться
+        (
+            "autoset_cap_ignored",
+            "const bool autosetAllowed = body_temp_autoset_allowed();",
+            "const bool autosetAllowed = body_temp_autoset_allowed() || true;",
+        ),
+        # [Ф3] отложенный захват без срока / без ожидания стабилизации
+        (
+            "deferred_capture_no_deadline",
+            "SteamSensor.BodyTemp == 0 && body_temp_capture_deadline > 0 &&",
+            "SteamSensor.BodyTemp == 0 &&",
+        ),
+        (
+            "deferred_capture_deadline_ignored",
+            "(is_steam_stable() || (int32_t)(millis() - body_temp_capture_deadline) >= 0)",
+            "(is_steam_stable())",
         ),
     ]
     for name, original, replacement in mutants:

@@ -71,7 +71,7 @@
 
     function calc_program () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Ошибка программы, проверьте её.");
+        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
         return;
       }
       var t = document.getElementsByClassName("prgline");
@@ -95,12 +95,12 @@
       try {
         const result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          alert(result.err || 'Программа не принята.');
+          SamovarApp.notify(result.err || 'Программа не принята.', 0);
           return;
         }
-        alert('Программа установлена');
+        SamovarApp.notify('Программа сохранена.', 2);
       } catch (e) {
-        alert('Ошибка сети: ' + e);
+        SamovarApp.notify('Ошибка сети: ' + e, 0);
       }
     };
 
@@ -124,7 +124,7 @@
     };
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
     };
 
 

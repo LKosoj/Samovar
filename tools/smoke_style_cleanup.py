@@ -24,12 +24,27 @@ if css:
   ]:
     if forbidden in css:
       errors.append(f"style.css still has global prgline selector: {forbidden!r}")
-  for token in [
-    ".prgline input,\n.prgline .program-row-action,\n.prgline select",
-    ".prgline input:enabled,\n.prgline .program-row-action,\n.prgline select",
-  ]:
-    if token not in css:
-      errors.append(f"style.css missing scoped prgline selector: {token!r}")
+  # Каждый селектор правила про поля строки программы обязан быть ограничен .prgline.
+  # Дословный пин списка селекторов ломался на их перестановке, которая на CSS
+  # не влияет вообще. Проверяем суть регресса: в таком правиле не должно быть
+  # селектора, действующего на всю страницу (исторически туда утекали глобальные
+  # img и select и перекрашивали весь интерфейс).
+  css_no_comments = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+  prgline_rules = [
+    match.group("selector")
+    for match in re.finditer(r"(?P<selector>[^{}]*\.prgline\s+input[^{}]*)\{", css_no_comments)
+  ]
+  if not prgline_rules:
+    errors.append("style.css missing .prgline input rules")
+  for rule in prgline_rules:
+    for selector in (part.strip() for part in rule.split(",")):
+      if selector and ".prgline" not in selector:
+        errors.append(f"style.css .prgline rule leaks page-wide selector: {selector}")
+  # Список и кнопка строки программы обязаны оставаться оформленными: без этой
+  # проверки предыдущая пройдёт и на CSS, из которого их просто выкинули.
+  for token in [".prgline select", ".prgline .program-row-action"]:
+    if token not in css_no_comments:
+      errors.append(f"style.css missing scoped prgline selector: {token}")
 
   message_box_rules = [
     match.group("selector")

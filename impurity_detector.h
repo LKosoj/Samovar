@@ -96,6 +96,25 @@ volatile float CurrentBaseSpeedRate = 0.0f;
 // при смене строки и при срабатывании лимита (авто-снижение скорости).
 volatile uint8_t RowStopPauseCount = 0;
 
+// [Ф3] Отложенный захват Т тела. При старте строки B/C с ненулевой мощностью
+// (run_program) старая Т тела обнуляется: колонна ещё не отреагировала на новую
+// мощность, и захват через 0.5 с дал бы опору от прежнего режима. Новая Т тела берётся
+// в withdrawal(), когда пар устоялся (is_steam_stable()) или истёк этот срок
+// (DETECTOR_STEAM_STABLE_MS от старта строки - когда детектор выключен, история не
+// ведётся и стабильность не наступает никогда). 0 = захват не ожидается.
+static uint32_t body_temp_capture_deadline = 0;
+
+// [Ф4] Т тела первого захвата в текущей строке - опора для предела автоподъёма
+// BODY_TEMP_AUTOSET_MAX_RISE. Обнуляется при старте строки и ручной установке Т тела.
+static float body_temp_row_base = 0.0f;
+
+// [Ф4] Разрешён ли ещё автоподъём Т тела в этой строке: пар не ушёл выше опоры
+// больше, чем на BODY_TEMP_AUTOSET_MAX_RISE. Без опоры (0) - не разрешён.
+inline bool body_temp_autoset_allowed() {
+  return body_temp_row_base > 0.0f &&
+         SteamSensor.avgTemp <= body_temp_row_base + BODY_TEMP_AUTOSET_MAX_RISE;
+}
+
 // Сброс накопителя усреднения и замера фона. Оба привязаны к истории: если история
 // очищена, усреднять и калиброваться надо заново.
 inline void detector_reset_sampling() {
@@ -239,11 +258,6 @@ bool is_steam_stable() {
   }
   detector_steam_stability_reason = DETECTOR_STEAM_READY;
   return true;
-}
-
-inline uint32_t detector_steam_stable_seconds() {
-  if (detector_steam_stable_since == 0) return 0;
-  return (millis() - detector_steam_stable_since) / 1000UL;
 }
 
 /**
@@ -802,8 +816,10 @@ void process_impurity_detector() {
       // устанавливаем новую температуру тела
       bool isFirstBodyProgram = is_first_body_program_after_heads(currentProgram, currentType);
 
-      if (isFirstBodyProgram) {
-        // Это первая программа тела - всегда устанавливаем новую Т тела вместо снижения скорости
+      // [Ф4] Подъём Т тела ограничен BODY_TEMP_AUTOSET_MAX_RISE от первого захвата в
+      // строке - выше него предупреждение детектора обрабатывается как в обычной строке.
+      if (isFirstBodyProgram && body_temp_autoset_allowed()) {
+        // Это первая программа тела - устанавливаем новую Т тела вместо снижения скорости
         set_body_temp();
         SendMsg("Детектор: Установка новой Т тела (первая программа тела, тренд " +
                 String(impurityDetector.currentTrend, 3) + ", variance: " +

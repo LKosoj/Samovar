@@ -11,6 +11,20 @@ constexpr uint8_t NBK_PROGRAM_MAX = 4;
 static_assert(PROGRAM_MAX > 0 && PROGRAM_MAX < 255, "PROGRAM_MAX must fit uint8_t and leave room for sentinel math");
 static_assert(PROGRAM_END == PROGRAM_MAX, "PROGRAM_END is a sentinel, not a valid program[] index");
 
+// [Б7.1] Перенесено из power_regulator.h: нужен раньше (program_io.h,
+// logic.h::validate_rect_program_startable()), чем power_regulator.h подключается
+// в logic.h.
+// Порог трактовки поля Power строки программы: |Power| выше него и Power > 0 -
+// абсолютная уставка (В для KVIC/RMVK, Вт для SEM_AVR), иначе - дельта к текущей
+// target_power_volt, 0 - строка явно "не трогать регулятор".
+// НЕ путать с POWER_WORK_MODE_THRESHOLD (порог WORK/SLEEP самого регулятора) -
+// для SEM_AVR числа разные (400 против 100), совпадают только у KVIC/RMVK (40).
+#ifdef SAMOVAR_USE_SEM_AVR
+static constexpr float PROGRAM_POWER_ABS_THRESHOLD = 400.0f;
+#else
+static constexpr float PROGRAM_POWER_ABS_THRESHOLD = 40.0f;
+#endif
+
 enum ProgramParseError : uint8_t {
   PROGRAM_PARSE_OK = 0,
   PROGRAM_PARSE_EMPTY_INPUT,

@@ -10,22 +10,33 @@ from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def telemetry_contract_ok(samovar_source: str, index_source: str) -> bool:
-    firmware_tokens = (
-        "snapshot.detectorRecoveryThreshold =",
-        "detector_current_recovery_threshold();",
-        "snapshot.detectorRecoveryReady = detector_trend_settled();",
-        '"DetectorRecoveryThreshold"',
-        '"DetectorRecoveryReady"',
-    )
-    ui_tokens = (
-        "myObj.DetectorRecoveryThreshold.toFixed(4)",
-        "myObj.DetectorRecoveryReady ? 'условие выполнено' : 'ожидание'",
-        "восстановление тренда",
-    )
-    return all(token in samovar_source for token in firmware_tokens) and all(
-        token in index_source for token in ui_tokens
-    )
+def telemetry_contract_ok(
+    samovar_source: str, index_source: str, detector_source: str, logic_source: str
+) -> bool:
+    """Порог восстановления детектора считается и РАБОТАЕТ, но наружу не отдаётся.
+
+    Подробная строка стабилизации с главного экрана убрана намеренно:
+    test_mode_logic_ui_browser требует "index must not show steam-stability debug
+    dump on the main screen". Раньше этот гейт требовал ровно обратного - текста
+    подсказки в index.htm, - и две проверки тянули разметку в разные стороны.
+
+    01.09.2026 решением владельца восемь полей DetectorSteam*/DetectorRecovery*
+    убраны и из /ajax: их не читал ни один экран, а уходили они в КАЖДОМ ответе
+    телеметрии. Значения при этом никуда не делись - на них стоит выход из паузы
+    по детектору в logic.h, что и проверяется здесь вместо прежнего "поле есть
+    в JSON".
+    """
+    if "return impurityDetector.currentTrend < detector_current_recovery_threshold();" \
+            not in detector_source:
+        return False
+    # Ищем именно вызов в условии, а не имя функции: в logic.h оно упомянуто ещё
+    # и в комментарии над этой строкой, и проверка "имя встречается" проходила бы
+    # даже после удаления самого вызова.
+    if "&& detector_trend_settled())" not in logic_source:
+        return False
+    if '"DetectorSteam' in samovar_source or '"DetectorRecovery' in samovar_source:
+        return False
+    return "detector_steam_stability" not in index_source
 
 def stability_gate_ok(detector_source: str) -> bool:
     """Гейт 10-минутной стабилизации первой строки тела работает по ВЫБРАННОМУ датчику.
@@ -239,28 +250,33 @@ def main() -> int:
     source = (ROOT / "impurity_detector.h").read_text(encoding="utf-8")
     samovar_source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
     index_source = (ROOT / "data_raw" / "index.htm").read_text(encoding="utf-8")
-    if not telemetry_contract_ok(samovar_source, index_source):
+    logic_source = (ROOT / "logic.h").read_text(encoding="utf-8")
+    if not telemetry_contract_ok(samovar_source, index_source, source, logic_source):
         print("FAIL: неполный telemetry-контракт восстановления детектора", file=sys.stderr)
         return 1
     telemetry_mutants = (
-        (
-            samovar_source.replace(
-                "detector_current_recovery_threshold();", "0.0f;", 1
-            ),
-            index_source,
-        ),
-        (
-            samovar_source.replace('"DetectorRecoveryReady"', '"DetectorReady"', 1),
-            index_source,
-        ),
-        (
-            samovar_source,
-            index_source.replace(
-                "myObj.DetectorRecoveryReady ? 'условие выполнено' : 'ожидание'",
-                "'неизвестно'",
-                1,
-            ),
-        ),
+        # порог восстановления перестал влиять на "тренд успокоился"
+        (samovar_source, index_source,
+         source.replace("detector_current_recovery_threshold();", "0.0f;", 1),
+         logic_source),
+        # выход из паузы по детектору перестал спрашивать тренд
+        (samovar_source, index_source, source,
+         logic_source.replace("&& detector_trend_settled())", ")", 1)),
+        # мёртвое поле вернулось в каждый ответ /ajax
+        (samovar_source.replace(
+            '  jsonFieldBool(out, first, "useautospeed", snapshot.useAutoSpeed);',
+            '  jsonFieldBool(out, first, "DetectorRecoveryReady", true);\n'
+            '  jsonFieldBool(out, first, "useautospeed", snapshot.useAutoSpeed);', 1),
+         index_source, source, logic_source),
+        # дамп стабилизации вернулся на главный экран
+        (samovar_source,
+         index_source.replace(
+             '<div id="detector_trend"',
+             '<div id="detector_steam_stability" class="text">-</div>\n'
+             '          <div id="detector_trend"',
+             1,
+         ),
+         source, logic_source),
     )
     if any(telemetry_contract_ok(*mutant) for mutant in telemetry_mutants):
         print("FAIL: мутация recovery-телеметрии пережила контракт", file=sys.stderr)

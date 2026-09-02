@@ -88,12 +88,12 @@
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          alert(result.err || 'Программа не установлена');
+          SamovarApp.notify(result.err || 'Программа не установлена', 0);
           return;
         }
-        alert("Программа установлена");
+        SamovarApp.notify("Программа сохранена.", 2);
       } catch (e) {
-        alert('Ошибка сети: ' + e);
+        SamovarApp.notify('Ошибка сети: ' + e, 0);
       }
     };
 
@@ -103,21 +103,21 @@
         return true;
       }
       if (!check_program(programText)) {
-        alert("Ошибка в программе, проверьте её!");
+        SamovarApp.notify("Ошибка в программе, проверьте её!", 1);
         return false;
       }
       let lines = programText.split("\n");
       let t = document.getElementsByClassName("prgline");
       const maxProgramLines = t.length - 1;
       if (lines.length > maxProgramLines) {
-        alert(`Программа НБК содержит ${lines.length} строк, интерфейс поддерживает ${maxProgramLines}.`);
+        SamovarApp.notify(`Программа НБК содержит ${lines.length} строк, интерфейс поддерживает ${maxProgramLines}.`, 1);
         return false;
       }
       const parsedLines = [];
       for (let i = 0; i < lines.length; i++) {
         let parts = lines[i].split(";");
         if (parts.length !== 3) {
-          alert(`Ошибка формата программы в строке ${i+1}! Ожидается 3 значения, разделенных точкой с запятой.`);
+          SamovarApp.notify(`Ошибка формата программы в строке ${i+1}! Ожидается 3 значения, разделенных точкой с запятой.`, 1);
           return false;
         }
         parsedLines.push(parts);
@@ -147,7 +147,7 @@
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
     };
 
 
@@ -168,11 +168,11 @@
         label: 'Скорость НБК', exclusiveMin: 0, max: 8000,
         accept: function(value) { return value < 8000; },
         acceptMessage: 'Скорость НБК должна быть меньше 8000.'
-      }, { successMessage: 'Скорость отбора установлена.', acknowledge: true });
+      }, { successMessage: 'Скорость НБК принята.' });
     };
 
     async function setOptimal () {
-      await SamovarApp.sendCommand('nbkopt', { successMessage: 'Параметры приняты.', acknowledge: true });
+      await SamovarApp.sendCommand('nbkopt', { successMessage: 'Параметры приняты.' });
     };
 
     function renderTelemetry(myObj) {
@@ -241,7 +241,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Ошибка программы, проверьте её!");
+          SamovarApp.notify("Ошибка программы, проверьте её!", 1);
           return;
         }
         getProgram();

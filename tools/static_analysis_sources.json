@@ -19,9 +19,11 @@
     "control_numeric_input.h",
     "crash_handler.h",
     "crash_handler.ino",
+    "debug_ds_emu.h",
     "distiller.h",
     "font.h",
     "impurity_detector.h",
+    "json_field_raw.h",
     "logic.h",
     "lua.h",
     "mod_rmv.ino",
@@ -37,6 +39,7 @@
     "power_regulator_numeric_input.h",
     "power_regulator_rmvk.h",
     "power_regulator_sem.h",
+    "profile_decode_fields.h",
     "profile_setup_fields.h",
     "profile_store.h",
     "program_io.h",
@@ -53,7 +56,9 @@
     "suvid.h",
     "time_utils.h",
     "user_config_override.h",
-    "valve_buzzer.h"
+    "valve_buzzer.h",
+    "web_i2c_stepper_parse.h",
+    "web_save_string_arg.h"
   ],
   "excluded": {
     "font.h": "bitmap font data"

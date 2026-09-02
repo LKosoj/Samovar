@@ -297,6 +297,10 @@ inline bool program_parse_rect_row(char* line, size_t, uint8_t, WProgram& row, c
 
   if (ok && parsedType != 'P' && speed <= 0.0f) ok = false;
   if (ok && parsedType == 'P' && volume <= 0) ok = false;
+  // [Ф2] Строка отбора без объёма и температуры не завершится никогда (переход по
+  // объёму требует цель != 0). validate_rect_program_startable() ловит это только при
+  // старте - строка, сохранённая уже во время отбора, проходила мимо.
+  if (ok && parsedType != 'P' && volume <= 0 && temp <= 0.0f) ok = false;
   if (!ok) return false;
 
   row.WType = parsedType;
@@ -699,7 +703,25 @@ inline ProgramParseResult prepare_program_for_mode(
         0,
         "Ошибка программы: неподдерживаемый режим");
   }
-  return program_parse_lines(text, *spec, draft);
+  ProgramParseResult result = program_parse_lines(text, *spec, draft);
+#ifdef SAMOVAR_USE_POWER
+  // [Б7.2] Только ректификация: check_alarm() (alarm.h) в момент окончания разгона
+  // безусловно применяет apply_program_power_row(program[0].Power) - первая строка
+  // обязана задавать АБСОЛЮТНУЮ уставку, иначе колонна останется на полной мощности
+  // разгона. Условие эквивалентно ветке "абсолют" в apply_program_power_row():
+  // порог положителен, поэтому "abs(power) > порог && power > 0" совпадает с
+  // "power > порог". БК и Lua делят тот же формат строки, но к этому переходу
+  // программу не привязывают - их не проверяем.
+  if (result.ok() && mode == SAMOVAR_RECTIFICATION_MODE && draft.len > 0 &&
+      !(draft.rows[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
+    program_reset_draft(draft);
+    result = program_parse_result(
+        PROGRAM_PARSE_INVALID_ROW,
+        1,
+        "Ошибка программы: первая строка должна задавать абсолютную мощность/напряжение (иначе колонна останется на полной мощности разгона)");
+  }
+#endif
+  return result;
 }
 
 inline String serialize_program_for_mode(SAMOVAR_MODE mode) {

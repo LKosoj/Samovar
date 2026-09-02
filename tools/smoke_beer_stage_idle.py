@@ -165,6 +165,19 @@ static void test_P_out_of_band_idle_requires_started_row() {
   check(beerStageIdleAccumMs == 3000, "РЕГРЕСС: возврат в полосу гистерезиса не зачёл накопленный простой (3000мс)");
 }
 
+// [Пиво 02.09 A4] Перегрев выше полосы гистерезиса на 'P' простоем не считается -
+// таймер выдержки не должен останавливаться, пока температура не ниже цели.
+static void test_P_overheat_above_band_does_not_accumulate_idle() {
+  reset_fixture();
+  program[0].Temp = 65;
+  begintime = 1;
+
+  beer_update_stage_idle('P', 70, 0.3f, 1000);  // сильно выше цели
+  check(beerStageIdleSinceMs == 0,
+        "РЕГРЕСС: перегрев выше полосы гистерезиса на 'P' ошибочно считается простоем");
+  check(beerStageIdleAccumMs == 0, "накопитель не должен расти на перегреве строки 'P'");
+}
+
 // [P2 п.5] На 'B' (кипячение) выход температуры за пределы program[].Temp+-tempDelta
 // НЕ считается простоем - кипячение реагирует только на ручную паузу.
 static void test_B_type_ignores_temperature_band() {
@@ -222,6 +235,7 @@ int main() {
   test_manual_pause_accumulates_idle_on_cooling_row();
   test_manual_pause_before_row_start_does_not_accumulate();
   test_P_out_of_band_idle_requires_started_row();
+  test_P_overheat_above_band_does_not_accumulate_idle();
   test_B_type_ignores_temperature_band();
   test_other_types_never_accumulate_idle();
   test_elapsed_clamped_when_idle_exceeds_elapsed_wall_time();

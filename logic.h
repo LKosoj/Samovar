@@ -74,9 +74,11 @@ inline bool rect_row_transition_requested(
     int16_t currentStartval,
     float steamTemp,
     float steamStartTemp) {
+  // [Б3] Ветка currentStartval == SAMOVAR_STARTVAL_RECT_DONE недостижима: withdrawal()
+  // делает ранний return при startval == SAMOVAR_STARTVAL_RECT_DONE, раньше чем
+  // управление доходит до вызова этой функции.
   if (targetSteps != 0 && targetSteps <= currentSteps &&
-      (currentStartval == SAMOVAR_STARTVAL_RECT_RUNNING ||
-       currentStartval == SAMOVAR_STARTVAL_RECT_DONE)) {
+      currentStartval == SAMOVAR_STARTVAL_RECT_RUNNING) {
     return true;
   }
   if (row.Temp == 0) return false;
@@ -135,6 +137,14 @@ void withdrawal(void) {
     return;
   }
 
+  // [Ф3] Отложенный захват Т тела (см. run_program: строка B/C с ненулевой мощностью).
+  // Пока Т тела == 0, паузы по датчикам не ставятся (условие sensor.BodyTemp > 0).
+  if (program_type_one_of(currentType, "BC") && SteamSensor.BodyTemp == 0 && body_temp_capture_deadline > 0 &&
+      (is_steam_stable() || (int32_t)(millis() - body_temp_capture_deadline) >= 0)) {
+    body_temp_capture_deadline = 0;
+    set_body_temp();
+  }
+
   //По достижению шаговика цели
   CurrrentStepps = currentCompletedSteps;
 
@@ -158,16 +168,24 @@ void withdrawal(void) {
   auto handlePauseBySensor = [&](DSSensor& sensor, ProgramWaitType waitType, const char* sensorLabel) -> bool {
     float c_temp = sensor.BodyTemp;  // датчик уже приведён к шкале с учетом настройки коррекции давления
     //Возвращаем колонну в стабильное состояние, если работает программа отбора тела и температура вышла за пределы или корректируем пределы
-    if (program_type_one_of(currentType, "BC") && (sensor.avgTemp >= c_temp + sensor.SetTemp) && sensor.BodyTemp > 0) {
+    // [Ф1] Вылет за уставку (SetTemp) <= 0 - контроль по этому датчику выключен: с нулём
+    // условие "текущая >= тело + 0" истинно сразу после захвата Т тела (заводской дефолт
+    // profile_setup_fields.h), и строка либо виснет в паузе, либо переставляет Т тела
+    // на каждом проходе loop().
+    if (program_type_one_of(currentType, "BC") && sensor.SetTemp > 0 && (sensor.avgTemp >= c_temp + sensor.SetTemp) && sensor.BodyTemp > 0) {
 #ifdef USE_BODY_TEMP_AUTOSET
+      // [Ф4] Автоподъём Т тела ограничен BODY_TEMP_AUTOSET_MAX_RISE от первого захвата в
+      // строке (body_temp_autoset_allowed) - иначе медленный рост примесей за длинную
+      // первую строку тела целиком впитывается в порог всех следующих строк.
+      const bool autosetAllowed = body_temp_autoset_allowed();
       //Если строка программы - предзахлеб и после есть еще две строки с отбором тела, то корректируем Т тела
-      if (hasTwoNextPrograms && currentType == 'C' &&
+      if (autosetAllowed && hasTwoNextPrograms && currentType == 'C' &&
           program_type_one_of(program_type_at(currentProgram + 1), "BCP") &&
           program_type_one_of(program_type_at(currentProgram + 2), "BC")) {
         set_body_temp();
       }
       //Если это первая строка с телом после голов (в т.ч. через строки паузы P) - корректируем Т тела
-      else if (is_first_body_program_after_heads(currentProgram, currentType)) {
+      else if (autosetAllowed && is_first_body_program_after_heads(currentProgram, currentType)) {
         set_body_temp();
       } else
 #endif
@@ -197,7 +215,8 @@ void withdrawal(void) {
     // другого сенсора и "(Детектор)"), снимала чужую паузу, а соответствующая ветка тут
     // же ставила её снова → осцилляция каждые Delay сек (спам, зуммер, пуски насоса).
     // [C-13] overflow-safe: t_min > 0 — сентинель "таймер установлен"; (int32_t)(millis()-t_min) >= 0 — истёк
-    } else if (program_type_one_of(currentType, "BC") && sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && currentWaitType == waitType) {
+    // [Ф1] SetTemp <= 0 (контроль выключили во время паузы) - пауза этого типа снимается по таймеру.
+    } else if (program_type_one_of(currentType, "BC") && (sensor.SetTemp <= 0 || sensor.avgTemp < c_temp + sensor.SetTemp - PAUSE_RESUME_HYSTERESIS_DELTA) && t_min > 0 && (int32_t)(millis() - t_min) >= 0 && program_Wait && currentWaitType == waitType) {
       //продолжаем отбор
       SendMsg(("Продолжаем отбор после автоматической паузы"), NOTIFY_MSG);
       t_min = 0;
@@ -473,7 +492,10 @@ String get_beer_status_text() {
   } else if (currentType == 'W') {
     local = local + "Ожидание. Нажмите 'Следующая программа'; ";
   } else if (currentType == 'A') {
-    local = local + "Автокалибровка. После завершения питание будет выключено";
+    // [Пиво 02.09 A7] Питание выключится только если строка последняя - иначе программа продолжится дальше.
+    const bool isLastProgramLine = (ProgramNum + 1 >= ProgramLen) || program_type_empty(program_type_at(ProgramNum + 1));
+    local = local + "Автокалибровка. После завершения " +
+            (isLastProgramLine ? "питание будет выключено" : "переход к следующей строке");
   } else if (currentType == 'B') {
     if (begintime == 0) {
       local = local + "Кипячение - нагрев";
@@ -719,10 +741,28 @@ static void reset_rect_program_pause_state(bool resumeStepper = true) {
  *        Temp==0 — ни TargetStepps!=0, ни температурный выход не могут сработать).
  */
 inline bool validate_rect_program_startable(String& errorMessage) {
+  // [Б1.1] TargetStepps = Volume * SamSetup.StepperStepMl (run_program()); при
+  // StepperStepMl==0 цель всегда 0, а rect_row_transition_requested() требует
+  // targetSteps != 0 - переход по объёму не сработает никогда. Переход по
+  // температуре в ректификации не используется (решение владельца), поэтому
+  // строка не завершится вообще, а отбор при этом идёт со скоростью 0.
+  if (SamSetup.StepperStepMl == 0) {
+    errorMessage = "Насос не откалиброван (шагов на мл = 0). Старт ректификации невозможен.";
+    return false;
+  }
   if (ProgramLen == 0 || program_type_empty(program[0].WType)) {
     errorMessage = "Ошибка программы ректификации: строка не задана";
     return false;
   }
+#ifdef SAMOVAR_USE_POWER
+  // [Б7.3] Программа могла попасть в program[] мимо валидатора program_io.h (файл на
+  // SPIFFS от старой прошивки, MQTT, редактирование program[0] через меню энкодера) -
+  // та же проверка, что в prepare_program_for_mode().
+  if (!(program[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
+    errorMessage = "Ошибка программы: первая строка должна задавать абсолютную мощность/напряжение. Старт ректификации невозможен.";
+    return false;
+  }
+#endif
   for (uint8_t i = 0; i < ProgramLen && i < PROGRAM_END; i++) {
     ProgramType t = program[i].WType;
     if (program_type_empty(t)) break;
@@ -789,6 +829,21 @@ void run_program(uint8_t num) {
   TankSensor.StartProgTemp = TankSensor.avgTemp;
 
   String p_s;
+  // [Ф3][Ф4] Новая строка - новая опора автоподъёма Т тела и никакого ожидающего захвата.
+  body_temp_row_base = 0;
+  body_temp_capture_deadline = 0;
+  // [Б5] Если новая строка не 'C' - гасим весь тракт "охоты" за предзахлёбом:
+  // alarm_c_min, alarm_c_low_min, prev_target_power_volt, alarm_h_min (решение
+  // владельца: "использовать только те параметры, которые заданы в новой строке
+  // программы отбора"). Если C идёт подряд за C - ничего не трогаем, счётчики
+  // продолжают идти как шли. alarm_h_min гасится здесь же, ВНЕ #ifdef
+  // SAMOVAR_USE_POWER: она объявлена и используется безусловно (Samovar.h,
+  // alarm.h под USE_HEAD_LEVEL_SENSOR - буззер и сообщение о захлёбе не зависят
+  // от регулятора мощности), поэтому на сборках без регулятора её сброс не
+  // должен зависеть от макроса.
+  if (program[num].WType != 'C') {
+    alarm_h_min = 0;
+  }
 #ifdef SAMOVAR_USE_POWER
   apply_program_power_row(program[num].Power);
   vTaskDelay(500 / portTICK_PERIOD_MS);
@@ -799,7 +854,13 @@ void run_program(uint8_t num) {
   // срабатывало почти сразу после старта, и выдержка TIME_C минут перед подъёмом
   // напряжения фактически не работала. Формат записи - как во второй ветке того же
   // check_alarm(), чтобы читатели поля трактовали его одинаково.
-  if (program[num].WType == 'C' && alarm_c_low_min == 0) alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+  if (program[num].WType == 'C') {
+    if (alarm_c_low_min == 0) alarm_c_low_min = millis() + 1000 * 60 * TIME_C;
+  } else {
+    alarm_c_min = 0;
+    alarm_c_low_min = 0;
+    prev_target_power_volt = 0;
+  }
 #endif
   p_s = "Программа: старт строки  №" + (String)(num + 1);
   if (program_type_one_of(program[num].WType, "HBTC")) {
@@ -850,8 +911,25 @@ void run_program(uint8_t num) {
     //Считаем, что колонна стабильна
     //Итак, текущая температура - это температура, которой Самовар будет придерживаться во время всех программ отобора тела.
     //Если она будет выходить за пределы, заданные в настройках, отбор будет ставиться на паузу, и продолжится после возвращения температуры в колонне к заданному значению.
-    if (program_type_one_of(program[num].WType, "BC") && SteamSensor.BodyTemp == 0) {
-      set_body_temp();
+    if (program_type_one_of(program[num].WType, "BC")) {
+#ifdef SAMOVAR_USE_POWER
+      const bool rowChangesPower = program[num].Power != 0;
+#else
+      const bool rowChangesPower = false;
+#endif
+      if (rowChangesPower) {
+        // [Ф3] Строка меняет мощность - прежняя Т тела (в т.ч. унаследованная от
+        // предыдущей строки) больше не опора: колонна отреагирует на новую мощность
+        // позже, чем через 0.5 с выдержки выше. Захват откладывается до стабилизации
+        // пара или на DETECTOR_STEAM_STABLE_MS - см. withdrawal().
+        SteamSensor.BodyTemp = 0;
+        PipeSensor.BodyTemp = 0;
+        WaterSensor.BodyTemp = 0;
+        TankSensor.BodyTemp = 0;
+        body_temp_capture_deadline = millis() + DETECTOR_STEAM_STABLE_MS;
+      } else if (SteamSensor.BodyTemp == 0) {
+        set_body_temp();
+      }
     }
   } else if (program[num].WType == 'P') {
     //Сбрасываем Т тела, так как при изменении напряжения на регуляторе изменяется Т в царге.
@@ -890,6 +968,8 @@ void set_body_temp() {
     PipeSensor.BodyTemp = PipeSensor.avgTemp;
     WaterSensor.BodyTemp = WaterSensor.avgTemp;
     TankSensor.BodyTemp = TankSensor.avgTemp;
+    // [Ф4] Первый захват в строке - опора предела автоподъёма BODY_TEMP_AUTOSET_MAX_RISE.
+    if (body_temp_row_base <= 0.0f) body_temp_row_base = SteamSensor.BodyTemp;
     SendMsg("Новые Т тела: пар = " + String(SteamSensor.BodyTemp) + ", царга = " + String(PipeSensor.BodyTemp), WARNING_MSG);
   } else {
     SendMsg(("Не возможно установить Т тела."), WARNING_MSG);

@@ -15,6 +15,13 @@ unsigned int - приведение отрицательного float к без
 без переписывания логики) и подставляет его в host-харнесс с подменёнными глобалами
 (program[], TargetStepps, CurrrentStepps, t_min/millis() и т.д.), наблюдая фактические
 WthdrwTime/WthdrwlProgress после клампа.
+
+[Пиво 02.09 C3] BEER-ветка той же функции считала прогресс строки по
+(millis() - begintime), не вычитая накопленный простой строки
+(beerStageIdleAccumMs) - в отличие от get_beer_status_text (logic.h), который
+использует beer_stage_elapsed_ms(). После правки BEER-ветка тоже зовёт
+beer_stage_elapsed_ms() - тест вытаскивает и его РЕАЛЬНОЕ тело из beer.h и
+проверяет, что простой строки вычитается из прогресса.
 """
 import subprocess
 import sys
@@ -24,6 +31,8 @@ from pathlib import Path
 from smoke_helpers import extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
+
+BEER_STAGE_ELAPSED_MS_SIGNATURE = "inline float beer_stage_elapsed_ms(unsigned long nowMs)"
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
@@ -98,6 +107,7 @@ volatile unsigned int CurrrentStepps = 0;
 volatile unsigned int TargetStepps = 0;
 unsigned long begintime = 0;
 unsigned long t_min = 0;
+unsigned long beerStageIdleAccumMs = 0;
 volatile float WthdrwTimeAll = 0;
 volatile float WthdrwTime = 0;
 volatile uint8_t WthdrwlProgress = 0;
@@ -112,6 +122,8 @@ static bool runtime_state_lock(TickType_t timeout = pdMS_TO_TICKS(50)) {
   return true;
 }
 static void runtime_state_unlock(bool) {}
+
+@BEER_STAGE_ELAPSED_MS_BODY@
 
 static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
 @BODY@
@@ -135,6 +147,7 @@ static void reset_fixture() {
   TargetStepps = 0;
   mockMillis = 0;
   t_min = 0;
+  beerStageIdleAccumMs = 0;
   WthdrwTime = 0;
   WthdrwTimeAll = 0;
   WthdrwlProgress = 0;
@@ -177,10 +190,27 @@ static void test_overdue_pause_clamped() {
   check(WthdrwlProgress <= 100, "WthdrwlProgress вышел за 100% в просроченной паузе ('P')");
 }
 
+// (4) [Пиво 02.09 C3] BEER-ветка: прогресс строки должен считаться по активному
+// времени (за вычетом простоя), а не по (millis() - begintime) целиком.
+// Time=60 мин, с начала строки прошло 30 мин по часам, из них 10 мин - простой ->
+// активное время 20 мин -> прогресс ~33%, а не 50%.
+static void test_beer_progress_subtracts_idle() {
+  reset_fixture();
+  Samovar_Mode = SAMOVAR_BEER_MODE;
+  program[0].Time = 60;  // минут
+  begintime = 1;  // > 0, иначе ветка вычисления wp не выполняется вовсе
+  beerStageIdleAccumMs = (unsigned long)10 * 60 * 1000;  // 10 минут простоя
+  mockMillis = (unsigned long)30 * 60 * 1000;  // 30 минут по часам
+  tick_update_withdrawal_progress('M');
+  check(WthdrwlProgress <= 34 && WthdrwlProgress >= 32,
+        "REGRESS: прогресс пива должен учитывать вычтенный простой (~33%, не 50%)");
+}
+
 int main() {
   test_overshoot_steps_clamped_to_one();
   test_zero_steps_unchanged();
   test_overdue_pause_clamped();
+  test_beer_progress_subtracts_idle();
 
   if (failures != 0) return 1;
   std::cout << "rectification withdrawal progress clamp checks passed\n";
@@ -194,7 +224,11 @@ def build_harness() -> str:
     body = extract_function_body(
         source, "static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {"
     )
-    return HARNESS_TEMPLATE.replace("@BODY@", body)
+    beer_source = (ROOT / "beer.h").read_text(encoding="utf-8")
+    elapsed_body = extract_function_body(beer_source, BEER_STAGE_ELAPSED_MS_SIGNATURE)
+    elapsed_fn = "float beer_stage_elapsed_ms(unsigned long nowMs) {" + elapsed_body + "}"
+    harness = HARNESS_TEMPLATE.replace("@BEER_STAGE_ELAPSED_MS_BODY@", elapsed_fn)
+    return harness.replace("@BODY@", body)
 
 
 def main() -> int:

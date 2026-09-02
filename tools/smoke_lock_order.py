@@ -53,6 +53,54 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
+def strip_string_literals(source: str) -> str:
+    """Опустошает "..." и '...', сохраняя кавычки и номера строк.
+
+    Скобки внутри литералов (Samovar.ino печатает JSON символами '{' и '}')
+    сбивали подсчёт глубины, и посреди функции глубина падала до нуля. Тогда
+    следующий `if (...) {` парсер принимал за определение функции с именем "if",
+    приписывал ей замки из тела этого if, а CALL_RE видел `if(` как вызов - и
+    любая функция с условием оказывалась "вызывающей" псевдофункцию if. Отсюда
+    брались все ложные нарушения порядка замков.
+    """
+    result: list[str] = []
+    index = 0
+    quote = ""
+    escaped = False
+    while index < len(source):
+        char = source[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                result.append(char)
+                quote = ""
+            elif char == "\n":
+                # незакрытый литерал не должен проглотить остаток файла
+                result.append(char)
+                quote = ""
+            index += 1
+            continue
+        if char in "\"'":
+            quote = char
+        result.append(char)
+        index += 1
+    return "".join(result)
+
+
+code_cache: dict[Path, list[str]] = {}
+
+
+def read_code_lines(path: Path) -> list[str]:
+    """Строки без комментариев и без содержимого литералов - для подсчёта
+    скобок, имён функций и вызовов. Номера строк сохраняются."""
+    if path not in code_cache:
+        code_cache[path] = strip_string_literals(strip_cpp_comments(read(path))).splitlines()
+    return code_cache[path]
+
+
 helpers_text = read(ROOT / "runtime_helpers.h")
 
 # ---- 1. таблица иерархии ----------------------------------------------------
@@ -148,6 +196,10 @@ CALL_RE = re.compile(r"(?<![\w])(\w+)\s*\(")
 
 
 EXIT_RE = re.compile(r"^\s*(return|break|continue|goto)\b")
+# `if (!locked)` - ветка, куда попадают ИМЕННО при неудачном захвате: внутри неё
+# замок не держится, хотя выше по тексту стоит строка с lock(). Без этого любой
+# SendMsg в обработчике отказа выглядел как вызов под замком.
+NEGATED_FLAG_RE = re.compile(r"if\s*\(\s*!\s*(\w+)\s*\)")
 
 
 def branch_exits_after(lines: list[str], index: int, depth: int) -> bool:
@@ -158,6 +210,14 @@ def branch_exits_after(lines: list[str], index: int, depth: int) -> bool:
         stripped = line.strip()
         if not stripped or stripped.startswith("//"):
             continue
+        # Закрывающие скобки в начале строки завершают ветку ДО того, как ниже
+        # встретится выход из соседней ветки. У `} else {` баланс строки нулевой,
+        # и без этой поправки continue/return из else-ветки считался выходом из
+        # ветки с unlock: замок оставался "удерживаемым" до конца функции и давал
+        # ложные нарушения порядка на всём, что вызывалось дальше.
+        leading = len(stripped) - len(stripped.lstrip("}"))
+        if current - leading < depth:
+            return False
         if EXIT_RE.match(line) and current >= depth:
             return True
         current += line.count("{") - line.count("}")
@@ -175,8 +235,12 @@ def line_events(line: str) -> tuple[list[tuple[str, str, str | None]], list[str]
         return takes, gives
     if not DEFINITION_RE.match(line):
         for pattern, tag in TAKE_PATTERNS:
-            if pattern.search(line):
-                takes.append((tag, "manual", None))
+            match = pattern.search(line)
+            if match:
+                # `bool locked = runtime_state_lock(...)` - имя флага нужно, чтобы
+                # ниже узнать ветку `if (!locked)`, где замок как раз НЕ взят.
+                flag = re.search(r"(\w+)\s*=[^=]*$", line[:match.start()])
+                takes.append((tag, "manual", flag.group(1) if flag else None))
         for pattern, tag in GIVE_PATTERNS:
             if pattern.search(line):
                 gives.append(tag)
@@ -194,6 +258,11 @@ def line_events(line: str) -> tuple[list[tuple[str, str, str | None]], list[str]
 
 
 # функция -> замки, которые она берёт напрямую (для одного уровня вызовов)
+# Управляющие конструкции - не функции: `if (...) {` не должен попадать в граф
+# вызовов как вызываемое имя, иначе замки из его тела расползаются по всему коду.
+CONTROL_KEYWORDS = {"if", "for", "while", "switch", "catch", "do", "else", "return", "sizeof"}
+
+
 def function_name_before_brace(chunk: str) -> str | None:
     """Имя функции = идентификатор перед скобкой, которая закрывается у '{'."""
     brace = chunk.rfind("{")
@@ -216,7 +285,9 @@ def function_name_before_brace(chunk: str) -> str | None:
     if index < 0:
         return None
     match = re.search(r"(\w+)\s*$", chunk[:index])
-    return match.group(1) if match else None
+    if match is None or match.group(1) in CONTROL_KEYWORDS:
+        return None
+    return match.group(1)
 
 
 def parse_functions(lines: list[str]) -> list[tuple[str, int, int]]:
@@ -240,7 +311,7 @@ def parse_functions(lines: list[str]) -> list[tuple[str, int, int]]:
 
 direct_tags: dict[str, set[str]] = {}
 for path in source_files():
-    lines = read(path).splitlines()
+    lines = read_code_lines(path)
     for name, start, end in parse_functions(lines):
         tags = set()
         for line in lines[start:end + 1]:
@@ -254,7 +325,7 @@ for path in source_files():
 # расширяют проверку лишними связями, а не пропускают настоящие)
 call_graph: dict[str, set[str]] = {}
 for path in source_files():
-    lines = read(path).splitlines()
+    lines = read_code_lines(path)
     for name, start, end in parse_functions(lines):
         callees: set[str] = set()
         for line in lines[start:end + 1]:
@@ -303,9 +374,10 @@ def reachable_tags(start: str) -> set[str]:
 # ---- 4. сам анализ вложенности ---------------------------------------------
 observed: dict[tuple[str, str], set[str]] = {}
 for path in source_files():
-    lines = read(path).splitlines()
+    lines = read_code_lines(path)
     depth = 0
     held: list[tuple[str, int, str, str | None]] = []  # тег, глубина захвата, вид, имя стража
+    suppressions: list[tuple[str, int]] = []  # тег, глубина ветки "замок не взят"
     for index, line in enumerate(lines):
         stripped = line.strip()
         if stripped.startswith("//") or stripped.startswith("*"):
@@ -319,17 +391,25 @@ for path in source_files():
                     gives.append(tag)
                     break
         where = f"{path.relative_to(ROOT)}:{index + 1}"
+        new_depth = depth + line.count("{") - line.count("}")
+        suppressions = [item for item in suppressions if depth >= item[1]]
+        negated = NEGATED_FLAG_RE.search(line)
+        if negated:
+            for held_tag, _held_depth, _held_kind, flag_name in held:
+                if flag_name is not None and flag_name == negated.group(1):
+                    suppressions.append((held_tag, new_depth if "{" in line else depth + 1))
+        muted = {tag for tag, _depth in suppressions}
+        effective = [item for item in held if item[0] not in muted]
         for tag, _kind, _guard in takes:
-            for held_tag, _held_depth, _held_kind, _held_name in held:
+            for held_tag, _held_depth, _held_kind, _held_name in effective:
                 if held_tag != tag:
                     observed.setdefault((held_tag, tag), set()).add(where)
-        if held:
+        if effective:
             for callee in CALL_RE.findall(line):
                 for tag in reachable_tags(callee):
-                    for held_tag, _held_depth, _held_kind, _held_name in held:
+                    for held_tag, _held_depth, _held_kind, _held_name in effective:
                         if held_tag != tag:
                             observed.setdefault((held_tag, tag), set()).add(f"{where} через {callee}()")
-        new_depth = depth + line.count("{") - line.count("}")
         for tag, kind, guard_name in takes:
             held.append((tag, new_depth if kind == "guard" else depth, kind, guard_name))
         # unlock снимает удержание, если после него код продолжается. unlock
@@ -341,6 +421,12 @@ for path in source_files():
                     continue
                 if depth <= held[position][1] or not branch_exits_after(lines, index, new_depth):
                     held.pop(position)
+                else:
+                    # unlock в ветке, которая тут же выходит: для ОСТАЛЬНЫХ путей
+                    # функции замок ещё держится, но до конца этой ветки он уже
+                    # отпущен - иначе строки после unlock и до return считались бы
+                    # выполняемыми под замком.
+                    suppressions.append((tag, new_depth))
                 break
         depth = new_depth
         held = [item for item in held if not (item[2] == "guard" and depth < item[1])]

@@ -99,6 +99,11 @@ HARNESS = r'''
 
 #define __SAMOVAR_H_
 #define CAPACITY_NUM 10
+
+// [Б7.2] Без этого define ветвь проверки первой строки в
+// prepare_program_for_mode() (program_io.h) вырезается препроцессором.
+#define SAMOVAR_USE_POWER
+
 #include "program_types.h"
 
 struct WProgram {
@@ -484,6 +489,41 @@ void test_mode_mapping_and_defaults() {
   check(sizeof(ProgramDraft) == 564, "ProgramDraft size changed");
 }
 
+void test_power_first_row_scope() {
+  // [Б7.2] Правило "первая строка задаёт АБСОЛЮТНУЮ мощность" из
+  // prepare_program_for_mode() распространяется ТОЛЬКО на ректификацию -
+  // check_alarm() (alarm.h) безусловно применяет её к регулятору только там.
+  // У БК своя мощность (SamSetup.BKPower), у Lua её задаёт скрипт - соседние
+  // режимы это правило не должно ловить молча.
+  ProgramDraft draft{};
+
+  ProgramParseResult rect_zero = prepare_program_for_mode(
+      SAMOVAR_RECTIFICATION_MODE, String("H;450;0.1;1;0;0\n"), draft);
+  check(!rect_zero.ok(), "rectification first row with Power=0 was accepted");
+  check(rect_zero.error == PROGRAM_PARSE_INVALID_ROW,
+        "rectification Power=0 error kind mismatch");
+
+  ProgramParseResult rect_low = prepare_program_for_mode(
+      SAMOVAR_RECTIFICATION_MODE, String("H;450;0.1;1;0;30\n"), draft);
+  check(!rect_low.ok(), "rectification first row with Power=30 (below threshold) was accepted");
+
+  // [Пункт 3] Power РОВНО равна порогу - сравнение строгое (>), граница не абсолютная
+  // уставка. Порог берём из уже включённого program_types.h (PROGRAM_POWER_ABS_THRESHOLD),
+  // не хардкодим число - кейс остаётся верным для обеих веток (400 SEM_AVR / 40 остальные).
+  String thresholdRow = String("H;450;0.1;1;0;") + String(PROGRAM_POWER_ABS_THRESHOLD) + String("\n");
+  ProgramParseResult rect_threshold = prepare_program_for_mode(
+      SAMOVAR_RECTIFICATION_MODE, thresholdRow, draft);
+  check(!rect_threshold.ok(), "rectification first row with Power==threshold (strict >) was accepted");
+
+  ProgramParseResult bk_zero = prepare_program_for_mode(
+      SAMOVAR_BK_MODE, String("H;450;0.1;1;0;0\n"), draft);
+  check(bk_zero.ok(), "BK first row with Power=0 must stay valid - BK power comes from SamSetup.BKPower");
+
+  ProgramParseResult lua_zero = prepare_program_for_mode(
+      SAMOVAR_LUA_MODE, String("H;450;0.1;1;0;0\n"), draft);
+  check(lua_zero.ok(), "Lua first row with Power=0 must stay valid - Lua power is set by the script");
+}
+
 }  // namespace
 
 int main() {
@@ -496,6 +536,7 @@ int main() {
   test_dist_row_type_bounds();
   test_beer_row_semantics();
   test_mode_mapping_and_defaults();
+  test_power_first_row_scope();
 
   if (failures != 0) return 1;
   std::cout << "Program atomic parse/commit behavioral checks passed (draft "

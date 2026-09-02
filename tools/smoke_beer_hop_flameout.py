@@ -59,6 +59,10 @@ unsigned long millis() { return fakeMillis; }
 static bool boilingReached = false;
 bool isBoilingStarted(float) { return boilingReached; }
 
+// [Пиво 02.09 A5] Смежная 'B' продолжает кипятить без повторной детекции только
+// если детектор кипения уже подтвердил кипение (см. continue-glue ниже).
+struct { bool isBoiling; } boilingDetector;
+
 // [П13] Таймаут разгона до кипения задействован извлечённым кодом
 // (см. tools/smoke_beer_boil_cooling_timeout.py про его поведение отдельно).
 #define BEER_BOIL_TIMEOUT_MS (120UL * 60UL * 1000UL)
@@ -179,6 +183,7 @@ int main() {
   fakeMillis = 1000;
   boilingReached = true;
   run_boil_row_tick(); // фиксируем начало кипения на строке 0
+  boilingDetector.isBoiling = true; // [Пиво 02.09 A5] детектор подтвердил кипение
   fakeMillis = begintime + 600000UL;
   run_boil_row_tick();
   check(hopStepperCalls == 1, "РЕГРЕСС (П68): напоминание про хмель должно сработать на первой из двух строк 'B'");
@@ -202,6 +207,17 @@ int main() {
   fakeMillis = begintime + 600000UL;
   run_boil_row_tick();
   check(hopStepperCalls == 2, "РЕГРЕСС (П68): напоминание про хмель должно сработать и на второй строке 'B'");
+
+  // Сценарий 3 [Пиво 02.09 A5]: смежная 'B'->'B', но детектор кипение ЕЩЁ НЕ
+  // подтвердил (isBoiling == false) - вторая строка не должна тихо "продолжать
+  // кипятить": begintime остаётся 0, идёт обычный путь ожидания кипения.
+  typeAt[0] = 'B'; typeAt[1] = 'B'; typeAt[2] = 'C';
+  boilingReached = false;
+  boilingDetector.isBoiling = false;
+  enter_row(1); // ProgramNum=1, предыдущая строка (typeAt[0]) - 'B'
+  run_boil_row_tick();
+  check(begintime == 0,
+        "РЕГРЕСС (Пиво 02.09 A5): смежная 'B' без подтверждённого детектором кипения не должна была выставить begintime");
 
   if (failures != 0) return 1;
   std::cout << "beer hop flameout (П68) behaviour checks passed\n";
@@ -241,7 +257,7 @@ def main() -> int:
         )
 
         continue_glue_token = (
-            "if (begintime == 0 && ProgramNum > 0 && program_type_at(ProgramNum - 1) == 'B') begintime = millis();"
+            "if (begintime == 0 && ProgramNum > 0 && program_type_at(ProgramNum - 1) == 'B' && boilingDetector.isBoiling) begintime = millis();"
         )
         if continue_glue_token not in strip_cpp_comments(b_branch):
             raise ValueError(f"continue-glue line not found: {continue_glue_token}")

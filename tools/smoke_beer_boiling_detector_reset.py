@@ -66,6 +66,7 @@ constexpr uint8_t PROGRAM_MAX = 8;
 constexpr uint8_t PROGRAM_END = PROGRAM_MAX;
 constexpr int16_t SAMOVAR_STARTVAL_BEER_START = 2000;
 constexpr int16_t SAMOVAR_STARTVAL_BEER_HEATING = 2001;
+constexpr int16_t SAMOVAR_STARTVAL_BEER_WAIT_MALT = 2002;
 
 struct WProgram {
   ProgramType WType = PROGRAM_TYPE_NONE;
@@ -82,7 +83,7 @@ struct SetupEEPROM {
   bool ChangeProgramBuzzer = false;
 };
 
-#define TEMP_HISTORY_SIZE 10
+#define TEMP_HISTORY_SIZE 7
 
 struct BoilingDetector {
     float tempHistory[TEMP_HISTORY_SIZE];
@@ -90,6 +91,7 @@ struct BoilingDetector {
     uint8_t samplesFilled = 0;
     bool isBoiling = false;
     unsigned long lastUpdateTime = 0;
+    unsigned long lastSampleTime = 0;
     uint8_t stableCount = 0;
 };
 
@@ -434,6 +436,61 @@ static void test_manual_skip_cold_before_begintime_set_skips_confirmation() {
   check(beerSkipConfirmProgramNum == 0xFF, "переход без подтверждения не должен оставлять ожидание");
 }
 
+// [Пиво 02.09 A1] Старт программы (startval == BEER_START) с первой строкой 'C' на
+// горячем сусле не должен требовать подтверждения пропуска охлаждения - иначе ТЭН,
+// уже включённый set_power(true) в beer_proc(), остаётся без управления навсегда.
+static void test_start_with_hot_c_row_skips_confirmation() {
+  reset_fixture();
+  startval = SAMOVAR_STARTVAL_BEER_START;
+  program[0].WType = 'C';
+  program[0].Temp = 10;
+  ProgramLen = 1;
+  TankSensor.avgTemp = 20;  // горячее цели
+
+  run_beer_program(0);
+
+  check(ProgramNum == 0, "старт с горячей 'C' должен был выполнить переход на строку 0");
+  check(beerSkipConfirmProgramNum == 0xFF,
+        "РЕГРЕСС: старт программы потребовал подтверждения пропуска охлаждения");
+  check(sendMsgCalls == 1,
+        "старт должен был отправить только обычное уведомление о смене строки, не предупреждение о подтверждении");
+}
+
+// [Пиво 02.09 A3] Повторный вход на строку 'M' (не только старт программы) обязан
+// взводить подэтап нагрева - иначе beer_stage_tick/статус не увидят "нагрев" на
+// второй засыпи солода в той же программе.
+static void test_repeat_m_row_sets_heating_substage() {
+  reset_fixture();
+  program[0].WType = 'M';
+  program[1].WType = 'P';
+  program[2].WType = 'M';
+  ProgramLen = 3;
+  ProgramNum = 1;
+  startval = SAMOVAR_STARTVAL_BEER_WAIT_MALT;
+
+  run_beer_program(2);
+
+  check(ProgramNum == 2, "run_beer_program должен был перейти на строку 2");
+  check(startval == SAMOVAR_STARTVAL_BEER_HEATING,
+        "РЕГРЕСС: повторный вход на строку 'M' не взвёл подэтап нагрева");
+}
+
+// Контроль: переход на строку не типа 'M' из того же startval подэтап нагрева не взводит.
+static void test_transition_to_non_m_row_keeps_startval() {
+  reset_fixture();
+  program[0].WType = 'M';
+  program[1].WType = 'P';
+  ProgramLen = 2;
+  ProgramNum = 0;
+  startval = SAMOVAR_STARTVAL_BEER_WAIT_MALT;
+
+  run_beer_program(1);
+
+  check(ProgramNum == 1, "run_beer_program должен был перейти на строку 1");
+  check(startval == SAMOVAR_STARTVAL_BEER_WAIT_MALT,
+        "РЕГРЕСС: переход на строку без типа 'M' изменил startval");
+}
+
 int main() {
   test_transition_from_cooling_resets_detector();
   test_adjacent_boiling_transition_keeps_detector();
@@ -443,6 +500,9 @@ int main() {
   test_auto_transition_from_cooled_target_skips_confirmation();
   test_manual_skip_hot_before_begintime_set_requires_confirmation();
   test_manual_skip_cold_before_begintime_set_skips_confirmation();
+  test_start_with_hot_c_row_skips_confirmation();
+  test_repeat_m_row_sets_heating_substage();
+  test_transition_to_non_m_row_keeps_startval();
   if (failures != 0) return 1;
   std::cout << "beer.h boiling detector reset behaviour checks passed\n";
   return 0;

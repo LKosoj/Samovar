@@ -199,6 +199,20 @@ if program_io:
             require_token(signature, body, token)
 
     try:
+        body = extract_function_body(program_io, "inline ProgramParseResult prepare_program_for_mode")
+    except ValueError as exc:
+        errors.append(str(exc))
+        body = ""
+    for token in [
+        "mode == SAMOVAR_RECTIFICATION_MODE",
+        "PROGRAM_POWER_ABS_THRESHOLD",
+        "PROGRAM_PARSE_INVALID_ROW",
+    ]:
+        # [Б7.2] Правило "первая строка ректификации задаёт абсолютную мощность"
+        # не должно молча потеряться при будущем рефакторинге prepare_program_for_mode().
+        require_token("prepare_program_for_mode rect-only power check", body, token)
+
+    try:
         body = extract_function_body(program_io, "inline bool program_parse_beer_row")
     except ValueError as exc:
         errors.append(str(exc))

@@ -61,10 +61,14 @@ PAGE_LABELS = {
         "mixerRpm", "mixerRunSec", "mixerPauseSec", "pumpMode", "pumpMlHour",
         "pumpPauseSec", "fillingMl", "fillingMlHour", "stepsPerMl",
     ),
+    # [Пиво 02.09 D1] выбор рецепта при нескольких RECIPE в файле.
+    "brewxml.htm": ("recipe-select",),
 }
 FROZEN = {
-    "edit.htm": "26b7e41df2a0a0197a14b9cf129f808fd001e760df4ed7c16df7a35a10b03ce6",
-    "edit.htm.gz": "86e2801e2370cd45420ed84005194b752cc22198e7ab85faa33129bd28a50cac",
+    # 01.09.2026: панель файлов получила мобильную раскладку (до 900 px её
+    # кнопки переносились под дерево файлов и не нажимались).
+    "edit.htm": "e50cababe8cd7421a250eb9ecfdd9dcdda26ab1d5ea61b5a6ada6aff64e536bb",
+    "edit.htm.gz": "0cc91264dd1da80e76faffb7ca2c293cf2777031449f82f9edf99e49c81baa84",
 }
 KEY_LISTENER_REGISTRATION = re.compile(
     r"\baddEventListener\s*\(\s*(['\"])(?:keydown|keyup|keypress)\1\s*,",

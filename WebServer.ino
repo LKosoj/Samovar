@@ -843,7 +843,11 @@ static void handle_column_params_request(AsyncWebServerRequest *request) {
   json += "\"tailsFlowMlH\":" + String(res.tailsFlowMlH, 0) + ",";
   json += "\"headsPowerW\":" + String(res.headsPowerW, 0) + ",";
   json += "\"bodyEndPowerW\":" + String(res.bodyEndPowerW, 0) + ",";
-  json += "\"tailsPowerW\":" + String(res.tailsPowerW, 0);
+  json += "\"tailsPowerW\":" + String(res.tailsPowerW, 0) + ",";
+  // [В8] Признаки, что рекомендация упёрлась в потолок сечения колонны - дальнейшие
+  // изменения параметров формы её не сдвинут, пока не изменится диаметр/высота/насадка.
+  json += "\"headsSpeedClamped\":" + String(res.headsSpeedClamped ? "true" : "false") + ",";
+  json += "\"bodySpeedClamped\":" + String(res.bodySpeedClamped ? "true" : "false");
   json += "}";
   send_no_store_response(request, 200, "application/json", json);
 }
@@ -1147,6 +1151,9 @@ String indexKeyProcessor(const String &var) {
   } else if (var == "PressureHide") {
     if (bme_pressure > 0) return "false";
     else return "true";
+  } else if (var == "IsBeerMode") {
+    // [Пиво 02.09 D8] brewxml.htm разрешает установку программы только в режиме "Пиво"
+    return (Samovar_Mode == SAMOVAR_BEER_MODE) ? "true" : "false";
   } else if (var == "ProgNumHide") {
     if (ProgramNum > 0) return "false";
     else return "true";
@@ -1176,8 +1183,6 @@ String indexKeyProcessor(const String &var) {
         maxValue);
     return result.ok() ? String(maxValue, 9) : String();
   }
-  else if (var == "pwr_unit_v_only")
-    return (String(PWR_TYPE) == "V") ? "block" : "none";
   else if (var == "btn_list") {
 #ifdef USE_LUA
     String cachedList;
@@ -1202,6 +1207,8 @@ String indexKeyProcessor(const String &var) {
     return String(SamSetup.PackDens);
   else if (var == "HeaterR")
     return String(SamSetup.HeaterResistant, 9);
+  else if (var == "MainsVoltage")
+    return String(SamSetup.MainsVoltage, 2);
   else if (var == "I2CStepperTab")
     // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
     return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
@@ -1747,7 +1754,11 @@ static const SaveU16Field kSaveU16Fields[] = {
     {"TankDelay", &SetupEEPROM::TankDelay, 0, 65535},
     {"ACPDelay", &SetupEEPROM::ACPDelay, 0, 65535},
     {"SuvidHoldMinutes", &SetupEEPROM::SuvidHoldMinutes, 0, 65535},
-    {"StepperStepMl", &SetupEEPROM::StepperStepMl, 0, 65535},
+    // [Б1.2] Нижняя граница поднята с 0: при StepperStepMl==0 цель TargetStepps =
+    // Volume * StepperStepMl всегда 0, и строка программы ректификации не завершается
+    // никогда (переход по температуре в ректификации намеренно не используется).
+    // validate_rect_program_startable() блокирует лишь СТАРТ, а не сохранение формы.
+    {"StepperStepMl", &SetupEEPROM::StepperStepMl, 1, 65535},
     {"StepperStepMlI2C", &SetupEEPROM::StepperStepMlI2C, 0, 65535},
 };
 
@@ -1798,7 +1809,9 @@ static const SaveU8Field kSaveU8Fields[] = {
     {"autospeed", &SetupEEPROM::autospeed, 0, 99},
     {"TimeZone", &SetupEEPROM::TimeZone, 0, 23},
     {"LogPeriod", &SetupEEPROM::LogPeriod, 1, 255},
-    {"PackDens", &SetupEEPROM::PackDens, 0, 100},
+    // [Б9] Нижняя граница поднята с 0 до 60: HTML-слайдер в setup.htm уже ограничен
+    // 60-100 (подпись "(60-100)"), сервер разрешал 0..100 - рассинхрон.
+    {"PackDens", &SetupEEPROM::PackDens, 60, 100},
 };
 
 static const SaveCheckboxField kSaveCheckboxFields[] = {
@@ -1859,12 +1872,23 @@ static bool save_param_name_allowed(const String& name) {
 // [T28] Мигрированный из EEPROM профиль (migrate_from_eeprom() в NVS_Manager.ino)
 // проверяет только flag и Mode - остальные ~30 числовых полей уходят в NVS как есть,
 // и мусор из битого сектора молча становится рабочими настройками на годы. Переиспользуем
-// те же таблицы диапазонов, что и проверка формы /save (kSaveFloatFields/kSaveU8Fields),
+// те же таблицы диапазонов, что и проверка формы /save (kSaveU16Fields/kSaveFloatFields/kSaveU8Fields),
 // вместо отдельного набора границ.
 bool sanitize_setup_profile_ranges(SetupEEPROM& profile, String& fixedFieldsOut) {
   SetupEEPROM defaults{};
   set_default_setup_profile(defaults);
   bool changed = false;
+  // [Б1.2] Раньше эта таблица не обходилась, потому что у всех её полей границы
+  // совпадали с полным диапазоном uint16_t. StepperStepMl сузил границы первым.
+  for (const SaveU16Field &f : kSaveU16Fields) {
+    long v = profile.*f.member;
+    if (v < f.minValue || v > f.maxValue) {
+      profile.*f.member = defaults.*f.member;
+      if (fixedFieldsOut.length()) fixedFieldsOut += ",";
+      fixedFieldsOut += f.name;
+      changed = true;
+    }
+  }
   for (const SaveFloatField &f : kSaveFloatFields) {
     float v = profile.*f.member;
     if (!isfinite(v) || v < f.minValue || v > f.maxValue) {
@@ -2015,7 +2039,7 @@ void handleSave(AsyncWebServerRequest *request) {
       return;
     }
     long stepsPer100Ml = 0;
-    if (!parse_save_long_arg(request, "stepperstepml", 0, 6553500, stepsPer100Ml)) return;
+    if (!parse_save_long_arg(request, "stepperstepml", 100, 6553500, stepsPer100Ml)) return;
     if ((stepsPer100Ml % 100) != 0) {
       send_save_parse_error(request, "stepperstepml", NUMERIC_PARSE_NOT_ALLOWED);
       return;
@@ -2382,7 +2406,8 @@ void web_command(AsyncWebServerRequest *request) {
       return;
     }
   } else if (action == "pause") {
-    SamovarCommands command = PauseOn ? SAMOVAR_CONTINUE : SAMOVAR_PAUSE;
+    // [Пиво 02.09 C1] PauseOn ИЛИ beerManualPause — как Blynk.ino:317, Menu.ino:440.
+    SamovarCommands command = (PauseOn || beerManualPause) ? SAMOVAR_CONTINUE : SAMOVAR_PAUSE;
     if (!queue_samovar_command(command)) {
       send_web_command_response(request, 503, "BUSY");
       return;

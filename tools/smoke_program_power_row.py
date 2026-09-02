@@ -7,10 +7,12 @@ logic.h::run_program и distiller.h::run_dist_program (и багованно
 абсолютная уставка, иначе (кроме 0) - дельта к target_power_volt, 0 - строка
 не трогает регулятор.
 
-Тест вытаскивает РЕАЛЬНЫЙ код из power_regulator.h через extract_function_body
-(тело функции) и текстовый срез ifdef-блока константы PROGRAM_POWER_ABS_THRESHOLD
-- без переписывания логики - и подставляет их в минимальный host-харнесс,
-замокав только downstream-вызов set_current_power и target_power_volt.
+Тест вытаскивает РЕАЛЬНЫЙ код: тело функции - из power_regulator.h через
+extract_function_body, а текстовый срез ifdef-блока константы
+PROGRAM_POWER_ABS_THRESHOLD - из program_types.h ([Б7.1] константа переехала
+туда, т.к. нужна раньше, чем power_regulator.h подключается в logic.h) - без
+переписывания логики - и подставляет их в минимальный host-харнесс, замокав
+только downstream-вызов set_current_power и target_power_volt.
 
 Компилируется ДВАЖДЫ - с -DSAMOVAR_USE_SEM_AVR (порог 400, Вт) и без
 (порог 40, В) - так проверяется, что оба ifdef-варианта константы реально
@@ -119,20 +121,20 @@ int main() {
 '''
 
 
-def build_snippet(source: str) -> str:
-    first = source.find(THRESHOLD_CONST)
+def build_snippet(types_source: str, regulator_source: str) -> str:
+    first = types_source.find(THRESHOLD_CONST)
     if first < 0:
         raise ValueError(f"constant not found: {THRESHOLD_CONST}")
-    start = source.rfind(IFDEF_MARKER, 0, first)
+    start = types_source.rfind(IFDEF_MARKER, 0, first)
     if start < 0:
         raise ValueError(f"enclosing {IFDEF_MARKER} not found before threshold constant")
-    endif_idx = source.find("#endif", first)
+    endif_idx = types_source.find("#endif", first)
     if endif_idx < 0:
         raise ValueError("closing #endif for threshold constant not found")
     endif_idx += len("#endif")
-    const_block = source[start:endif_idx]
+    const_block = types_source[start:endif_idx]
 
-    func_body = extract_function_body(source, FUNC_SIGNATURE)
+    func_body = extract_function_body(regulator_source, FUNC_SIGNATURE)
     func_full = FUNC_SIGNATURE + " {" + func_body + "}"
 
     return const_block + "\n\n" + func_full
@@ -162,9 +164,10 @@ def compile_and_run(harness: str, label: str, extra_define: str | None) -> int:
 
 
 def main() -> int:
-    source = (ROOT / "power_regulator.h").read_text(encoding="utf-8")
+    types_source = (ROOT / "program_types.h").read_text(encoding="utf-8")
+    regulator_source = (ROOT / "power_regulator.h").read_text(encoding="utf-8")
     try:
-        snippet = build_snippet(source)
+        snippet = build_snippet(types_source, regulator_source)
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1

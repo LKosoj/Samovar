@@ -114,6 +114,9 @@ class String {
       offset += replacement.size();
     }
   }
+  // Прошивка проверяет "текст непустой" через length() (Samovar.ino:473) -
+  // заглушка обязана давать тот же метод, иначе харнесс не собирается.
+  size_t length() const { return value_.size(); }
   const std::string& value() const { return value_; }
 
  private:

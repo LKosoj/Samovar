@@ -42,7 +42,8 @@ BROWSER_TEST = r'''async page => {
       floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
       theoreticalPlates: 20, headsFlowMlH: 100, bodyFlowMinMlH: 200,
       bodyFlowMaxMlH: 400, bodyEndFlowMlH: 300, tailsFlowMlH: 150,
-      headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000
+      headsPowerW: 1800, bodyEndPowerW: 2200, tailsPowerW: 2000,
+      headsSpeedClamped: false, bodySpeedClamped: false
     })
   }));
 

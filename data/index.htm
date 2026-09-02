@@ -18,6 +18,13 @@
     var HeaterPowerOn = false;
     // Отбор идёт? Кнопка 'start' по этому признаку меняет и надпись, и текст подтверждения.
     var WithdrawalActive = false;
+    // [Б6.2] Числовой статус самовара из телеметрии (SamovarStatusInt) - нужен только для того,
+    // чтобы перед ПЕРВЫМ стартом отбора предупредить, если колонна ещё не вышла на стабильный
+    // режим. null - телеметрия ещё не приходила, тогда не предупреждаем.
+    var RectStatusInt = null;
+    // Коды статуса ректификации (Samovar.h): разгон и стабилизация.
+    var RECT_STATUS_ACCEL = 50;
+    var RECT_STATUS_STABILIZING = 51;
     // Пока пользователь редактирует ячейку таблицы программы, getProgram() (полная
     // пересборка) откладывается - иначе правка теряется или прыгает курсор. Значок
     // использует тот же стиль "устаревших" показаний, что и staleReadingIds (app.js).
@@ -28,6 +35,21 @@
       if (!badge) return;
       badge.style.display = stale ? 'inline' : 'none';
       badge.style.color = SamovarApp.cssVar('--detector-warn-text');
+    }
+
+    // [Б6.2] Подтверждение для кнопки "Начать отбор". При идущем отборе - старое поведение
+    // без изменений. На ПЕРВОМ старте, если нагрев включён и колонна ещё греется или
+    // стабилизируется - предупреждаем. Нагрев выключен, статус ещё не пришёл или колонна уже
+    // стабильна - подтверждение не нужно: в первом случае команда всё равно ничего не сделает
+    // (сервер ответит POWER_OFF), в остальных предупреждать не о чем.
+    function confirmRectStart() {
+      if (WithdrawalActive) {
+        return confirm("Перейти к следующей программе?");
+      }
+      if (HeaterPowerOn && (RectStatusInt === RECT_STATUS_ACCEL || RectStatusInt === RECT_STATUS_STABILIZING)) {
+        return confirm("Колонна ещё не вышла на стабильный режим. Отбор по непрогретой колонне даст мутный продукт и собьёт разделение фракций. Начать всё равно?");
+      }
+      return true;
     }
 
     // ==================== POWER UNIT ===================================================================
@@ -88,7 +110,7 @@
 
     function calc_program () {
       if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Ошибка программы, проверьте её.");
+        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
         return;
       }
       var t = document.getElementsByClassName("prgline");
@@ -145,24 +167,24 @@
       try {
         let result = await SamovarApp.postProgram(document.forms.mainform);
         if (!result.ok) {
-          alert("set_program ERROR! " + (result.err || 'программа не установлена'));
+          SamovarApp.notify("set_program ERROR! " + (result.err || 'программа не установлена'), 0);
           return;
         }
-        alert("Программа установлена");
+        SamovarApp.notify("Программа сохранена.", 2);
       } catch (e) {
-        alert("set_program ERROR! " + e);
+        SamovarApp.notify("set_program ERROR! " + e, 0);
       }
     };
 
 
     async function sendvoltage () {
-      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Установлено.', acknowledge: true });
+      return await SamovarApp.sendPowerCommand('Voltage', pwr_unit, powerInputMax, { successMessage: 'Команда принята.' });
     };
 
     async function sendpumpspeed () {
       return await SamovarApp.sendNumericCommand('pumpspeed', 'pumpspeed', {
         label: 'Скорость отбора', exclusiveMin: 0
-      }, { successMessage: 'Скорость отбора установлена.', acknowledge: true });
+      }, { successMessage: 'Скорость отбора принята.' });
     };
 
 
@@ -280,6 +302,7 @@
           document.getElementById('DeltaTemp').innerHTML = dt.toFixed(1);
 
           WithdrawalActive = myObj.WthdrwlStatus > 0;
+          RectStatusInt = Number.isFinite(myObj.SamovarStatusInt) ? myObj.SamovarStatusInt : null;
           if (WithdrawalActive) {
             document.getElementById('start').value = "Следующая программа"
           } else {
@@ -463,7 +486,7 @@
     function getProgram () {
       _lnIdx = 0;
       if (!check_program(document.getElementById('WProgram').value)) {
-        alert("Ошибка программы, проверьте её.");
+        SamovarApp.notify("Ошибка программы, проверьте её.", 1);
         return;
       }
       var e = document.getElementById("prg");
@@ -558,7 +581,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById("WProgram").addEventListener("change", function(event) {
         if (!check_program(document.getElementById('WProgram').value)) {
-          alert("Ошибка программы, проверьте её.");
+          SamovarApp.notify("Ошибка программы, проверьте её.", 1);
           return;
         }
         getProgram();
@@ -686,7 +709,7 @@
         <div style="flex: 1; padding-left: 1em;">
           <div class="text" style="font-weight: bold;">Детектор примесей:</div>
           <div id="detector_status_text" style="font-size: 1.2em;">-</div>
-        </div>
+          </div>
         <div style="flex: 1; text-align: right; padding-right: 1em;">
           <div class="text">Тренд:</div>
           <div id="detector_trend" style="font-size: 1.2em; font-weight: bold;">-</div>
@@ -779,7 +802,7 @@
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
           <input id='power' type='button' name='power' value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=" + (HeaterPowerOn ? "0" : "1")); return false;' class="button">
-          <input id='start' type='button' name='start' value='Начать отбор' style="margin-right: 2em;" onclick='if (WithdrawalActive && !confirm("Перейти к следующей программе?")) return false; SamovarApp.sendCommand("start=1"); return false;' class="button">
+          <input id='start' type='button' name='start' value='Начать отбор' style="margin-right: 2em;" onclick='if (!confirmRectStart()) return false; SamovarApp.sendCommand("start=1"); return false;' class="button">
           <input id='pause' type='button' name='pause' value='Пауза' onclick='SamovarApp.sendCommand("pause=1");' class="button">
         </div>
         <div class="container_row" style="justify-content: space-around; align-items: center;">

@@ -844,16 +844,9 @@ inline ActuatorCommandResult current_power_command_status(uint64_t generation) {
   return ACTUATOR_COMMAND_FAILED;
 }
 
-// Порог трактовки поля Power строки программы: |Power| выше него и Power > 0 -
-// абсолютная уставка (В для KVIC/RMVK, Вт для SEM_AVR), иначе - дельта к текущей
-// target_power_volt, 0 - строка явно "не трогать регулятор".
-// НЕ путать с POWER_WORK_MODE_THRESHOLD (порог WORK/SLEEP самого регулятора) -
-// для SEM_AVR числа разные (400 против 100), совпадают только у KVIC/RMVK (40).
-#ifdef SAMOVAR_USE_SEM_AVR
-static constexpr float PROGRAM_POWER_ABS_THRESHOLD = 400.0f;
-#else
-static constexpr float PROGRAM_POWER_ABS_THRESHOLD = 40.0f;
-#endif
+// [Б7.1] PROGRAM_POWER_ABS_THRESHOLD переехал в program_types.h - он нужен раньше
+// (program_io.h, logic.h::validate_rect_program_startable()), чем этот файл
+// подключается в logic.h.
 
 // Применяет значение поля Power строки программы к регулятору. Логика перенесена
 // без изменений из run_program()/run_dist_program(): 0 не даёт сработать ни одной

@@ -39,9 +39,38 @@ if text:
     "rememberUnscaledProgram(body, unit)",
     "Math.round(Number(ll) * 1000)",
     "function restoreProgramTemplateSelect(selectObject)",
+    'id="colSpeedClampNote"',
+    "первая строка программы должна задавать абсолютную мощность/напряжение",
   ]:
     if token not in text:
       errors.append(f"data_raw/program.htm missing W7.5 template state token: {token}")
+
+  try:
+    apply_recommended_body = extract_function_body(text, "function applyRecommendedSpeeds(options)")
+  except ValueError as exc:
+    errors.append(str(exc))
+    apply_recommended_body = ""
+  if apply_recommended_body:
+    # [В2] Ветка "C после C" не должна сбрасывать накопленную подстройку
+    # предзахлёба абсолютной уставкой - проверяем, что она идёт РАНЬШЕ
+    # основного каскада выбора мощности (let rPwr = 0;).
+    require_ordered_tokens(
+      "applyRecommendedSpeeds() C-after-C guard order",
+      apply_recommended_body,
+      [
+        "if (type == 'C' && prevType === 'C')",
+        "let rPwr = 0;",
+      ],
+      errors,
+    )
+
+  try:
+    program_body_for_unit_body = extract_function_body(text, "function programBodyForUnit(parsed, unit)")
+  except ValueError as exc:
+    errors.append(str(exc))
+    program_body_for_unit_body = ""
+  if program_body_for_unit_body and "lastAbsoluteVolts" not in program_body_for_unit_body:
+    errors.append("programBodyForUnit() missing lastAbsoluteVolts tracking for delta rows")
 
   try:
     load_file_body = extract_function_body(text, "function loadFile(e)")
@@ -57,9 +86,12 @@ if text:
     errors.append(str(exc))
     dirty_body = ""
   if dirty_body:
+    # [В1] Упрощено до сравнения с baseline: programTemplateBaseline пуст ровно до
+    # первого updateProgramTemplateBaseline() (шаблон ИЛИ программа прибора), поэтому
+    # ветка по programTemplateLoaded стала не нужна - см. data_raw/program.htm.
     for token in [
       "if (!program) return false;",
-      'programTemplateLoaded ? program.value !== programTemplateBaseline : program.value !== ""',
+      "return program.value !== programTemplateBaseline;",
     ]:
       if token not in dirty_body:
         errors.append(f"programTemplateDirty() missing token: {token}")

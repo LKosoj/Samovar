@@ -368,6 +368,10 @@ static bool nearly_equal(float a, float b) {
   return diff < 0.01f;
 }
 
+static bool contains_text(const String& haystack, const char* needle) {
+  return haystack.std_str().find(needle) != std::string::npos;
+}
+
 static void seed_rect_program() {
   for (uint8_t i = 0; i < PROGRAM_MAX; i++) program[i] = {};
   program[0].WType = 'H';
@@ -621,6 +625,41 @@ int main() {
   check(pendingStateSnapshotNotice.length() > 0, "Сувид: прерванная сессия тоже требует предупреждения");
   check(formatUptimeCalls == 1,
         "[T24.2] приписка про накопленную выдержку Сувида обязана форматироваться через format_uptime");
+
+  // 14. Программа в снимке БЫЛА, но не проходит проверку формата (например, старая
+  // программа с относительной первой строкой - Б7 запрещает это для ректификации), а
+  // нагрев в снимке был ВЫКЛЮЧЕН. Раньше (ранний return по !snapshot.powerOn) в этом
+  // случае пользователь молча получал дефолтную программу вместо своей - теперь
+  // предупреждение обязано появиться независимо от powerOn, с причиной отказа разбора.
+  reset_world();
+  seed_rect_program();  // как будто дефолт уже загружен в буфер программы
+  PowerOn = false;
+  SPIFFS.data = "M=0;P=1;L=1;H=0\nZ;500;0.6;1;78.5;210\n";  // тип Z не входит в allowedTypes "HBCTP"
+  SPIFFS.present = true;
+  restore_state_snapshot();
+  check(ProgramLen == 3, "программа не прошла проверку - буфер должен остаться прежним (дефолтом)");
+  check(pendingStateSnapshotNotice.length() > 0,
+        "программа была в снимке, но не восстановилась - предупреждать нужно даже при выключенном нагреве");
+  check(contains_text(pendingStateSnapshotNotice, "по умолчанию"),
+        "уведомление должно объяснять, что установлена программа по умолчанию");
+  check(contains_text(pendingStateSnapshotNotice, "неверный формат строки"),
+        "уведомление должно нести причину отказа разбора (format_program_parse_error)");
+
+  // 15. Тот же отказ разбора, но нагрев в снимке был ВКЛЮЧЁН - совмещаем со старым
+  // сообщением о прерванной сессии, причина отказа тоже должна быть видна.
+  reset_world();
+  seed_rect_program();
+  PowerOn = true;
+  SPIFFS.data = "M=0;P=1;L=1;H=1\nZ;500;0.6;1;78.5;210\n";
+  SPIFFS.present = true;
+  restore_state_snapshot();
+  check(ProgramLen == 3, "программа не прошла проверку - буфер должен остаться прежним (дефолтом)");
+  check(contains_text(pendingStateSnapshotNotice, "Сессия прервана"),
+        "нагрев был включён - должно остаться и старое сообщение о прерванной сессии");
+  check(contains_text(pendingStateSnapshotNotice, "программа не восстановлена"),
+        "внутри сообщения о сессии должно быть видно, что программа не восстановилась");
+  check(contains_text(pendingStateSnapshotNotice, "неверный формат строки"),
+        "причина отказа разбора обязана попасть в уведомление и при включённом нагреве");
 
   if (failures != 0) return 1;
   std::cout << "state snapshot restore behaviour checks passed\n";

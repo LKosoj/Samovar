@@ -500,16 +500,22 @@ class BrowserTestRunnerTests(unittest.TestCase):
         # тест должен покраснеть, а не молча перестать его запускать.
         expected = {
             "test_accessibility_ui_browser.py",
+            # 02.09.2026: пакет "Пиво" - кнопка паузы на beer.htm и импорт рецепта brewxml.htm.
+            "test_beer_pause_button_browser.py",
+            "test_brewxml_recipe_browser.py",
             "test_i2c_operation_results_browser.py",
             "test_i2c_pump_ui_browser.py",
             "test_mode_logic_ui_browser.py",
             "test_numeric_input_ui_browser.py",
             "test_profile_operation_ui_browser.py",
             "test_program_clear_ui_browser.py",
+            "test_program_device_import_browser.py",
             "test_program_file_validation_browser.py",
+            "test_program_flood_power_recommendations_browser.py",
             "test_program_focus_redraw_browser.py",
             "test_program_percent_input_browser.py",
             "test_program_calc_browser.py",
+            "test_rect_start_stability_confirm_browser.py",
             "test_runtime_event_ui_browser.py",
             "test_setup_guards_browser.py",
             "test_setup_mode_hidden_selected_browser.py",

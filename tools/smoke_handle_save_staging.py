@@ -99,7 +99,7 @@ if handle_save:
         "SteamDelay": '{"SteamDelay", &SetupEEPROM::SteamDelay, 0, 65535}',
         "SetPipeTemp": '{"SetPipeTemp", &SetupEEPROM::SetPipeTemp, 0.0f, 150.0f}',
         "ACPAddr": '{"ACPAddr", &SetupEEPROM::ACPAdress, PROFILE_SENSOR_RESET_ACP}',
-        "PackDens": '{"PackDens", &SetupEEPROM::PackDens, 0, 100}',
+        "PackDens": '{"PackDens", &SetupEEPROM::PackDens, 60, 100}',
     }
     for field_name, initializer in field_initializers.items():
         if initializer not in web_text:

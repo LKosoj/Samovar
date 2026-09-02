@@ -157,6 +157,10 @@ elif "kSaveU16Fields" not in sanitize_body:
             "но sanitize_setup_profile_ranges эту таблицу не обходит - "
             "после миграции со старого EEPROM значение проедет без проверки")
 
+# [Б1.2] Переиспользуем start/end, уже вычисленные и провалидированные стражем выше -
+# отдельный повторный поиск kSaveU16Fields не нужен.
+save_u16_fields = web_text[start:end + 2] if start >= 0 and end >= 0 else ""
+
 migration_block = ""
 try:
     inner, _ = extract_braced_block_after(samovar_ino_text, "if (migratedFromLegacy) {")
@@ -200,6 +204,7 @@ struct String {
 @SETUP_EEPROM_STRUCT@
 
 // ---- реальные таблицы диапазонов (WebServer.ino, извлечены дословно) ----
+struct SaveU16Field { const char* name; uint16_t SetupEEPROM::* member; long minValue; long maxValue; };
 struct SaveFloatField { const char* name; float SetupEEPROM::* member; float minValue; float maxValue; };
 struct SaveU8Field  { const char* name; uint8_t  SetupEEPROM::* member; long minValue; long maxValue; };
 
@@ -209,6 +214,8 @@ struct SaveU8Field  { const char* name; uint8_t  SetupEEPROM::* member; long min
 inline float power_work_mode_threshold() { return 40.0f; }              // power_regulator.h: POWER_WORK_MODE_THRESHOLD (KVIC/RMVK)
 static const float CONTROL_HEATER_R_MIN = 2.0f;                          // control_numeric_input.h (реальное значение)
 static const float CONTROL_HEATER_R_MAX = 65.0f;                         // control_numeric_input.h (реальное значение)
+
+@SAVE_U16_FIELDS@
 
 @SAVE_FLOAT_FIELDS@
 
@@ -288,6 +295,10 @@ int main() {
     profile.TimeZone = 200;            // u8: выше максимума (23)
     profile.autospeed = 5;             // u8: валиден (0..99) - не должен тронуться
     profile.SetSteamTemp = 80.0f;      // float: валиден (0..150) - не должен тронуться
+    // [Пункт 4/Б1] u16: StepperStepMl==0 ниже нового минимума (1) - насос не
+    // откалиброван, TargetStepps=Volume*StepperStepMl всегда 0, строка ректификации
+    // никогда не завершится (переход по температуре здесь не используется).
+    profile.StepperStepMl = 0;
 
     String fixedFields;
     bool changed = sanitize_setup_profile_ranges(profile, fixedFields);
@@ -297,12 +308,15 @@ int main() {
     check(profile.Kp == defaults.Kp, "Kp (ниже минимума) должен стать реальным дефолтом");
     check(profile.ColDiam == defaults.ColDiam, "ColDiam (выше максимума) должен стать реальным дефолтом");
     check(profile.TimeZone == defaults.TimeZone, "TimeZone (выше максимума) должен стать реальным дефолтом");
+    check(profile.StepperStepMl == defaults.StepperStepMl,
+          "StepperStepMl (0, ниже нового минимума 1) должен стать реальным дефолтом");
     check(profile.autospeed == 5, "валидный autospeed не должен быть тронут");
     check(profile.SetSteamTemp == 80.0f, "валидный SetSteamTemp не должен быть тронут");
     check(fixedFields.contains("DeltaSteamTemp"), "имя DeltaSteamTemp должно попасть в fixedFieldsOut");
     check(fixedFields.contains("Kp"), "имя Kp должно попасть в fixedFieldsOut");
     check(fixedFields.contains("ColDiam"), "имя ColDiam должно попасть в fixedFieldsOut");
     check(fixedFields.contains("TimeZone"), "имя TimeZone должно попасть в fixedFieldsOut");
+    check(fixedFields.contains("StepperStepMl"), "имя StepperStepMl должно попасть в fixedFieldsOut");
     check(!fixedFields.contains("autospeed"), "валидное autospeed не должно попасть в fixedFieldsOut");
     check(!fixedFields.contains("SetSteamTemp"), "валидное SetSteamTemp не должно попасть в fixedFieldsOut");
 
@@ -363,6 +377,7 @@ int main() {
 def build_harness() -> str:
     harness = HARNESS_TEMPLATE
     harness = harness.replace("@SETUP_EEPROM_STRUCT@", setup_eeprom_struct)
+    harness = harness.replace("@SAVE_U16_FIELDS@", save_u16_fields)
     harness = harness.replace("@SAVE_FLOAT_FIELDS@", save_float_fields)
     harness = harness.replace("@SAVE_U8_FIELDS@", save_u8_fields)
     harness = harness.replace("@DEFAULT_PROFILE_BODY@", default_profile_body)

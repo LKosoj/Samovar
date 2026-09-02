@@ -384,6 +384,9 @@ static void detector_on_auto_resume() {}
 static bool detector_trend_settled() { return false; }
 static void apply_row_stop_pause_policy() {}
 static void set_body_temp() {}
+static bool is_steam_stable() { return false; }
+static uint32_t body_temp_capture_deadline = 0;
+static bool body_temp_autoset_allowed() { return false; }
 static bool is_first_body_program_after_heads(uint8_t, ProgramType) { return false; }
 static bool program_type_one_of(ProgramType, const char*) { return false; }
 static void set_pump_speed(float, bool, bool = true) {}

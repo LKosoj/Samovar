@@ -171,12 +171,6 @@ uint8_t temprature_sens_read();
 }
 #endif
 
-#define LCD_RESET_PERIOD_MS 240000UL         //период (мс) периодического menu_reset_lcd(), 4 минуты. Раньше вычислялся как CurMin==120 (uint8_t), т.е. переполнялся каждые 256 с побочно - теперь задан явно
-
-#ifdef SAMOVAR_BUILD_LUA
-#define USE_LUA
-#endif
-
 //#define __SAMOVAR_NOT_USE_WDT
 
 //--------------------------------------------------------------------------------------------------------------
@@ -654,7 +648,7 @@ bool mixer_status;                                              // Статус 
 // Пиво: ручная пауза и учёт простоя строки (см. beer.h, Samovar.ino
 // SAMOVAR_PAUSE/SAMOVAR_CONTINUE, logic.h get_beer_status_text)
 bool beerManualPause;                  // Ручная пауза пива (НЕ PauseOn — тот только для ректификации)
-unsigned long beerStageIdleAccumMs;    // Накопленное время простоя текущей строки (вне гистерезиса на 'P' и/или ручная пауза)
+unsigned long beerStageIdleAccumMs;    // Накопленное время простоя текущей строки (ниже полосы гистерезиса на 'P' и/или ручная пауза)
 unsigned long beerStageIdleSinceMs;    // Момент начала текущего простоя, 0 = простоя нет сейчас
 unsigned long beerBoilActiveAccumMs;   // [П13] Накопленное АКТИВНОЕ время разгона до кипения на строке 'B' (пауза не тикает)
 volatile bool alarm_event;                                      // Признак срабатывания кнопки тревоги
@@ -731,6 +725,20 @@ volatile unsigned int TargetStepps;                             // Количе�
 volatile ProgramWaitType program_Wait_Type;                     // Тип ожидания
 unsigned long begintime;                                        // Время начала отбора
 //unsigned long endtime;                                          // Время завершения отбора
+// Общий таймер-дедлайн (абсолютная метка millis(), НЕ длительность) для четырёх
+// взаимоисключающих механизмов паузы отбора, использующих его по очереди:
+//   1) пауза по температуре пара (SteamSensor);
+//   2) пауза по температуре царги (PipeSensor);
+//   3) пауза детектора примесей;
+//   4) отсчёт строки-паузы программы типа 'P' (program_Pause).
+// Взаимоисключение (1)-(3) обеспечивает program_Wait_Type (см. пометку [L-1/M-31]
+// в logic.h) - активен только один тип ожидания одновременно. С (4) пересечения
+// нет по другой причине: пока program_Pause истинен, withdrawal() проверяет t_min
+// и сразу делает return, не доходя до кода (1)-(3); а run_program() при старте
+// любой новой строки сбрасывает t_min/program_Pause/program_Wait/program_Wait_Type
+// разом через reset_rect_program_pause_state(). При добавлении пятого потребителя
+// нужно либо расширять ProgramWaitType, либо заводить ему отдельный таймер -
+// иначе он молча столкнётся дедлайнами с уже существующими.
 unsigned long t_min;                                            // Время для паузы в секундах с момента старта ESP32
 unsigned long alarm_t_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32
 unsigned long alarm_h_min;                                      // Время для паузы в секундах для событий безопасности с момента старта ESP32

@@ -28,11 +28,8 @@ BROWSER_TEST = r'''async page => {
     bme_pressure:760,start_pressure:759.5,prvl:1.2,VolumeAll:0,
     ActualVolumePerHour:0,WthdrwlProgress:0,CurrrentSpeed:0,CurrrentStepps:0,
     TargetStepps:0,WthdrwlStatus:0,ProgramNum:0,DetectorTrend:0.012,
-    DetectorStatus:2,useautospeed:true,DetectorSteamSpan:0.03,
-    DetectorSteamVariance:0.0002,DetectorSteamStableSeconds:125,
-    DetectorSteamStabilityReason:3,DetectorSteamSpanThreshold:0.1,
-    DetectorSteamVarianceThreshold:0.000625,DetectorRecoveryThreshold:0.02,
-    DetectorRecoveryReady:1,BoilingEvidence:2,BoilingPrecisionSensorConfigured:1,
+    DetectorStatus:2,useautospeed:true,
+    BoilingEvidence:2,BoilingPrecisionSensorConfigured:1,
     current_power_volt:220,target_power_volt:220,current_power_mode:"WORK",
     current_power_p:2000,WFtotalMl:10,WFflowRate:2,bme_temp:24,heap:200000,
     rssi:-50,fr_bt:300000,UseBBuzzer:false,PauseOn:0,PrgType:"L",Status:"Работа",
@@ -46,7 +43,6 @@ BROWSER_TEST = r'''async page => {
   const failures = [];
   const consoleProblems = [];
   const beerProgramPosts = [];
-  let legacyDetectorPayload = false;
   page.on("console", message => {
     if (message.type() === "warning" || message.type() === "error")
       consoleProblems.push(message.type() + ": " + message.text());
@@ -68,14 +64,6 @@ BROWSER_TEST = r'''async page => {
     let body;
     if (operationId === null) {
       body = {...telemetry};
-      if (legacyDetectorPayload) {
-        for (const field of [
-          "DetectorSteamSpan","DetectorSteamVariance","DetectorSteamStableSeconds",
-          "DetectorSteamStabilityReason","DetectorSteamSpanThreshold",
-          "DetectorSteamVarianceThreshold","DetectorRecoveryThreshold",
-          "DetectorRecoveryReady"
-        ]) delete body[field];
-      }
     } else {
       body = {operationId:operationId,state:"succeeded",error:"none"};
     }
@@ -139,16 +127,11 @@ BROWSER_TEST = r'''async page => {
       expect(await page.locator("#detector_steam_stability").count() === 0,
              "index must not show steam-stability debug dump on the main screen");
 
-      legacyDetectorPayload = true;
-      await page.goto(baseUrl + "/index.htm", {waitUntil:"load"});
-      await page.waitForFunction(() =>
-        document.getElementById("detector_status_text").textContent.includes("ПРОСКОК")
-      );
+      // Подробности стабилизации пара (DetectorSteam*/DetectorRecovery*) прошивка
+      // больше не отдаёт - их никто не читал. Основная телеметрия и тренд обязаны
+      // рисоваться без них, поэтому фикстура их не содержит вовсе.
       expect((await page.locator("#SteamTemp").textContent()).trim() === "78.1",
-             "legacy detector payload stopped core telemetry rendering");
-      expect((await page.locator("#detector_trend").textContent()).includes("0.012"),
-             "legacy detector payload stopped detector trend rendering");
-      legacyDetectorPayload = false;
+             "core telemetry is not rendered without detector stability fields");
 
       // П46: PowerOn=1 -> реальное состояние "нагрев включён". Портим ТОЛЬКО
       // надпись на кнопке (как будто страница не успела обновиться) и проверяем,

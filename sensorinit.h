@@ -14,6 +14,13 @@
 
 #include "debug_ds_emu.h"
 
+// [Б7.2] Дефолт (не-SEM_AVR) для ректификации и общий дефолт для БК/Lua -
+// раньше был продублирован литералом в обеих ветках switch ниже, расхождение
+// между копиями компилятор не поймал бы. Литерал остаётся литералом (#define,
+// не const char*, - лишнего объекта в ОЗУ/флеше не заводим), просто с одним
+// источником текста на обе ветки.
+#define DEFAULT_PROGRAM_HBH45 "H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n"
+
 ProgramParseResult prepare_default_program_for_mode(
     SAMOVAR_MODE mode,
     ProgramDraft& draft) {
@@ -30,9 +37,24 @@ ProgramParseResult prepare_default_program_for_mode(
       defaultProgram = NBK_DEFAULT_PROGRAM;
       break;
     case SAMOVAR_RECTIFICATION_MODE:
+      // [Б7.2] Power=45 - абсолютная уставка при вольтовом пороге 40, но для SEM_AVR
+      // порог 400 Вт: без отдельной ветки дефолт не прошёл бы новую проверку первой
+      // строки, и load_default_program_for_mode() уходил бы в аварийную блокировку при
+      // КАЖДОЙ загрузке (ректификация - режим по умолчанию на новом приборе).
+      // 500 Вт - минимальная выразимая абсолютная уставка ваттного регулятора;
+      // это программа-заглушка, оператор задаёт свою. Проверка первой строки
+      // (program_io.h::prepare_program_for_mode(), logic.h::validate_rect_program_startable())
+      // гейтится строго по SAMOVAR_RECTIFICATION_MODE, поэтому БК и Lua в этот
+      // #ifdef не заведены - их дефолт остаётся прежним, см. ветку ниже.
+#ifdef SAMOVAR_USE_SEM_AVR
+      defaultProgram = "H;450;0.1;1;0;500\nB;450;1;1;0;500\nH;450;0.1;1;0;500\n";
+#else
+      defaultProgram = DEFAULT_PROGRAM_HBH45;
+#endif
+      break;
     case SAMOVAR_BK_MODE:
     case SAMOVAR_LUA_MODE:
-      defaultProgram = "H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n";
+      defaultProgram = DEFAULT_PROGRAM_HBH45;
       break;
     default:
       return program_parse_result(

@@ -282,6 +282,7 @@ DetectorFixture impurityDetector{0.125f, 2};
 volatile float ActualVolumePerHour = 1.234f;
 volatile bool PowerOn = true;
 volatile bool PauseOn = false;
+bool beerManualPause = false;  // [Пиво 02.09 C2]
 volatile uint8_t WthdrwlProgress = 55;
 volatile int16_t startval = 1;
 volatile uint8_t ProgramNum = 2;
@@ -306,13 +307,6 @@ TimePredictorFixture timePredictor{99.9f, 12.9f, 44.9f, 22.9f, true, true};
 bool bootDegraded = false;
 String bootDegradedReason = "";
 
-static const float DETECTOR_SENSOR_QUANT_C = 0.0625f;
-static const float DETECTOR_STEAM_STABLE_SPAN = DETECTOR_SENSOR_QUANT_C * 3.0f;
-static const float DETECTOR_STEAM_STABLE_VARIANCE =
-    DETECTOR_SENSOR_QUANT_C * DETECTOR_SENSOR_QUANT_C;
-float detector_steam_stability_span = 0.025f;
-float detector_steam_stability_variance = 0.000313f;
-uint8_t detector_steam_stability_reason = 0;
 enum BoilingEvidence : uint8_t {
   BOILING_EVIDENCE_NONE = 0,
   BOILING_EVIDENCE_STEAM,
@@ -360,9 +354,6 @@ uint32_t millis() {
   return fakeMillis;
 }
 
-uint32_t detector_steam_stable_seconds() { return 123; }
-float detector_current_recovery_threshold() { return 0.1234f; }
-bool detector_trend_settled() { return true; }
 bool sensor_configured(const SensorFixture&) { return true; }
 
 String format_uptime(unsigned long seconds) {
@@ -569,16 +560,12 @@ EXPECTED_DEFAULT = (
     '"crnt_tm":"clock\\"x","stm":"01:02:03","SteamTemp":78.125,'
     '"PipeTemp":77.250,"WaterTemp":20.500,"TankTemp":89.750,'
     '"ACPTemp":30.000,"DetectorTrend":0.125,"DetectorStatus":2,'
-    '"DetectorSteamSpan":0.0250,"DetectorSteamVariance":0.000313,'
-    '"DetectorSteamStableSeconds":123,"DetectorSteamStabilityReason":0,'
-    '"DetectorSteamSpanThreshold":0.188,"DetectorSteamVarianceThreshold":0.003906,'
-    '"DetectorRecoveryThreshold":0.1234,"DetectorRecoveryReady":1,'
     '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
     '"useautospeed":1,"version":"6.27",'
     '"boot_degraded":0,"boot_degraded_reason":"","VolumeAll":42,'
-    '"ActualVolumePerHour":1.234,"PowerOn":1,"PauseOn":0,'
+    '"ActualVolumePerHour":1.234,"PowerOn":1,"PauseOn":0,"BeerManualPause":0,'
     '"WthdrwlProgress":55,"TargetStepps":1000,"CurrrentStepps":250,'
-    '"WthdrwlStatus":1,"ProgramNum":3,"ProgramIndex":2,'
+    '"WthdrwlStatus":1,"SamovarStatusInt":10,"ProgramNum":3,"ProgramIndex":2,'
     '"CurrrentSpeed":13.00,"UseBBuzzer":1,"StepperStepMl":800,'
     '"BodyTemp_Steam":77.000,"BodyTemp_Pipe":76.000,"mixer":1,'
     '"ISspd":2.500,"i2c_stepper_present":1,"i2c_mixer_present":1,'
@@ -682,6 +669,7 @@ def main() -> int:
         "bme_temp", "bme_pressure", "start_pressure", "SteamSensor",
         "PipeSensor", "WaterSensor", "TankSensor", "ACPSensor", "SamSetup",
         "impurityDetector", "ActualVolumePerHour", "PowerOn", "PauseOn",
+        "beerManualPause",
         "WthdrwlProgress", "ProgramNum", "startval", "mixer_status",
         "i2c_stepper_cache", "I2CPumpTargetMl", "ESP.", "WiFi.",
         "total_byte", "used_byte", "Samovar_Mode", "SamovarStatusInt",

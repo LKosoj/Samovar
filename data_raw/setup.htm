@@ -144,7 +144,7 @@
       { name: 'DistTimeF', integer: true, min: 0, max: 255 },
       { name: 'ColDiam', min: 0.1, max: 10 },
       { name: 'ColHeight', min: 0.01, max: 10 },
-      { name: 'PackDens', integer: true, min: 0, max: 100 },
+      { name: 'PackDens', integer: true, min: 60, max: 100 },
       { name: 'autospeed', integer: true, min: 0, max: 20 },
       { name: 'MaxPressureValue', min: 0, max: 10000 },
       { name: 'DeltaSteamTemp', min: -1000, max: 1000 },
@@ -169,7 +169,7 @@
       { name: 'WaterAddr', integer: true, min: -1, max: 255 },
       { name: 'TankAddr', integer: true, min: -1, max: 255 },
       { name: 'ACPAddr', integer: true, min: -1, max: 255 },
-      { name: 'StepperStepMl', integer: true, min: 0, max: 65535 },
+      { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
       { name: 'StepperStepMlI2C', integer: true, min: 0, max: 65535 },
       { name: 'Kp', min: 0, max: 100000 },
       { name: 'Ki', min: 0, max: 100000 },
@@ -381,7 +381,7 @@
         <h2>
           <label for="PackDens">Плотность насадки:</label>
           <input name="PackDens" id="PackDens" type="range" min="60" max="100" step="5" value="%PackDens%" style="width: 200px; vertical-align: middle;">
-          <output id="PackDensDisplay" name="PackDensDisplay" for="PackDens">%PackDens%</output> &#37; (60-100)
+          <output id="PackDensDisplay" name="PackDensDisplay" for="PackDens">%PackDens%</output>&nbsp;&#37; <span class="nowrap">(60-100)</span>
         </h2>
       </div>
       <div>
@@ -523,7 +523,7 @@
       <div style="display: %I2CPumpTab%;">
         <h2><label for="StepperStepMlI2C">Количество шагов I2C насоса:</label> <input id="StepperStepMlI2C" name='StepperStepMlI2C' type='text' inputmode='decimal' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
       </div>
-      <div style="margin: 0 auto; width: 200px;">
+      <div class="btn-cell" style="margin: 0 auto;">
         <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='if (confirmLeaveIfDirty()) location.href="calibrate.htm"' class="button">
       </div>
     </div>
