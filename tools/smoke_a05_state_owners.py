@@ -287,6 +287,11 @@ volatile uint8_t WthdrwlProgress = 55;
 volatile int16_t startval = 1;
 volatile uint8_t ProgramNum = 2;
 bool mixer_status = true;
+// [9b] Всегда читаются captureAjaxTelemetrySnapshot() безусловно (без #ifdef
+// USE_WATER_PUMP) - см. BK.h/Samovar.ino. Ненулевые значения фиксируют, что
+// снимок реально читает эти глобалы, а не просто печатает дефолт структуры.
+volatile bool bk_water_auto = true;
+volatile float bk_steam_setpoint = 78.4f;
 volatile I2CCacheFixture i2c_stepper_cache{true, true, 400, 2.5f, 7, 1};
 volatile float I2CPumpTargetMl = 12.5f;
 uint32_t total_byte = 100000;
@@ -568,6 +573,7 @@ EXPECTED_DEFAULT = (
     '"WthdrwlStatus":1,"SamovarStatusInt":10,"ProgramNum":3,"ProgramIndex":2,'
     '"CurrrentSpeed":13.00,"UseBBuzzer":1,"StepperStepMl":800,'
     '"BodyTemp_Steam":77.000,"BodyTemp_Pipe":76.000,"mixer":1,'
+    '"bk_water_auto":1,"bk_steam_setpoint":78.4,'
     '"ISspd":2.500,"i2c_stepper_present":1,"i2c_mixer_present":1,'
     '"i2c_pump_present":1,"i2c_pump_speed":400,"i2c_pump_target_ml":12.5,'
     '"i2c_pump_remaining_ml":7.0,"i2c_pump_running":1,"heap":123456,'
@@ -679,6 +685,9 @@ def main() -> int:
         "millis(", "get_liquid_volume(", "stepper_safe_get_",
         "current_program_type(", "get_alcohol(", "get_steam_alcohol(",
         "copy_ajax_runtime_snapshot(", "heater_safety_latched(",
+        # [9b] bk_water_auto/bk_steam_setpoint - те же безусловные глобалы БК,
+        # что и mixer_status/PowerOn выше - тоже обязаны идти через снимок.
+        "bk_water_auto", "bk_steam_setpoint",
     )
     for token in forbidden_writer_tokens:
         if token in writer_clean:

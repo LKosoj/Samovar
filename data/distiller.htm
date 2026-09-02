@@ -70,182 +70,6 @@
     };
 
 
-
-    async function set_program () {
-      document.getElementById("WProgram").value = document.getElementById("WProgram").value.replaceAll(",", ".");
-      try {
-        let result = await SamovarApp.postProgram(document.forms.mainform);
-        if (!result.ok) {
-          SamovarApp.notify(result.err || 'Программа не установлена', 0);
-          return;
-        }
-        SamovarApp.notify("Программа сохранена.", 2);
-      } catch (e) {
-        SamovarApp.notify('Ошибка сети: ' + e, 0);
-      }
-    };
-
-    function calc_program () {
-      var t = document.getElementsByClassName("prgline");
-      var k, s;
-      s = "";
-      for (i = 1; i < t.length; i++) {
-        k = t[i].childNodes;
-        for (j = 1; j < 5; j++) {
-          s = s + k[j].value + ";";
-        }
-        s = s.slice(0, -1);
-        s = s + "\n";
-      }
-      document.getElementById('WProgram').value = s;
-      set_num();
-    }
-
-    function set_num () {
-      var e = document.getElementById("prg").childNodes;
-      var a;
-      for (i = 1; i < e.length; i++) {
-        a = e[i].childNodes[0];
-        a.innerText = "";
-        if (i < 10) a.innerText = "0";
-        a.innerText = a.innerText + i;
-        var rowActions = e[i].getElementsByClassName("program-row-action");
-        if (rowActions.length === 2) {
-          rowActions[0].setAttribute("aria-label", "Добавить строку после " + a.innerText);
-          rowActions[1].setAttribute("aria-label", "Удалить строку " + a.innerText);
-        }
-      }
-    }
-
-    function removeLine (ln) {
-      var prg = document.getElementById("prg").childNodes.length;
-      if (prg < 3) return;
-      var prgline = document.getElementById(ln);
-      prgline.remove();
-      calc_program();
-    }
-
-    function addLine (obj, s) {
-      s = (s == null || s === undefined) ? "" : String(s).trim();
-      if (!s) return;
-      var arr = s.split(";");
-
-      var dl = document.createElement("div");
-      dl.className = "prgline";
-      dl.id = "prgln" + _lnIdx;
-
-      var num = document.createElement("label");
-      num.className = "prglabel";
-      num.id = "distiller-program-row-" + _lnIdx;
-      dl.appendChild(num);
-
-      num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" aria-labelledby="distiller-program-row-' + _lnIdx + ' distiller-program-col-type" onchange="set_bgcolor(' + _lnIdx + ')"><option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option></select>');
-
-      //  var ptype = dl.getElementsByName("ptype");
-      //  ptype[0].value = arr[0];
-
-      var ptemp = document.createElement("input");
-      ptemp.type = "text";
-      ptemp.id = "ptemp" + _lnIdx;
-      ptemp.name = "ptemp" + _lnIdx;
-      ptemp.setAttribute("aria-labelledby", "distiller-program-row-" + _lnIdx + " distiller-program-col-value");
-      ptemp.value = arr[1];
-      ptemp.setAttribute("onchange", "calc_program();");
-      dl.appendChild(ptemp);
-
-      ptemp.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" aria-labelledby="distiller-program-row-' + _lnIdx + ' distiller-program-col-container" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
-
-      var ppower = document.createElement("input");
-      ppower.type = "text";
-      ppower.id = "ppower" + _lnIdx;
-      ppower.name = "ppower" + _lnIdx;
-      ppower.setAttribute("aria-labelledby", "distiller-program-row-" + _lnIdx + " distiller-program-col-power");
-      ppower.value = arr[3];
-      ppower.setAttribute("onchange", "calc_program();");
-      dl.appendChild(ppower);
-
-      var plus = document.createElement("button");
-      plus.type = "button";
-      plus.className = "program-row-action";
-      plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','T;100;0;0')");
-      var plusIcon = document.createElement("img");
-      plusIcon.src = 'plus.png';
-      plusIcon.width = 20;
-      plusIcon.alt = "";
-      plus.appendChild(plusIcon);
-      dl.appendChild(plus);
-
-      var minus = document.createElement("button");
-      minus.type = "button";
-      minus.className = "program-row-action";
-      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
-      var minusIcon = document.createElement("img");
-      minusIcon.src = 'minus.png';
-      minusIcon.width = 20;
-      minusIcon.alt = "";
-      minus.appendChild(minusIcon);
-      dl.appendChild(minus);
-
-      if (!obj) {
-        var prg = document.getElementById("prg");
-        prg.appendChild(dl);
-      } else {
-        prg = document.getElementById(obj);
-        prg.after(dl);
-      }
-
-      var pnum = document.getElementById("pnum" + _lnIdx);
-      pnum.value = arr[2];
-
-      var p = "ptype" + _lnIdx;
-      var ptype = document.getElementById(p);
-      var typeCode = (arr[0] == null || arr[0] === undefined) ? "" : String(arr[0]).trim();
-      ptype.value = typeCode;
-
-      set_bgcolor(_lnIdx);
-
-      _lnIdx++;
-      calc_program();
-    }
-
-    function getProgram () {
-      var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-type" class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-value" class="tooltip">Значение<span class="tooltiptext">Тип значения зависит от типа программы. Температура, абсолютное или относительное значение спиртуозности</span></label>&nbsp;<label id="distiller-program-col-container" class="tooltip">№ емкости<span class="tooltiptext">Ёмкость переключается не сразу, а в момент, когда сработает условие этой строки — фактически задаёт ёмкость для следующей строки.</span></label><label id="distiller-program-col-power" class="tooltip">Напряжение<span class="tooltiptext">Мощность/напряжение регулятора применяется не всё время, пока строка активна, а в момент срабатывания её условия. 0 — не менять текущее значение (строка не трогает регулятор). Небольшое или отрицательное число — сдвиг от текущего значения, а не точная величина. Если это первая строка программы с ненулевым напряжением — она обязана быть абсолютным значением, иначе нагрев в разгоне может незаметно выключиться.</span></label></div>');
-      SamovarApp.enhanceTooltips();
-      var p = document.getElementById("WProgram");
-      var varr = p.value.split("\n");
-      for (z = 0; z < varr.length; z++) {
-        var line = (varr[z] == null || varr[z] === undefined) ? "" : String(varr[z]).trim();
-        if (line !== "") addLine(false, line);
-      }
-    }
-
-    function set_bgcolor (obj) {
-      var l = document.getElementById("prgln" + obj);
-      var t = document.getElementById("ptype" + obj).value;
-      let color = 'black';
-      if (t == "T") {color = "background-color: #FFFF00;";}
-      else if (t == "S") {color = "background-color: #FF6347;";}
-      else if (t == "A") {color = "background-color: #00BFFF;";}
-      else if (t == "R") {color = "background-color: #FFA500;";}
-      else if (t == "P") {color = "background-color: #98FB98;";}
-      color += "color: #17212B; border-color: #17212B;";
-      l.setAttribute("style", color);
-      var e = l.childNodes;
-      for (q = 0; q < e.length; q++) {
-        if (q == 2) {
-          e[q].setAttribute("style", color + "width:85");
-        } else if (q == 3) {
-          e[q].setAttribute("style", color + "width:90");
-        } else if (q == 4) {
-          e[q].setAttribute("style", color + "width:100");
-        }
-        else e[q].setAttribute("style", color);
-      }
-      calc_program();
-    }
-
-
     function renderTelemetry(myObj) {
         {
           document.getElementById('SteamTemp').innerHTML = myObj.SteamTemp.toFixed(3);
@@ -541,7 +365,203 @@
 
     <div id="Prog" class="tabcontent" aria-hidden="true">
       <div class="text" style="margin-top: 1em; margin-bottom: 1em">Программа дистилляции:</div>
-      <div class="prg" id="prg"></div>
+      <script>var PROGRAM_STEAM_COLUMN = false;</script>
+<div class="prg" id="prg"></div>
+<script>
+  // Таблица программы дистилляции/БК. Число колонок задаёт переменная
+  // PROGRAM_STEAM_COLUMN (объявляется в разметке страницы ДО этого include):
+  // false - 4 колонки (дистилляция), true - 5-я колонка "Т пара" (БК).
+  function removeLine (ln) {
+    var prg = document.getElementById("prg").childNodes.length;
+    if (prg < 3) return;
+    var prgline = document.getElementById(ln);
+    prgline.remove();
+    calc_program();
+  }
+
+  function addLine (obj, s) {
+    s = (s == null || s === undefined) ? "" : String(s).trim();
+    if (!s) return;
+    var arr = s.split(";");
+
+    var dl = document.createElement("div");
+    dl.className = "prgline";
+    dl.id = "prgln" + _lnIdx;
+
+    var num = document.createElement("label");
+    num.className = "prglabel";
+    num.id = "distiller-program-row-" + _lnIdx;
+    dl.appendChild(num);
+
+    num.insertAdjacentHTML("afterend", '<select id="ptype' + _lnIdx + '" name="ptype' + _lnIdx + '" aria-labelledby="distiller-program-row-' + _lnIdx + ' distiller-program-col-type" onchange="set_bgcolor(' + _lnIdx + ')"><option value="T">Температура</option><option value="S">Спирт в кубе отн.</option><option value="A">Спирт в кубе абс</option><option value="P">Спирт в отборе абс</option><option value="R">Спирт в отборе отн.</option></select>');
+
+    var ptemp = document.createElement("input");
+    ptemp.type = "text";
+    ptemp.id = "ptemp" + _lnIdx;
+    ptemp.name = "ptemp" + _lnIdx;
+    ptemp.setAttribute("aria-labelledby", "distiller-program-row-" + _lnIdx + " distiller-program-col-value");
+    ptemp.value = arr[1];
+    ptemp.setAttribute("onchange", "calc_program();");
+    dl.appendChild(ptemp);
+
+    ptemp.insertAdjacentHTML("afterend", '<select id="pnum' + _lnIdx + '" name="pnum' + _lnIdx + '" aria-labelledby="distiller-program-row-' + _lnIdx + ' distiller-program-col-container" onchange="calc_program()"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>');
+
+    var ppower = document.createElement("input");
+    ppower.type = "text";
+    ppower.id = "ppower" + _lnIdx;
+    ppower.name = "ppower" + _lnIdx;
+    ppower.setAttribute("aria-labelledby", "distiller-program-row-" + _lnIdx + " distiller-program-col-power");
+    ppower.value = arr[3];
+    ppower.setAttribute("onchange", "calc_program();");
+    dl.appendChild(ppower);
+
+    if (PROGRAM_STEAM_COLUMN) {
+      var psteam = document.createElement("input");
+      psteam.type = "text";
+      psteam.id = "psteam" + _lnIdx;
+      psteam.name = "psteam" + _lnIdx;
+      psteam.setAttribute("aria-labelledby", "distiller-program-row-" + _lnIdx + " distiller-program-col-steam");
+      psteam.value = arr[4] !== undefined ? arr[4] : "0";
+      psteam.setAttribute("onchange", "calc_program();");
+      dl.appendChild(psteam);
+    }
+
+    var plus = document.createElement("button");
+    plus.type = "button";
+    plus.className = "program-row-action";
+    plus.setAttribute("onclick", "addLine('prgln" + _lnIdx + "','T;100;0;0" + (PROGRAM_STEAM_COLUMN ? ";0" : "") + "')");
+      var plusIcon = document.createElement("img");
+      plusIcon.src = 'plus.png';
+      plusIcon.width = 20;
+      plusIcon.alt = "";
+      plus.appendChild(plusIcon);
+      dl.appendChild(plus);
+
+      var minus = document.createElement("button");
+      minus.type = "button";
+      minus.className = "program-row-action";
+      minus.setAttribute("onclick", "removeLine('prgln" + _lnIdx + "')");
+      var minusIcon = document.createElement("img");
+      minusIcon.src = 'minus.png';
+      minusIcon.width = 20;
+      minusIcon.alt = "";
+      minus.appendChild(minusIcon);
+      dl.appendChild(minus);
+
+    if (!obj) {
+      var prg = document.getElementById("prg");
+      prg.appendChild(dl);
+    } else {
+      prg = document.getElementById(obj);
+      prg.after(dl);
+    }
+
+    var pnum = document.getElementById("pnum" + _lnIdx);
+    pnum.value = arr[2];
+
+    var p = "ptype" + _lnIdx;
+    var ptype = document.getElementById(p);
+    var typeCode = (arr[0] == null || arr[0] === undefined) ? "" : String(arr[0]).trim();
+    ptype.value = typeCode;
+
+    set_bgcolor(_lnIdx);
+
+    _lnIdx++;
+    calc_program();
+  }
+
+  function getProgram () {
+    var e = document.getElementById("prg");
+    var steamHeader = PROGRAM_STEAM_COLUMN
+      ? '<label id="distiller-program-col-steam" class="tooltip">Т пара, °C<span class="tooltiptext">Уставка охлаждения дефлегматора на этой строке. 0 - вода вручную.</span></label>'
+      : '';
+    e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-type" class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-value" class="tooltip">Значение<span class="tooltiptext">Тип значения зависит от типа программы. Температура, абсолютное или относительное значение спиртуозности</span></label>&nbsp;<label id="distiller-program-col-container" class="tooltip">№ емкости<span class="tooltiptext">Ёмкость переключается не сразу, а в момент, когда сработает условие этой строки - фактически задаёт ёмкость для следующей строки.</span></label><label id="distiller-program-col-power" class="tooltip">Напряжение<span class="tooltiptext">Мощность/напряжение регулятора применяется не всё время, пока строка активна, а в момент срабатывания её условия. 0 - не менять текущее значение (строка не трогает регулятор). Небольшое или отрицательное число - сдвиг от текущего значения, а не точная величина. Если это первая строка программы с ненулевым напряжением - она обязана быть абсолютным значением, иначе нагрев в разгоне может незаметно выключиться.</span></label>' + steamHeader + '</div>');
+    SamovarApp.enhanceTooltips();
+    var p = document.getElementById("WProgram");
+    var varr = p.value.split("\n");
+    for (z = 0; z < varr.length; z++) {
+      var line = (varr[z] == null || varr[z] === undefined) ? "" : String(varr[z]).trim();
+      if (line !== "") addLine(false, line);
+    }
+  }
+
+  function set_bgcolor (obj) {
+    var l = document.getElementById("prgln" + obj);
+    var t = document.getElementById("ptype" + obj).value;
+    let color = 'black';
+    if (t == "T") {color = "background-color: #FFFF00;";}
+    else if (t == "S") {color = "background-color: #FF6347;";}
+    else if (t == "A") {color = "background-color: #00BFFF;";}
+    else if (t == "R") {color = "background-color: #FFA500;";}
+    else if (t == "P") {color = "background-color: #98FB98;";}
+    color += "color: #17212B; border-color: #17212B;";
+    l.setAttribute("style", color);
+    var e = l.childNodes;
+    for (q = 0; q < e.length; q++) {
+      if (q == 2) {
+        e[q].setAttribute("style", color + "width:85");
+      } else if (q == 3) {
+        e[q].setAttribute("style", color + "width:90");
+      } else if (q == 4) {
+        e[q].setAttribute("style", color + "width:100");
+      } else if (q == 5 && PROGRAM_STEAM_COLUMN) {
+        e[q].setAttribute("style", color + "width:90");
+      }
+      else e[q].setAttribute("style", color);
+    }
+    calc_program();
+  }
+
+  function calc_program () {
+    var t = document.getElementsByClassName("prgline");
+    var k, s;
+    var fieldEnd = PROGRAM_STEAM_COLUMN ? 6 : 5;
+    s = "";
+    for (i = 1; i < t.length; i++) {
+      k = t[i].childNodes;
+      for (j = 1; j < fieldEnd; j++) {
+        s = s + k[j].value + ";";
+      }
+      s = s.slice(0, -1);
+      s = s + "\n";
+    }
+    document.getElementById('WProgram').value = s;
+    set_num();
+  }
+
+  // Нумерация строк и ARIA-подписи кнопок +/- (живая функция, не мёртвый
+  // код: её вызывает calc_program() при каждом изменении таблицы).
+  function set_num () {
+    var e = document.getElementById("prg").childNodes;
+    var a;
+    for (i = 1; i < e.length; i++) {
+      a = e[i].childNodes[0];
+      a.innerText = "";
+      if (i < 10) a.innerText = "0";
+      a.innerText = a.innerText + i;
+      var rowActions = e[i].getElementsByClassName("program-row-action");
+      if (rowActions.length === 2) {
+        rowActions[0].setAttribute("aria-label", "Добавить строку после " + a.innerText);
+        rowActions[1].setAttribute("aria-label", "Удалить строку " + a.innerText);
+      }
+    }
+  }
+
+  async function set_program () {
+    document.getElementById("WProgram").value = document.getElementById("WProgram").value.replaceAll(",", ".");
+    try {
+      let result = await SamovarApp.postProgram(document.forms.mainform);
+      if (!result.ok) {
+        SamovarApp.notify(result.err || 'Программа не установлена', 0);
+        return;
+      }
+      SamovarApp.notify("Программа сохранена.", 2);
+    } catch (e) {
+      SamovarApp.notify('Ошибка сети: ' + e, 0);
+    }
+  };
+</script>
+
       <div>
 
         <div style="border: 1px dashed #bbb; padding: 1em; margin-top: 1em; margin-bottom: 1em; background-color: var(--bg-program-panel)">

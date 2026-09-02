@@ -8,6 +8,10 @@
     BUSY: { ok: false, level: 1, text: 'Устройство занято. Команда не принята.' },
     IGNORED: { ok: false, level: 1, text: 'Команда проигнорирована.' },
     POWER_OFF: { ok: false, level: 1, text: 'Нагрев выключен. Команда не принята.' },
+    PWM_TOO_LOW: { ok: false, level: 1, text: 'ШИМ насоса ниже минимума при работающем нагреве. Команда не принята.' },
+    NOT_RUNNING: { ok: false, level: 1, text: 'Программа БК не выполняется. Команда не принята.' },
+    NO_SETPOINT: { ok: false, level: 1, text: 'У текущей строки нет уставки пара. Команда не принята.' },
+    NO_PUMP: { ok: false, level: 1, text: 'Нужен ШИМ-насос охлаждения. Команда не принята.' },
     BAD_REQUEST: { ok: false, level: 0, text: 'Неверная команда.' }
   };
   const DECIMAL_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;

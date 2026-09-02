@@ -30,10 +30,10 @@ constexpr float PROGRAM_TEMP_MAX = 150.0f;
 constexpr float PROGRAM_RATE_MIN = 0.0f;
 constexpr float PROGRAM_RATE_MAX = 8000.0f;
 
-// «Speed» строки дистилляции — НЕ расход, а порог перехода: целевая T куба ('T', °C),
+// «Speed» строки дистилляции И БК — НЕ расход, а порог перехода: целевая T куба ('T', °C),
 // либо спиртуозность ('A'/'P', % об.), либо доля ('S'/'R', 0..1) — см. distiller.h.
 // 0..150 покрывает температуру (потолок DistTemp), спиртуозность (<100) и доли.
-// Это лишь первый грубый фильтр; точные типозависимые границы — в program_parse_dist_row().
+// Это лишь первый грубый фильтр; точные типозависимые границы — в program_parse_threshold_fields().
 constexpr float PROGRAM_DIST_THRESHOLD_MIN = 0.0f;
 constexpr float PROGRAM_DIST_THRESHOLD_MAX = 150.0f;
 
@@ -74,14 +74,16 @@ enum ProgramFormat : uint8_t {
   PROGRAM_FORMAT_DIST,
   PROGRAM_FORMAT_BEER,
   PROGRAM_FORMAT_NBK,
+  PROGRAM_FORMAT_BK,  // [БК п.9] БК ушла из группы RECT в собственный формат (5-е поле - Тпара)
 };
 
 inline ProgramFormat program_format_for_mode(SAMOVAR_MODE mode) {
   switch (mode) {
     case SAMOVAR_RECTIFICATION_MODE:
-    case SAMOVAR_BK_MODE:
     case SAMOVAR_LUA_MODE:
       return PROGRAM_FORMAT_RECT;
+    case SAMOVAR_BK_MODE:
+      return PROGRAM_FORMAT_BK;
     case SAMOVAR_DISTILLATION_MODE:
       return PROGRAM_FORMAT_DIST;
     case SAMOVAR_BEER_MODE:
@@ -317,21 +319,32 @@ inline bool program_parse_rect_row(char* line, size_t, uint8_t, WProgram& row, c
   return true;
 }
 
-inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage) {
-  char* saveTok = nullptr;
+// Общий разбор первых четырёх полей "Тип;Порог;Ёмкость;Мощность" для DIST и БК
+// (program_parse_dist_row/program_parse_bk_row) - границы и типозависимое
+// сужение (S/R/A/P/T) идентичны для обоих форматов, поэтому вынесены сюда,
+// а не скопированы. saveTok выставлен СРАЗУ ПОСЛЕ поля "Мощность" - у DIST
+// дальше полей нет, у БК есть пятое поле "Тпара"; чей это токен - решает
+// вызывающая сторона через тот же saveTok. [БК п.9]
+inline bool program_parse_threshold_fields(
+    char* line,
+    char*& saveTok,
+    const ProgramParseSpec& spec,
+    ProgramType& parsedType,
+    float& speed,
+    long& cap,
+    float& power,
+    const char*& errorMessage) {
   char* tokType = strtok_r(line, ";", &saveTok);
   char* tokSpeed = strtok_r(nullptr, ";", &saveTok);
   char* tokCap = strtok_r(nullptr, ";", &saveTok);
   char* tokPower = strtok_r(nullptr, ";", &saveTok);
-  char* tokExtra = strtok_r(nullptr, ";", &saveTok);
 
-  float speed = 0;
-  float power = 0;
-  long cap = 0;
-  ProgramType parsedType = PROGRAM_TYPE_NONE;
+  parsedType = PROGRAM_TYPE_NONE;
+  speed = 0;
+  cap = 0;
+  power = 0;
   bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
             tokSpeed && tokCap && tokPower &&
-            !tokExtra &&
             parse_bounded_float(tokSpeed, PROGRAM_DIST_THRESHOLD_MIN, PROGRAM_DIST_THRESHOLD_MAX, speed).ok() &&
             parse_bounded_long(tokCap, 0, CAPACITY_NUM, cap).ok() &&
             parse_bounded_float(tokPower, PROGRAM_POWER_MIN, PROGRAM_POWER_MAX, power).ok();
@@ -350,6 +363,28 @@ inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, c
     errorMessage = "Ошибка программы: для типа T Speed должен быть в диапазоне (0,150]";
     ok = false;
   }
+  return ok;
+}
+
+inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage) {
+  char* saveTok = nullptr;
+  ProgramType parsedType = PROGRAM_TYPE_NONE;
+  float speed = 0;
+  long cap = 0;
+  float power = 0;
+  bool ok = program_parse_threshold_fields(line, saveTok, spec, parsedType, speed, cap, power, errorMessage);
+
+  // [Сохранение поведения] fieldCount==4 у DIST уже отбивает 5-е поле ДО вызова
+  // parseRow (program_count_char(';') сверяется в program_parse_lines) - этот
+  // strtok_r практически недостижим в проде, но был в оригинале (как !tokExtra
+  // в общей ok-цепочке ДО типозависимого сужения) - errorMessage=nullptr вместо
+  // текста сужения воспроизводит тот же порядок: extra-токен раньше гасил ok
+  // до того, как сужение успевало записать свой текст. [БК п.9]
+  char* tokExtra = strtok_r(nullptr, ";", &saveTok);
+  if (tokExtra) {
+    ok = false;
+    errorMessage = nullptr;
+  }
 
   if (!ok) return false;
 
@@ -357,6 +392,39 @@ inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, c
   row.Speed = speed;
   row.capacity_num = (uint8_t)cap;
   row.Power = power;
+  return true;
+}
+
+// [БК п.9] Формат БК = формат DIST + пятое поле "Тпара" (уставка воды дефлегматора,
+// °C): 0 - вручную, иначе строго BK_STEAM_SETPOINT_MIN..MAX (Samovar_ini.h).
+// Первые четыре поля - через общий program_parse_threshold_fields, без копии.
+inline bool program_parse_bk_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage) {
+  char* saveTok = nullptr;
+  ProgramType parsedType = PROGRAM_TYPE_NONE;
+  float speed = 0;
+  long cap = 0;
+  float power = 0;
+  bool ok = program_parse_threshold_fields(line, saveTok, spec, parsedType, speed, cap, power, errorMessage);
+
+  char* tokTemp = strtok_r(nullptr, ";", &saveTok);
+  char* tokExtra = strtok_r(nullptr, ";", &saveTok);
+  float temp = 0.0f;
+  // 0 - вода дефлегматора вручную; иначе строго BK_STEAM_SETPOINT_MIN..MAX.
+  bool tempOk = ok && tokTemp && !tokExtra &&
+      parse_bounded_float(tokTemp, 0.0f, BK_STEAM_SETPOINT_MAX, temp).ok() &&
+      (temp == 0.0f || temp >= BK_STEAM_SETPOINT_MIN);
+  if (ok && !tempOk) {
+    errorMessage = "Ошибка программы: Т пара: 0 или 30..100";
+    ok = false;
+  }
+
+  if (!ok) return false;
+
+  row.WType = parsedType;
+  row.Speed = speed;
+  row.capacity_num = (uint8_t)cap;
+  row.Power = power;
+  row.Temp = temp;
   return true;
 }
 
@@ -564,6 +632,16 @@ inline void program_append_dist_row(String& out, const WProgram& row) {
   out += (String)row.Power + "\n";
 }
 
+// [БК п.9] Формат БК = program_append_dist_row + пятое поле Тпара.
+inline void program_append_bk_row(String& out, const WProgram& row) {
+  append_program_type(out, row.WType);
+  out += ";";
+  out += (String)row.Speed + ";";
+  out += (String)(int)row.capacity_num + ";";
+  out += (String)row.Power + ";";
+  out += (String)row.Temp + "\n";
+}
+
 inline void program_append_beer_row(String& out, const WProgram& row) {
   append_program_type(out, row.WType);
   out += ";";
@@ -628,6 +706,33 @@ inline const ProgramParseSpec& dist_program_parse_spec() {
   return spec;
 }
 
+// [БК п.9] fieldCount=5 (у DIST - 4): арифметическая проверка числа ';' в
+// program_parse_lines сама отбивает 4-польную DIST-строку под этим spec-ом и
+// 5-польную БК-строку под dist_program_parse_spec(), без доп. кода.
+inline const ProgramParseSpec& bk_program_parse_spec() {
+  static const ProgramFieldKind fields[] = {
+    PROGRAM_FIELD_TYPE,
+    PROGRAM_FIELD_SPEED,
+    PROGRAM_FIELD_CAPACITY,
+    PROGRAM_FIELD_POWER,
+    PROGRAM_FIELD_TEMP,
+  };
+  static const ProgramParseSpec spec = {
+    "Ошибка программы: слишком длинная строка (bk)",
+    "Ошибка программы: неверный формат строки bk",
+    "Ошибка программы: слишком много строк bk",
+    nullptr,
+    "TASPR",
+    fields,
+    static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
+    PROGRAM_END,
+    nullptr,
+    0,
+    program_parse_bk_row,
+  };
+  return spec;
+}
+
 inline const ProgramParseSpec& beer_program_parse_spec() {
   static const ProgramFieldKind fields[] = {
     PROGRAM_FIELD_TYPE,
@@ -681,6 +786,8 @@ inline const ProgramParseSpec* program_parse_spec_for_mode(SAMOVAR_MODE mode) {
       return &rect_program_parse_spec();
     case PROGRAM_FORMAT_DIST:
       return &dist_program_parse_spec();
+    case PROGRAM_FORMAT_BK:
+      return &bk_program_parse_spec();
     case PROGRAM_FORMAT_BEER:
       return &beer_program_parse_spec();
     case PROGRAM_FORMAT_NBK:
@@ -741,8 +848,9 @@ inline ProgramParseResult prepare_program_for_mode(
   // обязана задавать АБСОЛЮТНУЮ уставку, иначе колонна останется на полной мощности
   // разгона. Условие эквивалентно ветке "абсолют" в apply_program_power_row():
   // порог положителен, поэтому "abs(power) > порог && power > 0" совпадает с
-  // "power > порог". БК и Lua делят тот же формат строки, но к этому переходу
-  // программу не привязывают - их не проверяем.
+  // "power > порог". Lua делит тот же формат строки, но к этому переходу
+  // программу не привязывает - его не проверяем. У БК теперь свой формат
+  // (PROGRAM_FORMAT_BK) и своё аналогичное правило - см. блок дистилляции ниже. [БК п.9]
   if (result.ok() && mode == SAMOVAR_RECTIFICATION_MODE && draft.len > 0 &&
       !(draft.rows[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
     program_reset_draft(draft);
@@ -761,8 +869,12 @@ inline ProgramParseResult prepare_program_for_mode(
   // который в разгоне ещё 0, и итог уходит ниже порога WORK/SLEEP - нагрев молча
   // гаснет при PowerOn == true. Программа, где Power == 0 у ВСЕХ строк, не
   // проверяется - разгон длится весь процесс, это штатный случай (встроенный дефолт
-  // sensorinit.h именно такой).
-  if (result.ok() && mode == SAMOVAR_DISTILLATION_MODE) {
+  // sensorinit.h именно такой). [БК п.9] У БК теперь собственный формат
+  // (PROGRAM_FORMAT_BK) с тем же правилом первой ненулевой мощности, что и у
+  // дистилляции - обе исполняют переход строки одинаково (см. 9b:
+  // run_bk_program по образцу run_dist_program). Lua делит формат RECT, но к
+  // переходу по program[0].Power программу не привязывает - его не проверяем.
+  if (result.ok() && (mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_BK_MODE)) {
     for (uint8_t i = 0; i < draft.len; i++) {
       if (draft.rows[i].Power == 0.0f) continue;
       if (!(draft.rows[i].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
@@ -785,6 +897,8 @@ inline String serialize_program_for_mode(SAMOVAR_MODE mode) {
       return program_serialize_rows(0, PROGRAM_END, program_append_rect_row);
     case PROGRAM_FORMAT_DIST:
       return program_serialize_rows(0, PROGRAM_END, program_append_dist_row);
+    case PROGRAM_FORMAT_BK:
+      return program_serialize_rows(0, PROGRAM_END, program_append_bk_row);
     case PROGRAM_FORMAT_BEER:
       return program_serialize_rows(0, PROGRAM_END, program_append_beer_row);
     case PROGRAM_FORMAT_NBK:

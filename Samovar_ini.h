@@ -178,4 +178,21 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #ifndef BODY_TEMP_AUTOSET_MAX_RISE
 #define BODY_TEMP_AUTOSET_MAX_RISE 0.3f  //предел (°C) автоматического подъёма Т тела в пределах одной строки программы (первая строка тела после голов, предзахлёб с двумя строками тела следом); выше него превышение Т даёт обычную паузу, а не новую Т тела
 #endif
+
+#ifndef BK_STEAM_SETPOINT_MIN
+#define BK_STEAM_SETPOINT_MIN 30  //[БК п.9] нижняя граница уставки Т пара дефлегматора БК (5-е поле строки программы), °C; 0 - отдельный случай "вода вручную"
+#endif
+#ifndef BK_STEAM_SETPOINT_MAX
+#define BK_STEAM_SETPOINT_MAX 100  //[БК п.9] верхняя граница уставки Т пара дефлегматора БК, °C
+#endif
+
+#ifndef BK_WATER_ADJUST_PERIOD_MS
+#define BK_WATER_ADJUST_PERIOD_MS 60000   //[9b] период шага регулятора воды БК, мс
+#endif
+#ifndef BK_WATER_DEADBAND
+#define BK_WATER_DEADBAND 0.2f            //[9b] мёртвая зона (°C) вокруг уставки пара БК
+#endif
+#ifndef BK_WATER_PWM_STEP
+#define BK_WATER_PWM_STEP 30              //[9b] шаг регулятора ШИМ воды БК (из 1023)
+#endif
 #endif

@@ -761,6 +761,9 @@ volatile float WthdrwTime;                                      // Время о
 String WthdrwTimeAllS;                                          // Оставшееся время отбора строкой
 String WthdrwTimeS;                                             // Время отбора текущей строки программы строкой
 int bk_pwm;                                                     // Значение PWM насоса при работе с БК
+volatile bool bk_water_auto = false;                            // [9b] Авторежим воды дефлегматора по уставке пара
+volatile float bk_steam_setpoint = 0.0f;                        // [9b] Уставка пара текущей строки программы БК, 0 = нет уставки
+volatile uint32_t bk_water_last_adjust_ms = 0;                  // [9b] millis() последней правки ШИМ шаговым регулятором
 uint32_t chipId = 0;                                            // Идентификатор ESP32
 //String vr;                                                      // Причина перезагрузки ESP32
 String SessionDescription;                                      // Описание параметров работы в свободном формате для сохранения в облаке

@@ -669,6 +669,9 @@ volatile bool pending_water_temp_flag = false;
 volatile uint16_t pending_water_temp_value = 0;
 volatile bool pending_pump_speed_flag = false;
 volatile uint16_t pending_pump_speed_steps = 0;
+#ifdef USE_WATER_PUMP
+volatile bool pending_water_auto_flag = false;   // [9b] отложенный запуск автоводы БК
+#endif
 volatile bool pending_nbkopt_flag = false;
 volatile bool pending_log_flush_flag = false;
 volatile bool pending_log_close_flag = false;
@@ -3059,6 +3062,16 @@ static void tick_apply_pending_water_temp() {
   }
 }
 
+#ifdef USE_WATER_PUMP
+// [9b] Отложенный запуск автоводы БК (аналог tick_apply_pending_water_temp выше):
+// действие с побочными эффектами переносится из async в loop().
+static void tick_apply_pending_water_auto() {
+  if (take_pending_flag(pending_water_auto_flag)) {
+    bk_water_auto_resume();
+  }
+}
+#endif
+
 static void tick_apply_pending_pump_speed() {
   uint16_t pumpSpeedSteps = 0;
   if (take_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)) {
@@ -3400,6 +3413,10 @@ void loop() {
 
   tick_apply_pending_water_temp();
 
+#ifdef USE_WATER_PUMP
+  tick_apply_pending_water_auto();
+#endif
+
   tick_apply_pending_pump_speed();
 
   tick_apply_pending_voltage();
@@ -3612,6 +3629,9 @@ struct AjaxTelemetrySnapshot {
   float i2cPumpRemainingMl;
   float alcohol;
   float steamAlcohol;
+  // [9b] Уставка пара БК для /ajax - ВСЕГДА в снимке (0 без USE_WATER_PUMP
+  // или вне активной программы БК), см. captureAjaxTelemetrySnapshot ниже.
+  float bkSteamSetpoint;
 #ifdef SAMOVAR_USE_POWER
   float currentPowerVolt;
   float targetPowerVolt;
@@ -3660,6 +3680,8 @@ struct AjaxTelemetrySnapshot {
   bool beerPaused;  // [Пиво 02.09 C2] Ручная пауза пива (зеркалит beerManualPause) для /ajax
   bool useBrowserBuzzer;
   bool mixer;
+  // [9b] Флаг автоводы БК для /ajax - ВСЕГДА в снимке (false без USE_WATER_PUMP).
+  bool bkWaterAuto;
   bool i2cStepperPresent;
   bool i2cMixerPresent;
   bool i2cPumpPresent;
@@ -3728,6 +3750,11 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.steamBodyTemp = SteamSensor.BodyTemp;
   snapshot.pipeBodyTemp = PipeSensor.BodyTemp;
   snapshot.mixer = mixer_status;
+  // [9b] Читаем глобалы bk_water_auto/bk_steam_setpoint напрямую - это
+  // ЕДИНСТВЕННОЕ место их изменения не здесь (BK.h), а тут только снимок;
+  // без USE_WATER_PUMP они не выходят из дефолта false/0.0f (см. BK.h).
+  snapshot.bkWaterAuto = bk_water_auto;
+  snapshot.bkSteamSetpoint = bk_steam_setpoint;
 
   const bool i2cMixerPresent = i2c_stepper_cache.mixer_present;
   const bool i2cPumpPresent = i2c_stepper_cache.pump_present;
@@ -3849,6 +3876,9 @@ static void writeAjaxTelemetryFields(
   jsonFieldFloat(out, first, "BodyTemp_Steam", snapshot.steamBodyTemp, 3);
   jsonFieldFloat(out, first, "BodyTemp_Pipe", snapshot.pipeBodyTemp, 3);
   jsonFieldBool(out, first, "mixer", snapshot.mixer);
+  // [9b] Всегда в снимке (без USE_WATER_PUMP - false/0, см. captureAjaxTelemetrySnapshot).
+  jsonFieldBool(out, first, "bk_water_auto", snapshot.bkWaterAuto);
+  jsonFieldFloat(out, first, "bk_steam_setpoint", snapshot.bkSteamSetpoint, 1);
   jsonFieldFloat(out, first, "ISspd", snapshot.i2cStepperSpeed, 3);
   jsonFieldBool(out, first, "i2c_stepper_present", snapshot.i2cStepperPresent);
   jsonFieldBool(out, first, "i2c_mixer_present", snapshot.i2cMixerPresent);

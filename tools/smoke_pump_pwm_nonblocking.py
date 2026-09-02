@@ -119,7 +119,7 @@ if bk_alarm_body:
             "if (mode_should_open_cooling(false, true, true))",
             "set_pump_pwm(bk_pwm);",
             "coolingOpenedThisTick = true;",
-            "if (!coolingOpenedThisTick && valve_status && pump_started && bk_pwm != PWM_LOW_VALUE * 40 && wp_count < 10)",
+            "if (!coolingOpenedThisTick && valve_status && pump_started && wp_count <= 10)",
             "set_pump_pwm(bk_pwm);",
         ],
         errors,

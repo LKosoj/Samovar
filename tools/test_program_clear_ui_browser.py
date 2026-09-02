@@ -35,7 +35,8 @@ BROWSER_TEST = r'''async page => {
     Status: "Готов", Lstatus: "", TimeRemaining: 0,
     TotalTime: 0, alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0, i2c_pump_present: 0,
     i2c_pump_running: 0, i2c_pump_remaining_ml: 0, i2c_pump_speed: 0, PowerOn: 0,
-    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0,
+    bk_water_auto: false, bk_steam_setpoint: 0
   };
   const columnFixture = {
     maxFlow: 1000, headsSpeed: 100, bodySpeedMin: 200, bodySpeedMax: 400,

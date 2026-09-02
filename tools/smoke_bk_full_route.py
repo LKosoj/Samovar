@@ -19,7 +19,7 @@ static void vTaskDelay(int) {}
 
 class String {
  public:
-  explicit String(const char* value) : value_(value) {}
+  String(const char* value) : value_(value) {}
   const char* c_str() const { return value_; }
  private:
   const char* value_;
@@ -62,6 +62,9 @@ static int openValveCalls = 0;
 static const int POWER_SPEED_MODE = 1;
 static const int POWER_WORK_MODE = 2;
 static int powerMode = POWER_SPEED_MODE;
+// [A1 п.1] Глобальная переменная BK.h - extract_function_body её не извлекает
+// (она вне тела функций), харнесс заводит свою копию сам.
+static bool bk_work_power_pending = false;
 static const float CHANGE_POWER_MODE_STEAM_TEMP = 39.0f;
 static const float DELTA_T_CLOSE_VALVE = 2.0f;
 static const int MODE_HEATING_START_SUCCEEDED = 1;
@@ -89,7 +92,11 @@ static bool check_boiling() {
   record_boiling_evidence(BOILING_EVIDENCE_TANK_AND_WATER);
   return true;
 }
-static bool current_power_mode_is(int mode) { return powerMode == mode; }
+// [A1 п.1] Не static: после правки эта функция в извлечённых телах bk_proc()/
+// check_alarm_bk() больше нигде не вызывается (заменена на bk_work_power_pending) -
+// static-версия упала бы на -Werror=unused-function. Нужна только для того, чтобы
+// компилировалась мутация ниже, которая возвращает вызов в текст.
+bool current_power_mode_is(int mode) { return powerMode == mode; }
 static void set_current_power_mode_value(int mode) {
   powerMode = mode;
   workModeCalls++;
@@ -105,6 +112,53 @@ static void mode_request_water_flow_emergency_if_needed() {}
 static void mode_handle_water_pre_alarm_if_due() {}
 static void bk_finish() { finishCalls++; }
 
+// [A1 п.2] Датчик куба всегда валиден (sensor_valid выше) - ветка мягкого отказа
+// в bk_proc() синтаксически присутствует во вклеенном теле, но недостижима при
+// runtime в этом харнессе (её поведение проверяет smoke_bk_start_refusal.py).
+// Стабы нужны только для компиляции.
+static int cancelProcessStartCalls = 0;
+static void mode_cancel_process_start(const String&) { cancelProcessStartCalls++; }
+static bool heater_safety_latched() { return false; }
+
+// [A1 п.6] bk_proc() теперь безусловно зовёт хелпер плато из distiller.h - без
+// заглушки вклеенное тело не скомпилируется (was not declared in this scope).
+static bool plateauFinishDueStub = false;
+static bool dist_plateau_finish_due() { return plateauFinishDueStub; }
+
+// [A1 п.1, опционально] Управляемая заглушка (два значения) для ветки пред-аварии
+// по воде в check_alarm_bk() - позволяет исполняемо проверить, что BKPower
+// применяется по пред-аварии, если кипение ещё не подтверждено.
+static bool waterPreAlarmDueStub = false;
+static bool mode_water_pre_alarm_due() { return waterPreAlarmDueStub; }
+
+// [9b] bk_apply_work_power()/bk_proc() теперь безусловно ссылаются на программу
+// БК (переход по строкам, run_bk_program(0) после первого включения нагрева) -
+// без этих заглушек вклеенные тела не скомпилируются. USE_WATER_PUMP в этом
+// харнессе не определён, поэтому apply_program_power_row(program[0].Power) в
+// bk_apply_work_power() компилируется в ветку #else (набор стабов ниже её не
+// касается).
+using ProgramType = char;
+static const ProgramType PROGRAM_TYPE_NONE = 0;
+struct WProgram { ProgramType WType = PROGRAM_TYPE_NONE; float Speed = 0; float Power = 0; int capacity_num = 0; };
+static const uint8_t PROGRAM_END = 8;
+static WProgram program[PROGRAM_END];
+static uint8_t ProgramNum = 0;
+static uint8_t ProgramLen = 0;
+static bool program_type_empty(ProgramType value) { return value == PROGRAM_TYPE_NONE; }
+// Управляемая заглушка (минимум два значения) - переход по строке программы БК
+// не входит в сценарии этого файла (это область smoke_bk_program_run.py), но
+// должна быть управляемой, а не жёстко false, иначе мутационные проверки самого
+// program_threshold_row_done в другом тесте не спутать с этим стабом.
+static bool rowThresholdDoneStub = false;
+static bool program_threshold_row_done(const WProgram&) { return rowThresholdDoneStub; }
+static int runBkProgramCalls = 0;
+static uint8_t runBkProgramLastArg = 255;
+static void run_bk_program(uint8_t num) {
+  runBkProgramCalls++;
+  runBkProgramLastArg = num;
+}
+
+@BK_APPLY_WORK_POWER@
 @BK_PROC@
 @BK_ALARM@
 
@@ -148,6 +202,36 @@ int main() {
   bk_proc();
   check(finishCalls == 1, "достижение DistTemp должно завершить BK");
 
+  // [A1 п.1] Регулятор уже не в SPEED (например, ушёл туда по пред-аварии воды
+  // ДО этого тика через другой путь) - переход на BKPower не должен теряться,
+  // пока bk_work_power_pending ещё взведён.
+  bk_work_power_pending = true;
+  powerMode = POWER_WORK_MODE;
+  boilingFixture = true;
+  checkBoilingCalls = 0;
+  workModeCalls = 0;
+  check_alarm_bk();
+  check(workModeCalls == 1,
+        "BKPower должен примениться по взведённому флагу, даже если регулятор уже покинул SPEED");
+  check_alarm_bk();
+  check(workModeCalls == 1,
+        "повторный тик не должен повторно применять BKPower - флаг снимается после применения");
+
+  // [A1 п.1, опционально] Ветка пред-аварии по воде: если кипение ещё не
+  // подтверждено (флаг взведён заново), а вода уже перегрелась - BKPower должен
+  // примениться синхронно ДО общего хелпера, а не потеряться навсегда.
+  bk_work_power_pending = true;
+  boilingFixture = false;
+  waterPreAlarmDueStub = true;
+  workModeCalls = 0;
+  check_alarm_bk();
+  check(workModeCalls == 1,
+        "пред-авария по воде должна применить BKPower, пока переход ещё не случился");
+  waterPreAlarmDueStub = false;
+  check_alarm_bk();
+  check(workModeCalls == 1,
+        "после применения по пред-аварии флаг снят - повторный тик не должен применять BKPower повторно");
+
   if (failures != 0) return 1;
   std::cout << "BK full route passed\n";
   return 0;
@@ -165,6 +249,7 @@ def main() -> int:
     )
     proc_body = extract_function_body(bk, "void bk_proc()")
     alarm_body = extract_function_body(bk, "void check_alarm_bk()")
+    apply_work_power_body = extract_function_body(bk, "static void bk_apply_work_power()")
     if strip_cpp_comments(alarm_body).count("check_boiling()") != 1:
         print("FAIL: BK alarm должен вызывать check_boiling ровно один раз", file=sys.stderr)
         return 1
@@ -193,6 +278,10 @@ def main() -> int:
             "void record_boiling_evidence(BoilingEvidence evidence) {"
             + record_body
             + "}",
+        )
+        .replace(
+            "@BK_APPLY_WORK_POWER@",
+            "void bk_apply_work_power() {" + apply_work_power_body + "}",
         )
         .replace("@BK_PROC@", "void bk_proc() {" + proc_body + "}")
         .replace("@BK_ALARM@", "void check_alarm_bk() {" + alarm_body + "}")
@@ -241,6 +330,44 @@ def main() -> int:
         mutant_result = compile_and_run("bk_route_mutant", mutant)
         if mutant_result.returncode == 0:
             print("FAIL: мутация sticky evidence пережила BK route", file=sys.stderr)
+            return 1
+
+        # [A1 п.1] Откат к current_power_mode_is(POWER_SPEED_MODE) - переход на
+        # BKPower снова теряется навсегда, как только регулятор синхронно покинул
+        # SPEED ДО подтверждения кипения (см. новый сценарий в main()).
+        power_mode_mutant = harness.replace(
+            "bk_work_power_pending && (boilingNow",
+            "current_power_mode_is(POWER_SPEED_MODE) && (boilingNow",
+            1,
+        )
+        if power_mode_mutant == harness:
+            print("FAIL: не удалось построить мутацию bk_work_power_pending (boiling)", file=sys.stderr)
+            return 1
+        power_mode_mutant_result = compile_and_run("bk_route_power_mode_mutant", power_mode_mutant)
+        if power_mode_mutant_result.returncode == 0:
+            print(
+                "FAIL: мутация current_power_mode_is(POWER_SPEED_MODE) (boiling) пережила BK route",
+                file=sys.stderr,
+            )
+            return 1
+
+        # [A1 п.1, опционально] Пред-алармная ветка: если флаг игнорируется, переход
+        # на BKPower при пред-аварии по воде (кипение ещё не подтверждено) молча
+        # пропадает.
+        pre_alarm_mutant = harness.replace(
+            "bk_work_power_pending && mode_water_pre_alarm_due()",
+            "false && mode_water_pre_alarm_due()",
+            1,
+        )
+        if pre_alarm_mutant == harness:
+            print("FAIL: не удалось построить мутацию bk_work_power_pending (пред-авария)", file=sys.stderr)
+            return 1
+        pre_alarm_mutant_result = compile_and_run("bk_route_pre_alarm_mutant", pre_alarm_mutant)
+        if pre_alarm_mutant_result.returncode == 0:
+            print(
+                "FAIL: мутация bk_work_power_pending (пред-авария по воде) пережила BK route",
+                file=sys.stderr,
+            )
             return 1
         return 0
 

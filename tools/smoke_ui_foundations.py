@@ -155,10 +155,13 @@ def check_pages(errors):
         if line.strip() == "myObj.PipeTemp.toFixed(3)":
           errors.append(f"data_raw/nbk.htm:{line_no} still contains dangling PipeTemp.toFixed expression")
     if page.name == "bk.htm":
-      if re.search(r"\bid\s*=\s*['\"]Prog['\"]", text):
-        errors.append("data_raw/bk.htm still contains unreachable Prog tab")
-      if "SamovarApp.openTab(event, 'Prog')" in text or 'SamovarApp.openTab(event, "Prog")' in text:
-        errors.append("data_raw/bk.htm still links to unreachable Prog tab")
+      # [БК п.9] Вкладка Prog на bk.htm теперь настоящая (программа отбора БК с
+      # колонкой «Т пара»): прежний запрет «недостижимой» вкладки снят, но кнопка
+      # и содержимое обязаны присутствовать парой, иначе вкладка снова мёртвая.
+      has_tab = bool(re.search(r"\bid\s*=\s*['\"]Prog['\"]", text))
+      has_link = "SamovarApp.openTab(event, 'Prog')" in text or 'SamovarApp.openTab(event, "Prog")' in text
+      if has_tab != has_link:
+        errors.append("data_raw/bk.htm: Prog tab and its tab button must both exist (unreachable or dangling tab)")
 
 
 def check_app_js(errors):

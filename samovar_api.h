@@ -283,6 +283,11 @@ void bk_proc();
 void bk_finish();
 void check_alarm_bk();
 void set_water_temp(float duty);
+void run_bk_program(uint8_t num);          // [9b]
+#ifdef USE_WATER_PUMP
+void bk_water_auto_resume();               // [9b]
+#endif
+void bk_reset_water_auto();                // [9b]
 
 void nbk_proc();
 inline void nbk_finish();

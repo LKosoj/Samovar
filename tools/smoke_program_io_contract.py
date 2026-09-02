@@ -167,6 +167,18 @@ if program_io:
             "PROGRAM_END",
             "program_parse_dist_row",
         ],
+        "bk_program_parse_spec": [
+            "Ошибка программы: слишком длинная строка (bk)",
+            "Ошибка программы: неверный формат строки bk",
+            "\"TASPR\"",
+            "PROGRAM_FIELD_TYPE",
+            "PROGRAM_FIELD_SPEED",
+            "PROGRAM_FIELD_CAPACITY",
+            "PROGRAM_FIELD_POWER",
+            "PROGRAM_FIELD_TEMP",
+            "PROGRAM_END",
+            "program_parse_bk_row",
+        ],
         "beer_program_parse_spec": [
             "Ошибка программы: слишком длинная строка (beer)",
             "Ошибка программы: неверный формат строки beer",
@@ -206,12 +218,14 @@ if program_io:
     for token in [
         "mode == SAMOVAR_RECTIFICATION_MODE",
         "mode == SAMOVAR_DISTILLATION_MODE",
+        "mode == SAMOVAR_BK_MODE",
         "PROGRAM_POWER_ABS_THRESHOLD",
         "PROGRAM_PARSE_INVALID_ROW",
     ]:
-        # [Б7.2/П1] Правила "первая строка ректификации задаёт абсолютную мощность" и
-        # "первая ненулевая строка дистилляции задаёт абсолютную мощность" не должны
-        # молча потеряться при будущем рефакторинге prepare_program_for_mode().
+        # [Б7.2/П1/БК п.9] Правила "первая строка ректификации задаёт абсолютную
+        # мощность" и "первая ненулевая строка дистилляции/БК задаёт абсолютную
+        # мощность" не должны молча потеряться при будущем рефакторинге
+        # prepare_program_for_mode().
         require_token("prepare_program_for_mode power checks", body, token)
 
     try:

@@ -167,6 +167,14 @@ HARNESS = r'''
 
 #define __SAMOVAR_H_
 #define CAPACITY_NUM 10
+
+// [БК п.9] program_io.h::program_parse_bk_row требует эти границы (обычно из
+// Samovar_ini.h) безусловно, не под #ifdef - минимальные значения только для
+// компиляции этого харнесса, границы 30/100 против РЕАЛЬНОГО Samovar_ini.h
+// проверяет tools/smoke_bk_program_rows.py.
+#define BK_STEAM_SETPOINT_MIN 30
+#define BK_STEAM_SETPOINT_MAX 100
+
 #include "program_types.h"
 
 struct WProgram {

@@ -27,7 +27,13 @@ def read_page(name: str) -> str:
 FROZEN_SHA256 = {
     # 02.09.2026: общая функция beerRowTypeOk (правила типов строк пива) для
     # beer.htm/check_program и brewxml.htm/validateBeerProgramText. Раскладки не касается.
-    "app.js": "a0aaeff8c62fcf9969ca157034451432bf81fbd3490cb72f53e3431b8b168705",
+    # 02.09.2026 (задача A3, п.5): новый токен COMMAND_TOKENS.PWM_TOO_LOW - текст
+    # отказа /command watert при слишком низком ШИМ насоса воды во время нагрева
+    # БК. Раскладки не касается.
+    # 02.09.2026 (задача 9c): три новых токена COMMAND_TOKENS.NOT_RUNNING/
+    # NO_SETPOINT/NO_PUMP - отказы /command waterauto=1 (авто-вода БК).
+    # Раскладки не касается.
+    "app.js": "66899ddcfc950f988870921348e80838ef7748a920b5483d36c131db3684765d",
     # 01.09.2026: масштаб задают две ручки под графиком вместо колёсика и рамки
     # выделения (уменьшить масштаб на приборе было нечем).
     "chart.js": "14954d90d9194de5ea6461812bb01c7e8ad726573be7964efa9b370643e1ae4e",
@@ -42,7 +48,9 @@ STRUCTURE_SHA256 = {
     # диапазон рвался как "80 % (60-" / "100)". Полей и подписей не добавлялось.
     # 02.09.2026 (П11, пакет C): подсказка (.tooltip/.tooltiptext) у DistTemp
     # добавлена, у UseST дополнен текст существующей подсказки.
-    "setup.htm": "2fd95d030fd74d8509411f2ae801371da568fc8384dc5a3a4ce0c83c1bef4e09",
+    # 02.09.2026 (задача A3, п.5/6): текст метки DistTemp и текст подсказки
+    # DistTimeF изменились (упоминание БК) - структура тегов та же.
+    "setup.htm": "0d11a34cf1c5bfc3030f4b507ce4ccad65e67841e900f61636c4ed13198cab84",
     "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")

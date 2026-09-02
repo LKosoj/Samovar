@@ -170,7 +170,10 @@ expected_hashes = {
     # S/R принимают долю в (0,1) вместо (0,1]; отказ - тем же сбросом draft,
     # program[] не коммитится, A-09 не нарушена.
     # [П1 доп.] номер физической строки в сообщении.
-    "program_io.h": "5a37f1c22c418dd98545065f03b6afeb0dd002c0cc492f5be85d642e0bb5559f",
+    # [БК п.9, 02.09.2026] хэш обновлён: новый формат PROGRAM_FORMAT_BK (пятое поле
+    # «Т пара») и общий разбор четырёх полей с DIST; отказы - тем же сбросом draft,
+    # program[] не коммитится, A-09 не нарушена.
+    "program_io.h": "245665eaa2885aca17be3a66e6038675bec828840358bd355ad5487e867f2516",
     "program_types.h": "78a37ac7beda0a3bf50b0ad2e6682075d038a5c15f99e808c665404e22b9ed2b",
 }
 for name, expected in expected_hashes.items():

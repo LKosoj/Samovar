@@ -3,6 +3,7 @@ import re
 import sys
 from pathlib import Path
 
+from build_web_assets import resolve_includes
 from smoke_helpers import (
     extract_braced_block_after,
     extract_function_body,
@@ -155,7 +156,11 @@ if command_param_body:
     )
 
 if command_body:
-    allowed_responses = {"OK", "BUSY", "IGNORED", "POWER_OFF", "BAD_REQUEST"}
+    allowed_responses = {
+        "OK", "BUSY", "IGNORED", "POWER_OFF", "BAD_REQUEST", "PWM_TOO_LOW",
+        # [9b] Ответы действия waterauto (BK.h/WebServer.ino).
+        "NOT_RUNNING", "NO_SETPOINT", "NO_PUMP",
+    }
     response_bodies = re.findall(
         r'(?:send_web_command_response\s*\(\s*request\s*,\s*\d+\s*,|request->send\s*\(\s*\d+\s*,\s*"text/plain"\s*,)\s*"([^"]*)"',
         command_body,
@@ -176,6 +181,7 @@ if command_body:
         'name == "voltage"',
         'name == "mixer"',
         'name == "watert"',
+        'name == "waterauto"',
         'name == "pumpspeed"',
         'name == "pnbk"',
         'name == "nbkopt"',
@@ -198,6 +204,7 @@ if command_body:
         "mixer": "queue_pending_value(pending_mixer_flag, pending_mixer_on, boolValue)",
         "pnbk": "queue_pending_nbk(nbkCommand)",
         "watert": "queue_pending_value(pending_water_temp_flag, pending_water_temp_value, waterPwm)",
+        "waterauto": "queue_pending_flag(pending_water_auto_flag)",
         "pumpspeed": "queue_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)",
         "nbkopt": "queue_pending_flag(pending_nbkopt_flag)",
         "rescands": "queue_pending_flag(pending_rescan_ds_flag)",
@@ -485,7 +492,15 @@ for page in program_pages:
     if not page_file.exists():
         errors.append(f"data_raw/{page} not found")
         continue
-    page_text = page_file.read_text(encoding="utf-8", errors="ignore")
+    # [9b, фикс ревью] Страница может подключать таблицу программы (и вызов
+    # SamovarApp.postProgram) через <!--#include--> партиал (data_raw/partials/) -
+    # проверяем текст с раскрытыми включениями той же функцией, что и
+    # build_web_assets.py/test_program_clear_ui_browser.py, а не текст файла как есть.
+    try:
+        page_text = resolve_includes(page, page_file.read_bytes()).decode("utf-8", errors="ignore")
+    except ValueError as exc:
+        errors.append(str(exc))
+        continue
     if "SamovarApp.postProgram(" not in page_text:
         errors.append(f"data_raw/{page} does not use SamovarApp.postProgram for /program")
     if "fetch('/program'" in page_text or 'fetch("/program"' in page_text:

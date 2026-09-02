@@ -14,7 +14,7 @@
 
 #include "debug_ds_emu.h"
 
-// [Б7.2] Дефолт (не-SEM_AVR) для ректификации и общий дефолт для БК/Lua -
+// [Б7.2] Дефолт (не-SEM_AVR) для ректификации и общий дефолт для Lua -
 // раньше был продублирован литералом в обеих ветках switch ниже, расхождение
 // между копиями компилятор не поймал бы. Литерал остаётся литералом (#define,
 // не const char*, - лишнего объекта в ОЗУ/флеше не заводим), просто с одним
@@ -44,8 +44,11 @@ ProgramParseResult prepare_default_program_for_mode(
       // 500 Вт - минимальная выразимая абсолютная уставка ваттного регулятора;
       // это программа-заглушка, оператор задаёт свою. Проверка первой строки
       // (program_io.h::prepare_program_for_mode(), logic.h::validate_rect_program_startable())
-      // гейтится строго по SAMOVAR_RECTIFICATION_MODE, поэтому БК и Lua в этот
-      // #ifdef не заведены - их дефолт остаётся прежним, см. ветку ниже.
+      // гейтится строго по SAMOVAR_RECTIFICATION_MODE, поэтому Lua в этот
+      // #ifdef не заведён - его дефолт делит DEFAULT_PROGRAM_HBH45 с #else-веткой
+      // ниже. У БК теперь собственная ветка ниже и собственное правило
+      // (program_io.h::prepare_program_for_mode - как у дистилляции), но его
+      // дефолт с Power=0 под это правило не попадает. [БК п.9]
 #ifdef SAMOVAR_USE_SEM_AVR
       defaultProgram = "H;450;0.1;1;0;500\nB;450;1;1;0;500\nH;450;0.1;1;0;500\n";
 #else
@@ -53,6 +56,14 @@ ProgramParseResult prepare_default_program_for_mode(
 #endif
       break;
     case SAMOVAR_BK_MODE:
+      // [БК п.9] Одна строка: тип T (порог = целевая T куба, как у дистилляции),
+      // порог 93 (не влияет на переход - переход БК на BKPower зависит от
+      // закипания/пара, см. BK.h), мощность 0 (её задаёт SamSetup.BKPower,
+      // задача 9b), Тпара=0 (вода дефлегматора вручную). Пустая программа
+      // парсером отвергается (PROGRAM_PARSE_EMPTY_INPUT), поэтому дефолт не
+      // может быть "".
+      defaultProgram = "T;93;1;0;0\n";
+      break;
     case SAMOVAR_LUA_MODE:
       defaultProgram = DEFAULT_PROGRAM_HBH45;
       break;
@@ -672,7 +683,17 @@ void reset_process_state(void) {
   set_power(false, false);
   tick_status_fsm();
 
-  bk_pwm = PWM_LOW_VALUE * 40;
+  // [БК п.4] Насос охлаждения ещё крутится (сброс состояния приходит и при
+  // остановке процесса, когда клапан/насос дорабатывают до остывания): его
+  // ШИМ не трогаем, иначе следующий set_pump_pwm(bk_pwm) из check_alarm_bk
+  // молча уронит обороты до стартовых 400. Дефолт возвращаем только
+  // остановленному насосу (pump_started объявлен для всех сборок, без
+  // USE_WATER_PUMP он всегда false - поведение прежнее).
+  if (!pump_started) bk_pwm = PWM_LOW_VALUE * 40;
+  bk_reset_water_auto();   // [9b] auto/уставка/таймер воды БК - в тот же сброс,
+                           // что и bk_pwm выше (тот же комментарий "[БК п.4]"
+                           // объясняет, почему насос при этом не трогаем -
+                           // bk_reset_water_auto() приводов не касается вовсе).
 
 #ifdef SAMOVAR_USE_POWER
   power_err_cnt = 0;

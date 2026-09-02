@@ -64,6 +64,48 @@ enum DistPredictionReason : uint8_t {
 DistPredictionReason distRowPredictionReason = DIST_PREDICTION_AWAITING_BOIL;
 DistPredictionReason distProcessPredictionReason = DIST_PREDICTION_AWAITING_BOIL;
 
+// [A1 п.6] Общее условие "плато" для дистилляции и БК: Т куба выше 90°C, нагрев
+// включён, SamSetup.DistTimeF > 0 минут задано пользователем, и температура куба
+// не растёт больше чем на 0.1°C за DistTimeF минут. Состояние (d_s_temp_finish/
+// d_s_time_min, Samovar.h) общее для обоих режимов и сбрасывается в
+// reset_process_state() (sensorinit.h) - здесь дополнительный сброс не нужен,
+// функция самокорректируется за один тик при "чужом" наследии. Функция НЕ
+// завершает процесс сама (у distiller.h и BK.h разные finish()) - вызывающий
+// обязан сам вызвать свой *_finish() при true.
+inline bool dist_plateau_finish_due() {
+  if (!(TankSensor.avgTemp > 90 && PowerOn && SamSetup.DistTimeF > 0)) return false;
+  if (abs(TankSensor.avgTemp - d_s_temp_finish) > 0.1) {
+    d_s_temp_finish = TankSensor.avgTemp;
+    d_s_time_min = millis();
+    return false;
+  }
+  if ((millis() - d_s_time_min) > SamSetup.DistTimeF * 60 * 1000) {
+    SendMsg(("В кубе не осталось спирта"), NOTIFY_MSG);
+    return true;
+  }
+  return false;
+}
+
+// [9b] Условие завершения строки программы для типов T/A/S/P/R - общее для
+// дистилляции и БК (program_io.h::PROGRAM_FORMAT_DIST/PROGRAM_FORMAT_BK делят
+// один и тот же набор типов строк). Возвращает true РОВНО когда порог row
+// достигнут по TankSensor - переход на следующую строку делает вызывающий
+// (run_dist_program/run_bk_program), не эта функция.
+inline bool program_threshold_row_done(const WProgram& row) {
+  if (row.WType == 'T') return row.Speed <= TankSensor.avgTemp;
+  if (row.WType == 'A') return row.Speed >= get_alcohol(TankSensor.avgTemp);
+  if (row.WType == 'S') {
+    float startAlcohol = get_alcohol(TankSensor.StartProgTemp);
+    return startAlcohol > 0 && row.Speed >= get_alcohol(TankSensor.avgTemp) / startAlcohol;
+  }
+  if (row.WType == 'P') return row.Speed >= get_steam_alcohol(TankSensor.avgTemp);
+  if (row.WType == 'R') {
+    float startSteamAlcohol = get_steam_alcohol(TankSensor.StartProgTemp);
+    return startSteamAlcohol > 0 && row.Speed >= get_steam_alcohol(TankSensor.avgTemp) / startSteamAlcohol;
+  }
+  return false;
+}
+
 /**
  * @brief Основной цикл обработки процесса дистилляции.
  *
@@ -149,39 +191,14 @@ void distiller_proc() {
   }
 
   //Обрабатываем программу дистилляции (только если есть программы для выполнения)
-  if (ProgramNum < ProgramLen && !program_type_empty(program[ProgramNum].WType)) {
-    if (program[ProgramNum].WType == 'T' && program[ProgramNum].Speed <= TankSensor.avgTemp) {
-      //Если температура куба превысила заданное в программе значение - переходим на следующую строку программы
-      run_dist_program(ProgramNum + 1);
-    } else if (program[ProgramNum].WType == 'A' && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp)) {
-      //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
-      run_dist_program(ProgramNum + 1);
-    } else if (program[ProgramNum].WType == 'S') {
-      float startAlcohol = get_alcohol(TankSensor.StartProgTemp);
-      if (startAlcohol > 0 && program[ProgramNum].Speed >= get_alcohol(TankSensor.avgTemp) / startAlcohol) {
-        run_dist_program(ProgramNum + 1);
-      }
-    } else if (program[ProgramNum].WType == 'P' && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp)) {
-      //Если спиртуозность в кубе понизилась до заданного в программе значения - переходим на следующую строку программы
-      run_dist_program(ProgramNum + 1);
-    } else if (program[ProgramNum].WType == 'R') {
-      float startSteamAlcohol = get_steam_alcohol(TankSensor.StartProgTemp);
-      if (startSteamAlcohol > 0 && program[ProgramNum].Speed >= get_steam_alcohol(TankSensor.avgTemp) / startSteamAlcohol) {
-        run_dist_program(ProgramNum + 1);
-      }
-    }
+  if (ProgramNum < ProgramLen && !program_type_empty(program[ProgramNum].WType) &&
+      program_threshold_row_done(program[ProgramNum])) {
+    run_dist_program(ProgramNum + 1);
   }
 
 
-  //Если Т в кубе больше 90 градусов и включено напряжение и DistTimeF > 0, проверяем, что DistTimeF минут температура в кубе не меняется от последнего заполненного значения больше, чем на 0.1 градус
-  if (TankSensor.avgTemp > 90 && PowerOn && SamSetup.DistTimeF > 0) {
-    if (abs(TankSensor.avgTemp - d_s_temp_finish) > 0.1) {
-      d_s_temp_finish = TankSensor.avgTemp;
-      d_s_time_min = millis();
-    } else if ((millis() - d_s_time_min) > SamSetup.DistTimeF * 60 * 1000) {
-      SendMsg(("В кубе не осталось спирта"), NOTIFY_MSG);
-      distiller_finish();
-    }
+  if (dist_plateau_finish_due()) {
+    distiller_finish();
   }
 
   vTaskDelay(10 / portTICK_PERIOD_MS);

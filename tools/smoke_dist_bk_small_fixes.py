@@ -113,9 +113,9 @@ if bk_text:
             errors,
         )
         require_ordered_tokens(
-            "BK.h check_boiling() runs before the power-mode short-circuit",
+            "BK.h check_boiling() runs before the pending-power short-circuit",
             bk_alarm_body,
-            ["bool boilingNow = check_boiling();", "current_power_mode_is(POWER_SPEED_MODE)"],
+            ["bool boilingNow = check_boiling();", "bk_work_power_pending"],
             errors,
         )
 
@@ -128,36 +128,148 @@ if bk_text:
             "mode_handle_water_pre_alarm_if_due();",
         )
 
-        # [T16 fix] set_current_power() is asynchronous (it only enqueues a request for
-        # the background regulator task; the mode changes tens-hundreds of ms later via
-        # vTaskDelay inside apply_regulator_mode_blocking()). Checking
-        # current_power_mode_is(POWER_SLEEP_MODE) right after the call always observes
-        # the still-old mode, so the warning must compare BKPower against
-        # power_work_mode_threshold() synchronously BEFORE calling set_current_power().
+        # [A1 п.1/п.8] bk_apply_work_power() (BK.h) - единственная точка применения
+        # BKPower/POWER_WORK_MODE, вызывается и по факту кипения, и по пред-аварии
+        # воды (если переход ещё не случился). [T16] мёртвое предупреждение
+        # (SamSetup.BKPower < power_work_mode_threshold(), недостижимо - поле
+        # клампится этим же порогом при сохранении формы и миграции NVS) удалено
+        # целиком вместе со старым #else-веткой check_alarm_bk() - осталась только
+        # общая функция.
+        apply_calls = bk_alarm_body.count("bk_apply_work_power();")
+        if apply_calls != 2:
+            errors.append(
+                "BK.h check_alarm_bk must call bk_apply_work_power() exactly twice "
+                f"(boiling branch + water pre-alarm branch), found {apply_calls}"
+            )
         require_ordered_tokens(
-            "BK.h check_alarm_bk warns synchronously before set_current_power parks the regulator asleep",
+            "BK.h applies BKPower on boiling, then (if still pending) on water pre-alarm, before the shared helper",
             bk_alarm_body,
             [
-                "SamSetup.BKPower < power_work_mode_threshold()",
-                "WARNING_MSG",
-                "set_current_power(SamSetup.BKPower);",
+                "bool boilingNow = check_boiling();",
+                "bk_work_power_pending && (boilingNow",
+                "bk_apply_work_power();",
+                "mode_water_pre_alarm_due()",
+                "bk_apply_work_power();",
+                "mode_handle_water_pre_alarm_if_due();",
             ],
             errors,
-        )
-        # The comparison must be gated by boilingNow (true only on the single tick
-        # boiling is first detected - see the [П4.1] comment above) so the warning
-        # fires once per heating cycle instead of every ~10ms tick while
-        # POWER_SPEED_MODE and the outer SteamSensor/PipeSensor condition stay true
-        # during the async wait for the regulator to actually leave POWER_SPEED_MODE.
-        require_token(
-            "BK.h check_alarm_bk gates the BKPower warning on the one-shot boilingNow flag",
-            bk_alarm_body,
-            "if (boilingNow && SamSetup.BKPower < power_work_mode_threshold())",
         )
         forbid(
             "BK.h check_alarm_bk",
             bk_alarm_body,
-            ("current_power_mode_is(POWER_SLEEP_MODE)",),
+            (
+                "current_power_mode_is(POWER_SLEEP_MODE)",
+                "SamSetup.BKPower < power_work_mode_threshold()",
+            ),
+        )
+
+    try:
+        bk_finish_body = extract_function_body(bk_text, "void bk_finish()")
+    except ValueError as exc:
+        errors.append(str(exc))
+        bk_finish_body = ""
+    if bk_finish_body:
+        require_token(
+            "BK.h bk_finish resets bk_work_power_pending",
+            bk_finish_body,
+            "bk_work_power_pending = false;",
+        )
+
+    try:
+        bk_apply_work_power_body = extract_function_body(bk_text, "static void bk_apply_work_power()")
+    except ValueError as exc:
+        errors.append(str(exc))
+        bk_apply_work_power_body = ""
+    if bk_apply_work_power_body:
+        require_token(
+            "BK.h bk_apply_work_power resets bk_work_power_pending",
+            bk_apply_work_power_body,
+            "bk_work_power_pending = false;",
+        )
+        # [9b] Мощность строки 0 (если задана) применяется сразу после BKPower, а
+        # запуск программы БК (run_bk_program(0)) - после снятия флага, тем же
+        # порядком, каким distiller_proc() зовёт run_dist_program(0) после старта.
+        require_token(
+            "BK.h bk_apply_work_power applies row 0 power",
+            bk_apply_work_power_body,
+            "apply_program_power_row(program[0].Power);",
+        )
+        require_token(
+            "BK.h bk_apply_work_power starts the program at row 0",
+            bk_apply_work_power_body,
+            "run_bk_program(0);",
+        )
+        require_ordered_tokens(
+            "BK.h bk_apply_work_power applies BKPower, then row 0 power, then starts the program",
+            bk_apply_work_power_body,
+            [
+                "set_current_power(SamSetup.BKPower);",
+                "apply_program_power_row(program[0].Power);",
+                "bk_work_power_pending = false;",
+                "run_bk_program(0);",
+            ],
+            errors,
+        )
+
+    try:
+        bk_proc_body = extract_function_body(bk_text, "void bk_proc()")
+    except ValueError as exc:
+        errors.append(str(exc))
+        bk_proc_body = ""
+    if bk_proc_body:
+        # [A1 п.6] В BK.h (в отличие от distiller.h) плато проверяется ДО DistTemp -
+        # это новая функциональность для БК, порядок задан явно в плане.
+        require_token(
+            "BK.h bk_proc calls the shared plateau helper",
+            bk_proc_body,
+            "dist_plateau_finish_due()",
+        )
+        require_ordered_tokens(
+            "BK.h bk_proc checks the plateau before DistTemp",
+            bk_proc_body,
+            ["dist_plateau_finish_due()", "TankSensor.avgTemp >= SamSetup.DistTemp"],
+            errors,
+        )
+        # [9b] Переход по строкам программы БК использует тот же общий хелпер, что
+        # и дистилляция, и происходит после обеих проверок финиша.
+        require_token(
+            "BK.h bk_proc uses the shared row-threshold helper",
+            bk_proc_body,
+            "program_threshold_row_done(program[ProgramNum])",
+        )
+        require_token(
+            "BK.h bk_proc advances to the next program row",
+            bk_proc_body,
+            "run_bk_program(ProgramNum + 1)",
+        )
+        require_ordered_tokens(
+            "BK.h bk_proc checks both finish conditions before the row transition",
+            bk_proc_body,
+            [
+                "dist_plateau_finish_due()",
+                "TankSensor.avgTemp >= SamSetup.DistTemp",
+                "program_threshold_row_done",
+            ],
+            errors,
+        )
+
+    try:
+        run_bk_program_body = extract_function_body(bk_text, "void run_bk_program(uint8_t num)")
+    except ValueError as exc:
+        errors.append(str(exc))
+        run_bk_program_body = ""
+    if run_bk_program_body:
+        # [9b] По образцу run_dist_program: мощность ЗАВЕРШИВШЕЙСЯ строки
+        # применяется при переходе, уставка воды взводится из НОВОЙ строки.
+        require_token(
+            "run_bk_program applies the finished row's power",
+            run_bk_program_body,
+            "apply_program_power_row(program[num - 1].Power)",
+        )
+        require_token(
+            "run_bk_program arms the water setpoint from the new row",
+            run_bk_program_body,
+            "bk_water_auto = program[num].Temp > 0;",
         )
 
 # [П4.4/T21-1] distiller.h: BOOST heater is gated off exactly once, on the first
@@ -200,6 +312,65 @@ if distiller_text:
             "distiller_proc resets distBoostGated on (re)start",
             distiller_proc_body,
             "distBoostGated = false;",
+        )
+        # [A1 п.6] Плато DistTimeF вынесено в общий хелпер dist_plateau_finish_due()
+        # (используется и BK.h) - тело плато не должно копипаститься рядом с вызовом.
+        require_token(
+            "distiller_proc calls the shared plateau helper",
+            distiller_proc_body,
+            "dist_plateau_finish_due()",
+        )
+        forbid(
+            "distiller_proc",
+            distiller_proc_body,
+            ("TankSensor.avgTemp - d_s_temp_finish",),
+        )
+        # [9b] Условие завершения строки программы (T/A/S/P/R) вынесено в общий
+        # хелпер program_threshold_row_done() (используется и BK.h) - здесь не
+        # должно оставаться копии инлайновых WType-веток.
+        require_token(
+            "distiller_proc uses the shared row-threshold helper",
+            distiller_proc_body,
+            "program_threshold_row_done(program[ProgramNum])",
+        )
+        forbid(
+            "distiller_proc",
+            distiller_proc_body,
+            ("program[ProgramNum].WType == 'T'",),
+        )
+
+    try:
+        row_done_body = extract_function_body(
+            distiller_text, "inline bool program_threshold_row_done"
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        row_done_body = ""
+    if row_done_body:
+        for row_type_token in ["'T'", "'A'", "'S'", "'P'", "'R'"]:
+            require_token(
+                "program_threshold_row_done handles WType " + row_type_token,
+                row_done_body,
+                row_type_token,
+            )
+
+    try:
+        dist_plateau_body = extract_function_body(
+            distiller_text, "inline bool dist_plateau_finish_due()"
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        dist_plateau_body = ""
+    if dist_plateau_body:
+        require_token(
+            "dist_plateau_finish_due restarts the plateau timer on temperature movement",
+            dist_plateau_body,
+            "d_s_time_min = millis();",
+        )
+        require_token(
+            "dist_plateau_finish_due reports the out-of-alcohol message",
+            dist_plateau_body,
+            "В кубе не осталось спирта",
         )
 
     try:
@@ -283,6 +454,27 @@ if logic_text:
         if branch_index < 0 or prg_index < 0 or prg_index < branch_index:
             errors.append(
                 "get_distiller_status_text builds the \"Прг №\" branch before checking ProgramNum < ProgramLen"
+            )
+
+# [БК п.4] Сброс bk_pwm в дефолт только для остановленного насоса: у ещё
+# крутящегося насоса охлаждения подача воды не должна проседать до стартовых
+# 400 после остановки процесса.
+sensorinit_text = strip_cpp_comments(read_text("sensorinit.h"))
+if sensorinit_text:
+    try:
+        reset_state_body = extract_function_body(sensorinit_text, "void reset_process_state(void)")
+    except ValueError as exc:
+        errors.append(str(exc))
+        reset_state_body = ""
+    if reset_state_body:
+        require_token(
+            "sensorinit.h reset_process_state resets bk_pwm only for a stopped pump",
+            reset_state_body,
+            "if (!pump_started) bk_pwm = PWM_LOW_VALUE * 40;",
+        )
+        if reset_state_body.count("bk_pwm =") != 1:
+            errors.append(
+                "sensorinit.h reset_process_state must assign bk_pwm exactly once (guarded by !pump_started)"
             )
 
 if errors:

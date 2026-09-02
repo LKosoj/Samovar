@@ -104,6 +104,13 @@ HARNESS = r'''
 // prepare_program_for_mode() (program_io.h) вырезается препроцессором.
 #define SAMOVAR_USE_POWER
 
+// [БК п.9] Границы 5-го поля БК (program_parse_bk_row, program_io.h) обычно
+// объявлены в Samovar_ini.h - здесь минимальные значения только для
+// компиляции; сами границы (30/100) проверяет smoke_bk_program_rows.py против
+// РЕАЛЬНОГО Samovar_ini.h, этот файл их не пинит.
+#define BK_STEAM_SETPOINT_MIN 30
+#define BK_STEAM_SETPOINT_MAX 100
+
 #include "program_types.h"
 
 struct WProgram {
@@ -458,8 +465,8 @@ void test_mode_mapping_and_defaults() {
        "A;80.00;1;0\nS;0.50;2;0\nS;0.30;3;0\n", 3},
       {SAMOVAR_BEER_MODE, PROGRAM_FORMAT_BEER,
        "M;45;0;0^0^0^0;0\nP;45;1;0^0^0^0;0\nP;60;1;0^0^0^0;0\nW;0;0;0^0^0^0;0\nB;0;1;0^0^0^0;0\nC;30;0;0^0^0^0;0\n", 6},
-      {SAMOVAR_BK_MODE, PROGRAM_FORMAT_RECT,
-       "H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n", 3},
+      {SAMOVAR_BK_MODE, PROGRAM_FORMAT_BK,
+       "T;93;1;0;0\n", 1},
       {SAMOVAR_NBK_MODE, PROGRAM_FORMAT_NBK,
        "H;1;0\nS;10;2000\nO;0;0\nW;0;0\n", 4},
       {SAMOVAR_SUVID_MODE, PROGRAM_FORMAT_BEER,
@@ -493,11 +500,13 @@ void test_mode_mapping_and_defaults() {
 }
 
 void test_power_first_row_scope() {
-  // [Б7.2] Правило "первая строка задаёт АБСОЛЮТНУЮ мощность" из
-  // prepare_program_for_mode() распространяется ТОЛЬКО на ректификацию -
+  // [Б7.2] Правило "первая строка задаёт АБСОЛЮТНУЮ мощность" (program[0].Power)
+  // из prepare_program_for_mode() распространяется ТОЛЬКО на ректификацию -
   // check_alarm() (alarm.h) безусловно применяет её к регулятору только там.
-  // У БК своя мощность (SamSetup.BKPower), у Lua её задаёт скрипт - соседние
-  // режимы это правило не должно ловить молча.
+  // У Lua мощность задаёт скрипт - его это правило не должно ловить молча.
+  // [БК п.9] У БК теперь СВОЁ формат (PROGRAM_FORMAT_BK) и своё правило первой
+  // НЕНУЛЕВОЙ мощности - то же самое, что у дистилляции (см. bk_* кейсы ниже,
+  // по образцу dist_*).
   ProgramDraft draft{};
 
   ProgramParseResult rect_zero = prepare_program_for_mode(
@@ -518,13 +527,33 @@ void test_power_first_row_scope() {
       SAMOVAR_RECTIFICATION_MODE, thresholdRow, draft);
   check(!rect_threshold.ok(), "rectification first row with Power==threshold (strict >) was accepted");
 
-  ProgramParseResult bk_zero = prepare_program_for_mode(
-      SAMOVAR_BK_MODE, String("H;450;0.1;1;0;0\n"), draft);
-  check(bk_zero.ok(), "BK first row with Power=0 must stay valid - BK power comes from SamSetup.BKPower");
-
   ProgramParseResult lua_zero = prepare_program_for_mode(
       SAMOVAR_LUA_MODE, String("H;450;0.1;1;0;0\n"), draft);
   check(lua_zero.ok(), "Lua first row with Power=0 must stay valid - Lua power is set by the script");
+
+  // [БК п.9] БК: то же правило, что и у дистилляции (первая НЕНУЛЕВАЯ Power
+  // должна быть абсолютной), но формат строки БК - 5 полей (Тип;Порог;Ёмкость;
+  // Мощность;Тпара), не 6, как у ректификации.
+  ProgramParseResult bk_correction_first = prepare_program_for_mode(
+      SAMOVAR_BK_MODE, String("A;80;1;-20;0\n"), draft);
+  check(!bk_correction_first.ok(),
+        "BK first nonzero-power row as a correction (-20) was accepted");
+  check(bk_correction_first.lineNumber == 1, "BK correction-first line number mismatch");
+
+  ProgramParseResult bk_zero_then_abs = prepare_program_for_mode(
+      SAMOVAR_BK_MODE, String("A;80;1;0;0\nS;0.5;2;60;0\n"), draft);
+  check(bk_zero_then_abs.ok(),
+        "BK zero-power row followed by an absolute row must be accepted");
+
+  ProgramParseResult bk_zero_then_correction = prepare_program_for_mode(
+      SAMOVAR_BK_MODE, String("A;80;1;0;0\nS;0.5;2;20;0\n"), draft);
+  check(!bk_zero_then_correction.ok(),
+        "BK zero-power row followed by a correction as first nonzero must be rejected");
+  check(bk_zero_then_correction.lineNumber == 2, "BK zero-then-correction line number mismatch");
+
+  ProgramParseResult bk_all_zero = prepare_program_for_mode(
+      SAMOVAR_BK_MODE, String("A;80;1;0;0\nS;0.5;2;0;0\n"), draft);
+  check(bk_all_zero.ok(), "BK program with all-zero Power must stay valid (matches built-in default)");
 
   // [П1] Дистилляция: правило иное - не program[0], а ПЕРВАЯ строка с Power != 0.
   // run_dist_program() применяет Power только на переходе строки (distiller.h), поэтому

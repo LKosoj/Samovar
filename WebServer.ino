@@ -966,6 +966,7 @@ void WebServerInit(void) {
         "</main></body></html>"));
   });
   server.serveStatic("/program_fruit.txt", SPIFFS, "/program_fruit.txt").setCacheControl("max-age=1");
+  server.serveStatic("/program_bk.txt", SPIFFS, "/program_bk.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt").setCacheControl("max-age=1");
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
@@ -2153,7 +2154,8 @@ static bool web_command_name_allowed(const String& name) {
       name == "startst" || name == "rescands" || name == "stopst" ||
       name == "mixer" || name == "pnbk" || name == "nbkopt" ||
       name == "distiller" || name == "startbk" || name == "startnbk" ||
-      name == "watert" || name == "pumpspeed" || name == "pause") return true;
+      name == "watert" || name == "pumpspeed" || name == "pause" ||
+      name == "waterauto") return true;
 #ifdef SAMOVAR_USE_POWER
   if (name == "voltage") return true;
 #endif
@@ -2228,6 +2230,14 @@ void web_command(AsyncWebServerRequest *request) {
   } else if (action == "watert") {
     parseResult = parse_control_water_pwm(actionParam->value().c_str(), waterPwm);
     commandKeySuffix = "=" + String(waterPwm);
+  } else if (action == "waterauto") {
+    // [9b] "Автомат" - только включатель (значение обязано быть "1"); чтобы
+    // выключить авторежим, штатный путь - ручная правка watert (см. set_water_temp).
+    parseResult = parse_exact_bool(actionParam->value().c_str(), boolValue);
+    if (parseResult.ok() && !boolValue) {
+      parseResult = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+    }
+    commandKeySuffix = "=1";
   } else if (action == "pumpspeed") {
     parseResult = parse_control_rate_steps(
         actionParam->value().c_str(), SamSetup.StepperStepMl, pumpSpeedSteps);
@@ -2396,10 +2406,32 @@ void web_command(AsyncWebServerRequest *request) {
       return;
     }
   } else if (action == "watert") {
+    if (Samovar_Mode == SAMOVAR_BK_MODE && PowerOn && waterPwm < PWM_LOW_VALUE * 10) {
+      send_web_command_response(request, 409, "PWM_TOO_LOW");
+      return;
+    }
     if (!queue_pending_value(pending_water_temp_flag, pending_water_temp_value, waterPwm)) {
       send_web_command_response(request, 503, "BUSY");
       return;
     }
+  } else if (action == "waterauto") {
+#ifndef USE_WATER_PUMP
+    send_web_command_response(request, 409, "NO_PUMP");
+    return;
+#else
+    if (Samovar_Mode != SAMOVAR_BK_MODE || !PowerOn || ProgramNum >= ProgramLen) {
+      send_web_command_response(request, 409, "NOT_RUNNING");
+      return;
+    }
+    if (program[ProgramNum].Temp == 0) {
+      send_web_command_response(request, 409, "NO_SETPOINT");
+      return;
+    }
+    if (!queue_pending_flag(pending_water_auto_flag)) {
+      send_web_command_response(request, 503, "BUSY");
+      return;
+    }
+#endif
   } else if (action == "pumpspeed") {
     if (!queue_pending_value(pending_pump_speed_flag, pending_pump_speed_steps, pumpSpeedSteps)) {
       send_web_command_response(request, 503, "BUSY");
@@ -2925,6 +2957,7 @@ void get_web_interface() {
 
 
     updateFile("program_fruit.txt", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("program_bk.txt", SAVE_FILE_IF_NOT_EXIST);
     updateFile("program_grain.txt", SAVE_FILE_IF_NOT_EXIST);
     updateFile("program_shugar.txt", SAVE_FILE_IF_NOT_EXIST);
 
