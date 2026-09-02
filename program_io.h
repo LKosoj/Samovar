@@ -338,8 +338,8 @@ inline bool program_parse_dist_row(char* line, size_t, uint8_t, WProgram& row, c
 
   // Типозависимое сужение общих границ PROGRAM_DIST_THRESHOLD_*: поле Speed
   // хранит разный физический смысл в зависимости от WType (см. комментарий выше).
-  if (ok && (parsedType == 'S' || parsedType == 'R') && (speed <= 0.0f || speed > 1.0f)) {
-    errorMessage = "Ошибка программы: для типа S/R Speed должен быть в диапазоне (0,1]";
+  if (ok && (parsedType == 'S' || parsedType == 'R') && (speed <= 0.0f || speed >= 1.0f)) {
+    errorMessage = "Ошибка программы: для типа S/R Speed должен быть в диапазоне (0,1)";
     ok = false;
   }
   if (ok && (parsedType == 'A' || parsedType == 'P') && speed >= 100.0f) {
@@ -691,6 +691,37 @@ inline const ProgramParseSpec* program_parse_spec_for_mode(SAMOVAR_MODE mode) {
   }
 }
 
+// [П1 доп.] program_parse_lines() пропускает пустые строки исходного текста,
+// наращивая lineNumber БЕЗ увеличения индекса i (см. цикл там же) - поэтому
+// индекс draft.rows[i] не совпадает с физическим номером строки, если в
+// программе есть пустые строки. Хелпер повторяет тот же проход по тексту
+// (то же условие "пустая": program_trim_line_right - обрезка '\r'/' '/'\t'
+// справа, длина 0) только для диагностики; сам разбор не трогает.
+inline uint16_t program_physical_line_for_row(const String& text, uint8_t rowIndex) {
+  const char* cursor = text.c_str();
+  uint16_t lineNumber = 1;
+  uint8_t seen = 0;
+  while (*cursor != '\0') {
+    const char* line = cursor;
+    const char* newline = strchr(cursor, '\n');
+    size_t lineLen = newline ? static_cast<size_t>(newline - line) : strlen(line);
+    cursor = newline ? newline + 1 : cursor + lineLen;
+    while (lineLen > 0 && (line[lineLen - 1] == '\r' || line[lineLen - 1] == ' ' || line[lineLen - 1] == '\t')) {
+      lineLen--;
+    }
+    if (lineLen == 0) {
+      lineNumber++;
+      continue;
+    }
+    if (seen == rowIndex) {
+      return lineNumber;
+    }
+    seen++;
+    lineNumber++;
+  }
+  return lineNumber;
+}
+
 inline ProgramParseResult prepare_program_for_mode(
     SAMOVAR_MODE mode,
     const String& text,
@@ -719,6 +750,30 @@ inline ProgramParseResult prepare_program_for_mode(
         PROGRAM_PARSE_INVALID_ROW,
         1,
         "Ошибка программы: первая строка должна задавать абсолютную мощность/напряжение (иначе колонна останется на полной мощности разгона)");
+  }
+  // [П1] Дистилляция: правило устроено иначе, чем в ректификации. run_dist_program()
+  // применяет program[i].Power не при старте строки i, а в момент, когда СРАБОТАЛО
+  // её условие (переход i -> i+1, distiller.h::run_dist_program()). Строка с
+  // Power == 0 регулятор не трогает (apply_program_power_row(0) - no-op), поэтому
+  // регулятор может оставаться в разгоне (target_power_volt == 0) сколько угодно
+  // строк подряд. Опасен именно ПЕРВЫЙ вызов apply_program_power_row() с ненулевым
+  // Power: если это поправка (|Power| <= порога), она считается от target_power_volt,
+  // который в разгоне ещё 0, и итог уходит ниже порога WORK/SLEEP - нагрев молча
+  // гаснет при PowerOn == true. Программа, где Power == 0 у ВСЕХ строк, не
+  // проверяется - разгон длится весь процесс, это штатный случай (встроенный дефолт
+  // sensorinit.h именно такой).
+  if (result.ok() && mode == SAMOVAR_DISTILLATION_MODE) {
+    for (uint8_t i = 0; i < draft.len; i++) {
+      if (draft.rows[i].Power == 0.0f) continue;
+      if (!(draft.rows[i].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
+        program_reset_draft(draft);
+        result = program_parse_result(
+            PROGRAM_PARSE_INVALID_ROW,
+            program_physical_line_for_row(text, i),
+            "Ошибка программы: первая строка с ненулевым напряжением/мощностью должна задавать абсолютное значение, а не поправку (иначе нагрев в разгоне может незаметно выключиться)");
+      }
+      break;
+    }
   }
 #endif
   return result;

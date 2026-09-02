@@ -53,6 +53,7 @@ int main() {
 '''
 
 WRAP_HARNESS = r'''
+#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -124,6 +125,10 @@ static void check(bool condition, const char* message) {
   }
 }
 
+static void check_close(float actual, float expected, const char* message) {
+  check(std::fabs(actual - expected) < 1.0f, message);
+}
+
 static void configure_predictor_before_wrap() {
   const unsigned long beforeWrap = std::numeric_limits<unsigned long>::max() - 30000UL;
   program[0] = {'T', 98.0f};
@@ -135,13 +140,36 @@ static void configure_predictor_before_wrap() {
   timePredictor.baselineValid = true;
   timePredictor.initialTemp = 80.0f;
   timePredictor.processInitialTemp = 80.0f;
-  timePredictor.lastTemp = 80.0f;
   timePredictor.startTime = beforeWrap;
   timePredictor.processStartTime = beforeWrap;
   timePredictor.lastUpdateTime = beforeWrap;
   sessionTimerValid = true;
   sessionStartTime = beforeWrap;
   fakeMillis = 10000UL;
+}
+
+// [PKG-B, П7] Строка типа 'T' на очень медленном нагреве (0.03 °C/мин - типично
+// для DS18B20 с шагом квантования 0.0625 °C сразу после закипания). Скорость
+// обязана считаться как среднее с начала СТРОКИ (currentTemp/initialTemp за
+// currentTime/startTime), а не по последнему 30-секундному окну (PREDICTOR_UPDATE_MS) -
+// короткое окно то не видит изменения совсем, то ловит один квант целиком и
+// завышает скорость в разы.
+static void configure_slow_t_row() {
+  program[0] = {'T', 98.0f};
+  ProgramNum = 0;
+  ProgramLen = 1;
+  TankSensor.avgTemp = 80.06f;
+  SamSetup.DistTemp = 100.0f;
+  timePredictor = {};
+  timePredictor.baselineValid = true;
+  timePredictor.initialTemp = 80.0f;
+  timePredictor.processInitialTemp = 80.0f;
+  timePredictor.startTime = 0UL;
+  timePredictor.processStartTime = 0UL;
+  timePredictor.lastUpdateTime = 90000UL;
+  sessionTimerValid = true;
+  sessionStartTime = 0UL;
+  fakeMillis = 120000UL;
 }
 
 int main() {
@@ -153,6 +181,13 @@ int main() {
         "process predictor must remain available when process elapsed crosses wrap");
   check(timePredictor.predictedTotalTime > timePredictor.processRemainingTime,
         "session predicted total must include elapsed time across wrap");
+
+  configure_slow_t_row();
+  updateTimePredictor();
+  check(timePredictor.rowPredictionAvailable,
+        "slow T-row: медленный нагрев (0.03 C/мин с начала строки) должен дать доступный прогноз");
+  check_close(timePredictor.remainingTime, 598.0f,
+        "slow T-row: остаток обязан считаться по средней скорости с начала строки, а не по короткому 30-секундному окну");
 
   const unsigned long finishBeforeWrap = std::numeric_limits<unsigned long>::max() - 120000UL;
   sessionTimerValid = true;
@@ -306,6 +341,22 @@ def main() -> int:
         sys.stderr.write(result.stderr)
         if result.returncode != 0:
             return result.returncode
+
+        # [PKG-B, П7] Возврат к короткому 30-секундному окну (dtMin) вместо среднего
+        # с начала строки. При очень медленном нагреве это завышает скорость в разы
+        # (см. configure_slow_t_row) и должно завалить check_close на remainingTime.
+        mutant = wrap_harness.replace(
+            "(currentTemp - timePredictor.initialTemp) / "
+            "((currentTime - timePredictor.startTime) / 60000.0f)",
+            "(currentTemp - timePredictor.initialTemp) / dtMin",
+            1,
+        )
+        if mutant == wrap_harness:
+            print("FAIL: unable to build slow T-row rate mutation", file=sys.stderr)
+            return 1
+        if compile_and_run("dist_predictor_slow_t_row_mutant", mutant).returncode == 0:
+            print("FAIL: slow T-row rate mutation survived", file=sys.stderr)
+            return 1
 
         mutant = wrap_harness.replace(
             "unsigned long dtMs = currentTime - timePredictor.lastUpdateTime;",

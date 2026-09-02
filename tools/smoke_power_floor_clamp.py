@@ -34,7 +34,7 @@ REDUCE_SIGNATURE = "inline float reduce_power_by_volts(float power, float volts)
 
 HLS_START = '#ifdef SAMOVAR_USE_SEM_AVR\n      // [T14 п.1] Нижняя граница - без неё уход ниже порога SLEEP бесшумно гасит нагрев.'
 WATER_START = 'SendMsg("Критическая температура воды! Ошибка подачи воды. "'
-WATER_END = 'set_current_power(max(target_power_volt - target_power_volt / 100 * 8, power_work_mode_threshold()));'
+WATER_END = 'set_current_power(max(mode_water_alarm_power_base() - mode_water_alarm_power_base() / 100 * 8, power_work_mode_threshold()));'
 
 COMMON_PRELUDE = r'''
 #include <iostream>
@@ -173,6 +173,10 @@ String operator+(const char* lhs, const String& rhs) {
 enum { ALARM_MSG = 0 };
 static const char* PWR_MSG = "";
 static float target_power_volt = 0.0f;
+// [П2] Заглушка mode_water_alarm_power_base() (mode_common.h) - возвращает
+// target_power_volt, чтобы смысл проверки порога (клэмп от значения рядом с
+// порогом) сохранился без затягивания сюда всей mode_common.h.
+static float mode_water_alarm_power_base() { return target_power_volt; }
 // Не static: единственный вызов лежит во вклеенном коде ниже.
 void SendMsg(const String&, int) {}
 

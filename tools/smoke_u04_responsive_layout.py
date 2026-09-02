@@ -40,7 +40,9 @@ STRUCTURE_SHA256 = {
     # 01.09.2026: подпись ползунка плотности насадки обёрнута в <span class="nowrap">,
     # а знак процента привязан к значению неразрывным пробелом - на телефоне
     # диапазон рвался как "80 % (60-" / "100)". Полей и подписей не добавлялось.
-    "setup.htm": "3952814153fd45155eaffcd97bbffa6001da1536dd78e01efcdd175751252637",
+    # 02.09.2026 (П11, пакет C): подсказка (.tooltip/.tooltiptext) у DistTemp
+    # добавлена, у UseST дополнен текст существующей подсказки.
+    "setup.htm": "2fd95d030fd74d8509411f2ae801371da568fc8384dc5a3a4ce0c83c1bef4e09",
     "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")

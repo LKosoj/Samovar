@@ -51,19 +51,21 @@ BROWSER_TEST = r'''async page => {
   const DESKTOP_GEOMETRY_TOLERANCE = 0.5;
   // 01.09.2026: полоса участка графика (две ручки вместо колёсика) выше прежней
   // полосы прокрутки на 6 px - на столько же подросли панель и форма под ней.
+  // 02.09.2026: у поля DistTemp (вкладка Main) появилась подсказка (П11) - вкладка Main
+  // и все сценарии на её основе стали выше на 18.42 px; остальные вкладки не менялись.
   const DESKTOP_GEOMETRY_BASELINE = {
-    "setup/Main": { form: {x:265,y:25,width:910,height:1395.55}, panel: {x:295,y:163,width:850,height:1183.55}, actions: {x:386,y:1346.55,width:668,height:44}, save: {x:396,y:1356.55,width:200,height:34}, return: {x:620,y:1356.55,width:200,height:34}, edit: {x:844,y:1356.55,width:200,height:34} },
+    "setup/Main": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
     "setup/Temp": { form: {x:265,y:25,width:910,height:1696.81}, panel: {x:295,y:163,width:850,height:1484.81}, actions: {x:386,y:1647.81,width:668,height:44}, save: {x:396,y:1657.81,width:200,height:34}, return: {x:620,y:1657.81,width:200,height:34}, edit: {x:844,y:1657.81,width:200,height:34} },
     "setup/Pump": { form: {x:265,y:25,width:910,height:418.69}, panel: {x:295,y:163,width:850,height:206.69}, actions: {x:386,y:369.69,width:668,height:44}, save: {x:396,y:379.69,width:200,height:34}, return: {x:620,y:379.69,width:200,height:34}, edit: {x:844,y:379.69,width:200,height:34} },
     "setup/Beer": { form: {x:265,y:25,width:910,height:669.8}, panel: {x:295,y:163,width:850,height:457.8}, actions: {x:386,y:620.8,width:668,height:44}, save: {x:396,y:630.8,width:200,height:34}, return: {x:620,y:630.8,width:200,height:34}, edit: {x:844,y:630.8,width:200,height:34} },
     "setup/NBK": { form: {x:265,y:25,width:910,height:685.8}, panel: {x:295,y:163,width:850,height:473.8}, actions: {x:386,y:636.8,width:668,height:44}, save: {x:396,y:646.8,width:200,height:34}, return: {x:620,y:646.8,width:200,height:34}, edit: {x:844,y:646.8,width:200,height:34} },
     "setup/Other": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
-    "setup/main-longest-mode": { form: {x:265,y:25,width:910,height:1395.55}, panel: {x:295,y:163,width:850,height:1183.55}, actions: {x:386,y:1346.55,width:668,height:44}, save: {x:396,y:1356.55,width:200,height:34}, return: {x:620,y:1356.55,width:200,height:34}, edit: {x:844,y:1356.55,width:200,height:34} },
+    "setup/main-longest-mode": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
     "setup/other-long-values": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
     "setup/other-empty-values": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
-    "setup/validation-error": { form: {x:265,y:25,width:910,height:1479.3}, panel: {x:295,y:246.75,width:850,height:1183.55}, actions: {x:386,y:1430.3,width:668,height:44}, save: {x:396,y:1440.3,width:200,height:34}, return: {x:620,y:1440.3,width:200,height:34}, edit: {x:844,y:1440.3,width:200,height:34} },
-    "setup/request-error": { form: {x:265,y:25,width:910,height:1479.3}, panel: {x:295,y:246.75,width:850,height:1183.55}, actions: {x:386,y:1430.3,width:668,height:44}, save: {x:396,y:1440.3,width:200,height:34}, return: {x:620,y:1440.3,width:200,height:34}, edit: {x:844,y:1440.3,width:200,height:34} },
-    "setup/visible-tooltip": { form: {x:265,y:25,width:910,height:1395.55}, panel: {x:295,y:163,width:850,height:1183.55}, actions: {x:386,y:1346.55,width:668,height:44}, save: {x:396,y:1356.55,width:200,height:34}, return: {x:620,y:1356.55,width:200,height:34}, edit: {x:844,y:1356.55,width:200,height:34} },
+    "setup/validation-error": { form: {x:265,y:25,width:910,height:1497.72}, panel: {x:295,y:246.75,width:850,height:1201.97}, actions: {x:386,y:1448.72,width:668,height:44}, save: {x:396,y:1458.72,width:200,height:34}, return: {x:620,y:1458.72,width:200,height:34}, edit: {x:844,y:1458.72,width:200,height:34} },
+    "setup/request-error": { form: {x:265,y:25,width:910,height:1497.72}, panel: {x:295,y:246.75,width:850,height:1201.97}, actions: {x:386,y:1448.72,width:668,height:44}, save: {x:396,y:1458.72,width:200,height:34}, return: {x:620,y:1458.72,width:200,height:34}, edit: {x:844,y:1458.72,width:200,height:34} },
+    "setup/visible-tooltip": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
     "chart/messages-hidden": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
     "chart/messages-short": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:47.34}, messages: {x:208,y:22,width:600,height:47.34} },
     "chart/messages-long": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:276.83}, messages: {x:208,y:22,width:600,height:276.83} },
@@ -707,7 +709,7 @@ BROWSER_TEST = r'''async page => {
     await openSetupTab(tab);
     setupTooltipTotal += await checkTooltipFit(page, "setup.htm", { name: "320x800", width: 320 }, tab);
   }
-  const SETUP_TOOLTIP_TOTAL_EXPECTED = 10;
+  const SETUP_TOOLTIP_TOTAL_EXPECTED = 11;
   if (setupTooltipTotal !== SETUP_TOOLTIP_TOTAL_EXPECTED) {
     throw new Error("tooltip-fit: setup.htm суммарно нашёл " + setupTooltipTotal +
       " подсказок по всем вкладкам, ожидалось " + SETUP_TOOLTIP_TOTAL_EXPECTED);

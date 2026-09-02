@@ -26,6 +26,7 @@ struct ModeOps {
   ModeVoidFn finish;
   ModeStatusFn status;
   ModeVoidFn buttonPressAction;  // короткое нажатие при PowerOn == true; nullptr — режим кнопку не обслуживает
+  ModeVoidFn buttonHoldAction;   // [П12] удержание при PowerOn == true; nullptr — режим удержание не обслуживает
   const char* startBusyName;     // имя режима для сообщения об занятой очереди команд
   ModeVoidFn tick;                // тик loop() пока режим активен; nullptr — режим не тикает через реестр
   ModeVoidFn stopProcess;         // принудительная остановка активного процесса (смена режима/сброс); nullptr — общий сброс статуса/питания
@@ -45,6 +46,15 @@ inline void mode_alarm_beer() {
 
 inline void mode_button_press_beer() {
   run_beer_program(ProgramNum + 1);
+}
+
+// [П12] Короткое нажатие в дистилляции переходит к следующей строке программы -
+// тот же путь, что веб-кнопка "Следующая программа" (SAMOVAR_DIST_NEXT, Samovar.ino,
+// case SAMOVAR_DIST_NEXT). Завершение процесса перенесено на удержание
+// (buttonHoldAction = distiller_finish в таблице ниже), по аналогии с тем, как у
+// пива короткое нажатие двигает программу, а не завершает её.
+inline void mode_button_press_dist() {
+  run_dist_program(ProgramNum + 1);
 }
 
 // [WP17 п.40] Раньше выбор функции тика цикла был отдельным switch(Samovar_Mode)
@@ -82,25 +92,25 @@ static_assert(SAMOVAR_LUA_MODE == 6,
 // может разойтись с фактическим размером массива.
 inline const ModeOps* mode_registry_table(size_t& count) {
   static const ModeOps ops[] = {
-    {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr, nullptr, nullptr, withdrawal, mode_stop_process_rectification, true, nullptr},
-    {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text, distiller_finish, "дистилляции", distiller_proc, distiller_finish, true, nullptr},
+    {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_STATUS_IDLE, 1, SAMOVAR_STATUS_DISTILLATION, 1, SAMOVAR_STATUS_DISTILLATION, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm, nullptr, nullptr, nullptr, nullptr, nullptr, withdrawal, mode_stop_process_rectification, true, nullptr},
+    {SAMOVAR_DISTILLATION_MODE, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, SAMOVAR_STATUS_DISTILLATION, SAMOVAR_STATUS_DISTILLATION + 1, "/distiller.htm", SAMOVAR_DISTILLATION, SAMOVAR_DIST_NEXT, check_alarm_distiller, distiller_finish, get_distiller_status_text, mode_button_press_dist, distiller_finish, "дистилляции", distiller_proc, distiller_finish, true, nullptr},
     // statusRange у ПИВА [BEER, BEER+1) - ЭТО значение SamovarStatusInt всю сессию,
     // а startvalRange [BEER, BEER+1000) - под-стадии внутри сессии (см. комментарий у полей).
-    {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text, mode_button_press_beer, "пива", mode_tick_beer, beer_finish, true, nullptr},
+    {SAMOVAR_BEER_MODE, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1000, SAMOVAR_STATUS_BEER, SAMOVAR_STATUS_BEER + 1, "/beer.htm", SAMOVAR_BEER, SAMOVAR_BEER_NEXT, mode_alarm_beer, beer_finish, get_beer_status_text, mode_button_press_beer, nullptr, "пива", mode_tick_beer, beer_finish, true, nullptr},
     // [P7 п.2] startCommand=SAMOVAR_NONE: у БК нет своего "следующая программа"/старт-действия
     // через SAMOVAR_START (это команда ректификации) - веб-экшен action=start для БК не должен
     // молча дёргать чужой (ректификационный) старт. SUVID/LUA намеренно НЕ трогаем (асимметрия).
-    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text, bk_finish, "БК", bk_proc, bk_finish, true, nullptr},
+    {SAMOVAR_BK_MODE, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, SAMOVAR_STATUS_BK, SAMOVAR_STATUS_BK + 1, "/bk.htm", SAMOVAR_BK, SAMOVAR_NONE, check_alarm_bk, bk_finish, get_bk_status_text, bk_finish, nullptr, "БК", bk_proc, bk_finish, true, nullptr},
     // [WP17 п.45] НБК управляет мощностью через регулятор (run_nbk_program в nbk.h
     // отказывает без SAMOVAR_USE_POWER) - buildAvailable завязан на тот же макрос,
     // которым сама nbk.h условно компилирует код регулятора. statusRange [NBK, NBK+1) -
     // как у ПИВА, SamovarStatusInt не меняется всю сессию, в отличие от startvalRange.
-    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text, nbk_finish, "НБК", nbk_proc, nbk_finish, SAMOVAR_NBK_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: нет регулятора мощности"},
+    {SAMOVAR_NBK_MODE, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1000, SAMOVAR_STATUS_NBK, SAMOVAR_STATUS_NBK + 1, "/nbk.htm", SAMOVAR_NBK, SAMOVAR_NBK_NEXT, mode_alarm_nbk, nbk_finish, get_nbk_status_text, nbk_finish, nullptr, "НБК", nbk_proc, nbk_finish, SAMOVAR_NBK_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: нет регулятора мощности"},
     // statusRangeLow==statusRangeHigh==0: SUVID/LUA не держат отдельного значения
     // SamovarStatusInt (остаётся IDLE всю сессию) - диапазон пуст, ни один статус ему
     // не принадлежит, mode_dispatch_loop() их не тикает (см. suvid_tick()/lua-команды).
-    {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, true, nullptr},
-    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, SAMOVAR_LUA_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: не включён Lua"},
+    {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, true, nullptr},
+    {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, SAMOVAR_LUA_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: не включён Lua"},
   };
   count = sizeof(ops) / sizeof(ops[0]);
   return ops;
@@ -279,6 +289,24 @@ inline void mode_dispatch_button_press() {
   } else {
     ops->buttonPressAction();
   }
+}
+
+// [П12] Удержание кнопки: если нагрев включён и режим обслуживает удержание -
+// выполняется собственное buttonHoldAction режима. Во всех остальных случаях
+// (нагрев выключен, либо режим не завёл своё удержание) делегируем
+// press-диспетчеру: раньше isPress() срабатывал при ЛЮБОМ касании кнопки
+// независимо от длительности, включая нагрев при !PowerOn и вызывая
+// buttonPressAction (bk_finish/nbk_finish/mode_button_press_beer) при PowerOn.
+// GyverButton гасит oneClick_f при пересечении порога удержания, поэтому без
+// делегирования долгое нажатие в режимах без buttonHoldAction (БК/НБК/Пиво)
+// молча "проглатывалось" вместо остановки нагрева.
+inline void mode_dispatch_button_hold() {
+  const ModeOps* ops = mode_ops_by_mode(Samovar_Mode);
+  if (PowerOn && ops != nullptr && ops->buttonHoldAction != nullptr) {
+    ops->buttonHoldAction();
+    return;
+  }
+  mode_dispatch_button_press();
 }
 
 inline bool mode_status_by_status(int16_t status, String& text) {

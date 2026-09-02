@@ -10,10 +10,17 @@
 в loop(), а режимные различия вынесены в два новых поля ModeOps
 (`buttonPressAction`, `startBusyName`) в mode_registry.h.
 
+[П12] Короткое нажатие в дистилляции тоже больше не завершает процесс: у неё
+теперь своя обёртка `mode_button_press_dist()` (по образцу пива), а
+`distiller_finish()` перенесён на buttonHoldAction (удержание) - см.
+smoke_mode_button_hold_dispatch.py.
+
 Тест проверяет:
   a) `mode_button_press_beer()` при включённом питании зовёт именно
-     `run_beer_program(ProgramNum + 1)`, а не `beer_finish()` - это
-     принципиальное отличие пива от DISTILLATION/BK/NBK;
+     `run_beer_program(ProgramNum + 1)`, а не `beer_finish()`, и
+     `mode_button_press_dist()` аналогично зовёт `run_dist_program(ProgramNum + 1)`,
+     а не `distiller_finish()` - это принципиальное отличие пива и дистилляции
+     от BK/NBK, где короткое нажатие завершает процесс;
   b) таблица `mode_registry_table()` несёт правильные buttonPressAction/
      startBusyName для всех четырёх режимов, и имена режимов (startBusyName)
      различны - иначе сообщение об отказе для одного режима могло бы молча
@@ -64,9 +71,29 @@ def check_beer_wrapper(source: str, errors: list[str]) -> None:
         )
 
 
+# --- (a2) mode_button_press_dist(): следующая программа, а НЕ distiller_finish() ----------
+def check_dist_wrapper(source: str, errors: list[str]) -> None:
+    try:
+        body = extract_function_body(
+            strip_cpp_comments(source), "inline void mode_button_press_dist()"
+        )
+    except ValueError as exc:
+        errors.append(str(exc))
+        return
+    if "run_dist_program(ProgramNum + 1);" not in body:
+        errors.append(
+            "mode_button_press_dist() должна звать run_dist_program(ProgramNum + 1)"
+        )
+    if "distiller_finish" in body:
+        errors.append(
+            "mode_button_press_dist() не должна звать distiller_finish() - [П12] "
+            "короткое нажатие переключает программу, завершение перенесено на удержание"
+        )
+
+
 # --- (b) таблица: buttonPressAction/startBusyName по режимам, имена различны --------------
 EXPECTED_BUTTON_FIELDS = {
-    "SAMOVAR_DISTILLATION_MODE": ("distiller_finish", '"дистилляции"'),
+    "SAMOVAR_DISTILLATION_MODE": ("mode_button_press_dist", '"дистилляции"'),
     "SAMOVAR_BEER_MODE": ("mode_button_press_beer", '"пива"'),
     "SAMOVAR_BK_MODE": ("bk_finish", '"БК"'),
     "SAMOVAR_NBK_MODE": ("nbk_finish", '"НБК"'),
@@ -423,6 +450,7 @@ def main() -> int:
 
     errors: list[str] = []
     check_beer_wrapper(source, errors)
+    check_dist_wrapper(source, errors)
     check_table_rows(source, errors)
     if errors:
         for error in errors:

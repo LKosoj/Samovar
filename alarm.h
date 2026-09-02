@@ -392,13 +392,13 @@ void check_alarm() {
 #ifdef SAMOVAR_USE_SEM_AVR
     if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
       set_buzzer(true);
-      SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)target_power_volt, ALARM_MSG);
+      SendMsg("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)mode_water_alarm_power_base(), ALARM_MSG);
       // [T14 п.1] Нижняя граница - см. симметричный клэмп в reduce_power_by_volts().
-      set_current_power(max(target_power_volt - target_power_volt / 100 * 8, power_work_mode_threshold()));
+      set_current_power(max(mode_water_alarm_power_base() - mode_water_alarm_power_base() / 100 * 8, power_work_mode_threshold()));
     }
 #else
     //Попробуем снизить напряжение регулятора на 5 вольт, чтобы исключить перегрев колонны.
-    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)target_power_volt, 5);
+    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Ошибка подачи воды. " + (String)PWR_MSG + " снижаем с " + (String)mode_water_alarm_power_base(), 5);
 #endif
 #endif
     mode_set_alarm_pause_ms(30000);

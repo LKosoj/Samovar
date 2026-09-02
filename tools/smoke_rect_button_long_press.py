@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = ROOT / "Samovar.ino"
 
 
-def extract_button_parts(source: str) -> tuple[str, str, str]:
+def extract_button_parts(source: str) -> tuple[str, str, str, str, str]:
     loop_body = strip_cpp_comments(extract_function_body(source, "void loop()"))
     button_start = loop_body.find("\n  btn.tick();")
     if button_start < 0:
@@ -25,7 +25,7 @@ def extract_button_parts(source: str) -> tuple[str, str, str]:
     if button_end < 0:
         raise ValueError("loop(): конец BTN_PIN-блока не найден")
     button_block = loop_body[button_start:button_end]
-    rect_body, _ = extract_braced_block_after(
+    rect_body, rect_end = extract_braced_block_after(
         button_block, "if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE)"
     )
     hold_body, _ = extract_braced_block_after(
@@ -34,7 +34,17 @@ def extract_button_parts(source: str) -> tuple[str, str, str]:
     click_body, _ = extract_braced_block_after(
         rect_body, "else if (mainButtonClicked)"
     )
-    return button_block, rect_body, hold_body + "\n" + click_body
+    # [П12] Ветка ДЛЯ ОСТАЛЬНЫХ режимов (не ректификация) - идёт в button_block
+    # ПОСЛЕ закрывающей скобки rect-блока (rect_end), поэтому поиск токенов
+    # начинаем с этого смещения - иначе нашёлся бы "else if (mainButtonClicked)"
+    # внутри самого rect_body (click_body выше), а не нужная нам ветка.
+    non_rect_hold_body, non_rect_hold_end = extract_braced_block_after(
+        button_block, "else if (mainButtonHeld)", rect_end
+    )
+    non_rect_click_body, _ = extract_braced_block_after(
+        button_block, "else if (mainButtonClicked)", non_rect_hold_end
+    )
+    return button_block, rect_body, hold_body + "\n" + click_body, non_rect_hold_body, non_rect_click_body
 
 
 def validate_source(source: str) -> list[str]:
@@ -44,7 +54,9 @@ def validate_source(source: str) -> list[str]:
         errors.append("setup(): удержание основной кнопки должно быть ровно 2000 мс")
 
     try:
-        button_block, rect_body, combined_action_bodies = extract_button_parts(source)
+        button_block, rect_body, combined_action_bodies, non_rect_hold_body, non_rect_click_body = (
+            extract_button_parts(source)
+        )
     except ValueError as error:
         return errors + [str(error)]
 
@@ -55,14 +67,35 @@ def validate_source(source: str) -> list[str]:
             "btn.tick();",
             "const bool mainButtonHeld = btn.isHolded();",
             "const bool mainButtonClicked = btn.isClick();",
-            "const bool mainButtonPressed = btn.isPress();",
             "if (!mode_switch_in_progress())",
             "if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE)",
-            "else if (mainButtonPressed)",
+            "} else if (mainButtonHeld) {",
+            "mode_dispatch_button_hold();",
+            "} else if (mainButtonClicked) {",
             "mode_dispatch_button_press();",
         ],
         errors,
     )
+    # [П12] Для остальных режимов удержание и короткий клик обязаны звать РАЗНЫЕ
+    # диспетчеры реестра - одного лишь порядка токенов выше недостаточно, чтобы
+    # поймать перепутывание местами (оба текста всё равно есть где-то в файле по
+    # порядку), поэтому проверяем принадлежность вызова СВОЕЙ ветке.
+    if "mode_dispatch_button_hold();" not in non_rect_hold_body:
+        errors.append(
+            "удержание вне ректификации должно звать mode_dispatch_button_hold()"
+        )
+    if "mode_dispatch_button_press();" in non_rect_hold_body:
+        errors.append(
+            "удержание вне ректификации не должно звать mode_dispatch_button_press()"
+        )
+    if "mode_dispatch_button_press();" not in non_rect_click_body:
+        errors.append(
+            "короткий клик вне ректификации должен звать mode_dispatch_button_press()"
+        )
+    if "mode_dispatch_button_hold();" in non_rect_click_body:
+        errors.append(
+            "короткий клик вне ректификации не должен звать mode_dispatch_button_hold()"
+        )
     require_ordered_tokens(
         "rectification button actions",
         rect_body,
@@ -276,6 +309,11 @@ def main() -> int:
         ),
         "calibration is skippable": source.replace(
             "          startval != SAMOVAR_STARTVAL_CALIBRATION &&\n", "", 1
+        ),
+        "non-rect hold and click calls swapped": (
+            source.replace("mode_dispatch_button_hold();", "@SWAP_TMP@", 1)
+            .replace("mode_dispatch_button_press();", "mode_dispatch_button_hold();", 1)
+            .replace("@SWAP_TMP@", "mode_dispatch_button_press();", 1)
         ),
     }
     for name, mutant in mutations.items():

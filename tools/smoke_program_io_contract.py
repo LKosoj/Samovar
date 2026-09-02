@@ -205,12 +205,14 @@ if program_io:
         body = ""
     for token in [
         "mode == SAMOVAR_RECTIFICATION_MODE",
+        "mode == SAMOVAR_DISTILLATION_MODE",
         "PROGRAM_POWER_ABS_THRESHOLD",
         "PROGRAM_PARSE_INVALID_ROW",
     ]:
-        # [Б7.2] Правило "первая строка ректификации задаёт абсолютную мощность"
-        # не должно молча потеряться при будущем рефакторинге prepare_program_for_mode().
-        require_token("prepare_program_for_mode rect-only power check", body, token)
+        # [Б7.2/П1] Правила "первая строка ректификации задаёт абсолютную мощность" и
+        # "первая ненулевая строка дистилляции задаёт абсолютную мощность" не должны
+        # молча потеряться при будущем рефакторинге prepare_program_for_mode().
+        require_token("prepare_program_for_mode power checks", body, token)
 
     try:
         body = extract_function_body(program_io, "inline bool program_parse_beer_row")

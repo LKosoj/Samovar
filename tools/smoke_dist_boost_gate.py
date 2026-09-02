@@ -15,17 +15,26 @@ BOOST продолжал греть до конца сессии.
 heater_boost_output_off() ровно один раз. Откат правки (восстановление
 `&& program[num - 1].Power != 0`) валит этот assert, так как условие снова
 станет ложным для Power == 0.
+
+[PKG-B, П4] Второй харнесс (BOIL_FRONT_HARNESS_TEMPLATE) проверяет новый гейт в
+distiller_proc(): если SamSetup.UseST == false, BOOST обязан гаситься уже по
+фронту начала кипения (boil_started && !distBoilStartedPrev), не дожидаясь
+первого перехода строки программы - иначе однострочная программа или поздний
+переход держат BOOST включённым весь процесс кипения вопреки настройке
+пользователя. Извлекается РЕАЛЬНЫЙ блок `if (boil_started && ...) { ... }` из
+distiller_proc() через extract_braced_block_after.
 """
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body
+from smoke_helpers import extract_braced_block_after, extract_function_body
 
 ROOT = Path(__file__).resolve().parents[1]
 
 SIGNATURE = "void run_dist_program(uint8_t num)"
+BOIL_FRONT_TOKEN = "if (boil_started && !distBoilStartedPrev)"
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
@@ -63,9 +72,7 @@ struct TimePredictor {
   float initialAlcohol = 0;
   float initialSteamAlcohol = 0;
   float initialTemp = 0;
-  float lastTemp = 0;
   unsigned long lastUpdateTime = 0;
-  float tempChangeRate = 0;
   float remainingTime = 0;
   float rowPredictedTotalTime = 0;
   bool rowPredictionAvailable = false;
@@ -129,6 +136,83 @@ int main() {
 }
 '''
 
+BOIL_FRONT_HARNESS_TEMPLATE = r'''
+#include <iostream>
+
+struct Sensor { float avgTemp = 0; float StartProgTemp = 0; };
+static Sensor TankSensor;
+
+struct Setup { bool UseST = true; };
+static Setup SamSetup;
+
+static bool boil_started = false;
+static bool distBoilStartedPrev = false;
+static bool distBoostGated = false;
+
+static int resetCalls = 0;
+static void resetTimePredictor() { resetCalls++; }
+
+static int boostCalls = 0;
+static void heater_boost_output_off() { boostCalls++; }
+
+static void run_boil_front_block() {
+  if (boil_started && !distBoilStartedPrev) {
+@BOIL_FRONT_BLOCK@
+  }
+  distBoilStartedPrev = boil_started;
+}
+
+static int failures = 0;
+static void check(bool condition, const char* message) {
+  if (!condition) { std::cerr << "FAIL: " << message << '\n'; failures++; }
+}
+
+static void reset_state(bool useSt, bool boostGated, bool boilStarted, bool boilStartedPrev) {
+  SamSetup.UseST = useSt;
+  distBoostGated = boostGated;
+  boil_started = boilStarted;
+  distBoilStartedPrev = boilStartedPrev;
+  resetCalls = 0;
+  boostCalls = 0;
+}
+
+int main() {
+  // Не фронт кипения (уже шёл boil_started на прошлом тике) - гейт не должен
+  // сработать вовсе, независимо от UseST. Контроль, что мы не сломали исходное
+  // условие фронта.
+  reset_state(/*useSt=*/false, /*boostGated=*/false, /*boilStarted=*/true, /*boilStartedPrev=*/true);
+  run_boil_front_block();
+  check(resetCalls == 0, "не-фронт (boil уже шёл): resetTimePredictor не должен вызываться");
+  check(boostCalls == 0, "не-фронт (boil уже шёл): BOOST не должен гаситься");
+
+  // Фронт кипения, UseST == true (пользователь хочет держать BOOST при кипении):
+  // старое поведение - гасим только переходом строки, здесь BOOST не трогаем.
+  reset_state(/*useSt=*/true, /*boostGated=*/false, /*boilStarted=*/true, /*boilStartedPrev=*/false);
+  run_boil_front_block();
+  check(resetCalls == 1, "фронт кипения обязан вызвать resetTimePredictor ровно один раз");
+  check(boostCalls == 0, "UseST == true: фронт кипения не должен гасить BOOST");
+  check(!distBoostGated, "UseST == true: distBoostGated не должен взводиться по фронту");
+
+  // Фронт кипения, UseST == false, BOOST ещё не погашен - новый гейт обязан
+  // погасить его один раз прямо по фронту, не дожидаясь перехода строки.
+  reset_state(/*useSt=*/false, /*boostGated=*/false, /*boilStarted=*/true, /*boilStartedPrev=*/false);
+  run_boil_front_block();
+  check(resetCalls == 1, "фронт кипения обязан вызвать resetTimePredictor ровно один раз");
+  check(boostCalls == 1, "UseST == false: фронт кипения обязан один раз погасить BOOST");
+  check(distBoostGated, "UseST == false: distBoostGated должен защёлкнуться по фронту");
+
+  // Фронт кипения, UseST == false, но BOOST уже погашен переходом строки раньше -
+  // повторно гасить не должны (защёлка distBoostGated).
+  reset_state(/*useSt=*/false, /*boostGated=*/true, /*boilStarted=*/true, /*boilStartedPrev=*/false);
+  run_boil_front_block();
+  check(boostCalls == 0, "UseST == false, но уже погашен переходом строки: повторного гашения быть не должно");
+
+  if (failures != 0) return 1;
+  std::cout << "distiller_proc boiling-front BOOST gate checks passed\n";
+  return 0;
+}
+'''
+
 
 def build_harness(dist_source: str) -> str:
     body = extract_function_body(dist_source, SIGNATURE)
@@ -137,11 +221,16 @@ def build_harness(dist_source: str) -> str:
     )
 
 
-def compile_and_run(harness: str) -> int:
+def build_boil_front_harness(dist_source: str) -> str:
+    block, _ = extract_braced_block_after(dist_source, BOIL_FRONT_TOKEN)
+    return BOIL_FRONT_HARNESS_TEMPLATE.replace("@BOIL_FRONT_BLOCK@", block)
+
+
+def compile_and_run(harness: str, name: str = "dist_boost_gate_test") -> int:
     with tempfile.TemporaryDirectory(prefix="samovar-dist-boost-gate-") as temp_dir:
         temp = Path(temp_dir)
-        source = temp / "dist_boost_gate_test.cpp"
-        binary = temp / "dist_boost_gate_test"
+        source = temp / f"{name}.cpp"
+        binary = temp / name
         source.write_text(harness, encoding="utf-8")
         compile_result = subprocess.run(
             ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
@@ -167,7 +256,33 @@ def main() -> int:
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
-    return compile_and_run(harness)
+    result = compile_and_run(harness)
+    if result != 0:
+        return result
+
+    try:
+        boil_front_harness = build_boil_front_harness(dist_source)
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+    result = compile_and_run(boil_front_harness, name="dist_boil_front_gate_test")
+    if result != 0:
+        return result
+
+    # [PKG-B, П4] Мутация: убираем условие UseST - гейт срабатывает всегда, даже
+    # когда пользователь явно хочет держать BOOST включённым при кипении.
+    mutant = boil_front_harness.replace(
+        "if (!SamSetup.UseST && !distBoostGated) {",
+        "if (!distBoostGated) {",
+        1,
+    )
+    if mutant == boil_front_harness:
+        print("FAIL: не удалось построить мутацию boiling-front BOOST gate", file=sys.stderr)
+        return 1
+    if compile_and_run(mutant, name="dist_boil_front_gate_mutant") == 0:
+        print("FAIL: мутация boiling-front BOOST gate пережила тест", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

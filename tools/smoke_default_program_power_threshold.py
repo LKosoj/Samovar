@@ -29,6 +29,7 @@ THRESHOLD_MARKER = "PROGRAM_POWER_ABS_THRESHOLD"
 SEM_IFDEF = "#ifdef SAMOVAR_USE_SEM_AVR"
 CASE_MARKER = "case SAMOVAR_RECTIFICATION_MODE:"
 BK_LUA_CASE_MARKER = "case SAMOVAR_BK_MODE:"
+DIST_CASE_MARKER = "case SAMOVAR_DISTILLATION_MODE:"
 
 
 def parse_thresholds(types_source: str) -> tuple[float, float]:
@@ -125,6 +126,39 @@ def parse_default_programs(sensorinit_source: str) -> tuple[str, str]:
     return sem_program, default_program
 
 
+def parse_default_dist_program(sensorinit_source: str) -> str:
+    """Возвращает литерал дефолтной программы дистилляции (case
+    SAMOVAR_DISTILLATION_MODE). В отличие от ректификации, здесь нет ветки
+    #ifdef SAMOVAR_USE_SEM_AVR - один и тот же литерал компилируется во ВСЕ
+    окружения, поэтому его нужно проверять сразу против обоих порогов ниже."""
+    case_idx = sensorinit_source.find(DIST_CASE_MARKER)
+    if case_idx < 0:
+        raise ValueError(f"case not found: {DIST_CASE_MARKER}")
+    break_idx = sensorinit_source.find("break;", case_idx)
+    if break_idx < 0:
+        raise ValueError("closing break; for DIST case not found")
+    block = sensorinit_source[case_idx:break_idx]
+    return extract_program(block, sensorinit_source)
+
+
+def dist_first_nonzero_power(program_literal: str) -> float | None:
+    """[П1] Формат строки дистилляции - Type;Speed;Capacity;Power
+    (program_io.h::dist_program_parse_spec), Power - 4-е поле (индекс 3), в
+    отличие от 6-полевой строки ректификации. Возвращает Power первой строки
+    с ненулевой мощностью, либо None, если все строки Power == 0 (штатный
+    случай - разгон длится весь процесс, дефолт sensorinit.h именно такой)."""
+    for row in program_literal.split("\\n"):
+        if not row:
+            continue
+        fields = row.split(";")
+        if len(fields) < 4:
+            raise ValueError(f"dist row has too few fields: {row!r}")
+        power = float(fields[3])
+        if power != 0:
+            return power
+    return None
+
+
 def first_row_power(program_literal: str) -> float:
     # program_literal - это C-строковый литерал как есть в исходнике, "\n" -
     # это два символа (backslash + n), а не настоящий перевод строки.
@@ -143,12 +177,14 @@ def main() -> int:
     try:
         sem_threshold, default_threshold = parse_thresholds(types_source)
         sem_program, default_program = parse_default_programs(sensorinit_source)
+        dist_program = parse_default_dist_program(sensorinit_source)
     except ValueError as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
     sem_power = first_row_power(sem_program)
     default_power = first_row_power(default_program)
+    dist_first_power = dist_first_nonzero_power(dist_program)
 
     errors = []
     if not (sem_power > sem_threshold):
@@ -159,6 +195,19 @@ def main() -> int:
         errors.append(
             f"default (KVIC/RMVK) first-row Power={default_power} must be strictly > threshold {default_threshold}"
         )
+    # [П1] Один и тот же литерал дистилляции компилируется во все окружения -
+    # проверяем против ОБОИХ порогов (SEM_AVR и остальных), как и рект-дефолты выше.
+    if dist_first_power is not None:
+        if not (dist_first_power > sem_threshold):
+            errors.append(
+                f"[П1] dist default first nonzero-power row Power={dist_first_power} "
+                f"must be strictly > SEM_AVR threshold {sem_threshold}"
+            )
+        if not (dist_first_power > default_threshold):
+            errors.append(
+                f"[П1] dist default first nonzero-power row Power={dist_first_power} "
+                f"must be strictly > default threshold {default_threshold}"
+            )
 
     if errors:
         print("Default rectification program power threshold check failed:")

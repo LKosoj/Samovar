@@ -83,9 +83,7 @@ struct TimePredictor {
   float initialAlcohol = 0;
   float initialSteamAlcohol = 0;
   float initialTemp = 0;
-  float lastTemp = 0;
   unsigned long lastUpdateTime = 0;
-  float tempChangeRate = 0;
   float remainingTime = 0;
   float rowPredictedTotalTime = 0;
   bool rowPredictionAvailable = false;

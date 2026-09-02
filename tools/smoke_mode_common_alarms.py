@@ -102,8 +102,14 @@ if mode_common:
         (
             "inline bool mode_should_close_cooling",
             [
+                "if (!modeCoolingWasPowerOn && PowerOn) tankWasHot = false;",
+                "modeHeatOffDeadline = safety_deadline_after(millis(), 3UL * 60 * 1000);",
+                "if (PowerOn && sensor_valid(TankSensor) && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP)",
+                "tankWasHot = true;",
                 "PowerOn || is_self_test || !valve_status",
-                "WaterSensor.avgTemp > closeTemp",
+                "WaterSensor.avgTemp <= closeTemp &&",
+                "!modeHeatOffDeadlineArmed || safety_deadline_expired(millis(), modeHeatOffDeadline)",
+                "tankWasHot && sensor_valid(TankSensor) && TankSensor.avgTemp < OPEN_VALVE_TANK_TEMP - 7",
                 "requireAcpCoolEnough",
                 "ACPSensor.avgTemp <= MAX_ACP_TEMP - 10",
             ],
@@ -150,13 +156,19 @@ if mode_common:
             ],
         ),
         (
+            "inline float mode_water_alarm_power_base",
+            [
+                "return target_power_volt > 0 ? target_power_volt : current_power_volt;",
+            ],
+        ),
+        (
             "inline void mode_reduce_power_for_water_alarm_by_volts",
             [
                 "#ifdef SAMOVAR_USE_POWER",
                 "WaterSensor.avgTemp >= ALARM_WATER_TEMP",
                 "set_buzzer(true);",
                 "SendMsg(alarmMessage, ALARM_MSG);",
-                "set_current_power(reduce_power_by_volts(target_power_volt, reduceVolts));",
+                "set_current_power(reduce_power_by_volts(mode_water_alarm_power_base(), reduceVolts));",
             ],
         ),
         (

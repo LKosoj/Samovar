@@ -33,8 +33,48 @@ inline bool mode_should_open_cooling(bool requirePower, bool includeAcp, bool in
   return includeTank && PowerOn && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP;
 }
 
+// [П10] Раньше клапан закрывался ТОЛЬКО по остыванию воды охлаждения ниже
+// closeTemp: летом (тёплая проточная вода) порог почти никогда не достигается -
+// клапан не закрывается вовсе; при уже холодной воде клапан захлопывается СРАЗУ
+// по команде "стоп", даже если куб ещё кипяток. Добавлена вторая, независимая
+// причина закрытия - куб остыл ниже OPEN_VALVE_TANK_TEMP - 7 (запас 7°C от
+// порога открытия, т.е. ниже 70°C), и минимальная выдержка 3 минуты с момента
+// выключения нагрева перед закрытием по одной лишь температуре воды.
+// tankWasHot взводится, ТОЛЬКО если куб реально грелся в эту сессию (PowerOn и
+// датчик валиден, и температура доходила до OPEN_VALVE_TANK_TEMP) - иначе у
+// НБК (куб физически не греется, датчик куба может быть всегда ниже 70°C)
+// критерий "куб остыл" сработал бы сразу при остановке, минуя выдержку по воде.
 inline bool mode_should_close_cooling(float closeTemp, bool requireAcpCoolEnough) {
-  if (PowerOn || is_self_test || !valve_status || WaterSensor.avgTemp > closeTemp) return false;
+  // Фронты PowerOn ловим тут же - функция и так вызывается каждый тик всеми
+  // режимами независимо от PowerOn, отдельный тикающий хук не нужен.
+  static bool modeCoolingWasPowerOn = false;
+  static uint32_t modeHeatOffDeadline = 0;
+  static bool modeHeatOffDeadlineArmed = false;
+  static bool tankWasHot = false;
+
+  if (!modeCoolingWasPowerOn && PowerOn) tankWasHot = false;
+  if (modeCoolingWasPowerOn && !PowerOn) {
+    modeHeatOffDeadline = safety_deadline_after(millis(), 3UL * 60 * 1000);
+    modeHeatOffDeadlineArmed = true;
+  }
+  if (PowerOn && sensor_valid(TankSensor) && TankSensor.avgTemp >= OPEN_VALVE_TANK_TEMP) {
+    tankWasHot = true;
+  }
+  modeCoolingWasPowerOn = PowerOn;
+
+  if (PowerOn || is_self_test || !valve_status) return false;
+  // Пока нагрев ни разу не выключался в этой сессии прошивки, modeHeatOffDeadlineArmed
+  // остаётся false - выдержка считается уже прошедшей, как и было до этой правки.
+  // Отдельный флаг (а не сравнение дедлайна с 0) нужен, потому что
+  // safety_deadline_expired() сравнивает int32-разность millis(): при "0 как
+  // сентинел не взведено" критерий ломался бы после ~24.85 суток аптайма
+  // (2^31 мс), когда millis() уже сам превысил половину диапазона uint32.
+  const bool waterCooledLongEnough =
+    WaterSensor.avgTemp <= closeTemp &&
+    (!modeHeatOffDeadlineArmed || safety_deadline_expired(millis(), modeHeatOffDeadline));
+  const bool tankCooledEnough =
+    tankWasHot && sensor_valid(TankSensor) && TankSensor.avgTemp < OPEN_VALVE_TANK_TEMP - 7;
+  if (!waterCooledLongEnough && !tankCooledEnough) return false;
   if (!requireAcpCoolEnough) return true;
   return !sensor_configured(ACPSensor) || ACPSensor.avgTemp <= MAX_ACP_TEMP - 10;
 }
@@ -98,12 +138,23 @@ inline void mode_update_water_pump_pid(float acpBoostThreshold) {
 #endif
 }
 
+#ifdef SAMOVAR_USE_POWER
+// [П2] В разгоне (SPEED) target_power_volt == 0 (уставки ещё нет - греет на
+// максимум). Взять его за базу для "понизить на N" значит всегда падать в клэмп
+// power_work_mode_threshold() одним скачком с реального максимума. Настоящая
+// база - фактическое напряжение/мощность регулятора (current_power_volt) -
+// её единица уже согласована с PWR_FACTOR/порогом для каждого бэкенда.
+inline float mode_water_alarm_power_base() {
+  return target_power_volt > 0 ? target_power_volt : current_power_volt;
+}
+#endif
+
 inline void mode_reduce_power_for_water_alarm_by_volts(const String& alarmMessage, float reduceVolts) {
 #ifdef SAMOVAR_USE_POWER
   if (WaterSensor.avgTemp >= ALARM_WATER_TEMP) {
     set_buzzer(true);
     SendMsg(alarmMessage, ALARM_MSG);
-    set_current_power(reduce_power_by_volts(target_power_volt, reduceVolts));
+    set_current_power(reduce_power_by_volts(mode_water_alarm_power_base(), reduceVolts));
   }
 #else
   (void)alarmMessage;
@@ -125,7 +176,7 @@ inline void mode_handle_water_pre_alarm_if_due() {
 
 #ifdef SAMOVAR_USE_POWER
     //Попробуем снизить мощность на 5 В/шагов регулятора, чтобы исключить перегрев колонны.
-    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)target_power_volt, 5);
+    mode_reduce_power_for_water_alarm_by_volts("Критическая температура воды! Понижаем " + (String)PWR_MSG + " с " + (String)mode_water_alarm_power_base(), 5);
 #endif
     mode_set_alarm_pause_ms(30000);
   }

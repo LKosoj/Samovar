@@ -3261,7 +3261,6 @@ void loop() {
   btn.tick();
   const bool mainButtonHeld = btn.isHolded();
   const bool mainButtonClicked = btn.isClick();
-  const bool mainButtonPressed = btn.isPress();
   if (!mode_switch_in_progress()) {
     if (Samovar_Mode == SAMOVAR_RECTIFICATION_MODE) {
       if (mainButtonHeld && PowerOn &&
@@ -3290,7 +3289,11 @@ void loop() {
           menu_switch_focus();
         }
       }
-    } else if (mainButtonPressed) {
+    } else if (mainButtonHeld) {
+      // [П12] Удержание - остановка активного процесса (buttonHoldAction), только
+      // если режим её обслуживает; короткий клик (ниже) - переход к следующему шагу.
+      mode_dispatch_button_hold();
+    } else if (mainButtonClicked) {
       mode_dispatch_button_press();
     }
   }
@@ -4139,9 +4142,6 @@ void apply_config_runtime() {
   // рабочему дефолту DEFAULT_DIST_TEMP, а не к голому новому минимуму 30: 30°C - это
   // нижняя граница поля ввода, а не осмысленная рабочая температура окончания.
   if (isnan(SamSetup.DistTemp) || SamSetup.DistTemp < 30.0f) SamSetup.DistTemp = DEFAULT_DIST_TEMP;
-  if (isnan(SamSetup.DistTimeF)) {
-    SamSetup.DistTimeF = 16;
-  }
   if (isnan(SamSetup.MaxPressureValue)) {
     SamSetup.MaxPressureValue = 0;
   }

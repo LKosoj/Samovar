@@ -210,7 +210,7 @@
 
     function getProgram () {
       var e = document.getElementById("prg");
-      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-type" class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-value" class="tooltip">Значение<span class="tooltiptext">Тип значения зависит от типа программы. Температура, абсолютное или относительное значение спиртуозности</span></label>&nbsp;<label id="distiller-program-col-container" class="tooltip">№ емкости</label><label id="distiller-program-col-power" class="tooltip">Напряжение<span class="tooltiptext">Мощность/напряжение регулятора для этой строки. 0 — не менять текущее значение (строка не трогает регулятор). Небольшое или отрицательное число — сдвиг от текущего значения, а не точная величина.</span></label></div>');
+      e.insertAdjacentHTML("afterbegin", '<div class="prgline" id="hdr"><label class="tooltip">№</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-type" class="tooltip">Тип программы</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<label id="distiller-program-col-value" class="tooltip">Значение<span class="tooltiptext">Тип значения зависит от типа программы. Температура, абсолютное или относительное значение спиртуозности</span></label>&nbsp;<label id="distiller-program-col-container" class="tooltip">№ емкости<span class="tooltiptext">Ёмкость переключается не сразу, а в момент, когда сработает условие этой строки — фактически задаёт ёмкость для следующей строки.</span></label><label id="distiller-program-col-power" class="tooltip">Напряжение<span class="tooltiptext">Мощность/напряжение регулятора применяется не всё время, пока строка активна, а в момент срабатывания её условия. 0 — не менять текущее значение (строка не трогает регулятор). Небольшое или отрицательное число — сдвиг от текущего значения, а не точная величина. Если это первая строка программы с ненулевым напряжением — она обязана быть абсолютным значением, иначе нагрев в разгоне может незаметно выключиться.</span></label></div>');
       SamovarApp.enhanceTooltips();
       var p = document.getElementById("WProgram");
       var varr = p.value.split("\n");
@@ -581,13 +581,13 @@
                   </div>
                 </li>
                 <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-                  Значение (зависит от типа программы). Температура, абсолютное или относительное значение спиртуозности
+                  Значение (зависит от типа программы): температура, абсолютное значение спиртуозности (в °) или для S/R — доля от начальной спиртуозности строго между 0 и 1, границы не включены (1 значило бы «спиртуозность не изменилась» — такая строка завершится мгновенно)
                 </li>
                 <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-                  Номер емкости для отбора
+                  Номер ёмкости — переключается не сразу, а в момент, когда сработает условие ЭТОЙ строки (фактически задаёт ёмкость для СЛЕДУЮЩЕЙ строки)
                 </li>
                 <li style="font-size: 1em; font-weight: bold; font-style: italic; margin-top: 0.9em">
-                  Напряжение отбора
+                  Напряжение — тоже применяется в момент срабатывания условия ЭТОЙ строки, а не всё время, пока она активна. 0 — не менять текущее значение регулятора. Если это ПЕРВАЯ строка программы с ненулевым напряжением — она обязана быть абсолютным значением, а не небольшой поправкой (больше 40 В; для регулятора в ваттах — больше 400 Вт), иначе нагрев в разгоне может незаметно выключиться. Значения в примере ниже — в вольтах
                 </li>
               </ul>
 
@@ -596,11 +596,11 @@
       font-size: 1.2em; font-weight: bold; background-color: var(--bg-program-example)">
                 Пример программы дистилляции:
                 <div style="font-size: 1em; font-weight: normal; font-style: normal; margin-left: 1em; padding-top: 1em;">
-                  <div>T;90;0;190</div>
-                  <div>P;10.3;2;200</div>
-                  <div>A;11.3;2;0</div>
-                  <div>S;0.5;1;160</div>
-                  <div>R;0.5;2;210</div>
+                  <div>T;90;1;190</div>
+                  <div>A;40;2;0</div>
+                  <div>P;20;3;0</div>
+                  <div>S;0.50;3;-10</div>
+                  <div>R;0.30;3;15</div>
                 </div>
               </div>
             </div>

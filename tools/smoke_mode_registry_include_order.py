@@ -20,8 +20,9 @@ mode_registry.h не подключает их - вместо этого samovar
 1. `#include "mode_registry.h"` встречается ровно один раз, и после него в
    файле не осталось никакого кода (только эта строка - последняя).
 2. Для каждого идентификатора, который реально используется в реальных телах
-   mode_registry_table/mode_alarm_beer/mode_alarm_nbk/mode_button_press_beer
-   (вытащены из mode_registry.h) и при этом ОБЪЯВЛЕН где-то в samovar_api.h -
+   mode_registry_table/mode_alarm_beer/mode_alarm_nbk/mode_button_press_beer/
+   mode_button_press_dist (вытащены из mode_registry.h) и при этом ОБЪЯВЛЕН
+   где-то в samovar_api.h -
    объявление обязано стоять РАНЬШЕ #include "mode_registry.h". Список имён
    не захардкожен - если в таблицу режимов добавят новую функцию, проверка
    сама её подхватит.
@@ -54,6 +55,11 @@ BODY_SIGNATURES = [
     "inline void mode_alarm_nbk()",
     "inline void mode_alarm_beer()",
     "inline void mode_button_press_beer()",
+    # [П12] Тот же паттерн, что mode_button_press_beer() выше: определена прямо в
+    # mode_registry.h, зовёт run_dist_program() (samovar_api.h) - должна быть
+    # включена в харнесс, чтобы проверка forward-declaration ordering реально
+    # затрагивала и её внешнюю зависимость, а не только уже перечисленные ниже.
+    "inline void mode_button_press_dist()",
     # [WP17 п.40] Per-mode helpers added alongside tick/stopProcess in ModeOps -
     # same pattern as mode_alarm_beer above: defined right here in mode_registry.h,
     # referenced by name from mode_registry_table() below. Without a real body in
@@ -81,6 +87,7 @@ struct ModeOps {
   ModeVoidFn finish;
   ModeStatusFn status;
   ModeVoidFn buttonPressAction;
+  ModeVoidFn buttonHoldAction;
   const char* startBusyName;
   ModeVoidFn tick;
   ModeVoidFn stopProcess;

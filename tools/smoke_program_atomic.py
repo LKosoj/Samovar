@@ -382,10 +382,13 @@ void test_dist_row_type_bounds() {
       {"A;100;0;0\n", false},
       {"P;50;0;0\n", true},
       {"P;100;0;0\n", false},
-      {"S;1;0;0\n", true},
+      {"S;0.999;0;0\n", true},
+      {"S;1;0;0\n", false},
       {"S;0.0001;0;0\n", true},
       {"S;0;0;0\n", false},
       {"R;0.5;0;0\n", true},
+      {"R;0.999;0;0\n", true},
+      {"R;1;0;0\n", false},
       {"R;1.5;0;0\n", false},
   };
   for (const Case& test : cases) {
@@ -522,6 +525,48 @@ void test_power_first_row_scope() {
   ProgramParseResult lua_zero = prepare_program_for_mode(
       SAMOVAR_LUA_MODE, String("H;450;0.1;1;0;0\n"), draft);
   check(lua_zero.ok(), "Lua first row with Power=0 must stay valid - Lua power is set by the script");
+
+  // [П1] Дистилляция: правило иное - не program[0], а ПЕРВАЯ строка с Power != 0.
+  // run_dist_program() применяет Power только на переходе строки (distiller.h), поэтому
+  // строки с Power==0 разрешено пропускать сколько угодно - опасен только первый
+  // ненулевой Power, если он оказывается поправкой, а не абсолютной уставкой.
+  ProgramParseResult dist_correction_first = prepare_program_for_mode(
+      SAMOVAR_DISTILLATION_MODE, String("A;80;1;-20\n"), draft);
+  check(!dist_correction_first.ok(),
+        "dist first nonzero-power row as a correction (-20) was accepted");
+  check(dist_correction_first.lineNumber == 1, "dist correction-first line number mismatch");
+
+  ProgramParseResult dist_zero_then_abs = prepare_program_for_mode(
+      SAMOVAR_DISTILLATION_MODE, String("A;80;1;0\nS;0.5;2;60\n"), draft);
+  check(dist_zero_then_abs.ok(),
+        "dist zero-power row followed by an absolute row must be accepted");
+
+  ProgramParseResult dist_zero_then_correction = prepare_program_for_mode(
+      SAMOVAR_DISTILLATION_MODE, String("A;80;1;0\nS;0.5;2;20\n"), draft);
+  check(!dist_zero_then_correction.ok(),
+        "dist zero-power row followed by a correction as first nonzero must be rejected");
+  check(dist_zero_then_correction.lineNumber == 2, "dist zero-then-correction line number mismatch");
+
+  ProgramParseResult dist_all_zero = prepare_program_for_mode(
+      SAMOVAR_DISTILLATION_MODE, String("A;80;1;0\nS;0.5;2;0\n"), draft);
+  check(dist_all_zero.ok(), "dist program with all-zero Power must stay valid (matches built-in default)");
+
+  // [П1 доп.] program_parse_lines() пропускает пустые строки, наращивая
+  // lineNumber БЕЗ увеличения индекса непустой строки - номер в сообщении
+  // обязан быть ФИЗИЧЕСКИМ номером строки текста, а не индексом draft.rows[i].
+  ProgramParseResult dist_blank_first_line = prepare_program_for_mode(
+      SAMOVAR_DISTILLATION_MODE, String("\nA;80;1;-20\n"), draft);
+  check(!dist_blank_first_line.ok(),
+        "dist correction row after a blank line must still be rejected");
+  check(dist_blank_first_line.lineNumber == 2,
+        "dist blank-first-line physical line number mismatch");
+
+  ProgramParseResult dist_no_blank_lines = prepare_program_for_mode(
+      SAMOVAR_DISTILLATION_MODE, String("A;80;1;0\nS;0.5;2;-20\n"), draft);
+  check(!dist_no_blank_lines.ok(),
+        "dist correction row (no blank lines) must be rejected");
+  check(dist_no_blank_lines.lineNumber == 2,
+        "dist no-blank-lines physical line number mismatch");
 }
 
 }  // namespace
@@ -618,6 +663,72 @@ def main() -> int:
             sys.stderr.write("FAIL: beer semantic test did not catch the mutation\n")
             return 1
         print("Beer semantic mutation was rejected as expected")
+
+        # [П1] Mutation proof: neutralize the "skip zero-power rows" guard so the
+        # first-nonzero-power check would fire on program[0] unconditionally instead
+        # of scanning for the first nonzero row - a correction-only program with a
+        # leading zero row must stop being rejected once this line is disabled.
+        mutated_p1 = (ROOT / "program_io.h").read_text(encoding="utf-8")
+        mutated_p1 = mutated_p1.replace(
+            "if (draft.rows[i].Power == 0.0f) continue;",
+            "if (true) continue;", 1,
+        )
+        (temp / "program_io.h").write_text(mutated_p1, encoding="utf-8")
+        p1_mutation_binary = temp / "program_atomic_p1_mutation_test"
+        p1_mutation_compile = subprocess.run(
+            [
+                "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                "-I", str(temp), "-I", str(ROOT), str(harness), "-o", str(p1_mutation_binary),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        if p1_mutation_compile.returncode != 0:
+            sys.stderr.write("FAIL: dist first-power-row mutation did not compile\n")
+            sys.stderr.write(p1_mutation_compile.stderr)
+            return 1
+        p1_mutation_run = subprocess.run(
+            [str(p1_mutation_binary)], capture_output=True, text=True, check=False
+        )
+        if p1_mutation_run.returncode == 0:
+            sys.stderr.write("FAIL: dist first-power-row test did not catch the mutation\n")
+            return 1
+        print("Dist first-power-row mutation was rejected as expected")
+
+        # [П1 доп.] Mutation proof: revert program_physical_line_for_row() to the
+        # original bug it replaces (rowIndex + 1, ignoring blank lines) - the
+        # blank-line test above must then see line 1 instead of line 2 and fail.
+        mutated_line_helper = (ROOT / "program_io.h").read_text(encoding="utf-8")
+        mutated_line_helper = mutated_line_helper.replace(
+            "inline uint16_t program_physical_line_for_row(const String& text, uint8_t rowIndex) {\n"
+            "  const char* cursor = text.c_str();",
+            "inline uint16_t program_physical_line_for_row(const String& text, uint8_t rowIndex) {\n"
+            "  return rowIndex + 1;\n"
+            "  const char* cursor = text.c_str();",
+            1,
+        )
+        if mutated_line_helper == (ROOT / "program_io.h").read_text(encoding="utf-8"):
+            sys.stderr.write("FAIL: line-number helper mutation target not found\n")
+            return 1
+        (temp / "program_io.h").write_text(mutated_line_helper, encoding="utf-8")
+        line_mutation_binary = temp / "program_atomic_line_mutation_test"
+        line_mutation_compile = subprocess.run(
+            [
+                "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                "-I", str(temp), "-I", str(ROOT), str(harness), "-o", str(line_mutation_binary),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        if line_mutation_compile.returncode != 0:
+            sys.stderr.write("FAIL: line-number helper mutation did not compile\n")
+            sys.stderr.write(line_mutation_compile.stderr)
+            return 1
+        line_mutation_run = subprocess.run(
+            [str(line_mutation_binary)], capture_output=True, text=True, check=False
+        )
+        if line_mutation_run.returncode == 0:
+            sys.stderr.write("FAIL: physical-line test did not catch the mutation\n")
+            return 1
+        print("Physical-line-number mutation was rejected as expected")
         return 0
 
 

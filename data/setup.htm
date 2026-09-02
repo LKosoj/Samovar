@@ -350,8 +350,8 @@
             </select>
           </div>
         </h2>
-        <h2><label for="DistTemp">Ректификация и дистилляция до температуры в кубе:</label> <input id="DistTemp" name='DistTemp' type='text' inputmode='decimal' value='%DistTemp%'>&#176;C</h2>
-        <h2 class="tooltip"><label for="DistTimeF">Время для контроля завершения процесса дистилляции:</label> <input id="DistTimeF" name='DistTimeF' type='text' inputmode='decimal' value='%DistTimeF%'> мин<span class="tooltiptext">Время в минутах для прекращению дистилляции, при условии, что значение датчика куба не меняется. Не более 255 минут. 0 - не учитывать</span></h2>
+        <h2 class="tooltip"><label for="DistTemp">Ректификация и дистилляция до температуры в кубе:</label> <input id="DistTemp" name='DistTemp' type='text' inputmode='decimal' value='%DistTemp%'>&#176;C<span class="tooltiptext">Если выключена «Использовать корректировку давления», а время контроля завершения (ниже) равно 0, на высоте заданный порог (по умолчанию 99.9&#176;C) может быть недостижим - процесс сам не остановится.</span></h2>
+        <h2 class="tooltip"><label for="DistTimeF">Время для контроля завершения процесса дистилляции:</label> <input id="DistTimeF" name='DistTimeF' type='text' inputmode='decimal' value='%DistTimeF%'> мин<span class="tooltiptext">Время в минутах для прекращению дистилляции, при условии, что значение датчика куба не меняется. Не более 255 минут. 0 - не учитывать. По умолчанию - 60 минут; при малой мощности нагрева возможно завершение при остаточных 1-3% спирта в кубе.</span></h2>
         <h2>
           <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
           <label for='usepressure'>Использовать корректировку давления</label>
@@ -551,7 +551,7 @@
       </div>
         <h2>
           <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
-          <label for='UseST' class="tooltip">Использовать разгонный тэн при кипении<span class="tooltiptext">Если используется разгонный тэн, можно использовать его в режиме кипения</span></label>
+          <label for='UseST' class="tooltip">Использовать разгонный тэн при кипении<span class="tooltiptext">Если используется разгонный тэн, можно использовать его в режиме кипения. В дистилляции: если этот флажок выключен, разгонный ТЭН гасится сразу при закипании.</span></label>
         </h2>
     </div>
 

@@ -19,8 +19,6 @@ struct TimePredictor {
     unsigned long processStartTime;    ///< Время фактического начала кипения
     float initialAlcohol;              ///< Начальное содержание спирта
     float initialTemp;                 ///< Начальная температура
-    float lastTemp;                    ///< Последняя температура
-    float tempChangeRate;              ///< Скорость изменения температуры
     unsigned long lastUpdateTime;      ///< Время последнего обновления
     float predictedTotalTime;          ///< Прогнозируемое общее время (мин)
     float remainingTime;               ///< Оставшееся время (мин)
@@ -43,13 +41,14 @@ bool sessionTimerValid = false;
 // Фронт-детектор начала кипения для перезахвата TankSensor.StartProgTemp (не static
 // внутри функции — нужен сброс между сессиями дистилляции, см. resetTimePredictor()).
 bool distBoilStartedPrev = false;
-#ifdef SAMOVAR_USE_POWER
-// [П4.4] Гейт однократного гашения BOOST-ТЭНа на первом переходе строки программы,
-// которая явно задаёт Power (программа начинает управлять мощностью сама).
-// Сбрасывается только при (пере)старте дистилляции — НЕ через resetTimePredictor(),
-// иначе флаг обнулялся бы на КАЖДОМ переходе строки.
+// [П4.4/PKG-B п.4] Гейт однократного гашения BOOST-ТЭНа: либо на первом переходе
+// строки программы, которая явно задаёт Power (run_dist_program), либо, если
+// SamSetup.UseST выключен, раньше - по фронту начала кипения (distiller_proc()).
+// Не под #ifdef SAMOVAR_USE_POWER: heater_boost_output_off() - обычная запись в
+// GPIO (RELE_CHANNEL4, power_regulator.h), доступна во всех сборках, включая
+// Samovar_no_power. Сбрасывается только при (пере)старте дистилляции — НЕ через
+// resetTimePredictor(), иначе флаг обнулялся бы на КАЖДОМ переходе строки.
 bool distBoostGated = false;
-#endif
 // Минимальные пороги, чтобы не делить на ноль и не спамить оценками
 static constexpr float MIN_TEMP_RATE = 0.01f;    // °C/мин
 static constexpr float MIN_ALC_RATE  = 0.001f;   // доля/мин
@@ -77,7 +76,27 @@ void distiller_proc() {
     
   if (SamovarStatusInt != SAMOVAR_STATUS_DISTILLATION) return;
 
-  if (!sensor_valid(TankSensor) && process_sensor_failed("Дистилляция", "куба")) return;
+  // [PKG-B, П3] До первого включения нагрева (PowerOn == false) невалидный или
+  // не назначенный датчик куба - это отказ КОМАНДЫ СТАРТА, а не авария процесса:
+  // process_sensor_failed() взводит аварийную защёлку (heater_safety_latched()),
+  // снимаемую только перезагрузкой, а нагрев ещё ни разу не включался. Отказываем
+  // тем же путём, что и остальные предусловия mode_begin_heating_session
+  // (mode_cancel_process_start) - одно сообщение и возврат в SAMOVAR_STATUS_IDLE;
+  // повторный тик не спамит, так как первая строка функции остановит выполнение
+  // по несовпадению статуса. При PowerOn == true (процесс уже идёт) - без изменений.
+  // [ревью] Если защёлка УЖЕ взведена (heater_safety_latched(), снимается только
+  // перезагрузкой), настоящая причина отказа - она, а не датчик; в этом случае
+  // не перехватываем сообщение здесь, а даём исполнению дойти до
+  // mode_begin_heating_session ниже, который штатно откажет с сообщением про
+  // защёлку (см. mode_common.h, ветки heater_safety_latched()).
+  if (PowerOn) {
+    if (!sensor_valid(TankSensor) && process_sensor_failed("Дистилляция", "куба")) return;
+  } else if (!sensor_valid(TankSensor) && !heater_safety_latched()) {
+    mode_cancel_process_start(
+        "Дистилляция не запущена: датчик куба не назначен или не отвечает. "
+        "Откройте настройки и проверьте привязку датчика куба.");
+    return;
+  }
 
   if (!PowerOn || mode_heating_start_pending(SAMOVAR_STATUS_DISTILLATION)) {
     if (mode_run_heating_start(
@@ -91,8 +110,8 @@ void distiller_proc() {
     d_s_temp_prev = WaterSensor.avgTemp;
 #ifdef SAMOVAR_USE_POWER
     heater_enable_outputs(SAFETY_HEATER_OUTPUT_BOOST);
-    distBoostGated = false;
 #endif
+    distBoostGated = false;
     // Инициализируем систему прогнозирования
     distBoilStartedPrev = false;
     resetTimePredictor();
@@ -108,6 +127,16 @@ void distiller_proc() {
   if (boil_started && !distBoilStartedPrev) {
     TankSensor.StartProgTemp = TankSensor.avgTemp;
     resetTimePredictor();
+    // [PKG-B, П4] SamSetup.UseST == false - пользователь не хочет держать разгонный
+    // ТЭН включённым во время кипения. Раньше ТЭН гасился только на первом переходе
+    // строки программы (run_dist_program, num > 0 ниже) - если программа состоит
+    // из одной строки или первый переход случается намного позже закипания, ТЭН
+    // продолжал греть вопреки настройке. Гасим по фронту кипения, если ещё не
+    // погашен переходом строки; при UseST == true поведение не меняется.
+    if (!SamSetup.UseST && !distBoostGated) {
+      heater_boost_output_off();
+      distBoostGated = true;
+    }
   }
   distBoilStartedPrev = boil_started;
 
@@ -219,9 +248,11 @@ void run_dist_program(uint8_t num) {
   // и хвосты отбора продолжали течь в ёмкость предпоследней строки.
   // num > 0 НЕ гарантирует, что num-1 - реальная строка текущей программы: помимо
   // distiller_proc() (где ProgramNum < ProgramLen), сюда приходит и
-  // SAMOVAR_DIST_NEXT из веб-интерфейса (Samovar.ino, case SAMOVAR_DIST_NEXT),
-  // который вызывает run_dist_program(ProgramNum + 1) без проверки границ - при
-  // повторном нажатии после завершения программы num-1 указывает на строку ЗА
+  // SAMOVAR_DIST_NEXT из веб-интерфейса (Samovar.ino, case SAMOVAR_DIST_NEXT), и
+  // короткое нажатие физической кнопки (mode_dispatch_button_press ->
+  // mode_button_press_dist, mode_registry.h) - оба вызывают
+  // run_dist_program(ProgramNum + 1) без проверки границ - при повторном
+  // нажатии/команде после завершения программы num-1 указывает на строку ЗА
   // пределами ProgramLen (данные от прошлой, более длинной программы, а при
   // ProgramLen == PROGRAM_MAX - вовсе за границей массива program[]). Поэтому
   // явно проверяем num - 1 < ProgramLen ниже.
@@ -255,9 +286,7 @@ void run_dist_program(uint8_t num) {
   timePredictor.initialSteamAlcohol =
       timePredictor.baselineValid ? get_steam_alcohol(TankSensor.avgTemp) : 0.0f;
   timePredictor.initialTemp = TankSensor.avgTemp;
-  timePredictor.lastTemp = TankSensor.avgTemp;
   timePredictor.lastUpdateTime = millis();
-  timePredictor.tempChangeRate = 0.0f;
   timePredictor.remainingTime = 0.0f;
   timePredictor.rowPredictedTotalTime = 0.0f;
   timePredictor.rowPredictionAvailable = false;
@@ -296,9 +325,7 @@ void resetTimePredictor() {
         boil_started ? get_steam_alcohol(TankSensor.avgTemp) : 0.0f;
     timePredictor.initialTemp = TankSensor.avgTemp;
     timePredictor.processInitialTemp = TankSensor.avgTemp;
-    timePredictor.lastTemp = TankSensor.avgTemp;
     timePredictor.lastUpdateTime = now;
-    timePredictor.tempChangeRate = 0;
     timePredictor.predictedTotalTime = 0;
     timePredictor.remainingTime = 0;
     timePredictor.processRemainingTime = 0;
@@ -348,8 +375,6 @@ void updateTimePredictor() {
     if (dtMs < PREDICTOR_UPDATE_MS) return; // считаем не чаще, чем нужно
 
     float dtMin = dtMs / 60000.0f;
-    timePredictor.tempChangeRate = (currentTemp - timePredictor.lastTemp) / dtMin; // °C/мин
-    timePredictor.lastTemp = currentTemp;
     timePredictor.lastUpdateTime = currentTime;
 
     // Обновляем прогноз по спирту (используем долю, а не %)
@@ -357,6 +382,14 @@ void updateTimePredictor() {
     float alcoholChangeRate = (dtMin > 0) ? (alcoholDelta / ((currentTime - timePredictor.startTime) / 60000.0f)) : 0; // доля/мин
     float steamAlcoholDelta = timePredictor.initialSteamAlcohol - currentSteamAlcohol;
     float steamAlcoholChangeRate = (dtMin > 0) ? (steamAlcoholDelta / ((currentTime - timePredictor.startTime) / 60000.0f)) : 0; // доля/мин (пар)
+    // [PKG-B, П7] Скорость нагрева куба - среднее с начала СТРОКИ, как у веток
+    // A/S/P/R выше, а не окно в 30 с (было: tempChangeRate). У DS18B20 шаг
+    // квантования 0.0625 °C: на медленном участке 30-секундное окно то не видит
+    // изменения совсем (оценка "сбор данных"), то ловит квант целиком и завышает
+    // скорость в разы. Среднее с начала строки сглаживает этот шум.
+    float tempChangeRateRow = (dtMin > 0)
+        ? (currentTemp - timePredictor.initialTemp) / ((currentTime - timePredictor.startTime) / 60000.0f)
+        : 0;
 
     float remaining = 0;
     const bool hasActiveRow =
@@ -374,8 +407,8 @@ void updateTimePredictor() {
         float dT = targetTemp - currentTemp;
         if (dT <= 0) {
             remaining = 0;
-        } else if (timePredictor.tempChangeRate > MIN_TEMP_RATE) {
-            remaining = dT / timePredictor.tempChangeRate;
+        } else if (tempChangeRateRow > MIN_TEMP_RATE) {
+            remaining = dT / tempChangeRateRow;
         }
     } else if (wtype == 'A' || wtype == 'S') {
         float targetAlcohol = program[ProgramNum].Speed;
