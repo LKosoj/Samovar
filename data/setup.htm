@@ -351,7 +351,7 @@
           </div>
         </h2>
         <h2 class="tooltip"><label for="DistTemp">Ректификация, дистилляция и БК до температуры в кубе:</label> <input id="DistTemp" name='DistTemp' type='text' inputmode='decimal' value='%DistTemp%'>&#176;C<span class="tooltiptext">Если выключена «Использовать корректировку давления», а время контроля завершения (ниже) равно 0, на высоте заданный порог (по умолчанию 99.9&#176;C) может быть недостижим - процесс сам не остановится.</span></h2>
-        <h2 class="tooltip"><label for="DistTimeF">Время для контроля завершения процесса дистилляции:</label> <input id="DistTimeF" name='DistTimeF' type='text' inputmode='decimal' value='%DistTimeF%'> мин<span class="tooltiptext">Время в минутах для прекращения дистилляции и работы БК, при условии, что значение датчика куба не меняется. Не более 255 минут. 0 - не учитывать. По умолчанию - 60 минут; при малой мощности нагрева возможно завершение при остаточных 1-3% спирта в кубе.</span></h2>
+        <h2 class="tooltip"><label for="DistTimeF">Время для контроля завершения процесса дистилляции:</label> <input id="DistTimeF" name='DistTimeF' type='text' inputmode='decimal' value='%DistTimeF%'> мин<span class="tooltiptext">Время в минутах для прекращения дистилляции и работы БК, при условии, что значение датчика куба не меняется. Не более 255 минут. 0 - не учитывать. По умолчанию - 60 минут; при малой мощности нагрева возможно завершение при остаточных 1-3&#37; спирта в кубе.</span></h2>
         <h2>
           <input id='usepressure' type='checkbox' name='usepressure' value='usepressure' %Checked%>
           <label for='usepressure'>Использовать корректировку давления</label>
@@ -557,13 +557,13 @@
 
     <div id="NBK" class="tabcontent" aria-hidden="true">
       <h2>Настройки НБК:</h2>
-      <h2><label for="NbkIn">Инерция:</label> <input id="NbkIn" name='NbkIn' type='text' inputmode='decimal' value='%NbkIn%'></h2>
+      <h2><label for="NbkIn" class="tooltip">Инерция:<span class="tooltiptext">Время (с), за которое колонна после изменения мощности или подачи приходит в новое устойчивое состояние. По умолчанию 180. Для густых зерновых браг и колонн с предподогревом обычно 300-600: по опыту форумов реакция на шаг занимает 5-15 минут.</span></label> <input id="NbkIn" name='NbkIn' type='text' inputmode='decimal' value='%NbkIn%'></h2>
       <h2><label for="NbkDelta">Дельта:</label> <input id="NbkDelta" name='NbkDelta' type='text' inputmode='decimal' value='%NbkDelta%'></h2>
       <h2><label for="NbkDM">Шаг мощности:</label> <input id="NbkDM" name='NbkDM' type='text' inputmode='decimal' value='%NbkDM%'></h2>
       <h2><label for="NbkDP">Шаг подачи:</label> <input id="NbkDP" name='NbkDP' type='text' inputmode='decimal' value='%NbkDP%'></h2>
       <h2><label for="NbkSteamT">Т пара:</label> <input id="NbkSteamT" name='NbkSteamT' type='text' inputmode='decimal' value='%NbkSteamT%'></h2>
-      <h2><label for="NbkOwPress">Давление захлёба:</label> <input id="NbkOwPress" name='NbkOwPress' type='text' inputmode='decimal' value='%NbkOwPress%'></h2>
-      <h2><label for="NbkTn">Т завершения (барда):</label> <input id="NbkTn" name='NbkTn' type='text' inputmode='decimal' value='%NbkTn%'>&#176;C</h2>
+      <h2><label for="NbkOwPress" class="tooltip">Давление захлёба:<span class="tooltiptext">Порог по датчику давления, при котором фиксируется захлёб. Рабочий потолок давления - половина этого значения (например, для 40 мм это 20 мм, как в руководстве ХД): выше него автоматика снижает подачу.</span></label> <input id="NbkOwPress" name='NbkOwPress' type='text' inputmode='decimal' value='%NbkOwPress%'></h2>
+      <h2><label for="NbkTn" class="tooltip">Т завершения (барда):<span class="tooltiptext">Опорная температура отжатой барды. На первой итерации Оптимизации уточняется автоматически вверх по показанию датчика (до 102&#176;C).</span></label> <input id="NbkTn" name='NbkTn' type='text' inputmode='decimal' value='%NbkTn%'>&#176;C</h2>
     </div>
 
     <div id="Other" class="tabcontent" aria-hidden="true">

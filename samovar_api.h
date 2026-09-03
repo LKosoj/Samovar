@@ -302,7 +302,7 @@ inline bool nbk_transition_active();
 inline bool nbk_transition_reports_interruption();
 void check_alarm_nbk();
 bool check_nbk_critical_alarms();
-void run_nbk_program(uint8_t num, bool workConfirmed = false);
+void run_nbk_program(uint8_t num, bool workConfirmed = false, bool optimumEntry = false);
 String get_nbk_program();
 float fromPower(float value);
 

@@ -3083,20 +3083,34 @@ static void tick_apply_pending_voltage() {
 #ifdef SAMOVAR_USE_POWER
   float voltage = 0;
   if (take_pending_value(pending_voltage_flag, pending_voltage_value, voltage)) {
-    set_current_power(voltage);
+    // [Ремонт-2026-09-02 П4] На Оптимизации/Работе НБК ручная Voltage обходит алгоритм.
+    if (nbk_manual_control_locked()) {
+      SendMsg("Ручное управление недоступно на Оптимизации и в Работе НБК.", WARNING_MSG);
+    } else {
+      set_current_power(voltage);
+    }
   }
 #endif
 }
 
 static void tick_apply_pending_nbkopt() {
   if (take_pending_flag(pending_nbkopt_flag)) {
-    if (PowerOn) {
-      nbk_Mo = nbk_M;
-      nbk_Po = nbk_P;
-#ifdef SAMOVAR_USE_POWER
-      SendMsg("Установлены оптимальные значения: " + String(fromPower(nbk_Mo), 0) + String(PWR_SIGN) + ",  " + String(nbk_Po, 1) + " л/ч", WARNING_MSG);
-#endif
+    ProgramType currentType = current_program_type();
+    // [Ремонт-2026-09-02, ревью R3] буквы S/W есть и у других режимов (стабилизация БК/дистилляции,
+    // ожидание пива) - кнопка принадлежит только НБК.
+    if (!PowerOn || SamovarStatusInt != SAMOVAR_STATUS_NBK || (currentType != 'S' && currentType != 'W')) {
+      SendMsg("Кнопка доступна только на Ручной настройке и в Работе НБК.", WARNING_MSG);
+      return;
     }
+    nbk_Mo = toPower(target_power_volt);
+    nbk_Po = nbk_actual_feed_rate();
+    if (currentType == 'W') {
+      nbk_Po_ceiling = nbk_Po; // [П10] потолок следует за новым значением
+      nbk_high_temp_ticks = 0;
+    }
+#ifdef SAMOVAR_USE_POWER
+    SendMsg("Установлены оптимальные значения: " + String(fromPower(nbk_Mo), 0) + String(PWR_SIGN) + ",  " + String(nbk_Po, 1) + " л/ч", WARNING_MSG);
+#endif
   }
 }
 
@@ -3195,7 +3209,12 @@ static void tick_apply_pending_pnbk() {
     //        обрабатывается в этом же loop раньше). Флаг сбрасываем всегда — устаревшую
     //        команду при возврате питания не исполняем.
     if (PowerOn) {
-      if (pnbk.kind == CONTROL_NBK_INCREMENT) {
+      // [Ремонт-2026-09-02 П4] На Оптимизации/Работе НБК ручная pnbk обходит алгоритм —
+      // до разбора pnbk.kind, dispatch пропускается, флаг снимается через pnbkDone=true.
+      if (nbk_manual_control_locked()) {
+        SendMsg("Ручное управление недоступно на Оптимизации и в Работе НБК.", WARNING_MSG);
+        pnbkDone = true;
+      } else if (pnbk.kind == CONTROL_NBK_INCREMENT) {
         uint16_t deltaSpeed = 0;
         NumericParseResult conversion = checked_rate_to_step_speed(
             float(SamSetup.NbkDP) + 0.0001f,

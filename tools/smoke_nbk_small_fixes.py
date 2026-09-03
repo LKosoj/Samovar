@@ -39,7 +39,14 @@ if nbk:
     require_token("[T2] Po ceiling state", nbk_code, "float nbk_Po_ceiling = 0;")
     require_token("[T2] high temp ticks counter", nbk_code, "uint8_t nbk_high_temp_ticks = 0;")
     require_token("[T3] dry steam start time", nbk_code, "uint32_t nbk_dry_steam_start_time = 0;")
-    require_token("[T8] work entry overflow pending flag", nbk_code, "bool nbk_work_entry_overflow_pending = false;")
+    # [Ремонт-2026-09-02 П1] флаг-обходной путь удалён целиком - его работу
+    # теперь делает прямой автовход run_nbk_program(num, false, true).
+    if "nbk_work_entry_overflow_pending" in nbk_code:
+        errors.append("[Ремонт-2026-09-02 П1] nbk_work_entry_overflow_pending must stay removed")
+    if "NBK_OPERATING_RANGE" in nbk_code:
+        errors.append("[Ремонт-2026-09-02] dead NBK_OPERATING_RANGE constant must stay removed")
+    if "nbk_Mo_temp" in nbk_code or "nbk_Po_temp" in nbk_code:
+        errors.append("[Ремонт-2026-09-02] dead nbk_Mo_temp/nbk_Po_temp must stay removed")
 
     try:
         run_body = extract_function_body(nbk_code, "void run_nbk_program")
@@ -109,9 +116,16 @@ if nbk:
             [
                 "if (program[num].WType == 'W') {",
                 "if (!workConfirmed) {",
-                "if (program[num].Power <= 0 || program[num].Speed <= 0) {",
-                "const float candidateM = toPower(program[num].Power);",
-                "const float candidateP = program[num].Speed;",
+                # [Ремонт-2026-09-02 П5.3] нулевая строка W разрешена, если есть
+                # сохранённые nbk_Mo/nbk_Po - составное условие вместо одиночного.
+                "if ((program[num].Power <= 0 || program[num].Speed <= 0) &&",
+                "!(nbk_Mo > 0 && nbk_Po > 0)) {",
+                "const float candidateM = program[num].Power > 0",
+                "? toPower(program[num].Power)",
+                ": nbk_Mo;",
+                "const float candidateP = program[num].Speed > 0",
+                "? program[num].Speed",
+                ": nbk_Po;",
                 "nbk_schedule_actuator_command(",
                 "true,",
                 "num))",
@@ -139,8 +153,9 @@ if nbk:
                 errors,
             )
 
-    # [T8] handle_nbk_stage_optimization: снижение ДО перехода строки, флаг подавляет
-    # полное Мо/По при входе в W
+    # [T8/П1] handle_nbk_stage_optimization: захлёб без найденного оптимума -
+    # обычный handle_overflow(finish=true); захлёб ПОСЛЕ найденного оптимума -
+    # прямой автовход в Работу (run_nbk_program(..., false, true)), а не флаг.
     try:
         # сигнатура с открывающей скобкой: у функции есть прототип в разделе
         # "Прототипы функций для этапов", extract_function_body без "{" нашёл бы его.
@@ -151,13 +166,16 @@ if nbk:
 
     if opt_body:
         require_ordered_tokens(
-            "[T8] optimization success applies overflow reduction before switching program line",
+            "[T8/П1] optimization overflow without found optimum stops; with found optimum auto-enters W",
             opt_body,
             [
-                "nbk_work_entry_overflow_pending = true;",
+                "if (overflow()) {",
+                "if (!nbk_opt_found) {",
                 "handle_overflow(",
-                '"Оптимизация завершена."',
-                "run_nbk_program(ProgramNum + 1);",
+                "} else {",
+                "run_nbk_program(ProgramNum + 1, false, true);",
+                "}",
+                "return;",
             ],
             errors,
         )
@@ -222,7 +240,6 @@ if nbk:
             errors,
         )
 
-    require_token("NBK operating range float division", nbk_code, "NBK_OPERATING_RANGE / 100.0f")
     require_token(
         "NBK work stage initializes next deadline",
         nbk_code,

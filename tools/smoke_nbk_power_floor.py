@@ -77,6 +77,12 @@ struct NbkSessionConfig { float heaterResistance; };
 // со static неиспользованный экземпляр падал бы на -Wunused-variable.
 NbkSessionConfig nbkSessionConfig = {20.0f};
 
+// [T1-2026-09-03] обучение потолка давления (не предмет этого теста, но
+// теперь вызывается из handle_overflow/handle_nbk_stage_manual/паузы) - не
+// static: не в каждом харнессе вызывается, со static падал бы на
+// -Wunused-function.
+void nbk_learn_pressure_ceiling() {}
+
 static int failures = 0;
 static void check(bool condition, const char* message) {
   if (!condition) {
@@ -120,17 +126,27 @@ static bool overflowFlag = false;
 bool overflow() { return overflowFlag; }
 const char* nbk_overflow_source() { return "ДЗ"; }
 bool manual_overflow = false;
-float nbk_P = 9.0f;
 float target_power_volt = 0.0f;
 uint16_t nbk_opt_iter = 0;
+uint16_t nbk_column_inertia = 180;
+// [Ремонт-2026-09-02 П4/П6] новые зависимости "Ручной настройки".
+static float feedRateStub = 9.0f;
+float nbk_actual_feed_rate() { return feedRateStub; }
+uint32_t nbk_manual_overflow_until = 0;
+static uint32_t fakeMillis = 1000;
+uint32_t millis() { return fakeMillis; }
+uint32_t safety_deadline_after(uint32_t now, uint32_t ms) { return now + ms; }
+bool safety_deadline_expired(uint32_t now, uint32_t deadline) { return now >= deadline; }
 
 static int scheduleCalls = 0;
 static float lastCandidateM = -1.0f;
+static float lastCandidateP = -1.0f;
 void nbk_enter_safe_wait(const String&) {}
 void SendMsg(const String&, MESSAGE_TYPE) {}
-bool nbk_schedule_actuator_command(float candidateM, float, NbkActuatorDeadlineTarget, uint32_t, uint16_t) {
+bool nbk_schedule_actuator_command(float candidateM, float candidateP, NbkActuatorDeadlineTarget, uint32_t, uint16_t) {
   scheduleCalls++;
   lastCandidateM = candidateM;
+  lastCandidateP = candidateP;
   return true;
 }
 
@@ -142,10 +158,13 @@ int main() {
   // Далеко выше порога - floor не должен ничего менять.
   overflowFlag = true; manual_overflow = false; scheduleCalls = 0; lastCandidateM = -1.0f;
   target_power_volt = power_work_mode_threshold() * 10.0f;
+  feedRateStub = 9.0f;
   handle_nbk_stage_manual();
   check(scheduleCalls == 1, "захлёб в Ручной настройке обязан отправить составную команду");
   check(lastCandidateM == toPower(target_power_volt) / 2.0f,
         "вдали от порога candidateM должен равняться toPower(target_power_volt)/2 без клэмпа");
+  check(lastCandidateP == feedRateStub / 3.0f,
+        "candidateP обязан браться из nbk_actual_feed_rate()/3, а не из фиксированной подачи");
 
   // Рядом с порогом - половина уйдёт ниже порога без клэмпа.
   overflowFlag = true; manual_overflow = false; scheduleCalls = 0; lastCandidateM = -1.0f;
@@ -169,12 +188,12 @@ bool nbk_work_in_pause = false;
 uint8_t nbk_work_pause_stage = 0;
 bool nbk_overflow_happened = false;
 bool nbk_pause_overflow_repeat_latched = false;
-bool nbk_work_entry_overflow_pending = false;
 uint32_t nbk_work_next_time = 0;
 uint16_t nbk_column_inertia = 180;
 uint16_t nbk_opt_iter = 0;
 float nbk_Mo = 0.0f;
 float nbk_Po = 5.0f;
+float nbk_Po_ceiling = 0.0f; // [П10] заполняется в extract'нутом блоке
 float nbk_P = 5.0f;
 float nbk_dM = 10.0f;
 float nbk_dP = 1.0f;
@@ -227,7 +246,6 @@ int main() {
   nbk_pause_overflow_repeat_latched = false;
   test_overflow = false;
   nbk_overflow_happened = true;
-  nbk_work_entry_overflow_pending = false;
   nbk_Mo = floorWatts + 0.5f;
   nbk_dM = 100.0f;  // заведомо большой шаг, чтобы без клэмпа Mo ушёл в отрицательные
   scheduleCalls = 0; lastM = -1.0f;
@@ -265,7 +283,9 @@ bool nbk_overflow_happened = false;
 bool nbk_pause_overflow_repeat_latched = true;
 uint16_t nbk_opt_iter = 0;
 float nbk_Mo = 0.0f;
-float nbk_P = 9.0f;
+// [Ремонт-2026-09-02 П4] реальная подача насоса вместо фиксированного nbk_P.
+static float feedRateStub = 9.0f;
+float nbk_actual_feed_rate() { return feedRateStub; }
 
 const char* nbk_overflow_source() { return "ДЗ"; }
 void SendMsg(const String&, MESSAGE_TYPE) {}

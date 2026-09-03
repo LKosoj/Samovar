@@ -25,6 +25,10 @@ HARNESS = r'''
 #define NBK_DM_DEFAULT 100
 #define NBK_DP_DEFAULT 0.5
 #define NBK_TP_DEFAULT 81
+// [Ремонт-2026-09-02 П16] та же константа, что в nbk.h - вне тела
+// nbk_capture_session_config(), extraction её не подхватывает.
+static constexpr float NBK_MAINS_VOLTAGE_CAP __attribute__((unused)) = 230.0f;
+template <typename T> T min(T a, T b) { return a < b ? a : b; } // Arduino-подобный шаблон
 
 struct SetupProbe {
   float NbkIn;
@@ -154,8 +158,10 @@ int main() {
             near(nbkSessionConfig.steamTempLimit, 95) &&
             near(nbkSessionConfig.mainsVoltage, 240) &&
             near(nbkSessionConfig.heaterResistance, 20) &&
-            near(nbkSessionConfig.maxPower, 2880),
-        "следующая сессия должна получить независимый snapshot B");
+            // [Ремонт-2026-09-02 П16] MainsVoltage=240 клэмпится до 230 В: 230²/20=2645
+            // (без клэмпа было бы 240²/20=2880).
+            near(nbkSessionConfig.maxPower, 2645),
+        "следующая сессия должна получить независимый snapshot B (maxPower клэмпится 230В)");
 
   SetupProbe invalid = config_a();
   invalid.NbkIn = 1;
@@ -250,6 +256,7 @@ int main() {
 START_ROUTE_HARNESS = r'''
 #include <cstdint>
 #include <iostream>
+#include <string>
 
 enum ActuatorCommandResult {
   ACTUATOR_COMMAND_ACCEPTED,
@@ -261,6 +268,20 @@ static constexpr int16_t SAMOVAR_STARTVAL_IDLE = 0;
 static constexpr int16_t SAMOVAR_STARTVAL_NBK_START = 4000;
 static constexpr int16_t SAMOVAR_STARTVAL_NBK_RUNNING = 4001;
 
+// Минимальный String - те же требования, что и в smoke_nbk_cancel_program_start.py.
+class String {
+public:
+  String() : data_() {}
+  String(const char* s) : data_(s ? s : "") {}
+  String operator+(const String& other) const { return String((data_ + other.data_).c_str()); }
+  const std::string& str() const { return data_; }
+private:
+  std::string data_;
+};
+static String operator+(const char* lhs, const String& rhs) {
+  return String((std::string(lhs ? lhs : "") + rhs.str()).c_str());
+}
+
 static bool nbk_safe_waiting = false;
 static bool nbk_safe_wait_feed_stopped = false;
 static ActuatorCommandResult nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
@@ -268,6 +289,21 @@ static int16_t startval = SAMOVAR_STARTVAL_IDLE;
 static ActuatorCommandResult tickResult = ACTUATOR_COMMAND_FAILED;
 static int tickCalls = 0;
 static int captureCalls = 0;
+static int cancelCalls = 0;
+static std::string lastCancelMessage;
+// [Ремонт-2026-09-02 П7] Новые зависимости retry-ветки nbk_proc(): этот харнесс
+// проверяет только САМ факт retry+cancel (см. main()), причино-специфичные
+// тексты ("насос" vs "нагрев") и PowerOn/SetSpeed-ветвление - зона отдельного
+// smoke_nbk_safe_wait_restart.py, здесь не дублируется.
+static bool PowerOn = false;
+static bool power_transition_active() { return false; }
+static ActuatorCommandResult SetSpeed(float) { return ACTUATOR_COMMAND_APPLIED; }
+static void set_power(bool, bool) {}
+static void nbk_cancel_program_start(const String& message) {
+  cancelCalls++;
+  lastCancelMessage = message.str();
+  startval = SAMOVAR_STARTVAL_IDLE; // как реальный nbk_cancel_program_start -> mode_cancel_process_start
+}
 struct CommandProbe { bool active; };
 static CommandProbe nbkActuatorCommand = {false};
 
@@ -299,34 +335,40 @@ static void reset(ActuatorCommandResult result, int16_t requestedStart) {
   tickResult = result;
   tickCalls = 0;
   captureCalls = 0;
+  cancelCalls = 0;
+  lastCancelMessage.clear();
 }
 
 int main() {
   reset(ACTUATOR_COMMAND_APPLIED, SAMOVAR_STARTVAL_NBK_START);
   nbk_proc_start_route();
-  check(tickCalls == 1 && captureCalls == 1,
-        "APPLIED safe-stop обязан возобновить capture/start ровно один раз");
+  check(tickCalls == 1 && captureCalls == 1 && cancelCalls == 0,
+        "APPLIED safe-stop обязан возобновить capture/start ровно один раз без retry");
   check(!nbk_safe_waiting && !nbk_safe_wait_feed_stopped &&
             nbk_safe_wait_result == ACTUATOR_COMMAND_FAILED &&
             startval == SAMOVAR_STARTVAL_NBK_RUNNING,
         "APPLIED safe-stop обязан очистить wait-state перед запуском");
 
+  // [Ремонт-2026-09-02 П7] Раньше PENDING/FAILED на повторном нажатии молча
+  // возвращались (tickCalls==1, ничего не отменялось). Теперь делается ОДНА
+  // повторная попытка (tickCalls==2) и, если она тоже не APPLIED, явная отмена
+  // старта (cancelCalls==1) вместо тишины.
   reset(ACTUATOR_COMMAND_PENDING, SAMOVAR_STARTVAL_NBK_START);
   nbk_proc_start_route();
-  check(tickCalls == 1 && captureCalls == 0 && nbk_safe_waiting &&
-            startval == SAMOVAR_STARTVAL_NBK_START,
-        "PENDING safe-stop не должен запускать НБК или очищать wait-state");
+  check(tickCalls == 2 && captureCalls == 0 && cancelCalls == 1 &&
+            nbk_safe_waiting && startval == SAMOVAR_STARTVAL_IDLE,
+        "PENDING safe-stop обязан сделать повторную попытку и явно отменить старт");
 
   reset(ACTUATOR_COMMAND_FAILED, SAMOVAR_STARTVAL_NBK_START);
   nbk_proc_start_route();
-  check(tickCalls == 1 && captureCalls == 0 && nbk_safe_waiting &&
-            startval == SAMOVAR_STARTVAL_NBK_START,
-        "FAILED safe-stop не должен запускать НБК или очищать wait-state");
+  check(tickCalls == 2 && captureCalls == 0 && cancelCalls == 1 &&
+            nbk_safe_waiting && startval == SAMOVAR_STARTVAL_IDLE,
+        "FAILED safe-stop обязан сделать повторную попытку и явно отменить старт");
 
   reset(ACTUATOR_COMMAND_APPLIED, SAMOVAR_STARTVAL_NBK_RUNNING);
   nbk_proc_start_route();
-  check(tickCalls == 1 && captureCalls == 0 && nbk_safe_waiting,
-        "APPLIED без повторной START-команды не должен покидать safe-wait");
+  check(tickCalls == 1 && captureCalls == 0 && cancelCalls == 0 && nbk_safe_waiting,
+        "APPLIED без повторной START-команды не должен покидать safe-wait и не должен ретраить");
   return failures == 0 ? 0 : 1;
 }
 '''
@@ -447,7 +489,7 @@ def nbk_start_route_errors(source: str) -> list[str]:
             errors.append("старт НБК блокируется до захвата snapshot")
 
         run_program = extract_function_body(
-            source, "void run_nbk_program(uint8_t num, bool workConfirmed) {"
+            source, "void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {"
         )
         capture = "if (!nbk_capture_session_config())"
         running = "if (num == 0 && startval == SAMOVAR_STARTVAL_NBK_START)"
@@ -517,7 +559,7 @@ def main() -> int:
         "void handle_nbk_stage_manual() {",
         "void handle_nbk_stage_optimization() {",
         "void handle_nbk_stage_work() {",
-        "void run_nbk_program(uint8_t num, bool workConfirmed) {",
+        "void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {",
     )
     for signature in function_names:
         try:
@@ -569,6 +611,13 @@ def main() -> int:
         source.replace(
             "return sqrtf(value * nbkSessionConfig.heaterResistance);",
             "return sqrtf(value * SamSetup.HeaterResistant);",
+            1,
+        ),
+        # [Ремонт-2026-09-02 П16] снимаем клэмп 230В - без него config_b() (240В)
+        # даёт maxPower=2880 вместо ожидаемых 2645.
+        source.replace(
+            "min(nbkSessionConfig.mainsVoltage, NBK_MAINS_VOLTAGE_CAP)",
+            "nbkSessionConfig.mainsVoltage",
             1,
         ),
     ))

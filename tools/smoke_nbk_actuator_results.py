@@ -152,6 +152,10 @@ static uint32_t nbk_opt_next_time = 17;
 static uint32_t nbk_work_next_time = 18;
 static uint8_t ProgramNum = 2;
 static uint8_t nbk_high_temp_ticks = 4;
+// [T1-2026-09-03] счётчик тиков высокого давления - коммит обязан сбрасывать
+// его так же, как nbk_high_temp_ticks (тот же блок 1.5).
+static uint8_t nbk_high_pressure_ticks = 5;
+static uint8_t nbk_work_pause_stage = 9; // сентинел: нетронут вне commitKeepsOptimum
 static bool nbk_pause_overflow_repeat_latched = true;
 static bool nbk_work_in_pause = true;
 static bool nbk_overflow_happened = true;
@@ -196,7 +200,8 @@ inline bool nbk_schedule_actuator_command(
     uint32_t nextDelayMs,
     uint16_t iteration,
     bool commitProgram = false,
-    uint8_t candidateProgramNum = 0) {
+    uint8_t candidateProgramNum = 0,
+    bool commitKeepsOptimum = false) {
 @SCHEDULE_BODY@
 }
 inline void tick_nbk_actuator_command() {
@@ -224,8 +229,10 @@ static void reset_fixture() {
   nbk_opt_next_time = 17; nbk_work_next_time = 18;
   ProgramNum = 2;
   nbk_high_temp_ticks = 4;
+  nbk_high_pressure_ticks = 5;
   nbk_pause_overflow_repeat_latched = true;
   nbk_work_in_pause = true;
+  nbk_work_pause_stage = 9;
   nbk_overflow_happened = true;
   nbk_safe_waiting = false;
   nbk_safe_wait_feed_stopped = false;
@@ -266,6 +273,30 @@ int main() {
   check(ProgramNum == 3 && nbk_Mo == 900 && nbk_Po == 6 &&
             nbk_Po_ceiling == 6,
         "подтверждённый W должен коммитить строку и optimum");
+  check(!nbk_work_in_pause,
+        "коммит без commitKeepsOptimum обязан снять паузу (nbk_work_in_pause=false)");
+
+  // [Ремонт-2026-09-02 П1] commitKeepsOptimum=true: коммит переводит Работу в
+  // паузу автовхода и НЕ переписывает nbk_Mo/nbk_Po кандидатами (в отличие от
+  // сценария выше, где commitKeepsOptimum не передан).
+  reset_fixture();
+  check(nbk_schedule_actuator_command(
+            555, 3, NBK_ACTUATOR_WORK_DEADLINE, 4000, 21, true, 5, true),
+        "keepsOptimum-команда должна быть принята");
+  powerStartResult = ACTUATOR_COMMAND_APPLIED;
+  tick_nbk_actuator_command();
+  check(!nbkActuatorCommand.active && nbk_M == 555 && nbk_P == 3,
+        "keepsOptimum обязан всё равно подтвердить М/П приводов");
+  check(ProgramNum == 5 && nbk_Mo == 13 && nbk_Po == 14,
+        "commitKeepsOptimum НЕ должен переписывать nbk_Mo/nbk_Po кандидатами");
+  check(nbk_work_in_pause && nbk_work_pause_stage == 1,
+        "commitKeepsOptimum обязан перевести Работу в паузу stage=1");
+  check(!nbk_overflow_happened && !nbk_pause_overflow_repeat_latched,
+        "commitKeepsOptimum обязан снять флаги захлёба/повторного захлёба");
+  check(nbk_Po_ceiling == nbk_Po && nbk_high_temp_ticks == 0,
+        "commitKeepsOptimum обязан синхронизировать потолок По и сбросить счётчик");
+  check(nbk_high_pressure_ticks == 0,
+        "commit обязан сбросить счётчик тиков высокого давления так же, как temp");
 
   reset_fixture();
   check(nbk_schedule_actuator_command(
@@ -474,6 +505,51 @@ def main() -> int:
     fsm = fsm.replace("@SCHEDULE_BODY@", schedule.replace("\r\n", "\n"))
     fsm = fsm.replace("@TICK_BODY@", tick.replace("\r\n", "\n"))
     if compile_and_run(fsm, "samovar-nbk-actuator-fsm-") != 0:
+        return 1
+
+    # [Ремонт-2026-09-02 П1] Мутация: снять "!" - меняет местами ветки
+    # commitKeepsOptimum. Ломает ОБА новых assert'а: обычный коммит (Mo/Po
+    # ожидались перезаписанными) больше их не перезапишет, а keepsOptimum-коммит
+    # (Mo/Po ожидались нетронутыми) теперь их перезапишет.
+    commit_keeps_optimum_mutation = tick.replace(
+        "if (!nbkActuatorCommand.commitKeepsOptimum) {",
+        "if (nbkActuatorCommand.commitKeepsOptimum) {",
+        1,
+    )
+    if commit_keeps_optimum_mutation == tick:
+        print("FAIL: commitKeepsOptimum Mo/Po mutation anchor missing", file=sys.stderr)
+        return 1
+    mutated_fsm = FSM_HARNESS
+    mutated_fsm = mutated_fsm.replace("@STATE_BODY@", state_body.replace("\r\n", "\n"))
+    mutated_fsm = mutated_fsm.replace("@RESET_BODY@", reset.replace("\r\n", "\n"))
+    mutated_fsm = mutated_fsm.replace("@SCHEDULE_BODY@", schedule.replace("\r\n", "\n"))
+    mutated_fsm = mutated_fsm.replace(
+        "@TICK_BODY@", commit_keeps_optimum_mutation.replace("\r\n", "\n")
+    )
+    if compile_and_run(mutated_fsm, "samovar-nbk-actuator-fsm-mutation-", False) == 0:
+        print("FAIL: commitKeepsOptimum Mo/Po mutation survived", file=sys.stderr)
+        return 1
+
+    # Отдельная мутация: коммит с keepsOptimum перестаёт ставить паузу/stage=1
+    # (только nbk_work_in_pause/stage, Mo/Po-ветка не мутирована).
+    pause_stage_mutation = tick.replace(
+        "nbk_work_in_pause = nbkActuatorCommand.commitKeepsOptimum;\n"
+        "    if (nbkActuatorCommand.commitKeepsOptimum) nbk_work_pause_stage = 1;",
+        "nbk_work_in_pause = false;",
+        1,
+    )
+    if pause_stage_mutation == tick:
+        print("FAIL: commitKeepsOptimum pause/stage mutation anchor missing", file=sys.stderr)
+        return 1
+    mutated_pause_fsm = FSM_HARNESS
+    mutated_pause_fsm = mutated_pause_fsm.replace("@STATE_BODY@", state_body.replace("\r\n", "\n"))
+    mutated_pause_fsm = mutated_pause_fsm.replace("@RESET_BODY@", reset.replace("\r\n", "\n"))
+    mutated_pause_fsm = mutated_pause_fsm.replace("@SCHEDULE_BODY@", schedule.replace("\r\n", "\n"))
+    mutated_pause_fsm = mutated_pause_fsm.replace(
+        "@TICK_BODY@", pause_stage_mutation.replace("\r\n", "\n")
+    )
+    if compile_and_run(mutated_pause_fsm, "samovar-nbk-actuator-fsm-pause-mutation-", False) == 0:
+        print("FAIL: commitKeepsOptimum pause/stage mutation survived", file=sys.stderr)
         return 1
 
     safe_wait = SAFE_WAIT_HARNESS

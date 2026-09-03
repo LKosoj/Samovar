@@ -50,7 +50,10 @@ STRUCTURE_SHA256 = {
     # добавлена, у UseST дополнен текст существующей подсказки.
     # 02.09.2026 (задача A3, п.5/6): текст метки DistTemp и текст подсказки
     # DistTimeF изменились (упоминание БК) - структура тегов та же.
-    "setup.htm": "0d11a34cf1c5bfc3030f4b507ce4ccad65e67841e900f61636c4ed13198cab84",
+    # 03.09.2026 (НБК, T6): у "Инерция"/"Давление захлёба"/"Т завершения (барда)"
+    # появились class="tooltip" на <label> и <span class="tooltiptext"> - структура
+    # и текст изменились штатно.
+    "setup.htm": "6cb4683d0b97336b49fb5de0418764598a323c16e0c85ea30980cfa4831e0254",
     "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")

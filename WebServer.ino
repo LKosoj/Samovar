@@ -12,11 +12,6 @@
 #include "program_io.h"
 #include "runtime_helpers.h"
 
-extern float nbk_M;
-extern float nbk_Mo;
-extern float nbk_P;
-extern float nbk_Po;
-
 const AsyncWebParameter* get_request_param(AsyncWebServerRequest *request, const char *name);
 static uint8_t request_param_count(AsyncWebServerRequest *request, const char *name);
 bool is_valid_samovar_mode(long mode);

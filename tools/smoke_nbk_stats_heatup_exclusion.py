@@ -60,6 +60,9 @@ static uint8_t ProgramNum = 0;
 
 float nbk_P = 0;
 uint16_t nbk_opt_iter = 0;
+// [Ремонт-2026-09-02 П6] латч захлёба Ручной настройки не должен доживать до нового входа в S.
+bool manual_overflow = false;
+uint32_t nbk_manual_overflow_until = 0;
 enum NbkActuatorDeadlineTarget : uint8_t {
   NBK_ACTUATOR_NO_DEADLINE = 0,
 };
@@ -129,8 +132,15 @@ static void test_no_heatup_leak_for(uint32_t stale_gap_ms) {
   ProgramNum = 0;
   scheduleCalls = 0;
   stepperTargetCalls = 0;
+  // "Застрявший" латч захлёба от предыдущей сессии Ручной настройки.
+  manual_overflow = true;
+  nbk_manual_overflow_until = fakeMillis + 999999UL;
 
   enter_s_stage();
+  check(!manual_overflow,
+        "РЕГРЕСС [П6]: вход в S обязан сбросить латч захлёба прошлой Ручной настройки");
+  check(nbk_manual_overflow_until == 0,
+        "РЕГРЕСС [П6]: вход в S обязан обнулить дедлайн латча захлёба");
   check(scheduleCalls == 1, "вход в S обязан принять одну составную команду");
   check(stepperTargetCalls == 0,
         "ACCEPTED не должен применять насос до подтверждения регулятора");

@@ -7,10 +7,18 @@ nbk_Mo/nbk_Po на первой паузе - раньше это держало�
 был ещё false, и условие "if (workrun)" пропускало снижение именно в том
 единственном случае, где оно было нужнее всего: первый захлёб прямо в
 Работе. Снижение включалось лишь начиная со ВТОРОГО захлёба в той же сессии
-Работы - отсюда и баг "первый захлёб не снижает параметры". Единственный
-случай, который и должен был быть исключением из снижения на первой паузе -
-захлёб в конце Оптимизации, откуда flag nbk_work_entry_overflow_pending
-выставляется явно.
+Работы - отсюда и баг "первый захлёб не снижает параметры".
+
+[Ремонт-2026-09-02 П1] Промежуточный костыль nbk_work_entry_overflow_pending
+(одноразовый флаг, подавлявший повторное снижение после захлёба в конце
+Оптимизации) УДАЛЁН целиком. Теперь единственный исключительный случай -
+автовход из Оптимизации прямо в Работу с уже сниженными Мо/По - НЕ проходит
+через эту паузу вообще: run_nbk_program(num, false, true) коммитит через
+commitKeepsOptimum и переводит W сразу в паузу stage=1 с nbk_overflow_happened
+уже сброшенным в false (см. smoke_nbk_actuator_results.py, кейс
+commitKeepsOptimum). Поэтому здесь остаётся только один контракт:
+nbk_overflow_happened=true -> снижение на dM/10, dP/10 и сброс флага в false;
+nbk_overflow_happened=false -> снижения нет.
 
 Тест вытаскивает РЕАЛЬНЫЙ фрагмент из handle_nbk_stage_work() (nbk.h) -
 снижение Mo/Po на nbk_work_pause_stage==1 - через extract_braced_block_after
@@ -25,8 +33,8 @@ from smoke_helpers import extract_braced_block_after
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ANCHOR = "if (nbk_overflow_happened && !nbk_work_entry_overflow_pending) {"
-TAIL_STMT = "nbk_work_entry_overflow_pending = false;"
+ANCHOR = "if (nbk_overflow_happened) {"
+TAIL_STMT = "nbk_overflow_happened = false;"
 
 HARNESS_TEMPLATE = r'''
 #include <iostream>
@@ -37,7 +45,6 @@ static double nbk_Po = 0;
 static double nbk_dM = 0;
 static double nbk_dP = 0;
 static bool nbk_overflow_happened = false;
-static bool nbk_work_entry_overflow_pending = false;
 
 static void run_reduction_fragment() {
 @FRAGMENT@
@@ -52,36 +59,20 @@ static void check(bool condition, const std::string& message) {
 }
 
 int main() {
-  // --- РЕГРЕСС: первый захлёб ПРЯМО в Работе (не унаследованный из
-  // Оптимизации) обязан снизить Mo/Po на первой же паузе. ---
+  // --- РЕГРЕСС: первый захлёб ПРЯМО в Работе обязан снизить Mo/Po на первой
+  // же паузе (без промежуточного флага, который раньше мог это подавить). ---
   nbk_Mo = 1000; nbk_Po = 10;
   nbk_dM = 100; nbk_dP = 1;
   nbk_overflow_happened = true;
-  nbk_work_entry_overflow_pending = false;
   run_reduction_fragment();
   check(nbk_Mo == 990, "первый захлёб в Работе обязан снизить Mo на dM/10");
   check(nbk_Po == 9.9, "первый захлёб в Работе обязан снизить Po на dP/10");
   check(!nbk_overflow_happened, "флаг захлёба обязан сброситься после обработки паузы");
-  check(!nbk_work_entry_overflow_pending, "флаг входа из Оптимизации обязан остаться false, если уже был false");
-
-  // --- Оптимизация завершилась захлёбом -> переход в Работу -> первая пауза:
-  // снижение уже применено в конце Оптимизации, здесь повторного снижения
-  // быть не должно (это тот самый случай, который флаг обязан подавить). ---
-  nbk_Mo = 500; nbk_Po = 5;
-  nbk_dM = 100; nbk_dP = 1;
-  nbk_overflow_happened = true;  // пауза после захлёба, но снижение уже сделано в Оптимизации
-  nbk_work_entry_overflow_pending = true;
-  run_reduction_fragment();
-  check(nbk_Mo == 500, "переход из Оптимизации после захлёба НЕ должен снижать Mo повторно");
-  check(nbk_Po == 5, "переход из Оптимизации после захлёба НЕ должен снижать Po повторно");
-  check(!nbk_work_entry_overflow_pending, "одноразовый флаг обязан потребиться (стать false) после первой же паузы");
 
   // --- Второй и последующие захлёбы В ТОМ ЖЕ запуске (после первого, уже
-  // обработанного) обязаны снижать Mo/Po каждый раз - флаг больше не мешает,
-  // он одноразовый. ---
+  // обработанного) обязаны снижать Mo/Po каждый раз. ---
   nbk_Mo = 990; nbk_Po = 9.9;
   nbk_overflow_happened = true;
-  nbk_work_entry_overflow_pending = false;  // уже потреблён на первом захлёбе
   run_reduction_fragment();
   check(nbk_Mo == 980, "второй захлёб в том же запуске тоже обязан снижать Mo");
   check(std::abs(nbk_Po - 9.8) < 1e-9, "второй захлёб в том же запуске тоже обязан снижать Po");
@@ -94,13 +85,12 @@ int main() {
   // быть не должно (регресс: не привязываем к любой паузе без разбора). ---
   nbk_Mo = 700; nbk_Po = 7;
   nbk_overflow_happened = false;
-  nbk_work_entry_overflow_pending = false;
   run_reduction_fragment();
   check(nbk_Mo == 700, "пауза без захлёба не должна снижать Mo");
   check(nbk_Po == 7, "пауза без захлёба не должна снижать Po");
 
   if (failures != 0) return 1;
-  std::cout << "nbk work-entry overflow-pending reduction behaviour checks passed\n";
+  std::cout << "nbk work first-overflow reduction behaviour checks passed\n";
   return 0;
 }
 '''
@@ -114,14 +104,13 @@ def build_harness() -> str:
     if tail_end < 0:
         raise ValueError("tail reset statement not found right after the reduction block")
     between = nbk_source[tail_start:tail_end]
-    # Между "}" снижения и сбросом nbk_work_entry_overflow_pending должна
-    # быть только строка сброса nbk_overflow_happened (плюс комментарии) -
-    # без этого гарантия "фрагмент = именно эти три инструкции" не работает.
-    if "nbk_overflow_happened = false;" not in between:
-        raise ValueError("nbk_overflow_happened reset not found between reduction and pending reset")
+    # Между "}" снижения и сбросом nbk_overflow_happened не должно быть
+    # ничего, кроме пробелов/комментариев - без этого гарантия "фрагмент =
+    # именно эти инструкции" не работает.
+    if between.strip(" \t\r\n"):
+        raise ValueError("unexpected statements between reduction block and its flag reset")
     tail_stmt_end = tail_end + len(TAIL_STMT)
-    fragment = "if (nbk_overflow_happened && !nbk_work_entry_overflow_pending) {" + \
-        body + "}" + nbk_source[tail_start:tail_stmt_end]
+    fragment = ANCHOR + body + "}" + nbk_source[tail_start:tail_stmt_end]
 
     harness = HARNESS_TEMPLATE.replace("@FRAGMENT@", fragment)
     harness = harness.replace(
@@ -136,7 +125,7 @@ def main() -> int:
         print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    with tempfile.TemporaryDirectory(prefix="samovar-nbk-work-entry-pending-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="samovar-nbk-work-first-overflow-reduction-") as temp_dir:
         temp = Path(temp_dir)
         source = temp / "test.cpp"
         binary = temp / "test"

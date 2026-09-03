@@ -26,10 +26,16 @@ enum ActuatorCommandResult : uint8_t {
 enum NbkActuatorDeadlineTarget : uint8_t {
   NBK_ACTUATOR_WORK_DEADLINE = 2,
 };
+// [Ремонт-2026-09-02 П1] та же константа, что Samovar_ini.h/nbk.h.
+#define NBK_MULT_PAUSE_OVERFLOW 2
+template <typename T> T max(T a, T b) { return a > b ? a : b; } // Arduino-подобный шаблон
 class String {
  public:
   String(const char* value = "") : value_(value ? value : "") {}
   String(float value, int) : value_(std::to_string(value)) {}
+  void reserve(size_t) {}
+  String& operator+=(const char* text) { value_ += (text ? text : ""); return *this; }
+  String& operator+=(const String& other) { value_ += other.value_; return *this; }
   String operator+(const String& rhs) const { return String(value_ + rhs.value_); }
  private:
   explicit String(const std::string& value) : value_(value) {}
@@ -60,6 +66,17 @@ static bool scheduledCommit = false;
 static uint8_t scheduledProgram = 255;
 static float scheduledM = -1;
 static float scheduledP = -1;
+// [Ремонт-2026-09-02 П1] новые зависимости автовхода optimumEntry.
+static float nbk_Mo = 0;
+static float nbk_Po = 0;
+static float feedRateStub = 0;
+// [T1] причина автовхода по давлению (текст сообщения здесь не собирается - нет SAMOVAR_USE_POWER).
+static bool nbk_opt_entry_by_pressure = false;
+static bool scheduledKeepsOptimum = false;
+static uint32_t scheduledDelay = 0;
+static NbkActuatorDeadlineTarget scheduledDeadlineTarget = NBK_ACTUATOR_WORK_DEADLINE;
+float nbk_actual_feed_rate() { return feedRateStub; }
+float power_work_mode_threshold() { return 10.0f; }
 
 void nbk_enter_safe_wait(const String&) {
   safeWaitCalls++;
@@ -77,21 +94,25 @@ float toPower(float value) { return value * 2.0f; }
 bool nbk_schedule_actuator_command(
     float power,
     float speed,
-    NbkActuatorDeadlineTarget,
-    uint32_t,
+    NbkActuatorDeadlineTarget deadlineTarget,
+    uint32_t delayMs,
     uint16_t,
     bool commit,
-    uint8_t programNum) {
+    uint8_t programNum,
+    bool commitKeepsOptimum = false) {
   scheduleCalls++;
   scheduledM = power;
   scheduledP = speed;
   scheduledCommit = commit;
   scheduledProgram = programNum;
+  scheduledKeepsOptimum = commitKeepsOptimum;
+  scheduledDelay = delayMs;
+  scheduledDeadlineTarget = deadlineTarget;
   return true;
 }
 void SendMsg(const String&, MESSAGE_TYPE) {}
 
-static void run_w(uint8_t num, bool workConfirmed) {
+static void run_w(uint8_t num, bool workConfirmed, bool optimumEntry = false) {
 @BODY@
 }
 static int failures = 0;
@@ -116,12 +137,59 @@ static void reset_fixture() {
   scheduledProgram = 255;
   scheduledM = -1;
   scheduledP = -1;
+  nbk_Mo = 0;
+  nbk_Po = 0;
+  feedRateStub = 0;
+  scheduledKeepsOptimum = false;
+  scheduledDelay = 0;
+  scheduledDeadlineTarget = NBK_ACTUATOR_WORK_DEADLINE;
 }
 int main() {
   reset_fixture();
   run_w(1, false);
   check(safeWaitCalls == 1 && scheduleCalls == 0,
         "автоматический O->W обязан перейти в safe-wait без команды приводам");
+
+  // [Ремонт-2026-09-02 П1] optimumEntry: автовход в Работу с найденным оптимумом.
+  reset_fixture();
+  nbk_Mo = 1000;
+  nbk_Po = 6;
+  feedRateStub = 9;
+  run_w(1, false, true);
+  check(safeWaitCalls == 0 && scheduleCalls == 1,
+        "optimumEntry с Мо/По>0 должен принять одну команду без safe-wait");
+  check(scheduledM == 500 && scheduledP == 3 && scheduledCommit &&
+            scheduledProgram == 1 && scheduledKeepsOptimum,
+        "optimumEntry обязан считать М=max(Мо/2, порог), П=реальная подача/3, commitKeepsOptimum=true");
+  check(scheduledDeadlineTarget == NBK_ACTUATOR_WORK_DEADLINE &&
+            scheduledDelay == uint32_t(NBK_MULT_PAUSE_OVERFLOW) * nbk_column_inertia * 1000,
+        "optimumEntry обязан планировать WORK_DEADLINE с паузой MULT*Ин");
+
+  // Другое Мо доказывает, что М реально берёт max(), а не всегда Мо/2.
+  reset_fixture();
+  nbk_Mo = 20;
+  nbk_Po = 6;
+  feedRateStub = 9;
+  run_w(1, false, true);
+  check(scheduleCalls == 1 && scheduledM == 20,
+        "optimumEntry обязан поднять М до порога, если Мо/2 ниже него");
+
+  reset_fixture();
+  run_w(1, false, true);
+  check(safeWaitCalls == 1 && scheduleCalls == 0,
+        "optimumEntry без сохранённого оптимума (Мо=0) обязан уйти в safe-wait без команды");
+
+  // [Ремонт-2026-09-02 П5.3] явный W с нулями в строке берёт сохранённые nbk_Mo/nbk_Po
+  // напрямую, без повторного toPower().
+  reset_fixture();
+  program[1] = {'W', 0, 0};
+  nbk_Mo = 800;
+  nbk_Po = 4;
+  run_w(1, true);
+  check(safeWaitCalls == 0 && scheduleCalls == 1,
+        "явный W с нулями в строке, но сохранённым Мо/По, обязан принять команду");
+  check(scheduledM == 800 && scheduledP == 4 && !scheduledKeepsOptimum,
+        "явный W с нулями обязан взять именно nbk_Mo/nbk_Po без повторного toPower()");
 
   reset_fixture();
   program[1].Power = 0;
@@ -198,13 +266,21 @@ def main() -> int:
             1,
         ),
         source.replace(
-            "if (program[num].Power <= 0 || program[num].Speed <= 0) {",
-            "if (false && (program[num].Power <= 0 || program[num].Speed <= 0)) {",
+            "if ((program[num].Power <= 0 || program[num].Speed <= 0) &&\n"
+            "        !(nbk_Mo > 0 && nbk_Po > 0)) {",
+            "if (false) {",
             1,
         ),
         source.replace(
             "            true,\n            num))",
             "            false,\n            num))",
+            1,
+        ),
+        # [Ремонт-2026-09-02 П1] снимаем проверку сохранённого оптимума перед
+        # автовходом optimumEntry — без неё Мо=0 не должен уходить в safe-wait.
+        source.replace(
+            "if (nbk_safe_waiting || !PowerOn || !(nbk_Mo > 0) || !(nbk_Po > 0)) {",
+            "if (nbk_safe_waiting || !PowerOn) {",
             1,
         ),
     )

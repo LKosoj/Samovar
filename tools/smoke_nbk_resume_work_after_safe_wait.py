@@ -368,12 +368,12 @@ bool nbk_work_in_pause = false;
 uint8_t nbk_work_pause_stage = 0;
 bool nbk_overflow_happened = false;
 bool nbk_pause_overflow_repeat_latched = false;
-bool nbk_work_entry_overflow_pending = false;
 uint32_t nbk_work_next_time = 0;
 uint16_t nbk_column_inertia = 180;
 uint16_t nbk_opt_iter = 0;
 float nbk_Mo = 100.0f;
 float nbk_Po = 5.0f;
+float nbk_Po_ceiling = 0.0f; // [П10] заполняется в extract'нутом блоке
 float nbk_P = 5.0f;
 float nbk_dM = 10.0f;
 float nbk_dP = 1.0f;
@@ -405,6 +405,11 @@ void nbk_enter_safe_wait(const String&) { enterSafeWaitCalls++; }
 
 static int sendMsgCalls = 0;
 void SendMsg(const String&, MESSAGE_TYPE) { sendMsgCalls++; }
+
+// [T1-2026-09-03] обучение потолка давления (не предмет этого теста, но
+// теперь вызывается на каждом тике повтора захлёба в паузе, внутри блока
+// PAUSE_ANCHOR).
+void nbk_learn_pressure_ceiling() {}
 
 static void run_pause_tick() {
   if (nbk_work_in_pause) {

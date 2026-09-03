@@ -73,7 +73,7 @@ samovar = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
 
 try:
     run_body = extract_function_body(
-        nbk, "void run_nbk_program(uint8_t num, bool workConfirmed) {"
+        nbk, "void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {"
     )
 except ValueError as error:
     errors.append(str(error))

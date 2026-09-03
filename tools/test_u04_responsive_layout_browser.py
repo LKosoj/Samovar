@@ -697,11 +697,13 @@ BROWSER_TEST = r'''async page => {
   }
   // setup.htm: 320px по всем вкладкам (широкий экран для первого тултипа Main уже
   // проверен выше самой 168-матрицей, сценарий setup/*/visible-tooltip).
-  // Не у каждой вкладки есть подсказки (Temp/Pump/NBK - вообще без .tooltip в разметке),
+  // Не у каждой вкладки есть подсказки (Temp/Pump - вообще без .tooltip в разметке),
   // поэтому здесь требуем не "не ноль на каждой вкладке", а точную сумму по всем
   // вкладкам сразу - так и легитимно пустые вкладки не мешают, и потеря покрытия
   // (например, если openSetupTab перестанет открывать нужную панель) не спрячется
   // за одной непустой вкладкой Main.
+  // 03.09.2026 (НБК, T6): у NBK появились 3 подсказки (Инерция/Давление захлёба/
+  // Т завершения (барда)) - вкладка больше не пустая, сумма 11 -> 14.
   await page.setViewportSize({ width: 320, height: 800 });
   let setupTooltipTotal = 0;
   for (const tab of setupTabs) {
@@ -709,7 +711,7 @@ BROWSER_TEST = r'''async page => {
     await openSetupTab(tab);
     setupTooltipTotal += await checkTooltipFit(page, "setup.htm", { name: "320x800", width: 320 }, tab);
   }
-  const SETUP_TOOLTIP_TOTAL_EXPECTED = 11;
+  const SETUP_TOOLTIP_TOTAL_EXPECTED = 14;
   if (setupTooltipTotal !== SETUP_TOOLTIP_TOTAL_EXPECTED) {
     throw new Error("tooltip-fit: setup.htm суммарно нашёл " + setupTooltipTotal +
       " подсказок по всем вкладкам, ожидалось " + SETUP_TOOLTIP_TOTAL_EXPECTED);

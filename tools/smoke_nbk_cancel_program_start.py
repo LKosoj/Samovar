@@ -132,7 +132,12 @@ def build_harness(mode_common_source: str, nbk_source: str) -> str:
     bodies = []
     body = extract_function_body(mode_common_code, FUNCTIONS[0])
     bodies.append(f"{FUNCTIONS[0]} {{{body}}}")
-    body = extract_function_body(nbk_code, FUNCTIONS[1])
+    # [Ремонт-2026-09-02 П7] nbk.h теперь содержит forward-declaration
+    # nbk_cancel_program_start с тем же текстом сигнатуры (нужна nbk_proc() до
+    # определения). Без "{" naive-поиск extract_function_body находит прототип
+    # (оканчивается на ";") и хватает СЛЕДУЮЩУЮ "{" в файле - это тело
+    # nbk_pressure_stale(), не эта функция. Ищем именно определение.
+    body = extract_function_body(nbk_code, FUNCTIONS[1] + " {")
     bodies.append(f"{FUNCTIONS[1]} {{{body}}}")
 
     harness = HARNESS_TEMPLATE.replace("@FUNCTIONS@", "\n\n".join(bodies))

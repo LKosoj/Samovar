@@ -25,12 +25,16 @@ struct { // Структура для статистики
 #define NBK_DM_DEFAULT 100 // шаг регулирования мощности
 #define NBK_DP_DEFAULT 0.5 // шаг регулирования подачи
 #define NBK_TP_DEFAULT 81 // предельная Т пара
-#define NBK_OPERATING_RANGE 100 // отладочная, процент использования Mo и Po из оптимизации при переходе в работу.
 #define NBK_HIGH_TB_HOLD_TICKS 3 // сколько тиков подряд Тб выше Тн+dT нужно выдержать перед повышением По (задача 2)
+#define NBK_TN_AUTOCAL_MAX 102.0f // [Тарировка Тн] верхняя граница уточнения Тн по датчику барды на 1-й итерации O
+#define NBK_SPILL_DT_MULT 3 // [Пролив] порог пролива: Тн − 3·dT
 // Параметры из Samovar_ini.h
 // #define NBK_MULT_PAUSE_OVERFLOW 2 // Количество инерций в качестве паузы после захлёба
 // #define USE_NBK_DELTA_PRESSURE // Включение коррекции температуры барды по давлению в бардоотводчике
 // #define NBK_PUMP_LIMIT 30 // максимальная производительность насоса браги для Оптимизации, л/ч
+// #define NBK_WORK_PRESSURE_RATIO 0.5f // [T1-2026-09-03] доля от давления захлёба
+// #define NBK_PRESSURE_MARGIN 5 // [T1-2026-09-03] отступ вниз от давления захлёба при обучении
+// #define USE_NBK_END_BY_STEAM_RISE // NBK_END_STEAM_RISE — доп. признак конца браги по росту Тп
 
 uint16_t nbk_column_inertia = NBK_COLUMN_INERTIA_DEFAULT; // Инерция колонны (Ин)
 float nbk_overflow_pressure = NBK_OVERFLOW_PRESSURE_DEFAULT; // Давление захлёба (Дз)
@@ -56,25 +60,32 @@ uint16_t nbk_opt_iter = 0;
 uint32_t nbk_opt_next_time = 0;
 uint32_t time_speed = 0; // для подсчета литража
 bool nbk_opt_in_progress = false;
+bool nbk_opt_found = false; // [П5.2/П13] найден ли оптимум хотя бы на одной итерации O
+bool nbk_tn_autocal_done = false; // [Тарировка Тн] однократное уточнение nbkSessionConfig.tankTemp на каждый заход в O
 // === Переменные для этапа работы ===
 uint32_t nbk_work_next_time = 0;
 uint32_t nbk_overheat_start_time = 0;
 bool nbk_work_in_pause = false;
 uint8_t nbk_work_pause_stage = 0;
-float nbk_Mo_temp = 0,
-      nbk_Po_temp = 0; // временное хранилище на случай пропуска оптимизации
 bool manual_overflow = false; // флаг начавшегося захлёба в работе
+uint32_t nbk_manual_overflow_until = 0; // [Ремонт-2026-09-02 П6] защёлка держится минимум MULT*Ин после снижения на Ручной настройке
 bool noDZ_message_sent = false; // флаг сообщения об отсутствии ДЗ
 bool nbk_overflow_happened = false; // флаг: в текущей паузе после захлёба (stage W) снижение Mo/Po ещё не применялось
 bool nbk_pause_overflow_repeat_latched = false; // [T1] подавление повторных SendMsg о захлёбе в паузе W
 float nbk_Po_ceiling = 0; // [T2] потолок повышающей коррекции подачи в Работе
 uint8_t nbk_high_temp_ticks = 0; // [T2] счётчик тиков подряд с Тб выше Тн+dT
+float nbk_pressure_ceiling = 0; // [T1-2026-09-03] рабочий потолок давления, мм (сессия, ОЗУ)
+uint8_t nbk_high_pressure_ticks = 0; // [T1-2026-09-03] счётчик тиков/итераций подряд с давлением ≥ потолка
+bool nbk_opt_entry_by_pressure = false; // [T1] автовход O→W вызван давлением — run_nbk_program включает причину в единственное сообщение; оба вызова с optimumEntry выставляют флаг явно (ранние return в run_nbk_program его не трогают)
 uint32_t nbk_dry_steam_start_time = 0; // [T3] отсчёт времени перегрева пара на Ручной настройке
 uint32_t nbk_pressure_stale_start_time = 0; // [П7] отсчёт устойчивой потери показаний ДД
-bool nbk_work_entry_overflow_pending = false; // [T8] вход в Работу сразу после захлёба в конце Оптимизации
 bool nbk_safe_waiting = false;
 bool nbk_safe_wait_feed_stopped = false;
 ActuatorCommandResult nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
+#ifdef USE_NBK_END_BY_STEAM_RISE
+float nbk_steam_min = 0; // [T4] минимум Тп в Работе (не в паузе) с начала текущей сессии; 0 = ещё не зафиксирован
+uint32_t nbk_steam_rise_start = 0; // [T4] millis() начала устойчивого роста Тп >= минимум + NBK_END_STEAM_RISE; 0 = не идёт
+#endif
 
 struct NbkSessionConfig {
   bool valid;
@@ -117,6 +128,13 @@ inline void nbk_capture_runtime_input_validity(
   nbkMainsVoltageInputValid = mainsVoltage > 0 && mainsVoltage < 1000;
 }
 
+// [Ремонт-2026-09-02 П16] Тот же предел 230 В, что жёстко зашит в клэмпе регулятора
+// мощности (power_regulator.h:788,791) - там нет именованной константы, а заводить
+// общую ради одного числа НБК не стали (не трогаем чужой файл). Без клэмпа завышенный
+// SamSetup.MainsVoltage (опечатка/неверный ввод) завышал бы верхний предел мощности
+// НБК (nbkSessionConfig.maxPower) сверх реально возможного по сети.
+static constexpr float NBK_MAINS_VOLTAGE_CAP = 230.0f;
+
 inline bool nbk_capture_session_config() {
   const float heaterResistance = SamSetup.HeaterResistant;
   // [П70в] Раньше все 12 полей сворачивались в один configValid - оператор
@@ -150,8 +168,8 @@ inline bool nbk_capture_session_config() {
   nbkSessionConfig.steamTempLimit = SamSetup.NbkSteamT;
   nbkSessionConfig.mainsVoltage = SamSetup.MainsVoltage;
   nbkSessionConfig.heaterResistance = heaterResistance;
-  nbkSessionConfig.maxPower = nbkSessionConfig.mainsVoltage *
-      nbkSessionConfig.mainsVoltage / nbkSessionConfig.heaterResistance;
+  const float cappedMainsVoltage = min(nbkSessionConfig.mainsVoltage, NBK_MAINS_VOLTAGE_CAP);
+  nbkSessionConfig.maxPower = cappedMainsVoltage * cappedMainsVoltage / nbkSessionConfig.heaterResistance;
   nbkSessionConfig.valid = true;
   return true;
 }
@@ -206,6 +224,7 @@ void handle_nbk_stage_optimization();
 void handle_nbk_stage_work();
 void handle_overflow(const String& msg, bool finish = true, uint32_t pause_ms = 0, bool graceful = false);
 inline bool nbk_close_data_log();
+inline void nbk_cancel_program_start(const String& message); // [Ремонт-2026-09-02 П7] нужен для nbk_proc() выше её определения
 
 // [П7] «Несвежие» показания ДД — порог 10 подряд неудач, как у температурных
 // датчиков (sensor_reading_valid в alarm.h). pressure_err_count наращивается
@@ -231,6 +250,22 @@ inline bool nbk_close_data_log();
 //   по всему, это намеренное fail-safe поведение для этой конфигурации.
 inline bool nbk_pressure_stale() {
   return pressure_err_count > 10;
+}
+
+inline bool nbk_pressure_above_ceiling() { // [T1-2026-09-03] без ДД/при несвежих данных — всегда false, алгоритм не меняется
+  return use_pressure_sensor && pressure_value >= 0 && !nbk_pressure_stale() &&
+         nbk_pressure_ceiling > 0 && pressure_value >= nbk_pressure_ceiling;
+}
+
+inline void nbk_learn_pressure_ceiling() { // [T1-2026-09-03] предзахлёб: опускаем потолок по факту реального захлёба
+  if (!use_pressure_sensor || pressure_value < 0 || nbk_pressure_stale()) return;
+  const float floorCeiling = nbkSessionConfig.overflowPressure * NBK_WORK_PRESSURE_RATIO / 2.0f;
+  float candidate = pressure_value - NBK_PRESSURE_MARGIN;
+  if (candidate < floorCeiling) candidate = floorCeiling; // нижняя граница — половина стартового потолка
+  if (candidate < nbk_pressure_ceiling) {
+    nbk_pressure_ceiling = candidate;
+    SendMsg("Потолок давления снижен до " + String(nbk_pressure_ceiling, 0) + " мм (захлёб при " + String(pressure_value, 0) + " мм)", NOTIFY_MSG);
+  }
 }
 
 bool overflow(){
@@ -259,6 +294,19 @@ inline const char* nbk_overflow_source() {
     if (pressure_value >= nbk_overflow_pressure) return "ДД";
   }
   return "?";
+}
+
+// [Ремонт-2026-09-02 П12] Доступен ли хоть один детектор захлёба. SamSetup.UseHLS НЕ
+// гейтит ДЗ (проверено: overflow()/head_level_sensor_holded() смотрят только на макрос
+// USE_HEAD_LEVEL_SENSOR) - поэтому при собранном макросе ДЗ считается доступным. ДД
+// доступен, если инициализация нашла датчик (use_pressure_sensor) и есть хоть одно
+// показание (pressure_value >= 0; -1 - код "нет данных" из sensorinit.h).
+inline bool nbk_overflow_detection_available() {
+  bool hasLevelSensor = false;
+#ifdef USE_HEAD_LEVEL_SENSOR
+  hasLevelSensor = true;
+#endif
+  return hasLevelSensor || (use_pressure_sensor && pressure_value >= 0);
 }
 
 ActuatorCommandResult SetSpeed(float Speed) { // Прокладка для подсчета статистики
@@ -320,6 +368,7 @@ struct NbkActuatorCommandState {
   NbkActuatorDeadlineTarget deadlineTarget;
   bool commitProgram;
   uint8_t candidateProgramNum;
+  bool commitKeepsOptimum; // [П1] true = коммит переводит W в паузу автовхода, не переписывая nbk_Mo/nbk_Po
 };
 
 static NbkActuatorCommandState nbkActuatorCommand = {};
@@ -369,7 +418,8 @@ inline bool nbk_schedule_actuator_command(
     uint32_t nextDelayMs,
     uint16_t iteration,
     bool commitProgram = false,
-    uint8_t candidateProgramNum = 0) {
+    uint8_t candidateProgramNum = 0,
+    bool commitKeepsOptimum = false) {
   if (nbkActuatorCommand.active ||
       !(candidateM >= 0.0f) ||
       !(candidateP >= 0.0f)) {
@@ -387,6 +437,7 @@ inline bool nbk_schedule_actuator_command(
   nbkActuatorCommand.deadlineTarget = deadlineTarget;
   nbkActuatorCommand.commitProgram = commitProgram;
   nbkActuatorCommand.candidateProgramNum = candidateProgramNum;
+  nbkActuatorCommand.commitKeepsOptimum = commitKeepsOptimum;
   return true;
 }
 
@@ -442,12 +493,16 @@ inline void tick_nbk_actuator_command() {
   }
   if (nbkActuatorCommand.commitProgram) {
     ProgramNum = nbkActuatorCommand.candidateProgramNum;
-    nbk_Mo = nbkActuatorCommand.candidateM;
-    nbk_Po = nbkActuatorCommand.candidateP;
-    nbk_Po_ceiling = nbk_Po;
+    if (!nbkActuatorCommand.commitKeepsOptimum) {
+      nbk_Mo = nbkActuatorCommand.candidateM;
+      nbk_Po = nbkActuatorCommand.candidateP;
+    }
+    nbk_Po_ceiling = nbk_Po; // [П10] потолок всегда синхронизирован с текущим nbk_Po
     nbk_high_temp_ticks = 0;
+    nbk_high_pressure_ticks = 0; // [T1-2026-09-03] после коммита начинаем счёт заново
     nbk_pause_overflow_repeat_latched = false;
-    nbk_work_in_pause = false;
+    nbk_work_in_pause = nbkActuatorCommand.commitKeepsOptimum;
+    if (nbkActuatorCommand.commitKeepsOptimum) nbk_work_pause_stage = 1;
     nbk_overflow_happened = false;
     nbk_safe_waiting = false;
     nbk_safe_wait_feed_stopped = false;
@@ -483,9 +538,49 @@ bool nbk_stage_sensors_valid(ProgramType wtype) {
   return true;
 }
 
+// [Ремонт-2026-09-02 П4] Ручные Voltage/pnbk не должны обходить алгоритм НБК на
+// Оптимизации и в Работе - исполнители в Samovar.ino (tick_apply_pending_voltage/
+// tick_apply_pending_pnbk) проверяют этот предикат перед применением команды и
+// отклоняют её, если он true.
+inline bool nbk_manual_control_locked() {
+  return SamovarStatusInt == SAMOVAR_STATUS_NBK &&
+      startval >= SAMOVAR_STARTVAL_NBK_RUNNING &&
+      (current_program_type() == 'O' || current_program_type() == 'W');
+}
+
+// [Ремонт-2026-09-02 П4] Реальная текущая подача насоса (л/ч), а не последнее
+// заданное значение nbk_P - используется там, где нужна фактическая скорость
+// шагового насоса (снижение на 1/3 при захлёбе на Ручной настройке и в
+// handle_overflow()).
+inline float nbk_actual_feed_rate() {
+  return i2c_get_liquid_rate_by_step(get_stepper_speed());
+}
+
 void nbk_proc() { //главный цикл НБК
   if (nbk_safe_waiting) {
     tick_nbk_safe_wait();
+    // [Ремонт-2026-09-02 П7] Раньше при неподтверждённом останове (результат не APPLIED)
+    // повторное нажатие "Включить нагрев" просто возвращалось из цикла и НИЧЕГО не
+    // повторяло - обычный tick_nbk_safe_wait() опрашивает состояние, но не переотправляет
+    // команды останова. Теперь на каждый такой такт делаем ОДНУ попытку довести останов
+    // до конца, а если не получилось - явно отменяем попытку старта вместо тишины.
+    if (startval == SAMOVAR_STARTVAL_NBK_START &&
+        nbk_safe_wait_result != ACTUATOR_COMMAND_APPLIED &&
+        !power_transition_active()) {
+      if (!nbk_safe_wait_feed_stopped) {
+        nbk_safe_wait_feed_stopped = SetSpeed(0) == ACTUATOR_COMMAND_APPLIED;
+      }
+      if (PowerOn) set_power(false, false);
+      tick_nbk_safe_wait();
+      if (nbk_safe_wait_result != ACTUATOR_COMMAND_APPLIED) {
+        nbk_cancel_program_start(
+            "Перезапуск НБК невозможен: " +
+            String(nbk_safe_wait_feed_stopped
+                ? "нагрев ещё не выключен"
+                : "насос не подтвердил останов"));
+        return;
+      }
+    }
     if (startval != SAMOVAR_STARTVAL_NBK_START ||
         nbk_safe_wait_result != ACTUATOR_COMMAND_APPLIED) {
       return;
@@ -573,7 +668,8 @@ void handle_nbk_stage_heatup() {
 void handle_nbk_stage_manual() { //Если захлёб, выводим сообщение "Захлёб колонны!", М=1/2, П=1/3 (оставляем от подачи треть, половиним мощность).
   bool hasOverflow = overflow();
   if (hasOverflow && !manual_overflow) {
-      const float candidateP = nbk_P / 3;
+      nbk_learn_pressure_ceiling(); // [T1-2026-09-03] handle_overflow() здесь не зовётся — обучаем явно
+      const float candidateP = nbk_actual_feed_rate() / 3; // [Ремонт-2026-09-02 П4] реальная подача насоса
       // [T14 п.1] Нижняя граница в ваттном домене НБК - симметрично волюм. клэмпу.
       const float candidateM = max(toPower(target_power_volt) / 2, toPower(power_work_mode_threshold()));
       if (!nbk_schedule_actuator_command(
@@ -587,10 +683,18 @@ void handle_nbk_stage_manual() { //Если захлёб, выводим соо�
         return;
       }
       manual_overflow = true;
+      // [Ремонт-2026-09-02 П6] Защёлка держится минимум MULT*Ин после снижения -
+      // симметрично паузе после захлёба в Оптимизации/Работе, а не снимается мгновенно
+      // по первому же сухому такту.
+      nbk_manual_overflow_until = safety_deadline_after(
+          millis(), uint32_t(NBK_MULT_PAUSE_OVERFLOW) * nbk_column_inertia * 1000);
       SendMsg("Захлёб по " + String(nbk_overflow_source()) + ". Подача 1/3, мощность 1/2.", ALARM_MSG);
       vTaskDelay(200 / portTICK_PERIOD_MS);
       return;
-  } else if (!hasOverflow) manual_overflow = false;
+  } else if (manual_overflow && !hasOverflow && safety_deadline_expired(millis(), nbk_manual_overflow_until)) {
+    manual_overflow = false;
+    nbk_manual_overflow_until = 0;
+  }
   vTaskDelay(200 / portTICK_PERIOD_MS);
 }
 
@@ -612,7 +716,7 @@ void handle_nbk_stage_optimization() {
 
     #ifndef USE_HEAD_LEVEL_SENSOR //даём время пользователю задать вручную параметры в "Работе", если не задал - передадутся те, что были в Настройке
       if (!noDZ_message_sent) {
-        SendMsg("Оптимизация невозможна - отсутствует датчик захлёба. Установите вручную нужные параметры в программе этапа Работа и нажмите кнопку Следующая программа. Автоматический переход к Работе произойдёт через 10 минут", ALARM_MSG);
+        SendMsg("Оптимизация невозможна - отсутствует датчик захлёба. Установите вручную нужные параметры в программе этапа Работа и нажмите кнопку Следующая программа. Через 10 минут процесс перейдёт в безопасное ожидание (нагрев и подача выключены).", ALARM_MSG);
       }
       noDZ_message_sent = true;
       if ((millis() - begintime) < 600000) {  // [C-13] overflow-safe: ещё в пределах 10 мин от begintime
@@ -633,11 +737,10 @@ void handle_nbk_stage_optimization() {
     begintime = 0; // Сбрасываем отсчет для корректной обработки разницы окончания оптимизации, по захлёбу или нет
 
     // второй этап инициализации Оптимизации
-    // Мо=0, По=0 М и П - из строки программы или по-умолчанию: М = разгоннная*0.3 П = 10 л/ч
-      nbk_Mo_temp = 0; //пропуск оптимизации не состоялся, сброс значений
-      nbk_Po_temp = 0;
-      nbk_Mo = 0; //Мо=0, По=0
-      nbk_Po = 0;
+    // nbk_Mo/nbk_Po НЕ обнуляются - хранят последние реальные значения
+    // (Ручная настройка или прошлая Оптимизация); "оптимум найден на этой
+    // Оптимизации" отслеживает отдельный флаг nbk_opt_found.
+      nbk_opt_found = false;
       //передаём в Оптимизацию текущие М и П. (те, что сложились после манипуляций пользователя в Настройке)
       float candidateM = toPower(target_power_volt) > 100
           ? toPower(target_power_volt)
@@ -674,24 +777,16 @@ void handle_nbk_stage_optimization() {
        return;
      }
      if (overflow()) { // Если захлёб по ДЗ или ДД
-        if (nbk_Mo == 0 && nbk_Po == 0) {
-          // Если захлёб на первых же итерациях  (когда Мо или По равны нулю)
+        if (!nbk_opt_found) {
+          // Если захлёб до того, как оптимум был найден хотя бы на одной
+          // итерации (П5.2/П13) - продолжать оптимизацию бессмысленно.
           handle_overflow("Заданные параметры " + String(PWR_MSG) + " и Скорость слишком велики — оптимизация невозможна. Останов.", true, 0);
         } else {
-          // Если захлёб после нескольких итераций (Мо или По найдены) - мы
-          // оптимизировались. Переход к строке Работа через паузу MULT*Ин (для
-          // успокоения колонны после захлёба)
-          nbk_Po *= NBK_OPERATING_RANGE / 100.0f; // отладочная корректировка после захлёба
-          nbk_Mo *= NBK_OPERATING_RANGE / 100.0f;
-#ifdef SAMOVAR_USE_POWER
-          SendMsg(" Оптимум: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ",  " +
-          String(nbk_Po,1) + " л/ч", WARNING_MSG);
-#endif
-          nbk_work_entry_overflow_pending = true; // [T8] снижение будет применено ДО перехода строки
-          handle_overflow(
-            "Оптимизация завершена.",
-            false, NBK_MULT_PAUSE_OVERFLOW * nbk_column_inertia * 1000); // Сначала снижение...
-          run_nbk_program(ProgramNum + 1); // ...потом переход строки (флаг выше подавит полные Мо/По при входе в W)
+          // Если захлёб после того, как оптимум найден - автовход в Работу
+          // (П1): паузу MULT*Ин, снижение до Мо/2, По/3 и единственное
+          // сообщение целиком делает optimumEntry-ветка run_nbk_program.
+          nbk_opt_entry_by_pressure = false; // [T1] причина — захлёб; флаг мог остаться от сорвавшегося автовхода по давлению
+          run_nbk_program(ProgramNum + 1, false, true);
         }
         return;
      }
@@ -700,12 +795,41 @@ void handle_nbk_stage_optimization() {
     nbk_Tb = TankSensor.avgTemp;
     // Ядро оптимизации
     // 3.3) если Тб >= Тн то (По=П, Мо=М, новая П = П + dП, переход на 3.1) //увеличили подачу,
-    // иначе (новые П = П*0.9, М = М + dM, переход на 3.1) // уменьшили подачу, увеличили мощность
+    // иначе (новые П = П − dП, М = М + dM, переход на 3.1) // уменьшили подачу, увеличили мощность
     #ifdef USE_NBK_DELTA_PRESSURE
       if (pressure_value != -1) {
           nbk_dD = 0.00001913 * pressure_value * pressure_value + 0.03694 * pressure_value; // Поправка по давлению если включена в Samovar_ini.h
       }
     #endif
+
+    if (!nbk_tn_autocal_done) { // [Тарировка Тн] один раз за сессию — на первой итерации ядра O, до проверки давления и температурного ветвления
+      nbk_tn_autocal_done = true;
+      const float measuredTn = nbk_Tb - nbk_dD; // минус dD: поправка по давлению не должна учитываться дважды
+      if (measuredTn > nbkSessionConfig.tankTemp && measuredTn <= NBK_TN_AUTOCAL_MAX) {
+        const float previousTn = nbkSessionConfig.tankTemp;
+        nbkSessionConfig.tankTemp = measuredTn; // nbk_proc() каждый тик копирует nbk_Tn из снимка — правим сам снимок
+        nbk_Tn = measuredTn;
+        String msg; msg.reserve(128);
+        msg += "Опорная Тн уточнена по датчику барды: ";
+        msg += String(measuredTn, 1);
+        msg += " °C (в настройках ";
+        msg += String(previousTn, 1);
+        msg += " °C)";
+        SendMsg(msg, NOTIFY_MSG);
+      }
+    }
+
+    if (nbk_opt_found && nbk_pressure_above_ceiling()) { // [T1-2026-09-03] предзахлёб: оптимум уже есть, дальше рисковать нельзя
+      nbk_high_pressure_ticks++;
+      if (nbk_high_pressure_ticks >= NBK_HIGH_TB_HOLD_TICKS) {
+        nbk_high_pressure_ticks = 0; // сработали — в Работе счёт «подряд» начинается заново
+        nbk_opt_entry_by_pressure = true; // причина уходит в единственное сообщение optimumEntry-ветки run_nbk_program
+        run_nbk_program(ProgramNum + 1, false, true);
+        return;
+      }
+    } else {
+      nbk_high_pressure_ticks = 0;
+    }
 
     const float currentM = nbk_M;
     const float currentP = nbk_P;
@@ -713,6 +837,7 @@ void handle_nbk_stage_optimization() {
     float candidateP = currentP;
     nbk_Tp = SteamSensor.avgTemp; // обновляем
     if ((nbk_Tb >= nbk_Tn + nbk_dD) && (nbk_Tp >= nbk_Tp_lim)) { // если по барде и пару всё Ок
+      nbk_opt_found = true; // [П5.2] хотя бы одна удачная итерация состоялась
       nbk_Po = currentP;
       nbk_Mo = currentM;
       candidateP += nbk_dP;
@@ -731,11 +856,15 @@ void handle_nbk_stage_optimization() {
       SendMsg(msg, NOTIFY_MSG);
     } else {
       if ((currentM + nbk_dM) > nbk_M_max) {
-        SendMsg("Достигнута предельная мощность. (" + String(currentM ,0) + "+dM>" + String(nbk_M_max,0)  + " Вт.). Результат: " + String(nbk_Po,1) + " л/ч.", WARNING_MSG);
+        if (nbk_opt_found) {
+          SendMsg("Достигнута предельная мощность. (" + String(currentM ,0) + "+dM>" + String(nbk_M_max,0)  + " Вт.). Результат: " + String(nbk_Po,1) + " л/ч.", WARNING_MSG);
+        } else {
+          SendMsg("Оптимум не найден: Тб не достигла Тн (" + String(nbk_Tn + nbk_dD, 1) + ") ни на одной итерации. Проверьте датчик Тб.", WARNING_MSG);
+        }
         run_nbk_program(ProgramNum + 1);
         return;
       }
-      candidateP *= 0.9f;
+      candidateP = max(candidateP - nbk_dP, nbk_dP); // шаг, а не -10%: при 15-20 л/ч 10% = 1.5-2 л/ч, в 3-4 раза больше dП
       candidateM += nbk_dM;
       if (nbk_Tp < nbk_Tp_lim) {
         String msg; msg.reserve(128);
@@ -769,9 +898,13 @@ void handle_nbk_stage_optimization() {
       return;
     }
     if (nextIteration >= 300) {
+      if (nbk_opt_found) {
 #ifdef SAMOVAR_USE_POWER
-      SendMsg("Достигнут лимит итераций. Результат: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ", " + String(nbk_Po,1) + " л/ч", WARNING_MSG);
+        SendMsg("Достигнут лимит итераций. Результат: " + String(fromPower(nbk_Mo),0) + String(PWR_SIGN) + ", " + String(nbk_Po,1) + " л/ч", WARNING_MSG);
 #endif
+      } else {
+        SendMsg("Оптимум не найден: Тб не достигла Тн (" + String(nbk_Tn + nbk_dD, 1) + ") ни на одной итерации. Проверьте датчик Тб.", WARNING_MSG);
+      }
     }
   }
   }
@@ -783,9 +916,9 @@ void handle_nbk_stage_optimization() {
 void handle_nbk_stage_work() {
  //  4.1) Ждем время Ин - (первая пауза наследована от оптимизации Ин или MULT*Ин если был захлёб)
  //  4.1) если Тб<Тн-dT+dД, то П=П-dП/10, переход на 4.1)
- //  4.2) если захлёб, выводим сообщение "Захлёб колонны!", М=1/2, П=0, ждём время MULT*Ин. После этого Мо=Мо-dM/10. М=Мо, П=По, ждём время 2*Ин, переход на 4.1)
+ //  4.2) если захлёб, выводим сообщение "Захлёб колонны!", М=1/2, П=0, ждём время MULT*Ин. После этого Мо=Мо-dM/10. М=Мо, П=По, ждём время 2*MULT/3*Ин, переход на 4.1)
   if (!nbk_work_in_pause ) {// если не на паузе по захлёбу
-    // 4.2) если захлёб, выводим сообщение "Захлёб колонны!", М=0, П=0, ждём время MULT*Ин. После этого Мо=Мо-dM/10. М=Мо, П=По, ждём время 2*Ин, переход на 4.1)
+    // 4.2) если захлёб, выводим сообщение "Захлёб колонны!", М=0, П=0, ждём время MULT*Ин. После этого Мо=Мо-dM/10. М=Мо, П=По, ждём время 2*MULT/3*Ин, переход на 4.1)
     if (overflow()) {
       handle_overflow("Временное снижение подачи и нагрева.", false, NBK_MULT_PAUSE_OVERFLOW * nbk_column_inertia * 1000); //выводим сообщение "Захлёб колонны!", М=0, П=0, ждём время MULT*Ин.
       return;
@@ -798,71 +931,127 @@ void handle_nbk_stage_work() {
         nbk_dD = 0.00001913 * pressure_value * pressure_value + 0.03694 * pressure_value; // Поправка по давлению если включена в Samovar_ini.h
       }
     #endif
+    const bool pressureHigh = nbk_pressure_above_ceiling(); // [T1-2026-09-03]
     const float currentM = nbk_M;
     const float currentP = nbk_P;
     float candidateM = currentM;
     float candidateP = currentP;
-    bool commandNeeded = false;
+    // [Ремонт-2026-09-02 П11] Для решения «сообщение/команда только при реальном
+    // изменении» - сравниваем nbk_Po ДО и ПОСЛЕ ветвлений ниже.
+    const float previousPo = nbk_Po;
     //  4.1) если Тб<Тн-dT+dД, то П=П-dП/10, переход на 4.1)
     // 4.1.1) если Т пара ниже предела, то П=П-dП/10 (нововведение), ограничение спиртуозности выхода на случай вранья датчика Тб.
      // чем выше Т, тем ниже % спирта, нам надо снижать %, значит Т поднимать.
                                // 60% это примерно 81 гр.Ц., 50% - 84,4 гр.Ц., 40% - 87.7 гр.Ц
-    if ((nbk_Tb < nbk_Tn - nbk_dT + nbk_dD) || (nbk_Tp < nbk_Tp_lim)) {
-        if ((currentP > nbk_Po-0.1) && (currentP < nbk_Po+0.1) && (currentM > nbk_Mo-5) && (currentM < nbk_Mo+5)) {// если небыло вмешательств TODO теперь из-за преобразований мощность-напряжение-мощность придётся и по мощности сравнение делать с допустимым отклонением
-          nbk_Po -= nbk_dP / 10.0;
-          if (nbk_Po < 0) nbk_Po = 0; // По — подача не может быть отрицательной (по аналогии с 497-498)
-        }
-      candidateP = nbk_Po > 0 ? nbk_Po : 0;
+    if (nbk_Tb < nbk_Tn - NBK_SPILL_DT_MULT * nbk_dT + nbk_dD) { // [Пролив] Тб рухнула намного ниже Тн — снижаем подачу сразу на целый шаг dП, а не на dП/10
+      nbk_Po -= nbk_dP;
+      if (nbk_Po < 0) nbk_Po = 0;
+      candidateP = nbk_Po;
       candidateM = nbk_Mo;
-      commandNeeded = true;
+      nbk_high_temp_ticks = 0;
+      nbk_high_pressure_ticks = 0; // [Ревью итог 03.09] счётчик «подряд» — любая другая ветка обнуляет
+    } else if ((nbk_Tb < nbk_Tn - nbk_dT + nbk_dD) || (nbk_Tp < nbk_Tp_lim)) {
+      nbk_Po -= nbk_dP / 10.0;
+      if (nbk_Po < 0) nbk_Po = 0; // По — подача не может быть отрицательной (по аналогии с 497-498)
+      candidateP = nbk_Po;
+      candidateM = nbk_Mo;
+      nbk_high_temp_ticks = 0; // счётчики «подряд»: просадка прерывает серию перегрева
+      nbk_high_pressure_ticks = 0; // [Ревью итог 03.09] подача уже снижена — давление ниже потолка не «подряд»
+    } else if (pressureHigh) { // [T1-2026-09-03] давление ≥ рабочего потолка — мягкое ограничение подачи
+      nbk_high_pressure_ticks++;
+      if (nbk_high_pressure_ticks >= NBK_HIGH_TB_HOLD_TICKS) {
+        nbk_Po -= nbk_dP / 10.0;
+        if (nbk_Po < 0) nbk_Po = 0;
+        nbk_high_pressure_ticks = 0;
+      }
+      candidateP = nbk_Po;
+      candidateM = nbk_Mo;
+      nbk_high_temp_ticks = 0; // [T1-2026-09-03] давление приоритетнее — не даём веткам смешаться
     } else if (nbk_Tb > nbk_Tn + nbk_dT + nbk_dD) { // [T2] Тб держится выше Тн+dT — колонна недогружена, можно повысить подачу
-      if ((currentP > nbk_Po-0.1) && (currentP < nbk_Po+0.1) && (currentM > nbk_Mo-5) && (currentM < nbk_Mo+5)) { // не было вмешательств
-        nbk_high_temp_ticks++;
-        if (nbk_high_temp_ticks >= NBK_HIGH_TB_HOLD_TICKS) {
-          nbk_Po += nbk_dP / 10.0;
-          if (nbk_Po > nbk_Po_ceiling) nbk_Po = nbk_Po_ceiling; // не выше По из Оптимизации/Настройки
-          nbk_high_temp_ticks = 0;
-        }
-      } else {
+      nbk_high_temp_ticks++;
+      if (nbk_high_temp_ticks >= NBK_HIGH_TB_HOLD_TICKS) {
+        nbk_Po += nbk_dP / 10.0;
+        if (nbk_Po > nbk_Po_ceiling) nbk_Po = nbk_Po_ceiling; // не выше По из Оптимизации/Настройки
         nbk_high_temp_ticks = 0;
       }
       candidateP = nbk_Po;
       candidateM = nbk_Mo;
-      commandNeeded = true;
+      nbk_high_pressure_ticks = 0; // [Ревью итог 03.09] симметрично сбросу nbk_high_temp_ticks в ветке давления
     } else {
       nbk_high_temp_ticks = 0;
+      nbk_high_pressure_ticks = 0; // [T1-2026-09-03] нейтральная зона — по аналогии с nbk_high_temp_ticks выше
     }
-    if (nbk_Tb < nbk_Tn - nbk_dT + nbk_dD) {
-      String msg; msg.reserve(128);
-      msg += "Работа: Тб < Тн-dT (";
-      msg += String(nbk_Tn - nbk_dT + nbk_dD, 1);
-      msg += "), снижаем подачу на ";
-      msg += String(nbk_dP / 10.0, 1);
-      msg += ", до: ";
-      msg += String(candidateP, 1);
-      msg += " л/ч";
-      SendMsg(msg, NOTIFY_MSG);
+    // [Ремонт-2026-09-02 П11] Сообщения только при реальном изменении По в этом тике
+    // (не на каждом такте, пока условие по температуре остаётся истинным).
+    if (nbk_Tb < nbk_Tn - NBK_SPILL_DT_MULT * nbk_dT + nbk_dD) {
+      if (nbk_Po < previousPo) {
+        String msg; msg.reserve(128);
+        msg += "Работа: пролив браги (Тб ";
+        msg += String(nbk_Tb, 1);
+        msg += " < ";
+        msg += String(nbk_Tn - NBK_SPILL_DT_MULT * nbk_dT + nbk_dD, 1);
+        msg += "), подача снижена на ";
+        msg += String(nbk_dP, 1);
+        msg += ", до: ";
+        msg += String(candidateP, 1);
+        msg += " л/ч";
+        SendMsg(msg, WARNING_MSG);
+      }
+    } else if (nbk_Tb < nbk_Tn - nbk_dT + nbk_dD) {
+      if (nbk_Po < previousPo) {
+        String msg; msg.reserve(128);
+        msg += "Работа: Тб < Тн-dT (";
+        msg += String(nbk_Tn - nbk_dT + nbk_dD, 1);
+        msg += "), снижаем подачу на ";
+        msg += String(nbk_dP / 10.0, 1);
+        msg += ", до: ";
+        msg += String(candidateP, 1);
+        msg += " л/ч";
+        SendMsg(msg, NOTIFY_MSG);
+      }
     } else if (nbk_Tp < nbk_Tp_lim) {
-      String msg; msg.reserve(128);
-      msg += "Работа: Тп ниже предела (";
-      msg += String(nbk_Tp_lim, 1);
-      msg += "), снижаем подачу на ";
-      msg += String(nbk_dP / 10.0, 1);
-      msg += ", до: ";
-      msg += String(candidateP, 1);
-      msg += " л/ч";
-      SendMsg(msg, NOTIFY_MSG);
+      if (nbk_Po < previousPo) {
+        String msg; msg.reserve(128);
+        msg += "Работа: Тп ниже предела (";
+        msg += String(nbk_Tp_lim, 1);
+        msg += "), снижаем подачу на ";
+        msg += String(nbk_dP / 10.0, 1);
+        msg += ", до: ";
+        msg += String(candidateP, 1);
+        msg += " л/ч";
+        SendMsg(msg, NOTIFY_MSG);
+      }
+    } else if (pressureHigh) { // [T1-2026-09-03]
+      if (nbk_Po < previousPo) {
+        String msg; msg.reserve(128);
+        msg += "Работа: давление ";
+        msg += String(pressure_value, 0);
+        msg += " ≥ потолка ";
+        msg += String(nbk_pressure_ceiling, 0);
+        msg += " мм, снижаем подачу на ";
+        msg += String(nbk_dP / 10.0, 1);
+        msg += ", до: ";
+        msg += String(candidateP, 1);
+        msg += " л/ч";
+        SendMsg(msg, NOTIFY_MSG);
+      }
     } else if (nbk_Tb > nbk_Tn + nbk_dT + nbk_dD) { // [T2]
-      String msg; msg.reserve(128);
-      msg += "Работа: Тб > Тн+dT (";
-      msg += String(nbk_Tn + nbk_dT + nbk_dD, 1);
-      msg += "), увеличиваем подачу на ";
-      msg += String(nbk_dP / 10.0, 1);
-      msg += ", до: ";
-      msg += String(candidateP, 1);
-      msg += " л/ч";
-      SendMsg(msg, NOTIFY_MSG);
+      if (nbk_Po > previousPo) {
+        String msg; msg.reserve(128);
+        msg += "Работа: Тб > Тн+dT (";
+        msg += String(nbk_Tn + nbk_dT + nbk_dD, 1);
+        msg += "), увеличиваем подачу на ";
+        msg += String(nbk_dP / 10.0, 1);
+        msg += ", до: ";
+        msg += String(candidateP, 1);
+        msg += " л/ч";
+        SendMsg(msg, NOTIFY_MSG);
+      }
     }
+    // [Ремонт-2026-09-02 П11] Команду шлём, только если у алгоритма реально другая
+    // цель, чем то, что сейчас применено (а не на каждом такте, пока держится
+    // температурное условие) — иначе просто продлеваем таймер паузы на Ин.
+    const bool commandNeeded = (candidateP != currentP) || (candidateM != currentM);
     if (commandNeeded) {
       if (!nbk_schedule_actuator_command(
               candidateM,
@@ -882,6 +1071,7 @@ void handle_nbk_stage_work() {
   // Обработка паузы после захлёба
   if (nbk_work_in_pause) {
     if (overflow()) { // [T1] повторный захлёб во время паузы W — пауза продлевается, мощность снижается вдвое от Мо
+      nbk_learn_pressure_ceiling(); // [T1-2026-09-03] вызывается каждый тик повтора — функция сама идемпотентна
       if (!nbk_pause_overflow_repeat_latched) {
         SendMsg("Повторный захлёб по " + String(nbk_overflow_source()) + " во время паузы. Пауза продлена, мощность снижена вдвое.", WARNING_MSG);
         nbk_pause_overflow_repeat_latched = true;
@@ -904,16 +1094,18 @@ void handle_nbk_stage_work() {
     nbk_pause_overflow_repeat_latched = false;
     if (safety_deadline_expired(millis(), nbk_work_next_time)) {
     if (nbk_work_pause_stage == 1) {
-      // После 3*Ин: После этого Мо=Мо-dM/10. М=Мо, П=По,
-      if (nbk_overflow_happened && !nbk_work_entry_overflow_pending) { // снижаем Mo/Po только если пауза вызвана захлёбом в самой Работе, а не входом в неё сразу после захлёба в конце Оптимизации (там уже снижено)
+      // После MULT*Ин: снижаем только если пауза вызвана захлёбом в самой
+      // Работе - при автовходе из Оптимизации (П1) коммит уже снял
+      // nbk_overflow_happened (см. commitKeepsOptimum в tick_nbk_actuator_command).
+      if (nbk_overflow_happened) {
         nbk_Mo -= nbk_dM / 10.0; // на 1/10 шага убавляем мощность
         nbk_Po -= nbk_dP / 10.0; // на 1/10 шага убавляем подачу;
       }
       nbk_overflow_happened = false; // сброс флага в любом случае
-      nbk_work_entry_overflow_pending = false; // одноразовый, потребили
       // [T14 п.8] Нижняя граница - была 0 (та же ловушка SLEEP-схлопывания, что в п.1).
       if (nbk_Mo < toPower(power_work_mode_threshold())) nbk_Mo = toPower(power_work_mode_threshold());
       if (nbk_Po < 0) nbk_Po = 0;
+      nbk_Po_ceiling = nbk_Po; // [П10] потолок повышающей коррекции следует за снижением
       if (!nbk_schedule_actuator_command(
               nbk_Mo,
               nbk_Po,
@@ -936,7 +1128,7 @@ void handle_nbk_stage_work() {
       msg += String(nbk_Po,1);
       msg += " л/ч";
       SendMsg(msg, NOTIFY_MSG);
-      nbk_work_pause_stage = 2; // ждём время 2*NBK_MULT_PAUSE_OVERFLOW/3 * Ин
+      nbk_work_pause_stage = 2; // ждём время 2*MULT/3*Ин
     } else if (nbk_work_pause_stage == 2) { // после MULT*Ин: продолжаем работу
       nbk_work_in_pause = false;
       nbk_work_pause_stage = 0;
@@ -1025,7 +1217,7 @@ inline void nbk_resume_work_after_safe_wait() {
 }
 
 // Смена программы
-void run_nbk_program(uint8_t num, bool workConfirmed) {
+void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
  // if (Samovar_Mode != SAMOVAR_NBK_MODE || !PowerOn) return; //dranek: лишняя проверка, ломает запуск
 #ifndef SAMOVAR_USE_POWER
   if (num == 0) {
@@ -1093,15 +1285,68 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
           "Переход к Работе НБК отклонён: нет снимка конфигурации сессии.");
       return;
     }
+    if (optimumEntry) {
+      // [П1] Автовход в Работу сразу после найденного в Оптимизации оптимума:
+      // не ждёт workConfirmed и не использует program[num].Power/Speed.
+      const bool byPressure = nbk_opt_entry_by_pressure; // [T1] причина автовхода — только для текста сообщения
+      nbk_opt_entry_by_pressure = false;
+      if (nbk_safe_waiting || !PowerOn || !(nbk_Mo > 0) || !(nbk_Po > 0)) {
+        nbk_enter_safe_wait(
+            "Автовход в Работу НБК невозможен: нагрев выключен или оптимум не найден.");
+        return;
+      }
+      const float candidateM = max(nbk_Mo / 2, toPower(power_work_mode_threshold()));
+      const float candidateP = nbk_actual_feed_rate() / 3;
+      const uint32_t pauseMs =
+          uint32_t(NBK_MULT_PAUSE_OVERFLOW) * nbk_column_inertia * 1000;
+      if (!nbk_schedule_actuator_command(
+              candidateM,
+              candidateP,
+              NBK_ACTUATOR_WORK_DEADLINE,
+              pauseMs,
+              nbk_opt_iter,
+              true,
+              num,
+              true)) {
+        nbk_enter_safe_wait(
+            "Параметры автовхода в Работу не приняты приводами НБК.");
+        return;
+      }
+#ifdef SAMOVAR_USE_POWER
+      String msg;
+      msg.reserve(160);
+      msg += "Оптимизация завершена";
+      if (byPressure) {
+        msg += " по давлению (";
+        msg += String(pressure_value, 0);
+        msg += " ≥ потолка ";
+        msg += String(nbk_pressure_ceiling, 0);
+        msg += " мм)";
+      }
+      msg += ": Мо=";
+      msg += String(fromPower(nbk_Mo), 0);
+      msg += PWR_SIGN;
+      msg += ", По=";
+      msg += String(nbk_Po, 1);
+      msg += " л/ч. Пауза ";
+      msg += String(pauseMs / 1000);
+      msg += " с, затем Работа.";
+      SendMsg(msg, WARNING_MSG);
+#else
+      (void)byPressure;
+#endif
+      return;
+    }
     if (!workConfirmed) {
       nbk_enter_safe_wait(
           "Автоматический переход к Работе НБК запрещён. "
           "Задайте Power/Speed строки W и нажмите «Следующая программа».");
       return;
     }
-    if (program[num].Power <= 0 || program[num].Speed <= 0) {
+    if ((program[num].Power <= 0 || program[num].Speed <= 0) &&
+        !(nbk_Mo > 0 && nbk_Po > 0)) {
       nbk_enter_safe_wait(
-          "Строка W требует явно заданные ненулевые Power и Speed.");
+          "Строка W требует ненулевые Power и Speed, либо сохранённые оптимальные значения.");
       return;
     }
     if (nbk_safe_waiting) {
@@ -1134,8 +1379,12 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
           ALARM_MSG);
       return;
     }
-    const float candidateM = toPower(program[num].Power);
-    const float candidateP = program[num].Speed;
+    const float candidateM = program[num].Power > 0
+        ? toPower(program[num].Power)
+        : nbk_Mo;
+    const float candidateP = program[num].Speed > 0
+        ? program[num].Speed
+        : nbk_Po;
     if (!nbk_schedule_actuator_command(
             candidateM,
             candidateP,
@@ -1153,6 +1402,16 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
             String(candidateM, 0) + " Вт, П=" +
             String(candidateP, 1) + " л/ч",
         NOTIFY_MSG);
+    return;
+  }
+  // [Ремонт-2026-09-02 П8] "Следующая программа" во время safe wait НЕ на строке Работы
+  // (H/S/O) - это штатное завершение сессии оператором, не переход к следующей строке.
+  // Ветки W-возобновления и явного входа в W стоят раньше и сюда не попадают - см. их
+  // return выше. Стоит ДО проверки power_transition_active(): пока нагрев ещё
+  // выключается после входа в safe wait, нажатие не должно уходить в "старт отменён".
+  if (nbk_safe_waiting && num > 0) {
+    SendMsg("Безопасное ожидание НБК: сессия завершена по команде оператора.", NOTIFY_MSG);
+    nbk_finish();
     return;
   }
   if (!PowerOn && power_transition_active()) {
@@ -1187,12 +1446,26 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
     stats.totalVolume = 0;
     stats.activeVolume = 0;
     stats.activeFeedMs = 0;
-    nbk_work_entry_overflow_pending = false; // [П8] сброс на старте сессии
+    manual_overflow = false; // [Ремонт-2026-09-02 П6] сброс латча Ручной настройки на новом старте сессии
+    nbk_manual_overflow_until = 0;
+    nbk_Mo = 0; // [Ремонт-2026-09-02, ревью R2] Мо/По прошлой сессии не должны подставляться в явный W
+    nbk_Po = 0;
+    nbk_pressure_ceiling = nbkSessionConfig.overflowPressure * NBK_WORK_PRESSURE_RATIO; // [T1-2026-09-03] инициализация рабочего потолка на новую сессию
+    nbk_tn_autocal_done = false; // [Тарировка Тн] новая сессия — новая попытка уточнения
+#ifdef USE_NBK_END_BY_STEAM_RISE
+    nbk_steam_min = 0; // [T4] минимум Тп сбрасывается только на новом старте сессии
+    nbk_steam_rise_start = 0;
+#endif
     if (!create_data()) {
       nbk_cancel_program_start("Ошибка создания файла лога. Старт НБК отменён.");
       return;
     }
     SendMsg("Запуск программы НБК. Прогрев", NOTIFY_MSG);
+    // [Ремонт-2026-09-02 П12] Не блокирует старт - только предупреждает, что защита от
+    // захлёба физически не работает (нет ни ДЗ, ни рабочего ДД).
+    if (!nbk_overflow_detection_available()) {
+      SendMsg("Внимание: нет ни одного датчика захлёба (ДЗ выключен, ДД не отвечает). Защита от захлёба не работает.", WARNING_MSG);
+    }
     #ifdef USE_MQTT
     String sessionDescription;
     if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
@@ -1208,7 +1481,7 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
   // при переходе на Разгон
   if (program[ProgramNum].WType == 'H') {
     begintime = 0;
-    set_power(true);   // Если М и П не заданы в строке, то умолчания:М = разгонная П = 1 л/ч
+    set_power(true);   // Speed строки обязателен: при 0 - безопасное ожидание
     if (!PowerOn) {
       nbk_cancel_program_start("Нагрев НБК не включён. Старт отменён.");
       nbk_close_data_log();
@@ -1228,6 +1501,8 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
    //при переходе передаём в Оптимизацию текущие М и П.
   if (program[ProgramNum].WType == 'S') {
     begintime = 0;
+    manual_overflow = false; // [Ремонт-2026-09-02 П6] новый вход на Настройку — латч предыдущей сессии не должен доживать
+    nbk_manual_overflow_until = 0;
     time_speed = millis(); // [T10] точка отсчёта статистики объёма — прогрев (H) не должен в неё попадать
     // если параметры есть в строке берём их, иначе минимальные
     const float candidateM = program[ProgramNum].Power > 0
@@ -1254,10 +1529,15 @@ void run_nbk_program(uint8_t num, bool workConfirmed) {
   // при переходе на Оптимизацию
  if (program[ProgramNum].WType == 'O') {
       nbk_opt_iter = 0; // в начале оптимизации обнуляем счетчик итераций
+      nbk_high_pressure_ticks = 0; // [T1-2026-09-03] новый заход на O — счётчик по давлению тоже с нуля
+      nbk_opt_found = false; // [П5.2] симметрично nbk_opt_iter
+      nbk_tn_autocal_done = false; // [Тарировка Тн] симметрично nbk_opt_found — новый заход в O снова уточняет Тн
+#ifdef USE_NBK_END_BY_STEAM_RISE
+      nbk_steam_min = 0; // [T4] после повторной Оптимизации рабочая точка Тп другая — опорный минимум прошлой Работы протух
+      nbk_steam_rise_start = 0;
+#endif
       nbk_opt_in_progress = false; // включили паузу перед оптимизацией
       begintime = millis(); // засекли время для паузы перед оптимизацией
-      nbk_Mo_temp = toPower(target_power_volt); //запомним на случай пропуска Оптимизации пользователем или по отсутствию ДЗ
-      nbk_Po_temp = i2c_get_liquid_rate_by_step(get_stepper_speed());
       noDZ_message_sent = false;
  }
 }
@@ -1272,6 +1552,9 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
     nbk_overheat_start_time = 0;
     nbk_dry_steam_start_time = 0; // [Ревью П1, находка 2] симметрично nbk_overheat_start_time
     nbk_pressure_stale_start_time = 0; // [П7] симметрично
+#ifdef USE_NBK_END_BY_STEAM_RISE
+    nbk_steam_rise_start = 0; // [T4] симметрично остальным *_start_time — иначе рестарт после паузы вне режима даст мгновенный ложный стоп
+#endif
     return false;
   }
   if (heater_safety_latched()) { //если авария - в НБК не делаем ничего
@@ -1299,6 +1582,39 @@ bool check_nbk_critical_alarms() { //вызывается циклично из 
       return true; //возвращаем аварию
     }
     nbk_dry_steam_start_time = 0; // [T3] предел действует только на Ручной настройке
+#ifdef USE_NBK_END_BY_STEAM_RISE
+    // [T4] Компилируемая опция (по умолчанию выключена — см. USE_NBK_END_BY_STEAM_RISE
+    // в Samovar_ini.h): доп. признак конца браги — устойчивый рост Тп относительно
+    // минимума, зафиксированного в Работе. Действует ТОЛЬКО на строке W и НЕ в паузе
+    // после захлёба; обоснование обеих оговорок — в ветке else ниже.
+    if (currentType == 'W' && !nbk_work_in_pause) {
+      const float steamTemp = SteamSensor.avgTemp;
+      if (nbk_steam_min == 0 || steamTemp < nbk_steam_min) nbk_steam_min = steamTemp;
+      if (steamTemp >= nbk_steam_min + NBK_END_STEAM_RISE) {
+        if (nbk_steam_rise_start == 0) nbk_steam_rise_start = millis();
+        if (millis() - nbk_steam_rise_start > uint32_t(2) * nbk_column_inertia * 1000) {
+          String msg; msg.reserve(128);
+          msg += "Тп выросла на ";
+          msg += String(steamTemp - nbk_steam_min, 1);
+          msg += " °C относительно минимума ";
+          msg += String(nbk_steam_min, 1);
+          msg += " °C — брага заканчивается. Программа НБК завершена.";
+          SendMsg(msg, NOTIFY_MSG);
+          if (!queue_samovar_command(SAMOVAR_POWER)) {
+            request_emergency_stop("Аварийное отключение! Не удалось штатно завершить программу НБК (рост Тп пара)");
+          }
+          return true; //возвращаем аварию
+        }
+      } else {
+        nbk_steam_rise_start = 0;
+      }
+    } else {
+      // Не строка W либо пауза после захлёба — временный рост Тп из-за снижения
+      // подачи/мощности не должен копить время до срабатывания; минимум НЕ трогаем
+      // (он взят до захлёба и остаётся опорным после паузы).
+      nbk_steam_rise_start = 0;
+    }
+#endif
   } else if (SteamSensor.avgTemp >= 100.0) { // [T3] верхний предел Тп на Ручной настройке — защита от сухого хода парогенератора
     if (nbk_dry_steam_start_time == 0) nbk_dry_steam_start_time = millis();
     if (millis() - nbk_dry_steam_start_time > 60000) {
@@ -1575,7 +1891,8 @@ inline void nbk_emergency_finish() {
 }
 // === Централизованная обработка захлёба ===
 void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool graceful) {
-  const float candidateP = nbk_P / 3;
+  nbk_learn_pressure_ceiling(); // [T1-2026-09-03] единая точка входа для H/S/O/W-захлёбов, идущих через handle_overflow
+  const float candidateP = nbk_actual_feed_rate() / 3; // [Ремонт-2026-09-02 П4] реальная подача насоса, не последнее заданное значение
   SendMsg("Захлёб по " + String(nbk_overflow_source()) + ". " + msg, graceful ? NOTIFY_MSG : ALARM_MSG); // [Ревью П1, находка 3] восстановлена дифференциация по датчику
   if (finish) {
     if (SetSpeed(candidateP) != ACTUATOR_COMMAND_APPLIED) {

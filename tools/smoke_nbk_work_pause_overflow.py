@@ -108,6 +108,10 @@ bool nbk_schedule_actuator_command(
 }
 void nbk_enter_safe_wait(const String&) {}
 
+// [T1-2026-09-03] обучение потолка давления (не предмет этого теста, но
+// теперь вызывается на каждом тике повтора захлёба в паузе).
+void nbk_learn_pressure_ceiling() {}
+
 static uint32_t fakeMillis = 1000;
 uint32_t millis() { return fakeMillis; }
 uint32_t safety_deadline_after(uint32_t now, uint32_t ms) { return now + ms; }
