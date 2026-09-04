@@ -377,6 +377,17 @@ class StaticAnalysisRunnerTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
+    def test_codeql_uses_node24_checkout(self) -> None:
+        with (ROOT / ".github" / "workflows" / "codeql.yml").open(encoding="utf-8") as stream:
+            workflow = yaml.safe_load(stream)
+        checkout = workflow["jobs"]["analyze"]["steps"][0]
+        self.assertEqual(checkout.get("name"), "Checkout repository")
+        self.assertEqual(
+            checkout.get("uses"),
+            "actions/checkout@v5",
+            "CodeQL checkout обязан использовать Node.js 24, а не устаревший Node.js 20",
+        )
+
     def test_ci_uses_bounded_shared_runners_and_always_uploads_extended_report(self) -> None:
         workflow_path = ROOT / ".github" / "workflows" / "firmware-ci.yml"
         workflow_text = workflow_path.read_text(encoding="utf-8")
