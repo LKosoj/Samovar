@@ -221,7 +221,7 @@ struct RuntimeEventDescriptor {
   uint8_t level;
 };
 
-static const uint8_t RUNTIME_EVENT_DESCRIPTOR_CAPACITY = 16;
+static const uint8_t RUNTIME_EVENT_DESCRIPTOR_CAPACITY = 32;
 
 enum SAMOVAR_MODE : uint8_t {
   SAMOVAR_RECTIFICATION_MODE,
@@ -640,7 +640,7 @@ def main() -> int:
         return 1
 
     if not re.search(
-        r"static_assert\s*\(\s*sizeof\(AjaxTelemetrySnapshot\)\s*<=\s*768",
+        r"static_assert\s*\(\s*sizeof\(AjaxTelemetrySnapshot\)\s*<=\s*960",
         samovar,
     ):
         errors.append("AjaxTelemetrySnapshot stack budget assertion is missing")

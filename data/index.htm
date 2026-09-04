@@ -27,7 +27,7 @@
     var RECT_STATUS_STABILIZING = 51;
     // Пока пользователь редактирует ячейку таблицы программы, getProgram() (полная
     // пересборка) откладывается - иначе правка теряется или прыгает курсор. Значок
-    // использует тот же стиль "устаревших" показаний, что и staleReadingIds (app.js).
+    // использует тот же предупреждающий цвет, что и маркер обрыва связи.
     var programRedrawPending = false;
 
     function setProgramStaleBadge(stale) {
@@ -573,8 +573,7 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false,
-        staleReadingIds: ['Main'] // общий контейнер вкладки - гасит все показания разом, включая кнопку нагрева
+        implicitSystemTheme: false
       });
     };
 
@@ -802,7 +801,7 @@
       <div class="container_column" style="margin-bottom: 1em;">
         <div class="container_row" style="justify-content: space-around; align-items: center;">
           <input id='power' type='button' name='power' value='Включить нагрев' onclick='if (HeaterPowerOn && !confirm("Выключить нагрев?")) return false; SamovarApp.sendCommand("power=" + (HeaterPowerOn ? "0" : "1")); return false;' class="button">
-          <input id='start' type='button' name='start' value='Начать отбор' style="margin-right: 2em;" onclick='if (!confirmRectStart()) return false; SamovarApp.sendCommand("start=1"); return false;' class="button">
+          <input id='start' type='button' name='start' value='Начать отбор' onclick='if (!confirmRectStart()) return false; SamovarApp.sendCommand("start=1"); return false;' class="button">
           <input id='pause' type='button' name='pause' value='Пауза' onclick='SamovarApp.sendCommand("pause=1");' class="button">
         </div>
         <div class="container_row" style="justify-content: space-around; align-items: center;">

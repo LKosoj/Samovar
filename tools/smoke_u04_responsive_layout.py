@@ -33,14 +33,14 @@ FROZEN_SHA256 = {
     # 02.09.2026 (задача 9c): три новых токена COMMAND_TOKENS.NOT_RUNNING/
     # NO_SETPOINT/NO_PUMP - отказы /command waterauto=1 (авто-вода БК).
     # Раскладки не касается.
-    "app.js": "66899ddcfc950f988870921348e80838ef7748a920b5483d36c131db3684765d",
+    "app.js": "deb8888500655b330b619c347fd978d63d280d3809f4788877ae66bd13f34fd0",
     # 01.09.2026: масштаб задают две ручки под графиком вместо колёсика и рамки
     # выделения (уменьшить масштаб на приборе было нечем).
-    "chart.js": "14954d90d9194de5ea6461812bb01c7e8ad726573be7964efa9b370643e1ae4e",
-    # 01.09.2026: панель файлов получила мобильную раскладку (до 900 px её
-    # кнопки переносились под дерево файлов и не нажимались).
-    "edit.htm": "e50cababe8cd7421a250eb9ecfdd9dcdda26ab1d5ea61b5a6ada6aff64e536bb",
-    "edit.htm.gz": "0cc91264dd1da80e76faffb7ca2c293cf2777031449f82f9edf99e49c81baa84",
+    # 04.09.2026: loadCsv сам повторяет HTTP 503 BUSY. Раскладки не касается.
+    "chart.js": "3357e5e8c050addf5fa89356a81c97a6f1ed611d4d6701e6a727e04889f9de87",
+    # 04.09.2026: edit.htm — сетка вместо абсолютов, Ace 1.44.0, русская панель.
+    "edit.htm": "d98560fd84846400ffa6aecd9261c1fbcce3d382f68e39825fd35d98bbbb772b",
+    "edit.htm.gz": "18a87d45c9229498aaa20785f633c571126ca138fc2659634338829d1d09a54a",
 }
 STRUCTURE_SHA256 = {
     # 01.09.2026: подпись ползунка плотности насадки обёрнута в <span class="nowrap">,
@@ -53,7 +53,8 @@ STRUCTURE_SHA256 = {
     # 03.09.2026 (НБК, T6): у "Инерция"/"Давление захлёба"/"Т завершения (барда)"
     # появились class="tooltip" на <label> и <span class="tooltiptext"> - структура
     # и текст изменились штатно.
-    "setup.htm": "6cb4683d0b97336b49fb5de0418764598a323c16e0c85ea30980cfa4831e0254",
+    # 04.09.2026: Су-вид и Lua скрыты в <select> режима; поля SuvidTemp/SuvidHoldMinutes сняты.
+    "setup.htm": "206a17ea72b976aedd0f63a696d5769c4b2111db40d2c456050dcbb354723462",
     "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")

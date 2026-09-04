@@ -107,6 +107,14 @@ if chart_js:
         chart_js,
     ):
         errors.append("data_raw/chart.js initial CSV load is not explicit no-store, aborted fetch")
+    for token in [
+        "BUSY_RETRY_DELAY_MS",
+        "BUSY_RETRY_LIMIT",
+        "resp.status === 503",
+        "busyAttempt < BUSY_RETRY_LIMIT",
+    ]:
+        if token not in chart_js:
+            errors.append(f"data_raw/chart.js does not auto-retry HTTP 503 BUSY: missing {token}")
 
 if webserver:
     if 'server.on("/data.csv", (WebRequestMethodComposite)(HTTP_GET | HTTP_HEAD)' not in webserver:

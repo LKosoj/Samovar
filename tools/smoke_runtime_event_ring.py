@@ -182,14 +182,15 @@ static void test_two_cursor_full_fifo() {
 static void test_descriptor_and_pool_overflow() {
   RuntimeEventRing ring{};
   runtime_event_init(ring);
-  for (uint32_t index = 1; index <= 17; index++) {
-    const char value = static_cast<char>('a' + index - 1);
+  for (uint32_t index = 1; index <= RUNTIME_EVENT_DESCRIPTOR_CAPACITY + 1U; index++) {
+    const char value = static_cast<char>('a' + (index - 1U) % 26U);
     check(runtime_event_append_locked(
               ring, RUNTIME_EVENT_CONSOLE, 100, &value, 1) ==
               RUNTIME_EVENT_APPEND_OK,
           "descriptor-pressure append failed");
   }
-  check(ring.count == RUNTIME_EVENT_DESCRIPTOR_CAPACITY && ring.usedBytes == 16,
+  check(ring.count == RUNTIME_EVENT_DESCRIPTOR_CAPACITY &&
+            ring.usedBytes == RUNTIME_EVENT_DESCRIPTOR_CAPACITY,
         "descriptor pressure metadata mismatch");
   RuntimeEventDescriptor oldest = select_event(ring, 1, RUNTIME_EVENT_SELECT_FOUND);
   check(oldest.sequence == 2 && copy_event(ring, oldest) == "b",
@@ -372,7 +373,7 @@ static void test_cursor_parser_and_size_contract() {
           "invalid cursor accepted or output mutated");
   }
   check(sizeof(RuntimeEventDescriptor) <= 12, "descriptor exceeds size cap");
-  check(sizeof(RuntimeEventRing) <= 10464, "ring exceeds size cap");
+  check(sizeof(RuntimeEventRing) <= 10656, "ring exceeds size cap");
   check(sizeof(runtimeEventRing.textPool) == RUNTIME_EVENT_TEXT_POOL_BYTES + 1,
         "guard byte changed logical pool size");
 }
@@ -392,12 +393,13 @@ static void test_latest_sequence_helper() {
         "latest sequence setup append 2 failed");
   check(runtime_event_latest_sequence_locked(ring) == 2,
         "latest sequence did not advance to newest append");
-  for (uint8_t index = 0; index < 16; index++) {
+  for (uint8_t index = 0; index < RUNTIME_EVENT_DESCRIPTOR_CAPACITY; index++) {
     check(runtime_event_append_locked(
               ring, RUNTIME_EVENT_CONSOLE, 0, "x", 1) == RUNTIME_EVENT_APPEND_OK,
           "latest sequence eviction setup append failed");
   }
-  check(runtime_event_latest_sequence_locked(ring) == 18,
+  check(runtime_event_latest_sequence_locked(ring) ==
+            2U + RUNTIME_EVENT_DESCRIPTOR_CAPACITY,
         "latest sequence did not follow ring after eviction");
 }
 
@@ -1009,7 +1011,7 @@ def run_source_contracts() -> None:
         owner = extract_function_body(header, "struct RuntimeEventRing") if token == "String " else header
         if token in owner:
             errors.append(f"runtime event owner contains forbidden token: {token.strip()}")
-    if "sizeof(RuntimeEventRing) <= 10464" not in header:
+    if "sizeof(RuntimeEventRing) <= 10656" not in header:
         errors.append("runtime event owner size gate missing")
     if "runtime_event_parse_cursor" not in header:
         errors.append("strict cursor parser missing")
@@ -1166,7 +1168,7 @@ def run_source_contracts() -> None:
         "async function pollAjax(renderFn, sinks)",
         "fetch('/ajax?messageCursor=' + String(messageCursor)",
         "Пропущены сообщения: обнаружен разрыв последовательности.",
-        "const RUNTIME_EVENT_BATCH_LIMIT = 16;",
+        "const RUNTIME_EVENT_BATCH_LIMIT = 32;",
         "function validateRuntimeEvents(data)",
     ):
         if token not in app:

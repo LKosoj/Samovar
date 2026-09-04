@@ -1,679 +1,627 @@
 <!DOCTYPE html>
-<!--This is the plain html source of the hex encoded Editor-Page embedded in SPIFFSEditor.cpp -->
-<html lang="en">
+<html lang="ru">
 <head>
-<title>ESP Editor</title>
+<meta charset="utf-8">
+<title>Самовар — редактор файлов</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style type="text/css" media="screen">
-.cm {
-    z-index: 1000;
-    position: fixed;
-    background: #FFF;
-    border: 1px solid #DDD;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    font-family: sans-serif;
+<style>
+:root, :root[data-theme="light"] {
+  --accent: #3498db;
+  --accent-hover: #3498db97;
+  --bg-page: #e8eef3;
+  --bg-panel: #f1f1f1;
+  --bg-tree: #fafafa;
+  --text-main: #333;
+  --text-strong: #111;
+  --text-on-accent: #fff;
+  --bar-text: #111;
+  --status-text: #555;
+  --input-bg: #fff;
+  --input-text: #111;
+  --menu-bg: #fff;
+  --menu-text: #222;
+  --menu-hover: #f0f0f0;
+  --border: #ccc;
+  --danger: #b00020;
+  --ok: #2f7d4a;
+  --radius: 0.4em;
 }
-.cm ul {
-    list-style: none;
-    margin: 0;
-    padding: 5px 0;
-    min-width: 150px;
+:root[data-theme="dark"] {
+  --bg-page: #1a2733;
+  --bg-panel: #21303d;
+  --bg-tree: #1a2733;
+  --text-main: #cfd8e3;
+  --text-strong: #f3f6f9;
+  --bar-text: #eee;
+  --status-text: #cfd8e3;
+  --input-bg: #fff;
+  --input-text: #111;
+  --menu-bg: #21303d;
+  --menu-text: #f3f6f9;
+  --menu-hover: rgba(52, 152, 219, 0.22);
+  --border: #4a5b6c;
 }
-.cm li {
-    padding: 6px 15px;
-    cursor: pointer;
-    color: #333;
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas: "bar bar" "tree editor";
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text-main);
+  background: var(--bg-tree);
 }
-.cm li:hover {
-    background: #F0F0F0;
-    color: #000;
+#uploader {
+  grid-area: bar;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em 0.5em;
+  padding: 0.45em 0.7em;
+  background: var(--bg-panel);
+  color: var(--bar-text);
 }
-
-.cm li span {
-    color: inherit; /* Наследует цвет от li */
+#uploader a {
+  color: var(--text-strong);
+  font-weight: 600;
+  text-decoration: none;
+  margin-right: 0.4em;
 }
-.cm span {
-  color: #444;
-  display: inline-block;
-  padding: 6px;
-}
-.tvu ul, .tvu li {
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.tvu input {
-  position: absolute;
-  opacity: 0;
-}
-.tvu {
-  font: normal 12px Verdana, Arial, Sans-serif;
-  -moz-user-select: none;
-  -webkit-user-select: none;
-  user-select: none;
-  color: #444;
-  line-height: 16px;
-}
-.tvu span {
-  margin-bottom:5px;
-  padding: 0 0 0 18px;
+#uploader button, #uploader .file-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2em;
+  padding: 0.35em 0.75em;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font: inherit;
   cursor: pointer;
-  display: inline-block;
-  height: 16px;
-  vertical-align: middle;
-  background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAABGdBTUEAAK/INwWK6QAAABl0RVh0U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAADoSURBVBgZBcExblNBGAbA2ceegTRBuIKOgiihSZNTcC5LUHAihNJR0kGKCDcYJY6D3/77MdOinTvzAgCw8ysThIvn/VojIyMjIyPP+bS1sUQIV2s95pBDDvmbP/mdkft83tpYguZq5Jh/OeaYh+yzy8hTHvNlaxNNczm+la9OTlar1UdA/+C2A4trRCnD3jS8BB1obq2Gk6GU6QbQAS4BUaYSQAf4bhhKKTFdAzrAOwAxEUAH+KEM01SY3gM6wBsEAQB0gJ+maZoC3gI6iPYaAIBJsiRmHU0AALOeFC3aK2cWAACUXe7+AwO0lc9eTHYTAAAAAElFTkSuQmCC') no-repeat;
-  background-position: 0px 0px;
 }
-.tvu span:hover {
-  text-decoration: underline;
+#uploader button:hover, #uploader .file-btn:hover { background: var(--accent-hover); color: var(--text-strong); }
+#uploader button:focus-visible, #uploader .file-btn:focus-within, #uploader input:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
-.cm {
-    background: #fff;
-    border: 1px solid #ddd;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    min-width: 120px;
+#btn-save[data-dirty="1"] { background: var(--ok); }
+#uploader input[type="text"] {
+  min-width: 8em;
+  flex: 1 1 8em;
+  max-width: 22em;
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--input-text);
+  font: inherit;
 }
-
-.cm ul {
-    padding: 5px 0;
-    margin: 0;
-}
-
-.cm li {
-    padding: 5px 15px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.cm li:hover {
-    background: #f0f0f0;
-}
-@media screen and (-webkit-min-device-pixel-ratio:0){
-  .tvu{
-    -webkit-animation: webkit-adjacent-element-selector-bugfix infinite 1s;
-  }
-
-  @-webkit-keyframes webkit-adjacent-element-selector-bugfix {
-    from { 
-      padding: 0;
-    } 
-    to { 
-      padding: 0;
-    }
-  }
-}
-#uploader { 
+#editor-filename { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.file-btn { position: relative; overflow: hidden; }
+.file-btn input {
   position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height:28px;
-  line-height: 24px;
-  padding-left: 10px;
-  background-color: #444;
-  color:#EEE;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
-#tree { 
-  position: absolute;
-  top: 28px;
-  bottom: 0;
-  left: 0;
-  width:160px;
-  padding: 8px;
+.file-btn input::file-selector-button { display: none; }
+#status {
+  flex: 1 1 12em;
+  min-height: 1.2em;
+  color: var(--status-text);
 }
-#editor, #preview { 
-  position: absolute;
-  top: 28px;
-  right: 0;
-  bottom: 0;
-  left: 160px;
-  border-left:1px solid #EEE;
+#status.err { color: #ff8a80; font-weight: 600; }
+#status.ok { color: #7ee787; }
+#tree {
+  grid-area: tree;
+  overflow: auto;
+  padding: 0.5em 0.4em 0.8em;
+  border-right: 1px solid var(--border);
+  background: var(--bg-tree);
+}
+#editor, #preview {
+  grid-area: editor;
+  min-width: 0;
+  min-height: 0;
 }
 #preview {
-  background-color: #EEE;
-  padding:5px;
+  display: none;
+  overflow: auto;
+  padding: 0.6em;
+  background: var(--bg-tree);
 }
-@media (max-width: 900px) {
-  /* Кнопки панели не помещаются в одну строку и переносятся вниз, а панель
-     жёстко высотой 28px: перенесённые строки уходят под дерево файлов и
-     редактор, которые лежат абсолютом поверх. Нажатие на поле пути и на
-     кнопки Upload/Create/Save тогда до них не доходит. На узком экране
-     раскладываем страницу колонкой, чтобы панель занимала столько строк,
-     сколько ей нужно. */
-  body { margin: 0; height: 100vh; display: flex; flex-direction: column; }
-  #uploader, #tree, #preview { position: static; }
-  #uploader { height: auto; padding: 4px 10px; }
-  #tree { width: auto; height: 25vh; overflow: auto; }
-  #editor { position: relative; top: 0; left: 0; border-left: 0; }
-  #editor, #preview { flex: 1; min-height: 0; }
+.tvu { list-style: none; margin: 0; padding: 0; user-select: none; }
+.tvu li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  padding: 0.28em 0.4em;
+  border-radius: 0.3em;
+  cursor: pointer;
 }
-#loader { 
+.tvu li:hover { background: rgba(52, 152, 219, 0.18); }
+.tvu li.is-active { background: rgba(52, 152, 219, 0.32); color: var(--text-strong); }
+.tvu .name { flex: 1 1 auto; overflow-wrap: anywhere; }
+.tvu .size { flex: 0 0 auto; font-size: 11px; opacity: 0.65; }
+.cm {
+  z-index: 1000;
+  position: fixed;
+  min-width: 150px;
+  margin: 0;
+  padding: 0.3em 0;
+  list-style: none;
+  background: var(--menu-bg);
+  color: var(--menu-text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+.cm li { padding: 0.45em 0.9em; cursor: pointer; }
+.cm li:hover { background: var(--menu-hover); }
+.cm li.danger { color: var(--danger); }
+#loader {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,0.25);
+}
+.loader-spin {
   position: absolute;
-  top: 36%;
-  right: 40%;
+  top: 50%;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border: 6px solid #b5b5b5;
+  border-top-color: var(--accent);
+  border-bottom-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
-.loader {
-    z-index: 10000;
-    border: 8px solid #b5b5b5; /* Grey */
-    border-top: 8px solid #3498db; /* Blue */
-    border-bottom: 8px solid #3498db; /* Blue */
-    border-radius: 50%;
-    width: 240px;
-    height: 240px;
-    animation: spin 2s linear infinite;
-    display:none;
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 900px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(28vh, 36vh) 1fr;
+    grid-template-areas: "bar" "tree" "editor";
+  }
+  #tree { border-right: 0; border-bottom: 1px solid var(--border); }
+  #uploader input[type="text"] { max-width: none; }
 }
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+.theme-toggle {
+  margin-left: auto;
+  min-width: 44px;
+  min-height: 2em;
+  padding: 0.1em 0.5em;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 </style>
+<script src="app.js"></script>
+<script>SamovarApp.initTheme();</script>
+</head>
+<body>
+  <div id="loader"><div class="loader-spin"></div></div>
+  <header id="uploader">
+    <a href="/">Самовар</a>
+    <button type="button" id="btn-refresh">Обновить</button>
+    <label class="file-btn">Файл<input id="upload-select" type="file" name="data"></label>
+    <input id="upload-path" type="text" name="path" value="/" aria-label="Путь файла">
+    <button type="button" id="btn-upload">Загрузить</button>
+    <button type="button" id="btn-create">Создать</button>
+    <input id="editor-filename" type="text" disabled size="20" aria-label="Открытый файл">
+    <button type="button" id="btn-save">Сохранить</button>
+    <span id="status" role="status"></span>
+    <button type="button" id="themeToggle" class="theme-toggle" onclick="onEditorThemeToggle()" title="Переключить тему">☾</button>
+  </header>
+  <nav id="tree" aria-label="Файлы"></nav>
+  <div id="editor"></div>
+  <div id="preview"></div>
+  <iframe id="download-frame" style="display:none" title=""></iframe>
 <script>
-if (typeof XMLHttpRequest === "undefined") {
-  XMLHttpRequest = function () {
-    try { return new ActiveXObject("Msxml2.XMLHTTP.6.0"); } catch (e) {}
-    try { return new ActiveXObject("Msxml2.XMLHTTP.3.0"); } catch (e) {}
-    try { return new ActiveXObject("Microsoft.XMLHTTP"); } catch (e) {}
-    throw new Error("This browser does not support XMLHttpRequest.");
-  };
+function ge(id) { return document.getElementById(id); }
+function ce(tag) { return document.createElement(tag); }
+
+function setStatus(text, kind) {
+  var el = ge("status");
+  el.textContent = text || "";
+  el.className = kind || "";
 }
 
-function ge(a){
-  return document.getElementById(a);
+function describeHttpError(status, body) {
+  if (status == 503) return "Занято: идёт процесс, файлы сейчас нельзя менять";
+  var msg = "Ошибка " + status;
+  if (body) msg += ": " + body;
+  return msg;
 }
-function ce(a){
-  return document.createElement(a);
+
+function filePath(name) {
+  if (!name) return "/";
+  return name.charAt(0) === "/" ? name : "/" + name;
+}
+
+function fileExt(path) {
+  var m = /\.([^.]+)$/.exec(path);
+  return m ? m[1].toLowerCase() : "";
+}
+
+function formatSize(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + " Б";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " КБ";
+  return (n / 1048576).toFixed(1) + " МБ";
 }
 
 function sortByKey(array, key) {
-  return array.sort(function(a, b) {
+  return array.sort(function (a, b) {
     var x = a[key]; var y = b[key];
-    return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+    if (x < y) return -1;
+    if (x > y) return 1;
+    return 0;
   });
 }
-
 
 var QueuedRequester = function () {
   this.queue = [];
   this.running = false;
   this.xmlhttp = null;
-}
+};
 QueuedRequester.prototype = {
-  _request: function(req){
+  _request: function (req) {
+    if (!(req instanceof Object)) return;
     this.running = true;
-    if(!req instanceof Object) return;
     var that = this;
-    
-    function ajaxCb(x,d){ return function(){
-      if (x.readyState == 4){
-        ge("loader").style.display = "none";
-        d.callback(x.status, x.responseText);
-        if(that.queue.length === 0) that.running = false;
-        if(that.running) that._request(that.queue.shift());
-      }
-    }}
-    
     ge("loader").style.display = "block";
-    
     var p = "";
-    if(req.params instanceof FormData){
+    if (req.params instanceof FormData) {
       p = req.params;
-    } else if(req.params instanceof Object){
+    } else if (req.params instanceof Object) {
       for (var key in req.params) {
-        if(p === "")
-          p += (req.method === "GET")?"?":"";
-        else
-          p += "&";
-        p += encodeURIComponent(key)+"="+encodeURIComponent(req.params[key]);
-      };
+        p += (p === "" && req.method === "GET") ? "?" : (p === "" ? "" : "&");
+        p += encodeURIComponent(key) + "=" + encodeURIComponent(req.params[key]);
+      }
     }
-    
     this.xmlhttp = new XMLHttpRequest();
-    this.xmlhttp.onreadystatechange = ajaxCb(this.xmlhttp, req);
-    if(req.method === "GET"){
-      this.xmlhttp.open(req.method, req.url+p, true);
+    this.xmlhttp.onreadystatechange = function () {
+      if (that.xmlhttp.readyState != 4) return;
+      ge("loader").style.display = "none";
+      req.callback(that.xmlhttp.status, that.xmlhttp.responseText);
+      if (that.queue.length === 0) that.running = false;
+      if (that.running) that._request(that.queue.shift());
+    };
+    if (req.method === "GET") {
+      this.xmlhttp.open(req.method, req.url + p, true);
       this.xmlhttp.send();
     } else {
       this.xmlhttp.open(req.method, req.url, true);
-      if(p instanceof String)
-        this.xmlhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
       this.xmlhttp.send(p);
     }
   },
-  stop: function(){
-    if(this.running) this.running = false;
-    if(this.xmlhttp && this.xmlhttp.readyState < 4){
-      this.xmlhttp.abort();
-    }
-  },
-  add: function(method, url, params, callback){
-    this.queue.push({url:url,method:method,params:params,callback:callback});
-    if(!this.running){
-      this._request(this.queue.shift());
-    }
+  add: function (method, url, params, callback) {
+    this.queue.push({ url: url, method: method, params: params, callback: callback });
+    if (!this.running) this._request(this.queue.shift());
   }
-}
+};
 
 var requests = new QueuedRequester();
 
-function createFileUploader(element, tree, editor){
-  var xmlHttp;
-  
-  var refresh = ce("button");
-  refresh.innerHTML = 'Refresh List';
-  ge(element).appendChild(refresh);
-
-  var input = ce("input");
-  input.type = "file";
-  input.multiple = false;
-  input.name = "data";
-  input.id="upload-select";
-  ge(element).appendChild(input);
-  
-  var path = ce("input");
-  path.id = "upload-path";
-  path.type = "text";
-  path.name = "path";
-  path.defaultValue = "/";
-  ge(element).appendChild(path);
-  
-  var button = ce("button");
-  button.innerHTML = 'Upload';
-  ge(element).appendChild(button);
-  
-  var mkfile = ce("button");
-  mkfile.innerHTML = 'Create';
-  ge(element).appendChild(mkfile);
-
-  var filename     = ce("input");
-  filename.id      = "editor-filename";
-  filename.type    = "text";
-  filename.disabled= true;
-  filename.size    = 20;
-  ge(element).appendChild(filename);
-
-  var savefile = ce("button");
-  savefile.innerHTML = ' Save ' ;
-  ge(element).appendChild(savefile);
-
-  function httpPostProcessRequest(status, responseText){
-    if(status != 200)
-      alert("ERROR["+status+"]: "+responseText);
-    else
-      tree.refreshPath(path.value);
+function isTextFile(path) {
+  switch (fileExt(path)) {
+    case "txt": case "htm": case "html": case "js": case "css": case "xml":
+    case "json": case "conf": case "ini": case "h": case "c": case "cpp":
+    case "php": case "hex": case "ino": case "pde": case "lua": case "csv":
+      return true;
   }
-  function createPath(p){
+  return false;
+}
+
+function isImageFile(path) {
+  switch (fileExt(path)) {
+    case "png": case "jpg": case "jpeg": case "gif": case "bmp": case "ico":
+      return true;
+  }
+  return false;
+}
+
+function aceTheme() {
+  return document.documentElement.getAttribute("data-theme") === "dark"
+    ? "tomorrow_night"
+    : "chrome";
+}
+
+function onEditorThemeToggle() {
+  SamovarApp.toggleTheme();
+  if (window.samovarAce) window.samovarAce.setTheme("ace/theme/" + aceTheme());
+}
+
+function createFileUploader(tree, editor) {
+  var input = ge("upload-select");
+  var path = ge("upload-path");
+  function afterWrite(status, responseText) {
+    if (status != 200) {
+      setStatus(describeHttpError(status, responseText), "err");
+      return;
+    }
+    setStatus(responseText || "Готово", "ok");
+    tree.refreshPath("/");
+  }
+  ge("btn-refresh").onclick = function () { tree.refreshPath("/"); };
+  ge("btn-create").onclick = function () {
+    var p = filePath(path.value);
+    if (p === "/") {
+      setStatus("Укажите имя файла в поле пути", "err");
+      return;
+    }
     var formData = new FormData();
     formData.append("path", p);
-    requests.add("PUT", "/edit", formData, httpPostProcessRequest);
-  }
-  
-  mkfile.onclick = function(e){
-    createPath(path.value);
-    editor.loadUrl(path.value);
-    path.value="/";
+    requests.add("PUT", "/edit", formData, function (status, responseText) {
+      afterWrite(status, responseText);
+      if (status == 200) editor.loadUrl(p);
+    });
   };
-
-  savefile.onclick = function(e){
-    editor.execCommand('saveCommand');
-  };
-  
-  refresh.onclick = function(e){
-    tree.refreshPath(path.value);
-  };
-  
-  button.onclick = function(e){
-    if(input.files.length === 0){
+  ge("btn-save").onclick = function () { editor.execCommand("saveCommand"); };
+  ge("btn-upload").onclick = function () {
+    if (input.files.length === 0) {
+      setStatus("Сначала выберите файл", "err");
       return;
     }
     var formData = new FormData();
     formData.append("data", input.files[0], path.value);
-    requests.add("POST", "/edit", formData, httpPostProcessRequest);
-    var uploadPath= ge("upload-path");
-    uploadPath.value="/";
-    var uploadSelect= ge("upload-select");
-    uploadSelect.value="";
+    requests.add("POST", "/edit", formData, afterWrite);
+    path.value = "/";
+    input.value = "";
   };
-  input.onchange = function(e){
-    if(input.files.length === 0) return;
+  input.onchange = function () {
+    if (input.files.length === 0) return;
     var filename = input.files[0].name;
-    var ext = /(?:\.([^.]+))?$/.exec(filename)[1];
-    var name = /(.*)\.[^.]+$/.exec(filename)[1];
-    if(typeof name !== undefined){
-      filename = name;
-    }
-    path.value = "/"+filename+"."+ext;
+    var ext = fileExt(filename);
+    var name = filename.slice(0, filename.length - (ext ? ext.length + 1 : 0));
+    path.value = "/" + name + (ext ? "." + ext : "");
   };
 }
 
-function createTree(element, editor){
+function createTree(element, editor) {
   var preview = ge("preview");
-  var treeRoot = ce("div");
+  var treeRoot = ce("ul");
   treeRoot.className = "tvu";
   ge(element).appendChild(treeRoot);
 
-  function loadDownload(path){
-    ge('download-frame').src = "/edit?download="+path;
+  function loadDownload(path) {
+    ge("download-frame").src = "/edit?download=" + encodeURIComponent(path);
   }
-
-  function loadPreview(path){
-    var edfname = ge("editor-filename");
-    edfname.value=path;
+  function loadPreview(path) {
+    ge("editor-filename").value = path;
     ge("editor").style.display = "none";
     preview.style.display = "block";
-    preview.innerHTML = '<img src="/edit?edit='+path+'&_cb='+Date.now()+'" style="max-width:100%; max-height:100%; margin:auto; display:block;" />';
+    preview.innerHTML = '<img src="/edit?edit=' + encodeURIComponent(path) +
+      "&_cb=" + Date.now() + '" alt="" style="max-width:100%; max-height:100%; margin:auto; display:block;">';
+    markActive(path);
   }
-
-  function fillFileMenu(el, path){
-    var list = ce("ul");
-    el.appendChild(list);
-    var action = ce("li");
-    list.appendChild(action);
-    if(isImageFile(path)){
-      action.innerHTML = "<span>Preview</span>";
-      action.onclick = function(e){
-        loadPreview(path);
-        if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
-      };
-    } else if(isTextFile(path)){
-      action.innerHTML = "<span>Edit</span>";
-      action.onclick = function(e){
-        editor.loadUrl(path);
-        if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
-      };
+  function markActive(path) {
+    var items = treeRoot.querySelectorAll("li");
+    for (var i = 0; i < items.length; i++) {
+      items[i].classList.toggle("is-active", items[i].dataset.path === path);
     }
-    var download = ce("li");
-    list.appendChild(download);
-    download.innerHTML = "<span>Download</span>";
-    download.onclick = function(e){
-      loadDownload(path);
-      if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
-    };
-    var delFile = ce("li");
-    list.appendChild(delFile);
-    delFile.innerHTML = "<span>Delete</span>";
-    delFile.onclick = function(e){
-      httpDelete(path);
-      if(document.body.getElementsByClassName('cm').length > 0) document.body.removeChild(el);
-    };
   }
-
-  function showContextMenu(event, path, isfile) {
-    var oldMenu = document.querySelector('.cm');
-    if (oldMenu) document.body.removeChild(oldMenu);
-    var divContext = document.createElement('div');
-    divContext.className = 'cm';
-    divContext.style.display = 'block';
-    divContext.style.position = 'fixed'; // Используем fixed вместо absolute
-    divContext.style.left = event.clientX + 'px';
-    divContext.style.top = event.clientY + 'px';
-    divContext.style.zIndex = '1000';
-    fillFileMenu(divContext, path);
-    document.body.appendChild(divContext);
-    document.addEventListener('click', function closeMenu(e) {
-        if (!divContext.contains(e.target)) {
-            document.body.removeChild(divContext);
-            document.removeEventListener('click', closeMenu);
+  function closeMenu() {
+    var old = document.querySelector(".cm");
+    if (old) old.parentNode.removeChild(old);
+  }
+  function fillFileMenu(el, path) {
+    function addItem(label, cls, fn) {
+      var li = ce("li");
+      li.textContent = label;
+      if (cls) li.className = cls;
+      li.onclick = function () { fn(); closeMenu(); };
+      el.appendChild(li);
+    }
+    if (isImageFile(path)) addItem("Просмотр", "", function () { loadPreview(path); });
+    else if (isTextFile(path)) addItem("Правка", "", function () { editor.loadUrl(path); });
+    addItem("Скачать", "", function () { loadDownload(path); });
+    addItem("Удалить", "danger", function () {
+      if (!confirm("Удалить " + path + "?")) return;
+      var formData = new FormData();
+      formData.append("path", path);
+      requests.add("DELETE", "/edit", formData, function (status, responseText) {
+        if (status != 200) {
+          setStatus(describeHttpError(status, responseText), "err");
+          return;
         }
+        setStatus("Удалено: " + path, "ok");
+        refresh();
+      });
     });
-    divContext.addEventListener('click', function(e) {
-        e.stopPropagation();
-    });
-}
-
-  function createTreeLeaf(path, name, size){
+  }
+  function showContextMenu(event, path) {
+    closeMenu();
+    var menu = ce("ul");
+    menu.className = "cm";
+    menu.style.left = event.clientX + "px";
+    menu.style.top = event.clientY + "px";
+    fillFileMenu(menu, path);
+    document.body.appendChild(menu);
+    setTimeout(function () {
+      document.addEventListener("click", function hide(e) {
+        if (!menu.contains(e.target)) {
+          closeMenu();
+          document.removeEventListener("click", hide);
+        }
+      });
+    }, 0);
+  }
+  function createTreeLeaf(name, size) {
+    var path = filePath(name);
     var leaf = ce("li");
-    leaf.id = name;
+    leaf.dataset.path = path;
     var label = ce("span");
-    label.innerHTML = name;
+    label.className = "name";
+    label.textContent = path.replace(/^\//, "");
+    var sz = ce("span");
+    sz.className = "size";
+    sz.textContent = formatSize(size);
     leaf.appendChild(label);
-    leaf.onclick = function(e){
-      if(isTextFile(leaf.id.toLowerCase())){
-        editor.loadUrl(leaf.id);
-      } else if(isImageFile(leaf.id.toLowerCase())){
-        loadPreview(leaf.id);
-      }
+    leaf.appendChild(sz);
+    leaf.onclick = function () {
+      if (isTextFile(path)) editor.loadUrl(path);
+      else if (isImageFile(path)) loadPreview(path);
     };
-    leaf.oncontextmenu = function(e){
+    leaf.oncontextmenu = function (e) {
       e.preventDefault();
       e.stopPropagation();
-      showContextMenu(e, leaf.id, true);
+      showContextMenu(e, path);
     };
     return leaf;
   }
-
-  function addList(parent, path, items){
-    sortByKey(items, 'name');
-    var list = ce("ul");
-    parent.appendChild(list);
-    var ll = items.length;
-    for(var i = 0; i < ll; i++){
-      if(items[i].type === "file")
-        list.appendChild(createTreeLeaf(path, items[i].name, items[i].size));
+  function addList(items) {
+    sortByKey(items, "name");
+    treeRoot.innerHTML = "";
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type === "file") treeRoot.appendChild(createTreeLeaf(items[i].name, items[i].size));
     }
-
   }
-
-  function isTextFile(path){
-    var ext = /(?:\.([^.]+))?$/.exec(path)[1];
-    if(typeof ext !== undefined){
-      switch(ext){
-        case "txt":
-        case "htm":
-        case "html":
-        case "js":
-        case "css":
-        case "xml":
-        case "json":
-        case "conf":
-        case "ini":
-        case "h":
-        case "c":
-        case "cpp":
-        case "php":
-        case "hex":
-        case "ino":
-        case "pde":
-        case "lua":
-        case "csv":
-        return true;
+  function refresh() {
+    requests.add("GET", "/edit", { list: "/" }, function (status, responseText) {
+      if (status != 200) {
+        setStatus(describeHttpError(status, responseText), "err");
+        return;
       }
-    }
-    return false;
+      addList(JSON.parse(responseText));
+      markActive(ge("editor-filename").value);
+    });
   }
-
-  function isImageFile(path){
-    var ext = /(?:\.([^.]+))?$/.exec(path)[1];
-    if(typeof ext !== undefined){
-      switch(ext){
-        case "png":
-        case "jpg":
-        case "gif":
-        case "bmp":
-        return true;
-      }
-    }
-    return false;
-  }
-
-  this.refreshPath = function(path){
-    treeRoot.removeChild(treeRoot.childNodes[0]);
-    httpGet(treeRoot, "/");
-  };
-
-  function delCb(path){
-    return function(status, responseText){
-      if(status != 200){
-        alert("ERROR["+status+"]: "+responseText);
-      } else {
-        treeRoot.removeChild(treeRoot.childNodes[0]);
-        httpGet(treeRoot, "/");
-      }
-    }
-  }
-
-  function httpDelete(filename){
-    var formData = new FormData();
-    formData.append("path", filename);
-    requests.add("DELETE", "/edit", formData, delCb(filename));
-  }
-
-  function getCb(parent, path){
-    return function(status, responseText){
-      if(status == 200)
-        addList(parent, path, JSON.parse(responseText));
-    }
-  }
-
-  function httpGet(parent, path){
-    requests.add("GET", "/edit", { list: path }, getCb(parent, path));
-  }
-
-  httpGet(treeRoot, "/");
+  this.refreshPath = function () { refresh(); };
+  this.markActive = markActive;
+  refresh();
   return this;
 }
 
-function createEditor(element, file, lang, theme, type){
-  function getLangFromFilename(filename){
-    var lang = "plain";
-    var ext = /(?:\.([^.]+))?$/.exec(filename)[1];
-    if(typeof ext !== undefined){
-      switch(ext){
-        case "txt": lang = "plain"; break;
-        case "hex": lang = "plain"; break;
-        case "conf": lang = "plain"; break;
-        case "htm": lang = "html"; break;
-        case "js": lang = "javascript"; break;
-        case "h": lang = "c_cpp"; break;
-        case "c": lang = "c_cpp"; break;
-        case "cpp": lang = "c_cpp"; break;
-        case "lua": lang = "lua"; break;
-        case "css":
-        case "scss":
-        case "php":
-        case "html":
-        case "json":
-        case "xml":
-        case "ini":  lang = ext;
-      }
-    }
-    return lang;
+function createEditor(element, file, lang, theme) {
+  function getLangFromFilename(filename) {
+    var ext = fileExt(filename);
+    if (ext === "htm") return "html";
+    if (ext === "js") return "javascript";
+    if (ext === "h" || ext === "c" || ext === "cpp" || ext === "ino" || ext === "pde") return "c_cpp";
+    if (ext === "txt" || ext === "hex" || ext === "conf" || ext === "csv") return "plain";
+    if (ext === "lua" || ext === "css" || ext === "scss" || ext === "php" ||
+        ext === "html" || ext === "json" || ext === "xml" || ext === "ini") return ext;
+    return "plain";
   }
-
-  if(typeof file === "undefined") file = "/index.html";
-
-  if(typeof lang === "undefined"){
-    lang = getLangFromFilename(file);
-  }
-
-  if(typeof theme === "undefined") theme = "textmate";
-
-  if(typeof type === "undefined"){
-    type = "text/"+lang;
-    if(lang === "c_cpp") type = "text/plain";
-  }
-
-  ace.require("ace/ext/language_tools");
+  if (typeof file === "undefined") file = "/index.htm";
+  if (typeof lang === "undefined") lang = getLangFromFilename(file);
+  if (typeof theme === "undefined") theme = aceTheme();
+  var type = lang === "c_cpp" ? "text/plain" : "text/" + lang;
+  try { ace.require("ace/ext/language_tools"); } catch (e) {}
   var editor = ace.edit(element);
-
-    editor.setOptions({
-        enableBasicAutocompletion: true,
-        enableSnippets: true,
-        enableLiveAutocompletion: true
-    });
-    
-    
-  function httpPostProcessRequest(status, responseText){
-    if(status != 200) alert("ERROR["+status+"]: "+responseText);
+  editor.setOptions({
+    enableBasicAutocompletion: true,
+    enableSnippets: true,
+    enableLiveAutocompletion: true
+  });
+  var dirty = false;
+  function setDirty(on) {
+    dirty = !!on;
+    ge("btn-save").dataset.dirty = dirty ? "1" : "0";
   }
-  function httpPost(filename, data, type){
+  function httpPost(filename, data, mime) {
     var formData = new FormData();
-    formData.append("data", new Blob([data], { type: type }), filename);
-    requests.add("POST", "/edit", formData, httpPostProcessRequest);
+    formData.append("data", new Blob([data], { type: mime }), filename);
+    requests.add("POST", "/edit", formData, function (status, responseText) {
+      if (status != 200) {
+        setStatus(describeHttpError(status, responseText), "err");
+        return;
+      }
+      setDirty(false);
+      setStatus("Сохранено: " + filename, "ok");
+    });
   }
-  function httpGetProcessRequest(status, responseText){
+  function httpGet(theUrl) {
+    requests.add("GET", "/edit", { edit: theUrl }, function (status, responseText) {
       ge("preview").style.display = "none";
       ge("editor").style.display = "block";
-      if(status == 200)
-        editor.setValue(responseText);
-      else
-        editor.setValue("");
+      editor.setValue(status == 200 ? responseText : "");
       editor.clearSelection();
+      setDirty(false);
+      if (status != 200) setStatus(describeHttpError(status, responseText), "err");
+      else setStatus("");
+    });
   }
-  function httpGet(theUrl){
-      requests.add("GET", "/edit", { edit: theUrl }, httpGetProcessRequest);
-  }
-
-  if(lang !== "plain") editor.getSession().setMode("ace/mode/"+lang);
-  editor.setTheme("ace/theme/"+theme);
+  if (lang !== "plain") editor.getSession().setMode("ace/mode/" + lang);
+  editor.setTheme("ace/theme/" + theme);
   editor.$blockScrolling = Infinity;
   editor.getSession().setUseSoftTabs(true);
   editor.getSession().setTabSize(2);
   editor.setHighlightActiveLine(true);
   editor.setShowPrintMargin(false);
+  editor.on("change", function () { setDirty(true); });
   editor.commands.addCommand({
-      name: 'saveCommand',
-      bindKey: {win: 'Ctrl-S',  mac: 'Command-S'},
-      exec: function(editor) {
-        httpPost(file, editor.getValue()+"", type);
-      },
-      readOnly: false
+    name: "saveCommand",
+    bindKey: { win: "Ctrl-S", mac: "Command-S" },
+    exec: function () { httpPost(file, editor.getValue() + "", type); },
+    readOnly: false
   });
-  editor.commands.addCommand({
-      name: 'undoCommand',
-      bindKey: {win: 'Ctrl-Z',  mac: 'Command-Z'},
-      exec: function(editor) {
-        editor.getSession().getUndoManager().undo(false);
-      },
-      readOnly: false
-  });
-  editor.commands.addCommand({
-      name: 'redoCommand',
-      bindKey: {win: 'Ctrl-Shift-Z',  mac: 'Command-Shift-Z'},
-      exec: function(editor) {
-        editor.getSession().getUndoManager().redo(false);
-      },
-      readOnly: false
-  });
-  editor.loadUrl = function(filename){
-    var edfname = ge("editor-filename");
-    edfname.value=filename;
+  editor.loadUrl = function (filename) {
+    ge("editor-filename").value = filename;
     file = filename;
     lang = getLangFromFilename(file);
-    type = "text/"+lang;
-    if(lang !== "plain") editor.getSession().setMode("ace/mode/"+lang);
+    type = lang === "c_cpp" ? "text/plain" : "text/" + lang;
+    if (lang !== "plain") editor.getSession().setMode("ace/mode/" + lang);
+    else editor.getSession().setMode("ace/mode/text");
     httpGet(file);
+    var treeNav = ge("tree");
+    var active = treeNav && treeNav.querySelector(".tvu");
+    if (active) {
+      var items = active.querySelectorAll("li");
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle("is-active", items[i].dataset.path === filename);
+      }
+    }
   };
+  window.addEventListener("beforeunload", function (e) {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
   return editor;
 }
-function onBodyLoad(){
-  var vars = {};
-  var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m,key,value) { vars[key] = value; });
-  var editor = createEditor("editor", vars.file, vars.lang, vars.theme);
-  var tree = createTree("tree", editor);
-  createFileUploader("uploader", tree, editor);
-  if(typeof vars.file === "undefined") vars.file = "/index.htm";
-  editor.loadUrl(vars.file);
-};
-</script>
-<script id='ace' src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.3/ace.js" type="text/javascript" charset="utf-8"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.3/ext-language_tools.min.js"></script>
-<script>
-  if  (typeof ace.edit == "undefined") {
-    var script = document.createElement('script');
-    script.src = "/ace.js";
-    script.async = false;
-    document.head.appendChild(script);
+
+function onBodyLoad() {
+  if (typeof ace === "undefined" || typeof ace.edit !== "function") {
+    setStatus("Не загрузился Ace 1.44.0 (нужен интернет или локальный /ace.js)", "err");
+    return;
   }
+  SamovarApp.initTheme();
+  var vars = {};
+  window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function (m, key, value) { vars[key] = value; });
+  var editor = createEditor("editor", vars.file, vars.lang, vars.theme);
+  window.samovarAce = editor;
+  var tree = createTree("tree", editor);
+  createFileUploader(tree, editor);
+  if (typeof vars.file === "undefined") vars.file = "/index.htm";
+  editor.loadUrl(vars.file);
+}
 </script>
-</head>
-<body onload="onBodyLoad();">
-  <div id="loader" class="loader"></div>
-  <div id="uploader"></div>
-  <div id="tree"></div>
-  <div id="editor"></div>
-  <div id="preview" style="display:none;"></div>
-  <iframe id=download-frame style='display:none;'></iframe>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.44.0/ace.min.js" charset="utf-8" onerror="this.onerror=null;this.src='/ace.js'"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.44.0/ext-language_tools.min.js"></script>
+<script>
+(function waitAce(n) {
+  if (typeof ace !== "undefined" && typeof ace.edit === "function") {
+    onBodyLoad();
+    return;
+  }
+  if (n >= 40) {
+    onBodyLoad();
+    return;
+  }
+  setTimeout(function () { waitAce(n + 1); }, 50);
+})(0);
+</script>
 </body>
 </html>

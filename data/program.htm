@@ -583,9 +583,9 @@ function updateProgramTemplateBaseline() {
 function programTemplateDirty() {
   var program = document.getElementById('WProgram1');
   if (!program) return false;
-  // programTemplateBaseline пуст ровно до первого updateProgramTemplateBaseline()
-  // (шаблон ИЛИ программа прибора - В1), поэтому сравнение с baseline эквивалентно
-  // прежней ветке при programTemplateLoaded === false и не требует спецкейса.
+  // programTemplateBaseline пуст ровно до первого updateProgramTemplateBaseline(),
+  // поэтому сравнение с baseline эквивалентно прежней ветке при
+  // programTemplateLoaded === false и не требует спецкейса.
   return program.value !== programTemplateBaseline;
 }
 
@@ -618,8 +618,6 @@ async function getProgramFromFile(selectObject, options){
     applyParsedProgramText(parsed);
     programTemplateLoaded = true;
     currentProgramTemplateValue = String(value);
-    const deviceNotice = document.getElementById('deviceProgramNotice');
-    if (deviceNotice) deviceNotice.style.display = 'none';
     await updateColumnParams();
     applyRecommendedSpeeds({ silent: true });
     updateProgramTemplateBaseline();
@@ -776,8 +774,7 @@ function formatSummaryTime(value) {
 }
 
 // Проверять распределение сравнением суммы ПРОЦЕНТОВ со 100 нельзя: прибор хранит
-// объёмы строк в целых мл, поэтому программа, прочитанная с прибора и обратно
-// пересчитанная в проценты (В1: percent = (volumeMl/1000)/vlc), почти никогда не
+// объёмы строк в целых мл, поэтому пересчёт процентов из объёмов почти никогда не
 // даёт сумму ровно 100 - цена округления одного мл в долях зависит от размера
 // бюджета фракции (для маленького бюджета один мл - это заметная доля процента,
 // для большого - ничтожная), поэтому и фиксированный допуск в долях либо слишком
@@ -1276,66 +1273,6 @@ function set_bgcolor(obj){
   if (glcalcnum) set_num();
 }
 
-// ===== В1: обратное к set_num() - формат прошивки -> формат редактора =====
-// Строка прошивки (rect, program_io.h): Тип;Объём_мл;Скорость;Ёмкость;Темп;Мощность.
-// Строка редактора (WProgram1):          Ёмкость;Скорость;Процент;Тип;Мощность.
-// Ровно 6 полей и тип из HBCTP - надёжный признак rect-формата. У DIST/BEER/NBK
-// другое число полей, поэтому чужой формат отбрасывается ЦЕЛИКОМ, а не рисуется наполовину.
-function parseDeviceProgramRows(text) {
-  var lines = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  var rows = [];
-  for (var i = 0; i < lines.length; i++) {
-    var t = lines[i].trim();
-    if (!t) continue;
-    var f = t.split(";");
-    if (f.length !== 6) return null;
-    if (f[0].length !== 1 || PROGRAM_FILE_TYPES.indexOf(f[0]) === -1) return null;
-    rows.push(f);
-  }
-  return rows.length ? rows : null;
-}
-
-// Тот же делитель объёма, что использует set_num() для данного типа строки.
-function deviceProgramRowVlc(type) {
-  if (type === "H") return phv / 100;
-  if (type === "T") return ptv / 100;
-  if (type === "B" || type === "C") return pbas / 100;
-  return 0;
-}
-
-function deviceProgramRowToEditorRow(fields) {
-  var type = fields[0];
-  var percent = 0;
-  if (type !== "P") {
-    var volumeMl = Number(fields[1]);
-    var vlc = deviceProgramRowVlc(type);
-    if (isFinite(volumeMl) && isFinite(vlc) && vlc > 0) {
-      // Обратное к set_num(): ll = percent*vlc, Объём_мл = round(ll*1000).
-      percent = Math.round((volumeMl / 1000 / vlc) * 1e6) / 1e6;
-    }
-    // vlc<=0 - percent остаётся 0, сводка сама покажет нехватку процентов.
-  }
-  // Тип 'P': секунды паузы продублированы в "Объём" (округлённо) и "Скорость"
-  // (без округления) - редактор хранит паузу в колонке "Скорость", берём поле 3.
-  return [fields[3], fields[2], percent, type, fields[5]].join(";");
-}
-
-// Возвращает тело для WProgram1 или null, если пришёл не rect-формат либо пусто -
-// тогда вызывающий код откатывается на загрузку шаблона.
-function buildEditorBodyFromDeviceProgram(rawText) {
-  if (!rawText || !rawText.trim()) return null;
-  try {
-    if (!prep_calc()) return null;
-    var rows = parseDeviceProgramRows(rawText);
-    if (!rows) return null;
-    var out = [];
-    for (var i = 0; i < rows.length; i++) out.push(deviceProgramRowToEditorRow(rows[i]));
-    return out.join("\n");
-  } catch (e) {
-    return null;
-  }
-}
-
 window.onload = function() {
   SamovarApp.initTheme();
   // страховка: calc_program() ставит свои подсказки только при успешном prep_calc(),
@@ -1361,34 +1298,7 @@ window.onload = function() {
     if (!diamSelect.querySelector("option[selected]")) diamSelect.value = "2.0";
     currentColumnDiameterValue = diamSelect.value;
   }
-  // В1: если прибор прислал непустую программу в rect-формате - показываем ЕЁ,
-  // а не подменяем шаблоном "Фрукты" (иначе "Записать" затирал реальную программу
-  // устройства первым же нажатием). Список шаблонов не трогаем - шаблон грузится
-  // только вручную, через onchange.
-  const deviceProgramField = document.getElementById('WProgram');
-  const deviceProgramBody = deviceProgramField
-    ? buildEditorBodyFromDeviceProgram(deviceProgramField.value)
-    : null;
-  if (deviceProgramBody) {
-    document.getElementById('WProgram1').value = deviceProgramBody;
-    loadedProgramPowerUnit = regulatorPowerUnit();
-    columnRecommendationsApplied = false;
-    glcalcnum = false;
-    calc_program();
-    updateProgramPowerUnitHint();
-    updateProgramTemplateBaseline();
-    // Точка отката для СПИСКА шаблонов зафиксирована - это не значит "шаблон загружен".
-    // Само значение списка не трогаем (шаблон грузится только вручную), но запоминаем
-    // его, чтобы restoreProgramTemplateSelect() было куда вернуть список, если оператор
-    // откроет шаблон и откажется от подмены программы прибора.
-    if (loadProgramSelect) {
-      currentProgramTemplateValue = loadProgramSelect.value;
-      programTemplateLoaded = true;
-    }
-    var deviceNotice = document.getElementById('deviceProgramNotice');
-    if (deviceNotice) deviceNotice.style.display = 'block';
-    updateColumnParams();
-  } else if (loadProgramSelect) {
+  if (loadProgramSelect) {
     getProgramFromFile(loadProgramSelect, { skipConfirm: true });
   }
   
@@ -1424,8 +1334,6 @@ Samovar v. <span id='version'>%v%</span>
   <option value="3.0" %ColDiam_3.0%>3 дюйма</option>
 </select>
 </div>
-
-<p id="deviceProgramNotice" class="program-summary-status is-info" style="display:none; margin: 0.5em 0;">Показана текущая программа прибора. Проценты голов/тела/хвостов пересчитаны по параметрам этой страницы - объёмы и скорости отбора при этом остаются как в приборе.</p>
 
 <!-- БЛОК ПАРАМЕТРОВ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) -->
 <div class="tabcontent" style="display: block; border-top: 1px solid #ccc; padding: 10px;">
@@ -1557,7 +1465,7 @@ Samovar v. <span id='version'>%v%</span>
 <label for="fileToLoad" class="button custom-file-upload">
     <i class="fa fa-cloud-upload"></i> Загрузить расчет 
 </label>
-<input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button"/>
+<input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])"/>
 </div>
 </div>
 <div class="program-actions">

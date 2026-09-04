@@ -86,9 +86,9 @@ if text:
     errors.append(str(exc))
     dirty_body = ""
   if dirty_body:
-    # [В1] Упрощено до сравнения с baseline: programTemplateBaseline пуст ровно до
-    # первого updateProgramTemplateBaseline() (шаблон ИЛИ программа прибора), поэтому
-    # ветка по programTemplateLoaded стала не нужна - см. data_raw/program.htm.
+    # Упрощено до сравнения с baseline: programTemplateBaseline пуст ровно до
+    # первого updateProgramTemplateBaseline(), поэтому ветка по
+    # programTemplateLoaded стала не нужна - см. data_raw/program.htm.
     for token in [
       "if (!program) return false;",
       "return program.value !== programTemplateBaseline;",
@@ -164,6 +164,10 @@ if text:
     errors.append("data_raw/program.htm still calls /command through direct fetch()")
   if "getProgramFromFile(loadProgramSelect, { skipConfirm: true });" not in text:
     errors.append("program.htm initial template load is not explicitly confirm-free")
+  if "buildEditorBodyFromDeviceProgram" in text or 'id="deviceProgramNotice"' in text:
+    errors.append("program.htm must open the fruit template, not import the device program")
+  if '<option value="0">Фрукты</option>' not in text:
+    errors.append("program.htm default template option is not Фрукты")
 
   for token in [
     'id="programSummary"',

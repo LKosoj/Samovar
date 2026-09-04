@@ -6,7 +6,7 @@ stubbed) so the assertions exercise SamovarApp.pollAjax()/removeLastMessage()
 exactly as shipped, not a regex-pinned reflection of the source text. Covers two
 bugs fixed together:
 
-  (a) A fresh page load (messageCursor == 0) must not replay the up-to-16-entry
+  (a) A fresh page load (messageCursor == 0) must not replay the up-to-32-entry
       backlog of the runtime event ring one message per 2s poll - it must jump
       straight to the ring's current end (mirrors reset_lua_message_cursor()).
   (b) The alarm siren tracks the hardware latch (heaterAlarmLatched) and a

@@ -199,10 +199,10 @@ if webserver_ino:
     try:
         data_csv_body = extract_route_handler_body(webserver_ino, "/data.csv")
         require_ordered_tokens(
-            "/data.csv serves only after ready flush state",
+            "/data.csv 503 only when flush cannot be queued (BUSY), still serves on QUEUED",
             data_csv_body,
             [
-                "schedule_log_flush_if_needed() != LOG_FLUSH_READY",
+                "schedule_log_flush_if_needed() == LOG_FLUSH_BUSY",
                 'request->send(503, "text/plain", "BUSY")',
                 'request->send(SPIFFS, "/data.csv"',
             ],

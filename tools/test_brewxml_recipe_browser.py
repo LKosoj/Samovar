@@ -5,9 +5,9 @@
 фильтр хмеля по USE (D2), схлопывание одинаковых TIME без лишней "B;0.00;1"
 (D3), температуру первой строки M из рецепта (D4), мешалку выключенной на
 C/F (D5), семантическую проверку строки программы через общую
-SamovarApp.beerRowTypeOk (D6), безопасный разбор неполных рецептов (D7),
-привязку кнопки "Установить программу" к режиму "Пиво" (D8) и textContent
-вместо innerHTML для NOTES (D9).
+SamovarApp.beerRowTypeOk (D6), безопасный разбор неполных рецептов (D7)
+и textContent вместо innerHTML для NOTES (D9). Страница без шаблонов:
+кнопка установки программы всегда доступна.
 
 Тест гоняет НАСТОЯЩИЙ brewxml.htm в Chromium через playwright-cli и вызывает
 loadBeerXML() напрямую с синтетическим File - так же, как реальный
@@ -165,17 +165,15 @@ BROWSER_TEST = r'''async page => {
   const errors = [];
   page.on("pageerror", error => errors.push("pageerror: " + error.message));
 
-  // ---------- brewxml.htm вне режима "Пиво" (render_site по умолчанию даёт data-is-beer-mode="0") ----------
   await page.goto(baseUrl + "/brewxml.htm", { waitUntil: "load" });
   await page.waitForTimeout(100);
 
-  const offMode = await page.evaluate(() => ({
+  const setprogram = await page.evaluate(() => ({
     disabled: document.getElementById("setprogram").disabled,
-    dataset: document.body.dataset.isBeerMode,
-    error: (document.getElementById("request_error") || {}).textContent || ""
+    beerModeAttr: document.body.getAttribute("data-is-beer-mode")
   }));
-  if (!offMode.disabled) throw new Error("brewxml.htm: setprogram must be disabled outside beer mode: " + JSON.stringify(offMode));
-  if (!offMode.error.includes("Пиво")) throw new Error("brewxml.htm: missing beer-mode warning outside beer mode: " + JSON.stringify(offMode));
+  if (setprogram.disabled) throw new Error("brewxml.htm: setprogram must stay enabled: " + JSON.stringify(setprogram));
+  if (setprogram.beerModeAttr !== null) throw new Error("brewxml.htm: data-is-beer-mode must not be on <body>: " + JSON.stringify(setprogram));
 
   const results = await page.evaluate(async (f) => {
     function loadOnce(text, name) {
@@ -233,6 +231,11 @@ BROWSER_TEST = r'''async page => {
     out.diogenesFirstLine = window.program.split("\n")[0];
     await loadOnce(f.sampleBlonde, "sample_blonde.xml");
     out.sampleBlondeFirstLine = window.program.split("\n")[0];
+    out.blondeIbu = document.getElementById("IBU").textContent;
+    out.blondeOg = document.getElementById("OG").textContent;
+    out.blondeFermTime = document.getElementById("FERMENTABLE_TIME").textContent;
+    out.blondeIngr = document.getElementById("ingredients").textContent;
+    out.blondeEquip = document.getElementById("EQUIPMENT").textContent;
 
     // 7) [D5] мешалка выключена на C/F
     const progLines = window.program.trim().split("\n");
@@ -268,6 +271,16 @@ BROWSER_TEST = r'''async page => {
     out.primaryTempText = primaryEl.textContent;
     out.primaryPwned = window.__pwnedPrimary === true;
     SamovarApp.clearRequestError();
+
+    const brewmateXml = `<?xml version="1.0"?><recipe><namerecipe>Тест BrewMate</namerecipe><style>IPA</style><part>20</part><timeboil>60</timeboil><timebro>14</timebro><tempbro>18</tempbro><np>1.055</np><ibu>40</ibu><abv>5.8</abv><yeast>US-05</yeast><grains><grain><grainname>Пилснер</grainname><grainkg>5</grainkg></grain></grains><hops><hop><hopname>Cascade</hopname><hopgr>20</hopgr><hoptime>60</hoptime><hopalpha>6.5</hopalpha><hopuse>Кипячение</hopuse></hop><hop><hopname>Citra</hopname><hopgr>30</hopgr><hoptime>30</hoptime><hopalpha>12</hopalpha><hopuse>сухое охмеление</hopuse></hop></hops><zatirs><zatir><zatirgr>65</zatirgr><zatirtime>60</zatirtime></zatir></zatirs></recipe>`;
+    get_brewmate_info(brewmateXml);
+    out.bmName = document.getElementById("NAME").textContent;
+    out.bmIbu = document.getElementById("IBU").textContent;
+    out.bmFerm = document.getElementById("FERMENTABLE_TIME").textContent;
+    out.bmOg = document.getElementById("OG").textContent;
+    out.bmIngr = document.getElementById("ingredients").textContent;
+    out.bmProgram = window.program;
+    out.bmIsProgram = window.is_program;
 
     return out;
   }, fixtures);
@@ -370,19 +383,36 @@ BROWSER_TEST = r'''async page => {
   if (results.primaryPwned) throw new Error("PRIMARY_TEMP onerror must not execute");
   if (!results.primaryTempText.includes("<img")) throw new Error("PRIMARY_TEMP must keep the markup as plain text: " + results.primaryTempText);
 
-  // ---------- brewxml.htm в режиме "Пиво" ----------
-  await page.goto(baseUrl + "/brewxml_beer_mode.htm", { waitUntil: "load" });
-  await page.waitForTimeout(100);
-  const onMode = await page.evaluate(() => ({
-    disabled: document.getElementById("setprogram").disabled,
-    dataset: document.body.dataset.isBeerMode,
-    error: (document.getElementById("request_error") || {}).textContent || ""
-  }));
-  if (onMode.disabled) throw new Error("brewxml.htm: setprogram must stay enabled in beer mode: " + JSON.stringify(onMode));
-  if (onMode.error.includes("Пиво")) throw new Error("brewxml.htm: beer-mode warning must not show in beer mode: " + JSON.stringify(onMode));
+  if (results.blondeIbu !== "19.8") throw new Error("Sample Blonde IBU must be 19.8: " + results.blondeIbu);
+  if (results.blondeOg !== "1.044") throw new Error("Sample Blonde OG must be 1.044: " + results.blondeOg);
+  if (results.blondeFermTime !== "14 дней") throw new Error("Sample Blonde fermentation time must come from PRIMARY_AGE: " + results.blondeFermTime);
+  if (!results.blondeIngr.includes("Servomyces")) throw new Error("misc TYPE=Other must be listed: " + results.blondeIngr);
+  if (!results.blondeIngr.includes("Кипячение") || !results.blondeIngr.includes("Сухое охмеление")) {
+    throw new Error("hop USE must be shown: " + results.blondeIngr);
+  }
+  if (!results.blondeIngr.includes("5 г") && !results.blondeIngr.includes("5.0 г")) {
+    throw new Error("hop AMOUNT 0.005 kg must display as grams: " + results.blondeIngr);
+  }
+  if (results.blondeEquip !== "Grainfather") throw new Error("equipment name missing: " + results.blondeEquip);
+
+  if (!results.bmIsProgram) throw new Error("BrewMate recipe must produce a program");
+  if (results.bmName !== "Тест BrewMate") throw new Error("BrewMate NAME mismatch: " + results.bmName);
+  if (results.bmIbu !== "40") throw new Error("BrewMate IBU mismatch: " + results.bmIbu);
+  if (results.bmFerm !== "14 дней") throw new Error("BrewMate timebro must fill fermentation days: " + results.bmFerm);
+  if (results.bmOg !== "1.055") throw new Error("BrewMate np/OG mismatch: " + results.bmOg);
+  if (!results.bmIngr.includes("20 г") || !results.bmIngr.includes("Cascade")) {
+    throw new Error("BrewMate hopgr is grams: " + results.bmIngr);
+  }
+  if (!results.bmIngr.includes("Сухое охмеление") || !results.bmIngr.includes("Кипячение")) {
+    throw new Error("BrewMate hopuse must be mapped: " + results.bmIngr);
+  }
+  const bmB = results.bmProgram.split("\n").filter(l => l[0] === "B").map(l => Number(l.split(";")[2]));
+  if (JSON.stringify(bmB) !== JSON.stringify([60])) {
+    throw new Error("BrewMate dry hop must not create a boil split: " + JSON.stringify(bmB) + " program=" + results.bmProgram);
+  }
 
   if (errors.length > 0) throw new Error(errors.join("\n"));
-  return { results, offMode, onMode };
+  return { results, setprogram };
 }'''
 
 
@@ -397,18 +427,6 @@ def main() -> int:
         temp = Path(temp_dir)
         site = temp / "site"
         render_site(site)
-
-        # [Пиво 02.09 D8] render_site не знает про %IsBeerMode% и подставляет заглушку "0"
-        # (ветка "режим выключен") - для ветки "включён" делаем локальный вариант страницы,
-        # не трогая общий render_site (им пользуются другие тесты).
-        brewxml = site / "brewxml.htm"
-        beer_mode_variant = site / "brewxml_beer_mode.htm"
-        original = brewxml.read_text(encoding="utf-8")
-        replaced = original.replace('data-is-beer-mode="0"', 'data-is-beer-mode="true"', 1)
-        if replaced == original:
-            print("could not locate data-is-beer-mode placeholder in rendered brewxml.htm", file=sys.stderr)
-            return 1
-        beer_mode_variant.write_text(replaced, encoding="utf-8")
 
         handler = functools.partial(QuietHandler, directory=str(site))
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)

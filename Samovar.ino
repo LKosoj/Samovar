@@ -9,7 +9,7 @@
 // add to /Users/user/Library/Arduino15/packages/esp32/hardware/esp32/3.x.x/boards.txt
 // esp32.menu.PartitionScheme.samovar=Samovar
 // esp32.menu.PartitionScheme.samovar.build.partitions=samovar
-// esp32.menu.PartitionScheme.samovar.upload.maximum_size=1638400
+// esp32.menu.PartitionScheme.samovar.upload.maximum_size=1507328
 
 //**************************************************************************************************************
 // Подключение библиотек
@@ -2310,15 +2310,21 @@ static void setup_configure_head_level_sensor() {
 static void setup_start_ntp() {
   NTP.setTimeOffset(SamSetup.TimeZone * 3600);
   NTP.setUpdateInterval(1800000);//30 min
-  NTP.begin(); 
+  NTP.begin();
   delay(100);
-  // Принудительная синхронизация при старте с повторными попытками
-  if (WiFi.status() == WL_CONNECTED) {
-    int attempts = 0;
-    while (!NTP.forceUpdate() && attempts < 2) {
-      delay(500);
-      attempts++;
-    }
+  // Принудительная синхронизация при старте с повторными попытками.
+  // Неудача NTP не блокирует загрузку: время догонит triggerGetClock.
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println(F("NTP skipped: WiFi not connected"));
+    return;
+  }
+  bool synced = false;
+  for (int attempts = 0; attempts < 3 && !synced; attempts++) {
+    synced = NTP.forceUpdate();
+    if (!synced && attempts < 2) delay(500);
+  }
+  if (!synced) {
+    Serial.println(F("NTP sync failed at boot; continuing without network time"));
   }
 }
 
@@ -2735,6 +2741,17 @@ void setup() {
 
   setup_connect_wifi_and_notify();
 
+#ifndef NOT_USE_INTERFACE_UPDATE
+  // Качаем UI сразу после Wi‑Fi, до датчиков, HTTP-сервера, MQTT, NTP, фоновых задач
+  // и Lua: иначе async-сервер держит файлы LittleFS открытыми (rename падает), а
+  // буферы HTTP/heap к lua_init() уже израсходованы.
+  if (WiFi.status() == WL_CONNECTED) {
+    get_web_interface();
+  } else {
+    Serial.println(F("WEB interface update skipped: no WiFi connection"));
+  }
+#endif
+
   alarm_event = false;
 
   sensor_init();
@@ -2789,6 +2806,9 @@ void setup() {
   }
 #endif
 
+  // UDP-сокет NTP должен существовать до triggerGetClock: задача тоже зовёт NTP.update().
+  setup_start_ntp();
+
   //Запускаем таск для получения температур и различных проверок
   xTaskCreatePinnedToCore(
     triggerSysTicker, /* Function to implement the task */
@@ -2808,8 +2828,6 @@ void setup() {
     1,                /* Priority of the task */
     &GetClockTask1,   /* Task handle. */
     1);               /* Core where the task should run */
-
-  setup_start_ntp();
 
   setup_finalize_boot_display();
 
@@ -3718,7 +3736,7 @@ struct AjaxTelemetrySnapshot {
   uint32_t latestMessageSequence;
 };
 
-static_assert(sizeof(AjaxTelemetrySnapshot) <= 768,
+static_assert(sizeof(AjaxTelemetrySnapshot) <= 960,
               "AjaxTelemetrySnapshot exceeds its request stack budget");
 
 static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(

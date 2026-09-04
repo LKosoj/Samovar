@@ -233,8 +233,7 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false,
-        staleReadingIds: ['SteamTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp', 'power']
+        implicitSystemTheme: false
       });
     };
 
@@ -371,7 +370,7 @@
           </div>
           <input id='pmpl' type='button' name='pmpl' value='++' title='Увеличить скорость на шаг подачи (%NbkDP% л/ч)' onclick='nbkSpeedStep(false);' class="button">
         </div>
-        <input id='Send_speed' type='button' value='Установить' onclick='sendSpeed();' class="button" style="margin-right: 1em;">
+        <input id='Send_speed' type='button' value='Установить' onclick='sendSpeed();' class="button">
       </div>
 
       <div class="container_column" style="margin-bottom: 1em;">

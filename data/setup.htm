@@ -169,8 +169,6 @@
       { name: 'DeltaACPTemp', min: -1000, max: 1000 },
       { name: 'SetACPTemp', min: 0, max: 150 },
       { name: 'ACPDelay', integer: true, min: 0, max: 65535 },
-      { name: 'SuvidTemp', min: 0, max: 100 },
-      { name: 'SuvidHoldMinutes', integer: true, min: 0, max: 65535 },
       { name: 'SteamAddr', integer: true, min: -1, max: 255 },
       { name: 'PipeAddr', integer: true, min: -1, max: 255 },
       { name: 'WaterAddr', integer: true, min: -1, max: 255 },
@@ -345,8 +343,8 @@
               <option value="2" %BEER%>Пиво</option>
               <option value="3" %BK%>Бражная колонна</option>
               <option value="4" %NBK%>Непрерывная бражная колонна</option>
-              <option value="5" %SUVID%>Су-вид</option>
-              <option value="6" %LUA_MODE%>Lua-режим</option>
+              <option value="5" hidden %SUVID%>Су-вид</option>
+              <option value="6" hidden %LUA_MODE%>Lua-режим</option>
             </select>
           </div>
         </h2>
@@ -514,8 +512,6 @@
           <h2><label for="ACPDelay">Задержка срабатывания при выходе Т в ТСА за уставку:</label> <input id="ACPDelay" name='ACPDelay' type='text' inputmode='decimal' value='%ACPDelay%'> сек</h2>
         </div>
       </div>
-      <h2><label for="SuvidTemp">Уставка Су-вид (0 = не задано):</label> <input id="SuvidTemp" name='SuvidTemp' type='text' inputmode='decimal' value='%SuvidTemp%'>&#176;C</h2>
-      <h2><label for="SuvidHoldMinutes">Выдержка Су-вид в полосе уставки (0 = бессрочно):</label> <input id="SuvidHoldMinutes" name='SuvidHoldMinutes' type='text' inputmode='numeric' value='%SuvidHoldMinutes%'> мин</h2>
       <div 
         style="border: 1px dashed #bbb; display: flex; margin-bottom: 1em;  margin-top: 1em; padding: 1em; justify-content: center;"
         >
@@ -660,7 +656,7 @@
             <label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
               <i class="fa fa-cloud-upload"></i> Загрузить файл настроек
             </label>
-            <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button" />
+            <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" />
           </div>
           <div>
             <input id='reboot' type='button' name='reboot' value='Перезагрузить Самовар' onclick='if (confirm("Перезагрузить Самовар?")) sendbutton("reboot");' class="button">

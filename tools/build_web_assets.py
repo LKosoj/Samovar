@@ -4,7 +4,7 @@
 data_raw/ - источник: файлы в том виде, в каком их правит человек.
 data/ - образ файловой системы устройства: то, что реально уезжает в LittleFS.
 
-Пять бесшаблонных файлов уезжают только в сжатом виде: сырых версий в data/ нет,
+Бесшаблонные файлы уезжают только в сжатом виде: сырых версий в data/ нет,
 их место занимает .gz. Экономия около 105 КБ SPIFFS. Отдавать их умеет и
 serveStatic (AsyncStaticWebHandler._tryGzipFirst), и AsyncFileResponse - он сам
 подставит .gz, если сырого файла на диске не окажется.
@@ -30,7 +30,7 @@ PARTIALS_DIR = SOURCE / "partials"
 
 # Файлы, которые уезжают на устройство только сжатыми. Шаблонов в них нет и быть
 # не должно - см. check_no_placeholders().
-COMPRESS = ("app.js", "chart.js", "edit.htm", "i2cstepper.htm", "style.css")
+COMPRESS = ("app.js", "chart.js", "edit.htm", "i2cstepper.htm", "brewxml.htm", "style.css")
 
 PLACEHOLDER = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
 INCLUDE_RE = re.compile(rb"<!--#include\s+([A-Za-z0-9_.-]+)\s*-->")

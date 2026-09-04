@@ -385,8 +385,7 @@
         },
         storeMessageHistory: true,
         dynamicThemeTitle: false,
-        implicitSystemTheme: false,
-        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'bme_temp', 'power']
+        implicitSystemTheme: false
       });
     };
 
@@ -547,7 +546,7 @@
         <label for="fileToLoad" class="button custom-file-upload" style="margin-left: 0px !important;">
           <i class="fa fa-cloud-upload"></i> Загрузить программу
         </label>
-        <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" class="button" />
+        <input type="file" id="fileToLoad" accept="text/plain" onchange="loadFile(this.files[0])" />
       </div>
 
 

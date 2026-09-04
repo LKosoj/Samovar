@@ -1,30 +1,16 @@
 #!/usr/bin/env python3
-"""[T26.2] Браузерная проверка единого маркера "устарело" на /index.htm.
+"""Браузерная проверка замка страницы при обрыве связи на /index.htm.
 
-Контекст: до этой правки applyStaleVisuals() в app.js гасил (opacity=0.4)
-только перечисленные в staleReadingIds элементы, а index.htm перечислял там
-только температуры - объём, скорость, давление и, главное, состояние нагрева
-(кнопка power) НЕ гасли при обрыве связи. Пользователь видел старую надпись
-кнопки ("Выключить нагрев") как будто она всё ещё актуальна, жал её вслепую -
-и вместе с T26.1 (power=1 всегда, без учёта реального состояния) это могло
-включить нагрев вместо выключения.
+При обрыве applyStaleVisuals() вешает html.connection-lost (вся страница
+приглушается) и document.body.inert (клики, клавиатура, правки). Иначе
+оператор жмёт по застывшей кнопке нагрева.
 
-Правка (T26.2): index.htm теперь отдаёт staleReadingIds: ['Main'] - общий
-контейнер вкладки (id="Main", открывается в partials/main_status_header.htm,
-закрывается прямо в index.htm перед #Prog), который уже оборачивает ВСЕ
-динамические показания вкладки, включая кнопку нагрева.
-
-Этот тест гоняет НАСТОЯЩИЙ index.htm в Chromium через реальный цикл
-SamovarApp.startTelemetryPage -> pollAjax -> fetch('/ajax') (не вызывает
-SamovarApp.setConnectionError() напрямую) и проверяет:
-  a) пока связь жива - #Main не приглушен, кнопка показывает актуальное
-     состояние нагрева;
-  b) после нескольких подряд неудачных /ajax (моделируем обрывом сети через
-     route.abort, как реальный fetch()) #Main гаснет (opacity '0.4'), а
-     кнопка нагрева и температура ЗАСТЫВАЮТ на последнем известном значении
-     (не обнуляются и не обновляются "в слепую");
-  c) после восстановления связи #Main возвращает непрозрачность, а кнопка
-     нагрева обновляется на актуальное (новое) состояние.
+Тест гоняет НАСТОЯЩИЙ index.htm в Chromium через реальный цикл
+SamovarApp.startTelemetryPage -> pollAjax -> fetch('/ajax') и проверяет:
+  a) пока связь жива - замок снят, кнопка показывает актуальное состояние;
+  b) после нескольких подряд неудачных /ajax страница заблокирована,
+     кнопка нагрева и температура застывают на последнем известном значении;
+  c) после восстановления связи замок снимается, кнопка обновляется.
 """
 import functools
 import http.server
@@ -116,14 +102,15 @@ BROWSER_TEST = r'''async page => {
     return status && status.textContent === 'Готов';
   }, null, { timeout: 10000 });
 
-  // --- (a) связь жива - #Main не приглушен, кнопка показывает "нагрев ВКЛ" ---
+  // --- (a) связь жива - страница не заблокирована, кнопка показывает "нагрев ВКЛ" ---
   const before = await page.evaluate(() => ({
-    mainOpacity: document.getElementById('Main').style.opacity,
+    locked: document.documentElement.classList.contains('connection-lost'),
+    inert: document.body.inert,
     powerLabel: document.getElementById('power').value,
     steamTemp: document.getElementById('SteamTemp').innerHTML
   }));
-  if (before.mainOpacity !== '') {
-    throw new Error('#Main must not be dimmed while online, got opacity=' + JSON.stringify(before.mainOpacity));
+  if (before.locked || before.inert) {
+    throw new Error('page must not be locked while online, got ' + JSON.stringify(before));
   }
   if (before.powerLabel !== 'Выключить нагрев') {
     throw new Error('expected power button to show heating ON label while online, got ' + JSON.stringify(before.powerLabel));
@@ -135,14 +122,19 @@ BROWSER_TEST = r'''async page => {
   // 100ms задержка внутри самого setConnectionError() до применения приглушения.
   // Опрос идёт раз в 2с (startPollLoop), так что ждём щедро.
   phase = 'offline';
-  await page.waitForFunction(() => document.getElementById('Main').style.opacity === '0.4', null, { timeout: 25000 });
+  await page.waitForFunction(() => document.documentElement.classList.contains('connection-lost') && document.body.inert === true, null, { timeout: 25000 });
 
   const during = await page.evaluate(() => ({
-    mainOpacity: document.getElementById('Main').style.opacity,
+    locked: document.documentElement.classList.contains('connection-lost'),
+    inert: document.body.inert,
+    pointerEvents: getComputedStyle(document.documentElement).pointerEvents,
     powerLabel: document.getElementById('power').value,
     steamTemp: document.getElementById('SteamTemp').innerHTML,
     status: document.getElementById('Status').textContent
   }));
+  if (!during.locked || !during.inert || during.pointerEvents !== 'none') {
+    throw new Error('page must be locked while offline, got ' + JSON.stringify(during));
+  }
   if (during.powerLabel !== before.powerLabel) {
     throw new Error('power button must stay on its last-known label while offline (not blank/reset), got ' + JSON.stringify(during.powerLabel));
   }
@@ -152,19 +144,37 @@ BROWSER_TEST = r'''async page => {
   if (during.status !== 'Готов') {
     throw new Error('Status text must stay on its last-known value while offline, got ' + JSON.stringify(during.status));
   }
+  const blocked = await page.evaluate(() => {
+    let clicks = 0;
+    const power = document.getElementById('power');
+    const onClick = function () { clicks += 1; };
+    power.addEventListener('click', onClick);
+    power.click();
+    power.removeEventListener('click', onClick);
+    let commandThrew = false;
+    try { SamovarApp.sendCommand('power=0'); } catch (err) { commandThrew = true; }
+    return { clicks: clicks, commandThrew: commandThrew };
+  });
+  if (blocked.clicks !== 0) {
+    throw new Error('power click must not run while the page is locked, got clicks=' + blocked.clicks);
+  }
+  if (!blocked.commandThrew) {
+    throw new Error('sendCommand must throw while offline');
+  }
 
-  // --- (c) связь восстановлена - #Main возвращает непрозрачность, кнопка
+  // --- (c) связь восстановлена - замок снимается, кнопка
   // обновляется на актуальное (новое) состояние, а не остаётся "залипшей" ---
   phase = 'recovered';
-  await page.waitForFunction(() => document.getElementById('Main').style.opacity === '', null, { timeout: 15000 });
+  await page.waitForFunction(() => !document.documentElement.classList.contains('connection-lost') && document.body.inert !== true, null, { timeout: 15000 });
   await page.waitForFunction(() => document.getElementById('power').value === 'Включить нагрев', null, { timeout: 10000 });
 
   const after = await page.evaluate(() => ({
-    mainOpacity: document.getElementById('Main').style.opacity,
+    locked: document.documentElement.classList.contains('connection-lost'),
+    inert: document.body.inert,
     powerLabel: document.getElementById('power').value
   }));
-  if (after.mainOpacity !== '') {
-    throw new Error('#Main must reset opacity after reconnect, got ' + JSON.stringify(after.mainOpacity));
+  if (after.locked || after.inert) {
+    throw new Error('page must unlock after reconnect, got ' + JSON.stringify(after));
   }
   if (after.powerLabel !== 'Включить нагрев') {
     throw new Error('power button must reflect the fresh (recovered) heating-OFF state, got ' + JSON.stringify(after.powerLabel));

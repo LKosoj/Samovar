@@ -63,7 +63,7 @@ BROWSER_TEST = r'''async page => {
     "setup.htm": {rescan:true,tabs:6,theme:true},
     "chart.htm": {messages:true,theme:true},
     "i2cstepper.htm": {theme:true},
-    "brewxml.htm": {}
+    "brewxml.htm": {theme:true}
   };
   const ajaxFixture = {
     version:"test",crnt_tm:"12:00:00",stm:"00:01:00",SteamTemp:78.1,PipeTemp:77.9,
@@ -652,6 +652,35 @@ UPLOAD_TRIGGER = r'''async page => {
       return nativeOpen.apply(this, arguments);
     };
   }, handler);
+  const beforeHover = await page.evaluate(() => {
+    const wrap = document.querySelector(".file-upload-control");
+    const next = wrap && wrap.nextElementSibling;
+    const input = document.getElementById("fileToLoad");
+    return {
+      wrapH: wrap.getBoundingClientRect().height,
+      nextT: next ? next.getBoundingClientRect().top : null,
+      hasButtonClass: input.classList.contains("button")
+    };
+  });
+  if (beforeHover.hasButtonClass) throw new Error("file input must not use class=button");
+  await page.locator("label[for='fileToLoad']").hover();
+  const afterHover = await page.evaluate(() => {
+    const wrap = document.querySelector(".file-upload-control");
+    const next = wrap && wrap.nextElementSibling;
+    const box = document.getElementById("fileToLoad").getBoundingClientRect();
+    return {
+      wrapH: wrap.getBoundingClientRect().height,
+      nextT: next ? next.getBoundingClientRect().top : null,
+      inputW: box.width,
+      inputH: box.height
+    };
+  });
+  if (afterHover.wrapH !== beforeHover.wrapH || afterHover.nextT !== beforeHover.nextT) {
+    throw new Error("upload hover shifted layout " + JSON.stringify({beforeHover, afterHover}));
+  }
+  if (afterHover.inputW > 2 || afterHover.inputH > 2) {
+    throw new Error("native file control visible on hover " + JSON.stringify(afterHover));
+  }
   const input = page.locator("#fileToLoad");
   if (kind === "click") await input.evaluate(node => node.click());
   else await input.press(kind);

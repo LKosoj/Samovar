@@ -12,6 +12,9 @@
 куб обязателен (sensor_valid), общий mode_check_powered_cooling_sensors (жёсткая
 проверка воды) в теле check_alarm_suvid больше не вызывается; и кламп уставки
 SuvidTemp в WebServer.ino снижен со 150 до 100°.
+
+Настройки Су-вид с setup.htm сняты: Су-вид и Lua не предлагаются в списке
+(скрытые option value=5/6 остаются, чтобы сохранённый режим не затирался).
 """
 import re
 import sys
@@ -242,10 +245,16 @@ if webserver_text:
 
 setup_text = read_text("data_raw/setup.htm")
 if setup_text:
-    if "SuvidHoldMinutes" not in setup_text:
-        errors.append("setup page must expose SuvidHoldMinutes")
-    if "{ name: 'SuvidTemp', min: 0, max: 100 }" not in setup_text:
-        errors.append("setup page must validate SuvidTemp up to 100 degrees")
+    if "SuvidTemp" in setup_text or "SuvidHoldMinutes" in setup_text:
+        errors.append("setup page must not expose SuvidTemp/SuvidHoldMinutes")
+    if '<option value="5" hidden %SUVID%>Су-вид</option>' not in setup_text:
+        errors.append("setup page must keep a hidden Su-vid option so Mode=5 is not clobbered on save")
+    if re.search(r'<option value="5"(?! hidden)', setup_text):
+        errors.append("setup page must not offer Su-vid as a selectable mode")
+    if '<option value="6" hidden %LUA_MODE%>Lua-режим</option>' not in setup_text:
+        errors.append("setup page must keep a hidden Lua option so Mode=6 is not clobbered on save")
+    if re.search(r'<option value="6"(?! hidden)', setup_text):
+        errors.append("setup page must not offer Lua as a selectable mode")
 
 if errors:
     print("suvid mode fixes smoke failed:")

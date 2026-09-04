@@ -11,6 +11,8 @@ static const char *SPIFFS_EDITOR_UPLOAD_ERROR_ATTR = "spiffs_upload_error";
 static const char *SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE = "process_active";
 static const char *SPIFFS_EDITOR_UPLOAD_BAD_NAME = "bad_name";
 static const char *SPIFFS_EDITOR_UPLOAD_WRITE_FAILED = "write_failed";
+static const char *SPIFFS_EDITOR_UPLOAD_COMMITTED = "upload_committed";
+static const char *SPIFFS_EDITOR_UPLOAD_TOUCHED = "upload_touched";
 #ifdef USE_LUA
 extern volatile bool pending_lua_reload_flag;
 static const char *SPIFFS_EDITOR_LUA_RELOAD_BUSY = "lua_reload_busy";
@@ -286,15 +288,9 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
       }
     }
   } else if (request->method() == HTTP_DELETE) {
-    // Во время процесса (нагрев/перегонка) редактор не трогает ФС: SysTicker на
-    // ядре 0 пишет журнал перегонки под xLogFileSemaphore, а редактор из async_tcp
-    // на ядре 1 этот лок не берёт, поэтому удаление файла гонялось бы с записью
-    // журнала между ядрами. Гейт закрывает два состояния логгера: активный процесс
-    // (идёт дозапись/сброс) и ещё не выполненное отложенное закрытие журнала —
-    // request_data_log_close() лишь взводит флаг, а реальное закрытие журнала идёт
-    // позже тиком SysTicker, и сразу после конца процесса samovar_process_active()
-    // уже ложна, но файл ещё закрывается. Тот же гейт стоит на PUT и в handleUpload().
-    if (samovar_process_active() || data_log_close_pending()) {
+    // Тот же xLogFileSemaphore, что у журнала на SysTicker. timeout 0: async_tcp
+    // нельзя усыплять в ожидании замка. Не взяли — журнал сейчас в файле, 503.
+    if (!log_file_lock(0)) {
       request->send(503, "text/plain", "BUSY");
       return;
     }
@@ -302,12 +298,16 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
       String p = request->getParam("path", true)->value();
       if (p[0] != '/') p = "/" + p;
       if (_fs.remove(p)) {
+        log_file_unlock(true);
         request->send(200, "", "DELETE: " + request->getParam("path", true)->value());
       } else {
+        log_file_unlock(true);
         request->send(500, "text/plain", "DELETE FAILED: " + p);
       }
-    } else
+    } else {
+      log_file_unlock(true);
       request->send(404);
+    }
   } else if (request->method() == HTTP_POST) {
     if (request->hasParam("data", true, true)) {
       String p = request->getParam("data", true, true)->value();
@@ -325,16 +325,27 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
         return;
       }
       if (uploadError.length() > 0) {
+        if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_COMMITTED) != "1" &&
+            request->getAttribute(SPIFFS_EDITOR_UPLOAD_TOUCHED) == "1" &&
+            log_file_lock(0)) {
+          _fs.remove(p);
+          log_file_unlock(true);
+        }
         request->send(503, "text/plain", "BUSY");
         return;
       }
-      if (_fs.exists(p))
-        request->send(200, "", "UPLOADED: " + p);
-      else
-        request->send(500);
+      if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_COMMITTED) != "1") {
+        if (log_file_lock(0)) {
+          _fs.remove(p);
+          log_file_unlock(true);
+        }
+        request->send(500, "text/plain", "WRITE FAILED: " + p);
+        return;
+      }
+      request->send(200, "", "UPLOADED: " + p);
     }
   } else if (request->method() == HTTP_PUT) {
-    if (samovar_process_active() || data_log_close_pending()) {
+    if (!log_file_lock(0)) {
       request->send(503, "text/plain", "BUSY");
       return;
     }
@@ -342,19 +353,24 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
       String filename = request->getParam("path", true)->value();
       if (filename[0] != '/') filename = "/" + filename;
       if (_fs.exists(filename)) {
+        log_file_unlock(true);
         request->send(200);
       } else {
         fs::File f = _fs.open(filename, "w");
         if (f) {
           f.write((uint8_t)0x00);
           f.close();
+          log_file_unlock(true);
           request->send(200, "", "CREATE: " + filename);
         } else {
+          log_file_unlock(true);
           request->send(500);
         }
       }
-    } else
+    } else {
+      log_file_unlock(true);
       request->send(400);
+    }
   }
 }
 
@@ -369,7 +385,7 @@ void SPIFFSEditor::handleRequest(AsyncWebServerRequest *request) {
 // имени (редактор работает с плоским списком файлов), и имя длиннее
 // SPIFFS_MAXLENGTH_FILEPATH (не влезет в /.exclude.files).
 // tools/build_web_assets.py при сборке кладёт в data/ (то, что реально прошивается)
-// сжатые app.js.gz/chart.js.gz/edit.htm.gz/i2cstepper.htm.gz/style.css.gz вместо
+// сжатые app.js.gz/chart.js.gz/edit.htm.gz/i2cstepper.htm.gz/brewxml.htm.gz/style.css.gz вместо
 // сырых файлов - сервер сам подставляет .gz, если рядом нет несжатого файла. Смотрим
 // на расширение ДО .gz (для app.js.gz - на "js"), а не добавляем "gz" в allowed:
 // иначе прошёл бы любой файл вида *.exe.gz - последний дот стал бы дырой в белом
@@ -398,107 +414,66 @@ static bool spiffsEditorNameAllowed(const String &path) {
   return false;
 }
 
-// Атомарная публикация загруженного файла: переименовывает уже дозаписанный и
-// закрытый tmpPath поверх finalPath. Тот же приём, что write_web_file_atomic() в
-// WebServer.ino:2789 - через backup и rename, а не прямую перезапись, чтобы обрыв
-// соединения или нехватка места между двумя rename() не оставили устройство совсем
-// без finalPath.
-static bool spiffsEditorFinalizeUpload(fs::FS &fs, const String &tmpPath, const String &finalPath) {
-  String backupPath = finalPath + ".bak";
-  fs.remove(backupPath);
-  bool hadFinal = fs.exists(finalPath);
-  if (hadFinal && !fs.rename(finalPath, backupPath)) {
-    fs.remove(tmpPath);
-    return false;
-  }
-  if (!fs.rename(tmpPath, finalPath)) {
-    fs.remove(tmpPath);
-    if (hadFinal) fs.rename(backupPath, finalPath);
-    return false;
-  }
-  if (hadFinal) fs.remove(backupPath);
-  return true;
-}
-
 void SPIFFSEditor::handleUpload(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
     String p = filename;
     if (filename[0] != '/') p = "/" + filename;
-    // Пишем во временный файл, а не сразу в целевой: обрыв соединения или нехватка
-    // места на середине загрузки не должны уничтожать рабочий файл под тем же именем.
-    // Переименование в целевое имя - только после успешного final-чанка, см.
-    // spiffsEditorFinalizeUpload().
-    const String tmpPath = p + ".tmp";
     if (!index) {
-      // Тот же гейт, что на DELETE/PUT (активный процесс или ещё не закрытый
-      // журнал): при нём файл на запись не открываем, иначе запись чанков из
-      // async_tcp гоняется с журналом перегонки. Причину читает handleRequest и
-      // отвечает 503 BUSY; _tempFile остаётся закрытым, поэтому чанки ниже
-      // просто отбрасываются.
-      if (samovar_process_active() || data_log_close_pending()) {
-        request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE);
-        return;
-      }
       if (!spiffsEditorNameAllowed(p)) {
         request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_BAD_NAME);
         return;
       }
-      request->_tempFile = _fs.open(tmpPath, "w");
-      if (!request->_tempFile) {
-        // На заполненной ФС open() не создаёт файл и возвращает невалидный File.
-        // Без этой проверки все чанки ниже молча отбрасывались (условие
-        // `if (request->_tempFile)` ложно), причина отказа не выставлялась, и
-        // handleRequest отвечал "200 UPLOADED" - по факту существования СТАРОГО файла
-        // на целевом пути, которого загрузка вообще не касалась. Правка пользователя
-        // терялась без единого признака ошибки. Тот же приём, что у проверки неполной
-        // записи ниже (written != len).
+    }
+    if (request->getAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR).length() > 0) {
+      return;
+    }
+
+    // Тот же замок, что у журнала. 0 — не ждать в колбэке async_tcp. Файл на
+    // каждый чанк открываем/закрываем под замком: иначе между чанками LittleFS
+    // снова гоняется с SysTicker. Не взяли замок — 503, без записи.
+    if (!log_file_lock(0)) {
+      request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE);
+      return;
+    }
+
+    File wf = _fs.open(p, index ? "a" : "w");
+    if (!wf) {
+      if (index) {
+        _fs.remove(p);
+      }
+      log_file_unlock(true);
+      request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_WRITE_FAILED);
+      return;
+    }
+    request->setAttribute(SPIFFS_EDITOR_UPLOAD_TOUCHED, "1");
+    if (len) {
+      size_t written = wf.write(data, len);
+      if (written != len) {
+        wf.close();
+        _fs.remove(p);
+        log_file_unlock(true);
         request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_WRITE_FAILED);
         return;
       }
     }
-    // Процесс может стартовать на ядре 0 уже ПОСЛЕ первого чанка: тогда запись
-    // оставшихся чанков снова гонялась бы с журналом перегонки. Перепроверяем
-    // гейт на каждом чанке — если процесс поднялся в ходе загрузки, прекращаем
-    // запись, удаляем недописанный временный файл (целевой файл ещё не тронут) и
-    // помечаем запрос для ответа 503.
-    if (request->_tempFile && (samovar_process_active() || data_log_close_pending())) {
-      request->_tempFile.close();
-      _fs.remove(tmpPath);
-      request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE);
-      return;
-    }
-    if (request->_tempFile) {
-        if (len) {
-            size_t written = request->_tempFile.write(data, len);
-            if (written != len) {
-                // На заполненной памяти write() отдаёт меньше len - без этой проверки
-                // клиент получал бы "UPLOADED", а на диске лежал бы обрезок.
-                request->_tempFile.close();
-                _fs.remove(tmpPath);
-                request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_WRITE_FAILED);
-                return;
-            }
-        }
-        if (final) {
-            request->_tempFile.close();
-            if (!spiffsEditorFinalizeUpload(_fs, tmpPath, p)) {
-                request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_UPLOAD_WRITE_FAILED);
-                return;
-            }
+    wf.close();
+    log_file_unlock(true);
+
+    if (final) {
+      request->setAttribute(SPIFFS_EDITOR_UPLOAD_COMMITTED, "1");
 #ifdef USE_LUA
-            if (getValue(filename, '.', 1) == "lua") {
-                if (mode_switch_in_progress()) {
-                    request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
-                } else {
-                    PendingCommandLockGuard guard;
-                    if (guard && !mode_switch_in_progress()) {
-                        pending_lua_reload_flag = true;
-                    } else {
-                        request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
-                    }
-                }
-            }
-#endif
+      if (getValue(filename, '.', 1) == "lua") {
+        if (mode_switch_in_progress()) {
+          request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
+        } else {
+          PendingCommandLockGuard guard;
+          if (guard && !mode_switch_in_progress()) {
+            pending_lua_reload_flag = true;
+          } else {
+            request->setAttribute(SPIFFS_EDITOR_UPLOAD_ERROR_ATTR, SPIFFS_EDITOR_LUA_RELOAD_BUSY);
+          }
         }
+      }
+#endif
     }
 }
 

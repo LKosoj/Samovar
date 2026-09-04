@@ -10,7 +10,7 @@
   <title>Самовар</title>
 
   <script src="app.js"></script>
-  <script src="chart.js?v=7.00u9"></script>
+  <script src="chart.js?v=7.00u10"></script>
 
   <!-- Chart code -->
   <script>
@@ -123,8 +123,7 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
         implicitSystemTheme: true,
         onLastMessageRemoved: function(remainingCount) {
           if (remainingCount === 0) IsCalmingPause = false;
-        },
-        staleReadingIds: ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp', 'DeltaTemp', 'bme_temp', 'power_on', 'power_off']
+        }
       });
     });
   </script>

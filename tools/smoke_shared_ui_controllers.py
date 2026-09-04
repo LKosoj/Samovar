@@ -29,10 +29,9 @@ MODE_PAGES = {
 }
 ALL_PAGES = (*MODE_PAGES, "chart.htm")
 FROZEN_HASHES = {
-    # 01.09.2026: панель файлов получила мобильную раскладку (до 900 px её
-    # кнопки переносились под дерево файлов и не нажимались).
-    "edit.htm": "e50cababe8cd7421a250eb9ecfdd9dcdda26ab1d5ea61b5a6ada6aff64e536bb",
-    "edit.htm.gz": "0cc91264dd1da80e76faffb7ca2c293cf2777031449f82f9edf99e49c81baa84",
+    # 04.09.2026: edit.htm — сетка вместо абсолютов, Ace 1.44.0, русская панель.
+    "edit.htm": "d98560fd84846400ffa6aecd9261c1fbcce3d382f68e39825fd35d98bbbb772b",
+    "edit.htm.gz": "18a87d45c9229498aaa20785f633c571126ca138fc2659634338829d1d09a54a",
 }
 
 
@@ -69,77 +68,25 @@ def function_body(source: str, name: str) -> str:
     raise AssertionError(f"unterminated function {name}")
 
 
-def div_span(html: str, element_id: str) -> tuple[int, int] | None:
-    """Границы <div id="element_id">...</div> в развёрнутом (после include) HTML."""
-    match = re.search(rf"<div\b[^>]*\bid=[\"']{re.escape(element_id)}[\"']", html)
-    if match is None:
-        return None
-    tag_end = html.index(">", match.start()) + 1
-    depth = 1
-    for tag in re.finditer(r"<div\b|</div>", html[tag_end:]):
-        depth += -1 if tag.group(0) == "</div>" else 1
-        if depth == 0:
-            return tag_end, tag_end + tag.start()
-    return None
-
-
-def check_stale_reading_coverage():
-    """Каждое температурное показание страницы должно приглушаться при обрыве связи.
-
-    Ровно этот пропуск (bme_temp остался ярким на index/beer, когда остальные
-    цифры погасли) прошёл мимо текстовых проверок выше: они видят, что общий
-    механизм подключён, но не видят, что страница забыла перечислить показание.
-    bme_pressure исключён сознательно - он не приглушается ни на одной странице.
-    """
-    # Список страниц берём из ALL_PAGES, а не своей копией: седьмая страница
-    # с телеметрией должна попадать под проверку сама, без правки этого теста.
+def check_connection_lost_lock(app: str, pages: dict[str, str]) -> None:
+    """Обрыв связи блокирует всю страницу в app.js, а не список полей на каждой."""
+    apply_body = function_body(app, "applyStaleVisuals")
+    require("connection-lost" in apply_body, "applyStaleVisuals must toggle html.connection-lost")
+    require("document.body.inert" in apply_body, "applyStaleVisuals must set document.body.inert")
+    require("assertOnline" in function_body(app, "sendCommand"),
+            "sendCommand must refuse mutations while offline")
+    require("assertOnline" in function_body(app, "postProgram"),
+            "postProgram must refuse mutations while offline")
+    require("bindPageLock" in function_body(app, "startTelemetryPage"),
+            "startTelemetryPage must install the page interaction lock")
+    css = (DATA / "style.css").read_text(encoding="utf-8")
+    require("html.connection-lost" in css and "pointer-events: none" in css,
+            "style.css must disable pointer events on html.connection-lost")
     for page in ALL_PAGES:
-        text = (ROOT / "data_raw" / page).read_text(encoding="utf-8")
-        listed = re.search(r"staleReadingIds:\s*\[([^\]]*)\]", text)
-        require(listed is not None, f"{page}: страница не передаёт staleReadingIds")
-        declared = set(re.findall(r"['\"]([A-Za-z_]+)['\"]", listed.group(1)))
-        shown = set(re.findall(
-            r"getElementById\(['\"]([A-Za-z_]*(?:Temp|temp)[A-Za-z_]*)['\"]\)"
-            r"\.(?:innerHTML|innerText|textContent)\s*=",
-            text))
-        missing = shown - declared
-        if missing:
-            # Показание может быть накрыто не собственным id в staleReadingIds, а общим
-            # контейнером-обёрткой (index.htm: staleReadingIds: ['Main'] вместо списка полей) -
-            # такие "лишние" declared-id проверяем структурно по РАЗВЁРНУТОМУ (после include)
-            # HTML: ищем его <div id="...">...</div> и смотрим, лежит ли id забытого показания
-            # внутри границ, а не просто верим названию списка на слово.
-            resolved = read_page(page)
-            for container_id in declared - shown:
-                span = div_span(resolved, container_id)
-                if span is None:
-                    continue
-                container_html = resolved[span[0]:span[1]]
-                for field in list(missing):
-                    if re.search(rf"id=[\"']{re.escape(field)}[\"']", container_html):
-                        missing.discard(field)
-        require(not missing,
-                f"{page}: показания приглушаются не полностью, забыты {sorted(missing)}")
-
-        # Кнопка нагрева - тоже "показание": её надпись ("Включить/Выключить нагрев")
-        # читается как текущее состояние. Если при обрыве связи она осталась яркой,
-        # человек жмёт по устаревшему состоянию - ровно тот сценарий, ради которого
-        # /command?action=power перестал быть слепым переключателем (T26.1).
-        resolved = read_page(page)
-        buttons = set(re.findall(
-            r"<input[^>]*id=['\"](power[A-Za-z_]*)['\"][^>]*value=['\"][^'\"]*нагрев",
-            resolved))
-        uncovered = buttons - declared
-        for container_id in declared - buttons:
-            span = div_span(resolved, container_id)
-            if span is None:
-                continue
-            container_html = resolved[span[0]:span[1]]
-            for button in list(uncovered):
-                if re.search(rf"id=[\"']{re.escape(button)}[\"']", container_html):
-                    uncovered.discard(button)
-        require(not uncovered,
-                f"{page}: кнопка нагрева не гаснет при обрыве связи, забыты {sorted(uncovered)}")
+        require("staleReadingIds" not in (ROOT / "data_raw" / page).read_text(encoding="utf-8"),
+                f"{page}: per-page staleReadingIds must not exist; lock is page-wide")
+        require("staleReadingIds" not in pages[page],
+                f"{page}: resolved page still mentions staleReadingIds")
 
 
 def main() -> int:
@@ -164,18 +111,15 @@ def main() -> int:
     require(option_keys == [
         "threshold", "onReady", "connectionIds", "storeMessageHistory",
         "dynamicThemeTitle", "implicitSystemTheme", "onLastMessageRemoved",
-        "onConnectionChange", "staleReadingIds",
+        "onConnectionChange",
     ], f"unexpected telemetry option allowlist: {option_keys}")
-    # Приглушение устаревших показаний живёт в app.js (общее для всех страниц),
-    # а не копией на каждой странице - иначе часы из общего партиала замирают
-    # без пометки там, где копию забыли.
+    # Замок при обрыве связи живёт в app.js (вся страница), а не списком id
+    # на каждой странице: иначе забытое поле или вкладка остаются кликабельными.
     require("function applyStaleVisuals" in app,
             "stale-reading dimming must live in the shared controller")
     require("applyStaleVisuals(true)" in app and "applyStaleVisuals(false)" in app,
             "applyStaleVisuals must be driven by both connection transitions")
-    require("staleReadingIds должен быть массивом строк" in app,
-            "staleReadingIds must be validated")
-    check_stale_reading_coverage()
+    check_connection_lost_lock(app, pages)
     require("Неизвестная опция telemetry lifecycle" in start_body,
             "unknown lifecycle options must fail loudly")
     require("typeof renderFn !== 'function'" in start_body,

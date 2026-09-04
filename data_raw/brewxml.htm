@@ -179,6 +179,159 @@ function check_value(val, type){
   if (type == "pt") return 20;
 }
 
+function asList(node) {
+  if (node == null) return [];
+  return Array.isArray(node) ? node : [node];
+}
+
+function present(obj, exp) {
+  var v = (typeof exp === "number") ? get_object_value(obj, "", exp) : get_object_value(obj);
+  return (v === "Нет в рецепте") ? "" : String(v);
+}
+
+function pickPresent() {
+  for (var i = 0; i < arguments.length; i++) {
+    if (arguments[i] && arguments[i] !== "Нет в рецепте") return arguments[i];
+  }
+  return "Нет в рецепте";
+}
+
+function setSpec(id, value, hideIfMissing) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = value;
+  var row = el.closest(".spec-row");
+  if (!row) return;
+  var missing = (value === "Нет в рецепте" || value === "");
+  row.style.display = (hideIfMissing && missing) ? "none" : "";
+}
+
+function withDisplayUnit(value, unit) {
+  if (!value || value === "Нет в рецепте") return value;
+  var s = String(value);
+  if (/[A-Za-zА-Яа-я%]/.test(s)) return s;
+  return s + unit;
+}
+
+function kgFromGrams(node) {
+  var v = present(node, -6);
+  if (!v) return node;
+  var n = parseFloat(v);
+  if (!Number.isFinite(n)) return node;
+  return { "#text": String(n / 1000) };
+}
+
+function mapBrewMateHopUse(raw) {
+  var s = String(raw).trim().toLowerCase();
+  if (s === "boil" || s === "кипячение" || s === "варка") return "Boil";
+  if (s === "first wort" || s === "первое сусло" || s === "fwh") return "First Wort";
+  if (s === "mash" || s === "затирание") return "Mash";
+  if (s === "aroma" || s === "аромат" || s === "вирпул" || s === "whirlpool") return "Aroma";
+  if (s === "dry hop" || s === "dryhop" || s === "сухое охмеление") return "Dry Hop";
+  return "";
+}
+
+function fermentableTypeLabel(type) {
+  var t = String(type).trim().toLowerCase();
+  if (t === "adjunct") return "Добавка";
+  if (t === "sugar") return "Сахар";
+  if (t === "extract") return "Экстракт";
+  if (t === "dry extract") return "Сухой экстракт";
+  return "Солод";
+}
+
+function miscTypeLabel(type) {
+  var t = String(type).trim().toLowerCase();
+  if (t === "flavor") return "Вкус";
+  if (t === "fining") return "Очистка";
+  if (t === "spice") return "Специи";
+  if (t === "herb") return "Травы";
+  if (t === "water agent") return "Вода";
+  if (t === "other") return "Прочее";
+  return present({ "#text": type }) || "Прочее";
+}
+
+function usePhaseLabel(use) {
+  var s = String(use).trim().toLowerCase();
+  if (s === "boil") return "Кипячение";
+  if (s === "first wort") return "Первое сусло";
+  if (s === "mash") return "Затирание";
+  if (s === "aroma") return "Аромат";
+  if (s === "dry hop") return "Сухое охмеление";
+  if (s === "primary") return "Брожение";
+  if (s === "secondary") return "Дображивание";
+  if (s === "bottling") return "Розлив";
+  return use;
+}
+
+function hopUseLabel(hop) {
+  var user = present(hop.USER_HOP_USE).trim().toLowerCase();
+  if (user === "whirlpool") return "Вирпул";
+  if (user) return usePhaseLabel(present(hop.USER_HOP_USE));
+  return usePhaseLabel(present(hop.USE));
+}
+
+function hopFormLabel(form) {
+  var f = String(form).trim().toLowerCase();
+  if (f === "pellet") return "пеллеты";
+  if (f === "leaf") return "шишки";
+  if (f === "plug") return "пробки";
+  return form;
+}
+
+function formatHopTime(hop) {
+  var raw = present(hop.TIME, 0);
+  if (!raw) return "";
+  var n = parseFloat(raw);
+  if (!Number.isFinite(n)) return raw;
+  var use = (present(hop.USER_HOP_USE) || present(hop.USE)).trim().toLowerCase();
+  if (use.indexOf("dry") >= 0 && n >= 1440) return decimalAdjust("round", n / 1440, -1) + " сут";
+  return decimalAdjust("round", n, 0) + " мин";
+}
+
+function formatAmount(item, kind) {
+  var display = present(item.DISPLAY_AMOUNT);
+  if (display) return display;
+  var raw = present(item.AMOUNT, -6);
+  if (!raw) return "";
+  var n = parseFloat(raw);
+  if (!Number.isFinite(n)) return raw;
+  var flag = present(item.AMOUNT_IS_WEIGHT).toLowerCase();
+  var weight = (kind === "hop" || kind === "ferm" || flag === "true");
+  if (kind === "yeast" || kind === "misc") weight = (flag === "true");
+  if (!weight) {
+    if (Math.abs(n) >= 1) return decimalAdjust("round", n, -2) + " л";
+    return decimalAdjust("round", n * 1000, -1) + " мл";
+  }
+  if (Math.abs(n) >= 1) return decimalAdjust("round", n, -2) + " кг";
+  return decimalAdjust("round", n * 1000, -1) + " г";
+}
+
+function joinDetails(parts) {
+  var out = [];
+  for (var i = 0; i < parts.length; i++) {
+    if (parts[i]) out.push(parts[i]);
+  }
+  return out.join(", ");
+}
+
+function appendCol(row, className, text) {
+  var el = document.createElement("label");
+  el.className = className;
+  el.textContent = text;
+  row.appendChild(el);
+}
+
+function appendIng(parent, type, name, amount, detail) {
+  var row = document.createElement("div");
+  row.className = "ingredients";
+  appendCol(row, "ingType", type);
+  appendCol(row, "ingName", name);
+  appendCol(row, "ingAmount", amount);
+  appendCol(row, "ingDetail", detail || "");
+  parent.appendChild(row);
+}
+
 // [Пиво 02.09 D1] один файл может содержать несколько RECIPE - показываем выбор,
 // если их больше одного, и разбираем выбранный узел через get_recipe(R) (D0).
 var recipeList = [];
@@ -225,11 +378,23 @@ function get_brewmate_info(xml){
 	recipe.RECIPES.RECIPE.STYLE = Object.create(null);
 	recipe.RECIPES.RECIPE.STYLE.NAME = recipe.recipe.style;
 	recipe.RECIPES.RECIPE.NAME = recipe.recipe.namerecipe;
+	recipe.RECIPES.RECIPE.BREWER = recipe.recipe.author || recipe.recipe.brewer;
 	recipe.RECIPES.RECIPE.BATCH_SIZE = recipe.recipe.part;
+	recipe.RECIPES.RECIPE.BOIL_SIZE = recipe.recipe.volume;
 	recipe.RECIPES.RECIPE.BOIL_TIME = recipe.recipe.timeboil;
 	recipe.RECIPES.RECIPE.FERMENTABLE_TIME = recipe.recipe.timebro;
-	//recipe.RECIPES.RECIPE.NOTES = recipe.recipe.comms.comm.lin;
-	
+	recipe.RECIPES.RECIPE.PRIMARY_AGE = recipe.recipe.timebro;
+	recipe.RECIPES.RECIPE.PRIMARY_TEMP = recipe.recipe.tempbro;
+	recipe.RECIPES.RECIPE.EFFICIENCY = recipe.recipe.efficiency || recipe.recipe.kpd;
+	recipe.RECIPES.RECIPE.OG = recipe.recipe.np || recipe.recipe.og;
+	recipe.RECIPES.RECIPE.FG = recipe.recipe.kp || recipe.recipe.fg;
+	recipe.RECIPES.RECIPE.IBU = recipe.recipe.ibu;
+	recipe.RECIPES.RECIPE.ABV = recipe.recipe.abv || recipe.recipe.alc;
+	recipe.RECIPES.RECIPE.EST_COLOR = recipe.recipe.srm || recipe.recipe.ebc;
+	if (recipe.recipe.comms && recipe.recipe.comms.comm) {
+		recipe.RECIPES.RECIPE.NOTES = recipe.recipe.comms.comm.lin || recipe.recipe.comms.comm;
+	}
+
 	recipe.RECIPES.RECIPE.YEASTS = Object.create(null);
 	recipe.RECIPES.RECIPE.YEASTS.YEAST = Object.create(null);
 	recipe.RECIPES.RECIPE.YEASTS.YEAST.NAME = recipe.recipe.yeast;
@@ -245,6 +410,9 @@ function get_brewmate_info(xml){
     for (let ferm of FERMENTABLE){
     	ferm.NAME = ferm.grainname;
     	ferm.AMOUNT = ferm.grainkg;
+    	ferm.TYPE = ferm.graintype || ferm.TYPE;
+    	ferm.COLOR = ferm.graincolor || ferm.COLOR;
+    	ferm.YIELD = ferm.grainyield || ferm.YIELD;
 	}
 
     recipe.RECIPES.RECIPE.HOPS = Object.create(null);
@@ -256,8 +424,13 @@ function get_brewmate_info(xml){
     } else {HOP.push(recipe.RECIPES.RECIPE.HOPS.HOP) }
     for (let hop of HOP){
 		hop.NAME = hop.hopname;
-		hop.AMOUNT = hop.hopgr;
+		hop.AMOUNT = kgFromGrams(hop.hopgr);
 		hop.TIME = hop.hoptime;
+		hop.ALPHA = hop.hopalpha || hop.ALPHA;
+		hop.FORM = hop.hopform || hop.FORM;
+		var hopUse = present(hop.hopuse || hop.use);
+		var mappedUse = hopUse ? mapBrewMateHopUse(hopUse) : "";
+		if (mappedUse) hop.USE = { "#text": mappedUse };
 	}
 
 	recipe.RECIPES.RECIPE.MASH = Object.create(null);
@@ -271,6 +444,9 @@ function get_brewmate_info(xml){
     for (let mash of MASH){
     	mash.STEP_TEMP = mash.zatirgr;
     	mash.STEP_TIME = mash.zatirtime;
+    	mash.NAME = mash.zatirname || mash.NAME;
+    	mash.TYPE = mash.zatirtype || mash.TYPE;
+    	mash.INFUSE_AMOUNT = mash.zatirwater || mash.INFUSE_AMOUNT;
     }
 	
 	recipe.RECIPES.RECIPE.MISCS = Object.create(null);
@@ -283,7 +459,10 @@ function get_brewmate_info(xml){
     for (let misc of MISC){
 		misc.TYPE = misc.misctype;
 		misc.NAME = misc.miscname;
-		misc.AMOUNT = misc.miscgr;
+		misc.AMOUNT = kgFromGrams(misc.miscgr);
+		misc.AMOUNT_IS_WEIGHT = { "#text": "TRUE" };
+		misc.USE = misc.miscuse || misc.USE;
+		misc.TIME = misc.misctime || misc.TIME;
 	}
 
 	presentRecipe(recipe.RECIPES.RECIPE);
@@ -292,150 +471,130 @@ function get_brewmate_info(xml){
 function get_recipe(R){
     is_program = false;
     program = "";
-	//show main info
-    document.getElementById("STYLE").textContent = get_object_value(R.STYLE && R.STYLE.NAME);
-    document.getElementById("NAME").textContent = get_object_value(R.NAME);
-    document.getElementById("TYPE").textContent = get_object_value(R.TYPE);
-    document.getElementById("BATCH_SIZE").textContent = get_object_value(R.BATCH_SIZE, " л.");
-    document.getElementById("BOIL_SIZE").textContent = get_object_value(R.BOIL_SIZE, " л.");
-    document.getElementById("BOIL_TIME").textContent = get_object_value(R.BOIL_TIME, " мин.");
+    setSpec("STYLE", get_object_value(R.STYLE && R.STYLE.NAME), true);
+    setSpec("NAME", get_object_value(R.NAME), false);
+    setSpec("TYPE", get_object_value(R.TYPE), true);
+    setSpec("BREWER", get_object_value(R.BREWER), true);
+    setSpec("BATCH_SIZE", get_object_value(R.BATCH_SIZE, " л."), true);
+    setSpec("BOIL_SIZE", get_object_value(R.BOIL_SIZE, " л."), true);
+    setSpec("BOIL_TIME", get_object_value(R.BOIL_TIME, " мин."), true);
     // [Пиво 02.09 D9] textContent вместо innerHTML - заметки из файла рецепта не должны исполняться как HTML
-    document.getElementById("NOTES").textContent = get_object_value(R.NOTES);
-    document.getElementById("PRIMARY_TEMP").textContent = get_object_value(R.PRIMARY_TEMP, " °С");
-    document.getElementById("FERMENTABLE_TIME").textContent = get_object_value(R.FERMENTABLE_TIME, " дней");
+    var notesText = get_object_value(R.NOTES);
+    if (Array.isArray(R.NOTES)) {
+      notesText = R.NOTES.map(function (n) { return present(n); }).filter(Boolean).join("\n") || "Нет в рецепте";
+    }
+    setSpec("NOTES", notesText, true);
+    setSpec("PRIMARY_TEMP", get_object_value(R.PRIMARY_TEMP, " °С"), false);
+    setSpec("FERMENTABLE_TIME", pickPresent(
+      get_object_value(R.FERMENTABLE_TIME, " дней"),
+      get_object_value(R.PRIMARY_AGE, " дней")
+    ), false);
+    setSpec("OG", pickPresent(get_object_value(R.OG, "", -3), get_object_value(R.EST_OG)), true);
+    setSpec("FG", pickPresent(get_object_value(R.FG, "", -3), get_object_value(R.EST_FG)), true);
+    setSpec("IBU", get_object_value(R.IBU, "", -2), true);
+    setSpec("ABV", withDisplayUnit(pickPresent(get_object_value(R.EST_ABV), get_object_value(R.ABV, "", -2)), " %"), true);
+    setSpec("COLOR", pickPresent(get_object_value(R.EST_COLOR), get_object_value(R.COLOR, "", -1)), true);
+    setSpec("EFFICIENCY", withDisplayUnit(get_object_value(R.EFFICIENCY, "", -1), " %"), true);
+    var waterName = "Нет в рецепте";
+    if (R.WATERS && R.WATERS.WATER) {
+      waterName = get_object_value(asList(R.WATERS.WATER)[0].NAME);
+    }
+    setSpec("WATER", waterName, true);
+    setSpec("EQUIPMENT", get_object_value(R.EQUIPMENT && R.EQUIPMENT.NAME), true);
 
-        
-    //show ingredients
     var dl = document.createElement("div");
-  
-    var dl1 = document.createElement("div");
-    dl1.className = "ingredients";
-    var type = document.createElement("label");
-    type.textContent = "Тип";
-    type.className = "ingType";
-    dl1.appendChild(type);
-    var name = document.createElement("label");
-    name.textContent = "Название";
-    name.className = "ingName";
-    name.style = "text-align: center;";
-    dl1.appendChild(name);
-    var amount = document.createElement("label");
-    amount.textContent = "Количество";
-    amount.className = "ingAmount";
-    dl1.appendChild(amount);
-    dl.appendChild(dl1);
-    
+    appendIng(dl, "Тип", "Название", "Количество", "Параметры");
+
     var ingr = document.getElementById("ingredients");
     ingr.innerHTML = "";
     ingr.appendChild(dl);
 
     var FERMENTABLE = [];
     if (R.FERMENTABLES && R.FERMENTABLES.FERMENTABLE) {
-      if (Array.isArray(R.FERMENTABLES.FERMENTABLE)) FERMENTABLE = R.FERMENTABLES.FERMENTABLE;
-      else FERMENTABLE.push(R.FERMENTABLES.FERMENTABLE);
+      FERMENTABLE = asList(R.FERMENTABLES.FERMENTABLE);
     }
 
-    //grain
     for (let ferm of FERMENTABLE){
-      var dl1 = document.createElement("div");
-      dl1.className = "ingredients";
-  
-      var type = document.createElement("label");
-      if (get_object_value(ferm.TYPE) == "Adjunct") type.textContent = "Добавка";
-      else type.textContent = "Солод";
-      type.className = "ingType";
-      dl1.appendChild(type);
-      var name = document.createElement("label");
-      name.textContent = get_object_value(ferm.NAME);
-      name.className = "ingName";
-      dl1.appendChild(name);
-      var amount = document.createElement("label");
-      amount.textContent = get_object_value(ferm.AMOUNT,"",-2);
-      amount.className = "ingAmount";
-      dl1.appendChild(amount);
-    
-      dl.appendChild(dl1);
+      var fermColor = present(ferm.COLOR, -1);
+      var fermYield = present(ferm.YIELD, -1);
+      appendIng(
+        dl,
+        fermentableTypeLabel(present(ferm.TYPE)),
+        get_object_value(ferm.NAME),
+        formatAmount(ferm, "ferm"),
+        joinDetails([
+          fermColor ? (fermColor + " °L") : "",
+          fermYield ? ("выход " + fermYield + " %") : "",
+          present(ferm.SUPPLIER)
+        ])
+      );
     }
 
-    //hop
     // [Пиво 02.09 D7] хмель в рецепте не обязателен - без узла HOPS список остаётся пустым
     var HOP = [];
     if (R.HOPS && R.HOPS.HOP) {
-      if (Array.isArray(R.HOPS.HOP)) HOP = R.HOPS.HOP;
-      else HOP.push(R.HOPS.HOP);
+      HOP = asList(R.HOPS.HOP);
     }
     for (let hop of HOP){
-      var dl1 = document.createElement("div");
-      dl1.className = "ingredients";
-      var type = document.createElement("label");
-      type.textContent = "Хмель";
-      type.className = "ingType";
-      dl1.appendChild(type);
-      var name = document.createElement("label");
-      name.textContent = get_object_value(hop.NAME);
-      name.className = "ingName";
-      dl1.appendChild(name);
-      var amount = document.createElement("label");
-      amount.textContent = get_object_value(hop.AMOUNT,"",-4);
-      amount.className = "ingAmount";
-      dl1.appendChild(amount);
-    
-      dl.appendChild(dl1);
+      var hopTemp = present(hop.TEMPERATURE, -1) || present(hop.HOP_TEMP, -1);
+      var hopAlpha = present(hop.ALPHA, -1);
+      var hopForm = present(hop.FORM);
+      appendIng(
+        dl,
+        "Хмель",
+        get_object_value(hop.NAME),
+        formatAmount(hop, "hop"),
+        joinDetails([
+          hopUseLabel(hop),
+          formatHopTime(hop),
+          hopTemp ? (hopTemp + " °C") : "",
+          hopAlpha ? ("α " + hopAlpha + " %") : "",
+          hopForm ? hopFormLabel(hopForm) : ""
+        ])
+      );
     }
-    
-    //yeast
+
     var YEAST = [];
     if (R.YEASTS && R.YEASTS.YEAST) {
-      if (Array.isArray(R.YEASTS.YEAST)) YEAST = R.YEASTS.YEAST;
-      else YEAST.push(R.YEASTS.YEAST);
+      YEAST = asList(R.YEASTS.YEAST);
     }
     for (let yeast of YEAST){
-      var dl1 = document.createElement("div");
-      dl1.className = "ingredients";
-  
-      var type = document.createElement("label");
-      type.textContent = "Дрожжи";
-      type.className = "ingType";
-      dl1.appendChild(type);
-      var name = document.createElement("label");
-      name.textContent = get_object_value(yeast.NAME)
-      name.className = "ingName";
-      dl1.appendChild(name);
-      var amount = document.createElement("label");
-      amount.textContent = get_object_value(yeast.AMOUNT,"",-2);
-      amount.className = "ingAmount";
-      dl1.appendChild(amount);
-
-      dl.appendChild(dl1);
+      var lab = present(yeast.LABORATORY);
+      var pid = present(yeast.PRODUCT_ID);
+      var att = present(yeast.ATTENUATION, -1);
+      var tmin = present(yeast.MIN_TEMPERATURE, -1);
+      var tmax = present(yeast.MAX_TEMPERATURE, -1);
+      var yform = present(yeast.FORM).toLowerCase();
+      var yformRu = yform === "dry" ? "сухие" : (yform === "liquid" ? "жидкие" : present(yeast.FORM));
+      appendIng(
+        dl,
+        "Дрожжи",
+        get_object_value(yeast.NAME),
+        formatAmount(yeast, "yeast"),
+        joinDetails([
+          [lab, pid].filter(Boolean).join(" "),
+          yformRu,
+          att ? ("атт. " + att + " %") : "",
+          (tmin && tmax) ? (tmin + "–" + tmax + " °C") : (tmin || tmax ? ((tmin || tmax) + " °C") : "")
+        ])
+      );
     }
-    
-    //misc
+
     var MISC = [];
     if (R.MISCS && R.MISCS.MISC) {
-      if (Array.isArray(R.MISCS.MISC)) MISC = R.MISCS.MISC;
-      else MISC.push(R.MISCS.MISC);
+      MISC = asList(R.MISCS.MISC);
     }
     for (let misc of MISC){
-      if (get_object_value(misc.TYPE) == "Flavor" || get_object_value(misc.TYPE) == "Fining"){
-        var dl1 = document.createElement("div");
-        dl1.className = "ingredients";
-  
-        var type = document.createElement("label");
-        if (get_object_value(misc.TYPE) == "Flavor") type.textContent = "Специи";
-        else if (get_object_value(misc.TYPE) == "Fining") type.textContent = "Очистка";
-        type.className = "ingType";
-        dl1.appendChild(type);
-        var name = document.createElement("label");
-        name.textContent = get_object_value(misc.NAME)
-        name.className = "ingName";
-        dl1.appendChild(name);
-        var amount = document.createElement("label");
-        amount.textContent = get_object_value(misc.AMOUNT,"",-4);
-        amount.className = "ingAmount";
-        dl1.appendChild(amount);
-
-        dl.appendChild(dl1);
-      }
+      appendIng(
+        dl,
+        miscTypeLabel(present(misc.TYPE)),
+        get_object_value(misc.NAME),
+        formatAmount(misc, "misc"),
+        joinDetails([
+          usePhaseLabel(present(misc.USE)),
+          formatHopTime(misc)
+        ])
+      );
     }
     
     //show mash step
@@ -459,17 +618,18 @@ function get_recipe(R){
     mtime.textContent = "Время";
     mtime.className = "mashTime";
     dl1.appendChild(mtime);
+    var mwater = document.createElement("label");
+    mwater.textContent = "Вода";
+    mwater.className = "mashWater";
+    dl1.appendChild(mwater);
     dl.appendChild(dl1);
-    
+
     //mash
     // [Пиво 02.09 D7] без шагов затирания программу не построить - явная ошибка вместо TypeError
     if (!R.MASH || !R.MASH.MASH_STEPS || !R.MASH.MASH_STEPS.MASH_STEP) {
       throw new Error("в рецепте нет шагов затирания");
     }
-    var MASH = [];
-    if (Array.isArray(R.MASH.MASH_STEPS.MASH_STEP)){
-       MASH = R.MASH.MASH_STEPS.MASH_STEP;
-    } else {MASH.push(R.MASH.MASH_STEPS.MASH_STEP) }
+    var MASH = asList(R.MASH.MASH_STEPS.MASH_STEP);
 
     // [Пиво 02.09 D4] температура первой строки M - INFUSE_TEMP первого шага затирания, иначе его STEP_TEMP, иначе 45
     var mTemp = get_object_value(MASH[0].INFUSE_TEMP);
@@ -495,8 +655,13 @@ function get_recipe(R){
       dl1.appendChild(step_temp);
       var step_time = document.createElement("label");
       step_time.textContent = get_object_value(mash.STEP_TIME)
-      step_time.className = "mashTemp";
+      step_time.className = "mashTime";
       dl1.appendChild(step_time);
+      var infuse = document.createElement("label");
+      var infuseAmt = present(mash.INFUSE_AMOUNT, -2);
+      infuse.textContent = infuseAmt ? (infuseAmt + " л") : "";
+      infuse.className = "mashWater";
+      dl1.appendChild(infuse);
 
       dl.appendChild(dl1);
       program = program + "P;" + step_temp.textContent + ";" + step_time.textContent + ";1^-1^2^3" + ";0\n";
@@ -602,21 +767,18 @@ async function set_program(){
   }
 };
 
-// [Пиво 02.09 D8] установить программу можно только в режиме "Пиво"
-document.addEventListener("DOMContentLoaded", function () {
-  if (document.body.dataset.isBeerMode !== "true") {
-    document.getElementById("setprogram").disabled = true;
-    SamovarApp.showRequestError("Переключите режим на «Пиво», чтобы установить программу.");
-  }
+SamovarApp.initTheme();
+document.addEventListener('DOMContentLoaded', function () {
+  SamovarApp.initTheme();
 });
-
 </script>
 </head>
-<body data-is-beer-mode="%IsBeerMode%">
+<body>
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
 <form action='none' onsubmit='return false' name="mainform" id="mainform">
 <h1>
 <div class="message-box" style="display: none;" id="message"></div>
-Samovar v. <span id='version'>%v%</span>
+Самовар
 </h1>
 
 <div class="text">Программа затирания</div>
@@ -625,7 +787,7 @@ Samovar v. <span id='version'>%v%</span>
 <label for="fileToLoad" class="button custom-file-upload">
     <i class="fa fa-cloud-upload"></i>Загрузить рецепт
 </label>
-<input type="file" id="fileToLoad" accept="application/xml" onchange="loadBeerXML(this.files[0])" class="button"/>
+<input type="file" id="fileToLoad" accept="application/xml" onchange="loadBeerXML(this.files[0])"/>
 </div>
 
 <!-- [Пиво 02.09 D1] выбор рецепта, если в файле несколько RECIPE -->
@@ -639,31 +801,58 @@ Samovar v. <span id='version'>%v%</span>
 <label style="font-size: 20px; font-weight: 600;">Описание рецепта:</label>
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 <div class="specs">
-<div>
+<div class="spec-row">
 <label>Стиль: </label><label class="specs" id="STYLE"></label>
 </div>
-<div>
+<div class="spec-row">
 <label>Сорт: </label><label class="specs" id="NAME"></label>
 </div>
-<div>
+<div class="spec-row">
 <label>Тип: </label><label class="specs" id="TYPE"></label>
 </div>
-<div>
+<div class="spec-row">
+<label>Пивовар: </label><label class="specs" id="BREWER"></label>
+</div>
+<div class="spec-row">
 <label>Выход: </label><label class="specs" id="BATCH_SIZE"></label>
 </div>
-<div>
+<div class="spec-row">
 <label>Объем кипения: </label><label class="specs" id="BOIL_SIZE"></label>
 </div>
-<div>
+<div class="spec-row">
 <label>Температура брожения: </label><label class="specs" id="PRIMARY_TEMP"></label>
 </div>
-<div>
+<div class="spec-row">
 <label>Время кипения: </label><label class="specs" id="BOIL_TIME"></label>
 </div>
-<div>
+<div class="spec-row">
 <label>Время брожения: </label><label class="specs" id="FERMENTABLE_TIME"></label>
 </div>
-<div>
+<div class="spec-row">
+<label>OG: </label><label class="specs" id="OG"></label>
+</div>
+<div class="spec-row">
+<label>FG: </label><label class="specs" id="FG"></label>
+</div>
+<div class="spec-row">
+<label>IBU: </label><label class="specs" id="IBU"></label>
+</div>
+<div class="spec-row">
+<label>ABV: </label><label class="specs" id="ABV"></label>
+</div>
+<div class="spec-row">
+<label>Цвет: </label><label class="specs" id="COLOR"></label>
+</div>
+<div class="spec-row">
+<label>КПД: </label><label class="specs" id="EFFICIENCY"></label>
+</div>
+<div class="spec-row">
+<label>Вода: </label><label class="specs" id="WATER"></label>
+</div>
+<div class="spec-row">
+<label>Оборудование: </label><label class="specs" id="EQUIPMENT"></label>
+</div>
+<div class="spec-row">
 <label>Заметки: </label><label class="specs" id="NOTES"></label>
 </div>
 </div>

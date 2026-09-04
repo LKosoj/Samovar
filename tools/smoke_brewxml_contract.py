@@ -8,6 +8,9 @@
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web_assets import COMPRESS
+
 ROOT = Path(__file__).resolve().parents[1]
 BREWXML_PAGE = ROOT / "data_raw" / "brewxml.htm"
 
@@ -65,6 +68,11 @@ if brewxml.count(";0^0^0^0;0") != 2:
     errors.append("brewxml.htm: C/F rows must keep the mixer off (0^0^0^0), expected exactly 2 occurrences")
 
 # D6: семантика строки программы проверяется общим правилом SamovarApp.beerRowTypeOk.
+if "SamovarApp.initTheme(" not in brewxml or "SamovarApp.toggleTheme(" not in brewxml:
+    errors.append("brewxml.htm: theme must use SamovarApp.initTheme/toggleTheme")
+if 'id="themeToggle"' not in brewxml:
+    errors.append("brewxml.htm: theme toggle is missing")
+
 if "SamovarApp.beerRowTypeOk(" not in brewxml:
     errors.append("brewxml.htm: validateBeerProgramText does not call SamovarApp.beerRowTypeOk")
 
@@ -77,17 +85,31 @@ if "в рецепте нет шагов затирания" not in brewxml:
 if "xmlSyntaxError" not in brewxml:
     errors.append("brewxml.htm: xmlSyntaxError marker (formatRecipeErrorMessage) is missing")
 
-# D8: установка программы привязана к режиму "Пиво".
-if 'data-is-beer-mode="%IsBeerMode%"' not in brewxml:
-    errors.append("brewxml.htm: data-is-beer-mode placeholder is missing on <body>")
-if 'document.body.dataset.isBeerMode !== "true"' not in brewxml:
-    errors.append("brewxml.htm: beer-mode gate for #setprogram is missing")
+# Страница без шаблонов: иначе gzip на устройстве отдаст сырые %ПЛЕЙСХОЛДЕРЫ%.
+if "%IsBeerMode%" in brewxml or "%v%" in brewxml:
+    errors.append("brewxml.htm: template placeholders came back - файл нельзя сжимать")
+if "dataset.isBeerMode" in brewxml or "data-is-beer-mode" in brewxml:
+    errors.append("brewxml.htm: beer-mode gate came back")
+if "brewxml.htm" not in COMPRESS:
+    errors.append("brewxml.htm: должен быть в COMPRESS (tools/build_web_assets.py)")
 
-# D9: заметки рецепта не должны исполняться как HTML.
-if 'NOTES").textContent' not in brewxml:
-    errors.append('brewxml.htm: NOTES must be set via textContent')
+if 'NOTES").textContent' not in brewxml and 'setSpec("NOTES"' not in brewxml:
+    errors.append('brewxml.htm: NOTES must be set via textContent/setSpec')
 if 'NOTES").innerHTML' in brewxml:
     errors.append('brewxml.htm: NOTES must not be set via innerHTML')
+
+if "function formatAmount(" not in brewxml:
+    errors.append("brewxml.htm: formatAmount is missing")
+if "function mapBrewMateHopUse(" not in brewxml:
+    errors.append("brewxml.htm: BrewMate hop USE mapping is missing")
+if "PRIMARY_AGE" not in brewxml:
+    errors.append("brewxml.htm: PRIMARY_AGE (BeerXML fermentation days) is missing")
+if 'id="IBU"' not in brewxml or 'id="OG"' not in brewxml:
+    errors.append("brewxml.htm: recipe OG/IBU fields are missing")
+if "ingDetail" not in brewxml:
+    errors.append("brewxml.htm: ingredient detail column is missing")
+if 'get_object_value(misc.TYPE) == "Flavor"' in brewxml:
+    errors.append("brewxml.htm: old Flavor/Fining-only misc filter is back")
 
 if errors:
     print("brewxml.htm contract smoke check failed:")

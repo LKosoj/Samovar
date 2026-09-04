@@ -796,6 +796,43 @@ BROWSER_TEST = r'''async page => {
   );
   await csvErrorPage.close();
 
+  const csvBusyPage = await page.context().newPage();
+  track(csvBusyPage, 'chart-csv-busy-retry');
+  await csvBusyPage.addInitScript(() => {
+    window.Audio = function () {
+      this.play = function () { return Promise.resolve(); };
+      this.pause = function () {};
+    };
+    let csvCalls = 0;
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = function (input, options) {
+      const url = typeof input === 'string' ? input : input.url;
+      if (String(url) === 'data.csv') {
+        csvCalls += 1;
+        window.__csvBusyCalls = csvCalls;
+        if (csvCalls <= 2) {
+          return Promise.resolve(new Response('BUSY', {
+            status: 503, statusText: 'Service Unavailable'
+          }));
+        }
+        return Promise.resolve(new Response(
+          'Date,Steam,Pipe,Water,Tank,Pressure,ProgNum\n12:00:00,1,2,3,4,5,1\n',
+          { status: 200, headers: { 'Content-Type': 'text/csv' } }
+        ));
+      }
+      return nativeFetch(input, options);
+    };
+  });
+  await installRoutes(csvBusyPage);
+  await csvBusyPage.goto(baseUrl + '/chart.htm', { waitUntil: 'load' });
+  await csvBusyPage.waitForFunction(() =>
+    window.__csvBusyCalls >= 3 &&
+    document.querySelector('.chart-status') &&
+    document.querySelector('.chart-status').textContent.includes('Загружено точек') &&
+    !document.querySelector('.chart-status-error')
+  );
+  await csvBusyPage.close();
+
   expect(mutationRequests.length === 0,
     'startup/controller introduced mutation requests: ' + JSON.stringify(mutationRequests));
   if (problems.length) throw new Error(problems.join('\n'));

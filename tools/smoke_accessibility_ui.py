@@ -65,16 +65,17 @@ PAGE_LABELS = {
     "brewxml.htm": ("recipe-select",),
 }
 FROZEN = {
-    # 01.09.2026: панель файлов получила мобильную раскладку (до 900 px её
-    # кнопки переносились под дерево файлов и не нажимались).
-    "edit.htm": "e50cababe8cd7421a250eb9ecfdd9dcdda26ab1d5ea61b5a6ada6aff64e536bb",
-    "edit.htm.gz": "0cc91264dd1da80e76faffb7ca2c293cf2777031449f82f9edf99e49c81baa84",
+    # 04.09.2026: edit.htm — сетка вместо абсолютов, Ace 1.44.0, русская панель.
+    "edit.htm": "d98560fd84846400ffa6aecd9261c1fbcce3d382f68e39825fd35d98bbbb772b",
+    "edit.htm.gz": "18a87d45c9229498aaa20785f633c571126ca138fc2659634338829d1d09a54a",
 }
 KEY_LISTENER_REGISTRATION = re.compile(
     r"\baddEventListener\s*\(\s*(['\"])(?:keydown|keyup|keypress)\1\s*,",
     re.I,
 )
 UNLOCK_AUDIO_LISTENER = "document.addEventListener('keydown', unlockAudio, { once: true });"
+PAGE_LOCK_LISTENER = "document.addEventListener('keydown', onLockedPageInput, true);"
+ALLOWED_KEY_LISTENERS = (UNLOCK_AUDIO_LISTENER, PAGE_LOCK_LISTENER)
 
 
 def canonical_gzip(content: bytes) -> bytes:
@@ -89,10 +90,9 @@ def canonical_gzip(content: bytes) -> bytes:
 
 
 def app_key_listener_error(source: str) -> str | None:
-    count = source.count(UNLOCK_AUDIO_LISTENER)
-    if count != 1:
-        return f"exact unlockAudio keydown registration count is {count}"
-    remaining = source.replace(UNLOCK_AUDIO_LISTENER, "", 1)
+    remaining = source
+    for allowed in ALLOWED_KEY_LISTENERS:
+        remaining = remaining.replace(allowed, "")
     if KEY_LISTENER_REGISTRATION.search(remaining):
         return "additional key listener registration"
     return None
@@ -108,6 +108,8 @@ def verify_keyboard_guard(errors: list[str]) -> None:
             errors.append(f"keyboard guard misses {name} registration")
     if app_key_listener_error(UNLOCK_AUDIO_LISTENER) is not None:
         errors.append("keyboard guard rejects exact unlockAudio allow-case")
+    if app_key_listener_error(PAGE_LOCK_LISTENER) is not None:
+        errors.append("keyboard guard rejects exact page-lock keydown allow-case")
 
 
 class MarkupParser(HTMLParser):
@@ -286,6 +288,9 @@ def check_markup(errors: list[str]) -> None:
         file_tags = [attrs for tag, attrs in parsed[name][1].tags if tag == "input" and attrs.get("type") == "file"]
         if len(file_tags) != 1 or file_tags[0].get("id") != "fileToLoad":
             errors.append(f"data/{name}: native file input contract changed")
+        classes = (file_tags[0].get("class") or "").split()
+        if "button" in classes:
+            errors.append(f"data/{name}: file input must not use class=button")
 
     for name in GENERATED_PAGES:
         source, _ = parsed[name]
@@ -310,6 +315,10 @@ def check_markup(errors: list[str]) -> None:
 def check_scripts(errors: list[str]) -> None:
     app = (DATA / "app.js").read_text(encoding="utf-8")
     verify_keyboard_guard(errors)
+    if app.count(UNLOCK_AUDIO_LISTENER) != 1:
+        errors.append("data/app.js: exact unlockAudio keydown registration count changed")
+    if app.count(PAGE_LOCK_LISTENER) != 1:
+        errors.append("data/app.js: exact page-lock keydown registration count changed")
     key_listener_error = app_key_listener_error(app)
     if key_listener_error:
         errors.append(f"data/app.js: {key_listener_error}")
@@ -340,18 +349,49 @@ def check_scripts(errors: list[str]) -> None:
     i2c = (DATA / "i2cstepper.htm").read_text(encoding="utf-8")
     if "SamovarApp.initTheme(" not in i2c or "SamovarApp.toggleTheme(" not in i2c:
         errors.append("data/i2cstepper.htm: theme toggle does not delegate to SamovarApp")
+    brewxml = read_page("brewxml.htm")
+    if "SamovarApp.initTheme(" not in brewxml or "SamovarApp.toggleTheme(" not in brewxml:
+        errors.append("data/brewxml.htm: theme toggle does not delegate to SamovarApp")
+    edit = (DATA / "edit.htm").read_text(encoding="utf-8")
+    if "SamovarApp.initTheme(" not in edit or "SamovarApp.toggleTheme(" not in edit:
+        errors.append("data/edit.htm: theme toggle does not delegate to SamovarApp")
 
 
 def check_css(errors: list[str]) -> None:
     css = (DATA / "style.css").read_text(encoding="utf-8")
     css_rules = re.findall(r"([^{}]+)\{([^{}]*)\}", css, re.S)
+    def selector_compact(selector: str) -> str:
+        return re.sub(r"\s+", "", selector)
+
     file_rule = next(
-        (body for selector, body in css_rules
-         if re.search(r"input\[type=['\"]?file['\"]?\]", selector, re.I)),
+        (
+            body for selector, body in css_rules
+            if selector_compact(selector) == 'input[type="file"]'
+        ),
         None,
     )
     if file_rule is None or re.search(r"display\s*:\s*none", file_rule, re.I):
         errors.append("data/style.css: native file input is not visually-hidden/focusable")
+    picker_rule = next(
+        (
+            body for selector, body in css_rules
+            if selector_compact(selector) == 'input[type="file"]::file-selector-button'
+        ),
+        None,
+    )
+    if picker_rule is None or not re.search(r"display\s*:\s*none", picker_rule, re.I):
+        errors.append("data/style.css: native file picker button must stay display:none")
+    upload_hover = next(
+        (
+            body for selector, body in css_rules
+            if ".file-upload-control .custom-file-upload:hover" in selector
+            and ".file-upload-control .custom-file-upload:active" in selector
+        ),
+        None,
+    )
+    hover_compact = re.sub(r"\s+", "", upload_hover or "").lower()
+    if "top:0" not in hover_compact:
+        errors.append("data/style.css: file upload label must not shift on hover")
     focus_rules = re.findall(r"([^{}]*:focus(?:-visible|-within)[^{}]*)\{([^{}]*)\}", css, re.I)
     merged = [selector for selector, body in focus_rules
               if "a[href]:focus-visible" in selector and

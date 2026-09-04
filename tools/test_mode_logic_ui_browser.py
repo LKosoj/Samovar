@@ -231,9 +231,19 @@ BROWSER_TEST = r'''async page => {
              "beer mixer tooltip does not show the real firmware limit before input");
 
       await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});
-      expect(await page.locator("#SuvidTemp").count() === 1 &&
-             await page.locator("#SuvidHoldMinutes").count() === 1,
-             "Suvid controls missing");
+      expect(await page.locator("#SuvidTemp").count() === 0 &&
+             await page.locator("#SuvidHoldMinutes").count() === 0,
+             "Suvid controls must not be on setup.htm");
+      const suvidOption = await page.locator('#mode option[value="5"]').evaluate(el => ({
+        hidden: el.hidden, text: el.textContent.trim()
+      }));
+      expect(suvidOption.hidden === true,
+             "Su-vid must stay a hidden option so a stored Mode=5 is not replaced on save");
+      const luaOption = await page.locator('#mode option[value="6"]').evaluate(el => ({
+        hidden: el.hidden, text: el.textContent.trim()
+      }));
+      expect(luaOption.hidden === true,
+             "Lua must stay a hidden option so a stored Mode=6 is not replaced on save");
       const overflow = await page.evaluate(() =>
         document.documentElement.scrollWidth - document.documentElement.clientWidth
       );

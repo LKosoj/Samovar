@@ -765,13 +765,13 @@ if spiffs_file.exists():
     # Гейт разрушающих операций редактора: и активный процесс, и ещё не выполненное
     # отложенное закрытие журнала (close идёт тиком SysTicker уже после того, как
     # samovar_process_active() стала ложной — иначе осталось бы окно гонки).
-    gate_marker = "samovar_process_active() || data_log_close_pending()"
+    gate_marker = "log_file_lock(0)"
     post_error_marker = "if (uploadError.length() > 0) {"
     post_error_index = spiffs_text.find(post_error_marker)
     if post_error_index < 0:
         errors.append(f"SPIFFSEditor POST upload error response missing: {post_error_marker}")
     else:
-        post_error_window = spiffs_text[post_error_index:post_error_index + 200]
+        post_error_window = spiffs_text[post_error_index:post_error_index + 500]
         if 'request->send(503, "text/plain", "BUSY");' not in post_error_window:
             errors.append('SPIFFSEditor POST upload error response missing: request->send(503, "text/plain", "BUSY");')
     try:
@@ -799,44 +799,19 @@ if spiffs_file.exists():
         for token in ["load_lua_script(", "run_lua_script("]:
             if token in upload_body:
                 errors.append(f"SPIFFSEditor upload contains direct Lua operation: {token}")
-        # Гейт «идёт процесс / журнал ещё закрывается»: во время перегонки и пока
-        # не выполнено отложенное закрытие журнала редактор не пишет чанки на ФС
-        # (гонка с журналом на ядре 0). Загрузчик помечает запрос, ответ 503 даёт
-        # handleRequest. Гейт обязан стоять ДО открытия файла на запись, иначе
-        # перестановка гейта после _fs.open(p, "w") пройдёт незамеченной.
+        # Тот же xLogFileSemaphore, что у журнала: timeout 0, чтобы не блокировать
+        # async_tcp. Замок обязан стоять ДО открытия файла на запись и на каждом
+        # чанке (глубина 0 тела handleUpload).
         upload_gate_index = upload_body.find(gate_marker)
-        upload_open_index = upload_body.find('_fs.open(tmpPath, "w")')
+        upload_open_index = upload_body.find('_fs.open(p, index ? "a" : "w")')
         if upload_gate_index < 0:
-            errors.append("SPIFFSEditor upload is not gated by samovar_process_active()/data_log_close_pending()")
+            errors.append("SPIFFSEditor upload is not gated by log_file_lock(0)")
         elif upload_open_index < 0 or upload_gate_index > upload_open_index:
-            errors.append("SPIFFSEditor upload gate does not precede the file open for write")
+            errors.append("SPIFFSEditor upload lock does not precede the file open for write")
         if "SPIFFS_EDITOR_BUSY_PROCESS_ACTIVE" not in upload_body:
-            errors.append("SPIFFSEditor upload does not flag the busy reason when a process is active")
-        # Гейт должен проверяться не только при открытии файла (первый чанк), но и
-        # на каждом последующем вызове handleUpload: процесс может стартовать на
-        # ядре 0 уже в ходе загрузки, и тогда запись оставшихся чанков снова
-        # гонялась бы с журналом. Устойчивое к текстовым переформулировкам условие
-        # достижимости — гейт стоит на ГЛУБИНЕ ВЛОЖЕННОСТИ 0 тела handleUpload (на
-        # одном уровне с guard'ом записи `if (request->_tempFile)`), т.е. НЕ обёрнут
-        # ни в какой БЛОК ({...}: `if (!index) { ... }`, `if (index==0) { ... }`,
-        # второй такой же блок, голые {}). Любая скобочная обёртка, ограничивающая
-        # рекчек первым чанком, повышает глубину — и ловится независимо от её
-        # текстовой формы, в отличие от позиционного/по-литералу сравнения.
-        # Счётчик пропускает содержимое строковых/символьных литералов, чтобы
-        # непарная `{`/`}` внутри строки (напр. отладочный `"note {"`) не сбивала
-        # глубину и не давала ложного падения на корректной правке.
-        #
-        # ПРИНЯТАЯ ГРАНИЦА ТЕХНИКИ (не ловится статикой — держат компиляция 7
-        # окружений и ревью): (1) нейтрализация самого условия (`if (false && ...)`);
-        # (2) БЕЗСКОБОЧНАЯ обёртка control-flow (`if (!index)` без `{}` над рекчеком):
-        # подсчёт скобок — прокси для control-flow-вложенности, а `if/for/while` без
-        # скобок создают вложенность БЕЗ `{`, поэтому brace-depth её принципиально не
-        # видит. Догонять это новыми частными правилами = разбор грамматики C++, что
-        # для smoke-пина неоправданно; достоверно закрыл бы только рантайм-харнесс
-        # (решение о трудозатратах — за владельцем). Пин ловит все РЕАЛИСТИЧНЫЕ
-        # регрессии рекчека: удаление, перестановку после записи, скобочную обёртку.
+            errors.append("SPIFFSEditor upload does not flag BUSY when the log-file lock is taken")
         body_nc = strip_cpp_comments(upload_body)
-        write_pos = body_nc.find("request->_tempFile.write(data, len)")
+        write_pos = body_nc.find("wf.write(data, len)")
         depth = 0
         pos = 0
         in_string = False
@@ -881,12 +856,12 @@ if spiffs_file.exists():
             elif ch == "}":
                 depth -= 1
             pos += 1
-        if upload_body.count(gate_marker) < 2:
-            errors.append("SPIFFSEditor upload gates only the first chunk (no re-check before writing later chunks)")
+        if upload_body.count(gate_marker) < 1:
+            errors.append("SPIFFSEditor upload has no log_file_lock(0)")
         elif write_pos < 0:
             errors.append("SPIFFSEditor upload has no chunk write to guard")
         elif not gate_at_body_level:
-            errors.append("SPIFFSEditor upload re-check gate is not at handleUpload body level (unreachable for chunks after the first)")
+            errors.append("SPIFFSEditor upload lock is not at handleUpload body level (unreachable for chunks after the first)")
 
     # Разрушающие операции редактора (DELETE, создание через PUT) обязаны
     # отклоняться при активном процессе ДО того, как тронут ФС. Проверяем каждую
@@ -926,7 +901,7 @@ if spiffs_file.exists():
         gate_index = window.find(gate_marker)
         mutation_index = window.find(mutation)
         if gate_index < 0 or busy_send not in window[gate_index:gate_index + 150]:
-            errors.append(f"SPIFFSEditor {label} is not gated by samovar_process_active()/data_log_close_pending() with 503 BUSY")
+            errors.append(f"SPIFFSEditor {label} is not gated by log_file_lock(0) with 503 BUSY")
         elif mutation_index < 0 or gate_index > mutation_index:
             errors.append(f"SPIFFSEditor {label} gate does not precede the filesystem mutation")
 else:

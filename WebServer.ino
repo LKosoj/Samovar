@@ -964,7 +964,7 @@ void WebServerInit(void) {
   server.serveStatic("/program_bk.txt", SPIFFS, "/program_bk.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt").setCacheControl("max-age=1");
-  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
+  server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor).addMiddleware(&headerFilter);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
   // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
@@ -979,7 +979,12 @@ void WebServerInit(void) {
   // GET|HEAD: chart page и браузеры могут запрашивать HEAD; только GET давал 501 «Handler did not handle».
   // Если лога ещё нет — beginResponse(nullptr) → тот же 501; отдаём пустой CSV с заголовком как в FS.ino.
   server.on("/data.csv", (WebRequestMethodComposite)(HTTP_GET | HTTP_HEAD), [](AsyncWebServerRequest *request) {
-    if (schedule_log_flush_if_needed() != LOG_FLUSH_READY) {
+    // 503 только если не удалось даже поставить flush в очередь (лок команд занят).
+    // LOG_FLUSH_QUEUED раньше тоже давал 503 — график на первом открытии всегда
+    // ловил «HTTP 503» и требовал «Повторить»: запрос ставил flush, а SysTicker
+    // после flush сразу пишет новую строку лога, и следующее чтение снова не READY.
+    // На диске лежит согласованный CSV до последнего flush; свежие точки догоняет ajax.
+    if (schedule_log_flush_if_needed() == LOG_FLUSH_BUSY) {
       request->send(503, "text/plain", "BUSY");
       return;
     }
@@ -1086,16 +1091,6 @@ void WebServerInit(void) {
 #ifdef __SAMOVAR_DEBUG
   Serial.println("HTTP server started");
 #endif
-
-#ifndef NOT_USE_INTERFACE_UPDATE
-  // Без подключения к сети (режим AP или роутер не отвечает) качать интерфейс некуда:
-  // запрос всё равно упрётся в таймаут DNS и задержит загрузку на восемь секунд.
-  if (WiFi.status() == WL_CONNECTED) {
-    get_web_interface();
-  } else {
-    Serial.println(F("WEB interface update skipped: no WiFi connection"));
-  }
-#endif
 }
 
 // [WP7 п.21] Экранирование пользовательских строк для HTML-контекста (в отличие от
@@ -1147,9 +1142,6 @@ String indexKeyProcessor(const String &var) {
   } else if (var == "PressureHide") {
     if (bme_pressure > 0) return "false";
     else return "true";
-  } else if (var == "IsBeerMode") {
-    // [Пиво 02.09 D8] brewxml.htm разрешает установку программы только в режиме "Пиво"
-    return (Samovar_Mode == SAMOVAR_BEER_MODE) ? "true" : "false";
   } else if (var == "ProgNumHide") {
     if (ProgramNum > 0) return "false";
     else return "true";
@@ -2773,81 +2765,27 @@ static void normalize_web_if_version_string(String& v) {
   v.replace("\r", "");
 }
 
-// [T20] Комплект data/ (520192 байта с округлением по блокам LittleFS) почти заполняет
-// раздел spiffs (786432 байта); прежняя двухфазная схема
-// (весь набор во временные файлы, потом коммит разом) держала на диске одновременно
-// старый рабочий комплект И новый во временных именах - пик места 942080 байт физически
-// не помещался в раздел. Теперь каждый файл интерфейса пишется атомарно ПО ОТДЕЛЬНОСТИ:
-// содержимое кладётся в path+".tmp", перепроверяется чтением с диска и только потом
-// одним переименованием ставится на место path (с бэкапом старого файла на время
-// переименования и откатом при неудаче). Пик места - один лишний файл сверх обычного
-// комплекта (самый крупный - index.htm, с блоком 53248 байт), это укладывается в раздел
-// с запасом. Обрыв на файле N оставляет 1..N-1 уже обновлёнными, N..конец - старыми:
-// интерфейс временно смешанный, но каждый отдельный файл цел, и обновление можно повторить.
-//
-// Тело HTTP нельзя собирать в Arduino String: xbuf уже держит файл кусками (~51 КБ у
-// index.htm), а responseText() требует ещё один непрерывный блок того же размера.
-// На этом месте обновление обрывалось с "incomplete: 0/51631" при HTTP 200 — это не
-// таймаут, а отказ String::reserve(). Качаемые файлы пишутся из xbuf сразу во флеш.
-static bool commit_web_file_tmp(const String& path, const String& tmpPath, size_t expectedSize) {
-  File rf = SPIFFS.open(tmpPath, FILE_READ);
-  if (!rf) {
-    Serial.println("WEB interface write failed, reopen tmp: " + tmpPath);
-    SPIFFS.remove(tmpPath);
-    return false;
-  }
-  const size_t tmpSize = rf.size();
-  rf.close();
-  if (tmpSize != expectedSize) {
-    Serial.println("WEB interface write failed, tmp size: " + tmpPath);
-    SPIFFS.remove(tmpPath);
-    return false;
-  }
-
-  String backupPath = path + ".bak";
-  SPIFFS.remove(backupPath);
-
-  const bool hadFinal = SPIFFS.exists(path);
-  if (hadFinal && !SPIFFS.rename(path, backupPath)) {
-    Serial.println("WEB interface write failed, backup final: " + path);
-    SPIFFS.remove(tmpPath);
-    return false;
-  }
-
-  if (!SPIFFS.rename(tmpPath, path)) {
-    Serial.println("WEB interface write failed, install tmp: " + path);
-    SPIFFS.remove(tmpPath);
-    if (hadFinal && !SPIFFS.rename(backupPath, path)) {
-      Serial.println("WEB interface rollback failed: " + path);
-    }
-    return false;
-  }
-
-  if (hadFinal) {
-    SPIFFS.remove(backupPath);
-  }
-  return true;
-}
-
-static bool write_web_file_atomic(const String& path, const String& content) {
-  String tmpPath = path + ".tmp";
-  SPIFFS.remove(tmpPath);
-
-  File wf = SPIFFS.open(tmpPath, FILE_WRITE);
+// Комплект data/ почти заполняет раздел LittleFS, поэтому файлы качаются по одному
+// и пишутся сразу в конечный путь: без *.tmp/*.bak и без rename (LittleFS не
+// переименовывает открытый файл). Тело ответа не копится в RAM — чанки сливаются
+// во флеш, пока запрос ещё идёт; иначе program.htm (~80 КБ) рвёт TCP
+// (HTTPCODE_CONNECTION_LOST). Обрыв на файле N удаляет его неполный хвост, 1..N-1
+// уже новые, N+1 старые; маркер версии не пишется, обновление можно повторить.
+static bool write_web_file(const String& path, const String& content) {
+  File wf = SPIFFS.open(path, FILE_WRITE);
   if (!wf) {
-    Serial.println("WEB interface write failed, open tmp: " + tmpPath);
-    SPIFFS.remove(tmpPath);
+    Serial.println("WEB interface write failed, open: " + path);
     return false;
   }
 
   const size_t written = wf.write((const uint8_t*)content.c_str(), content.length());
   wf.close();
   if (written != content.length()) {
-    Serial.println("WEB interface write failed, partial tmp: " + tmpPath);
-    SPIFFS.remove(tmpPath);
+    Serial.println("WEB interface write failed, partial: " + path);
+    SPIFFS.remove(path);
     return false;
   }
-  return commit_web_file_tmp(path, tmpPath, content.length());
+  return true;
 }
 
 static bool web_file_content_empty_invalid(const String& fn, get_web_type type, const String& content) {
@@ -2894,29 +2832,20 @@ void get_web_interface() {
       }
     };
 
-    // [T20] Старая схема качала ВЕСЬ набор во временные "*.tmp" и только потом коммитила
-    // разом - пик занятого места (старый рабочий комплект + новый во временных именах)
-    // достигал 942080 байт, а раздел spiffs - всего 786432: обновление физически не
-    // помещалось. Теперь каждый файл интерфейса качается и ставится на место атомарно ПО
-    // ОТДЕЛЬНОСТИ (write_web_file_atomic - см. комментарий там же), пик места - один
-    // лишний файл сверх обычного комплекта, с запасом укладывается в раздел. Порядок
-    // ниже - сначала общие ресурсы (картинки/звук/стили/скрипты), затем HTML-страницы:
-    // при обрыве связи на файле N цикл останавливается (break), и риск временно
-    // нерабочей страницы ниже, чем риск нерабочего общего ресурса, от которого зависят
-    // все страницы разом.
+    // Порядок: сначала общие ресурсы, затем HTML. При обрыве на файле N цикл
+    // останавливается — лучше оставить старую страницу, чем битый общий ресурс.
     static const char* const kWebOverrideFiles[] = {
         "Green.png", "Red_light.gif", "alarm.mp3", "favicon.ico",
         "minus.png", "plus.png",
         "style.css.gz", "app.js.gz", "chart.js.gz",
-        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm", "calibrate.htm",
+        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm.gz", "calibrate.htm",
         "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
         "program.htm", "setup.htm",
     };
     static const size_t kWebOverrideFileCount = sizeof(kWebOverrideFiles) / sizeof(kWebOverrideFiles[0]);
 
-    // used_byte (Samovar.ino) на момент вызова ещё не инициализирован - SPIFFS.usedBytes()
-    // пересчитывается позже, в setup_finalize_boot_display(), которая выполняется ПОСЛЕ
-    // WebServerInit(). Поэтому здесь нужен свежий прямой запрос к SPIFFS, а не used_byte.
+    // used_byte заполняется только в setup_finalize_boot_display(); к этому моменту
+    // загрузка ещё не дошла туда, поэтому спрашиваем SPIFFS напрямую.
     static const uint32_t WEB_UPDATE_FREE_SPACE_MARGIN_BYTES = 65536;
     uint32_t freeBytes = SPIFFS.totalBytes() - SPIFFS.usedBytes();
     if (freeBytes < WEB_UPDATE_FREE_SPACE_MARGIN_BYTES) {
@@ -2959,7 +2888,7 @@ void get_web_interface() {
     if (updateOk) {
       // Версию уже скачали в начале функции — записываем нормализованную строку, без повторного HTTP.
       String versionMarker = version + "\n";
-      if (!write_web_file_atomic("/version.txt", versionMarker)) {
+      if (!write_web_file("/version.txt", versionMarker)) {
         Serial.println("WEB interface update failed on version marker; local version marker was not changed.");
         updateOk = false;
       }
@@ -3008,15 +2937,37 @@ static void abort_http_request(void* requestPtr) {
   }
 }
 
+static bool drain_http_body_to_file(asyncHTTPrequest& request, File& wf, size_t& total) {
+  uint8_t buf[512];
+  while (true) {
+    const size_t avail = request.available();
+    if (avail == 0) {
+      return true;
+    }
+    const size_t chunk = avail < sizeof(buf) ? avail : sizeof(buf);
+    const size_t got = request.responseRead(buf, chunk);
+    if (got == 0) {
+      return true;
+    }
+    if (wf.write(buf, got) != got) {
+      Serial.println("WEB interface write failed, partial: " + String(wf.name()));
+      return false;
+    }
+    total += got;
+  }
+}
+
 // Общая часть трёх http_sync_request_*: открыть соединение, дождаться готовности,
 // при необходимости выставить заголовок Content-Type, отправить запрос и дождаться
-// завершения (readyState() == 4). При неудаче на любом шаге сама печатает диагностику,
-// зовёт abort_http_request() и возвращает false — в этом случае вызывающая сторона
-// обязана вернуть "<ERR>", не трогая общий объект дальше. При успехе возвращает true.
+// завершения (readyState() == 4). bodySink — опционально сливать тело во файл по мере
+// прихода, не копя его в xbuf. При неудаче печатает диагностику, зовёт
+// abort_http_request() и возвращает false.
 static bool http_sync_request_connect_and_send(const String& method, const String& url,
                                                const String& body, const String& contentType,
                                                bool alwaysSetContentTypeHeader, bool alwaysSendBody,
-                                               uint32_t timeoutMs) {
+                                               uint32_t timeoutMs,
+                                               File* bodySink = nullptr,
+                                               size_t* bodyWritten = nullptr) {
   if (!sharedHttpRequest.open(method.c_str(), url.c_str())) {
     Serial.println("HTTP " + method + " open() failed, readyState = " + String(sharedHttpRequest.readyState()));
     return false;
@@ -3043,15 +2994,25 @@ static bool http_sync_request_connect_and_send(const String& method, const Strin
   }
 
   vTaskDelay(150 / portTICK_PERIOD_MS);
-  // Таймаут для ожидания завершения запроса (readyState == 4)
   startTime = millis();
   while (sharedHttpRequest.readyState() != 4) {
-    if (millis() - startTime > timeoutMs) { // Общий таймаут
+    if (millis() - startTime > timeoutMs) {
       Serial.println("Timeout: sharedHttpRequest not completed within " + String(timeoutMs / 1000) + " seconds");
       abort_http_request(&sharedHttpRequest);
       return false;
     }
+    if (bodySink != nullptr && bodyWritten != nullptr) {
+      if (!drain_http_body_to_file(sharedHttpRequest, *bodySink, *bodyWritten)) {
+        abort_http_request(&sharedHttpRequest);
+        return false;
+      }
+    }
     vTaskDelay(25 / portTICK_PERIOD_MS);
+  }
+  if (bodySink != nullptr && bodyWritten != nullptr) {
+    if (!drain_http_body_to_file(sharedHttpRequest, *bodySink, *bodyWritten)) {
+      return false;
+    }
   }
   vTaskDelay(60 / portTICK_PERIOD_MS);
   return true;
@@ -3112,64 +3073,50 @@ static bool http_sync_download_file(const String& url, const String& path) {
   }
   asyncHTTPrequest& request = sharedHttpRequest;
   request.setDebug(false);
-  const uint32_t timeoutMs = 8000;
-  if (!http_sync_complete_get(request, url, timeoutMs)) {
+  const uint32_t timeoutMs = 20000;
+  request.setTimeout(timeoutMs / 1000U);
+
+  File wf = SPIFFS.open(path, FILE_WRITE);
+  if (!wf) {
+    Serial.println("WEB interface write failed, open: " + path);
+    return false;
+  }
+
+  size_t written = 0;
+  const bool transferred = http_sync_request_connect_and_send(
+      "GET", url, "", "", false, false, timeoutMs, &wf, &written);
+  wf.close();
+  if (!transferred) {
+    SPIFFS.remove(path);
+    return false;
+  }
+
+  if (request.responseHTTPcode() < 0) {
+    Serial.print(F("responseHTTPcode = "));
+    Serial.println(request.responseHTTPcode());
+    Serial.println("Content " + url + " download error (2)");
+    SPIFFS.remove(path);
+    return false;
+  }
+  if (request.responseHTTPcode() != 200) {
+    Serial.print(F("responseHTTPcode = "));
+    Serial.println(request.responseHTTPcode());
+    Serial.println("Content " + url + " download error");
+    SPIFFS.remove(path);
     return false;
   }
 
   const size_t expectedLength = request.responseLength();
-  const size_t available = request.available();
-  if (expectedLength == 0 || available == 0) {
+  if (expectedLength == 0 || written == 0 || written != expectedLength) {
     Serial.println(
-        "Content " + url + " empty body: length=" + String(expectedLength) +
-        " available=" + String(available) +
+        "Content " + url + " incomplete: " + String(written) + "/" + String(expectedLength) +
         " heap=" + String(ESP.getFreeHeap()) +
         " maxAlloc=" + String(ESP.getMaxAllocHeap()));
-    return false;
-  }
-  if (expectedLength != available) {
-    Serial.println("Content " + url + " incomplete: " + String(available) + "/" + String(expectedLength));
+    SPIFFS.remove(path);
     return false;
   }
 
-  String tmpPath = path + ".tmp";
-  SPIFFS.remove(tmpPath);
-  File wf = SPIFFS.open(tmpPath, FILE_WRITE);
-  if (!wf) {
-    Serial.println("WEB interface write failed, open tmp: " + tmpPath);
-    SPIFFS.remove(tmpPath);
-    return false;
-  }
-
-  uint8_t buf[512];
-  size_t total = 0;
-  while (total < expectedLength) {
-    const size_t remain = expectedLength - total;
-    const size_t chunk = remain < sizeof(buf) ? remain : sizeof(buf);
-    const size_t got = request.responseRead(buf, chunk);
-    if (got == 0) {
-      wf.close();
-      SPIFFS.remove(tmpPath);
-      Serial.println(
-          "Content " + url + " drain failed: " + String(total) + "/" + String(expectedLength) +
-          " heap=" + String(ESP.getFreeHeap()) +
-          " maxAlloc=" + String(ESP.getMaxAllocHeap()));
-      return false;
-    }
-    if (wf.write(buf, got) != got) {
-      wf.close();
-      SPIFFS.remove(tmpPath);
-      Serial.println("WEB interface write failed, partial tmp: " + tmpPath);
-      return false;
-    }
-    total += got;
-  }
-  wf.close();
-
-  if (!commit_web_file_tmp(path, tmpPath, expectedLength)) {
-    return false;
-  }
-  Serial.println("Done (L=" + String(expectedLength) + ")");
+  Serial.println("Done (L=" + String(written) + ")");
   return true;
 }
 

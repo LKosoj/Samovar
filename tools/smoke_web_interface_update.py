@@ -14,17 +14,9 @@
 временные файлы подчищаются (discard_web_file_stage), а старый рабочий набор остаётся
 нетронутым.
 
-[T20] Третий регресс - обнаруженный при аудите 24.08.2026 и починенный этим же файлом:
-схема из [WP7 п.20] держит на диске ОДНОВРЕМЕННО старый рабочий комплект и новый набор
-во временных "*.tmp" - пик занятого места (942080 байт) физически не помещается в
-раздел spiffs (786432 байта, partitions.csv). Обновление было невозможно в принципе,
-а не только в теории "мало места". Починка: каждый файл интерфейса теперь качается и
-ставится на место атомарно ПО ОТДЕЛЬНОСТИ (write_web_file_atomic, тот же приём
-"*.tmp" + переименование, что и раньше, но применённый к одному файлу, а не ко всему
-набору разом) - пик места сокращается до одного лишнего файла сверх обычного комплекта
-(573440 байт, запас 212992). Отдельно добавлен гейт: если свежий SPIFFS.totalBytes() -
-SPIFFS.usedBytes() меньше WEB_UPDATE_FREE_SPACE_MARGIN_BYTES, обновление не начинается
-вовсе.
+[T20] Третий регресс: двухфазная схема держала на диске старый комплект и новый
+во временных "*.tmp" - пик не помещался в раздел. Файлы качаются по одному и
+пишутся сразу в конечный путь, тело HTTP сливается во флеш чанками.
 
 Тест пинит СОГЛАСИЕ, а не числа:
   1. версия берётся из сети, а не из константы прошивки;
@@ -139,7 +131,7 @@ def main() -> int:
             )
 
     # --- 5. маркер пишется последним и только при полном успехе ---------------
-    marker = body.find('write_web_file_atomic("/version.txt"')
+    marker = body.find('write_web_file("/version.txt"')
     last_download = body.rfind("updateFile(")
     override_pos = override_loop.start() if override_loop else -1
     if marker == -1:
@@ -249,7 +241,7 @@ def main() -> int:
         "minus.png", "plus.png", "style.css.gz", "app.js.gz", "chart.js.gz",
     ]
     PAGE_NAMES = [
-        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm", "calibrate.htm",
+        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm.gz", "calibrate.htm",
         "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
         "program.htm", "setup.htm",
     ]
@@ -278,20 +270,33 @@ def main() -> int:
 
     download = function_body(web, "static bool http_sync_download_file(const String& url, const String& path)", errors)
     if download:
-        if "responseRead(" not in download:
+        if "&wf" not in download or "http_sync_request_connect_and_send" not in download:
             errors.append(
-                "http_sync_download_file: нет responseRead() - тело должно стекаться "
-                "во флеш чанками, не через responseText()"
+                "http_sync_download_file: тело не сливается во файл во время HTTP"
             )
         if "responseText(" in download:
             errors.append(
                 "http_sync_download_file: responseText() снова держит весь файл в String"
             )
-        if "commit_web_file_tmp(" not in download:
+        if "commit_web_file_tmp(" in download or ".tmp" in download:
             errors.append(
-                "http_sync_download_file: нет commit_web_file_tmp() - файл должен "
-                "ставиться тем же атомарным переименованием, что и маркер версии"
+                "http_sync_download_file: снова пишет через .tmp/rename"
             )
+        if "FILE_WRITE" not in download and '"w"' not in download:
+            errors.append(
+                "http_sync_download_file: не открывает целевой путь на запись"
+            )
+
+    drain = function_body(
+        web,
+        "static bool drain_http_body_to_file(asyncHTTPrequest& request, File& wf, size_t& total)",
+        errors,
+    )
+    if drain and "responseRead(" not in drain:
+        errors.append(
+            "drain_http_body_to_file: нет responseRead() - тело должно стекаться "
+            "во флеш чанками, не через responseText()"
+        )
 
     if errors:
         print("web interface update smoke failed:")

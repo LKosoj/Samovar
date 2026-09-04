@@ -21,13 +21,13 @@
   const OPERATION_POLL_INTERVAL_MS = 250;
   const OPERATION_TIMEOUT_MS = 45000;
   const MAX_MESSAGE_SEQUENCE = 0xFFFFFFFF;
-  const RUNTIME_EVENT_BATCH_LIMIT = 16;
+  const RUNTIME_EVENT_BATCH_LIMIT = 32;
   const MESSAGE_GAP_WARNING = 'Пропущены сообщения: обнаружен разрыв последовательности.';
   const MESSAGE_REBOOT_WARNING = 'Контроллер перезагрузился: счёт сообщений начат заново.';
   const RUNTIME_BUSY_WARNING = 'Контроллер временно занят, статус обновится при следующем опросе.';
   const TELEMETRY_OPTION_KEYS = [
     'threshold', 'onReady', 'connectionIds', 'storeMessageHistory',
-    'dynamicThemeTitle', 'implicitSystemTheme', 'onLastMessageRemoved', 'onConnectionChange', 'staleReadingIds'
+    'dynamicThemeTitle', 'implicitSystemTheme', 'onLastMessageRemoved', 'onConnectionChange'
   ];
 
   let offlineCounter = 0;
@@ -55,8 +55,8 @@
   let implicitSystemTheme = false;
   let onLastMessageRemoved = null;
   let onConnectionChange = null;
-  let staleReadingIds = [];
   let clockStale = false;
+  let pageLockBound = false;
 
   function byId(id) {
     return document.getElementById(id);
@@ -93,6 +93,214 @@
     if (type === 'L') return temp === 0 && time === 0 && noDevice && sensor === 0;
     if (type === 'A') return temp > 0 && time === 0 && noDevice;
     return false;
+  }
+
+  var BEER_MASH_DEVICE_DEFAULT = '1^-1^2^3';
+  var BEER_PUMP_CONTINUOUS = '2^0^65535^0';
+  var BEER_WAIT_DEVICE = '0^0^0^0';
+  var BEER_BREW_ORDER_KEY = 'samovarBeerBrewOrder';
+  var BEER_MASH_LIFT_KEY = 'samovarBeerMashLift';
+  var BEER_PROGRAM_MAX_ROWS = 20;
+
+  function beerBrewOrders() {
+    return {
+      allinone: {
+        id: 'allinone',
+        label: 'All-in-one / BIAB',
+        mashSensor: 0,
+        mashDevice: BEER_MASH_DEVICE_DEFAULT,
+        hint: 'ПИД по кубу (затор), мешалка как в универсальной программе.'
+      },
+      herms: {
+        id: 'herms',
+        label: 'HERMS',
+        mashSensor: 1,
+        mashDevice: BEER_PUMP_CONTINUOUS,
+        hint: 'ПИД по воде (бойлер), насос непрерывно гоняет затор через змеевик. Датчик куба — контроль затора.'
+      },
+      rims: {
+        id: 'rims',
+        label: 'RIMS',
+        mashSensor: 2,
+        mashDevice: BEER_PUMP_CONTINUOUS,
+        hint: 'ПИД по царге (обратка), насос непрерывно. Нагрев без потока на реальном RIMS опасен.'
+      }
+    };
+  }
+
+  function beerMashLifts() {
+    return {
+      auto: { id: 'auto', label: 'По TYPE шага BeerXML' },
+      temperature: { id: 'temperature', label: 'Прямой нагрев (Temperature)' },
+      infusion: { id: 'infusion', label: 'Доливы (Infusion)' },
+      decoction: { id: 'decoction', label: 'Отварка (Decoction)' }
+    };
+  }
+
+  function beerBrewOrder(id) {
+    var orders = beerBrewOrders();
+    return orders[id] || orders.allinone;
+  }
+
+  function readStoredBeerChoice(key, fallback) {
+    try {
+      var v = window.localStorage.getItem(key);
+      return v || fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function writeStoredBeerChoice(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (e) { /* private mode */ }
+  }
+
+  function currentBeerBrewOrderId() {
+    var el = byId('beer-brew-order');
+    if (el && el.value) return el.value;
+    return readStoredBeerChoice(BEER_BREW_ORDER_KEY, 'allinone');
+  }
+
+  function currentBeerMashLiftId() {
+    var el = byId('beer-mash-lift');
+    if (el && el.value) return el.value;
+    return readStoredBeerChoice(BEER_MASH_LIFT_KEY, 'auto');
+  }
+
+  function fillBeerOrderSelects() {
+    var orderEl = byId('beer-brew-order');
+    var liftEl = byId('beer-mash-lift');
+    var orderId = readStoredBeerChoice(BEER_BREW_ORDER_KEY, 'allinone');
+    var liftId = readStoredBeerChoice(BEER_MASH_LIFT_KEY, 'auto');
+    if (orderEl && !orderEl.options.length) {
+      var orders = beerBrewOrders();
+      Object.keys(orders).forEach(function (id) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = orders[id].label;
+        orderEl.appendChild(opt);
+      });
+    }
+    if (liftEl && !liftEl.options.length) {
+      var lifts = beerMashLifts();
+      Object.keys(lifts).forEach(function (id) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = lifts[id].label;
+        liftEl.appendChild(opt);
+      });
+    }
+    if (orderEl) orderEl.value = beerBrewOrders()[orderId] ? orderId : 'allinone';
+    if (liftEl) liftEl.value = beerMashLifts()[liftId] ? liftId : 'auto';
+    updateBeerOrderHint();
+  }
+
+  function updateBeerOrderHint() {
+    var hint = byId('beer-order-hint');
+    if (!hint) return;
+    var order = beerBrewOrder(currentBeerBrewOrderId());
+    hint.textContent = order.hint;
+  }
+
+  function persistBeerOrderChoices() {
+    writeStoredBeerChoice(BEER_BREW_ORDER_KEY, currentBeerBrewOrderId());
+    writeStoredBeerChoice(BEER_MASH_LIFT_KEY, currentBeerMashLiftId());
+    updateBeerOrderHint();
+  }
+
+  function beerSensorOptionHtml() {
+    return '<option value="0">Куб (затор)</option>' +
+      '<option value="1">Вода (бойлер HERMS)</option>' +
+      '<option value="2">Царга (обратка RIMS)</option>' +
+      '<option value="3">Пар</option>' +
+      '<option value="4">ТСА</option>';
+  }
+
+  function beerProgramRow(type, temp, time, device, sensor) {
+    return type + ';' + temp + ';' + time + ';' + device + ';' + sensor;
+  }
+
+  function normalizeMashStepType(raw) {
+    if (raw == null) return 'temperature';
+    var t = String(raw).trim();
+    if (!t || t === 'Нет в рецепте') return 'temperature';
+    t = t.toLowerCase();
+    if (t === 'temperature' || t === 'step' || t === 'настойный') return 'temperature';
+    if (t === 'infusion' || t === 'infuse') return 'infusion';
+    if (t === 'decoction' || t === 'отварка') return 'decoction';
+    return '';
+  }
+
+  function effectiveMashKind(stepType, mashLift) {
+    var lift = mashLift || 'auto';
+    if (lift !== 'auto') return lift;
+    return normalizeMashStepType(stepType);
+  }
+
+  function applyBeerBrewOrderToProgramText(text, orderId) {
+    var order = beerBrewOrder(orderId);
+    var lines = String(text || '').split('\n');
+    var out = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line === '') {
+        out.push(line);
+        continue;
+      }
+      var f = line.split(';');
+      if (f.length !== 5) {
+        out.push(line);
+        continue;
+      }
+      if (f[0] === 'M' || f[0] === 'P') {
+        f[3] = order.mashDevice;
+        f[4] = String(order.mashSensor);
+      }
+      out.push(f.join(';'));
+    }
+    return out.join('\n');
+  }
+
+  // steps: [{type, temp, time, infuseAmount, infuseTemp, decoctionAmount, name}]
+  function buildBeerMashStageLines(steps, orderId, mashLift) {
+    var order = beerBrewOrder(orderId);
+    var hints = [];
+    var lines = [];
+    if (!steps || !steps.length) {
+      return { error: 'в рецепте нет шагов затирания', lines: lines, hints: hints };
+    }
+    for (var i = 0; i < steps.length; i++) {
+      var step = steps[i];
+      var kind = effectiveMashKind(step.type, mashLift);
+      if (!kind) {
+        return {
+          error: 'неизвестный TYPE шага затирания «' + step.type + '» (нужны Infusion, Temperature или Decoction)',
+          lines: [],
+          hints: []
+        };
+      }
+      var n = i + 1;
+      var title = step.name ? ('«' + step.name + '»') : ('шаг ' + n);
+      if (kind === 'infusion' && i > 0) {
+        var amt = step.infuseAmount ? (step.infuseAmount + ' л') : 'расчётный объём';
+        var it = step.infuseTemp ? (step.infuseTemp + ' °C') : 'кипяток';
+        hints.push('Infusion ' + title + ': долейте ' + amt + ' воды (' + it + '), затем «далее».');
+        lines.push(beerProgramRow('W', '0', '0', BEER_WAIT_DEVICE, '0'));
+      }
+      if (kind === 'decoction') {
+        var decoct = step.decoctionAmount ? (step.decoctionAmount + ' л') : 'густую треть затора';
+        hints.push('Decoction ' + title + ': отберите ' + decoct + ', закипятите, верните. Две строки ожидания, затем выдержка без догрева ТЭНом до паузы.');
+        lines.push(beerProgramRow('W', '0', '0', BEER_WAIT_DEVICE, '0'));
+        lines.push(beerProgramRow('W', '0', '0', BEER_WAIT_DEVICE, '0'));
+      }
+      if (kind === 'temperature' && mashLift === 'auto') {
+        hints.push('Temperature ' + title + ': прямой нагрев до ' + step.temp + ' °C, ' + step.time + ' мин.');
+      }
+      lines.push(beerProgramRow('P', step.temp, step.time, order.mashDevice, String(order.mashSensor)));
+    }
+    return { error: '', lines: lines, hints: hints };
   }
 
   function requestErrorElement() {
@@ -389,29 +597,47 @@
     setConnectionIcon('Green.png');
   }
 
-  // Обрыв связи: часы и показания приглушаются, чтобы старые цифры
-  // не принимали за живые. Часы обрабатываются здесь для всех страниц,
-  // список приглушаемых показаний страница задаёт через staleReadingIds.
+  function onLockedPageInput(event) {
+    if (!document.documentElement.classList.contains('connection-lost')) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function bindPageLock() {
+    if (pageLockBound) return;
+    pageLockBound = true;
+    document.addEventListener('click', onLockedPageInput, true);
+    document.addEventListener('pointerdown', onLockedPageInput, true);
+    document.addEventListener('keydown', onLockedPageInput, true);
+    document.addEventListener('submit', onLockedPageInput, true);
+  }
+
+  function assertOnline() {
+    if (isOffline) throw new Error('Нет связи: действие заблокировано.');
+  }
+
+  // Обрыв связи: вся страница приглушается и блокируется (клики, клавиатура,
+  // правки). Иначе оператор жмёт по застывшим кнопкам и полям. Часы помечаются
+  // текстом «Нет связи, данные от …», чтобы было видно, насколько цифры старые.
   function applyStaleVisuals(offline) {
     const clock = byId('crnt_tm');
+    const root = document.documentElement;
     if (offline) {
       if (clockStale) return;
       clockStale = true;
       if (clock) {
         clock.textContent = 'Нет связи, данные от ' + clock.textContent;
-        clock.style.opacity = '0.6';
       }
-      staleReadingIds.forEach(function (id) {
-        const el = byId(id);
-        if (el) el.style.opacity = '0.4';
-      });
+      root.classList.add('connection-lost');
+      document.body.inert = true;
+      const active = document.activeElement;
+      if (active && active !== document.body && typeof active.blur === 'function') {
+        active.blur();
+      }
     } else {
       clockStale = false;
-      if (clock) clock.style.opacity = '';
-      staleReadingIds.forEach(function (id) {
-        const el = byId(id);
-        if (el) el.style.opacity = '';
-      });
+      root.classList.remove('connection-lost');
+      document.body.inert = false;
     }
   }
 
@@ -875,7 +1101,7 @@
               // Кольцо на ESP начинается с 1 после перезагрузки. Вкладка при этом
               // живёт со старым курсором (203 → 1) - это не потеря сообщений, а
               // новый прогон. Настоящий разрыв - только прыжок вперёд: курсор
-              // вытеснен из кольца (больше 16 событий между опросами).
+              // вытеснен из кольца (больше 32 событий между опросами).
               const deviceRestarted = messageCursor !== 0 && event.sequence < expected;
               // Молчать про откат счётчика нельзя: перезагрузка контроллера посреди
               // перегонки - это событие, о котором оператор обязан узнать (нагрев
@@ -957,11 +1183,6 @@
         typeof pageOptions.onConnectionChange !== 'function') {
       throw new Error('onConnectionChange должен быть функцией.');
     }
-    if (pageOptions.staleReadingIds !== undefined &&
-        (!Array.isArray(pageOptions.staleReadingIds) ||
-         pageOptions.staleReadingIds.some(function (id) { return typeof id !== 'string'; }))) {
-      throw new Error('staleReadingIds должен быть массивом строк.');
-    }
     if (pageOptions.connectionIds !== undefined) {
       const ids = pageOptions.connectionIds;
       if (!ids || Object.keys(ids).length !== 2 ||
@@ -980,7 +1201,7 @@
     storeMessageHistory = pageOptions.storeMessageHistory !== false;
     onLastMessageRemoved = pageOptions.onLastMessageRemoved || null;
     onConnectionChange = pageOptions.onConnectionChange || null;
-    staleReadingIds = pageOptions.staleReadingIds || [];
+    bindPageLock();
     init({
       threshold: pageOptions.threshold || 3,
       connectionIds: pageOptions.connectionIds,
@@ -997,7 +1218,12 @@
     return { ok: false, level: 0, text: body || 'Неизвестный ответ команды.' };
   }
 
-  async function sendCommand(command, options) {
+  function sendCommand(command, options) {
+    assertOnline();
+    return sendCommandRequest(command, options);
+  }
+
+  async function sendCommandRequest(command, options) {
     try {
       const commandBody = command.indexOf('=') === -1 ? command + '=1' : command;
       const resp = await fetch('/command', {
@@ -1260,7 +1486,12 @@
     return result;
   }
 
-  async function postProgram(form) {
+  function postProgram(form) {
+    assertOnline();
+    return postProgramRequest(form);
+  }
+
+  async function postProgramRequest(form) {
     const body = new FormData();
     const allowedFields = ['WProgram', 'vless', 'Descr'];
     for (let i = 0; i < allowedFields.length; i++) {
@@ -1416,6 +1647,21 @@
     addLuaButtons: addLuaButtons,
     addMessage: addMessage,
     beerRowTypeOk: beerRowTypeOk,
+    beerBrewOrders: beerBrewOrders,
+    beerMashLifts: beerMashLifts,
+    beerBrewOrder: beerBrewOrder,
+    beerProgramMaxRows: BEER_PROGRAM_MAX_ROWS,
+    beerProgramRow: beerProgramRow,
+    beerSensorOptionHtml: beerSensorOptionHtml,
+    normalizeMashStepType: normalizeMashStepType,
+    effectiveMashKind: effectiveMashKind,
+    applyBeerBrewOrderToProgramText: applyBeerBrewOrderToProgramText,
+    buildBeerMashStageLines: buildBeerMashStageLines,
+    fillBeerOrderSelects: fillBeerOrderSelects,
+    persistBeerOrderChoices: persistBeerOrderChoices,
+    currentBeerBrewOrderId: currentBeerBrewOrderId,
+    currentBeerMashLiftId: currentBeerMashLiftId,
+    mashDeviceDefault: BEER_MASH_DEVICE_DEFAULT,
     clearProgram: clearProgram,
     clearHistory: clearHistory,
     clearMessages: clearMessages,

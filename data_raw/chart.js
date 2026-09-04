@@ -14,6 +14,10 @@
   const RIGHT_AXIS_SERIES = { Pressure: true };
   const PROG_AXIS_SERIES = { ProgNum: true };
   const LOAD_TIMEOUT_MS = 15000;
+  // /data.csv отвечает 503 BUSY, пока не взят лок постановки flush. Без автоповтора
+  // первое открытие графика показывало ошибку и кнопку «Повторить».
+  const BUSY_RETRY_DELAY_MS = 500;
+  const BUSY_RETRY_LIMIT = 8;
 
   function parseNumber(value) {
     if (value === undefined || value === null || value === '') return null;
@@ -558,39 +562,47 @@
     const self = this;
     const retry = function () { self.loadCsv(url); };
     this.setStatus('Загрузка графика...', false);
-    const ctrl = new AbortController();
-    const timer = setTimeout(function () { ctrl.abort(); }, LOAD_TIMEOUT_MS);
-    let resp;
+    let busyAttempt = 0;
     try {
-      resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
-    } catch (err) {
-      const timedOut = err && err.name === 'AbortError';
-      this.setStatus(
-        'Ошибка загрузки графика: ' + (timedOut ? 'превышено время ожидания.' : err),
-        true, retry
-      );
-      this.loading = false;
-      return false;
+      while (true) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(function () { ctrl.abort(); }, LOAD_TIMEOUT_MS);
+        let resp;
+        try {
+          resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+        } catch (err) {
+          const timedOut = err && err.name === 'AbortError';
+          this.setStatus(
+            'Ошибка загрузки графика: ' + (timedOut ? 'превышено время ожидания.' : err),
+            true, retry
+          );
+          return false;
+        } finally {
+          clearTimeout(timer);
+        }
+        if (resp.status === 503 && busyAttempt < BUSY_RETRY_LIMIT) {
+          busyAttempt += 1;
+          await new Promise(function (resolve) {
+            setTimeout(resolve, BUSY_RETRY_DELAY_MS);
+          });
+          continue;
+        }
+        if (!resp.ok) {
+          this.setStatus('Ошибка загрузки графика: HTTP ' + resp.status, true, retry);
+          return false;
+        }
+        const text = await resp.text();
+        this.setData(parseCsv(text));
+        this.setStatus(
+          (this.rows.length ? 'Загружено точек: ' + this.rows.length + '. ' : 'Нет данных графика. ') +
+          'Ползунки под графиком задают участок, двойной щелчок по полосе — весь график, легенда — вкл/выкл, наведение — значения.',
+          false
+        );
+        return true;
+      }
     } finally {
-      clearTimeout(timer);
-    }
-    if (!resp.ok) {
-      this.setStatus('Ошибка загрузки графика: HTTP ' + resp.status, true, retry);
-      this.loading = false;
-      return false;
-    }
-    try {
-      const text = await resp.text();
-      this.setData(parseCsv(text));
-      this.setStatus(
-        (this.rows.length ? 'Загружено точек: ' + this.rows.length + '. ' : 'Нет данных графика. ') +
-        'Ползунки под графиком задают участок, двойной щелчок по полосе — весь график, легенда — вкл/выкл, наведение — значения.',
-        false
-      );
-    } finally {
       this.loading = false;
     }
-    return true;
   };
 
   SamovarChart.prototype.setAutoRefresh = function (enabled) {

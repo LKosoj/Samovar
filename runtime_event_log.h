@@ -6,7 +6,7 @@
 #include <string.h>
 #include <utility>
 
-static const uint8_t RUNTIME_EVENT_DESCRIPTOR_CAPACITY = 16;
+static const uint8_t RUNTIME_EVENT_DESCRIPTOR_CAPACITY = 32;
 static const uint16_t RUNTIME_EVENT_TEXT_POOL_BYTES = 10240;
 static const uint16_t RUNTIME_EVENT_MAX_TEXT_BYTES = 10000;
 
@@ -54,7 +54,7 @@ struct RuntimeEventRing {
 };
 
 static_assert(sizeof(RuntimeEventDescriptor) <= 12, "RuntimeEventDescriptor exceeds RAM budget");
-static_assert(sizeof(RuntimeEventRing) <= 10464, "RuntimeEventRing exceeds RAM budget");
+static_assert(sizeof(RuntimeEventRing) <= 10656, "RuntimeEventRing exceeds RAM budget");
 
 extern RuntimeEventRing runtimeEventRing;
 

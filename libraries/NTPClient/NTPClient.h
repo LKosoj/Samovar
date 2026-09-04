@@ -26,7 +26,7 @@ class NTPClient {
 
     byte          _packetBuffer[NTP_PACKET_SIZE];
 
-    void          sendNTPPacket();
+    bool          sendNTPPacket();
     bool          isValid(byte * ntpPacket);
 
   public:

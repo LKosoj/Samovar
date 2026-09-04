@@ -54,10 +54,9 @@ void NTPClient::begin() {
 
 void NTPClient::begin(int port) {
   this->_port = port;
-
-  this->_udp->begin(this->_port);
-
-  this->_udpSetup = true;
+  // WiFiUDP::begin() может вернуть 0 (нет сокета/буфера) — тогда write() падает
+  // в StoreProhibited по NULL tx_buffer. _udpSetup только при реальном успехе.
+  this->_udpSetup = this->_udp->begin(this->_port) != 0;
 }
 
 bool NTPClient::isValid(byte * ntpPacket)
@@ -88,10 +87,14 @@ bool NTPClient::forceUpdate() {
   #ifdef DEBUG_NTPClient
     Serial.println("Update from NTP Server");
   #endif
+  if (!this->_udpSetup) {
+    this->begin();
+    if (!this->_udpSetup) return false;
+  }
   // flush any existing packets
   while(this->_udp->parsePacket() != 0)
     this->_udp->flush();
-  this->sendNTPPacket();
+  if (!this->sendNTPPacket()) return false;
 
   // Wait till data is there or timeout...
   byte timeout = 0;
@@ -208,7 +211,7 @@ void NTPClient::setUpdateInterval(unsigned long updateInterval) {
   this->_updateInterval = updateInterval;
 }
 
-void NTPClient::sendNTPPacket() {
+bool NTPClient::sendNTPPacket() {
   // set all bytes in the buffer to 0
   memset(this->_packetBuffer, 0, NTP_PACKET_SIZE);
   // Initialize values needed to form NTP request
@@ -223,11 +226,14 @@ void NTPClient::sendNTPPacket() {
   this->_packetBuffer[14]  = 0x49;
   this->_packetBuffer[15]  = 0x52;
 
-  // all NTP fields have been given values, now
-  // you can send a packet requesting a timestamp:
-  this->_udp->beginPacket(this->_poolServerName, 123); //NTP requests are to port 123
+  // beginPacket() при ошибке DNS/сокета не выделяет tx_buffer; write() без проверки
+  // пишет в NULL и роняет ESP32 (StoreProhibited).
+  if (!this->_udp->beginPacket(this->_poolServerName, 123)) {
+    return false;
+  }
   this->_udp->write(this->_packetBuffer, NTP_PACKET_SIZE);
   this->_udp->endPacket();
+  return true;
 }
 
 void NTPClient::setEpochTime(unsigned long secs) {
