@@ -3711,6 +3711,7 @@ struct AjaxTelemetrySnapshot {
   uint8_t boilingEvidence;
   uint8_t withdrawalProgress;
   uint8_t programIndex;
+  uint8_t beerBrewOrder;
   bool useAutoSpeed;
   bool powerOn;
   bool pauseOn;
@@ -3770,6 +3771,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.boilingPrecisionSensorConfigured =
       sensor_configured(SteamSensor) || sensor_configured(PipeSensor);
   snapshot.useAutoSpeed = SamSetup.useautospeed;
+  snapshot.beerBrewOrder = SamSetup.BeerBrewOrder;
   snapshot.volumeAll = get_liquid_volume();
   snapshot.actualVolumePerHour = ActualVolumePerHour;
   snapshot.powerOn = PowerOn;
@@ -3898,6 +3900,10 @@ static void writeAjaxTelemetryFields(
   jsonFieldBool(out, first, "PowerOn", snapshot.powerOn);
   jsonFieldBool(out, first, "PauseOn", snapshot.pauseOn);
   jsonFieldBool(out, first, "BeerManualPause", snapshot.beerPaused);  // [Пиво 02.09 C2]
+  jsonFieldString(
+      out, first, "BeerBrewOrder",
+      snapshot.beerBrewOrder == 1 ? String("herms") :
+      snapshot.beerBrewOrder == 2 ? String("rims") : String("allinone"));
   jsonFieldRaw(out, first, "WthdrwlProgress", snapshot.withdrawalProgress);
   jsonFieldRaw(out, first, "TargetStepps", snapshot.targetSteps);
   jsonFieldRaw(out, first, "CurrrentStepps", snapshot.currentSteps);

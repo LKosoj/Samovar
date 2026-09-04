@@ -38,7 +38,8 @@ BROWSER_TEST = r'''async page => {
     RowPredictionReason:2,ProcessPredictionReason:2,alc:50,stm_alc:70,ISspd:0,
     wp_spd:0,i2c_pump_present:0,i2c_pump_running:0,i2c_pump_remaining_ml:0,
     i2c_pump_speed:0,PowerOn:1,StepperStepMl:100,
-    heaterAlarmLatched:0,heaterAlarmReason:'',latestMessageSequence:0
+    heaterAlarmLatched:0,heaterAlarmReason:'',latestMessageSequence:0,
+    BeerBrewOrder:"allinone"
   };
   const failures = [];
   const consoleProblems = [];
@@ -175,6 +176,8 @@ BROWSER_TEST = r'''async page => {
       await checkPowerStaleLabel("startnbk=", "NBK");
 
       await page.goto(baseUrl + "/beer.htm", {waitUntil:"load"});
+      expect(await page.locator("#BeerBrewOrder").count() === 0,
+             "brew order must not be chosen on beer.htm (settings only)");
       expect((await page.locator("body").textContent()).includes(
                "Вход ждёт подтверждённый запуск Lua-job"),
              "Beer Lua-stage safety explanation missing");
@@ -231,6 +234,8 @@ BROWSER_TEST = r'''async page => {
              "beer mixer tooltip does not show the real firmware limit before input");
 
       await page.goto(baseUrl + "/setup.htm", {waitUntil:"load"});
+      expect(await page.locator("#BeerBrewOrder").count() === 1,
+             "brew order profile must be on setup.htm tab Пиво");
       expect(await page.locator("#SuvidTemp").count() === 0 &&
              await page.locator("#SuvidHoldMinutes").count() === 0,
              "Suvid controls must not be on setup.htm");

@@ -528,6 +528,7 @@ struct SetupEEPROM {
   float MainsVoltage;                                          //Номинальное напряжение сети, В
   float SuvidTemp;                                             //Уставка термостата Су-вид; 0 = не задано (дефолт в suvid-логике)
   uint16_t SuvidHoldMinutes;                                   //Выдержка Су-вид в полосе уставки; 0 = бессрочный термостат
+  uint8_t BeerBrewOrder;                                       //Варочный порядок пива: 0=all-in-one/BIAB, 1=HERMS, 2=RIMS
 };
 
 struct ImpurityDetector {

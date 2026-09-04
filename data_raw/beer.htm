@@ -231,7 +231,7 @@
       pmixer.setAttribute("onfocus", "popup_modal(" + _lnIdx + ");");
       dl.appendChild(pmixer);
 
-      pmixer.insertAdjacentHTML("afterend", '<select id="dt' + _lnIdx + '" name="dt' + _lnIdx + '" aria-labelledby="beer-program-row-' + _lnIdx + ' beer-program-col-sensor" onchange="calc_program()"><option value="0">Куб</option><option value="1">Вода</option><option value="2">Царга</option><option value="3">Пар</option><option value="4">ТСА</option></select>');
+      pmixer.insertAdjacentHTML("afterend", '<select id="dt' + _lnIdx + '" name="dt' + _lnIdx + '" aria-labelledby="beer-program-row-' + _lnIdx + ' beer-program-col-sensor" onchange="calc_program()">' + SamovarApp.beerSensorOptionHtml() + '</select>');
 
       var plus = document.createElement("button");
       plus.type = "button";
@@ -380,6 +380,11 @@
         onReady: function() {
           setPowerUnit();
           SamovarApp.addLuaButtons();
+          var hint = document.getElementById('beer-order-hint');
+          if (hint) {
+            var order = SamovarApp.beerBrewOrder(SamovarApp.currentBeerBrewOrderId());
+            hint.textContent = 'Варочный порядок из настроек: ' + order.label + '. ' + order.hint;
+          }
           getProgram();
           SamovarApp.enhanceTooltips(); // страховка: getProgram() выше может выйти раньше своего вызова enhanceTooltips() при ошибке в WProgram; заодно ловит статичные подсказки (модалка мешалки)
         },
@@ -406,7 +411,7 @@
 </script>
 </head>
 
-<body>
+<body data-beer-brew-order="%BeerBrewOrderId%">
   <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
   <button type="button" class="history-trigger" style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: var(--text-history-link); text-decoration: underline; cursor: pointer" onclick='SamovarApp.showHistory()' aria-controls="historyBox" aria-expanded="false">История</button>
   <div class="history_box" style="display: none;" id="historyBox">
@@ -498,6 +503,7 @@
     </div>
     <div id="Prog" class="tabcontent" aria-hidden="true">
       <div class="text">Программа затирки:</div>
+      <p id="beer-order-hint" class="dvcs" style="margin: 0.5em 0;"></p>
       <div class="prg" id="prg"></div>
       <details class="spoiler">
         <summary>Описание программы затирки:</summary>
@@ -512,7 +518,7 @@
             <p><span>W - wait (режим ожидания, ничего не делает до смены строки программы)</span></p>
             <p><span>F - ferment (ферментирование; ручная пауза выключает и нагрев, и охлаждение до продолжения).</span></p>
             <p><span>L - Lua скрипт: все параметры строки должны быть нулевыми. Вход ждёт подтверждённый запуск Lua-job, выход ждёт его остановку; ошибка Lua останавливает варку.</span></p>
-            <p><span>A - AutoTune (автотюнинг)</span></p>
+            <p><span>Варочный порядок (All-in-one / HERMS / RIMS) задаётся в Настройках, вкладка «Пиво». Импорт BeerXML подставляет датчик и насос из этого порядка; TYPE шага (Infusion/Temperature/Decoction) берётся из рецепта.</span></p>
             <p><span>&nbsp;</span></p>
             <p><span>Пример программы отбора:</span></p>
             <p><span>M;45.00;0;1^1^1^1;0</span></p>

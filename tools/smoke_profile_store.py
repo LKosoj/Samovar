@@ -309,7 +309,7 @@ setup_fields = re.findall(
     setup_definition,
     re.MULTILINE,
 )
-require(len(setup_fields) == 73, "SetupEEPROM field inventory changed")
+require(len(setup_fields) == 74, "SetupEEPROM field inventory changed")
 padding_marks = "\n".join(
     "  mark_field(occupied, offsetof(SetupEEPROM, "
     f"{field}), sizeof(((SetupEEPROM*)0)->{field}));"
@@ -377,7 +377,7 @@ nvs_harness = (
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
-        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V2 = 517;
+        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V2 = 518;
 
         using ProfileCodec = ProfileBlobCodec<
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V2,
@@ -1598,7 +1598,7 @@ nvs_harness += (
         // ---------------------------------------------------------------------
         // A-16/T3 golden-тест: независимый (посчитанный отдельным python-скриптом,
         // НЕ через encode_setup_payload/decode_setup_payload_fields) побайтовый
-        // эталон канонического V2-профиля (517 байт). Пин порядка/ширины полей —
+        // эталон канонического V2-профиля (518 байт). Пин порядка/ширины полей —
         // перестановка, смена put_u16->put_u8, потеря вызова в цепочке && или
         // смещение candidate = {} обязаны развалить один из ассертов ниже с
         // указанием ИМЕНИ поля и байтового смещения, а не абстрактным «не то».
@@ -1684,9 +1684,10 @@ nvs_harness += (
           {"MainsVoltage", 507, 4, offsetof(SetupEEPROM, MainsVoltage), sizeof(((SetupEEPROM*)0)->MainsVoltage)},
           {"SuvidTemp", 511, 4, offsetof(SetupEEPROM, SuvidTemp), sizeof(((SetupEEPROM*)0)->SuvidTemp)},
           {"SuvidHoldMinutes", 515, 2, offsetof(SetupEEPROM, SuvidHoldMinutes), sizeof(((SetupEEPROM*)0)->SuvidHoldMinutes)},
+          {"BeerBrewOrder", 517, 1, offsetof(SetupEEPROM, BeerBrewOrder), sizeof(((SetupEEPROM*)0)->BeerBrewOrder)},
         };
 
-        static const uint8_t GOLDEN_A[517] = {
+        static const uint8_t GOLDEN_A[520] = {
           0x0B,  // [  0-  0] flag
           0x00, 0x00, 0x00, 0x00,  // [  1-  4] DeltaSteamTemp
           0x00, 0x00, 0x50, 0xC0,  // [  5-  8] DeltaPipeTemp
@@ -1760,9 +1761,11 @@ nvs_harness += (
           0x00, 0x80, 0x8E, 0xC2,  // [507-510] MainsVoltage
           0x00, 0x80, 0x90, 0xC2,  // [511-514] SuvidTemp
           0x75, 0x0E,  // [515-516] SuvidHoldMinutes
+          0x01,  // [517-517] BeerBrewOrder
+          0x00, 0x00,  // [518-519] payload padding (finish() требует нули до PAYLOAD_SIZE_V2)
         };
 
-        static const uint8_t GOLDEN_B[517] = {
+        static const uint8_t GOLDEN_B[520] = {
           0xEE,  // [  0-  0] flag
           0x00, 0xC0, 0x48, 0x43,  // [  1-  4] DeltaSteamTemp
           0x00, 0x60, 0x96, 0x43,  // [  5-  8] DeltaPipeTemp
@@ -1836,9 +1839,11 @@ nvs_harness += (
           0x00, 0xE6, 0xDD, 0x45,  // [507-510] MainsVoltage
           0x00, 0x06, 0xE1, 0x45,  // [511-514] SuvidTemp
           0x4A, 0xFC,  // [515-516] SuvidHoldMinutes
+          0x02,  // [517-517] BeerBrewOrder
+          0x00, 0x00,  // [518-519] payload padding (finish() требует нули до PAYLOAD_SIZE_V2)
         };
 
-        static const uint8_t GOLDEN_DEFAULT_NOSEM[517] = {
+        static const uint8_t GOLDEN_DEFAULT_NOSEM[520] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -1912,9 +1917,11 @@ nvs_harness += (
           0x00, 0x00, 0x66, 0x43,  // [507-510] MainsVoltage
           0x00, 0x00, 0x00, 0x00,  // [511-514] SuvidTemp
           0x00, 0x00,  // [515-516] SuvidHoldMinutes
+          0x00,  // [517-517] BeerBrewOrder
+          0x00, 0x00,  // [518-519] payload padding (finish() требует нули до PAYLOAD_SIZE_V2)
         };
 
-        static const uint8_t GOLDEN_DEFAULT_SEM[517] = {
+        static const uint8_t GOLDEN_DEFAULT_SEM[520] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -1988,6 +1995,8 @@ nvs_harness += (
           0x00, 0x00, 0x66, 0x43,  // [507-510] MainsVoltage
           0x00, 0x00, 0x00, 0x00,  // [511-514] SuvidTemp
           0x00, 0x00,  // [515-516] SuvidHoldMinutes
+          0x00,  // [517-517] BeerBrewOrder
+          0x00, 0x00,  // [518-519] payload padding (finish() требует нули до PAYLOAD_SIZE_V2)
         };
 
 
@@ -2103,8 +2112,9 @@ nvs_harness += (
         candidateA.MainsVoltage = -71.25f;
         candidateA.SuvidTemp = -72.25f;
         candidateA.SuvidHoldMinutes = 3701;
+        candidateA.BeerBrewOrder = 1;
 
-          uint8_t payloadA[517] = {};
+          uint8_t payloadA[520] = {};
           assert(encode_setup_payload(candidateA, payloadA) &&
                  "encode_setup_payload must succeed for golden set A");
           golden_check_encode(payloadA, GOLDEN_A, "encode set A");
@@ -2188,8 +2198,9 @@ nvs_harness += (
         candidateB.MainsVoltage = 7100.75f;
         candidateB.SuvidTemp = 7200.75f;
         candidateB.SuvidHoldMinutes = 64586;
+        candidateB.BeerBrewOrder = 2;
 
-          uint8_t payloadB[517] = {};
+          uint8_t payloadB[520] = {};
           assert(encode_setup_payload(candidateB, payloadB) &&
                  "encode_setup_payload must succeed for golden set B");
           golden_check_encode(payloadB, GOLDEN_B, "encode set B");
@@ -2214,7 +2225,7 @@ nvs_harness += (
           memset(&candidate, 0xAA, sizeof(candidate));
           set_default_setup_profile(candidate);
 
-          uint8_t payload[517] = {};
+          uint8_t payload[520] = {};
           assert(encode_setup_payload(candidate, payload) &&
                  "encode_setup_payload must succeed for defaults");
         #ifndef SAMOVAR_USE_SEM_AVR
@@ -2652,8 +2663,8 @@ else:
     )
     total_size = sum(int(row[2]) for row in profile_field_rows)
     require(
-        total_size == 517,
-        f"profile_setup_fields.h SIZE column sums to {total_size} bytes, expected 517",
+        total_size == 518,
+        f"profile_setup_fields.h SIZE column sums to {total_size} bytes, expected 518",
     )
     # decode_setup_payload_fields() и decode_setup_payload_v2only_fields() читают
     # ОДИН И ТОТ ЖЕ курсор reader двумя последовательными проходами по одному и
@@ -2673,7 +2684,7 @@ else:
         f"all ALL fields (decode reads them in two passes over one cursor): {scopes!r}",
     )
     require(
-        v2only_fields[:1] == ["SuvidHoldMinutes"] if v2only_fields else False,
+        v2only_fields == ["SuvidHoldMinutes", "BeerBrewOrder"],
         f"unexpected V2ONLY field set in profile_setup_fields.h: {v2only_fields!r}",
     )
     # [П8] DistTimeF по умолчанию должен быть 60 минут (был 16 - см. мёртвую

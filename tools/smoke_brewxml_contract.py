@@ -64,8 +64,9 @@ if 'FERMENTABLE_TIME").innerHTML' in brewxml:
     errors.append('brewxml.htm: FERMENTABLE_TIME must not be set via innerHTML')
 
 # D5: мешалка выключена на строках C/F.
-if brewxml.count(";0^0^0^0;0") != 2:
-    errors.append("brewxml.htm: C/F rows must keep the mixer off (0^0^0^0), expected exactly 2 occurrences")
+if ';0;0^0^0^0;0\\nF;' not in brewxml and '";0;0^0^0^0;0\\nF;"' not in brewxml:
+    if 'C;" + pt + ";0;0^0^0^0;0\\nF;"' not in brewxml:
+        errors.append("brewxml.htm: C/F rows must keep the mixer off (0^0^0^0)")
 
 # D6: семантика строки программы проверяется общим правилом SamovarApp.beerRowTypeOk.
 if "SamovarApp.initTheme(" not in brewxml or "SamovarApp.toggleTheme(" not in brewxml:
@@ -75,6 +76,16 @@ if 'id="themeToggle"' not in brewxml:
 
 if "SamovarApp.beerRowTypeOk(" not in brewxml:
     errors.append("brewxml.htm: validateBeerProgramText does not call SamovarApp.beerRowTypeOk")
+if "SamovarApp.beerRowTypeOk(" not in brewxml:
+    errors.append("brewxml.htm: validateBeerProgramText does not call SamovarApp.beerRowTypeOk")
+if "SamovarApp.buildBeerMashStageLines(" not in brewxml:
+    errors.append("brewxml.htm: mash program must be built via SamovarApp.buildBeerMashStageLines")
+if "SamovarApp.currentBeerBrewOrderId(" not in brewxml:
+    errors.append("brewxml.htm: mash program must use the brew order from settings")
+if 'id="BeerBrewOrder"' in brewxml:
+    errors.append("brewxml.htm: brew order select must stay on setup.htm, not per recipe")
+if 'id="mash-order-hints"' not in brewxml:
+    errors.append("brewxml.htm: mash-order-hints is missing")
 
 # D7: неполные рецепты не роняют разбор с TypeError - безопасные обращения и явная ошибка MASH.
 for token in ("R.STYLE && R.STYLE.NAME", "R.HOPS && R.HOPS.HOP", "R.YEASTS && R.YEASTS.YEAST", "R.MISCS && R.MISCS.MISC"):

@@ -105,4 +105,5 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(FLOAT, BKPower, 4, candidate.BKPower = SAMOVAR_BK_POWER_DEFAULT, ALL) \
   X(FLOAT, MainsVoltage, 4, candidate.MainsVoltage = 230.0f, ALL) \
   X(FLOAT, SuvidTemp, 4, candidate.SuvidTemp = 0.0f, ALL) \
-  X(U16, SuvidHoldMinutes, 2, candidate.SuvidHoldMinutes = 0, V2ONLY)
+  X(U16, SuvidHoldMinutes, 2, candidate.SuvidHoldMinutes = 0, V2ONLY) \
+  X(U8, BeerBrewOrder, 1, candidate.BeerBrewOrder = 0, V2ONLY)

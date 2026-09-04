@@ -43,7 +43,8 @@ BROWSER_TEST = r'''async page => {
     TimeRemaining: 0, TotalTime: 0, alc: 0, stm_alc: 0, ISspd: 0, wp_spd: 0,
     i2c_pump_present: 0, i2c_pump_running: 0, i2c_pump_remaining_ml: 0,
     i2c_pump_speed: 0, PowerOn: 0, StepperStepMl: 111,
-    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
+    heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0,
+    BeerBrewOrder: "allinone"
   };
   const columnFixture = {
     floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
@@ -983,6 +984,7 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
         "ColHeight": "1.0",
         "PackDens": "80",
         "v": "test",
+        "BeerBrewOrderId": "allinone",
     }
     empty_markers = {
         "RECT", "DIST", "BEER", "BK", "NBK", "SUVID", "LUA_MODE",
@@ -996,6 +998,10 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
         name = match.group(1)
         if name in replacements:
             return replacements[name]
+        if name == "BeerBrewOrder_0":
+            return "selected"
+        if name.startswith("BeerBrewOrder_"):
+            return ""
         if name in address_tokens:
             return '<option value="-1" selected>-</option>'
         if name in empty_markers or name.startswith(("ColDiam_", "ColHeight_")):

@@ -15,7 +15,7 @@ static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 2;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
-static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V2 = 517;
+static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V2 = 518;
 
 static_assert(sizeof(SetupEEPROM) == 536,
               "SetupEEPROM v2 ABI changed; bump the profile format version");
@@ -89,6 +89,7 @@ static bool decode_setup_payload_v1(
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V1 ||
       !reader.finish()) return false;
   decoded.SuvidHoldMinutes = 0;
+  decoded.BeerBrewOrder = 0;
   candidate = decoded;
   return true;
 }

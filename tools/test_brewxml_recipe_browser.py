@@ -50,6 +50,44 @@ NEIPA = (RECIPES_DIR / "AvgPerfectNortheastIPANEIPA.xml").read_text(encoding="ut
 DIOGENES = (RECIPES_DIR / "Diogenes Chocolate Cherry Stout 20240421.xml").read_text(encoding="utf-8")
 SAMPLE_BLONDE = (RECIPES_DIR / "Sample Blonde Ale 20240421.xml").read_text(encoding="utf-8")
 
+UNKNOWN_MASH_TYPE = """<?xml version="1.0" encoding="UTF-8"?>
+<RECIPES>
+<RECIPE>
+<NAME>BadType</NAME>
+<BOIL_TIME>30</BOIL_TIME>
+<FERMENTABLES><FERMENTABLE><NAME>Солод</NAME><AMOUNT>5</AMOUNT></FERMENTABLE></FERMENTABLES>
+<MASH><MASH_STEPS><MASH_STEP><NAME>Шаг</NAME><TYPE>Cereal</TYPE><STEP_TEMP>65</STEP_TEMP><STEP_TIME>60</STEP_TIME></MASH_STEP></MASH_STEPS></MASH>
+</RECIPE>
+</RECIPES>
+"""
+
+INFUSION_STEPS = """<?xml version="1.0" encoding="UTF-8"?>
+<RECIPES>
+<RECIPE>
+<NAME>InfusionTwo</NAME>
+<BOIL_TIME>45</BOIL_TIME>
+<FERMENTABLES><FERMENTABLE><NAME>Солод</NAME><AMOUNT>5</AMOUNT></FERMENTABLE></FERMENTABLES>
+<MASH><MASH_STEPS>
+<MASH_STEP><NAME>Mash In</NAME><TYPE>Infusion</TYPE><STEP_TEMP>65</STEP_TEMP><STEP_TIME>60</STEP_TIME><INFUSE_AMOUNT>18</INFUSE_AMOUNT></MASH_STEP>
+<MASH_STEP><NAME>Mash Out</NAME><TYPE>Infusion</TYPE><STEP_TEMP>76</STEP_TEMP><STEP_TIME>10</STEP_TIME><INFUSE_AMOUNT>8</INFUSE_AMOUNT><INFUSE_TEMP>95</INFUSE_TEMP></MASH_STEP>
+</MASH_STEPS></MASH>
+</RECIPE>
+</RECIPES>
+"""
+
+DECOCTION_STEP = """<?xml version="1.0" encoding="UTF-8"?>
+<RECIPES>
+<RECIPE>
+<NAME>DecoctionOne</NAME>
+<BOIL_TIME>45</BOIL_TIME>
+<FERMENTABLES><FERMENTABLE><NAME>Солод</NAME><AMOUNT>5</AMOUNT></FERMENTABLE></FERMENTABLES>
+<MASH><MASH_STEPS>
+<MASH_STEP><NAME>Sacc</NAME><TYPE>Decoction</TYPE><STEP_TEMP>70</STEP_TEMP><STEP_TIME>30</STEP_TIME><DECOCTION_AMOUNT>12</DECOCTION_AMOUNT></MASH_STEP>
+</MASH_STEPS></MASH>
+</RECIPE>
+</RECIPES>
+"""
+
 NO_HOPS = """<?xml version="1.0" encoding="UTF-8"?>
 <RECIPES>
 <RECIPE>
@@ -272,6 +310,30 @@ BROWSER_TEST = r'''async page => {
     out.primaryPwned = window.__pwnedPrimary === true;
     SamovarApp.clearRequestError();
 
+    // 14) Infusion: первая пауза без W, вторая — ожидание долива, затем P
+    await loadOnce(f.infusionSteps, "infusion.xml");
+    out.infusionIsProgram = window.is_program;
+    out.infusionProgram = window.program;
+
+    // 15) Decoction: две строки W, затем P без нагрева-подъёма отдельной P
+    await loadOnce(f.decoctionStep, "decoction.xml");
+    out.decoctionIsProgram = window.is_program;
+    out.decoctionProgram = window.program;
+
+    // 16) неизвестный TYPE — ошибка, не универсальный P
+    await loadOnce(f.unknownMashType, "unknown_type.xml");
+    out.unknownTypeIsProgram = window.is_program;
+    out.unknownTypeError = (document.getElementById("request_error") || {}).textContent || "";
+    SamovarApp.clearRequestError();
+
+    out.hasBrewOrderSelect = !!document.getElementById("BeerBrewOrder");
+
+    // 17) HERMS из настроек — датчик воды и непрерывный насос на M/P
+    SamovarApp.setConfiguredBeerBrewOrder("herms");
+    await loadOnce(f.noHops, "no_hops_herms.xml");
+    out.hermsProgram = window.program;
+    SamovarApp.setConfiguredBeerBrewOrder("allinone");
+
     const brewmateXml = `<?xml version="1.0"?><recipe><namerecipe>Тест BrewMate</namerecipe><style>IPA</style><part>20</part><timeboil>60</timeboil><timebro>14</timebro><tempbro>18</tempbro><np>1.055</np><ibu>40</ibu><abv>5.8</abv><yeast>US-05</yeast><grains><grain><grainname>Пилснер</grainname><grainkg>5</grainkg></grain></grains><hops><hop><hopname>Cascade</hopname><hopgr>20</hopgr><hoptime>60</hoptime><hopalpha>6.5</hopalpha><hopuse>Кипячение</hopuse></hop><hop><hopname>Citra</hopname><hopgr>30</hopgr><hoptime>30</hoptime><hopalpha>12</hopalpha><hopuse>сухое охмеление</hopuse></hop></hops><zatirs><zatir><zatirgr>65</zatirgr><zatirtime>60</zatirtime></zatir></zatirs></recipe>`;
     get_brewmate_info(brewmateXml);
     out.bmName = document.getElementById("NAME").textContent;
@@ -411,6 +473,37 @@ BROWSER_TEST = r'''async page => {
     throw new Error("BrewMate dry hop must not create a boil split: " + JSON.stringify(bmB) + " program=" + results.bmProgram);
   }
 
+  if (!results.infusionIsProgram) throw new Error("infusion recipe must produce a program: " + results.infusionProgram);
+  const infusionTypes = results.infusionProgram.split("\n").filter(Boolean).map(l => l.split(";")[0]);
+  if (JSON.stringify(infusionTypes.slice(0, 4)) !== JSON.stringify(["M", "P", "W", "P"])) {
+    throw new Error("infusion must be M,P,W,P then boil: " + results.infusionProgram);
+  }
+  if (!results.infusionProgram.includes("W;0;0;0^0^0^0;0")) {
+    throw new Error("second infusion step must wait for water addition: " + results.infusionProgram);
+  }
+
+  if (!results.decoctionIsProgram) throw new Error("decoction recipe must produce a program: " + results.decoctionProgram);
+  const decoctionTypes = results.decoctionProgram.split("\n").filter(Boolean).map(l => l.split(";")[0]);
+  if (JSON.stringify(decoctionTypes.slice(0, 4)) !== JSON.stringify(["M", "W", "W", "P"])) {
+    throw new Error("decoction must be M,W,W,P: " + results.decoctionProgram);
+  }
+
+  if (results.unknownTypeIsProgram) throw new Error("unknown mash TYPE must not become a program");
+  if (!results.unknownTypeError.includes("неизвестный TYPE")) {
+    throw new Error("unknown mash TYPE must be a hard error: " + results.unknownTypeError);
+  }
+
+  if (results.hasBrewOrderSelect) {
+    throw new Error("brewxml.htm must not offer a per-recipe brew order select");
+  }
+
+  if (!results.hermsProgram.startsWith("M;65;0;2^0^65535^0;1")) {
+    throw new Error("HERMS settings must put M/P on water sensor with continuous pump: " + results.hermsProgram);
+  }
+  if (!results.hermsProgram.includes("P;65;60;2^0^65535^0;1")) {
+    throw new Error("HERMS P row must follow mash sensor/pump mapping: " + results.hermsProgram);
+  }
+
   if (errors.length > 0) throw new Error(errors.join("\n"));
   return { results, setprogram };
 }'''
@@ -459,6 +552,9 @@ def main() -> int:
                 "emptyInfuse": EMPTY_INFUSE_TEMP,
                 "noFermentables": NO_FERMENTABLES,
                 "primaryTempXss": PRIMARY_TEMP_XSS,
+                "infusionSteps": INFUSION_STEPS,
+                "decoctionStep": DECOCTION_STEP,
+                "unknownMashType": UNKNOWN_MASH_TYPE,
             }
             browser_test = (
                 BROWSER_TEST

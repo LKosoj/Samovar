@@ -1116,6 +1116,12 @@ static String html_escape(const String &s) {
 }
 
 String indexKeyProcessor(const String &var) {
+  if (var == "BeerBrewOrderId") {
+    const uint8_t order = SamSetup.BeerBrewOrder;
+    if (order == 1) return "herms";
+    if (order == 2) return "rims";
+    return "allinone";
+  }
   if (var == "SteamColor") return html_escape((String)SamSetup.SteamColor);
   else if (var == "v")
     return SAMOVAR_VERSION;
@@ -1233,6 +1239,7 @@ struct GetCheckboxField { const char* var; bool SetupEEPROM::* member; };
 struct GetModeSelectField { const char* var; SAMOVAR_MODE mode; };
 struct GetRelaySelectField { const char* var; bool SetupEEPROM::* member; bool expected; };
 struct GetColToleranceField { const char* var; float SetupEEPROM::* member; float target; };
+struct GetU8SelectField { const char* var; uint8_t SetupEEPROM::* member; uint8_t expected; };
 struct GetDsAddrField { const char* var; uint8_t (SetupEEPROM::* member)[8]; };
 struct GetColorField { const char* var; char (SetupEEPROM::* member)[20]; };
 
@@ -1344,6 +1351,12 @@ static const GetColToleranceField kGetColToleranceFields[] = {
     {"ColHeight_2.50", &SetupEEPROM::ColHeight, 2.50f},
 };
 
+static const GetU8SelectField kGetU8SelectFields[] = {
+    {"BeerBrewOrder_0", &SetupEEPROM::BeerBrewOrder, 0},
+    {"BeerBrewOrder_1", &SetupEEPROM::BeerBrewOrder, 1},
+    {"BeerBrewOrder_2", &SetupEEPROM::BeerBrewOrder, 2},
+};
+
 static const GetDsAddrField kGetDsAddrFields[] = {
     {"SteamAddr", &SetupEEPROM::SteamAdress},
     {"PipeAddr", &SetupEEPROM::PipeAdress},
@@ -1424,6 +1437,9 @@ String setupKeyProcessor(const String &var) {
   }
   for (const GetColToleranceField &f : kGetColToleranceFields) {
     if (var == f.var) return (abs(SamSetup.*f.member - f.target) < 0.01f) ? "selected" : "";
+  }
+  for (const GetU8SelectField &f : kGetU8SelectFields) {
+    if (var == f.var) return (SamSetup.*f.member == f.expected) ? "selected" : "";
   }
   for (const GetDsAddrField &f : kGetDsAddrFields) {
     if (var == f.var) return get_DSAddressList(getDSAddress(SamSetup.*f.member));
@@ -1800,6 +1816,7 @@ static const SaveU8Field kSaveU8Fields[] = {
     // [Б9] Нижняя граница поднята с 0 до 60: HTML-слайдер в setup.htm уже ограничен
     // 60-100 (подпись "(60-100)"), сервер разрешал 0..100 - рассинхрон.
     {"PackDens", &SetupEEPROM::PackDens, 60, 100},
+    {"BeerBrewOrder", &SetupEEPROM::BeerBrewOrder, 0, 2},
 };
 
 static const SaveCheckboxField kSaveCheckboxFields[] = {

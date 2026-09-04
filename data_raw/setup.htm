@@ -525,6 +525,14 @@
     </div>
 
     <div id="Beer" class="tabcontent" aria-hidden="true">
+      <h2>
+        <label for="BeerBrewOrder" class="tooltip">Варочный порядок<span class="tooltiptext">Схема пивоварни, а не рецепт. All-in-one греет затор в кубе. HERMS — ПИД по датчику воды (бойлер) и непрерывный насос. RIMS — ПИД по царге (обратка) и непрерывный насос. Способ затирания (долив/отварка) берётся из TYPE шага BeerXML.</span></label>
+        <select id="BeerBrewOrder" name="BeerBrewOrder">
+          <option value="0" %BeerBrewOrder_0%>All-in-one / BIAB</option>
+          <option value="1" %BeerBrewOrder_1%>HERMS</option>
+          <option value="2" %BeerBrewOrder_2%>RIMS</option>
+        </select>
+      </h2>
       <h2>Коэффициенты для PID регулятора нагрева:</h2>
       <h2><label for="Kp">Kp:</label> <input id="Kp" name='Kp' type='text' inputmode='decimal' value='%Kp%'></h2>
       <h2><label for="Ki">Ki:</label> <input id="Ki" name='Ki' type='text' inputmode='decimal' value='%Ki%'></h2>

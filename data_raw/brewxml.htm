@@ -630,13 +630,15 @@ function get_recipe(R){
       throw new Error("в рецепте нет шагов затирания");
     }
     var MASH = asList(R.MASH.MASH_STEPS.MASH_STEP);
+    var brewOrder = SamovarApp.beerBrewOrder(SamovarApp.currentBeerBrewOrderId());
 
     // [Пиво 02.09 D4] температура первой строки M - INFUSE_TEMP первого шага затирания, иначе его STEP_TEMP, иначе 45
     var mTemp = get_object_value(MASH[0].INFUSE_TEMP);
     if (mTemp === "Нет в рецепте") mTemp = get_object_value(MASH[0].STEP_TEMP);
     if (mTemp === "Нет в рецепте") mTemp = "45.00";
-    program = "M;" + mTemp + ";0;1^-1^2^3;0\n";
+    program = SamovarApp.beerProgramRow("M", mTemp, "0", brewOrder.mashDevice, String(brewOrder.mashSensor)) + "\n";
 
+    var mashSteps = [];
     for (let mash of MASH){
 	  var dl1 = document.createElement("div");
       dl1.className = "ingredients";
@@ -664,7 +666,25 @@ function get_recipe(R){
       dl1.appendChild(infuse);
 
       dl.appendChild(dl1);
-      program = program + "P;" + step_temp.textContent + ";" + step_time.textContent + ";1^-1^2^3" + ";0\n";
+      mashSteps.push({
+        type: get_object_value(mash.TYPE),
+        name: get_object_value(mash.NAME),
+        temp: step_temp.textContent,
+        time: step_time.textContent,
+        infuseAmount: infuseAmt,
+        infuseTemp: present(mash.INFUSE_TEMP, -2),
+        decoctionAmount: present(mash.DECOCTION_AMOUNT, -2)
+      });
+    }
+    var mashBuilt = SamovarApp.buildBeerMashStageLines(mashSteps, brewOrder.id);
+    if (mashBuilt.error) {
+      throw new Error(mashBuilt.error);
+    }
+    if (mashBuilt.lines.length) program = program + mashBuilt.lines.join("\n") + "\n";
+    var hintsBox = document.getElementById("mash-order-hints");
+    if (hintsBox) {
+      var hintLines = ["Варочный порядок из настроек: " + brewOrder.label + ". " + brewOrder.hint].concat(mashBuilt.hints);
+      hintsBox.textContent = hintLines.join("\n");
     }
 
     var ingr = document.getElementById("mash");
@@ -709,7 +729,7 @@ function get_recipe(R){
 // Ограничения соответствуют разбору формата beer на прошивке (program_io.h, program_types.h):
 // PROGRAM_MAX = CAPACITY_NUM*2 = 20 строк, допустимые типы строки - allowedTypes формата beer,
 // температура - PROGRAM_TEMP_MIN..MAX, время шага - PROGRAM_TIME_MIN..MAX (в минутах).
-var BEER_PROGRAM_MAX_ROWS = 20;
+var BEER_PROGRAM_MAX_ROWS = SamovarApp.beerProgramMaxRows;
 var BEER_PROGRAM_TYPES = "MPBCFWLA";
 
 function validateBeerProgramText(text) {
@@ -770,6 +790,12 @@ async function set_program(){
 SamovarApp.initTheme();
 document.addEventListener('DOMContentLoaded', function () {
   SamovarApp.initTheme();
+  fetch('/ajax?messageCursor=0').then(function (resp) {
+    if (!resp.ok) return null;
+    return resp.json();
+  }).then(function (data) {
+    if (data && data.BeerBrewOrder) SamovarApp.setConfiguredBeerBrewOrder(data.BeerBrewOrder);
+  }).catch(function () {});
 });
 </script>
 </head>
@@ -872,6 +898,7 @@ document.addEventListener('DOMContentLoaded', function () {
 <div id="mash">
 </div>
 </div>
+<div id="mash-order-hints" class="dvcs" style="white-space: pre-wrap; margin: 0.5em 0;"></div>
 </div>
 
 <div class="program-actions">

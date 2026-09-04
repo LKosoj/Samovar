@@ -239,6 +239,7 @@ struct SetupFixture {
   bool useautospeed;
   bool UseBBuzzer;
   uint16_t StepperStepMl;
+  uint8_t BeerBrewOrder;
 };
 
 struct SensorFixture {
@@ -272,7 +273,7 @@ struct TimePredictorFixture {
 volatile float bme_temp = 1.25f;
 volatile float bme_pressure = 760.0f;
 volatile float start_pressure = 755.5f;
-SetupFixture SamSetup{true, true, 800};
+SetupFixture SamSetup{true, true, 800, 0};
 SensorFixture SteamSensor{78.125f, 77.0f};
 SensorFixture PipeSensor{77.25f, 76.0f};
 SensorFixture WaterSensor{20.5f, 0.0f};
@@ -569,6 +570,7 @@ EXPECTED_DEFAULT = (
     '"useautospeed":1,"version":"6.27",'
     '"boot_degraded":0,"boot_degraded_reason":"","VolumeAll":42,'
     '"ActualVolumePerHour":1.234,"PowerOn":1,"PauseOn":0,"BeerManualPause":0,'
+    '"BeerBrewOrder":"allinone",'
     '"WthdrwlProgress":55,"TargetStepps":1000,"CurrrentStepps":250,'
     '"WthdrwlStatus":1,"SamovarStatusInt":10,"ProgramNum":3,"ProgramIndex":2,'
     '"CurrrentSpeed":13.00,"UseBBuzzer":1,"StepperStepMl":800,'

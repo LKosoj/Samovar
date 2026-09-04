@@ -98,9 +98,8 @@
   var BEER_MASH_DEVICE_DEFAULT = '1^-1^2^3';
   var BEER_PUMP_CONTINUOUS = '2^0^65535^0';
   var BEER_WAIT_DEVICE = '0^0^0^0';
-  var BEER_BREW_ORDER_KEY = 'samovarBeerBrewOrder';
-  var BEER_MASH_LIFT_KEY = 'samovarBeerMashLift';
   var BEER_PROGRAM_MAX_ROWS = 20;
+  var configuredBeerBrewOrderId = 'allinone';
 
   function beerBrewOrders() {
     return {
@@ -128,86 +127,22 @@
     };
   }
 
-  function beerMashLifts() {
-    return {
-      auto: { id: 'auto', label: 'По TYPE шага BeerXML' },
-      temperature: { id: 'temperature', label: 'Прямой нагрев (Temperature)' },
-      infusion: { id: 'infusion', label: 'Доливы (Infusion)' },
-      decoction: { id: 'decoction', label: 'Отварка (Decoction)' }
-    };
-  }
-
   function beerBrewOrder(id) {
     var orders = beerBrewOrders();
     return orders[id] || orders.allinone;
   }
 
-  function readStoredBeerChoice(key, fallback) {
-    try {
-      var v = window.localStorage.getItem(key);
-      return v || fallback;
-    } catch (e) {
-      return fallback;
-    }
-  }
-
-  function writeStoredBeerChoice(key, value) {
-    try {
-      window.localStorage.setItem(key, value);
-    } catch (e) { /* private mode */ }
+  function setConfiguredBeerBrewOrder(id) {
+    configuredBeerBrewOrderId = beerBrewOrder(id).id;
+    return configuredBeerBrewOrderId;
   }
 
   function currentBeerBrewOrderId() {
-    var el = byId('beer-brew-order');
-    if (el && el.value) return el.value;
-    return readStoredBeerChoice(BEER_BREW_ORDER_KEY, 'allinone');
-  }
-
-  function currentBeerMashLiftId() {
-    var el = byId('beer-mash-lift');
-    if (el && el.value) return el.value;
-    return readStoredBeerChoice(BEER_MASH_LIFT_KEY, 'auto');
-  }
-
-  function fillBeerOrderSelects() {
-    var orderEl = byId('beer-brew-order');
-    var liftEl = byId('beer-mash-lift');
-    var orderId = readStoredBeerChoice(BEER_BREW_ORDER_KEY, 'allinone');
-    var liftId = readStoredBeerChoice(BEER_MASH_LIFT_KEY, 'auto');
-    if (orderEl && !orderEl.options.length) {
-      var orders = beerBrewOrders();
-      Object.keys(orders).forEach(function (id) {
-        var opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = orders[id].label;
-        orderEl.appendChild(opt);
-      });
+    var fromBody = document.body && document.body.getAttribute('data-beer-brew-order');
+    if (fromBody && beerBrewOrders()[fromBody]) {
+      configuredBeerBrewOrderId = fromBody;
     }
-    if (liftEl && !liftEl.options.length) {
-      var lifts = beerMashLifts();
-      Object.keys(lifts).forEach(function (id) {
-        var opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = lifts[id].label;
-        liftEl.appendChild(opt);
-      });
-    }
-    if (orderEl) orderEl.value = beerBrewOrders()[orderId] ? orderId : 'allinone';
-    if (liftEl) liftEl.value = beerMashLifts()[liftId] ? liftId : 'auto';
-    updateBeerOrderHint();
-  }
-
-  function updateBeerOrderHint() {
-    var hint = byId('beer-order-hint');
-    if (!hint) return;
-    var order = beerBrewOrder(currentBeerBrewOrderId());
-    hint.textContent = order.hint;
-  }
-
-  function persistBeerOrderChoices() {
-    writeStoredBeerChoice(BEER_BREW_ORDER_KEY, currentBeerBrewOrderId());
-    writeStoredBeerChoice(BEER_MASH_LIFT_KEY, currentBeerMashLiftId());
-    updateBeerOrderHint();
+    return beerBrewOrder(configuredBeerBrewOrderId).id;
   }
 
   function beerSensorOptionHtml() {
@@ -233,9 +168,7 @@
     return '';
   }
 
-  function effectiveMashKind(stepType, mashLift) {
-    var lift = mashLift || 'auto';
-    if (lift !== 'auto') return lift;
+  function effectiveMashKind(stepType) {
     return normalizeMashStepType(stepType);
   }
 
@@ -264,7 +197,7 @@
   }
 
   // steps: [{type, temp, time, infuseAmount, infuseTemp, decoctionAmount, name}]
-  function buildBeerMashStageLines(steps, orderId, mashLift) {
+  function buildBeerMashStageLines(steps, orderId) {
     var order = beerBrewOrder(orderId);
     var hints = [];
     var lines = [];
@@ -273,7 +206,7 @@
     }
     for (var i = 0; i < steps.length; i++) {
       var step = steps[i];
-      var kind = effectiveMashKind(step.type, mashLift);
+      var kind = effectiveMashKind(step.type);
       if (!kind) {
         return {
           error: 'неизвестный TYPE шага затирания «' + step.type + '» (нужны Infusion, Temperature или Decoction)',
@@ -294,9 +227,6 @@
         hints.push('Decoction ' + title + ': отберите ' + decoct + ', закипятите, верните. Две строки ожидания, затем выдержка без догрева ТЭНом до паузы.');
         lines.push(beerProgramRow('W', '0', '0', BEER_WAIT_DEVICE, '0'));
         lines.push(beerProgramRow('W', '0', '0', BEER_WAIT_DEVICE, '0'));
-      }
-      if (kind === 'temperature' && mashLift === 'auto') {
-        hints.push('Temperature ' + title + ': прямой нагрев до ' + step.temp + ' °C, ' + step.time + ' мин.');
       }
       lines.push(beerProgramRow('P', step.temp, step.time, order.mashDevice, String(order.mashSensor)));
     }
@@ -1648,7 +1578,6 @@
     addMessage: addMessage,
     beerRowTypeOk: beerRowTypeOk,
     beerBrewOrders: beerBrewOrders,
-    beerMashLifts: beerMashLifts,
     beerBrewOrder: beerBrewOrder,
     beerProgramMaxRows: BEER_PROGRAM_MAX_ROWS,
     beerProgramRow: beerProgramRow,
@@ -1657,11 +1586,8 @@
     effectiveMashKind: effectiveMashKind,
     applyBeerBrewOrderToProgramText: applyBeerBrewOrderToProgramText,
     buildBeerMashStageLines: buildBeerMashStageLines,
-    fillBeerOrderSelects: fillBeerOrderSelects,
-    persistBeerOrderChoices: persistBeerOrderChoices,
+    setConfiguredBeerBrewOrder: setConfiguredBeerBrewOrder,
     currentBeerBrewOrderId: currentBeerBrewOrderId,
-    currentBeerMashLiftId: currentBeerMashLiftId,
-    mashDeviceDefault: BEER_MASH_DEVICE_DEFAULT,
     clearProgram: clearProgram,
     clearHistory: clearHistory,
     clearMessages: clearMessages,
