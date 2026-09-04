@@ -378,13 +378,19 @@ class StaticAnalysisRunnerTests(unittest.TestCase):
 
 class WorkflowContractTests(unittest.TestCase):
     def test_ci_uses_bounded_shared_runners_and_always_uploads_extended_report(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "firmware-ci.yml").read_text(encoding="utf-8")
-        blocking = self._job_block(workflow, "static-analysis")
-        smoke = self._job_block(workflow, "smoke")
-        self.assertEqual(workflow.count("python tools/run_smoke_tests.py"), 1)
+        workflow_path = ROOT / ".github" / "workflows" / "firmware-ci.yml"
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        blocking = self._job_block(workflow_text, "static-analysis")
+        smoke = self._job_block(workflow_text, "smoke")
+        self.assertEqual(workflow_text.count("python tools/run_smoke_tests.py"), 1)
         self.assertIn("run: python tools/run_cppcheck.py --timeout 300", blocking)
         self.assertNotIn("--force", blocking)
         self.assertNotIn("continue-on-error", blocking)
+        self.assertIn(
+            "run: python -m pip install PyYAML==6.0.3 platformio==6.1.19",
+            smoke,
+            "smoke job обязан установить зависимости, которые импортируют smoke_ci_contract.py и build_metadata.py",
+        )
         self.assertIn("run: python tools/run_smoke_tests.py --timeout 60", smoke)
 
     def test_extended_cppcheck_is_baseline_gated_not_ignored(self) -> None:
@@ -453,6 +459,13 @@ class WorkflowContractTests(unittest.TestCase):
         run_commands = [step["run"] for step in steps if "run" in step]
         install_commands = [command for command in run_commands if "playwright install" in command]
         self.assertTrue(install_commands, "не найден шаг, устанавливающий браузер Playwright")
+        install_step = next(step for step in steps if "playwright install" in step.get("run", ""))
+        self.assertEqual(install_step.get("env", {}).get("MINIMIST_VERSION"), "1.2.8")
+        self.assertIn(
+            "minimist@$MINIMIST_VERSION",
+            install_step["run"],
+            "playwright-cli не запустится в чистом global npm prefix без явно поднятого minimist",
+        )
 
         test_commands = [
             command for command in run_commands if command == "python tools/run_browser_tests.py --timeout 240"

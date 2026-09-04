@@ -121,6 +121,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install smoke dependencies
+        run: python -m pip install PyYAML==6.0.3 platformio==6.1.19
+
       - name: Run all smoke tests
         run: python tools/run_smoke_tests.py --timeout 60
 
@@ -155,8 +158,9 @@ jobs:
           # Chromium (ревизия r1212) - именно та, что нужна playwright-cli.
           PLAYWRIGHT_VERSION: "1.59.0-alpha-1771104257000"
           PLAYWRIGHT_CLI_VERSION: "0.1.1"
+          MINIMIST_VERSION: "1.2.8"
         run: |
-          npm install -g playwright@$PLAYWRIGHT_VERSION @playwright/cli@$PLAYWRIGHT_CLI_VERSION
+          npm install -g playwright@$PLAYWRIGHT_VERSION @playwright/cli@$PLAYWRIGHT_CLI_VERSION minimist@$MINIMIST_VERSION
           npx playwright install --with-deps chromium
 
       - name: Run browser UI tests
