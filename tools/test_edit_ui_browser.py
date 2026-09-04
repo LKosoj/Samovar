@@ -53,14 +53,17 @@ BROWSER_TEST = r'''async page => {
 
   await page.route(/\/edit(\?|$)/, async route => {
     const req = route.request();
-    const url = new URL(req.url());
+    const requestUrl = req.url();
+    const queryAt = requestUrl.indexOf("?");
+    const search = queryAt === -1 ? "" : requestUrl.slice(queryAt);
+    const editMatch = /(?:\?|&)edit=([^&]*)/.exec(search);
     editLog.push({
       method: req.method(),
-      search: url.search,
-      hasList: url.searchParams.has("list"),
-      edit: url.searchParams.get("edit"),
+      search: search,
+      hasList: /(?:\?|&)list=/.test(search),
+      edit: editMatch ? decodeURIComponent(editMatch[1]) : null,
     });
-    if (req.method() === "GET" && url.searchParams.has("list")) {
+    if (req.method() === "GET" && /(?:\?|&)list=/.test(search)) {
       return route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -71,14 +74,14 @@ BROWSER_TEST = r'''async page => {
         ])
       });
     }
-    if (req.method() === "GET" && url.searchParams.has("edit")) {
+    if (req.method() === "GET" && editMatch) {
       return route.fulfill({
         status: 200,
         contentType: "text/plain",
-        body: "contents-of-" + url.searchParams.get("edit")
+        body: "contents-of-" + decodeURIComponent(editMatch[1])
       });
     }
-    if (req.method() === "GET" && url.searchParams.has("download")) {
+    if (req.method() === "GET" && /(?:\?|&)download=/.test(search)) {
       return route.fulfill({ status: 200, body: "download" });
     }
     return route.fulfill({ status: 200, contentType: "text/plain", body: req.method() + " ok" });

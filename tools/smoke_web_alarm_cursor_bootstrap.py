@@ -42,6 +42,7 @@ function check(condition, message) {
 
 function freshEnv() {
   const storage = {};
+  const rootClasses = new Set();
   function makeElement() {
     return { style: {}, innerHTML: "", scrollTop: 0, scrollHeight: 0 };
   }
@@ -72,7 +73,15 @@ function freshEnv() {
         if (!elements[id]) elements[id] = makeElement();
         return elements[id];
       },
-      documentElement: {},
+      documentElement: {
+        classList: {
+          add: function (name) { rootClasses.add(name); },
+          remove: function (name) { rootClasses.delete(name); },
+          contains: function (name) { return rootClasses.has(name); },
+        },
+      },
+      body: { inert: false },
+      activeElement: null,
       addEventListener: function () {},
     },
     localStorage: {
@@ -98,7 +107,7 @@ function freshEnv() {
     clearTimeout: clearTimeout,
     AbortController: AbortController,
   };
-  return { env: env, elements: elements, audio: AudioStub.instances };
+  return { env: env, elements: elements, audio: AudioStub.instances, rootClasses: rootClasses };
 }
 
 function loadApp(fetchImpl) {
@@ -106,7 +115,8 @@ function loadApp(fetchImpl) {
   fresh.env.fetch = fetchImpl;
   const context = vm.createContext(fresh.env);
   vm.runInContext(appSource, context, { filename: "app.js" });
-  return { app: context.window.SamovarApp, elements: fresh.elements, audio: fresh.audio };
+  return { app: context.window.SamovarApp, elements: fresh.elements, audio: fresh.audio,
+    rootClasses: fresh.rootClasses };
 }
 
 function makeFetch(responses) {
@@ -299,7 +309,7 @@ async function scenarioEspRebootDoesNotWarnSequenceGap() {
 }
 
 async function scenarioConnectionLossSoundsSiren() {
-  const { app, audio, elements } = loadApp(makeFetch([
+  const { app, audio, elements, rootClasses } = loadApp(makeFetch([
     { heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0 },
   ]));
   app.setSoundEnabled(true);
@@ -313,12 +323,17 @@ async function scenarioConnectionLossSoundsSiren() {
     "the fourth failed poll must show the connection-loss toast");
   check(audio.length === 1 && audio[0].playing === true,
     "confirmed connection loss must loop the siren when the browser buzzer is on");
+  await new Promise(function (resolve) { setTimeout(resolve, 150); });
+  check(rootClasses.has("connection-lost"),
+    "confirmed connection loss must disable the page through html.connection-lost");
   app.removeLastMessage();
   check(audio[0].playing === true,
     "dismissing the connection-loss toast must not silence the siren while still offline");
   app.setConnectionOk();
   check(audio[0].playing === false,
     "restored connection must stop the siren unless heaterAlarmLatched is set");
+  check(!rootClasses.has("connection-lost"),
+    "restored connection must re-enable the page");
 }
 
 async function main() {

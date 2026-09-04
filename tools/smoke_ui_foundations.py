@@ -183,10 +183,16 @@ def check_app_js(errors):
       errors.append(f"data_raw/app.js COMMAND_TOKENS missing {token}")
 
   try:
-    send_command_body = extract_function_body(text, "async function sendCommand(command, options)")
+    send_command_wrapper = extract_function_body(text, "function sendCommand(command, options)")
+    send_command_body = extract_function_body(text, "async function sendCommandRequest(command, options)")
   except ValueError as exc:
     errors.append(str(exc))
+    send_command_wrapper = ""
     send_command_body = ""
+  if send_command_wrapper:
+    for token in ("assertOnline();", "return sendCommandRequest(command, options);"):
+      if token not in send_command_wrapper:
+        errors.append(f"data_raw/app.js sendCommand() missing synchronous guard token: {token}")
   if send_command_body:
     for token in [
       "const commandBody = command.indexOf('=') === -1 ? command + '=1' : command;",
@@ -196,7 +202,7 @@ def check_app_js(errors):
       "body: commandBody",
     ]:
       if token not in send_command_body:
-        errors.append(f"data_raw/app.js sendCommand() missing POST command transport token: {token}")
+        errors.append(f"data_raw/app.js sendCommandRequest() missing POST command transport token: {token}")
     if "/command?" in send_command_body or "method: 'GET'" in send_command_body:
       errors.append("data_raw/app.js sendCommand() still uses GET /command transport")
     known_token_match = re.search(

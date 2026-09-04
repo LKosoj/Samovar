@@ -85,8 +85,9 @@ BROWSER_TEST = r'''async page => {
     pumpMlHour:100,pumpPauseSec:0,fillingMl:100,fillingMlHour:100,stepsPerMl:100,
     remaining:0,currentSpeed:0
   };
+  // 04.09.2026: select BeerBrewOrder добавил один клавиатурный сценарий.
   const report = {expectedCells:runMatrix ? viewports.length*themes.length*pages.length : 0,cells:[],
-    expectedActionCases:runActions ? 69*activationKinds.length : 0,actionCases:[],focusPages:[],failures:[],consoleProblems:[]};
+    expectedActionCases:runActions ? 70*activationKinds.length : 0,actionCases:[],focusPages:[],failures:[],consoleProblems:[]};
   let scenario = "startup";
   const mutationRequests = [];
   function expect(value, message) {
@@ -615,6 +616,11 @@ UPLOAD_TRIGGER = r'''async page => {
     if (!trigger) throw new Error("upload tab trigger missing for " + panel.id);
     trigger.click();
   });
+  if (file === "program.htm") {
+    await page.waitForFunction(() =>
+      programTemplateLoaded && columnParams !== null && programTemplateBaseline !== ""
+    );
+  }
   await page.evaluate(symbol => {
     const original = window[symbol];
     if (typeof original !== "function") throw new Error("missing upload handler " + symbol);
@@ -657,9 +663,10 @@ UPLOAD_TRIGGER = r'''async page => {
     const wrap = document.querySelector(".file-upload-control");
     const next = wrap && wrap.nextElementSibling;
     const input = document.getElementById("fileToLoad");
+    const nextBox = next && next.getBoundingClientRect();
     return {
       wrapH: wrap.getBoundingClientRect().height,
-      nextT: next ? next.getBoundingClientRect().top : null,
+      nextT: nextBox ? nextBox.top + window.scrollY : null,
       hasButtonClass: input.classList.contains("button")
     };
   });
@@ -669,9 +676,10 @@ UPLOAD_TRIGGER = r'''async page => {
     const wrap = document.querySelector(".file-upload-control");
     const next = wrap && wrap.nextElementSibling;
     const box = document.getElementById("fileToLoad").getBoundingClientRect();
+    const nextBox = next && next.getBoundingClientRect();
     return {
       wrapH: wrap.getBoundingClientRect().height,
-      nextT: next ? next.getBoundingClientRect().top : null,
+      nextT: nextBox ? nextBox.top + window.scrollY : null,
       inputW: box.width,
       inputH: box.height
     };
@@ -917,9 +925,9 @@ def main() -> int:
         for report in stage_reports
         if report.get("stage") in ("actions", "uploads")
     )
-    if action_count != 73 * activation_count:
+    if action_count != 74 * activation_count:
         failures.append(
-            f"combined action cases {action_count}/{73 * activation_count}"
+            f"combined action cases {action_count}/{74 * activation_count}"
         )
     if error is None and failures:
         error = f"{len(failures)} browser assertions failed; first: {failures[0]}"

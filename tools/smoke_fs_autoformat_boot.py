@@ -312,8 +312,8 @@ require(
     "root firmware must contain one server.begin() call",
 )
 # Обновление интерфейса живёт в get_web_interface() и пинится отдельно, в
-# tools/smoke_web_interface_update.py. Здесь важно лишь, что FS_init им не занимается,
-# и что WebServerInit его безусловно вызывает после server.begin().
+# tools/smoke_web_interface_update.py. Здесь важно, что FS_init им не занимается, а setup()
+# завершает сетевое обновление до запуска датчиков и веб-сервера.
 
 fs_init_body = body(fs_text, "FsInitResult FS_init(void)")
 if fs_init_body:
@@ -388,11 +388,7 @@ if web_init_body:
         [
             "FS_register_web_handlers();",
             'server.on("/", HTTP_GET | HTTP_POST',
-            # Обновление интерфейса идёт ПОСЛЕ старта сервера и не решает, жить ему
-            # или нет: недоступный web.samovar-tool.ru не должен лишать пользователя
-            # локального веб-интерфейса, который уже лежит на ФС.
             "server.begin();",
-            "get_web_interface();",
         ],
         "WebServerInit",
     )
@@ -400,10 +396,7 @@ require(
     web_init_body.count("server.begin()") == 1,
     "WebServerInit must start the server once",
 )
-require(
-    web_init_body.count("get_web_interface();") == 1,
-    "WebServerInit must call get_web_interface once",
-)
+require("get_web_interface();" not in web_init_body, "WebServerInit must not update open UI files")
 
 setup_body = body(samovar_text, "void setup()")
 # P8 owner note (2026-08-22): setup() now delegates the WiFi/Blynk/Telegram/OTA
@@ -431,6 +424,9 @@ if setup_body:
             'report_degraded_boot("filesystem", "mount failed");',
             "esp_log_level_set",
             "AsyncWiFiManager",
+            "WiFi.status() == WL_CONNECTED",
+            "get_web_interface();",
+            "sensor_init();",
             "startService();",
             "WebServerInit();",
             'Serial.println(F("Samovar started"));',
@@ -445,6 +441,10 @@ if setup_body:
     require(
         "webServerInitResult" not in setup_body,
         "setup() must not branch on a WebServerInit result anymore",
+    )
+    require(
+        setup_body.count("get_web_interface();") == 1,
+        "setup() must call get_web_interface once before sensors and web server startup",
     )
     # Owner decision: FS mount failure (formatted-recovery or fully unrecoverable) degrades
     # and continues (report_degraded_boot), it must not halt the boot forever.

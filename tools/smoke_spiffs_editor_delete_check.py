@@ -41,14 +41,28 @@ class String {
 
 static bool g_remove_result = true;
 static std::string g_removed_path;
+static bool g_log_lock_result = true;
+static int g_log_lock_calls = 0;
+static int g_log_unlock_calls = 0;
+static int failures = 0;
+
+static void expect(bool cond, const char* what) {
+  if (!cond) { fprintf(stderr, "FAIL: %s\n", what); failures++; }
+}
 
 struct FSMock {
   bool remove(const String& p) { g_removed_path = p.c_str(); return g_remove_result; }
 };
 static FSMock _fs;
 
-static bool samovar_process_active() { return false; }
-static bool data_log_close_pending() { return false; }
+static bool log_file_lock(unsigned long timeout) {
+  expect(timeout == 0, "DELETE must not wait for the log lock in async_tcp");
+  ++g_log_lock_calls;
+  return g_log_lock_result;
+}
+static void log_file_unlock(bool locked) {
+  if (locked) ++g_log_unlock_calls;
+}
 
 struct Param {
   String v;
@@ -74,31 +88,48 @@ static RequestMock* request = &request_storage;
 
 @EXTRACTED@
 
-static int failures = 0;
-
-static void expect(bool cond, const char* what) {
-  if (!cond) { fprintf(stderr, "FAIL: %s\n", what); failures++; }
-}
-
 int main() {
+  // Журнал удерживает ФС: DELETE не трогает файл и сразу отвечает 503.
+  {
+    request_storage = RequestMock{};
+    g_log_lock_result = false;
+    g_log_lock_calls = 0;
+    g_log_unlock_calls = 0;
+    g_removed_path.clear();
+    handleDelete();
+    expect(request_storage.sent_code == 503, "занятой журнал должен вернуть 503");
+    expect(g_removed_path.empty(), "при занятом журнале remove() вызывать нельзя");
+    expect(g_log_lock_calls == 1, "DELETE должен один раз попытаться взять замок");
+    expect(g_log_unlock_calls == 0, "невзятый замок нельзя отпускать");
+  }
   // Успех: remove() отработал - 200 и подтверждение с именем файла.
   {
     request_storage = RequestMock{};
+    g_log_lock_result = true;
+    g_log_lock_calls = 0;
+    g_log_unlock_calls = 0;
     g_remove_result = true;
     handleDelete();
     expect(request_storage.sent_code == 200, "успешное удаление должно вернуть 200");
     expect(request_storage.sent_body.find("DELETE:") != std::string::npos,
            "успешный ответ должен подтверждать удаление");
+    expect(g_log_lock_calls == 1 && g_log_unlock_calls == 1,
+           "успешный DELETE должен отпустить замок ровно один раз");
   }
   // Неудача: remove() вернул false (ФС отказала) - НЕ 200, и тело не должно врать про
   // успешное удаление.
   {
     request_storage = RequestMock{};
+    g_log_lock_result = true;
+    g_log_lock_calls = 0;
+    g_log_unlock_calls = 0;
     g_remove_result = false;
     handleDelete();
     expect(request_storage.sent_code != 200,
            "неудачное удаление НЕ должно отвечать 200 - файл на самом деле не удалён");
     expect(request_storage.sent_code == 500, "неудачное удаление должно вернуть 500");
+    expect(g_log_lock_calls == 1 && g_log_unlock_calls == 1,
+           "отказ remove() должен отпустить замок ровно один раз");
   }
 
   if (failures) {

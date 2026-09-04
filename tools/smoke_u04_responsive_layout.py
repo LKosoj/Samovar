@@ -33,7 +33,9 @@ FROZEN_SHA256 = {
     # 02.09.2026 (задача 9c): три новых токена COMMAND_TOKENS.NOT_RUNNING/
     # NO_SETPOINT/NO_PUMP - отказы /command waterauto=1 (авто-вода БК).
     # Раскладки не касается.
-    "app.js": "deb8888500655b330b619c347fd978d63d280d3809f4788877ae66bd13f34fd0",
+    # 04.09.2026: варочный порядок берётся из настроек прибора, а не localStorage.
+    # Раскладочных констант в app.js не менялось.
+    "app.js": "f1c51d3c6dcd3eba9000934d0d1aa1f12e763e6cbfb20aaed20064a9a5be1472",
     # 01.09.2026: масштаб задают две ручки под графиком вместо колёсика и рамки
     # выделения (уменьшить масштаб на приборе было нечем).
     # 04.09.2026: loadCsv сам повторяет HTTP 503 BUSY. Раскладки не касается.
@@ -54,7 +56,8 @@ STRUCTURE_SHA256 = {
     # появились class="tooltip" на <label> и <span class="tooltiptext"> - структура
     # и текст изменились штатно.
     # 04.09.2026: Су-вид и Lua скрыты в <select> режима; поля SuvidTemp/SuvidHoldMinutes сняты.
-    "setup.htm": "206a17ea72b976aedd0f63a696d5769c4b2111db40d2c456050dcbb354723462",
+    # 04.09.2026: на вкладку Beer добавлены select BeerBrewOrder и его подсказка.
+    "setup.htm": "9ee671aaa7124cf4290e6379b3dfed5c442a2e2f247fe532f71704f6bde60a46",
     "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")

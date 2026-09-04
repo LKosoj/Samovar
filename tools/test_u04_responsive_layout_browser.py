@@ -53,11 +53,12 @@ BROWSER_TEST = r'''async page => {
   // полосы прокрутки на 6 px - на столько же подросли панель и форма под ней.
   // 02.09.2026: у поля DistTemp (вкладка Main) появилась подсказка (П11) - вкладка Main
   // и все сценарии на её основе стали выше на 18.42 px; остальные вкладки не менялись.
+  // 04.09.2026: с Temp убраны два поля су-вида; в Beer добавлен BeerBrewOrder.
   const DESKTOP_GEOMETRY_BASELINE = {
     "setup/Main": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
-    "setup/Temp": { form: {x:265,y:25,width:910,height:1696.81}, panel: {x:295,y:163,width:850,height:1484.81}, actions: {x:386,y:1647.81,width:668,height:44}, save: {x:396,y:1657.81,width:200,height:34}, return: {x:620,y:1657.81,width:200,height:34}, edit: {x:844,y:1657.81,width:200,height:34} },
+    "setup/Temp": { form: {x:265,y:25,width:910,height:1578.55}, panel: {x:295,y:163,width:850,height:1366.55}, actions: {x:386,y:1529.55,width:668,height:44}, save: {x:396,y:1539.55,width:200,height:34}, return: {x:620,y:1539.55,width:200,height:34}, edit: {x:844,y:1539.55,width:200,height:34} },
     "setup/Pump": { form: {x:265,y:25,width:910,height:418.69}, panel: {x:295,y:163,width:850,height:206.69}, actions: {x:386,y:369.69,width:668,height:44}, save: {x:396,y:379.69,width:200,height:34}, return: {x:620,y:379.69,width:200,height:34}, edit: {x:844,y:379.69,width:200,height:34} },
-    "setup/Beer": { form: {x:265,y:25,width:910,height:669.8}, panel: {x:295,y:163,width:850,height:457.8}, actions: {x:386,y:620.8,width:668,height:44}, save: {x:396,y:630.8,width:200,height:34}, return: {x:620,y:630.8,width:200,height:34}, edit: {x:844,y:630.8,width:200,height:34} },
+    "setup/Beer": { form: {x:265,y:25,width:910,height:717.22}, panel: {x:295,y:163,width:850,height:505.22}, actions: {x:386,y:668.22,width:668,height:44}, save: {x:396,y:678.22,width:200,height:34}, return: {x:620,y:678.22,width:200,height:34}, edit: {x:844,y:678.22,width:200,height:34} },
     "setup/NBK": { form: {x:265,y:25,width:910,height:685.8}, panel: {x:295,y:163,width:850,height:473.8}, actions: {x:386,y:636.8,width:668,height:44}, save: {x:396,y:646.8,width:200,height:34}, return: {x:620,y:646.8,width:200,height:34}, edit: {x:844,y:646.8,width:200,height:34} },
     "setup/Other": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
     "setup/main-longest-mode": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
@@ -401,7 +402,8 @@ BROWSER_TEST = r'''async page => {
             theme: cell.theme, state: cell.state, kind: "desktop-geometry",
             selector: target + "." + coordinate, rect: actualGeometry[target],
             ancestorRect: null, baseline: expected, actual, delta,
-            detail: "desktop geometry delta exceeds " + DESKTOP_GEOMETRY_TOLERANCE
+            detail: "actual=" + actual + " baseline=" + expected + " delta=" + delta +
+              " exceeds " + DESKTOP_GEOMETRY_TOLERANCE
           });
         }
       });
@@ -704,6 +706,7 @@ BROWSER_TEST = r'''async page => {
   // за одной непустой вкладкой Main.
   // 03.09.2026 (НБК, T6): у NBK появились 3 подсказки (Инерция/Давление захлёба/
   // Т завершения (барда)) - вкладка больше не пустая, сумма 11 -> 14.
+  // 04.09.2026: в Beer добавлена подсказка к варочному порядку, сумма 14 -> 15.
   await page.setViewportSize({ width: 320, height: 800 });
   let setupTooltipTotal = 0;
   for (const tab of setupTabs) {
@@ -711,7 +714,7 @@ BROWSER_TEST = r'''async page => {
     await openSetupTab(tab);
     setupTooltipTotal += await checkTooltipFit(page, "setup.htm", { name: "320x800", width: 320 }, tab);
   }
-  const SETUP_TOOLTIP_TOTAL_EXPECTED = 14;
+  const SETUP_TOOLTIP_TOTAL_EXPECTED = 15;
   if (setupTooltipTotal !== SETUP_TOOLTIP_TOTAL_EXPECTED) {
     throw new Error("tooltip-fit: setup.htm суммарно нашёл " + setupTooltipTotal +
       " подсказок по всем вкладкам, ожидалось " + SETUP_TOOLTIP_TOTAL_EXPECTED);

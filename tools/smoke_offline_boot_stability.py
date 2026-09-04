@@ -43,17 +43,28 @@ web_server = read("WebServer.ino")
 samovar = read("Samovar.ino")
 async_http = read("libraries/asyncHTTPrequest/src/asyncHTTPrequest.cpp")
 
-# 1. Загрузка интерфейса только при живом подключении к сети.
+# 1. Загрузка интерфейса только при живом подключении к сети и до
+# запуска датчиков/веб-сервера: открытые файлы LittleFS мешают обновлению.
 web_server_init = body(web_server, "void WebServerInit(void)", "WebServerInit")
-if web_server_init:
+setup = body(samovar, "void setup()", "setup")
+if setup:
     require_ordered_tokens(
-        "WebServerInit",
-        web_server_init,
-        ["WiFi.status() == WL_CONNECTED", "get_web_interface()"],
+        "setup",
+        setup,
+        [
+            "setup_connect_wifi_and_notify();",
+            "WiFi.status() == WL_CONNECTED",
+            "get_web_interface();",
+            "sensor_init();",
+            "startService();",
+            "WebServerInit();",
+        ],
         errors,
     )
-    if web_server_init.count("get_web_interface()") != 1:
-        errors.append("WebServerInit: get_web_interface() должен вызываться ровно один раз")
+    if setup.count("get_web_interface()") != 1:
+        errors.append("setup: get_web_interface() должен вызываться ровно один раз")
+if web_server_init and "get_web_interface()" in web_server_init:
+    errors.append("WebServerInit: обновление UI должно завершиться до запуска веб-сервера")
 
 # 2. Объект запроса общий и долгоживущий, доступ к нему сериализован.
 if web_server and "static asyncHTTPrequest sharedHttpRequest;" not in web_server:
