@@ -570,7 +570,10 @@ class StepperIsrCliTests(unittest.TestCase):
             root = Path(temp_dir)
             import check_stepper_isr_iram as stepper_check
 
-            with patch.object(stepper_check, "BUILD_DIR", root / ".pio" / "build"):
+            with (
+                patch.object(stepper_check, "BUILD_DIR", root / ".pio" / "build"),
+                patch.object(stepper_check, "detect_core_status", return_value=("ok", "core test")),
+            ):
                 ok, message = stepper_check.check_env("NoSuchEnvironment")
             self.assertFalse(ok)
             self.assertIn("не найден", message)
