@@ -29,6 +29,8 @@
    (нет абсолютной уставки выше по программе) - число копируется в оба
    столбца сырьём, но пороги V (40) и P (400) разные, значит то же число
    может быть дельтой в одной единице и абсолютной уставкой в другой.
+10. Загрузка встроенного TXT-шаблона сохраняет его скорости до явного нажатия
+    кнопки «Применить рекомендации».
 """
 import functools
 import http.server
@@ -116,6 +118,13 @@ BROWSER_TEST = r'''async page => {
         bodySpeedClamped: false
       };
     }
+
+    const templateSpeeds = Array.from(document.querySelectorAll('.prgline'))
+      .map(function(line) {
+        const speed = line.querySelector('input[name^="speed"]');
+        return speed ? Number(speed.value) : null;
+      })
+      .filter(function(value) { return value !== null; });
 
     const volumes = firmwareVolumes(document.getElementById("WProgram").value);
 
@@ -325,6 +334,7 @@ BROWSER_TEST = r'''async page => {
     const clampTextNone = clampNote ? clampNote.textContent : "";
 
     return {
+      templateSpeeds: templateSpeeds,
       volumes: volumes,
       scaledHeads: scaledHeads,
       scaledBody: scaledBody,
@@ -370,6 +380,15 @@ BROWSER_TEST = r'''async page => {
       clampTextNone: clampTextNone
     };
   });
+
+  const expectedTemplateSpeeds = [
+    0.07, 0.1, 0.2, 0.3, 0.4, 300, 1, 0.9,
+    200, 200, 1.1, 0.9, 0.7, 0.5, 0.2, 0.1
+  ];
+  if (JSON.stringify(result.templateSpeeds) !== JSON.stringify(expectedTemplateSpeeds)) {
+    throw new Error("loading program_fruit.txt silently changed speeds: " +
+      JSON.stringify(result.templateSpeeds));
+  }
 
   if (!result.volumes.length || result.volumes.some(function(row) { return row.type !== "P" && !row.integer; })) {
     throw new Error("WProgram volumes must be integers: " + JSON.stringify(result.volumes));

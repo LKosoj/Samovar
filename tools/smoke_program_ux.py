@@ -79,6 +79,8 @@ if text:
     load_file_body = ""
   if "updateProgramTemplateBaseline" in load_file_body:
     errors.append("data_raw/program.htm loadFile() marks user-loaded program as clean template baseline")
+  if "applyRecommendedSpeeds" in load_file_body:
+    errors.append("data_raw/program.htm loadFile() silently changes speeds from the selected file")
 
   try:
     dirty_body = extract_function_body(text, "function programTemplateDirty()")
@@ -128,7 +130,6 @@ if text:
         "programTemplateLoaded = true;",
         "currentProgramTemplateValue = String(value);",
         "await updateColumnParams();",
-        "applyRecommendedSpeeds({ silent: true });",
         "updateProgramTemplateBaseline();",
         "updateProgramPowerUnitHint();",
         "return true;",
@@ -138,6 +139,19 @@ if text:
       ],
       errors,
     )
+    if "applyRecommendedSpeeds" in template_body:
+      errors.append("data_raw/program.htm template loading silently changes stored speeds")
+
+  try:
+    diameter_body = extract_function_body(text, "async function onColumnDiameterChange(selectObject)")
+  except ValueError as exc:
+    errors.append(str(exc))
+    diameter_body = ""
+  if "applyRecommendedSpeeds" in diameter_body:
+    errors.append("data_raw/program.htm diameter change silently changes program speeds")
+
+  if len(re.findall(r"\bapplyRecommendedSpeeds\s*\(", text)) != 2:
+    errors.append("data_raw/program.htm recommendations must run only from their explicit button")
 
   try:
     column_body = extract_function_body(text, "async function updateColumnParams()")

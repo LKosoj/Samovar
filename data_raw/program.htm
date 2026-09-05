@@ -395,7 +395,6 @@ async function onColumnDiameterChange(selectObject) {
   currentColumnDiameterValue = selectObject.value;
   const params = await updateColumnParams();
   if (!params) return false;
-  applyRecommendedSpeeds({ silent: true });
   updateProgramTemplateBaseline();
   return true;
 }
@@ -576,7 +575,6 @@ function loadFile(e) {
 			return;
 		}
 		applyParsedProgramText(parsed);
-		if (columnParams) applyRecommendedSpeeds({ silent: true });
 	};
 	reader.onerror = function () {
 		SamovarApp.showRequestError('Не удалось прочитать файл программы.');
@@ -635,7 +633,6 @@ async function getProgramFromFile(selectObject, options){
     programTemplateLoaded = true;
     currentProgramTemplateValue = String(value);
     await updateColumnParams();
-    applyRecommendedSpeeds({ silent: true });
     updateProgramTemplateBaseline();
     updateProgramPowerUnitHint();
     return true;
