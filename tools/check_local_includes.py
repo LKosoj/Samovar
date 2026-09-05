@@ -42,6 +42,12 @@ EXTERNAL_PATH = Path(__file__).resolve().parent / "external_headers.json"
 # [ \t]* перед кавычкой, а не [ \t]+: #include"file.h" без пробела - валидный
 # синтаксис препроцессора, и такая директива обязана проверяться наравне с обычной.
 INCLUDE_RE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*"([^"]+)"', re.MULTILINE)
+OPTIONAL_INCLUDE_RE = re.compile(
+    r'^[ \t]*#[ \t]*if[ \t]+__has_include[ \t]*\([ \t]*"(?P<target>[^"]+)"[ \t]*\)[ \t]*\r?\n'
+    r'(?P<include>^[ \t]*#[ \t]*include[ \t]*"(?P=target)"[ \t]*$)\r?\n'
+    r'^[ \t]*#[ \t]*endif\b',
+    re.MULTILINE,
+)
 
 
 class ExternalHeadersError(ValueError):
@@ -91,8 +97,13 @@ def check_includes(root: Path = ROOT, external: dict[str, str] | None = None) ->
         # Комментарии убираем: закомментированный include файла не требует,
         # а многострочный /* ... */ вокруг него regex сам по себе не заметил бы.
         text = strip_cpp_comments(source.read_text(encoding="utf-8", errors="replace"))
+        optional_include_offsets = {
+            match.start("include") for match in OPTIONAL_INCLUDE_RE.finditer(text)
+        }
         for match in INCLUDE_RE.finditer(text):
             target = match.group(1)
+            if match.start() in optional_include_offsets:
+                continue
             if target in headers:
                 continue
             if (source.parent / target).exists():

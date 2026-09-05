@@ -428,8 +428,8 @@ class ConfiguratorModelTests(unittest.TestCase):
     def test_serial_monitor_does_not_reset_esp(self) -> None:
         query_source = inspect.getsource(configurator.query_samovar_ip)
         monitor_source = inspect.getsource(configurator.run_serial_monitor)
-        self.assertIn("serial_connection(serial, port)", query_source)
-        self.assertIn("serial_connection(serial, port)", monitor_source)
+        self.assertIn("open_serial_connection(serial, port)", query_source)
+        self.assertIn("open_serial_connection(serial, port)", monitor_source)
         self.assertIn("time.monotonic() + 30", query_source)
         self.assertNotIn("platformio", monitor_source)
 
@@ -494,7 +494,16 @@ class ConfiguratorModelTests(unittest.TestCase):
 
         class PlainSerial:
             def __init__(self):
+                object.__setattr__(self, "events", [])
                 self.exclusive = False
+
+            def __setattr__(self, name, value):
+                object.__setattr__(self, name, value)
+                if name in ("rts", "dtr"):
+                    self.events.append((name, value))
+
+            def open(self):
+                self.events.append(("open", None))
 
         for port in ("/dev/cu.usbserial-1", "COM7"):
             calls = []
@@ -508,12 +517,20 @@ class ConfiguratorModelTests(unittest.TestCase):
                     calls.append((selected_port, baudrate, do_not_open))
                     return connection
 
-            configured = configurator.serial_connection(SerialModule, port)
+            configured = configurator.open_serial_connection(SerialModule, port)
             self.assertIs(configured, connection)
             self.assertEqual(calls, [(port, 115200, True)])
             self.assertTrue(connection.exclusive)
-            self.assertFalse(hasattr(connection, "dtr"))
-            self.assertFalse(hasattr(connection, "rts"))
+            self.assertEqual(
+                connection.events,
+                [
+                    ("rts", True),
+                    ("dtr", True),
+                    ("open", None),
+                    ("rts", False),
+                    ("dtr", False),
+                ],
+            )
 
         monitor_source = inspect.getsource(configurator.run_serial_monitor)
         self.assertNotIn("platformio", monitor_source)

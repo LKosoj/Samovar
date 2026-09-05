@@ -666,12 +666,17 @@ def extract_samovar_ip(text: str) -> Optional[str]:
     return None
 
 
-def serial_connection(serial_module, port: str):
+def open_serial_connection(serial_module, port: str):
     connection = serial_module.serial_for_url(
         _required_port(port), 115200, do_not_open=True
     )
     if isinstance(connection, serial_module.Serial):
         connection.exclusive = True
+    connection.rts = True
+    connection.dtr = True
+    connection.open()
+    connection.rts = False
+    connection.dtr = False
     return connection
 
 
@@ -681,11 +686,10 @@ def query_samovar_ip(port: str) -> str:
     except ImportError as error:
         raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    connection = serial_connection(serial, port)
+    connection = open_serial_connection(serial, port)
     connection.timeout = 0.2
     connection.write_timeout = 2
     try:
-        connection.open()
         connection.reset_input_buffer()
         connection.write(b"SAMOVAR:IP?\n")
         deadline = time.monotonic() + 30
@@ -709,10 +713,9 @@ def run_serial_monitor(port: str) -> int:
     except ImportError as error:
         raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    connection = serial_connection(serial, port)
+    connection = open_serial_connection(serial, port)
     connection.timeout = 0.2
     try:
-        connection.open()
         print("--- Последовательный порт {} | 115200 8-N-1".format(port), flush=True)
         while True:
             data = connection.read(256)

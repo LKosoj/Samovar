@@ -388,6 +388,9 @@ class WorkflowContractTests(unittest.TestCase):
             "actions/checkout@v5",
             "CodeQL checkout обязан использовать Node.js 24, а не устаревший Node.js 20",
         )
+        config = workflow["jobs"]["analyze"]["steps"][1]["with"].get("config", "")
+        for path in ("ai_docs_site/**", "libraries/**", "tools/smoke_ui_foundations.py"):
+            self.assertIn(path, config, f"CodeQL не должен анализировать служебный путь {path}")
 
     def test_ci_uses_bounded_shared_runners_and_always_uploads_extended_report(self) -> None:
         workflow_path = ROOT / ".github" / "workflows" / "firmware-ci.yml"

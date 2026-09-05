@@ -143,6 +143,17 @@ static void load(const float* values, uint8_t count) {
 }
 
 int main() {
+  const float precisionSample = 77.12345f;
+  const double precisionSquare = static_cast<double>(precisionSample) * precisionSample;
+  update_detector_history(precisionSample, 0);
+  check(std::fabs(impurityDetector.historySumSquares - precisionSquare) < 1e-10,
+        "квадрат температуры должен считаться с точностью double");
+  for (uint8_t i = 1; i < 30; i++) update_detector_history(precisionSample, i);
+  update_detector_history(0.0f, 30);
+  check(std::fabs(impurityDetector.historySumSquares - precisionSquare * 29.0) < 1e-8,
+        "вычитаемый квадрат должен считаться с точностью double");
+  impurityDetector = Detector{};
+
   for (uint8_t i = 0; i < 30; i++) update_detector_history(77.0f + i * 0.01f, i * 4000U);
   check(impurityDetector.historySize == 30, "кольцо должно заполниться 30 точками");
   check(std::fabs(impurityDetector.historyMin - 77.0f) < 0.0001f,
@@ -390,7 +401,7 @@ def main() -> int:
             print("FAIL: мутация порога заполнения пережила тест", file=sys.stderr)
             return 1
         aggregate_mutant = harness.replace(
-            "impurityDetector.historySumSquares += columnTemp * columnTemp;", "", 1
+            "impurityDetector.historySumSquares += static_cast<double>(columnTemp) * columnTemp;", "", 1
         )
         if aggregate_mutant == harness:
             print("FAIL: не удалось построить мутацию агрегатов кольца", file=sys.stderr)
@@ -398,6 +409,17 @@ def main() -> int:
         if compile_and_run("steam_stability_aggregate_mutant", aggregate_mutant).returncode == 0:
             print("FAIL: мутация агрегатов кольца пережила тест", file=sys.stderr)
             return 1
+        precision_mutants = (
+            harness.replace("static_cast<double>(replaced) * replaced", "replaced * replaced", 1),
+            harness.replace("static_cast<double>(columnTemp) * columnTemp", "columnTemp * columnTemp", 1),
+        )
+        if any(mutant == harness for mutant in precision_mutants):
+            print("FAIL: не удалось построить мутации точности квадратов", file=sys.stderr)
+            return 1
+        for index, precision_mutant in enumerate(precision_mutants):
+            if compile_and_run(f"steam_stability_precision_mutant_{index}", precision_mutant).returncode == 0:
+                print("FAIL: потеря точности квадрата пережила тест", file=sys.stderr)
+                return 1
         wrap_mutant = harness.replace(
             "if (now - detector_steam_stable_since < DETECTOR_STEAM_STABLE_MS)",
             "if (now >= detector_steam_stable_since && "

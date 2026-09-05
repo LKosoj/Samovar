@@ -2,7 +2,9 @@
 """Браузерный гейт edit.htm: панель не перекрывает дерево, список/сохранение
 ходят в /edit, Ace 1.44.0 указан в разметке.
 """
+import base64
 import functools
+import hashlib
 import http.server
 import json
 import os
@@ -33,10 +35,20 @@ ACE_MOCK = (
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const aceMock = __ACE_MOCK__;
+  const aceIntegrity = __ACE_INTEGRITY__;
   const errors = [];
   const passed = [];
   const editLog = [];
   let scenario = "setup";
+
+  await page.route(/\/edit\.htm$/, async route => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      /integrity="sha384-[^"]+"/g,
+      'integrity="' + aceIntegrity + '"'
+    );
+    await route.fulfill({ response: response, body: body });
+  });
 
   page.on("console", message => {
     if (message.type() === "error") errors.push(scenario + " console: " + message.text());
@@ -98,8 +110,17 @@ BROWSER_TEST = r'''async page => {
     await page.setViewportSize({ width: width, height: height });
     await page.goto(baseUrl + "/edit.htm", { waitUntil: "load" });
     await page.locator("#tree li").first().waitFor({ timeout: 5000 });
-    const aceSrc = await page.locator("script[src*='ace/1.44.0']").count();
-    if (aceSrc < 1) throw new Error(name + " Ace 1.44.0 script tag missing");
+    const aceScripts = page.locator("script[src*='ace/1.44.0']");
+    if (await aceScripts.count() !== 2) throw new Error(name + " Ace 1.44.0 script tags missing");
+    for (let i = 0; i < 2; i++) {
+      const script = aceScripts.nth(i);
+      if (!(await script.getAttribute("integrity") || "").startsWith("sha384-")) {
+        throw new Error(name + " Ace script has no SHA-384 integrity check");
+      }
+      if (await script.getAttribute("crossorigin") !== "anonymous") {
+        throw new Error(name + " Ace script has no anonymous CORS mode");
+      }
+    }
     const labels = await page.locator("#uploader").innerText();
     for (const word of ["Обновить", "Загрузить", "Создать", "Сохранить"]) {
       if (labels.indexOf(word) === -1) throw new Error(name + " missing button: " + word);
@@ -189,6 +210,14 @@ def main():
       BROWSER_TEST
       .replace("__BASE_URL__", json.dumps(base_url))
       .replace("__ACE_MOCK__", json.dumps(ACE_MOCK))
+      .replace(
+        "__ACE_INTEGRITY__",
+        json.dumps(
+          "sha384-" + base64.b64encode(
+            hashlib.sha384(ACE_MOCK.encode("utf-8")).digest()
+          ).decode("ascii")
+        ),
+      )
     )
     run_cli(cli, session, ["run-code", browser_test], str(work), 120)
   except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:

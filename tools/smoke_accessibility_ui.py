@@ -66,8 +66,8 @@ PAGE_LABELS = {
 }
 FROZEN = {
     # 04.09.2026: edit.htm — сетка вместо абсолютов, Ace 1.44.0, русская панель.
-    "edit.htm": "d98560fd84846400ffa6aecd9261c1fbcce3d382f68e39825fd35d98bbbb772b",
-    "edit.htm.gz": "18a87d45c9229498aaa20785f633c571126ca138fc2659634338829d1d09a54a",
+    "edit.htm": "30acf0170c85dba7f02d522658867795536c9ef5543183f2fad3fd60c4bbdb42",
+    "edit.htm.gz": "77ed6074a230eecb2dfb558e543368f12f20b08d1996d851e5d256546d2d831b",
 }
 KEY_LISTENER_REGISTRATION = re.compile(
     r"\baddEventListener\s*\(\s*(['\"])(?:keydown|keyup|keypress)\1\s*,",

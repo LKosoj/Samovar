@@ -270,14 +270,14 @@ void update_detector_history(float columnTemp, uint32_t sampleMillis) {
     const float replaced =
         impurityDetector.tempHistory[impurityDetector.historyIndex];
     impurityDetector.historySum -= replaced;
-    impurityDetector.historySumSquares -= replaced * replaced;
+    impurityDetector.historySumSquares -= static_cast<double>(replaced) * replaced;
   }
   impurityDetector.tempHistory[impurityDetector.historyIndex] = columnTemp;
   impurityDetector.sampleTime[impurityDetector.historyIndex] = sampleMillis;
   impurityDetector.historyIndex = (impurityDetector.historyIndex + 1) % 30;
   if (impurityDetector.historySize < 30) impurityDetector.historySize++;
   impurityDetector.historySum += columnTemp;
-  impurityDetector.historySumSquares += columnTemp * columnTemp;
+  impurityDetector.historySumSquares += static_cast<double>(columnTemp) * columnTemp;
 
   const uint8_t oldest =
       (impurityDetector.historyIndex - impurityDetector.historySize + 30) % 30;

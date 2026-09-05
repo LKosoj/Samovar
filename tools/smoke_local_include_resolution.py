@@ -85,7 +85,28 @@ def main() -> int:
         if commented:
             fail(errors, "закомментированные include не должны считаться находками: " + "; ".join(commented))
 
-        # 7. Протухший список внешних заголовков: файл появился в репозитории,
+        # 7. Include под совпадающим __has_include необязателен; обычный include и
+        #    include под проверкой другого файла по-прежнему обязаны быть находками.
+        write(root, "app.ino",
+              '#if __has_include("local_a.h")\n'
+              '#include "local_a.h"\n'
+              '#endif\n'
+              '#if __has_include ( "local_b.h" )\n'
+              '# include "local_b.h"\n'
+              '#endif\n')
+        if check_includes(root, EXTERNAL):
+            fail(errors, "include под совпадающим __has_include должен быть необязательным")
+        write(root, "app.ino",
+              '#if __has_include("other.h")\n'
+              '#include "still_required.h"\n'
+              '#endif\n'
+              '#include "also_required.h"\n')
+        required = check_includes(root, EXTERNAL)
+        for name in ("still_required.h", "also_required.h"):
+            if not any(name in item for item in required):
+                fail(errors, f"{name} без совпадающего __has_include обязан быть находкой")
+
+        # 8. Протухший список внешних заголовков: файл появился в репозитории,
         #    а запись осталась - такой include молча перестал бы проверяться.
         write(root, "app.ino", '#include "driver/uart.h"\n')
         (root / "driver").mkdir()
@@ -94,7 +115,7 @@ def main() -> int:
         if not any("больше не внешний" in item for item in stale):
             fail(errors, "заявленный внешним заголовок, лежащий в репозитории, обязан быть находкой")
 
-    # 8. Проверка подключена к глубокому анализу не на словах: гоняем сам
+    # 9. Проверка подключена к глубокому анализу не на словах: гоняем сам
     #    run_cppcheck.main() на дереве с битым include и требуем отказ ДО запуска
     #    cppcheck. Проверка "в файле есть слово check_includes" таким не была бы:
     #    строка импорта осталась бы на месте и после отключения вызова.
@@ -121,7 +142,7 @@ def main() -> int:
         if "no_such_header.h" not in stderr.getvalue():
             fail(errors, "отказ должен называть проблемный заголовок")
 
-    # 9. Расширенный анализ (джоба static-analysis-force) собирает команду сам и
+    # 10. Расширенный анализ (джоба static-analysis-force) собирает команду сам и
     #    run_cppcheck.main() не зовёт - значит он наследует заглушённый missingInclude
     #    и обязан звать замену самостоятельно. Слепое пятно теста иначе в точности
     #    повторило бы слепое пятно проверки.
@@ -152,7 +173,7 @@ def main() -> int:
     if "--suppress=missingInclude" in source and "check_local_includes" not in source:
         fail(errors, "глушить missingInclude можно только вместе со ссылкой на замену")
 
-    # 10. Заявленные внешние заголовки действительно кем-то включаются:
+    # 11. Заявленные внешние заголовки действительно кем-то включаются:
     #    список не должен копить мусор.
     if headers:
         used: set[str] = set()
