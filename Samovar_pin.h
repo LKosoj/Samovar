@@ -2,15 +2,14 @@
 #define __SAMOVAR_PIN_H_
 
 // Автоматическое определение типа платы
+#if !defined(BOARD)
 #if defined(ARDUINO_ESP32S3_DEV)
-#undef BOARD
 #define BOARD ESP32S3
 #elif defined(ARDUINO_ESP32_LILYGO_T_RELAY)
-#undef BOARD
 #define BOARD LILYGO
 #elif defined(ARDUINO_ESP32_DEV)
-#undef BOARD
 #define BOARD DEVKIT
+#endif
 #endif
 
 // Если плата не определена автоматически, используем DEVKIT по умолчанию

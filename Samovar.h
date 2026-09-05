@@ -51,7 +51,9 @@
 
 #include "Samovar_ini.h"
 
+#if __has_include("user_config_override.h")
 #include "user_config_override.h"
+#endif
 
 #ifdef SAMOVAR_BUILD_NO_POWER
 #undef SAMOVAR_USE_POWER

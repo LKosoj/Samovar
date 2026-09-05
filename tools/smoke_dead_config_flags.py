@@ -10,7 +10,7 @@
 
 Смысл этого теста — не в самом факте "код мёртв" (это осознанное решение,
 см. Samovar.h), а в том, чтобы будущее включение флага (в platformio.ini,
-Samovar_ini.h, user_config_override.h или прямо в Samovar.h) не прошло
+Samovar_ini.h, user_config_override.example.h или прямо в Samovar.h) не прошло
 незамеченным: как только флаг где-то реально определится, тест покраснеет
 и потребует осознанного решения, а не тихого "само включилось".
 
@@ -35,7 +35,7 @@ DEAD_FLAGS = [
 DEFINE_SOURCE_FILES = [
     "Samovar.h",
     "Samovar_ini.h",
-    "user_config_override.h",
+    "user_config_override.example.h",
 ]
 
 errors: list[str] = []

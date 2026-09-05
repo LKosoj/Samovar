@@ -55,7 +55,7 @@
     "string_utils.h",
     "suvid.h",
     "time_utils.h",
-    "user_config_override.h",
+    "user_config_override.example.h",
     "valve_buzzer.h",
     "web_i2c_stepper_parse.h",
     "web_save_string_arg.h"

@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""Проверяет конфигуратор, выбор платы и начальные реквизиты Wi-Fi."""
+
+import importlib.util
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from smoke_helpers import extract_function_body
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULE_PATH = ROOT / "tools" / "samovar_configurator.py"
+SPEC = importlib.util.spec_from_file_location("samovar_configurator", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+configurator = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(configurator)
+
+
+class ConfiguratorModelTests(unittest.TestCase):
+    def make_project(self, include_override: bool = False) -> Path:
+        root = Path(self.temporary.name)
+        shutil.copyfile(ROOT / "Samovar_ini.h", root / "Samovar_ini.h")
+        shutil.copyfile(
+            ROOT / "user_config_override.example.h",
+            root / "user_config_override.example.h",
+        )
+        if include_override:
+            shutil.copyfile(ROOT / "user_config_override.h", root / "user_config_override.h")
+        return root
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def test_round_trip_preserves_unknown_text_and_selects_exclusive_values(self) -> None:
+        root = self.make_project()
+        ini_path = root / "Samovar_ini.h"
+        ini_path.write_text(
+            ini_path.read_text(encoding="utf-8").replace(
+                "#endif  // __SAMOVAR_I_H_",
+                "// Пользовательская строка, которую конфигуратор не знает\n#endif  // __SAMOVAR_I_H_",
+            ),
+            encoding="utf-8",
+        )
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        self.assertTrue((root / "user_config_override.h").exists())
+        self.assertEqual(state["board"], "ESP32 DevKit")
+        self.assertEqual(state["regulator"], "KVIC")
+
+        state.update({
+            "board": "LILYGO",
+            "regulator": "SEM_AVR",
+            "atmospheric_sensor": "BMP280",
+            "column_pressure_sensor": "XGZP6897D",
+            "USE_PRESSURE_XGZ": "64",
+            "MAX_WATER_TEMP": "73.5",
+            "USE_WATERSENSOR": False,
+            "USE_EXPANDER.enabled": True,
+            "USE_EXPANDER": "0x21",
+            "servoDelta": "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10",
+            "wifi_ssid": "Домашняя сеть",
+            "wifi_password": "correct-pass",
+        })
+        model.save(state)
+
+        ini = ini_path.read_text(encoding="utf-8")
+        override = (root / "user_config_override.h").read_text(encoding="utf-8")
+        self.assertIn("#define BOARD LILYGO", ini)
+        self.assertIn("//#define BOARD DEVKIT", ini)
+        self.assertIn("//#define BOARD ESP32S3", ini)
+        self.assertIn("#define SAMOVAR_USE_SEM_AVR", ini)
+        self.assertIn("//#define SAMOVAR_USE_RMVK", ini)
+        self.assertIn("#define USE_BMP280", ini)
+        self.assertIn("//#define USE_BME680", ini)
+        self.assertIn("#define USE_PRESSURE_XGZ 64", ini)
+        self.assertIn("// Пользовательская строка, которую конфигуратор не знает", ini)
+        self.assertNotIn("correct-pass", ini)
+        self.assertIn('#define SAMOVAR_WIFI_SSID "Домашняя сеть"', override)
+        self.assertIn('#define SAMOVAR_WIFI_PASSWORD "correct-pass"', override)
+
+        loaded = model.load()
+        self.assertEqual(loaded["board"], "LILYGO")
+        self.assertEqual(loaded["MAX_WATER_TEMP"], "73.5")
+        self.assertEqual(loaded["USE_EXPANDER"], "0x21")
+        self.assertEqual(loaded["wifi_ssid"], "Домашняя сеть")
+
+    def test_second_board_and_regulator_are_not_hardcoded(self) -> None:
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        state.update({
+            "board": "ESP32-S3",
+            "regulator": "РМВ-К",
+            "atmospheric_sensor": "Не использовать",
+            "column_pressure_sensor": "1-Wire",
+            "wifi_ssid": "Workshop",
+            "wifi_password": "another-pass",
+        })
+        model.save(state)
+        loaded = model.load()
+        self.assertEqual(loaded["board"], "ESP32-S3")
+        self.assertEqual(loaded["regulator"], "РМВ-К")
+        self.assertEqual(loaded["column_pressure_sensor"], "1-Wire")
+        self.assertEqual(loaded["wifi_ssid"], "Workshop")
+
+    def test_invalid_values_fail_without_changing_files(self) -> None:
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        before_ini = model.ini_path.read_bytes()
+        before_override = model.override_path.read_bytes()
+        state["MAX_WATER_TEMP"] = "не число"
+        with self.assertRaisesRegex(configurator.ConfigError, "требуется число"):
+            model.save(state)
+        self.assertEqual(model.ini_path.read_bytes(), before_ini)
+        self.assertEqual(model.override_path.read_bytes(), before_override)
+
+        state = model.load()
+        state["wifi_ssid"] = "Workshop"
+        state["wifi_password"] = "short"
+        with self.assertRaisesRegex(configurator.ConfigError, "от 8 до 64"):
+            model.save(state)
+        self.assertEqual(model.ini_path.read_bytes(), before_ini)
+        self.assertEqual(model.override_path.read_bytes(), before_override)
+
+    def test_commands_use_existing_environments_and_never_build_twice(self) -> None:
+        self.assertEqual(
+            configurator.pio_command("pio.exe", "ESP32 DevKit", "upload"),
+            ["pio.exe", "run", "-e", "Samovar", "-t", "upload"],
+        )
+        self.assertEqual(
+            configurator.pio_command("pio.exe", "LILYGO", "uploadfs"),
+            ["pio.exe", "run", "-e", "Samovar", "-t", "uploadfs"],
+        )
+        self.assertEqual(
+            configurator.pio_command("pio.exe", "ESP32-S3", "monitor"),
+            ["pio.exe", "run", "-e", "Samovar_s3", "-t", "monitor"],
+        )
+
+    def test_every_user_macro_has_an_interface_control(self) -> None:
+        source = (ROOT / "Samovar_ini.h").read_text(encoding="utf-8")
+        defined = set(
+            re.findall(r"^\s*(?://\s*)?#define\s+([A-Za-z_]\w*)", source, re.MULTILINE)
+        )
+        expected = defined - {"__SAMOVAR_I_H_", "NBK_DEFAULT_PROGRAM"}
+        controlled = {"BOARD"}
+        controlled.update(spec.macro for spec in configurator.VALUE_SPECS)
+        controlled.update(spec.macro for spec in configurator.BOOL_SPECS)
+        controlled.update(spec.macro for spec in configurator.OPTIONAL_SPECS)
+        controlled.update(spec.macro for spec in configurator.CHOICE_VALUE_SPECS)
+        controlled.update(
+            macro
+            for options in configurator.CHOICE_OPTIONS.values()
+            for macros in options.values()
+            for macro in macros
+        )
+        self.assertEqual(controlled, expected)
+
+
+class FirmwareIntegrationTests(unittest.TestCase):
+    def test_wifi_override_is_local_and_optional(self) -> None:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "user_config_override.h"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(tracked.returncode, 0)
+        self.assertIn("user_config_override.h", (ROOT / ".gitignore").read_text(encoding="utf-8"))
+        template = (ROOT / "user_config_override.example.h").read_text(encoding="utf-8")
+        self.assertIn('#define SAMOVAR_WIFI_SSID ""', template)
+        self.assertIn('#define SAMOVAR_WIFI_PASSWORD ""', template)
+        header = (ROOT / "Samovar.h").read_text(encoding="utf-8")
+        self.assertIn('#if __has_include("user_config_override.h")', header)
+
+    def test_explicit_board_precedes_automatic_detection(self) -> None:
+        for explicit, automatic, expected in (
+            ("LILYGO", "ARDUINO_ESP32_DEV", "2"),
+            ("ESP32S3", "ARDUINO_ESP32_DEV", "3"),
+            (None, "ARDUINO_ESP32_DEV", "1"),
+        ):
+            definitions = "#define DEVKIT 1\n#define LILYGO 2\n#define ESP32S3 3\n"
+            if explicit is not None:
+                definitions += "#define BOARD {}\n".format(explicit)
+            definitions += "#define {}\n#include \"Samovar_pin.h\"\nBOARD\n".format(automatic)
+            result = subprocess.run(
+                ["cpp", "-x", "c++", "-P", "-I", str(ROOT), "-"],
+                input=definitions,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertEqual(result.stdout.strip().splitlines()[-1], expected)
+
+    def test_initial_wifi_credentials_use_real_firmware_function(self) -> None:
+        source = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
+        body = extract_function_body(source, "static void apply_initial_wifi_credentials()")
+        for ssid, expected_mode, expected_begin in (("Workshop", 1, 1), ("", 0, 0)):
+            harness = """
+#include <cassert>
+#include <cstring>
+#include <string>
+#include <cstdint>
+#define SAMOVAR_WIFI_SSID "@SSID@"
+#define SAMOVAR_WIFI_PASSWORD "correct-pass"
+#define WIFI_STA 1
+#define WIFI_IF_STA 0
+#define ESP_OK 0
+#define F(value) value
+typedef int esp_err_t;
+struct wifi_sta_config_t { unsigned char ssid[33]; };
+struct wifi_config_t { wifi_sta_config_t sta; };
+static int configResult = ESP_OK;
+static bool hasStoredSsid = false;
+static int modeCalls = 0;
+static int beginCalls = 0;
+struct FakeWiFi {
+  void mode(int) { modeCalls++; }
+  void begin(const char *, const char *) { beginCalls++; }
+} WiFi;
+struct FakeSerial {
+  void print(const char *) {}
+  void println(const char *) {}
+} Serial;
+const char *esp_err_to_name(int) { return "error"; }
+int esp_wifi_get_config(int, wifi_config_t *config) {
+  std::memset(config, 0, sizeof(*config));
+  if (hasStoredSsid) config->sta.ssid[0] = 'x';
+  return configResult;
+}
+static void apply_initial_wifi_credentials() {
+@BODY@
+}
+int main() {
+  apply_initial_wifi_credentials();
+  assert(modeCalls == @MODE@);
+  assert(beginCalls == @BEGIN@);
+  modeCalls = beginCalls = 0;
+  hasStoredSsid = true;
+  apply_initial_wifi_credentials();
+  assert(beginCalls == 0);
+}
+""".replace("@SSID@", ssid).replace("@BODY@", body).replace("@MODE@", str(expected_mode)).replace("@BEGIN@", str(expected_begin))
+            with tempfile.TemporaryDirectory() as temporary:
+                source_path = Path(temporary) / "wifi.cpp"
+                binary_path = Path(temporary) / "wifi"
+                source_path.write_text(harness, encoding="utf-8")
+                subprocess.run(
+                    ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source_path), "-o", str(binary_path)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run([str(binary_path)], check=True)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

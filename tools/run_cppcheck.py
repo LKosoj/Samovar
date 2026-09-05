@@ -33,7 +33,9 @@ def discover_root_sources(root: Path) -> list[str]:
     return sorted(
         path.name
         for path in root.iterdir()
-        if path.is_file() and path.suffix in SOURCE_SUFFIXES
+        if path.is_file()
+        and path.suffix in SOURCE_SUFFIXES
+        and path.name != "user_config_override.h"
     )
 
 

@@ -2,65 +2,22 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 
-set "BOARD=devkit"
-set "LITTLEFS=no"
-set "PIO_ENV=Samovar"
-
-:parse_args
-if "%~1"=="" goto :args_ready
-if /I "%~1"=="--help" goto :help
-if /I "%~1"=="-h" goto :help
-if /I "%~1"=="--board" (
-  if "%~2"=="" goto :bad_args
-  set "BOARD=%~2"
-  shift
-  shift
-  goto :parse_args
-)
-if /I "%~1"=="--littlefs" (
-  if "%~2"=="" goto :bad_args
-  set "LITTLEFS=%~2"
-  shift
-  shift
-  goto :parse_args
-)
-goto :bad_args
-
-:args_ready
 if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64" goto :architecture_ready
 if /I "%PROCESSOR_ARCHITEW6432%"=="AMD64" goto :architecture_ready
 echo Ошибка: батник поддерживает только 64-разрядную Windows 10 или 11 на процессорах Intel/AMD.
 exit /b 1
 
 :architecture_ready
-if /I "%BOARD%"=="devkit" (
-  set "PIO_ENV=Samovar"
-) else if /I "%BOARD%"=="s3" (
-  set "PIO_ENV=Samovar_s3"
-) else (
-  echo Ошибка: неизвестная плата "%BOARD%".
-  goto :bad_args
-)
-
-if /I not "%LITTLEFS%"=="yes" if /I not "%LITTLEFS%"=="no" (
-  echo Ошибка: для --littlefs укажите yes или no.
-  goto :bad_args
-)
-
 pushd "%~dp0" || (
   echo Ошибка: не удалось открыть папку проекта.
   goto :failed_without_project
 )
 
-echo Плата: %BOARD%
-echo Окружение PlatformIO: %PIO_ENV%
-echo Загружать LittleFS: %LITTLEFS%
-echo.
+call :ensure_python || goto :failed
 
 call :find_pio
 if not defined PIO_EXE (
   echo PlatformIO не найден. Начинается автоматическая установка.
-  call :ensure_python || goto :failed
   call :install_platformio || goto :failed
   call :find_pio
   if not defined PIO_EXE (
@@ -72,24 +29,10 @@ if not defined PIO_EXE (
 )
 
 echo.
-echo [1/3] Сборка и загрузка прошивки в плату...
-"%PIO_EXE%" run -e "%PIO_ENV%" -t upload
-if errorlevel 1 goto :failed
-
-if /I "%LITTLEFS%"=="yes" (
-  echo.
-  echo [2/3] Загрузка файлов LittleFS...
-  "%PIO_EXE%" run -e "%PIO_ENV%" -t uploadfs
-  if errorlevel 1 goto :failed
-) else (
-  echo.
-  echo [2/3] Загрузка LittleFS пропущена.
-)
-
-echo.
-echo [3/3] Открытие монитора порта. Для выхода нажмите Ctrl+C.
-"%PIO_EXE%" run -e "%PIO_ENV%" -t monitor
+echo Запуск окна настройки Samovar...
+"%PYTHON_EXE%" %PYTHON_ARGS% "%~dp0tools\samovar_configurator.py" --project-root "%~dp0" --pio "%PIO_EXE%"
 set "RESULT=%ERRORLEVEL%"
+if not "%RESULT%"=="0" goto :failed
 popd
 exit /b %RESULT%
 
@@ -132,7 +75,7 @@ if not errorlevel 1 (
     echo Ошибка: контрольная сумма установщика Python не совпала.
     exit /b 1
   )
-  start /wait "" "%TEMP%\samovar-python-3.13.15-amd64.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_test=0 Include_launcher=1 InstallLauncherAllUsers=0
+  start /wait "" "%TEMP%\samovar-python-3.13.15-amd64.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_tcltk=1 Include_test=0 Include_launcher=1 InstallLauncherAllUsers=0
   if errorlevel 1 (
     echo Ошибка: установщик Python завершился с ошибкой.
     exit /b 1
@@ -149,7 +92,7 @@ exit /b 0
 :find_python
 set "PYTHON_EXE="
 set "PYTHON_ARGS="
-py.exe -3 -c "import sys; raise SystemExit(sys.version_info < (3, 7))" >nul 2>&1
+py.exe -3 -c "import sys, tkinter; raise SystemExit(sys.version_info < (3, 7))" >nul 2>&1
 if not errorlevel 1 (
   set "PYTHON_EXE=py.exe"
   set "PYTHON_ARGS=-3"
@@ -157,10 +100,9 @@ if not errorlevel 1 (
 )
 if exist "%LocalAppData%\Programs\Python\Python313\python.exe" (
   set "PYTHON_EXE=%LocalAppData%\Programs\Python\Python313\python.exe"
-  exit /b 0
 )
-for /f "delims=" %%P in ('where python.exe 2^>nul ^| findstr /I /V /C:"\Microsoft\WindowsApps\"') do if not defined PYTHON_EXE set "PYTHON_EXE=%%P"
-if defined PYTHON_EXE "%PYTHON_EXE%" -c "import sys; raise SystemExit(sys.version_info < (3, 7))" >nul 2>&1
+if not defined PYTHON_EXE for /f "delims=" %%P in ('where python.exe 2^>nul ^| findstr /I /V /C:"\Microsoft\WindowsApps\"') do if not defined PYTHON_EXE set "PYTHON_EXE=%%P"
+if defined PYTHON_EXE "%PYTHON_EXE%" -c "import sys, tkinter; raise SystemExit(sys.version_info < (3, 7))" >nul 2>&1
 if errorlevel 1 set "PYTHON_EXE="
 exit /b 0
 
@@ -177,21 +119,6 @@ if errorlevel 1 (
   exit /b 1
 )
 exit /b 0
-
-:help
-echo Использование:
-echo   %~nx0 [--board devkit^|s3] [--littlefs yes^|no]
-echo.
-echo По умолчанию: --board devkit --littlefs no
-exit /b 0
-
-:bad_args
-echo.
-echo Использование:
-echo   %~nx0 [--board devkit^|s3] [--littlefs yes^|no]
-echo.
-echo По умолчанию: --board devkit --littlefs no
-exit /b 2
 
 :failed
 echo.

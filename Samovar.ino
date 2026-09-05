@@ -2369,6 +2369,25 @@ static void setup_report_degraded_boot() {
   }
 }
 
+static void apply_initial_wifi_credentials() {
+#if defined(SAMOVAR_WIFI_SSID) && defined(SAMOVAR_WIFI_PASSWORD)
+  if (SAMOVAR_WIFI_SSID[0] == '\0') return;
+
+  WiFi.mode(WIFI_STA);
+  wifi_config_t storedConfig{};
+  const esp_err_t configResult = esp_wifi_get_config(WIFI_IF_STA, &storedConfig);
+  if (configResult != ESP_OK) {
+    Serial.print(F("WiFi: saved credentials check failed: "));
+    Serial.println(esp_err_to_name(configResult));
+    return;
+  }
+  if (storedConfig.sta.ssid[0] != '\0') return;
+
+  WiFi.begin(SAMOVAR_WIFI_SSID, SAMOVAR_WIFI_PASSWORD);
+  Serial.println(F("WiFi: initial credentials loaded from local configuration"));
+#endif
+}
+
 static void setup_connect_wifi_and_notify() {
   String StIP;
 
@@ -2399,6 +2418,7 @@ static void setup_connect_wifi_and_notify() {
     wifiManager.setDebugOutput(false);
     wifiManager.addParameter(&custom_blynk_token);
 
+    apply_initial_wifi_credentials();
     if (!wifiManager.autoConnect("Samovar")) {
       WiFi.mode(WIFI_AP);
       WiFi.softAP("Samovar", "SamApp123");

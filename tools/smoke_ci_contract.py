@@ -162,6 +162,7 @@ class StaticAnalysisManifestTests(unittest.TestCase):
             root = Path(temp_dir)
             (root / "app.ino").write_text("void setup() {}\n", encoding="utf-8")
             (root / "generated.h").write_text("", encoding="utf-8")
+            (root / "user_config_override.h").write_text("", encoding="utf-8")
             vendor = root / "libraries"
             vendor.mkdir()
             (vendor / "vendor.h").write_text("", encoding="utf-8")
