@@ -31,7 +31,7 @@ settings = json.loads(
 )
 
 current_defaults = {
-    "ColDiam": "2.0",
+    "ColDiam": "1.5",
     "ColHeight": "0.5",
     "PackDens": "80",
     "useDetector": False,

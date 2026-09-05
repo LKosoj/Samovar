@@ -4,7 +4,7 @@
   "DistTimeF" : "60",
   "usepressure" : true,
   "useflevel" : true,
-  "ColDiam" : "2.0",
+  "ColDiam" : "1.5",
   "ColHeight" : "0.5",
   "PackDens" : "80",
   "useautospeed" : true,

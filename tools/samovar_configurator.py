@@ -593,7 +593,12 @@ def list_serial_ports(pio_executable: str) -> List[str]:
 def pio_command(pio_executable: str, board: str, action: str, port: str) -> List[str]:
     if board not in BOARD_OPTIONS:
         raise ConfigError("Неизвестная плата: {}".format(board))
-    targets = {"upload": "upload", "uploadfs": "uploadfs", "monitor": "monitor"}
+    targets = {
+        "upload": "upload",
+        "uploadfs": "uploadfs",
+        "erase": "erase",
+        "monitor": "monitor",
+    }
     if action not in targets:
         raise ConfigError("Неизвестная команда: {}".format(action))
     port = port.strip()
@@ -807,8 +812,17 @@ class ConfiguratorWindow:
         self.save_button = ttk.Button(buttons, text="Сохранить настройки", command=self.save)
         self.upload_button = ttk.Button(buttons, text="Прошить", command=lambda: self.start_action("upload"))
         self.fs_button = ttk.Button(buttons, text="Загрузить LittleFS", command=self.start_littlefs)
+        self.erase_button = ttk.Button(
+            buttons, text="Полностью очистить флеш", command=self.start_flash_erase
+        )
         self.monitor_button = ttk.Button(buttons, text="Монитор порта", command=self.open_monitor)
-        for button in (self.save_button, self.upload_button, self.fs_button, self.monitor_button):
+        for button in (
+            self.save_button,
+            self.upload_button,
+            self.fs_button,
+            self.erase_button,
+            self.monitor_button,
+        ):
             button.pack(side="left", padx=(0, 8))
 
         ttk.Label(outer, text="Журнал").pack(anchor="w")
@@ -923,6 +937,14 @@ class ConfiguratorWindow:
         if confirmed:
             self.start_action("uploadfs")
 
+    def start_flash_erase(self) -> None:
+        confirmed = self.messagebox.askyesno(
+            "Полная очистка флеша",
+            "Будут удалены прошивка, LittleFS и все сохранённые настройки. Продолжить?",
+        )
+        if confirmed:
+            self.start_action("erase")
+
     def open_monitor(self) -> None:
         if self.busy:
             self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
@@ -984,7 +1006,7 @@ class ConfiguratorWindow:
         if self.busy:
             self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
             return
-        if action in ("upload", "uploadfs") and os.name == "nt" and is_unc_path(self.config.project_root):
+        if action in ("upload", "uploadfs", "erase") and os.name == "nt" and is_unc_path(self.config.project_root):
             self.messagebox.showerror(
                 "Проект находится в общей папке",
                 "Windows не позволяет PlatformIO собирать проект по сетевому пути. "
@@ -1056,6 +1078,7 @@ class ConfiguratorWindow:
         self.save_button.configure(state=state)
         self.upload_button.configure(state=state)
         self.fs_button.configure(state=state)
+        self.erase_button.configure(state=state)
         self.monitor_button.configure(state=state)
         self.port_combo.configure(state=state)
         self.port_refresh_button.configure(state=state)

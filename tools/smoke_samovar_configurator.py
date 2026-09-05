@@ -370,6 +370,34 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertIn('log_frame.pack(fill="both", expand=True)', source)
         self.assertNotIn('log_frame.pack(fill="both", expand=False)', source)
 
+    def test_full_flash_erase_requires_confirmation(self) -> None:
+        answers = iter((False, True))
+        prompts = []
+        actions = []
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.messagebox = type(
+            "Messages",
+            (),
+            {
+                "askyesno": lambda _, title, message: (
+                    prompts.append((title, message)), next(answers)
+                )[1]
+            },
+        )()
+        window.start_action = actions.append
+
+        window.start_flash_erase()
+        self.assertEqual(actions, [])
+        window.start_flash_erase()
+        self.assertEqual(actions, ["erase"])
+        self.assertIn("прошивка", prompts[0][1])
+        self.assertIn("LittleFS", prompts[0][1])
+        self.assertIn("настройки", prompts[0][1])
+
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        self.assertIn('text="Полностью очистить флеш"', source)
+        self.assertIn("self.erase_button.configure(state=state)", source)
+
     def test_cheese_shared_connections_warning_is_visible(self) -> None:
         source = MODULE_PATH.read_text(encoding="utf-8")
         for token in ('Режим «Сыр»', 'LUA_PIN', 'PH-4502C', 'MPX5010DP', 'реле №4',
@@ -394,6 +422,10 @@ class ConfiguratorModelTests(unittest.TestCase):
                 "pio.exe", "run", "-e", "Samovar_s3", "-t", "monitor",
                 "--monitor-port", "/dev/cu.usbserial-1",
             ],
+        )
+        self.assertEqual(
+            configurator.pio_command("pio.exe", "ESP32 DevKit", "erase", "COM7"),
+            ["pio.exe", "run", "-e", "Samovar", "-t", "erase", "--upload-port", "COM7"],
         )
         with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "  ")
@@ -459,7 +491,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertFalse(configurator.is_unc_path(Path("/Users/kosoj/Documents/Samovar-7.00")))
 
     def test_windows_unc_path_stops_builds_before_save(self) -> None:
-        for action in ("upload", "uploadfs"):
+        for action in ("upload", "uploadfs", "erase"):
             with self.subTest(action=action):
                 errors = []
                 window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)

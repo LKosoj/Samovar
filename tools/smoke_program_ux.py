@@ -164,6 +164,8 @@ if text:
     errors.append("data_raw/program.htm still calls /command through direct fetch()")
   if "getProgramFromFile(loadProgramSelect, { skipConfirm: true });" not in text:
     errors.append("program.htm initial template load is not explicitly confirm-free")
+  if 'diamSelect.value = "1.5"' not in text:
+    errors.append("program.htm fallback column diameter is not 1.5 inches")
   if "buildEditorBodyFromDeviceProgram" in text or 'id="deviceProgramNotice"' in text:
     errors.append("program.htm must open the fruit template, not import the device program")
   if '<option value="0">Фрукты</option>' not in text:
