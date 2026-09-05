@@ -58,7 +58,9 @@ STRUCTURE_SHA256 = {
     # 04.09.2026: Су-вид и Lua скрыты в <select> режима; поля SuvidTemp/SuvidHoldMinutes сняты.
     # 04.09.2026: на вкладку Beer добавлены select BeerBrewOrder и его подсказка.
     # 05.09.2026: добавлены согласованные поля MPX, второго насоса и потока НБК.
-    "setup.htm": "1dafc6f211343b31c21b1d36e1bb90e5bcb6f712e40ff9c77b61dce849b9f06d",
+    # 05.09.2026: добавлена вкладка Cheese с пятью полями и предупреждением о
+    # взаимоисключающем физическом подключении общих входа и реле.
+    "setup.htm": "02d1513f49094dedc80e6ff636a2910de966aebec913f5f946c7a02cb65cf8e7",
     "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
 }
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")

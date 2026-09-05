@@ -67,6 +67,9 @@ ProgramParseResult prepare_default_program_for_mode(
     case SAMOVAR_LUA_MODE:
       defaultProgram = DEFAULT_PROGRAM_HBH45;
       break;
+    case SAMOVAR_CHEESE_MODE:
+      defaultProgram = "M;32;0;0^0^0^0;0;0\nP;32;30;0^0^0^0;0;0\nR;0;0;0^0^0^0;0;0\n";
+      break;
     default:
       return program_parse_result(
           PROGRAM_PARSE_UNSUPPORTED_MODE,
@@ -656,6 +659,7 @@ void reset_process_state(void) {
   // Это не дубль штатного завершения: внутри ни приводов, ни локов, ни I2C - только
   // присваивания полям, как и всё остальное в этой функции.
   beer_reset_stage_state();
+  cheese_reset_stage_state();
   PauseOn = false;
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;

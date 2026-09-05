@@ -64,6 +64,7 @@ if program_io:
         "PROGRAM_FIELD_POWER",
         "PROGRAM_FIELD_TEMP_SENSOR",
         "PROGRAM_FIELD_BEER_DEVICE",
+        "PROGRAM_FIELD_PARAM",
     ]:
         require_token("program_io.h", program_io, token)
 
@@ -199,6 +200,19 @@ if program_io:
             "static const ProgramType expectedTypes[NBK_PROGRAM_MAX] = {'H', 'S', 'O', 'W'};",
             "NBK_PROGRAM_MAX",
             "program_parse_nbk_row",
+        ],
+        "cheese_program_parse_spec": [
+            "Ошибка программы: слишком длинная строка (cheese)",
+            "Ошибка программы: неверный формат строки cheese",
+            '"MPCWALZfzdspvrnSR"',
+            "PROGRAM_FIELD_TYPE",
+            "PROGRAM_FIELD_TEMP",
+            "PROGRAM_FIELD_TIME",
+            "PROGRAM_FIELD_BEER_DEVICE",
+            "PROGRAM_FIELD_TEMP_SENSOR",
+            "PROGRAM_FIELD_PARAM",
+            "PROGRAM_END",
+            "program_parse_cheese_row",
         ],
     }
     for signature, tokens in specs.items():

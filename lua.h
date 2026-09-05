@@ -1035,6 +1035,10 @@ inline bool lua_pin_is_heater_channel(int pin) {
   return pin == RELE_CHANNEL1 || pin == RELE_CHANNEL4;
 }
 
+inline bool lua_pin_reserved_for_cheese_ph(int pin) {
+  return Samovar_CR_Mode == SAMOVAR_CHEESE_MODE && pin == LUA_PIN;
+}
+
 
 static int lua_wrapper_pinMode(lua_State *lua_state) {
   vTaskDelay(5 / portTICK_PERIOD_MS);
@@ -1042,6 +1046,9 @@ static int lua_wrapper_pinMode(lua_State *lua_state) {
   int b = lua_check_truncated_arg(lua_state, 2);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
   if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
+  if (lua_pin_reserved_for_cheese_ph(a)) {
+    return luaL_error(lua_state, "LUA_PIN is reserved for cheese pH sensor");
+  }
   if (a == RELE_CHANNEL1 || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN) {
     if (lua_pin_is_heater_channel(a) && heater_safety_latched()) {
       // Защёлка взведена: pinMode(INPUT) отдал бы пин подтяжке платы в обход
@@ -1059,6 +1066,9 @@ static int lua_wrapper_digitalWrite(lua_State *lua_state) {
   int b = lua_check_truncated_arg(lua_state, 2);
   if (!lua_state_mutation_allowed()) return lua_reject_state_mutation(lua_state);
   if (lua_simulation_enabled()) return lua_reject_actuator_mutation(lua_state);
+  if (lua_pin_reserved_for_cheese_ph(a)) {
+    return luaL_error(lua_state, "LUA_PIN is reserved for cheese pH sensor");
+  }
   if (a == RELE_CHANNEL1 || a == WATER_PUMP_PIN || a == RELE_CHANNEL4 || a == RELE_CHANNEL3 || a == RELE_CHANNEL2 || a == LUA_PIN
 #ifdef ALARM_BTN_PIN
       || a == ALARM_BTN_PIN
@@ -2363,6 +2373,12 @@ String get_lua_mode_name(bool filename) {
       fl = "/suvid" + String(LUA_SUVID) + ".lua";
     } else {
       fl = "suvid";
+    }
+  } else if (Samovar_CR_Mode == SAMOVAR_CHEESE_MODE) {
+    if (filename) {
+      fl = "/cheese.lua";
+    } else {
+      fl = "cheese";
     }
   } else if (Samovar_CR_Mode == SAMOVAR_LUA_MODE) {
     // У SAMOVAR_LUA_MODE (в отличие от остальных режимов) нет своего "режимного"

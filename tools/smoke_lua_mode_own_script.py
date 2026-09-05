@@ -18,7 +18,7 @@ SAMOVAR_RECTIFICATION_MODE. В результате пользователь, в
 setObject()/getObject() между ними тоже не изолировалось при переключении.
 
 Проверяем РЕАЛЬНОЕ тело get_lua_mode_name() (извлечённое из lua.h, без
-переписывания) для всех 7 режимов: у SAMOVAR_LUA_MODE обе перегрузки
+переписывания) для всех режимов: у SAMOVAR_LUA_MODE обе перегрузки
 (filename=true/false) обязаны возвращать пустую строку - "режимного скрипта
 нет" - а не "rect"/"/rectificat.lua". Пустая строка безопасна для обоих
 потребителей (проверено по исходникам framework-arduinoespressif32/libraries/
@@ -84,6 +84,7 @@ enum SAMOVAR_MODE {
   SAMOVAR_NBK_MODE,
   SAMOVAR_SUVID_MODE,
   SAMOVAR_LUA_MODE,
+  SAMOVAR_CHEESE_MODE,
 };
 static SAMOVAR_MODE Samovar_CR_Mode;
 
@@ -132,6 +133,8 @@ int main() {
   check(SAMOVAR_NBK_MODE, false, "nbk", "nbk name");
   check(SAMOVAR_SUVID_MODE, true, "/suvid.lua", "suvid filename");
   check(SAMOVAR_SUVID_MODE, false, "suvid", "suvid name");
+  check(SAMOVAR_CHEESE_MODE, true, "/cheese.lua", "cheese filename");
+  check(SAMOVAR_CHEESE_MODE, false, "cheese", "cheese name");
 
   // Ключевая проверка находки: LUA_MODE не должен унаследовать rect-fallback.
   check(SAMOVAR_LUA_MODE, true, "", "lua mode filename must be empty (no rectificat.lua leak into user's own script)");
@@ -141,7 +144,7 @@ int main() {
     std::cerr << failures << " check(s) failed\\n";
     return 1;
   }
-  std::cout << "get_lua_mode_name behavioural checks passed (7 modes, filename=true/false)\\n";
+  std::cout << "get_lua_mode_name behavioural checks passed (8 modes, filename=true/false)\\n";
   return 0;
 }
 """

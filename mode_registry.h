@@ -48,6 +48,15 @@ inline void mode_button_press_beer() {
   run_beer_program(ProgramNum + 1);
 }
 
+inline void mode_alarm_cheese() {
+  cheese_check_cooling_limits();
+  mode_request_water_flow_emergency_if_needed();
+}
+
+inline void mode_button_press_cheese() {
+  run_cheese_program(ProgramNum + 1);
+}
+
 // [П12] Короткое нажатие в дистилляции переходит к следующей строке программы -
 // тот же путь, что веб-кнопка "Следующая программа" (SAMOVAR_DIST_NEXT, Samovar.ino,
 // case SAMOVAR_DIST_NEXT). Завершение процесса перенесено на удержание
@@ -63,6 +72,11 @@ inline void mode_button_press_dist() {
 inline void mode_tick_beer() {
   if (startval == SAMOVAR_STARTVAL_BEER_START) beer_proc();
   else if (startval > SAMOVAR_STARTVAL_BEER_START) beer_stage_tick();
+}
+
+inline void mode_tick_cheese() {
+  if (startval == SAMOVAR_STARTVAL_CHEESE_START && !PowerOn) cheese_proc();
+  else if (startval >= SAMOVAR_STARTVAL_CHEESE_START) cheese_stage_tick();
 }
 
 // [WP17 п.40] Раньше — ветка SAMOVAR_RECTIFICATION_MODE в switch(Samovar_Mode)
@@ -86,6 +100,8 @@ inline void mode_stop_process_rectification() {
 // ниже нужно добавить руками.
 static_assert(SAMOVAR_LUA_MODE == 6,
     "SAMOVAR_MODE (Samovar.h) изменил состав/порядок — сверьте и обновите mode_registry_table() в mode_registry.h");
+static_assert(SAMOVAR_CHEESE_MODE == 7,
+    "Режим Сыр должен оставаться добавленным после существующих режимов");
 
 // Единственное место, где объявлена таблица режимов и её размер. mode_registry()
 // и mode_registry_count() читают её только отсюда — количество строк больше не
@@ -111,6 +127,7 @@ inline const ModeOps* mode_registry_table(size_t& count) {
     // не принадлежит, mode_dispatch_loop() их не тикает (см. suvid_tick()/lua-команды).
     {SAMOVAR_SUVID_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, check_alarm_suvid, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, true, nullptr},
     {SAMOVAR_LUA_MODE, SAMOVAR_STATUS_IDLE, 0, 0, 0, 0, "/index.htm", SAMOVAR_POWER, SAMOVAR_START, SAMOVAR_LUA_ALARM_FN, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, SAMOVAR_LUA_BUILD_AVAILABLE, "Недоступно в этой сборке прошивки: не включён Lua"},
+    {SAMOVAR_CHEESE_MODE, SAMOVAR_STATUS_CHEESE, SAMOVAR_STATUS_CHEESE, SAMOVAR_STATUS_CHEESE + 1000, SAMOVAR_STATUS_CHEESE, SAMOVAR_STATUS_CHEESE + 1, "/cheese.htm", SAMOVAR_CHEESE, SAMOVAR_CHEESE_NEXT, mode_alarm_cheese, cheese_finish, get_cheese_status_text, mode_button_press_cheese, cheese_finish, "сыроварения", mode_tick_cheese, cheese_finish, true, nullptr},
   };
   count = sizeof(ops) / sizeof(ops[0]);
   return ops;

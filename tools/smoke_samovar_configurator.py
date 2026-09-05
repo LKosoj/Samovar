@@ -274,11 +274,11 @@ class ConfiguratorModelTests(unittest.TestCase):
     def test_commands_use_existing_environments_and_never_build_twice(self) -> None:
         self.assertEqual(
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload"),
-            ["pio.exe", "run", "-e", "Samovar", "-t", "upload"],
+            ["pio.exe", "run", "-j", "1", "-e", "Samovar", "-t", "upload"],
         )
         self.assertEqual(
             configurator.pio_command("pio.exe", "LILYGO", "uploadfs"),
-            ["pio.exe", "run", "-e", "Samovar", "-t", "uploadfs"],
+            ["pio.exe", "run", "-j", "1", "-e", "Samovar", "-t", "uploadfs"],
         )
         self.assertEqual(
             configurator.pio_command("pio.exe", "ESP32-S3", "monitor"),

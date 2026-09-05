@@ -186,6 +186,7 @@ struct WProgram {
   float Power;
   uint8_t TempSensor;
   float Time;
+  float Param;
 };
 
 WProgram program[PROGRAM_MAX];
@@ -199,6 +200,7 @@ enum SAMOVAR_MODE {
   SAMOVAR_NBK_MODE,
   SAMOVAR_SUVID_MODE,
   SAMOVAR_LUA_MODE,
+  SAMOVAR_CHEESE_MODE,
 };
 
 enum MESSAGE_TYPE { ALARM_MSG = 0, WARNING_MSG = 1, NOTIFY_MSG = 2, NONE_MSG = 100 };

@@ -17,7 +17,7 @@ switch(ops->mode), перечислявших режимы заново, пер�
   a) в телах обеих функций больше нет ключевого слова `switch` (конструкция
      реально переведена на реестр, а не просто переименована);
   b) строки mode_registry_table() несут правильные tick/stopProcess для всех
-     7 режимов, включая nullptr у SUVID/LUA;
+     все режимы, включая nullptr у SUVID/LUA;
   c) сами тела функций, извлечённые из исходников (а не переписанные в тесте),
      ведут себя по контракту в харнессах на g++ с мокнутыми зависимостями;
   d) мутации тел обеих функций обязаны валить содержательные assert'ы харнесса,
@@ -60,7 +60,7 @@ def check_no_switch(name: str, body: str, errors: list[str]) -> None:
         errors.append(f"{name}: тело всё ещё содержит switch - конструкция не переведена на реестр")
 
 
-# --- (b) строки таблицы: tick/stopProcess по всем 7 режимам --------------------------------
+# --- (b) строки таблицы: tick/stopProcess по всем режимам --------------------------------
 EXPECTED_TICK_STOP = {
     "SAMOVAR_RECTIFICATION_MODE": ("withdrawal", "mode_stop_process_rectification"),
     "SAMOVAR_DISTILLATION_MODE": ("distiller_proc", "distiller_finish"),
@@ -69,6 +69,7 @@ EXPECTED_TICK_STOP = {
     "SAMOVAR_NBK_MODE": ("nbk_proc", "nbk_finish"),
     "SAMOVAR_SUVID_MODE": ("nullptr", "nullptr"),
     "SAMOVAR_LUA_MODE": ("nullptr", "nullptr"),
+    "SAMOVAR_CHEESE_MODE": ("mode_tick_cheese", "cheese_finish"),
 }
 
 

@@ -19,6 +19,7 @@ HARNESS_TEMPLATE = r'''
 enum SamovarMode {
   SAMOVAR_RECTIFICATION_MODE = 0,
   SAMOVAR_BEER_MODE = 3,
+  SAMOVAR_CHEESE_MODE = 7,
 };
 
 struct SetupEEPROM { bool UseWS = true; };
@@ -27,10 +28,12 @@ static SamovarMode Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 static bool valve_status = false;
 static bool pump_started = false;
 static bool beerCoolingPumpActive = false;
+static bool cheeseCoolingPumpActive = false;
 static int WFAlarmCount = 0;
 constexpr int WF_ALARM_COUNT = 3;
 static int emergencyRequests = 0;
 bool beer_cooling_pump_demanded() { return beerCoolingPumpActive; }
+bool cheese_cooling_pump_demanded() { return cheeseCoolingPumpActive; }
 void set_buzzer(bool) {}
 void request_emergency_stop(const char*) { emergencyRequests++; }
 
@@ -63,6 +66,14 @@ int main() {
         "активный насос охлаждения Beer не создал спрос на проток");
 
   beerCoolingPumpActive = false;
+  cheeseCoolingPumpActive = true;
+  Samovar_Mode = SAMOVAR_CHEESE_MODE;
+  check(mode_water_flow_demanded(),
+        "активное охлаждение Cheese не создало спрос на проток");
+  cheeseCoolingPumpActive = false;
+  check(!mode_water_flow_demanded(),
+        "неактивное охлаждение Cheese создало ложный спрос на проток");
+
   valve_status = true;
   check(mode_water_flow_demanded(),
         "открытый клапан Beer не создал спрос на проток");

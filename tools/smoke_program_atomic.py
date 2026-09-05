@@ -122,6 +122,7 @@ struct WProgram {
   float Power;
   uint8_t TempSensor;
   float Time;
+  float Param;
 };
 
 WProgram program[PROGRAM_MAX];
@@ -135,6 +136,7 @@ enum SAMOVAR_MODE {
   SAMOVAR_NBK_MODE,
   SAMOVAR_SUVID_MODE,
   SAMOVAR_LUA_MODE,
+  SAMOVAR_CHEESE_MODE,
 };
 
 #include "string_utils.h"
@@ -162,6 +164,7 @@ void seed_program() {
     program[i].Power = 30.0f + i;
     program[i].TempSensor = i % 5;
     program[i].Time = 40.0f + i;
+    program[i].Param = 4.0f + i;
   }
   ProgramLen = 3;
 }
@@ -368,6 +371,12 @@ void test_blank_lines_and_all_formats_round_trip() {
       2,
       "MP");
   check_round_trip(
+      "M;34;0;1^1^30^10;3;0\nn;36;90;3^-1^20^5;1;5.25\n",
+      cheese_program_parse_spec(),
+      program_append_cheese_row,
+      2,
+      "Mn");
+  check_round_trip(
       "H;0;0\nS;1;10\nO;2;20\nW;3;30\n",
       nbk_program_parse_spec(),
       program_append_nbk_row,
@@ -451,6 +460,47 @@ void test_beer_row_semantics() {
   }
 }
 
+void test_cheese_row_semantics() {
+  struct Case {
+    const char* text;
+    bool expectOk;
+  };
+  const Case cases[] = {
+      {"M;34;0;1^1^30^10;3;0\n", true},
+      {"C;18;0;2^0^15^5;2;0\n", true},
+      {"P;36;45;3^-1^20^5;1;0\n", true},
+      {"Z;32;10;0^0^0^0;0;0\n", true},
+      {"f;33;11;0^0^0^0;0;0\n", true},
+      {"z;34;12;0^0^0^0;0;0\n", true},
+      {"d;35;13;0^0^0^0;0;0\n", true},
+      {"s;36;14;1^1^5^5;1;0\n", true},
+      {"p;37;15;1^1^5^5;2;0\n", true},
+      {"v;38;16;1^1^5^5;3;0\n", true},
+      {"r;38;12;1^1^6^4;4;0\n", true},
+      {"A;65;0;0^0^0^0;4;0\n", true},
+      {"n;36;90;0^0^0^0;1;5.25\n", true},
+      {"n;36;90;0^0^0^0;1;6.40\n", true},
+      {"S;0;8;0^0^0^0;0;0\n", true},
+      {"W;0;0;0^0^0^0;0;0\n", true},
+      {"R;0;0;0^0^0^0;0;0\n", true},
+      {"M;34;0;1^1^30^10;3;5.2\n", false},
+      {"n;36;0;0^0^0^0;1;5.25\n", false},
+      {"n;36;90;0^0^0^0;1;0\n", false},
+      {"n;36;90;0^0^0^0;1;14.1\n", false},
+      {"S;0;8;1^1^5^5;0;0\n", false},
+      {"W;0;0;1^1^5^5;0;0\n", false},
+      {"R;0;0;0^0^0^0;1;0\n", false},
+      {"B;0;1;0^0^0^0;0;0\n", false},
+  };
+  for (const Case& test : cases) {
+    ProgramDraft draft{};
+    ProgramParseResult result = program_parse_lines(
+        String(test.text), cheese_program_parse_spec(), draft);
+    std::string message = std::string("cheese semantic mismatch for: ") + test.text;
+    check(result.ok() == test.expectOk, message.c_str());
+  }
+}
+
 void test_mode_mapping_and_defaults() {
   struct ModeCase {
     SAMOVAR_MODE mode;
@@ -473,6 +523,8 @@ void test_mode_mapping_and_defaults() {
        "M;45;0;0^0^0^0;0\nP;45;1;0^0^0^0;0\nP;60;1;0^0^0^0;0\nW;0;0;0^0^0^0;0\nB;0;1;0^0^0^0;0\nC;30;0;0^0^0^0;0\n", 6},
       {SAMOVAR_LUA_MODE, PROGRAM_FORMAT_RECT,
        "H;450;0.1;1;0;45\nB;450;1;1;0;45\nH;450;0.1;1;0;45\n", 3},
+      {SAMOVAR_CHEESE_MODE, PROGRAM_FORMAT_CHEESE,
+       "M;34;0;1^1^30^10;3;0\nn;36;90;0^0^0^0;1;5.25\n", 2},
   };
 
   for (const ModeCase& test : modes) {
@@ -496,7 +548,7 @@ void test_mode_mapping_and_defaults() {
         "unsupported mode error kind mismatch");
   check_unchanged(before, before_len, "unsupported mode changed active program");
 
-  check(sizeof(ProgramDraft) == 564, "ProgramDraft size changed");
+  check(sizeof(ProgramDraft) == 644, "ProgramDraft size changed");
 }
 
 void test_power_first_row_scope() {
@@ -609,6 +661,7 @@ int main() {
   test_blank_lines_and_all_formats_round_trip();
   test_dist_row_type_bounds();
   test_beer_row_semantics();
+  test_cheese_row_semantics();
   test_mode_mapping_and_defaults();
   test_power_first_row_scope();
 
@@ -692,6 +745,37 @@ def main() -> int:
             sys.stderr.write("FAIL: beer semantic test did not catch the mutation\n")
             return 1
         print("Beer semantic mutation was rejected as expected")
+
+        mutated_cheese = (ROOT / "program_io.h").read_text(encoding="utf-8")
+        mutated_cheese = mutated_cheese.replace(
+            "if (type != 'n' && param != 0.0f) {",
+            "if (false) {",
+            1,
+        )
+        if mutated_cheese == (ROOT / "program_io.h").read_text(encoding="utf-8"):
+            sys.stderr.write("FAIL: cheese Param mutation target not found\n")
+            return 1
+        (temp / "program_io.h").write_text(mutated_cheese, encoding="utf-8")
+        cheese_mutation_binary = temp / "program_atomic_cheese_mutation_test"
+        cheese_mutation_compile = subprocess.run(
+            [
+                "g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                "-I", str(temp), "-I", str(ROOT), str(harness),
+                "-o", str(cheese_mutation_binary),
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        if cheese_mutation_compile.returncode != 0:
+            sys.stderr.write("FAIL: cheese Param mutation did not compile\n")
+            sys.stderr.write(cheese_mutation_compile.stderr)
+            return 1
+        cheese_mutation_run = subprocess.run(
+            [str(cheese_mutation_binary)], capture_output=True, text=True, check=False
+        )
+        if cheese_mutation_run.returncode == 0:
+            sys.stderr.write("FAIL: cheese Param test did not catch the mutation\n")
+            return 1
+        print("Cheese Param mutation was rejected as expected")
 
         # [П1] Mutation proof: neutralize the "skip zero-power rows" guard so the
         # first-nonzero-power check would fire on program[0] unconditionally instead

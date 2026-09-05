@@ -443,9 +443,9 @@ LiquidMenu main_menu1(lcd);
 
 DNSServer dns;
 
-enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF};
+enum SamovarCommands {SAMOVAR_NONE, SAMOVAR_START, SAMOVAR_POWER, SAMOVAR_RESET, CALIBRATE_START, CALIBRATE_STOP, SAMOVAR_PAUSE, SAMOVAR_CONTINUE, SAMOVAR_SETBODYTEMP, SAMOVAR_DISTILLATION, SAMOVAR_BEER, SAMOVAR_BEER_NEXT, SAMOVAR_BK, SAMOVAR_NBK, SAMOVAR_SELF_TEST, SAMOVAR_DIST_NEXT, SAMOVAR_NBK_NEXT, SAMOVAR_POWER_OFF, SAMOVAR_CHEESE, SAMOVAR_CHEESE_NEXT};
 
-enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE};
+enum SAMOVAR_MODE {SAMOVAR_RECTIFICATION_MODE, SAMOVAR_DISTILLATION_MODE, SAMOVAR_BEER_MODE, SAMOVAR_BK_MODE, SAMOVAR_NBK_MODE, SAMOVAR_SUVID_MODE, SAMOVAR_LUA_MODE, SAMOVAR_CHEESE_MODE};
 volatile SAMOVAR_MODE Samovar_Mode;
 volatile SAMOVAR_MODE Samovar_CR_Mode;
 
@@ -534,6 +534,11 @@ struct SetupEEPROM {
   float SecondI2CPumpRate;                                     //Скорость второго I2C-насоса, л/ч
   bool UseSecondI2CPump;                                       //Использовать второй I2C-насос отбора
   bool NbkUseStreamServo;                                      //Переключать поток НБК сервоприводом
+  float CheesePhSlope;                                         //Коэффициент наклона калибровки pH
+  float CheesePhOffset;                                        //Смещение калибровки pH
+  uint8_t CheesePhSmoothPercent;                               //Сила сглаживания pH, %
+  uint16_t CheeseDoserSpeed;                                   //Скорость сырного дозатора, шаг/с
+  uint16_t CheeseDoserSteps;                                   //Количество шагов одной порции
 };
 
 struct ImpurityDetector {
@@ -581,6 +586,7 @@ struct WProgram {
   float Power;                                                 //напряжение, при которой отбирается эта часть погона.
   uint8_t TempSensor;                                          //температурный сенсор, используемый в программе Пиво для контроля нагрева
   float Time;                                                  //время, необходимое для отбора программы
+  float Param;                                                 //целевой pH сырного этапа n
 };
 
 enum ProgramWaitType : uint8_t {
@@ -703,6 +709,7 @@ constexpr int16_t SAMOVAR_STATUS_DISTILLATION      = 1000; // activeStatus ре�
 constexpr int16_t SAMOVAR_STATUS_BEER              = 2000; // activeStatus режима "Пиво"
 constexpr int16_t SAMOVAR_STATUS_BK                = 3000; // activeStatus режима "БК"
 constexpr int16_t SAMOVAR_STATUS_NBK               = 4000; // activeStatus режима "НБК"
+constexpr int16_t SAMOVAR_STATUS_CHEESE            = 5000; // activeStatus режима "Сыр"
 
 // Значения startval — публичный контракт (JSON-ключ "WthdrwlStatus"). ЧИСЛА НЕ МЕНЯТЬ.
 constexpr int16_t SAMOVAR_STARTVAL_IDLE           = 0;    // нет активного отбора/сессии
@@ -718,6 +725,7 @@ constexpr int16_t SAMOVAR_STARTVAL_BEER_WAIT_MALT = 2002; // ожидание з
 // НБК:
 constexpr int16_t SAMOVAR_STARTVAL_NBK_START      = 4000; // запуск, первая строка программы ещё не выбрана
 constexpr int16_t SAMOVAR_STARTVAL_NBK_RUNNING    = 4001; // программа НБК идёт (после первой строки прогрева)
+constexpr int16_t SAMOVAR_STARTVAL_CHEESE_START   = 5000; // запуск сыроварения, первая строка ещё не выбрана
 volatile int currentstepcnt = 0;                                // Текущее количество шагов шагового двигателя
 volatile float ActualVolumePerHour;                             // Скорость отбора в литрах в моменте
 volatile uint16_t CurrrentStepperSpeed;                         // Скорость шагового двигателя

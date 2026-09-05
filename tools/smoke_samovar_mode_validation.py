@@ -110,16 +110,17 @@ static void check(bool condition, const char* message) {
 int main() {
   check(!is_valid_samovar_mode(-1), "negative mode must fail");
   check(is_valid_samovar_mode(SAMOVAR_RECTIFICATION_MODE), "first mode must pass");
-  check(is_valid_samovar_mode(SAMOVAR_LUA_MODE), "last mode must pass");
-  check(!is_valid_samovar_mode(SAMOVAR_LUA_MODE + 1), "one-past-last must fail");
+  check(is_valid_samovar_mode(SAMOVAR_LUA_MODE), "existing Lua mode must pass");
+  check(is_valid_samovar_mode(SAMOVAR_CHEESE_MODE), "last Cheese mode must pass");
+  check(!is_valid_samovar_mode(SAMOVAR_CHEESE_MODE + 1), "one-past-last must fail");
 
   SamSetup.Mode = -1;
   apply_loaded_mode_clamp();
   check(SamSetup.Mode == SAMOVAR_RECTIFICATION_MODE,
         "negative persisted mode must be clamped");
-  SamSetup.Mode = SAMOVAR_LUA_MODE;
+  SamSetup.Mode = SAMOVAR_CHEESE_MODE;
   apply_loaded_mode_clamp();
-  check(Samovar_Mode == SAMOVAR_LUA_MODE, "valid persisted mode must survive");
+  check(Samovar_Mode == SAMOVAR_CHEESE_MODE, "valid persisted mode must survive");
 
   if (failures != 0) return 1;
   std::cout << "Samovar mode validation and Lua read-only route passed\n";

@@ -1,0 +1,116 @@
+<!--#include head_boilerplate.htm-->
+  <link rel="stylesheet" href="style.css?v=7.00u7">
+  <title>Самовар — калибровка pH</title>
+  <script src="app.js"></script>
+  <style>
+    .ph-page { box-sizing: border-box; max-width: 42em; margin: 0 auto; padding: 1em; }
+    .ph-card { border: 1px solid var(--border-color, #bbb); margin: .8em 0; padding: 1em; }
+    .ph-grid { display: grid; grid-template-columns: minmax(8em, 1fr) minmax(8em, 1fr) auto; gap: .6em; align-items: end; }
+    .ph-grid label { display: flex; min-width: 0; flex-direction: column; gap: .25em; }
+    .ph-grid input { box-sizing: border-box; width: 100%; min-width: 0; }
+    .ph-actions { display: flex; flex-wrap: wrap; gap: .5em; margin-top: .8em; }
+    @media (max-width: 520px) { .ph-grid { grid-template-columns: 1fr; } .ph-grid button { width: 100%; } }
+  </style>
+  <script>
+    var latestPh = {raw:null, value:null, valid:false};
+    var calibrationPoints = [null, null];
+
+    function phError(message) {
+      SamovarApp.showRequestError(message);
+      document.getElementById('phStatus').textContent = message;
+      return false;
+    }
+
+    function renderCalibrationTelemetry(data) {
+      latestPh.raw = Number(data.CheesePhRaw);
+      latestPh.value = Number(data.CheesePh);
+      latestPh.valid = Number(data.CheesePhValid) === 1 && Number.isFinite(latestPh.raw);
+      document.getElementById('phRaw').textContent = latestPh.valid ? String(latestPh.raw) : 'нет данных';
+      document.getElementById('phCurrent').textContent = latestPh.valid && Number.isFinite(latestPh.value) ? latestPh.value.toFixed(2) : 'нет данных';
+    }
+
+    function capturePhPoint(index) {
+      var input = document.getElementById(index === 0 ? 'point1Ph' : 'point2Ph');
+      var ph = Number(String(input.value).replace(',', '.'));
+      if (!latestPh.valid || !Number.isFinite(ph) || ph < 0 || ph > 14) return phError('Нужны достоверный ADC и pH от 0 до 14.');
+      calibrationPoints[index] = {raw:latestPh.raw, ph:ph};
+      document.getElementById(index === 0 ? 'point1Raw' : 'point2Raw').textContent = String(latestPh.raw);
+      document.getElementById('phStatus').textContent = 'Точка ' + (index + 1) + ' зафиксирована.';
+      SamovarApp.clearRequestError();
+      return true;
+    }
+
+    function calculatePhCalibration() {
+      var first = calibrationPoints[0];
+      var second = calibrationPoints[1];
+      if (!first || !second) return phError('Сначала зафиксируйте две точки.');
+      if (first.raw === second.raw) return phError('Значения ADC двух точек должны различаться.');
+      var slope = (second.ph - first.ph) / (second.raw - first.raw);
+      var offset = first.ph - slope * first.raw;
+      if (!Number.isFinite(slope) || !Number.isFinite(offset)) return phError('Не удалось рассчитать коэффициенты.');
+      document.getElementById('CheesePhSlope').value = slope.toFixed(6);
+      document.getElementById('CheesePhOffset').value = offset.toFixed(6);
+      document.getElementById('phStatus').textContent = 'Коэффициенты рассчитаны. Сохраните их.';
+      SamovarApp.clearRequestError();
+      return true;
+    }
+
+    async function savePhCalibration() {
+      var slope = Number(document.getElementById('CheesePhSlope').value);
+      var offset = Number(document.getElementById('CheesePhOffset').value);
+      var smoothing = Number(document.getElementById('CheesePhSmoothPercent').value);
+      if (!Number.isFinite(slope) || !Number.isFinite(offset) || !Number.isInteger(smoothing) || smoothing < 0 || smoothing > 99) {
+        return phError('Проверьте коэффициенты и сглаживание от 0 до 99%.');
+      }
+      var button = document.getElementById('savePh');
+      button.disabled = true;
+      try {
+        var response = await fetch('/save', {method:'POST', body:new FormData(document.getElementById('phForm'))});
+        var accepted = await SamovarApp.readOperationAcceptance(response);
+        await SamovarApp.waitForOperation(accepted.operationId);
+        SamovarApp.clearRequestError();
+        document.getElementById('phStatus').textContent = 'Калибровка сохранена.';
+        return true;
+      } catch (error) {
+        return phError('Калибровка не сохранена: ' + (error.message || error));
+      } finally { button.disabled = false; }
+    }
+
+    window.onload = function() {
+      SamovarApp.startTelemetryPage(renderCalibrationTelemetry, {threshold:3, storeMessageHistory:false});
+    };
+  </script>
+</head>
+<body>
+  <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  <main class="ph-page">
+    <div id="connection_indicator"><img src="Green.png" alt="Связь" style="width:20px"></div>
+    <div id="request_error" class="message_0" role="alert" aria-live="assertive" style="display:none"></div>
+    <h1>Калибровка pH</h1>
+    <p><a href="/cheese.htm">← К сыроварению</a></p>
+    <div class="ph-card">Текущее значение: <strong id="phCurrent">нет данных</strong> pH · ADC: <strong id="phRaw">нет данных</strong></div>
+    <div class="ph-card">
+      <p>Промойте электрод, поместите его в буфер и дождитесь стабильного ADC. Повторите для второго буфера.</p>
+      <div class="ph-grid">
+        <label>pH первой точки<input id="point1Ph" type="number" min="0" max="14" step="0.01" value="7.00"></label>
+        <div>ADC: <strong id="point1Raw">—</strong></div>
+        <button type="button" id="capturePoint1" onclick="capturePhPoint(0)">Зафиксировать</button>
+        <label>pH второй точки<input id="point2Ph" type="number" min="0" max="14" step="0.01" value="4.00"></label>
+        <div>ADC: <strong id="point2Raw">—</strong></div>
+        <button type="button" id="capturePoint2" onclick="capturePhPoint(1)">Зафиксировать</button>
+      </div>
+      <div class="ph-actions"><button type="button" id="calculatePh" onclick="calculatePhCalibration()">Рассчитать</button></div>
+    </div>
+    <form id="phForm" class="ph-card" onsubmit="return false">
+      <div class="ph-grid">
+        <label>Коэффициент k<input id="CheesePhSlope" name="CheesePhSlope" type="number" step="0.000001" value="%CheesePhSlope%"></label>
+        <label>Смещение d<input id="CheesePhOffset" name="CheesePhOffset" type="number" step="0.000001" value="%CheesePhOffset%"></label>
+        <label>Сглаживание, %<input id="CheesePhSmoothPercent" name="CheesePhSmoothPercent" type="number" min="0" max="99" step="1" value="%CheesePhSmoothPercent%"></label>
+      </div>
+      <div class="ph-actions"><button type="button" id="savePh" onclick="savePhCalibration()">Сохранить калибровку</button></div>
+      <p id="phStatus" role="status" aria-live="polite"></p>
+    </form>
+    <div class="ph-card">PH-4502C подключается к LUA_PIN только через согласование уровня до 3,3 В. Не подключайте его одновременно с MPX5010DP.</div>
+  </main>
+</body>
+</html>

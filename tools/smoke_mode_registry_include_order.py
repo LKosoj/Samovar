@@ -60,12 +60,15 @@ BODY_SIGNATURES = [
     # включена в харнесс, чтобы проверка forward-declaration ordering реально
     # затрагивала и её внешнюю зависимость, а не только уже перечисленные ниже.
     "inline void mode_button_press_dist()",
+    "inline void mode_alarm_cheese()",
+    "inline void mode_button_press_cheese()",
     # [WP17 п.40] Per-mode helpers added alongside tick/stopProcess in ModeOps -
     # same pattern as mode_alarm_beer above: defined right here in mode_registry.h,
     # referenced by name from mode_registry_table() below. Without a real body in
     # the harness, that reference is simply undeclared (not a decl-order issue) -
     # they must be pulled in like the other three per-mode callbacks.
     "inline void mode_tick_beer()",
+    "inline void mode_tick_cheese()",
     "inline void mode_stop_process_rectification()",
     "inline const ModeOps* mode_registry_table(size_t& count)",
 ]
@@ -171,11 +174,14 @@ constexpr int16_t SAMOVAR_STATUS_DISTILLATION = 1000;
 constexpr int16_t SAMOVAR_STATUS_BEER = 2000;
 constexpr int16_t SAMOVAR_STATUS_BK = 3000;
 constexpr int16_t SAMOVAR_STATUS_NBK = 4000;
+constexpr int16_t SAMOVAR_STATUS_CHEESE = 5000;
 constexpr int16_t SAMOVAR_STARTVAL_BEER_START = 2000;
+constexpr int16_t SAMOVAR_STARTVAL_CHEESE_START = 5000;
 constexpr uint8_t PROGRAM_END = 0;
 
 volatile uint8_t ProgramNum = 0;
 volatile int16_t startval = 0;
+volatile bool PowerOn = false;
 
 {MODEOPS_PRELUDE}
 

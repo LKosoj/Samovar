@@ -21,6 +21,7 @@ HARNESS = r'''
 enum SamovarMode {
   SAMOVAR_RECTIFICATION_MODE = 0,
   SAMOVAR_BEER_MODE = 3,
+  SAMOVAR_CHEESE_MODE = 7,
 };
 
 struct Setup {
@@ -33,6 +34,7 @@ static bool valve_status = false;
 static bool pump_started = false;
 static SamovarMode Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 static bool beerCoolingPumpActive = false;
+static bool cheeseCoolingPumpActive = false;
 static int WFAlarmCount = 0;
 static int buzzerCalls = 0;
 static int emergencyCalls = 0;
@@ -40,6 +42,7 @@ static int emergencyCalls = 0;
 void set_buzzer(bool) { buzzerCalls++; }
 void request_emergency_stop(const char*) { emergencyCalls++; }
 bool beer_cooling_pump_demanded() { return beerCoolingPumpActive; }
+bool cheese_cooling_pump_demanded() { return cheeseCoolingPumpActive; }
 
 @DEMAND@
 @EMERGENCY@
@@ -60,6 +63,7 @@ static void reset_fixture() {
   pump_started = false;
   Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
   beerCoolingPumpActive = false;
+  cheeseCoolingPumpActive = false;
   WFAlarmCount = WF_ALARM_COUNT + 1;
   buzzerCalls = 0;
   emergencyCalls = 0;
@@ -91,6 +95,18 @@ static void expect_beer_pump_demand(bool coolingPump, bool expected,
   check((emergencyCalls == 1) == expected, label);
 }
 
+static void expect_cheese_pump_demand(bool coolingPump, bool expected,
+                                      const char* label) {
+  reset_fixture();
+  SamSetup.UseWS = true;
+  Samovar_Mode = SAMOVAR_CHEESE_MODE;
+  pump_started = true;
+  cheeseCoolingPumpActive = coolingPump;
+  check(mode_water_flow_demanded() == expected, label);
+  mode_request_water_flow_emergency_if_needed();
+  check((emergencyCalls == 1) == expected, label);
+}
+
 int main() {
   expect_demand(true, true, true, false, true,
                 "открытый клапан при нагреве должен требовать проток");
@@ -106,6 +122,10 @@ int main() {
                            "насос расписания мешалки Beer не должен требовать проток");
   expect_beer_pump_demand(true, true,
                            "активный насос охлаждения Beer должен требовать проток");
+  expect_cheese_pump_demand(false, false,
+                            "мешалка Cheese не должна требовать проток");
+  expect_cheese_pump_demand(true, true,
+                            "активное охлаждение Cheese должно требовать проток");
 
   reset_fixture();
   PowerOn = true;
@@ -188,6 +208,16 @@ def main() -> int:
             return 1
         if compile_and_run("flow_demand_beer_mutant", beer_mutant).returncode == 0:
             print("FAIL: мутация Beer demand пережила тест", file=sys.stderr)
+            return 1
+
+        cheese_mutant = harness.replace(
+            "return cheese_cooling_pump_demanded();", "return pump_started;", 1
+        )
+        if cheese_mutant == harness:
+            print("FAIL: не удалось построить мутацию Cheese demand", file=sys.stderr)
+            return 1
+        if compile_and_run("flow_demand_cheese_mutant", cheese_mutant).returncode == 0:
+            print("FAIL: мутация Cheese demand пережила тест", file=sys.stderr)
             return 1
         return 0
 

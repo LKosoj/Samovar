@@ -58,7 +58,7 @@ struct ProgramDraft {
   uint8_t len;
 };
 
-constexpr size_t PROGRAM_DRAFT_MAX_BYTES = 640;
+constexpr size_t PROGRAM_DRAFT_MAX_BYTES = 644;
 static_assert(std::is_trivially_copyable<WProgram>::value, "WProgram must remain safe for fixed draft copies");
 static_assert(sizeof(ProgramDraft) <= PROGRAM_DRAFT_MAX_BYTES, "ProgramDraft exceeds the firmware stack budget");
 
@@ -75,6 +75,7 @@ enum ProgramFormat : uint8_t {
   PROGRAM_FORMAT_BEER,
   PROGRAM_FORMAT_NBK,
   PROGRAM_FORMAT_BK,  // [БК п.9] БК ушла из группы RECT в собственный формат (5-е поле - Тпара)
+  PROGRAM_FORMAT_CHEESE,
 };
 
 inline ProgramFormat program_format_for_mode(SAMOVAR_MODE mode) {
@@ -91,6 +92,8 @@ inline ProgramFormat program_format_for_mode(SAMOVAR_MODE mode) {
       return PROGRAM_FORMAT_BEER;
     case SAMOVAR_NBK_MODE:
       return PROGRAM_FORMAT_NBK;
+    case SAMOVAR_CHEESE_MODE:
+      return PROGRAM_FORMAT_CHEESE;
     default:
       return PROGRAM_FORMAT_UNSUPPORTED;
   }
@@ -106,6 +109,7 @@ enum ProgramFieldKind : uint8_t {
   PROGRAM_FIELD_POWER,
   PROGRAM_FIELD_TEMP_SENSOR,
   PROGRAM_FIELD_BEER_DEVICE,
+  PROGRAM_FIELD_PARAM,
 };
 
 struct ProgramParseSpec;
@@ -476,6 +480,125 @@ inline bool program_parse_beer_row(char* line, size_t lineLen, uint8_t, WProgram
   return true;
 }
 
+inline bool program_validate_cheese_row_semantics(
+    ProgramType type,
+    float temp,
+    float timeMin,
+    long devType,
+    long speed,
+    long onTime,
+    long offTime,
+    long sensor,
+    float param,
+    const char*& errorMessage) {
+  const bool noDevice = devType == 0 && speed == 0 && onTime == 0 && offTime == 0;
+  const bool validDeviceSchedule = devType >= 1 && devType <= 3 && onTime > 0;
+  if (!noDevice && !validDeviceSchedule) {
+    errorMessage = "Ошибка программы: устройство должно быть 0^0^0^0 или маской 1..3 с ненулевым расписанием";
+    return false;
+  }
+  if (type != 'n' && param != 0.0f) {
+    errorMessage = "Ошибка программы: параметр допустим только для типа n";
+    return false;
+  }
+  switch (type) {
+    case 'M':
+    case 'C':
+      if (temp > 0.0f && timeMin == 0.0f) return true;
+      errorMessage = "Ошибка программы: для типа M/C Temp больше 0 и Time=0";
+      return false;
+    case 'P':
+    case 'Z':
+    case 'f':
+    case 'z':
+    case 'd':
+    case 's':
+    case 'p':
+    case 'v':
+    case 'r':
+      if (temp > 0.0f && timeMin > 0.0f) return true;
+      errorMessage = "Ошибка программы: для температурного этапа Temp и Time должны быть больше 0";
+      return false;
+    case 'n':
+      if (temp > 0.0f && timeMin > 0.0f && param > 0.0f && param <= 14.0f) return true;
+      errorMessage = "Ошибка программы: для типа n нужны Temp>0, Time>0 и pH в диапазоне (0,14]";
+      return false;
+    case 'W':
+    case 'R':
+      if (temp == 0.0f && timeMin == 0.0f && noDevice && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для типа W/R нужны нулевые безопасные параметры";
+      return false;
+    case 'S':
+      if (temp == 0.0f && timeMin > 0.0f && noDevice && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для типа S нужны Temp=0, Time>0 и выключенные устройства";
+      return false;
+    case 'L':
+#ifdef USE_LUA
+      if (temp == 0.0f && timeMin == 0.0f && noDevice && sensor == 0) return true;
+      errorMessage = "Ошибка программы: для типа L нужны нулевые параметры";
+#else
+      errorMessage = "Ошибка программы: тип L требует USE_LUA";
+#endif
+      return false;
+    case 'A':
+      if (temp > 0.0f && timeMin == 0.0f && noDevice) return true;
+      errorMessage = "Ошибка программы: для типа A Temp больше 0, Time=0 и устройство=0^0^0^0";
+      return false;
+    default:
+      errorMessage = "Ошибка программы: неизвестный тип cheese";
+      return false;
+  }
+}
+
+inline bool program_parse_cheese_row(char* line, size_t, uint8_t, WProgram& row, const ProgramParseSpec& spec, const char*& errorMessage) {
+  char* saveTok = nullptr;
+  char* tokType = strtok_r(line, ";", &saveTok);
+  char* tokTemp = strtok_r(nullptr, ";", &saveTok);
+  char* tokTime = strtok_r(nullptr, ";", &saveTok);
+  char* tokDevice = strtok_r(nullptr, ";", &saveTok);
+  char* tokSensor = strtok_r(nullptr, ";", &saveTok);
+  char* tokParam = strtok_r(nullptr, ";", &saveTok);
+  char* tokExtra = strtok_r(nullptr, ";", &saveTok);
+
+  ProgramType parsedType = PROGRAM_TYPE_NONE;
+  float temp = 0.0f;
+  float timeMin = 0.0f;
+  float param = 0.0f;
+  long sensor = 0;
+  bool ok = parse_program_type(tokType, spec.allowedTypes, parsedType) &&
+            tokTemp && tokTime && tokDevice && tokSensor && tokParam && !tokExtra &&
+            parse_bounded_float(tokTemp, PROGRAM_TEMP_MIN, PROGRAM_TEMP_MAX, temp).ok() &&
+            parse_bounded_float(tokTime, PROGRAM_TIME_MIN, PROGRAM_TIME_MAX, timeMin).ok() &&
+            parse_bounded_long(tokSensor, 0, 4, sensor).ok() &&
+            parse_bounded_float(tokParam, 0.0f, 14.0f, param).ok();
+
+  long devType = 0;
+  long speed = 0;
+  long onTime = 0;
+  long offTime = 0;
+  if (ok && !program_parse_beer_device(tokDevice, devType, speed, onTime, offTime)) {
+    errorMessage = "Ошибка программы: неверный шаблон устройства cheese";
+    ok = false;
+  }
+  if (ok && !program_validate_cheese_row_semantics(
+      parsedType, temp, timeMin, devType, speed, onTime, offTime,
+      sensor, param, errorMessage)) {
+    ok = false;
+  }
+  if (!ok) return false;
+
+  row.WType = parsedType;
+  row.Temp = temp;
+  row.Time = timeMin;
+  row.capacity_num = (uint8_t)devType;
+  row.Speed = (float)speed;
+  row.Volume = (uint16_t)onTime;
+  row.Power = (float)offTime;
+  row.TempSensor = (uint8_t)sensor;
+  row.Param = param;
+  return true;
+}
+
 inline bool program_parse_nbk_row(char* line, size_t, uint8_t rowIndex, WProgram& row, const ProgramParseSpec& spec, const char*&) {
   char* saveTok = nullptr;
   char* tokType = strtok_r(line, ";", &saveTok);
@@ -651,6 +774,16 @@ inline void program_append_beer_row(String& out, const WProgram& row) {
   out += (String)row.TempSensor + "\n";
 }
 
+inline void program_append_cheese_row(String& out, const WProgram& row) {
+  append_program_type(out, row.WType);
+  out += ";";
+  out += (String)row.Temp + ";";
+  out += (String)row.Time + ";";
+  out += (String)row.capacity_num + "^" + (int)row.Speed + "^" + row.Volume + "^" + (int)row.Power + ";";
+  out += (String)row.TempSensor + ";";
+  out += (String)row.Param + "\n";
+}
+
 inline void program_append_nbk_row(String& out, const WProgram& row) {
   append_program_type(out, row.WType);
   out += ";";
@@ -780,6 +913,31 @@ inline const ProgramParseSpec& nbk_program_parse_spec() {
   return spec;
 }
 
+inline const ProgramParseSpec& cheese_program_parse_spec() {
+  static const ProgramFieldKind fields[] = {
+    PROGRAM_FIELD_TYPE,
+    PROGRAM_FIELD_TEMP,
+    PROGRAM_FIELD_TIME,
+    PROGRAM_FIELD_BEER_DEVICE,
+    PROGRAM_FIELD_TEMP_SENSOR,
+    PROGRAM_FIELD_PARAM,
+  };
+  static const ProgramParseSpec spec = {
+    "Ошибка программы: слишком длинная строка (cheese)",
+    "Ошибка программы: неверный формат строки cheese",
+    "Ошибка программы: слишком много строк cheese",
+    nullptr,
+    "MPCWALZfzdspvrnSR",
+    fields,
+    static_cast<uint8_t>(sizeof(fields) / sizeof(fields[0])),
+    PROGRAM_END,
+    nullptr,
+    0,
+    program_parse_cheese_row,
+  };
+  return spec;
+}
+
 inline const ProgramParseSpec* program_parse_spec_for_mode(SAMOVAR_MODE mode) {
   switch (program_format_for_mode(mode)) {
     case PROGRAM_FORMAT_RECT:
@@ -792,6 +950,8 @@ inline const ProgramParseSpec* program_parse_spec_for_mode(SAMOVAR_MODE mode) {
       return &beer_program_parse_spec();
     case PROGRAM_FORMAT_NBK:
       return &nbk_program_parse_spec();
+    case PROGRAM_FORMAT_CHEESE:
+      return &cheese_program_parse_spec();
     case PROGRAM_FORMAT_UNSUPPORTED:
     default:
       return nullptr;
@@ -903,6 +1063,8 @@ inline String serialize_program_for_mode(SAMOVAR_MODE mode) {
       return program_serialize_rows(0, PROGRAM_END, program_append_beer_row);
     case PROGRAM_FORMAT_NBK:
       return program_serialize_rows(0, PROGRAM_END, program_append_nbk_row);
+    case PROGRAM_FORMAT_CHEESE:
+      return program_serialize_rows(0, PROGRAM_END, program_append_cheese_row);
     case PROGRAM_FORMAT_UNSUPPORTED:
     default:
       return String();

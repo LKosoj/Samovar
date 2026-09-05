@@ -37,10 +37,12 @@ FORBIDDEN_COMMANDS = [
     "SAMOVAR_BEER_NEXT",
     "SAMOVAR_DIST_NEXT",
     "SAMOVAR_NBK_NEXT",
+    "SAMOVAR_CHEESE_NEXT",
     "SAMOVAR_BEER",
     "SAMOVAR_BK",
     "SAMOVAR_NBK",
     "SAMOVAR_DISTILLATION",
+    "SAMOVAR_CHEESE",
 ]
 
 REGISTRY_CALLS = ("mode_power_on_command(", "mode_start_command(")
@@ -122,6 +124,7 @@ EXPECTED_MODE_COMMANDS = [
     ("SAMOVAR_NBK_MODE", "SAMOVAR_NBK", "SAMOVAR_NBK_NEXT"),
     ("SAMOVAR_SUVID_MODE", "SAMOVAR_POWER", "SAMOVAR_START"),
     ("SAMOVAR_LUA_MODE", "SAMOVAR_POWER", "SAMOVAR_START"),
+    ("SAMOVAR_CHEESE_MODE", "SAMOVAR_CHEESE", "SAMOVAR_CHEESE_NEXT"),
 ]
 
 registry_source = strip_cpp_comments(read_text("mode_registry.h"))

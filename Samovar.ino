@@ -178,6 +178,7 @@ SimpleStringQueue msg_q(5, 200);
 
 #include "distiller.h"
 #include "beer.h"
+#include "cheese.h"
 #include "BK.h"
 #include "nbk.h"
 #include "suvid.h"
@@ -1957,7 +1958,7 @@ static void session_checkpoint_report_pending() {
   session_checkpoint_clear();
 }
 
-// PowerOn rising edge (BEER/SUVID) -> пишем чекпоинт и держим его "нашим" (checkpointOwned),
+// PowerOn rising edge (BEER/SUVID/CHEESE) -> пишем чекпоинт и держим его "нашим" (checkpointOwned),
 // пока сессия жива; falling edge -> стираем, но ТОЛЬКО если чекпоинт писали мы сами в этой
 // же сессии (иначе затёрли бы чужой, ещё не прочитанный, чекпоинт предыдущей загрузки).
 static void session_checkpoint_tick() {
@@ -1966,7 +1967,8 @@ static void session_checkpoint_tick() {
   static uint16_t lastWrittenPayload = 0;
 
   if (PowerOn && !prevPowerOn) {
-    if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE) {
+    if (Samovar_Mode == SAMOVAR_BEER_MODE || Samovar_Mode == SAMOVAR_SUVID_MODE ||
+        Samovar_Mode == SAMOVAR_CHEESE_MODE) {
       lastWrittenPayload = (uint16_t(Samovar_Mode) << 8) | ProgramNum;
       session_checkpoint_write((uint8_t)Samovar_Mode, ProgramNum);
       checkpointOwned = true;
@@ -3419,6 +3421,12 @@ void loop() {
       case SAMOVAR_BEER_NEXT:
         run_beer_program(ProgramNum + 1);
         break;
+      case SAMOVAR_CHEESE:
+        mode_apply_power_on_command(commandMsg.command);
+        break;
+      case SAMOVAR_CHEESE_NEXT:
+        run_cheese_program(ProgramNum + 1);
+        break;
       case SAMOVAR_DIST_NEXT:
         run_dist_program(ProgramNum + 1);
         break;
@@ -3488,6 +3496,7 @@ void loop() {
   tick_apply_pending_pnbk();
 
   mode_dispatch_loop();
+  cheese_ph_tick();
   suvid_tick();
   session_checkpoint_tick();
 
@@ -3677,6 +3686,7 @@ struct AjaxTelemetrySnapshot {
   float waterTemp;
   float tankTemp;
   float acpTemp;
+  float cheesePh;
   float detectorTrend;
   float actualVolumePerHour;
   float steamBodyTemp;
@@ -3709,6 +3719,7 @@ struct AjaxTelemetrySnapshot {
   uint32_t freeFsBytes;
   int32_t targetSteps;
   int32_t currentSteps;
+  int cheesePhRaw;
   float currentSpeed;
   int volumeAll;
   int timeRemaining;
@@ -3736,6 +3747,7 @@ struct AjaxTelemetrySnapshot {
   bool powerOn;
   bool pauseOn;
   bool beerPaused;  // [Пиво 02.09 C2] Ручная пауза пива (зеркалит beerManualPause) для /ajax
+  bool cheesePhValid;
   bool useBrowserBuzzer;
   bool mixer;
   // [9b] Флаг автоводы БК для /ajax - ВСЕГДА в снимке (false без USE_WATER_PUMP).
@@ -3784,6 +3796,9 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.waterTemp = WaterSensor.avgTemp;
   snapshot.tankTemp = TankSensor.avgTemp;
   snapshot.acpTemp = ACPSensor.avgTemp;
+  snapshot.cheesePhRaw = cheese_ph_raw();
+  snapshot.cheesePh = cheese_ph_value();
+  snapshot.cheesePhValid = cheese_ph_valid();
   snapshot.detectorTrend = impurityDetector.currentTrend;
   snapshot.detectorStatus = impurityDetector.detectorStatus;
   snapshot.boilingDetected = boiling_evidence != BOILING_EVIDENCE_NONE;
@@ -3838,7 +3853,8 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.statusInt = status;  // [Б6.1] числовой статус в телеметрии
   const ProgramType currentType = current_program_type();
   if ((mode == SAMOVAR_RECTIFICATION_MODE || mode == SAMOVAR_BEER_MODE ||
-       mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE) &&
+       mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE ||
+       mode == SAMOVAR_CHEESE_MODE) &&
       (status == SAMOVAR_STATUS_RECT_WITHDRAWAL || status == SAMOVAR_STATUS_RECT_AUTOPAUSE || (status == SAMOVAR_STATUS_BEER && snapshot.powerOn)) &&
       !program_type_empty(currentType)) {
     snapshot.programType = program_type_to_string(currentType);
@@ -3903,6 +3919,9 @@ static void writeAjaxTelemetryFields(
   jsonFieldFloat(out, first, "WaterTemp", snapshot.waterTemp, 3);
   jsonFieldFloat(out, first, "TankTemp", snapshot.tankTemp, 3);
   jsonFieldFloat(out, first, "ACPTemp", snapshot.acpTemp, 3);
+  jsonFieldRaw(out, first, "CheesePhRaw", snapshot.cheesePhRaw);
+  jsonFieldFloat(out, first, "CheesePh", snapshot.cheesePh, 3);
+  jsonFieldBool(out, first, "CheesePhValid", snapshot.cheesePhValid);
   jsonFieldFloat(out, first, "DetectorTrend", snapshot.detectorTrend, 3);
   jsonFieldRaw(out, first, "DetectorStatus", snapshot.detectorStatus);
   jsonFieldBool(out, first, "BoilingDetected", snapshot.boilingDetected);

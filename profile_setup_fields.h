@@ -18,7 +18,7 @@
 //             для перекрёстной проверки smoke-тестом.
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
-//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY или V3ONLY. Версионные
+//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY или V4ONLY. Версионные
 //             поля образуют последовательные хвосты канонического формата.
 //
 // BKPower — единственное поле с дефолтом, зависящим от компиляции
@@ -109,4 +109,9 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(FLOAT, MpxCountsPerMmHg, 4, candidate.MpxCountsPerMmHg = 12.0f, V3ONLY) \
   X(FLOAT, SecondI2CPumpRate, 4, candidate.SecondI2CPumpRate = 0.0f, V3ONLY) \
   X(BOOL, UseSecondI2CPump, 1, candidate.UseSecondI2CPump = false, V3ONLY) \
-  X(BOOL, NbkUseStreamServo, 1, candidate.NbkUseStreamServo = false, V3ONLY)
+  X(BOOL, NbkUseStreamServo, 1, candidate.NbkUseStreamServo = false, V3ONLY) \
+  X(FLOAT, CheesePhSlope, 4, candidate.CheesePhSlope = 1.0f, V4ONLY) \
+  X(FLOAT, CheesePhOffset, 4, candidate.CheesePhOffset = 1.0f, V4ONLY) \
+  X(U8, CheesePhSmoothPercent, 1, candidate.CheesePhSmoothPercent = 90, V4ONLY) \
+  X(U16, CheeseDoserSpeed, 2, candidate.CheeseDoserSpeed = 200, V4ONLY) \
+  X(U16, CheeseDoserSteps, 2, candidate.CheeseDoserSteps = 160, V4ONLY)

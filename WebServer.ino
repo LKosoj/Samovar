@@ -949,6 +949,7 @@ void WebServerInit(void) {
     send_index_template_response(request, "/chart.htm", "max-age=1");
   }).addMiddleware(&headerFilter);
   server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor).setCacheControl("no-store").addMiddleware(&headerFilter);
+  server.serveStatic("/calibrate_ph.htm", SPIFFS, "/calibrate_ph.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-store").addMiddleware(&headerFilter);
   server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm").setCacheControl("max-age=800");
   server.on("/pong.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -1077,6 +1078,9 @@ void WebServerInit(void) {
   server.on("/beer.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_mode_specific_htm(request, "/beer.htm", SAMOVAR_BEER_MODE);
   }).addMiddleware(&headerFilter);
+  server.on("/cheese.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
+    send_mode_specific_htm(request, "/cheese.htm", SAMOVAR_CHEESE_MODE);
+  }).addMiddleware(&headerFilter);
   server.on("/bk.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_mode_specific_htm(request, "/bk.htm", SAMOVAR_BK_MODE);
   }).addMiddleware(&headerFilter);
@@ -1203,6 +1207,16 @@ String indexKeyProcessor(const String &var) {
     return String(SamSetup.HeaterResistant, 9);
   else if (var == "MainsVoltage")
     return String(SamSetup.MainsVoltage, 2);
+  else if (var == "CheesePhSlope")
+    return String(SamSetup.CheesePhSlope, 9);
+  else if (var == "CheesePhOffset")
+    return String(SamSetup.CheesePhOffset, 9);
+  else if (var == "CheesePhSmoothPercent")
+    return String(SamSetup.CheesePhSmoothPercent);
+  else if (var == "CheeseDoserSpeed")
+    return String(SamSetup.CheeseDoserSpeed);
+  else if (var == "CheeseDoserSteps")
+    return String(SamSetup.CheeseDoserSteps);
   else if (var == "I2CStepperTab")
     // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
     return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
@@ -1284,6 +1298,8 @@ static const GetFloatDirectField kGetFloatDirectFields[] = {
     {"MpxZeroAdc", &SetupEEPROM::MpxZeroAdc},
     {"MpxCountsPerMmHg", &SetupEEPROM::MpxCountsPerMmHg},
     {"SecondI2CPumpRate", &SetupEEPROM::SecondI2CPumpRate},
+    {"CheesePhSlope", &SetupEEPROM::CheesePhSlope},
+    {"CheesePhOffset", &SetupEEPROM::CheesePhOffset},
 };
 
 static const GetU16Field kGetU16Fields[] = {
@@ -1295,6 +1311,8 @@ static const GetU16Field kGetU16Fields[] = {
     {"WaterDelay", &SetupEEPROM::WaterDelay},
     {"TankDelay", &SetupEEPROM::TankDelay},
     {"ACPDelay", &SetupEEPROM::ACPDelay},
+    {"CheeseDoserSpeed", &SetupEEPROM::CheeseDoserSpeed},
+    {"CheeseDoserSteps", &SetupEEPROM::CheeseDoserSteps},
 };
 
 static const GetU8Field kGetU8Fields[] = {
@@ -1303,6 +1321,7 @@ static const GetU8Field kGetU8Fields[] = {
     {"DistTimeF", &SetupEEPROM::DistTimeF},
     {"autospeed", &SetupEEPROM::autospeed},
     {"PackDens", &SetupEEPROM::PackDens},
+    {"CheesePhSmoothPercent", &SetupEEPROM::CheesePhSmoothPercent},
 };
 
 static const GetCheckboxField kGetCheckboxFields[] = {
@@ -1328,6 +1347,7 @@ static const GetModeSelectField kGetModeSelectFields[] = {
     {"NBK", SAMOVAR_NBK_MODE},
     {"SUVID", SAMOVAR_SUVID_MODE},
     {"LUA_MODE", SAMOVAR_LUA_MODE},
+    {"CHEESE", SAMOVAR_CHEESE_MODE},
 };
 
 static const GetRelaySelectField kGetRelaySelectFields[] = {
@@ -1536,7 +1556,7 @@ String calibrateKeyProcessor(const String &var) {
 }
 
 bool is_valid_samovar_mode(long mode) {
-  return mode >= SAMOVAR_RECTIFICATION_MODE && mode <= SAMOVAR_LUA_MODE;
+  return mode >= SAMOVAR_RECTIFICATION_MODE && mode <= SAMOVAR_CHEESE_MODE;
 }
 
 static bool pending_mode_control_commands_locked() {
@@ -1775,6 +1795,8 @@ static const SaveU16Field kSaveU16Fields[] = {
     // validate_rect_program_startable() блокирует лишь СТАРТ, а не сохранение формы.
     {"StepperStepMl", &SetupEEPROM::StepperStepMl, 1, 65535},
     {"StepperStepMlI2C", &SetupEEPROM::StepperStepMlI2C, 0, 65535},
+    {"CheeseDoserSpeed", &SetupEEPROM::CheeseDoserSpeed, 1, 65535},
+    {"CheeseDoserSteps", &SetupEEPROM::CheeseDoserSteps, 1, 65535},
 };
 
 static const SaveFloatField kSaveFloatFields[] = {
@@ -1820,6 +1842,8 @@ static const SaveFloatField kSaveFloatFields[] = {
     {"MpxZeroAdc", &SetupEEPROM::MpxZeroAdc, 0.0f, 4095.0f},
     {"MpxCountsPerMmHg", &SetupEEPROM::MpxCountsPerMmHg, 0.001f, 4095.0f},
     {"SecondI2CPumpRate", &SetupEEPROM::SecondI2CPumpRate, 0.0f, 65.535f},
+    {"CheesePhSlope", &SetupEEPROM::CheesePhSlope, -100.0f, 100.0f},
+    {"CheesePhOffset", &SetupEEPROM::CheesePhOffset, -100.0f, 100.0f},
 };
 
 static const SaveU8Field kSaveU8Fields[] = {
@@ -1831,6 +1855,7 @@ static const SaveU8Field kSaveU8Fields[] = {
     // 60-100 (подпись "(60-100)"), сервер разрешал 0..100 - рассинхрон.
     {"PackDens", &SetupEEPROM::PackDens, 60, 100},
     {"BeerBrewOrder", &SetupEEPROM::BeerBrewOrder, 0, 2},
+    {"CheesePhSmoothPercent", &SetupEEPROM::CheesePhSmoothPercent, 0, 99},
 };
 
 static const SaveCheckboxField kSaveCheckboxFields[] = {
@@ -2871,7 +2896,7 @@ void get_web_interface() {
         "Green.png", "Red_light.gif", "alarm.mp3", "favicon.ico",
         "minus.png", "plus.png",
         "style.css.gz", "app.js.gz", "chart.js.gz",
-        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm.gz", "calibrate.htm",
+        "index.htm", "beer.htm", "cheese.htm", "bk.htm", "nbk.htm", "brewxml.htm.gz", "calibrate.htm", "calibrate_ph.htm",
         "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
         "program.htm", "setup.htm",
     };
@@ -2893,6 +2918,7 @@ void get_web_interface() {
     }
 
     updateFile("beer.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("cheese.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("bk.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("nbk.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("dist.lua", SAVE_FILE_IF_NOT_EXIST);
@@ -2904,6 +2930,8 @@ void get_web_interface() {
     updateFile("btn_rect_button2.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("btn_beer_button1.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("btn_beer_button2.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_cheese_button1.lua", SAVE_FILE_IF_NOT_EXIST);
+    updateFile("btn_cheese_button2.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("btn_dist_button1.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("btn_dist_button2.lua", SAVE_FILE_IF_NOT_EXIST);
     updateFile("btn_bk_button1.lua", SAVE_FILE_IF_NOT_EXIST);

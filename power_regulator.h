@@ -74,6 +74,10 @@ inline bool power_transition_start_pending_locked() {
 
 inline bool heater_outputs_enable_locked(uint8_t outputs, bool setPowerOn) {
   if (mode_switch_barrier_active) return false;
+  if (Samovar_Mode == SAMOVAR_CHEESE_MODE) {
+    outputs &= ~SAFETY_HEATER_OUTPUT_BOOST;
+    if (outputs == 0) return false;
+  }
   if (!safety_heater_enable(heaterSafetyState, setPowerOn)) return false;
   PowerOn = heaterSafetyState.powerOn;
   if (outputs & SAFETY_HEATER_OUTPUT_MAIN) {

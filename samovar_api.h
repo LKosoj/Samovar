@@ -369,6 +369,21 @@ inline void mode_request_overheat_emergency_if_needed();
 inline void check_alarm_lua();
 #endif
 
+// Режим сыроварения (cheese.h подключается позже из Samovar.ino).
+void cheese_proc();
+void cheese_stage_tick();
+void run_cheese_program(uint8_t num);
+void cheese_finish();
+inline void cheese_check_cooling_limits();
+inline bool cheese_cooling_pump_demanded();
+inline void cheese_ph_tick();
+inline int cheese_ph_raw();
+inline float cheese_ph_value();
+inline bool cheese_ph_valid();
+inline void cheese_reset_stage_state();
+String get_cheese_status_text();
+String get_cheese_program();
+
 // [P8] mode_registry.h подключается ниже и в НЕ-Lua сборках тоже - макрос
 // должен быть определён всегда, отдельно от Lua-only блока деклараций выше.
 #ifdef USE_LUA

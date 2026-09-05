@@ -231,6 +231,7 @@ enum SAMOVAR_MODE : uint8_t {
   SAMOVAR_NBK_MODE,
   SAMOVAR_SUVID_MODE,
   SAMOVAR_LUA_MODE,
+  SAMOVAR_CHEESE_MODE,
 };
 
 using ProgramType = char;
@@ -339,6 +340,9 @@ static int copyCalls = 0;
 static int sourceGetterCalls = 0;
 static uint32_t fakeLatestSequence = 42;
 static bool fakeHeaterAlarmLatched = false;
+static int fakeCheesePhRaw = 2048;
+static float fakeCheesePh = 5.25f;
+static bool fakeCheesePhValid = true;
 char latched_emergency_stop_reason[192] = "";
 
 struct ESPFixture {
@@ -361,6 +365,21 @@ uint32_t millis() {
 }
 
 bool sensor_configured(const SensorFixture&) { return true; }
+
+int cheese_ph_raw() {
+  sourceGetterCalls++;
+  return fakeCheesePhRaw;
+}
+
+float cheese_ph_value() {
+  sourceGetterCalls++;
+  return fakeCheesePh;
+}
+
+bool cheese_ph_valid() {
+  sourceGetterCalls++;
+  return fakeCheesePhValid;
+}
 
 String format_uptime(unsigned long seconds) {
   std::ostringstream out;
@@ -483,6 +502,9 @@ static void mutateSources() {
   sourceEvent = RuntimeEventDescriptor{8, 0, 3, RUNTIME_EVENT_CONSOLE, 100};
   fakeLatestSequence = 999;
   fakeHeaterAlarmLatched = true;
+  fakeCheesePhRaw = 1000;
+  fakeCheesePh = 7.0f;
+  fakeCheesePhValid = false;
 }
 
 int main() {
@@ -565,7 +587,8 @@ EXPECTED_DEFAULT = (
     '{"bme_temp":1.250,"bme_pressure":760.000,"start_pressure":755.500,'
     '"crnt_tm":"clock\\"x","stm":"01:02:03","SteamTemp":78.125,'
     '"PipeTemp":77.250,"WaterTemp":20.500,"TankTemp":89.750,'
-    '"ACPTemp":30.000,"DetectorTrend":0.125,"DetectorStatus":2,'
+    '"ACPTemp":30.000,"CheesePhRaw":2048,"CheesePh":5.250,"CheesePhValid":1,'
+    '"DetectorTrend":0.125,"DetectorStatus":2,'
     '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
     '"useautospeed":1,"version":"6.27",'
     '"boot_degraded":0,"boot_degraded_reason":"","VolumeAll":42,'

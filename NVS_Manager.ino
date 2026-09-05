@@ -11,16 +11,18 @@
 
 static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
 static const char* const SAMOVAR_PROFILE_KEY = "profile";
-static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 3;
+static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 4;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V2 = 518;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V3 = 532;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V3 = 532;
+static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V4 = 545;
+static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V4 = 545;
 
-static_assert(sizeof(SetupEEPROM) == 552,
-              "SetupEEPROM v3 ABI changed; bump the profile format version");
+static_assert(sizeof(SetupEEPROM) == 568,
+              "SetupEEPROM v4 ABI changed; bump the profile format version");
 static_assert(std::is_trivially_copyable<SetupEEPROM>::value,
               "SetupEEPROM must remain trivially copyable");
 static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
@@ -28,9 +30,12 @@ static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
 static_assert(sizeof(int) == 4, "profile v1 requires 32-bit int");
 
 using ProfileCodec = ProfileBlobCodec<
-    SAMOVAR_PROFILE_PAYLOAD_SIZE_V3,
+    SAMOVAR_PROFILE_PAYLOAD_SIZE_V4,
     SAMOVAR_PROFILE_FORMAT_VERSION>;
 using PreviousProfileCodec = ProfileBlobCodec<
+    SAMOVAR_PROFILE_PAYLOAD_SIZE_V3,
+    3>;
+using V2ProfileCodec = ProfileBlobCodec<
     SAMOVAR_PROFILE_PAYLOAD_SIZE_V2,
     2>;
 using LegacyProfileCodec = ProfileBlobCodec<
@@ -46,7 +51,7 @@ enum ProfileValueResult : uint8_t {
 static bool encode_setup_payload(
     const SetupEEPROM& candidate,
     uint8_t* payload) {
-  CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V3> writer(payload);
+  CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V4> writer(payload);
 #define SAMOVAR_PUT_U8(name) writer.put_u8(candidate.name)
 #define SAMOVAR_PUT_BOOL(name) writer.put_bool(candidate.name)
 #define SAMOVAR_PUT_U16(name) writer.put_u16(candidate.name)
@@ -66,7 +71,7 @@ static bool encode_setup_payload(
 #undef SAMOVAR_PUT_U16
 #undef SAMOVAR_PUT_BOOL
 #undef SAMOVAR_PUT_U8
-  return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V3 &&
+  return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V4 &&
          writer.finish();
 }
 
@@ -76,11 +81,12 @@ static bool decode_setup_payload(
     const uint8_t* payload,
     SetupEEPROM& candidate) {
   SetupEEPROM decoded{};
-  CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V3> reader(payload);
+  CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V4> reader(payload);
   if (!decode_setup_payload_fields(reader, decoded) ||
       !decode_setup_payload_v2only_fields(reader, decoded) ||
       !decode_setup_payload_v3only_fields(reader, decoded) ||
-      reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V3 ||
+      !decode_setup_payload_v4only_fields(reader, decoded) ||
+      reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V4 ||
       !reader.finish()) return false;
   candidate = decoded;
   return true;
@@ -90,13 +96,30 @@ static void set_profile_version_defaults(SetupEEPROM& candidate, uint8_t version
 #define SAMOVAR_DEFAULT_TERM_ALL(deflt)
 #define SAMOVAR_DEFAULT_TERM_V2ONLY(deflt) if (version < 2) { deflt; }
 #define SAMOVAR_DEFAULT_TERM_V3ONLY(deflt) if (version < 3) { deflt; }
+#define SAMOVAR_DEFAULT_TERM_V4ONLY(deflt) if (version < 4) { deflt; }
 #define SAMOVAR_DEFAULT_VERSION_FIELD(kind, name, size, deflt, scope) \
     SAMOVAR_DEFAULT_TERM_##scope(deflt)
   SAMOVAR_PROFILE_FIELDS(SAMOVAR_DEFAULT_VERSION_FIELD)
 #undef SAMOVAR_DEFAULT_VERSION_FIELD
+#undef SAMOVAR_DEFAULT_TERM_V4ONLY
 #undef SAMOVAR_DEFAULT_TERM_V3ONLY
 #undef SAMOVAR_DEFAULT_TERM_V2ONLY
 #undef SAMOVAR_DEFAULT_TERM_ALL
+}
+
+static bool decode_setup_payload_v3(
+    const uint8_t* payload,
+    SetupEEPROM& candidate) {
+  SetupEEPROM decoded{};
+  CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V3> reader(payload);
+  if (!decode_setup_payload_fields(reader, decoded) ||
+      !decode_setup_payload_v2only_fields(reader, decoded) ||
+      !decode_setup_payload_v3only_fields(reader, decoded) ||
+      reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V3 ||
+      !reader.finish()) return false;
+  set_profile_version_defaults(decoded, 3);
+  candidate = decoded;
+  return true;
 }
 
 static bool decode_setup_payload_v2(
@@ -418,6 +441,7 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
   }
   if (storedSize != ProfileCodec::BLOB_SIZE &&
       storedSize != PreviousProfileCodec::BLOB_SIZE &&
+      storedSize != V2ProfileCodec::BLOB_SIZE &&
       storedSize != LegacyProfileCodec::BLOB_SIZE) {
     nvs_close(readHandle);
     return PROFILE_LOAD_STORED_SIZE_MISMATCH;
@@ -452,6 +476,26 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
     uint8_t payload[PreviousProfileCodec::PAYLOAD_SIZE] = {};
     const ProfileLoadResult validation = load_codec_result(PreviousProfileCodec::decode(
         encoded.bytes, PreviousProfileCodec::BLOB_SIZE, payload));
+    if (validation != PROFILE_LOAD_OK) return validation;
+    SetupEEPROM migrated{};
+    if (!decode_setup_payload_v3(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
+    if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
+    candidate = migrated;
+    return PROFILE_LOAD_OK;
+  }
+
+  if (storedSize == V2ProfileCodec::BLOB_SIZE) {
+    V2ProfileCodec::Blob encoded{};
+    size_t readSize = V2ProfileCodec::BLOB_SIZE;
+    const uint8_t readResult = nvs_read_blob(
+        readHandle, SAMOVAR_PROFILE_KEY, encoded.bytes, readSize);
+    nvs_close(readHandle);
+    if (readResult != PROFILE_VALUE_FOUND) return PROFILE_LOAD_READ_FAILED;
+    if (readSize != V2ProfileCodec::BLOB_SIZE) return PROFILE_LOAD_SHORT_READ;
+
+    uint8_t payload[V2ProfileCodec::PAYLOAD_SIZE] = {};
+    const ProfileLoadResult validation = load_codec_result(V2ProfileCodec::decode(
+        encoded.bytes, V2ProfileCodec::BLOB_SIZE, payload));
     if (validation != PROFILE_LOAD_OK) return validation;
     SetupEEPROM migrated{};
     if (!decode_setup_payload_v2(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;

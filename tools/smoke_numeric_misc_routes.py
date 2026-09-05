@@ -173,7 +173,9 @@ expected_hashes = {
     # [БК п.9, 02.09.2026] хэш обновлён: новый формат PROGRAM_FORMAT_BK (пятое поле
     # «Т пара») и общий разбор четырёх полей с DIST; отказы - тем же сбросом draft,
     # program[] не коммитится, A-09 не нарушена.
-    "program_io.h": "245665eaa2885aca17be3a66e6038675bec828840358bd355ad5487e867f2516",
+    # 05.09.2026: добавлен отдельный строгий формат программы Cheese с шестым
+    # полем Param; разбор по-прежнему идёт в draft до атомарного commit.
+    "program_io.h": "ce670ae523cd3fb649284403949fb3598e96684451d2a97a45dd947d74e6bbb6",
     "program_types.h": "78a37ac7beda0a3bf50b0ad2e6682075d038a5c15f99e808c665404e22b9ed2b",
 }
 for name, expected in expected_hashes.items():

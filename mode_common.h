@@ -90,6 +90,7 @@ inline bool mode_water_flow_demanded() {
   if (valve_status) return true;
 #ifdef USE_WATER_PUMP
   if (Samovar_Mode == SAMOVAR_BEER_MODE) return beer_cooling_pump_demanded();
+  if (Samovar_Mode == SAMOVAR_CHEESE_MODE) return cheese_cooling_pump_demanded();
   return pump_started;
 #else
   return false;

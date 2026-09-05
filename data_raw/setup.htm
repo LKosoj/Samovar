@@ -139,7 +139,7 @@
     }
 
     const setupNumericSchema = [
-      { name: 'mode', integer: true, min: 0, max: 6 },
+      { name: 'mode', integer: true, min: 0, max: 7 },
       { name: 'DistTemp', min: 30, max: 150 },
       { name: 'DistTimeF', integer: true, min: 0, max: 255 },
       { name: 'ColDiam', min: 0.1, max: 10 },
@@ -172,6 +172,9 @@
       { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
       { name: 'StepperStepMlI2C', integer: true, min: 0, max: 65535 },
       { name: 'SecondI2CPumpRate', min: 0, max: 65.535 },
+      { name: 'CheesePhSmoothPercent', integer: true, min: 0, max: 99 },
+      { name: 'CheeseDoserSpeed', integer: true, min: 1, max: 65535 },
+      { name: 'CheeseDoserSteps', integer: true, min: 1, max: 65535 },
       { name: 'Kp', min: 0, max: 100000 },
       { name: 'Ki', min: 0, max: 100000 },
       { name: 'Kd', min: 0, max: 100000 },
@@ -325,6 +328,7 @@
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Temp');" value="Температура" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Pump');" value="Насос" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Beer');" value="Пиво" aria-pressed="false">
+      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Cheese');" value="Сыр" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'NBK');" value="НБК" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Прочие" aria-pressed="false">
     </div>
@@ -341,6 +345,7 @@
               <option value="4" %NBK%>Непрерывная бражная колонна</option>
               <option value="5" hidden %SUVID%>Су-вид</option>
               <option value="6" hidden %LUA_MODE%>Lua-режим</option>
+              <option value="7" %CHEESE%>Сыроварение</option>
             </select>
           </div>
         </h2>
@@ -562,6 +567,17 @@
           <input id='UseST' type='checkbox' name='UseST' value='UseST' %UseST%>
           <label for='UseST' class="tooltip">Использовать разгонный тэн при кипении<span class="tooltiptext">Если используется разгонный тэн, можно использовать его в режиме кипения. В дистилляции: если этот флажок выключен, разгонный ТЭН гасится сразу при закипании.</span></label>
         </h2>
+    </div>
+
+    <div id="Cheese" class="tabcontent" aria-hidden="true">
+      <h2>Настройки сыроварения:</h2>
+      <p><strong>Подключение для режима «Сыр»:</strong> PH-4502C занимает <code>LUA_PIN</code>, а сливной клапан — реле №4. Оператор должен физически подключить либо PH-4502C, либо MPX5010DP к общему аналоговому входу и либо клапан, либо разгонный ТЭН к реле №4. В остальных режимах MPX5010DP, Lua и разгонный ТЭН остаются доступны.</p>
+      <h2><label for="CheesePhSmoothPercent" class="tooltip">Сглаживание pH:<span class="tooltiptext">Доля предыдущего измерения в новом значении. Чем больше процент, тем спокойнее показания.</span></label> <input id="CheesePhSmoothPercent" name="CheesePhSmoothPercent" type="text" inputmode="numeric" value="%CheesePhSmoothPercent%"> &#37; (0–99)</h2>
+      <h2><label for="CheeseDoserSpeed" class="tooltip">Скорость дозатора:<span class="tooltiptext">Скорость локального шагового двигателя при выдаче одной порции.</span></label> <input id="CheeseDoserSpeed" name="CheeseDoserSpeed" type="text" inputmode="numeric" value="%CheeseDoserSpeed%"> шаг/с</h2>
+      <h2><label for="CheeseDoserSteps" class="tooltip">Размер порции:<span class="tooltiptext">Сколько шагов локальный двигатель выполняет один раз на дозирующем этапе.</span></label> <input id="CheeseDoserSteps" name="CheeseDoserSteps" type="text" inputmode="numeric" value="%CheeseDoserSteps%"> шагов</h2>
+      <div class="btn-cell" style="margin: 0 auto;">
+        <input type="button" value="Калибровка pH" onclick="if (confirmLeaveIfDirty()) location.href='calibrate_ph.htm'" class="button">
+      </div>
     </div>
 
     <div id="NBK" class="tabcontent" aria-hidden="true">

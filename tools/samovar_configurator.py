@@ -515,7 +515,11 @@ def pio_command(pio_executable: str, board: str, action: str) -> List[str]:
     if action not in targets:
         raise ConfigError("Неизвестная команда: {}".format(action))
     environment = BOARD_OPTIONS[board][1]
-    return [pio_executable, "run", "-e", environment, "-t", targets[action]]
+    command = [pio_executable, "run"]
+    if action != "monitor":
+        command.extend(("-j", "1"))
+    command.extend(("-e", environment, "-t", targets[action]))
+    return command
 
 
 class ConfiguratorWindow:
