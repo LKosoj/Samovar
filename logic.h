@@ -85,16 +85,28 @@ inline void rect_fail_second_i2c_pump(const String& action) {
                          "» не подтверждена после 10 отправок.");
 }
 
+inline bool rect_stop_second_i2c_pump_if_running() {
+  if (!rectSecondPumpRunning) return true;
+  if (!stop_second_i2c_pump()) return false;
+  rectSecondPumpRunning = false;
+  return true;
+}
+
 inline bool rect_apply_second_pump_for_row(const WProgram& row) {
+  if (!rect_second_i2c_pump_enabled()) {
+    if (!rect_stop_second_i2c_pump_if_running()) return false;
+    rectSecondPumpHeadsRow = false;
+    rectSecondPumpHeadsFilling = false;
+    rectSecondPumpPaused = false;
+    rectSecondPumpPausedVolume = 0;
+    rectSecondPumpTargetSteps = 0;
+    return true;
+  }
   rectSecondPumpHeadsRow = false;
   rectSecondPumpHeadsFilling = false;
   rectSecondPumpPaused = false;
   rectSecondPumpPausedVolume = 0;
   rectSecondPumpTargetSteps = 0;
-  if (!rect_second_i2c_pump_enabled()) {
-    rectSecondPumpRunning = false;
-    return true;
-  }
   if (row.WType == 'H') {
     rectSecondPumpHeadsRow = true;
     rectSecondPumpHeadsFilling = row.Volume > 0;
@@ -109,10 +121,7 @@ inline bool rect_apply_second_pump_for_row(const WProgram& row) {
         SamSetup.SecondI2CPumpRate, 0);
     return rectSecondPumpRunning;
   }
-  if (!rectSecondPumpRunning) return true;
-  const bool stopped = stop_second_i2c_pump();
-  if (stopped) rectSecondPumpRunning = false;
-  return stopped;
+  return rect_stop_second_i2c_pump_if_running();
 }
 
 inline bool rect_pause_second_i2c_pump() {
@@ -875,16 +884,16 @@ inline bool validate_rect_program_startable(String& errorMessage) {
 void run_program(uint8_t num) {
   rectProgramCommandFailed = false;
   if (num >= PROGRAM_MAX) {
+    if (!rect_stop_second_i2c_pump_if_running()) {
+      rect_fail_second_i2c_pump("завершение программы");
+      return;
+    }
     // PROGRAM_END — sentinel завершения; его нельзя публиковать в ProgramNum.
     reset_rect_program_pause_state();
     ProgramNum = 0;
     startval = SAMOVAR_STARTVAL_IDLE;
     stopService();
     stepper_safe_stop_reset();
-    if (rectSecondPumpRunning && !stop_second_i2c_pump()) {
-      SendMsg("I2C-насос над ЦП: останов не подтверждён после 10 отправок.", ALARM_MSG);
-    }
-    rectSecondPumpRunning = false;
     rectSecondPumpHeadsRow = false;
     rectSecondPumpPaused = false;
     set_capacity(0);

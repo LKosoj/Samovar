@@ -32,6 +32,16 @@ require("i2c_stepper_send_confirmed_command" in start and "I2CSTEP_CMD_START" in
         "second pump start must use the ten-send confirmed command")
 require("i2c_stepper_send_confirmed_command" in stop and "I2CSTEP_CMD_STOP" in stop,
         "second pump stop must use the ten-send confirmed command")
+require("i2c_stepper_refresh" not in start,
+        "stale pre-refresh must not suppress ten START command attempts")
+require("i2c_stepper_refresh" not in stop,
+        "stale pre-refresh must not suppress ten STOP command attempts")
+require("rectSecondPumpRunning = false" not in stop,
+        "low-level STOP must not forget rectification running state")
+require("if (!configOwned) return false" not in start and
+        start.index("i2c_stepper_send_confirmed_command") <
+        start.index("return configured && confirmed"),
+        "config busy must still execute ten START command attempts and report failure")
 
 apply_row = extract_function_body(LOGIC, "inline bool rect_apply_second_pump_for_row(")
 require("row.WType == 'H'" in apply_row,
@@ -40,14 +50,16 @@ require("program_type_one_of(row.WType, \"BC\")" in apply_row,
         "body and pre-flood rows must run the I2C pump continuously")
 require("SamSetup.SecondI2CPumpRate" in apply_row,
         "body/preflood rate must come from the dedicated setting")
-require("stop_second_i2c_pump()" in apply_row,
-        "other rows must stop the second pump")
+require("rect_stop_second_i2c_pump_if_running()" in apply_row,
+        "disabled and non-pump rows must preserve running state until STOP is confirmed")
 
 run_program = extract_function_body(LOGIC, "void run_program(uint8_t num)")
 require("rect_apply_second_pump_for_row(program[num])" in run_program,
         "every rectification row must apply second-pump routing")
 require("rect_fail_second_i2c_pump" in run_program,
         "an unconfirmed row command must end with an explicit error")
+require("if (!rect_stop_second_i2c_pump_if_running())" in run_program,
+        "final program stop must remain retryable and escalate an unconfirmed STOP")
 require("if (!rectSecondPumpHeadsRow)" in run_program,
         "local pump must stay stopped while heads use the I2C pump")
 
@@ -60,5 +72,7 @@ require("rect_resume_second_i2c_pump()" in pause,
 menu = extract_function_body(MENU, "void menu_samovar_start()")
 require(menu.count("if (rectProgramCommandFailed) return;") >= 2,
         "initial start and row continuation must not overwrite I2C failure state")
+require("if (!rect_stop_second_i2c_pump_if_running())" in menu,
+        "last B/C row must confirm second-pump STOP before RECT_DONE hold")
 
 print("OK: rectification routes the startup-discovered I2C pump without fallback")

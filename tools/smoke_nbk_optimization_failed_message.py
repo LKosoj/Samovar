@@ -75,6 +75,8 @@ static bool nbk_opt_entry_by_pressure = false;
 static bool scheduledKeepsOptimum = false;
 static uint32_t scheduledDelay = 0;
 static NbkActuatorDeadlineTarget scheduledDeadlineTarget = NBK_ACTUATOR_WORK_DEADLINE;
+static int cleanStreamCalls = 0;
+void nbk_set_stream_clean() { cleanStreamCalls++; }
 float nbk_actual_feed_rate() { return feedRateStub; }
 float power_work_mode_threshold() { return 10.0f; }
 
@@ -143,6 +145,7 @@ static void reset_fixture() {
   scheduledKeepsOptimum = false;
   scheduledDelay = 0;
   scheduledDeadlineTarget = NBK_ACTUATOR_WORK_DEADLINE;
+  cleanStreamCalls = 0;
 }
 int main() {
   reset_fixture();
@@ -212,6 +215,8 @@ int main() {
   run_w(1, true);
   check(scheduleCalls == 0 && powerOnCalls == 0,
         "W запрещён до terminal APPLIED безопасного останова");
+  check(cleanStreamCalls == 0,
+        "до terminal APPLIED грязный поток обязан сохраняться");
 
   reset_fixture();
   nbk_safe_waiting = true;
@@ -220,6 +225,8 @@ int main() {
   run_w(1, true);
   check(powerOnCalls == 1 && scheduleCalls == 1,
         "только явная команда может вывести подтверждённый safe-wait в W");
+  check(cleanStreamCalls == 1,
+        "ручной выход из подтверждённого safe-wait обязан вернуть чистый поток");
   return failures == 0 ? 0 : 1;
 }
 '''

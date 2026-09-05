@@ -77,6 +77,7 @@ def executor_fake_headers() -> dict[str, str]:
             int xSemaphoreTake(SemaphoreHandle_t, TickType_t);
             void xSemaphoreGive(SemaphoreHandle_t);
             void vTaskDelay(TickType_t);
+            void feedLoopWDT();
             // [Ревью 24.08, ошибка 1] i2c_stepper_send_command() теперь считает общий
             // дедлайн по millis() - объявление нужно ДО #include "I2CStepper.h" ниже
             // по файлу; определение - там же, где остальные millis()-фейки этого
@@ -327,6 +328,7 @@ static int calibrationCalls = 0;
 int xSemaphoreTake(SemaphoreHandle_t, TickType_t) { return pdTRUE; }
 void xSemaphoreGive(SemaphoreHandle_t) {}
 void vTaskDelay(TickType_t) {}
+void feedLoopWDT() {}
 // [Ревью 24.08, ошибка 1] i2c_stepper_send_command() внутри вызывает millis() для
 // общего дедлайна - executor-харнесс не варьирует время, поэтому стаб просто
 // постоянно возвращает 0 (это не ломает деадлайн: (int32_t)(0 - (0+3000)) < 0).

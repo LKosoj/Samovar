@@ -469,6 +469,8 @@ static float nbk_pressure_ceiling = 20.0f;
 static bool nbk_opt_entry_by_pressure = false;
 static bool pressureAboveCeilingFlag = false;
 bool nbk_pressure_above_ceiling() { return pressureAboveCeilingFlag; }
+static int dirtyStreamCalls = 0;
+void nbk_set_stream_dirty() { dirtyStreamCalls++; }
 
 static int runNbkProgramCalls = 0;
 static uint8_t lastRunNum = 255;
@@ -534,6 +536,7 @@ static void reset_opt_fixture() {
   pressureAboveCeilingFlag = false;
   nbk_tn_autocal_done = true;
   nbk_opt_entry_by_pressure = false;
+  dirtyStreamCalls = 0;
 }
 
 int main() {
@@ -567,6 +570,7 @@ int main() {
   check(sendMsgCalls == msgsBeforeEntry, "D1: ядро O не должно слать собственное сообщение (иначе их будет два подряд)");
   check(nbk_opt_entry_by_pressure, "D1: причина автовхода обязана передаться флагом nbk_opt_entry_by_pressure");
   check(nbk_high_pressure_ticks == 0, "D1: после срабатывания счётчик обязан обнулиться");
+  check(dirtyStreamCalls == 0, "D1: вход по давлению без overflow не должен переключать поток");
 
   // D2: оптимум ещё не найден - автовход по давлению не срабатывает,
   // счётчик каждый раз обнуляется, обычная логика выполняется всегда.

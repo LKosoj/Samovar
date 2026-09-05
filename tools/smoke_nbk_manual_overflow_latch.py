@@ -98,6 +98,8 @@ void SendMsg(const String&, int) { sendMsgCalls++; }
 // [T1-2026-09-03] обучение потолка давления (не предмет этого теста, но
 // теперь вызывается из handle_nbk_stage_manual при первом захлёбе).
 void nbk_learn_pressure_ceiling() {}
+static int dirtyStreamCalls = 0;
+void nbk_set_stream_dirty() { dirtyStreamCalls++; }
 
 @BODY@
 
@@ -123,6 +125,7 @@ static void reset_fixture(uint16_t inertia, float feedRate, float voltage) {
   scheduleShouldSucceed = true;
   enterSafeWaitCalls = 0;
   sendMsgCalls = 0;
+  dirtyStreamCalls = 0;
 }
 
 // Полный сценарий "сухо -> залито -> сухо в паузе -> залито в паузе ->
@@ -148,6 +151,7 @@ static void test_latch_sequence_for(uint16_t inertia, float feedRate, float volt
   check(nbk_manual_overflow_until == safety_deadline_after(1000, deadlineMs),
         "дедлайн защёлки обязан считаться от MULT*Ин, а не быть захардкожен");
   check(sendMsgCalls == 1, "первый захлёб обязан дать ровно одно сообщение");
+  check(dirtyStreamCalls == 1, "первый захлёб обязан перевести сервопривод на грязный поток");
 
   // 3) сухо, НО В ПРЕДЕЛАХ дедлайна - латч держится, повторного снижения нет.
   fakeMillis += deadlineMs / 2;
@@ -163,6 +167,7 @@ static void test_latch_sequence_for(uint16_t inertia, float feedRate, float volt
   handle_nbk_stage_manual();
   check(scheduleCalls == 1, "повторный залив в пределах паузы не должен давать вторую команду (не спам)");
   check(sendMsgCalls == 1, "повторный залив в пределах паузы не должен давать второе сообщение");
+  check(dirtyStreamCalls == 1, "повторный залив под латчем не должен дёргать сервопривод повторно");
 
   // 5) продвигаем время ЗА дедлайн, датчик сухой - латч обязан освободиться.
   fakeMillis = nbk_manual_overflow_until + 1;
@@ -177,6 +182,7 @@ static void test_latch_sequence_for(uint16_t inertia, float feedRate, float volt
   handle_nbk_stage_manual();
   check(scheduleCalls == 2, "новый захлёб после освобождения латча обязан дать вторую команду");
   check(sendMsgCalls == 2, "новый захлёб после освобождения латча обязан дать второе сообщение");
+  check(dirtyStreamCalls == 2, "новый захлёб после освобождения латча обязан снова выбрать грязный поток");
   check(manual_overflow, "новый захлёб обязан снова взвести латч");
 }
 

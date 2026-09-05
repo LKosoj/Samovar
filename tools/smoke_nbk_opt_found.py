@@ -113,6 +113,8 @@ static NbkSessionConfig nbkSessionConfig{200.0f};
 #define NBK_HIGH_TB_HOLD_TICKS 3
 static uint8_t nbk_high_pressure_ticks = 0;
 static bool nbk_opt_entry_by_pressure = false; // [T1] причина автовхода по давлению - не предмет этого теста
+static int dirtyStreamCalls = 0;
+void nbk_set_stream_dirty() { dirtyStreamCalls++; }
 static bool pressureAboveCeilingFlag = false;
 bool nbk_pressure_above_ceiling() { return pressureAboveCeilingFlag; }
 
@@ -182,6 +184,7 @@ static void reset_fixture() {
   scheduleLastM = -1; scheduleLastP = -1; scheduleLastIter = 65535;
   enterSafeWaitCalls = 0;
   nbk_high_pressure_ticks = 0;
+  dirtyStreamCalls = 0;
   pressureAboveCeilingFlag = false;
   nbk_tn_autocal_done = true;
 }
@@ -213,6 +216,7 @@ static void test_found_within_pump_limit() {
   check(lastMsg.contains("увеличиваем подачу"), "1: сообщение обязано говорить про увеличение подачи");
   check(runNbkProgramCalls == 0, "1: переход к следующей строке здесь не нужен");
   check(enterSafeWaitCalls == 0, "1: успешная подача команды не должна уходить в safe-wait");
+  check(dirtyStreamCalls == 0, "1: без захлёба сервопривод потока не должен двигаться");
 }
 
 // 2) Тот же успех, но кандидат подачи ПРЕВЫШАЕТ предел насоса - отдельная

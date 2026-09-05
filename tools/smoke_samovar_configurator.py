@@ -130,6 +130,147 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(model.ini_path.read_bytes(), before_ini)
         self.assertEqual(model.override_path.read_bytes(), before_override)
 
+    def test_numeric_suffixes_are_hidden_and_preserved(self) -> None:
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        self.assertEqual(state["PAUSE_RESUME_HYSTERESIS_DELTA"], "0.07")
+        self.assertEqual(state["NBK_WORK_PRESSURE_RATIO"], "0.5")
+        self.assertEqual(state["LCD_RESET_PERIOD_MS"], "240000")
+
+        state["PAUSE_RESUME_HYSTERESIS_DELTA"] = "0.08"
+        state["NBK_WORK_PRESSURE_RATIO"] = "0.6"
+        state["LCD_RESET_PERIOD_MS"] = "250000"
+        model.save(state)
+
+        source = model.ini_path.read_text(encoding="utf-8")
+        self.assertRegex(source, r"#define PAUSE_RESUME_HYSTERESIS_DELTA 0\.08f\b")
+        self.assertRegex(source, r"#define NBK_WORK_PRESSURE_RATIO 0\.6f\b")
+        self.assertRegex(source, r"#define LCD_RESET_PERIOD_MS 250000UL\b")
+        loaded = model.load()
+        self.assertEqual(loaded["PAUSE_RESUME_HYSTERESIS_DELTA"], "0.08")
+        self.assertEqual(loaded["NBK_WORK_PRESSURE_RATIO"], "0.6")
+        self.assertEqual(loaded["LCD_RESET_PERIOD_MS"], "250000")
+
+    def test_monitor_uses_modal_window_and_separate_log(self) -> None:
+        class FakeWidget:
+            def __init__(self, *args, **kwargs):
+                self.options = dict(kwargs)
+                self.entries = []
+                self.destroyed = False
+
+            def pack(self, **kwargs):
+                self.pack_options = kwargs
+
+            def configure(self, **kwargs):
+                self.options.update(kwargs)
+
+            def insert(self, position, text):
+                self.entries.append((position, text))
+
+            def see(self, position):
+                self.last_seen = position
+
+            def set(self, *args):
+                self.scroll = args
+
+            def yview(self, *args):
+                self.yview_args = args
+
+        class FakeWindow(FakeWidget):
+            def __init__(self):
+                super().__init__()
+                self.grabbed = False
+
+            def title(self, value):
+                self.window_title = value
+
+            def geometry(self, value):
+                self.window_geometry = value
+
+            def minsize(self, width, height):
+                self.minimum_size = (width, height)
+
+            def transient(self, parent):
+                self.transient_parent = parent
+
+            def protocol(self, name, callback):
+                self.protocols = {name: callback}
+
+            def grab_set(self):
+                self.grabbed = True
+
+            def grab_release(self):
+                self.grabbed = False
+
+            def focus_set(self):
+                self.focused = True
+
+            def destroy(self):
+                self.destroyed = True
+
+        class FakeTk:
+            def __init__(self):
+                self.window = FakeWindow()
+
+            def Toplevel(self, parent):
+                self.window.parent = parent
+                return self.window
+
+            Text = FakeWidget
+
+        class FakeTtk:
+            Frame = FakeWidget
+            Scrollbar = FakeWidget
+            Button = FakeWidget
+
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.root = object()
+        window.tk = FakeTk()
+        window.ttk = FakeTtk()
+        window.messagebox = type("Messages", (), {"showerror": lambda *args: None})()
+        window.log = FakeWidget()
+        window.busy = False
+        window.active_action = ""
+        window.monitor_window = None
+        window.monitor_log = None
+        window.monitor_stop_button = None
+        window.start_action = lambda action: setattr(window, "active_action", action)
+
+        window.open_monitor()
+        modal = window.monitor_window
+        self.assertIs(modal.transient_parent, window.root)
+        self.assertTrue(modal.grabbed)
+        self.assertEqual(modal.protocols["WM_DELETE_WINDOW"], window.close_monitor)
+        window._append_log("serial\n")
+        self.assertEqual(window.monitor_log.entries, [("end", "serial\n")])
+        self.assertEqual(window.log.entries, [])
+
+        window.active_action = "upload"
+        window._append_log("build\n")
+        self.assertEqual(window.log.entries, [("end", "build\n")])
+
+        process = type("Process", (), {"terminate": lambda self: setattr(self, "terminated", True)})()
+        process.terminated = False
+        window.busy = True
+        window.active_action = "monitor"
+        window.process = process
+        window.toggle_monitor()
+        self.assertTrue(window.stop_requested)
+        self.assertTrue(process.terminated)
+        self.assertFalse(modal.destroyed)
+
+        window.busy = False
+        window.active_action = ""
+        window.close_monitor()
+        self.assertTrue(modal.destroyed)
+        self.assertIsNone(window.monitor_window)
+
+    def test_main_log_expands_with_window(self) -> None:
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        self.assertIn('log_frame.pack(fill="both", expand=True)', source)
+        self.assertNotIn('log_frame.pack(fill="both", expand=False)', source)
+
     def test_commands_use_existing_environments_and_never_build_twice(self) -> None:
         self.assertEqual(
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload"),

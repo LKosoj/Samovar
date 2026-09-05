@@ -93,6 +93,14 @@ static void set_buzzer(bool v) { setBuzzerCalls++; lastBuzzerArg = v; }
 static int resetPauseStateCalls = 0;
 static bool lastResumeStepperArg = true;
 static void reset_rect_program_pause_state(bool resumeStepper) { resetPauseStateCalls++; lastResumeStepperArg = resumeStepper; }
+static bool secondPumpStopResult = true;
+static int secondPumpStopCalls = 0;
+static bool rect_stop_second_i2c_pump_if_running() {
+  secondPumpStopCalls++;
+  return secondPumpStopResult;
+}
+static int secondPumpFailureCalls = 0;
+static void rect_fail_second_i2c_pump(const String&) { secondPumpFailureCalls++; }
 '''
 
 MENU_MAIN_TEMPLATE = r'''
@@ -123,6 +131,19 @@ int main() {
   check(setBuzzerCalls == 1 && lastBuzzerArg == true, "MIN>0: должен был включиться буззер");
   check(program_done_hold_since == fake_millis_value, "MIN>0: program_done_hold_since должен был выставиться в текущий millis()");
   check(sendMsgCalls == 1 && lastMsgType == ALARM_MSG, "MIN>0: должно было отправиться ALARM-сообщение");
+  check(secondPumpStopCalls == 1, "MIN>0: STOP второго насоса должен подтверждаться до холда");
+
+  secondPumpStopResult = false;
+  secondPumpFailureCalls = 0;
+  resetPauseStateCalls = 0;
+  stopServiceCalls = 0;
+  program_done_hold_since = 0;
+  menu_done_branch();
+  check(secondPumpFailureCalls == 1, "ошибка STOP второго насоса должна вызвать явную аварию");
+  check(resetPauseStateCalls == 0 && stopServiceCalls == 0,
+        "неподтверждённый STOP не должен молча переходить в холд");
+  check(program_done_hold_since == 0,
+        "неподтверждённый STOP не должен запускать таймер завершения");
 #endif
 
   if (failures != 0) return 1;

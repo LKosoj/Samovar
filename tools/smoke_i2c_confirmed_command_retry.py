@@ -41,6 +41,8 @@ enum : uint8_t {
   I2CSTEP_REG_MODE = 2,
   I2CSTEP_REG_COMMAND = 16,
   I2CSTEP_REG_COMMAND_SEQ = 17,
+  I2CSTEP_REG_ACK_SEQ = 18,
+  I2CSTEP_REG_ERROR = 20,
 };
 
 struct I2CStepperDevice {
@@ -59,7 +61,9 @@ struct WriteCall {
 static std::vector<WriteCall> writes;
 static int commandSends = 0;
 static int refreshCalls = 0;
+static int feedLoopWDTCalls = 0;
 static int ackOnSend = 0;
+static uint8_t reportedError = 0;
 
 inline bool i2c_stepper_write_byte(uint8_t, uint8_t reg, uint8_t value) {
   writes.push_back({reg, value});
@@ -75,7 +79,22 @@ inline bool i2c_stepper_refresh(I2CStepperDevice& dev, bool) {
   return true;
 }
 
+inline bool i2c_stepper_read_byte(uint8_t, uint8_t reg, uint8_t& value) {
+  if (reg == I2CSTEP_REG_ACK_SEQ) {
+    value = ackOnSend > 0 && commandSends >= ackOnSend
+        ? writes.back().value
+        : 0;
+    return true;
+  }
+  if (reg == I2CSTEP_REG_ERROR) {
+    value = reportedError;
+    return true;
+  }
+  return false;
+}
+
 void vTaskDelay(TickType_t) {}
+void feedLoopWDT() { feedLoopWDTCalls++; }
 
 inline bool i2c_stepper_send_confirmed_command(
     I2CStepperDevice& dev, uint8_t command) {
@@ -95,7 +114,9 @@ static void reset_fixture(int confirmedOnSend) {
   writes.clear();
   commandSends = 0;
   refreshCalls = 0;
+  feedLoopWDTCalls = 0;
   ackOnSend = confirmedOnSend;
+  reportedError = 0;
 }
 
 static void check_command_pairs(
@@ -119,8 +140,12 @@ int main() {
     dev.commandSeq = 7;
     bool ok = i2c_stepper_send_confirmed_command(dev, 41);
     check(ok, "ack on the first send must succeed");
-    check(commandSends == 1 && refreshCalls == 1,
+    check(commandSends == 1,
           "first-send ack must stop without duplicate commands");
+    check(refreshCalls == 0,
+          "confirmed path must not emit legacy refresh fallback messages");
+    check(feedLoopWDTCalls == 0,
+          "first-send ack must not feed between nonexistent retries");
     check_command_pairs(41, 8, 1);
   }
 
@@ -130,8 +155,12 @@ int main() {
     dev.commandSeq = 20;
     bool ok = i2c_stepper_send_confirmed_command(dev, 73);
     check(ok, "ack on a later send must succeed");
-    check(commandSends == 4 && refreshCalls == 4,
+    check(commandSends == 4,
           "helper must stop on the exact send that is acknowledged");
+    check(refreshCalls == 0,
+          "late ack must not use the legacy fallback-reporting refresh path");
+    check(feedLoopWDTCalls == 3,
+          "watchdog must be fed between four command attempts");
     check_command_pairs(73, 21, 4);
   }
 
@@ -141,8 +170,12 @@ int main() {
     dev.commandSeq = 90;
     bool ok = i2c_stepper_send_confirmed_command(dev, 99);
     check(!ok, "ten sends without ack must fail");
-    check(commandSends == 10 && refreshCalls == 10,
+    check(commandSends == 10,
           "missing ack must produce exactly ten total command sends");
+    check(refreshCalls == 0,
+          "missing ack must not claim a local fallback through refresh");
+    check(feedLoopWDTCalls == 9,
+          "watchdog must be fed between all ten command attempts");
     check_command_pairs(99, 91, 10);
   }
 
@@ -158,7 +191,7 @@ int main() {
   {
     reset_fixture(1);
     I2CStepperDevice dev;
-    dev.error = 4;
+    reportedError = 4;
     bool ok = i2c_stepper_send_confirmed_command(dev, 18);
     check(!ok, "ack with a device error must not confirm the command");
     check(commandSends == 10,
@@ -166,14 +199,16 @@ int main() {
   }
 
   {
-    reset_fixture(1);
+    reset_fixture(0);
     writes.push_back({I2CSTEP_REG_MODE, 6});
     I2CStepperDevice dev;
     dev.present = false;
     bool ok = i2c_stepper_send_confirmed_command(dev, 33);
-    check(!ok, "absent device must fail without sending a command");
-    check(commandSends == 0 && writes.size() == 1,
-          "configuration writes are separate and must not be repeated or counted");
+    check(!ok, "stale absent cache without ack must fail after retries");
+    check(commandSends == 10,
+          "stale absent cache must not suppress ten physical command attempts");
+    check(writes.front().reg == I2CSTEP_REG_MODE,
+          "configuration write must remain separate from command attempts");
   }
 
   if (failures != 0) return 1;
@@ -245,6 +280,35 @@ def run() -> int:
                 file=sys.stderr,
             )
             print(mutated_result.stdout + mutated_result.stderr, file=sys.stderr)
+            return 1
+
+        watchdog_anchor = "if (attempt + 1 < 10) feedLoopWDT();"
+        if helper_body.count(watchdog_anchor) != 1:
+            print("FAIL: watchdog mutation anchor is missing", file=sys.stderr)
+            return 1
+        watchdog_mutated_body = helper_body.replace(
+            watchdog_anchor, "if (false) feedLoopWDT();", 1
+        )
+        watchdog_mutated_result = compile_and_run(
+            watchdog_mutated_body, "confirmed_command_watchdog_mutated"
+        )
+        if watchdog_mutated_result.returncode == 0:
+            print(
+                "FAIL: watchdog mutation survived: retry loop did not require feeding",
+                file=sys.stderr,
+            )
+            return 1
+        if "watchdog must be fed between four command attempts" not in (
+            watchdog_mutated_result.stdout + watchdog_mutated_result.stderr
+        ):
+            print(
+                "FAIL: watchdog mutation failed for an unrelated reason",
+                file=sys.stderr,
+            )
+            print(
+                watchdog_mutated_result.stdout + watchdog_mutated_result.stderr,
+                file=sys.stderr,
+            )
             return 1
 
         print(result.stdout, end="")

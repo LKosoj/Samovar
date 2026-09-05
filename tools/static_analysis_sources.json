@@ -15,6 +15,7 @@
     "WebServer.ino",
     "alarm.h",
     "beer.h",
+    "bmp180_pressure_filter.h",
     "column_math.h",
     "control_numeric_input.h",
     "crash_handler.h",

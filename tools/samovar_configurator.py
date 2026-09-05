@@ -149,7 +149,8 @@ SECTIONS = (
 )
 
 NUMERIC_RE = re.compile(
-    r"^[+-]?(?:0[xX][0-9A-Fa-f]+|(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?))(?:[fFuUlL]{0,3})$"
+    r"^(?P<number>[+-]?(?:0[xX][0-9A-Fa-f]+|(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)))"
+    r"(?P<suffix>[fFuUlL]{0,3})$"
 )
 ONEWIRE_RE = re.compile(
     r"^\{\s*0x[0-9A-Fa-f]{2}(?:\s*,\s*0x[0-9A-Fa-f]{2}){7}\s*\}$"
@@ -259,6 +260,19 @@ def validate_value(value: str, kind: str, label: str) -> None:
             raise ConfigError("В поле «{}» допустимы только LOW или HIGH".format(label))
 
 
+def numeric_value_for_ui(value: str) -> str:
+    match = NUMERIC_RE.fullmatch(value.strip())
+    return match.group("number") if match is not None else value
+
+
+def numeric_value_for_source(value: str, current: str) -> str:
+    value_match = NUMERIC_RE.fullmatch(value.strip())
+    current_match = NUMERIC_RE.fullmatch(current.strip())
+    if value_match is None or current_match is None:
+        raise ConfigError("Некорректное числовое значение")
+    return value_match.group("number") + current_match.group("suffix")
+
+
 def atomic_write(path: Path, text: str) -> None:
     mode = path.stat().st_mode if path.exists() else None
     descriptor, temporary_name = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
@@ -306,15 +320,24 @@ class SamovarConfig:
 
         for spec in VALUE_SPECS:
             line = self._required_line(ini, spec.macro)
-            state[spec.macro] = cpp_string_decode(line.value) if spec.kind == "text" else line.value
+            state[spec.macro] = (
+                cpp_string_decode(line.value)
+                if spec.kind == "text"
+                else numeric_value_for_ui(line.value)
+            )
         for spec in BOOL_SPECS:
             state[spec.macro] = self._required_line(ini, spec.macro).enabled
         for spec in OPTIONAL_SPECS:
             line = self._required_line(ini, spec.macro)
             state[spec.macro + ".enabled"] = line.enabled
-            state[spec.macro] = line.value
+            state[spec.macro] = (
+                numeric_value_for_ui(line.value) if spec.kind == "number" else line.value
+            )
         for spec in CHOICE_VALUE_SPECS:
-            state[spec.macro] = self._required_line(ini, spec.macro).value
+            line = self._required_line(ini, spec.macro)
+            state[spec.macro] = (
+                numeric_value_for_ui(line.value) if spec.kind == "number" else line.value
+            )
 
         state["regulator"] = self._read_choice(ini, CHOICE_OPTIONS["Регулятор мощности"])
         state["atmospheric_sensor"] = self._read_choice(
@@ -353,10 +376,13 @@ class SamovarConfig:
         for spec in VALUE_SPECS:
             value = str(state[spec.macro]).strip()
             validate_value(value, spec.kind, spec.label)
+            current = self._required_line(ini, spec.macro)
             ini.set_macro(
                 spec.macro,
                 True,
-                cpp_string_encode(value) if spec.kind == "text" else value,
+                cpp_string_encode(value)
+                if spec.kind == "text"
+                else numeric_value_for_source(value, current.value),
             )
         for spec in BOOL_SPECS:
             current = self._required_line(ini, spec.macro)
@@ -364,12 +390,19 @@ class SamovarConfig:
         for spec in OPTIONAL_SPECS:
             value = str(state[spec.macro]).strip()
             validate_value(value, spec.kind, spec.label)
-            ini.set_macro(spec.macro, bool(state[spec.macro + ".enabled"]), value)
+            current = self._required_line(ini, spec.macro)
+            source_value = (
+                numeric_value_for_source(value, current.value) if spec.kind == "number" else value
+            )
+            ini.set_macro(spec.macro, bool(state[spec.macro + ".enabled"]), source_value)
         for spec in CHOICE_VALUE_SPECS:
             value = str(state[spec.macro]).strip()
             validate_value(value, spec.kind, spec.label)
             current = self._required_line(ini, spec.macro)
-            ini.set_macro(spec.macro, current.enabled, value)
+            source_value = (
+                numeric_value_for_source(value, current.value) if spec.kind == "number" else value
+            )
+            ini.set_macro(spec.macro, current.enabled, source_value)
 
         self._write_choice(ini, "regulator", str(state["regulator"]), "Регулятор мощности")
         self._write_choice(
@@ -501,6 +534,9 @@ class ConfiguratorWindow:
         self.active_action = ""
         self.output_queue = queue.Queue()
         self.stop_requested = False
+        self.monitor_window = None
+        self.monitor_log = None
+        self.monitor_stop_button = None
         self.value_vars = {}
         self.bool_vars = {}
         self.optional_enabled_vars = {}
@@ -599,13 +635,13 @@ class ConfiguratorWindow:
         self.save_button = ttk.Button(buttons, text="Сохранить настройки", command=self.save)
         self.upload_button = ttk.Button(buttons, text="Прошить", command=lambda: self.start_action("upload"))
         self.fs_button = ttk.Button(buttons, text="Загрузить LittleFS", command=self.start_littlefs)
-        self.monitor_button = ttk.Button(buttons, text="Монитор порта", command=self.toggle_monitor)
+        self.monitor_button = ttk.Button(buttons, text="Монитор порта", command=self.open_monitor)
         for button in (self.save_button, self.upload_button, self.fs_button, self.monitor_button):
             button.pack(side="left", padx=(0, 8))
 
         ttk.Label(outer, text="Журнал").pack(anchor="w")
         log_frame = ttk.Frame(outer)
-        log_frame.pack(fill="both", expand=False)
+        log_frame.pack(fill="both", expand=True)
         scrollbar = ttk.Scrollbar(log_frame)
         scrollbar.pack(side="right", fill="y")
         self.log = tk.Text(log_frame, height=13, wrap="word", yscrollcommand=scrollbar.set)
@@ -682,6 +718,38 @@ class ConfiguratorWindow:
         if confirmed:
             self.start_action("uploadfs")
 
+    def open_monitor(self) -> None:
+        if self.busy:
+            self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
+            return
+        window = self.tk.Toplevel(self.root)
+        window.title("Монитор порта Samovar")
+        window.geometry("1000x600")
+        window.minsize(700, 400)
+        window.transient(self.root)
+        window.protocol("WM_DELETE_WINDOW", self.close_monitor)
+
+        frame = self.ttk.Frame(window, padding=10)
+        frame.pack(fill="both", expand=True)
+        scrollbar = self.ttk.Scrollbar(frame)
+        scrollbar.pack(side="right", fill="y")
+        self.monitor_log = self.tk.Text(
+            frame, wrap="word", yscrollcommand=scrollbar.set, font="TkFixedFont"
+        )
+        self.monitor_log.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=self.monitor_log.yview)
+        self.monitor_stop_button = self.ttk.Button(
+            window, text="Остановить", command=self.toggle_monitor
+        )
+        self.monitor_stop_button.pack(pady=(0, 10))
+        self.monitor_window = window
+        window.grab_set()
+        window.focus_set()
+
+        self.start_action("monitor")
+        if self.active_action != "monitor":
+            self._destroy_monitor_window()
+
     def toggle_monitor(self) -> None:
         if self.busy:
             if self.active_action != "monitor":
@@ -690,7 +758,22 @@ class ConfiguratorWindow:
             if self.process is not None:
                 self.process.terminate()
             return
-        self.start_action("monitor")
+        self.close_monitor()
+
+    def close_monitor(self) -> None:
+        if self.busy and self.active_action == "monitor":
+            self.stop_requested = True
+            if self.process is not None:
+                self.process.terminate()
+        self._destroy_monitor_window()
+
+    def _destroy_monitor_window(self) -> None:
+        if self.monitor_window is not None:
+            self.monitor_window.grab_release()
+            self.monitor_window.destroy()
+        self.monitor_window = None
+        self.monitor_log = None
+        self.monitor_stop_button = None
 
     def start_action(self, action: str) -> None:
         if self.busy:
@@ -740,7 +823,6 @@ class ConfiguratorWindow:
                     stopped = self.stop_requested
                     self.process = None
                     self.busy = False
-                    self.active_action = ""
                     self._set_busy(False, "")
                     if stopped:
                         self._append_log("Монитор порта остановлен.\n")
@@ -749,6 +831,7 @@ class ConfiguratorWindow:
                     else:
                         self._append_log("Операция завершилась с ошибкой {}.\n".format(value))
                         self.messagebox.showerror("Ошибка PlatformIO", "Код завершения: {}".format(value))
+                    self.active_action = ""
         except queue.Empty:
             pass
         self.root.after(100, self._drain_output)
@@ -758,14 +841,16 @@ class ConfiguratorWindow:
         self.save_button.configure(state=state)
         self.upload_button.configure(state=state)
         self.fs_button.configure(state=state)
-        self.monitor_button.configure(
-            state="normal" if busy and action == "monitor" else state,
-            text="Остановить монитор" if busy and action == "monitor" else "Монитор порта",
-        )
+        self.monitor_button.configure(state=state)
+        if self.monitor_stop_button is not None:
+            self.monitor_stop_button.configure(
+                text="Остановить" if busy and action == "monitor" else "Закрыть",
+            )
 
     def _append_log(self, text: str) -> None:
-        self.log.insert("end", text)
-        self.log.see("end")
+        target = self.monitor_log if self.active_action == "monitor" and self.monitor_log is not None else self.log
+        target.insert("end", text)
+        target.see("end")
 
     def close(self) -> None:
         if self.process is not None:

@@ -524,6 +524,10 @@ void menu_samovar_start() {
       // [П3-6] "Работа на себя": глушим насос, нагрев НЕ трогаем.
       // Полное завершение — по таймауту (withdrawal()) или повторным Стартом
       // (ветка startval==STOPPING ниже сработает при СЛЕДУЮЩЕМ вызове).
+      if (!rect_stop_second_i2c_pump_if_running()) {
+        rect_fail_second_i2c_pump("завершение последней строки");
+        return;
+      }
       reset_rect_program_pause_state(false);
       stopService();
       stepper_safe_stop_reset();

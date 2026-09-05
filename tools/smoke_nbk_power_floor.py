@@ -132,6 +132,8 @@ uint16_t nbk_column_inertia = 180;
 // [Ремонт-2026-09-02 П4/П6] новые зависимости "Ручной настройки".
 static float feedRateStub = 9.0f;
 float nbk_actual_feed_rate() { return feedRateStub; }
+static int dirtyStreamCalls = 0;
+void nbk_set_stream_dirty() { dirtyStreamCalls++; }
 uint32_t nbk_manual_overflow_until = 0;
 static uint32_t fakeMillis = 1000;
 uint32_t millis() { return fakeMillis; }
@@ -156,7 +158,7 @@ int main() {
   const float floorWatts = toPower(power_work_mode_threshold());
 
   // Далеко выше порога - floor не должен ничего менять.
-  overflowFlag = true; manual_overflow = false; scheduleCalls = 0; lastCandidateM = -1.0f;
+  overflowFlag = true; manual_overflow = false; scheduleCalls = 0; dirtyStreamCalls = 0; lastCandidateM = -1.0f;
   target_power_volt = power_work_mode_threshold() * 10.0f;
   feedRateStub = 9.0f;
   handle_nbk_stage_manual();
@@ -165,13 +167,17 @@ int main() {
         "вдали от порога candidateM должен равняться toPower(target_power_volt)/2 без клэмпа");
   check(lastCandidateP == feedRateStub / 3.0f,
         "candidateP обязан браться из nbk_actual_feed_rate()/3, а не из фиксированной подачи");
+  check(dirtyStreamCalls == 1,
+        "захлёб в Ручной настройке обязан выбрать грязный поток");
 
   // Рядом с порогом - половина уйдёт ниже порога без клэмпа.
-  overflowFlag = true; manual_overflow = false; scheduleCalls = 0; lastCandidateM = -1.0f;
+  overflowFlag = true; manual_overflow = false; scheduleCalls = 0; dirtyStreamCalls = 0; lastCandidateM = -1.0f;
   target_power_volt = power_work_mode_threshold() * 1.2f;
   handle_nbk_stage_manual();
   check(lastCandidateM >= floorWatts,
         "РЕГРЕСС: candidateM в Ручной настройке обязан клэмпиться к toPower(power_work_mode_threshold())");
+  check(dirtyStreamCalls == 1,
+        "повторный независимый сценарий захлёба обязан выбрать грязный поток один раз");
 
   if (failures != 0) return 1;
   std::cout << "handle_nbk_stage_manual candidateM floor checks passed\n";

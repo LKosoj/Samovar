@@ -119,6 +119,9 @@ static float scheduledP = -1;
 static bool scheduledKeepsOptimum = false;
 static bool scheduleShouldSucceed = true;
 static int sendMsgCalls = 0;
+static int cleanStreamCalls = 0;
+
+void nbk_set_stream_clean() { cleanStreamCalls++; }
 
 void nbk_enter_safe_wait(const String&) {
   safeWaitCalls++;
@@ -184,6 +187,7 @@ static void reset_fixture() {
   scheduledKeepsOptimum = false;
   scheduleShouldSucceed = true;
   sendMsgCalls = 0;
+  cleanStreamCalls = 0;
   lastMsg.clear();
   nbk_opt_entry_by_pressure = false;
   pressure_value = 25.0f;
@@ -216,6 +220,8 @@ int main() {
   run_w(1, true);
   check(safeWaitCalls == 0 && scheduleCalls == 1,
         "П5.3: fallback на сохранённые Mo/По обязан пройти без safe-wait");
+  check(cleanStreamCalls == 0,
+        "обычный явный вход в W без safe-wait не должен дёргать сервопривод");
   check(scheduledM == 800 && scheduledP == 4,
         "П5.3: fallback обязан передать nbk_Mo/nbk_Po без повторной конвертации toPower()");
 
@@ -349,6 +355,7 @@ int main() {
   check(finishCalls == 0, "порядок веток: ветка П8 не должна перехватывать строку W");
   check(cancelCalls == 0, "порядок веток: отмены на строке W быть не должно");
   check(powerOnCalls == 1, "порядок веток: возобновление обязано включить нагрев");
+  check(cleanStreamCalls == 1, "порядок веток: выход из safe wait обязан вернуть чистый поток");
   check(!fellThrough, "порядок веток: W-ветка обязана завершиться return");
 
   // B: safe wait на строке НЕ W (O) - штатное завершение сессии через П8.
@@ -528,6 +535,8 @@ bool overflow() { return test_overflow; }
 static bool nbk_opt_found = false;
 static uint8_t ProgramNum = 3;
 static bool nbk_opt_entry_by_pressure = false; // [T1] причина автовхода - захлёб обязан её сбросить
+static int dirtyStreamCalls = 0;
+void nbk_set_stream_dirty() { dirtyStreamCalls++; }
 
 static int handleOverflowCalls = 0;
 static std::string lastHandleOverflowMsg;
@@ -551,6 +560,7 @@ static bool didReturn = false;
 static void run_overflow_tick() {
   handleOverflowCalls = 0;
   runNbkProgramCalls = 0;
+  dirtyStreamCalls = 0;
   didReturn = false;
   if (overflow()) { // Если захлёб по ДЗ или ДД
 @BODY@
@@ -586,6 +596,7 @@ int main() {
   ProgramNum = 6;
   run_overflow_tick();
   check(handleOverflowCalls == 0, "opt_found: handle_overflow вызываться не должен");
+  check(dirtyStreamCalls == 1, "opt_found: захлёб обязан выбрать грязный поток до автовхода в W");
   check(runNbkProgramCalls == 1, "opt_found: run_nbk_program обязан вызваться ровно один раз");
   check(lastRunNum == 7 && !lastWorkConfirmed && lastOptimumEntry,
         "opt_found: переход обязан быть run_nbk_program(ProgramNum + 1, false, true)");

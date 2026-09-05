@@ -193,6 +193,8 @@ bool nbk_schedule_actuator_command(float candidateM, float candidateP,
 static int sendMsgCalls = 0;
 void SendMsg(const String&, int) { sendMsgCalls++; }
 void SendMsg(const char*, int) { sendMsgCalls++; }
+static int cleanStreamCalls = 0;
+void nbk_set_stream_clean() { cleanStreamCalls++; }
 
 uint32_t nbk_column_inertia = 180;
 uint16_t nbk_opt_iter = 0;
@@ -237,6 +239,7 @@ static void reset_fixture() {
   lastCandidateP = -1;
   test_scheduleSucceeds = true;
   sendMsgCalls = 0;
+  cleanStreamCalls = 0;
   nbk_Mo = 777.5f;
   nbk_Po = 3.25f;
   // "Застрявшее" состояние паузы, как в сценарии из код-ревью: захлёб в
@@ -296,6 +299,7 @@ int main() {
   check(setPowerCalls == 1, "обязана быть попытка включить нагрев");
   check(scheduleCalls == 0, "без включённого нагрева команда приводам не должна уходить");
   check(enterSafeWaitCalls == 1, "неудачное включение нагрева обязано вернуть в safe-wait с причиной");
+  check(cleanStreamCalls == 0, "без включённого нагрева грязный поток обязан сохраняться");
 
   // --- Успех: причина устранена, нагрев включается, приводам уходят ЖИВЫЕ
   // nbk_Mo/nbk_Po (регресс-точка П9 - не program[].Power/Speed). ---
@@ -307,6 +311,7 @@ int main() {
   check(scheduleCalls == 1, "успешное возобновление обязано отправить ровно одну команду приводам");
   check(lastCandidateM == 642.0f, "команда приводам обязана использовать живой nbk_Mo, а не program[].Power");
   check(lastCandidateP == 1.75f, "команда приводам обязана использовать живой nbk_Po, а не program[].Speed");
+  check(cleanStreamCalls == 1, "успешное ручное возобновление обязано вернуть чистый поток");
   check(!nbk_safe_waiting, "успешное возобновление обязано снять флаг ожидания");
   // --- [Дефект 2] Успешное возобновление обязано разрешить "застрявшее"
   // состояние паузы (а не оставить его как было в момент срыва в safe-wait) -
@@ -323,6 +328,7 @@ int main() {
   nbk_resume_work_after_safe_wait();
   check(scheduleCalls == 1, "попытка отправки команды обязана быть сделана");
   check(enterSafeWaitCalls == 1, "отказ приводов принять команду обязан вернуть в safe-wait");
+  check(cleanStreamCalls == 1, "чистый поток должен быть выбран до попытки возобновить приводы");
 
   if (failures != 0) return 1;
   std::cout << "nbk resume-work-after-safe-wait behaviour checks passed\n";

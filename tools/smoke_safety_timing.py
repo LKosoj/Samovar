@@ -518,9 +518,7 @@ forbid(
 )
 
 logic = read_source("logic.h")
-rect_finish_start = logic.find("if (num >= PROGRAM_MAX)")
-rect_finish_end = logic.find("return;", rect_finish_start)
-rect_finish = logic[rect_finish_start:rect_finish_end] if rect_finish_start >= 0 and rect_finish_end >= 0 else ""
+rect_finish = function_body(logic, "void run_program")
 require("rectification finish", rect_finish, ("ProgramNum = 0", "startval = SAMOVAR_STARTVAL_IDLE"))
 for name, source, signature in (
     ("distillation finish", distiller, "void distiller_finish"),

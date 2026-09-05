@@ -88,6 +88,8 @@ static bool overflowFlag = false;
 bool overflow() { return overflowFlag; }
 static int handleOverflowCalls = 0;
 void handle_overflow(const String&, bool = true, uint32_t = 0, bool = false) { handleOverflowCalls++; }
+static int dirtyStreamCalls = 0;
+void nbk_set_stream_dirty() { dirtyStreamCalls++; }
 
 static uint32_t fakeMillis = 1000;
 uint32_t millis() { return fakeMillis; }
@@ -280,6 +282,7 @@ int main() {
   test_no_change_when_above_ceiling();
   test_second_tick_is_noop();
   test_normalizes_by_dD();
+  check(dirtyStreamCalls == 0, "тарировка Тн без захлёба не должна переключать поток");
   if (failures != 0) return 1;
   std::cout << "nbk Tn autocal behaviour checks passed\n";
   return 0;

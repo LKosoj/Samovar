@@ -677,6 +677,7 @@ void handle_nbk_stage_manual() { //Если захлёб, выводим соо�
   bool hasOverflow = overflow();
   if (hasOverflow && !manual_overflow) {
       nbk_learn_pressure_ceiling(); // [T1-2026-09-03] handle_overflow() здесь не зовётся — обучаем явно
+      nbk_set_stream_dirty();
       const float candidateP = nbk_actual_feed_rate() / 3; // [Ремонт-2026-09-02 П4] реальная подача насоса
       // [T14 п.1] Нижняя граница в ваттном домене НБК - симметрично волюм. клэмпу.
       const float candidateM = max(toPower(target_power_volt) / 2, toPower(power_work_mode_threshold()));
@@ -793,6 +794,7 @@ void handle_nbk_stage_optimization() {
           // Если захлёб после того, как оптимум найден - автовход в Работу
           // (П1): паузу MULT*Ин, снижение до Мо/2, По/3 и единственное
           // сообщение целиком делает optimumEntry-ветка run_nbk_program.
+          nbk_set_stream_dirty();
           nbk_opt_entry_by_pressure = false; // [T1] причина — захлёб; флаг мог остаться от сорвавшегося автовхода по давлению
           run_nbk_program(ProgramNum + 1, false, true);
         }
@@ -1195,6 +1197,7 @@ inline void nbk_resume_work_after_safe_wait() {
     nbk_enter_safe_wait("Нагрев НБК не включён при попытке возобновления Работы.");
     return;
   }
+  nbk_set_stream_clean();
   nbk_safe_waiting = false;
   nbk_safe_wait_feed_stopped = false;
   nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
@@ -1378,6 +1381,7 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
             "Нагрев НБК не включён по явной команде перехода к Работе.");
         return;
       }
+      nbk_set_stream_clean();
       nbk_safe_waiting = false;
       nbk_safe_wait_feed_stopped = false;
       nbk_safe_wait_result = ACTUATOR_COMMAND_FAILED;
