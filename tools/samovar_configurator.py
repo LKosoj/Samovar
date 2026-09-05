@@ -603,7 +603,6 @@ def pio_command(pio_executable: str, board: str, action: str, port: str) -> List
         "upload": "upload",
         "uploadfs": "uploadfs",
         "erase": "erase",
-        "monitor": "monitor",
     }
     if action not in targets:
         raise ConfigError("Неизвестная команда: {}".format(action))
@@ -611,9 +610,8 @@ def pio_command(pio_executable: str, board: str, action: str, port: str) -> List
     if not port:
         raise ConfigError("Выберите последовательный порт")
     environment = BOARD_OPTIONS[board][1]
-    port_option = "--monitor-port" if action == "monitor" else "--upload-port"
     return [
-        pio_executable, "run", "-e", environment, "-t", targets[action], port_option, port,
+        pio_executable, "run", "-e", environment, "-t", targets[action], "--upload-port", port,
     ]
 
 
@@ -633,6 +631,15 @@ def esptool_reboot_command(pio_executable: str, port: str) -> List[str]:
 
 def serial_ip_command(python_executable: str, script: Path, port: str) -> List[str]:
     return [python_executable, str(script), "--serial-ip", _required_port(port)]
+
+
+def serial_monitor_command(
+    python_executable: str, script: Path, project_root: Path, environment: str, port: str
+) -> List[str]:
+    return [
+        python_executable, str(script), "--project-root", str(project_root),
+        "--serial-monitor", _required_port(port), "--environment", environment,
+    ]
 
 
 def pio_python_executable(pio_executable: str) -> str:
@@ -665,13 +672,24 @@ def extract_samovar_ip(text: str) -> Optional[str]:
     return None
 
 
+def serial_class_without_reset(base_class):
+    class SerialWithoutReset(base_class):
+        def _update_dtr_state(self):
+            pass
+
+        def _update_rts_state(self):
+            pass
+
+    return SerialWithoutReset
+
+
 def query_samovar_ip(port: str) -> str:
     try:
         import serial
     except ImportError as error:
         raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    connection = serial.Serial()
+    connection = serial_class_without_reset(serial.Serial)()
     connection.port = _required_port(port)
     connection.baudrate = 115200
     connection.timeout = 0.2
@@ -693,6 +711,32 @@ def query_samovar_ip(port: str) -> str:
         if connection.is_open:
             connection.close()
     raise ConfigError("Samovar не ответил на запрос IP через {}".format(port))
+
+
+def run_serial_monitor(project_root: Path, environment: str, port: str) -> int:
+    try:
+        import serial
+        from platformio.device.monitor.command import device_monitor_cmd
+        from platformio.exception import PlatformioException
+    except ImportError as error:
+        raise ConfigError("Не удалось загрузить монитор PlatformIO") from error
+
+    serial.Serial = serial_class_without_reset(serial.Serial)
+    try:
+        device_monitor_cmd.main(
+            args=[
+                "--port", _required_port(port), "--baud", "115200",
+                "--filter", "esp32_exception_decoder", "--project-dir", str(project_root),
+                "--environment", environment,
+            ],
+            prog_name="pio device monitor",
+            standalone_mode=False,
+        )
+    except KeyboardInterrupt:
+        pass
+    except PlatformioException as error:
+        raise ConfigError(str(error)) from error
+    return 0
 
 
 def _remote_path(name: str) -> str:
@@ -1458,10 +1502,19 @@ class ConfiguratorWindow:
             )
             return
         try:
-            command = pio_command(
-                self.pio_executable, self.board_var.get(), action, self.port_var.get()
-            )
-        except ConfigError as error:
+            if action == "monitor":
+                board = self.board_var.get()
+                if board not in BOARD_OPTIONS:
+                    raise ConfigError("Неизвестная плата: {}".format(board))
+                command = serial_monitor_command(
+                    pio_python_executable(self.pio_executable), Path(__file__).resolve(),
+                    self.config.project_root, BOARD_OPTIONS[board][1], self.port_var.get(),
+                )
+            else:
+                command = pio_command(
+                    self.pio_executable, self.board_var.get(), action, self.port_var.get()
+                )
+        except (OSError, ConfigError) as error:
             self.messagebox.showerror("Ошибка запуска", str(error))
             return
         if action == "upload" and not self.save(show_success=False):
@@ -1569,6 +1622,8 @@ def parse_arguments(argv: Optional[List[str]] = None):
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--pio", default=shutil.which("pio") or shutil.which("platformio"))
     parser.add_argument("--serial-ip")
+    parser.add_argument("--serial-monitor")
+    parser.add_argument("--environment")
     return parser.parse_args(argv)
 
 
@@ -1582,6 +1637,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
         print("SAMOVAR:IP={}".format(address))
         return 0
+    if arguments.serial_monitor:
+        if not arguments.environment:
+            print("Не указано окружение PlatformIO", file=sys.stderr)
+            return 1
+        try:
+            return run_serial_monitor(
+                arguments.project_root.resolve(), arguments.environment, arguments.serial_monitor
+            )
+        except ConfigError as error:
+            print(str(error), file=sys.stderr)
+            return 1
     if not arguments.pio:
         print("PlatformIO не найден", file=sys.stderr)
         return 1

@@ -419,13 +419,6 @@ class ConfiguratorModelTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            configurator.pio_command("pio.exe", "ESP32-S3", "monitor", "/dev/cu.usbserial-1"),
-            [
-                "pio.exe", "run", "-e", "Samovar_s3", "-t", "monitor",
-                "--monitor-port", "/dev/cu.usbserial-1",
-            ],
-        )
-        self.assertEqual(
             configurator.pio_command("pio.exe", "ESP32 DevKit", "erase", "COM7"),
             ["pio.exe", "run", "-e", "Samovar", "-t", "erase", "--upload-port", "COM7"],
         )
@@ -433,10 +426,10 @@ class ConfiguratorModelTests(unittest.TestCase):
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "  ")
 
     def test_serial_monitor_does_not_reset_esp(self) -> None:
-        source = (ROOT / "platformio.ini").read_text(encoding="utf-8")
-        base_environment = source.split("[env:Samovar_s3]", 1)[0]
-        self.assertRegex(base_environment, r"(?m)^monitor_dtr\s*=\s*0\s*$")
-        self.assertRegex(base_environment, r"(?m)^monitor_rts\s*=\s*0\s*$")
+        query_source = inspect.getsource(configurator.query_samovar_ip)
+        monitor_source = inspect.getsource(configurator.run_serial_monitor)
+        self.assertIn("serial_class_without_reset(serial.Serial)()", query_source)
+        self.assertIn("serial.Serial = serial_class_without_reset(serial.Serial)", monitor_source)
 
     def test_main_window_device_controls_and_ip_gate(self) -> None:
         source = inspect.getsource(configurator.ConfiguratorWindow._build)
@@ -471,6 +464,15 @@ class ConfiguratorModelTests(unittest.TestCase):
             configurator.serial_ip_command("C:/Python/python.exe", MODULE_PATH, "/dev/cu.usbserial-1"),
             ["C:/Python/python.exe", str(MODULE_PATH), "--serial-ip", "/dev/cu.usbserial-1"],
         )
+        self.assertEqual(
+            configurator.serial_monitor_command(
+                "C:/Python/python.exe", MODULE_PATH, ROOT, "Samovar_s3", "/dev/cu.usbserial-1"
+            ),
+            [
+                "C:/Python/python.exe", str(MODULE_PATH), "--project-root", str(ROOT),
+                "--serial-monitor", "/dev/cu.usbserial-1", "--environment", "Samovar_s3",
+            ],
+        )
         with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
             configurator.esptool_reboot_command("pio.exe", " ")
 
@@ -488,9 +490,24 @@ class ConfiguratorModelTests(unittest.TestCase):
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
 
-        query_source = inspect.getsource(configurator.query_samovar_ip)
-        self.assertNotIn("connection.dtr", query_source)
-        self.assertNotIn("connection.rts", query_source)
+        class ResettingSerial:
+            def __init__(self):
+                self.changes = []
+
+            def _update_dtr_state(self):
+                self.changes.append("DTR")
+
+            def _update_rts_state(self):
+                self.changes.append("RTS")
+
+            def open(self):
+                self._update_dtr_state()
+                self._update_rts_state()
+
+        no_reset_class = configurator.serial_class_without_reset(ResettingSerial)
+        connection = no_reset_class()
+        connection.open()
+        self.assertEqual(connection.changes, [])
 
     def test_compressed_editor_files_round_trip_and_upload_to_existing_gzip(self) -> None:
         text = "<html>Привет</html>\n"
