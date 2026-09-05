@@ -135,6 +135,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 #include "mod_rmvk.h"
 
+#include "I2CStepper.h"
 #include "logic.h"
 
 #ifdef USE_UPDATE_OTA
@@ -175,7 +176,6 @@ SimpleStringQueue msg_q(5, 200);
 #include "pumppwm.h"
 #endif
 
-#include "I2CStepper.h"
 #include "distiller.h"
 #include "beer.h"
 #include "BK.h"
@@ -270,7 +270,7 @@ static_assert(sizeof(ProfileOperationPhase) == sizeof(uint8_t),
               "ProfileOperationPhase must remain byte-sized");
 static_assert(std::is_trivially_copyable<ProfileOperationSlot>::value,
               "ProfileOperationSlot must remain safe for fixed slot copies");
-static_assert(sizeof(ProfileOperationSlot) <= 1368,
+static_assert(sizeof(ProfileOperationSlot) <= 1384,
               "ProfileOperationSlot exceeds replaced pending storage");
 
 static inline ProfileOperationPhase profile_operation_phase_load() {

@@ -163,6 +163,19 @@ class ConfiguratorModelTests(unittest.TestCase):
         )
         self.assertEqual(controlled, expected)
 
+    def test_every_control_section_has_a_tab(self) -> None:
+        control_sections = {
+            spec.section
+            for specs in (
+                configurator.VALUE_SPECS,
+                configurator.BOOL_SPECS,
+                configurator.OPTIONAL_SPECS,
+                configurator.CHOICE_VALUE_SPECS,
+            )
+            for spec in specs
+        }
+        self.assertEqual(control_sections, set(configurator.SECTIONS))
+
 
 class FirmwareIntegrationTests(unittest.TestCase):
     def test_wifi_override_is_local_and_optional(self) -> None:

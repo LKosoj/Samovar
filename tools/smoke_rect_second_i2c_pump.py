@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LOGIC = (ROOT / "logic.h").read_text(encoding="utf-8")
 I2C = (ROOT / "I2CStepper.h").read_text(encoding="utf-8")
 MENU = (ROOT / "Menu.ino").read_text(encoding="utf-8")
+SAMOVAR_INO = (ROOT / "Samovar.ino").read_text(encoding="utf-8")
 
 
 def require(condition: bool, message: str) -> None:
@@ -21,6 +22,9 @@ require("SamSetup.UseSecondI2CPump" in enabled,
         "second pump must be opt-in")
 require("use_I2C_dev == I2CSTEPPER_PUMP_ADDR" in enabled,
         "second pump must use only the device discovered at startup")
+require(SAMOVAR_INO.index('#include "I2CStepper.h"') <
+        SAMOVAR_INO.index('#include "logic.h"'),
+        "I2C stepper declarations must precede rectification helpers")
 
 start = extract_function_body(I2C, "inline bool start_second_i2c_pump(")
 stop = extract_function_body(I2C, "inline bool stop_second_i2c_pump()")

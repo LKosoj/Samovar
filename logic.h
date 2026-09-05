@@ -119,8 +119,9 @@ inline bool rect_pause_second_i2c_pump() {
   if (!rectSecondPumpRunning) return true;
   if (rectSecondPumpHeadsFilling) {
     if (!i2c_stepper_refresh(i2cStepperPump, true)) return false;
-    rectSecondPumpPausedVolume =
-        (uint16_t)min(i2cStepperPump.remaining, 65535UL);
+    rectSecondPumpPausedVolume = i2cStepperPump.remaining > UINT16_MAX
+        ? UINT16_MAX
+        : (uint16_t)i2cStepperPump.remaining;
   }
   if (!stop_second_i2c_pump()) return false;
   rectSecondPumpRunning = false;
