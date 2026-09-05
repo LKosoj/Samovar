@@ -489,8 +489,8 @@ class ConfiguratorModelTests(unittest.TestCase):
         )
 
         query_source = inspect.getsource(configurator.query_samovar_ip)
-        self.assertLess(query_source.index("connection.dtr = False"), query_source.index("connection.open()"))
-        self.assertLess(query_source.index("connection.rts = False"), query_source.index("connection.open()"))
+        self.assertNotIn("connection.dtr", query_source)
+        self.assertNotIn("connection.rts", query_source)
 
     def test_compressed_editor_files_round_trip_and_upload_to_existing_gzip(self) -> None:
         text = "<html>Привет</html>\n"

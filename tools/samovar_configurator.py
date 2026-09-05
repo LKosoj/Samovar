@@ -669,15 +669,13 @@ def query_samovar_ip(port: str) -> str:
     try:
         import serial
     except ImportError as error:
-        raise ConfigError("В Python PlatformIO не найден модуль работы с USB-портом") from error
+        raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
     connection = serial.Serial()
     connection.port = _required_port(port)
     connection.baudrate = 115200
     connection.timeout = 0.2
     connection.write_timeout = 2
-    connection.dtr = False
-    connection.rts = False
     try:
         connection.open()
         connection.reset_input_buffer()
