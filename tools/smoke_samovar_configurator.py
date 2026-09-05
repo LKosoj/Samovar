@@ -511,7 +511,48 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(connection.changes, [])
         self.assertFalse(connection._dtr_state)
         self.assertFalse(connection._rts_state)
-        self.assertNotIn("_reconfigure_port", no_reset_class.__dict__)
+
+        events = []
+
+        class ConfiguringSerial:
+            fd = 17
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def _reconfigure_port(self, *args, **kwargs):
+                events.append("configure")
+
+        no_reset_class = configurator.serial_class_without_reset(ConfiguringSerial)
+        with mock.patch.object(
+            configurator,
+            "_disable_posix_serial_control_lines",
+            side_effect=lambda fd: events.append(("disable", fd)),
+        ):
+            no_reset_class()._reconfigure_port(force_update=True)
+        expected = ["configure"] if configurator.os.name == "nt" else [("disable", 17), "configure"]
+        self.assertEqual(events, expected)
+
+        if configurator.os.name != "nt":
+            for unrelated_bit in (0x100, 0x200):
+                writes = []
+
+                def ioctl(fd, operation, value, mutate=False):
+                    if operation == configurator.termios.TIOCMGET:
+                        value[0] = (
+                            configurator.termios.TIOCM_DTR |
+                            configurator.termios.TIOCM_RTS |
+                            unrelated_bit
+                        )
+                    else:
+                        writes.append((fd, operation, value[0]))
+
+                with mock.patch.object(configurator.fcntl, "ioctl", side_effect=ioctl):
+                    configurator._disable_posix_serial_control_lines(23)
+                self.assertEqual(
+                    writes,
+                    [(23, configurator.termios.TIOCMSET, unrelated_bit)],
+                )
 
         monitor_source = inspect.getsource(configurator.run_serial_monitor)
         self.assertNotIn("platformio", monitor_source)

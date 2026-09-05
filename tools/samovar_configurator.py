@@ -2,6 +2,7 @@
 """Окно настройки, сборки и прошивки Samovar для Windows."""
 
 import argparse
+import array
 import ast
 import gzip
 import ipaddress
@@ -21,6 +22,10 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+if os.name != "nt":
+    import fcntl
+    import termios
 
 
 BOARD_OPTIONS = {
@@ -667,12 +672,24 @@ def extract_samovar_ip(text: str) -> Optional[str]:
     return None
 
 
+def _disable_posix_serial_control_lines(fd: int) -> None:
+    status = array.array("i", [0])
+    fcntl.ioctl(fd, termios.TIOCMGET, status, True)
+    status[0] &= ~(termios.TIOCM_DTR | termios.TIOCM_RTS)
+    fcntl.ioctl(fd, termios.TIOCMSET, status)
+
+
 def serial_class_without_reset(base_class):
     class SerialWithoutReset(base_class):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self._dtr_state = False
             self._rts_state = False
+
+        def _reconfigure_port(self, *args, **kwargs):
+            if os.name != "nt":
+                _disable_posix_serial_control_lines(self.fd)
+            super()._reconfigure_port(*args, **kwargs)
 
         def _update_dtr_state(self):
             pass
