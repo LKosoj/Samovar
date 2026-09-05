@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Окно настройки, сборки и прошивки Samovar для Windows."""
 
+import array
 import argparse
 import ast
 import gzip
@@ -633,13 +634,8 @@ def serial_ip_command(python_executable: str, script: Path, port: str) -> List[s
     return [python_executable, str(script), "--serial-ip", _required_port(port)]
 
 
-def serial_monitor_command(
-    python_executable: str, script: Path, project_root: Path, environment: str, port: str
-) -> List[str]:
-    return [
-        python_executable, str(script), "--project-root", str(project_root),
-        "--serial-monitor", _required_port(port), "--environment", environment,
-    ]
+def serial_monitor_command(python_executable: str, script: Path, port: str) -> List[str]:
+    return [python_executable, str(script), "--serial-monitor", _required_port(port)]
 
 
 def pio_python_executable(pio_executable: str) -> str:
@@ -674,11 +670,33 @@ def extract_samovar_ip(text: str) -> Optional[str]:
 
 def serial_class_without_reset(base_class):
     class SerialWithoutReset(base_class):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._dtr_state = False
+            self._rts_state = False
+
         def _update_dtr_state(self):
             pass
 
         def _update_rts_state(self):
             pass
+
+        def _reconfigure_port(self, *args, **kwargs):
+            super()._reconfigure_port(*args, **kwargs)
+            if os.name == "nt":
+                return
+            import fcntl
+            import termios
+
+            # На POSIX обе линии меняются одной операцией: раздельное переключение
+            # создаёт промежуточную комбинацию, которая сбрасывает ESP32.
+            status = array.array("i", [0])
+            fcntl.ioctl(self.fd, getattr(termios, "TIOCMGET", 0x5415), status, True)
+            status[0] &= ~(
+                getattr(termios, "TIOCM_DTR", 0x002) |
+                getattr(termios, "TIOCM_RTS", 0x004)
+            )
+            fcntl.ioctl(self.fd, getattr(termios, "TIOCMSET", 0x5418), status)
 
     return SerialWithoutReset
 
@@ -713,29 +731,30 @@ def query_samovar_ip(port: str) -> str:
     raise ConfigError("Samovar не ответил на запрос IP через {}".format(port))
 
 
-def run_serial_monitor(project_root: Path, environment: str, port: str) -> int:
+def run_serial_monitor(port: str) -> int:
     try:
         import serial
-        from platformio.device.monitor.command import device_monitor_cmd
-        from platformio.exception import PlatformioException
     except ImportError as error:
-        raise ConfigError("Не удалось загрузить монитор PlatformIO") from error
+        raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    serial.Serial = serial_class_without_reset(serial.Serial)
+    connection = serial_class_without_reset(serial.Serial)()
+    connection.port = _required_port(port)
+    connection.baudrate = 115200
+    connection.timeout = 0.2
     try:
-        device_monitor_cmd.main(
-            args=[
-                "--port", _required_port(port), "--baud", "115200",
-                "--filter", "esp32_exception_decoder", "--project-dir", str(project_root),
-                "--environment", environment,
-            ],
-            prog_name="pio device monitor",
-            standalone_mode=False,
-        )
+        connection.open()
+        print("--- Последовательный порт {} | 115200 8-N-1".format(port), flush=True)
+        while True:
+            data = connection.read(256)
+            if data:
+                print(data.decode("utf-8", errors="replace"), end="", flush=True)
     except KeyboardInterrupt:
         pass
-    except PlatformioException as error:
-        raise ConfigError(str(error)) from error
+    except (OSError, serial.SerialException) as error:
+        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
+    finally:
+        if connection.is_open:
+            connection.close()
     return 0
 
 
@@ -1503,12 +1522,9 @@ class ConfiguratorWindow:
             return
         try:
             if action == "monitor":
-                board = self.board_var.get()
-                if board not in BOARD_OPTIONS:
-                    raise ConfigError("Неизвестная плата: {}".format(board))
                 command = serial_monitor_command(
                     pio_python_executable(self.pio_executable), Path(__file__).resolve(),
-                    self.config.project_root, BOARD_OPTIONS[board][1], self.port_var.get(),
+                    self.port_var.get(),
                 )
             else:
                 command = pio_command(
@@ -1623,7 +1639,6 @@ def parse_arguments(argv: Optional[List[str]] = None):
     parser.add_argument("--pio", default=shutil.which("pio") or shutil.which("platformio"))
     parser.add_argument("--serial-ip")
     parser.add_argument("--serial-monitor")
-    parser.add_argument("--environment")
     return parser.parse_args(argv)
 
 
@@ -1638,13 +1653,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("SAMOVAR:IP={}".format(address))
         return 0
     if arguments.serial_monitor:
-        if not arguments.environment:
-            print("Не указано окружение PlatformIO", file=sys.stderr)
-            return 1
         try:
-            return run_serial_monitor(
-                arguments.project_root.resolve(), arguments.environment, arguments.serial_monitor
-            )
+            return run_serial_monitor(arguments.serial_monitor)
         except ConfigError as error:
             print(str(error), file=sys.stderr)
             return 1

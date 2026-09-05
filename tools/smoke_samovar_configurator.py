@@ -429,7 +429,8 @@ class ConfiguratorModelTests(unittest.TestCase):
         query_source = inspect.getsource(configurator.query_samovar_ip)
         monitor_source = inspect.getsource(configurator.run_serial_monitor)
         self.assertIn("serial_class_without_reset(serial.Serial)()", query_source)
-        self.assertIn("serial.Serial = serial_class_without_reset(serial.Serial)", monitor_source)
+        self.assertIn("serial_class_without_reset(serial.Serial)()", monitor_source)
+        self.assertNotIn("platformio", monitor_source)
 
     def test_main_window_device_controls_and_ip_gate(self) -> None:
         source = inspect.getsource(configurator.ConfiguratorWindow._build)
@@ -466,11 +467,11 @@ class ConfiguratorModelTests(unittest.TestCase):
         )
         self.assertEqual(
             configurator.serial_monitor_command(
-                "C:/Python/python.exe", MODULE_PATH, ROOT, "Samovar_s3", "/dev/cu.usbserial-1"
+                "C:/Python/python.exe", MODULE_PATH, "/dev/cu.usbserial-1"
             ),
             [
-                "C:/Python/python.exe", str(MODULE_PATH), "--project-root", str(ROOT),
-                "--serial-monitor", "/dev/cu.usbserial-1", "--environment", "Samovar_s3",
+                "C:/Python/python.exe", str(MODULE_PATH),
+                "--serial-monitor", "/dev/cu.usbserial-1",
             ],
         )
         with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
@@ -491,7 +492,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         )
 
         class ResettingSerial:
-            def __init__(self):
+            def __init__(self, *args, **kwargs):
                 self.changes = []
 
             def _update_dtr_state(self):
@@ -508,6 +509,12 @@ class ConfiguratorModelTests(unittest.TestCase):
         connection = no_reset_class()
         connection.open()
         self.assertEqual(connection.changes, [])
+        self.assertFalse(connection._dtr_state)
+        self.assertFalse(connection._rts_state)
+
+        monitor_source = inspect.getsource(configurator.run_serial_monitor)
+        self.assertNotIn("platformio", monitor_source)
+        self.assertIn("connection.read", monitor_source)
 
     def test_compressed_editor_files_round_trip_and_upload_to_existing_gzip(self) -> None:
         text = "<html>Привет</html>\n"
