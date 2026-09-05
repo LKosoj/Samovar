@@ -280,17 +280,79 @@ class ConfiguratorModelTests(unittest.TestCase):
 
     def test_commands_use_existing_environments_and_never_build_twice(self) -> None:
         self.assertEqual(
-            configurator.pio_command("pio.exe", "ESP32 DevKit", "upload"),
-            ["pio.exe", "run", "-e", "Samovar", "-t", "upload"],
+            configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "COM7"),
+            ["pio.exe", "run", "-e", "Samovar", "-t", "upload", "--upload-port", "COM7"],
         )
         self.assertEqual(
-            configurator.pio_command("pio.exe", "LILYGO", "uploadfs"),
-            ["pio.exe", "run", "-e", "Samovar", "-t", "uploadfs"],
+            configurator.pio_command("pio.exe", "LILYGO", "uploadfs", "/dev/ttyUSB0"),
+            [
+                "pio.exe", "run", "-e", "Samovar", "-t", "uploadfs",
+                "--upload-port", "/dev/ttyUSB0",
+            ],
         )
         self.assertEqual(
-            configurator.pio_command("pio.exe", "ESP32-S3", "monitor"),
-            ["pio.exe", "run", "-e", "Samovar_s3", "-t", "monitor"],
+            configurator.pio_command("pio.exe", "ESP32-S3", "monitor", "/dev/cu.usbserial-1"),
+            [
+                "pio.exe", "run", "-e", "Samovar_s3", "-t", "monitor",
+                "--monitor-port", "/dev/cu.usbserial-1",
+            ],
         )
+        with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
+            configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "  ")
+
+    def test_serial_ports_are_read_from_platformio_json(self) -> None:
+        result = type(
+            "Result",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '[{"port":"COM7"},{"port":"/dev/ttyUSB0"},{"port":"COM7"}]',
+                "stderr": "",
+            },
+        )()
+        with mock.patch.object(configurator.subprocess, "run", return_value=result) as run:
+            ports = configurator.list_serial_ports("pio.exe")
+
+        self.assertEqual(ports, ["COM7", "/dev/ttyUSB0"])
+        run.assert_called_once_with(
+            ["pio.exe", "device", "list", "--serial", "--json-output"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+    def test_port_control_is_editable_and_refreshable(self) -> None:
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        for token in (
+            'text="Последовательный порт"',
+            'self.port_combo = ttk.Combobox(',
+            'state="normal"',
+            'text="Обновить"',
+            'command=self.refresh_ports',
+        ):
+            self.assertIn(token, source)
+
+    def test_empty_port_stops_upload_before_saving_or_starting(self) -> None:
+        errors = []
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.busy = False
+        window.config = type("Config", (), {"project_root": Path("/tmp/Samovar")})()
+        window.pio_executable = "pio.exe"
+        window.board_var = type("Variable", (), {"get": lambda self: "ESP32 DevKit"})()
+        window.port_var = type("Variable", (), {"get": lambda self: ""})()
+        window.messagebox = type(
+            "Messages",
+            (),
+            {"showerror": lambda _, title, message: errors.append((title, message))},
+        )()
+        window.save = lambda **kwargs: self.fail("Upload without a port must stop before saving")
+
+        with mock.patch.object(configurator.subprocess, "Popen") as popen:
+            window.start_action("upload")
+
+        self.assertEqual(errors, [("Ошибка запуска", "Выберите последовательный порт")])
+        popen.assert_not_called()
 
     def test_unc_project_path_detection(self) -> None:
         self.assertTrue(configurator.is_unc_path(Path(r"\\Mac\Home\Documents\Samovar-7.00")))

@@ -3,6 +3,7 @@
 
 import argparse
 import ast
+import json
 import os
 import queue
 import re
@@ -512,14 +513,45 @@ def is_unc_path(path: Path) -> bool:
     return str(path).startswith(("\\\\", "//"))
 
 
-def pio_command(pio_executable: str, board: str, action: str) -> List[str]:
+def list_serial_ports(pio_executable: str) -> List[str]:
+    result = subprocess.run(
+        [pio_executable, "device", "list", "--serial", "--json-output"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise ConfigError("Не удалось получить список портов: {}".format(detail))
+    try:
+        devices = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise ConfigError("PlatformIO вернул некорректный список портов") from error
+    if not isinstance(devices, list):
+        raise ConfigError("PlatformIO вернул некорректный список портов")
+    ports = []
+    for device in devices:
+        port = device.get("port") if isinstance(device, dict) else None
+        if isinstance(port, str) and port.strip() and port not in ports:
+            ports.append(port)
+    return ports
+
+
+def pio_command(pio_executable: str, board: str, action: str, port: str) -> List[str]:
     if board not in BOARD_OPTIONS:
         raise ConfigError("Неизвестная плата: {}".format(board))
     targets = {"upload": "upload", "uploadfs": "uploadfs", "monitor": "monitor"}
     if action not in targets:
         raise ConfigError("Неизвестная команда: {}".format(action))
+    port = port.strip()
+    if not port:
+        raise ConfigError("Выберите последовательный порт")
     environment = BOARD_OPTIONS[board][1]
-    return [pio_executable, "run", "-e", environment, "-t", targets[action]]
+    port_option = "--monitor-port" if action == "monitor" else "--upload-port"
+    return [
+        pio_executable, "run", "-e", environment, "-t", targets[action], port_option, port,
+    ]
 
 
 class ConfiguratorWindow:
@@ -574,6 +606,23 @@ class ConfiguratorWindow:
 
         self.board_var = tk.StringVar()
         self._add_combo(section_frames, section_rows, "Основные", "Плата", self.board_var, tuple(BOARD_OPTIONS))
+        self.port_var = tk.StringVar()
+        row = section_rows["Основные"]
+        ttk.Label(section_frames["Основные"], text="Последовательный порт").grid(
+            row=row, column=0, sticky="w", pady=3
+        )
+        port_controls = ttk.Frame(section_frames["Основные"])
+        port_controls.grid(row=row, column=1, sticky="ew", padx=(10, 0), pady=3)
+        port_controls.columnconfigure(0, weight=1)
+        self.port_combo = ttk.Combobox(
+            port_controls, textvariable=self.port_var, values=(), state="normal"
+        )
+        self.port_combo.grid(row=0, column=0, sticky="ew")
+        self.port_refresh_button = ttk.Button(
+            port_controls, text="Обновить", command=self.refresh_ports
+        )
+        self.port_refresh_button.grid(row=0, column=1, padx=(8, 0))
+        section_rows["Основные"] += 1
         self.servo_var = tk.StringVar()
         self._add_entry(section_frames, section_rows, "Основные", "Поправки сервопривода (11 чисел)", self.servo_var)
 
@@ -696,6 +745,18 @@ class ConfiguratorWindow:
             variable.set(str(state[key]))
         self.ssid_var.set(str(state["wifi_ssid"]))
         self.password_var.set(str(state["wifi_password"]))
+        self.refresh_ports()
+
+    def refresh_ports(self) -> None:
+        try:
+            ports = list_serial_ports(self.pio_executable)
+        except (OSError, ConfigError) as error:
+            self.messagebox.showerror("Ошибка поиска портов", str(error))
+            return
+        current = self.port_var.get().strip()
+        self.port_combo.configure(values=ports)
+        if not current and ports:
+            self.port_var.set(ports[0])
 
     def _state(self) -> Dict[str, object]:
         state = {macro: variable.get() for macro, variable in self.value_vars.items()}
@@ -800,12 +861,14 @@ class ConfiguratorWindow:
                 r"C:\Samovar-7.00, и запустите flash_windows.bat из этой папки.",
             )
             return
-        if action == "upload" and not self.save(show_success=False):
-            return
         try:
-            command = pio_command(self.pio_executable, self.board_var.get(), action)
+            command = pio_command(
+                self.pio_executable, self.board_var.get(), action, self.port_var.get()
+            )
         except ConfigError as error:
             self.messagebox.showerror("Ошибка запуска", str(error))
+            return
+        if action == "upload" and not self.save(show_success=False):
             return
         try:
             self.process = subprocess.Popen(
@@ -863,6 +926,8 @@ class ConfiguratorWindow:
         self.upload_button.configure(state=state)
         self.fs_button.configure(state=state)
         self.monitor_button.configure(state=state)
+        self.port_combo.configure(state=state)
+        self.port_refresh_button.configure(state=state)
         if self.monitor_stop_button is not None:
             self.monitor_stop_button.configure(
                 text="Остановить" if busy and action == "monitor" else "Закрыть",
