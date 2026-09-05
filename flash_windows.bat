@@ -72,27 +72,22 @@ if not defined PIO_EXE (
 )
 
 echo.
-echo [1/4] Компиляция прошивки...
-"%PIO_EXE%" run -e "%PIO_ENV%"
-if errorlevel 1 goto :failed
-
-echo.
-echo [2/4] Загрузка прошивки в плату...
+echo [1/3] Сборка и загрузка прошивки в плату...
 "%PIO_EXE%" run -e "%PIO_ENV%" -t upload
 if errorlevel 1 goto :failed
 
 if /I "%LITTLEFS%"=="yes" (
   echo.
-  echo [3/4] Загрузка файлов LittleFS...
+  echo [2/3] Загрузка файлов LittleFS...
   "%PIO_EXE%" run -e "%PIO_ENV%" -t uploadfs
   if errorlevel 1 goto :failed
 ) else (
   echo.
-  echo [3/4] Загрузка LittleFS пропущена.
+  echo [2/3] Загрузка LittleFS пропущена.
 )
 
 echo.
-echo [4/4] Открытие монитора порта. Для выхода нажмите Ctrl+C.
+echo [3/3] Открытие монитора порта. Для выхода нажмите Ctrl+C.
 "%PIO_EXE%" run -e "%PIO_ENV%" -t monitor
 set "RESULT=%ERRORLEVEL%"
 popd

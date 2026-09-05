@@ -29,26 +29,28 @@ def validate(source: str) -> list[str]:
         if token not in source:
             errors.append(f"нет обязательного элемента: {name}")
 
+    standalone_build = '"%PIO_EXE%" run -e "%PIO_ENV%"\n'
     commands = [
-        '"%PIO_EXE%" run -e "%PIO_ENV%"\n',
         '"%PIO_EXE%" run -e "%PIO_ENV%" -t upload\n',
         '"%PIO_EXE%" run -e "%PIO_ENV%" -t uploadfs\n',
         '"%PIO_EXE%" run -e "%PIO_ENV%" -t monitor\n',
     ]
+    if standalone_build in source:
+        errors.append("прошивка не должна предварительно компилироваться отдельной командой")
     positions = [source.find(command) for command in commands]
     if any(position < 0 for position in positions):
-        errors.append("нет полной цепочки compile -> upload -> uploadfs -> monitor")
+        errors.append("нет полной цепочки upload -> uploadfs -> monitor")
     elif positions != sorted(positions) or len(set(positions)) != len(positions):
-        errors.append("нарушен порядок compile -> upload -> uploadfs -> monitor")
+        errors.append("нарушен порядок upload -> uploadfs -> monitor")
 
     littlefs_guard = 'if /I "%LITTLEFS%"=="yes" ('
     guard_position = source.find(littlefs_guard)
-    uploadfs_position = source.find(commands[2])
-    monitor_position = source.find(commands[3])
+    uploadfs_position = source.find(commands[1])
+    monitor_position = source.find(commands[2])
     if not (0 <= guard_position < uploadfs_position < monitor_position):
         errors.append("uploadfs не защищён параметром --littlefs yes")
 
-    for command in commands[:3]:
+    for command in commands[:2]:
         command_position = source.find(command)
         if command_position >= 0:
             following = source[command_position + len(command):].lstrip().splitlines()
@@ -77,6 +79,11 @@ def main() -> int:
         "монитор открыт до прошивки": source.replace(
             '"%PIO_EXE%" run -e "%PIO_ENV%" -t monitor\n',
             '"%PIO_EXE%" run -e "%PIO_ENV%" -t upload\n',
+            1,
+        ),
+        "лишняя предварительная компиляция": source.replace(
+            '"%PIO_EXE%" run -e "%PIO_ENV%" -t upload\n',
+            '"%PIO_EXE%" run -e "%PIO_ENV%"\n"%PIO_EXE%" run -e "%PIO_ENV%" -t upload\n',
             1,
         ),
     }
