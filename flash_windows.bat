@@ -71,8 +71,6 @@ if not defined PIO_EXE (
   echo PlatformIO найден: "%PIO_EXE%"
 )
 
-call :ensure_git || goto :failed
-
 echo.
 echo [1/4] Компиляция прошивки...
 "%PIO_EXE%" run -e "%PIO_ENV%"
@@ -184,53 +182,6 @@ if errorlevel 1 (
   exit /b 1
 )
 exit /b 0
-
-:ensure_git
-call :find_git
-if not errorlevel 1 (
-  echo Git найден.
-  exit /b 0
-)
-
-where winget.exe >nul 2>&1
-if not errorlevel 1 (
-  echo Git не найден. Установка Git через winget...
-  winget install --id Git.Git -e --scope user --silent --accept-package-agreements --accept-source-agreements
-  if errorlevel 1 (
-    echo Ошибка: winget не смог установить Git.
-    exit /b 1
-  )
-) else (
-  echo Git и winget не найдены. Скачивание Git for Windows...
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; $release=Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/git-for-windows/git/releases/latest'; $asset=@($release.assets | Where-Object { $_.name -match '^Git-.*-64-bit\.exe$' })[0]; if (-not $asset) { exit 1 }; Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile (Join-Path $env:TEMP 'samovar-git-64-bit.exe')"
-  if errorlevel 1 (
-    echo Ошибка: не удалось скачать Git for Windows.
-    exit /b 1
-  )
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "if ((Get-AuthenticodeSignature (Join-Path $env:TEMP 'samovar-git-64-bit.exe')).Status -ne 'Valid') { exit 1 }"
-  if errorlevel 1 (
-    echo Ошибка: цифровая подпись установщика Git недействительна.
-    exit /b 1
-  )
-  start /wait "" "%TEMP%\samovar-git-64-bit.exe" /VERYSILENT /NORESTART /NOCANCEL /SP- /CURRENTUSER
-  if errorlevel 1 (
-    echo Ошибка: установщик Git завершился с ошибкой.
-    exit /b 1
-  )
-)
-
-call :find_git
-if errorlevel 1 (
-  echo Ошибка: Git установлен, но команда git не найдена.
-  exit /b 1
-)
-exit /b 0
-
-:find_git
-if exist "%LocalAppData%\Programs\Git\cmd\git.exe" set "PATH=%LocalAppData%\Programs\Git\cmd;%PATH%"
-if exist "%ProgramFiles%\Git\cmd\git.exe" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
-git.exe --version >nul 2>&1
-exit /b %ERRORLEVEL%
 
 :help
 echo Использование:

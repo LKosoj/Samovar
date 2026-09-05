@@ -172,33 +172,19 @@ def tree_sha256(root: Path, ignore_esptoolpy_generated: bool = False) -> str:
     return digest.hexdigest()
 
 
-def git_revision(platform_root: Path) -> str:
-    git_root = require_directory(platform_root / ".git", "platform Git metadata")
-    head = require_regular_file(git_root / "HEAD", "platform Git HEAD").read_text(encoding="ascii").strip()
-    if GIT_SHA_RE.fullmatch(head):
-        return head.lower()
-    prefix = "ref: "
-    if not head.startswith(prefix):
-        raise MetadataError("platform Git HEAD is malformed")
-    reference = head[len(prefix) :]
-    if reference.startswith("/") or ".." in Path(reference).parts:
-        raise MetadataError("platform Git HEAD reference is invalid")
-    reference_path = git_root / reference
-    if reference_path.is_file():
-        revision = reference_path.read_text(encoding="ascii").strip()
-    else:
-        packed = require_regular_file(git_root / "packed-refs", "platform packed refs")
-        revision = ""
-        for line in packed.read_text(encoding="ascii").splitlines():
-            if line.startswith(("#", "^")):
-                continue
-            fields = line.split(" ", 1)
-            if len(fields) == 2 and fields[1] == reference:
-                revision = fields[0]
-                break
-    if not GIT_SHA_RE.fullmatch(revision):
-        raise MetadataError("platform Git revision is missing or malformed")
-    return revision.lower()
+def archive_revision(platform_root: Path) -> str:
+    package_metadata = load_json_object(platform_root / ".piopm", "platform package metadata")
+    spec = package_metadata.get("spec")
+    if not isinstance(spec, dict):
+        raise MetadataError("platform package spec must be an object")
+    uri = required_string(spec.get("uri"), "platform package URI")
+    match = re.fullmatch(
+        r"https://github\.com/[^/]+/[^/]+/archive/([0-9a-fA-F]{40})\.zip",
+        uri,
+    )
+    if match is None:
+        raise MetadataError("platform archive revision is missing or malformed")
+    return match.group(1).lower()
 
 
 def platform_inventory(core_dir: Path) -> list[dict[str, object]]:
@@ -210,7 +196,7 @@ def platform_inventory(core_dir: Path) -> list[dict[str, object]]:
         platforms.append(
             {
                 "name": required_string(manifest.get("name"), "platform name"),
-                "revision": git_revision(entry),
+                "revision": archive_revision(entry),
                 "source": source_from_manifest(manifest, "platform manifest"),
                 "tree_sha256": tree_sha256(entry),
                 "version": required_string(manifest.get("version"), "platform version"),

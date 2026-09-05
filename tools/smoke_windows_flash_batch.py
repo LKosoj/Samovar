@@ -22,7 +22,6 @@ def validate(source: str) -> list[str]:
         "PlatformIO при имени пользователя с кириллицей": 'C:\\.platformio\\penv\\Scripts\\pio.exe',
         "установка без winget": "Python и winget не найдены",
         "официальный установщик PlatformIO": "platformio/platformio-core-installer/master/get-platformio.py",
-        "Git для платформы из репозитория": "call :ensure_git",
         "поддерживаемая архитектура": 'if /I "%PROCESSOR_ARCHITECTURE%"=="AMD64"',
         "исключение псевдонима Microsoft Store": '\\Microsoft\\WindowsApps\\',
     }
@@ -58,6 +57,10 @@ def validate(source: str) -> list[str]:
 
     if 'sys.version_info ^< (3, 7)' in source or '$release.assets ^|' in source:
         errors.append("символ внутри кавычек ошибочно экранирован для cmd.exe")
+
+    for token in ("call :ensure_git", ":ensure_git", ":find_git", "Git.Git", "samovar-git-64-bit.exe"):
+        if token in source:
+            errors.append(f"батник всё ещё устанавливает ненужный Git: {token}")
 
     return errors
 

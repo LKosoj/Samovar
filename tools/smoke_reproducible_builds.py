@@ -17,7 +17,7 @@ RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "build_release.yml"
 HELPER = ROOT / "tools" / "build_metadata.py"
 
 PLATFORM_COMMIT = "3c076807e1f55b90799b50b946e76a0508e97778"
-PLATFORM_URL = f"https://github.com/platformio/platform-espressif32.git#{PLATFORM_COMMIT}"
+PLATFORM_URL = f"https://github.com/platformio/platform-espressif32/archive/{PLATFORM_COMMIT}.zip"
 PACKAGE_SPECS = (
     "platformio/framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b",
     "platformio/tool-esptoolpy @ 2.40900.250804",
@@ -205,7 +205,7 @@ def make_fixture(root: Path, reverse: bool = False) -> dict[str, Path]:
     core = root / "core"
     paths = [
         project / "libraries" / "Example" / "src",
-        core / "platforms" / "espressif32" / ".git",
+        core / "platforms" / "espressif32",
         core / "packages" / "tool-esptoolpy" / "_contrib" / "bin",
         core / "packages" / "tool-esptoolpy" / "_contrib" / "cffi-2.1.0.dist-info",
         core / "packages" / "tool-scons" / "_contrib" / "bin",
@@ -230,7 +230,10 @@ def make_fixture(root: Path, reverse: bool = False) -> dict[str, Path]:
             "repository": {"url": "https://github.com/platformio/platform-espressif32.git"},
         },
     )
-    (core / "platforms" / "espressif32" / ".git" / "HEAD").write_text(PLATFORM_COMMIT + "\n", encoding="ascii")
+    write_json(
+        core / "platforms" / "espressif32" / ".piopm",
+        {"spec": {"uri": PLATFORM_URL}},
+    )
     write_json(
         core / "packages" / "tool-esptoolpy" / "package.json",
         {
@@ -347,6 +350,7 @@ class MetadataHelperContract(unittest.TestCase):
             self.assertEqual(first_data, second_data)
             self.assertEqual(first_data["source_date_epoch"], 1_700_000_000)
             self.assertEqual(first_data["environment"], "Samovar")
+            self.assertEqual(first_data["platformio"]["platforms"][0]["revision"], PLATFORM_COMMIT)
 
             library_file = second["project"] / "libraries" / "Example" / "src" / "example.h"
             library_file.write_text("#define VALUE 2\n", encoding="utf-8")
@@ -445,6 +449,15 @@ class MetadataHelperContract(unittest.TestCase):
             result = run_helper(missing_manifest)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("package.json", result.stderr)
+
+            invalid_platform_spec = make_fixture(root / "invalid-platform-spec")
+            write_json(
+                invalid_platform_spec["core"] / "platforms" / "espressif32" / ".piopm",
+                {"spec": {"uri": "https://github.com/platformio/platform-espressif32/archive/develop.zip"}},
+            )
+            result = run_helper(invalid_platform_spec)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("revision", result.stderr.lower())
 
             symlink_fixture = make_fixture(root / "symlink")
             (symlink_fixture["project"] / "libraries" / "Example" / "escape").symlink_to(root.parent)
