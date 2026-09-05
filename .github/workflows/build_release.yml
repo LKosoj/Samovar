@@ -69,3 +69,6 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: "firmware/**/*.bin"
+          allowUpdates: true
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true

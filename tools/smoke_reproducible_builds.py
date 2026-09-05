@@ -111,6 +111,7 @@ class WorkflowContract(unittest.TestCase):
         release = read(RELEASE_WORKFLOW)
         firmware_build = job_section(firmware, "build")
         release_build = job_section(release, "build")
+        release_publish = job_section(release, "release")
         errors: list[str] = []
 
         if job_names(firmware) != ["build", "static-analysis", "static-analysis-force", "smoke", "browser-ui"]:
@@ -127,6 +128,13 @@ class WorkflowContract(unittest.TestCase):
             errors.append("release artifact retention changed")
         if 'artifacts: "firmware/**/*.bin"' not in release:
             errors.append("release .bin glob changed")
+        for marker in (
+            "allowUpdates: true",
+            "omitBodyDuringUpdate: true",
+            "omitNameDuringUpdate: true",
+        ):
+            if marker not in release_publish:
+                errors.append(f"release update contract missing: {marker}")
 
         if tuple(re.findall(r"^          - (Samovar[^\s]*)$", firmware_build, re.MULTILINE)) != ENVIRONMENTS:
             errors.append("firmware CI seven-environment matrix changed")
