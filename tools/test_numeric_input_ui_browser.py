@@ -563,24 +563,19 @@ BROWSER_TEST = r'''async page => {
       };
     });
     const state = await requestState();
-    // Времена посчитаны для скоростей, УЖЕ приведённых к рекомендациям колонны:
-    // при загрузке шаблона applyRecommendedSpeeds({silent:true}) масштабирует
-    // скорости так, чтобы самая быстрая строка каждой фракции равнялась
-    // рекомендации из /ajax_col_params (головы 100, тело 400, хвосты 150 мл/ч
-    // в фикстуре colParams). Пропорции строк шаблона сохраняются: 0.07/0.1/0.2/
-    // 0.3/0.4 л/ч у голов превращаются в 0.018/0.025/0.050/0.075/0.100.
-    // Объёмы от масштаба не зависят и остались прежними; изменились только
-    // времена (время строки = объём / скорость).
+    // Времена посчитаны по исходным скоростям шаблона. Рекомендации колонны
+    // применяются только по явному нажатию кнопки и не меняют загруженную
+    // программу автоматически.
     // \u00a0 - неразрывный пробел: сводка склеивает число с единицей именно им,
     // иначе на телефоне "мин" уезжает на следующую строку.
     const expectedSummary = {
-      headsAs: "8%", headsVolume: "354\u00a0мл", headsTime: "11\u00a0ч\u00a026\u00a0мин",
+      headsAs: "8%", headsVolume: "354\u00a0мл", headsTime: "2\u00a0ч\u00a054\u00a0мин",
       headsDistribution: "По строкам: 100% — распределено полностью",
-      bodyAs: "87%", bodyVolume: "3855\u00a0мл", bodyTime: "11\u00a0ч\u00a005\u00a0мин",
+      bodyAs: "87%", bodyVolume: "3855\u00a0мл", bodyTime: "4\u00a0ч\u00a002\u00a0мин",
       bodyDistribution: "По строкам B+C: 100% — распределено полностью",
-      tailsAs: "5%", tailsVolume: "88\u00a0мл", tailsTime: "0\u00a0ч\u00a052\u00a0мин",
+      tailsAs: "5%", tailsVolume: "88\u00a0мл", tailsTime: "0\u00a0ч\u00a039\u00a0мин",
       tailsDistribution: "По строкам: 20% — информационно",
-      totalVolume: "4297\u00a0мл", totalTime: "23\u00a0ч\u00a036\u00a0мин", pauseTime: "0\u00a0ч\u00a011\u00a0мин",
+      totalVolume: "4297\u00a0мл", totalTime: "7\u00a0ч\u00a047\u00a0мин", pauseTime: "0\u00a0ч\u00a011\u00a0мин",
       valid: true
     };
     if (JSON.stringify(result.initialSummary) !== JSON.stringify(expectedSummary) ||
