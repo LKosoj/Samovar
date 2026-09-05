@@ -110,7 +110,6 @@ class WorkflowContract(unittest.TestCase):
         firmware = read(FIRMWARE_WORKFLOW)
         release = read(RELEASE_WORKFLOW)
         firmware_build = job_section(firmware, "build")
-        release_build = job_section(release, "build")
         release_publish = job_section(release, "release")
         errors: list[str] = []
 
@@ -119,16 +118,23 @@ class WorkflowContract(unittest.TestCase):
         browser_ui_build = job_section(firmware, "browser-ui")
         if "continue-on-error" in browser_ui_build:
             errors.append("browser-ui job must stay blocking (continue-on-error is forbidden)")
-        if job_names(release) != ["build", "release"]:
+        if job_names(release) != ["release"]:
             errors.append("release job topology changed")
-        for marker in ('branches: ["master", "main"]', "tags:\n      - '*'", "branches: [master]"):
+        for marker in ('branches: ["master", "main"]', "tags:\n      - '*'"):
             if marker not in firmware + release:
                 errors.append(f"existing workflow trigger missing: {marker!r}")
-        if "retention-days: 1" not in release_build:
-            errors.append("release artifact retention changed")
-        if 'artifacts: "firmware/**/*.bin"' not in release:
-            errors.append("release .bin glob changed")
+        for forbidden in (
+            "firmware.bin",
+            "actions/upload-artifact",
+            "actions/download-artifact",
+            "artifacts:",
+            "platformio run",
+            "tools/build_metadata.py",
+        ):
+            if forbidden in release:
+                errors.append(f"release workflow must publish source code only: {forbidden!r}")
         for marker in (
+            "ncipollo/release-action@v1",
             "allowUpdates: true",
             "omitBodyDuringUpdate: true",
             "omitNameDuringUpdate: true",
@@ -141,7 +147,7 @@ class WorkflowContract(unittest.TestCase):
         if "default_envs = Samovar" not in read(PLATFORMIO_INI):
             errors.append("default PlatformIO environment changed")
 
-        for label, section in (("firmware CI", firmware_build), ("release", release_build)):
+        for label, section in (("firmware CI", firmware_build),):
             if not re.search(r"python-version:\s*['\"]3\.12['\"]", section):
                 errors.append(f"{label} does not use Python 3.12")
             if "python -m pip install platformio==6.1.19" not in section:
@@ -183,16 +189,6 @@ class WorkflowContract(unittest.TestCase):
 
         if "actions/upload-artifact" in firmware_build:
             errors.append("firmware matrix gained an artifact upload")
-        for artifact in (
-            ".pio/build/Samovar/firmware.bin",
-            ".pio/build/Samovar/firmware.map",
-            ".pio/build/Samovar/build-metadata.json",
-        ):
-            if artifact not in release_build:
-                errors.append(f"release Archive misses {artifact}")
-        if "FIRMWARE_VERSION=${{github.ref_name}}" not in release_build:
-            errors.append("release FIRMWARE_VERSION contract changed")
-
         self.assertEqual(errors, [], "\n" + "\n".join(errors))
 
 
