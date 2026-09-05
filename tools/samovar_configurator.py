@@ -2,7 +2,6 @@
 """Окно настройки, сборки и прошивки Samovar для Windows."""
 
 import argparse
-import array
 import ast
 import gzip
 import ipaddress
@@ -22,11 +21,6 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-
-if os.name != "nt":
-    import fcntl
-    import termios
-
 
 BOARD_OPTIONS = {
     "ESP32 DevKit": ("DEVKIT", "Samovar"),
@@ -672,32 +666,13 @@ def extract_samovar_ip(text: str) -> Optional[str]:
     return None
 
 
-def _disable_posix_serial_control_lines(fd: int) -> None:
-    status = array.array("i", [0])
-    fcntl.ioctl(fd, termios.TIOCMGET, status, True)
-    status[0] &= ~(termios.TIOCM_DTR | termios.TIOCM_RTS)
-    fcntl.ioctl(fd, termios.TIOCMSET, status)
-
-
-def serial_class_without_reset(base_class):
-    class SerialWithoutReset(base_class):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self._dtr_state = False
-            self._rts_state = False
-
-        def _reconfigure_port(self, *args, **kwargs):
-            if os.name != "nt":
-                _disable_posix_serial_control_lines(self.fd)
-            super()._reconfigure_port(*args, **kwargs)
-
-        def _update_dtr_state(self):
-            pass
-
-        def _update_rts_state(self):
-            pass
-
-    return SerialWithoutReset
+def serial_connection(serial_module, port: str):
+    connection = serial_module.serial_for_url(
+        _required_port(port), 115200, do_not_open=True
+    )
+    if isinstance(connection, serial_module.Serial):
+        connection.exclusive = True
+    return connection
 
 
 def query_samovar_ip(port: str) -> str:
@@ -706,16 +681,14 @@ def query_samovar_ip(port: str) -> str:
     except ImportError as error:
         raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    connection = serial_class_without_reset(serial.Serial)()
-    connection.port = _required_port(port)
-    connection.baudrate = 115200
+    connection = serial_connection(serial, port)
     connection.timeout = 0.2
     connection.write_timeout = 2
     try:
         connection.open()
         connection.reset_input_buffer()
         connection.write(b"SAMOVAR:IP?\n")
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 30
         received = ""
         while time.monotonic() < deadline:
             received += connection.read(128).decode("utf-8", errors="replace")
@@ -736,9 +709,7 @@ def run_serial_monitor(port: str) -> int:
     except ImportError as error:
         raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    connection = serial_class_without_reset(serial.Serial)()
-    connection.port = _required_port(port)
-    connection.baudrate = 115200
+    connection = serial_connection(serial, port)
     connection.timeout = 0.2
     try:
         connection.open()
