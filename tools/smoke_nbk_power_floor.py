@@ -217,6 +217,7 @@ bool nbk_schedule_actuator_command(float m, float, NbkActuatorDeadlineTarget, ui
 }
 void nbk_enter_safe_wait(const String&) {}
 void SendMsg(const String&, MESSAGE_TYPE) {}
+void nbk_set_stream_clean() {}
 
 static void run_pause_tick() {
   if (nbk_work_in_pause) {
@@ -290,6 +291,7 @@ float nbk_actual_feed_rate() { return feedRateStub; }
 const char* nbk_overflow_source() { return "ДЗ"; }
 void SendMsg(const String&, MESSAGE_TYPE) {}
 void nbk_enter_safe_wait(const String&) {}
+void nbk_set_stream_dirty() {}
 
 static int scheduleCalls = 0;
 static float lastM = -1.0f;

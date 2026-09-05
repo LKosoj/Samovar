@@ -66,6 +66,95 @@ int get_liquid_volume() {
 
 // [П3-6] Момент постановки статуса "программа завершена, работа на себя" (0 - неактивно).
 volatile unsigned long program_done_hold_since = 0;
+bool rectProgramCommandFailed = false;
+static bool rectSecondPumpRunning = false;
+static bool rectSecondPumpHeadsRow = false;
+static bool rectSecondPumpHeadsFilling = false;
+static bool rectSecondPumpPaused = false;
+static uint16_t rectSecondPumpPausedVolume = 0;
+static uint32_t rectSecondPumpTargetSteps = 0;
+
+inline bool rect_second_i2c_pump_enabled() {
+  return SamSetup.UseSecondI2CPump &&
+         use_I2C_dev == I2CSTEPPER_PUMP_ADDR;
+}
+
+inline void rect_fail_second_i2c_pump(const String& action) {
+  rectProgramCommandFailed = true;
+  request_emergency_stop("I2C-насос над ЦП: команда «" + action +
+                         "» не подтверждена после 10 отправок.");
+}
+
+inline bool rect_apply_second_pump_for_row(const WProgram& row) {
+  rectSecondPumpHeadsRow = false;
+  rectSecondPumpHeadsFilling = false;
+  rectSecondPumpPaused = false;
+  rectSecondPumpPausedVolume = 0;
+  rectSecondPumpTargetSteps = 0;
+  if (!rect_second_i2c_pump_enabled()) {
+    rectSecondPumpRunning = false;
+    return true;
+  }
+  if (row.WType == 'H') {
+    rectSecondPumpHeadsRow = true;
+    rectSecondPumpHeadsFilling = row.Volume > 0;
+    rectSecondPumpTargetSteps =
+        (uint32_t)row.Volume * (uint32_t)i2c_stepper_steps_per_ml();
+    rectSecondPumpRunning = start_second_i2c_pump(row.Speed, row.Volume);
+    return rectSecondPumpRunning;
+  }
+  if (program_type_one_of(row.WType, "BC")) {
+    if (!(SamSetup.SecondI2CPumpRate > 0)) return false;
+    rectSecondPumpRunning = start_second_i2c_pump(
+        SamSetup.SecondI2CPumpRate, 0);
+    return rectSecondPumpRunning;
+  }
+  if (!rectSecondPumpRunning) return true;
+  const bool stopped = stop_second_i2c_pump();
+  if (stopped) rectSecondPumpRunning = false;
+  return stopped;
+}
+
+inline bool rect_pause_second_i2c_pump() {
+  if (!rectSecondPumpRunning) return true;
+  if (rectSecondPumpHeadsFilling) {
+    if (!i2c_stepper_refresh(i2cStepperPump, true)) return false;
+    rectSecondPumpPausedVolume =
+        (uint16_t)min(i2cStepperPump.remaining, 65535UL);
+  }
+  if (!stop_second_i2c_pump()) return false;
+  rectSecondPumpRunning = false;
+  rectSecondPumpPaused = true;
+  return true;
+}
+
+inline bool rect_resume_second_i2c_pump() {
+  if (!rectSecondPumpPaused || !rect_second_i2c_pump_enabled()) return true;
+  if (rectSecondPumpHeadsFilling && rectSecondPumpPausedVolume == 0) {
+    rectSecondPumpPaused = false;
+    return true;
+  }
+  const float rate = rectSecondPumpHeadsRow
+      ? program[ProgramNum].Speed
+      : SamSetup.SecondI2CPumpRate;
+  const uint16_t volume = rectSecondPumpHeadsFilling
+      ? rectSecondPumpPausedVolume
+      : 0;
+  rectSecondPumpRunning = start_second_i2c_pump(rate, volume);
+  if (rectSecondPumpRunning) rectSecondPumpPaused = false;
+  return rectSecondPumpRunning;
+}
+
+inline uint32_t rect_current_withdrawal_steps() {
+  if (!rectSecondPumpHeadsRow || rectSecondPumpTargetSteps == 0) {
+    return stepper_safe_get_current();
+  }
+  const uint32_t remaining =
+      (uint32_t)i2cStepperPump.remaining * i2c_stepper_steps_per_ml();
+  return remaining < rectSecondPumpTargetSteps
+      ? rectSecondPumpTargetSteps - remaining
+      : 0;
+}
 
 inline bool rect_row_transition_requested(
     const WProgram& row,
@@ -110,7 +199,7 @@ void withdrawal(void) {
   const float currentSteamTemp = SteamSensor.avgTemp;
   const float currentSteamStartTemp = SteamSensor.StartProgTemp;
   const uint32_t currentTargetSteps = TargetStepps;
-  const uint32_t currentCompletedSteps = stepper_safe_get_current();
+  const uint32_t currentCompletedSteps = rect_current_withdrawal_steps();
   const int16_t currentStartval = startval;
   const bool detectorWaitWasActive = program_Wait;
   const bool pauseWasActive = PauseOn;
@@ -300,7 +389,7 @@ PumpCalibrationResult pump_calibrate(int stpspeed) {
 // Пауза отбора
 void pause_withdrawal(bool Pause) {
   if (Samovar_Mode != SAMOVAR_RECTIFICATION_MODE) return;
-  if (!stepper_safe_get_state() && !PauseOn) return;
+  if (!stepper_safe_get_state() && !PauseOn && !rectSecondPumpRunning) return;
   // Возобновление отбора запрещено после аварии и при выключенном нагреве. Гейт стоит
   // до присваивания PauseOn, иначе флаг паузы и SamovarStatusInt разъезжаются: снаружи
   // (кнопка «Питание», Lua) питание может быть снято без аварии и без сброса статуса.
@@ -312,7 +401,14 @@ void pause_withdrawal(bool Pause) {
     if (CurrrentStepperSpeed < 1) CurrrentStepperSpeed = (uint16_t)max(1, (int)abs((int)stepper_safe_get_speed()));
     stopService();
     stepper_safe_stop();
+    if (!rect_pause_second_i2c_pump()) {
+      rect_fail_second_i2c_pump("пауза");
+    }
   } else {
+    if (!rect_resume_second_i2c_pump()) {
+      rect_fail_second_i2c_pump("продолжение");
+      return;
+    }
     stepper_safe_set_max_speed(CurrrentStepperSpeed);
     stepper_safe_set_current(CurrrentStepps);
     stepper_safe_set_target(TargetStepps);
@@ -776,6 +872,7 @@ inline bool validate_rect_program_startable(String& errorMessage) {
 
 // Запустить программу
 void run_program(uint8_t num) {
+  rectProgramCommandFailed = false;
   if (num >= PROGRAM_MAX) {
     // PROGRAM_END — sentinel завершения; его нельзя публиковать в ProgramNum.
     reset_rect_program_pause_state();
@@ -783,6 +880,12 @@ void run_program(uint8_t num) {
     startval = SAMOVAR_STARTVAL_IDLE;
     stopService();
     stepper_safe_stop_reset();
+    if (rectSecondPumpRunning && !stop_second_i2c_pump()) {
+      SendMsg("I2C-насос над ЦП: останов не подтверждён после 10 отправок.", ALARM_MSG);
+    }
+    rectSecondPumpRunning = false;
+    rectSecondPumpHeadsRow = false;
+    rectSecondPumpPaused = false;
     set_capacity(0);
     if (!request_data_log_close()) SendMsg("Файл лога занят: закрытие пропущено", WARNING_MSG);
     stop_process("Выполнение программы завершено.");
@@ -863,6 +966,10 @@ void run_program(uint8_t num) {
   }
 #endif
   p_s = "Программа: старт строки  №" + (String)(num + 1);
+  if (!rect_apply_second_pump_for_row(program[num])) {
+    rect_fail_second_i2c_pump("старт строки " + String(num + 1));
+    return;
+  }
   if (program_type_one_of(program[num].WType, "HBTC")) {
     if (program_type_one_of(program[num].WType, "HT")) {
       SteamSensor.BodyTemp = 0;
@@ -873,7 +980,9 @@ void run_program(uint8_t num) {
     p_s += ", отбор в ёмкость " + (String)program[num].capacity_num;
     //устанавливаем параметры для текущей программы отбора
     set_capacity(program[num].capacity_num);
-    CurrrentStepperSpeed = (uint16_t)get_speed_from_rate(program[num].Speed);
+    CurrrentStepperSpeed = rectSecondPumpHeadsRow
+        ? (uint16_t)i2c_stepper_steps_from_rate(program[num].Speed)
+        : (uint16_t)get_speed_from_rate(program[num].Speed);
     // [П6] get_speed_from_rate() зажимает результат по верхней границе молча (это
     // общая функция, дергается и из автоматики детектора); здесь же есть контекст
     // (номер строки программы), поэтому предупреждаем оператора явно - иначе на
@@ -884,11 +993,18 @@ void run_program(uint8_t num) {
               WARNING_MSG);
     }
     CurrentBaseSpeedRate = program[num].Speed;  // [П3-1] новая база для детектора при старте строки
-    stepper_safe_set_max_speed(CurrrentStepperSpeed);
-    TargetStepps = (uint32_t)program[num].Volume * (uint32_t)SamSetup.StepperStepMl;
-    stepper_safe_set_current(0);
-    stepper_safe_set_target(TargetStepps);
-    startService();
+    TargetStepps = rectSecondPumpHeadsRow
+        ? rectSecondPumpTargetSteps
+        : (uint32_t)program[num].Volume * (uint32_t)SamSetup.StepperStepMl;
+    if (!rectSecondPumpHeadsRow) {
+      stepper_safe_set_max_speed(CurrrentStepperSpeed);
+      stepper_safe_set_current(0);
+      stepper_safe_set_target(TargetStepps);
+      startService();
+    } else {
+      stopService();
+      stepper_safe_stop_reset();
+    }
     ActualVolumePerHour = program[num].Speed;
     // [L-3] Семантика поля Temp строк B/C (согласно UI-документации data/index.htm):
     //   Temp == 0  → не используется (переход только по объёму)

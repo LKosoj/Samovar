@@ -236,6 +236,7 @@ static void run_program(uint8_t) {}
 static bool stepperState = true;
 static bool stepper_safe_get_state() { return stepperState; }
 static uint32_t stepper_safe_get_current() { return CurrrentStepps; }
+static uint32_t rect_current_withdrawal_steps() { return stepper_safe_get_current(); }
 static uint32_t stepper_safe_get_target() { return TargetStepps; }
 static void stepper_safe_set_max_speed(uint16_t) {}
 static void stepper_safe_set_target(uint32_t) {}
@@ -872,12 +873,12 @@ def main() -> int:
             "  const float currentSteamTemp = SteamSensor.avgTemp;\n"
             "  const float currentSteamStartTemp = SteamSensor.StartProgTemp;\n"
             "  const uint32_t currentTargetSteps = TargetStepps;\n"
-            "  const uint32_t currentCompletedSteps = stepper_safe_get_current();\n"
+            "  const uint32_t currentCompletedSteps = rect_current_withdrawal_steps();\n"
             "  const int16_t currentStartval = startval;",
             "  const float currentSteamTemp = SteamSensor.avgTemp - SteamSensor.avgTemp;\n"
             "  const float currentSteamStartTemp = SteamSensor.StartProgTemp + 100.0f;\n"
             "  const uint32_t currentTargetSteps = TargetStepps + 899;\n"
-            "  const uint32_t currentCompletedSteps = stepper_safe_get_current() - stepper_safe_get_current();\n"
+            "  const uint32_t currentCompletedSteps = rect_current_withdrawal_steps() - rect_current_withdrawal_steps();\n"
             "  const int16_t currentStartval = startval - startval;",
         ),
         (

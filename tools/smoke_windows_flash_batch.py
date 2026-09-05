@@ -20,7 +20,7 @@ def validate(source: str) -> list[str]:
         "исключение псевдонима Microsoft Store": '\\Microsoft\\WindowsApps\\',
         "проверка Tkinter": "import sys, tkinter",
         "установка Tkinter": "Include_tcltk=1",
-        "запуск конфигуратора": 'tools\\samovar_configurator.py" --project-root "%~dp0" --pio "%PIO_EXE%"',
+        "запуск конфигуратора": 'tools\\samovar_configurator.py" --project-root "%~dp0." --pio "%PIO_EXE%"',
     }
     for name, token in required.items():
         if token not in source:
@@ -42,6 +42,11 @@ def main() -> int:
     source = SOURCE.read_text(encoding="utf-8")
     errors = validate(source)
     mutations = {
+        "путь проекта снова заканчивается обратной косой чертой": source.replace(
+            '--project-root "%~dp0."',
+            '--project-root "%~dp0"',
+            1,
+        ),
         "нет проверки Tkinter": source.replace("import sys, tkinter", "import sys"),
         "конфигуратор не запущен": source.replace("tools\\samovar_configurator.py", "tools\\missing.py", 1),
         "батник снова прошивает сам": source.replace(

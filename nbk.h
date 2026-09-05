@@ -226,6 +226,14 @@ void handle_overflow(const String& msg, bool finish = true, uint32_t pause_ms = 
 inline bool nbk_close_data_log();
 inline void nbk_cancel_program_start(const String& message); // [Ремонт-2026-09-02 П7] нужен для nbk_proc() выше её определения
 
+inline void nbk_set_stream_dirty() {
+  if (SamSetup.NbkUseStreamServo) set_capacity(1);
+}
+
+inline void nbk_set_stream_clean() {
+  if (SamSetup.NbkUseStreamServo) set_capacity(0);
+}
+
 // [П7] «Несвежие» показания ДД — порог 10 подряд неудач, как у температурных
 // датчиков (sensor_reading_valid в alarm.h). pressure_err_count наращивается
 // по-разному в зависимости от того, какой датчик давления выбран в
@@ -1130,6 +1138,7 @@ void handle_nbk_stage_work() {
       SendMsg(msg, NOTIFY_MSG);
       nbk_work_pause_stage = 2; // ждём время 2*MULT/3*Ин
     } else if (nbk_work_pause_stage == 2) { // после MULT*Ин: продолжаем работу
+      nbk_set_stream_clean();
       nbk_work_in_pause = false;
       nbk_work_pause_stage = 0;
       nbk_work_next_time = safety_deadline_after(millis(), (uint32_t)nbk_column_inertia * 1000); // ждем время Ин
@@ -1807,6 +1816,7 @@ inline void tick_nbk_transition() {
 
 void nbk_finish_common(bool resetWorkState) {
   SendMsg("Работа НБК завершена", NOTIFY_MSG);
+  nbk_set_stream_clean();
   nbk_reset_actuator_command();
   if (SetSpeed(0) != ACTUATOR_COMMAND_APPLIED) {
     SendMsg(
@@ -1892,6 +1902,7 @@ inline void nbk_emergency_finish() {
 // === Централизованная обработка захлёба ===
 void handle_overflow(const String& msg, bool finish, uint32_t pause_ms, bool graceful) {
   nbk_learn_pressure_ceiling(); // [T1-2026-09-03] единая точка входа для H/S/O/W-захлёбов, идущих через handle_overflow
+  nbk_set_stream_dirty();
   const float candidateP = nbk_actual_feed_rate() / 3; // [Ремонт-2026-09-02 П4] реальная подача насоса, не последнее заданное значение
   SendMsg("Захлёб по " + String(nbk_overflow_source()) + ". " + msg, graceful ? NOTIFY_MSG : ALARM_MSG); // [Ревью П1, находка 3] восстановлена дифференциация по датчику
   if (finish) {

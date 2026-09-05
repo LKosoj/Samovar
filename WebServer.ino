@@ -1281,6 +1281,9 @@ static const GetFloatDirectField kGetFloatDirectFields[] = {
     {"NbkSteamT", &SetupEEPROM::NbkSteamT},
     {"NbkOwPress", &SetupEEPROM::NbkOwPress},
     {"NbkTn", &SetupEEPROM::NbkTn},
+    {"MpxZeroAdc", &SetupEEPROM::MpxZeroAdc},
+    {"MpxCountsPerMmHg", &SetupEEPROM::MpxCountsPerMmHg},
+    {"SecondI2CPumpRate", &SetupEEPROM::SecondI2CPumpRate},
 };
 
 static const GetU16Field kGetU16Fields[] = {
@@ -1313,6 +1316,8 @@ static const GetCheckboxField kGetCheckboxFields[] = {
     {"UseWS", &SetupEEPROM::UseWS},
     {"UseST", &SetupEEPROM::UseST},
     {"ChckPwr", &SetupEEPROM::CheckPower},
+    {"SecondI2CPumpChecked", &SetupEEPROM::UseSecondI2CPump},
+    {"NbkStreamServoChecked", &SetupEEPROM::NbkUseStreamServo},
 };
 
 static const GetModeSelectField kGetModeSelectFields[] = {
@@ -1486,6 +1491,12 @@ String setupKeyProcessor(const String &var) {
     return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
   } else if (var == "I2CPumpTab") {
     return i2c_stepper_cache.pump_present ? "inline-block" : "none";
+  } else if (var == "MpxSettingsDisplay") {
+#ifdef USE_PRESSURE_MPX
+    return "block";
+#else
+    return "none";
+#endif
   }
   return "";
 }
@@ -1806,6 +1817,9 @@ static const SaveFloatField kSaveFloatFields[] = {
     {"NbkTn", &SetupEEPROM::NbkTn, 0.0f, 150.0f},
     {"ColDiam", &SetupEEPROM::ColDiam, 0.1f, 10.0f},
     {"ColHeight", &SetupEEPROM::ColHeight, 0.01f, 10.0f},
+    {"MpxZeroAdc", &SetupEEPROM::MpxZeroAdc, 0.0f, 4095.0f},
+    {"MpxCountsPerMmHg", &SetupEEPROM::MpxCountsPerMmHg, 0.001f, 4095.0f},
+    {"SecondI2CPumpRate", &SetupEEPROM::SecondI2CPumpRate, 0.0f, 65.535f},
 };
 
 static const SaveU8Field kSaveU8Fields[] = {
@@ -1830,6 +1844,8 @@ static const SaveCheckboxField kSaveCheckboxFields[] = {
     {"UseWS", &SetupEEPROM::UseWS},
     {"UseST", &SetupEEPROM::UseST},
     {"CheckPower", &SetupEEPROM::CheckPower},
+    {"UseSecondI2CPump", &SetupEEPROM::UseSecondI2CPump},
+    {"NbkUseStreamServo", &SetupEEPROM::NbkUseStreamServo},
 };
 
 static const SaveBool01Field kSaveBool01Fields[] = {

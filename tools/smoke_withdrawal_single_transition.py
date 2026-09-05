@@ -89,7 +89,7 @@ def main() -> int:
         "const float currentSteamTemp = SteamSensor.avgTemp;",
         "const float currentSteamStartTemp = SteamSensor.StartProgTemp;",
         "const uint32_t currentTargetSteps = TargetStepps;",
-        "const uint32_t currentCompletedSteps = stepper_safe_get_current();",
+        "const uint32_t currentCompletedSteps = rect_current_withdrawal_steps();",
         "const int16_t currentStartval = startval;",
         "process_impurity_detector();",
         "(!detectorWaitWasActive && program_Wait)",

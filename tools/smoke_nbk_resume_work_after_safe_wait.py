@@ -410,6 +410,7 @@ void SendMsg(const String&, MESSAGE_TYPE) { sendMsgCalls++; }
 // теперь вызывается на каждом тике повтора захлёба в паузе, внутри блока
 // PAUSE_ANCHOR).
 void nbk_learn_pressure_ceiling() {}
+void nbk_set_stream_clean() {}
 
 static void run_pause_tick() {
   if (nbk_work_in_pause) {

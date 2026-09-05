@@ -30,7 +30,7 @@ if not defined PIO_EXE (
 
 echo.
 echo Запуск окна настройки Samovar...
-"%PYTHON_EXE%" %PYTHON_ARGS% "%~dp0tools\samovar_configurator.py" --project-root "%~dp0" --pio "%PIO_EXE%"
+"%PYTHON_EXE%" %PYTHON_ARGS% "%~dp0tools\samovar_configurator.py" --project-root "%~dp0." --pio "%PIO_EXE%"
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" goto :failed
 popd

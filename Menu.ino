@@ -506,6 +506,7 @@ void menu_samovar_start() {
     delay(200);
 #endif
     run_program(0);
+    if (rectProgramCommandFailed) return;
     SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
     ProgramNum = 0;
     startval = SAMOVAR_STARTVAL_RECT_RUNNING;
@@ -513,6 +514,7 @@ void menu_samovar_start() {
     ProgramNum++;
     Str = "Prg No " + (String)(ProgramNum + 1);
     run_program(ProgramNum);
+    if (rectProgramCommandFailed) return;
     SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
   } else if (startval == SAMOVAR_STARTVAL_RECT_DONE) {
     Str = "Prg finish";

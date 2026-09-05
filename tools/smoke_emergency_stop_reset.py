@@ -370,6 +370,7 @@ static SAMOVAR_MODE Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 // [T09] Пост-аварийные гейты withdrawal() и pause_withdrawal() читают эти флаги.
 static bool PowerOn = true;
 static bool alarm_event = false;
+static bool rectSecondPumpRunning = false;
 
 static unsigned long fake_millis_value = 100000;
 static unsigned long millis() { return fake_millis_value; }
@@ -412,9 +413,13 @@ static void menu_samovar_start() { menuSamovarStartCalls++; }
 static bool stepperState = false;
 static bool stepper_safe_get_state() { return stepperState; }
 static uint32_t stepper_safe_get_current() { return CurrrentStepps; }
+static uint32_t rect_current_withdrawal_steps() { return stepper_safe_get_current(); }
 static uint32_t stepper_safe_get_target() { return TargetStepps; }
 static float stepper_safe_get_speed() { return 100.0f; }
 static void stopService() {}
+static bool rect_pause_second_i2c_pump() { return true; }
+static bool rect_resume_second_i2c_pump() { return true; }
+static void rect_fail_second_i2c_pump(const String&) {}
 
 static int stepperSetMaxSpeedCalls = 0;
 static void stepper_safe_set_max_speed(uint16_t) { stepperSetMaxSpeedCalls++; }

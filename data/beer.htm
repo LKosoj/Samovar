@@ -52,16 +52,49 @@
     // предел прошивки: program_io.h program_parse_beer_device - время вкл/выкл мешалки
     // хранится в uint16_t (0..UINT16_MAX)
     var MIXER_MAX_SECONDS = 65535;
+    var PROGRAM_BACKUP_VERSION = 1;
+
+    function programBackupError(message) {
+      SamovarApp.notify('Ошибка файла программы: ' + message, 1);
+    }
+
+    function descriptionByteLength(description) {
+      return new TextEncoder().encode(description).length;
+    }
 
     function loadFile (e) {
       var file = e;
       var reader = new FileReader();
       reader.onload = function() {
+        var text = String(reader.result || '');
+        var program = text;
+        var description = null;
+        if (/^\s*\{/.test(text)) {
+          var backup;
+          try {
+            backup = JSON.parse(text);
+          } catch (error) {
+            programBackupError('повреждён JSON.');
+            return;
+          }
+          if (!backup || backup.version !== PROGRAM_BACKUP_VERSION ||
+              typeof backup.program !== 'string' || typeof backup.description !== 'string') {
+            programBackupError('неподдерживаемый формат.');
+            return;
+          }
+          if (descriptionByteLength(backup.description) > 250) {
+            programBackupError('описание длиннее 250 байт.');
+            return;
+          }
+          program = backup.program;
+          description = backup.description;
+        }
         var element = document.getElementById("prg");
         while (element.firstChild) {
           element.removeChild(element.firstChild);
         }
-        document.getElementById('WProgram').value = reader.result;
+        document.getElementById('WProgram').value = program;
+        if (description !== null) document.getElementById('Descr').value = description;
         glcalcnum = false;
         getProgram();
       };
@@ -69,10 +102,17 @@
     }
 
     function SaveProgramToFile () {
-      var filename, text;
-      filename = 'programbackup.txt';
-      //  text = getJson(document.getElementById('setupform'));
-      text = document.getElementById('WProgram').value;
+      var filename = 'programbackup.txt';
+      var description = document.getElementById('Descr').value;
+      if (descriptionByteLength(description) > 250) {
+        programBackupError('описание длиннее 250 байт.');
+        return;
+      }
+      var text = JSON.stringify({
+        version: PROGRAM_BACKUP_VERSION,
+        program: document.getElementById('WProgram').value,
+        description: description
+      }, null, 2);
 
       var pom = document.createElement('a');
       pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));

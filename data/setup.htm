@@ -154,6 +154,8 @@
       { name: 'PackDens', integer: true, min: 60, max: 100 },
       { name: 'autospeed', integer: true, min: 0, max: 20 },
       { name: 'MaxPressureValue', min: 0, max: 10000 },
+      { name: 'MpxZeroAdc', min: 0, max: 4095 },
+      { name: 'MpxCountsPerMmHg', min: 0.001, max: 4095 },
       { name: 'DeltaSteamTemp', min: -1000, max: 1000 },
       { name: 'SetSteamTemp', min: 0, max: 150 },
       { name: 'SteamDelay', integer: true, min: 0, max: 65535 },
@@ -176,6 +178,7 @@
       { name: 'ACPAddr', integer: true, min: -1, max: 255 },
       { name: 'StepperStepMl', integer: true, min: 1, max: 65535 },
       { name: 'StepperStepMlI2C', integer: true, min: 0, max: 65535 },
+      { name: 'SecondI2CPumpRate', min: 0, max: 65.535 },
       { name: 'Kp', min: 0, max: 100000 },
       { name: 'Ki', min: 0, max: 100000 },
       { name: 'Kd', min: 0, max: 100000 },
@@ -406,6 +409,10 @@
 
         <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
           <h2><label for="MaxPressureValue" class="tooltip">Давление, при котором включится авария:<span class="tooltiptext">При достижении этого давления Самовар перейдет в аварийный режим</span></label><input id="MaxPressureValue" name='MaxPressureValue' type='text' inputmode='decimal' value='%MaxPressureValue%'>мм. Рт. ст.</h2>
+          <div style="display: %MpxSettingsDisplay%;">
+            <h2><label for="MpxZeroAdc" class="tooltip">Нулевая точка MPX:<span class="tooltiptext">Показание АЦП при нулевом избыточном давлении. Его вычитают из каждого измерения.</span></label> <input id="MpxZeroAdc" name='MpxZeroAdc' type='text' inputmode='decimal' value='%MpxZeroAdc%'></h2>
+            <h2><label for="MpxCountsPerMmHg" class="tooltip">Отсчётов MPX на 1 мм рт. ст.:<span class="tooltiptext">Масштаб датчика: на это число делится разница между текущим показанием АЦП и нулевой точкой. Заводское значение — 12.</span></label> <input id="MpxCountsPerMmHg" name='MpxCountsPerMmHg' type='text' inputmode='decimal' value='%MpxCountsPerMmHg%'></h2>
+          </div>
         </div>
 
         <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -524,7 +531,12 @@
     <div id="Pump" class="tabcontent" aria-hidden="true">
       <h2><label for="StepperStepMl">Количество шагов шагового двигателя:</label> <input id="StepperStepMl" name='StepperStepMl' type='text' inputmode='decimal' value='%StepperStepMl%' style="width: 6em;"> /мл.</h2>
       <div style="display: %I2CPumpTab%;">
-        <h2><label for="StepperStepMlI2C">Количество шагов I2C насоса:</label> <input id="StepperStepMlI2C" name='StepperStepMlI2C' type='text' inputmode='decimal' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
+        <h2><label for="StepperStepMlI2C" class="tooltip">Количество шагов I2C насоса:<span class="tooltiptext">Калибровка внешнего насоса: сколько шагов двигателя приходится на 1 мл жидкости.</span></label> <input id="StepperStepMlI2C" name='StepperStepMlI2C' type='text' inputmode='decimal' value='%StepperStepMlI2C%' style="width: 6em;"> /мл.</h2>
+        <h2>
+          <input id='UseSecondI2CPump' type='checkbox' name='UseSecondI2CPump' value='UseSecondI2CPump' %SecondI2CPumpChecked%>
+          <label for='UseSecondI2CPump' class="tooltip">Использовать I2C-насос над ЦП<span class="tooltiptext">Насос участвует в ректификации только если был обнаружен при запуске Самовара. Для голов он становится основным насосом, для тела и предзахлёба работает одновременно с локальным насосом.</span></label>
+        </h2>
+        <h2><label for="SecondI2CPumpRate" class="tooltip">Скорость отбора над ЦП:<span class="tooltiptext">Постоянная скорость I2C-насоса на строках тела B и предзахлёба C. На строке голов H берётся скорость самой строки программы.</span></label> <input id="SecondI2CPumpRate" name='SecondI2CPumpRate' type='text' inputmode='decimal' value='%SecondI2CPumpRate%'> л/ч</h2>
       </div>
       <div class="btn-cell" style="margin: 0 auto;">
         <input id='setstvolume' type='button' name='return' value='Калибровка насоса' onclick='if (confirmLeaveIfDirty()) location.href="calibrate.htm"' class="button">
@@ -562,12 +574,16 @@
     <div id="NBK" class="tabcontent" aria-hidden="true">
       <h2>Настройки НБК:</h2>
       <h2><label for="NbkIn" class="tooltip">Инерция:<span class="tooltiptext">Время (с), за которое колонна после изменения мощности или подачи приходит в новое устойчивое состояние. По умолчанию 180. Для густых зерновых браг и колонн с предподогревом обычно 300-600: по опыту форумов реакция на шаг занимает 5-15 минут.</span></label> <input id="NbkIn" name='NbkIn' type='text' inputmode='decimal' value='%NbkIn%'></h2>
-      <h2><label for="NbkDelta">Дельта:</label> <input id="NbkDelta" name='NbkDelta' type='text' inputmode='decimal' value='%NbkDelta%'></h2>
-      <h2><label for="NbkDM">Шаг мощности:</label> <input id="NbkDM" name='NbkDM' type='text' inputmode='decimal' value='%NbkDM%'></h2>
-      <h2><label for="NbkDP">Шаг подачи:</label> <input id="NbkDP" name='NbkDP' type='text' inputmode='decimal' value='%NbkDP%'></h2>
-      <h2><label for="NbkSteamT">Т пара:</label> <input id="NbkSteamT" name='NbkSteamT' type='text' inputmode='decimal' value='%NbkSteamT%'></h2>
+      <h2><label for="NbkDelta" class="tooltip">Дельта:<span class="tooltiptext">Допустимое отклонение температуры барды от опорной Тн, в пределах которого мощность и подача не меняются.</span></label> <input id="NbkDelta" name='NbkDelta' type='text' inputmode='decimal' value='%NbkDelta%'></h2>
+      <h2><label for="NbkDM" class="tooltip">Шаг мощности:<span class="tooltiptext">На сколько ватт автоматика изменяет мощность за одну коррекцию.</span></label> <input id="NbkDM" name='NbkDM' type='text' inputmode='decimal' value='%NbkDM%'></h2>
+      <h2><label for="NbkDP" class="tooltip">Шаг подачи:<span class="tooltiptext">На сколько литров в час автоматика изменяет подачу браги за одну коррекцию.</span></label> <input id="NbkDP" name='NbkDP' type='text' inputmode='decimal' value='%NbkDP%'></h2>
+      <h2><label for="NbkSteamT" class="tooltip">Т пара:<span class="tooltiptext">Верхний рабочий предел температуры пара. При приближении к нему автоматика уменьшает подачу.</span></label> <input id="NbkSteamT" name='NbkSteamT' type='text' inputmode='decimal' value='%NbkSteamT%'></h2>
       <h2><label for="NbkOwPress" class="tooltip">Давление захлёба:<span class="tooltiptext">Порог по датчику давления, при котором фиксируется захлёб. Рабочий потолок давления - половина этого значения (например, для 40 мм это 20 мм, как в руководстве ХД): выше него автоматика снижает подачу.</span></label> <input id="NbkOwPress" name='NbkOwPress' type='text' inputmode='decimal' value='%NbkOwPress%'></h2>
       <h2><label for="NbkTn" class="tooltip">Т завершения (барда):<span class="tooltiptext">Опорная температура отжатой барды. На первой итерации Оптимизации уточняется автоматически вверх по показанию датчика (до 102&#176;C).</span></label> <input id="NbkTn" name='NbkTn' type='text' inputmode='decimal' value='%NbkTn%'>&#176;C</h2>
+      <h2>
+        <input id='NbkUseStreamServo' type='checkbox' name='NbkUseStreamServo' value='NbkUseStreamServo' %NbkStreamServoChecked%>
+        <label for='NbkUseStreamServo' class="tooltip">Переключать поток сервоприводом при захлёбе<span class="tooltiptext">При захлёбе выбирается позиция 1 — грязный поток. Позиция 0 — чистый поток — возвращается только после полной восстановительной паузы или при завершении НБК.</span></label>
+      </h2>
     </div>
 
     <div id="Other" class="tabcontent" aria-hidden="true">

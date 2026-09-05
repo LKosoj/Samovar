@@ -416,6 +416,20 @@ inline bool i2c_stepper_send_command(I2CStepperDevice& dev, uint8_t command) {
   return dev.present && dev.ackSeq == seq && dev.error == 0;
 }
 
+inline bool i2c_stepper_send_confirmed_command(I2CStepperDevice& dev, uint8_t command) {
+  if (!dev.present) return false;
+  uint8_t seq = dev.commandSeq + 1;
+  if (seq == 0) seq = 1;
+  for (uint8_t attempt = 0; attempt < 10; attempt++) {
+    bool sent = i2c_stepper_write_byte(dev.address, I2CSTEP_REG_COMMAND, command) &&
+                i2c_stepper_write_byte(dev.address, I2CSTEP_REG_COMMAND_SEQ, seq);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    if (sent && i2c_stepper_refresh(dev, true) &&
+        dev.ackSeq == seq && dev.error == 0) return true;
+  }
+  return false;
+}
+
 inline bool i2c_stepper_apply(I2CStepperDevice& dev) {
   return i2c_stepper_write_config(dev) && i2c_stepper_send_command(dev, I2CSTEP_CMD_APPLY);
 }
@@ -434,6 +448,39 @@ inline bool i2c_stepper_stop(I2CStepperDevice& dev) {
 
 inline uint16_t i2c_stepper_steps_per_ml() {
   return SamSetup.StepperStepMlI2C > 0 ? SamSetup.StepperStepMlI2C : I2C_STEPPER_STEP_ML_DEFAULT;
+}
+
+inline bool start_second_i2c_pump(float rateLitersPerHour, uint16_t volumeMl) {
+  if (use_I2C_dev != I2CSTEPPER_PUMP_ADDR || rateLitersPerHour <= 0) return false;
+  if (!i2c_stepper_refresh(i2cStepperPump, true) ||
+      !i2c_stepper_config_begin(i2cStepperPump)) return false;
+
+  const uint32_t rateMlHour = (uint32_t)round(rateLitersPerHour * 1000.0f);
+  i2cStepperPump.stepsPerMl = i2c_stepper_steps_per_ml();
+  i2cStepperPump.optionFlags &= ~I2CSTEPPER_FLAG_DIRECTION;
+  if (volumeMl > 0) {
+    i2cStepperPump.mode = I2CSTEP_MODE_FILLING;
+    i2cStepperPump.fillingMl = volumeMl;
+    i2cStepperPump.fillingMlHour =
+        rateMlHour > 65535UL ? 65535 : (uint16_t)rateMlHour;
+  } else {
+    i2cStepperPump.mode = I2CSTEP_MODE_PUMP;
+    i2cStepperPump.pumpMlHour =
+        rateMlHour > 65535UL ? 65535 : (uint16_t)rateMlHour;
+  }
+  const bool ok = i2c_stepper_write_config(i2cStepperPump) &&
+                  i2c_stepper_send_confirmed_command(i2cStepperPump, I2CSTEP_CMD_START);
+  i2c_stepper_config_end(i2cStepperPump);
+  return ok;
+}
+
+inline bool stop_second_i2c_pump() {
+  if (use_I2C_dev != I2CSTEPPER_PUMP_ADDR) return false;
+  if (!i2c_stepper_refresh(i2cStepperPump, true) ||
+      !i2c_stepper_config_begin(i2cStepperPump)) return false;
+  const bool ok = i2c_stepper_send_confirmed_command(i2cStepperPump, I2CSTEP_CMD_STOP);
+  i2c_stepper_config_end(i2cStepperPump);
+  return ok;
 }
 
 inline uint16_t i2c_stepper_mlh_from_step_speed(uint16_t spd) {

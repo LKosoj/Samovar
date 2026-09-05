@@ -18,10 +18,8 @@
 //             для перекрёстной проверки smoke-тестом.
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
-//   SCOPE   — ALL (поле участвует в общем decode_setup_payload_fields(),
-//             используемом и V1, и V2) или V2ONLY (поле decode_setup_payload_fields
-//             пропускает; decode_setup_payload() читает его отдельно после
-//             остальных — так SuvidHoldMinutes остаётся вне V1-формата).
+//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY или V3ONLY. Версионные
+//             поля образуют последовательные хвосты канонического формата.
 //
 // BKPower — единственное поле с дефолтом, зависящим от компиляции
 // (SAMOVAR_USE_SEM_AVR меняет рабочую мощность БК). Вынесено в именованную
@@ -106,4 +104,9 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(FLOAT, MainsVoltage, 4, candidate.MainsVoltage = 230.0f, ALL) \
   X(FLOAT, SuvidTemp, 4, candidate.SuvidTemp = 0.0f, ALL) \
   X(U16, SuvidHoldMinutes, 2, candidate.SuvidHoldMinutes = 0, V2ONLY) \
-  X(U8, BeerBrewOrder, 1, candidate.BeerBrewOrder = 0, V2ONLY)
+  X(U8, BeerBrewOrder, 1, candidate.BeerBrewOrder = 0, V2ONLY) \
+  X(FLOAT, MpxZeroAdc, 4, candidate.MpxZeroAdc = 36.7f, V3ONLY) \
+  X(FLOAT, MpxCountsPerMmHg, 4, candidate.MpxCountsPerMmHg = 12.0f, V3ONLY) \
+  X(FLOAT, SecondI2CPumpRate, 4, candidate.SecondI2CPumpRate = 0.0f, V3ONLY) \
+  X(BOOL, UseSecondI2CPump, 1, candidate.UseSecondI2CPump = false, V3ONLY) \
+  X(BOOL, NbkUseStreamServo, 1, candidate.NbkUseStreamServo = false, V3ONLY)

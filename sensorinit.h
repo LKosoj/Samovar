@@ -242,7 +242,8 @@ void pressure_sensor_get() {
     if (pressure_err_count < INT32_MAX) pressure_err_count++;
   }
 #elif defined(USE_PRESSURE_MPX)
-  pressure_value = (analogRead(LUA_PIN) - 36.7) / 12;
+  pressure_value = (analogRead(LUA_PIN) - SamSetup.MpxZeroAdc) /
+      SamSetup.MpxCountsPerMmHg;
   pressure_value = (old_pressure_value + pressure_value) / 2;
   old_pressure_value = pressure_value;
 #else
