@@ -23,6 +23,24 @@ calibrate = read("calibrate_ph.htm")
 cheese_lua = read("cheese.lua")
 button1 = read("btn_cheese_button1.lua")
 button2 = read("btn_cheese_button2.lua")
+device_modal = read("partials/device_schedule_modal.htm")
+app = read("app.js")
+
+
+def unsafe_template_percent(source: str) -> bool:
+    without_placeholders = re.sub(r"%[A-Za-z0-9_.]+%", "", source)
+    return "%" in without_placeholders.replace("%%", "")
+
+
+for page_name, page in (("cheese.htm", cheese), ("calibrate_ph.htm", calibrate)):
+    if unsafe_template_percent(page):
+        errors.append(
+            f"{page_name} contains an unescaped percent that can corrupt the ESP template response"
+        )
+
+percent_mutant = cheese.replace("100%%", "100%", 1)
+if percent_mutant == cheese or not unsafe_template_percent(percent_mutant):
+    errors.append("cheese template-percent mutation was not rejected")
 
 stage_values = re.findall(r'<option value="([A-Za-z])"', cheese)
 expected_stages = list("MPCWALZfzds pvrnSR".replace(" ", ""))
@@ -35,15 +53,33 @@ for token in (
     "function parseCheeseProgram(",
     "function validateCheeseRow(",
     "function applyRowRules(",
+    "SamovarApp.openDeviceScheduleModal(row.device)",
     "function serializeCheeseRows(",
     "SamovarApp.postProgram(document.forms.mainform)",
     'maxlength="250"',
     "PROGRAM_BACKUP_VERSION = 1",
     "new TextEncoder().encode(description).length",
     "backup.version !== PROGRAM_BACKUP_VERSION",
+    'value="Настройки"',
+    "SamovarApp.showHistory()",
+    '<!--#include lua_field.htm-->',
 ):
     if token not in cheese:
         errors.append(f"cheese.htm missing contract token: {token}")
+
+if 'id="popup"' not in device_modal or "SamovarApp.saveDeviceScheduleModal()" not in device_modal:
+    errors.append("shared device modal does not save through SamovarApp")
+
+modal_contract = (
+    "function openDeviceScheduleModal(input, onSave)",
+    "function saveDeviceScheduleModal()",
+    "deviceScheduleInput.value = byId('m_type').value + '^' + byId('m_direction').value + '^' + run.text + '^' + pause.text",
+)
+if any(token not in app for token in modal_contract):
+    errors.append("app.js is missing the shared device-modal behavior")
+modal_mutant = app.replace("deviceScheduleInput.value = ", "const ignoredDeviceSchedule = ", 1)
+if modal_mutant == app or all(token in modal_mutant for token in modal_contract):
+    errors.append("device-modal save mutation was not rejected")
 
 for forbidden in ("new XMLHttpRequest", "request.open(", "cdn.amcharts.com", "chartCh.htm"):
     if forbidden in cheese or forbidden in calibrate:

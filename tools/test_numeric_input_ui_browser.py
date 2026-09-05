@@ -1015,7 +1015,8 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
         # ДО подстановки %ПЛЕЙСХОЛДЕРОВ% - иначе served-копия покажет браузеру голый
         # HTML-комментарий вместо разметки/JS партиала.
         resolved = resolve_includes(path.name, path.read_bytes()).decode("utf-8", errors="ignore")
-        path.write_text(token_pattern.sub(replace_token, resolved), encoding="utf-8")
+        rendered = token_pattern.sub(replace_token, resolved).replace("%%", "%")
+        path.write_text(rendered, encoding="utf-8")
 
     program = target / "program.htm"
     invalid = target / "program_invalid.htm"

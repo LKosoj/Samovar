@@ -61,9 +61,27 @@ BROWSER_TEST = r'''async page => {
 
   await page.goto(baseUrl + "/cheese.htm", {waitUntil:"load"});
   await page.waitForFunction(() => document.querySelectorAll("#programRows .cheese-row").length === 1);
+  expect(await page.getByRole("button", {name:"Настройки"}).count() === 1, "settings button is missing");
+  expect(await page.getByRole("button", {name:"История"}).count() === 1, "history button is missing");
+  await page.getByRole("button", {name:"Настройки"}).click();
+  await page.waitForURL("**/setup.htm");
+  await page.goto(baseUrl + "/cheese.htm", {waitUntil:"load"});
+  await page.waitForFunction(() => document.querySelectorAll("#programRows .cheese-row").length === 1);
+  await page.getByRole("button", {name:"История"}).click();
+  expect(await page.locator("#historyBox").isVisible(), "history panel did not open");
+  await page.evaluate(() => SamovarApp.showHistory());
   const allTypes = await page.locator(".cheese-type option").evaluateAll(nodes => nodes.map(n => n.value));
   expect(allTypes.join("") === "MPCWALZfzds pvrnSR".replace(" ", ""), "not all cheese stages are offered");
   await page.getByRole("button", {name:"Программа"}).click();
+  await page.locator(".cheese-device").focus();
+  await page.waitForFunction(() => getComputedStyle(document.getElementById("popup")).display === "block");
+  await page.locator("#m_type").selectOption("3");
+  await page.locator("#m_direction").selectOption("-1");
+  await page.locator("#m_time").fill("12");
+  await page.locator("#m_pause").fill("4");
+  await page.locator("#yes-btn").click();
+  expect(await page.locator(".cheese-device").inputValue() === "3^-1^12^4", "device modal did not update the row");
+  expect(await page.locator(".cheese-row").evaluate(row => getComputedStyle(row).backgroundColor !== "rgba(0, 0, 0, 0)"), "cheese row has no standard stage color");
   for (const type of allTypes) {
     await page.locator(".cheese-type").selectOption(type);
     const controls = await page.locator(".cheese-row").evaluate(row => ({
@@ -104,9 +122,16 @@ BROWSER_TEST = r'''async page => {
   await page.evaluate(() => loadFile(new File(["{broken"], "broken.json", {type:"application/json"})));
   await page.waitForFunction(() => document.getElementById("request_error").textContent.includes("JSON"));
   expect(await page.locator(".cheese-temperature").inputValue() === "32", "malformed JSON fell back to plain text");
+  await page.getByRole("button", {name:"Дополнительно"}).click();
+  expect(await page.getByRole("button", {name:"Калибровка pH"}).count() === 1, "pH calibration action is missing");
+  expect(await page.locator("#lua_str_i").count() === 1, "standard Lua controls are missing");
+  await page.setViewportSize({width:390,height:844});
+  expect(!await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth), "cheese page has horizontal overflow on mobile");
 
   await page.goto(baseUrl + "/calibrate_ph.htm", {waitUntil:"load"});
   await page.waitForFunction(() => document.getElementById("phRaw").textContent === "1000");
+  expect(await page.locator("form#phForm").count() === 1, "pH page is not using the standard form layout");
+  expect(await page.getByRole("button", {name:"Настройки"}).count() === 1, "pH settings button is missing");
   await page.locator("#point1Ph").fill("7.00");
   await page.locator("#capturePoint1").click();
   rawPh = 2000;

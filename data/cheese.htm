@@ -11,7 +11,6 @@
   <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
   <script src="app.js"></script>
   <style>
-    .cheese-page { max-width: 72em; margin: 0 auto; padding: 0 .75em 2em; }
     .cheese-panel { border: 1px solid var(--border-color, #bbb); margin: .75em 0; padding: .8em; }
     .cheese-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(10em, 1fr)); gap: .6em; }
     .cheese-summary div { padding: .6em; background: var(--bg-status); }
@@ -19,10 +18,11 @@
     .cheese-program-head, .cheese-row { display: grid; grid-template-columns: 3.2em 7em 6em minmax(12em, 1fr) 8em 7em 2.5em; gap: .35em; align-items: center; }
     .cheese-program-head { font-weight: bold; margin-bottom: .35em; }
     .cheese-row { margin-bottom: .45em; }
-    .cheese-row input, .cheese-row select { box-sizing: border-box; min-width: 0; width: 100%; }
+    .cheese-row { padding: .35em; color: #17212b; }
+    .cheese-row input, .cheese-row select { box-sizing: border-box; min-width: 0; width: 100%%; background: transparent; color: inherit; border: 1px solid #52606d; }
     .cheese-remove { padding: .35em; }
     .cheese-help { line-height: 1.45; }
-    .cheese-file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .cheese-file { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%%); }
     @media (max-width: 760px) {
       .cheese-program-head { display: none; }
       .cheese-row { grid-template-columns: 1fr 1fr; border-bottom: 1px dashed #999; padding-bottom: .7em; }
@@ -35,6 +35,7 @@
     var CHEESE_PROGRAM_FIELDS = 6;
     var PROGRAM_BACKUP_VERSION = 1;
     var HeaterPowerOn = false;
+    var STAGE_COLORS = {M:'#FFFF00',P:'#FFA500',C:'#00BFFF',W:'#98FB98',A:'#FF3838',L:'#3498DB',Z:'#DACEFF',f:'#DACEFF',z:'#DACEFF',d:'#DACEFF',s:'#DACEFF',p:'#DACEFF',v:'#DACEFF',r:'#DACEFF',n:'#DACEFF',S:'#DACEFF',R:'#98FB98'};
     var STAGE_RULES = {
       M:{temperature:true,device:true,sensor:true}, P:{temperature:true,time:true,device:true,sensor:true},
       C:{temperature:true,device:true,sensor:true}, W:{}, A:{temperature:true,sensor:true}, L:{},
@@ -96,6 +97,7 @@
       row.sensor.disabled = rule.sensor !== true;
       row.parameter.disabled = rule.parameter !== true;
       row.parameter.setAttribute('aria-label', rule.parameter === true ? 'Целевой pH' : 'Параметр не используется');
+      row.style.backgroundColor = STAGE_COLORS[row.type.value] || '#DACEFF';
       if (row.temperature.disabled) row.temperature.value = '0';
       if (row.time.disabled) row.time.value = '0';
       if (row.device.disabled) row.device.value = '0^0^0^0';
@@ -113,6 +115,10 @@
       row.device = row.querySelector('.cheese-device');
       row.sensor = row.querySelector('.cheese-sensor');
       row.parameter = row.querySelector('.cheese-parameter');
+      row.device.readOnly = true;
+      row.device.addEventListener('focus', function() {
+        SamovarApp.openDeviceScheduleModal(row.device);
+      });
       var initial = values || ['M', '30', '0', '0^0^0^0', '0', '0'];
       row.type.value = initial[0];
       row.temperature.value = initial[1];
@@ -217,7 +223,7 @@
       document.getElementById('stm').textContent = data.stm || '';
       document.getElementById('Status').textContent = data.Status || '';
       document.getElementById('stageType').textContent = data.PrgType || '—';
-      document.getElementById('stageProgress').textContent = Number(data.WthdrwlProgress || 0).toFixed(0) + '%';
+      document.getElementById('stageProgress').textContent = Number(data.WthdrwlProgress || 0).toFixed(0) + '\u0025';
       document.getElementById('cheesePh').textContent = data.CheesePhValid ? Number(data.CheesePh).toFixed(2) : 'нет данных';
       HeaterPowerOn = Number(data.PowerOn) === 1;
       document.getElementById('power').value = HeaterPowerOn ? 'Остановить сыроварение' : 'Начать сыроварение';
@@ -238,6 +244,11 @@
 </head>
 <body>
   <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  <button type="button" class="history-trigger" style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: var(--text-history-link); text-decoration: underline; cursor: pointer" onclick="SamovarApp.showHistory()" aria-controls="historyBox" aria-expanded="false">История</button>
+  <div class="history_box" style="display: none;" id="historyBox">
+    <button type="button" class="history-clear" style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; font-style: italic; color: var(--text-history-action); cursor: pointer" onclick="SamovarApp.clearHistory()">[x] очистить историю</button>
+    <div class="history_array" id="historyList"></div>
+  </div>
   <div id="overlay"></div>
   <form action="none" onsubmit="return false" name="mainform" id="mainform" class="cheese-page">
     <div id="request_error" class="message_0" role="alert" aria-live="assertive" style="display:none"></div>
@@ -279,22 +290,22 @@
       <div class="cheese-summary">
         <div>Этап: <strong id="stageType">—</strong></div>
         <div>pH: <strong id="cheesePh">нет данных</strong></div>
-        <div>Прогресс: <strong id="stageProgress">0%</strong></div>
+        <div>Прогресс: <strong id="stageProgress">0&#37;</strong></div>
       </div>
       <div class="cheese-panel">Статус: <strong id="Status"></strong></div>
       <div class="cheese-actions">
         <input type="button" id="power" class="button" value="Начать сыроварение" onclick="if(HeaterPowerOn &amp;&amp; !confirm('Остановить сыроварение?')) return false; SamovarApp.sendCommand('power=' + (HeaterPowerOn ? '0' : '1'))">
         <input type="button" class="button" value="Следующий этап" onclick="if(confirm('Перейти к следующему этапу?')) SamovarApp.sendCommand('start=1')">
         <input type="button" class="button" value="График" onclick="location.href='/chart.htm'">
+        <input type="button" class="button" value="Настройки" onclick="location.href='/setup.htm'">
       </div>
     </div>
 
     <div id="Prog" class="tabcontent" aria-hidden="true">
-      <div class="cheese-panel cheese-help">
-        Формат устройства: <code>устройство^направление^работа^пауза</code>.
-        Для набора кислотности задайте целевой pH и обязательный срок.
-      </div>
-      <div class="cheese-program-head" aria-hidden="true"><span>Тип</span><span>°C</span><span>Мин</span><span>Устройство</span><span>Датчик</span><span>Параметр</span><span></span></div>
+      <details class="spoiler"><summary>Описание сырной программы</summary><div class="spoiler-content cheese-help">
+        Поле «Устройство» открывает редактор мешалки и насоса. Для набора кислотности задайте целевой pH и обязательный срок.
+      </div></details>
+      <div class="cheese-program-head" aria-hidden="true"><span>Тип</span><span>Темп.</span><span>Время</span><span>Устройство</span><span>Датчик</span><span>pH</span><span></span></div>
       <div id="programRows"></div>
       <div class="cheese-actions">
         <button type="button" class="button" onclick="addCheeseRow()">Добавить этап</button>
@@ -319,15 +330,47 @@
           <button type="button" class="cheese-remove" title="Удалить этап" aria-label="Удалить этап">×</button>
         </div>
       </template>
+  <div id="popup" class="popup">
+    <div class="popup__content">
+      <h2 class="popup__title">Редактирование режима устройства</h2>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 20px !important;">
+        <div id="popup_mesh" class="modalline">
+          <label for="m_type">Устройство<select id="m_type"><option value="0">Выключено</option><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select></label>
+          <label for="m_direction">Направление<select id="m_direction"><option value="-1">Реверс после паузы</option><option value="0">Прямое</option><option value="1">Обратное</option></select></label>
+          <label for="m_time" class="tooltip">Работа, сек<span class="tooltiptext">Максимальное время — 65535 сек (18 ч 12 мин)</span><input type="number" id="m_time" min="0" max="65535" step="1" onchange="SamovarApp.normalizeDeviceScheduleSeconds(this)" onblur="SamovarApp.normalizeDeviceScheduleSeconds(this)"></label>
+          <label for="m_pause" class="tooltip">Пауза, сек<span class="tooltiptext">Максимальное время — 65535 сек (18 ч 12 мин)</span><input type="number" id="m_pause" min="0" max="65535" step="1" onchange="SamovarApp.normalizeDeviceScheduleSeconds(this)" onblur="SamovarApp.normalizeDeviceScheduleSeconds(this)"></label>
+        </div>
+      </div>
+      <div class="btn-container">
+        <button type="button" id="no-btn" class="popup__button" onclick="SamovarApp.closeDeviceScheduleModal()">Отмена</button>
+        <button type="button" id="yes-btn" class="popup__button" onclick="SamovarApp.saveDeviceScheduleModal()">Ок</button>
+      </div>
+    </div>
+  </div>
+
     </div>
 
     <div id="Other" class="tabcontent" aria-hidden="true">
-      <div class="cheese-panel cheese-help">
-        <a href="/calibrate_ph.htm">Калибровка pH</a><br>
+      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+        <input type="button" class="button" value="Калибровка pH" onclick="location.href='/calibrate_ph.htm'">
+        <div class="cheese-help">
         PH-4502C подключается к LUA_PIN только через схему, безопасную для входа 3,3 В.
         Не подключайте PH-4502C и MPX5010DP одновременно. В режиме «Сыр» реле №4 — клапан слива, а не разгонный ТЭН.
+        </div>
       </div>
-      <div id="lua_btn_ln"><div id="lua_btn"></div></div>
+      <div style="visibility: hidden" id="lua_btn">
+        <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em; justify-content: space-between;">
+          <div class="container_column" style="flex: 1.1; padding-left: 2em;">
+            <div class="container_row" style="justify-content: space-around; align-items: center; display: block;" id="lua_btn_ln"></div>
+            <div class="container_row" style="justify-content: space-around; align-items: center;" id="lua_str_d">
+              <label for="lua_str_i">Lua:</label>
+              <input name='lua_str_i' id='lua_str_i' type='text' value='' style='padding: 5px; width: 200px; margin-bottom: 10px; margin-left: 100px;'>
+              <input type="button" name="lua_str_b" value="Выполнить Lua" class="button" onclick="SamovarApp.runLuaString();" style='margin-bottom: 20px; margin-right: 100px;'>
+            </div>
+            <div class="container_row" style="margin-top: 10px !important; margin-bottom: 10px !important;"><span>Статус Lua:</span><span id="Lstatus"></span></div>
+          </div>
+        </div>
+      </div>
     </div>
   </form>
   <img src="Red_light.gif" alt="" style="width:0;height:0;visibility:hidden">

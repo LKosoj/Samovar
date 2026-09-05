@@ -14,9 +14,9 @@
     .ph-card { border: 1px solid var(--border-color, #bbb); margin: .8em 0; padding: 1em; }
     .ph-grid { display: grid; grid-template-columns: minmax(8em, 1fr) minmax(8em, 1fr) auto; gap: .6em; align-items: end; }
     .ph-grid label { display: flex; min-width: 0; flex-direction: column; gap: .25em; }
-    .ph-grid input { box-sizing: border-box; width: 100%; min-width: 0; }
+    .ph-grid input { box-sizing: border-box; width: 100%%; min-width: 0; }
     .ph-actions { display: flex; flex-wrap: wrap; gap: .5em; margin-top: .8em; }
-    @media (max-width: 520px) { .ph-grid { grid-template-columns: 1fr; } .ph-grid button { width: 100%; } }
+    @media (max-width: 520px) { .ph-grid { grid-template-columns: 1fr; } .ph-grid button { width: 100%%; } }
   </style>
   <script>
     var latestPh = {raw:null, value:null, rawValid:false, valid:false};
@@ -68,7 +68,7 @@
       var offset = Number(document.getElementById('CheesePhOffset').value);
       var smoothing = Number(document.getElementById('CheesePhSmoothPercent').value);
       if (!Number.isFinite(slope) || !Number.isFinite(offset) || !Number.isInteger(smoothing) || smoothing < 0 || smoothing > 99) {
-        return phError('Проверьте коэффициенты и сглаживание от 0 до 99%.');
+        return phError('Проверьте коэффициенты и сглаживание от 0 до 99 процентов.');
       }
       var button = document.getElementById('savePh');
       button.disabled = true;
@@ -91,11 +91,14 @@
 </head>
 <body>
   <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
-  <main class="ph-page">
+  <form id="phForm" class="ph-page" onsubmit="return false">
     <div id="connection_indicator"><img src="Green.png" alt="Связь" style="width:20px"></div>
     <div id="request_error" class="message_0" role="alert" aria-live="assertive" style="display:none"></div>
     <h1>Калибровка pH</h1>
-    <p><a href="/cheese.htm">← К сыроварению</a></p>
+    <div class="ph-actions">
+      <input type="button" class="button" value="К сыроварению" onclick="location.href='/cheese.htm'">
+      <input type="button" class="button" value="Настройки" onclick="location.href='/setup.htm'">
+    </div>
     <div class="ph-card">Текущее значение: <strong id="phCurrent">нет данных</strong> pH · ADC: <strong id="phRaw">нет данных</strong></div>
     <div class="ph-card">
       <p>Промойте электрод, поместите его в буфер и дождитесь стабильного ADC. Повторите для второго буфера.</p>
@@ -109,16 +112,16 @@
       </div>
       <div class="ph-actions"><button type="button" id="calculatePh" onclick="calculatePhCalibration()">Рассчитать</button></div>
     </div>
-    <form id="phForm" class="ph-card" onsubmit="return false">
+    <section class="ph-card">
       <div class="ph-grid">
         <label>Коэффициент k<input id="CheesePhSlope" name="CheesePhSlope" type="number" step="0.000001" value="%CheesePhSlope%"></label>
         <label>Смещение d<input id="CheesePhOffset" name="CheesePhOffset" type="number" step="0.000001" value="%CheesePhOffset%"></label>
-        <label>Сглаживание, %<input id="CheesePhSmoothPercent" name="CheesePhSmoothPercent" type="number" min="0" max="99" step="1" value="%CheesePhSmoothPercent%"></label>
+        <label>Сглаживание, &#37;<input id="CheesePhSmoothPercent" name="CheesePhSmoothPercent" type="number" min="0" max="99" step="1" value="%CheesePhSmoothPercent%"></label>
       </div>
       <div class="ph-actions"><button type="button" id="savePh" onclick="savePhCalibration()">Сохранить калибровку</button></div>
       <p id="phStatus" role="status" aria-live="polite"></p>
-    </form>
+    </section>
     <div class="ph-card">PH-4502C подключается к LUA_PIN только через согласование уровня до 3,3 В. Не подключайте его одновременно с MPX5010DP.</div>
-  </main>
+  </form>
 </body>
 </html>

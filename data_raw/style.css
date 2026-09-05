@@ -1077,6 +1077,34 @@ details.spoiler > .spoiler-content {
   cursor: pointer;
 }
 
+.modalline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75em;
+}
+
+.modalline label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35em;
+  color: var(--text-strong);
+}
+
+.modalline input,
+.modalline select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.4em;
+}
+
+.btn-container {
+  display: flex;
+  justify-content: center;
+  gap: 1em;
+}
+
 #overlay {
   position: fixed;
   top: 0;
@@ -1177,6 +1205,7 @@ details.spoiler > .spoiler-content {
   .text { font-size: 1.2em; }
   .ingredients { width: auto; }
   .popup { width: 92vw; }
+  .modalline { grid-template-columns: 1fr 1fr; }
   .chart-messages-host { position: static; width: 100%; margin: 0 auto; }
   /* На узком экране подсказку показываем полосой у нижнего края и снимаем её с
      потока. При position: absolute её край отсчитывается от самой метки, поэтому
@@ -1211,6 +1240,7 @@ details.spoiler > .spoiler-content {
   .history-trigger ~ form > .tab { padding-top: 44px; box-sizing: border-box; }
   .tab { flex-direction: column; align-items: stretch; }
   .tab input { margin: 0.15em 0; width: 100%; min-height: 2.2em; }
+  .modalline { grid-template-columns: 1fr; }
   .container_row {
     flex-direction: column;
     align-items: stretch;

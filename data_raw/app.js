@@ -57,6 +57,8 @@
   let onConnectionChange = null;
   let clockStale = false;
   let pageLockBound = false;
+  let deviceScheduleInput = null;
+  let deviceScheduleOnSave = null;
 
   function byId(id) {
     return document.getElementById(id);
@@ -505,6 +507,54 @@
         activeLink.setAttribute('aria-pressed', 'true');
       }
     }
+  }
+
+  function openDeviceScheduleModal(input, onSave) {
+    const values = String(input.value || '0^0^0^0').split('^');
+    if (values.length !== 4) return false;
+    deviceScheduleInput = input;
+    deviceScheduleOnSave = typeof onSave === 'function' ? onSave : null;
+    byId('m_type').value = values[0];
+    byId('m_direction').value = values[1];
+    byId('m_time').value = values[2];
+    byId('m_pause').value = values[3];
+    byId('popup').style.display = 'block';
+    byId('overlay').classList.add('show');
+    return true;
+  }
+
+  function closeDeviceScheduleModal() {
+    byId('popup').style.display = 'none';
+    byId('overlay').classList.remove('show');
+    deviceScheduleInput = null;
+    deviceScheduleOnSave = null;
+  }
+
+  function normalizeDeviceScheduleSeconds(input) {
+    let value = String(input.value || '').replace(/[^0-9]/g, '');
+    let seconds = parseInt(value, 10);
+    if (Number.isNaN(seconds)) seconds = 0;
+    if (seconds > 65535) seconds = 65535;
+    input.value = String(seconds);
+  }
+
+  function saveDeviceScheduleModal() {
+    if (!deviceScheduleInput) return false;
+    normalizeDeviceScheduleSeconds(byId('m_time'));
+    normalizeDeviceScheduleSeconds(byId('m_pause'));
+    const run = readNumericInput('m_time', {
+      integer: true, min: 0, max: 65535, label: 'Время включения устройства'
+    });
+    if (!run) return false;
+    const pause = readNumericInput('m_pause', {
+      integer: true, min: 0, max: 65535, label: 'Время паузы устройства'
+    });
+    if (!pause) return false;
+    deviceScheduleInput.value = byId('m_type').value + '^' + byId('m_direction').value + '^' + run.text + '^' + pause.text;
+    const onSave = deviceScheduleOnSave;
+    closeDeviceScheduleModal();
+    if (onSave) onSave();
+    return true;
   }
 
   function setConnectionIcon(fileName) {
@@ -1591,10 +1641,12 @@
     clearProgram: clearProgram,
     clearHistory: clearHistory,
     clearMessages: clearMessages,
+    closeDeviceScheduleModal: closeDeviceScheduleModal,
     clearRequestError: clearRequestError,
     clearRequestErrorIfUnchanged: clearRequestErrorIfUnchanged,
     cssVar: cssVar,
     currentRequestErrorRevision: currentRequestErrorRevision,
+    deviceScheduleMaxSeconds: 65535,
     enhanceTooltips: enhanceTooltips,
     escapeHtml: escapeHtml,
     fetchJson: fetchJson,
@@ -1602,6 +1654,8 @@
     init: init,
     initTheme: initTheme,
     notify: notify,
+    normalizeDeviceScheduleSeconds: normalizeDeviceScheduleSeconds,
+    openDeviceScheduleModal: openDeviceScheduleModal,
     openTab: openTab,
     pollAjax: pollAjax,
     postProgram: postProgram,
@@ -1618,6 +1672,7 @@
     sendI2cPump: sendI2cPump,
     sendNumericCommand: sendNumericCommand,
     sendPowerCommand: sendPowerCommand,
+    saveDeviceScheduleModal: saveDeviceScheduleModal,
     setConnectionError: setConnectionError,
     setConnectionOk: setConnectionOk,
     setSoundEnabled: setSoundEnabled,

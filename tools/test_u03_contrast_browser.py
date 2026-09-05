@@ -658,7 +658,7 @@ BROWSER_TEST = r'''async page => {
     }
 
     await gotoPage("default", "beer.htm", theme, 180);
-    await page.evaluate(() => popup_modal(0));
+    await page.evaluate(() => SamovarApp.openDeviceScheduleModal(document.getElementById("pmixer0")));
     {
       const label = "beer-popup/" + theme;
       const value = await page.evaluate(() => {

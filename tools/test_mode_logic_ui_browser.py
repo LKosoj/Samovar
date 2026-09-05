@@ -221,8 +221,8 @@ BROWSER_TEST = r'''async page => {
       const mixerCheck = await page.evaluate(() => {
         const el = document.getElementById("m_time");
         el.value = "70000";
-        validateMixerInput(el);
-        return { clamped: el.value, maxConst: MIXER_MAX_SECONDS };
+        SamovarApp.normalizeDeviceScheduleSeconds(el);
+        return { clamped: el.value, maxConst: SamovarApp.deviceScheduleMaxSeconds };
       });
       expect(mixerCheck.maxConst === 65535,
              "beer mixer max seconds does not match the firmware uint16_t bound (program_io.h)");
