@@ -91,8 +91,10 @@ Adafruit_BME680 bme;  // I2C
 
 #ifdef USE_BMP180
 #include <Adafruit_BMP085_U.h>
+#include "bmp180_pressure_filter.h"
 #define BME_STRING "BMP180"
 Adafruit_BMP085_Unified bme;  // I2C
+static Bmp180PressureFilter bmp180PressureFilter = {0.0f, false, 0};
 #endif
 
 #ifdef USE_BMP280
@@ -188,7 +190,10 @@ void BME_getvalue(bool fl) {
     sensors_event_t event;
     bme.getEvent(&event);
     if (event.pressure) {
-      bme_pressure = event.pressure * 0.75;
+      const float rawMmHg = event.pressure * 0.75f;
+      if (bmp180_pressure_filter_update(bmp180PressureFilter, rawMmHg)) {
+        bme_pressure = bmp180PressureFilter.value;
+      }
       float temp;
       bme.getTemperature(&temp);
       bme_temp = temp;
@@ -457,7 +462,7 @@ void sensor_init(void) {
   if (!bme.begin(BMP280_ADDRESS_ALT, BMP280_CHIPID)) {
 #else
 #ifdef USE_BMP180
-  if (!bme.begin(BMP085_MODE_STANDARD)) {
+  if (!bme.begin(BMP085_MODE_ULTRAHIGHRES)) {
 #else
   if (!bme.begin()) {
 #endif
