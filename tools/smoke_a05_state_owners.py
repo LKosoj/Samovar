@@ -302,6 +302,7 @@ volatile SAMOVAR_MODE Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
 constexpr int16_t SAMOVAR_STATUS_RECT_WITHDRAWAL = 10;
 constexpr int16_t SAMOVAR_STATUS_RECT_AUTOPAUSE = 15;
 constexpr int16_t SAMOVAR_STATUS_BEER = 2000;
+constexpr int16_t SAMOVAR_STATUS_CHEESE = 5000;
 volatile int16_t SamovarStatusInt = 10;
 volatile float current_power_volt = 221.26f;
 volatile float target_power_volt = 220.0f;
@@ -343,6 +344,7 @@ static bool fakeHeaterAlarmLatched = false;
 static int fakeCheesePhRaw = 2048;
 static float fakeCheesePh = 5.25f;
 static bool fakeCheesePhValid = true;
+static bool fakeCheesePhRawValid = true;
 char latched_emergency_stop_reason[192] = "";
 
 struct ESPFixture {
@@ -379,6 +381,11 @@ float cheese_ph_value() {
 bool cheese_ph_valid() {
   sourceGetterCalls++;
   return fakeCheesePhValid;
+}
+
+bool cheese_ph_raw_valid() {
+  sourceGetterCalls++;
+  return fakeCheesePhRawValid;
 }
 
 String format_uptime(unsigned long seconds) {
@@ -505,6 +512,7 @@ static void mutateSources() {
   fakeCheesePhRaw = 1000;
   fakeCheesePh = 7.0f;
   fakeCheesePhValid = false;
+  fakeCheesePhRawValid = false;
 }
 
 int main() {
@@ -587,7 +595,7 @@ EXPECTED_DEFAULT = (
     '{"bme_temp":1.250,"bme_pressure":760.000,"start_pressure":755.500,'
     '"crnt_tm":"clock\\"x","stm":"01:02:03","SteamTemp":78.125,'
     '"PipeTemp":77.250,"WaterTemp":20.500,"TankTemp":89.750,'
-    '"ACPTemp":30.000,"CheesePhRaw":2048,"CheesePh":5.250,"CheesePhValid":1,'
+    '"ACPTemp":30.000,"CheesePhRaw":2048,"CheesePhRawValid":1,"CheesePh":5.250,"CheesePhValid":1,'
     '"DetectorTrend":0.125,"DetectorStatus":2,'
     '"BoilingDetected":1,"BoilingEvidence":3,"BoilingPrecisionSensorConfigured":1,'
     '"useautospeed":1,"version":"6.27",'

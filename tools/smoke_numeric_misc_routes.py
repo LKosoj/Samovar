@@ -174,8 +174,9 @@ expected_hashes = {
     # «Т пара») и общий разбор четырёх полей с DIST; отказы - тем же сбросом draft,
     # program[] не коммитится, A-09 не нарушена.
     # 05.09.2026: добавлен отдельный строгий формат программы Cheese с шестым
-    # полем Param; разбор по-прежнему идёт в draft до атомарного commit.
-    "program_io.h": "ce670ae523cd3fb649284403949fb3598e96684451d2a97a45dd947d74e6bbb6",
+    # полем Param и направлением устройства только -1..1; разбор по-прежнему
+    # идёт в draft до атомарного commit.
+    "program_io.h": "20876fa1cd2dcb37e2873edcd700bf730140d18199b4ac3bdaa728055529f711",
     "program_types.h": "78a37ac7beda0a3bf50b0ad2e6682075d038a5c15f99e808c665404e22b9ed2b",
 }
 for name, expected in expected_hashes.items():

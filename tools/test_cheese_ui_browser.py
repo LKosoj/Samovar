@@ -43,7 +43,8 @@ BROWSER_TEST = r'''async page => {
       TimeRemaining:10, TotalTime:30, alc:0, stm_alc:0, ISspd:0, wp_spd:0,
       i2c_pump_present:0, i2c_pump_running:0, i2c_pump_remaining_ml:0,
       i2c_pump_speed:0, PowerOn:0, heaterAlarmLatched:0, heaterAlarmReason:"",
-      latestMessageSequence:0, CheesePhRaw:rawPh, CheesePh:5.4, CheesePhValid:1
+      latestMessageSequence:0, CheesePhRaw:rawPh, CheesePhRawValid:1,
+      CheesePh:99, CheesePhValid:0
     };
     return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(body)});
   });

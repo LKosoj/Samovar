@@ -2018,10 +2018,10 @@ void handleSave(AsyncWebServerRequest *request) {
         send_save_parse_error(request, "mode", NUMERIC_PARSE_INVALID_ARGUMENT);
         return;
       }
-      const int32_t allowedModes[] = {0, 1, 2, 3, 4, 5, 6};
+      const int32_t allowedModes[] = {0, 1, 2, 3, 4, 5, 6, 7};
       int32_t requestedModeValue = 0;
       NumericParseResult result = parse_exact_enum(
-          modeParam->value().c_str(), allowedModes, 7, requestedModeValue);
+          modeParam->value().c_str(), allowedModes, 8, requestedModeValue);
       if (!result.ok()) {
         send_save_parse_error(request, "mode", result.error);
         return;

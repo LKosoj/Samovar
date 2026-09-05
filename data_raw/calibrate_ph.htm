@@ -12,7 +12,7 @@
     @media (max-width: 520px) { .ph-grid { grid-template-columns: 1fr; } .ph-grid button { width: 100%; } }
   </style>
   <script>
-    var latestPh = {raw:null, value:null, valid:false};
+    var latestPh = {raw:null, value:null, rawValid:false, valid:false};
     var calibrationPoints = [null, null];
 
     function phError(message) {
@@ -24,15 +24,16 @@
     function renderCalibrationTelemetry(data) {
       latestPh.raw = Number(data.CheesePhRaw);
       latestPh.value = Number(data.CheesePh);
-      latestPh.valid = Number(data.CheesePhValid) === 1 && Number.isFinite(latestPh.raw);
-      document.getElementById('phRaw').textContent = latestPh.valid ? String(latestPh.raw) : 'нет данных';
+      latestPh.rawValid = Number(data.CheesePhRawValid) === 1 && Number.isFinite(latestPh.raw);
+      latestPh.valid = Number(data.CheesePhValid) === 1;
+      document.getElementById('phRaw').textContent = latestPh.rawValid ? String(latestPh.raw) : 'нет данных';
       document.getElementById('phCurrent').textContent = latestPh.valid && Number.isFinite(latestPh.value) ? latestPh.value.toFixed(2) : 'нет данных';
     }
 
     function capturePhPoint(index) {
       var input = document.getElementById(index === 0 ? 'point1Ph' : 'point2Ph');
       var ph = Number(String(input.value).replace(',', '.'));
-      if (!latestPh.valid || !Number.isFinite(ph) || ph < 0 || ph > 14) return phError('Нужны достоверный ADC и pH от 0 до 14.');
+      if (!latestPh.rawValid || !Number.isFinite(ph) || ph < 0 || ph > 14) return phError('Нужны свежий ADC и pH от 0 до 14.');
       calibrationPoints[index] = {raw:latestPh.raw, ph:ph};
       document.getElementById(index === 0 ? 'point1Raw' : 'point2Raw').textContent = String(latestPh.raw);
       document.getElementById('phStatus').textContent = 'Точка ' + (index + 1) + ' зафиксирована.';

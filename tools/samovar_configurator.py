@@ -508,6 +508,10 @@ class SamovarConfig:
             raise ConfigError("Нельзя указать пароль Wi-Fi без SSID")
 
 
+def is_unc_path(path: Path) -> bool:
+    return str(path).startswith(("\\\\", "//"))
+
+
 def pio_command(pio_executable: str, board: str, action: str) -> List[str]:
     if board not in BOARD_OPTIONS:
         raise ConfigError("Неизвестная плата: {}".format(board))
@@ -515,11 +519,7 @@ def pio_command(pio_executable: str, board: str, action: str) -> List[str]:
     if action not in targets:
         raise ConfigError("Неизвестная команда: {}".format(action))
     environment = BOARD_OPTIONS[board][1]
-    command = [pio_executable, "run"]
-    if action != "monitor":
-        command.extend(("-j", "1"))
-    command.extend(("-e", environment, "-t", targets[action]))
-    return command
+    return [pio_executable, "run", "-e", environment, "-t", targets[action]]
 
 
 class ConfiguratorWindow:
@@ -633,6 +633,15 @@ class ConfiguratorWindow:
         ttk.Entry(
             section_frames["Сеть"], textvariable=self.password_var, show="•", width=34
         ).grid(row=row, column=1, sticky="ew", padx=(10, 0), pady=3)
+
+        ttk.Label(
+            outer,
+            text=(
+                "Режим «Сыр»: оператор подключает к LUA_PIN либо PH-4502C, либо "
+                "MPX5010DP; к реле №4 — либо клапан слива, либо разгонный ТЭН."
+            ),
+            wraplength=900,
+        ).pack(fill="x", pady=(8, 0))
 
         buttons = ttk.Frame(outer, padding=(0, 10, 0, 8))
         buttons.pack(fill="x")
@@ -782,6 +791,14 @@ class ConfiguratorWindow:
     def start_action(self, action: str) -> None:
         if self.busy:
             self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
+            return
+        if action in ("upload", "uploadfs") and os.name == "nt" and is_unc_path(self.config.project_root):
+            self.messagebox.showerror(
+                "Проект находится в общей папке",
+                "Windows не позволяет PlatformIO собирать проект по сетевому пути. "
+                "Скопируйте всю папку проекта на локальный диск Windows, например "
+                r"C:\Samovar-7.00, и запустите flash_windows.bat из этой папки.",
+            )
             return
         if action == "upload" and not self.save(show_success=False):
             return

@@ -490,6 +490,7 @@ void test_cheese_row_semantics() {
       {"S;0;8;1^1^5^5;0;0\n", false},
       {"W;0;0;1^1^5^5;0;0\n", false},
       {"R;0;0;0^0^0^0;1;0\n", false},
+      {"P;36;45;1^2^20^5;1;0\n", false},
       {"B;0;1;0^0^0^0;0;0\n", false},
   };
   for (const Case& test : cases) {

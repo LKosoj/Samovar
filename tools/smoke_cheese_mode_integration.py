@@ -58,5 +58,45 @@ require(
     '"cheese.htm"' in web and '"calibrate_ph.htm"' in web,
     "Новые сырные страницы отсутствуют в списке обновления интерфейса",
 )
+require(
+    "const int32_t allowedModes[] = {0, 1, 2, 3, 4, 5, 6, 7};" in web and
+    "allowedModes, 8, requestedModeValue" in web,
+    "WebServer не принимает и не сохраняет mode=7",
+)
+require(
+    "#ifdef USE_LUA\ninline bool cheese_lua_result_pending" in
+    (ROOT / "cheese.h").read_text(encoding="utf-8"),
+    "Lua-тип Cheese просачивается в сборки без USE_LUA",
+)
+require(
+    "Samovar_Mode == SAMOVAR_BEER_MODE ||\n      Samovar_Mode == SAMOVAR_CHEESE_MODE" in samovar_ino,
+    "Общий расчёт прогресса не обслуживает Cheese",
+)
+require(
+    "status == SAMOVAR_STATUS_CHEESE && snapshot.powerOn" in samovar_ino,
+    "Телеметрия скрывает тип активного этапа Cheese",
+)
+require(
+    "pinMode(LUA_PIN, INPUT);" in (ROOT / "cheese.h").read_text(encoding="utf-8"),
+    "При старте Cheese LUA_PIN не возвращается в режим входа",
+)
+cheese_runtime = (ROOT / "cheese.h").read_text(encoding="utf-8")
+for token in (
+    "alarm_c_min = 0;",
+    "alarm_c_low_min = 0;",
+    "currentstepcnt = 0;",
+    "beerMixerPauseSinceMs = 0;",
+):
+    require(token in cheese_runtime, f"Новая строка Cheese не сбрасывает {token}")
+require(
+    "const bool sensorRequired = kind == CHEESE_STAGE_HEAT_TO_TARGET" in cheese_runtime and
+    "if (sensorRequired &&" in cheese_runtime,
+    "W/R/S всё ещё зависят от датчика температуры",
+)
+require(
+    "stepper_safe_reverse(true);" in cheese_runtime and
+    "stepper_safe_reverse(false);" in cheese_runtime,
+    "Дозатор Cheese не восстанавливает штатное направление STEPPER_REVERSE",
+)
 
 print("OK: отдельный режим Сыр зарегистрирован без перенумерации старых режимов")

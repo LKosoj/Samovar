@@ -66,10 +66,16 @@ for token in (
     "SamovarApp.readOperationAcceptance(response)",
     "SamovarApp.waitForOperation(accepted.operationId)",
     "CheesePhRaw",
+    "CheesePhRawValid",
     "CheesePhValid",
 ):
     if token not in calibrate:
         errors.append(f"calibrate_ph.htm missing calibration token: {token}")
+
+if "latestPh.rawValid" not in calibrate or "if (!latestPh.rawValid" not in calibrate:
+    errors.append("calibrate_ph.htm cannot capture raw ADC before pH is calibrated")
+if '<option value="1">Вода</option>' not in cheese or '<option value="3">Пар</option>' not in cheese:
+    errors.append("cheese.htm sensor labels disagree with beer_control_sensor")
 
 if "setNextProgram()" not in cheese_lua:
     errors.append("cheese.lua must document the explicit stage-completion call")

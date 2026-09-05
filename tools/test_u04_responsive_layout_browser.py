@@ -25,7 +25,7 @@ BROWSER_TEST = r'''async page => {
     { name: "1440x900", width: 1440, height: 900 }
   ];
   const themes = ["light", "dark"];
-  const setupTabs = ["Main", "Temp", "Pump", "Beer", "NBK", "Other"];
+  const setupTabs = ["Main", "Temp", "Pump", "Beer", "Cheese", "NBK", "Other"];
   const setupStates = [
     "main-longest-mode", "other-long-values", "other-empty-values",
     "validation-error", "request-error", "visible-tooltip"
@@ -55,18 +55,19 @@ BROWSER_TEST = r'''async page => {
   // и все сценарии на её основе стали выше на 18.42 px; остальные вкладки не менялись.
   // 04.09.2026: с Temp убраны два поля су-вида; в Beer добавлен BeerBrewOrder.
   const DESKTOP_GEOMETRY_BASELINE = {
-    "setup/Main": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
+    "setup/Main": { form: {x:265,y:25,width:910,height:1528.81}, panel: {x:295,y:163,width:850,height:1316.81}, actions: {x:386,y:1479.81,width:668,height:44}, save: {x:396,y:1489.81,width:200,height:34}, return: {x:620,y:1489.81,width:200,height:34}, edit: {x:844,y:1489.81,width:200,height:34} },
     "setup/Temp": { form: {x:265,y:25,width:910,height:1578.55}, panel: {x:295,y:163,width:850,height:1366.55}, actions: {x:386,y:1529.55,width:668,height:44}, save: {x:396,y:1539.55,width:200,height:34}, return: {x:620,y:1539.55,width:200,height:34}, edit: {x:844,y:1539.55,width:200,height:34} },
-    "setup/Pump": { form: {x:265,y:25,width:910,height:418.69}, panel: {x:295,y:163,width:850,height:206.69}, actions: {x:386,y:369.69,width:668,height:44}, save: {x:396,y:379.69,width:200,height:34}, return: {x:620,y:379.69,width:200,height:34}, edit: {x:844,y:379.69,width:200,height:34} },
+    "setup/Pump": { form: {x:265,y:25,width:910,height:517.53}, panel: {x:295,y:163,width:850,height:305.53}, actions: {x:386,y:468.53,width:668,height:44}, save: {x:396,y:478.53,width:200,height:34}, return: {x:620,y:478.53,width:200,height:34}, edit: {x:844,y:478.53,width:200,height:34} },
     "setup/Beer": { form: {x:265,y:25,width:910,height:717.22}, panel: {x:295,y:163,width:850,height:505.22}, actions: {x:386,y:668.22,width:668,height:44}, save: {x:396,y:678.22,width:200,height:34}, return: {x:620,y:678.22,width:200,height:34}, edit: {x:844,y:678.22,width:200,height:34} },
-    "setup/NBK": { form: {x:265,y:25,width:910,height:685.8}, panel: {x:295,y:163,width:850,height:473.8}, actions: {x:386,y:636.8,width:668,height:44}, save: {x:396,y:646.8,width:200,height:34}, return: {x:620,y:646.8,width:200,height:34}, edit: {x:844,y:646.8,width:200,height:34} },
+    "setup/Cheese": { form: {x:265,y:25,width:910,height:565.53}, panel: {x:295,y:163,width:850,height:353.53}, actions: {x:386,y:516.53,width:668,height:44}, save: {x:396,y:526.53,width:200,height:34}, return: {x:620,y:526.53,width:200,height:34}, edit: {x:844,y:526.53,width:200,height:34} },
+    "setup/NBK": { form: {x:265,y:25,width:910,height:727.22}, panel: {x:295,y:163,width:850,height:515.22}, actions: {x:386,y:678.22,width:668,height:44}, save: {x:396,y:688.22,width:200,height:34}, return: {x:620,y:688.22,width:200,height:34}, edit: {x:844,y:688.22,width:200,height:34} },
     "setup/Other": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
-    "setup/main-longest-mode": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
+    "setup/main-longest-mode": { form: {x:265,y:25,width:910,height:1528.81}, panel: {x:295,y:163,width:850,height:1316.81}, actions: {x:386,y:1479.81,width:668,height:44}, save: {x:396,y:1489.81,width:200,height:34}, return: {x:620,y:1489.81,width:200,height:34}, edit: {x:844,y:1489.81,width:200,height:34} },
     "setup/other-long-values": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
     "setup/other-empty-values": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
-    "setup/validation-error": { form: {x:265,y:25,width:910,height:1497.72}, panel: {x:295,y:246.75,width:850,height:1201.97}, actions: {x:386,y:1448.72,width:668,height:44}, save: {x:396,y:1458.72,width:200,height:34}, return: {x:620,y:1458.72,width:200,height:34}, edit: {x:844,y:1458.72,width:200,height:34} },
-    "setup/request-error": { form: {x:265,y:25,width:910,height:1497.72}, panel: {x:295,y:246.75,width:850,height:1201.97}, actions: {x:386,y:1448.72,width:668,height:44}, save: {x:396,y:1458.72,width:200,height:34}, return: {x:620,y:1458.72,width:200,height:34}, edit: {x:844,y:1458.72,width:200,height:34} },
-    "setup/visible-tooltip": { form: {x:265,y:25,width:910,height:1413.97}, panel: {x:295,y:163,width:850,height:1201.97}, actions: {x:386,y:1364.97,width:668,height:44}, save: {x:396,y:1374.97,width:200,height:34}, return: {x:620,y:1374.97,width:200,height:34}, edit: {x:844,y:1374.97,width:200,height:34} },
+    "setup/validation-error": { form: {x:265,y:25,width:910,height:1612.56}, panel: {x:295,y:246.75,width:850,height:1316.81}, actions: {x:386,y:1563.56,width:668,height:44}, save: {x:396,y:1573.56,width:200,height:34}, return: {x:620,y:1573.56,width:200,height:34}, edit: {x:844,y:1573.56,width:200,height:34} },
+    "setup/request-error": { form: {x:265,y:25,width:910,height:1612.56}, panel: {x:295,y:246.75,width:850,height:1316.81}, actions: {x:386,y:1563.56,width:668,height:44}, save: {x:396,y:1573.56,width:200,height:34}, return: {x:620,y:1573.56,width:200,height:34}, edit: {x:844,y:1573.56,width:200,height:34} },
+    "setup/visible-tooltip": { form: {x:265,y:25,width:910,height:1528.81}, panel: {x:295,y:163,width:850,height:1316.81}, actions: {x:386,y:1479.81,width:668,height:44}, save: {x:396,y:1489.81,width:200,height:34}, return: {x:620,y:1489.81,width:200,height:34}, edit: {x:844,y:1489.81,width:200,height:34} },
     "chart/messages-hidden": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
     "chart/messages-short": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:47.34}, messages: {x:208,y:22,width:600,height:47.34} },
     "chart/messages-long": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:276.83}, messages: {x:208,y:22,width:600,height:276.83} },
@@ -78,7 +79,7 @@ BROWSER_TEST = r'''async page => {
     "chart/refresh": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
   };
   const report = {
-    expectedCells: 168, cells: [], failures: [], consoleProblems: [],
+    expectedCells: 176, cells: [], failures: [], consoleProblems: [],
     expectedConsoleEvents: [], pageErrors: [], lifecycleProblems: [],
     requestTraces: [], desktopGeometry: {}, tooltipFitCells: [], tooltipFitBlocked: []
   };
@@ -300,7 +301,7 @@ BROWSER_TEST = r'''async page => {
         form: ["setupform", "/save", "post"],
         actions: [["save", "save", "submit", "Сохранить"], ["return", "return", "button", "На главную"], ["edit", "edit", "button", "Редактор"]],
         longInputs: [["blynkauth", "text"], ["tgtoken", "text"], ["tgchatid", "text"], ["videourl", "text"]],
-        tabs: ["Main", "Temp", "Pump", "Beer", "NBK", "Other"]
+        tabs: ["Main", "Temp", "Pump", "Beer", "Cheese", "NBK", "Other"]
       };
       if (JSON.stringify(contract) !== JSON.stringify(expected)) {
         fail("behavior-invariant", "#setupform", form, null, JSON.stringify(contract));
@@ -440,7 +441,7 @@ BROWSER_TEST = r'''async page => {
   async function openSetupTab(tab) {
     await page.locator(".tablinks").filter({ hasText: new RegExp("^" + ({
       Main: "Основные", Temp: "Температура", Pump: "Насос", Beer: "Пиво",
-      NBK: "НБК", Other: "Прочие"
+      Cheese: "Сыр", NBK: "НБК", Other: "Прочие"
     })[tab] + "$") }).click();
     await page.waitForFunction(name => getComputedStyle(document.getElementById(name)).display !== "none", tab);
   }
@@ -588,9 +589,9 @@ BROWSER_TEST = r'''async page => {
       }
     }
   }
-  if (report.cells.length !== 168) throw new Error("matrix cardinality=" + report.cells.length + ", expected 168");
-  if (Object.keys(DESKTOP_GEOMETRY_BASELINE).length !== 21) {
-    throw new Error("desktop baseline cardinality=" + Object.keys(DESKTOP_GEOMETRY_BASELINE).length + ", expected 21");
+  if (report.cells.length !== 176) throw new Error("matrix cardinality=" + report.cells.length + ", expected 176");
+  if (Object.keys(DESKTOP_GEOMETRY_BASELINE).length !== 22) {
+    throw new Error("desktop baseline cardinality=" + Object.keys(DESKTOP_GEOMETRY_BASELINE).length + ", expected 22");
   }
   const expectedDesktopScenarios = Object.keys(DESKTOP_GEOMETRY_BASELINE).flatMap(key => {
     const parts = key.split("/");
@@ -605,7 +606,7 @@ BROWSER_TEST = r'''async page => {
   }
 
   // [код-ревью 24.08 #1] Подсказка (.tooltiptext) не должна вылезать за границы экрана
-  // ни при каком положении её метки в строке. 168-матрица выше гоняет только
+  // ни при каком положении её метки в строке. 176-матрица выше гоняет только
   // setup.htm/chart.htm (и там - только один тултип на вкладке Main), а сюда попадают
   // именно страницы из находки (program.htm - колонки "Мощность" и "Скорость",
   // index.htm, distiller.htm) плюс остальные вкладки setup.htm, где подсказок больше
@@ -698,7 +699,7 @@ BROWSER_TEST = r'''async page => {
     }
   }
   // setup.htm: 320px по всем вкладкам (широкий экран для первого тултипа Main уже
-  // проверен выше самой 168-матрицей, сценарий setup/*/visible-tooltip).
+  // проверен выше самой 176-матрицей, сценарий setup/*/visible-tooltip).
   // Не у каждой вкладки есть подсказки (Temp/Pump - вообще без .tooltip в разметке),
   // поэтому здесь требуем не "не ноль на каждой вкладке", а точную сумму по всем
   // вкладкам сразу - так и легитимно пустые вкладки не мешают, и потеря покрытия
@@ -707,6 +708,9 @@ BROWSER_TEST = r'''async page => {
   // 03.09.2026 (НБК, T6): у NBK появились 3 подсказки (Инерция/Давление захлёба/
   // Т завершения (барда)) - вкладка больше не пустая, сумма 11 -> 14.
   // 04.09.2026: в Beer добавлена подсказка к варочному порядку, сумма 14 -> 15.
+  // 05.09.2026: согласованные подсказки MPX, второго I2C-насоса, НБК и Cheese
+  // увеличили фактическое число проверяемых подсказок до 25; отдельная вкладка
+  // Cheese добавила ещё три, итого 28.
   await page.setViewportSize({ width: 320, height: 800 });
   let setupTooltipTotal = 0;
   for (const tab of setupTabs) {
@@ -714,7 +718,7 @@ BROWSER_TEST = r'''async page => {
     await openSetupTab(tab);
     setupTooltipTotal += await checkTooltipFit(page, "setup.htm", { name: "320x800", width: 320 }, tab);
   }
-  const SETUP_TOOLTIP_TOTAL_EXPECTED = 15;
+  const SETUP_TOOLTIP_TOTAL_EXPECTED = 28;
   if (setupTooltipTotal !== SETUP_TOOLTIP_TOTAL_EXPECTED) {
     throw new Error("tooltip-fit: setup.htm суммарно нашёл " + setupTooltipTotal +
       " подсказок по всем вкладкам, ожидалось " + SETUP_TOOLTIP_TOTAL_EXPECTED);
@@ -831,7 +835,7 @@ def main() -> int:
         for error in cleanup_errors:
             print(f"U-04 responsive browser cleanup failed: {error}", file=sys.stderr)
         return 1
-    print("U-04 responsive browser gate passed: 168/168 cells")
+    print("U-04 responsive browser gate passed: 176/176 cells")
     return 0
 
 

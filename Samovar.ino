@@ -815,11 +815,15 @@ static void tick_publish_log_line(const String &baseLine) {
 
 static void tick_update_withdrawal_progress(ProgramType tickerProgramType) {
   //Считаем прогресс для текущей строки программы и время до конца завершения строки и всего отбора (режим пива)
-  if (Samovar_Mode == SAMOVAR_BEER_MODE) {
+  if (Samovar_Mode == SAMOVAR_BEER_MODE ||
+      Samovar_Mode == SAMOVAR_CHEESE_MODE) {
     float wp;
     if (program[ProgramNum].Time > 0 && begintime > 0) {
       // [Пиво 02.09 C3] Вычитаем накопленный простой строки, как в get_beer_status_text.
-      wp = beer_stage_elapsed_ms(millis()) / 1000 / 60 / program[ProgramNum].Time;
+      const unsigned long elapsedMs = Samovar_Mode == SAMOVAR_BEER_MODE
+          ? beer_stage_elapsed_ms(millis())
+          : millis() - begintime;
+      wp = elapsedMs / 1000.0f / 60.0f / program[ProgramNum].Time;
     } else
       wp = 0;
     if (wp < 0) wp = 0;
@@ -3748,6 +3752,7 @@ struct AjaxTelemetrySnapshot {
   bool pauseOn;
   bool beerPaused;  // [Пиво 02.09 C2] Ручная пауза пива (зеркалит beerManualPause) для /ajax
   bool cheesePhValid;
+  bool cheesePhRawValid;
   bool useBrowserBuzzer;
   bool mixer;
   // [9b] Флаг автоводы БК для /ajax - ВСЕГДА в снимке (false без USE_WATER_PUMP).
@@ -3799,6 +3804,7 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   snapshot.cheesePhRaw = cheese_ph_raw();
   snapshot.cheesePh = cheese_ph_value();
   snapshot.cheesePhValid = cheese_ph_valid();
+  snapshot.cheesePhRawValid = cheese_ph_raw_valid();
   snapshot.detectorTrend = impurityDetector.currentTrend;
   snapshot.detectorStatus = impurityDetector.detectorStatus;
   snapshot.boilingDetected = boiling_evidence != BOILING_EVIDENCE_NONE;
@@ -3855,7 +3861,10 @@ static RuntimeAjaxSnapshotResult captureAjaxTelemetrySnapshot(
   if ((mode == SAMOVAR_RECTIFICATION_MODE || mode == SAMOVAR_BEER_MODE ||
        mode == SAMOVAR_DISTILLATION_MODE || mode == SAMOVAR_NBK_MODE ||
        mode == SAMOVAR_CHEESE_MODE) &&
-      (status == SAMOVAR_STATUS_RECT_WITHDRAWAL || status == SAMOVAR_STATUS_RECT_AUTOPAUSE || (status == SAMOVAR_STATUS_BEER && snapshot.powerOn)) &&
+      (status == SAMOVAR_STATUS_RECT_WITHDRAWAL ||
+       status == SAMOVAR_STATUS_RECT_AUTOPAUSE ||
+       (status == SAMOVAR_STATUS_BEER && snapshot.powerOn) ||
+       (status == SAMOVAR_STATUS_CHEESE && snapshot.powerOn)) &&
       !program_type_empty(currentType)) {
     snapshot.programType = program_type_to_string(currentType);
   }
@@ -3920,6 +3929,7 @@ static void writeAjaxTelemetryFields(
   jsonFieldFloat(out, first, "TankTemp", snapshot.tankTemp, 3);
   jsonFieldFloat(out, first, "ACPTemp", snapshot.acpTemp, 3);
   jsonFieldRaw(out, first, "CheesePhRaw", snapshot.cheesePhRaw);
+  jsonFieldBool(out, first, "CheesePhRawValid", snapshot.cheesePhRawValid);
   jsonFieldFloat(out, first, "CheesePh", snapshot.cheesePh, 3);
   jsonFieldBool(out, first, "CheesePhValid", snapshot.cheesePhValid);
   jsonFieldFloat(out, first, "DetectorTrend", snapshot.detectorTrend, 3);

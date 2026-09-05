@@ -81,6 +81,7 @@ static SetupEEPROM SamSetup;
 static int cheesePhRaw = 0;
 static float cheesePhValue = 0.0f;
 static bool cheesePhValid = false;
+static bool cheesePhSampled = false;
 static unsigned long cheesePhSampleMs = 0;
 static int fakeRaw = 0;
 static unsigned long fakeMillis = 0;
@@ -126,6 +127,10 @@ inline float cheese_ph_value() {
 
 inline bool cheese_ph_valid() {
 @PH_VALID_GETTER@
+}
+
+inline bool cheese_ph_raw_valid() {
+@PH_RAW_VALID_GETTER@
 }
 
 inline void cheese_sample_ph(unsigned long nowMs) {
@@ -218,25 +223,32 @@ int main() {
   check(cheese_calibrated_ph(500, 0.01f, 1.0f) == 6.0f,
         "second raw pH calibration changed");
 
-  SamSetup.CheesePhSlope = -0.003f;
-  SamSetup.CheesePhOffset = 8.0f;
   fakeRaw = 1000;
   fakeMillis = 1000;
   cheese_sample_ph(1000);
+  check(cheese_ph_raw_valid() && !cheese_ph_valid(),
+        "raw ADC must remain usable before pH calibration");
+
+  SamSetup.CheesePhSlope = -0.003f;
+  SamSetup.CheesePhOffset = 8.0f;
+  fakeRaw = 1000;
+  fakeMillis = 2000;
+  cheese_sample_ph(2000);
   check(cheese_ph_raw() == 1000, "first raw pH sample was not retained");
+  check(cheese_ph_raw_valid(), "fresh raw ADC was not exposed for calibration");
   check(cheese_ph_value() == 5.0f && cheese_ph_valid(),
         "first raw pH sample was not calibrated");
   SamSetup.CheesePhSlope = 0.01f;
   SamSetup.CheesePhOffset = 1.0f;
   fakeRaw = 500;
-  fakeMillis = 2000;
-  cheese_sample_ph(2000);
+  fakeMillis = 3000;
+  cheese_sample_ph(3000);
   check(cheese_ph_raw() == 500, "second raw pH sample was not retained");
   check(cheese_ph_value() == 6.0f && cheese_ph_valid(),
         "second raw pH sample was not calibrated");
 
   fakeRaw = 700;
-  fakeMillis = 3000;
+  fakeMillis = 4000;
   cheese_ph_tick();
   check(cheese_ph_raw() == 500,
         "idle non-cheese mode sampled the pH input");
@@ -246,8 +258,9 @@ int main() {
         "active cheese mode did not sample the pH input");
   check(cheese_ph_value() == 8.0f && cheese_ph_valid(),
         "cheese pH tick did not publish calibrated live pH");
-  fakeMillis = 8001;
+  fakeMillis = 9001;
   check(!cheese_ph_valid(), "stale live pH remained valid after five seconds");
+  check(!cheese_ph_raw_valid(), "stale raw ADC remained valid for calibration");
 
   if (failures != 0) return 1;
   std::cout << "Cheese runtime decision checks passed\n";
@@ -411,6 +424,9 @@ def build_harness(source: str) -> str:
         ),
         "@PH_VALID_GETTER@": extract_function_body(
             source, "inline bool cheese_ph_valid()"
+        ),
+        "@PH_RAW_VALID_GETTER@": extract_function_body(
+            source, "inline bool cheese_ph_raw_valid()"
         ),
         "@SAMPLE@": extract_function_body(source, SAMPLE_SIGNATURE),
         "@PH_TICK@": extract_function_body(source, PH_TICK_SIGNATURE),

@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from smoke_helpers import extract_function_body
 
@@ -271,19 +272,55 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertIn('log_frame.pack(fill="both", expand=True)', source)
         self.assertNotIn('log_frame.pack(fill="both", expand=False)', source)
 
+    def test_cheese_shared_connections_warning_is_visible(self) -> None:
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        for token in ('Режим «Сыр»', 'LUA_PIN', 'PH-4502C', 'MPX5010DP', 'реле №4',
+                      'клапан слива', 'разгонный ТЭН'):
+            self.assertIn(token, source)
+
     def test_commands_use_existing_environments_and_never_build_twice(self) -> None:
         self.assertEqual(
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload"),
-            ["pio.exe", "run", "-j", "1", "-e", "Samovar", "-t", "upload"],
+            ["pio.exe", "run", "-e", "Samovar", "-t", "upload"],
         )
         self.assertEqual(
             configurator.pio_command("pio.exe", "LILYGO", "uploadfs"),
-            ["pio.exe", "run", "-j", "1", "-e", "Samovar", "-t", "uploadfs"],
+            ["pio.exe", "run", "-e", "Samovar", "-t", "uploadfs"],
         )
         self.assertEqual(
             configurator.pio_command("pio.exe", "ESP32-S3", "monitor"),
             ["pio.exe", "run", "-e", "Samovar_s3", "-t", "monitor"],
         )
+
+    def test_unc_project_path_detection(self) -> None:
+        self.assertTrue(configurator.is_unc_path(Path(r"\\Mac\Home\Documents\Samovar-7.00")))
+        self.assertTrue(configurator.is_unc_path(Path("//server/share/Samovar-7.00")))
+        self.assertFalse(configurator.is_unc_path(Path(r"C:\Users\gala\Documents\Samovar-7.00")))
+        self.assertFalse(configurator.is_unc_path(Path("/Users/kosoj/Documents/Samovar-7.00")))
+
+    def test_windows_unc_path_stops_builds_before_save(self) -> None:
+        for action in ("upload", "uploadfs"):
+            with self.subTest(action=action):
+                errors = []
+                window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+                window.busy = False
+                window.config = type(
+                    "Config",
+                    (),
+                    {"project_root": Path(r"\\Mac\Home\Documents\Arduino\Samovar-7.00")},
+                )()
+                window.messagebox = type(
+                    "Messages",
+                    (),
+                    {"showerror": lambda _, title, message: errors.append((title, message))},
+                )()
+                window.save = lambda **kwargs: self.fail("UNC build must stop before saving")
+
+                with mock.patch.object(configurator.os, "name", "nt"):
+                    window.start_action(action)
+
+                self.assertEqual(errors[0][0], "Проект находится в общей папке")
+                self.assertIn(r"C:\Samovar-7.00", errors[0][1])
 
     def test_every_user_macro_has_an_interface_control(self) -> None:
         source = (ROOT / "Samovar_ini.h").read_text(encoding="utf-8")

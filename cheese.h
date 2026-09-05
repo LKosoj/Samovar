@@ -57,6 +57,7 @@ static bool cheeseDoserCompleted = false;
 static int cheesePhRaw = 0;
 static float cheesePhValue = 0.0f;
 static bool cheesePhValid = false;
+static bool cheesePhSampled = false;
 static unsigned long cheesePhSampleMs = 0;
 
 inline CheeseStageKind cheese_stage_kind(ProgramType type) {
@@ -94,11 +95,13 @@ inline CheesePhStageResult cheese_ph_stage_result(
   return CHEESE_PH_WAIT;
 }
 
+#ifdef USE_LUA
 inline bool cheese_lua_result_pending(LuaBeerJobResult result) {
   return result == LUA_BEER_JOB_LOCK_BUSY ||
          result == LUA_BEER_JOB_QUEUED ||
          result == LUA_BEER_JOB_RUNNING;
 }
+#endif
 
 inline bool cheese_doser_motion_complete(
     bool started, bool moving, int32_t current, int32_t target) {
@@ -132,6 +135,10 @@ inline bool cheese_ph_valid() {
   return cheesePhValid && millis() - cheesePhSampleMs <= CHEESE_PH_STALE_MS;
 }
 
+inline bool cheese_ph_raw_valid() {
+  return cheesePhSampled && millis() - cheesePhSampleMs <= CHEESE_PH_STALE_MS;
+}
+
 inline void cheese_set_drain(bool open) {
   digitalWrite(RELE_CHANNEL4, open ? SamSetup.rele4 : !SamSetup.rele4);
   cheeseDrainOpen = open;
@@ -146,6 +153,7 @@ inline void cheese_sample_ph(unsigned long nowMs) {
   const float measured = cheese_calibrated_ph(
       raw, SamSetup.CheesePhSlope, SamSetup.CheesePhOffset);
   cheesePhSampleMs = nowMs;
+  cheesePhSampled = true;
   if (!isfinite(measured) || measured < 0.0f || measured > 14.0f) {
     cheesePhValid = false;
     return;
@@ -169,6 +177,11 @@ inline void cheese_ph_tick() {
 inline void cheese_start_doser() {
   stopService();
   stepper_safe_stop_reset();
+#ifdef STEPPER_REVERSE
+  stepper_safe_reverse(true);
+#else
+  stepper_safe_reverse(false);
+#endif
   TargetStepps = SamSetup.CheeseDoserSteps;
   stepper_safe_set_motion(SamSetup.CheeseDoserSpeed, 0, TargetStepps);
   StepperMoving = true;
@@ -220,6 +233,10 @@ inline void cheese_reset_lua_stage() {
   cheeseLuaStage.nextProgram = PROGRAM_END;
 }
 
+inline bool cheese_lua_stop_pending() {
+  return cheeseFinishPending && cheeseLuaStage.phase != CHEESE_LUA_STAGE_IDLE;
+}
+
 inline void cheese_reset_stage_state() {
   cheeseFinishPending = false;
   cheeseDrainOpen = false;
@@ -228,6 +245,7 @@ inline void cheese_reset_stage_state() {
   cheesePhRaw = 0;
   cheesePhValue = 0.0f;
   cheesePhValid = false;
+  cheesePhSampled = false;
   cheesePhSampleMs = 0;
   cheese_reset_lua_stage();
 }
@@ -332,6 +350,10 @@ inline bool cheese_validate_program(String& error) {
 
 inline bool cheese_prepare_stage(uint8_t targetProgram) {
   if (!cheese_apply_safe_outputs(true)) return false;
+  alarm_c_min = 0;
+  alarm_c_low_min = 0;
+  currentstepcnt = 0;
+  beerMixerPauseSinceMs = 0;
   ProgramNum = targetProgram;
   begintime = 0;
   msgfl = true;
@@ -440,10 +462,14 @@ void cheese_stage_tick() {
     return;
   }
 
+  const bool sensorRequired = kind == CHEESE_STAGE_HEAT_TO_TARGET ||
+      kind == CHEESE_STAGE_TIMED_HOLD || kind == CHEESE_STAGE_COOL ||
+      kind == CHEESE_STAGE_AUTOTUNE || kind == CHEESE_STAGE_PH;
   const DSSensor* sensor = nullptr;
   const char* sensorName = "";
-  if (!beer_control_sensor(row.TempSensor, sensor, sensorName) ||
-      (!sensor_valid(*sensor) && process_sensor_failed("Сыроварение", sensorName))) {
+  if (sensorRequired &&
+      (!beer_control_sensor(row.TempSensor, sensor, sensorName) ||
+       (!sensor_valid(*sensor) && process_sensor_failed("Сыроварение", sensorName)))) {
     cheese_abort("Ошибка датчика температуры на этапе сыроварения");
     return;
   }
@@ -587,7 +613,9 @@ void cheese_proc() {
   cheesePhRaw = 0;
   cheesePhValue = 0.0f;
   cheesePhValid = false;
+  cheesePhSampled = false;
   cheesePhSampleMs = 0;
+  pinMode(LUA_PIN, INPUT);
   cheese_set_drain(false);
   set_power(true);
   if (!PowerOn) {

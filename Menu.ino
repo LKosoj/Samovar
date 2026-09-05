@@ -560,6 +560,10 @@ void samovar_reset() {
   // Lua-job варки продолжали работать при статусе "простой".
   // Процесс не активен - функция дёшево чистит статус/startval/ProgramNum и выходит.
   stop_active_process_for_mode();
+  // Сырный L-этап сам владеет Lua-job по тикету. cheese_finish() повторяется из
+  // mode_tick_cheese(), пока beer_lua_job_idle() не подтвердит остановку. До этого
+  // нельзя сбрасывать cheeseLuaStage: иначе теряется тикет и повторить stop некому.
+  if (Samovar_Mode == SAMOVAR_CHEESE_MODE && cheese_lua_stop_pending()) return;
 #ifdef USE_LUA
   // Та же пара вызовов, что делает смена режима (mode_switch.h::switch_samovar_mode):
   // штатный finish мог выйти раньше времени (занят лок, job ещё не подтвердил остановку),

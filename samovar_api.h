@@ -380,6 +380,7 @@ inline void cheese_ph_tick();
 inline int cheese_ph_raw();
 inline float cheese_ph_value();
 inline bool cheese_ph_valid();
+inline bool cheese_ph_raw_valid();
 inline void cheese_reset_stage_state();
 String get_cheese_status_text();
 String get_cheese_program();

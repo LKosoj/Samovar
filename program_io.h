@@ -492,7 +492,8 @@ inline bool program_validate_cheese_row_semantics(
     float param,
     const char*& errorMessage) {
   const bool noDevice = devType == 0 && speed == 0 && onTime == 0 && offTime == 0;
-  const bool validDeviceSchedule = devType >= 1 && devType <= 3 && onTime > 0;
+  const bool validDeviceSchedule = devType >= 1 && devType <= 3 &&
+      speed >= -1 && speed <= 1 && onTime > 0;
   if (!noDevice && !validDeviceSchedule) {
     errorMessage = "Ошибка программы: устройство должно быть 0^0^0^0 или маской 1..3 с ненулевым расписанием";
     return false;
