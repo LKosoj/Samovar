@@ -427,11 +427,13 @@ class ConfiguratorModelTests(unittest.TestCase):
 
     def test_serial_monitor_does_not_reset_esp(self) -> None:
         query_source = inspect.getsource(configurator.query_samovar_ip)
-        monitor_source = inspect.getsource(configurator.run_serial_monitor)
-        self.assertIn("open_serial_connection(serial, port)", query_source)
-        self.assertIn("open_serial_connection(serial, port)", monitor_source)
+        action_source = inspect.getsource(configurator.ConfiguratorWindow.start_action)
+        self.assertIn("open_platformio_serial_connection(port)", query_source)
         self.assertIn("time.monotonic() + 30", query_source)
-        self.assertNotIn("platformio", monitor_source)
+        self.assertIn("serial_monitor_command(", action_source)
+        self.assertIn("self.pio_executable", action_source)
+        self.assertNotIn("pio_python_executable", action_source)
+        self.assertFalse(hasattr(configurator, "run_serial_monitor"))
 
     def test_main_window_device_controls_and_ip_gate(self) -> None:
         source = inspect.getsource(configurator.ConfiguratorWindow._build)
@@ -468,11 +470,13 @@ class ConfiguratorModelTests(unittest.TestCase):
         )
         self.assertEqual(
             configurator.serial_monitor_command(
-                "C:/Python/python.exe", MODULE_PATH, "/dev/cu.usbserial-1"
+                "pio.exe", "ESP32 DevKit", ROOT, "/dev/cu.usbserial-1"
             ),
             [
-                "C:/Python/python.exe", str(MODULE_PATH),
-                "--serial-monitor", "/dev/cu.usbserial-1",
+                "pio.exe", "device", "monitor",
+                "--port", "/dev/cu.usbserial-1",
+                "--project-dir", str(ROOT),
+                "--environment", "Samovar",
             ],
         )
         with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
@@ -492,49 +496,24 @@ class ConfiguratorModelTests(unittest.TestCase):
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
 
-        class PlainSerial:
-            def __init__(self):
-                object.__setattr__(self, "events", [])
-                self.exclusive = False
-
-            def __setattr__(self, name, value):
-                object.__setattr__(self, name, value)
-                if name in ("rts", "dtr"):
-                    self.events.append((name, value))
-
-            def open(self):
-                self.events.append(("open", None))
-
         for port in ("/dev/cu.usbserial-1", "COM7"):
-            calls = []
-            connection = PlainSerial()
-
-            class SerialModule:
-                Serial = PlainSerial
-
-                @staticmethod
-                def serial_for_url(selected_port, baudrate, do_not_open):
-                    calls.append((selected_port, baudrate, do_not_open))
-                    return connection
-
-            configured = configurator.open_serial_connection(SerialModule, port)
+            connection = object()
+            with mock.patch(
+                "platformio.device.monitor.terminal.new_serial_instance",
+                return_value=connection,
+            ) as new_serial:
+                configured = configurator.open_platformio_serial_connection(port)
             self.assertIs(configured, connection)
-            self.assertEqual(calls, [(port, 115200, True)])
-            self.assertTrue(connection.exclusive)
-            self.assertEqual(
-                connection.events,
-                [
-                    ("rts", True),
-                    ("dtr", True),
-                    ("open", None),
-                    ("rts", False),
-                    ("dtr", False),
-                ],
-            )
-
-        monitor_source = inspect.getsource(configurator.run_serial_monitor)
-        self.assertNotIn("platformio", monitor_source)
-        self.assertIn("connection.read", monitor_source)
+            new_serial.assert_called_once_with({
+                "port": port,
+                "baud": 115200,
+                "parity": "N",
+                "rtscts": False,
+                "xonxoff": False,
+                "dtr": None,
+                "rts": None,
+                "quiet": True,
+            })
 
     def test_compressed_editor_files_round_trip_and_upload_to_existing_gzip(self) -> None:
         text = "<html>Привет</html>\n"

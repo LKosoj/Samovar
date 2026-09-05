@@ -632,8 +632,17 @@ def serial_ip_command(python_executable: str, script: Path, port: str) -> List[s
     return [python_executable, str(script), "--serial-ip", _required_port(port)]
 
 
-def serial_monitor_command(python_executable: str, script: Path, port: str) -> List[str]:
-    return [python_executable, str(script), "--serial-monitor", _required_port(port)]
+def serial_monitor_command(
+    pio_executable: str, board: str, project_root: Path, port: str
+) -> List[str]:
+    if board not in BOARD_OPTIONS:
+        raise ConfigError("Неизвестная плата: {}".format(board))
+    return [
+        pio_executable, "device", "monitor",
+        "--port", _required_port(port),
+        "--project-dir", str(project_root),
+        "--environment", BOARD_OPTIONS[board][1],
+    ]
 
 
 def pio_python_executable(pio_executable: str) -> str:
@@ -666,18 +675,25 @@ def extract_samovar_ip(text: str) -> Optional[str]:
     return None
 
 
-def open_serial_connection(serial_module, port: str):
-    connection = serial_module.serial_for_url(
-        _required_port(port), 115200, do_not_open=True
-    )
-    if isinstance(connection, serial_module.Serial):
-        connection.exclusive = True
-    connection.rts = True
-    connection.dtr = True
-    connection.open()
-    connection.rts = False
-    connection.dtr = False
-    return connection
+def open_platformio_serial_connection(port: str):
+    try:
+        from platformio.device.monitor.terminal import new_serial_instance
+        from platformio.exception import UserSideException
+    except ImportError as error:
+        raise ConfigError("В Python PlatformIO не найден модуль монитора порта") from error
+    try:
+        return new_serial_instance({
+            "port": _required_port(port),
+            "baud": 115200,
+            "parity": "N",
+            "rtscts": False,
+            "xonxoff": False,
+            "dtr": None,
+            "rts": None,
+            "quiet": True,
+        })
+    except UserSideException as error:
+        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
 
 
 def query_samovar_ip(port: str) -> str:
@@ -686,7 +702,7 @@ def query_samovar_ip(port: str) -> str:
     except ImportError as error:
         raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    connection = open_serial_connection(serial, port)
+    connection = open_platformio_serial_connection(port)
     connection.timeout = 0.2
     connection.write_timeout = 2
     try:
@@ -705,30 +721,6 @@ def query_samovar_ip(port: str) -> str:
         if connection.is_open:
             connection.close()
     raise ConfigError("Samovar не ответил на запрос IP через {}".format(port))
-
-
-def run_serial_monitor(port: str) -> int:
-    try:
-        import serial
-    except ImportError as error:
-        raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
-
-    connection = open_serial_connection(serial, port)
-    connection.timeout = 0.2
-    try:
-        print("--- Последовательный порт {} | 115200 8-N-1".format(port), flush=True)
-        while True:
-            data = connection.read(256)
-            if data:
-                print(data.decode("utf-8", errors="replace"), end="", flush=True)
-    except KeyboardInterrupt:
-        pass
-    except (OSError, serial.SerialException) as error:
-        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
-    finally:
-        if connection.is_open:
-            connection.close()
-    return 0
 
 
 def _remote_path(name: str) -> str:
@@ -1496,7 +1488,7 @@ class ConfiguratorWindow:
         try:
             if action == "monitor":
                 command = serial_monitor_command(
-                    pio_python_executable(self.pio_executable), Path(__file__).resolve(),
+                    self.pio_executable, self.board_var.get(), self.config.project_root,
                     self.port_var.get(),
                 )
             else:
@@ -1611,7 +1603,6 @@ def parse_arguments(argv: Optional[List[str]] = None):
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--pio", default=shutil.which("pio") or shutil.which("platformio"))
     parser.add_argument("--serial-ip")
-    parser.add_argument("--serial-monitor")
     return parser.parse_args(argv)
 
 
@@ -1625,12 +1616,6 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
         print("SAMOVAR:IP={}".format(address))
         return 0
-    if arguments.serial_monitor:
-        try:
-            return run_serial_monitor(arguments.serial_monitor)
-        except ConfigError as error:
-            print(str(error), file=sys.stderr)
-            return 1
     if not arguments.pio:
         print("PlatformIO не найден", file=sys.stderr)
         return 1
