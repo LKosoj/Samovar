@@ -46,7 +46,7 @@ settings = json.loads(
 current_defaults = {
     "ColDiam": "1.5",
     "ColHeight": "1.25",
-    "PackDens": "80",
+    "PackDens": "55",
     "useDetector": False,
     "MpxZeroAdc": "36.7",
     "MpxCountsPerMmHg": "12.0",

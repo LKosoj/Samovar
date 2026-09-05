@@ -4182,9 +4182,8 @@ void apply_config_runtime() {
   // блокирует СТАРТ программы, но не лечит уже загруженный профиль. Подтягиваем к
   // заводской калибровке, как остальные поля этой функции.
   if (SamSetup.StepperStepMl == 0) SamSetup.StepperStepMl = STEPPER_STEP_ML;
-  // [Б9] Плотность насадки вне рабочего диапазона формы - подтягиваем к заводскому
-  // дефолту (profile_setup_fields.h: PackDens=80).
-  if (SamSetup.PackDens < 60 || SamSetup.PackDens > 100) SamSetup.PackDens = 80;
+  // Плотность насадки выше диапазона формы подтягиваем к заводскому дефолту.
+  if (SamSetup.PackDens > 100) SamSetup.PackDens = 55;
   apply_setup_sensor_fields(0);
 
   // Проверка через валидатор, а не только по верхней границе: SamSetup.Mode — знаковый int

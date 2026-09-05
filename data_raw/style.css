@@ -276,7 +276,7 @@ input[type="file"]::file-selector-button {
 
 .program-actions { width: 450px; max-width: 100%; margin: 0 auto; box-sizing: border-box; }
 
-/* Кусок текста, который нельзя рвать переносом (диапазон "60-100" в настройках). */
+/* Кусок текста, который нельзя рвать переносом (диапазон "0-100" в настройках). */
 .nowrap { white-space: nowrap; }
 
 .custom-file-upload {

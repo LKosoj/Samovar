@@ -295,8 +295,14 @@ BROWSER_TEST = r'''async page => {
         });
       }
       setBoundary("min");
+      const packDensityControl = form.elements.PackDens;
+      const packDensityRangeOk = packDensityControl.min === "0" && packDensityControl.max === "100";
+      const packDensityMinValue = packDensityControl.value;
       form.dispatchEvent(new Event("input", { bubbles: true }));
       const minOk = await submit();
+      const packDensityZeroSent = window.__numericRequests.at(-1).body.some(
+        entry => entry[0] === "PackDens" && entry[1] === "0"
+      );
       setBoundary("max");
       form.dispatchEvent(new Event("input", { bubbles: true }));
       const maxOk = await submit();
@@ -333,13 +339,15 @@ BROWSER_TEST = r'''async page => {
       form.dataset.dirty = "false";
       return {
         count: window.__numericRequests.length, minOk, maxOk, commaOk, commaSent,
-        invalidBlocked, bad400, bad503, dirty400, dirty503
+        invalidBlocked, bad400, bad503, dirty400, dirty503,
+        packDensityRangeOk, packDensityMinValue, packDensityZeroSent
       };
     });
     const state = await requestState();
     if (result.minOk !== false || result.maxOk !== false || result.commaOk !== false || !result.commaSent ||
         !result.invalidBlocked || result.bad400 !== false || result.bad503 !== false ||
-        !result.dirty400 || !result.dirty503 || !state.errorVisible) {
+        !result.dirty400 || !result.dirty503 || !result.packDensityRangeOk ||
+        result.packDensityMinValue !== "0" || !result.packDensityZeroSent || !state.errorVisible) {
       throw new Error("setup contract mismatch: " + JSON.stringify({ result, state }));
     }
   }

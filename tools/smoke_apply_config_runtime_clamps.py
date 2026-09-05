@@ -4,8 +4,7 @@
   - StepperStepMl == 0 -> STEPPER_STEP_ML (Б1.2: насос отбора не откалиброван,
     без клэмпа TargetStepps в run_program() всегда 0, и переход строки по
     объёму в ректификации никогда не наступит).
-  - PackDens вне 60..100 -> 80 (Б9: форма расчёта колонны column_math.h ожидает
-    плотность насадки строго в этом диапазоне).
+  - PackDens выше 100 -> 55; весь диапазон 0..100 сохраняется без изменений.
 
 Сейчас ни одна из этих двух строк не вызывается ни одним тестом - удаление
 любой из них пройдёт незамеченным. Извлекается РЕАЛЬНЫЙ код через
@@ -25,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 SIGNATURE = "void apply_config_runtime()"
 STEPPER_LINE = "if (SamSetup.StepperStepMl == 0) SamSetup.StepperStepMl = STEPPER_STEP_ML;"
-PACKDENS_LINE = "if (SamSetup.PackDens < 60 || SamSetup.PackDens > 100) SamSetup.PackDens = 80;"
+PACKDENS_LINE = "if (SamSetup.PackDens > 100) SamSetup.PackDens = 55;"
 
 COMMON_PRELUDE = r'''
 #include <cstdint>
@@ -84,22 +83,26 @@ int main() {
   check(SamSetup.StepperStepMl == 777,
         "РЕГРЕСС: ненулевой StepperStepMl не должен подменяться клэмпом");
 
-  // PackDens ниже 60 -> заводской дефолт 80.
+  // Весь диапазон PackDens 0..100 допустим и не должен меняться.
   SamSetup.StepperStepMl = 500;
-  SamSetup.PackDens = 10;
+  SamSetup.PackDens = 0;
   apply_clamps();
-  check(SamSetup.PackDens == 80, "PackDens < 60 обязан подтягиваться к 80");
+  check(SamSetup.PackDens == 0, "РЕГРЕСС: PackDens==0 не должен подменяться клэмпом");
 
-  // PackDens выше 100 -> заводской дефолт 80.
+  SamSetup.PackDens = 5;
+  apply_clamps();
+  check(SamSetup.PackDens == 5, "РЕГРЕСС: PackDens==5 не должен подменяться клэмпом");
+
+  SamSetup.PackDens = 55;
+  apply_clamps();
+  check(SamSetup.PackDens == 55, "РЕГРЕСС: PackDens==55 не должен подменяться клэмпом");
+
+  // PackDens выше 100 -> заводской дефолт 55.
   SamSetup.PackDens = 250;
   apply_clamps();
-  check(SamSetup.PackDens == 80, "PackDens > 100 обязан подтягиваться к 80");
+  check(SamSetup.PackDens == 55, "PackDens > 100 обязан подтягиваться к 55");
 
   // Границы диапазона включительно валидны - клэмп их трогать не должен.
-  SamSetup.PackDens = 60;
-  apply_clamps();
-  check(SamSetup.PackDens == 60, "РЕГРЕСС: PackDens==60 (нижняя граница) не должен клэмпиться");
-
   SamSetup.PackDens = 100;
   apply_clamps();
   check(SamSetup.PackDens == 100, "РЕГРЕСС: PackDens==100 (верхняя граница) не должен клэмпиться");

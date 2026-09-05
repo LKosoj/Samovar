@@ -1891,9 +1891,7 @@ static const SaveU8Field kSaveU8Fields[] = {
     {"autospeed", &SetupEEPROM::autospeed, 0, 99},
     {"TimeZone", &SetupEEPROM::TimeZone, 0, 23},
     {"LogPeriod", &SetupEEPROM::LogPeriod, 1, 255},
-    // [Б9] Нижняя граница поднята с 0 до 60: HTML-слайдер в setup.htm уже ограничен
-    // 60-100 (подпись "(60-100)"), сервер разрешал 0..100 - рассинхрон.
-    {"PackDens", &SetupEEPROM::PackDens, 60, 100},
+    {"PackDens", &SetupEEPROM::PackDens, 0, 100},
     {"BeerBrewOrder", &SetupEEPROM::BeerBrewOrder, 0, 2},
     {"CheesePhSmoothPercent", &SetupEEPROM::CheesePhSmoothPercent, 0, 99},
 };

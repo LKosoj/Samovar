@@ -6,7 +6,7 @@
   "useflevel" : true,
   "ColDiam" : "1.5",
   "ColHeight" : "1.25",
-  "PackDens" : "80",
+  "PackDens" : "55",
   "useautospeed" : true,
   "autospeed" : "10",
   "useDetector" : false,

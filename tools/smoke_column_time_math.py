@@ -81,9 +81,8 @@ int main() {
 
   // ВАЖНО: при плотности 60% множитель (packingDensity - 0.6) обнуляется,
   // и densityImpact/pDensityAdj-коэффициент можно испортить незаметно для
-  // сценария выше. Проверяем реальный дефолт пользователей
-  // (profile_setup_fields.h: PackDens = 80) и точку с другой стороны от 60%
-  // (40%), чтобы (packingDensity - 0.6) была ненулевой в обе стороны.
+  // сценария выше. Проверяем точки с обеих сторон от 60%: 80% и 40%,
+  // чтобы (packingDensity - 0.6) была ненулевой в обе стороны.
   // Эталоны посчитаны независимо на Python тем же алгоритмом (без клампов):
   //   packingDensity = 0.8; hetpFactor = 1 - (0.8-0.6)*(0.3/0.4) = 0.85;
   //   theoreticalPlates = 30*10/(30*0.85) = 11.7647...
@@ -93,8 +92,8 @@ int main() {
   SamSetup.ColHeight = 0.3f;
   SamSetup.PackDens = 80;
   ColumnResults sugar80 = calculate_column_etalon(2);
-  check_near(sugar80.theoreticalPlates, 11.76f, 0.01f, "theoreticalPlates для 0.3 м/80% (реальный дефолт) должно быть 11.76");
-  check_near(sugar80.floodPowerW, 1081.41f, 1.0f, "floodPowerW для 80% (реальный дефолт)");
+  check_near(sugar80.theoreticalPlates, 11.76f, 0.01f, "theoreticalPlates для 0.3 м/80% должно быть 11.76");
+  check_near(sugar80.floodPowerW, 1081.41f, 1.0f, "floodPowerW для 80%");
   check_near(sugar80.bodyFlowMaxMlH, 556.15f, 1.0f, "bodyFlowMaxMlH для 80% (реальный дефолт, без клампа)");
   check_near(sugar80.bodyFlowMinMlH, 367.27f, 1.0f, "bodyFlowMinMlH для 80% (реальный дефолт, без клампа)");
   check_near(sugar80.tailsFlowMlH, 233.58f, 1.0f, "tailsFlowMlH для 80% (реальный дефолт)");
