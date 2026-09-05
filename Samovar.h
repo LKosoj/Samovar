@@ -53,6 +53,18 @@
 
 #include "user_config_override.h"
 
+#ifdef SAMOVAR_BUILD_NO_POWER
+#undef SAMOVAR_USE_POWER
+#endif
+
+#if defined(SAMOVAR_BUILD_RMVK) || defined(SAMOVAR_BUILD_SEM)
+#define SAMOVAR_USE_RMVK
+#endif
+
+#ifdef SAMOVAR_BUILD_SEM
+#define SAMOVAR_USE_SEM_AVR
+#endif
+
 #ifndef USE_BODY_TEMP_AUTOSET
 #define USE_BODY_TEMP_AUTOSET
 #endif
@@ -345,20 +357,6 @@ Encoder encoder(ENC_CLK, ENC_DT, ENC_SW, TYPE2);
 // Работает только на Arduino core 2.x: в core 3.x таймер живёт на драйвере gptimer,
 // и флаг там задаётся при сборке IDF (CONFIG_GPTIMER_ISR_IRAM_SAFE), а не из скетча.
 #define USE_STEPPER_IRAM_ISR
-
-// --- Отключённая подсистема: плавный разгон/торможение шагового двигателя (~24 строки в Samovar.h, Samovar.ino, selftest.h) ---
-// Флаг: USE_STEPPER_ACCELERATION. Нигде не определён: ни в одном из 7 окружений platformio.ini,
-// ни в user_config_override.h; в Samovar_ini.h есть только закомментированный пример (см. `#define USE_STEPPER_ACCELERATION`).
-// Включать: раскомментировать строку в Samovar_ini.h или добавить #define в user_config_override.h —
-// и ОБЯЗАТЕЛЬНО закомментировать `#define USE_STEPPER_IRAM_ISR` чуть выше в этом файле: с 21.08.2026
-// (коммит cf62d3f3) он включён безусловно и несовместим с этим флагом — см. #error ниже.
-// Собирается: с выключенным USE_STEPPER_IRAM_ISR — похоже, что да: stepper.setAcceleration(),
-// timerMux, timer, stepper.getPeriod(), которые использует код под флагом, в прошивке на месте.
-// Без этой правки сборка гарантированно упадёт на #error ниже, а не «просто соберётся».
-// Опция известна с 2024 года (коммит e3398e7d), ни разу не включалась ни в одном окружении.
-#if defined(USE_STEPPER_IRAM_ISR) && defined(USE_STEPPER_ACCELERATION)
-#error "USE_STEPPER_IRAM_ISR несовместим с USE_STEPPER_ACCELERATION: в режиме с ускорением тикер вызывает из прерывания пересчёт профиля (setTarget), который лежит во флеше. Закомментируйте одну из двух строк."
-#endif
 
 #ifdef USE_STEPPER_ACCELERATION
 #define GS_FAST_PROFILE 10

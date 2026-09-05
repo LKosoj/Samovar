@@ -150,9 +150,10 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
                     }
 #endif
                 } else {  // приехали
-                    if (revF) {
-                        brake();
-                        setTarget(bufT);
+                    if (nextPlanReady) {
+                        applyMotionPlan(nextPlan);
+                        nextPlanReady = false;
+                        status = 1;
                         return status;
                     }
                     if (status == 1) readyF = 1;
@@ -228,6 +229,9 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
     // =========================== POSITION MODE ===========================
     // установить цель и опционально режим
     void setTarget(int32_t ntar, GS_posType type = ABSOLUTE) {
+#ifndef GS_NO_ACCEL
+        nextPlanReady = false;
+#endif
         if (sp0) {  // нулевая скорость
             brake();
             readyF = 1;
@@ -243,55 +247,36 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
             changeSett = 0;
         }
 
-        if (type == RELATIVE) tar = ntar + pos;
-        else tar = ntar;
+        int32_t requestedTar = (type == RELATIVE) ? ntar + pos : ntar;
 
-        if (tar == pos) {
+        if (requestedTar == pos) {
             brake();
             readyF = 1;
             return;
         }
 
 #ifndef GS_NO_ACCEL
-        revF = 0;
-        S = abs(tar - pos);
-        int8_t ndir = (pos < tar) ? 1 : -1;
         int32_t v1 = 0;
         if (status > 0) v1 = 1000000L / us;
         int32_t ss = 0;
         if (a > 0) ss = (int32_t)v1 * v1 / (2L * a);  // расстояние до остановки с текущей скоростью
-        if (ss > S || (status && ndir != dir)) {      // не успеем остановиться или едем не туда
-            revF = 1;
-            bufT = tar;
-            tar = pos + ss * dir;
-            S = ss;
-        }
-
-        // расчёт точек смены характера движения
-        // s1 - окончание разгона, s1-s2 - равномерное движение, s2 - торможение
-        if (a > 0 && usMin < GS_MIN_US) {                                // ускорение задано и мин. скорость выше порога
-            if ((int32_t)V * V / a - ((int32_t)v1 * v1 / a >> 1) > S) {  // треугольник
-                if (revF) s1 = 0;
-                else s1 = ((int32_t)S >> 1) - ((int32_t)v1 * v1 / a >> 2);
-                s2 = s1;
-            } else {  // трапеция
-                s1 = ((int32_t)V * V - (int32_t)v1 * v1) / (2L * a);
-                s2 = S - (int32_t)V * V / (2L * a);
-            }
-            so1 = (int32_t)v1 * v1 / (2L * a);
-            if (v1 == 0) us = us0;
+        int8_t requestedDir = (pos < requestedTar) ? 1 : -1;
+        bool directionChange = status && requestedDir != dir;
+        if (ss > 0 && (ss > abs(requestedTar - pos) || directionChange)) {
+            int32_t stopTar = pos + ss * dir;
+            applyMotionPlan(makeMotionPlan(pos, stopTar, v1, us, true));
+            nextPlan = makeMotionPlan(stopTar, requestedTar, 0, us0, false);
+            nextPlanReady = true;
         } else {
-            s1 = so1 = 0;
-            s2 = S;
-            us = usMin;
+            applyMotionPlan(makeMotionPlan(
+                pos, requestedTar, directionChange ? 0 : v1,
+                directionChange ? us0 : us, false));
         }
-        // здесь us10 - us*1024 для повышения разрешения микросекунд в 1024 раз
-        us10 = (uint32_t)us << 10;
-        steps = 0;
 #else
+        tar = requestedTar;
         us = usMin;
-#endif
         dir = (pos < tar) ? 1 : -1;
+#endif
         status = 1;
         if (autoP) enable();
         readyF = 0;
@@ -310,7 +295,7 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
     // получить целевую позицию
     int32_t getTarget() {
 #ifndef GS_NO_ACCEL
-        return revF ? bufT : tar;
+        return nextPlanReady ? nextPlan.tar : tar;
 #else
         return tar;
 #endif
@@ -441,6 +426,59 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
 
     // ============================= PRIVATE =============================
    private:
+#ifndef GS_NO_ACCEL
+    struct MotionPlan {
+        int32_t tar;
+        int32_t S;
+        int32_t s1;
+        int32_t s2;
+        int32_t so1;
+        uint32_t us;
+        uint32_t us10;
+        int8_t dir;
+    };
+
+    MotionPlan makeMotionPlan(int32_t start, int32_t target, int32_t startSpeed,
+                              uint32_t startPeriod, bool decelerationOnly) {
+        MotionPlan plan;
+        plan.tar = target;
+        plan.S = abs(target - start);
+        plan.us = startPeriod;
+        plan.dir = (start < target) ? 1 : -1;
+
+        if (a > 0 && usMin < GS_MIN_US) {
+            if ((int32_t)V * V / a - ((int32_t)startSpeed * startSpeed / a >> 1) > plan.S) {
+                plan.s1 = decelerationOnly ? 0 : ((int32_t)plan.S >> 1) -
+                    ((int32_t)startSpeed * startSpeed / a >> 2);
+                plan.s2 = plan.s1;
+            } else {
+                plan.s1 = ((int32_t)V * V - (int32_t)startSpeed * startSpeed) / (2L * a);
+                plan.s2 = plan.S - (int32_t)V * V / (2L * a);
+            }
+            plan.so1 = (int32_t)startSpeed * startSpeed / (2L * a);
+            if (startSpeed == 0) plan.us = us0;
+        } else {
+            plan.s1 = plan.so1 = 0;
+            plan.s2 = plan.S;
+            plan.us = usMin;
+        }
+        plan.us10 = plan.us << 10;
+        return plan;
+    }
+
+    void GS_ISR_INLINE applyMotionPlan(const MotionPlan& plan) {
+        tar = plan.tar;
+        S = plan.S;
+        s1 = plan.s1;
+        s2 = plan.s2;
+        so1 = plan.so1;
+        us = plan.us;
+        us10 = plan.us10;
+        dir = plan.dir;
+        steps = 0;
+    }
+#endif
+
     void calcPlan() {
 #ifdef GS_FAST_PROFILE
         if (a > 0) {
@@ -475,8 +513,8 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
     int16_t stopStep;
     uint32_t us0, us10;
     int32_t S, s1, s2, so1, steps;
-    int32_t bufT = 0;
-    bool revF = false;
+    MotionPlan nextPlan;
+    bool nextPlanReady = false;
 
 #ifdef GS_FAST_PROFILE
     uint32_t prfS[GS_FAST_PROFILE], prfP[GS_FAST_PROFILE];

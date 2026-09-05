@@ -69,18 +69,10 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #endif
 //Все логи с сообщения Самовара будут сохраняться и будут доступны на сайте через меню - Пользователь - Логи.
 
-#ifndef SAMOVAR_BUILD_NO_POWER
 #define SAMOVAR_USE_POWER                    //использовать регулятор напряжения в проекте https://alcodistillers.ru/forum/viewtopic.php?id=1524
-#endif
 //#define KVIC_USE_9600                      //использовать для регулятора KVIC скорость обмена по UART 9600 (новые версии), иначе использовать 38400
 //#define SAMOVAR_USE_RMVK                     //использовать в проекте регулятор напряжения РМВК с управлением по UART
 //#define SAMOVAR_USE_SEM_AVR                  //использовать в проекте регулятор мощности https://alcodistillers.ru/forum/viewtopic.php?id=1549 с управлением по UART
-#if defined(SAMOVAR_BUILD_RMVK) || defined(SAMOVAR_BUILD_SEM)
-#define SAMOVAR_USE_RMVK
-#endif
-#ifdef SAMOVAR_BUILD_SEM
-#define SAMOVAR_USE_SEM_AVR
-#endif
 
 
 //**************************************************************************************************************
@@ -198,5 +190,5 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #endif
 #ifndef BK_WATER_PWM_STEP
 #define BK_WATER_PWM_STEP 30              //[9b] шаг регулятора ШИМ воды БК (из 1023)
-#endif
-#endif
+#endif  // BK_WATER_PWM_STEP
+#endif  // __SAMOVAR_I_H_

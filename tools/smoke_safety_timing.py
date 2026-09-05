@@ -46,6 +46,7 @@ mode_registry = read_source("mode_registry.h")
 selftest = read_source("selftest.h")
 nbk = read_source("nbk.h")
 samovar = read_source("Samovar.ino")
+samovar_header = read_source("Samovar.h")
 menu = read_source("Menu.ino")
 webserver = read_source("WebServer.ino")
 mode_switch = read_source("mode_switch.h")
@@ -736,22 +737,53 @@ for environment in (
     if environment not in ci:
         errors.append(f"CI build matrix missing environment: {environment}")
 require(
-    "compile macro selectors",
+    "transparent manual power selector",
     ini,
     (
-        "SAMOVAR_BUILD_NO_POWER",
-        "SAMOVAR_BUILD_RMVK",
-        "SAMOVAR_BUILD_SEM",
+        "#define SAMOVAR_USE_POWER",
+    ),
+)
+if re.search(r"^\s*#define SAMOVAR_USE_RMVK", ini, re.MULTILINE):
+    errors.append("manual power selector must leave SAMOVAR_USE_RMVK disabled by default")
+if re.search(r"^\s*#define SAMOVAR_USE_SEM_AVR", ini, re.MULTILINE):
+    errors.append("manual power selector must leave SAMOVAR_USE_SEM_AVR disabled by default")
+if "SAMOVAR_BUILD_NO_POWER" in ini or "SAMOVAR_BUILD_RMVK" in ini or "SAMOVAR_BUILD_SEM" in ini:
+    errors.append("PlatformIO build selectors must not obscure the manual selector in Samovar_ini.h")
+require(
+    "non-power compile macro selectors",
+    ini,
+    (
         "SAMOVAR_BUILD_LUA",
         "SAMOVAR_BUILD_MQTT",
     ),
 )
+require(
+    "compile macro selectors",
+    samovar_header,
+    (
+        "SAMOVAR_BUILD_NO_POWER",
+        "SAMOVAR_BUILD_RMVK",
+        "SAMOVAR_BUILD_SEM",
+    ),
+)
 if not re.search(
     r"#if defined\(SAMOVAR_BUILD_RMVK\) \|\| defined\(SAMOVAR_BUILD_SEM\)\s+"
-    r"#define SAMOVAR_USE_RMVK",
-    ini,
+    r"(?:#ifndef SAMOVAR_USE_RMVK\s+)?#define SAMOVAR_USE_RMVK",
+    samovar_header,
 ):
     errors.append("SEM build selector must enter the nested SEM/RMVK protocol branch")
+if not re.search(
+    r"#ifdef SAMOVAR_USE_SEM_AVR\s+#ifndef SAMOVAR_USE_RMVK\s+"
+    r"#define SAMOVAR_USE_RMVK",
+    samovar_header,
+):
+    errors.append("manual SEM selector must enable the RMVK protocol dependency")
+if not re.search(
+    r"#ifdef SAMOVAR_USE_RMVK[\s\S]*?#ifndef SAMOVAR_USE_POWER\s+"
+    r"#define SAMOVAR_USE_POWER",
+    samovar_header,
+):
+    errors.append("manual RMVK selector must enable the base power-regulator dependency")
 
 host_source = r'''
 #include <cstdint>
