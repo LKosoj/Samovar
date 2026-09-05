@@ -511,6 +511,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(connection.changes, [])
         self.assertFalse(connection._dtr_state)
         self.assertFalse(connection._rts_state)
+        self.assertNotIn("_reconfigure_port", no_reset_class.__dict__)
 
         monitor_source = inspect.getsource(configurator.run_serial_monitor)
         self.assertNotIn("platformio", monitor_source)

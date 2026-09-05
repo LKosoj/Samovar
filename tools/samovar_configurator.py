@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Окно настройки, сборки и прошивки Samovar для Windows."""
 
-import array
 import argparse
 import ast
 import gzip
@@ -680,23 +679,6 @@ def serial_class_without_reset(base_class):
 
         def _update_rts_state(self):
             pass
-
-        def _reconfigure_port(self, *args, **kwargs):
-            super()._reconfigure_port(*args, **kwargs)
-            if os.name == "nt":
-                return
-            import fcntl
-            import termios
-
-            # На POSIX обе линии меняются одной операцией: раздельное переключение
-            # создаёт промежуточную комбинацию, которая сбрасывает ESP32.
-            status = array.array("i", [0])
-            fcntl.ioctl(self.fd, getattr(termios, "TIOCMGET", 0x5415), status, True)
-            status[0] &= ~(
-                getattr(termios, "TIOCM_DTR", 0x002) |
-                getattr(termios, "TIOCM_RTS", 0x004)
-            )
-            fcntl.ioctl(self.fd, getattr(termios, "TIOCMSET", 0x5418), status)
 
     return SerialWithoutReset
 
