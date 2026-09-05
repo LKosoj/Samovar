@@ -14,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -628,21 +627,8 @@ def esptool_reboot_command(pio_executable: str, port: str) -> List[str]:
     ]
 
 
-def serial_ip_command(python_executable: str, script: Path, port: str) -> List[str]:
-    return [python_executable, str(script), "--serial-ip", _required_port(port)]
-
-
-def serial_monitor_command(
-    pio_executable: str, board: str, project_root: Path, port: str
-) -> List[str]:
-    if board not in BOARD_OPTIONS:
-        raise ConfigError("Неизвестная плата: {}".format(board))
-    return [
-        pio_executable, "device", "monitor",
-        "--port", _required_port(port),
-        "--project-dir", str(project_root),
-        "--environment", BOARD_OPTIONS[board][1],
-    ]
+def serial_monitor_command(python_executable: str, script: Path, port: str) -> List[str]:
+    return [python_executable, str(script), "--serial-monitor", _required_port(port)]
 
 
 def pio_python_executable(pio_executable: str) -> str:
@@ -696,7 +682,15 @@ def open_platformio_serial_connection(port: str):
         raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
 
 
-def query_samovar_ip(port: str) -> str:
+def forward_serial_commands(connection, input_stream) -> None:
+    for command in input_stream:
+        try:
+            connection.write(command.encode("utf-8"))
+        except OSError:
+            return
+
+
+def run_serial_monitor(port: str) -> int:
     try:
         import serial
     except ImportError as error:
@@ -704,23 +698,23 @@ def query_samovar_ip(port: str) -> str:
 
     connection = open_platformio_serial_connection(port)
     connection.timeout = 0.2
-    connection.write_timeout = 2
+    threading.Thread(
+        target=forward_serial_commands, args=(connection, sys.stdin), daemon=True
+    ).start()
     try:
-        connection.reset_input_buffer()
-        connection.write(b"SAMOVAR:IP?\n")
-        deadline = time.monotonic() + 30
-        received = ""
-        while time.monotonic() < deadline:
-            received += connection.read(128).decode("utf-8", errors="replace")
-            address = extract_samovar_ip(received)
-            if address:
-                return address
+        print("--- Последовательный порт {} | 115200 8-N-1".format(port), flush=True)
+        while True:
+            data = connection.read(256)
+            if data:
+                print(data.decode("utf-8", errors="replace"), end="", flush=True)
+    except KeyboardInterrupt:
+        pass
     except (OSError, serial.SerialException) as error:
-        raise ConfigError("Не удалось получить IP через {}: {}".format(port, error)) from error
+        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
     finally:
         if connection.is_open:
             connection.close()
-    raise ConfigError("Samovar не ответил на запрос IP через {}".format(port))
+    return 0
 
 
 def _remote_path(name: str) -> str:
@@ -1085,6 +1079,7 @@ class ConfiguratorWindow:
         self.monitor_window = None
         self.monitor_log = None
         self.monitor_stop_button = None
+        self.monitor_ip_button = None
         self.device_ip = None
         self.value_vars = {}
         self.bool_vars = {}
@@ -1248,7 +1243,6 @@ class ConfiguratorWindow:
 
         device_buttons = ttk.Frame(outer, padding=(0, 0, 0, 8))
         device_buttons.pack(fill="x")
-        self.ip_button = ttk.Button(device_buttons, text="Получить IP", command=self.get_ip)
         self.reboot_button = ttk.Button(
             device_buttons, text="Перезагрузить ESP", command=self.reboot_esp
         )
@@ -1257,7 +1251,7 @@ class ConfiguratorWindow:
         )
         self.editor_button.configure(state="disabled")
         self.ip_status = ttk.Label(device_buttons, text="IP: не получен")
-        for button in (self.ip_button, self.reboot_button, self.editor_button):
+        for button in (self.reboot_button, self.editor_button):
             button.pack(side="left", padx=(0, 8))
         self.ip_status.pack(side="left", padx=(4, 0))
         self.port_combo.bind("<<ComboboxSelected>>", self._port_changed, add="+")
@@ -1388,21 +1382,6 @@ class ConfiguratorWindow:
         self.ip_status.configure(text="IP: не получен")
         self.editor_button.configure(state="disabled")
 
-    def get_ip(self) -> None:
-        if self.busy:
-            self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
-            return
-        try:
-            python_executable = pio_python_executable(self.pio_executable)
-            command = serial_ip_command(
-                python_executable, Path(__file__).resolve(), self.port_var.get()
-            )
-        except (OSError, ConfigError) as error:
-            self.messagebox.showerror("Не удалось получить IP", str(error))
-            return
-        self._port_changed()
-        self._start_process(command, "ip")
-
     def reboot_esp(self) -> None:
         try:
             command = esptool_reboot_command(self.pio_executable, self.port_var.get())
@@ -1436,10 +1415,16 @@ class ConfiguratorWindow:
         )
         self.monitor_log.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=self.monitor_log.yview)
-        self.monitor_stop_button = self.ttk.Button(
-            window, text="Остановить", command=self.toggle_monitor
+        controls = self.ttk.Frame(window)
+        controls.pack(pady=(0, 10))
+        self.monitor_ip_button = self.ttk.Button(
+            controls, text="Получить IP", command=self.request_monitor_ip
         )
-        self.monitor_stop_button.pack(pady=(0, 10))
+        self.monitor_ip_button.pack(side="left", padx=(0, 8))
+        self.monitor_stop_button = self.ttk.Button(
+            controls, text="Остановить", command=self.toggle_monitor
+        )
+        self.monitor_stop_button.pack(side="left")
         self.monitor_window = window
         window.grab_set()
         window.focus_set()
@@ -1458,6 +1443,17 @@ class ConfiguratorWindow:
             return
         self.close_monitor()
 
+    def request_monitor_ip(self) -> None:
+        if not self.busy or self.active_action != "monitor" or self.process is None:
+            self.messagebox.showerror("Не удалось получить IP", "Монитор порта не запущен")
+            return
+        assert self.process.stdin is not None
+        try:
+            self.process.stdin.write("SAMOVAR:IP?\n")
+            self.process.stdin.flush()
+        except OSError as error:
+            self.messagebox.showerror("Не удалось получить IP", str(error))
+
     def close_monitor(self) -> None:
         if self.busy and self.active_action == "monitor":
             self.stop_requested = True
@@ -1472,6 +1468,7 @@ class ConfiguratorWindow:
         self.monitor_window = None
         self.monitor_log = None
         self.monitor_stop_button = None
+        self.monitor_ip_button = None
 
     def start_action(self, action: str) -> None:
         if self.busy:
@@ -1488,7 +1485,7 @@ class ConfiguratorWindow:
         try:
             if action == "monitor":
                 command = serial_monitor_command(
-                    self.pio_executable, self.board_var.get(), self.config.project_root,
+                    pio_python_executable(self.pio_executable), Path(__file__).resolve(),
                     self.port_var.get(),
                 )
             else:
@@ -1510,6 +1507,7 @@ class ConfiguratorWindow:
             self.process = subprocess.Popen(
                 command,
                 cwd=str(self.config.project_root),
+                stdin=subprocess.PIPE if action == "monitor" else None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -1548,9 +1546,7 @@ class ConfiguratorWindow:
                     if stopped:
                         self._append_log("Монитор порта остановлен.\n")
                     elif value == 0:
-                        if completed_action == "ip" and self.device_ip:
-                            self._append_log("IP Samovar получен: {}\n".format(self.device_ip))
-                        elif completed_action == "reboot":
+                        if completed_action == "reboot":
                             self._append_log("ESP перезагружен.\n")
                         else:
                             self._append_log("Операция успешно завершена.\n")
@@ -1569,7 +1565,6 @@ class ConfiguratorWindow:
         self.fs_button.configure(state=state)
         self.erase_button.configure(state=state)
         self.monitor_button.configure(state=state)
-        self.ip_button.configure(state=state)
         self.reboot_button.configure(state=state)
         self.editor_button.configure(
             state="normal" if not busy and self.device_ip else "disabled"
@@ -1579,6 +1574,10 @@ class ConfiguratorWindow:
         if self.monitor_stop_button is not None:
             self.monitor_stop_button.configure(
                 text="Остановить" if busy and action == "monitor" else "Закрыть",
+            )
+        if self.monitor_ip_button is not None:
+            self.monitor_ip_button.configure(
+                state="normal" if busy and action == "monitor" else "disabled"
             )
 
     def _append_log(self, text: str) -> None:
@@ -1602,20 +1601,18 @@ def parse_arguments(argv: Optional[List[str]] = None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--pio", default=shutil.which("pio") or shutil.which("platformio"))
-    parser.add_argument("--serial-ip")
+    parser.add_argument("--serial-monitor")
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     arguments = parse_arguments(argv)
-    if arguments.serial_ip:
+    if arguments.serial_monitor:
         try:
-            address = query_samovar_ip(arguments.serial_ip)
+            return run_serial_monitor(arguments.serial_monitor)
         except ConfigError as error:
             print(str(error), file=sys.stderr)
             return 1
-        print("SAMOVAR:IP={}".format(address))
-        return 0
     if not arguments.pio:
         print("PlatformIO не найден", file=sys.stderr)
         return 1

@@ -336,6 +336,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         window.monitor_window = None
         window.monitor_log = None
         window.monitor_stop_button = None
+        window.monitor_ip_button = None
         window.start_action = lambda action: setattr(window, "active_action", action)
 
         window.open_monitor()
@@ -343,6 +344,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertIs(modal.transient_parent, window.root)
         self.assertTrue(modal.grabbed)
         self.assertEqual(modal.protocols["WM_DELETE_WINDOW"], window.close_monitor)
+        self.assertEqual(window.monitor_ip_button.options["text"], "Получить IP")
         window._append_log("serial\n")
         self.assertEqual(window.monitor_log.entries, [("end", "serial\n")])
         self.assertEqual(window.log.entries, [])
@@ -351,11 +353,25 @@ class ConfiguratorModelTests(unittest.TestCase):
         window._append_log("build\n")
         self.assertEqual(window.log.entries, [("end", "build\n")])
 
+        class Input:
+            def __init__(self):
+                self.text = ""
+
+            def write(self, text):
+                self.text += text
+
+            def flush(self):
+                self.flushed = True
+
         process = type("Process", (), {"terminate": lambda self: setattr(self, "terminated", True)})()
         process.terminated = False
+        process.stdin = Input()
         window.busy = True
         window.active_action = "monitor"
         window.process = process
+        window.request_monitor_ip()
+        self.assertEqual(process.stdin.text, "SAMOVAR:IP?\n")
+        self.assertTrue(process.stdin.flushed)
         window.toggle_monitor()
         self.assertTrue(window.stop_requested)
         self.assertTrue(process.terminated)
@@ -426,26 +442,27 @@ class ConfiguratorModelTests(unittest.TestCase):
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "  ")
 
     def test_serial_monitor_does_not_reset_esp(self) -> None:
-        query_source = inspect.getsource(configurator.query_samovar_ip)
+        monitor_source = inspect.getsource(configurator.run_serial_monitor)
         action_source = inspect.getsource(configurator.ConfiguratorWindow.start_action)
-        self.assertIn("open_platformio_serial_connection(port)", query_source)
-        self.assertIn("time.monotonic() + 30", query_source)
+        self.assertIn("open_platformio_serial_connection(port)", monitor_source)
+        self.assertIn("forward_serial_commands", monitor_source)
         self.assertIn("serial_monitor_command(", action_source)
-        self.assertIn("self.pio_executable", action_source)
-        self.assertNotIn("pio_python_executable", action_source)
-        self.assertFalse(hasattr(configurator, "run_serial_monitor"))
+        self.assertIn("pio_python_executable", action_source)
+        process_source = inspect.getsource(configurator.ConfiguratorWindow._start_process)
+        self.assertIn('stdin=subprocess.PIPE if action == "monitor" else None', process_source)
 
     def test_main_window_device_controls_and_ip_gate(self) -> None:
         source = inspect.getsource(configurator.ConfiguratorWindow._build)
         for token in (
-            'text="Получить IP"',
             'text="Перезагрузить ESP"',
             'text="Редактор файлов"',
             'self.editor_button.configure(state="disabled")',
         ):
             self.assertIn(token, source)
+        self.assertNotIn('text="Получить IP"', source)
         monitor_source = inspect.getsource(configurator.ConfiguratorWindow.open_monitor)
-        for label in ("Получить IP", "Перезагрузить ESP", "Редактор файлов"):
+        self.assertIn('text="Получить IP"', monitor_source)
+        for label in ("Перезагрузить ESP", "Редактор файлов"):
             self.assertNotIn(label, monitor_source)
 
         self.assertEqual(
@@ -459,24 +476,18 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertIsNone(configurator.extract_samovar_ip("SAMOVAR:IP=999.1.2.3\n"))
         self.assertIsNone(configurator.extract_samovar_ip("SAMOVAR:IP=0.0.0.0\n"))
 
-    def test_usb_reboot_and_ip_commands_use_selected_port(self) -> None:
+    def test_reboot_and_monitor_commands_use_selected_port(self) -> None:
         self.assertEqual(
             configurator.esptool_reboot_command("pio.exe", "COM7"),
             ["pio.exe", "pkg", "exec", "-p", "tool-esptoolpy", "--", "esptool.py", "--port", "COM7", "run"],
         )
         self.assertEqual(
-            configurator.serial_ip_command("C:/Python/python.exe", MODULE_PATH, "/dev/cu.usbserial-1"),
-            ["C:/Python/python.exe", str(MODULE_PATH), "--serial-ip", "/dev/cu.usbserial-1"],
-        )
-        self.assertEqual(
             configurator.serial_monitor_command(
-                "pio.exe", "ESP32 DevKit", ROOT, "/dev/cu.usbserial-1"
+                "C:/Python/python.exe", MODULE_PATH, "/dev/cu.usbserial-1"
             ),
             [
-                "pio.exe", "device", "monitor",
-                "--port", "/dev/cu.usbserial-1",
-                "--project-dir", str(ROOT),
-                "--environment", "Samovar",
+                "C:/Python/python.exe", str(MODULE_PATH),
+                "--serial-monitor", "/dev/cu.usbserial-1",
             ],
         )
         with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
@@ -514,6 +525,22 @@ class ConfiguratorModelTests(unittest.TestCase):
                 "rts": None,
                 "quiet": True,
             })
+
+        class Connection:
+            def __init__(self):
+                self.writes = []
+
+            def write(self, payload):
+                self.writes.append(payload)
+
+        connection = Connection()
+        configurator.forward_serial_commands(
+            connection, ["SAMOVAR:IP?\n", "second command\n"]
+        )
+        self.assertEqual(
+            connection.writes,
+            [b"SAMOVAR:IP?\n", b"second command\n"],
+        )
 
     def test_compressed_editor_files_round_trip_and_upload_to_existing_gzip(self) -> None:
         text = "<html>Привет</html>\n"

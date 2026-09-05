@@ -529,6 +529,10 @@ p {
   color: var(--text-strong);
 }
 
+.tab input[hidden] {
+  display: none;
+}
+
 .tab input:hover {
   position: relative;
   top: 1px;

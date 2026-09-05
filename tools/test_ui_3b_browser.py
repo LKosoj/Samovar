@@ -108,9 +108,9 @@ BROWSER_TEST = r'''async page => {
     expect(await page.locator('#Descr').inputValue() === expected.description, path + ' description missing');
     expect(await page.locator('input[type="button"][value="' + (index ? 'Lua two' : 'Lua one') + '"]').count() === 1,
       path + ' Lua buttons missing');
-    expect(await page.locator('#i2cStepperTab').evaluate(el => el.hidden) === !expected.i2cStepperVisible,
+    expect(await page.locator('#i2cStepperTab').isHidden() === !expected.i2cStepperVisible,
       path + ' I2C stepper visibility missing');
-    expect(await page.locator('#i2cPumpTab').evaluate(el => el.hidden) === !expected.i2cPumpVisible,
+    expect(await page.locator('#i2cPumpTab').isHidden() === !expected.i2cPumpVisible,
       path + ' I2C pump visibility missing');
     const colorIds = path === '/nbk.htm' ? ['SteamTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp'] : ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp'];
     const colors = await page.evaluate(ids => ids.map(id => {
