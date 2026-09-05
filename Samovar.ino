@@ -3310,7 +3310,35 @@ static void tick_apply_pending_pnbk() {
 // async_tcp (ядро 1, приоритет 5, см. AGENTS.md) вытесняет эту задачу (ядро 1, приоритет 1)
 // в произвольной точке - обработчик HTTP-запроса может вклиниться посреди итерации loop().
 // Общие данные с ним - только под блокировкой (LOCK_ORDER в runtime_helpers.h).
+inline void tick_usb_serial_command() {
+  static char command[24];
+  static uint8_t length = 0;
+  static bool overflow = false;
+  while (Serial.available()) {
+    char incoming = (char)Serial.read();
+    if (incoming == '\r') continue;
+    if (incoming == '\n') {
+      if (!overflow) {
+        command[length] = '\0';
+        if (strcmp(command, "SAMOVAR:IP?") == 0) {
+          Serial.print(F("SAMOVAR:IP="));
+          Serial.println(ipst);
+        }
+      }
+      length = 0;
+      overflow = false;
+    } else if (!overflow) {
+      if (length < sizeof(command) - 1) {
+        command[length++] = incoming;
+      } else {
+        overflow = true;
+      }
+    }
+  }
+}
+
 void loop() {
+  tick_usb_serial_command();
   tick_check_stack_headroom();
   tick_check_systicker_liveness();
   tick_reload_stepper_timer();

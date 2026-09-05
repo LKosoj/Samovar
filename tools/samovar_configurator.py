@@ -3,6 +3,8 @@
 
 import argparse
 import ast
+import gzip
+import ipaddress
 import json
 import os
 import queue
@@ -12,6 +14,10 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -611,6 +617,205 @@ def pio_command(pio_executable: str, board: str, action: str, port: str) -> List
     ]
 
 
+def _required_port(port: str) -> str:
+    port = port.strip()
+    if not port:
+        raise ConfigError("Выберите последовательный порт")
+    return port
+
+
+def esptool_reboot_command(pio_executable: str, port: str) -> List[str]:
+    return [
+        pio_executable, "pkg", "exec", "-p", "tool-esptoolpy", "--",
+        "esptool.py", "--port", _required_port(port), "run",
+    ]
+
+
+def serial_ip_command(python_executable: str, script: Path, port: str) -> List[str]:
+    return [python_executable, str(script), "--serial-ip", _required_port(port)]
+
+
+def pio_python_executable(pio_executable: str) -> str:
+    result = subprocess.run(
+        [pio_executable, "system", "info", "--json-output"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode != 0:
+        raise ConfigError("Не удалось определить Python PlatformIO: {}".format(
+            (result.stderr or result.stdout).strip()
+        ))
+    try:
+        value = json.loads(result.stdout)["python_exe"]["value"]
+    except (KeyError, TypeError, json.JSONDecodeError) as error:
+        raise ConfigError("PlatformIO не сообщил путь к Python") from error
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError("PlatformIO не сообщил путь к Python")
+    return value
+
+
+def extract_samovar_ip(text: str) -> Optional[str]:
+    matches = re.findall(r"(?m)^SAMOVAR:IP=([^\r\n]+)$", text)
+    for value in reversed(matches):
+        try:
+            address = ipaddress.ip_address(value.strip())
+        except ValueError:
+            continue
+        if address.version == 4 and not address.is_unspecified:
+            return str(address)
+    return None
+
+
+def query_samovar_ip(port: str) -> str:
+    try:
+        import serial
+    except ImportError as error:
+        raise ConfigError("В Python PlatformIO не найден модуль работы с USB-портом") from error
+
+    connection = serial.Serial()
+    connection.port = _required_port(port)
+    connection.baudrate = 115200
+    connection.timeout = 0.2
+    connection.write_timeout = 2
+    connection.dtr = False
+    connection.rts = False
+    try:
+        connection.open()
+        connection.reset_input_buffer()
+        connection.write(b"SAMOVAR:IP?\n")
+        deadline = time.monotonic() + 5
+        received = ""
+        while time.monotonic() < deadline:
+            received += connection.read(128).decode("utf-8", errors="replace")
+            address = extract_samovar_ip(received)
+            if address:
+                return address
+    except (OSError, serial.SerialException) as error:
+        raise ConfigError("Не удалось получить IP через {}: {}".format(port, error)) from error
+    finally:
+        if connection.is_open:
+            connection.close()
+    raise ConfigError("Samovar не ответил на запрос IP через {}".format(port))
+
+
+def _remote_path(name: str) -> str:
+    name = name.strip().replace("\\", "/")
+    if not name.startswith("/"):
+        name = "/" + name
+    if name == "/" or ".." in name or "/" in name[1:] or len(name) >= 32:
+        raise ConfigError("Недопустимое имя файла: {}".format(name))
+    return name
+
+
+def decode_remote_text(path: str, payload: bytes) -> str:
+    if path.lower().endswith(".gz"):
+        try:
+            payload = gzip.decompress(payload)
+        except OSError as error:
+            raise ConfigError("Файл {} повреждён или не является gzip".format(path)) from error
+    try:
+        return payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ConfigError("Файл {} не является текстом UTF-8".format(path)) from error
+
+
+def encode_remote_text(path: str, text: str) -> bytes:
+    payload = text.encode("utf-8")
+    return gzip.compress(payload, mtime=0) if path.lower().endswith(".gz") else payload
+
+
+def prepare_remote_upload(name: str, payload: bytes, remote_names: List[str]) -> Tuple[str, bytes]:
+    target = _remote_path(Path(name).name)
+    compressed_target = target + ".gz"
+    if not target.lower().endswith(".gz") and compressed_target in remote_names:
+        return compressed_target, gzip.compress(payload, mtime=0)
+    return target, payload
+
+
+def syntax_spans(name: str, text: str) -> List[Tuple[str, int, int]]:
+    logical_name = name[:-3] if name.lower().endswith(".gz") else name
+    extension = Path(logical_name).suffix.lower()
+    patterns = []
+    if extension in (".htm", ".html"):
+        patterns = [("comment", r"<!--[\s\S]*?-->"), ("tag", r"</?[A-Za-z][^>]*>")]
+    elif extension == ".js":
+        patterns = [
+            ("comment", r"//[^\n]*|/\*[\s\S]*?\*/"),
+            ("string", r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')"),
+            ("keyword", r"\b(?:const|let|var|function|if|else|for|while|return|class|new|async|await|true|false|null)\b"),
+            ("number", r"\b\d+(?:\.\d+)?\b"),
+        ]
+    elif extension == ".css":
+        patterns = [
+            ("comment", r"/\*[\s\S]*?\*/"),
+            ("property", r"\b[-A-Za-z]+(?=\s*:)"),
+            ("number", r"\b\d+(?:\.\d+)?(?:px|em|rem|%|s)?\b"),
+        ]
+    elif extension == ".lua":
+        patterns = [
+            ("comment", r"--[^\n]*"),
+            ("string", r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')"),
+            ("keyword", r"\b(?:and|break|do|else|elseif|end|false|for|function|if|in|local|nil|not|or|repeat|return|then|true|until|while)\b"),
+            ("number", r"\b\d+(?:\.\d+)?\b"),
+        ]
+    spans = []
+    for tag, pattern in patterns:
+        spans.extend((tag, match.start(), match.end()) for match in re.finditer(pattern, text))
+    return spans
+
+
+def is_text_remote_file(path: str) -> bool:
+    logical_path = path[:-3] if path.lower().endswith(".gz") else path
+    return Path(logical_path).suffix.lower() in (".htm", ".html", ".js", ".css", ".lua", ".txt")
+
+
+class SamovarFileClient:
+    def __init__(self, address: str):
+        self.url = "http://{}".format(address)
+
+    def _request(self, request: urllib.request.Request) -> bytes:
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.read()
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace").strip()
+            raise ConfigError("Samovar ответил с ошибкой {}: {}".format(error.code, detail)) from error
+        except urllib.error.URLError as error:
+            raise ConfigError("Не удалось подключиться к Samovar: {}".format(error.reason)) from error
+
+    def list_files(self) -> List[Dict[str, object]]:
+        payload = self._request(urllib.request.Request(self.url + "/edit?list=/"))
+        try:
+            files = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ConfigError("Samovar вернул некорректный список файлов") from error
+        if not isinstance(files, list):
+            raise ConfigError("Samovar вернул некорректный список файлов")
+        return files
+
+    def read_file(self, path: str) -> bytes:
+        query = urllib.parse.urlencode({"edit": _remote_path(path)})
+        return self._request(urllib.request.Request(self.url + "/edit?" + query))
+
+    def upload_file(self, path: str, payload: bytes) -> None:
+        path = _remote_path(path)
+        boundary = "----SamovarConfiguratorBoundary"
+        body = (
+            "--{0}\r\nContent-Disposition: form-data; name=\"data\"; filename=\"{1}\"\r\n"
+            "Content-Type: application/octet-stream\r\n\r\n".format(boundary, path)
+        ).encode("utf-8") + payload + ("\r\n--{}--\r\n".format(boundary)).encode("ascii")
+        request = urllib.request.Request(self.url + "/edit", data=body, method="POST")
+        request.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
+        self._request(request)
+
+    def create_file(self, path: str) -> None:
+        data = urllib.parse.urlencode({"path": _remote_path(path)}).encode("utf-8")
+        self._request(urllib.request.Request(self.url + "/edit", data=data, method="PUT"))
+
+    def delete_file(self, path: str) -> None:
+        data = urllib.parse.urlencode({"path": _remote_path(path)}).encode("utf-8")
+        self._request(urllib.request.Request(self.url + "/edit", data=data, method="DELETE"))
+
+
 class Tooltip:
     def __init__(self, widget, text: str):
         self.widget = widget
@@ -646,6 +851,195 @@ class Tooltip:
             self.window = None
 
 
+class FileEditorWindow:
+    def __init__(self, parent, address: str):
+        import tkinter as tk
+        from tkinter import filedialog, messagebox, simpledialog, ttk
+
+        self.tk = tk
+        self.filedialog = filedialog
+        self.messagebox = messagebox
+        self.simpledialog = simpledialog
+        self.client = SamovarFileClient(address)
+        self.files = []
+        self.current_path = None
+
+        self.window = tk.Toplevel(parent)
+        self.window.title("Файлы Samovar — {}".format(address))
+        self.window.geometry("1100x700")
+        self.window.minsize(760, 480)
+        self.window.transient(parent)
+
+        toolbar = ttk.Frame(self.window, padding=8)
+        toolbar.pack(fill="x")
+        for text, command in (
+            ("Обновить", self.refresh),
+            ("Создать", self.create),
+            ("Удалить", self.delete),
+            ("Загрузить", self.upload),
+            ("Скачать", self.download),
+            ("Сохранить", self.save),
+        ):
+            ttk.Button(toolbar, text=text, command=command).pack(side="left", padx=(0, 8))
+
+        content = ttk.Panedwindow(self.window, orient="horizontal")
+        content.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        list_frame = ttk.Frame(content)
+        editor_frame = ttk.Frame(content)
+        content.add(list_frame, weight=1)
+        content.add(editor_frame, weight=4)
+
+        list_scroll = ttk.Scrollbar(list_frame)
+        list_scroll.pack(side="right", fill="y")
+        self.file_list = tk.Listbox(list_frame, yscrollcommand=list_scroll.set, font="TkFixedFont")
+        self.file_list.pack(fill="both", expand=True)
+        list_scroll.configure(command=self.file_list.yview)
+        self.file_list.bind("<<ListboxSelect>>", self.open_selected)
+
+        editor_scroll = ttk.Scrollbar(editor_frame)
+        editor_scroll.pack(side="right", fill="y")
+        self.editor = tk.Text(
+            editor_frame, wrap="none", undo=True, font="TkFixedFont",
+            yscrollcommand=editor_scroll.set,
+        )
+        self.editor.pack(fill="both", expand=True)
+        editor_scroll.configure(command=self.editor.yview)
+        self.editor.bind("<KeyRelease>", self._highlight)
+        self.editor.tag_configure("comment", foreground="#6a9955")
+        self.editor.tag_configure("string", foreground="#a31515")
+        self.editor.tag_configure("keyword", foreground="#0000cc")
+        self.editor.tag_configure("number", foreground="#098658")
+        self.editor.tag_configure("tag", foreground="#800000")
+        self.editor.tag_configure("property", foreground="#0451a5")
+        self.refresh()
+
+    def _show_error(self, error: Exception) -> None:
+        self.messagebox.showerror("Ошибка редактора файлов", str(error), parent=self.window)
+
+    def refresh(self) -> None:
+        try:
+            entries = self.client.list_files()
+        except ConfigError as error:
+            self._show_error(error)
+            return
+        self.files = [
+            str(entry.get("name")) for entry in entries
+            if isinstance(entry, dict) and entry.get("type") == "file" and isinstance(entry.get("name"), str)
+        ]
+        self.files.sort(key=str.lower)
+        self.file_list.delete(0, "end")
+        for path in self.files:
+            label = path[1:] if path.startswith("/") else path
+            if label.lower().endswith(".gz"):
+                label = label[:-3] + "  [gzip]"
+            self.file_list.insert("end", label)
+
+    def _selected_path(self) -> Optional[str]:
+        selection = self.file_list.curselection()
+        return self.files[selection[0]] if selection else None
+
+    def open_selected(self, _event=None) -> None:
+        path = self._selected_path()
+        if not path:
+            return
+        if not is_text_remote_file(path):
+            self.current_path = None
+            self.editor.delete("1.0", "end")
+            return
+        try:
+            text = decode_remote_text(path, self.client.read_file(path))
+        except ConfigError as error:
+            self._show_error(error)
+            return
+        self.current_path = path
+        self.editor.delete("1.0", "end")
+        self.editor.insert("1.0", text)
+        self._highlight()
+
+    def save(self) -> None:
+        if not self.current_path:
+            self.messagebox.showerror("Файл не выбран", "Выберите или создайте файл", parent=self.window)
+            return
+        try:
+            payload = encode_remote_text(self.current_path, self.editor.get("1.0", "end-1c"))
+            self.client.upload_file(self.current_path, payload)
+        except ConfigError as error:
+            self._show_error(error)
+            return
+        self.messagebox.showinfo("Samovar", "Файл сохранён", parent=self.window)
+        self.refresh()
+
+    def create(self) -> None:
+        name = self.simpledialog.askstring("Новый файл", "Имя файла:", parent=self.window)
+        if not name:
+            return
+        try:
+            path = _remote_path(name)
+            self.client.create_file(path)
+        except ConfigError as error:
+            self._show_error(error)
+            return
+        self.refresh()
+        self.current_path = path
+        self.editor.delete("1.0", "end")
+        self._highlight()
+
+    def delete(self) -> None:
+        path = self._selected_path()
+        if not path:
+            return
+        if not self.messagebox.askyesno("Удаление файла", "Удалить {}?".format(path), parent=self.window):
+            return
+        try:
+            self.client.delete_file(path)
+        except ConfigError as error:
+            self._show_error(error)
+            return
+        if self.current_path == path:
+            self.current_path = None
+            self.editor.delete("1.0", "end")
+        self.refresh()
+
+    def upload(self) -> None:
+        filename = self.filedialog.askopenfilename(parent=self.window)
+        if not filename:
+            return
+        try:
+            target, payload = prepare_remote_upload(
+                Path(filename).name, Path(filename).read_bytes(), self.files
+            )
+            self.client.upload_file(target, payload)
+        except (OSError, ConfigError) as error:
+            self._show_error(error)
+            return
+        self.refresh()
+
+    def download(self) -> None:
+        path = self._selected_path()
+        if not path:
+            return
+        logical_name = Path(path[:-3] if path.lower().endswith(".gz") else path).name
+        filename = self.filedialog.asksaveasfilename(initialfile=logical_name, parent=self.window)
+        if not filename:
+            return
+        try:
+            payload = self.client.read_file(path)
+            if path.lower().endswith(".gz"):
+                payload = gzip.decompress(payload)
+            Path(filename).write_bytes(payload)
+        except (OSError, ConfigError) as error:
+            self._show_error(error)
+
+    def _highlight(self, _event=None) -> None:
+        for tag in ("comment", "string", "keyword", "number", "tag", "property"):
+            self.editor.tag_remove(tag, "1.0", "end")
+        if not self.current_path:
+            return
+        text = self.editor.get("1.0", "end-1c")
+        for tag, start, end in syntax_spans(self.current_path, text):
+            self.editor.tag_add(tag, "1.0+{}c".format(start), "1.0+{}c".format(end))
+
+
 class ConfiguratorWindow:
     def __init__(self, root, config: SamovarConfig, pio_executable: str):
         import tkinter as tk
@@ -665,6 +1059,7 @@ class ConfiguratorWindow:
         self.monitor_window = None
         self.monitor_log = None
         self.monitor_stop_button = None
+        self.device_ip = None
         self.value_vars = {}
         self.bool_vars = {}
         self.optional_enabled_vars = {}
@@ -825,6 +1220,23 @@ class ConfiguratorWindow:
         ):
             button.pack(side="left", padx=(0, 8))
 
+        device_buttons = ttk.Frame(outer, padding=(0, 0, 0, 8))
+        device_buttons.pack(fill="x")
+        self.ip_button = ttk.Button(device_buttons, text="Получить IP", command=self.get_ip)
+        self.reboot_button = ttk.Button(
+            device_buttons, text="Перезагрузить ESP", command=self.reboot_esp
+        )
+        self.editor_button = ttk.Button(
+            device_buttons, text="Редактор файлов", command=self.open_file_editor
+        )
+        self.editor_button.configure(state="disabled")
+        self.ip_status = ttk.Label(device_buttons, text="IP: не получен")
+        for button in (self.ip_button, self.reboot_button, self.editor_button):
+            button.pack(side="left", padx=(0, 8))
+        self.ip_status.pack(side="left", padx=(4, 0))
+        self.port_combo.bind("<<ComboboxSelected>>", self._port_changed, add="+")
+        self.port_combo.bind("<KeyRelease>", self._port_changed, add="+")
+
         ttk.Label(outer, text="Журнал").pack(anchor="w")
         log_frame = ttk.Frame(outer)
         log_frame.pack(fill="both", expand=True)
@@ -945,6 +1357,39 @@ class ConfiguratorWindow:
         if confirmed:
             self.start_action("erase")
 
+    def _port_changed(self, _event=None) -> None:
+        self.device_ip = None
+        self.ip_status.configure(text="IP: не получен")
+        self.editor_button.configure(state="disabled")
+
+    def get_ip(self) -> None:
+        if self.busy:
+            self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
+            return
+        try:
+            python_executable = pio_python_executable(self.pio_executable)
+            command = serial_ip_command(
+                python_executable, Path(__file__).resolve(), self.port_var.get()
+            )
+        except (OSError, ConfigError) as error:
+            self.messagebox.showerror("Не удалось получить IP", str(error))
+            return
+        self._port_changed()
+        self._start_process(command, "ip")
+
+    def reboot_esp(self) -> None:
+        try:
+            command = esptool_reboot_command(self.pio_executable, self.port_var.get())
+        except ConfigError as error:
+            self.messagebox.showerror("Не удалось перезагрузить ESP", str(error))
+            return
+        self._start_process(command, "reboot")
+
+    def open_file_editor(self) -> None:
+        if not self.device_ip:
+            return
+        FileEditorWindow(self.root, self.device_ip)
+
     def open_monitor(self) -> None:
         if self.busy:
             self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
@@ -1023,6 +1468,12 @@ class ConfiguratorWindow:
             return
         if action == "upload" and not self.save(show_success=False):
             return
+        self._start_process(command, action)
+
+    def _start_process(self, command: List[str], action: str) -> None:
+        if self.busy:
+            self.messagebox.showerror("Команда уже выполняется", "Дождитесь завершения текущей команды")
+            return
         try:
             self.process = subprocess.Popen(
                 command,
@@ -1058,16 +1509,22 @@ class ConfiguratorWindow:
                     self._append_log(value)
                 else:
                     stopped = self.stop_requested
+                    completed_action = self.active_action
                     self.process = None
                     self.busy = False
                     self._set_busy(False, "")
                     if stopped:
                         self._append_log("Монитор порта остановлен.\n")
                     elif value == 0:
-                        self._append_log("Операция успешно завершена.\n")
+                        if completed_action == "ip" and self.device_ip:
+                            self._append_log("IP Samovar получен: {}\n".format(self.device_ip))
+                        elif completed_action == "reboot":
+                            self._append_log("ESP перезагружен.\n")
+                        else:
+                            self._append_log("Операция успешно завершена.\n")
                     else:
                         self._append_log("Операция завершилась с ошибкой {}.\n".format(value))
-                        self.messagebox.showerror("Ошибка PlatformIO", "Код завершения: {}".format(value))
+                        self.messagebox.showerror("Ошибка операции", "Код завершения: {}".format(value))
                     self.active_action = ""
         except queue.Empty:
             pass
@@ -1080,6 +1537,11 @@ class ConfiguratorWindow:
         self.fs_button.configure(state=state)
         self.erase_button.configure(state=state)
         self.monitor_button.configure(state=state)
+        self.ip_button.configure(state=state)
+        self.reboot_button.configure(state=state)
+        self.editor_button.configure(
+            state="normal" if not busy and self.device_ip else "disabled"
+        )
         self.port_combo.configure(state=state)
         self.port_refresh_button.configure(state=state)
         if self.monitor_stop_button is not None:
@@ -1088,6 +1550,12 @@ class ConfiguratorWindow:
             )
 
     def _append_log(self, text: str) -> None:
+        address = extract_samovar_ip(text)
+        if address:
+            self.device_ip = address
+            self.ip_status.configure(text="IP: {}".format(address))
+            if not self.busy:
+                self.editor_button.configure(state="normal")
         target = self.monitor_log if self.active_action == "monitor" and self.monitor_log is not None else self.log
         target.insert("end", text)
         target.see("end")
@@ -1102,11 +1570,20 @@ def parse_arguments(argv: Optional[List[str]] = None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--pio", default=shutil.which("pio") or shutil.which("platformio"))
+    parser.add_argument("--serial-ip")
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     arguments = parse_arguments(argv)
+    if arguments.serial_ip:
+        try:
+            address = query_samovar_ip(arguments.serial_ip)
+        except ConfigError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        print("SAMOVAR:IP={}".format(address))
+        return 0
     if not arguments.pio:
         print("PlatformIO не найден", file=sys.stderr)
         return 1

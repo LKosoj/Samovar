@@ -22,11 +22,31 @@ UPLOAD_CASES = (
     ("setup.htm", "loadFile", "setup.txt"),
     ("brewxml.htm", "loadBeerXML", "recipe.xml"),
 )
+BOOTSTRAP_PAGES = (
+    "index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm",
+    "program.htm", "chart.htm", "calibrate.htm", "calibrate_ph.htm", "cheese.htm",
+)
+BOOTSTRAP_READY_HELPER = r'''
+  const bootstrapPages = new Set(__BOOTSTRAP_PAGES__);
+  async function waitForBootstrapReady(file) {
+    if (!bootstrapPages.has(file)) return;
+    try {
+      await page.waitForFunction(() => document.body.inert === false);
+    } catch (error) {
+      const state = await page.evaluate(() => ({
+        inert: document.body.inert,
+        error: document.getElementById("request_error")?.textContent || ""
+      }));
+      throw new Error(file + " bootstrap readiness " + JSON.stringify(state) + ": " + error.message);
+    }
+  }
+'''
 
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
+__BOOTSTRAP_READY_HELPER__
   const focused = __FOCUSED__;
   const runMatrix = __RUN_MATRIX__;
   const runActions = __RUN_ACTIONS__;
@@ -214,6 +234,7 @@ BROWSER_TEST = r'''async page => {
           scenario = viewport.name + "/" + theme + "/" + file;
           try {
             await page.goto(baseUrl + "/" + file, {waitUntil:"load"});
+            await waitForBootstrapReady(file);
             if (file === "program.htm") {
               await page.waitForFunction(() => programTemplateLoaded && columnParams !== null);
             }
@@ -496,6 +517,7 @@ BROWSER_TEST = r'''async page => {
         scenario = "actions/" + kind + "/" + file;
         try {
           await page.goto(baseUrl + "/" + file, {waitUntil:"load"});
+          await waitForBootstrapReady(file);
           if (file === "program.htm") {
             await page.waitForFunction(() => programTemplateLoaded && columnParams !== null);
           }
@@ -609,7 +631,9 @@ UPLOAD_TRIGGER = r'''async page => {
   const file = __FILE__;
   const handler = __HANDLER__;
   const kind = __KIND__;
+__BOOTSTRAP_READY_HELPER__
   await page.goto(baseUrl + "/" + file, {waitUntil:"load"});
+  await waitForBootstrapReady(file);
   await page.evaluate(() => {
     const input = document.getElementById("fileToLoad");
     const panel = input && input.closest(".tabcontent");
@@ -710,6 +734,12 @@ UPLOAD_VERIFY = r'''async page => {
   }));
   return "__U05_RESULT__" + JSON.stringify(result);
 }'''
+
+
+def bootstrap_ready_helper() -> str:
+    return BOOTSTRAP_READY_HELPER.replace(
+        "__BOOTSTRAP_PAGES__", json.dumps(BOOTSTRAP_PAGES)
+    )
 
 
 def run_cli_report(
@@ -817,6 +847,7 @@ def run_upload_cases(
                 .replace("__FILE__", json.dumps(file))
                 .replace("__HANDLER__", json.dumps(handler))
                 .replace("__KIND__", json.dumps(kind))
+                .replace("__BOOTSTRAP_READY_HELPER__", bootstrap_ready_helper())
             )
             run_cli_filechooser(cli, session, trigger, cwd, 30)
             run_cli(
@@ -888,6 +919,7 @@ def main() -> int:
                     code = (BROWSER_TEST
                             .replace("__BASE_URL__", json.dumps(base_url))
                             .replace("__UI_BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE))
+                            .replace("__BOOTSTRAP_READY_HELPER__", bootstrap_ready_helper())
                             .replace("__FOCUSED__", "true" if args.focused else "false")
                             .replace("__RUN_MATRIX__", "true" if stage == "matrix" else "false")
                             .replace("__RUN_ACTIONS__", "true" if stage == "actions" else "false"))

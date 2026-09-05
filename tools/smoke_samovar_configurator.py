@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Проверяет конфигуратор, выбор платы и начальные реквизиты Wi-Fi."""
 
+import gzip
 import importlib.util
+import inspect
 import re
 import shutil
 import subprocess
@@ -429,6 +431,99 @@ class ConfiguratorModelTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "  ")
+
+    def test_serial_monitor_does_not_reset_esp(self) -> None:
+        source = (ROOT / "platformio.ini").read_text(encoding="utf-8")
+        base_environment = source.split("[env:Samovar_s3]", 1)[0]
+        self.assertRegex(base_environment, r"(?m)^monitor_dtr\s*=\s*0\s*$")
+        self.assertRegex(base_environment, r"(?m)^monitor_rts\s*=\s*0\s*$")
+
+    def test_main_window_device_controls_and_ip_gate(self) -> None:
+        source = inspect.getsource(configurator.ConfiguratorWindow._build)
+        for token in (
+            'text="Получить IP"',
+            'text="Перезагрузить ESP"',
+            'text="Редактор файлов"',
+            'self.editor_button.configure(state="disabled")',
+        ):
+            self.assertIn(token, source)
+        monitor_source = inspect.getsource(configurator.ConfiguratorWindow.open_monitor)
+        for label in ("Получить IP", "Перезагрузить ESP", "Редактор файлов"):
+            self.assertNotIn(label, monitor_source)
+
+        self.assertEqual(
+            configurator.extract_samovar_ip("noise\nSAMOVAR:IP=192.168.1.37\n"),
+            "192.168.1.37",
+        )
+        self.assertEqual(
+            configurator.extract_samovar_ip("SAMOVAR:IP=10.0.0.8\n"),
+            "10.0.0.8",
+        )
+        self.assertIsNone(configurator.extract_samovar_ip("SAMOVAR:IP=999.1.2.3\n"))
+        self.assertIsNone(configurator.extract_samovar_ip("SAMOVAR:IP=0.0.0.0\n"))
+
+    def test_usb_reboot_and_ip_commands_use_selected_port(self) -> None:
+        self.assertEqual(
+            configurator.esptool_reboot_command("pio.exe", "COM7"),
+            ["pio.exe", "pkg", "exec", "-p", "tool-esptoolpy", "--", "esptool.py", "--port", "COM7", "run"],
+        )
+        self.assertEqual(
+            configurator.serial_ip_command("C:/Python/python.exe", MODULE_PATH, "/dev/cu.usbserial-1"),
+            ["C:/Python/python.exe", str(MODULE_PATH), "--serial-ip", "/dev/cu.usbserial-1"],
+        )
+        with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
+            configurator.esptool_reboot_command("pio.exe", " ")
+
+        result = type(
+            "Result", (), {
+                "returncode": 0,
+                "stdout": '{"python_exe":{"title":"Python Executable","value":"C:/pio/python.exe"}}',
+                "stderr": "",
+            },
+        )()
+        with mock.patch.object(configurator.subprocess, "run", return_value=result) as run:
+            self.assertEqual(configurator.pio_python_executable("pio.exe"), "C:/pio/python.exe")
+        run.assert_called_once_with(
+            ["pio.exe", "system", "info", "--json-output"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+
+        query_source = inspect.getsource(configurator.query_samovar_ip)
+        self.assertLess(query_source.index("connection.dtr = False"), query_source.index("connection.open()"))
+        self.assertLess(query_source.index("connection.rts = False"), query_source.index("connection.open()"))
+
+    def test_compressed_editor_files_round_trip_and_upload_to_existing_gzip(self) -> None:
+        text = "<html>Привет</html>\n"
+        packed = gzip.compress(text.encode("utf-8"), mtime=0)
+        self.assertEqual(configurator.decode_remote_text("/index.htm.gz", packed), text)
+        self.assertEqual(
+            gzip.decompress(configurator.encode_remote_text("/index.htm.gz", text)).decode("utf-8"),
+            text,
+        )
+
+        target, payload = configurator.prepare_remote_upload(
+            "index.htm", text.encode("utf-8"), ["/index.htm.gz", "/style.css.gz"]
+        )
+        self.assertEqual(target, "/index.htm.gz")
+        self.assertEqual(gzip.decompress(payload).decode("utf-8"), text)
+
+        target, payload = configurator.prepare_remote_upload(
+            "program.txt", b"first\nsecond\n", ["/index.htm.gz"]
+        )
+        self.assertEqual(target, "/program.txt")
+        self.assertEqual(payload, b"first\nsecond\n")
+
+    def test_syntax_highlighting_covers_supported_text_formats(self) -> None:
+        fixtures = {
+            "page.htm": ("<div class=\"x\">hello</div>", "tag"),
+            "app.js": ("const value = 42; // note", "keyword"),
+            "style.css": (".x { color: red; }", "property"),
+            "script.lua": ("local value = 42 -- note", "keyword"),
+        }
+        for name, (content, expected_tag) in fixtures.items():
+            tags = {tag for tag, _, _ in configurator.syntax_spans(name, content)}
+            self.assertIn(expected_tag, tags, name)
+        self.assertEqual(configurator.syntax_spans("notes.txt", "plain text 42"), [])
 
     def test_serial_ports_are_read_from_platformio_json(self) -> None:
         result = type(
