@@ -5,7 +5,9 @@ import importlib.util
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -152,6 +154,102 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(loaded["PAUSE_RESUME_HYSTERESIS_DELTA"], "0.08")
         self.assertEqual(loaded["NBK_WORK_PRESSURE_RATIO"], "0.6")
         self.assertEqual(loaded["LCD_RESET_PERIOD_MS"], "250000")
+
+    def test_tooltip_descriptions_come_from_header_comments(self) -> None:
+        descriptions = configurator.SamovarConfig(self.make_project()).descriptions()
+
+        self.assertEqual(
+            descriptions["ALARM_WATER_TEMP"],
+            "Температура воды, при достижении которой будет оповещен оператор",
+        )
+        self.assertIn("использовать датчик потока воды охлаждения", descriptions["USE_WATERSENSOR"])
+        self.assertEqual(descriptions["servoDelta"], "Корректировка для угла поворота сервопривода.")
+        self.assertIn("РМВ-К: использовать в проекте регулятор напряжения РМВК", descriptions["regulator"])
+
+    def test_configurator_attaches_descriptions_to_registered_widgets(self) -> None:
+        first_widget = object()
+        second_widget = object()
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.config = type(
+            "Config",
+            (),
+            {"descriptions": lambda self: {"MAX_WATER_TEMP": "Аварийный предел"}},
+        )()
+        window.tooltip_widgets = {
+            "MAX_WATER_TEMP": [first_widget, second_widget],
+            "NO_COMMENT": [object()],
+        }
+        window.tooltips = []
+
+        created = []
+        with mock.patch.object(
+            configurator,
+            "Tooltip",
+            side_effect=lambda widget, text: created.append((widget, text)) or (widget, text),
+        ):
+            window._apply_tooltips()
+
+        self.assertEqual(
+            created,
+            [(first_widget, "Аварийный предел"), (second_widget, "Аварийный предел")],
+        )
+        self.assertEqual(window.tooltips, created)
+
+    def test_tooltip_opens_below_widget_and_closes(self) -> None:
+        class FakeWidget:
+            def __init__(self):
+                self.bindings = {}
+
+            def bind(self, event, callback, add=None):
+                self.bindings[event] = (callback, add)
+
+            def winfo_rootx(self):
+                return 100
+
+            def winfo_rooty(self):
+                return 200
+
+            def winfo_height(self):
+                return 24
+
+        class FakeWindow:
+            def wm_overrideredirect(self, value):
+                self.borderless = value
+
+            def wm_geometry(self, value):
+                self.geometry = value
+
+            def destroy(self):
+                self.destroyed = True
+
+        class FakeLabel:
+            def __init__(self, parent, **options):
+                self.parent = parent
+                self.options = options
+                labels.append(self)
+
+            def pack(self):
+                self.packed = True
+
+        widget = FakeWidget()
+        popup = FakeWindow()
+        labels = []
+        fake_tk = types.ModuleType("tkinter")
+        fake_ttk = types.ModuleType("tkinter.ttk")
+        fake_tk.Toplevel = lambda parent: popup
+        fake_tk.ttk = fake_ttk
+        fake_ttk.Label = FakeLabel
+        tooltip = configurator.Tooltip(widget, "Описание параметра")
+
+        with mock.patch.dict(sys.modules, {"tkinter": fake_tk, "tkinter.ttk": fake_ttk}):
+            widget.bindings["<Enter>"][0]()
+            self.assertIs(tooltip.window, popup)
+            self.assertEqual(popup.geometry, "+116+228")
+            self.assertEqual(labels[0].options["text"], "Описание параметра")
+            widget.bindings["<Leave>"][0]()
+
+        self.assertTrue(popup.destroyed)
+        self.assertIsNone(tooltip.window)
 
     def test_monitor_uses_modal_window_and_separate_log(self) -> None:
         class FakeWidget:

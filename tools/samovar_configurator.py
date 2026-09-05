@@ -203,6 +203,27 @@ class HeaderDocument:
             )
         return None
 
+    def preceding_description(self, index: int) -> str:
+        comments = []
+        for line in reversed(self.lines[:index]):
+            stripped = line.strip()
+            if not stripped.startswith("//"):
+                break
+            comment = stripped[2:].strip()
+            if re.fullmatch(r"[*=-]+", comment):
+                break
+            if comment:
+                comments.append(comment)
+        return " ".join(reversed(comments))
+
+    def description(self, macro: str) -> str:
+        found = self.find(macro)
+        if found is None:
+            return ""
+        if found.comment:
+            return found.comment.split("//", 1)[1].strip()
+        return self.preceding_description(found.index)
+
     def set_macro(self, macro: str, enabled: bool, value: str = "") -> None:
         found = self.find(macro)
         if found is None:
@@ -360,6 +381,37 @@ class SamovarConfig:
         state["wifi_ssid"] = self._read_override_string(override, "SAMOVAR_WIFI_SSID")
         state["wifi_password"] = self._read_override_string(override, "SAMOVAR_WIFI_PASSWORD")
         return state
+
+    def descriptions(self) -> Dict[str, str]:
+        ini = HeaderDocument(self.ini_path.read_text(encoding="utf-8"))
+        descriptions = {}
+        for spec in VALUE_SPECS + BOOL_SPECS + OPTIONAL_SPECS + CHOICE_VALUE_SPECS:
+            description = ini.description(spec.macro)
+            if description:
+                descriptions[spec.macro] = description
+
+        for index, line in enumerate(ini.lines):
+            if re.match(r"^\s*int8_t\s+servoDelta\s*\[11\]", line):
+                descriptions["servoDelta"] = ini.preceding_description(index)
+                break
+
+        for key, group in (
+            ("regulator", "Регулятор мощности"),
+            ("atmospheric_sensor", "Датчик атмосферного давления"),
+            ("column_pressure_sensor", "Датчик давления в колонне"),
+        ):
+            options = []
+            for label, macros in CHOICE_OPTIONS[group].items():
+                description = ""
+                for macro in reversed(macros):
+                    description = ini.description(macro)
+                    if description:
+                        break
+                if description:
+                    options.append("{}: {}".format(label, description))
+            if options:
+                descriptions[key] = "\n".join(options)
+        return descriptions
 
     def save(self, state: Dict[str, object]) -> None:
         self.ensure_override()
@@ -554,6 +606,41 @@ def pio_command(pio_executable: str, board: str, action: str, port: str) -> List
     ]
 
 
+class Tooltip:
+    def __init__(self, widget, text: str):
+        self.widget = widget
+        self.text = text
+        self.window = None
+        widget.bind("<Enter>", self.show, add="+")
+        widget.bind("<Leave>", self.hide, add="+")
+
+    def show(self, _event=None) -> None:
+        if self.window is not None:
+            return
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.window = tk.Toplevel(self.widget)
+        self.window.wm_overrideredirect(True)
+        x = self.widget.winfo_rootx() + 16
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self.window.wm_geometry("+{}+{}".format(x, y))
+        ttk.Label(
+            self.window,
+            text=self.text,
+            justify="left",
+            wraplength=520,
+            relief="solid",
+            borderwidth=1,
+            padding=6,
+        ).pack()
+
+    def hide(self, _event=None) -> None:
+        if self.window is not None:
+            self.window.destroy()
+            self.window = None
+
+
 class ConfiguratorWindow:
     def __init__(self, root, config: SamovarConfig, pio_executable: str):
         import tkinter as tk
@@ -577,6 +664,8 @@ class ConfiguratorWindow:
         self.bool_vars = {}
         self.optional_enabled_vars = {}
         self.choice_vars = {}
+        self.tooltip_widgets = {}
+        self.tooltips = []
 
         root.title("Настройка и прошивка Samovar")
         root.geometry("1040x780")
@@ -605,7 +694,10 @@ class ConfiguratorWindow:
             section_rows[section] = 0
 
         self.board_var = tk.StringVar()
-        self._add_combo(section_frames, section_rows, "Основные", "Плата", self.board_var, tuple(BOARD_OPTIONS))
+        self._add_combo(
+            section_frames, section_rows, "Основные", "Плата", self.board_var,
+            tuple(BOARD_OPTIONS),
+        )
         self.port_var = tk.StringVar()
         row = section_rows["Основные"]
         ttk.Label(section_frames["Основные"], text="Последовательный порт").grid(
@@ -624,37 +716,48 @@ class ConfiguratorWindow:
         self.port_refresh_button.grid(row=0, column=1, padx=(8, 0))
         section_rows["Основные"] += 1
         self.servo_var = tk.StringVar()
-        self._add_entry(section_frames, section_rows, "Основные", "Поправки сервопривода (11 чисел)", self.servo_var)
+        self._add_entry(
+            section_frames, section_rows, "Основные", "Поправки сервопривода (11 чисел)",
+            self.servo_var, "servoDelta",
+        )
 
         self.choice_vars["regulator"] = tk.StringVar()
         self._add_combo(
             section_frames, section_rows, "Регулятор", "Тип регулятора",
-            self.choice_vars["regulator"], tuple(CHOICE_OPTIONS["Регулятор мощности"]),
+            self.choice_vars["regulator"], tuple(CHOICE_OPTIONS["Регулятор мощности"]), "regulator",
         )
         self.choice_vars["atmospheric_sensor"] = tk.StringVar()
         self._add_combo(
             section_frames, section_rows, "Датчики", "Атмосферное давление",
             self.choice_vars["atmospheric_sensor"],
             tuple(CHOICE_OPTIONS["Датчик атмосферного давления"]),
+            "atmospheric_sensor",
         )
         self.choice_vars["column_pressure_sensor"] = tk.StringVar()
         self._add_combo(
             section_frames, section_rows, "Датчики", "Давление в колонне",
             self.choice_vars["column_pressure_sensor"],
             tuple(CHOICE_OPTIONS["Датчик давления в колонне"]),
+            "column_pressure_sensor",
         )
 
         for spec in VALUE_SPECS:
             variable = tk.StringVar()
             self.value_vars[spec.macro] = variable
-            self._add_entry(section_frames, section_rows, spec.section, spec.label, variable)
+            self._add_entry(
+                section_frames, section_rows, spec.section, spec.label, variable, spec.macro
+            )
         for spec in BOOL_SPECS:
             variable = tk.BooleanVar()
             self.bool_vars[spec.macro] = variable
             row = section_rows[spec.section]
-            ttk.Checkbutton(section_frames[spec.section], text=spec.label, variable=variable).grid(
+            checkbutton = ttk.Checkbutton(
+                section_frames[spec.section], text=spec.label, variable=variable
+            )
+            checkbutton.grid(
                 row=row, column=0, columnspan=2, sticky="w", pady=3
             )
+            self._register_tooltip(spec.macro, checkbutton)
             section_rows[spec.section] += 1
         for spec in OPTIONAL_SPECS:
             enabled = tk.BooleanVar()
@@ -662,17 +765,24 @@ class ConfiguratorWindow:
             self.optional_enabled_vars[spec.macro] = enabled
             self.value_vars[spec.macro] = value
             row = section_rows[spec.section]
-            ttk.Checkbutton(section_frames[spec.section], text=spec.label, variable=enabled).grid(
+            checkbutton = ttk.Checkbutton(
+                section_frames[spec.section], text=spec.label, variable=enabled
+            )
+            checkbutton.grid(
                 row=row, column=0, sticky="w", pady=3
             )
-            ttk.Entry(section_frames[spec.section], textvariable=value, width=34).grid(
+            entry = ttk.Entry(section_frames[spec.section], textvariable=value, width=34)
+            entry.grid(
                 row=row, column=1, sticky="ew", padx=(10, 0), pady=3
             )
+            self._register_tooltip(spec.macro, checkbutton, entry)
             section_rows[spec.section] += 1
         for spec in CHOICE_VALUE_SPECS:
             variable = tk.StringVar()
             self.value_vars[spec.macro] = variable
-            self._add_entry(section_frames, section_rows, spec.section, spec.label, variable)
+            self._add_entry(
+                section_frames, section_rows, spec.section, spec.label, variable, spec.macro
+            )
 
         self.ssid_var = tk.StringVar()
         self.password_var = tk.StringVar()
@@ -710,20 +820,33 @@ class ConfiguratorWindow:
         self.log.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=self.log.yview)
 
-    def _add_entry(self, frames, rows, section, label, variable) -> None:
+    def _register_tooltip(self, key, *widgets) -> None:
+        self.tooltip_widgets.setdefault(key, []).extend(widgets)
+
+    def _add_entry(self, frames, rows, section, label, variable, tooltip_key=None) -> None:
         row = rows[section]
-        self.ttk.Label(frames[section], text=label).grid(row=row, column=0, sticky="w", pady=3)
-        self.ttk.Entry(frames[section], textvariable=variable, width=34).grid(
+        label_widget = self.ttk.Label(frames[section], text=label)
+        label_widget.grid(row=row, column=0, sticky="w", pady=3)
+        entry = self.ttk.Entry(frames[section], textvariable=variable, width=34)
+        entry.grid(
             row=row, column=1, sticky="ew", padx=(10, 0), pady=3
         )
+        if tooltip_key:
+            self._register_tooltip(tooltip_key, label_widget, entry)
         rows[section] += 1
 
-    def _add_combo(self, frames, rows, section, label, variable, values) -> None:
+    def _add_combo(self, frames, rows, section, label, variable, values, tooltip_key=None) -> None:
         row = rows[section]
-        self.ttk.Label(frames[section], text=label).grid(row=row, column=0, sticky="w", pady=3)
-        self.ttk.Combobox(frames[section], textvariable=variable, values=values, state="readonly").grid(
+        label_widget = self.ttk.Label(frames[section], text=label)
+        label_widget.grid(row=row, column=0, sticky="w", pady=3)
+        combo = self.ttk.Combobox(
+            frames[section], textvariable=variable, values=values, state="readonly"
+        )
+        combo.grid(
             row=row, column=1, sticky="ew", padx=(10, 0), pady=3
         )
+        if tooltip_key:
+            self._register_tooltip(tooltip_key, label_widget, combo)
         rows[section] += 1
 
     def _load(self) -> None:
@@ -745,7 +868,15 @@ class ConfiguratorWindow:
             variable.set(str(state[key]))
         self.ssid_var.set(str(state["wifi_ssid"]))
         self.password_var.set(str(state["wifi_password"]))
+        self._apply_tooltips()
         self.refresh_ports()
+
+    def _apply_tooltips(self) -> None:
+        descriptions = self.config.descriptions()
+        for key, widgets in self.tooltip_widgets.items():
+            description = descriptions.get(key)
+            if description:
+                self.tooltips.extend(Tooltip(widget, description) for widget in widgets)
 
     def refresh_ports(self) -> None:
         try:
