@@ -27,20 +27,71 @@ device_modal = read("partials/device_schedule_modal.htm")
 app = read("app.js")
 
 
-def unsafe_template_percent(source: str) -> bool:
-    without_placeholders = re.sub(r"%[A-Za-z0-9_.]+%", "", source)
-    return "%" in without_placeholders.replace("%%", "")
+if "%%" in calibrate:
+    errors.append("calibrate_ph.htm still escapes ordinary percent for template processing")
+
+for placeholder in ("%WProgram%", "%Descr%", "%btn_list%"):
+    if placeholder in cheese:
+        errors.append(f"cheese.htm still contains template placeholder {placeholder}")
+if "%%" in cheese:
+    errors.append("cheese.htm still escapes ordinary percent for template processing")
+for token in (
+    "clip-path: inset(50%);",
+    "SamovarApp.loadUiBootstrap(applyCheeseBootstrap)",
+    "function applyCheeseBootstrap(data)",
+    "JSON.stringify(data.luaButtonList)",
+):
+    if token not in cheese:
+        errors.append(f"cheese.htm missing UI bootstrap token: {token}")
+
+for token in (
+    "async function loadUiBootstrap(applyBootstrap)",
+    "fetch('/ui-bootstrap', { cache: 'no-store' })",
+    "bootstrapPending = true;",
+    "bootstrapPending = false;",
+    "Начальные данные недоступны: HTTP ",
+    "Некорректный JSON начальных данных.",
+    "function validateUiBootstrap(data)",
+    "hasExactKeys(data, UI_BOOTSTRAP_KEYS)",
+    "descriptionByteLength(data.description) > 250",
+    "bootstrapStarted = true;",
+    "Начальные данные уже загружены.",
+    "async function requestI2cPump(url, fallbackText)",
+    "async function clearProgram()",
+):
+    if token not in app:
+        errors.append(f"app.js missing UI bootstrap contract: {token}")
+if app.count("fetch('/ui-bootstrap', { cache: 'no-store' })") != 1:
+    errors.append("app.js must issue exactly one no-store UI bootstrap fetch")
 
 
-for page_name, page in (("cheese.htm", cheese), ("calibrate_ph.htm", calibrate)):
-    if unsafe_template_percent(page):
-        errors.append(
-            f"{page_name} contains an unescaped percent that can corrupt the ESP template response"
-        )
+def function_body(signature: str) -> str:
+    start = app.find(signature)
+    if start < 0:
+        return ""
+    open_brace = app.find("{", start)
+    depth = 0
+    for index in range(open_brace, len(app)):
+        if app[index] == "{":
+            depth += 1
+        elif app[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return app[open_brace + 1:index]
+    return ""
 
-percent_mutant = cheese.replace("100%%", "100%", 1)
-if percent_mutant == cheese or not unsafe_template_percent(percent_mutant):
-    errors.append("cheese template-percent mutation was not rejected")
+
+for signature in (
+    "async function sendCommandRequest(command, options)",
+    "async function requestI2cPump(url, fallbackText)",
+    "async function postProgramRequest(form)",
+    "async function clearProgram()",
+):
+    body = function_body(signature)
+    assert_at = body.find("assertOnline();")
+    fetch_at = body.find("fetch(")
+    if assert_at < 0 or fetch_at < 0 or assert_at > fetch_at:
+        errors.append(f"{signature} can mutate before bootstrap succeeds")
 
 stage_values = re.findall(r'<option value="([A-Za-z])"', cheese)
 expected_stages = list("MPCWALZfzds pvrnSR".replace(" ", ""))
@@ -58,14 +109,35 @@ for token in (
     "SamovarApp.postProgram(document.forms.mainform)",
     'maxlength="250"',
     "PROGRAM_BACKUP_VERSION = 1",
-    "new TextEncoder().encode(description).length",
+    "SamovarApp.descriptionByteLength(description)",
     "backup.version !== PROGRAM_BACKUP_VERSION",
     'value="Настройки"',
     "SamovarApp.showHistory()",
     '<!--#include lua_field.htm-->',
+    'class="prg" id="programRows"',
+    'class="prgline" id="cheeseProgramHeader"',
+    'class="prglabel cheese-row-number"',
+    'class="program-row-action cheese-add"',
+    'class="program-row-action cheese-remove"',
+    '<img src="plus.png" alt="">',
+    '<img src="minus.png" alt="">',
+    "function setCheeseRowNumbers()",
 ):
     if token not in cheese:
         errors.append(f"cheese.htm missing contract token: {token}")
+
+if "Добавить этап" in cheese:
+    errors.append("cheese.htm still uses a separate add-stage button instead of row + controls")
+
+for token in (
+    '<form id="phForm"',
+    '<h1>Калибровка pH</h1>',
+    'class="tabcontent" style="display: block;',
+    'class="container_column"',
+    'class="container_row"',
+):
+    if token not in calibrate:
+        errors.append(f"calibrate_ph.htm missing standard calibration layout token: {token}")
 
 if 'id="popup"' not in device_modal or "SamovarApp.saveDeviceScheduleModal()" not in device_modal:
     errors.append("shared device modal does not save through SamovarApp")

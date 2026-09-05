@@ -854,36 +854,17 @@ const char* get_index_page_path() {
   return mode_page_path(Samovar_Mode);
 }
 
-void send_index_template_response(AsyncWebServerRequest *request, const char *spiffsPath, const char *cacheControl) {
-  String description;
-  if (!copy_session_description(description)) {
-    request->send(503, "text/plain", "Runtime state busy");
-    return;
-  }
-  String luaButtonList;
-  // chart.htm - страница наблюдения, кнопок Lua не выводит (нет %btn_list% и #lua_btn в
-  // разметке) - не берём мьютекс runtime_state и не копируем список впустую.
-  bool pageUsesLuaButtons = strcmp(spiffsPath, "/chart.htm") != 0;
-  if (pageUsesLuaButtons && !copy_lua_button_list_cache(luaButtonList)) {
-    request->send(503, "text/plain", "Runtime state busy");
-    return;
-  }
-  AsyncWebServerResponse *response = request->beginResponse(SPIFFS, spiffsPath, "text/html", false, [description, luaButtonList](const String &var) -> String {
-    return indexKeyProcessorWithSnapshots(var, description, luaButtonList);
-  });
-  response->addHeader("Cache-Control", cacheControl);
-  request->send(response);
-}
-
 void send_index_page(AsyncWebServerRequest *request) {
   // [WP7 п.5] Раньше здесь Samovar_Mode принудительно перезаписывался значением
   // SamSetup.Mode на каждой отдаче страницы - см. change_samovar_mode() (mode_switch.h)
   // про причину удаления и куда перенесена синхронизация. Живой Samovar_Mode уже корректен без этой
   // записи: страница просто показывает текущий активный режим как есть.
-  send_index_template_response(request, get_index_page_path(), "no-cache, no-store, must-revalidate");
+  AsyncWebServerResponse *response = request->beginResponse(
+      SPIFFS, get_index_page_path(), "text/html", false, nullptr);
+  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  request->send(response);
 }
 
-// Прямой GET /distiller.htm|beer.htm|… иначе отдаётся через serveStatic без шаблонизатора — %WProgram% не подставляется, в UI «тип программы» пустой.
 void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode) {
   // [WP7 п.5] Редирект теперь сверяется с живым Samovar_Mode (а не с SamSetup.Mode) и
   // ничего в него не пишет - см. change_samovar_mode(). Если открыта страница чужого
@@ -892,7 +873,10 @@ void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPa
     request->redirect("/index.htm");
     return;
   }
-  send_index_template_response(request, spiffsPath, "no-cache, no-store, must-revalidate");
+  AsyncWebServerResponse *response = request->beginResponse(
+      SPIFFS, spiffsPath, "text/html", false, nullptr);
+  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  request->send(response);
 }
 
 struct CachedStaticFile {
@@ -910,6 +894,32 @@ static void send_cached_static_file(
   response->addHeader("Cache-Control", cacheControl);
   request->send(response);
 }
+
+struct UiBootstrapSnapshot {
+  SAMOVAR_MODE mode;
+  SetupEEPROM setup;
+  String program;
+  String description;
+  String luaButtonList;
+  String version;
+  String powerUnit;
+  bool steamVisible;
+  bool pipeVisible;
+  bool waterVisible;
+  bool tankVisible;
+  bool pressureVisible;
+  bool programNumberVisible;
+  bool i2cStepperVisible;
+  bool i2cPumpVisible;
+  bool calibrationRunning;
+  bool i2cCalibration;
+  int pwmValue;
+  float pwmLow;
+  float heaterMaxPower;
+};
+
+static bool capture_ui_bootstrap_snapshot(UiBootstrapSnapshot& snapshot);
+static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snapshot);
 
 void WebServerInit(void) {
   FS_register_web_handlers();
@@ -944,13 +954,11 @@ void WebServerInit(void) {
   // пользователь правит вчерашние настройки, думая что видит текущие. headerFilter
   // вырезает этот заголовок из запроса, так и не подключённый к обработчикам изначально.
   // На /style.css и прочую статику (js/css/картинки) он НЕ вешается - их кэшировать нужно.
-  server.serveStatic("/program.htm", SPIFFS, "/program.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
-  server.on("/chart.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
-    send_index_template_response(request, "/chart.htm", "max-age=1");
-  }).addMiddleware(&headerFilter);
-  server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setTemplateProcessor(calibrateKeyProcessor).setCacheControl("no-store").addMiddleware(&headerFilter);
-  server.serveStatic("/calibrate_ph.htm", SPIFFS, "/calibrate_ph.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("no-store").addMiddleware(&headerFilter);
-  server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setTemplateProcessor(indexKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
+  server.serveStatic("/program.htm", SPIFFS, "/program.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
+  server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
+  server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
+  server.serveStatic("/calibrate_ph.htm", SPIFFS, "/calibrate_ph.htm").setCacheControl("no-store").addMiddleware(&headerFilter);
+  server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
   server.serveStatic("/manual.htm", SPIFFS, "/manual.htm").setCacheControl("max-age=800");
   server.on("/pong.htm", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "text/html; charset=utf-8",
@@ -966,7 +974,6 @@ void WebServerInit(void) {
   server.serveStatic("/program_grain.txt", SPIFFS, "/program_grain.txt").setCacheControl("max-age=1");
   server.serveStatic("/program_shugar.txt", SPIFFS, "/program_shugar.txt").setCacheControl("max-age=1");
   server.serveStatic("/brewxml.htm", SPIFFS, "/brewxml.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);
-  server.serveStatic("/test.txt", SPIFFS, "/test.txt").setTemplateProcessor(indexKeyProcessor).addMiddleware(&headerFilter);
   server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor).setCacheControl("max-age=1").addMiddleware(&headerFilter);
   // SPIFFSEditor уже обрабатывает /edit с поддержкой gzip в FS.ino
 
@@ -1001,6 +1008,29 @@ void WebServerInit(void) {
   });
   server.on("/ajax", HTTP_GET, [](AsyncWebServerRequest *request) {
     send_ajax_json(request);
+  });
+  server.on("/ui-bootstrap", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (request->params() != 0) {
+      send_no_store_response(request, 400, "text/plain", "BAD_REQUEST");
+      return;
+    }
+    if (mode_switch_in_progress()) {
+      send_no_store_response(request, 503, "text/plain", "BUSY");
+      return;
+    }
+    UiBootstrapSnapshot snapshot{};
+    if (!capture_ui_bootstrap_snapshot(snapshot) || mode_switch_in_progress()) {
+      send_no_store_response(request, 503, "text/plain", "BUSY");
+      return;
+    }
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    response->addHeader("Cache-Control", "no-store");
+    if (!write_ui_bootstrap_json(*response, snapshot)) {
+      delete response;
+      send_no_store_response(request, 503, "text/plain", "BUSY");
+      return;
+    }
+    request->send(response);
   });
   server.on("/command", HTTP_POST, [](AsyncWebServerRequest *request) {
     web_command(request);
@@ -1119,115 +1149,9 @@ static String html_escape(const String &s) {
   return out;
 }
 
-String indexKeyProcessor(const String &var) {
-  if (var == "BeerBrewOrderId") {
-    const uint8_t order = SamSetup.BeerBrewOrder;
-    if (order == 1) return "herms";
-    if (order == 2) return "rims";
-    return "allinone";
-  }
-  if (var == "SteamColor") return html_escape((String)SamSetup.SteamColor);
-  else if (var == "v")
-    return SAMOVAR_VERSION;
-  else if (var == "PipeColor")
-    return html_escape((String)SamSetup.PipeColor);
-  else if (var == "WaterColor")
-    return html_escape((String)SamSetup.WaterColor);
-  else if (var == "TankColor")
-    return html_escape((String)SamSetup.TankColor);
-  else if (var == "ACPColor")
-    return html_escape((String)SamSetup.ACPColor);
-  else if (var == "SteamHide") {
-    if (SteamSensor.avgTemp > 0) return "false";
-    else return "true";
-  } else if (var == "PipeHide") {
-    if (PipeSensor.avgTemp > 0) return "false";
-    else return "true";
-  } else if (var == "WaterHide") {
-    if (WaterSensor.avgTemp > 0) return "false";
-    else return "true";
-  } else if (var == "TankHide") {
-    if (TankSensor.avgTemp > 0) return "false";
-    else return "true";
-  } else if (var == "PressureHide") {
-    if (bme_pressure > 0) return "false";
-    else return "true";
-  } else if (var == "ProgNumHide") {
-    if (ProgramNum > 0) return "false";
-    else return "true";
-  } else if (var == "WProgram") {
-    return serialize_program_for_mode(Samovar_Mode);
-  } else if (var == "Descr") {
-    String description;
-    if (!copy_session_description(description)) return F("Runtime state busy");
-    return html_escape(description);
-  } else if (var == "videourl")
-    return html_escape((String)SamSetup.videourl);
-  else if (var == "PWM_LV")
-    return (String)(PWM_LOW_VALUE * 10);
-  else if (var == "PWM_V")
-    return (String)bk_pwm;
-  else if (var == "pwr_unit")
-    return PWR_TYPE;
-  else if (var == "HeaterMaxPower") {
-    float maxValue = 0.0f;
-    NumericParseResult result = control_power_input_max(
-#ifdef SAMOVAR_USE_SEM_AVR
-        true,
-#else
-        false,
-#endif
-        SamSetup.HeaterResistant,
-        maxValue);
-    return result.ok() ? String(maxValue, 9) : String();
-  }
-  else if (var == "btn_list") {
+bool copy_lua_button_list_cache(String &buttonList, TickType_t timeout) {
 #ifdef USE_LUA
-    String cachedList;
-    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-    if (locked) {
-      cachedList = lua_script_list_cache;
-      runtime_state_unlock(true);
-    }
-    return toJsonString(cachedList);
-#else
-    return toJsonString(String());
-#endif
-  } else if (var == "showvideo") {
-    if (strlen(SamSetup.videourl) > 0) return "inline";
-    else
-      return "none";
-  } else if (var == "ColDiam")
-    return String(SamSetup.ColDiam, 1);
-  else if (var == "ColHeight")
-    return String(SamSetup.ColHeight, 2);
-  else if (var == "PackDens")
-    return String(SamSetup.PackDens);
-  else if (var == "HeaterR")
-    return String(SamSetup.HeaterResistant, 9);
-  else if (var == "MainsVoltage")
-    return String(SamSetup.MainsVoltage, 2);
-  else if (var == "CheesePhSlope")
-    return String(SamSetup.CheesePhSlope, 9);
-  else if (var == "CheesePhOffset")
-    return String(SamSetup.CheesePhOffset, 9);
-  else if (var == "CheesePhSmoothPercent")
-    return String(SamSetup.CheesePhSmoothPercent);
-  else if (var == "CheeseDoserSpeed")
-    return String(SamSetup.CheeseDoserSpeed);
-  else if (var == "CheeseDoserSteps")
-    return String(SamSetup.CheeseDoserSteps);
-  else if (var == "I2CStepperTab")
-    // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
-    return (i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present) ? "inline-block" : "none";
-  else if (var == "I2CPumpTab")
-    return i2c_stepper_cache.pump_present ? "inline-block" : "none";
-  return "";
-}
-
-bool copy_lua_button_list_cache(String &buttonList) {
-#ifdef USE_LUA
-  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  bool locked = runtime_state_lock(timeout);
   if (!locked) return false;
   buttonList = lua_script_list_cache;
   runtime_state_unlock(true);
@@ -1237,10 +1161,143 @@ bool copy_lua_button_list_cache(String &buttonList) {
   return true;
 }
 
-String indexKeyProcessorWithSnapshots(const String &var, const String &description, const String &luaButtonList) {
-  if (var == "Descr") return html_escape(description);
-  if (var == "btn_list") return toJsonString(luaButtonList);
-  return indexKeyProcessor(var);
+static bool capture_ui_bootstrap_snapshot(UiBootstrapSnapshot& snapshot) {
+  snapshot.mode = Samovar_Mode;
+  portENTER_CRITICAL(&configMux);
+  snapshot.setup = SamSetup;
+  portEXIT_CRITICAL(&configMux);
+  snapshot.program = serialize_program_for_mode(snapshot.mode);
+  if (!copy_session_description(snapshot.description, 0)) return false;
+  if (!copy_lua_button_list_cache(snapshot.luaButtonList, 0)) return false;
+  snapshot.version = SAMOVAR_VERSION;
+  snapshot.powerUnit = PWR_TYPE;
+  NumericParseResult powerResult = control_power_input_max(
+#ifdef SAMOVAR_USE_SEM_AVR
+      true,
+#else
+      false,
+#endif
+      snapshot.setup.HeaterResistant, snapshot.heaterMaxPower);
+  if (!powerResult.ok() ||
+      !isfinite(snapshot.setup.NbkDP) ||
+      !isfinite(snapshot.setup.ColDiam) ||
+      !isfinite(snapshot.setup.ColHeight) ||
+      !isfinite(snapshot.setup.HeaterResistant) ||
+      !isfinite(snapshot.setup.MainsVoltage) ||
+      !isfinite(snapshot.setup.CheesePhSlope) ||
+      !isfinite(snapshot.setup.CheesePhOffset)) return false;
+
+  snapshot.steamVisible = SteamSensor.avgTemp > 0;
+  snapshot.pipeVisible = PipeSensor.avgTemp > 0;
+  snapshot.waterVisible = WaterSensor.avgTemp > 0;
+  snapshot.tankVisible = TankSensor.avgTemp > 0;
+  snapshot.pressureVisible = bme_pressure > 0;
+  snapshot.programNumberVisible = ProgramNum > 0;
+  snapshot.i2cStepperVisible =
+      i2c_stepper_cache.mixer_present || i2c_stepper_cache.pump_present;
+  snapshot.i2cPumpVisible = i2c_stepper_cache.pump_present;
+  snapshot.i2cCalibration = I2CPumpCalibrating;
+  snapshot.calibrationRunning =
+      startval == SAMOVAR_STARTVAL_CALIBRATION || snapshot.i2cCalibration;
+  snapshot.pwmValue = bk_pwm;
+  snapshot.pwmLow = PWM_LOW_VALUE * 10;
+  return true;
+}
+
+static bool ui_bootstrap_write_key(Print& out, bool& first, const char* key) {
+  if (!first && out.print(',') != 1) return false;
+  first = false;
+  if (out.print('"') != 1 ||
+      !json_write_escaped(out, key, strlen(key)) ||
+      out.print('"') != 1 || out.print(':') != 1) return false;
+  return true;
+}
+
+static bool ui_bootstrap_write_string(
+    Print& out, bool& first, const char* key, const char* value, size_t valueLength) {
+  if (!ui_bootstrap_write_key(out, first, key) || out.print('"') != 1) return false;
+  if (!json_write_escaped(out, value, valueLength) || out.print('"') != 1) return false;
+  return true;
+}
+
+static bool ui_bootstrap_write_string(
+    Print& out, bool& first, const char* key, const String& value) {
+  return ui_bootstrap_write_string(out, first, key, value.c_str(), value.length());
+}
+
+static bool ui_bootstrap_write_bool(Print& out, bool& first, const char* key, bool value) {
+  return ui_bootstrap_write_key(out, first, key) &&
+         out.print(value ? "true" : "false") == (value ? 4 : 5);
+}
+
+static bool ui_bootstrap_write_long(Print& out, bool& first, const char* key, long value) {
+  return ui_bootstrap_write_key(out, first, key) && out.print(value) > 0;
+}
+
+static bool ui_bootstrap_write_float(
+    Print& out, bool& first, const char* key, float value, uint8_t digits) {
+  if (!isfinite(value)) return false;
+  if (value > 99999.0f || value < -99999.0f) return false;
+  return ui_bootstrap_write_key(out, first, key) && out.print(value, digits) > 0;
+}
+
+static const char* ui_bootstrap_beer_brew_order(uint8_t order) {
+  if (order == 1) return "herms";
+  if (order == 2) return "rims";
+  return "allinone";
+}
+
+static bool write_ui_bootstrap_json(Print& out, const UiBootstrapSnapshot& snapshot) {
+  bool first = true;
+  if (out.print('{') != 1 ||
+      !ui_bootstrap_write_long(out, first, "mode", snapshot.mode) ||
+      !ui_bootstrap_write_string(out, first, "version", snapshot.version) ||
+      !ui_bootstrap_write_string(out, first, "powerUnit", snapshot.powerUnit) ||
+      !ui_bootstrap_write_string(out, first, "program", snapshot.program) ||
+      !ui_bootstrap_write_string(out, first, "description", snapshot.description) ||
+      !ui_bootstrap_write_string(out, first, "luaButtonList", snapshot.luaButtonList) ||
+      !ui_bootstrap_write_string(out, first, "steamColor", snapshot.setup.SteamColor,
+                                  strnlen(snapshot.setup.SteamColor, sizeof(snapshot.setup.SteamColor))) ||
+      !ui_bootstrap_write_string(out, first, "pipeColor", snapshot.setup.PipeColor,
+                                  strnlen(snapshot.setup.PipeColor, sizeof(snapshot.setup.PipeColor))) ||
+      !ui_bootstrap_write_string(out, first, "waterColor", snapshot.setup.WaterColor,
+                                  strnlen(snapshot.setup.WaterColor, sizeof(snapshot.setup.WaterColor))) ||
+      !ui_bootstrap_write_string(out, first, "tankColor", snapshot.setup.TankColor,
+                                  strnlen(snapshot.setup.TankColor, sizeof(snapshot.setup.TankColor))) ||
+      !ui_bootstrap_write_string(out, first, "acpColor", snapshot.setup.ACPColor,
+                                  strnlen(snapshot.setup.ACPColor, sizeof(snapshot.setup.ACPColor))) ||
+      !ui_bootstrap_write_bool(out, first, "steamVisible", snapshot.steamVisible) ||
+      !ui_bootstrap_write_bool(out, first, "pipeVisible", snapshot.pipeVisible) ||
+      !ui_bootstrap_write_bool(out, first, "waterVisible", snapshot.waterVisible) ||
+      !ui_bootstrap_write_bool(out, first, "tankVisible", snapshot.tankVisible) ||
+      !ui_bootstrap_write_bool(out, first, "pressureVisible", snapshot.pressureVisible) ||
+      !ui_bootstrap_write_bool(out, first, "programNumberVisible", snapshot.programNumberVisible) ||
+      !ui_bootstrap_write_bool(out, first, "i2cStepperVisible", snapshot.i2cStepperVisible) ||
+      !ui_bootstrap_write_bool(out, first, "i2cPumpVisible", snapshot.i2cPumpVisible) ||
+      !ui_bootstrap_write_string(out, first, "beerBrewOrder",
+                                  ui_bootstrap_beer_brew_order(snapshot.setup.BeerBrewOrder),
+                                  strlen(ui_bootstrap_beer_brew_order(snapshot.setup.BeerBrewOrder))) ||
+      !ui_bootstrap_write_float(out, first, "pwmLow", snapshot.pwmLow, 0) ||
+      !ui_bootstrap_write_long(out, first, "pwmValue", snapshot.pwmValue) ||
+      !ui_bootstrap_write_float(out, first, "nbkDp", snapshot.setup.NbkDP, 3) ||
+      !ui_bootstrap_write_float(out, first, "columnDiameter", snapshot.setup.ColDiam, 1) ||
+      !ui_bootstrap_write_float(out, first, "columnHeight", snapshot.setup.ColHeight, 2) ||
+      !ui_bootstrap_write_long(out, first, "packDensity", snapshot.setup.PackDens) ||
+      !ui_bootstrap_write_float(out, first, "heaterResistance", snapshot.setup.HeaterResistant, 9) ||
+      !ui_bootstrap_write_float(out, first, "heaterMaxPower", snapshot.heaterMaxPower, 9) ||
+      !ui_bootstrap_write_float(out, first, "mainsVoltage", snapshot.setup.MainsVoltage, 2) ||
+      !ui_bootstrap_write_long(out, first, "stepperMaxSpeed", STEPPER_MAX_SPEED) ||
+      !ui_bootstrap_write_long(out, first, "stepperStepsPerMl", snapshot.setup.StepperStepMl * 100L) ||
+      !ui_bootstrap_write_long(out, first, "i2cStepperStepsPerMl", snapshot.setup.StepperStepMlI2C * 100L) ||
+      !ui_bootstrap_write_bool(out, first, "calibrationRunning", snapshot.calibrationRunning) ||
+      !ui_bootstrap_write_string(out, first, "calibrationPump",
+                                  snapshot.i2cCalibration ? "i2c" : "local",
+                                  snapshot.i2cCalibration ? 3 : 5) ||
+      !ui_bootstrap_write_float(out, first, "cheesePhSlope", snapshot.setup.CheesePhSlope, 9) ||
+      !ui_bootstrap_write_float(out, first, "cheesePhOffset", snapshot.setup.CheesePhOffset, 9) ||
+      !ui_bootstrap_write_long(out, first, "cheesePhSmoothPercent", snapshot.setup.CheesePhSmoothPercent) ||
+      out.print('}') != 1) return false;
+  return true;
 }
 
 struct GetFloat2Field { const char* var; float SetupEEPROM::* member; };
@@ -1536,23 +1593,6 @@ static uint8_t request_param_count(AsyncWebServerRequest *request, const char *n
     if (param && param->name() == name && count < UINT8_MAX) count++;
   }
   return count;
-}
-
-String calibrateKeyProcessor(const String &var) {
-  if (var == "StepperStep") return (String)STEPPER_MAX_SPEED;
-  else if (var == "StepperStepMl")
-    return (String)(SamSetup.StepperStepMl * 100);
-  else if (var == "StepperStepMlI2C")
-    return (String)(SamSetup.StepperStepMlI2C * 100);
-  else if (var == "I2CPumpTab")
-    // [W-3] Читаем из кэша (обновляется в SysTicker), без I2C в async.
-    return i2c_stepper_cache.pump_present ? "inline-block" : "none";
-  else if (var == "CalibrationRunning")
-    return startval == SAMOVAR_STARTVAL_CALIBRATION || I2CPumpCalibrating ? "1" : "0";
-  else if (var == "CalibrationPump")
-    return I2CPumpCalibrating ? "i2c" : "local";
-
-  return String();
 }
 
 bool is_valid_samovar_mode(long mode) {
@@ -2857,6 +2897,37 @@ static bool web_file_content_empty_invalid(const String& fn, get_web_type type, 
   return false;
 }
 
+static bool cleanup_legacy_raw_web_page(const char* downloadedFile) {
+  struct LegacyRawPage {
+    const char* gzipFile;
+    const char* rawFile;
+  };
+  static const LegacyRawPage kLegacyRawPages[] = {
+      {"index.htm.gz", "index.htm"},
+      {"beer.htm.gz", "beer.htm"},
+      {"cheese.htm.gz", "cheese.htm"},
+      {"distiller.htm.gz", "distiller.htm"},
+      {"bk.htm.gz", "bk.htm"},
+      {"nbk.htm.gz", "nbk.htm"},
+      {"chart.htm.gz", "chart.htm"},
+      {"program.htm.gz", "program.htm"},
+      {"calibrate.htm.gz", "calibrate.htm"},
+      {"calibrate_ph.htm.gz", "calibrate_ph.htm"},
+  };
+
+  for (const LegacyRawPage& page : kLegacyRawPages) {
+    if (strcmp(downloadedFile, page.gzipFile) != 0) continue;
+    String rawPath = String("/") + page.rawFile;
+    if (!SPIFFS.exists(rawPath)) return true;
+    if (!SPIFFS.remove(rawPath)) {
+      Serial.println("WEB interface cleanup failed: " + rawPath);
+      return false;
+    }
+    return true;
+  }
+  return true;
+}
+
 void get_web_interface() {
   String version;
   String local_version;
@@ -2887,6 +2958,10 @@ void get_web_interface() {
       if (result == "<ERR>") {
         Serial.println("WEB interface update failed on " + fn);
         updateOk = false;
+        return;
+      }
+      if (type == SAVE_FILE_OVERRIDE && !cleanup_legacy_raw_web_page(fn.c_str())) {
+        updateOk = false;
       }
     };
 
@@ -2896,9 +2971,10 @@ void get_web_interface() {
         "Green.png", "Red_light.gif", "alarm.mp3", "favicon.ico",
         "minus.png", "plus.png",
         "style.css.gz", "app.js.gz", "chart.js.gz",
-        "index.htm", "beer.htm", "cheese.htm", "bk.htm", "nbk.htm", "brewxml.htm.gz", "calibrate.htm", "calibrate_ph.htm",
-        "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
-        "program.htm", "setup.htm",
+        "index.htm.gz", "beer.htm.gz", "cheese.htm.gz", "distiller.htm.gz",
+        "bk.htm.gz", "nbk.htm.gz", "chart.htm.gz", "program.htm.gz",
+        "calibrate.htm.gz", "calibrate_ph.htm.gz", "brewxml.htm.gz",
+        "i2cstepper.htm.gz", "edit.htm.gz", "setup.htm",
     };
     static const size_t kWebOverrideFileCount = sizeof(kWebOverrideFiles) / sizeof(kWebOverrideFiles[0]);
 

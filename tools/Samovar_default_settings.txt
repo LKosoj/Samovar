@@ -5,7 +5,7 @@
   "usepressure" : true,
   "useflevel" : true,
   "ColDiam" : "1.5",
-  "ColHeight" : "0.5",
+  "ColHeight" : "1.25",
   "PackDens" : "80",
   "useautospeed" : true,
   "autospeed" : "10",

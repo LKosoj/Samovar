@@ -69,7 +69,20 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
     };
 
     SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });
-    function initChart () {
+    function applyChartBootstrap(data) {
+      const colors = {
+        SteamTemp: data.steamColor,
+        PipeTemp: data.pipeColor,
+        WaterTemp: data.waterColor,
+        TankTemp: data.tankColor,
+        ACPTemp: data.acpColor
+      };
+      Object.keys(colors).forEach(function(id) {
+        document.getElementById(id).parentElement.style.color = colors[id];
+      });
+      initChart(data);
+    }
+    function initChart (data) {
       var chartBlock = document.getElementById('chartdiv');
       if (typeof SamovarChart !== 'function') {
         chartBlock.textContent = 'График недоступен: локальный chart.js не загружен.';
@@ -78,12 +91,12 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
       try {
         chart = new SamovarChart('chartdiv', {
           hidden: {
-            Steam: templateBool("%SteamHide%"),
-            Pipe: templateBool("%PipeHide%"),
-            Water: templateBool("%WaterHide%"),
-            Tank: templateBool("%TankHide%"),
-            Pressure: templateBool("%PressureHide%"),
-            ProgNum: templateBool("%ProgNumHide%")
+            Steam: !data.steamVisible,
+            Pipe: !data.pipeVisible,
+            Water: !data.waterVisible,
+            Tank: !data.tankVisible,
+            Pressure: !data.pressureVisible,
+            ProgNum: !data.programNumberVisible
           }
         });
         chart.loadCsv('data.csv').catch(function (err) {
@@ -92,9 +105,6 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
       } catch (err) {
         chartBlock.textContent = 'График недоступен: ' + err;
       }
-    }
-    function templateBool (value) {
-      return String(value).toLowerCase() === 'true';
     }
     function retryChartLoad () {
       if (!chart) return;
@@ -106,10 +116,10 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
       document.getElementById('power_on').style.display = powerOn ? 'none' : '';
       document.getElementById('power_off').style.display = powerOn ? '' : 'none';
     }
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', async function () {
+      if (!await SamovarApp.loadUiBootstrap(applyChartBootstrap)) return;
       SamovarApp.startTelemetryPage(renderTelemetry, {
         threshold: 3,
-        onReady: initChart,
         connectionIds: { online: 'GreenT', offline: 'RedT' },
         storeMessageHistory: false,
         dynamicThemeTitle: true,
@@ -151,12 +161,12 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
     <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">
 
       <div class="container_column" style="flex: 1.1; padding-left: 2em;">
-        <div class="text" style="text-decoration-line: underline; text-decoration-color: %PipeColor%;">
+        <div class="text" style="text-decoration-line: underline;">
           Т в царге: &nbsp;&nbsp;
           <span id='PipeTemp' style="font-size: xx-large;"></span>
           &#176;C
         </div>
-        <div class="text" style="text-decoration-line: underline; text-decoration-color: %SteamColor%;">
+        <div class="text" style="text-decoration-line: underline;">
           Т пара: &nbsp;&nbsp;
           <span id='SteamTemp' style="font-size: xx-large;"></span>
           &#176;C
@@ -169,17 +179,17 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
       </div>
 
       <div class="container_column" style="flex: 1; align-items: flex-end; padding-right: 2em;">
-        <div class="text" style="text-decoration-line: underline; text-decoration-color: %WaterColor%;">
+        <div class="text" style="text-decoration-line: underline;">
           Т воды: &nbsp;&nbsp;
           <span id='WaterTemp' style="font-size: xx-large;"></span>
           &#176;C
         </div>
-        <div class="text" style="text-decoration-line: underline; text-decoration-color: %TankColor%;">
+        <div class="text" style="text-decoration-line: underline;">
           Т в кубе: &nbsp;&nbsp;
           <span id='TankTemp' style="font-size: xx-large;"></span>
           &#176;C
         </div>
-        <div class="text" style="text-decoration-line: underline; text-decoration-color: %ACPColor%;">
+        <div class="text" style="text-decoration-line: underline;">
           Т в ТСА: &nbsp;&nbsp;
           <span id='ACPTemp' style="font-size: xx-large;"></span>
           &#176;C

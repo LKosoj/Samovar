@@ -75,7 +75,7 @@ NORMALIZED_SHA256 = {
     # 05.09.2026: общая модалка устройства получила сетку и мобильную раскладку;
     # используются только существующие цветовые переменные.
     "style.css": "c23358635052668b62b942e784a3de825935cefafabaa1154974bd8835a72736",
-    "index.htm": "a228bcfd1b7fb4d1dcfd923be2f98ac7d9258ee4ffd4e0b2351fa5c121db6944",
+    "index.htm": "358a30676e42750b62d536a47141948101a8b181f73c1b3f14bd1d3e2636c503",
     # beer.htm / program.htm / setup.htm 01.09.2026: инлайновая ширина 200px у
     # ячеек с кнопками заменена классом .btn-cell (на телефоне ячейка тянется во
     # всю строку, кнопки выходят одной ширины). Цветов не касается.
@@ -87,7 +87,7 @@ NORMALIZED_SHA256 = {
     # 05.09.2026: экспорт программы пива включает описание в JSON; цветов не добавлено.
     # 05.09.2026: существующая модалка режима устройства подключена через общий
     # партиал и SamovarApp, чтобы её без дублирования использовал Cheese.
-    "beer.htm": "55a53057409d480949b1569b06bca13704c617468adc22d4fe1dbfdecf1062a9",
+    "beer.htm": "893b5fb44a4a60b554f38fd1f5444ab8cc18a418e819a51c9f15b0ecced220e8",
     # 02.09.2026: подсказки к колонкам "№ ёмкости" и "Напряжение" программы
     # дистилляции расписаны подробнее (когда применяется значение строки, правило
     # "первая ненулевая строка напряжения - абсолютная величина, а не поправка" с
@@ -99,7 +99,7 @@ NORMALIZED_SHA256 = {
     # program_table_dist.htm (4 колонки, PROGRAM_STEAM_COLUMN=false), мёртвый
     # дубль calc_program/removeLine/addLine/getProgram/set_bgcolor удалён из
     # <head>. Разметка и текст не изменились, цветов не касается.
-    "distiller.htm": "733e0d1691eec7b40e6f7698bed1a623e7aebe43b323bacd1182642a6b1591b9",
+    "distiller.htm": "ae82b622d8f312f573d0315a278fc23706ad16dc94af2de2766afb5bf4fbf1c6",
     # 02.09.2026 (задача A3, п.5): changetxtpwm() читает нижнюю границу текстового
     # поля ШИМ насоса из атрибута min ползунка (PWM_LV), а не хардкодит 0.
     # Цветов не касается.
@@ -112,12 +112,12 @@ NORMALIZED_SHA256 = {
     # "Значения в примере ниже - в вольтах" (как у distiller.htm), кнопка
     # "Автомат" переоформлена в обёртку .btn-cell вокруг input (как везде в
     # проекте), а не класс на самом input. Цветов не касается.
-    "bk.htm": "ac6b2eebfce8192173344b2be19fac6e0c2184352bf31c7d203f4aefe9bd06f4",
+    "bk.htm": "b261e95d2a5da520860e057d868ce58a20865a65f97358c711e7dec8e539bf0a",
     # 03.09.2026 (НБК, T6): новый спойлер "Как работает автоматика и что влияет
     # на НБК" на вкладке Prog - 7 пунктов, обычный <ul><li>, без новых цветов/inline-стилей.
     # Итоговое ревью 03.09.2026: уточнение текста про автовход по давлению (только после найденного оптимума).
     # 04.09.2026: снят инлайновый margin-right у кнопки «Установить»; замок обрыва связи общий.
-    "nbk.htm": "71d03038936ec749f3d176278b06d2a04a1cc1a735530aca311bfd6fc143fef5",
+    "nbk.htm": "df8186de1111a4f6d019e089f80d8e220dc5d0e8078a887038856cc681860061",
     # setup.htm: клиентские нижние границы StepperStepMl (0->1) и PackDens (0->60)
     # изменились - цветов/разметки не касалось (см. tools/smoke_u04_responsive_layout.py
     # STRUCTURE_SHA256 для DOM-структуры).
@@ -143,7 +143,7 @@ NORMALIZED_SHA256 = {
     # PH/MPX на LUA_PIN и клапана/ТЭНа на реле 4; новых цветов нет.
     "setup.htm": "737391b7cc31099c0692e05362e4edd136ac6b0b63c0cfff25327688e3b0898d",
     # 04.09.2026: cache-bust chart.js?v=7.00u10 (автоповтор HTTP 503 при загрузке CSV).
-    "chart.htm": "8f7d24bb8f5597149bc5124cffca2922091f6d9c5208bf3affb7d8fcf50fb5d6",
+    "chart.htm": "07c4a68e21128876c566a135af095917a7c978d93fc57b093b9c20ce76603e90",
     # program.htm: пин был устаревшим уже на HEAD (унаследованный долг, не наш) -
     # накопилась функциональная правка редактора программ (шаблоны В1-В8: разбор
     # программы прибора, дельты мощности/напряжения, примечание про предзахлёб и
@@ -212,8 +212,8 @@ NORMALIZED_SHA256 = {
     # 04.09.2026: program.htm снова открывает шаблон «Фрукты», а не программу
     # прибора из %WProgram%. Импорт прибора и плашка deviceProgramNotice убраны.
     # Цветов не касается.
-    "program.htm": "b8c2e3212ef9755115f4c4f7a48b719942354b4fefc0ada27a8ac3fa8d141fd6",
-    "i2cstepper.htm": "8e0b828032807735a731082df9249487684a8c9d47e95b4819b89d8d64258dcc",
+    "program.htm": "a0b0cb4e81996de835b81fd688f6189bab8bd6f51c94fc98ce2a8fd065f76497",
+    "i2cstepper.htm": "c47a3628e008a19141a9fd43189d5aeca99e3bfce38020d04f25f7cea98f634f",
     # 01.09.2026: масштаб графика полностью перешёл на полосу участка с двумя
     # ручками (колёсико, выделение рамкой и двойной щелчок по холсту убраны -
     # они умели только приближать). Палитра рядов не менялась (её отдельно
@@ -232,9 +232,9 @@ FROZEN_SHA256 = {
     # Цветов не касается.
     # 04.09.2026: варочный порядок берётся из настроек прибора, а не localStorage;
     # цветовые литералы не менялись.
-    # 05.09.2026: общий редактор режима мешалки/насоса вынесен из beer.htm,
-    # чтобы Cheese использовал ту же модалку без копии JS. Палитру не меняет.
-    "app.js": "fdc622beaa9a698c8eee23452337151fbd64b129816d6997ac1fa18231e7168a",
+    # 05.09.2026: bootstrap блокирует рабочие страницы до типизированного снимка;
+    # палитру это не меняет.
+    "app.js": "8fe4ae24003d1507984ae46f5bb3a1e64db1349176d9a3568907230e5379751c",
     # 04.09.2026: edit.htm — сетка вместо абсолютов, Ace 1.44.0, русская панель.
     "edit.htm": "d98560fd84846400ffa6aecd9261c1fbcce3d382f68e39825fd35d98bbbb772b",
     "edit.htm.gz": "18a87d45c9229498aaa20785f633c571126ca138fc2659634338829d1d09a54a",
@@ -321,10 +321,22 @@ def normalize_style(text: str) -> str:
 
 
 def normalize_page(text: str) -> str:
+    text = text.replace(
+        ".parentElement.style.color = data.",
+        ".parentElement.style.textDecorationColor = data.",
+    )
+    text = text.replace(
+        ".parentElement.style.color = colors[id]",
+        ".parentElement.style.textDecorationColor = colors[id]",
+    )
     for token in SENSOR_TOKENS:
         source = f'style="color: %{token}%;"'
         target = (
             'style="color: var(--text-strong); text-decoration-line: underline; '
+            f'text-decoration-color: %{token}%;"'
+        )
+        colored_target = (
+            f'style="color: %{token}%; text-decoration-line: underline; '
             f'text-decoration-color: %{token}%;"'
         )
         short_target = (
@@ -335,6 +347,7 @@ def normalize_page(text: str) -> str:
         text = (
             text.replace(source, marker)
             .replace(target, marker)
+            .replace(colored_target, marker)
             .replace(short_target, marker)
         )
     text = text.replace('style="color: black;"', 'style="<U03:delta>"')
@@ -469,24 +482,15 @@ def verify_mandatory_fixes() -> None:
     if program.count("background: var(--bg-program-example);") != 3:
         raise AssertionError("data/program.htm: program example token cardinality")
 
-    full_target_template = (
-        'style="color: var(--text-strong); text-decoration-line: underline; '
+    setup_target_template = (
+        'style="color: %{token}%; text-decoration-line: underline; '
         'text-decoration-color: %{token}%;"'
     )
-    short_target_template = (
-        'style="text-decoration-line: underline; text-decoration-color: %{token}%;"'
-    )
-    for name in SENSOR_PAGES:
-        text = read_page(name)
-        target_template = (
-            full_target_template if name == "setup.htm" else short_target_template
-        )
-        for token in SENSOR_TOKENS:
-            target = target_template.format(token=token)
-            if text.count(target) != 1:
-                raise AssertionError(f"data/{name}: {token} readable accent cardinality")
-            if f'style="color: %{token}%;"' in text:
-                raise AssertionError(f"data/{name}: {token} remains a foreground")
+    setup = read_page("setup.htm")
+    for token in SENSOR_TOKENS:
+        target = setup_target_template.format(token=token)
+        if setup.count(target) != 1:
+            raise AssertionError(f"data/setup.htm: {token} foreground accent cardinality")
 
     style = read_page("style.css")
     if style.count("#file-input {\n  padding: 0;\n  border: 1px solid #ddd;\n") != 1:

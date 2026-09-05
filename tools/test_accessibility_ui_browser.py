@@ -12,7 +12,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from test_numeric_input_ui_browser import QuietHandler, render_site, run_cli
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE, QuietHandler, render_site, run_cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +26,7 @@ UPLOAD_CASES = (
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
   const focused = __FOCUSED__;
   const runMatrix = __RUN_MATRIX__;
   const runActions = __RUN_ACTIONS__;
@@ -120,6 +121,9 @@ BROWSER_TEST = r'''async page => {
   });
   await page.route("**/ajax?messageCursor=*", route => route.fulfill({
     status:200,contentType:"application/json",body:JSON.stringify(ajaxFixture)
+  }));
+  await page.route("**/ui-bootstrap", route => route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify(bootstrapFixture)
   }));
   await page.route("**/ajax_col_params?*", route => route.fulfill({
     status:200,contentType:"application/json",body:JSON.stringify({
@@ -883,6 +887,7 @@ def main() -> int:
                     opened = True
                     code = (BROWSER_TEST
                             .replace("__BASE_URL__", json.dumps(base_url))
+                            .replace("__UI_BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE))
                             .replace("__FOCUSED__", "true" if args.focused else "false")
                             .replace("__RUN_MATRIX__", "true" if stage == "matrix" else "false")
                             .replace("__RUN_ACTIONS__", "true" if stage == "actions" else "false"))

@@ -80,9 +80,9 @@ function render(vars) {
   return out;
 }
 
-function makeEnv(vars, fetchImpl) {
+async function makeEnv(vars, fetchImpl) {
   const elements = {};
-  for (const id of ["calibrateid", "pump_type", "kstepperspd", "stepperstepml", "save", "request_error"]) {
+  for (const id of ["calibrateid", "pump_type", "i2c_pump_hint", "kstepperspd", "stepperstepml", "save", "request_error"]) {
     elements[id] = makeElement(id);
   }
   elements.pump_type.value = "local";
@@ -110,6 +110,17 @@ function makeEnv(vars, fetchImpl) {
     // Заглушка SamovarApp: настоящая логика валидации живёт в app.js и покрыта
     // своими тестами; здесь важно, ЧТО страница отправляет и когда.
     SamovarApp: {
+      loadUiBootstrap: async function (apply) {
+        apply({
+          stepperMaxSpeed: vars.StepperStep,
+          stepperStepsPerMl: vars.StepperStepMl,
+          i2cStepperStepsPerMl: vars.StepperStepMlI2C,
+          calibrationRunning: vars.CalibrationRunning === 1,
+          calibrationPump: vars.CalibrationPump,
+          i2cPumpVisible: vars.I2CPumpTab !== "none",
+        });
+        return true;
+      },
       initTheme: function () {},
       showRequestError: function (text) { shown.push(String(text)); },
       clearRequestError: function () {},
@@ -133,7 +144,7 @@ function makeEnv(vars, fetchImpl) {
   env.window = env;
   const context = vm.createContext(env);
   vm.runInContext(render(vars), context, { filename: "calibrate.htm" });
-  context.window.onload();
+  await context.window.onload();
   return { context: context, elements: elements, shown: shown, submit: function () {
     return submitHandler({ preventDefault: function () {} });
   }, calibrate: function () { return context.calibrate(); } };
@@ -171,7 +182,7 @@ const BASE = { StepperStepMl: 2500, StepperStepMlI2C: 3300, CalibrationRunning: 
 
 async function scenarioBuiltInPumpSavesOwnSetting() {
   const fetchImpl = makeFetch(accepted);
-  const env = makeEnv(BASE, fetchImpl);
+  const env = await makeEnv(BASE, fetchImpl);
   env.elements.pump_type.value = "local";
   env.elements.stepperstepml.value = "2500";
   const ok = await env.submit();
@@ -186,7 +197,7 @@ async function scenarioBuiltInPumpSavesOwnSetting() {
 
 async function scenarioI2cPumpDoesNotClobberBuiltIn() {
   const fetchImpl = makeFetch(accepted);
-  const env = makeEnv(BASE, fetchImpl);
+  const env = await makeEnv(BASE, fetchImpl);
   env.elements.pump_type.value = "i2c";
   env.elements.stepperstepml.value = "3300";
   const ok = await env.submit();
@@ -200,7 +211,7 @@ async function scenarioI2cPumpDoesNotClobberBuiltIn() {
 
 async function scenarioSpeedIsNeverSent() {
   const fetchImpl = makeFetch(accepted);
-  const env = makeEnv(BASE, fetchImpl);
+  const env = await makeEnv(BASE, fetchImpl);
   env.elements.kstepperspd.value = "1234";
   await env.submit();
   const body = fetchImpl.calls[0].body;
@@ -210,7 +221,7 @@ async function scenarioSpeedIsNeverSent() {
 
 async function scenarioNonMultipleOfHundredIsRejectedLocally() {
   const fetchImpl = makeFetch(accepted);
-  const env = makeEnv(BASE, fetchImpl);
+  const env = await makeEnv(BASE, fetchImpl);
   env.elements.stepperstepml.value = "2534";
   const ok = await env.submit();
   check(ok === false, "a value that is not a multiple of 100 must be rejected");
@@ -221,7 +232,7 @@ async function scenarioNonMultipleOfHundredIsRejectedLocally() {
 
 async function scenarioSavingIsBlockedWhileCalibrating() {
   const fetchImpl = makeFetch(accepted);
-  const env = makeEnv(Object.assign({}, BASE, { CalibrationRunning: 1, CalibrationPump: "local" }), fetchImpl);
+  const env = await makeEnv(Object.assign({}, BASE, { CalibrationRunning: 1, CalibrationPump: "local" }), fetchImpl);
   check(env.elements.save.disabled === true,
     "the save control must be disabled while a calibration is running");
   const ok = await env.submit();
@@ -232,7 +243,7 @@ async function scenarioSavingIsBlockedWhileCalibrating() {
 
 async function scenarioServerRejectionSurfaces() {
   const fetchImpl = makeFetch(function () { return rejected(400, "Invalid request field: not_allowed"); });
-  const env = makeEnv(BASE, fetchImpl);
+  const env = await makeEnv(BASE, fetchImpl);
   const ok = await env.submit();
   check(ok === false, "a rejected save must resolve false");
   check(env.shown.some(function (m) { return m.indexOf("not_allowed") !== -1; }),
@@ -244,7 +255,7 @@ async function scenarioNetworkFailureSurfaces() {
   const calls = [];
   const fetchImpl = function (url, init) { calls.push(url); return Promise.reject(new TypeError("Failed to fetch")); };
   fetchImpl.calls = calls;
-  const env = makeEnv(BASE, fetchImpl);
+  const env = await makeEnv(BASE, fetchImpl);
   const ok = await env.submit();
   check(ok === false, "a dead network must resolve false");
   check(env.shown.some(function (m) { return m.indexOf("Failed to fetch") !== -1; }),
@@ -264,7 +275,7 @@ async function scenarioCalibrateIsBlockedWhileSaveIsInFlight() {
     if (url === "/save") return saveGate.then(accepted);
     return Promise.resolve(accepted());
   };
-  const env = makeEnv(BASE, fetchImpl);
+  const env = await makeEnv(BASE, fetchImpl);
 
   const savePromise = env.submit();
   await Promise.resolve();

@@ -63,6 +63,13 @@ EMPTY_MARKERS = {
     "CUBuzz", "CUBBuzz", "UseWS", "UseST", "ChckPwr", "IgnFL",
 }
 ADDRESS_TOKENS = {"SteamAddr", "PipeAddr", "WaterAddr", "TankAddr", "ACPAddr"}
+COLOR_TOKENS = {
+    "SteamColor": "#112233",
+    "PipeColor": "#223344",
+    "WaterColor": "#334455",
+    "TankColor": "#445566",
+    "ACPColor": "#556677",
+}
 TOKEN_PATTERN = re.compile(r"%([A-Za-z0-9_.]+)%")
 
 
@@ -76,8 +83,8 @@ def replace_token(match: "re.Match[str]") -> str:
         return '<option value="-1" selected>-</option>'
     if name in EMPTY_MARKERS or name.startswith(("ColDiam_", "ColHeight_")):
         return ""
-    if name.endswith("Color"):
-        return "#000000"
+    if name in COLOR_TOKENS:
+        return COLOR_TOKENS[name]
     return "0"
 
 
@@ -127,6 +134,18 @@ BROWSER_TEST = r'''async page => {
   }));
 
   await page.goto(baseUrl + "/setup.htm", { waitUntil: "load" });
+
+  const sensorColors = await page.evaluate(() => [
+    ['SteamAddr', 'rgb(17, 34, 51)'],
+    ['PipeAddr', 'rgb(34, 51, 68)'],
+    ['WaterAddr', 'rgb(51, 68, 85)'],
+    ['TankAddr', 'rgb(68, 85, 102)'],
+    ['ACPAddr', 'rgb(85, 102, 119)']
+  ].every(([id, expected]) => {
+    const style = getComputedStyle(document.getElementById(id).closest('[style*="text-decoration-color"]'));
+    return style.color === expected && style.textDecorationColor === expected;
+  }));
+  if (!sensorColors) throw new Error('цвет текста и подчёркивания датчиков не совпадает с настройками');
 
   // Прочие числовые поля формы заполнены "нулевым" заглушечным дефолтом рендера этого
   // теста (не настоящей ESP32) - часть из них вне допустимого validateNumericFields()

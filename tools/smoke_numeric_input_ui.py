@@ -95,15 +95,11 @@ require_ordered_tokens(
 )
 
 web = read(ROOT / "WebServer.ino")
-processor = body(web, "String indexKeyProcessor(const String &var)")
-for token in [
-    'var == "HeaterMaxPower"',
-    "control_power_input_max(",
-    "SamSetup.HeaterResistant",
-    "result.ok() ? String(maxValue, 9) : String()",
-]:
-    if token not in processor:
-        errors.append(f"server-rendered power maximum missing token: {token}")
+if "String indexKeyProcessor(const String &var)" in web:
+    errors.append("WebServer.ino: удалённый indexKeyProcessor всё ещё рендерит рабочие страницы")
+for token in ('"heaterMaxPower"', "control_power_input_max("):
+    if token not in web:
+        errors.append(f"/ui-bootstrap power maximum missing token: {token}")
 
 setup = read_page("setup.htm")
 setup_submit = body(setup, "async function submitSetupForm")
@@ -299,7 +295,12 @@ page_contracts = {
 }
 for page, tokens in page_contracts.items():
     text = read_page(page)
-    for token in ["Number('%HeaterMaxPower%')", *tokens]:
+    power_max_token = (
+        "powerInputMax = data.heaterMaxPower;"
+        if page in ("index.htm", "beer.htm", "bk.htm", "distiller.htm", "nbk.htm")
+        else "Number('%HeaterMaxPower%')"
+    )
+    for token in [power_max_token, *tokens]:
         if token not in text:
             errors.append(f"{page} missing numeric UI token: {token}")
 
@@ -352,8 +353,10 @@ for token in ['params.set(\'finish\', \'1\')', '<script src="app.js"></script>',
     if token not in calibrate:
         errors.append(f"calibrate.htm missing token: {token}")
 for token in [
-    "Number('%CalibrationRunning%') === 1",
-    "calibrationRunning ? '%CalibrationPump%' : ''",
+    "let calibrationRunning = false;",
+    "let calibrationPump = '';",
+    "calibrationRunning = data.calibrationRunning;",
+    "calibrationRunning ? data.calibrationPump : ''",
     "if (calibrationInFlight) return false;",
     "document.getElementById('pump_type').disabled = calibrationRunning || calibrationInFlight;",
     "const pump = calibrationRunning ? calibrationPump : getPumpType();",
@@ -362,15 +365,11 @@ for token in [
     if token not in calibrate:
         errors.append(f"calibrate state hydration/lock missing token: {token}")
 
-calibrate_processor = body(web, "String calibrateKeyProcessor(const String &var)")
-for token in [
-    'var == "CalibrationRunning"',
-    "startval == SAMOVAR_STARTVAL_CALIBRATION || I2CPumpCalibrating",
-    'var == "CalibrationPump"',
-    'I2CPumpCalibrating ? "i2c" : "local"',
-]:
-    if token not in calibrate_processor:
-        errors.append(f"calibrate server state processor missing token: {token}")
+if "String calibrateKeyProcessor(const String &var)" in web:
+    errors.append("WebServer.ino: удалённый calibrateKeyProcessor всё ещё рендерит calibration state")
+for token in ('"calibrationRunning"', '"calibrationPump"'):
+    if token not in web:
+        errors.append(f"/ui-bootstrap calibration state missing token: {token}")
 
 i2c = read(DATA / "i2cstepper.htm")
 request_json = body(i2c, "async function requestJson")

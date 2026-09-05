@@ -250,11 +250,11 @@ def main() -> int:
         print("Descr byte-limit smoke failed", file=sys.stderr)
         return 1
 
-    # ---- Мутация: TextEncoder-подсчёт байт -> value.length (символы) ----
+    # ---- Мутация: реальный helper TextEncoder-подсчёта байт -> length символов ----
     app_js_text = APP_JS.read_text(encoding="utf-8")
-    original = "const byteLength = new TextEncoder().encode(fields[0].value).length;"
-    mutated = "const byteLength = fields[0].value.length;"
-    if original not in app_js_text:
+    original = "return new TextEncoder().encode(description).length;"
+    mutated = "return description.length;"
+    if app_js_text.count(original) != 1:
         print(f"FAIL: mutation anchor not found in {APP_JS}: {original!r}", file=sys.stderr)
         return 1
     mutant_text = app_js_text.replace(original, mutated, 1)

@@ -29,6 +29,33 @@
     'threshold', 'onReady', 'connectionIds', 'storeMessageHistory',
     'dynamicThemeTitle', 'implicitSystemTheme', 'onLastMessageRemoved', 'onConnectionChange'
   ];
+  const UI_BOOTSTRAP_KEYS = [
+    'mode', 'version', 'powerUnit', 'program', 'description', 'luaButtonList',
+    'steamColor', 'pipeColor', 'waterColor', 'tankColor', 'acpColor',
+    'steamVisible', 'pipeVisible', 'waterVisible', 'tankVisible', 'pressureVisible',
+    'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible',
+    'beerBrewOrder', 'pwmLow', 'pwmValue', 'nbkDp', 'columnDiameter',
+    'columnHeight', 'packDensity', 'heaterResistance', 'mainsVoltage', 'heaterMaxPower',
+    'stepperMaxSpeed', 'stepperStepsPerMl', 'i2cStepperStepsPerMl',
+    'calibrationRunning', 'calibrationPump', 'cheesePhSlope', 'cheesePhOffset',
+    'cheesePhSmoothPercent'
+  ];
+  const UI_BOOTSTRAP_STRING_KEYS = [
+    'version', 'powerUnit', 'program', 'description', 'luaButtonList',
+    'steamColor', 'pipeColor', 'waterColor', 'tankColor', 'acpColor'
+  ];
+  const UI_BOOTSTRAP_BOOLEAN_KEYS = [
+    'steamVisible', 'pipeVisible', 'waterVisible', 'tankVisible', 'pressureVisible',
+    'programNumberVisible', 'i2cStepperVisible', 'i2cPumpVisible', 'calibrationRunning'
+  ];
+  const UI_BOOTSTRAP_INTEGER_KEYS = [
+    'mode', 'pwmValue', 'packDensity', 'stepperMaxSpeed', 'stepperStepsPerMl',
+    'i2cStepperStepsPerMl', 'cheesePhSmoothPercent'
+  ];
+  const UI_BOOTSTRAP_NUMBER_KEYS = [
+    'pwmLow', 'nbkDp', 'columnDiameter', 'columnHeight', 'heaterResistance',
+    'mainsVoltage', 'heaterMaxPower', 'cheesePhSlope', 'cheesePhOffset'
+  ];
 
   let offlineCounter = 0;
   let offlineThreshold = 3;
@@ -57,6 +84,8 @@
   let onConnectionChange = null;
   let clockStale = false;
   let pageLockBound = false;
+  let bootstrapPending = false;
+  let bootstrapStarted = false;
   let deviceScheduleInput = null;
   let deviceScheduleOnSave = null;
 
@@ -82,6 +111,10 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function descriptionByteLength(description) {
+    return new TextEncoder().encode(description).length;
   }
 
   // Правила типов строк программы «Пиво» — единый источник для beer.htm
@@ -593,6 +626,7 @@
   }
 
   function assertOnline() {
+    if (bootstrapPending) throw new Error('Начальные данные ещё не загружены: действие заблокировано.');
     if (isOffline) throw new Error('Нет связи: действие заблокировано.');
   }
 
@@ -1126,6 +1160,51 @@
     })();
   }
 
+  async function loadUiBootstrap(applyBootstrap) {
+    if (typeof applyBootstrap !== 'function') {
+      throw new Error('Не задан обработчик начальных данных.');
+    }
+    if (bootstrapStarted) {
+      showRequestError('Начальные данные уже загружены.');
+      return false;
+    }
+    bootstrapStarted = true;
+    bootstrapPending = true;
+    document.body.inert = true;
+    let response;
+    try {
+      response = await fetch('/ui-bootstrap', { cache: 'no-store' });
+    } catch (err) {
+      showRequestError('Ошибка сети при загрузке начальных данных.');
+      return false;
+    }
+    if (!response.ok) {
+      showRequestError('Начальные данные недоступны: HTTP ' + response.status + '.');
+      return false;
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      showRequestError('Некорректный JSON начальных данных.');
+      return false;
+    }
+    if (!validateUiBootstrap(data)) {
+      showRequestError('Некорректные начальные данные.');
+      return false;
+    }
+    try {
+      applyBootstrap(data);
+    } catch (err) {
+      showRequestError('Некорректные начальные данные: ' +
+        (err && err.message ? err.message : err));
+      return false;
+    }
+    bootstrapPending = false;
+    document.body.inert = false;
+    return true;
+  }
+
   function startTelemetryPage(renderFn, options) {
     if (typeof renderFn !== 'function') {
       throw new Error('Не задан обработчик telemetry response.');
@@ -1205,6 +1284,7 @@
 
   async function sendCommandRequest(command, options) {
     try {
+      assertOnline();
       const commandBody = command.indexOf('=') === -1 ? command + '=1' : command;
       const resp = await fetch('/command', {
         method: 'POST',
@@ -1285,6 +1365,28 @@
     const sortedExpected = expectedKeys.slice().sort();
     if (actualKeys.length !== sortedExpected.length) return false;
     return actualKeys.every(function (key, index) { return key === sortedExpected[index]; });
+  }
+
+  function validateUiBootstrap(data) {
+    if (!hasExactKeys(data, UI_BOOTSTRAP_KEYS)) return false;
+    for (let index = 0; index < UI_BOOTSTRAP_STRING_KEYS.length; index++) {
+      if (typeof data[UI_BOOTSTRAP_STRING_KEYS[index]] !== 'string') return false;
+    }
+    if (descriptionByteLength(data.description) > 250) return false;
+    for (let index = 0; index < UI_BOOTSTRAP_BOOLEAN_KEYS.length; index++) {
+      if (typeof data[UI_BOOTSTRAP_BOOLEAN_KEYS[index]] !== 'boolean') return false;
+    }
+    for (let index = 0; index < UI_BOOTSTRAP_INTEGER_KEYS.length; index++) {
+      if (!Number.isSafeInteger(data[UI_BOOTSTRAP_INTEGER_KEYS[index]])) return false;
+    }
+    for (let index = 0; index < UI_BOOTSTRAP_NUMBER_KEYS.length; index++) {
+      if (!Number.isFinite(data[UI_BOOTSTRAP_NUMBER_KEYS[index]])) return false;
+    }
+    if (data.mode < 0 || data.mode > 7 ||
+        data.cheesePhSmoothPercent < 0 || data.cheesePhSmoothPercent > 100) return false;
+    if (['allinone', 'herms', 'rims'].indexOf(data.beerBrewOrder) === -1 ||
+        ['local', 'i2c'].indexOf(data.calibrationPump) === -1) return false;
+    return true;
   }
 
   function validateOperationPayload(value, expectedKeys, expectedOperationId, context) {
@@ -1404,6 +1506,7 @@
     const ctrl = new AbortController();
     const timer = setTimeout(function () { ctrl.abort(); }, 4000);
     try {
+      assertOnline();
       const resp = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
       if (!resp.ok) {
         showRequestError(await responseErrorText(resp, fallbackText));
@@ -1491,7 +1594,7 @@
           return { ok: false, err: byId('request_error').textContent, program: '', httpStatus: 0, queued: false };
         }
       } else if (name === 'Descr') {
-        const byteLength = new TextEncoder().encode(fields[0].value).length;
+        const byteLength = descriptionByteLength(fields[0].value);
         if (byteLength > 250) {
           const err = 'Описание длиннее 250 байт.';
           showRequestError(err);
@@ -1512,6 +1615,7 @@
     }
     programMutationPending = true;
     try {
+      assertOnline();
       const resp = await fetch('/program', { method: 'POST', body: body });
       const result = await readProgramResponse(resp);
       if (!result.ok) {
@@ -1545,6 +1649,7 @@
     body.append('clear', '1');
     programMutationPending = true;
     try {
+      assertOnline();
       const resp = await fetch('/program', { method: 'POST', body: body });
       const result = await readProgramResponse(resp);
       if (!result.ok) {
@@ -1646,6 +1751,7 @@
     clearRequestErrorIfUnchanged: clearRequestErrorIfUnchanged,
     cssVar: cssVar,
     currentRequestErrorRevision: currentRequestErrorRevision,
+    descriptionByteLength: descriptionByteLength,
     deviceScheduleMaxSeconds: 65535,
     enhanceTooltips: enhanceTooltips,
     escapeHtml: escapeHtml,
@@ -1653,6 +1759,7 @@
     fieldLabelFromDom: fieldLabelFromDom,
     init: init,
     initTheme: initTheme,
+    loadUiBootstrap: loadUiBootstrap,
     notify: notify,
     normalizeDeviceScheduleSeconds: normalizeDeviceScheduleSeconds,
     openDeviceScheduleModal: openDeviceScheduleModal,

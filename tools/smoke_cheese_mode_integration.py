@@ -55,8 +55,8 @@ require(
     "Lua может переназначить общий LUA_PIN во время сыроварения",
 )
 require(
-    '"cheese.htm"' in web and '"calibrate_ph.htm"' in web,
-    "Новые сырные страницы отсутствуют в списке обновления интерфейса",
+    '"cheese.htm.gz"' in web and '"calibrate_ph.htm.gz"' in web,
+    "Сжатые сырные страницы отсутствуют в списке обновления интерфейса",
 )
 require(
     "const int32_t allowedModes[] = {0, 1, 2, 3, 4, 5, 6, 7};" in web and

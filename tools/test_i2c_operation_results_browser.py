@@ -10,7 +10,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from test_numeric_input_ui_browser import render_site
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE, render_site
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -278,8 +278,8 @@ BROWSER_HELPER = r'''(() => {
       caps: Object.assign({}, deviceCaps),
       actionsDisabled: actionIds.every(id => document.getElementById(id).disabled)
     };
-    if (absent.mixerPanel !== "none" || absent.mixerMissing !== "block" ||
-        absent.pumpPanel !== "none" || absent.pumpMissing !== "block" ||
+    if (absent.mixerPanel !== "none" || absent.mixerMissing !== "none" ||
+        absent.pumpPanel !== "none" || absent.pumpMissing !== "none" ||
         absent.mixerState.present || absent.mixerState.supported ||
         absent.pumpState.present || absent.pumpState.supported ||
         absent.caps.mixer !== 0 || absent.caps.pump !== 0 ||
@@ -686,6 +686,8 @@ BROWSER_HELPER = r'''(() => {
 SETUP_BROWSER = r'''async page => {
   page.__a02Problems = [];
   page.__a02Scenario = "setup";
+  const bootstrapBase = __BOOTSTRAP_FIXTURE__;
+  page.__a02BootstrapPlan = {};
   page.on("console", message => {
     if (message.type() === "warning" || message.type() === "error") {
       page.__a02Problems.push(
@@ -696,6 +698,11 @@ SETUP_BROWSER = r'''async page => {
   page.on("pageerror", error => {
     page.__a02Problems.push(page.__a02Scenario + " pageerror: " + error.message);
   });
+  await page.route("**/ui-bootstrap", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({...bootstrapBase, ...page.__a02BootstrapPlan})
+  }));
   const mixer = {
     present: 1, caps: 25, status: 0, error: 0, remaining: 0, currentSpeed: 0,
     mode: 1, optionFlags: 0, sensorFlags: 0, relayMask: 0,
@@ -834,13 +841,22 @@ def calibration_code(base_url, name, page_name, method, argument=None):
     call = f"window.__a02.{method}()"
     if argument is not None:
         call = f"window.__a02.{method}({json.dumps(argument)})"
+    running = method in ("runPersistFailure", "runReadbackFailure")
+    bootstrap = {
+        "calibrationRunning": running,
+        "calibrationPump": "i2c" if running else "local",
+        "i2cPumpVisible": True,
+        "stepperStepsPerMl": 100,
+        "i2cStepperStepsPerMl": 100,
+    }
     return (
         "async page => {"
         f"page.__a02Scenario={json.dumps(name)};"
+        f"page.__a02BootstrapPlan={json.dumps(bootstrap)};"
         f"await page.goto({json.dumps(base_url + '/' + page_name)},"
         "{waitUntil:'load'});"
         "await page.waitForFunction(() => typeof calibrate === 'function' && "
-        "window.__a02);"
+        "window.__a02 && document.body.inert === false);"
         f"return await page.evaluate(() => {call});"
         "}"
     )
@@ -879,7 +895,9 @@ def main():
                 }), encoding="utf-8")
                 open_args.append(f"--config={config}")
             run_cli(cli, session, open_args, temp, 30)
-            setup = SETUP_BROWSER.replace("__HELPER_PATH__", json.dumps(str(helper)))
+            setup = SETUP_BROWSER.replace("__HELPER_PATH__", json.dumps(str(helper))).replace(
+                "__BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE)
+            )
             run_cli(cli, session, ["run-code", setup], temp, 30)
             prepare = I2C_PREPARE.replace("__BASE_URL__", json.dumps(base_url))
             run_cli(cli, session, ["run-code", prepare], temp, 30)
@@ -890,13 +908,13 @@ def main():
                 ("calibration/i2c", "calibrate.htm", "runCalibration", "i2c"),
                 (
                     "calibration/persist-failed",
-                    "calibrate_running.htm",
+                    "calibrate.htm",
                     "runPersistFailure",
                     None,
                 ),
                 (
                     "calibration/readback-failed",
-                    "calibrate_running.htm",
+                    "calibrate.htm",
                     "runReadbackFailure",
                     None,
                 ),

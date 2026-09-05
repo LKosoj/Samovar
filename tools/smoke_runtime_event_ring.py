@@ -1181,13 +1181,13 @@ def run_source_contracts() -> None:
         errors.append("message cursor must not persist in localStorage")
 
     for page in ("index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm"):
-        page_text = read(f"data/{page}")
+        page_text = read(f"data_raw/{page}")
         if page_text.count("SamovarApp.startTelemetryPage(renderTelemetry, {") != 1:
-            errors.append(f"data/{page} does not use one shared telemetry lifecycle")
+            errors.append(f"data_raw/{page} does not use one shared telemetry lifecycle")
         if "SamovarApp.pollAjax(" in page_text or "SamovarApp.startPollLoop(" in page_text:
-            errors.append(f"data/{page} retains local polling ownership")
+            errors.append(f"data_raw/{page} retains local polling ownership")
         if re.search(r"\bmyObj\.(?:Msg|LogMsg)\b", page_text):
-            errors.append(f"data/{page} retains a duplicate runtime event consumer")
+            errors.append(f"data_raw/{page} retains a duplicate runtime event consumer")
 
     chart = read("data_raw/chart.htm")
     if '<script src="app.js"></script>' not in chart:

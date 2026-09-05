@@ -10,7 +10,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from test_numeric_input_ui_browser import render_site
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE, render_site
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +32,7 @@ HARNESS = r'''<!doctype html>
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
   const artifactDir = __ARTIFACT_DIR__;
   const modePages = ['index.htm', 'beer.htm', 'distiller.htm', 'bk.htm', 'nbk.htm'];
   const pages = modePages.concat(['chart.htm']);
@@ -200,6 +201,9 @@ BROWSER_TEST = r'''async page => {
   }
 
   async function installRoutes(current) {
+    await current.route('**/ui-bootstrap', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(bootstrapFixture)
+    }));
     await current.route('**/ajax?messageCursor=*', route => {
       ajaxRequests.push({ label: current.__u06Label, url: route.request().url() });
       return route.fulfill({
@@ -294,8 +298,7 @@ BROWSER_TEST = r'''async page => {
             scenario + ' parse/DCL theme trace: ' + JSON.stringify(themes));
           expect(tags.indexOf('theme-apply') < tags.indexOf('start') &&
             tags.indexOf('start') < tags.lastIndexOf('theme-apply') &&
-            tags.lastIndexOf('theme-apply') < tags.indexOf('ready') &&
-            tags.indexOf('ready') < tags.indexOf('fetch') &&
+            tags.lastIndexOf('theme-apply') < tags.indexOf('fetch') &&
             tags.indexOf('fetch') < tags.indexOf('render'),
             scenario + ' chart startup order: ' + JSON.stringify(tags));
         } else {
@@ -917,6 +920,7 @@ def main() -> int:
             run_cli(cli, session, ["open", f"--config={config}"], temp, 30)
             browser_test = (BROWSER_TEST
                 .replace("__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_port}"))
+                .replace("__UI_BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE))
                 .replace("__ARTIFACT_DIR__", json.dumps(str(artifact_dir))))
             run_cli(cli, session, ["run-code", browser_test], temp, 180)
         except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:

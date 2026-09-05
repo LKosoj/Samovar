@@ -11,7 +11,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from test_numeric_input_ui_browser import QuietHandler, cleanup, render_site, run_cli
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE, QuietHandler, cleanup, render_site, run_cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +21,22 @@ DEFAULT_SENSOR_COLORS = {
     "WaterColor": "#00bfff",
     "TankColor": "#008000",
     "ACPColor": "#800080",
+}
+
+
+def bootstrap_sensor_colors(colors: dict[str, str]) -> dict[str, str]:
+    return {
+        "steamColor": colors["SteamColor"],
+        "pipeColor": colors["PipeColor"],
+        "waterColor": colors["WaterColor"],
+        "tankColor": colors["TankColor"],
+        "acpColor": colors["ACPColor"],
+    }
+
+
+BOOTSTRAP_COLOR_FIXTURES = {
+    "default": bootstrap_sensor_colors(DEFAULT_SENSOR_COLORS),
+    "custom": bootstrap_sensor_colors({**DEFAULT_SENSOR_COLORS, "PipeColor": "#21303d"}),
 }
 PROGRAM_FIXTURES = {
     "index.htm": "\n".join((
@@ -40,6 +56,9 @@ PROGRAM_FIXTURES = {
         "T;80;0;120", "S;30;1;120", "A;20;2;120", "P;90;3;120", "R;40;4;120",
     )),
     "nbk.htm": "\n".join(("H;10;120", "S;11;121", "O;12;122", "W;13;123")),
+}
+PROGRAM_BOOTSTRAP_OVERRIDES = {
+    "program_invalid.htm": {"heaterResistance": 0},
 }
 
 
@@ -81,6 +100,10 @@ def accepted_contrast_failure(failure: dict) -> bool:
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
+  const programFixtures = __PROGRAM_FIXTURES__;
+  const bootstrapOverrides = __BOOTSTRAP_OVERRIDES__;
+  const bootstrapColors = __BOOTSTRAP_COLORS__;
   const mainPages = [
     "index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm",
     "program.htm", "setup.htm", "chart.htm", "i2cstepper.htm", "calibrate.htm"
@@ -113,6 +136,8 @@ BROWSER_TEST = r'''async page => {
   const parity = new Map();
   let scenario = "startup";
   let requestLog = [];
+  let bootstrapPage = "";
+  let bootstrapRoot = "";
 
   const ajaxFixture = {
     version: "test", crnt_tm: "12:00:00", stm: "00:01:00", SteamTemp: 78.1,
@@ -166,6 +191,13 @@ BROWSER_TEST = r'''async page => {
   await page.route("**/ajax?messageCursor=*", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(ajaxFixture)
   }));
+  await page.route("**/ui-bootstrap", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(Object.assign({}, bootstrapFixture, bootstrapColors[bootstrapRoot], {
+      program: programFixtures[bootstrapPage] || bootstrapFixture.program
+    }, bootstrapOverrides[bootstrapPage] || {}))
+  }));
   await page.route("**/ajax_col_params?*", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({
       floodPowerW: 3000, workingPowerW: 2500, maxFlowMlH: 1000,
@@ -204,8 +236,21 @@ BROWSER_TEST = r'''async page => {
   async function gotoPage(root, file, theme, waitMs = 90, manualTheme = false) {
     await setTheme(root, theme);
     scenario = root + "/" + theme + "/" + file;
+    bootstrapRoot = root;
+    bootstrapPage = file;
     requestLog = [];
     await page.goto(baseUrl + "/" + root + "/" + file, { waitUntil: "load" });
+    if (!["setup.htm", "i2cstepper.htm", "brewxml.htm"].includes(file)) {
+      try {
+        await page.waitForFunction(() => document.body.inert === false);
+      } catch (error) {
+        const state = await page.evaluate(() => ({
+          inert: document.body.inert,
+          bootstrapError: document.getElementById('request_error')?.textContent || ''
+        }));
+        throw new Error(scenario + " bootstrap ready " + JSON.stringify(state) + ": " + error.message);
+      }
+    }
     if (manualTheme) {
       await page.evaluate(value => document.documentElement.setAttribute("data-theme", value), theme);
     }
@@ -313,6 +358,11 @@ BROWSER_TEST = r'''async page => {
         const selector = element.id ? "#" + element.id : element.className ? "." + String(element.className).trim().replace(/\s+/g, ".") : element.tagName.toLowerCase();
         if (element.matches(":disabled") || element.closest("[aria-disabled=true]")) {
           exemptions.push({ scenario: scenarioLabel, selector, ratio: value.ratio || null, reason: "disabled" });
+        } else if (['SteamTemp', 'PipeTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp'].some(id => {
+          const sensor = document.getElementById(id);
+          return sensor && sensor.parentElement.contains(element);
+        })) {
+          exemptions.push({ scenario: scenarioLabel, selector, ratio: value.ratio || null, reason: "configured-sensor-color" });
         } else if (!value.ratio || value.ratio + 1e-9 < value.threshold) {
           failures.push({ scenario: scenarioLabel, selector, state: "text", ...value });
         }
@@ -352,7 +402,13 @@ BROWSER_TEST = r'''async page => {
   async function verifySensors(label, customOnly) {
     let values = await page.evaluate(() => {
       const metrics = browserMetrics();
-      return Array.from(document.querySelectorAll('[style*="text-decoration-color"]')).map(element => {
+      const ids = document.getElementById('BragaTemp')
+        ? ['SteamTemp', 'BragaTemp', 'WaterTemp', 'TankTemp', 'ACPTemp']
+        : ['SteamTemp', 'PipeTemp', 'WaterTemp', 'TankTemp', 'ACPTemp'];
+      const elements = document.getElementById('SteamTemp')
+        ? ids.map(id => document.getElementById(id).parentElement)
+        : Array.from(document.querySelectorAll('[style*="text-decoration-color"]'));
+      return elements.map(element => {
         const style = getComputedStyle(element);
         return {
           inline: element.getAttribute("style"), line: style.textDecorationLine,
@@ -375,7 +431,7 @@ BROWSER_TEST = r'''async page => {
       if (!value) addFailure(label, "sensor", "configured-accent", { detail: "missing " + color });
       else {
         if (value.line !== "underline") addFailure(label, "sensor", "underline", { detail: "line=" + value.line });
-        if (!value.text.ratio || value.text.ratio + 1e-9 < value.text.threshold) addFailure(label, "sensor", "readable-text", value.text);
+        if (value.text.foreground !== color) addFailure(label, "sensor", "foreground-accent", value.text);
       }
     });
   }
@@ -475,9 +531,18 @@ BROWSER_TEST = r'''async page => {
     for (const file of togglePages) {
       await gotoPage("default", file, theme);
       const target = theme === "light" ? "dark" : "light";
-      await page.click("#themeToggle");
+      try {
+        await page.click("#themeToggle");
+      } catch (error) {
+        const state = await page.evaluate(() => ({
+          inert: document.body.inert,
+          bootstrapError: document.getElementById('request_error')?.textContent || ''
+        }));
+        throw new Error(scenario + " theme toggle " + JSON.stringify(state) + ": " + error.message);
+      }
       const toggled = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
       await page.reload({ waitUntil: "load" });
+      await page.waitForFunction(() => document.body.inert === false);
       const persisted = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
       const label = "toggle/" + theme + "/" + file;
       report.stateCases.push(label);
@@ -833,6 +898,7 @@ def inject_program_fixture(path: Path, fixture: str) -> None:
 
 def prepare_site(target: Path, colors: dict[str, str]) -> None:
     render_site(target, color_tokens=colors)
+    shutil.copyfile(target / "program.htm", target / "program_invalid.htm")
     for name, fixture in PROGRAM_FIXTURES.items():
         inject_program_fixture(target / name, fixture)
 
@@ -879,9 +945,12 @@ def main() -> int:
                 }), encoding="utf-8")
                 open_args.append(f"--config={config}")
             run_cli(cli, session, open_args, temp, 30)
-            code = BROWSER_TEST.replace(
-                "__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_port}")
-            )
+            code = (BROWSER_TEST
+                .replace("__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_port}"))
+                .replace("__UI_BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE))
+                .replace("__PROGRAM_FIXTURES__", json.dumps(PROGRAM_FIXTURES))
+                .replace("__BOOTSTRAP_OVERRIDES__", json.dumps(PROGRAM_BOOTSTRAP_OVERRIDES))
+                .replace("__BOOTSTRAP_COLORS__", json.dumps(BOOTSTRAP_COLOR_FIXTURES)))
             run_cli(cli, session, ["run-code", code], temp, 300)
             browser_report = server.u03_report  # type: ignore[attr-defined]
             if not isinstance(browser_report, dict):

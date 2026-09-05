@@ -13,15 +13,28 @@ class SetupFieldParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.fields: set[str] = set()
+        self.select_options: dict[str, set[str]] = {}
+        self.current_select: str | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "option" and self.current_select and attributes.get("value") is not None:
+            self.select_options[self.current_select].add(attributes["value"])
+            return
         if tag not in ("input", "select"):
             return
-        attributes = dict(attrs)
         name = attributes.get("name")
         input_type = attributes.get("type", "select")
         if name and input_type not in ("button", "submit", "hidden", "file"):
             self.fields.add(name)
+        if tag == "select":
+            self.current_select = name
+            if name:
+                self.select_options[name] = set()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "select":
+            self.current_select = None
 
 
 parser = SetupFieldParser()
@@ -32,7 +45,7 @@ settings = json.loads(
 
 current_defaults = {
     "ColDiam": "1.5",
-    "ColHeight": "0.5",
+    "ColHeight": "1.25",
     "PackDens": "80",
     "useDetector": False,
     "MpxZeroAdc": "36.7",
@@ -62,6 +75,15 @@ if missing:
     raise AssertionError("В начальных настройках отсутствуют поля: " + ", ".join(missing))
 if empty:
     raise AssertionError("В начальных настройках не заполнены поля: " + ", ".join(empty))
+invalid_selects = sorted(
+    name
+    for name, options in parser.select_options.items()
+    if options and name in settings and str(settings[name]) not in options
+)
+if invalid_selects:
+    raise AssertionError(
+        "Начальные значения отсутствуют в вариантах списков: " + ", ".join(invalid_selects)
+    )
 
 
 def find_wrong_defaults(candidate: dict[str, object]) -> list[str]:

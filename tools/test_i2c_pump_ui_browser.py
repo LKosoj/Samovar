@@ -11,6 +11,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_web_assets import resolve_includes
 
@@ -19,6 +21,7 @@ DATA = ROOT / "data_raw"
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
   const pages = ["index.htm", "beer.htm", "distiller.htm", "bk.htm", "nbk.htm"];
   const viewports = [
     { name: "desktop", width: 1440, height: 900 },
@@ -52,6 +55,9 @@ BROWSER_TEST = r'''async page => {
     status: 200,
     contentType: "application/json",
     body: JSON.stringify(fixture)
+  }));
+  await page.route("**/ui-bootstrap", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(bootstrapFixture)
   }));
 
   for (const viewport of viewports) {
@@ -275,7 +281,9 @@ def main():
 
       run_cli(cli, session, open_args, temp_dir, 30)
       base_url = f"http://127.0.0.1:{server.server_port}"
-      browser_test = BROWSER_TEST.replace("__BASE_URL__", json.dumps(base_url))
+      browser_test = (BROWSER_TEST
+        .replace("__BASE_URL__", json.dumps(base_url))
+        .replace("__UI_BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE)))
       run_cli(cli, session, ["run-code", browser_test], temp_dir, 120)
   except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
     primary_error = str(error)

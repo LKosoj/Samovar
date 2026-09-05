@@ -14,9 +14,11 @@
    ошибки (битый JSON, не-объект, поле вне диапазона), а не молчит.
 """
 import functools
+import gzip
 import http.server
 import io
 import json
+import mimetypes
 import os
 import shutil
 import subprocess
@@ -25,14 +27,14 @@ import tempfile
 import threading
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_web_assets import resolve_includes
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data_raw"
+DATA = ROOT / "data"
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
   const errors = [];
   const passed = [];
 
@@ -55,6 +57,9 @@ BROWSER_TEST = r'''async page => {
       version: "test", crnt_tm: "12:00:00", Status: "Готов", PowerOn: 0,
       heaterAlarmLatched: 0, heaterAlarmReason: '', latestMessageSequence: 0
     })
+  }));
+  await page.route("**/ui-bootstrap", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(bootstrapFixture)
   }));
 
   // ВНИМАНИЕ: этот код исполняется в Node-окружении playwright-cli (снаружи
@@ -437,14 +442,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
       self.end_headers()
       return io.BytesIO(data)
     path = self.translate_path(self.path)
-    if path.endswith(".htm") and os.path.isfile(path):
-      try:
-        data = resolve_includes(os.path.basename(path), Path(path).read_bytes())
-      except ValueError as exc:
-        self.send_error(500, str(exc))
-        return None
+    gzip_path = path + ".gz"
+    if not os.path.isfile(path) and os.path.isfile(gzip_path):
+      data = gzip.decompress(Path(gzip_path).read_bytes())
       self.send_response(200)
-      self.send_header("Content-type", "text/html; charset=utf-8")
+      self.send_header("Content-type", mimetypes.guess_type(path)[0] or "application/octet-stream")
       self.send_header("Content-Length", str(len(data)))
       self.end_headers()
       return io.BytesIO(data)
@@ -541,7 +543,9 @@ def main():
 
       run_cli(cli, session, open_args, temp_dir, 30)
       base_url = f"http://127.0.0.1:{server.server_port}"
-      browser_test = BROWSER_TEST.replace("__BASE_URL__", json.dumps(base_url))
+      browser_test = (BROWSER_TEST
+        .replace("__BASE_URL__", json.dumps(base_url))
+        .replace("__UI_BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE)))
       run_cli(cli, session, ["run-code", browser_test], temp_dir, 180)
   except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
     primary_error = str(error)

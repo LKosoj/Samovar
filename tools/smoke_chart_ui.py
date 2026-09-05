@@ -35,10 +35,10 @@ if chart_htm:
     if '<script src="chart.js' not in chart_htm:
         errors.append("data_raw/chart.htm does not load local chart.js")
     for token in [
-        "function initChart ()",
+        "function initChart (data)",
         "typeof SamovarChart !== 'function'",
         "chart = new SamovarChart('chartdiv'",
-        "function templateBool (value)",
+        "SamovarApp.loadUiBootstrap(applyChartBootstrap)",
         "chart.loadCsv('data.csv')",
         "function appendChartPoint(myObj)",
         "chart.appendAjaxPoint(myObj)",
@@ -49,16 +49,15 @@ if chart_htm:
             errors.append(f"data_raw/chart.htm missing W7 chart token: {token}")
 
     try:
-        dom_body = extract_function_body(chart_htm, "document.addEventListener('DOMContentLoaded', function ()")
-        ready_pos = dom_body.find("onReady: initChart")
+        dom_body = extract_function_body(chart_htm, "document.addEventListener('DOMContentLoaded', async function ()")
+        ready_pos = dom_body.find("await SamovarApp.loadUiBootstrap(applyChartBootstrap)")
         poll_pos = dom_body.find("SamovarApp.startTelemetryPage(renderTelemetry, {")
         if ready_pos == -1 or poll_pos == -1:
             errors.append(
-                "data_raw/chart.htm DOMContentLoaded does not start shared telemetry "
-                "with initChart as onReady"
+                "data_raw/chart.htm DOMContentLoaded does not load bootstrap before telemetry"
             )
-        elif ready_pos < poll_pos:
-            errors.append("data_raw/chart.htm chart onReady escaped shared lifecycle options")
+        elif ready_pos > poll_pos:
+            errors.append("data_raw/chart.htm starts telemetry before bootstrap")
     except ValueError as exc:
         errors.append(str(exc))
 
@@ -66,12 +65,12 @@ if chart_htm:
         "SamovarApp.initTheme({ implicitSystemTheme: true, dynamicThemeTitle: true });"
     )
     chart_script_pos = chart_htm.find('<script src="chart.js')
-    init_function_pos = chart_htm.find("function initChart ()")
+    init_function_pos = chart_htm.find("function initChart (data)")
     if not (chart_script_pos != -1 and chart_script_pos < theme_pos < init_function_pos):
         errors.append("data_raw/chart.htm parse-time shared theme call moved out of former IIFE position")
 
     try:
-        init_body = extract_function_body(chart_htm, "function initChart ()")
+        init_body = extract_function_body(chart_htm, "function initChart (data)")
         for token in ["chartBlock.textContent", "try {", "catch (err)", "chart.loadCsv('data.csv').catch"]:
             if token not in init_body:
                 errors.append(f"data_raw/chart.htm initChart() does not fail explicitly without blocking polling: {token}")

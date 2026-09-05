@@ -36,14 +36,23 @@
   8. гейт свободного места проверяется до начала закачки набора, а в kWebOverrideFiles[]
      общие ресурсы (картинки/звук/стили/скрипты) идут раньше HTML-страниц - при обрыве
      связи риск нерабочей одной страницы ниже риска нерабочего общего ресурса.
+  9. после подтверждённой загрузки каждой из десяти gzip-страниц удаляется только её
+     legacy raw-файл; ошибка удаления останавливает обновление до записи версии.
 """
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_SERVER = ROOT / "WebServer.ino"
 DATA = ROOT / "data"
+
+LEGACY_RAW_PAGES = (
+    "index.htm", "beer.htm", "cheese.htm", "distiller.htm", "bk.htm",
+    "nbk.htm", "chart.htm", "program.htm", "calibrate.htm", "calibrate_ph.htm",
+)
 
 
 def read(path: Path) -> str:
@@ -67,6 +76,144 @@ def function_body(source: str, signature: str, errors: list[str]) -> str:
     return ""
 
 
+def cleanup_harness(cleanup_body: str) -> str:
+    return f'''\
+#include <cstring>
+#include <iostream>
+#include <set>
+#include <string>
+
+class String {{
+ public:
+  String() = default;
+  String(const char *value) : value_(value) {{}}
+  String(const std::string& value) : value_(value) {{}}
+  const std::string& value() const {{ return value_; }}
+ private:
+  std::string value_;
+}};
+
+String operator+(const String& lhs, const char *rhs) {{
+  return String(lhs.value() + rhs);
+}}
+
+String operator+(const char *lhs, const String& rhs) {{
+  return String(std::string(lhs) + rhs.value());
+}}
+
+struct MockFs {{
+  std::set<std::string> files;
+  std::set<std::string> removeFailures;
+  int removeCalls = 0;
+
+  bool exists(const String& path) const {{ return files.count(path.value()) != 0; }}
+  bool remove(const String& path) {{
+    removeCalls++;
+    if (removeFailures.count(path.value())) return false;
+    return files.erase(path.value()) == 1;
+  }}
+}} SPIFFS;
+
+struct MockSerial {{
+  void println(const String&) {{}}
+}} Serial;
+
+static bool cleanup_legacy_raw_web_page(const char* downloadedFile) {{
+{cleanup_body}
+}}
+
+static void expect(bool value, const char *message) {{
+  if (!value) {{
+    std::cerr << message << "\\n";
+    std::exit(1);
+  }}
+}}
+
+int main() {{
+  const char *rawPages[] = {{
+    "/index.htm", "/beer.htm", "/cheese.htm", "/distiller.htm", "/bk.htm",
+    "/nbk.htm", "/chart.htm", "/program.htm", "/calibrate.htm", "/calibrate_ph.htm"
+  }};
+  const char *gzipPages[] = {{
+    "index.htm.gz", "beer.htm.gz", "cheese.htm.gz", "distiller.htm.gz", "bk.htm.gz",
+    "nbk.htm.gz", "chart.htm.gz", "program.htm.gz", "calibrate.htm.gz", "calibrate_ph.htm.gz"
+  }};
+  SPIFFS.files = {{"/setup.htm"}};
+  for (const char *rawPage : rawPages) SPIFFS.files.insert(rawPage);
+  for (size_t i = 0; i < 10; i++) {{
+    expect(cleanup_legacy_raw_web_page(gzipPages[i]), "legacy cleanup failed");
+    expect(!SPIFFS.exists(String(rawPages[i])), "legacy raw survived cleanup");
+  }}
+  const int callsAfterPages = SPIFFS.removeCalls;
+  expect(cleanup_legacy_raw_web_page("setup.htm"), "unrelated file rejected");
+  expect(SPIFFS.removeCalls == callsAfterPages, "unrelated file triggered removal");
+  expect(SPIFFS.exists(String("/setup.htm")), "unrelated raw file removed");
+
+  expect(cleanup_legacy_raw_web_page("index.htm.gz"), "repeat cleanup rejected absent raw");
+  SPIFFS.files.insert("/beer.htm");
+  SPIFFS.removeFailures.insert("/beer.htm");
+  expect(!cleanup_legacy_raw_web_page("beer.htm.gz"), "remove failure was hidden");
+  expect(SPIFFS.exists(String("/beer.htm")), "failed removal changed raw file");
+  return 0;
+}}
+'''
+
+
+def compile_and_run_cleanup(cleanup_body: str) -> tuple[int, str]:
+    with tempfile.TemporaryDirectory(prefix="samovar-web-legacy-cleanup-") as tmp:
+        source = Path(tmp) / "cleanup.cpp"
+        binary = Path(tmp) / "cleanup"
+        source.write_text(cleanup_harness(cleanup_body), encoding="utf-8")
+        compiled = subprocess.run(
+            ["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if compiled.returncode != 0:
+            return compiled.returncode, compiled.stdout + compiled.stderr
+        ran = subprocess.run([str(binary)], text=True, capture_output=True, check=False)
+        return ran.returncode, ran.stdout + ran.stderr
+
+
+def validate_cleanup_flow(body: str) -> list[str]:
+    errors: list[str] = []
+    tokens = (
+        "String result = get_web_file(fn, type);",
+        "if (result == \"<ERR>\") {",
+        "return;",
+        "if (type == SAVE_FILE_OVERRIDE && !cleanup_legacy_raw_web_page(fn.c_str())) {",
+        "updateFile(kWebOverrideFiles[i], SAVE_FILE_OVERRIDE);",
+        "if (!updateOk) break;",
+    )
+    positions: list[int] = []
+    offset = 0
+    for token in tokens:
+        position = body.find(token, offset)
+        positions.append(position)
+        if position >= 0:
+            offset = position + len(token)
+    if any(position < 0 for position in positions):
+        errors.append(
+            "get_web_interface: legacy raw cleanup must follow its successful gzip "
+            "download, propagate removal failure, and precede the loop break"
+        )
+    cleanup_pos = body.find(
+        "if (type == SAVE_FILE_OVERRIDE && !cleanup_legacy_raw_web_page(fn.c_str())) {"
+    )
+    cleanup_end = body.find("}", cleanup_pos)
+    if cleanup_pos < 0 or "updateOk = false;" not in body[cleanup_pos:cleanup_end]:
+        errors.append(
+            "get_web_interface: legacy raw removal failure must set updateOk=false"
+        )
+    marker = body.find('write_web_file("/version.txt"')
+    if marker < 0 or (positions[-1] >= 0 and marker < positions[-1]):
+        errors.append(
+            "get_web_interface: version marker can be written before legacy raw cleanup succeeds"
+        )
+    return errors
+
+
 def main() -> int:
     errors: list[str] = []
     web = read(WEB_SERVER)
@@ -75,6 +222,78 @@ def main() -> int:
         for error in errors:
             print(f" - {error}")
         return 1
+
+    cleanup = function_body(
+        web, "static bool cleanup_legacy_raw_web_page(const char* downloadedFile)", errors
+    )
+    if cleanup:
+        cleanup_names = {
+            raw for _, raw in re.findall(
+                r'\{"([^"]+\.htm\.gz)",\s*"([^"]+\.htm)"\}', cleanup
+            )
+        }
+        if cleanup_names != set(LEGACY_RAW_PAGES):
+            errors.append(
+                "cleanup_legacy_raw_web_page: mapping must cover exactly the ten legacy raw pages"
+            )
+        cleanup_open = cleanup.find("SPIFFS.exists(rawPath)")
+        cleanup_remove = cleanup.find("SPIFFS.remove(rawPath)")
+        if cleanup_open < 0 or cleanup_remove < cleanup_open:
+            errors.append(
+                "cleanup_legacy_raw_web_page: absent raw page must be accepted before remove()"
+            )
+        cleanup_signature_end = cleanup.find("{")
+        cleanup_body = cleanup[cleanup_signature_end + 1:-1]
+        cleanup_rc, cleanup_output = compile_and_run_cleanup(cleanup_body)
+        if cleanup_rc != 0:
+            errors.append(
+                "cleanup_legacy_raw_web_page: source-derived behavior failed:\n" + cleanup_output
+            )
+        cleanup_mutants = (
+            (
+                "if (!SPIFFS.exists(rawPath)) return true;",
+                "if (!SPIFFS.exists(rawPath)) return false;",
+                "absent-raw-repeat",
+            ),
+            (
+                "Serial.println(\"WEB interface cleanup failed: \" + rawPath);\n"
+                "      return false;",
+                "Serial.println(\"WEB interface cleanup failed: \" + rawPath);\n"
+                "      return true;",
+                "remove-failure-hidden",
+            ),
+        )
+        for old, new, label in cleanup_mutants:
+            if cleanup_body.count(old) != 1:
+                errors.append(f"cleanup_legacy_raw_web_page: mutation anchor missing: {label}")
+                continue
+            mutant_rc, _ = compile_and_run_cleanup(cleanup_body.replace(old, new, 1))
+            if mutant_rc == 0:
+                errors.append(f"cleanup_legacy_raw_web_page: mutation survived: {label}")
+
+    errors.extend(validate_cleanup_flow(body))
+
+    cleanup_flow_mutants = (
+        (
+            "if (type == SAVE_FILE_OVERRIDE && !cleanup_legacy_raw_web_page(fn.c_str())) {",
+            "if (false && !cleanup_legacy_raw_web_page(fn.c_str())) {",
+            "cleanup-disabled",
+        ),
+        (
+            "updateOk = false;\n        return;\n      }\n"
+            "      if (type == SAVE_FILE_OVERRIDE",
+            "updateOk = false;\n      }\n"
+            "      if (type == SAVE_FILE_OVERRIDE",
+            "cleanup-after-download-failure",
+        ),
+    )
+    for old, new, label in cleanup_flow_mutants:
+        if body.count(old) != 1:
+            errors.append(f"get_web_interface: mutation anchor missing: {label}")
+            continue
+        mutant = body.replace(old, new, 1)
+        if not validate_cleanup_flow(mutant):
+            errors.append(f"get_web_interface: cleanup mutation survived: {label}")
 
     # --- 1. версия приходит из сети ------------------------------------------
     # Самый важный пин файла. Если версия снова станет вкомпилированной константой,
@@ -172,6 +391,25 @@ def main() -> int:
     else:
         override_names = re.findall(r'"([^"]+)"', override_array.group("items"))
 
+    required_gzip_pages = (
+        "index.htm.gz", "beer.htm.gz", "cheese.htm.gz", "distiller.htm.gz",
+        "bk.htm.gz", "nbk.htm.gz", "chart.htm.gz", "program.htm.gz",
+        "calibrate.htm.gz", "calibrate_ph.htm.gz",
+    )
+    for name in required_gzip_pages:
+        if name not in override_names:
+            errors.append(
+                f"get_web_interface: {name} не входит в SAVE_FILE_OVERRIDE набор"
+            )
+    for name in ("index.htm", "beer.htm", "cheese.htm", "distiller.htm", "bk.htm",
+                 "nbk.htm", "chart.htm", "program.htm", "calibrate.htm", "calibrate_ph.htm"):
+        if name in override_names:
+            errors.append(
+                f"get_web_interface: {name} должен обновляться только как gzip"
+            )
+    if "setup.htm" not in override_names or "setup.htm.gz" in override_names:
+        errors.append("get_web_interface: setup.htm должен остаться несжатым шаблоном")
+
     if_not_exist_entries = dict(
         re.findall(r'updateFile\("([^"]+)",\s*(SAVE_FILE_IF_NOT_EXIST)\)', body)
     )
@@ -241,9 +479,10 @@ def main() -> int:
         "minus.png", "plus.png", "style.css.gz", "app.js.gz", "chart.js.gz",
     ]
     PAGE_NAMES = [
-        "index.htm", "beer.htm", "bk.htm", "nbk.htm", "brewxml.htm.gz", "calibrate.htm",
-        "chart.htm", "distiller.htm", "i2cstepper.htm.gz", "edit.htm.gz",
-        "program.htm", "setup.htm",
+        "index.htm.gz", "beer.htm.gz", "cheese.htm.gz", "distiller.htm.gz",
+        "bk.htm.gz", "nbk.htm.gz", "chart.htm.gz", "program.htm.gz",
+        "calibrate.htm.gz", "calibrate_ph.htm.gz", "brewxml.htm.gz",
+        "i2cstepper.htm.gz", "edit.htm.gz", "setup.htm",
     ]
     resource_positions = [override_names.index(n) for n in RESOURCE_NAMES if n in override_names]
     page_positions = [override_names.index(n) for n in PAGE_NAMES if n in override_names]

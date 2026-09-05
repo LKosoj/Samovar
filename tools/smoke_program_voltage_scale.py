@@ -7,10 +7,8 @@ U = Umax * sqrt(P / Pmax).
 
 mainsVolt used to be a hardcoded client constant that had to match the firmware's
 regulator clamp in set_current_power() (power_regulator.h). It no longer does:
-mainsVolt is now the real mains voltage from device settings (%MainsVoltage%,
-served by indexKeyProcessor in WebServer.ino), with 230 only as a fallback for
-when the substitution does not happen at all (a page served outside the firmware's
-template processor). The math
+mainsVolt is now the real mains voltage from the typed /ui-bootstrap snapshot.
+The math
 still works with a real mains voltage because heaterMaxPwr is auto-filled as
 mainsVolt**2/R on the same page: mainsVolt cancels out of both
 wattsToProgramVolts() and programVoltsToWatts(), leaving volts = sqrt(W*R) -
@@ -21,11 +19,9 @@ set_current_power()'s 230 V clamp is a separate thing: a ceiling on the
 regulator's setpoint, not the mains voltage, and this test still pins it at 230
 so nobody quietly changes that ceiling without noticing here.
 
-This test pins three things: (1) program.htm reads mainsVolt from %MainsVoltage%
-with a fallback of exactly 230; (2) power_regulator.h's setpoint clamp is still
-230 and self-consistent; (3) WebServer.ino's indexKeyProcessor actually serves
-%MainsVoltage% from SamSetup.MainsVoltage, so the substitution is not silently
-dropped back to the fallback on every request.
+This test pins three things: (1) program.htm reads mainsVolt from /ui-bootstrap;
+(2) power_regulator.h's setpoint clamp is still 230 and self-consistent;
+(3) WebServer.ino's bootstrap writer serves the typed mainsVoltage field.
 """
 import re
 import sys
@@ -99,32 +95,14 @@ def main() -> int:
             f"{sorted(firmware_volts)}"
         )
 
-    # --- client side: mainsVolt comes from the device, not a literal ---------
-    # %MainsVoltage% is substituted by indexKeyProcessor (WebServer.ino) from
-    # SamSetup.MainsVoltage - the real mains voltage, not the regulator's clamp.
-    # The fallback only kicks in when the token is not substituted at all - the
-    # page opened outside the firmware's template processor (a raw data/program.htm
-    # from disk, a proxy that strips templating) or served with an empty/zero
-    # setting. It must stay exactly 230: that is the reference mains the shipped
-    # program_*.txt watt column is computed for (3480 W heater at 230 V) and the
-    # same number set_current_power() clamps the setpoint to, so an unsubstituted
-    # page still prefills the heater power with the historical value instead of a
-    # silently different one. Browser tests do NOT exercise this path -
-    # test_numeric_input_ui_browser.py render_site() substitutes "230.00".
-    page_match = re.search(
-        r"var\s+mainsVolt\s*=\s*Number\(\s*'%MainsVoltage%'\s*\)\s*\|\|\s*(\d+(?:\.\d+)?)\s*;",
-        page,
-    )
-    if not page_match:
+    # --- client side: mainsVolt comes from bootstrap, not a literal ----------
+    if not re.search(r"var\s+mainsVolt\s*=\s*NaN\s*;", page):
         errors.append(
-            "data_raw/program.htm: mainsVolt must read Number('%MainsVoltage%') || <fallback> "
-            "- found a different declaration (hardcoded literal?)"
+            "data_raw/program.htm: mainsVolt must be neutral until bootstrap"
         )
-    fallback_volt = float(page_match.group(1)) if page_match else None
-    if fallback_volt is not None and fallback_volt != 230:
+    if "mainsVolt = data.mainsVoltage;" not in page:
         errors.append(
-            f"data_raw/program.htm: mainsVolt fallback is {fallback_volt:g}, expected exactly 230 "
-            "(the reference mains a page with an unsubstituted %MainsVoltage% renders against)"
+            "data_raw/program.htm: mainsVolt is not initialized from /ui-bootstrap"
         )
 
     # Все три формулы обязаны ходить через одну константу. Это не косметика: toVolt()
@@ -186,14 +164,10 @@ def main() -> int:
                 f"power_regulator.h: the setpoint clamp is {firmware_volt:g} V, expected 230 V"
             )
 
-    # --- %MainsVoltage% is actually wired up in WebServer.ino ----------------
-    if not re.search(
-        r'else if \(var == "MainsVoltage"\)\s*\n\s*return String\(SamSetup\.MainsVoltage',
-        web_server,
-    ):
+    # --- mainsVoltage is actually wired up in /ui-bootstrap ------------------
+    if '"mainsVoltage", snapshot.setup.MainsVoltage' not in web_server:
         errors.append(
-            "WebServer.ino: indexKeyProcessor does not serve \"MainsVoltage\" from "
-            "SamSetup.MainsVoltage - %MainsVoltage% in program.htm would always fall back to 230"
+            "WebServer.ino: /ui-bootstrap does not serve mainsVoltage"
         )
 
     if errors:

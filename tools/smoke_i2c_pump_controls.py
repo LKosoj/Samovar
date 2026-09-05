@@ -340,12 +340,18 @@ def check_pages_static() -> list[str]:
     errors = []
     for name in PAGES:
         text = read_page(name)
+        tab_match = re.search(r"<input\b[^>]*\bid=['\"]i2cPumpTab['\"][^>]*>", text)
+        if not tab_match or (
+            'class="tablinks"' not in tab_match.group(0) or
+            "SamovarApp.openTab(event, 'I2CPump');" not in tab_match.group(0)
+        ):
+            errors.append(f"{name}: missing the #i2cPumpTab 'Внешний насос' tab button")
         if not re.search(
-            r"class=\"tablinks\"[^>]*onclick=\"SamovarApp\.openTab\(event,\s*'I2CPump'\);\"[^>]*"
-            r"style=\"display:\s*%I2CPumpTab%;\"",
+            r"document\.getElementById\(['\"]i2cPumpTab['\"]\)\.(?:hidden\s*=\s*!data\.i2cPumpVisible|"
+            r"style\.display\s*=\s*data\.i2cPumpVisible\s*\?\s*['\"]inline-block['\"]\s*:\s*['\"]none['\"])",
             text,
         ):
-            errors.append(f"{name}: missing the 'Внешний насос' tab button wired to %I2CPumpTab%")
+            errors.append(f"{name}: bootstrap does not apply i2cPumpVisible to #i2cPumpTab")
         if not re.search(r"<div\s+id=\"I2CPump\"\s+class=\"tabcontent\"", text):
             errors.append(f"{name}: missing the #I2CPump tabcontent block")
         if "SamovarApp.sendI2cPump();" not in text:

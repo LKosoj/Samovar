@@ -30,9 +30,13 @@ PARTIALS_DIR = SOURCE / "partials"
 
 # Файлы, которые уезжают на устройство только сжатыми. Шаблонов в них нет и быть
 # не должно - см. check_no_placeholders().
-COMPRESS = ("app.js", "chart.js", "edit.htm", "i2cstepper.htm", "brewxml.htm", "style.css")
+COMPRESS = (
+    "app.js", "chart.js", "edit.htm", "i2cstepper.htm", "brewxml.htm", "style.css",
+    "index.htm", "beer.htm", "cheese.htm", "distiller.htm", "bk.htm", "nbk.htm",
+    "chart.htm", "program.htm", "calibrate.htm", "calibrate_ph.htm",
+)
 
-PLACEHOLDER = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
+PLACEHOLDER = re.compile(r"%[A-Za-z_][A-Za-z0-9_.]*%")
 INCLUDE_RE = re.compile(rb"<!--#include\s+([A-Za-z0-9_.-]+)\s*-->")
 
 
@@ -82,11 +86,12 @@ def build(target: Path) -> list[str]:
         if error:
             errors.append(error)
             continue
-        if source.name in COMPRESS:
+        if source.name != "setup.htm":
             error = check_no_placeholders(source.name, data)
             if error:
                 errors.append(error)
                 continue
+        if source.name in COMPRESS:
             (target / f"{source.name}.gz").write_bytes(canonical_gzip(data))
         else:
             (target / source.name).write_bytes(data)

@@ -2,7 +2,7 @@
   <link rel="stylesheet" href="style.css?v=7.00u7">
   <title>Самовар</title>
 
-  <script type="application/json" id="samovar_lua_btn_list">%btn_list%</script>
+  <script type="application/json" id="samovar_lua_btn_list"></script>
   <script src="app.js"></script>
   <script>
     // ==================== POWER UNIT ===================================================================
@@ -15,10 +15,6 @@
 
     function programBackupError(message) {
       SamovarApp.notify('Ошибка файла программы: ' + message, 1);
-    }
-
-    function descriptionByteLength(description) {
-      return new TextEncoder().encode(description).length;
     }
 
     function loadFile (e) {
@@ -41,7 +37,7 @@
             programBackupError('неподдерживаемый формат.');
             return;
           }
-          if (descriptionByteLength(backup.description) > 250) {
+          if (SamovarApp.descriptionByteLength(backup.description) > 250) {
             programBackupError('описание длиннее 250 байт.');
             return;
           }
@@ -63,7 +59,7 @@
     function SaveProgramToFile () {
       var filename = 'programbackup.txt';
       var description = document.getElementById('Descr').value;
-      if (descriptionByteLength(description) > 250) {
+      if (SamovarApp.descriptionByteLength(description) > 250) {
         programBackupError('описание длиннее 250 байт.');
         return;
       }
@@ -368,7 +364,29 @@
       return counter;
     }
 
-    window.onload = function() {
+    function applyBeerBootstrap(data) {
+      if (!check_program(data.program)) throw new Error('неверный формат программы.');
+      pwr_unit = data.powerUnit;
+      powerInputMax = data.heaterMaxPower;
+      document.body.setAttribute('data-beer-brew-order', data.beerBrewOrder);
+      document.getElementById('WProgram').value = data.program;
+      document.getElementById('Descr').value = data.description;
+      document.getElementById('samovar_lua_btn_list').textContent = JSON.stringify(data.luaButtonList);
+      document.getElementById('SteamTemp').parentElement.style.color = data.steamColor;
+      document.getElementById('PipeTemp').parentElement.style.color = data.pipeColor;
+      document.getElementById('WaterTemp').parentElement.style.color = data.waterColor;
+      document.getElementById('TankTemp').parentElement.style.color = data.tankColor;
+      document.getElementById('ACPTemp').parentElement.style.color = data.acpColor;
+      document.getElementById('version').textContent = data.version;
+      document.getElementById('i2cStepperTab').style.display = data.i2cStepperVisible ? 'inline-block' : 'none';
+      document.getElementById('i2cPumpTab').style.display = data.i2cPumpVisible ? 'inline-block' : 'none';
+      document.getElementById('PWM').min = String(data.pwmLow);
+      document.getElementById('PWM').value = String(data.pwmValue);
+      document.getElementById('pwmLowTick').value = String(data.pwmLow);
+    }
+
+    window.onload = async function() {
+      if (!await SamovarApp.loadUiBootstrap(applyBeerBootstrap)) return;
       SamovarApp.startTelemetryPage(renderTelemetry, {
         threshold: 3,
         onReady: function() {
@@ -405,7 +423,7 @@
 </script>
 </head>
 
-<body data-beer-brew-order="%BeerBrewOrderId%">
+<body data-beer-brew-order="">
   <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
   <button type="button" class="history-trigger" style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: var(--text-history-link); text-decoration: underline; cursor: pointer" onclick='SamovarApp.showHistory()' aria-controls="historyBox" aria-expanded="false">История</button>
   <div class="history_box" style="display: none;" id="historyBox">
@@ -422,8 +440,8 @@
       <input type='button' class="tablinks active" onclick="SamovarApp.openTab(event, 'Main');" value="Затирание" aria-pressed="true">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Prog');" value="Программа" aria-pressed="false">
       <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'Other');" value="Дополнительно" aria-pressed="false">
-      <input type='button' class="tablinks" onclick="location.href='/i2cstepper.htm';" value="I2CStepper" style="display: %I2CStepperTab%;">
-      <input type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" style="display: %I2CPumpTab%;" aria-pressed="false">
+      <input id='i2cStepperTab' type='button' class="tablinks" onclick="location.href='/i2cstepper.htm';" value="I2CStepper" style="display: none;">
+      <input id='i2cPumpTab' type='button' class="tablinks" onclick="SamovarApp.openTab(event, 'I2CPump');" value="Внешний насос" style="display: none;" aria-pressed="false">
     </div>
 <!--#include main_status_header.htm-->
 
@@ -503,7 +521,7 @@
         <summary>Описание программы затирки:</summary>
         <div class="spoiler-content">
           <div><label for="WProgram">Текст программы затирки:</label></div>
-          <textarea cols="40" rows="7" id='WProgram' name='WProgram'>%WProgram%</textarea>
+          <textarea cols="40" rows="7" id='WProgram' name='WProgram'></textarea>
           <div class='dvcs'>
             <p><span>Параметры программы затирания: Тип программы;Температура;Время;Режим работы мешалки;Датчик</span></p>
             <p><span>&nbsp;</span></p>
@@ -534,7 +552,7 @@
         <summary>Описание программы затирки в текстовом формате для сохранения в облаке:</summary>
         <div class="spoiler-content">
           <div><label for="Descr">Описание программы затирки:</label></div>
-          <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'>%Descr%</textarea>
+          <textarea cols="40" rows="5" id='Descr' name='Descr' maxlength='250'></textarea>
         </div>
       </details>
       <hr style="margin-bottom: 20px !important; margin-top: 20px !important;">
@@ -570,9 +588,9 @@
           <div class="container_row" style="padding-left: 2em; justify-content: space-around; align-items:center;">
             <div>
               <span id="pump-speed-label">Скорость насоса:</span>
-              <input name='PWM' id='PWM' type='range' min="%PWM_LV%" max="1023" value='%PWM_V%' list="tickmarks" onchange='sliderChange();' aria-labelledby="pump-speed-label">
+              <input name='PWM' id='PWM' type='range' min="0" max="1023" value='0' list="tickmarks" onchange='sliderChange();' aria-labelledby="pump-speed-label">
               <datalist id="tickmarks">
-                <option value="%PWM_LV%">
+                <option id='pwmLowTick' value="0">
                 <option value="300">
                 <option value="500">
                 <option value="700">

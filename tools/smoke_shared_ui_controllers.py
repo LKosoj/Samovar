@@ -168,7 +168,7 @@ def main() -> int:
                 f"{name}: mode theme policy changed")
         require("onLastMessageRemoved" not in source,
                 f"{name}: chart-only removal callback leaked into mode page")
-        onload = source.index("window.onload = function()")
+        onload = source.index("window.onload = async function()")
         start = source.index("SamovarApp.startTelemetryPage(")
         require(onload < start, f"{name}: lifecycle start left window.onload")
 

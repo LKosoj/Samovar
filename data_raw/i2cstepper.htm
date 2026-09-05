@@ -288,7 +288,7 @@
       var title = missing.querySelector('h2');
       if (title) title.textContent = message;
       panel.style.display = 'none';
-      missing.style.display = 'block';
+      missing.style.display = requestError ? 'block' : 'none';
       deviceState[device] = {
         present: false,
         supported: false,
@@ -613,7 +613,7 @@
     </div>
 
     <div id="i2cstepperContent" class="tabcontent" style="display:block;">
-      <div id="mixer_missing" class="container_column i2c-panel">
+      <div id="mixer_missing" class="container_column i2c-panel" style="display:none;">
         <h2>Мешалка I2CStepper не подключена.</h2>
       </div>
 
@@ -652,7 +652,7 @@
         </div>
       </div>
 
-      <div id="pump_missing" class="container_column i2c-panel">
+      <div id="pump_missing" class="container_column i2c-panel" style="display:none;">
         <h2>Насос I2CStepper не подключен.</h2>
       </div>
 

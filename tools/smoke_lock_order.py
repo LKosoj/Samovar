@@ -474,6 +474,8 @@ CONFIGMUX_SITES = [
      "SamSetup = profileCandidate;"),
     ("WebServer.ino", "void handleSave(AsyncWebServerRequest *request)",
      "SetupEEPROM staged = SamSetup;"),
+    ("WebServer.ino", "static bool capture_ui_bootstrap_snapshot(UiBootstrapSnapshot& snapshot)",
+     "snapshot.setup = SamSetup;"),
     ("beer.h", "void FinishAutoTune()",
      "SamSetup = profileCandidate;"),
     ("logic.h", "PumpCalibrationResult pump_calibrate(int stpspeed)",

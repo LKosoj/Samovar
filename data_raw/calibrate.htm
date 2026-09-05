@@ -9,11 +9,23 @@
 
 <script src="app.js"></script>
 <script>
-let stepperStepMlLocal = Number('%StepperStepMl%');
-let stepperStepMlI2C = Number('%StepperStepMlI2C%');
-let calibrationRunning = Number('%CalibrationRunning%') === 1;
-let calibrationPump = calibrationRunning ? '%CalibrationPump%' : '';
+let stepperStepMlLocal = 0;
+let stepperStepMlI2C = 0;
+let calibrationRunning = false;
+let calibrationPump = '';
 let calibrationInFlight = false;
+
+function applyCalibrationBootstrap(data){
+  stepperStepMlLocal = data.stepperStepsPerMl;
+  stepperStepMlI2C = data.i2cStepperStepsPerMl;
+  calibrationRunning = data.calibrationRunning;
+  calibrationPump = calibrationRunning ? data.calibrationPump : '';
+  document.getElementById('kstepperspd').value = String(data.stepperMaxSpeed);
+  const pumpSelect = document.getElementById('pump_type');
+  const pumpHint = document.getElementById('i2c_pump_hint');
+  pumpSelect.style.display = data.i2cPumpVisible ? '' : 'none';
+  pumpHint.style.display = data.i2cPumpVisible ? '' : 'none';
+}
 
 function updateCalibrationButton(){
   document.getElementById('calibrateid').value = calibrationRunning ? 'Зафиксировать 100 мл' : 'Начать калибровку';
@@ -167,8 +179,9 @@ async function saveCalibration(event){
   }
 }
 
-window.onload = function() {
+window.onload = async function() {
   SamovarApp.initTheme();
+  if (!await SamovarApp.loadUiBootstrap(applyCalibrationBootstrap)) return;
   document.forms.setupform.addEventListener('submit', saveCalibration);
   if (calibrationRunning) document.getElementById('pump_type').value = calibrationPump;
   onPumpTypeChange();
@@ -182,15 +195,15 @@ window.onload = function() {
 <h1>Калибровка шагового двигателя</h1>
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">
 <h2><label for="pump_type">Насос:</label>
-  <select id='pump_type' onchange='onPumpTypeChange();' style="display: %I2CPumpTab%;">
+  <select id='pump_type' onchange='onPumpTypeChange();'>
     <option value="local" selected>Встроенный</option>
     <option value="i2c">Внешний (I2C)</option>
   </select>
-  <span style="display: %I2CPumpTab%;">(I2C)</span>
+  <span id="i2c_pump_hint">(I2C)</span>
 </h2>
 <h2>Объем жидкости : <span id='start_pressure'>100</span> мл.</h2>
-<h2><label for="kstepperspd">Скорость шагового двигателя :</label> <input id='kstepperspd' name='kstepperspd' type='text' inputmode='numeric' value='%StepperStep%' style="width: 6em;"> шагов/сек.</h2>
-<h2><label for="stepperstepml">Шагов на 100 мл:</label> <input id='stepperstepml' name='stepperstepml' type='text' inputmode='numeric' value='%StepperStepMl%' style="width: 6em;"></h2>
+<h2><label for="kstepperspd">Скорость шагового двигателя :</label> <input id='kstepperspd' name='kstepperspd' type='text' inputmode='numeric' value='' style="width: 6em;"> шагов/сек.</h2>
+<h2><label for="stepperstepml">Шагов на 100 мл:</label> <input id='stepperstepml' name='stepperstepml' type='text' inputmode='numeric' value='' style="width: 6em;"></h2>
 <input id='calibrateid' type='button' name='calibratenm' value='Начать калибровку' onclick='calibrate();' class="button">
 <input id='save' type='submit' value='Сохранить' class="button">
 <input id='return' type='button' name='return' value='К настройкам' onclick='javascript:location.href="/setup.htm"' class="button">

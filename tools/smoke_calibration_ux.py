@@ -19,8 +19,10 @@ else:
 
 if text:
   for token in [
-    "let calibrationRunning = Number('%CalibrationRunning%') === 1;",
-    "let calibrationPump = calibrationRunning ? '%CalibrationPump%' : '';",
+    "calibrationRunning = data.calibrationRunning;",
+    "calibrationPump = calibrationRunning ? data.calibrationPump : '';",
+    "stepperStepMlLocal = data.stepperStepsPerMl;",
+    "stepperStepMlI2C = data.i2cStepperStepsPerMl;",
     "let calibrationInFlight = false;",
     "function updateCalibrationButton()",
     "calibrationRunning ? 'Зафиксировать 100 мл' : 'Начать калибровку'",
@@ -107,30 +109,31 @@ if text:
         errors.append(f"confirmed calibration read contains fallback path: {token}")
 
   try:
-    onload_body = extract_function_body(text, "window.onload = function()")
+    onload_body = extract_function_body(text, "window.onload = async function()")
   except ValueError as exc:
     errors.append(str(exc))
     onload_body = ""
-  if onload_body and "updateCalibrationButton();" not in onload_body:
-    errors.append("window.onload does not initialize calibration button from explicit state")
+if onload_body:
+  require_ordered_tokens(
+    "calibrate bootstrap precedes calibration initialization",
+    onload_body,
+    [
+      "await SamovarApp.loadUiBootstrap(applyCalibrationBootstrap)",
+      "onPumpTypeChange();",
+      "updateCalibrationButton();",
+    ],
+    errors,
+  )
 
 if not WEB.exists():
   errors.append("WebServer.ino not found")
 else:
   web = WEB.read_text(encoding="utf-8", errors="ignore")
-  try:
-    processor = extract_function_body(web, "String calibrateKeyProcessor(const String &var)")
-  except ValueError as exc:
-    errors.append(str(exc))
-    processor = ""
-  for token in [
-    'var == "CalibrationRunning"',
-    "startval == SAMOVAR_STARTVAL_CALIBRATION || I2CPumpCalibrating",
-    'var == "CalibrationPump"',
-    'I2CPumpCalibrating ? "i2c" : "local"',
-  ]:
-    if token not in processor:
-      errors.append(f"calibrate server hydration missing token: {token}")
+  if "String calibrateKeyProcessor(const String &var)" in web:
+    errors.append("WebServer.ino still renders calibration state through a template processor")
+  for token in ('"calibrationRunning"', '"calibrationPump"'):
+    if token not in web:
+      errors.append(f"/ui-bootstrap calibration state missing token: {token}")
 
 if errors:
   print("Calibration UX smoke check failed:")

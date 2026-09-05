@@ -535,6 +535,7 @@ class BrowserTestRunnerTests(unittest.TestCase):
             "test_edit_ui_browser.py",
             "test_i2c_operation_results_browser.py",
             "test_i2c_pump_ui_browser.py",
+            "test_mode_bootstrap_ui_browser.py",
             "test_mode_logic_ui_browser.py",
             "test_numeric_input_ui_browser.py",
             "test_profile_operation_ui_browser.py",
@@ -550,8 +551,10 @@ class BrowserTestRunnerTests(unittest.TestCase):
             "test_setup_mode_hidden_selected_browser.py",
             "test_shared_ui_controllers_browser.py",
             "test_stale_telemetry_dimming_browser.py",
+            "test_task4_bootstrap_ui_browser.py",
             "test_u03_contrast_browser.py",
             "test_u04_responsive_layout_browser.py",
+            "test_ui_3b_browser.py",
         }
         self.assertEqual(discovered, expected)
 

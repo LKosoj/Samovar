@@ -23,6 +23,12 @@ from build_web_assets import (
     resolve_includes,
 )
 
+GZIP_PAGES = (
+    "index.htm", "beer.htm", "cheese.htm", "distiller.htm", "bk.htm",
+    "nbk.htm", "chart.htm", "program.htm", "calibrate.htm",
+    "calibrate_ph.htm",
+)
+
 
 def main() -> int:
     errors: list[str] = []
@@ -33,6 +39,14 @@ def main() -> int:
 
     sources = {p.name for p in SOURCE.iterdir() if p.is_file()}
     built = {p.name for p in TARGET.iterdir() if p.is_file()}
+
+    for name in GZIP_PAGES:
+        if name not in COMPRESS:
+            errors.append(f"data_raw/{name}: рабочая страница не добавлена в COMPRESS")
+        if (TARGET / name).exists():
+            errors.append(f"data/{name}: рабочая страница должна уезжать только как .gz")
+        if not (TARGET / f"{name}.gz").exists():
+            errors.append(f"data/{name}.gz: нет сжатой рабочей страницы")
 
     # Ожидаемый состав сборки: сжимаемые уезжают только как .gz, остальное - как есть.
     expected = {f"{n}.gz" if n in COMPRESS else n for n in sources}
@@ -49,10 +63,11 @@ def main() -> int:
         except ValueError as exc:
             errors.append(str(exc))
             continue
-        if name in COMPRESS:
+        if name != "setup.htm":
             error = check_no_placeholders(name, source)
             if error:
                 errors.append(error)
+        if name in COMPRESS:
             gz = TARGET / f"{name}.gz"
             if gz.exists() and gz.read_bytes() != canonical_gzip(source):
                 errors.append(

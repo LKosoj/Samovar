@@ -10,7 +10,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from test_numeric_input_ui_browser import QuietHandler, cleanup, render_site, run_cli
+from test_numeric_input_ui_browser import UI_BOOTSTRAP_FIXTURE, QuietHandler, cleanup, render_site, run_cli
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
+  const bootstrapFixture = __UI_BOOTSTRAP_FIXTURE__;
   const viewports = [
     { name: "320x800", width: 320, height: 800 },
     { name: "390x844", width: 390, height: 844 },
@@ -135,6 +136,9 @@ BROWSER_TEST = r'''async page => {
   });
   await page.route("**/ajax?messageCursor=*", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(ajaxFixture)
+  }));
+  await page.route("**/ui-bootstrap", route => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(bootstrapFixture)
   }));
   // program.htm/index.htm/distiller.htm (проверка подсказок на fit, ниже) на загрузке
   // сами запрашивают параметры колонки - без фикстуры это настоящий 404 от тестового
@@ -434,6 +438,9 @@ BROWSER_TEST = r'''async page => {
       response.url() === baseUrl + "/data.csv" && response.status() === 200
     ) : null;
     await page.goto(baseUrl + "/" + file, { waitUntil: "load" });
+    if (file !== "setup.htm" && file !== "i2cstepper.htm") {
+      await page.waitForFunction(() => document.body.inert === false);
+    }
     if (dataResponse) await dataResponse;
     const applied = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
     if (applied !== theme) throw new Error(file + " applied theme=" + applied + ", expected " + theme);
@@ -785,9 +792,9 @@ def main() -> int:
                 }
             }), encoding="utf-8")
             run_cli(cli, session, ["open", f"--config={config}"], temp, 30)
-            code = BROWSER_TEST.replace(
-                "__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_port}")
-            )
+            code = (BROWSER_TEST
+                .replace("__BASE_URL__", json.dumps(f"http://127.0.0.1:{server.server_port}"))
+                .replace("__UI_BOOTSTRAP_FIXTURE__", json.dumps(UI_BOOTSTRAP_FIXTURE)))
             run_cli(cli, session, ["run-code", code], temp, 300)
             browser_report = server.u04_report  # type: ignore[attr-defined]
             if not isinstance(browser_report, dict):

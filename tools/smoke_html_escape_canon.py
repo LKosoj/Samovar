@@ -44,12 +44,9 @@ VALUE_B = "x' onmouseover='alert(1)"
 assert "<" in VALUE_A and ">" in VALUE_A, "фикстура A обязана содержать теги"
 assert "'" in VALUE_B, "фикстура B обязана содержать одинарную кавычку"
 
-# (файл, сигнатура, требуемая подстрока с вызовом html_escape) - шесть точек подстановки,
-# перечисленных в отчёте по п.21 как места правки.
+# Рабочие страницы получают эти значения через JSON; HTML-экранирование осталось
+# нужно только шаблонному setup.htm.
 DELEGATES = [
-    ("indexKeyProcessor", 'html_escape((String)SamSetup.SteamColor)'),
-    ("indexKeyProcessor", 'html_escape((String)SamSetup.videourl)'),
-    ("indexKeyProcessorWithSnapshots", 'html_escape(description)'),
     ("setupKeyProcessor", 'html_escape(String(SamSetup.*f.member))'),
     ("setupKeyProcessor", 'html_escape(String(SamSetup.blynkauth))'),
     ("setupKeyProcessor", 'html_escape(String(SamSetup.tg_token))'),

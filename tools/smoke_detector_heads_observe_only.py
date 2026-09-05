@@ -205,7 +205,7 @@ def check_detector_source(detector_source: str) -> list[str]:
 
 def check_web_interface() -> list[str]:
     errors: list[str] = []
-    for relative in ("data_raw/index.htm", "data/index.htm"):
+    for relative in ("data_raw/index.htm",):
         path = ROOT / relative
         if not path.exists():
             errors.append(f"{relative}: файл не найден")

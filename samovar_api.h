@@ -117,13 +117,10 @@ void stop_active_process_for_mode();
 void mode_switch_begin();
 void mode_switch_end();
 ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode);
-void send_index_template_response(AsyncWebServerRequest *request, const char *spiffsPath, const char *cacheControl);
 void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode);
-String indexKeyProcessor(const String &var);
-String indexKeyProcessorWithSnapshots(const String &var, const String &description, const String &luaButtonList);
-bool copy_lua_button_list_cache(String &buttonList);
+bool copy_lua_button_list_cache(
+    String &buttonList, TickType_t timeout = pdMS_TO_TICKS(50));
 String setupKeyProcessor(const String &var);
-String calibrateKeyProcessor(const String &var);
 void web_command(AsyncWebServerRequest *request);
 void handleSave(AsyncWebServerRequest *request);
 void web_program(AsyncWebServerRequest *request);

@@ -18,6 +18,46 @@ from build_web_assets import resolve_includes
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data_raw"
 
+UI_BOOTSTRAP_FIXTURE = {
+    "mode": 0,
+    "version": "test",
+    "powerUnit": "V",
+    "program": "",
+    "description": "",
+    "luaButtonList": "",
+    "steamColor": "#000000",
+    "pipeColor": "#000000",
+    "waterColor": "#000000",
+    "tankColor": "#000000",
+    "acpColor": "#000000",
+    "steamVisible": True,
+    "pipeVisible": True,
+    "waterVisible": True,
+    "tankVisible": True,
+    "pressureVisible": True,
+    "programNumberVisible": True,
+    "i2cStepperVisible": True,
+    "i2cPumpVisible": True,
+    "beerBrewOrder": "allinone",
+    "pwmLow": 0,
+    "pwmValue": 0,
+    "nbkDp": 0,
+    "columnDiameter": 2,
+    "columnHeight": 1,
+    "packDensity": 80,
+    "heaterResistance": 10,
+    "mainsVoltage": 230,
+    "heaterMaxPower": 230,
+    "stepperMaxSpeed": 1000,
+    "stepperStepsPerMl": 100,
+    "i2cStepperStepsPerMl": 100,
+    "calibrationRunning": False,
+    "calibrationPump": "local",
+    "cheesePhSlope": 1,
+    "cheesePhOffset": 0,
+    "cheesePhSmoothPercent": 20,
+}
+
 BROWSER_TEST = r'''async page => {
   const baseUrl = __BASE_URL__;
   const pages = [
@@ -553,7 +593,16 @@ BROWSER_TEST = r'''async page => {
 
   async function testInvalidProgramHeater() {
     scenario = "program-invalid-heater";
-    await page.goto(baseUrl + "/program_invalid.htm", { waitUntil: "load" });
+    const bootstrapPattern = "**/ui-bootstrap";
+    await page.route(bootstrapPattern, async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.heaterResistance = 1;
+      await route.fulfill({response, json:body});
+    });
+    await page.goto(baseUrl + "/program.htm", { waitUntil: "load" });
+    await page.waitForFunction(() => document.body.inert === false);
+    await page.unroute(bootstrapPattern);
     await page.waitForTimeout(100);
     const state = await page.evaluate(() => {
       const heater = document.getElementById("heaterMaxPower");
@@ -650,7 +699,18 @@ BROWSER_TEST = r'''async page => {
 
   async function testHydratedCalibration() {
     scenario = "calibrate-server-hydrated";
-    await page.goto(baseUrl + "/calibrate_running.htm", { waitUntil: "load" });
+    const bootstrapPattern = "**/ui-bootstrap";
+    await page.route(bootstrapPattern, async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.calibrationRunning = true;
+      body.calibrationPump = "i2c";
+      body.i2cPumpVisible = true;
+      await route.fulfill({response, json:body});
+    });
+    await page.goto(baseUrl + "/calibrate.htm", { waitUntil: "load" });
+    await page.waitForFunction(() => document.body.inert === false);
+    await page.unroute(bootstrapPattern);
     await installRecorder("/calibrate", "calibrate");
     const result = await page.evaluate(async () => {
       const button = document.getElementById("calibrateid");
@@ -925,6 +985,11 @@ BROWSER_TEST = r'''async page => {
       for (const file of pages) {
         scenario = viewport.name + "/" + theme + "/" + file;
         await page.goto(baseUrl + "/" + file, { waitUntil: "load" });
+        if (["index.htm", "beer.htm", "bk.htm", "distiller.htm", "nbk.htm"].includes(file)) {
+          await page.waitForFunction(() =>
+            document.body.inert === false && document.querySelector("#prg").children.length > 0
+          );
+        }
         if (file === "program.htm") await page.waitForTimeout(100);
         if (file === "i2cstepper.htm") await stopI2cPolling();
         const appliedTheme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
@@ -964,6 +1029,9 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
 def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> None:
     shutil.copytree(DATA, target, dirs_exist_ok=True)
+    (target / "ui-bootstrap").write_text(
+        json.dumps(UI_BOOTSTRAP_FIXTURE), encoding="utf-8"
+    )
     color_tokens = color_tokens or {}
     replacements = {
         "pwr_unit": "V",
@@ -1017,26 +1085,6 @@ def render_site(target: Path, color_tokens: dict[str, str] | None = None) -> Non
         resolved = resolve_includes(path.name, path.read_bytes()).decode("utf-8", errors="ignore")
         rendered = token_pattern.sub(replace_token, resolved).replace("%%", "%")
         path.write_text(rendered, encoding="utf-8")
-
-    program = target / "program.htm"
-    invalid = target / "program_invalid.htm"
-    invalid.write_text(
-        program.read_text(encoding="utf-8").replace(
-            "var heaterResistance = Number('10.000000000');",
-            "var heaterResistance = Number('NaN');",
-            1,
-        ),
-        encoding="utf-8",
-    )
-    calibrate = target / "calibrate.htm"
-    running = target / "calibrate_running.htm"
-    running.write_text(
-        calibrate.read_text(encoding="utf-8")
-        .replace("Number('0') === 1", "Number('1') === 1", 1)
-        .replace("calibrationRunning ? 'local' : ''", "calibrationRunning ? 'i2c' : ''", 1),
-        encoding="utf-8",
-    )
-
 
 def run_cli(cli: str, session: str, arguments: list[str], cwd: Path, timeout: int, check: bool = True) -> int:
     result = subprocess.run(

@@ -10,16 +10,16 @@
 
 <script src="app.js"></script>
 <script>
-  var pwr_unit = "%pwr_unit%";
-var heaterResistance = Number('%HeaterR%');
-// Значение берётся из настроек прибора (SamSetup.MainsVoltage), запасное - 230.
+  var pwr_unit = "";
+var heaterResistance = NaN;
+// Значение приходит из проверенного /ui-bootstrap; при ошибке страница остаётся заблокированной.
 // Внимание: set_current_power() (power_regulator.h) клампит УСТАВКУ к 230 В - это
 // потолок регулятора, а не напряжение сети. В формулах wattsToProgramVolts/
 // programVoltsToWatts mainsVolt сокращается (volts = sqrt(W*R)), поэтому от него
 // зависит только автозаполнение поля "Мощность ТЭНа" - максимум, который ТЭН реально
 // отдаст при данной сети. Ранее здесь стояло 220 при клампе 230 - расчёт занижал
 // вольты примерно на 4 процента, а мощность на 9; отсюда и появился хардкод 230.
-var mainsVolt = Number('%MainsVoltage%') || 230;
+var mainsVolt = NaN;
 var _lnIdx = 0;
 var phv = 0;
 var ptv = 0;
@@ -40,6 +40,22 @@ var currentColumnDiameterValue = "";
 
 // ========== КОНФИГУРАЦИЯ КОЛОННЫ (ТОЛЬКО ПРОСМОТР) ==========
 var columnParams = null;
+
+function applyProgramBootstrap(data) {
+  pwr_unit = data.powerUnit;
+  heaterResistance = data.heaterResistance;
+  mainsVolt = data.mainsVoltage;
+  const requestedDiameter = Number(data.columnDiameter).toFixed(1);
+  const diamSelect = document.getElementById('coldiam');
+  currentColumnDiameterValue = diamSelect.querySelector(
+    'option[value="' + requestedDiameter + '"]'
+  ) ? requestedDiameter : '';
+  document.getElementById('version').textContent = data.version;
+  document.getElementById('columnHeight').textContent = String(data.columnHeight);
+  document.getElementById('packDensity').textContent = String(data.packDensity);
+  document.getElementById('WProgram').value = data.program;
+  if (currentColumnDiameterValue) diamSelect.value = currentColumnDiameterValue;
+}
 
 function updateHeadsTailsPercent(recalculate) {
   const materialSelect = document.getElementById('loadprogram');
@@ -1273,7 +1289,8 @@ function set_bgcolor(obj){
   if (glcalcnum) set_num();
 }
 
-window.onload = function() {
+window.onload = async function() {
+  if (!await SamovarApp.loadUiBootstrap(applyProgramBootstrap)) return;
   SamovarApp.initTheme();
   // страховка: calc_program() ставит свои подсказки только при успешном prep_calc(),
   // поэтому статические подсказки (блок параметров расчёта, сводка) включаем здесь безусловно
@@ -1295,7 +1312,7 @@ window.onload = function() {
   const loadProgramSelect = document.getElementById("loadprogram");
   const diamSelect = document.getElementById("coldiam");
   if (diamSelect) {
-    if (!diamSelect.querySelector("option[selected]")) diamSelect.value = "1.5";
+    if (!currentColumnDiameterValue && !diamSelect.querySelector("option[selected]")) diamSelect.value = "1.5";
     currentColumnDiameterValue = diamSelect.value;
   }
   if (loadProgramSelect) {
@@ -1319,7 +1336,7 @@ window.onload = function() {
 <form action='none' onsubmit='return false' name="mainform" id="mainform">
 <h1>
 <div class="message-box" style="display: none;" id="message"></div>
-Samovar v. <span id='version'>%v%</span>
+Samovar v. <span id='version'></span>
 </h1>
 <div class="text"><label for="loadprogram">Расчет программы отбора</label>
 <select id="loadprogram" name="loadprogram" onchange="getProgramFromFile(this)">
@@ -1329,9 +1346,9 @@ Samovar v. <span id='version'>%v%</span>
 </select>
 <label for="coldiam">Диаметр колонны</label>
 <select id="coldiam" name="coldiam" onchange="onColumnDiameterChange(this)">
-  <option value="1.5" %ColDiam_1.5%>1.5 дюйма</option>
-  <option value="2.0" %ColDiam_2.0%>2 дюйма</option>
-  <option value="3.0" %ColDiam_3.0%>3 дюйма</option>
+  <option value="1.5">1.5 дюйма</option>
+  <option value="2.0">2 дюйма</option>
+  <option value="3.0">3 дюйма</option>
 </select>
 </div>
 
@@ -1340,7 +1357,7 @@ Samovar v. <span id='version'>%v%</span>
   <div style="border: 2px solid #3498db; background: var(--bg-program-panel); padding: 15px; border-radius: 5px;">
     <div style="color: var(--text-strong); font-weight: bold; margin-bottom: 10px;">⚙️ ПАРАМЕТРЫ ОБОРУДОВАНИЯ</div>
     <div style="font-size: 0.9em; margin-bottom: 10px; color: var(--text-main);">
-      Диаметр выбран выше (1.5 / 2 / 3 дюйма). Высота: <b>%ColHeight%&nbsp;м</b> | Насадка: <b>%PackDens%&#37;</b>
+      Диаметр выбран выше (1.5 / 2 / 3 дюйма). Высота: <b><span id="columnHeight"></span>&nbsp;м</b> | Насадка: <b><span id="packDensity"></span>&#37;</b>
     </div>
 
     <div id="heaterPowerBlock" style="margin-bottom: 10px;">
@@ -1454,7 +1471,7 @@ Samovar v. <span id='version'>%v%</span>
 
 <div>
 <textarea cols="40" rows="15" id='WProgram1' name='WProgram1' style="visibility: hidden;position: absolute;width: 20px;" hidden></textarea>
-<textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20px;" hidden>%WProgram%</textarea>
+<textarea cols="40" rows="15" id='WProgram' name='WProgram' style="visibility: hidden;position: absolute;width: 20px;" hidden></textarea>
 </div>
 
 <div class="container_row" style="border: 1px dashed #bbb; margin-bottom: 1em;">

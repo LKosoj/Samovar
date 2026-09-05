@@ -86,6 +86,46 @@ def main() -> int:
             "снова опираться на устаревший SamSetup.Mode"
         )
 
+    # Рабочие страницы теперь статические gzip-ответы: шаблонизатор AsyncWebServer
+    # для них невозможен (gzip отключает callback). setup.htm намеренно остаётся
+    # единственной шаблонной страницей.
+    if "send_index_template_response" in source:
+        errors.append(
+            "WebServer.ino: остался send_index_template_response - рабочая страница "
+            "может снова получить шаблонизатор вместо статического gzip-ответа"
+        )
+    for signature in (
+        "void send_index_page(AsyncWebServerRequest *request)",
+        "void send_mode_specific_htm(AsyncWebServerRequest *request, const char *spiffsPath, SAMOVAR_MODE requiredMode)",
+    ):
+        try:
+            body = strip_cpp_comments(extract_function_body(source, signature))
+        except ValueError:
+            continue
+        if "nullptr" not in body or "setTemplateProcessor" in body:
+            errors.append(
+                f"WebServer.ino: {signature.split('(')[0]} должен отдавать "
+                "страницу без template processor"
+            )
+
+    static_routes = (
+        'server.serveStatic("/program.htm", SPIFFS, "/program.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);',
+        'server.serveStatic("/chart.htm", SPIFFS, "/chart.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);',
+        'server.serveStatic("/calibrate.htm", SPIFFS, "/calibrate.htm").setCacheControl("no-store").addMiddleware(&headerFilter);',
+        'server.serveStatic("/calibrate_ph.htm", SPIFFS, "/calibrate_ph.htm").setCacheControl("no-store").addMiddleware(&headerFilter);',
+        'server.serveStatic("/i2cstepper.htm", SPIFFS, "/i2cstepper.htm").setCacheControl("max-age=1").addMiddleware(&headerFilter);',
+    )
+    for route in static_routes:
+        if route not in source:
+            errors.append(f"WebServer.ino: нет статического маршрута {route}")
+    if source.count(".setTemplateProcessor(") != 1 or (
+        'server.serveStatic("/setup.htm", SPIFFS, "/setup.htm").setTemplateProcessor(setupKeyProcessor)'
+        not in source
+    ):
+        errors.append(
+            "WebServer.ino: template processor разрешён только для setup.htm"
+        )
+
     if errors:
         print("mode page-load no-switch smoke failed:")
         for error in errors:
