@@ -613,7 +613,8 @@ def list_network_devices(pio_executable: str) -> List[str]:
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
+        lines = [line for line in (result.stderr or result.stdout).splitlines() if re.search(r"[A-Za-zА-Яа-я]", line)]
+        detail = lines[-1].strip() if lines else "код {}".format(result.returncode)
         raise ConfigError("Не удалось найти устройства в сети: {}".format(detail))
     try:
         services = json.loads(result.stdout)
@@ -1545,27 +1546,28 @@ class ConfiguratorWindow:
 
         settings = ttk.Labelframe(left, text="Настройки прошивки", padding=(8, 4, 8, 8))
         settings.pack(fill="x")
-        self.section_list = tk.Listbox(
-            settings, height=len(SECTIONS), exportselection=False, activestyle="none",
-            width=18, borderwidth=1, relief="solid", highlightthickness=0,
+        section_row = ttk.Frame(settings)
+        section_row.pack(fill="x", pady=(4, 6))
+        ttk.Label(section_row, text="Раздел").pack(side="left")
+        self.section_var = tk.StringVar(value=SECTIONS[0])
+        self.section_combo = ttk.Combobox(
+            section_row, textvariable=self.section_var, values=SECTIONS, state="readonly", width=22,
         )
-        self.section_list.pack(side="left", fill="y", pady=4)
+        self.section_combo.pack(side="left", padx=(10, 0))
+        self.section_combo.bind("<<ComboboxSelected>>", self._section_selected)
         container = ttk.Frame(settings)
-        container.pack(side="left", fill="both", expand=True, padx=(10, 0))
+        container.pack(fill="both", expand=True)
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
         section_frames = {}
         section_rows = {}
         for section in SECTIONS:
-            self.section_list.insert("end", "  " + section)
             frame = ttk.Frame(container, padding=(4, 4, 0, 4))
             frame.grid(row=0, column=0, sticky="nsew")
             frame.columnconfigure(1, weight=1)
             section_frames[section] = frame
             section_rows[section] = 0
         self.section_frames = section_frames
-        self.section_list.bind("<<ListboxSelect>>", self._section_selected)
-        self.section_list.selection_set(0)
 
         self.board_var = tk.StringVar()
         self._add_combo(
@@ -1574,7 +1576,7 @@ class ConfiguratorWindow:
         )
         self.servo_var = tk.StringVar()
         self._add_entry(
-            section_frames, section_rows, "Основные", "Поправки сервопривода (11 чисел)",
+            section_frames, section_rows, "Оборудование", "Поправки сервопривода (11 чисел)",
             self.servo_var, "servoDelta",
         )
 
@@ -1772,9 +1774,8 @@ class ConfiguratorWindow:
             holder.columnconfigure(column, weight=1, uniform="buttons")
 
     def _section_selected(self, _event=None) -> None:
-        selection = self.section_list.curselection()
-        if selection:
-            self.section_frames[SECTIONS[selection[0]]].tkraise()
+        self.section_frames[self.section_var.get()].tkraise()
+        self.section_combo.selection_clear()
 
     def _install_edit_menu(self, widget, kind: str, **options) -> None:
         self.edit_menus.append(EditMenu(widget, kind, **options))
