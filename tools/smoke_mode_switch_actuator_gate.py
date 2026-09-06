@@ -44,6 +44,117 @@ SET_PUMP_PWM_SIGNATURE = "ActuatorCommandResult set_pump_pwm(float duty)"
 OPEN_VALVE_GATE_LINE = "if (mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED;\n    "
 SET_PUMP_PWM_GATE_LINE = "if (duty > 0 && mode_switch_barrier_active) return ACTUATOR_COMMAND_FAILED;\n\n  "
 
+ACTUATOR_ERROR_HARNESS = r'''
+#include <cstdint>
+#include <iostream>
+
+#define USE_WATER_PUMP 1
+
+enum OperationError : uint8_t {
+  OPERATION_ERROR_NONE = 0,
+  OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED,
+};
+
+struct ModeActuatorCleanupState {
+  bool initialized;
+  bool mixerStopped;
+  bool pumpStopped;
+  uint32_t deadline;
+};
+
+static ModeActuatorCleanupState modeActuatorCleanup{};
+static bool valve_status = false;
+static bool mixer_status = false;
+static bool heater_state = false;
+static bool pump_started = false;
+static uint16_t water_pump_speed = 0;
+static bool stepperState = false;
+static int32_t stepperTarget = 0;
+static uint16_t CurrrentStepperSpeed = 0;
+static uint16_t I2CStepperSpeed = 0;
+static uint16_t I2CPumpCmdSpeed = 0;
+static uint32_t I2CPumpTargetSteps = 0;
+static uint16_t I2CPumpTargetMl = 0;
+static bool I2CPumpCalibrating = false;
+
+static bool stepper_safe_get_state() { return stepperState; }
+static int32_t stepper_safe_get_target() { return stepperTarget; }
+
+static OperationError mode_actuator_cleanup_error() {
+@BODY@
+}
+
+static void reset_fixture() {
+  modeActuatorCleanup = {true, true, true, 0};
+  valve_status = false;
+  mixer_status = false;
+  heater_state = false;
+  pump_started = false;
+  water_pump_speed = 0;
+  stepperState = false;
+  stepperTarget = 0;
+  CurrrentStepperSpeed = 0;
+  I2CStepperSpeed = 0;
+  I2CPumpCmdSpeed = 0;
+  I2CPumpTargetSteps = 0;
+  I2CPumpTargetMl = 0;
+  I2CPumpCalibrating = false;
+}
+
+static int failures = 0;
+static void check(bool condition, const char* message) {
+  if (!condition) {
+    std::cerr << "FAIL: " << message << '\n';
+    failures++;
+  }
+}
+
+int main() {
+  reset_fixture();
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_NONE, "idle state");
+
+  reset_fixture(); modeActuatorCleanup.mixerStopped = false;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED, "I2C mixer");
+  reset_fixture(); modeActuatorCleanup.pumpStopped = false;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED, "I2C pump");
+  reset_fixture(); valve_status = true;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED, "valve");
+  reset_fixture(); mixer_status = true;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED, "mixer");
+  reset_fixture(); heater_state = true;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED, "heater");
+  reset_fixture(); pump_started = true;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED, "cooling pump state");
+  reset_fixture(); water_pump_speed = 100;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED, "cooling pump speed");
+  reset_fixture(); stepperState = true;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED, "stepper state");
+  reset_fixture(); stepperTarget = 10;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED, "stepper target");
+  reset_fixture(); CurrrentStepperSpeed = 10;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED, "local stepper speed");
+  reset_fixture(); I2CStepperSpeed = 10;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED, "I2C stepper speed state");
+  reset_fixture(); I2CPumpCmdSpeed = 10;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED, "I2C pump command state");
+  reset_fixture(); I2CPumpTargetSteps = 10;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED, "I2C pump target steps");
+  reset_fixture(); I2CPumpTargetMl = 10;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED, "I2C pump target volume");
+  reset_fixture(); I2CPumpCalibrating = true;
+  check(mode_actuator_cleanup_error() == OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED, "calibration");
+
+  return failures == 0 ? 0 : 1;
+}
+'''
+
 OPEN_VALVE_HARNESS = r'''
 #include <iostream>
 
@@ -342,12 +453,54 @@ def check_set_pump_pwm() -> int:
     return 0
 
 
+def check_actuator_error_details() -> int:
+    source = (ROOT / "mode_switch.h").read_text(encoding="utf-8")
+    try:
+        body = extract_function_body(
+            source, "static OperationError mode_actuator_cleanup_error()")
+    except ValueError as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+
+    rc = run_variant(
+        "mode_actuator_cleanup_error", "baseline", ACTUATOR_ERROR_HARNESS,
+        body, "samovar-mode-switch-actuator-errors-", expect_pass=True)
+    if rc:
+        return rc
+
+    error_names = [
+        "OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED",
+        "OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED",
+        "OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED",
+        "OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED",
+        "OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED",
+        "OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED",
+        "OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED",
+        "OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED",
+    ]
+    for error_name in error_names:
+        mutant = body.replace(f"return {error_name};", "return OPERATION_ERROR_NONE;", 1)
+        if mutant == body:
+            print(f"FAIL: mutation target not found: {error_name}", file=sys.stderr)
+            return 1
+        rc = run_variant(
+            "mode_actuator_cleanup_error", error_name, ACTUATOR_ERROR_HARNESS,
+            mutant, "samovar-mode-switch-actuator-errors-mutant-", expect_pass=False)
+        if rc:
+            return rc
+    return 0
+
+
 def main() -> int:
     rc = check_open_valve()
     if rc:
         return rc
 
     rc = check_set_pump_pwm()
+    if rc:
+        return rc
+
+    rc = check_actuator_error_details()
     if rc:
         return rc
 

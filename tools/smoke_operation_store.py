@@ -415,6 +415,27 @@ void test_wire_codes() {
   check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED),
                     "mode_switch_lua_reload_failed") == 0,
         "mode-switch Lua reload error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED),
+                    "mode_switch_i2c_mixer_failed") == 0,
+        "mode-switch I2C mixer error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED),
+                    "mode_switch_i2c_pump_failed") == 0,
+        "mode-switch I2C pump error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED),
+                    "mode_switch_local_stepper_failed") == 0,
+        "mode-switch local stepper error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED),
+                    "mode_switch_valve_failed") == 0,
+        "mode-switch valve error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED),
+                    "mode_switch_mixer_failed") == 0,
+        "mode-switch mixer error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED),
+                    "mode_switch_cooling_pump_failed") == 0,
+        "mode-switch cooling pump error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED),
+                    "mode_switch_calibration_failed") == 0,
+        "mode-switch calibration error code mismatch");
   check(std::strcmp(operation_error_code(OPERATION_ERROR_RUNTIME_BUSY),
                     "operation_runtime_busy") == 0,
         "runtime-busy error code mismatch");

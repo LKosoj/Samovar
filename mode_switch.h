@@ -150,17 +150,58 @@ static bool stop_i2c_mode_actuator(I2CStepperDevice& dev, bool finishCalibration
   return stopped;
 }
 
-static bool mode_actuators_idle() {
-  bool idle = !valve_status && !mixer_status && !heater_state &&
-              !stepper_safe_get_state() && stepper_safe_get_target() == 0 &&
-              CurrrentStepperSpeed == 0 && I2CStepperSpeed == 0 &&
-              I2CPumpCmdSpeed == 0 && I2CPumpTargetSteps == 0 &&
-              I2CPumpTargetMl == 0 && !I2CPumpCalibrating;
+static OperationError mode_actuator_cleanup_error() {
+  if (!modeActuatorCleanup.mixerStopped) {
+    return OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED;
+  }
+  if (!modeActuatorCleanup.pumpStopped) {
+    return OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED;
+  }
+  if (valve_status) return OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED;
+  if (mixer_status) return OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED;
+  if (heater_state) return OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED;
 #ifdef USE_WATER_PUMP
-  idle = idle && !pump_started && water_pump_speed == 0;
+  if (pump_started || water_pump_speed != 0) {
+    return OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED;
+  }
 #endif
-  return idle && modeActuatorCleanup.mixerStopped &&
-         modeActuatorCleanup.pumpStopped;
+  if (stepper_safe_get_state() || stepper_safe_get_target() != 0 ||
+      CurrrentStepperSpeed != 0 || I2CStepperSpeed != 0 ||
+      I2CPumpCmdSpeed != 0 || I2CPumpTargetSteps != 0 ||
+      I2CPumpTargetMl != 0) {
+    return OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED;
+  }
+  if (I2CPumpCalibrating) {
+    return OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED;
+  }
+  return OPERATION_ERROR_NONE;
+}
+
+static bool mode_actuators_idle() {
+  return mode_actuator_cleanup_error() == OPERATION_ERROR_NONE;
+}
+
+static const char* mode_actuator_cleanup_warning(OperationError error) {
+  switch (error) {
+    case OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED:
+      return "Смена режима завершена принудительно: I2C-мешалка не подтвердила остановку";
+    case OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED:
+      return "Смена режима завершена принудительно: I2C-насос не подтвердил остановку";
+    case OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED:
+      return "Смена режима завершена принудительно: шаговый двигатель не остановился";
+    case OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED:
+      return "Смена режима завершена принудительно: клапан не закрылся";
+    case OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED:
+      return "Смена режима завершена принудительно: мешалка не остановилась";
+    case OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED:
+      return "Смена режима завершена принудительно: насос охлаждения не остановился";
+    case OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED:
+      return "Смена режима завершена принудительно: не завершилась калибровка насоса";
+    case OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED:
+      return "Смена режима завершена принудительно: не подтвердился нагрев";
+    default:
+      return "Смена режима завершена принудительно: не подтвердился привод";
+  }
 }
 
 static bool tick_mode_actuator_cleanup(bool luaIdle) {
@@ -318,8 +359,9 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
       warning = "Смена режима завершена принудительно: не подтвердился очередь";
       error = OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED;
     } else if (!actuatorsIdle) {
-      warning = "Смена режима завершена принудительно: не подтвердился привод";
-      error = OPERATION_ERROR_MODE_SWITCH_ACTUATOR_FAILED;
+      const OperationError actuatorError = mode_actuator_cleanup_error();
+      warning = mode_actuator_cleanup_warning(actuatorError);
+      error = actuatorError;
     } else if (heaterPowerOn) {
       warning = "Смена режима завершена принудительно: не подтвердился нагрев";
       error = OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED;

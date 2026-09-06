@@ -52,6 +52,13 @@ enum OperationError : uint8_t {
   OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED,
   OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED,
   OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED,
 };
 
 struct OperationRecord {
@@ -237,6 +244,13 @@ inline const char* operation_error_code(OperationError error) {
     case OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED: return "mode_switch_self_test_failed";
     case OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED: return "mode_switch_owner_failed";
     case OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED: return "mode_switch_lua_reload_failed";
+    case OPERATION_ERROR_MODE_SWITCH_I2C_MIXER_FAILED: return "mode_switch_i2c_mixer_failed";
+    case OPERATION_ERROR_MODE_SWITCH_I2C_PUMP_FAILED: return "mode_switch_i2c_pump_failed";
+    case OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED: return "mode_switch_local_stepper_failed";
+    case OPERATION_ERROR_MODE_SWITCH_VALVE_FAILED: return "mode_switch_valve_failed";
+    case OPERATION_ERROR_MODE_SWITCH_MIXER_FAILED: return "mode_switch_mixer_failed";
+    case OPERATION_ERROR_MODE_SWITCH_COOLING_PUMP_FAILED: return "mode_switch_cooling_pump_failed";
+    case OPERATION_ERROR_MODE_SWITCH_CALIBRATION_FAILED: return "mode_switch_calibration_failed";
     case OPERATION_ERROR_RUNTIME_BUSY: return "operation_runtime_busy";
     case OPERATION_ERROR_I2C_CONFIG_BUSY: return "i2c_config_busy";
     case OPERATION_ERROR_I2C_COMMAND_FAILED: return "i2c_command_failed";

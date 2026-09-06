@@ -62,6 +62,8 @@ def build_harness() -> str:
         "@PUBLISH_BODY@": extract_function_body(samovar, "static void publish_profile_operation_terminal()"),
         "@FORCE_COMPLETE_BODY@": extract_function_body(
             mode_switch, "static ModeSwitchResult force_complete_mode_switch_failed("),
+        "@ACTUATOR_WARNING_BODY@": extract_function_body(
+            mode_switch, "static const char* mode_actuator_cleanup_warning(OperationError error)"),
         "@SWITCH_BODY@": extract_function_body(mode_switch, "ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode)"),
         "@PROCESS_BODY@": extract_last_function_body(samovar, "static void process_profile_operation()"),
         "@CLEAR_BARRIER_BODY@": extract_function_body(
@@ -398,6 +400,16 @@ static bool tick_mode_actuator_cleanup(bool) {
     modeActuatorCleanup.deadline = cleanupDeadline;
   }
   return actuatorsIdleResult;
+}
+
+static OperationError mode_actuator_cleanup_error() {
+  return actuatorsIdleResult
+      ? OPERATION_ERROR_NONE
+      : OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED;
+}
+
+static const char* mode_actuator_cleanup_warning(OperationError error) {
+@ACTUATOR_WARNING_BODY@
 }
 
 bool request_data_log_close() {
@@ -1133,8 +1145,8 @@ static void test_mode_switch_force_completion_names_single_blocker() {
        OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED,
        "Смена режима завершена принудительно: не подтвердился владелец режима"},
       {"actuatorsIdle", false, false, false, false, false, true, false, true, true, false,
-       OPERATION_ERROR_MODE_SWITCH_ACTUATOR_FAILED,
-       "Смена режима завершена принудительно: не подтвердился привод"},
+       OPERATION_ERROR_MODE_SWITCH_LOCAL_STEPPER_FAILED,
+       "Смена режима завершена принудительно: шаговый двигатель не остановился"},
       // luaIdle/queuesIdle входили ещё в дофиксовый выход по дедлайну, но
       // проверены не были: lua_mode_owner_idle() был захардкожен в true, а
       // modeQueuesIdleResult никто не ронял. Без этих двух кейсов терм можно
