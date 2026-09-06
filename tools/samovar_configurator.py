@@ -103,11 +103,11 @@ VALUE_SPECS = (
     ValueSpec("NBK_END_STEAM_RISE", "Рост температуры пара для завершения, °C", "НБК"),
     ValueSpec("SAMOVAR_USE_POWER_START_TIME", "Задержка запуска регулятора, мс", "Регулятор"),
     ValueSpec("LCD_RESET_PERIOD_MS", "Период сброса дисплея, мс", "Оборудование"),
-    ValueSpec("PAUSE_RESUME_HYSTERESIS_DELTA", "Гистерезис паузы, °C", "Автоматика"),
-    ValueSpec("PROGRAM_ROW_STOP_PAUSE_LIMIT", "Число стоп-пауз строки", "Автоматика"),
-    ValueSpec("PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT", "Снижение скорости после стоп-пауз, %", "Автоматика"),
-    ValueSpec("PROGRAM_DONE_AUTO_POWEROFF_MIN", "Автовыключение после программы, мин", "Автоматика"),
-    ValueSpec("BODY_TEMP_AUTOSET_MAX_RISE", "Предел автоподъёма температуры тела, °C", "Автоматика"),
+    ValueSpec("PAUSE_RESUME_HYSTERESIS_DELTA", "Гистерезис паузы, °C", "Ректификация"),
+    ValueSpec("PROGRAM_ROW_STOP_PAUSE_LIMIT", "Число стоп-пауз строки", "Ректификация"),
+    ValueSpec("PROGRAM_ROW_STOP_PAUSE_SPEED_CUT_PCT", "Снижение скорости после стоп-пауз, %", "Ректификация"),
+    ValueSpec("PROGRAM_DONE_AUTO_POWEROFF_MIN", "Автовыключение после программы, мин", "Ректификация"),
+    ValueSpec("BODY_TEMP_AUTOSET_MAX_RISE", "Предел автоподъёма температуры тела, °C", "Ректификация"),
     ValueSpec("BK_STEAM_SETPOINT_MIN", "Минимальная уставка пара БК, °C", "БК"),
     ValueSpec("BK_STEAM_SETPOINT_MAX", "Максимальная уставка пара БК, °C", "БК"),
     ValueSpec("BK_WATER_ADJUST_PERIOD_MS", "Период регулировки воды БК, мс", "БК"),
@@ -133,11 +133,11 @@ BOOL_SPECS = (
     BoolSpec("WHLS_HIGH_PULL", "Датчик уровня жидкости N-P-N", "Датчики"),
     BoolSpec("USE_ALARM_BTN", "Использовать аварийную кнопку", "Оборудование"),
     BoolSpec("USE_BTN", "Использовать кнопку управления", "Оборудование"),
-    BoolSpec("USE_BODY_TEMP_AUTOSET", "Автокоррекция температуры тела", "Автоматика"),
+    BoolSpec("USE_BODY_TEMP_AUTOSET", "Автокоррекция температуры тела", "Ректификация"),
     BoolSpec("USE_LUA", "Использовать Lua", "Оборудование"),
     BoolSpec("USE_STEPPER_ACCELERATION", "Плавный разгон шагового двигателя", "Шаговый двигатель"),
     BoolSpec("STEPPER_REVERSE", "Обратное направление шагового двигателя", "Шаговый двигатель"),
-    BoolSpec("COLUMN_WETTING", "Смачивание насадки перед ректификацией", "Автоматика"),
+    BoolSpec("COLUMN_WETTING", "Смачивание насадки перед ректификацией", "Ректификация"),
 )
 
 OPTIONAL_SPECS = (
@@ -145,7 +145,7 @@ OPTIONAL_SPECS = (
     OptionalSpec("USE_EXPANDER", "Адрес расширителя PCF8575", "Оборудование", "number"),
     OptionalSpec("USE_ANALOG_EXPANDER", "Адрес расширителя PCF8591", "Оборудование", "number"),
     OptionalSpec("I2CStepperStepMl", "Шагов на мл для I2CStepper", "Шаговый двигатель", "number"),
-    OptionalSpec("WETTING_POWER", "Мощность смачивания насадки", "Автоматика", "number"),
+    OptionalSpec("WETTING_POWER", "Мощность смачивания насадки", "Ректификация", "number"),
 )
 
 CHOICE_VALUE_SPECS = (
@@ -155,7 +155,7 @@ CHOICE_VALUE_SPECS = (
 
 SECTIONS = (
     "Основные", "Температуры", "Регулятор", "БК", "НБК", "Датчики",
-    "Насосы", "Оборудование", "Шаговый двигатель", "Автоматика", "Сеть",
+    "Насосы", "Оборудование", "Шаговый двигатель", "Ректификация", "Сеть",
 )
 
 NUMERIC_RE = re.compile(
