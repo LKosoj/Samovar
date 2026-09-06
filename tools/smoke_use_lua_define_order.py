@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
 Удерживает ПОРЯДОК: трансляция `SAMOVAR_BUILD_LUA -> #define USE_LUA`
-(сейчас в Samovar_ini.h) обязана происходить РАНЬШЕ первого места, где
+в Samovar.h обязана происходить РАНЬШЕ первого места, где
 Samovar.h проверяет `#ifdef USE_LUA`, чтобы объявить `xLuaSemaphore`.
 
 Почему это хрупко: раньше эта же трансляция стояла в Samovar.h НИЖЕ строки,
 объявляющей xLuaSemaphore под `#ifdef USE_LUA` - из-за этого окружение
 Samovar_lua_mqtt не собиралось ("'xLuaSemaphore' was not declared in this
-scope"). Перенос трансляции в Samovar_ini.h (который Samovar.h подключает
-задолго до xLuaSemaphore, строка `#include "Samovar_ini.h"`) это исправил,
-но ничем не удержан: удаление строки, перенос её обратно ниже xLuaSemaphore,
+scope"). Теперь трансляция стоит в Samovar.h до xLuaSemaphore, но её порядок
+нужно удерживать: удаление строки, перенос её обратно ниже xLuaSemaphore,
 обёртывание блока в лишнее условие или переименование макроса сломает сборку
 Samovar_lua_mqtt молча - ни один другой тест этого не заметит (окружение
 просто не попадает в обычный smoke-прогон).
@@ -22,7 +21,8 @@ Samovar_lua_mqtt молча - ни один другой тест этого н�
 сборке никогда бы не определился.
 
 НОВАЯ версия доказывает поведение НАСТОЯЩИМ препроцессором (cpp) на настоящих
-Samovar_ini.h/Samovar.h, а не на вырезанных фрагментах:
+Samovar_ini.h/Samovar.h, а не на вырезанных фрагментах. Она также проверяет
+соседнюю трансляцию `SAMOVAR_BUILD_MQTT -> #define USE_MQTT`:
   1. Прогоняет cpp с -DSAMOVAR_BUILD_LUA и без него и проверяет: с флагом
      строка `SemaphoreHandle_t xLuaSemaphore = NULL;` (настоящая строка из
      Samovar.h, не выдуманный маркер) обязана попасть в результат
@@ -49,14 +49,15 @@ Samovar_ini.h/Samovar.h, а не на вырезанных фрагментах:
     компенсирующими #endif на конец - ровно по числу директив #if/#ifdef/
     #ifndef этого файла, оставшихся открытыми на момент среза (в первую
     очередь это его собственный include guard `#ifndef __SAMOVAR_H_`).
-    Всё ДО среза - дословный текст настоящего файла, включая порядок
-    #include "Samovar_ini.h" и весь путь до xLuaSemaphore.
+    Всё ДО среза - дословный текст настоящего файла, включая блоки трансляции
+    и весь путь до xLuaSemaphore.
   - Samovar_pin.h содержит `#if not defined(BOARD)` - альтернативный токен
     "not" распознаётся препроцессором только в режиме C++, поэтому cpp
     запускается с `-x c++` (эти файлы и так компилируются как C++).
   - Это ДОКАЗЫВАЕТ: при реальном порядке файлов и реальном содержимом от
     начала Samovar.h до конца блока xLuaSemaphore, флаг SAMOVAR_BUILD_LUA
-    действительно управляет тем, определён ли USE_LUA к моменту проверки.
+    действительно управляет тем, определён ли USE_LUA к моменту проверки;
+    SAMOVAR_BUILD_MQTT аналогично определяет USE_MQTT.
     Это НЕ проверяет побочные эффекты USE_LUA дальше по файлу (остальные
     ifdef USE_LUA в Samovar.ino/WebServer.ino и т.п.) - для них нужна была бы
     полная сборка окружения Samovar_lua_mqtt через PlatformIO.
@@ -71,6 +72,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 TRANSITION_BLOCK = "#ifdef SAMOVAR_BUILD_LUA\n#define USE_LUA\n#endif"
+MQTT_TRANSITION_BLOCK = "#ifdef SAMOVAR_BUILD_MQTT\n#define USE_MQTT\n#endif"
 CHECKPOINT_BLOCK = (
     "#ifdef USE_LUA\n"
     "SemaphoreHandle_t xLuaSemaphore = NULL;\n"
@@ -78,6 +80,7 @@ CHECKPOINT_BLOCK = (
     "#endif"
 )
 XLUA_DECLARATION = "SemaphoreHandle_t xLuaSemaphore = NULL;"
+MQTT_PROBE = "SAMOVAR_TEST_MQTT_ENABLED"
 
 # Библиотеки, которые #include'ит Samovar.h/Samovar_ini.h до конца блока
 # xLuaSemaphore. Их РЕАЛЬНОГО содержимого на машине сборки теста нет и для
@@ -133,7 +136,13 @@ def _build_stub_includes(stub_dir: Path) -> None:
         (stub_dir / name).write_text("", encoding="utf-8")
 
 
-def preprocess(ini_text: str, samovar_slice_text: str, *, build_lua: bool) -> str:
+def preprocess(
+    ini_text: str,
+    samovar_slice_text: str,
+    *,
+    build_lua: bool,
+    build_mqtt: bool = False,
+) -> str:
     """Прогоняет настоящий `cpp` над переданным содержимым Samovar_ini.h и
     (уже обрезанного до конца блока xLuaSemaphore) Samovar.h - содержимое
     может быть как реальным, так и мутированной копией в памяти; на диск
@@ -145,7 +154,8 @@ def preprocess(ini_text: str, samovar_slice_text: str, *, build_lua: bool) -> st
         _build_stub_includes(stub_dir)
 
         (tmp_path / "Samovar_ini.h").write_text(ini_text, encoding="utf-8")
-        (tmp_path / "Samovar.h").write_text(samovar_slice_text, encoding="utf-8")
+        mqtt_probe = "\n#ifdef USE_MQTT\n{}\n#endif\n".format(MQTT_PROBE)
+        (tmp_path / "Samovar.h").write_text(samovar_slice_text + mqtt_probe, encoding="utf-8")
         for name in _SUPPORT_HEADER_NAMES:
             shutil.copyfile(ROOT / name, tmp_path / name)
 
@@ -155,6 +165,8 @@ def preprocess(ini_text: str, samovar_slice_text: str, *, build_lua: bool) -> st
         ]
         if build_lua:
             cmd.append("-DSAMOVAR_BUILD_LUA")
+        if build_mqtt:
+            cmd.append("-DSAMOVAR_BUILD_MQTT")
         cmd.append(str(tmp_path / "Samovar.h"))
 
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -165,6 +177,10 @@ def preprocess(ini_text: str, samovar_slice_text: str, *, build_lua: bool) -> st
 
 def xlua_declared(preprocessed_text: str) -> bool:
     return XLUA_DECLARATION in preprocessed_text
+
+
+def mqtt_enabled(preprocessed_text: str) -> bool:
+    return MQTT_PROBE in preprocessed_text
 
 
 def check_mutation(name: str, mutated_ini: str, mutated_samovar_slice: str) -> list[str]:
@@ -195,11 +211,19 @@ def main() -> int:
     ini_text = (ROOT / "Samovar_ini.h").read_text(encoding="utf-8")
     samovar_text = (ROOT / "Samovar.h").read_text(encoding="utf-8")
 
-    if TRANSITION_BLOCK not in ini_text:
+    if TRANSITION_BLOCK not in samovar_text:
         print(
             f"FAIL: блок `#ifdef SAMOVAR_BUILD_LUA / #define USE_LUA / #endif` не найден "
-            f"в Samovar_ini.h дословно - его удалили, переместили или переформатировали "
+            f"в Samovar.h дословно - его удалили, переместили или переформатировали "
             f"(anchor: {TRANSITION_BLOCK!r})",
+            file=sys.stderr,
+        )
+        return 1
+    if MQTT_TRANSITION_BLOCK not in samovar_text:
+        print(
+            f"FAIL: блок `#ifdef SAMOVAR_BUILD_MQTT / #define USE_MQTT / #endif` не найден "
+            f"в Samovar.h дословно - его удалили, переместили или переформатировали "
+            f"(anchor: {MQTT_TRANSITION_BLOCK!r})",
             file=sys.stderr,
         )
         return 1
@@ -234,6 +258,21 @@ def main() -> int:
                 "без -DSAMOVAR_BUILD_LUA объявление xLuaSemaphore всё равно попало в "
                 "результат препроцессора - USE_LUA определяется, когда флаг не задан"
             )
+        if mqtt_enabled(without_flag):
+            errors.append(
+                "без -DSAMOVAR_BUILD_MQTT макрос USE_MQTT всё равно определён"
+            )
+
+    try:
+        with_mqtt = preprocess(ini_text, samovar_slice, build_lua=False, build_mqtt=True)
+    except RuntimeError as error:
+        errors.append(str(error))
+    else:
+        if not mqtt_enabled(with_mqtt):
+            errors.append(
+                "с флагом -DSAMOVAR_BUILD_MQTT макрос USE_MQTT не определён "
+                "после обработки Samovar.h"
+            )
 
     if errors:
         print("USE_LUA define-order smoke check failed:", file=sys.stderr)
@@ -243,6 +282,7 @@ def main() -> int:
 
     print("OK: с -DSAMOVAR_BUILD_LUA настоящий препроцессор видит объявление xLuaSemaphore")
     print("OK: без -DSAMOVAR_BUILD_LUA настоящий препроцессор его не видит")
+    print("OK: с -DSAMOVAR_BUILD_MQTT настоящий препроцессор определяет USE_MQTT")
 
     # ---- Мутационная самопроверка: 4 поломки, каждая обязана красить тест ----
     # Мутации накладываются на копии текста В ПАМЯТИ (ini_text/samovar_slice),
@@ -250,27 +290,31 @@ def main() -> int:
     mutations = [
         (
             "удаление блока трансляции",
-            ini_text.replace(TRANSITION_BLOCK, "", 1),
-            samovar_slice,
+            ini_text,
+            samovar_slice.replace(TRANSITION_BLOCK, "", 1),
         ),
         (
             "перенос блока трансляции в Samovar.h ниже xLuaSemaphore",
-            ini_text.replace(TRANSITION_BLOCK, "", 1),
-            samovar_slice.replace(CHECKPOINT_BLOCK, CHECKPOINT_BLOCK + "\n\n" + TRANSITION_BLOCK, 1),
+            ini_text,
+            samovar_slice.replace(TRANSITION_BLOCK, "", 1).replace(
+                CHECKPOINT_BLOCK, CHECKPOINT_BLOCK + "\n\n" + TRANSITION_BLOCK, 1
+            ),
         ),
         (
             "обёртывание блока в #if неопределённого флага",
-            ini_text.replace(
+            ini_text,
+            samovar_slice.replace(
                 TRANSITION_BLOCK,
                 "#if SAMOVAR_UNDEFINED_LUA_GATE\n" + TRANSITION_BLOCK + "\n#endif",
                 1,
             ),
-            samovar_slice,
         ),
         (
             "переименование USE_LUA в другое имя",
-            ini_text.replace(TRANSITION_BLOCK, TRANSITION_BLOCK.replace("USE_LUA", "USE_LUA_RENAMED"), 1),
-            samovar_slice,
+            ini_text,
+            samovar_slice.replace(
+                TRANSITION_BLOCK, TRANSITION_BLOCK.replace("USE_LUA", "USE_LUA_RENAMED"), 1
+            ),
         ),
     ]
 
@@ -282,6 +326,19 @@ def main() -> int:
                 print(f" - {error}", file=sys.stderr)
             return 1
         print(f"OK: мутация «{name}» ловится (сборка Samovar_lua_mqtt была бы сломана)")
+
+    without_mqtt_transition = samovar_slice.replace(MQTT_TRANSITION_BLOCK, "", 1)
+    try:
+        mqtt_mutant = preprocess(
+            ini_text, without_mqtt_transition, build_lua=False, build_mqtt=True
+        )
+    except RuntimeError as error:
+        print(f"USE_MQTT define smoke check failed: {error}", file=sys.stderr)
+        return 1
+    if mqtt_enabled(mqtt_mutant):
+        print("FAIL: мутация удаления трансляции USE_MQTT пережила тест", file=sys.stderr)
+        return 1
+    print("OK: мутация удаления трансляции USE_MQTT ловится")
 
     print("USE_LUA define-order smoke check passed")
     return 0

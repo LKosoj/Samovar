@@ -749,7 +749,7 @@ if "SAMOVAR_BUILD_NO_POWER" in ini or "SAMOVAR_BUILD_RMVK" in ini or "SAMOVAR_BU
     errors.append("PlatformIO build selectors must not obscure the manual selector in Samovar_ini.h")
 require(
     "non-power compile macro selectors",
-    ini,
+    samovar_header,
     (
         "SAMOVAR_BUILD_LUA",
         "SAMOVAR_BUILD_MQTT",
