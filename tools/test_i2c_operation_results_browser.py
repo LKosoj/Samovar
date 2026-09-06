@@ -340,20 +340,20 @@ BROWSER_HELPER = r'''(() => {
     covered.push(name);
 
     for (const failure of [
-      ["command", "i2c_command_failed", 111],
-      ["device", "i2c_device_error", 112],
-      ["refresh", "i2c_refresh_failed", 113]
+      ["command", "i2c_command_failed", "не подтвердило команду", 111],
+      ["device", "i2c_device_error", "сообщило об ошибке", 112],
+      ["refresh", "i2c_refresh_failed", "не удалось получить текущее состояние", 113]
     ]) {
       name = "i2c/failed-" + failure[0];
       install({
-        mutations: [accepted(failure[2])],
-        lookups: [terminal(failure[2], "failed", failure[1])]
+        mutations: [accepted(failure[3])],
+        lookups: [terminal(failure[3], "failed", failure[1])]
       });
-      const failed = await runPumpApply(failure[2]);
+      const failed = await runPumpApply(failure[3]);
       const failedTrace = trace();
       assertTrace(name, failedTrace, 1, 1);
       if (!failed.started || !failed.idle || !failed.dirty ||
-          failed.value !== String(failure[2]) || !failed.error.includes(failure[1])) {
+          failed.value !== String(failure[3]) || !failed.error.includes(failure[2])) {
         throw new Error(name + " state mismatch: " + JSON.stringify(failed));
       }
       covered.push(name);
@@ -606,7 +606,7 @@ BROWSER_HELPER = r'''(() => {
         document.getElementById("calibrateid").disabled ||
         !document.getElementById("pump_type").disabled ||
         !document.getElementById("kstepperspd").disabled ||
-        !error || !error.textContent.includes("profile_persist_failed") ||
+        !error || !error.textContent.includes("не удалось записать в постоянную память") ||
         value.reads.length !== 0 ||
         JSON.stringify(after) !== JSON.stringify(before) ||
         value.mutations[0] !== "/calibrate?pump=i2c&finish=1") {

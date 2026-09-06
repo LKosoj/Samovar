@@ -41,6 +41,17 @@ enum OperationError : uint8_t {
   OPERATION_ERROR_I2C_REFRESH_FAILED,
   OPERATION_ERROR_CALIBRATION_INVALID_RESULT,
   OPERATION_ERROR_STALE_REAPED,
+  OPERATION_ERROR_MODE_SWITCH_LOG_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_ACTUATOR_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_POWER_TRANSITION_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_NBK_TRANSITION_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_HEATING_START_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED,
+  OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED,
 };
 
 struct OperationRecord {
@@ -215,6 +226,17 @@ inline const char* operation_error_code(OperationError error) {
     case OPERATION_ERROR_CANCELLED: return "operation_cancelled";
     case OPERATION_ERROR_PROFILE_PERSIST_FAILED: return "profile_persist_failed";
     case OPERATION_ERROR_MODE_SWITCH_FAILED: return "mode_switch_failed";
+    case OPERATION_ERROR_MODE_SWITCH_LOG_FAILED: return "mode_switch_log_failed";
+    case OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED: return "mode_switch_lua_stop_failed";
+    case OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED: return "mode_switch_queue_failed";
+    case OPERATION_ERROR_MODE_SWITCH_ACTUATOR_FAILED: return "mode_switch_actuator_failed";
+    case OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED: return "mode_switch_heater_failed";
+    case OPERATION_ERROR_MODE_SWITCH_POWER_TRANSITION_FAILED: return "mode_switch_power_transition_failed";
+    case OPERATION_ERROR_MODE_SWITCH_NBK_TRANSITION_FAILED: return "mode_switch_nbk_transition_failed";
+    case OPERATION_ERROR_MODE_SWITCH_HEATING_START_FAILED: return "mode_switch_heating_start_failed";
+    case OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED: return "mode_switch_self_test_failed";
+    case OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED: return "mode_switch_owner_failed";
+    case OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED: return "mode_switch_lua_reload_failed";
     case OPERATION_ERROR_RUNTIME_BUSY: return "operation_runtime_busy";
     case OPERATION_ERROR_I2C_CONFIG_BUSY: return "i2c_config_busy";
     case OPERATION_ERROR_I2C_COMMAND_FAILED: return "i2c_command_failed";

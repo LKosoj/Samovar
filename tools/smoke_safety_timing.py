@@ -439,7 +439,7 @@ if stop_process_idx is not None:
                 f"through to the generic reset), got {actual!r}"
             )
 force_complete_mode_switch = function_body(
-    mode_switch, "static ModeSwitchResult force_complete_mode_switch_failed(const char* warning)")
+    mode_switch, "static ModeSwitchResult force_complete_mode_switch_failed(")
 require_ordered_tokens(
     "force-complete releases the barrier on every failure path",
     force_complete_mode_switch,
@@ -484,7 +484,7 @@ require_ordered_tokens(
         # поэтому и старая дефектная проверка из 5 термов проходила скан насквозь.
         # `&&` тут не украшение - он отличает выход от нижнего гейта.
         "&& !cleanupReady) {",
-        "force_complete_mode_switch_failed(warning)",
+        "force_complete_mode_switch_failed(error, warning)",
         "if (!modeSwitchState.logCloseRequested)",
         "request_data_log_close()",
         "safety_mode_switch_mark_log_close_requested",

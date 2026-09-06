@@ -398,6 +398,39 @@
     return true;
   }
 
+  function operationErrorText(code) {
+    const messages = {
+      invalid_operation_id: 'некорректный номер операции',
+      operation_not_found: 'операция не найдена или её результат уже удалён',
+      operation_store_full: 'очередь операций заполнена',
+      operation_store_busy: 'хранилище операций временно занято',
+      invalid_operation_transition: 'нарушена последовательность выполнения операции',
+      operation_internal: 'внутренняя ошибка выполнения операции',
+      operation_cancelled: 'операция отменена',
+      profile_persist_failed: 'настройки не удалось записать в постоянную память',
+      mode_switch_failed: 'не удалось завершить смену режима; точная причина есть в журнале',
+      mode_switch_log_failed: 'не завершилось закрытие журнала',
+      mode_switch_lua_stop_failed: 'не остановилось выполнение Lua',
+      mode_switch_queue_failed: 'не освободилась очередь команд',
+      mode_switch_actuator_failed: 'привод не подтвердил остановку',
+      mode_switch_heater_failed: 'нагрев не подтвердил выключение',
+      mode_switch_power_transition_failed: 'не завершился переход мощности',
+      mode_switch_nbk_transition_failed: 'не завершился переход НБК',
+      mode_switch_heating_start_failed: 'не отменился запуск нагрева',
+      mode_switch_self_test_failed: 'не остановился самотест',
+      mode_switch_owner_failed: 'после предыдущего режима не сбросилось внутреннее состояние программы',
+      mode_switch_lua_reload_failed: 'не удалось перечитать Lua-скрипт нового режима',
+      operation_runtime_busy: 'устройство занято другой операцией',
+      i2c_config_busy: 'I2C-устройство занято настройкой',
+      i2c_command_failed: 'I2C-устройство не подтвердило команду',
+      i2c_device_error: 'I2C-устройство сообщило об ошибке',
+      i2c_refresh_failed: 'не удалось получить текущее состояние I2C-устройства',
+      calibration_invalid_result: 'получен некорректный результат калибровки',
+      operation_stale_reaped: 'операция не завершилась вовремя и была остановлена'
+    };
+    return messages[code] || code;
+  }
+
   async function responseErrorText(resp, prefix) {
     let detail = '';
     const contentType = resp.headers.get('Content-Type') || '';
@@ -406,14 +439,15 @@
         const body = await resp.json();
         if (body && typeof body === 'object') {
           // Конверт ошибок отдаёт message человеку и error машине; старые ответы кладут
-          // человеческий текст прямо в error, а код - в code. Показываем текст, код даём
-          // в скобках: так обе формы рисуются одинаково, пока эндпоинты переезжают.
+          // человеческий текст прямо в error, а код - в code. Известные коды переводим,
+          // неизвестные сохраняем для диагностики.
           detail = body.message || body.error || body.err || body.code || '';
           const code = body.code || (body.message ? body.error : '');
-          if (code && detail !== code) detail += ' (' + code + ')';
+          detail = operationErrorText(detail);
+          if (code && detail !== code && operationErrorText(code) === code) detail += ' (' + code + ')';
         }
       } else {
-        detail = (await resp.text()).trim();
+        detail = operationErrorText((await resp.text()).trim());
       }
     } catch (err) {
       if (err && err.name === 'AbortError') throw err;
@@ -1480,7 +1514,7 @@
           );
           if (result.state === 'succeeded') return result;
           if (result.state === 'failed') {
-            throw new Error('Операция ' + operationId + ' завершилась с ошибкой: ' + result.error + '.');
+            throw new Error('Операция ' + operationId + ' завершилась с ошибкой: ' + operationErrorText(result.error) + '.');
           }
         }
       } catch (err) {

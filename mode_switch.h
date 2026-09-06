@@ -221,7 +221,11 @@ void stop_active_process_for_mode() {
 // mode_switch_barrier_active снимается ровно как на успехе. Строка предупреждения
 // передаётся вызывающей стороной литералом — без промежуточного буфера, чтобы
 // длинное сообщение в UTF-8 не обрезалось молча (см. snprintf-ловушку).
-static ModeSwitchResult force_complete_mode_switch_failed(const char* warning) {
+static ModeSwitchResult force_complete_mode_switch_failed(
+    OperationError error, const char* warning) {
+  if (active_profile_operation.terminalError == OPERATION_ERROR_NONE) {
+    active_profile_operation.terminalError = error;
+  }
   portENTER_CRITICAL(&emergencyStopMux);
   force_heater_output_off_locked(true);
   safety_mode_switch_complete(modeSwitchState);
@@ -256,6 +260,9 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
     if (!stopRequested || !queueDiscarded || !pendingDiscarded) {
       if (safety_deadline_expired(millis(), modeActuatorCleanup.deadline)) {
         return force_complete_mode_switch_failed(
+            !stopRequested
+                ? OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED
+                : OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED,
             !stopRequested
                 ? "Смена режима завершена принудительно: не подтвердился Lua"
                 : "Смена режима завершена принудительно: не подтвердился очередь");
@@ -300,28 +307,39 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
 
   if (safety_deadline_expired(millis(), modeActuatorCleanup.deadline) && !cleanupReady) {
     const char* warning = "Смена режима завершена принудительно: не подтвердилась готовность";
+    OperationError error = OPERATION_ERROR_MODE_SWITCH_FAILED;
     if (!modeSwitchState.logCloseRequested || logClosePending) {
       warning = "Смена режима завершена принудительно: не подтвердился лог";
+      error = OPERATION_ERROR_MODE_SWITCH_LOG_FAILED;
     } else if (!luaIdle) {
       warning = "Смена режима завершена принудительно: не подтвердился Lua";
+      error = OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED;
     } else if (!queuesIdle) {
       warning = "Смена режима завершена принудительно: не подтвердился очередь";
+      error = OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED;
     } else if (!actuatorsIdle) {
       warning = "Смена режима завершена принудительно: не подтвердился привод";
+      error = OPERATION_ERROR_MODE_SWITCH_ACTUATOR_FAILED;
     } else if (heaterPowerOn) {
       warning = "Смена режима завершена принудительно: не подтвердился нагрев";
+      error = OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED;
     } else if (powerTransitionActive) {
       warning = "Смена режима завершена принудительно: не подтвердился переход мощности";
+      error = OPERATION_ERROR_MODE_SWITCH_POWER_TRANSITION_FAILED;
     } else if (nbkTransitionActive) {
       warning = "Смена режима завершена принудительно: не подтвердился переход НБК";
+      error = OPERATION_ERROR_MODE_SWITCH_NBK_TRANSITION_FAILED;
     } else if (modeHeatingActive) {
       warning = "Смена режима завершена принудительно: не подтвердился старт нагрева";
+      error = OPERATION_ERROR_MODE_SWITCH_HEATING_START_FAILED;
     } else if (selfTestActive) {
       warning = "Смена режима завершена принудительно: не подтвердился самотест";
+      error = OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED;
     } else if (!ownerIdle) {
       warning = "Смена режима завершена принудительно: не подтвердился владелец режима";
+      error = OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED;
     }
-    return force_complete_mode_switch_failed(warning);
+    return force_complete_mode_switch_failed(error, warning);
   }
 
   if (!modeSwitchState.logCloseRequested) {
@@ -349,10 +367,8 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
 #ifdef USE_LUA
   if (!load_lua_script()) {
     if (++modeSwitchState.luaReloadAttempts >= 10) {
-      if (active_profile_operation.terminalError == OPERATION_ERROR_NONE) {
-        active_profile_operation.terminalError = OPERATION_ERROR_MODE_SWITCH_FAILED;
-      }
       return force_complete_mode_switch_failed(
+          OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED,
           "Смена режима завершена принудительно: скрипт Lua не перечитан");
     }
     return MODE_SWITCH_PENDING;
@@ -360,6 +376,7 @@ ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode) {
 #endif
   if (active_profile_operation.terminalError != OPERATION_ERROR_NONE) {
     return force_complete_mode_switch_failed(
+        active_profile_operation.terminalError,
         "Смена режима завершена принудительно: профиль не сохранён");
   }
   portENTER_CRITICAL(&emergencyStopMux);

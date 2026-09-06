@@ -30,6 +30,7 @@ waiter = body(app, "async function waitForOperation")
 program = body(app, "async function postProgram")
 clear = body(app, "async function clearProgram")
 acceptance = body(app, "async function readOperationAcceptance")
+error_text = body(app, "function operationErrorText")
 
 for token in [
   "const OPERATION_POLL_INTERVAL_MS = 250;",
@@ -41,6 +42,37 @@ for token in [
 ]:
   if token not in app:
     errors.append(f"shared operation contract missing token: {token}")
+
+for token in [
+  "invalid_operation_id",
+  "operation_not_found",
+  "operation_store_full",
+  "operation_store_busy",
+  "invalid_operation_transition",
+  "operation_internal",
+  "operation_cancelled",
+  "profile_persist_failed",
+  "mode_switch_log_failed",
+  "mode_switch_lua_stop_failed",
+  "mode_switch_queue_failed",
+  "mode_switch_actuator_failed",
+  "mode_switch_heater_failed",
+  "mode_switch_power_transition_failed",
+  "mode_switch_nbk_transition_failed",
+  "mode_switch_heating_start_failed",
+  "mode_switch_self_test_failed",
+  "mode_switch_owner_failed",
+  "mode_switch_lua_reload_failed",
+  "operation_runtime_busy",
+  "i2c_config_busy",
+  "i2c_command_failed",
+  "i2c_device_error",
+  "i2c_refresh_failed",
+  "calibration_invalid_result",
+  "operation_stale_reaped",
+]:
+  if token not in error_text:
+    errors.append(f"operation error text missing translation: {token}")
 
 require_ordered_tokens(
   "strict operation waiter",

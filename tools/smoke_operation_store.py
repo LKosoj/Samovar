@@ -382,6 +382,39 @@ void test_wire_codes() {
   check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_FAILED),
                     "mode_switch_failed") == 0,
         "mode-switch error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_LOG_FAILED),
+                    "mode_switch_log_failed") == 0,
+        "mode-switch log error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED),
+                    "mode_switch_lua_stop_failed") == 0,
+        "mode-switch Lua stop error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED),
+                    "mode_switch_queue_failed") == 0,
+        "mode-switch queue error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_ACTUATOR_FAILED),
+                    "mode_switch_actuator_failed") == 0,
+        "mode-switch actuator error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED),
+                    "mode_switch_heater_failed") == 0,
+        "mode-switch heater error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_POWER_TRANSITION_FAILED),
+                    "mode_switch_power_transition_failed") == 0,
+        "mode-switch power transition error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_NBK_TRANSITION_FAILED),
+                    "mode_switch_nbk_transition_failed") == 0,
+        "mode-switch NBK transition error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_HEATING_START_FAILED),
+                    "mode_switch_heating_start_failed") == 0,
+        "mode-switch heating-start error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED),
+                    "mode_switch_self_test_failed") == 0,
+        "mode-switch self-test error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED),
+                    "mode_switch_owner_failed") == 0,
+        "mode-switch owner error code mismatch");
+  check(std::strcmp(operation_error_code(OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED),
+                    "mode_switch_lua_reload_failed") == 0,
+        "mode-switch Lua reload error code mismatch");
   check(std::strcmp(operation_error_code(OPERATION_ERROR_RUNTIME_BUSY),
                     "operation_runtime_busy") == 0,
         "runtime-busy error code mismatch");

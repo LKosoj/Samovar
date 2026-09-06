@@ -61,7 +61,7 @@ def build_harness() -> str:
         "@SET_TERMINAL_BODY@": extract_function_body(samovar, "static void set_profile_operation_terminal("),
         "@PUBLISH_BODY@": extract_function_body(samovar, "static void publish_profile_operation_terminal()"),
         "@FORCE_COMPLETE_BODY@": extract_function_body(
-            mode_switch, "static ModeSwitchResult force_complete_mode_switch_failed(const char* warning)"),
+            mode_switch, "static ModeSwitchResult force_complete_mode_switch_failed("),
         "@SWITCH_BODY@": extract_function_body(mode_switch, "ModeSwitchResult switch_samovar_mode(SAMOVAR_MODE requestedMode)"),
         "@PROCESS_BODY@": extract_last_function_body(samovar, "static void process_profile_operation()"),
         "@CLEAR_BARRIER_BODY@": extract_function_body(
@@ -475,7 +475,8 @@ static void publish_profile_operation_terminal() {
 @PUBLISH_BODY@
 }
 
-static ModeSwitchResult force_complete_mode_switch_failed(const char* warning) {
+static ModeSwitchResult force_complete_mode_switch_failed(
+    OperationError error, const char* warning) {
 @FORCE_COMPLETE_BODY@
 }
 
@@ -904,7 +905,7 @@ static void test_failures_preserve_owner_state() {
         "cleanup-failure setup queue failed");
   record = run_to_terminal(id);
   check(record.state == OPERATION_STATE_FAILED &&
-            record.error == OPERATION_ERROR_MODE_SWITCH_FAILED &&
+            record.error == OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED &&
             persistCalls == 0 && SamSetup.value == 10 && liveProgram == 7 &&
             !mode_switch_barrier_active && forceHeaterOffCalls == 1 &&
             notifyPowerWorkerCalls == 1,
@@ -1107,24 +1108,32 @@ struct ModeSwitchBlockerCase {
   bool luaIdle;
   bool queuesIdle;
   bool logClosePending;
+  OperationError expectedError;
   const char* expectedWarning;
 };
 
 static void test_mode_switch_force_completion_names_single_blocker() {
   const ModeSwitchBlockerCase cases[] = {
       {"heaterPowerOn", true, false, false, false, false, true, true, true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_HEATER_FAILED,
        "Смена режима завершена принудительно: не подтвердился нагрев"},
       {"powerTransitionActive", false, true, false, false, false, true, true, true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_POWER_TRANSITION_FAILED,
        "Смена режима завершена принудительно: не подтвердился переход мощности"},
       {"nbkTransitionActive", false, false, true, false, false, true, true, true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_NBK_TRANSITION_FAILED,
        "Смена режима завершена принудительно: не подтвердился переход НБК"},
       {"modeHeatingActive", false, false, false, true, false, true, true, true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_HEATING_START_FAILED,
        "Смена режима завершена принудительно: не подтвердился старт нагрева"},
       {"selfTestActive", false, false, false, false, true, true, true, true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_SELF_TEST_FAILED,
        "Смена режима завершена принудительно: не подтвердился самотест"},
       {"ownerIdle", false, false, false, false, false, false, true, true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_OWNER_FAILED,
        "Смена режима завершена принудительно: не подтвердился владелец режима"},
       {"actuatorsIdle", false, false, false, false, false, true, false, true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_ACTUATOR_FAILED,
        "Смена режима завершена принудительно: не подтвердился привод"},
       // luaIdle/queuesIdle входили ещё в дофиксовый выход по дедлайну, но
       // проверены не были: lua_mode_owner_idle() был захардкожен в true, а
@@ -1135,8 +1144,10 @@ static void test_mode_switch_force_completion_names_single_blocker() {
       // (request_lua_mode_stop/samovar_command_queue_idle), поэтому уронить эти
       // два терма можно, не мешая дойти до WAIT_CLEANUP.
       {"luaIdle", false, false, false, false, false, true, true, false, true, false,
+       OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED,
        "Смена режима завершена принудительно: не подтвердился Lua"},
       {"queuesIdle", false, false, false, false, false, true, true, true, false, false,
+       OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED,
        "Смена режима завершена принудительно: не подтвердился очередь"},
       // logClosePending проверяется здесь же, хотя в цепочке стоит первым: лог
       // закрывается асинхронно, и «закрытие запрошено, но ещё не доехало» - это
@@ -1144,6 +1155,7 @@ static void test_mode_switch_force_completion_names_single_blocker() {
       // вечно. Кейс держится на том, что выход по дедлайну (WebServer.ino:1887)
       // стоит РАНЬШЕ запроса закрытия лога (1913).
       {"logClosePending", false, false, false, false, false, true, true, true, true, true,
+       OPERATION_ERROR_MODE_SWITCH_LOG_FAILED,
        "Смена режима завершена принудительно: не подтвердился лог"},
   };
 
@@ -1186,7 +1198,7 @@ static void test_mode_switch_force_completion_names_single_blocker() {
     process_profile_operation();
     const OperationRecord record = record_for(id);
     check(record.state == OPERATION_STATE_FAILED &&
-              record.error == OPERATION_ERROR_MODE_SWITCH_FAILED,
+              record.error == blockerCase.expectedError,
           (label + ": did not force-complete the stuck switch").c_str());
     check(!mode_switch_barrier_active,
           (label + ": left the barrier stuck").c_str());
@@ -1213,16 +1225,20 @@ struct StopPhaseBlockerCase {
   bool luaStop;
   bool queueDiscarded;
   bool pendingDiscarded;
+  OperationError expectedError;
   const char* expectedWarning;
 };
 
 static void test_stop_phase_force_completion_names_single_blocker() {
   const StopPhaseBlockerCase cases[] = {
       {"luaStop", false, true, true,
+       OPERATION_ERROR_MODE_SWITCH_LUA_STOP_FAILED,
        "Смена режима завершена принудительно: не подтвердился Lua"},
       {"queueDiscarded", true, false, true,
+       OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED,
        "Смена режима завершена принудительно: не подтвердился очередь"},
       {"pendingDiscarded", true, true, false,
+       OPERATION_ERROR_MODE_SWITCH_QUEUE_FAILED,
        "Смена режима завершена принудительно: не подтвердился очередь"},
   };
 
@@ -1252,7 +1268,7 @@ static void test_stop_phase_force_completion_names_single_blocker() {
     process_profile_operation();
     const OperationRecord record = record_for(id);
     check(record.state == OPERATION_STATE_FAILED &&
-              record.error == OPERATION_ERROR_MODE_SWITCH_FAILED,
+              record.error == blockerCase.expectedError,
           (label + ": did not force-complete the stuck switch").c_str());
     check(!mode_switch_barrier_active,
           (label + ": left the barrier stuck").c_str());
@@ -1323,7 +1339,7 @@ static void test_log_close_request_failure_forces_completion() {
   process_profile_operation();  // Тик 3: дедлайн вышел -> принудительно.
   const OperationRecord record = record_for(id);
   check(record.state == OPERATION_STATE_FAILED &&
-            record.error == OPERATION_ERROR_MODE_SWITCH_FAILED,
+            record.error == OPERATION_ERROR_MODE_SWITCH_LOG_FAILED,
         "a failing log close did not force-complete the stuck switch");
   check(lastWarningMessage ==
             "Смена режима завершена принудительно: не подтвердился лог",
@@ -1347,7 +1363,7 @@ static void test_lua_reload_retry_exhausts_and_fails_once_committed() {
 
   const OperationRecord record = run_to_terminal(id, 20);
   check(record.state == OPERATION_STATE_FAILED &&
-            record.error == OPERATION_ERROR_MODE_SWITCH_FAILED,
+            record.error == OPERATION_ERROR_MODE_SWITCH_LUA_RELOAD_FAILED,
         "endless Lua reload failure did not force-fail the switch after retries");
   check(luaLoadCalls == 10,
         "switch did not retry load_lua_script() exactly ten times before giving up");

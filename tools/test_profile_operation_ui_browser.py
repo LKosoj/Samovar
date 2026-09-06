@@ -167,12 +167,39 @@ BROWSER_TEST = r'''async page => {
     status: 503,
     body: { operationId: 17, error: "operation_runtime_busy" }
   }], "Некорректный контракт HTTP 503");
-  for (const code of [
-    "operation_cancelled", "profile_persist_failed", "mode_switch_failed", "operation_runtime_busy"
-  ]) {
+  const failureMessages = {
+    invalid_operation_id: "некорректный номер операции",
+    operation_not_found: "операция не найдена",
+    operation_store_full: "очередь операций заполнена",
+    operation_store_busy: "хранилище операций временно занято",
+    invalid_operation_transition: "нарушена последовательность",
+    operation_internal: "внутренняя ошибка",
+    operation_cancelled: "операция отменена",
+    profile_persist_failed: "не удалось записать в постоянную память",
+    mode_switch_failed: "точная причина есть в журнале",
+    mode_switch_log_failed: "не завершилось закрытие журнала",
+    mode_switch_lua_stop_failed: "не остановилось выполнение Lua",
+    mode_switch_queue_failed: "не освободилась очередь команд",
+    mode_switch_actuator_failed: "привод не подтвердил остановку",
+    mode_switch_heater_failed: "нагрев не подтвердил выключение",
+    mode_switch_power_transition_failed: "не завершился переход мощности",
+    mode_switch_nbk_transition_failed: "не завершился переход НБК",
+    mode_switch_heating_start_failed: "не отменился запуск нагрева",
+    mode_switch_self_test_failed: "не остановился самотест",
+    mode_switch_owner_failed: "не сбросилось внутреннее состояние программы",
+    mode_switch_lua_reload_failed: "не удалось перечитать Lua-скрипт нового режима",
+    operation_runtime_busy: "устройство занято другой операцией",
+    i2c_config_busy: "I2C-устройство занято настройкой",
+    i2c_command_failed: "не подтвердило команду",
+    i2c_device_error: "сообщило об ошибке",
+    i2c_refresh_failed: "не удалось получить текущее состояние",
+    calibration_invalid_result: "некорректный результат калибровки",
+    operation_stale_reaped: "не завершилась вовремя"
+  };
+  for (const [code, message] of Object.entries(failureMessages)) {
     await waiter("failed-" + code, [
       { status: 200, body: { operationId: 17, state: "failed", error: code } }
-    ], code);
+    ], message);
   }
   await waiter("expired", [{ status: 404, body: { error: "operation_not_found" } }], "HTTP 404");
   await waiter("network", [{ network: "offline" }], "Ошибка сети");
@@ -293,7 +320,7 @@ BROWSER_TEST = r'''async page => {
   });
   if (setupFailed.result !== false || setupFailed.dirty !== "true" ||
       setupFailed.submitting !== "false" || setupFailed.disabled ||
-      !setupFailed.message.includes("profile_persist_failed") ||
+      !setupFailed.message.includes("не удалось записать в постоянную память") ||
       setupFailed.mutations !== 1 || setupFailed.lookups !== 1 || setupFailed.path !== "/setup.htm") {
     throw new Error(scenario + " mismatch: " + JSON.stringify(setupFailed));
   }
@@ -461,8 +488,8 @@ BROWSER_TEST = r'''async page => {
       lookups: window.__lookupRequests.length
     };
   });
-  if (programFailed.result.ok || !programFailed.result.err.includes("mode_switch_failed") ||
-      !programFailed.message.includes("mode_switch_failed") ||
+  if (programFailed.result.ok || !programFailed.result.err.includes("точная причина есть в журнале") ||
+      !programFailed.message.includes("точная причина есть в журнале") ||
       programFailed.mutations !== 1 || programFailed.lookups !== 1) {
     throw new Error(scenario + " mismatch: " + JSON.stringify(programFailed));
   }
