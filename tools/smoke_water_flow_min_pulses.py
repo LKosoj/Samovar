@@ -11,7 +11,7 @@ from pathlib import Path
 from smoke_helpers import extract_function_body, require_ordered_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
-SIGNATURE = "static void tick_update_water_flow(uint16_t waterPulses, unsigned long &oldTime)"
+SIGNATURE = "static void tick_update_water_flow(uint16_t waterPulses, unsigned long &oldTime) {"
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
