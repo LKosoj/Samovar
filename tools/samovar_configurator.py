@@ -857,41 +857,260 @@ def prepare_remote_upload(name: str, payload: bytes, remote_names: List[str]) ->
     return target, payload
 
 
-def syntax_spans(name: str, text: str) -> List[Tuple[str, int, int]]:
+_STRING_RULES = [
+    ("string", r'"(?:\\.|[^"\\\n])*"?'),
+    ("string", r"'(?:\\.|[^'\\\n])*'?"),
+]
+_JS_KEYWORDS = (
+    "async|await|break|case|catch|class|const|continue|default|delete|do|else|export|extends|"
+    "false|finally|for|function|if|import|in|instanceof|let|new|null|of|return|switch|this|throw|"
+    "true|try|typeof|undefined|var|void|while|with|yield"
+)
+_LUA_KEYWORDS = (
+    "and|break|do|else|elseif|end|false|for|function|goto|if|in|local|nil|not|or|repeat|return|"
+    "then|true|until|while"
+)
+_LUA_BUILTINS = (
+    "print|pairs|ipairs|tostring|tonumber|type|require|pcall|error|select|next|unpack|"
+    "string|table|math|os|io|coroutine"
+)
+_NUMBER = r"\b(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)\b"
+
+SYNTAX_RULES = {
+    "js": [
+        ("comment", r"//[^\n]*|/\*[\s\S]*?(?:\*/|\Z)"),
+        ("string", r"`(?:\\.|[^`\\])*`?"),
+    ] + _STRING_RULES + [
+        ("keyword", r"\b(?:" + _JS_KEYWORDS + r")\b"),
+        ("number", _NUMBER),
+        ("property", r"(?<=\.)[A-Za-z_$][\w$]*(?=\s*\()"),
+    ],
+    "lua": [
+        ("comment", "|".join(r"--\[{0}\[[\s\S]*?(?:\]{0}\]|\Z)".format(level) for level in ("", "=", "==")) + r"|--[^\n]*"),
+        ("string", "|".join(r"\[{0}\[[\s\S]*?(?:\]{0}\]|\Z)".format(level) for level in ("", "=", "=="))),
+    ] + _STRING_RULES + [
+        ("keyword", r"\b(?:" + _LUA_KEYWORDS + r")\b"),
+        ("property", r"\b(?:" + _LUA_BUILTINS + r")\b"),
+        ("number", _NUMBER),
+    ],
+    "css": [
+        ("comment", r"/\*[\s\S]*?(?:\*/|\Z)"),
+    ] + _STRING_RULES + [
+        ("property", r"(?<![\w-])[-A-Za-z]+(?=\s*:[^{};]*[;}])"),
+        ("number", r"(?<![\w.])[-+]?\d+(?:\.\d+)?(?:px|em|rem|%|s|ms|vh|vw|pt|deg)?\b|#[0-9a-fA-F]{3,8}\b"),
+        ("keyword", r"@[A-Za-z-]+"),
+    ],
+    "json": [
+        ("property", r'"(?:\\.|[^"\\\n])*"(?=\s*:)'),
+        ("string", r'"(?:\\.|[^"\\\n])*"?'),
+        ("keyword", r"\b(?:true|false|null)\b"),
+        ("number", r"-?" + _NUMBER),
+    ],
+    "html": [
+        ("comment", r"<!--[\s\S]*?(?:-->|\Z)"),
+        ("tag", r"<!(?:DOCTYPE|doctype)[^>]*>"),
+    ],
+}
+_HTML_EMBEDDED = re.compile(r"<(script|style)\b[^>]*>([\s\S]*?)</\1\s*>", re.IGNORECASE)
+_HTML_TAG = re.compile(r"</?[A-Za-z][\w:-]*(?:\s+[^\s=>/]+(?:\s*=\s*(?:\"[^\"]*\"?|'[^']*'?|[^\s>]+))?)*\s*/?>?")
+_HTML_ATTRIBUTE = re.compile(r"([^\s=>/\"']+)(\s*=\s*)?(\"[^\"]*\"?|'[^']*'?|[^\s>]+)?")
+
+
+def syntax_language(name: str) -> Optional[str]:
     logical_name = name[:-3] if name.lower().endswith(".gz") else name
-    extension = Path(logical_name).suffix.lower()
-    patterns = []
-    if extension in (".htm", ".html"):
-        patterns = [("comment", r"<!--[\s\S]*?-->"), ("tag", r"</?[A-Za-z][^>]*>")]
-    elif extension == ".js":
-        patterns = [
-            ("comment", r"//[^\n]*|/\*[\s\S]*?\*/"),
-            ("string", r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')"),
-            ("keyword", r"\b(?:const|let|var|function|if|else|for|while|return|class|new|async|await|true|false|null)\b"),
-            ("number", r"\b\d+(?:\.\d+)?\b"),
-        ]
-    elif extension == ".css":
-        patterns = [
-            ("comment", r"/\*[\s\S]*?\*/"),
-            ("property", r"\b[-A-Za-z]+(?=\s*:)"),
-            ("number", r"\b\d+(?:\.\d+)?(?:px|em|rem|%|s)?\b"),
-        ]
-    elif extension == ".lua":
-        patterns = [
-            ("comment", r"--[^\n]*"),
-            ("string", r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')"),
-            ("keyword", r"\b(?:and|break|do|else|elseif|end|false|for|function|if|in|local|nil|not|or|repeat|return|then|true|until|while)\b"),
-            ("number", r"\b\d+(?:\.\d+)?\b"),
-        ]
+    return {
+        ".htm": "html", ".html": "html", ".js": "js", ".css": "css", ".lua": "lua", ".json": "json",
+    }.get(Path(logical_name).suffix.lower())
+
+
+def _scan(text: str, rules, offset: int = 0) -> List[Tuple[str, int, int]]:
+    """Один проход по тексту: на каждой позиции побеждает первое подошедшее правило.
+
+    Поэтому ключевое слово внутри строки или комментария не подсвечивается: правила
+    комментариев и строк стоят раньше и «съедают» текст целиком.
+    """
+    if not rules:
+        return []
+    groups = [tag for tag, _ in rules]
+    combined = re.compile("|".join("(?P<r{}>{})".format(index, pattern) for index, (_, pattern) in enumerate(rules)))
     spans = []
-    for tag, pattern in patterns:
-        spans.extend((tag, match.start(), match.end()) for match in re.finditer(pattern, text))
+    for match in combined.finditer(text):
+        if match.end() == match.start():
+            continue
+        spans.append((groups[int(match.lastgroup[1:])], offset + match.start(), offset + match.end()))
     return spans
+
+
+def _html_spans(text: str) -> List[Tuple[str, int, int]]:
+    spans = []
+    position = 0
+
+    def scan_markup(chunk: str, offset: int) -> None:
+        masked = []
+        for tag, start, end in _scan(chunk, SYNTAX_RULES["html"], offset):
+            spans.append((tag, start, end))
+            masked.append((start - offset, end - offset))
+        cursor = 0
+        for match in _HTML_TAG.finditer(chunk):
+            if any(start <= match.start() < end for start, end in masked):
+                continue
+            body = match.group(0)
+            name_end = re.match(r"</?[A-Za-z][\w:-]*", body).end()
+            spans.append(("tag", offset + match.start(), offset + match.start() + name_end))
+            for attribute in _HTML_ATTRIBUTE.finditer(body, name_end):
+                if attribute.group(1) in ("/", ">", "/>"):
+                    continue
+                spans.append(("property", offset + match.start() + attribute.start(1), offset + match.start() + attribute.end(1)))
+                if attribute.group(3):
+                    spans.append(("string", offset + match.start() + attribute.start(3), offset + match.start() + attribute.end(3)))
+            if body.endswith(">"):
+                spans.append(("tag", offset + match.end() - 1, offset + match.end()))
+
+    for embedded in _HTML_EMBEDDED.finditer(text):
+        scan_markup(text[position:embedded.start(2)], position)
+        language = "js" if embedded.group(1).lower() == "script" else "css"
+        spans.extend(_scan(embedded.group(2), SYNTAX_RULES[language], embedded.start(2)))
+        position = embedded.end(2)
+    scan_markup(text[position:], position)
+    spans.sort(key=lambda span: span[1])
+    return spans
+
+
+def syntax_spans(name: str, text: str) -> List[Tuple[str, int, int]]:
+    language = syntax_language(name)
+    if language is None:
+        return []
+    if language == "html":
+        return _html_spans(text)
+    return _scan(text, SYNTAX_RULES[language])
+
+
+def code_without_literals(name: str, text: str) -> str:
+    """Текст той же длины, где комментарии и строки заменены пробелами (переводы строк сохранены)."""
+    characters = list(text)
+    for tag, start, end in syntax_spans(name, text):
+        if tag in ("comment", "string", "property") and (tag != "property" or syntax_language(name) == "json"):
+            for index in range(start, end):
+                if characters[index] != "\n":
+                    characters[index] = " "
+    return "".join(characters)
+
+
+_BRACKET_PAIRS = {")": "(", "]": "[", "}": "{"}
+
+
+def _line_of(text: str, position: int) -> int:
+    return text.count("\n", 0, position) + 1
+
+
+def check_bracket_balance(code: str) -> Optional[Tuple[int, str]]:
+    stack = []
+    for position, character in enumerate(code):
+        if character in "([{":
+            stack.append((character, position))
+        elif character in _BRACKET_PAIRS:
+            if not stack or stack[-1][0] != _BRACKET_PAIRS[character]:
+                return _line_of(code, position), "лишняя закрывающая скобка «{}»".format(character)
+            stack.pop()
+    if stack:
+        character, position = stack[-1]
+        return _line_of(code, position), "не закрыта скобка «{}»".format(character)
+    return None
+
+
+_LUA_OPENERS = {"function", "if", "do", "repeat"}
+
+
+def check_lua_blocks(code: str) -> Optional[Tuple[int, str]]:
+    stack = []
+    for match in re.finditer(r"\b(function|if|do|repeat|end|until)\b", code):
+        word = match.group(1)
+        line = _line_of(code, match.start())
+        if word in _LUA_OPENERS:
+            stack.append((word, line))
+        elif word == "until":
+            if not stack or stack[-1][0] != "repeat":
+                return line, "«until» без «repeat»"
+            stack.pop()
+        else:
+            if not stack or stack[-1][0] == "repeat":
+                return line, "лишний «end»"
+            stack.pop()
+    if stack:
+        word, line = stack[-1]
+        return line, "нет «end» для «{}» (строка {})".format(word, line)
+    return None
+
+
+def check_syntax(name: str, text: str) -> Optional[Tuple[int, str]]:
+    """Быстрая проверка без внешних инструментов: (номер строки, сообщение) или None, если всё в порядке."""
+    language = syntax_language(name)
+    if language is None:
+        return None
+    if language == "json":
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as error:
+            return error.lineno, error.msg
+        return None
+    code = code_without_literals(name, text)
+    if language == "html":
+        for match in _HTML_EMBEDDED.finditer(text):
+            inner_name = "x.js" if match.group(1).lower() == "script" else "x.css"
+            problem = check_syntax(inner_name, match.group(2))
+            if problem:
+                return problem[0] + _line_of(text, match.start(2)) - 1, problem[1]
+        unclosed = re.search(r"<!--(?![\s\S]*?-->)", text)
+        if unclosed:
+            return _line_of(text, unclosed.start()), "не закрыт комментарий <!--"
+        return None
+    for tag, start, end in syntax_spans(name, text):
+        if tag == "comment" and text[start:end].startswith("/*") and not text[start:end].endswith("*/"):
+            return _line_of(text, start), "не закрыт комментарий /*"
+        if tag == "string" and (end - start < 2 or text[end - 1] != text[start]) and text[start] in "\"'`":
+            return _line_of(text, start), "не закрыта строка"
+    problem = check_bracket_balance(code)
+    if problem:
+        return problem
+    if language == "lua":
+        return check_lua_blocks(code)
+    return None
+
+
+def matching_bracket(code: str, position: int) -> Optional[int]:
+    """Позиция парной скобки для скобки в position (по тексту без строк и комментариев)."""
+    if position < 0 or position >= len(code):
+        return None
+    character = code[position]
+    if character in "([{":
+        opener, closer, step = character, {"(": ")", "[": "]", "{": "}"}[character], 1
+    elif character in _BRACKET_PAIRS:
+        opener, closer, step = character, _BRACKET_PAIRS[character], -1
+    else:
+        return None
+    depth = 0
+    index = position
+    while 0 <= index < len(code):
+        if code[index] == opener:
+            depth += 1
+        elif code[index] == closer:
+            depth -= 1
+            if depth == 0:
+                return index
+        index += step
+    return None
+
+
+def web_editor_url(address: str, path: Optional[str] = None) -> str:
+    url = "http://{}/edit".format(address)
+    if path:
+        url += "?file=" + urllib.parse.quote(path)
+    return url
 
 
 def is_text_remote_file(path: str) -> bool:
     logical_path = path[:-3] if path.lower().endswith(".gz") else path
-    return Path(logical_path).suffix.lower() in (".htm", ".html", ".js", ".css", ".lua", ".txt")
+    return Path(logical_path).suffix.lower() in (".htm", ".html", ".js", ".css", ".lua", ".txt", ".json", ".csv")
 
 
 class SamovarFileClient:
@@ -1274,9 +1493,12 @@ class FileEditorWindow:
         self.filedialog = filedialog
         self.messagebox = messagebox
         self.simpledialog = simpledialog
+        self.address = address
         self.client = SamovarFileClient(address)
         self.files = []
         self.current_path = None
+        self.check_result = None
+        self.check_id = None
 
         self.window = tk.Toplevel(parent)
         self.window.title("Файлы Samovar — {}".format(address))
@@ -1297,6 +1519,9 @@ class FileEditorWindow:
             ttk.Button(toolbar, text=text, command=command).pack(side="left", padx=(0, 8))
         self.save_button = ttk.Button(toolbar, text="Сохранить (Ctrl+S)", command=self.save)
         self.save_button.pack(side="right")
+        ttk.Button(
+            toolbar, text="Веб-редактор (/edit)", command=self.open_in_web_editor
+        ).pack(side="right", padx=(0, 8))
 
         content = ttk.Panedwindow(self.window, orient="horizontal")
         content.pack(fill="both", expand=True, padx=8, pady=(0, 4))
@@ -1316,14 +1541,22 @@ class FileEditorWindow:
         editor_scroll.pack(side="right", fill="y")
         editor_xscroll = ttk.Scrollbar(editor_frame, orient="horizontal")
         editor_xscroll.pack(side="bottom", fill="x")
+        self.gutter = tk.Text(
+            editor_frame, width=4, wrap="none", font="TkFixedFont", state="disabled",
+            takefocus=0, borderwidth=0, highlightthickness=0, background="#f0f0f0",
+            foreground="#808080", padx=4,
+        )
+        self.gutter.pack(side="left", fill="y")
         self.editor = tk.Text(
             editor_frame, wrap="none", undo=True, font="TkFixedFont",
-            yscrollcommand=editor_scroll.set, xscrollcommand=editor_xscroll.set,
+            yscrollcommand=self._editor_scrolled, xscrollcommand=editor_xscroll.set,
         )
         self.editor.pack(fill="both", expand=True)
-        editor_scroll.configure(command=self.editor.yview)
+        self.editor_scroll = editor_scroll
+        editor_scroll.configure(command=self._scroll_both)
         editor_xscroll.configure(command=self.editor.xview)
-        self.editor.bind("<KeyRelease>", self._highlight)
+        self.editor.bind("<KeyRelease>", self._edited)
+        self.editor.bind("<ButtonRelease-1>", self._cursor_moved)
         self.editor.bind("<<Modified>>", self._modified)
         self.editor.tag_configure("comment", foreground="#6a9955")
         self.editor.tag_configure("string", foreground="#a31515")
@@ -1331,6 +1564,11 @@ class FileEditorWindow:
         self.editor.tag_configure("number", foreground="#098658")
         self.editor.tag_configure("tag", foreground="#800000")
         self.editor.tag_configure("property", foreground="#0451a5")
+        self.editor.tag_configure("current_line", background="#f5f7fb")
+        self.editor.tag_configure("bracket", background="#dbe9ff")
+        self.editor.tag_configure("error", background="#ffe0e0")
+        self.editor.tag_lower("current_line")
+        self.editor.tag_raise("error")
         self.edit_menu = EditMenu(self.editor, "text", on_save=self.save)
         self.window.bind("<Control-KeyPress>", self._window_key)
 
@@ -1349,10 +1587,83 @@ class FileEditorWindow:
 
     def _set_status(self) -> None:
         if not self.current_path:
-            self.status.configure(text="Файл не открыт")
+            self.status.configure(text="Файл не открыт", foreground="")
             return
         modified = " — изменён, не сохранён" if self.editor.edit_modified() else ""
-        self.status.configure(text="{}{}".format(self.current_path, modified))
+        if self.check_result:
+            line, message = self.check_result
+            self.status.configure(
+                text="{}{} — строка {}: {}".format(self.current_path, modified, line, message),
+                foreground="#b00020",
+            )
+        elif syntax_language(self.current_path):
+            self.status.configure(text="{}{} — синтаксис в порядке".format(self.current_path, modified), foreground="")
+        else:
+            self.status.configure(text="{}{}".format(self.current_path, modified), foreground="")
+
+    def open_in_web_editor(self) -> None:
+        """Тот же файл в /edit прошивки: Ace с подсказками и полноценной проверкой синтаксиса."""
+        import webbrowser
+
+        webbrowser.open(web_editor_url(self.address, self.current_path))
+
+    # ------------------------------------------------------------------ подсветка и проверка
+    def _editor_scrolled(self, first, last) -> None:
+        self.editor_scroll.set(first, last)
+        self.gutter.yview_moveto(first)
+
+    def _scroll_both(self, *args) -> None:
+        self.editor.yview(*args)
+        self.gutter.yview(*args)
+
+    def _update_gutter(self) -> None:
+        lines = int(self.editor.index("end-1c").split(".")[0])
+        current = int(self.gutter.index("end-1c").split(".")[0]) if self.gutter.get("1.0", "end-1c") else 0
+        if current == lines:
+            return
+        self.gutter.configure(state="normal", width=max(4, len(str(lines)) + 1))
+        self.gutter.delete("1.0", "end")
+        self.gutter.insert("1.0", "\n".join("{:>{}}".format(number, len(str(lines))) for number in range(1, lines + 1)))
+        self.gutter.configure(state="disabled")
+        self.gutter.yview_moveto(self.editor.yview()[0])
+
+    def _edited(self, _event=None) -> None:
+        self._highlight()
+        self._cursor_moved()
+        self._schedule_check()
+
+    def _cursor_moved(self, _event=None) -> None:
+        self.editor.tag_remove("current_line", "1.0", "end")
+        self.editor.tag_remove("bracket", "1.0", "end")
+        self.editor.tag_add("current_line", "insert linestart", "insert lineend+1c")
+        if not self.current_path:
+            return
+        text = self.editor.get("1.0", "end-1c")
+        code = code_without_literals(self.current_path, text)
+        position = len(self.editor.get("1.0", "insert"))
+        for candidate in (position - 1, position):
+            partner = matching_bracket(code, candidate)
+            if partner is not None:
+                for index in (candidate, partner):
+                    self.editor.tag_add("bracket", "1.0+{}c".format(index), "1.0+{}c".format(index + 1))
+                break
+
+    def _schedule_check(self) -> None:
+        if self.check_id is not None:
+            self.window.after_cancel(self.check_id)
+        self.check_id = self.window.after(400, self._run_check)
+
+    def _run_check(self) -> None:
+        self.check_id = None
+        self.editor.tag_remove("error", "1.0", "end")
+        if not self.current_path:
+            self.check_result = None
+            return
+        self.check_result = check_syntax(self.current_path, self.editor.get("1.0", "end-1c"))
+        if self.check_result:
+            line = self.check_result[0]
+            self.editor.tag_add("error", "{}.0".format(line), "{}.0+1l".format(line))
+        self._set_status()
 
     def _modified(self, _event=None) -> None:
         self._set_status()
@@ -1397,7 +1708,8 @@ class FileEditorWindow:
         self.editor.edit_reset()
         self.editor.edit_modified(False)
         self._highlight()
-        self._set_status()
+        self._cursor_moved()
+        self._run_check()
 
     def open_selected(self, _event=None) -> None:
         path = self._selected_path()
@@ -1505,6 +1817,7 @@ class FileEditorWindow:
     def _highlight(self, _event=None) -> None:
         for tag in ("comment", "string", "keyword", "number", "tag", "property"):
             self.editor.tag_remove(tag, "1.0", "end")
+        self._update_gutter()
         if not self.current_path:
             return
         text = self.editor.get("1.0", "end-1c")

@@ -979,16 +979,74 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(payload, b"first\nsecond\n")
 
     def test_syntax_highlighting_covers_supported_text_formats(self) -> None:
-        fixtures = {
-            "page.htm": ("<div class=\"x\">hello</div>", "tag"),
-            "app.js": ("const value = 42; // note", "keyword"),
-            "style.css": (".x { color: red; }", "property"),
-            "script.lua": ("local value = 42 -- note", "keyword"),
-        }
-        for name, (content, expected_tag) in fixtures.items():
-            tags = {tag for tag, _, _ in configurator.syntax_spans(name, content)}
-            self.assertIn(expected_tag, tags, name)
+        def spans(name, content):
+            return [(tag, content[start:end]) for tag, start, end in configurator.syntax_spans(name, content)]
+
+        # ключевые слова внутри строк и комментариев не подсвечиваются, // в адресе - не комментарий
+        self.assertEqual(
+            spans("script.lua", 'local s = "if end" -- if\nreturn 0x1F'),
+            [("keyword", "local"), ("string", '"if end"'), ("comment", "-- if"), ("keyword", "return"), ("number", "0x1F")],
+        )
+        self.assertEqual(
+            spans("app.js", 'const u = "http://x"; // c'),
+            [("keyword", "const"), ("string", '"http://x"'), ("comment", "// c")],
+        )
+        self.assertIn(("comment", "--[[ long\ncomment ]]"), spans("script.lua", "x = 1 --[[ long\ncomment ]] y"))
+        self.assertIn(("string", "[[ ( ]]"), spans("script.lua", "s = [[ ( ]]"))
+        self.assertEqual(
+            spans("style.css", ".x:hover { color: #fff; margin:-2px }"),
+            [("property", "color"), ("number", "#fff"), ("property", "margin"), ("number", "-2px")],
+        )
+        self.assertEqual(
+            spans("data.json", '{"a": [1, true, "s"]}'),
+            [("property", '"a"'), ("number", "1"), ("keyword", "true"), ("string", '"s"')],
+        )
+        # HTML: имена тегов, атрибуты, значения, вложенные script/style на их языках
+        html = spans("page.htm", '<!-- c --><div class="x">t</div><script>var a = "</div>";</script><style>.a{color:red}</style>')
+        self.assertEqual(html[:6], [
+            ("comment", "<!-- c -->"), ("tag", "<div"), ("property", "class"), ("string", '"x"'), ("tag", ">"), ("tag", "</div"),
+        ])
+        self.assertIn(("keyword", "var"), html)
+        self.assertIn(("string", '"</div>"'), html)
+        self.assertIn(("property", "color"), html)
         self.assertEqual(configurator.syntax_spans("notes.txt", "plain text 42"), [])
+        self.assertEqual(configurator.syntax_spans("app.js.gz", "let x"), [("keyword", 0, 3)])
+        self.assertTrue(configurator.is_text_remote_file("/data.json"))
+        self.assertTrue(configurator.is_text_remote_file("/program.csv"))
+
+    def test_editor_syntax_check_reports_first_problem_with_line(self) -> None:
+        cases = [
+            ("a.lua", "if x then\n  print(1)\n", (1, "нет «end» для «if» (строка 1)")),
+            ("a.lua", "function f() end end", (1, "лишний «end»")),
+            ("a.lua", "repeat x() until y", None),
+            ("a.lua", 'for i=1,3 do print("end") end', None),
+            ("a.lua", 'local s = "(("', None),
+            ("a.lua", "--[==[ x ]] ]==] ok = 1", None),
+            ("a.js", "f(1, [2)", (1, "лишняя закрывающая скобка «)»")),
+            ("a.js", "let a = 1;\nfunction f() {\n", (2, "не закрыта скобка «{»")),
+            ("a.js", "/* open", (1, "не закрыт комментарий /*")),
+            ("a.js", "'unterminated", (1, "не закрыта строка")),
+            ("a.json", '{"a": }', (1, "Expecting value")),
+            ("a.json", '{"a": [1]}', None),
+            ("a.htm", "<script>\nif (x {\n</script>", (2, "не закрыта скобка «{»")),
+            ("a.htm", "<!-- x", (1, "не закрыт комментарий <!--")),
+            ("a.txt", "anything ((", None),
+        ]
+        for name, text, expected in cases:
+            self.assertEqual(configurator.check_syntax(name, text), expected, (name, text))
+        self.assertEqual(configurator.matching_bracket("a(b[c])d", 1), 6)
+        self.assertEqual(configurator.matching_bracket("a(b[c])d", 6), 1)
+        self.assertIsNone(configurator.matching_bracket("a(b", 1))
+        self.assertIsNone(configurator.matching_bracket("abc", 1))
+        self.assertEqual(configurator.web_editor_url("192.168.1.37"), "http://192.168.1.37/edit")
+        self.assertEqual(
+            configurator.web_editor_url("samovar.local", "/файл.lua"),
+            "http://samovar.local/edit?file=/%D1%84%D0%B0%D0%B9%D0%BB.lua",
+        )
+        editor = inspect.getsource(configurator.FileEditorWindow.__init__)
+        self.assertIn('text="Веб-редактор (/edit)"', editor)
+        self.assertIn("self.gutter = tk.Text(", editor)
+        self.assertIn('self.editor.bind("<KeyRelease>", self._edited)', editor)
 
     def test_serial_ports_are_read_from_platformio_json(self) -> None:
         result = type(
