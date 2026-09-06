@@ -1631,13 +1631,18 @@ void triggerGetClock(void *parameter) {
         WriteConsoleLog(F("notify_queue_pop_failed"));
       } else if (queuePopResult) {
         vTaskDelay(5 / portTICK_PERIOD_MS);
-        String qMsg(c);
+        // Первый символ записи — тип сообщения (см. SendMsg), текст начинается со второго.
+        const char msgLevel = c[0];
+        String qMsg(c + 1);
+        // Blynk и V26: заголовок словами, по нему приложения отличают тревогу от остального.
+        String pushMsg = String(msgLevel == '0' ? "Тревога! " : (msgLevel == '1' ? "Предупреждение! " : "")) + qMsg;
 
 #ifdef USE_TELEGRAM
         bool telegramDeliveryFailed = false;
         if (SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
+          String tgMsg = String(msgLevel == '0' ? "*Тревога!*\n" : (msgLevel == '1' ? "*Предупреждение!*\n" : "")) + " Самовар - " + qMsg;
           telegramDeliveryFailed =
-              http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(qMsg)) == "<ERR>";
+              http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(tgMsg)) == "<ERR>";
         }
 #endif
 
@@ -1649,13 +1654,13 @@ void triggerGetClock(void *parameter) {
           if (!blynkLock) {
             blynkLockBusy = true;
           } else if (Blynk.connected()) {
-            Blynk.virtualWrite(V26, qMsg);
+            Blynk.virtualWrite(V26, pushMsg);
             // Push в мобильные приложения через сервер Blynk (виджет Notification в проекте).
             // notify помечен устаревшим в пользу logEvent, но logEvent работает только
             // в новом облаке Blynk IoT (BLYNK_TEMPLATE_ID); со старым сервером нужен notify.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-            Blynk.notify(qMsg);
+            Blynk.notify(pushMsg);
 #pragma GCC diagnostic pop
           } else {
             blynkDisconnected = true;
@@ -4367,14 +4372,10 @@ void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   MsgPl.replace(",", ";");
   MqttSendMsg(MsgPl + "," + msg_type, "msg");
 #endif
-#ifdef USE_TELEGRAM
-  switch (msg_type) {
-    case 0: MsgPl = F("*Тревога!*\n"); break;
-    case 1: MsgPl = F("*Предупреждение!*\n"); break;
-    case 2: MsgPl = ""; break;
-    default: MsgPl = "";
-  }
-  MsgPl += " Самовар - " + m;
+#if defined(USE_TELEGRAM) || defined(SAMOVAR_USE_BLYNK)
+  // Запись очереди: первый символ — тип ('0' тревога, '1' предупреждение, '2' уведомление),
+  // дальше сам текст. Заголовки для Telegram и Blynk добавляет потребитель в triggerGetClock().
+  MsgPl = String((char)('0' + (msg_type == NONE_MSG ? NOTIFY_MSG : msg_type))) + m;
   const BaseType_t queueTakeResult =
       xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));
   bool queuePushResult = false;

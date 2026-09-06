@@ -616,9 +616,12 @@ def check_source_contract() -> list[str]:
             require(forbidden not in critical,
                     f"{name}: {forbidden} remains under xMsgSemaphore", errors)
 
-    require("#ifdef USE_TELEGRAM" in send_body and
-            send_body.find("#ifdef USE_TELEGRAM") < send_body.find("msg_q.push("),
-            "Telegram-only enqueue guard changed", errors)
+    enqueue_guard = "#if defined(USE_TELEGRAM) || defined(SAMOVAR_USE_BLYNK)"
+    require(enqueue_guard in send_body and
+            send_body.find(enqueue_guard) < send_body.find("msg_q.push("),
+            "Telegram/Blynk enqueue guard changed", errors)
+    require("String pushMsg = String(msgLevel == '0' ? \"Тревога! \"" in clock_body,
+            "Blynk/V26 alarm prefix changed (apps detect alarms by it)", errors)
     require("#ifdef USE_MQTT" in send_body and "MqttSendMsg(" in send_body,
             "MQTT side effect/guard changed", errors)
     require("#ifdef SAMOVAR_USE_BLYNK" in clock_body,
