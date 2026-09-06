@@ -610,6 +610,11 @@ void reset_process_state(void) {
   stopService();
   stepper_safe_set_max_speed(0);
   stepper_safe_stop_reset();
+  StepperMoving = false;
+  CurrrentStepps = 0;
+  TargetStepps = 0;
+  CurrrentStepperSpeed = 0;
+  I2CStepperSpeed = 0;
   set_capacity(0);
   alarm_h_min = 0;
   alarm_t_min = 0;
@@ -664,7 +669,6 @@ void reset_process_state(void) {
   program_Wait = false;
   SteamSensor.Start_Pressure = 0;
   WthdrwlProgress = 0;
-  TargetStepps = 0;
   I2CPumpTargetSteps = 0;
   I2CPumpTargetMl = 0;
   I2CPumpCmdSpeed = 0;

@@ -113,6 +113,33 @@ if sensorinit_text:
     if process_state_body:
         forbid_token("reset_process_state", process_state_body, "request_data_log_close(")
         forbid_token("reset_process_state", process_state_body, "BME_getvalue(")
+        stepper_reset_tokens = [
+            "stopService();",
+            "stepper_safe_set_max_speed(0);",
+            "stepper_safe_stop_reset();",
+            "StepperMoving = false;",
+            "CurrrentStepps = 0;",
+            "TargetStepps = 0;",
+            "CurrrentStepperSpeed = 0;",
+            "I2CStepperSpeed = 0;",
+        ]
+        require_ordered_tokens(
+            "reset_process_state fully resets local stepper state",
+            process_state_body,
+            stepper_reset_tokens,
+            errors,
+        )
+        for token in stepper_reset_tokens:
+            mutated_body = process_state_body.replace(token, "", 1)
+            mutated_errors: list[str] = []
+            require_ordered_tokens(
+                "stepper reset mutation",
+                mutated_body,
+                stepper_reset_tokens,
+                mutated_errors,
+            )
+            if not mutated_errors:
+                errors.append(f"проверка полного сброса шагового двигателя не ловит удаление {token}")
         # [Решение владельца 25.08] Состояние варки обязано сбрасываться здесь же,
         # и ровно тем хвостом, который выполняет штатный beer_finish(). Почему его
         # больше некому доделать после сброса статуса - доказывает поведенческая
