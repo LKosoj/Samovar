@@ -9,8 +9,8 @@
   и включён в таблицу kBlynkFastPush;
 - быстрые пины шлются порциями (BLYNK_PUSH_PER_TICK), а не все за одну итерацию loop();
 - медленные пины (V3, V4, V13, V5, V15, V20, V19, V16, V24) шлются из blynk_push_slow
-  только при изменении/force, V24 - по счётчику program_revision, который program_commit()
-  и program_clear() обязаны инкрементировать;
+  только при изменении/force, V24 - по отпечатку program[] (blynk_program_fingerprint),
+  program_io.h при этом не трогается (он заморожен другими smoke-тестами);
 - после (пере)подключения всё переотправляется (BLYNK_CONNECTED -> s_blynkPushResendAll);
 - tick_blynk() зовёт blynk_push_tick() после Blynk.run().
 """
@@ -41,7 +41,6 @@ def body(source: str, signature: str) -> str:
 
 blynk = strip_cpp_comments(read_text("Blynk.ino"))
 samovar = strip_cpp_comments(read_text("Samovar.ino"))
-program_io = strip_cpp_comments(read_text("program_io.h"))
 
 if blynk and "BLYNK_READ(" in blynk:
     errors.append("BLYNK_READ handlers must be gone: pins are pushed from blynk_push_tick()")
@@ -109,8 +108,12 @@ if blynk:
     ]:
         if slow_body and write not in slow_body:
             errors.append(f"blynk_push_slow must contain: {write}")
-    if slow_body and "program_revision" not in slow_body:
-        errors.append("blynk_push_slow must gate V24 by program_revision")
+    if slow_body and "blynk_program_fingerprint()" not in slow_body:
+        errors.append("blynk_push_slow must gate V24 by blynk_program_fingerprint()")
+    fp_body = body(blynk, "static uint32_t blynk_program_fingerprint()")
+    for token in ("sizeof(WProgram) * PROGRAM_END", "ProgramLen"):
+        if fp_body and token not in fp_body:
+            errors.append(f"blynk_program_fingerprint must cover {token}")
 
     tick_body = body(blynk, "void blynk_push_tick()")
     require_ordered_tokens(
@@ -136,12 +139,6 @@ if samovar:
         ["BlynkLockGuard", "Blynk.run();", "blynk_push_tick();"],
         errors,
     )
-
-if program_io:
-    for signature in ("inline void program_commit", "inline void program_clear()"):
-        fn_body = body(program_io, signature)
-        if fn_body and "program_revision++;" not in fn_body:
-            errors.append(f"{signature} must increment program_revision (V24 push)")
 
 if errors:
     print("Blynk push contract smoke check failed:")

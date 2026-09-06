@@ -426,6 +426,19 @@ static bool blynk_changed(String& last, const String& now, bool force) {
   return true;
 }
 
+// Отпечаток программы отбора (FNV-1a по байтам program[] и ProgramLen). Считается раз в
+// цикл push (~1.5 КБ памяти), чтобы слать V24 только после правки программы, не трогая
+// program_io.h (он заморожен smoke-тестами). Рваное чтение параллельно с program_commit()
+// даёт лишь один лишний push V24 на следующем цикле.
+static uint32_t blynk_program_fingerprint() {
+  uint32_t h = 2166136261u;
+  const uint8_t* bytes = reinterpret_cast<const uint8_t*>(program);
+  for (size_t i = 0; i < sizeof(WProgram) * PROGRAM_END; i++) {
+    h = (h ^ bytes[i]) * 16777619u;
+  }
+  return (h ^ ProgramLen) * 16777619u;
+}
+
 // Медленные пины: шлём только при изменении, все разом при force.
 static void blynk_push_slow(bool force) {
   static int lastProcess = -1;
@@ -434,7 +447,7 @@ static void blynk_push_slow(bool force) {
   static float lastPressure = -1e9f;
   static String lastIp;
   static int lastMode = -1;
-  static uint32_t lastProgramRevision = 0;
+  static uint32_t lastProgramFingerprint = 0;
   static int lastProgramMode = -1;
 
   const int process = (startval > 0 && startval < 5) ? 1 : 0;
@@ -449,11 +462,11 @@ static void blynk_push_slow(bool force) {
   static float lastTarget = -1e9f;
   if (blynk_changed(lastTarget, (float)target_power_volt, force)) Blynk.virtualWrite(V16, target_power_volt);
 #endif
-  // Программа: сериализация недешёвая, поэтому только по счётчику правок program_revision
-  // (program_io.h) и при смене режима (формат строк зависит от режима).
-  const bool revisionChanged = blynk_changed(lastProgramRevision, (uint32_t)program_revision, force);
+  // Программа: сериализация недешёвая, поэтому только по отпечатку program[] и при смене
+  // режима (формат строк зависит от режима).
+  const bool programChanged = blynk_changed(lastProgramFingerprint, blynk_program_fingerprint(), force);
   const bool programModeChanged = blynk_changed(lastProgramMode, (int)Samovar_Mode, force);
-  if (revisionChanged || programModeChanged) Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));
+  if (programChanged || programModeChanged) Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));
 }
 
 void blynk_push_tick() {

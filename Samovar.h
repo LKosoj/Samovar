@@ -736,7 +736,6 @@ volatile uint8_t capacity_num;                                  // Текуща�
 volatile uint8_t prev_ProgramNum;                               // Пердыдущая программа отбора
 volatile uint8_t ProgramNum;                                    // Текущая программа отбора
 volatile uint8_t ProgramLen;                                    // Количество строк программы отбора
-volatile uint32_t program_revision = 0;                         // Счётчик правок программы (program_commit/program_clear) для push V24 в Blynk
 volatile uint8_t WthdrwlProgress;                               // Прогресс текущего отбора
 volatile int16_t startval = 0;                                  // Признак идущего отбора
 
