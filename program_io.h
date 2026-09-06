@@ -170,6 +170,7 @@ inline void program_commit(const ProgramDraft& draft) {
     program[i].WType = PROGRAM_TYPE_NONE;
   }
   ProgramLen = draft.len;
+  program_revision++;
   portEXIT_CRITICAL(&configMux);
 }
 
@@ -182,6 +183,7 @@ inline void program_clear() {
     program[i].WType = PROGRAM_TYPE_NONE;
   }
   ProgramLen = 0;
+  program_revision++;
   portEXIT_CRITICAL(&configMux);
 }
 

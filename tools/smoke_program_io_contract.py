@@ -360,7 +360,7 @@ if samovar_api:
 if blynk:
     require_token("Blynk.ino centralized program serializer", blynk, '#include "program_io.h"')
     try:
-        blynk_v24 = extract_function_body(blynk, "BLYNK_READ(V24)")
+        blynk_v24 = extract_function_body(blynk, "static void blynk_push_slow(bool force)")
     except ValueError as exc:
         errors.append(str(exc))
         blynk_v24 = ""

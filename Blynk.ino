@@ -33,209 +33,7 @@ BLYNK_WRITE(V22) {
 }
 #endif
 
-BLYNK_READ(V0) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return; // Предотвращаем рекурсию
-  inReadHandler = true;
-  
-  vTaskDelay(2 / portTICK_PERIOD_MS);
-  Blynk.virtualWrite(V0, SteamSensor.avgTemp);
-  vTaskDelay(2 / portTICK_PERIOD_MS);
-  Blynk.virtualWrite(V4, PowerOn);
-  int i;
-  int k;
-  if (startval > 0 && startval < 5)
-    i = 1;
-  else
-    i = 0;
-  Blynk.virtualWrite(V3, i);
-  vTaskDelay(2 / portTICK_PERIOD_MS);
-  if (PauseOn)
-    k = 1;
-  else
-    k = 0;
-  Blynk.virtualWrite(V13, k);
-  
-  inReadHandler = false;
-}
-
-BLYNK_READ(V1) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V1, PipeSensor.avgTemp);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V25) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V25, ACPSensor.avgTemp);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V2) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V2, WthdrwlProgress);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V5) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V5, bme_pressure);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V6) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V6, WaterSensor.avgTemp);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V7) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V7, TankSensor.avgTemp);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V8) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V8, get_liquid_volume());
-  inReadHandler = false;
-}
-
-BLYNK_READ(V9) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V9, ActualVolumePerHour);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V10) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  // [C-1] Читаем строки времени под замком.
-  {
-    String timesCopy;
-    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-    if (locked) {
-      timesCopy = WthdrwTimeS + "; " + WthdrwTimeAllS;
-      runtime_state_unlock(true);
-    }
-    Blynk.virtualWrite(V10, timesCopy);
-  }
-  inReadHandler = false;
-}
-
-BLYNK_READ(V11) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  // [C-1] Читаем строку StrCrt под замком.
-  {
-    String strCrtCopy;
-    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-    if (locked) {
-      strCrtCopy = StrCrt;
-      runtime_state_unlock(true);
-    }
-    Blynk.virtualWrite(V11, strCrtCopy);
-  }
-  inReadHandler = false;
-}
-
-BLYNK_READ(V14) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  // [C-2] Читаем кэш SamovarStatus под замком; FSM продвигает его раз в секунду
-  // из секундного гейта triggerSysTicker (core 0) через tick_status_fsm().
-  {
-    String statusCopy;
-    bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
-    if (locked) {
-      statusCopy = SamovarStatus;
-      runtime_state_unlock(true);
-    }
-    Blynk.virtualWrite(V14, statusCopy);
-  }
-  inReadHandler = false;
-}
-
-BLYNK_READ(V15) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V15, ipst);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V19) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V19, SAMOVAR_VERSION);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V20) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V20, Samovar_Mode);
-  inReadHandler = false;
-}
-
-BLYNK_READ(V24) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));
-  inReadHandler = false;
-}
-
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
-BLYNK_READ(V23) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V23, pressure_value);
-  inReadHandler = false;
-}
-#endif
-
 #ifdef SAMOVAR_USE_POWER
-BLYNK_READ(V21) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt);
-  inReadHandler = false;
-}
-#endif
-
-#ifdef SAMOVAR_USE_POWER
-BLYNK_READ(V16) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  Blynk.virtualWrite(V16, target_power_volt);
-  inReadHandler = false;
-}
-
 BLYNK_WRITE(V16) {
   if (mode_switch_in_progress()) return;
   float maxPower = 0.0f;
@@ -396,22 +194,16 @@ static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
   out.print('}');
 }
 
-BLYNK_READ(V27) {
-  static bool inReadHandler = false;
-  if (inReadHandler) return;
-  inReadHandler = true;
-  {
-    AjaxTelemetrySnapshot snapshot;
-    // Курсор сообщений 0: лента событий здесь не нужна, но снимок общий с /ajax.
-    if (captureAjaxTelemetrySnapshot(0, snapshot) == RUNTIME_AJAX_SNAPSHOT_OK) {
-      String json;
-      json.reserve(512);
-      JsonStringPrint sink(json);
-      write_blynk_mode_json(sink, snapshot);
-      Blynk.virtualWrite(V27, json);
-    }
+static void blynk_push_v27() {
+  AjaxTelemetrySnapshot snapshot;
+  // Курсор сообщений 0: лента событий здесь не нужна, но снимок общий с /ajax.
+  if (captureAjaxTelemetrySnapshot(0, snapshot) == RUNTIME_AJAX_SNAPSHOT_OK) {
+    String json;
+    json.reserve(512);
+    JsonStringPrint sink(json);
+    write_blynk_mode_json(sink, snapshot);
+    Blynk.virtualWrite(V27, json);
   }
-  inReadHandler = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -536,6 +328,147 @@ BLYNK_WRITE(V32) {
   }
   if (command != SAMOVAR_NONE && !queue_samovar_command(command)) {
     report_blynk_refusal(32, "BUSY");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Push вместо опроса (2026-09). Раньше у виджетов проекта стоял frequency=5000: сервер
+// раз в 5 с слал 21 команду «vr» одной пачкой, и вся пачка (21 обработчик BLYNK_READ,
+// 24 отправки, задержки и захваты замков) выполнялась внутри одного Blynk.run(), т.е.
+// одной итерации loop(). Теперь в эталонном проекте frequency=0 (PUSH), обработчиков
+// BLYNK_READ нет, и прошивка отдаёт пины сама:
+//  - быстрые пины (kBlynkFastPush) - раз в BLYNK_PUSH_PERIOD_MS, по BLYNK_PUSH_PER_TICK
+//    штук за итерацию loop(), чтобы не было всплеска;
+//  - медленные (blynk_push_slow) - только когда значение изменилось, и все разом после
+//    (пере)подключения, потому что сервер мог их потерять (BLYNK_CONNECTED ниже).
+// Старые проекты с опросом продолжают присылать «vr»: библиотека их отбрасывает, а
+// значения приходят push-ем с той же периодичностью. V26 (сообщения) и V15/V20-url
+// при применении профиля шлются как раньше (Samovar.ino).
+// blynk_push_tick() зовётся из tick_blynk() (Samovar.ino) под BlynkLockGuard после
+// Blynk.run() - как и BLYNK_WRITE, всё здесь выполняется уже под этим локом.
+// ---------------------------------------------------------------------------
+#define BLYNK_PUSH_PERIOD_MS 5000UL
+#define BLYNK_PUSH_PER_TICK 3
+
+static bool s_blynkPushResendAll = true;
+
+BLYNK_CONNECTED() {
+  s_blynkPushResendAll = true;
+}
+
+static void blynk_push_v0() { Blynk.virtualWrite(V0, SteamSensor.avgTemp); }
+static void blynk_push_v1() { Blynk.virtualWrite(V1, PipeSensor.avgTemp); }
+static void blynk_push_v2() { Blynk.virtualWrite(V2, WthdrwlProgress); }
+static void blynk_push_v6() { Blynk.virtualWrite(V6, WaterSensor.avgTemp); }
+static void blynk_push_v7() { Blynk.virtualWrite(V7, TankSensor.avgTemp); }
+static void blynk_push_v8() { Blynk.virtualWrite(V8, get_liquid_volume()); }
+static void blynk_push_v9() { Blynk.virtualWrite(V9, ActualVolumePerHour); }
+static void blynk_push_v25() { Blynk.virtualWrite(V25, ACPSensor.avgTemp); }
+// V23 и V21 попадают в kBlynkFastPush только в сборках с датчиком давления/регулятором;
+// сами функции без #if, иначе автопрототип Arduino даёт «declared static but never defined».
+static void __attribute__((unused)) blynk_push_v23() { Blynk.virtualWrite(V23, pressure_value); }
+// Текущее напряжение меняется всё время регулирования, поэтому V21 - быстрый пин.
+static void __attribute__((unused)) blynk_push_v21() {
+  Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt);
+}
+
+// V10, V11, V14 - строки под runtime_state_lock; один захват замка на все три.
+static void blynk_push_strings() {
+  String timesCopy;
+  String strCrtCopy;
+  String statusCopy;
+  bool locked = runtime_state_lock(pdMS_TO_TICKS(50));
+  if (locked) {
+    timesCopy = WthdrwTimeS + "; " + WthdrwTimeAllS;
+    strCrtCopy = StrCrt;
+    statusCopy = SamovarStatus;
+    runtime_state_unlock(true);
+  }
+  Blynk.virtualWrite(V10, timesCopy);
+  Blynk.virtualWrite(V11, strCrtCopy);
+  Blynk.virtualWrite(V14, statusCopy);
+}
+
+typedef void (*BlynkPushFn)();
+static const BlynkPushFn kBlynkFastPush[] = {
+  blynk_push_v0, blynk_push_v1, blynk_push_v2, blynk_push_v6, blynk_push_v7,
+  blynk_push_v8, blynk_push_v9, blynk_push_v25,
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
+  blynk_push_v23,
+#endif
+#ifdef SAMOVAR_USE_POWER
+  blynk_push_v21,
+#endif
+  blynk_push_strings, blynk_push_v27,
+};
+static const uint8_t kBlynkFastPushCount = sizeof(kBlynkFastPush) / sizeof(kBlynkFastPush[0]);
+
+// true, если значение изменилось (или force); запоминает новое. Перегрузки вместо
+// шаблона: генератор прототипов Arduino/PlatformIO шаблоны в .ino не понимает.
+static bool blynk_changed(int& last, int now, bool force) {
+  if (!force && last == now) return false;
+  last = now;
+  return true;
+}
+static bool blynk_changed(float& last, float now, bool force) {
+  if (!force && last == now) return false;
+  last = now;
+  return true;
+}
+static bool blynk_changed(uint32_t& last, uint32_t now, bool force) {
+  if (!force && last == now) return false;
+  last = now;
+  return true;
+}
+static bool blynk_changed(String& last, const String& now, bool force) {
+  if (!force && last == now) return false;
+  last = now;
+  return true;
+}
+
+// Медленные пины: шлём только при изменении, все разом при force.
+static void blynk_push_slow(bool force) {
+  static int lastProcess = -1;
+  static int lastPower = -1;
+  static int lastPause = -1;
+  static float lastPressure = -1e9f;
+  static String lastIp;
+  static int lastMode = -1;
+  static uint32_t lastProgramRevision = 0;
+  static int lastProgramMode = -1;
+
+  const int process = (startval > 0 && startval < 5) ? 1 : 0;
+  if (blynk_changed(lastProcess, process, force)) Blynk.virtualWrite(V3, process);
+  if (blynk_changed(lastPower, (int)PowerOn, force)) Blynk.virtualWrite(V4, (int)PowerOn);
+  if (blynk_changed(lastPause, (int)PauseOn, force)) Blynk.virtualWrite(V13, (int)PauseOn);
+  if (blynk_changed(lastPressure, (float)bme_pressure, force)) Blynk.virtualWrite(V5, bme_pressure);
+  if (blynk_changed(lastIp, String(ipst), force)) Blynk.virtualWrite(V15, ipst);
+  if (blynk_changed(lastMode, (int)Samovar_Mode, force)) Blynk.virtualWrite(V20, Samovar_Mode);
+  if (force) Blynk.virtualWrite(V19, SAMOVAR_VERSION);
+#ifdef SAMOVAR_USE_POWER
+  static float lastTarget = -1e9f;
+  if (blynk_changed(lastTarget, (float)target_power_volt, force)) Blynk.virtualWrite(V16, target_power_volt);
+#endif
+  // Программа: сериализация недешёвая, поэтому только по счётчику правок program_revision
+  // (program_io.h) и при смене режима (формат строк зависит от режима).
+  const bool revisionChanged = blynk_changed(lastProgramRevision, (uint32_t)program_revision, force);
+  const bool programModeChanged = blynk_changed(lastProgramMode, (int)Samovar_Mode, force);
+  if (revisionChanged || programModeChanged) Blynk.virtualWrite(V24, serialize_program_for_mode(Samovar_Mode));
+}
+
+void blynk_push_tick() {
+  static unsigned long cycleStart = 0;
+  static uint8_t next = 0xFF;  // 0xFF - цикл не идёт
+  const unsigned long now = millis();
+  if (next >= kBlynkFastPushCount) {
+    if (!s_blynkPushResendAll && now - cycleStart < BLYNK_PUSH_PERIOD_MS) return;
+    cycleStart = now;
+    next = 0;
+    blynk_push_slow(s_blynkPushResendAll);
+    s_blynkPushResendAll = false;
+  }
+  for (uint8_t n = 0; n < BLYNK_PUSH_PER_TICK && next < kBlynkFastPushCount; n++) {
+    kBlynkFastPush[next++]();
   }
 }
 

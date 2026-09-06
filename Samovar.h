@@ -127,6 +127,45 @@
 #endif
 #endif
 
+// Настройки библиотеки Blynk. Именно здесь, а не флагами -D в platformio.ini
+// (их не видит Arduino IDE) и не в Samovar.ino после #include "logic.h" (он уже
+// втянул BlynkConfig.h). Samovar.h - первое включение во всех заголовках с Blynk
+// (logic.h, program_io.h, lua.h, runtime_helpers.h), а в BlynkConfig.h значения
+// заданы через #ifndef. Проверка порядка: static_assert после #include
+// <BlynkSimpleEsp32.h> в Samovar.ino.
+#ifdef SAMOVAR_USE_BLYNK
+// Blynk.run() зовётся из loop() и на зависшем сокете блокирует его ровно на это время
+// (client->setTimeout, блокирующий readBytes). Заводские 6000 мс не влезают в бюджет
+// одной итерации loop() под сторожем LOOP_WDT_TIMEOUT_S; 3000 мс подобраны по бюджету
+// Blynk.run() отдельно от I2C (сторожит tools/smoke_loop_budget_vs_watchdog.py).
+// Дисконнект по неактивности: 1000*BLYNK_HEARTBEAT(10) + 3*3000 = 19 с; логин
+// Blynk.connect(BLYNK_TIMEOUT_MS) = 3 с (Samovar.ino зовёт без множителя x3).
+#ifndef BLYNK_TIMEOUT_MS
+#define BLYNK_TIMEOUT_MS 3000UL
+#endif
+// Интервал «сердцебиения» (ping при простое). Сервер считает устройство отключённым
+// через 2.3*BLYNK_HEARTBEAT с молчания: с заводскими 45 с это 104 с, и приложения
+// почти две минуты показывали «связь есть» после выключения питания; с 10 с - 23 с.
+#ifndef BLYNK_HEARTBEAT
+#define BLYNK_HEARTBEAT 10
+#endif
+// Буфер исходящей команды (BlynkApi.h: char mem[BLYNK_MAX_SENDBYTES] в virtualWrite).
+// Заводские 128 байт молча обрезали программу в V24. Худший случай V24: 20 строк
+// сыра с крайними значениями полей = 927 байт; V27 JSON режима <= 357.
+#ifndef BLYNK_MAX_SENDBYTES
+#define BLYNK_MAX_SENDBYTES 1024
+#endif
+// Клиентский ограничитель исходящих сообщений выключен. С заводскими 15/с каждый
+// virtualWrite ждёт 66 мс после ЛЮБОЙ активности (в т.ч. входящей), крутя run() -
+// при опросе виджетов приложением loop() был занят Blynk больше секунды в секунду,
+// а обработчики BLYNK_READ выполнялись вложенно из любого virtualWrite на стеке
+// чужой задачи (переполнение GetClockTicker). Темп ответов задаёт сервер своим
+// опросом, порог флуда локального сервера (100/с) недостижим.
+#ifndef BLYNK_MSG_LIMIT
+#define BLYNK_MSG_LIMIT 0
+#endif
+#endif
+
 #ifdef SAMOVAR_USE_SEM_AVR
 #ifndef SAMOVAR_USE_RMVK
 #define SAMOVAR_USE_RMVK
@@ -697,6 +736,7 @@ volatile uint8_t capacity_num;                                  // Текуща�
 volatile uint8_t prev_ProgramNum;                               // Пердыдущая программа отбора
 volatile uint8_t ProgramNum;                                    // Текущая программа отбора
 volatile uint8_t ProgramLen;                                    // Количество строк программы отбора
+volatile uint32_t program_revision = 0;                         // Счётчик правок программы (program_commit/program_clear) для push V24 в Blynk
 volatile uint8_t WthdrwlProgress;                               // Прогресс текущего отбора
 volatile int16_t startval = 0;                                  // Признак идущего отбора
 

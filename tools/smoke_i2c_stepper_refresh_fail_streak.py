@@ -2,7 +2,8 @@
 """T25.1: i2c_stepper_read_byte() обязана делегировать на i2c_stepper_read_block()
 (который на отказе НЕ трогает выходной буфер), а i2c_stepper_refresh() - копить
 refreshFailStreak и сообщать РОВНО ОДИН раз при достижении порога
-I2CSTEPPER_FAIL_STREAK_ALERT.
+I2CSTEPPER_FAIL_STREAK_ALERT - и только для платы, которая хоть раз отвечала
+(отсутствие с самого старта не сообщается).
 
 Компилирует РЕАЛЬНЫЕ тела функций (i2c_stepper_read_block/read_byte/read_u16/
 read_u32/check_I2C_device/i2c_stepper_note_refresh_failure/i2c_stepper_refresh),
@@ -230,6 +231,16 @@ int main() {
   check(!sixthOk, "sixth consecutive failure must still report failure");
   check(dev.refreshFailStreak == 6, "refreshFailStreak keeps counting past the alert threshold");
   check(sendMsgCalls == 1, "message must not repeat on further failures past the threshold");
+
+  // (в) плата, которой не было с самого старта: отсутствие - не отказ, молчим.
+  I2CStepperDevice absent{};
+  absent.address = ADDR;
+  wireState.failReg = I2CSTEP_REG_MAGIC;
+  for (int i = 1; i <= 6; i++) {
+    check(!i2c_stepper_refresh(absent, true, 1000), "absent device must report failure");
+  }
+  check(!absent.everPresent, "device that never answered must stay everPresent=false");
+  check(sendMsgCalls == 1, "no message for a device that was never present");
 
   if (failures != 0) return 1;
   std::cout << "i2c_stepper refresh fail-streak checks passed\n";

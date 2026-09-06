@@ -112,6 +112,7 @@ struct I2CStepperDevice {
   uint32_t remaining;
   uint16_t currentSpeed;
   uint8_t refreshFailStreak;
+  bool everPresent;  // хоть раз ответил после старта: пропажу сообщаем, отсутствие - нет
 };
 
 inline I2CStepperDevice make_i2c_stepper_device(uint8_t address) {
@@ -260,6 +261,8 @@ inline bool i2c_stepper_read_u32(uint8_t address, uint8_t reg, uint32_t& value, 
 inline void i2c_stepper_note_refresh_failure(I2CStepperDevice& dev) {
   if (dev.refreshFailStreak < 255) dev.refreshFailStreak++;
   if (dev.refreshFailStreak != I2CSTEPPER_FAIL_STREAK_ALERT) return;
+  // Платы может просто не быть в сборке - это штатно, а не отказ.
+  if (!dev.everPresent) return;
   SendMsg(String("Степпер на адресе ") + dev.address + " не отвечает, переход на локальный запасной путь", ALARM_MSG);
 }
 
@@ -317,6 +320,7 @@ inline bool i2c_stepper_refresh(I2CStepperDevice& dev, bool force, TickType_t lo
     return false;
   }
   dev.present = true;
+  dev.everPresent = true;
   dev.refreshFailStreak = 0;
   return true;
 }

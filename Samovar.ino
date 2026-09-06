@@ -144,22 +144,14 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 
 #ifdef SAMOVAR_USE_BLYNK
 //#define BLYNK_PRINT Serial
-// [Ревью 24.08] Blynk.run() зовётся из loop() (tick_blynk) и на зависшем сокете блокирует
-// его ровно на BLYNK_TIMEOUT_MS: библиотека ставит client->setTimeout(BLYNK_TIMEOUT_MS)
-// (BlynkArduinoClient.h) и читает блокирующим readBytes(). Заводские 6000 мс не влезали в
-// бюджет ОДНОЙ итерации loop() под сторожем LOOP_WDT_TIMEOUT_S=10 с. Значение снижено до
-// 3000 мс флагом сборки -DBLYNK_TIMEOUT_MS в platformio.ini (сторожит
-// tools/smoke_loop_budget_vs_watchdog.py). Именно флагом, а не #define здесь: logic.h
-// (строка 134 выше) уже втянул BlynkSimpleEsp32.h -> BlynkConfig.h, где значение задано
-// через #ifndef, поэтому переопределение в этом месте опаздывает и не работает.
-// [Ревью 24.08, ошибка 1] Ожидание подтверждения I2C-команды в бюджет этой итерации
-// больше не суммируется: process_pending_i2c_operations() кормит сторож отдельно
-// (feedLoopWDT() сразу после операции - см. комментарий там), т.к. цепочка I2C ограничена
-// СВОИМИ таймаутами, но может быть длиннее одной итерации. 3000 мс подобраны по бюджету
-// Blynk.run() отдельно от I2C: 54 с дисконнект/3 с логин Blynk - см. platformio.ini.
+// Настройки библиотеки (BLYNK_TIMEOUT_MS, BLYNK_MAX_SENDBYTES, BLYNK_MSG_LIMIT) - в
+// Samovar.h, раньше первого включения BlynkConfig.h; здесь #define уже опоздал бы.
 //#define BLYNK_HEARTBEAT 17
 
 #include <BlynkSimpleEsp32.h>
+static_assert(BLYNK_TIMEOUT_MS == 3000UL, "BLYNK_TIMEOUT_MS из Samovar.h не подействовал: BlynkConfig.h включён раньше");
+static_assert(BLYNK_MAX_SENDBYTES == 1024, "BLYNK_MAX_SENDBYTES из Samovar.h не подействовал: BlynkConfig.h включён раньше");
+static_assert(BLYNK_MSG_LIMIT == 0, "BLYNK_MSG_LIMIT из Samovar.h не подействовал: BlynkConfig.h включён раньше");
 
 #endif
 
@@ -1659,7 +1651,12 @@ void triggerGetClock(void *parameter) {
           } else if (Blynk.connected()) {
             Blynk.virtualWrite(V26, qMsg);
             // Push в мобильные приложения через сервер Blynk (виджет Notification в проекте).
+            // notify помечен устаревшим в пользу logEvent, но logEvent работает только
+            // в новом облаке Blynk IoT (BLYNK_TEMPLATE_ID); со старым сервером нужен notify.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
             Blynk.notify(qMsg);
+#pragma GCC diagnostic pop
           } else {
             blynkDisconnected = true;
           }
@@ -3004,6 +3001,9 @@ static void tick_ota() {
 #endif
 }
 
+#ifdef SAMOVAR_USE_BLYNK
+void blynk_push_tick();  // Blynk.ino
+#endif
 static void tick_blynk() {
 #ifdef SAMOVAR_USE_BLYNK
   // Отключаем Blynk во время OTA для освобождения ресурсов. Лок короткий: не взяли -
@@ -3013,6 +3013,8 @@ static void tick_blynk() {
   BlynkLockGuard blynkLock(pdMS_TO_TICKS(20));
   if (blynkLock && !ota_running && Blynk.connected()) {
     Blynk.run();
+    // Push пинов вместо серверного опроса (Blynk.ino), под тем же локом.
+    blynk_push_tick();
   }
 #endif
 }

@@ -30,13 +30,10 @@ feedLoopWDT() сразу после I2C-операции. Это не маски
      из бюджета - враньё, а не факт).
   2. Оставшийся посчитанный участник бюджета - tick_blynk() -> Blynk.run(): на зависшем
      сокете блокирует ровно BLYNK_TIMEOUT_MS (client->setTimeout, читает блокирующим
-     readBytes()). Значение задаётся флагом сборки -DBLYNK_TIMEOUT_MS в platformio.ini,
-     а не #define в Samovar.ino: logic.h втягивает BlynkSimpleEsp32.h -> BlynkConfig.h
-     РАНЬШЕ блока Blynk в Samovar.ino, где значение задано через #ifndef - #define в
-     Samovar.ino опоздал бы и молча не подействовал бы (плюс warning "redefined").
-     Флаг же в командной строке компилятора, раньше любого #include. Флаг обязан лежать
-     в базовой секции [env:Samovar]: остальные окружения наследуют её build_flags, иначе
-     часть прошивок собралась бы с заводскими 6000 мс.
+     readBytes()). Значение задаётся #define BLYNK_TIMEOUT_MS в Samovar.h - первом
+     включении всех заголовков с Blynk, раньше BlynkConfig.h (там #ifndef). Не флагом
+     -D в platformio.ini: Arduino IDE флаги не видит. Не в Samovar.ino: logic.h выше
+     уже втянул BlynkConfig.h, define опоздал бы и молча не подействовал.
   3. Blynk-бюджет + запас укладывается в порог.
 
 Использование:
@@ -107,28 +104,18 @@ def main() -> int:
                 "operations() выше) - без сброса сторож снова считает её частью "
                 "бюджета одной итерации")
 
-    blynk = None
-    for line in ini.splitlines():
-        stripped = line.strip()
-        if stripped.startswith(";"):
-            continue
-        match = re.match(r"-DBLYNK_TIMEOUT_MS=(\d+)", stripped)
-        if match:
-            blynk = int(match.group(1))
-            break
-    if blynk is None:
+    samovar_h = (ROOT / "Samovar.h").read_text(encoding="utf-8", errors="ignore")
+    match = re.search(r"^#define\s+BLYNK_TIMEOUT_MS\s+(\d+)UL\s*$", samovar_h, re.MULTILINE)
+    if not match:
         return fail(
-            "в platformio.ini нет флага -DBLYNK_TIMEOUT_MS: останутся заводские 6000 мс "
+            "в Samovar.h нет #define BLYNK_TIMEOUT_MS: останутся заводские 6000 мс "
             "(BlynkConfig.h), и Blynk.run() один заберёт больше половины бюджета итерации")
+    blynk = int(match.group(1))
 
-    base = ini[ini.find("[env:Samovar]"):]
-    next_section = base.find("\n[env:")
-    if next_section > 0:
-        base = base[:next_section]
-    if "-DBLYNK_TIMEOUT_MS" not in base:
+    if "-DBLYNK_TIMEOUT_MS" in ini:
         return fail(
-            "флаг -DBLYNK_TIMEOUT_MS задан не в базовой секции [env:Samovar]: остальные "
-            "окружения наследуют ${env:Samovar.build_flags} и собрались бы с 6000 мс")
+            "BLYNK_TIMEOUT_MS задан флагом в platformio.ini: Arduino IDE флаги не видит, "
+            "единственный источник - Samovar.h")
 
     for index, line in enumerate(samovar.splitlines(), 1):
         stripped = line.strip()
@@ -138,7 +125,7 @@ def main() -> int:
             return fail(
                 f"Samovar.ino:{index}: #define BLYNK_TIMEOUT_MS здесь опаздывает (logic.h "
                 "выше уже втянул BlynkConfig.h), молча не действует и даёт предупреждение "
-                '"redefined" - значение задаётся флагом сборки в platformio.ini')
+                '"redefined" - значение задаётся в Samovar.h')
 
     total = blynk + REQUIRED_HEADROOM_MS
     if total > threshold_ms:

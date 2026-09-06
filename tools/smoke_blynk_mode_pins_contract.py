@@ -10,7 +10,7 @@
   Пропажа ключа сломает экран режима молча (приложение просто спрячет поле).
 - V28..V32: разбор значения -> report_blynk_numeric_error -> return ДО любого
   побочного эффекта; никаких .asInt()/.asFloat().
-- Флаг -DBLYNK_MAX_SENDBYTES=1024: без него virtualWrite обрезает длинные
+- #define BLYNK_MAX_SENDBYTES 1024 в Samovar.h (не флаг -D: Arduino IDE их не видит): без него virtualWrite обрезает длинные
   значения (V24 программа, V27 JSON) тихо, по размеру буфера.
 """
 import re
@@ -52,12 +52,11 @@ for forbidden in (".asInt()", ".asFloat()"):
         errors.append(f"Blynk.ino contains forbidden numeric conversion: {forbidden}")
 
 # --- V27: снимок и сериализатор -------------------------------------------
-read_body = function_body(blynk, "BLYNK_READ(V27)")
+read_body = function_body(blynk, "static void blynk_push_v27()")
 require_ordered_tokens(
-    "BLYNK_READ(V27)",
+    "blynk_push_v27",
     read_body,
     [
-        "static bool inReadHandler",
         "AjaxTelemetrySnapshot snapshot;",
         "captureAjaxTelemetrySnapshot(0, snapshot) == RUNTIME_AJAX_SNAPSHOT_OK",
         "write_blynk_mode_json(sink, snapshot);",
@@ -185,8 +184,11 @@ if "static bool queue_pending_flag(volatile bool& flag, bool bypassBarrier);" no
     errors.append("Blynk.ino misses forward declaration of queue_pending_flag without default argument")
 
 # --- буфер отправки Blynk ------------------------------------------------------
-if "-DBLYNK_MAX_SENDBYTES=1024" not in platformio:
-    errors.append("platformio.ini misses -DBLYNK_MAX_SENDBYTES=1024 (long V24/V27 values would be truncated)")
+samovar_h = read_text("Samovar.h")
+if not re.search(r"^#define BLYNK_MAX_SENDBYTES 1024$", samovar_h, re.MULTILINE):
+    errors.append("Samovar.h misses #define BLYNK_MAX_SENDBYTES 1024 (long V24/V27 values would be truncated)")
+if "-DBLYNK_MAX_SENDBYTES" in platformio:
+    errors.append("platformio.ini must not set BLYNK_MAX_SENDBYTES: Arduino IDE ignores -D flags, single source is Samovar.h")
 
 if errors:
     print("Blynk mode pins contract smoke check failed:")
