@@ -4,6 +4,7 @@
 import gzip
 import importlib.util
 import inspect
+import json
 import re
 import shutil
 import subprocess
@@ -205,6 +206,13 @@ class ConfiguratorModelTests(unittest.TestCase):
             def bind(self, event, callback, add=None):
                 self.bindings[event] = (callback, add)
 
+            def after(self, _delay, callback):
+                callback()
+                return "after#1"
+
+            def after_cancel(self, _identifier):
+                pass
+
             def winfo_rootx(self):
                 return 100
 
@@ -266,11 +274,23 @@ class ConfiguratorModelTests(unittest.TestCase):
             def configure(self, **kwargs):
                 self.options.update(kwargs)
 
-            def insert(self, position, text):
+            def insert(self, position, text, *tags):
                 self.entries.append((position, text))
 
             def see(self, position):
                 self.last_seen = position
+
+            def tag_configure(self, *args, **kwargs):
+                pass
+
+            def bind(self, *args, **kwargs):
+                pass
+
+            def get(self):
+                return self.options.get("value", "")
+
+            def delete(self, *args):
+                pass
 
             def set(self, *args):
                 self.scroll = args
@@ -310,6 +330,13 @@ class ConfiguratorModelTests(unittest.TestCase):
             def destroy(self):
                 self.destroyed = True
 
+        class FakeVar:
+            def __init__(self, value=True):
+                self.value = value
+
+            def get(self):
+                return self.value
+
         class FakeTk:
             def __init__(self):
                 self.window = FakeWindow()
@@ -319,11 +346,15 @@ class ConfiguratorModelTests(unittest.TestCase):
                 return self.window
 
             Text = FakeWidget
+            BooleanVar = FakeVar
 
         class FakeTtk:
             Frame = FakeWidget
             Scrollbar = FakeWidget
             Button = FakeWidget
+            Entry = FakeWidget
+            Label = FakeWidget
+            Checkbutton = FakeWidget
 
         window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
         window.root = object()
@@ -337,9 +368,13 @@ class ConfiguratorModelTests(unittest.TestCase):
         window.monitor_log = None
         window.monitor_stop_button = None
         window.monitor_ip_button = None
+        window.monitor_input = None
+        window.log_autoscroll = FakeVar(True)
         window.start_action = lambda action: setattr(window, "active_action", action)
 
-        window.open_monitor()
+        with mock.patch.object(configurator, "EditMenu", lambda *args, **kwargs: None), \
+                mock.patch.object(configurator, "configure_log_tags", lambda widget: None):
+            window.open_monitor()
         modal = window.monitor_window
         self.assertIs(modal.transient_parent, window.root)
         self.assertTrue(modal.grabbed)
@@ -372,7 +407,13 @@ class ConfiguratorModelTests(unittest.TestCase):
         window.request_monitor_ip()
         self.assertEqual(process.stdin.text, "SAMOVAR:IP?\n")
         self.assertTrue(process.stdin.flushed)
-        window.toggle_monitor()
+        window.monitor_input.options["value"] = "  SAMOVAR:STATUS?  "
+        window.send_monitor_command()
+        self.assertEqual(process.stdin.text, "SAMOVAR:IP?\nSAMOVAR:STATUS?\n")
+        with mock.patch.object(
+            configurator, "terminate_process_tree", lambda process: process.terminate()
+        ):
+            window.toggle_monitor()
         self.assertTrue(window.stop_requested)
         self.assertTrue(process.terminated)
         self.assertFalse(modal.destroyed)
@@ -384,9 +425,334 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertIsNone(window.monitor_window)
 
     def test_main_log_expands_with_window(self) -> None:
-        source = MODULE_PATH.read_text(encoding="utf-8")
+        source = inspect.getsource(configurator.ConfiguratorWindow._build)
         self.assertIn('log_frame.pack(fill="both", expand=True)', source)
         self.assertNotIn('log_frame.pack(fill="both", expand=False)', source)
+        # Журнал занимает правую колонку на всю высоту, настройки слева не растягиваются.
+        self.assertIn('ttk.Panedwindow(outer, orient="horizontal")', source)
+        self.assertIn("paned.add(left, weight=0)", source)
+        self.assertIn("paned.add(right, weight=1)", source)
+        self.assertIn('log_box.pack(fill="both", expand=True', source)
+
+    def test_network_port_in_the_same_list_switches_platformio_to_espota(self) -> None:
+        # PlatformIO включает espota только по виду --upload-port (IPv4 или *.local);
+        # переменная PLATFORMIO_UPLOAD_PROTOCOL при проверке 06.09.2026 была проигнорирована.
+        for port in ("COM7", r"\\.\COM12", "/dev/ttyUSB0", "com3", ""):
+            self.assertFalse(configurator.is_network_port(port), port)
+        for port in ("192.168.1.37", "samovar.local", "192.168.1.37 — samovar (Wi-Fi)"):
+            self.assertTrue(configurator.is_network_port(port), port)
+        self.assertEqual(configurator.port_value("192.168.1.37 — samovar (Wi-Fi)"), "192.168.1.37")
+        self.assertEqual(configurator.port_value(" COM7 "), "COM7")
+        self.assertEqual(configurator.network_port_label("192.168.1.37", "samovar"), "192.168.1.37 — samovar (Wi-Fi)")
+        self.assertEqual(
+            configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "192.168.1.37 — samovar (Wi-Fi)"),
+            ["pio.exe", "run", "-e", "Samovar", "-t", "upload", "--upload-port", "192.168.1.37"],
+        )
+        with mock.patch.object(
+            configurator.socket, "getaddrinfo",
+            return_value=[(None, None, None, "", ("192.168.1.40", 0))],
+        ) as resolver:
+            self.assertEqual(
+                configurator.pio_command("pio.exe", "ESP32-S3", "uploadfs", "samovar.local"),
+                ["pio.exe", "run", "-e", "Samovar_s3", "-t", "uploadfs", "--upload-port", "192.168.1.40"],
+            )
+        resolver.assert_called_once_with(
+            "samovar.local", None, configurator.socket.AF_INET, configurator.socket.SOCK_STREAM
+        )
+        with mock.patch.object(configurator.socket, "getaddrinfo", side_effect=OSError("no such host")):
+            with self.assertRaisesRegex(configurator.ConfigError, "Не удалось определить IP-адрес"):
+                configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "samovar")
+        with self.assertRaisesRegex(configurator.ConfigError, "Некорректный адрес"):
+            configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "192.168.1.37; rm")
+        # По сети нельзя стирать флеш, смотреть монитор и перезагружать через esptool
+        with self.assertRaisesRegex(configurator.ConfigError, "только по USB"):
+            configurator.pio_command("pio.exe", "ESP32 DevKit", "erase", "192.168.1.37")
+        with self.assertRaisesRegex(configurator.ConfigError, "только по USB"):
+            configurator.esptool_reboot_command("pio.exe", "samovar.local")
+        with self.assertRaisesRegex(configurator.ConfigError, "только по USB"):
+            configurator.serial_monitor_command("python", Path("x.py"), "192.168.1.37 — samovar (Wi-Fi)")
+        self.assertEqual(
+            configurator.esptool_reboot_command("pio.exe", "COM7")[-3:], ["--port", "COM7", "run"]
+        )
+        process_source = inspect.getsource(configurator.ConfiguratorWindow._start_process)
+        self.assertIn("**process_start_options()", process_source)
+        for method in ("stop_action", "close", "close_monitor", "toggle_monitor"):
+            self.assertIn(
+                "terminate_process_tree(self.process)",
+                inspect.getsource(getattr(configurator.ConfiguratorWindow, method)),
+                method,
+            )
+
+    def test_network_devices_are_read_from_mdns_arduino_services(self) -> None:
+        result = type("Result", (), {
+            "returncode": 0,
+            "stdout": json.dumps([
+                {"type": "_arduino._tcp.local.", "name": "samovar._arduino._tcp.local.", "ip": "192.168.1.37", "port": 3232},
+                {"type": "_http._tcp.local.", "name": "printer._http._tcp.local.", "ip": "192.168.1.5", "port": 80},
+                {"type": "_arduino._tcp.local.", "name": "esp-kitchen._arduino._tcp.local.", "ip": "fe80::1, 192.168.1.38", "port": 3232},
+                {"type": "_arduino._tcp.local.", "name": "samovar._arduino._tcp.local.", "ip": "192.168.1.37", "port": 3232},
+            ]),
+            "stderr": "",
+        })()
+        with mock.patch.object(configurator.subprocess, "run", return_value=result) as run:
+            devices = configurator.list_network_devices("pio.exe")
+        self.assertEqual(devices, ["192.168.1.37 — samovar (Wi-Fi)", "192.168.1.38 — esp-kitchen (Wi-Fi)"])
+        run.assert_called_once_with(
+            ["pio.exe", "device", "list", "--mdns", "--json-output"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        failed = type("Result", (), {"returncode": 1, "stdout": "", "stderr": "zeroconf missing"})()
+        with mock.patch.object(configurator.subprocess, "run", return_value=failed):
+            with self.assertRaisesRegex(configurator.ConfigError, "zeroconf missing"):
+                configurator.list_network_devices("pio.exe")
+
+    def test_refresh_merges_serial_ports_network_devices_and_reported_ip(self) -> None:
+        class Variable:
+            def __init__(self, value=""):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+            def set(self, value):
+                self.value = value
+
+        class Widget:
+            def __init__(self):
+                self.options = {"values": ()}
+
+            def configure(self, **kwargs):
+                self.options.update(kwargs)
+
+            def cget(self, key):
+                return self.options[key]
+
+        logged = []
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.busy = False
+        window.pio_executable = "pio.exe"
+        window.device_ip = None
+        window.port_var = Variable("")
+        window.port_combo = Widget()
+        window.port_refresh_button = Widget()
+        window.editor_button = Widget()
+        window.browser_button = Widget()
+        window.status_var = Variable()
+        window.output_queue = configurator.queue.Queue()
+        window._append_log = lambda text, tag=None: logged.append((text, tag))
+        window.messagebox = type(
+            "Messages", (), {"showerror": lambda _, title, message: self.fail(message)}
+        )()
+
+        class Thread:
+            def __init__(self, target, daemon):
+                self.target = target
+
+            def start(self):
+                self.target()
+
+        with mock.patch.object(configurator, "list_serial_ports", return_value=["COM7"]), \
+                mock.patch.object(configurator, "list_network_devices", return_value=["192.168.1.37 — samovar (Wi-Fi)"]), \
+                mock.patch.object(configurator.threading, "Thread", Thread):
+            window.refresh_ports()
+        # COM-порты появляются сразу, а сетевые - когда закончится поиск в фоне
+        self.assertEqual(window.port_combo.cget("values"), ["COM7"])
+        self.assertEqual(window.port_var.get(), "COM7")
+        self.assertEqual(window.port_refresh_button.options["state"], "disabled")
+        window._drain_output = None
+        kind, value = window.output_queue.get_nowait()
+        self.assertEqual((kind, value), ("network", ["192.168.1.37 — samovar (Wi-Fi)"]))
+        window._network_search_done(value)
+        self.assertEqual(window.port_combo.cget("values"), ["COM7", "192.168.1.37 — samovar (Wi-Fi)"])
+        self.assertEqual(window.port_var.get(), "COM7")
+        self.assertEqual(window.port_refresh_button.options["state"], "normal")
+        self.assertEqual(window.status_var.get(), "Найдено устройств в сети: 1")
+
+        # адрес, который устройство сообщило в мониторе порта, тоже попадает в список
+        window._device_ip_found("192.168.1.40")
+        self.assertEqual(
+            window.port_combo.cget("values"),
+            ["COM7", "192.168.1.37 — samovar (Wi-Fi)", "192.168.1.40 — samovar (Wi-Fi)"],
+        )
+        self.assertEqual(logged[-1][1], "ok")
+        self.assertEqual(window.device_address(), "192.168.1.40")
+        self.assertEqual(window.editor_button.options["state"], "normal")
+        window.port_var.set("192.168.1.37 — samovar (Wi-Fi)")
+        self.assertEqual(window.device_address(), "192.168.1.37")
+        window.device_ip = None
+        window.port_var.set("COM7")
+        window._port_changed()
+        self.assertEqual(window.editor_button.options["state"], "disabled")
+        self.assertEqual(window.browser_button.options["state"], "disabled")
+
+        window._network_search_done(None, "zeroconf missing")
+        self.assertEqual(logged[-1][1], "warning")
+        self.assertEqual(window.status_var.get(), "Устройства в сети не найдены")
+
+    def test_upload_to_network_port_warns_when_firmware_option_disabled(self) -> None:
+        class Variable:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        answers = iter((False, True))
+        prompts = []
+        started = []
+        saved = []
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.busy = False
+        window.config = type("Config", (), {"project_root": Path("/tmp/Samovar")})()
+        window.pio_executable = "pio.exe"
+        window.board_var = Variable("LILYGO")
+        window.port_var = Variable("192.168.1.37 — samovar (Wi-Fi)")
+        window.bool_vars = {"USE_UPDATE_OTA": Variable(False)}
+        window.messagebox = type(
+            "Messages",
+            (),
+            {
+                "askyesno": lambda _, title, message: (prompts.append(title), next(answers))[1],
+                "showerror": lambda _, title, message: self.fail(message),
+            },
+        )()
+        window.save = lambda **kwargs: saved.append(kwargs) or True
+        window._start_process = lambda command, action: started.append((command, action))
+
+        window.start_action("upload")
+        self.assertEqual(started, [])
+        self.assertEqual(saved, [])
+        window.start_action("upload")
+        self.assertEqual(len(prompts), 2)
+        self.assertIn("Wi-Fi", prompts[0])
+        self.assertEqual(saved, [{"show_success": False}])
+        self.assertEqual(
+            started,
+            [(
+                ["pio.exe", "run", "-e", "Samovar", "-t", "upload", "--upload-port", "192.168.1.37"],
+                "upload",
+            )],
+        )
+        self.assertTrue(window.active_port_network)
+
+        # LittleFS по сети без вопроса про USE_UPDATE_OTA; по COM-порту - тоже без вопроса
+        window.start_action("uploadfs")
+        self.assertEqual(len(prompts), 2)
+        self.assertEqual(started[-1][0][5], "uploadfs")
+        window.port_var = Variable("COM7")
+        window.start_action("upload")
+        self.assertEqual(len(prompts), 2)
+        self.assertEqual(started[-1][0][-1], "COM7")
+        self.assertFalse(window.active_port_network)
+
+    def test_shortcut_action_is_layout_independent(self) -> None:
+        self.assertEqual(configurator.shortcut_action("Cyrillic_es", 54, "linux"), "copy")
+        self.assertEqual(configurator.shortcut_action("Cyrillic_EM", 55, "linux"), "paste")
+        self.assertEqual(configurator.shortcut_action("Cyrillic_ef", 38, "darwin"), "select_all")
+        self.assertEqual(configurator.shortcut_action("Cyrillic_yeru", 39, "linux"), "save")
+        self.assertEqual(configurator.shortcut_action("c", 54, "linux"), "copy")
+        self.assertEqual(configurator.shortcut_action("Cyrillic_es", 67, "win32"), "copy")
+        self.assertEqual(configurator.shortcut_action("Cyrillic_em", 86, "win32"), "paste")
+        self.assertEqual(configurator.shortcut_action("Cyrillic_ef", 65, "win32"), "select_all")
+        self.assertIsNone(configurator.shortcut_action("q", 24, "linux"))
+        self.assertIsNone(configurator.shortcut_action("Cyrillic_shorti", 81, "win32"))
+        # AltGr (Control+Alt) в Windows - ввод символа, а не сочетание
+        self.assertIsNone(configurator.shortcut_action("aogonek", 65, "win32", state=0x20004))
+        self.assertIsNone(configurator.shortcut_action("c", 54, "linux", state=0xC))
+        self.assertEqual(configurator.shortcut_action("c", 67, "win32", state=0x4), "copy")
+
+    def test_edit_menu_is_installed_on_every_text_control(self) -> None:
+        build = inspect.getsource(configurator.ConfiguratorWindow._build)
+        self.assertIn('self._install_edit_menu(self.log, "readonly", on_clear=self.clear_log)', build)
+        self.assertIn('self._install_edit_menu(self.port_combo, "entry")', build)
+        self.assertIn('self._install_edit_menu(self.password_entry, "entry")', build)
+        self.assertIn('self._install_edit_menu(entry, "entry")', build)
+        add_entry = inspect.getsource(configurator.ConfiguratorWindow._add_entry)
+        self.assertIn('self._install_edit_menu(entry, "entry")', add_entry)
+        monitor = inspect.getsource(configurator.ConfiguratorWindow.open_monitor)
+        self.assertIn('EditMenu(self.monitor_log, "readonly", on_clear=self.clear_monitor)', monitor)
+        self.assertIn('EditMenu(self.monitor_input, "entry")', monitor)
+        editor = inspect.getsource(configurator.FileEditorWindow.__init__)
+        self.assertIn('EditMenu(self.editor, "text", on_save=self.save)', editor)
+        menu = inspect.getsource(configurator.EditMenu.__init__)
+        for label in ("Вырезать", "Копировать", "Вставить", "Выделить всё", "Отменить", "Повторить"):
+            self.assertIn('label="{}"'.format(label), menu)
+        self.assertIn('widget.bind("<Button-3>", self.popup', menu)
+        self.assertIn('widget.bind("<Control-KeyPress>", self.key', menu)
+
+    def test_log_lines_are_classified_for_colouring(self) -> None:
+        cases = {
+            "> pio run -e Samovar -t upload": "command",
+            "src/lua.h:1442:5: error: expected ';'": "error",
+            "==== [FAILED] Took 12.34 seconds ====": "error",
+            "Samovar.ino:12:3: warning: unused variable": "warning",
+            "==== [SUCCESS] Took 61.2 seconds ====": "ok",
+            "Compiling .pio/build/Samovar/src/Samovar.ino.cpp.o": None,
+            "build_flags = -Werror=return-type": None,
+        }
+        for line, expected in cases.items():
+            self.assertEqual(configurator.log_line_tag(line), expected, line)
+
+    def test_user_preferences_round_trip_and_ignore_garbage(self) -> None:
+        path = Path(self.temporary.name) / "prefs.json"
+        configurator.save_user_prefs({"port": "192.168.1.37 — samovar (Wi-Fi)", "geometry": "1280x780+10+10"}, path)
+        self.assertEqual(
+            configurator.load_user_prefs(path),
+            {"port": "192.168.1.37 — samovar (Wi-Fi)", "geometry": "1280x780+10+10"},
+        )
+        path.write_text("{not json", encoding="utf-8")
+        self.assertEqual(configurator.load_user_prefs(path), {})
+        path.write_text('{"address": 5, "port": "COM3", "geometry": "abc"}', encoding="utf-8")
+        self.assertEqual(configurator.load_user_prefs(path), {"port": "COM3"})
+        self.assertEqual(configurator.load_user_prefs(path.with_name("missing.json")), {})
+
+    def test_failed_action_reports_recent_log_lines_and_ota_hint(self) -> None:
+        class Variable:
+            def __init__(self):
+                self.value = ""
+
+            def set(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        logged = []
+        errors = []
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.stop_requested = False
+        window.active_action = "upload"
+        window.active_port_network = True
+        window.action_started = 0.0
+        window.process = object()
+        window.busy = True
+        window.recent_lines = ["[ERROR]: No response from the ESP\n", "*** [upload] Error 1\n"]
+        window.status_var = Variable()
+        window._set_busy = lambda busy, action: None
+        window._append_log = lambda text, tag=None: logged.append((text, tag))
+        window.messagebox = type(
+            "Messages", (), {"showerror": lambda _, title, message: errors.append(message)}
+        )()
+
+        window._finish_action(1)
+        self.assertFalse(window.busy)
+        self.assertIsNone(window.process)
+        self.assertEqual(window.active_action, "")
+        self.assertEqual(logged[0][1], "error")
+        self.assertEqual(logged[1], (configurator.OTA_FAILURE_HINT, "warning"))
+        self.assertIn("No response from the ESP", errors[0])
+        self.assertIn("Прошивка", errors[0])
+        self.assertEqual(window.status_var.get(), "Прошивка: ошибка")
+        self.assertFalse(window.active_port_network)
+
+        logged.clear()
+        window.busy = True
+        window.process = object()
+        window.active_action = "upload"
+        window.stop_requested = True
+        window._finish_action(-15)
+        self.assertEqual(errors, errors[:1])
+        self.assertIn("остановлено пользователем", logged[0][0])
 
     def test_full_flash_erase_requires_confirmation(self) -> None:
         answers = iter((False, True))
@@ -438,7 +804,7 @@ class ConfiguratorModelTests(unittest.TestCase):
             configurator.pio_command("pio.exe", "ESP32 DevKit", "erase", "COM7"),
             ["pio.exe", "run", "-e", "Samovar", "-t", "erase", "--upload-port", "COM7"],
         )
-        with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
+        with self.assertRaisesRegex(configurator.ConfigError, "Выберите порт или устройство в сети"):
             configurator.pio_command("pio.exe", "ESP32 DevKit", "upload", "  ")
 
     def test_serial_monitor_does_not_reset_esp(self) -> None:
@@ -456,9 +822,11 @@ class ConfiguratorModelTests(unittest.TestCase):
         for token in (
             'text="Перезагрузить ESP"',
             'text="Редактор файлов"',
-            'self.editor_button.configure(state="disabled")',
+            'self.port_var.trace_add("write", lambda *_: self._port_changed())',
         ):
             self.assertIn(token, source)
+        # Редактор файлов недоступен, пока нет адреса устройства (см. _port_changed)
+        self.assertIn("self._port_changed()", inspect.getsource(configurator.ConfiguratorWindow._load))
         self.assertNotIn('text="Получить IP"', source)
         monitor_source = inspect.getsource(configurator.ConfiguratorWindow.open_monitor)
         self.assertIn('text="Получить IP"', monitor_source)
@@ -490,7 +858,7 @@ class ConfiguratorModelTests(unittest.TestCase):
                 "--serial-monitor", "/dev/cu.usbserial-1",
             ],
         )
-        with self.assertRaisesRegex(configurator.ConfigError, "Выберите последовательный порт"):
+        with self.assertRaisesRegex(configurator.ConfigError, "Выберите порт или устройство в сети"):
             configurator.esptool_reboot_command("pio.exe", " ")
 
         result = type(
@@ -600,7 +968,8 @@ class ConfiguratorModelTests(unittest.TestCase):
     def test_port_control_is_editable_and_refreshable(self) -> None:
         source = MODULE_PATH.read_text(encoding="utf-8")
         for token in (
-            'text="Последовательный порт"',
+            'text="Порт или адрес"',
+            'text="Устройство"',
             'self.port_combo = ttk.Combobox(',
             'state="normal"',
             'text="Обновить"',
@@ -626,7 +995,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         with mock.patch.object(configurator.subprocess, "Popen") as popen:
             window.start_action("upload")
 
-        self.assertEqual(errors, [("Ошибка запуска", "Выберите последовательный порт")])
+        self.assertEqual(errors, [("Ошибка запуска", "Выберите порт или устройство в сети")])
         popen.assert_not_called()
 
     def test_unc_project_path_detection(self) -> None:

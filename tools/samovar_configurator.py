@@ -10,10 +10,13 @@ import os
 import queue
 import re
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -594,6 +597,80 @@ def list_serial_ports(pio_executable: str) -> List[str]:
     return ports
 
 
+SERIAL_PORT_RE = re.compile(r"^(\\\\\.\\)?COM\d+$|^/dev/", re.IGNORECASE)
+NETWORK_PORT_SUFFIX = " — "
+ADDRESS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$")
+
+
+def list_network_devices(pio_executable: str) -> List[str]:
+    """Ищет Samovar в локальной сети через mDNS (объявление ArduinoOTA `_arduino._tcp`).
+
+    Возвращает строки вида «192.168.1.37 — samovar (Wi-Fi)»: перед « — » стоит адрес,
+    который и уходит в PlatformIO как --upload-port.
+    """
+    result = subprocess.run(
+        [pio_executable, "device", "list", "--mdns", "--json-output"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise ConfigError("Не удалось найти устройства в сети: {}".format(detail))
+    try:
+        services = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise ConfigError("PlatformIO вернул некорректный список сетевых устройств") from error
+    if not isinstance(services, list):
+        raise ConfigError("PlatformIO вернул некорректный список сетевых устройств")
+    devices = []
+    for service in services:
+        if not isinstance(service, dict) or "_arduino._tcp" not in str(service.get("type", "")):
+            continue
+        addresses = str(service.get("ip") or "")
+        name = str(service.get("name") or "").split(".")[0]
+        for address in addresses.split(","):
+            address = address.strip()
+            if not address:
+                continue
+            try:
+                ipaddress.IPv4Address(address)
+            except ValueError:
+                continue
+            label = network_port_label(address, name)
+            if label not in devices:
+                devices.append(label)
+    return devices
+
+
+def network_port_label(address: str, name: str = "") -> str:
+    return "{}{}{} (Wi-Fi)".format(address, NETWORK_PORT_SUFFIX, name or "samovar").rstrip()
+
+
+def port_value(port: str) -> str:
+    """Из строки списка портов вычленяет сам порт или адрес (часть до « — »)."""
+    return port.split(NETWORK_PORT_SUFFIX, 1)[0].strip()
+
+
+def is_network_port(port: str) -> bool:
+    port = port_value(port)
+    return bool(port) and not SERIAL_PORT_RE.match(port)
+
+
+def _required_port(port: str) -> str:
+    port = port_value(port)
+    if not port:
+        raise ConfigError("Выберите порт или устройство в сети")
+    return port
+
+
+def _required_serial_port(port: str, what: str) -> str:
+    port = _required_port(port)
+    if is_network_port(port):
+        raise ConfigError(
+            "{} возможно только по USB: выберите COM-порт вместо устройства в сети".format(what)
+        )
+    return port
+
+
 def pio_command(pio_executable: str, board: str, action: str, port: str) -> List[str]:
     if board not in BOARD_OPTIONS:
         raise ConfigError("Неизвестная плата: {}".format(board))
@@ -604,31 +681,30 @@ def pio_command(pio_executable: str, board: str, action: str, port: str) -> List
     }
     if action not in targets:
         raise ConfigError("Неизвестная команда: {}".format(action))
-    port = port.strip()
-    if not port:
-        raise ConfigError("Выберите последовательный порт")
+    if action == "erase":
+        port = _required_serial_port(port, "Полная очистка флеша")
+    elif is_network_port(port):
+        port = resolve_device_address(port_value(port))
+    else:
+        port = _required_port(port)
     environment = BOARD_OPTIONS[board][1]
     return [
         pio_executable, "run", "-e", environment, "-t", targets[action], "--upload-port", port,
     ]
 
 
-def _required_port(port: str) -> str:
-    port = port.strip()
-    if not port:
-        raise ConfigError("Выберите последовательный порт")
-    return port
-
-
 def esptool_reboot_command(pio_executable: str, port: str) -> List[str]:
     return [
         pio_executable, "pkg", "exec", "-p", "tool-esptoolpy", "--",
-        "esptool.py", "--port", _required_port(port), "run",
+        "esptool.py", "--port", _required_serial_port(port, "Перезагрузка ESP"), "run",
     ]
 
 
 def serial_monitor_command(python_executable: str, script: Path, port: str) -> List[str]:
-    return [python_executable, str(script), "--serial-monitor", _required_port(port)]
+    return [
+        python_executable, str(script), "--serial-monitor",
+        _required_serial_port(port, "Монитор порта"),
+    ]
 
 
 def pio_python_executable(pio_executable: str) -> str:
@@ -836,15 +912,302 @@ class SamovarFileClient:
         self._request(urllib.request.Request(self.url + "/edit", data=data, method="DELETE"))
 
 
+GEOMETRY_RE = re.compile(r"^\d+x\d+(?:[+-]\d+[+-]\d+)?$")
+USER_PREFS_PATH = Path.home() / ".samovar_configurator.json"
+
+ACTION_LABELS = {
+    "upload": "Прошивка",
+    "uploadfs": "Загрузка LittleFS",
+    "erase": "Полная очистка флеша",
+    "monitor": "Монитор порта",
+    "reboot": "Перезагрузка ESP",
+}
+
+OTA_FAILURE_HINT = (
+    "Подсказка: обновление по Wi-Fi требует, чтобы компьютер и Samovar были в одной сети, "
+    "прошивка на устройстве была собрана с включённым «Разрешить обновление по Wi-Fi», "
+    "а брандмауэр разрешал python.exe входящие подключения: устройство само подключается "
+    "к компьютеру для передачи образа.\n"
+)
+
+
+def _required_address(address: str) -> str:
+    address = address.strip()
+    if not address:
+        raise ConfigError("Укажите IP-адрес или имя устройства в сети")
+    if not ADDRESS_RE.fullmatch(address):
+        raise ConfigError("Некорректный адрес устройства: {}".format(address))
+    return address
+
+
+def resolve_device_address(address: str) -> str:
+    """Возвращает IPv4-адрес устройства: имя (в том числе samovar.local) разрешается на компьютере.
+
+    PlatformIO переключает загрузку на espota (обновление по сети) только когда
+    --upload-port выглядит как IPv4-адрес или имя *.local; переменная окружения
+    PLATFORMIO_UPLOAD_PROTOCOL при проверке была проигнорирована. Поэтому в команду
+    всегда передаётся уже разрешённый IPv4, а pio сам выбирает espota вместо esptool.
+    """
+    address = _required_address(address)
+    try:
+        return str(ipaddress.IPv4Address(address))
+    except ValueError:
+        pass
+    try:
+        candidates = socket.getaddrinfo(address, None, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError as error:
+        raise ConfigError("Не удалось определить IP-адрес устройства {}: {}".format(address, error)) from error
+    for candidate in candidates:
+        resolved = candidate[4][0]
+        if isinstance(resolved, str) and resolved:
+            return resolved
+    raise ConfigError("Не удалось определить IP-адрес устройства {}".format(address))
+
+
+def terminate_process_tree(process) -> None:
+    """Останавливает pio вместе с дочерними процессами (scons, esptool, espota).
+
+    Простой terminate() убивает только pio: дети продолжают работать, держат
+    stdout-канал, и окно остаётся «занятым» до их самостоятельного завершения.
+    """
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    else:
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        except OSError:
+            process.terminate()
+
+
+def process_start_options() -> Dict[str, object]:
+    if os.name == "nt":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+    return {"start_new_session": True}
+
+
+def log_line_tag(line: str) -> Optional[str]:
+    if line.startswith("> "):
+        return "command"
+    lowered = line.lower()
+    if re.search(r"\berror\b|\[failed\]|\bfailed\b|\bfatal\b|ошибк|traceback", lowered):
+        return "error"
+    if re.search(r"\[success\]|\bsuccess\b|успешно|перезагружен|сохранены", lowered):
+        return "ok"
+    if re.search(r"\bwarning\b|предупрежд", lowered):
+        return "warning"
+    return None
+
+
+def load_user_prefs(path: Path = USER_PREFS_PATH) -> Dict[str, str]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    prefs = {key: value for key, value in data.items() if isinstance(value, str)}
+    if not GEOMETRY_RE.fullmatch(prefs.get("geometry", "")):
+        prefs.pop("geometry", None)
+    return prefs
+
+
+def save_user_prefs(data: Dict[str, str], path: Path = USER_PREFS_PATH) -> None:
+    try:
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+# Сочетания клавиш, не зависящие от раскладки: в Windows Tk сообщает виртуальный код
+# клавиши (латинская буква независимо от раскладки), в X11 и macOS - keysym текущей
+# раскладки, поэтому кириллические keysym перечислены отдельно.
+SHORTCUT_KEYCODES = {65: "select_all", 67: "copy", 86: "paste", 88: "cut", 90: "undo", 89: "redo", 83: "save"}
+SHORTCUT_KEYSYMS = {
+    "a": "select_all", "cyrillic_ef": "select_all",
+    "c": "copy", "cyrillic_es": "copy",
+    "v": "paste", "cyrillic_em": "paste",
+    "x": "cut", "cyrillic_che": "cut",
+    "z": "undo", "cyrillic_ya": "undo",
+    "y": "redo", "cyrillic_en": "redo",
+    "s": "save", "cyrillic_yeru": "save",
+}
+EDIT_EVENTS = {
+    "copy": "<<Copy>>", "paste": "<<Paste>>", "cut": "<<Cut>>",
+    "select_all": "<<SelectAll>>", "undo": "<<Undo>>", "redo": "<<Redo>>",
+}
+
+
+def shortcut_action(keysym: str, keycode: int, platform: str = sys.platform, state: int = 0) -> Optional[str]:
+    # AltGr в Windows приходит как Control+Alt: это ввод символа (ą, ć, ś…), а не сочетание.
+    alt_mask = 0x20000 if platform == "win32" else 0x8
+    if state & alt_mask:
+        return None
+    if platform == "win32" and keycode in SHORTCUT_KEYCODES:
+        return SHORTCUT_KEYCODES[keycode]
+    return SHORTCUT_KEYSYMS.get(keysym.lower())
+
+
+class EditMenu:
+    """Контекстное меню и сочетания клавиш для полей ввода и текстовых областей.
+
+    kind: "entry" - однострочное поле, "text" - редактируемый текст с отменой,
+    "readonly" - только чтение (журнал), где доступны копирование и выделение.
+    """
+
+    def __init__(self, widget, kind: str, on_save=None, on_clear=None):
+        import tkinter as tk
+
+        self.widget = widget
+        self.kind = kind
+        self.on_save = on_save
+        self.on_clear = on_clear
+        self.menu = tk.Menu(widget, tearoff=0)
+        self.editable = kind != "readonly"
+        if kind == "text":
+            self.menu.add_command(label="Отменить", accelerator="Ctrl+Z", command=lambda: self.run("undo"))
+            self.menu.add_command(label="Повторить", accelerator="Ctrl+Y", command=lambda: self.run("redo"))
+            self.menu.add_separator()
+        if self.editable:
+            self.menu.add_command(label="Вырезать", accelerator="Ctrl+X", command=lambda: self.run("cut"))
+        self.menu.add_command(label="Копировать", accelerator="Ctrl+C", command=lambda: self.run("copy"))
+        if self.editable:
+            self.menu.add_command(label="Вставить", accelerator="Ctrl+V", command=lambda: self.run("paste"))
+        self.menu.add_separator()
+        self.menu.add_command(label="Выделить всё", accelerator="Ctrl+A", command=lambda: self.run("select_all"))
+        if on_clear is not None:
+            self.menu.add_separator()
+            self.menu.add_command(label="Очистить", command=on_clear)
+        if on_save is not None:
+            self.menu.add_separator()
+            self.menu.add_command(label="Сохранить", accelerator="Ctrl+S", command=on_save)
+        widget.bind("<Button-3>", self.popup, add="+")
+        if sys.platform == "darwin":
+            widget.bind("<Button-2>", self.popup, add="+")
+            widget.bind("<Control-Button-1>", self.popup, add="+")
+        widget.bind("<Control-KeyPress>", self.key, add="+")
+
+    def has_selection(self) -> bool:
+        try:
+            if self.kind == "entry":
+                return bool(self.widget.selection_present())
+            return bool(self.widget.tag_ranges("sel"))
+        except Exception:
+            return False
+
+    def has_clipboard(self) -> bool:
+        try:
+            return bool(self.widget.clipboard_get())
+        except Exception:
+            return False
+
+    def popup(self, event):
+        self.widget.focus_set()
+        selected = self.has_selection()
+        for label, enabled in (
+            ("Вырезать", selected and self.editable),
+            ("Копировать", selected),
+            ("Вставить", self.editable and self.has_clipboard()),
+        ):
+            try:
+                self.menu.entryconfigure(label, state="normal" if enabled else "disabled")
+            except Exception:
+                pass
+        try:
+            self.menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.menu.grab_release()
+        return "break"
+
+    def key(self, event):
+        action = shortcut_action(event.keysym, event.keycode, state=getattr(event, "state", 0))
+        if action is None:
+            return None
+        if action == "save":
+            if self.on_save is None:
+                return None
+            self.on_save()
+            return "break"
+        return self.run(action)
+
+    def run(self, action: str):
+        if action in ("cut", "paste") and not self.editable:
+            return "break"
+        if action in ("undo", "redo"):
+            if self.kind != "text":
+                return "break"
+            try:
+                self.widget.event_generate(EDIT_EVENTS[action])
+            except Exception:
+                pass
+            return "break"
+        if action == "select_all" and self.kind == "entry":
+            self.widget.selection_range(0, "end")
+            self.widget.icursor("end")
+            return "break"
+        self.widget.event_generate(EDIT_EVENTS[action])
+        return "break"
+
+
+def write_readonly(text_widget, text: str, tag: Optional[str] = None, autoscroll: bool = True) -> None:
+    text_widget.configure(state="normal")
+    if tag:
+        text_widget.insert("end", text, tag)
+    else:
+        text_widget.insert("end", text)
+    text_widget.configure(state="disabled")
+    if autoscroll:
+        text_widget.see("end")
+
+
+def clear_readonly(text_widget) -> None:
+    text_widget.configure(state="normal")
+    text_widget.delete("1.0", "end")
+    text_widget.configure(state="disabled")
+
+
+def configure_log_tags(text_widget) -> None:
+    from tkinter import font as tkfont
+
+    # Font(font=..., weight=...) игнорирует параметры при заданном font - нужна копия.
+    text_widget.command_font = tkfont.nametofont("TkFixedFont").copy()
+    text_widget.command_font.configure(weight="bold")
+    text_widget.tag_configure("command", foreground="#1a4fa3", font=text_widget.command_font)
+    text_widget.tag_configure("error", foreground="#b3261e")
+    text_widget.tag_configure("warning", foreground="#8a5a00")
+    text_widget.tag_configure("ok", foreground="#1b7f3b")
+
+
 class Tooltip:
+    DELAY_MS = 450
+
     def __init__(self, widget, text: str):
         self.widget = widget
         self.text = text
         self.window = None
-        widget.bind("<Enter>", self.show, add="+")
+        self.after_id = None
+        widget.bind("<Enter>", self.schedule, add="+")
         widget.bind("<Leave>", self.hide, add="+")
+        widget.bind("<ButtonPress>", self.hide, add="+")
+
+    def schedule(self, _event=None) -> None:
+        self.cancel()
+        self.after_id = self.widget.after(self.DELAY_MS, self.show)
+
+    def cancel(self) -> None:
+        if self.after_id is not None:
+            try:
+                self.widget.after_cancel(self.after_id)
+            except Exception:
+                pass
+            self.after_id = None
 
     def show(self, _event=None) -> None:
+        self.after_id = None
         if self.window is not None:
             return
         import tkinter as tk
@@ -866,6 +1229,7 @@ class Tooltip:
         ).pack()
 
     def hide(self, _event=None) -> None:
+        self.cancel()
         if self.window is not None:
             self.window.destroy()
             self.window = None
@@ -889,21 +1253,23 @@ class FileEditorWindow:
         self.window.geometry("1100x700")
         self.window.minsize(760, 480)
         self.window.transient(parent)
+        self.window.protocol("WM_DELETE_WINDOW", self.close)
 
         toolbar = ttk.Frame(self.window, padding=8)
         toolbar.pack(fill="x")
         for text, command in (
-            ("Обновить", self.refresh),
+            ("Обновить список", self.refresh),
             ("Создать", self.create),
             ("Удалить", self.delete),
-            ("Загрузить", self.upload),
-            ("Скачать", self.download),
-            ("Сохранить", self.save),
+            ("Загрузить с компьютера", self.upload),
+            ("Скачать на компьютер", self.download),
         ):
             ttk.Button(toolbar, text=text, command=command).pack(side="left", padx=(0, 8))
+        self.save_button = ttk.Button(toolbar, text="Сохранить (Ctrl+S)", command=self.save)
+        self.save_button.pack(side="right")
 
         content = ttk.Panedwindow(self.window, orient="horizontal")
-        content.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        content.pack(fill="both", expand=True, padx=8, pady=(0, 4))
         list_frame = ttk.Frame(content)
         editor_frame = ttk.Frame(content)
         content.add(list_frame, weight=1)
@@ -911,30 +1277,64 @@ class FileEditorWindow:
 
         list_scroll = ttk.Scrollbar(list_frame)
         list_scroll.pack(side="right", fill="y")
-        self.file_list = tk.Listbox(list_frame, yscrollcommand=list_scroll.set, font="TkFixedFont")
+        self.file_list = tk.Listbox(list_frame, yscrollcommand=list_scroll.set, font="TkFixedFont", exportselection=False)
         self.file_list.pack(fill="both", expand=True)
         list_scroll.configure(command=self.file_list.yview)
         self.file_list.bind("<<ListboxSelect>>", self.open_selected)
 
         editor_scroll = ttk.Scrollbar(editor_frame)
         editor_scroll.pack(side="right", fill="y")
+        editor_xscroll = ttk.Scrollbar(editor_frame, orient="horizontal")
+        editor_xscroll.pack(side="bottom", fill="x")
         self.editor = tk.Text(
             editor_frame, wrap="none", undo=True, font="TkFixedFont",
-            yscrollcommand=editor_scroll.set,
+            yscrollcommand=editor_scroll.set, xscrollcommand=editor_xscroll.set,
         )
         self.editor.pack(fill="both", expand=True)
         editor_scroll.configure(command=self.editor.yview)
+        editor_xscroll.configure(command=self.editor.xview)
         self.editor.bind("<KeyRelease>", self._highlight)
+        self.editor.bind("<<Modified>>", self._modified)
         self.editor.tag_configure("comment", foreground="#6a9955")
         self.editor.tag_configure("string", foreground="#a31515")
         self.editor.tag_configure("keyword", foreground="#0000cc")
         self.editor.tag_configure("number", foreground="#098658")
         self.editor.tag_configure("tag", foreground="#800000")
         self.editor.tag_configure("property", foreground="#0451a5")
+        self.edit_menu = EditMenu(self.editor, "text", on_save=self.save)
+        self.window.bind("<Control-KeyPress>", self._window_key)
+
+        self.status = ttk.Label(self.window, text="Выберите файл в списке слева", padding=(8, 2))
+        self.status.pack(fill="x")
         self.refresh()
+
+    def _window_key(self, event):
+        if shortcut_action(event.keysym, event.keycode, state=getattr(event, "state", 0)) == "save":
+            self.save()
+            return "break"
+        return None
 
     def _show_error(self, error: Exception) -> None:
         self.messagebox.showerror("Ошибка редактора файлов", str(error), parent=self.window)
+
+    def _set_status(self) -> None:
+        if not self.current_path:
+            self.status.configure(text="Файл не открыт")
+            return
+        modified = " — изменён, не сохранён" if self.editor.edit_modified() else ""
+        self.status.configure(text="{}{}".format(self.current_path, modified))
+
+    def _modified(self, _event=None) -> None:
+        self._set_status()
+
+    def _discard_changes_allowed(self) -> bool:
+        if not self.current_path or not self.editor.edit_modified():
+            return True
+        return self.messagebox.askyesno(
+            "Несохранённые изменения",
+            "Файл {} изменён. Отбросить изменения?".format(self.current_path),
+            parent=self.window,
+        )
 
     def refresh(self) -> None:
         try:
@@ -953,28 +1353,43 @@ class FileEditorWindow:
             if label.lower().endswith(".gz"):
                 label = label[:-3] + "  [gzip]"
             self.file_list.insert("end", label)
+        if self.current_path in self.files:
+            self.file_list.selection_set(self.files.index(self.current_path))
 
     def _selected_path(self) -> Optional[str]:
         selection = self.file_list.curselection()
         return self.files[selection[0]] if selection else None
 
+    def _load_text(self, path: Optional[str], text: str) -> None:
+        self.current_path = path
+        self.editor.delete("1.0", "end")
+        self.editor.insert("1.0", text)
+        self.editor.edit_reset()
+        self.editor.edit_modified(False)
+        self._highlight()
+        self._set_status()
+
     def open_selected(self, _event=None) -> None:
         path = self._selected_path()
-        if not path:
+        if not path or path == self.current_path:
+            return
+        if not self._discard_changes_allowed():
+            self.file_list.selection_clear(0, "end")
+            if self.current_path in self.files:
+                self.file_list.selection_set(self.files.index(self.current_path))
             return
         if not is_text_remote_file(path):
-            self.current_path = None
-            self.editor.delete("1.0", "end")
+            self._load_text(None, "")
+            self.status.configure(
+                text="{}: двоичный файл, доступны только скачивание и удаление".format(path)
+            )
             return
         try:
             text = decode_remote_text(path, self.client.read_file(path))
         except ConfigError as error:
             self._show_error(error)
             return
-        self.current_path = path
-        self.editor.delete("1.0", "end")
-        self.editor.insert("1.0", text)
-        self._highlight()
+        self._load_text(path, text)
 
     def save(self) -> None:
         if not self.current_path:
@@ -986,10 +1401,13 @@ class FileEditorWindow:
         except ConfigError as error:
             self._show_error(error)
             return
-        self.messagebox.showinfo("Samovar", "Файл сохранён", parent=self.window)
+        self.editor.edit_modified(False)
+        self.status.configure(text="{} — сохранён на устройстве".format(self.current_path))
         self.refresh()
 
     def create(self) -> None:
+        if not self._discard_changes_allowed():
+            return
         name = self.simpledialog.askstring("Новый файл", "Имя файла:", parent=self.window)
         if not name:
             return
@@ -999,10 +1417,8 @@ class FileEditorWindow:
         except ConfigError as error:
             self._show_error(error)
             return
+        self._load_text(path, "")
         self.refresh()
-        self.current_path = path
-        self.editor.delete("1.0", "end")
-        self._highlight()
 
     def delete(self) -> None:
         path = self._selected_path()
@@ -1016,8 +1432,7 @@ class FileEditorWindow:
             self._show_error(error)
             return
         if self.current_path == path:
-            self.current_path = None
-            self.editor.delete("1.0", "end")
+            self._load_text(None, "")
         self.refresh()
 
     def upload(self) -> None:
@@ -1032,6 +1447,7 @@ class FileEditorWindow:
         except (OSError, ConfigError) as error:
             self._show_error(error)
             return
+        self.status.configure(text="{} загружен на устройство".format(target))
         self.refresh()
 
     def download(self) -> None:
@@ -1049,6 +1465,12 @@ class FileEditorWindow:
             Path(filename).write_bytes(payload)
         except (OSError, ConfigError) as error:
             self._show_error(error)
+            return
+        self.status.configure(text="{} сохранён в {}".format(path, filename))
+
+    def close(self) -> None:
+        if self._discard_changes_allowed():
+            self.window.destroy()
 
     def _highlight(self, _event=None) -> None:
         for tag in ("comment", "string", "keyword", "number", "tag", "property"):
@@ -1080,62 +1502,76 @@ class ConfiguratorWindow:
         self.monitor_log = None
         self.monitor_stop_button = None
         self.monitor_ip_button = None
+        self.monitor_input = None
         self.device_ip = None
+        self.active_port_network = False
         self.value_vars = {}
         self.bool_vars = {}
         self.optional_enabled_vars = {}
         self.choice_vars = {}
         self.tooltip_widgets = {}
         self.tooltips = []
+        self.edit_menus = []
+        self.saved_state = None
+        self.recent_lines = []
+        self.action_started = 0.0
+        self.tick_id = None
+        self.prefs = load_user_prefs()
 
         root.title("Настройка и прошивка Samovar")
-        root.geometry("1040x780")
-        root.minsize(820, 620)
+        root.geometry(self.prefs.get("geometry") or "1280x780")
+        root.minsize(1000, 640)
+        root.option_add("*tearOff", False)
         root.protocol("WM_DELETE_WINDOW", self.close)
 
         self._build()
         self._load()
         self.root.after(100, self._drain_output)
 
+    # ------------------------------------------------------------------ построение окна
     def _build(self) -> None:
         ttk = self.ttk
         tk = self.tk
-        outer = ttk.Frame(self.root, padding=10)
+        outer = ttk.Frame(self.root, padding=(10, 8, 10, 6))
         outer.pack(fill="both", expand=True)
 
-        notebook = ttk.Notebook(outer)
-        notebook.pack(fill="both", expand=True)
+        # Слева - настройки и кнопки (ширина по содержимому), справа - журнал на всю высоту.
+        paned = ttk.Panedwindow(outer, orient="horizontal")
+        paned.pack(fill="both", expand=True)
+        left = ttk.Frame(paned)
+        right = ttk.Frame(paned)
+        paned.add(left, weight=0)
+        paned.add(right, weight=1)
+
+        settings = ttk.Labelframe(left, text="Настройки прошивки", padding=(8, 4, 8, 8))
+        settings.pack(fill="x")
+        self.section_list = tk.Listbox(
+            settings, height=len(SECTIONS), exportselection=False, activestyle="none",
+            width=18, borderwidth=1, relief="solid", highlightthickness=0,
+        )
+        self.section_list.pack(side="left", fill="y", pady=4)
+        container = ttk.Frame(settings)
+        container.pack(side="left", fill="both", expand=True, padx=(10, 0))
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
         section_frames = {}
         section_rows = {}
         for section in SECTIONS:
-            frame = ttk.Frame(notebook, padding=12)
-            notebook.add(frame, text=section)
+            self.section_list.insert("end", "  " + section)
+            frame = ttk.Frame(container, padding=(4, 4, 0, 4))
+            frame.grid(row=0, column=0, sticky="nsew")
             frame.columnconfigure(1, weight=1)
             section_frames[section] = frame
             section_rows[section] = 0
+        self.section_frames = section_frames
+        self.section_list.bind("<<ListboxSelect>>", self._section_selected)
+        self.section_list.selection_set(0)
 
         self.board_var = tk.StringVar()
         self._add_combo(
             section_frames, section_rows, "Основные", "Плата", self.board_var,
             tuple(BOARD_OPTIONS),
         )
-        self.port_var = tk.StringVar()
-        row = section_rows["Основные"]
-        ttk.Label(section_frames["Основные"], text="Последовательный порт").grid(
-            row=row, column=0, sticky="w", pady=3
-        )
-        port_controls = ttk.Frame(section_frames["Основные"])
-        port_controls.grid(row=row, column=1, sticky="ew", padx=(10, 0), pady=3)
-        port_controls.columnconfigure(0, weight=1)
-        self.port_combo = ttk.Combobox(
-            port_controls, textvariable=self.port_var, values=(), state="normal"
-        )
-        self.port_combo.grid(row=0, column=0, sticky="ew")
-        self.port_refresh_button = ttk.Button(
-            port_controls, text="Обновить", command=self.refresh_ports
-        )
-        self.port_refresh_button.grid(row=0, column=1, padx=(8, 0))
-        section_rows["Основные"] += 1
         self.servo_var = tk.StringVar()
         self._add_entry(
             section_frames, section_rows, "Основные", "Поправки сервопривода (11 чисел)",
@@ -1192,10 +1628,11 @@ class ConfiguratorWindow:
             checkbutton.grid(
                 row=row, column=0, sticky="w", pady=3
             )
-            entry = ttk.Entry(section_frames[spec.section], textvariable=value, width=34)
+            entry = ttk.Entry(section_frames[spec.section], textvariable=value, width=24)
             entry.grid(
                 row=row, column=1, sticky="ew", padx=(10, 0), pady=3
             )
+            self._install_edit_menu(entry, "entry")
             self._register_tooltip(spec.macro, checkbutton, entry)
             section_rows[spec.section] += 1
         for spec in CHOICE_VALUE_SPECS:
@@ -1210,61 +1647,137 @@ class ConfiguratorWindow:
         self._add_entry(section_frames, section_rows, "Сеть", "SSID Wi-Fi", self.ssid_var)
         row = section_rows["Сеть"]
         ttk.Label(section_frames["Сеть"], text="Пароль Wi-Fi").grid(row=row, column=0, sticky="w", pady=3)
-        ttk.Entry(
-            section_frames["Сеть"], textvariable=self.password_var, show="•", width=34
-        ).grid(row=row, column=1, sticky="ew", padx=(10, 0), pady=3)
+        password_row = ttk.Frame(section_frames["Сеть"])
+        password_row.grid(row=row, column=1, sticky="ew", padx=(10, 0), pady=3)
+        password_row.columnconfigure(0, weight=1)
+        self.password_entry = ttk.Entry(password_row, textvariable=self.password_var, show="•", width=24)
+        self.password_entry.grid(row=0, column=0, sticky="ew")
+        self._install_edit_menu(self.password_entry, "entry")
+        self.show_password_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            password_row, text="Показать", variable=self.show_password_var,
+            command=self._toggle_password,
+        ).grid(row=0, column=1, padx=(8, 0))
+        section_rows["Сеть"] += 1
 
+        row = section_rows["Оборудование"]
         ttk.Label(
-            outer,
+            section_frames["Оборудование"],
             text=(
                 "Режим «Сыр»: оператор подключает к LUA_PIN либо PH-4502C, либо "
                 "MPX5010DP; к реле №4 — либо клапан слива, либо разгонный ТЭН."
             ),
-            wraplength=900,
-        ).pack(fill="x", pady=(8, 0))
+            wraplength=430,
+            foreground="#555555",
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        section_rows["Оборудование"] += 1
+        section_frames[SECTIONS[0]].tkraise()
 
-        buttons = ttk.Frame(outer, padding=(0, 10, 0, 8))
-        buttons.pack(fill="x")
-        self.save_button = ttk.Button(buttons, text="Сохранить настройки", command=self.save)
-        self.upload_button = ttk.Button(buttons, text="Прошить", command=lambda: self.start_action("upload"))
-        self.fs_button = ttk.Button(buttons, text="Загрузить LittleFS", command=self.start_littlefs)
+        # --- устройство: порт USB или адрес в сети, общие кнопки
+        usb = ttk.Labelframe(left, text="Устройство", padding=(10, 6, 10, 8))
+        usb.pack(fill="x", pady=(10, 0))
+        usb.columnconfigure(1, weight=1)
+        ttk.Label(usb, text="Порт или адрес").grid(row=0, column=0, sticky="w")
+        self.port_var = tk.StringVar(value=self.prefs.get("port", ""))
+        self.port_combo = ttk.Combobox(
+            usb, textvariable=self.port_var, values=(), state="normal"
+        )
+        self.port_combo.grid(row=0, column=1, sticky="ew", padx=(10, 0))
+        self._install_edit_menu(self.port_combo, "entry")
+        self.tooltips.append(Tooltip(
+            self.port_combo,
+            "COM-порт для прошивки по USB или устройство в сети для обновления по Wi-Fi "
+            "(OTA - «по воздуху»). Кнопка «Обновить» ищет и то, и другое; адрес можно "
+            "ввести вручную, например 192.168.1.37 или samovar.local.",
+        ))
+        self.port_refresh_button = ttk.Button(usb, text="Обновить", command=self.refresh_ports)
+        self.port_refresh_button.grid(row=0, column=2, padx=(8, 0))
+        usb_buttons = self._button_holder(usb)
+        self.upload_button = ttk.Button(usb_buttons, text="Прошить", command=lambda: self.start_action("upload"))
+        self.fs_button = ttk.Button(usb_buttons, text="Загрузить LittleFS", command=self.start_littlefs)
         self.erase_button = ttk.Button(
-            buttons, text="Полностью очистить флеш", command=self.start_flash_erase
+            usb_buttons, text="Полностью очистить флеш", command=self.start_flash_erase
         )
-        self.monitor_button = ttk.Button(buttons, text="Монитор порта", command=self.open_monitor)
-        for button in (
-            self.save_button,
+        self.monitor_button = ttk.Button(usb_buttons, text="Монитор порта", command=self.open_monitor)
+        self.reboot_button = ttk.Button(usb_buttons, text="Перезагрузить ESP", command=self.reboot_esp)
+        self.editor_button = ttk.Button(usb_buttons, text="Редактор файлов", command=self.open_file_editor)
+        self.browser_button = ttk.Button(usb_buttons, text="Открыть в браузере", command=self.open_in_browser)
+        self._grid_buttons(usb_buttons, (
+            self.upload_button, self.fs_button, self.erase_button,
+            self.monitor_button, self.reboot_button, self.editor_button, self.browser_button,
+        ))
+        self.tooltips.append(Tooltip(
             self.upload_button,
+            "Собрать прошивку и записать её на выбранное устройство: по USB через COM-порт "
+            "или по Wi-Fi, если выбран адрес в сети. Настройки сохраняются автоматически.",
+        ))
+        self.tooltips.append(Tooltip(
             self.fs_button,
-            self.erase_button,
-            self.monitor_button,
-        ):
-            button.pack(side="left", padx=(0, 8))
+            "Собрать образ LittleFS с веб-интерфейсом и записать его по USB или по Wi-Fi. "
+            "Файлы и пользовательские данные на устройстве будут заменены.",
+        ))
+        self.tooltips.append(Tooltip(self.monitor_button, "Показывает вывод устройства (только по USB). Кнопка «Получить IP» в мониторе запрашивает адрес устройства для работы по Wi-Fi."))
+        self.tooltips.append(Tooltip(self.editor_button, "Файлы на устройстве через веб-интерфейс. Нужен адрес устройства в сети: выберите его в списке выше или получите через монитор порта."))
+        self.port_var.trace_add("write", lambda *_: self._port_changed())
 
-        device_buttons = ttk.Frame(outer, padding=(0, 0, 0, 8))
-        device_buttons.pack(fill="x")
-        self.reboot_button = ttk.Button(
-            device_buttons, text="Перезагрузить ESP", command=self.reboot_esp
-        )
-        self.editor_button = ttk.Button(
-            device_buttons, text="Редактор файлов", command=self.open_file_editor
-        )
-        self.editor_button.configure(state="disabled")
-        self.ip_status = ttk.Label(device_buttons, text="IP: не получен")
-        for button in (self.reboot_button, self.editor_button):
-            button.pack(side="left", padx=(0, 8))
-        self.ip_status.pack(side="left", padx=(4, 0))
-        self.port_combo.bind("<<ComboboxSelected>>", self._port_changed, add="+")
-        self.port_combo.bind("<KeyRelease>", self._port_changed, add="+")
-
-        ttk.Label(outer, text="Журнал").pack(anchor="w")
-        log_frame = ttk.Frame(outer)
+        # --- журнал
+        log_box = ttk.Labelframe(right, text="Журнал", padding=(8, 4, 8, 8))
+        log_box.pack(fill="both", expand=True, padx=(10, 0))
+        log_tools = ttk.Frame(log_box)
+        log_tools.pack(fill="x", pady=(0, 4))
+        ttk.Button(log_tools, text="Очистить", command=self.clear_log).pack(side="left")
+        ttk.Button(log_tools, text="Копировать всё", command=self.copy_log).pack(side="left", padx=(8, 0))
+        self.log_autoscroll = tk.BooleanVar(value=True)
+        ttk.Checkbutton(log_tools, text="Прокручивать к концу", variable=self.log_autoscroll).pack(side="right")
+        log_frame = ttk.Frame(log_box)
         log_frame.pack(fill="both", expand=True)
         scrollbar = ttk.Scrollbar(log_frame)
         scrollbar.pack(side="right", fill="y")
-        self.log = tk.Text(log_frame, height=13, wrap="word", yscrollcommand=scrollbar.set)
+        self.log = tk.Text(
+            log_frame, height=8, width=60, wrap="word", yscrollcommand=scrollbar.set,
+            font="TkFixedFont", state="disabled",
+        )
         self.log.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=self.log.yview)
+        configure_log_tags(self.log)
+        self._install_edit_menu(self.log, "readonly", on_clear=self.clear_log)
+
+        # --- нижняя панель: сохранение, остановка, состояние
+        bar = ttk.Frame(outer)
+        bar.pack(fill="x", pady=(8, 0))
+        self.save_button = ttk.Button(bar, text="Сохранить настройки", command=self.save)
+        self.save_button.pack(side="left")
+        self.stop_button = ttk.Button(bar, text="Остановить", command=self.stop_action, state="disabled")
+        self.stop_button.pack(side="left", padx=(8, 0))
+        self.dirty_var = tk.StringVar(value="")
+        ttk.Label(bar, textvariable=self.dirty_var, foreground="#8a5a00").pack(side="left", padx=(12, 0))
+        self.status_var = tk.StringVar(value="Готово")
+        ttk.Label(bar, textvariable=self.status_var).pack(side="right")
+
+    def _button_holder(self, parent):
+        holder = self.ttk.Frame(parent)
+        holder.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        return holder
+
+    @staticmethod
+    def _grid_buttons(holder, buttons, columns: int = 3) -> None:
+        """Раскладывает кнопки одинаковой ширины сеткой."""
+        for index, button in enumerate(buttons):
+            row, column = divmod(index, columns)
+            button.grid(
+                row=row, column=column, sticky="ew",
+                padx=(0, 8) if column < columns - 1 else 0, pady=(0, 4),
+            )
+        for column in range(columns):
+            holder.columnconfigure(column, weight=1, uniform="buttons")
+
+    def _section_selected(self, _event=None) -> None:
+        selection = self.section_list.curselection()
+        if selection:
+            self.section_frames[SECTIONS[selection[0]]].tkraise()
+
+    def _install_edit_menu(self, widget, kind: str, **options) -> None:
+        self.edit_menus.append(EditMenu(widget, kind, **options))
 
     def _register_tooltip(self, key, *widgets) -> None:
         self.tooltip_widgets.setdefault(key, []).extend(widgets)
@@ -1273,10 +1786,11 @@ class ConfiguratorWindow:
         row = rows[section]
         label_widget = self.ttk.Label(frames[section], text=label)
         label_widget.grid(row=row, column=0, sticky="w", pady=3)
-        entry = self.ttk.Entry(frames[section], textvariable=variable, width=34)
+        entry = self.ttk.Entry(frames[section], textvariable=variable, width=24)
         entry.grid(
             row=row, column=1, sticky="ew", padx=(10, 0), pady=3
         )
+        self._install_edit_menu(entry, "entry")
         if tooltip_key:
             self._register_tooltip(tooltip_key, label_widget, entry)
         rows[section] += 1
@@ -1295,6 +1809,10 @@ class ConfiguratorWindow:
             self._register_tooltip(tooltip_key, label_widget, combo)
         rows[section] += 1
 
+    def _toggle_password(self) -> None:
+        self.password_entry.configure(show="" if self.show_password_var.get() else "•")
+
+    # ------------------------------------------------------------------ загрузка и состояние
     def _load(self) -> None:
         try:
             state = self.config.load()
@@ -1315,7 +1833,19 @@ class ConfiguratorWindow:
         self.ssid_var.set(str(state["wifi_ssid"]))
         self.password_var.set(str(state["wifi_password"]))
         self._apply_tooltips()
+        self._mark_saved()
+        for variable in self._tracked_variables():
+            variable.trace_add("write", lambda *_: self._refresh_dirty())
+        self._port_changed()
         self.refresh_ports()
+
+    def _tracked_variables(self):
+        variables = [self.board_var, self.servo_var, self.ssid_var, self.password_var]
+        variables.extend(self.value_vars.values())
+        variables.extend(self.bool_vars.values())
+        variables.extend(self.optional_enabled_vars.values())
+        variables.extend(self.choice_vars.values())
+        return variables
 
     def _apply_tooltips(self) -> None:
         descriptions = self.config.descriptions()
@@ -1325,15 +1855,51 @@ class ConfiguratorWindow:
                 self.tooltips.extend(Tooltip(widget, description) for widget in widgets)
 
     def refresh_ports(self) -> None:
+        """Обновляет список: COM-порты сразу, устройства в сети (mDNS, 3 с) — в фоне."""
         try:
             ports = list_serial_ports(self.pio_executable)
         except (OSError, ConfigError) as error:
             self.messagebox.showerror("Ошибка поиска портов", str(error))
             return
+        self._apply_port_list(ports, [])
+        if self.busy:
+            return
+        self.port_refresh_button.configure(state="disabled")
+        self.status_var.set("Поиск устройств в сети…")
+
+        def search() -> None:
+            try:
+                devices = list_network_devices(self.pio_executable)
+            except (OSError, ConfigError) as error:
+                self.output_queue.put(("network_error", str(error)))
+                return
+            self.output_queue.put(("network", devices))
+
+        threading.Thread(target=search, daemon=True).start()
+
+    def _apply_port_list(self, ports: List[str], devices: List[str]) -> None:
+        values = list(ports)
+        for label in devices:
+            if label not in values:
+                values.append(label)
+        if self.device_ip and not any(port_value(value) == self.device_ip for value in values):
+            values.append(network_port_label(self.device_ip))
         current = self.port_var.get().strip()
-        self.port_combo.configure(values=ports)
-        if not current and ports:
-            self.port_var.set(ports[0])
+        self.port_combo.configure(values=values)
+        if not current and values:
+            self.port_var.set(values[0])
+
+    def _network_search_done(self, devices: Optional[List[str]], error: str = "") -> None:
+        if not self.busy:
+            self.port_refresh_button.configure(state="normal")
+        if devices is None:
+            self._append_log("Поиск устройств в сети не удался: {}\n".format(error), "warning")
+            self.status_var.set("Устройства в сети не найдены")
+            return
+        self._apply_port_list(list(self.port_combo.cget("values")), devices)
+        self.status_var.set(
+            "Найдено устройств в сети: {}".format(len(devices)) if devices else "Устройства в сети не найдены"
+        )
 
     def _state(self) -> Dict[str, object]:
         state = {macro: variable.get() for macro, variable in self.value_vars.items()}
@@ -1350,17 +1916,33 @@ class ConfiguratorWindow:
         })
         return state
 
+    def _mark_saved(self) -> None:
+        self.saved_state = self._state()
+        self._refresh_dirty()
+
+    def is_dirty(self) -> bool:
+        return self.saved_state is not None and self._state() != self.saved_state
+
+    def _refresh_dirty(self) -> None:
+        if self.saved_state is None:
+            return
+        dirty = self.is_dirty()
+        self.dirty_var.set("Есть несохранённые изменения" if dirty else "")
+        self.root.title("Настройка и прошивка Samovar" + (" *" if dirty else ""))
+
     def save(self, show_success: bool = True) -> bool:
         try:
             self.config.save(self._state())
         except (OSError, ConfigError) as error:
             self.messagebox.showerror("Настройки не сохранены", str(error))
             return False
+        self._mark_saved()
         self._append_log("Настройки сохранены.\n")
         if show_success:
-            self.messagebox.showinfo("Samovar", "Настройки сохранены")
+            self.status_var.set("Настройки сохранены")
         return True
 
+    # ------------------------------------------------------------------ команды
     def start_littlefs(self) -> None:
         confirmed = self.messagebox.askyesno(
             "Загрузка LittleFS",
@@ -1377,10 +1959,25 @@ class ConfiguratorWindow:
         if confirmed:
             self.start_action("erase")
 
-    def _port_changed(self, _event=None) -> None:
-        self.device_ip = None
-        self.ip_status.configure(text="IP: не получен")
-        self.editor_button.configure(state="disabled")
+    def device_address(self) -> str:
+        """Адрес для веб-функций: выбранное устройство в сети, иначе IP из монитора порта."""
+        port = self.port_var.get()
+        if is_network_port(port):
+            return port_value(port)
+        return self.device_ip or ""
+
+    def _port_changed(self) -> None:
+        has_address = bool(self.device_address())
+        state = "normal" if has_address and not self.busy else "disabled"
+        self.editor_button.configure(state=state)
+        self.browser_button.configure(state="normal" if has_address else "disabled")
+
+    def _device_ip_found(self, address: str) -> None:
+        if address != self.device_ip:
+            self._append_log("Устройство сообщило адрес {}: можно выбрать его в списке портов.\n".format(address), "ok")
+        self.device_ip = address
+        self._apply_port_list(list(self.port_combo.cget("values")), [])
+        self._port_changed()
 
     def reboot_esp(self) -> None:
         try:
@@ -1391,9 +1988,22 @@ class ConfiguratorWindow:
         self._start_process(command, "reboot")
 
     def open_file_editor(self) -> None:
-        if not self.device_ip:
+        try:
+            address = _required_address(self.device_address())
+        except ConfigError as error:
+            self.messagebox.showerror("Редактор файлов", str(error))
             return
-        FileEditorWindow(self.root, self.device_ip)
+        FileEditorWindow(self.root, address)
+
+    def open_in_browser(self) -> None:
+        try:
+            address = _required_address(self.device_address())
+        except ConfigError as error:
+            self.messagebox.showerror("Открыть в браузере", str(error))
+            return
+        import webbrowser
+
+        webbrowser.open("http://{}/".format(address))
 
     def open_monitor(self) -> None:
         if self.busy:
@@ -1411,20 +2021,37 @@ class ConfiguratorWindow:
         scrollbar = self.ttk.Scrollbar(frame)
         scrollbar.pack(side="right", fill="y")
         self.monitor_log = self.tk.Text(
-            frame, wrap="word", yscrollcommand=scrollbar.set, font="TkFixedFont"
+            frame, wrap="word", yscrollcommand=scrollbar.set, font="TkFixedFont", state="disabled"
         )
         self.monitor_log.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=self.monitor_log.yview)
-        controls = self.ttk.Frame(window)
-        controls.pack(pady=(0, 10))
+        configure_log_tags(self.monitor_log)
+        self.monitor_menu = EditMenu(self.monitor_log, "readonly", on_clear=self.clear_monitor)
+
+        send_row = self.ttk.Frame(window, padding=(10, 0, 10, 6))
+        send_row.pack(fill="x")
+        self.ttk.Label(send_row, text="Команда устройству").pack(side="left")
+        self.monitor_input = self.ttk.Entry(send_row)
+        self.monitor_input.pack(side="left", fill="x", expand=True, padx=(8, 8))
+        self.monitor_input.bind("<Return>", lambda _event: self.send_monitor_command())
+        self.monitor_input_menu = EditMenu(self.monitor_input, "entry")
+        self.ttk.Button(send_row, text="Отправить", command=self.send_monitor_command).pack(side="left")
+
+        controls = self.ttk.Frame(window, padding=(10, 0, 10, 10))
+        controls.pack(fill="x")
         self.monitor_ip_button = self.ttk.Button(
             controls, text="Получить IP", command=self.request_monitor_ip
         )
         self.monitor_ip_button.pack(side="left", padx=(0, 8))
+        self.ttk.Button(controls, text="Очистить", command=self.clear_monitor).pack(side="left", padx=(0, 8))
+        self.monitor_autoscroll = self.tk.BooleanVar(value=True)
+        self.ttk.Checkbutton(
+            controls, text="Прокручивать к концу", variable=self.monitor_autoscroll
+        ).pack(side="left", padx=(0, 8))
         self.monitor_stop_button = self.ttk.Button(
             controls, text="Остановить", command=self.toggle_monitor
         )
-        self.monitor_stop_button.pack(side="left")
+        self.monitor_stop_button.pack(side="right")
         self.monitor_window = window
         window.grab_set()
         window.focus_set()
@@ -1439,26 +2066,44 @@ class ConfiguratorWindow:
                 return
             self.stop_requested = True
             if self.process is not None:
-                self.process.terminate()
+                terminate_process_tree(self.process)
             return
         self.close_monitor()
 
-    def request_monitor_ip(self) -> None:
+    def _write_monitor_command(self, command: str, error_title: str) -> bool:
         if not self.busy or self.active_action != "monitor" or self.process is None:
-            self.messagebox.showerror("Не удалось получить IP", "Монитор порта не запущен")
-            return
+            self.messagebox.showerror(error_title, "Монитор порта не запущен")
+            return False
         assert self.process.stdin is not None
         try:
-            self.process.stdin.write("SAMOVAR:IP?\n")
+            self.process.stdin.write(command)
             self.process.stdin.flush()
         except OSError as error:
-            self.messagebox.showerror("Не удалось получить IP", str(error))
+            self.messagebox.showerror(error_title, str(error))
+            return False
+        return True
+
+    def request_monitor_ip(self) -> None:
+        self._write_monitor_command("SAMOVAR:IP?\n", "Не удалось получить IP")
+
+    def send_monitor_command(self) -> None:
+        if self.monitor_input is None:
+            return
+        command = self.monitor_input.get().strip()
+        if not command:
+            return
+        if self._write_monitor_command(command + "\n", "Не удалось отправить команду"):
+            self.monitor_input.delete(0, "end")
+
+    def clear_monitor(self) -> None:
+        if self.monitor_log is not None:
+            clear_readonly(self.monitor_log)
 
     def close_monitor(self) -> None:
         if self.busy and self.active_action == "monitor":
             self.stop_requested = True
             if self.process is not None:
-                self.process.terminate()
+                terminate_process_tree(self.process)
         self._destroy_monitor_window()
 
     def _destroy_monitor_window(self) -> None:
@@ -1469,6 +2114,7 @@ class ConfiguratorWindow:
         self.monitor_log = None
         self.monitor_stop_button = None
         self.monitor_ip_button = None
+        self.monitor_input = None
 
     def start_action(self, action: str) -> None:
         if self.busy:
@@ -1495,9 +2141,26 @@ class ConfiguratorWindow:
         except (OSError, ConfigError) as error:
             self.messagebox.showerror("Ошибка запуска", str(error))
             return
+        network = is_network_port(self.port_var.get())
+        if action == "upload" and network and not self.bool_vars["USE_UPDATE_OTA"].get():
+            confirmed = self.messagebox.askyesno(
+                "Обновление по Wi-Fi выключено в настройках",
+                "В разделе «Сеть» снят флажок «Разрешить обновление по Wi-Fi». Новая прошивка "
+                "не будет принимать обновления по сети: следующий раз прошивать придётся по USB. "
+                "Продолжить?",
+            )
+            if not confirmed:
+                return
         if action == "upload" and not self.save(show_success=False):
             return
+        self.active_port_network = network
         self._start_process(command, action)
+
+    def stop_action(self) -> None:
+        if not self.busy or self.process is None:
+            return
+        self.stop_requested = True
+        terminate_process_tree(self.process)
 
     def _start_process(self, command: List[str], action: str) -> None:
         if self.busy:
@@ -1514,6 +2177,7 @@ class ConfiguratorWindow:
                 encoding="utf-8",
                 errors="replace",
                 bufsize=1,
+                **process_start_options(),
             )
         except OSError as error:
             self.messagebox.showerror("Не удалось запустить PlatformIO", str(error))
@@ -1521,9 +2185,12 @@ class ConfiguratorWindow:
         self.stop_requested = False
         self.busy = True
         self.active_action = action
+        self.recent_lines = []
+        self.action_started = time.monotonic()
         self._set_busy(True, action)
-        self._append_log("\n> {}\n".format(subprocess.list2cmdline(command)))
+        self._append_log("\n> {}\n".format(subprocess.list2cmdline(command)), "command")
         threading.Thread(target=self._read_process_output, args=(self.process,), daemon=True).start()
+        self._tick_status()
 
     def _read_process_output(self, process) -> None:
         assert process.stdout is not None
@@ -1531,32 +2198,67 @@ class ConfiguratorWindow:
             self.output_queue.put(("line", line))
         self.output_queue.put(("done", process.wait()))
 
+    def _tick_status(self) -> None:
+        if self.tick_id is not None:
+            self.root.after_cancel(self.tick_id)
+            self.tick_id = None
+        if not self.busy:
+            return
+        elapsed = int(time.monotonic() - self.action_started)
+        self.status_var.set("{}… {}:{:02d}".format(
+            ACTION_LABELS.get(self.active_action, self.active_action), elapsed // 60, elapsed % 60
+        ))
+        self.tick_id = self.root.after(1000, self._tick_status)
+
     def _drain_output(self) -> None:
         try:
             while True:
                 kind, value = self.output_queue.get_nowait()
                 if kind == "line":
+                    self.recent_lines = (self.recent_lines + [value])[-12:]
                     self._append_log(value)
+                elif kind == "network":
+                    self._network_search_done(value)
+                elif kind == "network_error":
+                    self._network_search_done(None, value)
                 else:
-                    stopped = self.stop_requested
-                    completed_action = self.active_action
-                    self.process = None
-                    self.busy = False
-                    self._set_busy(False, "")
-                    if stopped:
-                        self._append_log("Монитор порта остановлен.\n")
-                    elif value == 0:
-                        if completed_action == "reboot":
-                            self._append_log("ESP перезагружен.\n")
-                        else:
-                            self._append_log("Операция успешно завершена.\n")
-                    else:
-                        self._append_log("Операция завершилась с ошибкой {}.\n".format(value))
-                        self.messagebox.showerror("Ошибка операции", "Код завершения: {}".format(value))
-                    self.active_action = ""
+                    self._finish_action(value)
         except queue.Empty:
             pass
         self.root.after(100, self._drain_output)
+
+    def _finish_action(self, code: int) -> None:
+        stopped = self.stop_requested and code != 0
+        completed_action = self.active_action
+        label = ACTION_LABELS.get(completed_action, completed_action)
+        elapsed = int(time.monotonic() - self.action_started)
+        self.process = None
+        self.busy = False
+        self._set_busy(False, "")
+        if stopped:
+            message = "Монитор порта остановлен.\n" if completed_action == "monitor" else "{}: остановлено пользователем.\n".format(label)
+            self._append_log(message)
+            self.status_var.set("Остановлено")
+        elif code == 0:
+            if completed_action == "reboot":
+                self._append_log("ESP перезагружен.\n", "ok")
+            else:
+                self._append_log("{}: успешно завершено за {}:{:02d}.\n".format(label, elapsed // 60, elapsed % 60), "ok")
+            self.status_var.set("{}: готово".format(label))
+        else:
+            self._append_log("{}: завершилось с ошибкой {}.\n".format(label, code), "error")
+            if self.active_port_network and completed_action in ("upload", "uploadfs"):
+                self._append_log(OTA_FAILURE_HINT, "warning")
+            self.status_var.set("{}: ошибка".format(label))
+            tail = "".join(self.recent_lines).strip()
+            self.messagebox.showerror(
+                "Ошибка операции",
+                "{} завершилась с ошибкой (код {}).\n\nПоследние строки журнала:\n{}".format(
+                    label, code, tail or "(пусто)"
+                ),
+            )
+        self.active_action = ""
+        self.active_port_network = False
 
     def _set_busy(self, busy: bool, action: str) -> None:
         state = "disabled" if busy else "normal"
@@ -1566,11 +2268,10 @@ class ConfiguratorWindow:
         self.erase_button.configure(state=state)
         self.monitor_button.configure(state=state)
         self.reboot_button.configure(state=state)
-        self.editor_button.configure(
-            state="normal" if not busy and self.device_ip else "disabled"
-        )
         self.port_combo.configure(state=state)
         self.port_refresh_button.configure(state=state)
+        self.stop_button.configure(state="normal" if busy and action != "monitor" else "disabled")
+        self._port_changed()
         if self.monitor_stop_button is not None:
             self.monitor_stop_button.configure(
                 text="Остановить" if busy and action == "monitor" else "Закрыть",
@@ -1580,21 +2281,52 @@ class ConfiguratorWindow:
                 state="normal" if busy and action == "monitor" else "disabled"
             )
 
-    def _append_log(self, text: str) -> None:
+    def _append_log(self, text: str, tag: Optional[str] = None) -> None:
         address = extract_samovar_ip(text)
         if address:
-            self.device_ip = address
-            self.ip_status.configure(text="IP: {}".format(address))
-            if not self.busy:
-                self.editor_button.configure(state="normal")
-        target = self.monitor_log if self.active_action == "monitor" and self.monitor_log is not None else self.log
-        target.insert("end", text)
-        target.see("end")
+            self._device_ip_found(address)
+        if self.active_action == "monitor" and self.monitor_log is not None:
+            target, autoscroll = self.monitor_log, self.monitor_autoscroll
+        else:
+            target, autoscroll = self.log, self.log_autoscroll
+        write_readonly(target, text, tag or log_line_tag(text), bool(autoscroll.get()))
+
+    def clear_log(self) -> None:
+        clear_readonly(self.log)
+
+    def copy_log(self) -> None:
+        text = self.log.get("1.0", "end-1c")
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.status_var.set("Журнал скопирован в буфер обмена")
 
     def close(self) -> None:
+        if self.is_dirty():
+            answer = self.messagebox.askyesnocancel(
+                "Несохранённые изменения", "Сохранить изменения настроек перед выходом?"
+            )
+            if answer is None:
+                return
+            if answer and not self.save(show_success=False):
+                return
         if self.process is not None:
-            self.process.terminate()
+            terminate_process_tree(self.process)
+        save_user_prefs({
+            "port": self.port_var.get().strip(),
+            "geometry": self.root.geometry(),
+        })
         self.root.destroy()
+
+
+def enable_windows_dpi_awareness() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
 
 
 def parse_arguments(argv: Optional[List[str]] = None):
@@ -1621,6 +2353,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except ImportError:
         print("Tkinter не найден. Переустановите Python с компонентом Tcl/Tk.", file=sys.stderr)
         return 1
+    enable_windows_dpi_awareness()
     root = tk.Tk()
     ConfiguratorWindow(root, SamovarConfig(arguments.project_root.resolve()), arguments.pio)
     root.mainloop()
