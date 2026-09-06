@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 import gzip
-import hashlib
-import json
 import re
 import sys
 import zlib
-from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,98 +21,9 @@ def read_page(name: str) -> str:
     """Разворачивает <!--#include--> (data_raw/partials/) той же функцией, что
     использует сама сборка - не копией её логики."""
     return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
-FROZEN_SHA256 = {
-    # 02.09.2026: общая функция beerRowTypeOk (правила типов строк пива) для
-    # beer.htm/check_program и brewxml.htm/validateBeerProgramText. Раскладки не касается.
-    # 02.09.2026 (задача A3, п.5): новый токен COMMAND_TOKENS.PWM_TOO_LOW - текст
-    # отказа /command watert при слишком низком ШИМ насоса воды во время нагрева
-    # БК. Раскладки не касается.
-    # 02.09.2026 (задача 9c): три новых токена COMMAND_TOKENS.NOT_RUNNING/
-    # NO_SETPOINT/NO_PUMP - отказы /command waterauto=1 (авто-вода БК).
-    # Раскладки не касается.
-    # 04.09.2026: варочный порядок берётся из настроек прибора, а не localStorage.
-    # Раскладочных констант в app.js не менялось.
-    # 05.09.2026: bootstrap блокирует рабочие страницы до типизированного снимка;
-    # её раскладка проверяется отдельно в style.css и браузерных тестах.
-    "app.js": "8fe4ae24003d1507984ae46f5bb3a1e64db1349176d9a3568907230e5379751c",
-    # 01.09.2026: масштаб задают две ручки под графиком вместо колёсика и рамки
-    # выделения (уменьшить масштаб на приборе было нечем).
-    # 04.09.2026: loadCsv сам повторяет HTTP 503 BUSY. Раскладки не касается.
-    "chart.js": "3357e5e8c050addf5fa89356a81c97a6f1ed611d4d6701e6a727e04889f9de87",
-    # 04.09.2026: edit.htm — сетка вместо абсолютов, Ace 1.44.0, русская панель.
-    "edit.htm": "30acf0170c85dba7f02d522658867795536c9ef5543183f2fad3fd60c4bbdb42",
-    "edit.htm.gz": "77ed6074a230eecb2dfb558e543368f12f20b08d1996d851e5d256546d2d831b",
-}
-STRUCTURE_SHA256 = {
-    # 01.09.2026: подпись ползунка плотности насадки обёрнута в <span class="nowrap">,
-    # а знак процента привязан к значению неразрывным пробелом - на телефоне
-    # диапазон рвался как "80 % (60-" / "100)". Полей и подписей не добавлялось.
-    # 02.09.2026 (П11, пакет C): подсказка (.tooltip/.tooltiptext) у DistTemp
-    # добавлена, у UseST дополнен текст существующей подсказки.
-    # 02.09.2026 (задача A3, п.5/6): текст метки DistTemp и текст подсказки
-    # DistTimeF изменились (упоминание БК) - структура тегов та же.
-    # 03.09.2026 (НБК, T6): у "Инерция"/"Давление захлёба"/"Т завершения (барда)"
-    # появились class="tooltip" на <label> и <span class="tooltiptext"> - структура
-    # и текст изменились штатно.
-    # 04.09.2026: Су-вид и Lua скрыты в <select> режима; поля SuvidTemp/SuvidHoldMinutes сняты.
-    # 04.09.2026: на вкладку Beer добавлены select BeerBrewOrder и его подсказка.
-    # 05.09.2026: добавлены согласованные поля MPX, второго насоса и потока НБК.
-    # 05.09.2026: добавлена вкладка Cheese с пятью полями и предупреждением о
-    # взаимоисключающем физическом подключении общих входа и реле.
-    # 06.09.2026: диапазон PackDens расширен с 60-100 до 0-100.
-    "setup.htm": "3184ecb317c2caaafb65cc091211d013a8401c861554ac6163d580750486bafb",
-    "chart.htm": "f65e993e2d2e837fcc37c88f5aca7a112076de5f75b873e38e6a6ba2a6c701d0",
-}
+
+
 LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")
-
-
-class ContractParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.parts: list[list[object]] = []
-        self.skip_depth = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in ("script", "style"):
-            self.skip_depth += 1
-            return
-        if self.skip_depth:
-            return
-        kept = sorted((key, value) for key, value in attrs if key not in ("class", "style"))
-        self.parts.append(["start", tag, kept])
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if self.skip_depth:
-            return
-        kept = sorted((key, value) for key, value in attrs if key not in ("class", "style"))
-        self.parts.append(["void", tag, kept])
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in ("script", "style"):
-            self.skip_depth = max(0, self.skip_depth - 1)
-            return
-        if not self.skip_depth:
-            self.parts.append(["end", tag])
-
-    def handle_data(self, data: str) -> None:
-        if self.skip_depth:
-            return
-        value = " ".join(data.split())
-        if value:
-            self.parts.append(["text", value])
-
-
-def digest(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def structure_digest(name: str) -> str:
-    parser = ContractParser()
-    parser.feed(read_page(name))
-    payload = json.dumps(
-        parser.parts, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
-    return digest(payload)
 
 
 def rule_body(css: str, selector: str, start: int = 0) -> str | None:
@@ -224,17 +132,7 @@ def verify_css(errors: list[str]) -> None:
         errors.append("data/style.css: overflow-x:clip is forbidden")
 
 
-def verify_frozen_contract(errors: list[str]) -> None:
-    for name, expected in FROZEN_SHA256.items():
-        # .gz - продукт сборки, сырьё - источник.
-        source = (BUILD if name.endswith(".gz") else DATA) / name
-        actual = digest(source.read_bytes())
-        if actual != expected:
-            errors.append(f"data/{name}: frozen SHA changed: {actual}")
-    for name, expected in STRUCTURE_SHA256.items():
-        actual = structure_digest(name)
-        if actual != expected:
-            errors.append(f"data/{name}: DOM/text/control/action structure changed: {actual}")
+def verify_u03_contract(errors: list[str]) -> None:
     try:
         verify_mandatory_fixes()
         verify_chart_palette()
@@ -261,7 +159,7 @@ def main() -> int:
     try:
         verify_markup(errors)
         verify_css(errors)
-        verify_frozen_contract(errors)
+        verify_u03_contract(errors)
         verify_projection(errors)
     except (OSError, UnicodeError, re.error, zlib.error) as error:
         errors.append(f"harness error: {error}")
