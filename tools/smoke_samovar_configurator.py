@@ -810,7 +810,7 @@ class ConfiguratorModelTests(unittest.TestCase):
     def test_serial_monitor_does_not_reset_esp(self) -> None:
         monitor_source = inspect.getsource(configurator.run_serial_monitor)
         action_source = inspect.getsource(configurator.ConfiguratorWindow.start_action)
-        self.assertIn("open_platformio_serial_connection(port)", monitor_source)
+        self.assertIn("open_serial_without_reset(serial, port)", monitor_source)
         self.assertIn("forward_serial_commands", monitor_source)
         self.assertIn("serial_monitor_command(", action_source)
         self.assertIn("pio_python_executable", action_source)
@@ -875,24 +875,71 @@ class ConfiguratorModelTests(unittest.TestCase):
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
 
-        for port in ("/dev/cu.usbserial-1", "COM7"):
-            connection = object()
-            with mock.patch(
-                "platformio.device.monitor.terminal.new_serial_instance",
-                return_value=connection,
-            ) as new_serial:
-                configured = configurator.open_platformio_serial_connection(port)
-            self.assertIs(configured, connection)
-            new_serial.assert_called_once_with({
-                "port": port,
-                "baud": 115200,
-                "parity": "N",
-                "rtscts": False,
-                "xonxoff": False,
-                "dtr": None,
-                "rts": None,
-                "quiet": True,
-            })
+        # Сброс ESP32 = «DTR снят, RTS выставлен». Порт открывается без прохода через это состояние.
+        class FakeSerial:
+            def __init__(self):
+                self.events = []
+                self.is_open = False
+                self.fd = 7
+                self.exclusive = False
+
+            @property
+            def dtr(self):
+                return self._dtr
+
+            @dtr.setter
+            def dtr(self, value):
+                self.events.append(("dtr", value, self.is_open))
+
+            @property
+            def rts(self):
+                return self._rts
+
+            @rts.setter
+            def rts(self, value):
+                self.events.append(("rts", value, self.is_open))
+
+            def open(self):
+                self.is_open = True
+                self.events.append(("open",))
+
+        class SerialModule:
+            Serial = FakeSerial
+
+            def __init__(self):
+                self.calls = []
+
+            def serial_for_url(self, port, baud, do_not_open=False):
+                self.calls.append((port, baud, do_not_open))
+                self.instance = FakeSerial()
+                return self.instance
+
+        module = SerialModule()
+        with mock.patch.object(configurator.os, "name", "nt"):
+            connection = configurator.open_serial_without_reset(module, "COM7")
+        self.assertEqual(module.calls, [("COM7", 115200, True)])
+        self.assertTrue(connection.exclusive)
+        # обе линии выключены ДО открытия и попадают в один SetCommState; после открытия ничего не трогаем
+        self.assertEqual(connection.events, [("dtr", False, False), ("rts", False, False), ("open",)])
+
+        module = SerialModule()
+        ioctls = []
+
+        def fake_ioctl(fd, request, arg, mutate=False):
+            ioctls.append((fd, request, list(arg), mutate))
+            if request == "TIOCMGET":
+                arg[0] = 0x002 | 0x004 | 0x100  # DTR, RTS и посторонний бит от ядра
+
+        fake_termios = types.SimpleNamespace(TIOCMGET="TIOCMGET", TIOCMSET="TIOCMSET", TIOCM_DTR=0x002, TIOCM_RTS=0x004)
+        with mock.patch.object(configurator.os, "name", "posix"), \
+                mock.patch.dict(sys.modules, {"fcntl": types.SimpleNamespace(ioctl=fake_ioctl), "termios": fake_termios}):
+            connection = configurator.open_serial_without_reset(module, "/dev/cu.usbserial-1")
+        # на POSIX ядро выставляет обе линии само; снимаем их ОДНОЙ операцией после открытия
+        self.assertEqual(connection.events, [("open",)])
+        self.assertEqual(ioctls[0][:2], (7, "TIOCMGET"))
+        self.assertEqual(ioctls[1], (7, "TIOCMSET", [0x100], False))
+        with self.assertRaisesRegex(configurator.ConfigError, "только по USB"):
+            configurator.open_serial_without_reset(module, "192.168.1.37")
 
         class Connection:
             def __init__(self):

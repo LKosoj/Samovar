@@ -738,25 +738,51 @@ def extract_samovar_ip(text: str) -> Optional[str]:
     return None
 
 
-def open_platformio_serial_connection(port: str):
-    try:
-        from platformio.device.monitor.terminal import new_serial_instance
-        from platformio.exception import UserSideException
-    except ImportError as error:
-        raise ConfigError("В Python PlatformIO не найден модуль монитора порта") from error
-    try:
-        return new_serial_instance({
-            "port": _required_port(port),
-            "baud": 115200,
-            "parity": "N",
-            "rtscts": False,
-            "xonxoff": False,
-            "dtr": None,
-            "rts": None,
-            "quiet": True,
-        })
-    except UserSideException as error:
-        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
+def clear_control_lines_atomically(fd: int) -> None:
+    """Снимает DTR и RTS одной операцией TIOCMSET (POSIX).
+
+    Раздельные вызовы pyserial (сначала DTR, потом RTS) проходят через состояние
+    «DTR снят, RTS выставлен», а именно оно на платах ESP32 замыкает EN на землю.
+    """
+    import array
+    import fcntl
+    import termios
+
+    status = array.array("i", [0])
+    fcntl.ioctl(fd, termios.TIOCMGET, status, True)
+    status[0] &= ~(termios.TIOCM_DTR | termios.TIOCM_RTS)
+    fcntl.ioctl(fd, termios.TIOCMSET, status)
+
+
+def open_serial_without_reset(serial_module, port: str):
+    """Открывает порт так, чтобы схема автосброса ESP32 не увидела «сбросного» сочетания линий.
+
+    Плата сбрасывается, когда DTR снят, а RTS выставлен (транзистор тянет EN к земле);
+    режим загрузчика - когда наоборот. Безопасны только состояния «обе сняты» и «обе
+    выставлены», поэтому важно не проходить через промежуточные:
+    - Windows: драйвер применяет DCB при открытии, pyserial передаёт fDtrControl и
+      fRtsControl одним SetCommState. Обе линии заранее выключены → после сессии
+      esptool/монитора драйвер хранит то же состояние, и открытие ничего не переключает.
+    - macOS/Linux: ядро само выставляет обе линии при open() одним запросом к USB-чипу;
+      после этого они снимаются одной ioctl-операцией, а не двумя, как делает pyserial.
+    Закрытие порта из состояния «обе сняты» тоже ничего не переключает.
+    """
+    connection = serial_module.serial_for_url(
+        _required_serial_port(port, "Монитор порта"), 115200, do_not_open=True
+    )
+    if isinstance(connection, serial_module.Serial):
+        connection.exclusive = True
+    if os.name == "nt":
+        connection.dtr = False
+        connection.rts = False
+        connection.open()
+    else:
+        connection.open()
+        try:
+            clear_control_lines_atomically(connection.fd)
+        except OSError:
+            pass  # у виртуальных портов (pty, socket://) модемных линий нет - сбрасывать нечего
+    return connection
 
 
 def forward_serial_commands(connection, input_stream) -> None:
@@ -773,7 +799,10 @@ def run_serial_monitor(port: str) -> int:
     except ImportError as error:
         raise ConfigError("В Python PlatformIO не найден модуль работы с последовательным портом") from error
 
-    connection = open_platformio_serial_connection(port)
+    try:
+        connection = open_serial_without_reset(serial, port)
+    except (OSError, serial.SerialException) as error:
+        raise ConfigError("Не удалось открыть последовательный порт {}: {}".format(port, error)) from error
     connection.timeout = 0.2
     threading.Thread(
         target=forward_serial_commands, args=(connection, sys.stdin), daemon=True
