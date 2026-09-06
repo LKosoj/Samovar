@@ -55,6 +55,15 @@
 #include "user_config_override.h"
 #endif
 
+//Порядок удерживает tools/smoke_use_lua_define_order.py.
+#ifdef SAMOVAR_BUILD_LUA
+#define USE_LUA
+#endif
+
+#ifdef SAMOVAR_BUILD_MQTT
+#define USE_MQTT
+#endif
+
 #ifdef SAMOVAR_BUILD_NO_POWER
 #undef SAMOVAR_USE_POWER
 #endif

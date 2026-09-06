@@ -64,9 +64,6 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 #define SAMOVAR_USE_BLYNK                    //использовать Blynk в проекте
 #define BLYNK_SAMOVAR_TOOL "samovar-tool.ru" //использовать бесплатный сервер Blynk samovar-tool.ru  вместо облачного Blynk
 //#define USE_MQTT                             //использовать сохранение логов в облако. Для этого необходимо зарегистрироваться на сайте www.samovar-tool.ru и в редактировании своего профиля указать токен Blynk.
-#ifdef SAMOVAR_BUILD_MQTT
-#define USE_MQTT
-#endif
 //Все логи с сообщения Самовара будут сохраняться и будут доступны на сайте через меню - Пользователь - Логи.
 
 #define SAMOVAR_USE_POWER                    //использовать регулятор напряжения в проекте https://alcodistillers.ru/forum/viewtopic.php?id=1524
@@ -128,14 +125,6 @@ int8_t servoDelta[11] = {0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2};
 //#define USE_EXPANDER 0x20                    //использовать расширитель портов PCF8575
 //#define USE_ANALOG_EXPANDER 0x48             //использовать расширитель аналоговых портов PCF8591
 //#define USE_LUA                              //использовать lua для написания скриптов для управления Самоваром и расширителем портов
-//Эта трансляция ОБЯЗАНА стоять именно здесь, а не в Samovar.h ниже объявления
-//xLuaSemaphore (`#ifdef USE_LUA`) - иначе окружение Samovar_lua_mqtt перестанет
-//собираться ("xLuaSemaphore" was not declared). Samovar_ini.h подключается в
-//Samovar.h задолго до этого объявления, поэтому USE_LUA должен быть определён
-//именно тут. Порядок удерживает tools/smoke_use_lua_define_order.py.
-#ifdef SAMOVAR_BUILD_LUA
-#define USE_LUA
-#endif
 
 //Определение типа используемого датчика давления. Может быть использован только один тип. Если раскомментировать три или два датчика, то использоваться будет только MPX5010D
 //#define USE_PRESSURE_XGZ 32                  //использовать датчик давления XGZP6897D (или аналогичный). Какое использовать значение - смотреть параметр К в таблице: https://github.com/fanfanlatulipe26/XGZP6897D 
