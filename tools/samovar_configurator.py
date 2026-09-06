@@ -738,34 +738,40 @@ def extract_samovar_ip(text: str) -> Optional[str]:
     return None
 
 
-def clear_control_lines_atomically(fd: int) -> None:
-    """Снимает DTR и RTS одной операцией TIOCMSET (POSIX).
+def keep_control_lines_after_close(fd: int) -> None:
+    """Снимает флаг HUPCL (POSIX): ядро не будет опускать DTR/RTS при закрытии порта.
 
-    Раздельные вызовы pyserial (сначала DTR, потом RTS) проходят через состояние
-    «DTR снят, RTS выставлен», а именно оно на платах ESP32 замыкает EN на землю.
+    Линии остаются выставленными и между сессиями монитора, поэтому следующее открытие
+    ничего не переключает - а сбросить плату может только переключение.
     """
-    import array
-    import fcntl
     import termios
 
-    status = array.array("i", [0])
-    fcntl.ioctl(fd, termios.TIOCMGET, status, True)
-    status[0] &= ~(termios.TIOCM_DTR | termios.TIOCM_RTS)
-    fcntl.ioctl(fd, termios.TIOCMSET, status)
+    try:
+        attributes = termios.tcgetattr(fd)
+        attributes[2] &= ~termios.HUPCL
+        termios.tcsetattr(fd, termios.TCSANOW, attributes)
+    except termios.error:
+        pass  # у виртуальных портов (pty без tty-настроек и т.п.) снимать нечего
 
 
 def open_serial_without_reset(serial_module, port: str):
     """Открывает порт так, чтобы схема автосброса ESP32 не увидела «сбросного» сочетания линий.
 
     Плата сбрасывается, когда DTR снят, а RTS выставлен (транзистор тянет EN к земле);
-    режим загрузчика - когда наоборот. Безопасны только состояния «обе сняты» и «обе
-    выставлены», поэтому важно не проходить через промежуточные:
-    - Windows: драйвер применяет DCB при открытии, pyserial передаёт fDtrControl и
-      fRtsControl одним SetCommState. Обе линии заранее выключены → после сессии
-      esptool/монитора драйвер хранит то же состояние, и открытие ничего не переключает.
-    - macOS/Linux: ядро само выставляет обе линии при open() одним запросом к USB-чипу;
-      после этого они снимаются одной ioctl-операцией, а не двумя, как делает pyserial.
-    Закрытие порта из состояния «обе сняты» тоже ничего не переключает.
+    режим загрузчика - когда наоборот (IO0 к земле, безвредно для работающей платы).
+    Сбрасывает только ПЕРЕХОД через «DTR снят, RTS выставлен»; драйверы меняют линии
+    по одной, в порядке, который из программы не виден. Поэтому задача - свести число
+    переключений к минимуму.
+
+    - macOS/Linux: ядро при open() выставляет обе линии; мы их не трогаем и снимаем
+      флаг HUPCL, чтобы ядро не опускало их при закрытии. Между сессиями линии остаются
+      выставленными, и следующее открытие ничего не переключает (нет перехода - нет
+      сброса). Единственный переход - первое открытие после прошивки или переподключения
+      USB, когда линии опущены кем-то другим (esptool).
+    - Windows: драйвер всегда опускает линии при закрытии (DTR первым - это и есть
+      сброс), поэтому здесь наоборот: до открытия просим «DTR выставлен, RTS снят» -
+      из любого стартового состояния меняется ровно одна линия через безопасную
+      сторону; после открытия снимаем DTR. Закрытие из «обе сняты» ничего не переключает.
     """
     connection = serial_module.serial_for_url(
         _required_serial_port(port, "Монитор порта"), 115200, do_not_open=True
@@ -773,16 +779,20 @@ def open_serial_without_reset(serial_module, port: str):
     if isinstance(connection, serial_module.Serial):
         connection.exclusive = True
     if os.name == "nt":
-        connection.dtr = False
+        connection.dtr = True
         connection.rts = False
         connection.open()
+        connection.dtr = False
     else:
+        connection.dtr = True
+        connection.rts = True
         connection.open()
-        try:
-            clear_control_lines_atomically(connection.fd)
-        except OSError:
-            pass  # у виртуальных портов (pty, socket://) модемных линий нет - сбрасывать нечего
+        keep_control_lines_after_close(connection.fd)
     return connection
+
+
+BOOT_BANNER = b"rst:0x"
+BOOT_BANNER_WINDOW_S = 3.0
 
 
 def forward_serial_commands(connection, input_stream) -> None:
@@ -809,10 +819,17 @@ def run_serial_monitor(port: str) -> int:
     ).start()
     try:
         print("--- Последовательный порт {} | 115200 8-N-1".format(port), flush=True)
+        opened_at = time.monotonic()
         while True:
             data = connection.read(256)
             if data:
                 print(data.decode("utf-8", errors="replace"), end="", flush=True)
+                if BOOT_BANNER in data and time.monotonic() - opened_at < BOOT_BANNER_WINDOW_S:
+                    print(
+                        "\n!!! ESP32 перезагрузилась при открытии порта. Сообщите разработчику: "
+                        "ОС и чип USB-UART платы (CP2102, CH340, ...).",
+                        flush=True,
+                    )
     except KeyboardInterrupt:
         pass
     except (OSError, serial.SerialException) as error:

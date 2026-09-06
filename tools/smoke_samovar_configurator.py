@@ -919,25 +919,31 @@ class ConfiguratorModelTests(unittest.TestCase):
             connection = configurator.open_serial_without_reset(module, "COM7")
         self.assertEqual(module.calls, [("COM7", 115200, True)])
         self.assertTrue(connection.exclusive)
-        # обе линии выключены ДО открытия и попадают в один SetCommState; после открытия ничего не трогаем
-        self.assertEqual(connection.events, [("dtr", False, False), ("rts", False, False), ("open",)])
+        # Windows: драйвер опускает линии при закрытии (DTR первым = сброс), поэтому до открытия
+        # просим «DTR выставлен, RTS снят» - из любого стартового состояния меняется ровно одна
+        # линия через безопасную сторону; после открытия снимаем DTR, закрытие ничего не трогает.
+        self.assertEqual(
+            connection.events,
+            [("dtr", True, False), ("rts", False, False), ("open",), ("dtr", False, True)],
+        )
 
         module = SerialModule()
-        ioctls = []
-
-        def fake_ioctl(fd, request, arg, mutate=False):
-            ioctls.append((fd, request, list(arg), mutate))
-            if request == "TIOCMGET":
-                arg[0] = 0x002 | 0x004 | 0x100  # DTR, RTS и посторонний бит от ядра
-
-        fake_termios = types.SimpleNamespace(TIOCMGET="TIOCMGET", TIOCMSET="TIOCMSET", TIOCM_DTR=0x002, TIOCM_RTS=0x004)
+        termios_calls = []
+        fake_termios = types.SimpleNamespace(
+            HUPCL=0x4000, TCSANOW="TCSANOW", error=OSError,
+            tcgetattr=lambda fd: [0, 0, 0x4000 | 0x0B00, 0],
+            tcsetattr=lambda fd, when, attrs: termios_calls.append((fd, when, list(attrs))),
+        )
         with mock.patch.object(configurator.os, "name", "posix"), \
-                mock.patch.dict(sys.modules, {"fcntl": types.SimpleNamespace(ioctl=fake_ioctl), "termios": fake_termios}):
+                mock.patch.dict(sys.modules, {"termios": fake_termios}):
             connection = configurator.open_serial_without_reset(module, "/dev/cu.usbserial-1")
-        # на POSIX ядро выставляет обе линии само; снимаем их ОДНОЙ операцией после открытия
-        self.assertEqual(connection.events, [("open",)])
-        self.assertEqual(ioctls[0][:2], (7, "TIOCMGET"))
-        self.assertEqual(ioctls[1], (7, "TIOCMSET", [0x100], False))
+        # macOS/Linux: линии не опускаем вовсе и снимаем HUPCL - ядро не опустит их при закрытии;
+        # следующее открытие ничего не переключает, а сбрасывает плату только переключение.
+        self.assertEqual(connection.events, [("dtr", True, False), ("rts", True, False), ("open",)])
+        self.assertEqual(termios_calls, [(7, "TCSANOW", [0, 0, 0x0B00, 0])])
+        monitor_source = inspect.getsource(configurator.run_serial_monitor)
+        self.assertIn("BOOT_BANNER in data", monitor_source)
+        self.assertIn("перезагрузилась при открытии порта", monitor_source)
         with self.assertRaisesRegex(configurator.ConfigError, "только по USB"):
             configurator.open_serial_without_reset(module, "192.168.1.37")
 
