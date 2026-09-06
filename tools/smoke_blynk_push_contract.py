@@ -11,7 +11,10 @@
 - медленные пины (V3, V4, V13, V5, V15, V20, V19, V16, V24) шлются из blynk_push_slow
   только при изменении/force, V24 - по отпечатку program[] (blynk_program_fingerprint),
   program_io.h при этом не трогается (он заморожен другими smoke-тестами);
-- после (пере)подключения всё переотправляется (BLYNK_CONNECTED -> s_blynkPushResendAll);
+- после (пере)подключения всё переотправляется (BLYNK_CONNECTED -> s_blynkPushResendAll),
+  и медленные пины повторяются раз в BLYNK_PUSH_SLOW_PERIOD_MS: сервер стирает значения
+  виджетов при синхронизации проекта из приложения (2026-09-07: после синхронизации в
+  приложении пропали режим и программа);
 - tick_blynk() зовёт blynk_push_tick() после Blynk.run().
 """
 import sys
@@ -121,13 +124,18 @@ if blynk:
         tick_body,
         [
             "BLYNK_PUSH_PERIOD_MS",
-            "blynk_push_slow(s_blynkPushResendAll);",
+            "now - slowSentAt >= BLYNK_PUSH_SLOW_PERIOD_MS",
+            "blynk_push_slow(force);",
+            "if (force) slowSentAt = now;",
             "s_blynkPushResendAll = false;",
             "n < BLYNK_PUSH_PER_TICK",
             "kBlynkFastPush[next++]();",
         ],
         errors,
     )
+    resend_body = body(blynk, "BLYNK_WRITE(V33)")
+    if resend_body and "s_blynkPushResendAll = true;" not in resend_body:
+        errors.append("BLYNK_WRITE(V33) must request full resend (s_blynkPushResendAll = true)")
     connected_body = body(blynk, "BLYNK_CONNECTED()")
     if connected_body and "s_blynkPushResendAll = true;" not in connected_body:
         errors.append("BLYNK_CONNECTED must request full resend (s_blynkPushResendAll = true)")

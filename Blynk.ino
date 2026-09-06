@@ -339,8 +339,10 @@ BLYNK_WRITE(V32) {
 // BLYNK_READ нет, и прошивка отдаёт пины сама:
 //  - быстрые пины (kBlynkFastPush) - раз в BLYNK_PUSH_PERIOD_MS, по BLYNK_PUSH_PER_TICK
 //    штук за итерацию loop(), чтобы не было всплеска;
-//  - медленные (blynk_push_slow) - только когда значение изменилось, и все разом после
-//    (пере)подключения, потому что сервер мог их потерять (BLYNK_CONNECTED ниже).
+//  - медленные (blynk_push_slow) - когда значение изменилось, плюс все разом после
+//    (пере)подключения (BLYNK_CONNECTED ниже) и раз в BLYNK_PUSH_SLOW_PERIOD_MS: сервер
+//    стирает значения виджетов при синхронизации проекта из приложения и при своём
+//    перезапуске, а прошивка об этом не узнаёт.
 // Старые проекты с опросом продолжают присылать «vr»: библиотека их отбрасывает, а
 // значения приходят push-ем с той же периодичностью. V26 (сообщения) и V15/V20-url
 // при применении профиля шлются как раньше (Samovar.ino).
@@ -349,10 +351,18 @@ BLYNK_WRITE(V32) {
 // ---------------------------------------------------------------------------
 #define BLYNK_PUSH_PERIOD_MS 5000UL
 #define BLYNK_PUSH_PER_TICK 3
+#define BLYNK_PUSH_SLOW_PERIOD_MS 60000UL
 
 static bool s_blynkPushResendAll = true;
 
 BLYNK_CONNECTED() {
+  s_blynkPushResendAll = true;
+}
+
+// V33: «отправь все пины заново». Приложение шлёт при запуске и сразу после синхронизации
+// проекта (сервер при ней стирает значения виджетов). Значение не важно, виджет не нужен:
+// сервер передаёт /update на железо и без него. PIN_SPEC.md §7.
+BLYNK_WRITE(V33) {
   s_blynkPushResendAll = true;
 }
 
@@ -471,13 +481,16 @@ static void blynk_push_slow(bool force) {
 
 void blynk_push_tick() {
   static unsigned long cycleStart = 0;
+  static unsigned long slowSentAt = 0;
   static uint8_t next = 0xFF;  // 0xFF - цикл не идёт
   const unsigned long now = millis();
   if (next >= kBlynkFastPushCount) {
     if (!s_blynkPushResendAll && now - cycleStart < BLYNK_PUSH_PERIOD_MS) return;
     cycleStart = now;
     next = 0;
-    blynk_push_slow(s_blynkPushResendAll);
+    const bool force = s_blynkPushResendAll || now - slowSentAt >= BLYNK_PUSH_SLOW_PERIOD_MS;
+    blynk_push_slow(force);
+    if (force) slowSentAt = now;
     s_blynkPushResendAll = false;
   }
   for (uint8_t n = 0; n < BLYNK_PUSH_PER_TICK && next < kBlynkFastPushCount; n++) {
