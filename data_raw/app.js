@@ -4,7 +4,8 @@
   const HISTORY_KEY = 'samovarHistoryV2';
   const HISTORY_LIMIT = 500;
   const COMMAND_TOKENS = {
-    OK: { ok: true, level: 2, text: 'Команда принята.' },
+    // Успех молчит: подтверждение показываем только там, где страница передала successMessage.
+    OK: { ok: true, level: 2, text: '' },
     BUSY: { ok: false, level: 1, text: 'Устройство занято. Команда не принята.' },
     IGNORED: { ok: false, level: 1, text: 'Команда проигнорирована.' },
     POWER_OFF: { ok: false, level: 1, text: 'Нагрев выключен. Команда не принята.' },
@@ -1369,7 +1370,7 @@
       }
       if (knownToken && result.ok) {
         clearRequestError();
-        report(options && options.successMessage ? options.successMessage : result.text, 2);
+        if (options && options.successMessage) report(options.successMessage, 2);
         return true;
       }
       addMessage(result.text, result.level);
