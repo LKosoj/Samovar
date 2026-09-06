@@ -279,6 +279,7 @@ struct QueueProbe {
 int telegramCalls = 0;
 int blynkCheckCalls = 0;
 int blynkWriteCalls = 0;
+int blynkNotifyCalls = 0;
 bool blynkConnected = true;
 String telegramResponse("OK");
 std::vector<std::string> actions;
@@ -299,6 +300,9 @@ struct BlynkProbe {
     blynkWriteCalls++;
     actions.push_back("blynk_write");
   }
+  // Push через сервер Blynk идёт сразу после virtualWrite(V26) под тем же замком;
+  // отдельного шага в последовательности действий не даёт.
+  void notify(const String&) { blynkNotifyCalls++; }
 } Blynk;
 
 // Заглушка RAII-стража замка Blynk (runtime_helpers.h): библиотека Blynk не
@@ -374,6 +378,7 @@ void resetProbe() {
   telegramCalls = 0;
   blynkCheckCalls = 0;
   blynkWriteCalls = 0;
+  blynkNotifyCalls = 0;
   telegramResponse = "OK";
   blynkConnected = true;
   blynkLockAvailable = true;
@@ -465,6 +470,7 @@ void checkIntegrationPaths() {
   msg_q.empty = false;
   telegramResponse = "<ERR>";
   runConsumerBlock();
+  check(blynkNotifyCalls == blynkWriteCalls, "blynk_notify_follows_v26_write");
   check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 1 &&
             codes == std::vector<std::string>({
                 "notify_telegram_delivery_failed"}) &&
@@ -504,6 +510,7 @@ void checkIntegrationPaths() {
   configureIntegrations();
   msg_q.empty = false;
   runConsumerBlock();
+  check(blynkNotifyCalls == blynkWriteCalls, "blynk_notify_follows_v26_write");
   check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 1 &&
             codes.empty() && actions == std::vector<std::string>({
                 "give", "telegram", "blynk_lock", "blynk_check", "blynk_write"}),

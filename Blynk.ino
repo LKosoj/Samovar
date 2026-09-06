@@ -342,4 +342,201 @@ BLYNK_WRITE(V4) {
   //set_power(Value4);
 }
 
+// ---------------------------------------------------------------------------
+// V27: телеметрия режима одним JSON для мобильных приложений (PIN_SPEC.md §9).
+// Берётся тот же снимок, что и /ajax (captureAjaxTelemetrySnapshot, Samovar.ino),
+// сериализатор читает ТОЛЬКО снимок. Ключи короткие: буфер BLYNK_MAX_SENDBYTES.
+// Поля, которых нет в сборке/режиме, не пишутся - приложение показывает то, что пришло.
+// ---------------------------------------------------------------------------
+static void write_blynk_mode_json(Print& out, const AjaxTelemetrySnapshot& s) {
+  bool first = true;
+  out.print('{');
+  jsonFieldRaw(out, first, "st", s.statusInt);
+  jsonFieldRaw(out, first, "pn", s.programIndex + 1);
+  jsonFieldString(out, first, "pt", s.programType);
+  if (s.hasAlcohol) {
+    jsonFieldFloat(out, first, "alc", s.alcohol, 2);
+    jsonFieldFloat(out, first, "salc", s.steamAlcohol, 2);
+  }
+  if (s.hasTimePrediction) {
+    jsonFieldBool(out, first, "rpa", s.rowPredictionAvailable);
+    jsonFieldBool(out, first, "ppa", s.processPredictionAvailable);
+    if (s.rowPredictionAvailable) {
+      jsonFieldRaw(out, first, "tr", s.timeRemaining);
+      jsonFieldRaw(out, first, "rtt", s.rowPredictedTotalTime);
+    }
+    if (s.processPredictionAvailable) {
+      jsonFieldRaw(out, first, "ptr", s.processRemainingTime);
+      jsonFieldRaw(out, first, "tt", s.totalTime);
+    }
+  }
+  jsonFieldRaw(out, first, "det", s.detectorStatus);
+  jsonFieldFloat(out, first, "dtr", s.detectorTrend, 3);
+  jsonFieldBool(out, first, "boil", s.boilingDetected);
+  jsonFieldRaw(out, first, "bev", s.boilingEvidence);
+  jsonFieldBool(out, first, "bps", s.boilingPrecisionSensorConfigured);
+  jsonFieldBool(out, first, "wauto", s.bkWaterAuto);
+  jsonFieldFloat(out, first, "wsp", s.bkSteamSetpoint, 1);
+#ifdef USE_WATER_PUMP
+  jsonFieldRaw(out, first, "wpwm", s.waterPumpSpeed);
+#endif
+#ifdef USE_WATERSENSOR
+  jsonFieldFloat(out, first, "wf", s.waterFlowRate, 2);
+  jsonFieldRaw(out, first, "wft", s.waterFlowTotalMl);
+#endif
+#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_1WIRE) || defined(USE_PRESSURE_MPX)
+  jsonFieldFloat(out, first, "prvl", s.pressure, 2);
+#endif
+  jsonFieldFloat(out, first, "isspd", s.i2cStepperSpeed, 3);
+  jsonFieldBool(out, first, "bpause", s.beerPaused);
+  jsonFieldRaw(out, first, "order", s.beerBrewOrder);
+  jsonFieldBool(out, first, "mixer", s.mixer);
+  jsonFieldFloat(out, first, "ph", s.cheesePh, 2);
+  jsonFieldBool(out, first, "phv", s.cheesePhValid);
+  out.print('}');
+}
+
+BLYNK_READ(V27) {
+  static bool inReadHandler = false;
+  if (inReadHandler) return;
+  inReadHandler = true;
+  {
+    AjaxTelemetrySnapshot snapshot;
+    // Курсор сообщений 0: лента событий здесь не нужна, но снимок общий с /ajax.
+    if (captureAjaxTelemetrySnapshot(0, snapshot) == RUNTIME_AJAX_SNAPSHOT_OK) {
+      String json;
+      json.reserve(512);
+      JsonStringPrint sink(json);
+      write_blynk_mode_json(sink, snapshot);
+      Blynk.virtualWrite(V27, json);
+    }
+  }
+  inReadHandler = false;
+}
+
+// ---------------------------------------------------------------------------
+// V28..V32: команды веб-форм режимов, которых не было в Blynk. Разбор значений и
+// проверки те же, что в web_command() (WebServer.ino); отказы уходят предупреждением
+// в V26 через SendMsg, т.к. HTTP-кода ответа у Blynk нет.
+// ---------------------------------------------------------------------------
+// queue_pending_flag() - static в WebServer.ino (идёт в склейке .ino ПОСЛЕ этого файла),
+// а автопрототип для функции с аргументом по умолчанию сборщик не вставляет. Объявляем
+// сами без умолчания и зовём с явным bypassBarrier=false.
+static bool queue_pending_flag(volatile bool& flag, bool bypassBarrier);
+
+static inline void report_blynk_refusal(uint8_t virtualPin, const char* reason) {
+  String message = "Blynk V";
+  message += virtualPin;
+  message += ": ";
+  message += reason;
+  SendMsg(message, WARNING_MSG);
+}
+
+// ШИМ насоса воды 0..1023 (= /command watert).
+BLYNK_WRITE(V28) {
+  if (mode_switch_in_progress()) return;
+  uint16_t waterPwm = 0;
+  NumericParseResult result = parse_control_water_pwm(param.asStr(), waterPwm);
+  if (!result.ok()) {
+    report_blynk_numeric_error(28, result);
+    return;
+  }
+  if (Samovar_Mode == SAMOVAR_BK_MODE && PowerOn && waterPwm < PWM_LOW_VALUE * 10) {
+    report_blynk_refusal(28, "PWM_TOO_LOW");
+    return;
+  }
+  if (!queue_pending_value(pending_water_temp_flag, pending_water_temp_value, waterPwm)) {
+    report_blynk_refusal(28, "BUSY");
+  }
+}
+
+// Скорость подачи НБК: л/ч, 0 = стоп, 8000/9000 = шаг вниз/вверх (= /command pnbk).
+BLYNK_WRITE(V29) {
+  if (mode_switch_in_progress()) return;
+  ControlNbkCommand nbkCommand = {};
+  NumericParseResult result = parse_control_nbk(
+      param.asStr(), SamSetup.StepperStepMlI2C, nbkCommand);
+  if (result.ok() && nbkCommand.kind != CONTROL_NBK_STOP && SamSetup.StepperStepMlI2C == 0) {
+    result = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+  }
+  if (!result.ok()) {
+    report_blynk_numeric_error(29, result);
+    return;
+  }
+  if (!PowerOn) {
+    report_blynk_refusal(29, "POWER_OFF");
+    return;
+  }
+  if (!queue_pending_nbk(nbkCommand)) {
+    report_blynk_refusal(29, "BUSY");
+  }
+}
+
+// Автомат воды БК, только включение значением 1 (= /command waterauto).
+BLYNK_WRITE(V30) {
+  if (mode_switch_in_progress()) return;
+  bool state = false;
+  NumericParseResult result = parse_exact_bool(param.asStr(), state);
+  if (result.ok() && !state) result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+  if (!result.ok()) {
+    report_blynk_numeric_error(30, result);
+    return;
+  }
+#ifndef USE_WATER_PUMP
+  report_blynk_refusal(30, "NO_PUMP");
+#else
+  if (Samovar_Mode != SAMOVAR_BK_MODE || !PowerOn || ProgramNum >= ProgramLen) {
+    report_blynk_refusal(30, "NOT_RUNNING");
+    return;
+  }
+  if (program[ProgramNum].Temp == 0) {
+    report_blynk_refusal(30, "NO_SETPOINT");
+    return;
+  }
+  if (!queue_pending_flag(pending_water_auto_flag, false)) {
+    report_blynk_refusal(30, "BUSY");
+  }
+#endif
+}
+
+// НБК: зафиксировать текущие параметры как оптимальные, значением 1 (= /command nbkopt).
+BLYNK_WRITE(V31) {
+  if (mode_switch_in_progress()) return;
+  bool state = false;
+  NumericParseResult result = parse_exact_bool(param.asStr(), state);
+  if (result.ok() && !state) result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+  if (!result.ok()) {
+    report_blynk_numeric_error(31, result);
+    return;
+  }
+  if (!PowerOn) {
+    report_blynk_refusal(31, "POWER_OFF");
+    return;
+  }
+  if (!queue_pending_flag(pending_nbkopt_flag, false)) {
+    report_blynk_refusal(31, "BUSY");
+  }
+}
+
+// Явное питание: 1 - включить (если выключено), 0 - всегда выключить (= /command power=0|1).
+// В отличие от тумблера V4 направление задано явно - безопасно при потере связи.
+BLYNK_WRITE(V32) {
+  if (mode_switch_in_progress()) return;
+  bool state = false;
+  NumericParseResult result = parse_exact_bool(param.asStr(), state);
+  if (!result.ok()) {
+    report_blynk_numeric_error(32, result);
+    return;
+  }
+  SamovarCommands command = SAMOVAR_NONE;
+  if (state) {
+    if (!PowerOn) command = mode_power_on_command(Samovar_Mode);
+  } else {
+    command = SAMOVAR_POWER_OFF;
+  }
+  if (command != SAMOVAR_NONE && !queue_samovar_command(command)) {
+    report_blynk_refusal(32, "BUSY");
+  }
+}
+
 #endif

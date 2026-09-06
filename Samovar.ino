@@ -1658,6 +1658,8 @@ void triggerGetClock(void *parameter) {
             blynkLockBusy = true;
           } else if (Blynk.connected()) {
             Blynk.virtualWrite(V26, qMsg);
+            // Push в мобильные приложения через сервер Blynk (виджет Notification в проекте).
+            Blynk.notify(qMsg);
           } else {
             blynkDisconnected = true;
           }
