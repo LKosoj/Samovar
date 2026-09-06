@@ -589,6 +589,157 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(logged[-1][1], "warning")
         self.assertEqual(window.status_var.get(), "Устройства в сети не найдены")
 
+    def test_broken_esptool_package_is_removed_and_action_retried_once(self) -> None:
+        # Лог форумчанина (Windows): зависимости esptool не доставлены в _contrib -> ошибка импорта
+        log = [
+            'Building .pio\\build\\Samovar\\bootloader.bin\n',
+            'Traceback (most recent call last):\n',
+            '  File "C:\\Users\\Admin\\.platformio\\packages\\tool-esptoolpy\\esptool.py", line 41, in <module>\n',
+            '    import esptool\n',
+            '  File "C:\\Users\\Admin\\.platformio\\packages\\tool-esptoolpy\\esptool\\bin_image.py", line 16, in <module>\n',
+            '    from intelhex import HexRecordError, IntelHex\n',
+            "ImportError: cannot import name 'HexRecordError' from 'intelhex' (unknown location)\n",
+            '*** [.pio\\build\\Samovar\\bootloader.bin] Error 1\n',
+        ]
+        self.assertEqual(configurator.broken_esptool_package(log), "C:\\Users\\Admin\\.platformio\\packages\\tool-esptoolpy")
+        self.assertEqual(
+            configurator.broken_esptool_package([
+                '  File "/home/u/.platformio/packages/tool-esptoolpy@2.40900.250804/esptool/bin_image.py", line 16\n',
+                "ModuleNotFoundError: No module named 'intelhex'\n",
+            ]),
+            "/home/u/.platformio/packages/tool-esptoolpy@2.40900.250804",
+        )
+        # ошибка импорта без трассировки esptool и трассировка esptool без ошибки импорта - не наш случай
+        self.assertIsNone(configurator.broken_esptool_package(["ImportError: x\n"]))
+        self.assertIsNone(configurator.broken_esptool_package([log[2], "OSError: boom\n"]))
+
+        with tempfile.TemporaryDirectory() as root:
+            package = Path(root) / "tool-esptoolpy"
+            package.mkdir()
+            (package / "esptool.py").write_text("", encoding="utf-8")
+            (package / "_contrib" / "intelhex").mkdir(parents=True)
+            configurator.remove_broken_esptool(str(package))
+            self.assertFalse(package.exists())
+            # чужую папку удалять нельзя
+            other = Path(root) / "framework-arduinoespressif32"
+            other.mkdir()
+            (other / "esptool.py").write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(configurator.ConfigError, "не похожа на пакет esptool"):
+                configurator.remove_broken_esptool(str(other))
+            self.assertTrue(other.exists())
+            empty = Path(root) / "tool-esptoolpy@1"
+            empty.mkdir()
+            with self.assertRaises(configurator.ConfigError):
+                configurator.remove_broken_esptool(str(empty))
+
+        class Variable:
+            def __init__(self):
+                self.value = ""
+
+            def set(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        with tempfile.TemporaryDirectory() as root:
+            package = Path(root) / "tool-esptoolpy"
+            package.mkdir()
+            (package / "esptool.py").write_text("", encoding="utf-8")
+            traceback_line = '  File "{}", line 41, in <module>\n'.format(package / "esptool.py")
+            logged, errors, started = [], [], []
+            window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+            window.stop_requested = False
+            window.active_action = "upload"
+            window.active_port_network = False
+            window.action_started = 0.0
+            window.process = object()
+            window.busy = True
+            window.esptool_repaired = None
+            window.partial_line = ""
+            window.recent_lines = [log[6]]
+            window.action_lines = [traceback_line, log[6]]
+            window.status_var = Variable()
+            window._set_busy = lambda busy, action: None
+            window._append_log = lambda text, tag=None: logged.append((text, tag))
+            window.start_action = lambda action: started.append(action)
+            window.messagebox = type("Messages", (), {"showerror": lambda _, title, message: errors.append(message)})()
+
+            window._finish_action(1)
+            self.assertFalse(package.exists())
+            self.assertEqual(started, ["upload"])
+            self.assertEqual(errors, [])  # окно с ошибкой не показываем: операция повторяется сама
+            self.assertEqual(logged[-1][1], "warning")
+            self.assertIn("установит пакет заново", logged[-1][0])
+            self.assertEqual(window.esptool_repaired, str(package))
+
+            # та же папка сломана снова после переустановки: второй раз не удаляем и не зацикливаемся
+            package.mkdir()
+            (package / "esptool.py").write_text("", encoding="utf-8")
+            window.busy, window.process, window.active_action = True, object(), "upload"
+            window._finish_action(1)
+            self.assertTrue(package.exists())
+            self.assertEqual(started, ["upload"])
+            self.assertEqual(len(errors), 1)
+
+            # монитор порта не повторяем никогда
+            window.busy, window.process, window.active_action = True, object(), "monitor"
+            window.esptool_repaired = None
+            window._finish_action(1)
+            self.assertTrue(package.exists())
+            self.assertEqual(started, ["upload"])
+
+        note = inspect.getsource(configurator.ConfiguratorWindow._note_output_line)
+        self.assertIn("self.action_lines.append(line)", note)
+
+    def test_process_output_is_shown_in_chunks_before_newline(self) -> None:
+        # PlatformIO через канал печатает «Downloading 0% 10% …» без перевода строки: построчное
+        # чтение молчало до конца загрузки тулчейна, и батник выглядел зависшим.
+        import io
+        import queue as queue_module
+
+        class Process:
+            def __init__(self, payload: bytes):
+                self.stdout = io.TextIOWrapper(io.BufferedReader(io.BytesIO(payload)), encoding="utf-8")
+
+            def wait(self):
+                return 0
+
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.output_queue = queue_module.Queue()
+        window._read_process_output(Process(
+            "Tool Manager: Installing espressif/toolchain-xtensa-esp32 @ 8.4.0\nDownloading 0% 10%".encode("utf-8")
+        ))
+        items = []
+        while True:
+            item = window.output_queue.get_nowait()
+            items.append(item)
+            if item[0] == "done":
+                break
+        self.assertEqual(items[-1], ("done", 0))
+        self.assertEqual("".join(value for kind, value in items[:-1]), "Tool Manager: Installing espressif/toolchain-xtensa-esp32 @ 8.4.0\nDownloading 0% 10%")
+        self.assertTrue(all(kind == "chunk" for kind, _ in items[:-1]))
+
+        logged = []
+        window.recent_lines, window.action_lines, window.partial_line = [], [], ""
+        window.install_hint_shown = False
+        window._append_log = lambda text, tag=None: logged.append((text, tag))
+        window._note_output("Tool Manager: Installing espressif/toolchain-xtensa-esp32 @ 8.4.0\nDownloading 0% 10%")
+        self.assertEqual(logged[0][0], "Tool Manager: Installing espressif/toolchain-xtensa-esp32 @ 8.4.0\n")
+        self.assertEqual(logged[1], (configurator.PACKAGE_INSTALL_HINT, "warning"))
+        self.assertEqual(logged[2][0], "Downloading 0% 10%")  # видно сразу, без ожидания перевода строки
+        self.assertEqual(window.recent_lines, ["Tool Manager: Installing espressif/toolchain-xtensa-esp32 @ 8.4.0\n"])
+        self.assertEqual(window.partial_line, "Downloading 0% 10%")
+        window._note_output(" 20%\nTool Manager: Installing platformio/tool-scons @ 4.4\n")
+        self.assertEqual(window.recent_lines[-2:], ["Downloading 0% 10% 20%\n", "Tool Manager: Installing platformio/tool-scons @ 4.4\n"])
+        self.assertEqual(window.partial_line, "")
+        self.assertEqual(sum(1 for text, _ in logged if text == configurator.PACKAGE_INSTALL_HINT), 1)  # подсказка один раз
+        # незавершённая строка при завершении процесса тоже попадает в журнал ошибок
+        finish = inspect.getsource(configurator.ConfiguratorWindow._finish_action)
+        self.assertIn("if self.partial_line:\n            self._note_output_line(self.partial_line)", finish)
+        drain = inspect.getsource(configurator.ConfiguratorWindow._drain_output)
+        self.assertIn('if kind == "chunk":\n                    self._note_output(value)', drain)
+
     def test_upload_to_network_port_warns_when_firmware_option_disabled(self) -> None:
         class Variable:
             def __init__(self, value):
@@ -727,6 +878,9 @@ class ConfiguratorModelTests(unittest.TestCase):
         window.process = object()
         window.busy = True
         window.recent_lines = ["[ERROR]: No response from the ESP\n", "*** [upload] Error 1\n"]
+        window.action_lines = list(window.recent_lines)
+        window.partial_line = ""
+        window.esptool_repaired = None
         window.status_var = Variable()
         window._set_busy = lambda busy, action: None
         window._append_log = lambda text, tag=None: logged.append((text, tag))
@@ -1049,8 +1203,16 @@ class ConfiguratorModelTests(unittest.TestCase):
             configurator.web_editor_url("samovar.local", "/файл.lua"),
             "http://samovar.local/edit?file=/%D1%84%D0%B0%D0%B9%D0%BB.lua",
         )
+        # /edit прошивки не распаковывает gzip: для сжатых файлов кнопка гаснет
+        self.assertTrue(configurator.web_editor_supports("/script.lua"))
+        self.assertFalse(configurator.web_editor_supports("/index.htm.gz"))
+        self.assertFalse(configurator.web_editor_supports("/INDEX.HTM.GZ"))
+        self.assertFalse(configurator.web_editor_supports(None))
         editor = inspect.getsource(configurator.FileEditorWindow.__init__)
         self.assertIn('text="Веб-редактор (/edit)"', editor)
+        self.assertIn('self.web_button = ttk.Button(', editor)
+        load_text = inspect.getsource(configurator.FileEditorWindow._load_text)
+        self.assertIn('self.web_button.configure(state="normal" if web_editor_supports(path) else "disabled")', load_text)
         self.assertIn("self.gutter = tk.Text(", editor)
         self.assertIn('self.editor.bind("<KeyRelease>", self._edited)', editor)
 

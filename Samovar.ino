@@ -326,6 +326,14 @@ static OperationError queue_profile_operation(
     OperationId& operationId);
 static OperationError commit_profile_operation();
 static void process_profile_operation();
+// Явные объявления: PlatformIO генерирует прототипы для всех функций .ino без учёта #ifdef,
+// а при выключенной опции такой прототип остаётся без определения (-Wunused-function).
+#ifdef USE_WATERSENSOR
+static void tick_update_water_flow(uint16_t waterPulses, unsigned long &oldTime);
+#endif
+#ifdef USE_WATER_PUMP
+static void tick_apply_pending_water_auto();
+#endif
 
 static void clear_ds_sensor_runtime(DSSensor& sensor) {
   sensor.avgTemp = 0;
@@ -1697,7 +1705,9 @@ void triggerSysTicker(void *parameter) {
   uint8_t CurMinST = 0;
   uint8_t OldMinST = 0;
   uint8_t tcntST = 0;
+#ifdef USE_WATERSENSOR
   unsigned long oldTime = 0;  // Предыдущее время в милисекундах
+#endif
 #if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
   bool pressure_alarm_sent = false;
 #endif

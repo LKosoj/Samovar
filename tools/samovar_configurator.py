@@ -7,6 +7,7 @@ import gzip
 import ipaddress
 import json
 import os
+import codecs
 import queue
 import re
 import shutil
@@ -1125,6 +1126,11 @@ def web_editor_url(address: str, path: Optional[str] = None) -> str:
     return url
 
 
+def web_editor_supports(path: Optional[str]) -> bool:
+    """Веб-редактор прошивки (/edit) показывает файл как есть и не распаковывает gzip."""
+    return bool(path) and not path.lower().endswith(".gz")
+
+
 def is_text_remote_file(path: str) -> bool:
     logical_path = path[:-3] if path.lower().endswith(".gz") else path
     return Path(logical_path).suffix.lower() in (".htm", ".html", ".js", ".css", ".lua", ".txt", ".json", ".csv")
@@ -1195,6 +1201,38 @@ OTA_FAILURE_HINT = (
     "а брандмауэр разрешал python.exe входящие подключения: устройство само подключается "
     "к компьютеру для передачи образа.\n"
 )
+
+PACKAGE_INSTALL_HINT = (
+    "Скачивание и распаковка пакета: проценты появятся по мере загрузки. Тулчейн для ESP32 "
+    "весит сотни мегабайт, при первом запуске это занимает до 10–15 минут (скорость сети и "
+    "антивирус). Окно не зависло.\n"
+)
+
+ESPTOOL_TRACEBACK_RE = re.compile(r'File "(?P<dir>[^"]*[\\/]tool-esptoolpy[^"\\/]*)[\\/]esptool(?:\.py|[\\/])')
+IMPORT_ERROR_RE = re.compile(r"^(ImportError|ModuleNotFoundError): ")
+
+
+def broken_esptool_package(lines: List[str]) -> Optional[str]:
+    """Папка пакета tool-esptoolpy, если в выводе есть его трассировка с ошибкой импорта.
+
+    Зависимости esptool лежат в подпапке _contrib пакета; если их не доставил pip или вычистил
+    антивирус, esptool.py падает на импорте. Пакет проще удалить: PlatformIO поставит его заново.
+    """
+    package = None
+    for line in lines:
+        match = ESPTOOL_TRACEBACK_RE.search(line)
+        if match:
+            package = match.group("dir")
+        elif package and IMPORT_ERROR_RE.match(line.strip()):
+            return package
+    return None
+
+
+def remove_broken_esptool(package_dir: str) -> None:
+    path = Path(package_dir)
+    if not path.name.startswith("tool-esptoolpy") or not (path / "esptool.py").is_file():
+        raise ConfigError("папка {} не похожа на пакет esptool".format(path))
+    shutil.rmtree(path)
 
 
 def _required_address(address: str) -> str:
@@ -1536,9 +1574,10 @@ class FileEditorWindow:
             ttk.Button(toolbar, text=text, command=command).pack(side="left", padx=(0, 8))
         self.save_button = ttk.Button(toolbar, text="Сохранить (Ctrl+S)", command=self.save)
         self.save_button.pack(side="right")
-        ttk.Button(
-            toolbar, text="Веб-редактор (/edit)", command=self.open_in_web_editor
-        ).pack(side="right", padx=(0, 8))
+        self.web_button = ttk.Button(
+            toolbar, text="Веб-редактор (/edit)", command=self.open_in_web_editor, state="disabled"
+        )
+        self.web_button.pack(side="right", padx=(0, 8))
 
         content = ttk.Panedwindow(self.window, orient="horizontal")
         content.pack(fill="both", expand=True, padx=8, pady=(0, 4))
@@ -1720,6 +1759,7 @@ class FileEditorWindow:
 
     def _load_text(self, path: Optional[str], text: str) -> None:
         self.current_path = path
+        self.web_button.configure(state="normal" if web_editor_supports(path) else "disabled")
         self.editor.delete("1.0", "end")
         self.editor.insert("1.0", text)
         self.editor.edit_reset()
@@ -1874,6 +1914,10 @@ class ConfiguratorWindow:
         self.edit_menus = []
         self.saved_state = None
         self.recent_lines = []
+        self.action_lines = []
+        self.partial_line = ""
+        self.install_hint_shown = False
+        self.esptool_repaired = None
         self.action_started = 0.0
         self.tick_id = None
         self.prefs = load_user_prefs()
@@ -2546,6 +2590,9 @@ class ConfiguratorWindow:
         self.busy = True
         self.active_action = action
         self.recent_lines = []
+        self.action_lines = []
+        self.partial_line = ""
+        self.install_hint_shown = False
         self.action_started = time.monotonic()
         self._set_busy(True, action)
         self._append_log("\n> {}\n".format(subprocess.list2cmdline(command)), "command")
@@ -2553,10 +2600,38 @@ class ConfiguratorWindow:
         self._tick_status()
 
     def _read_process_output(self, process) -> None:
+        """Читает вывод порциями, а не строками: PlatformIO печатает проценты загрузки
+        («Downloading 0% 10% …») без перевода строки, и построчное чтение молчало бы до конца."""
         assert process.stdout is not None
-        for line in process.stdout:
-            self.output_queue.put(("line", line))
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        raw = process.stdout.buffer
+        while True:
+            chunk = raw.read1(4096)
+            if not chunk:
+                break
+            text = decoder.decode(chunk)
+            if text:
+                self.output_queue.put(("chunk", text))
+        text = decoder.decode(b"", final=True)
+        if text:
+            self.output_queue.put(("chunk", text))
         self.output_queue.put(("done", process.wait()))
+
+    def _note_output(self, text: str) -> None:
+        """Показывает порцию вывода сразу, а строки для журнала ошибок собирает по переводу строки."""
+        for piece in text.splitlines(keepends=True):
+            self._append_log(piece)
+            self.partial_line += piece
+            if piece.endswith(("\n", "\r")):
+                self._note_output_line(self.partial_line)
+                self.partial_line = ""
+
+    def _note_output_line(self, line: str) -> None:
+        self.recent_lines = (self.recent_lines + [line])[-12:]
+        self.action_lines.append(line)
+        if "Manager: Installing" in line and not self.install_hint_shown:
+            self.install_hint_shown = True
+            self._append_log(PACKAGE_INSTALL_HINT, "warning")
 
     def _tick_status(self) -> None:
         if self.tick_id is not None:
@@ -2574,9 +2649,8 @@ class ConfiguratorWindow:
         try:
             while True:
                 kind, value = self.output_queue.get_nowait()
-                if kind == "line":
-                    self.recent_lines = (self.recent_lines + [value])[-12:]
-                    self._append_log(value)
+                if kind == "chunk":
+                    self._note_output(value)
                 elif kind == "network":
                     self._network_search_done(value)
                 elif kind == "network_error":
@@ -2588,6 +2662,9 @@ class ConfiguratorWindow:
         self.root.after(100, self._drain_output)
 
     def _finish_action(self, code: int) -> None:
+        if self.partial_line:
+            self._note_output_line(self.partial_line)
+            self.partial_line = ""
         stopped = self.stop_requested and code != 0
         completed_action = self.active_action
         label = ACTION_LABELS.get(completed_action, completed_action)
@@ -2607,6 +2684,8 @@ class ConfiguratorWindow:
             self.status_var.set("{}: готово".format(label))
         else:
             self._append_log("{}: завершилось с ошибкой {}.\n".format(label, code), "error")
+            if self._repair_esptool_and_retry(completed_action, label):
+                return
             if self.active_port_network and completed_action in ("upload", "uploadfs"):
                 self._append_log(OTA_FAILURE_HINT, "warning")
             self.status_var.set("{}: ошибка".format(label))
@@ -2619,6 +2698,29 @@ class ConfiguratorWindow:
             )
         self.active_action = ""
         self.active_port_network = False
+
+    def _repair_esptool_and_retry(self, action: str, label: str) -> bool:
+        """Повреждённый пакет esptool удаляется, и операция повторяется один раз."""
+        package = broken_esptool_package(self.action_lines)
+        if not package or action not in ("upload", "uploadfs", "erase") or package == self.esptool_repaired:
+            return False
+        try:
+            remove_broken_esptool(package)
+        except (OSError, ConfigError) as error:
+            self._append_log(
+                "В пакете esptool не хватает библиотек, но удалить его не удалось: {}. "
+                "Удалите папку {} вручную и повторите операцию.\n".format(error, package), "error",
+            )
+            return False
+        self.esptool_repaired = package
+        self._append_log(
+            "В пакете esptool не хватает библиотек (ошибка импорта). Папка {} удалена, "
+            "PlatformIO установит пакет заново. Повторяю: {}.\n".format(package, label), "warning",
+        )
+        self.active_action = ""
+        self.active_port_network = False
+        self.start_action(action)
+        return True
 
     def _set_busy(self, busy: bool, action: str) -> None:
         state = "disabled" if busy else "normal"
