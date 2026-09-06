@@ -31,8 +31,10 @@ PARTITION_TOOL = (
     "v1.4.4/esp32partitiontool-platformio.zip"
 )
 BUILD_PATH_MAPS = (
-    "-ffile-prefix-map=${platformio.packages_dir}=.platformio/packages",
-    "-fdebug-prefix-map=${platformio.src_dir}=.",
+    # В кавычках: без них SCons режет подставленный путь Windows по обратным
+    # косым чертам и пробелам (shlex.split), и компилятор отвергает флаг.
+    '"-ffile-prefix-map=${platformio.packages_dir}=.platformio/packages"',
+    '"-fdebug-prefix-map=${platformio.src_dir}=."',
 )
 ENVIRONMENTS = (
     "Samovar",
@@ -93,7 +95,7 @@ class BuildConfigurationContract(unittest.TestCase):
         active_base_section = "\n".join(
             line for line in base_section.splitlines() if not line.lstrip().startswith((";", "#"))
         )
-        path_maps = re.findall(r"(?<!\S)-f(?:file|debug|macro)-prefix-map=\S+", active_base_section)
+        path_maps = re.findall(r"(?<!\S)\"?-f(?:file|debug|macro)-prefix-map=\S+", active_base_section)
         if path_maps != list(BUILD_PATH_MAPS):
             errors.append(
                 "[env:Samovar] path maps must be exactly the ordered file/debug pair; "
