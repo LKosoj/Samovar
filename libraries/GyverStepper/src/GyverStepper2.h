@@ -229,6 +229,8 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
     // =========================== POSITION MODE ===========================
     // установить цель и опционально режим
     void setTarget(int32_t ntar, GS_posType type = ABSOLUTE) {
+        int32_t requestedTar = (type == RELATIVE) ? ntar + pos : ntar;
+        tar = requestedTar;
 #ifndef GS_NO_ACCEL
         nextPlanReady = false;
 #endif
@@ -246,8 +248,6 @@ class GStepper2 : public Stepper<_DRV, _TYPE> {
 #endif
             changeSett = 0;
         }
-
-        int32_t requestedTar = (type == RELATIVE) ? ntar + pos : ntar;
 
         if (requestedTar == pos) {
             brake();
