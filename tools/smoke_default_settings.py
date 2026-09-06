@@ -59,6 +59,7 @@ current_defaults = {
     "CheeseDoserSpeed": "200",
     "CheeseDoserSteps": "160",
     "NbkTn": "98.5",
+    "NbkSteamT": "81.00",
     "NbkUseStreamServo": False,
     "MainsVoltage": "230.0",
 }
