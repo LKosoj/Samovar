@@ -698,9 +698,18 @@ class ConfiguratorModelTests(unittest.TestCase):
         import io
         import queue as queue_module
 
+        class Raw:
+            """Отдаёт заранее нарезанные порции, как труба процесса."""
+
+            def __init__(self, pieces):
+                self.pieces = list(pieces)
+
+            def read1(self, size):
+                return self.pieces.pop(0) if self.pieces else b""
+
         class Process:
-            def __init__(self, payload: bytes):
-                self.stdout = io.TextIOWrapper(io.BufferedReader(io.BytesIO(payload)), encoding="utf-8")
+            def __init__(self, *pieces: bytes):
+                self.stdout = types.SimpleNamespace(buffer=Raw(pieces))
 
             def wait(self):
                 return 0
@@ -720,6 +729,13 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual("".join(value for kind, value in items[:-1]), "Tool Manager: Installing espressif/toolchain-xtensa-esp32 @ 8.4.0\nDownloading 0% 10%")
         self.assertTrue(all(kind == "chunk" for kind, _ in items[:-1]))
 
+        # прошивка шлёт \r\n; \r не должен доходить до окна (Tk рисует его как лишний перенос),
+        # даже если \r и \n пришли разными порциями; многобайтная кириллица на стыке тоже цела
+        window.output_queue = queue_module.Queue()
+        window._read_process_output(Process(b"Samovar started\r\nInit \xd0", b"\x9a\xd0\x92\xd0\x98\xd0\x9a\r", b"\nready\r\n"))
+        text = "".join(value for kind, value in iter(window.output_queue.get_nowait, ("done", 0)))
+        self.assertEqual(text, "Samovar started\nInit КВИК\nready\n")
+
         logged = []
         window.recent_lines, window.action_lines, window.partial_line = [], [], ""
         window.install_hint_shown = False
@@ -734,6 +750,15 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertEqual(window.recent_lines[-2:], ["Downloading 0% 10% 20%\n", "Tool Manager: Installing platformio/tool-scons @ 4.4\n"])
         self.assertEqual(window.partial_line, "")
         self.assertEqual(sum(1 for text, _ in logged if text == configurator.PACKAGE_INSTALL_HINT), 1)  # подсказка один раз
+        # ответ на SAMOVAR:IP? прошивка печатает двумя вызовами (print + println): IP ищется
+        # в собранной строке, а не в отдельных порциях
+        found = []
+        window._device_ip_found = lambda address: found.append(address)
+        window._note_output("SAMOVAR:IP=")
+        window._note_output("192.168.1.37\n")
+        self.assertEqual(found, ["192.168.1.37"])
+        append_log = inspect.getsource(configurator.ConfiguratorWindow._append_log)
+        self.assertNotIn("extract_samovar_ip", append_log)
         # незавершённая строка при завершении процесса тоже попадает в журнал ошибок
         finish = inspect.getsource(configurator.ConfiguratorWindow._finish_action)
         self.assertIn("if self.partial_line:\n            self._note_output_line(self.partial_line)", finish)

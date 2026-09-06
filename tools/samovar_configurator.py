@@ -8,6 +8,7 @@ import ipaddress
 import json
 import os
 import codecs
+import io
 import queue
 import re
 import shutil
@@ -2603,7 +2604,9 @@ class ConfiguratorWindow:
         """Читает вывод порциями, а не строками: PlatformIO печатает проценты загрузки
         («Downloading 0% 10% …») без перевода строки, и построчное чтение молчало бы до конца."""
         assert process.stdout is not None
-        decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        # IncrementalNewlineDecoder превращает \r\n и одиночный \r в \n даже на стыке порций:
+        # иначе \r из вывода прошивки доходит до окна журнала и Tk рисует лишний перенос.
+        decoder = io.IncrementalNewlineDecoder(codecs.getincrementaldecoder("utf-8")("replace"), translate=True)
         raw = process.stdout.buffer
         while True:
             chunk = raw.read1(4096)
@@ -2622,13 +2625,18 @@ class ConfiguratorWindow:
         for piece in text.splitlines(keepends=True):
             self._append_log(piece)
             self.partial_line += piece
-            if piece.endswith(("\n", "\r")):
+            if piece.endswith("\n"):
                 self._note_output_line(self.partial_line)
                 self.partial_line = ""
 
     def _note_output_line(self, line: str) -> None:
+        """Разбор только по целой строке: ответ SAMOVAR:IP= прошивка печатает двумя вызовами,
+        и порции могут разрезать его посередине."""
         self.recent_lines = (self.recent_lines + [line])[-12:]
         self.action_lines.append(line)
+        address = extract_samovar_ip(line)
+        if address:
+            self._device_ip_found(address)
         if "Manager: Installing" in line and not self.install_hint_shown:
             self.install_hint_shown = True
             self._append_log(PACKAGE_INSTALL_HINT, "warning")
@@ -2744,9 +2752,6 @@ class ConfiguratorWindow:
             )
 
     def _append_log(self, text: str, tag: Optional[str] = None) -> None:
-        address = extract_samovar_ip(text)
-        if address:
-            self._device_ip_found(address)
         if self.active_action == "monitor" and self.monitor_log is not None:
             target, autoscroll = self.monitor_log, self.monitor_autoscroll
         else:
