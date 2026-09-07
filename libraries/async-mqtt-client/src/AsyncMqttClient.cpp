@@ -200,7 +200,7 @@ void AsyncMqttClient::_onConnect() {
 
     if (!sslFoundFingerprint) {
       _disconnectReason = AsyncMqttClientDisconnectReason::TLS_BAD_FINGERPRINT;
-      _client.close(true);
+  _client.close();
       return;
     }
   }

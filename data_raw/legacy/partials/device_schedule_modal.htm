@@ -1,0 +1,17 @@
+  <div id="popup" class="popup">
+    <div class="popup__content">
+      <h2 class="popup__title">Редактирование режима устройства</h2>
+      <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 20px !important;">
+        <div id="popup_mesh" class="modalline">
+          <label for="m_type">Устройство<select id="m_type"><option value="0">Выключено</option><option value="1">Мешалка</option><option value="2">Насос</option><option value="3">Мешалка и насос</option></select></label>
+          <label for="m_direction">Направление<select id="m_direction"><option value="-1">Реверс после паузы</option><option value="0">Прямое</option><option value="1">Обратное</option></select></label>
+          <label for="m_time" class="tooltip">Работа, сек<span class="tooltiptext">Максимальное время — 65535 сек (18 ч 12 мин)</span><input type="number" id="m_time" min="0" max="65535" step="1" onchange="SamovarApp.normalizeDeviceScheduleSeconds(this)" onblur="SamovarApp.normalizeDeviceScheduleSeconds(this)"></label>
+          <label for="m_pause" class="tooltip">Пауза, сек<span class="tooltiptext">Максимальное время — 65535 сек (18 ч 12 мин)</span><input type="number" id="m_pause" min="0" max="65535" step="1" onchange="SamovarApp.normalizeDeviceScheduleSeconds(this)" onblur="SamovarApp.normalizeDeviceScheduleSeconds(this)"></label>
+        </div>
+      </div>
+      <div class="btn-container">
+        <button type="button" id="no-btn" class="popup__button" onclick="SamovarApp.closeDeviceScheduleModal()">Отмена</button>
+        <button type="button" id="yes-btn" class="popup__button" onclick="SamovarApp.saveDeviceScheduleModal()">Ок</button>
+      </div>
+    </div>
+  </div>

@@ -1,0 +1,31 @@
+    function setPowerUnit () {
+      let setPowerLabel;
+      let setPowerButton;
+      let powerCurrent;
+      let powerTarget;
+      let powerUnit;
+      if (pwr_unit === 'P') {
+        setPowerLabel = 'Мощность регулятора: ';
+        setPowerButton = 'Установить мощность';
+        powerCurrent = 'Текущая мощн.: ';
+        powerTarget = 'Целевая мощн.: ';
+        powerUnit = ' Вт';
+        document.getElementById('current_power_line').style = 'visibility: hidden';
+      } else if (pwr_unit === 'V') {
+        setPowerLabel = 'Напряжение регулятора: ';
+        setPowerButton = 'Установить напряжение';
+        powerCurrent = 'Текущее напр.: ';
+        powerTarget = 'Целевое напр.: ';
+        powerUnit = ' V';
+        document.getElementById('current_power_line').style = 'visibility: visible';
+      } else {
+        document.getElementById('PWR').style =
+          'visibility: hidden;position: fixed;';
+      }
+      document.getElementById('set_power_label').innerHTML = setPowerLabel;
+      document.getElementById('SetVoltage').value = setPowerButton;
+      document.getElementById('power_current').innerHTML = powerCurrent;
+      document.getElementById('power_target').innerHTML = powerTarget;
+      document.getElementById('power_unit_current').innerHTML = powerUnit;
+      document.getElementById('power_unit_target').innerHTML = powerUnit;
+    }

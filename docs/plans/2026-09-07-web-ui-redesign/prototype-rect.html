@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Самовар · Ректификация (прототип)</title>
+<style>
+/* ==================== Токены ==================== */
+:root {
+  --bg: #f3efe9;          /* тёплый светлый фон, «бумага» */
+  --surface: #fbf9f6;
+  --surface-2: #ece6dd;
+  --line: #d9d1c5;
+  --text: #1d1a17;
+  --muted: #6f665c;
+  --copper: #b8641f;      /* единственный акцент — медь, как в иконке приложений */
+  --copper-soft: #e08a3c;
+  --danger: #b3261e;
+  --ok: #2e7d4f;
+  --warn: #b8860b;
+  --steam: #c0392b; --pipe: #2b6cb0; --water: #178f8f; --tank: #7b3fa0; --acp: #c9641a;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px -12px rgba(60,40,20,.25);
+}
+:root[data-theme="dark"], :root:not([data-theme="light"]) { color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --dark: 1; } }
+:root[data-theme="dark"], :root:not([data-theme="light"]):has(body[data-auto-dark]) {}
+:root[data-theme="dark"] {
+  --bg: #16130f; --surface: #1f1b16; --surface-2: #2a241d; --line: #3a322a;
+  --text: #f1ebe3; --muted: #a2978a; --copper: #e08a3c; --copper-soft: #f4b36a;
+  --danger: #ff6b5c; --ok: #6fcf97; --warn: #f2cc60;
+  --steam: #ff7a6b; --pipe: #6fb1ff; --water: #4fd1c5; --tank: #c58cff; --acp: #ffa860;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.8);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.num { font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -.01em; }
+
+/* ==================== Шапка ==================== */
+.top {
+  display: flex; align-items: center; gap: 18px; padding: 10px 20px;
+  border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 10;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+.brand svg { width: 26px; height: 26px; }
+.nav { display: flex; gap: 2px; margin-left: 8px; }
+.nav a { padding: 6px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 500; }
+.nav a[aria-current] { background: var(--surface-2); color: var(--text); }
+.nav a:hover { color: var(--text); }
+.nav .legacy-link { font-size: 12px; opacity: .7; margin-left: 6px; }
+.spacer { flex: 1; }
+.status-chip { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.icon-btn { width: 34px; height: 34px; border: 1px solid var(--line); background: transparent; border-radius: 8px; color: var(--text); cursor: pointer; }
+.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--copper); color: #fff; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; }
+
+/* ==================== Полоса этапа ==================== */
+.stage {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 16px 24px; align-items: center;
+  padding: 14px 20px; border-bottom: 1px solid var(--line);
+}
+.stage h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.stage h1 small { font-weight: 500; color: var(--muted); font-size: 14px; margin-left: 10px; }
+.progress { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.progress > i { display: block; height: 100%; width: 42%; background: linear-gradient(90deg, var(--copper), var(--copper-soft)); border-radius: 3px; }
+.stage .meta { display: flex; gap: 22px; color: var(--muted); font-size: 13px; }
+.stage .meta b { color: var(--text); font-weight: 600; }
+
+/* ==================== Сетка ==================== */
+.grid { display: grid; grid-template-columns: 300px minmax(380px, 1fr) 340px; gap: 20px; padding: 20px; max-width: 1400px; margin: 0 auto; }
+.col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+section h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* Действия */
+.actions { display: grid; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 8px; padding: 10px 14px; font: inherit; font-weight: 600; cursor: pointer; text-align: center; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--copper); border-color: var(--copper); color: #fff; }
+.btn.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.btn.danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* Датчики */
+.sensors { display: flex; flex-direction: column; }
+.sensor { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.sensor:last-child { border-bottom: 0; }
+.sensor i { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+.sensor .name { color: var(--muted); }
+.sensor .name small { display: block; font-size: 11px; color: var(--muted); opacity: .8; }
+.sensor .val { font-size: 20px; }
+.sensor .val u { font-size: 12px; text-decoration: none; color: var(--muted); margin-left: 2px; }
+.sensor.hero .val { font-size: 26px; }
+
+/* Мнемосхема */
+.scheme { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; }
+.scheme { position: sticky; top: 76px; }
+.scheme svg { width: 100%; height: auto; max-height: calc(100vh - 150px); display: block; margin: 0 auto; }
+.tag { font: 600 13px/1 -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--text); }
+.tag-bg { fill: var(--surface); stroke: var(--line); }
+.tag-lbl { font: 500 9.5px/1 -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.metal { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.5; }
+.pipe { fill: none; stroke: var(--line); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.pipe-in { fill: none; stroke: var(--water); stroke-width: 3; stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -14; } }
+.liquid { fill: url(#liq); }
+.heater { stroke: var(--danger); stroke-width: 3; fill: none; filter: drop-shadow(0 0 4px var(--danger)); animation: glow 1.6s ease-in-out infinite alternate; }
+@keyframes glow { from { opacity: .6; } to { opacity: 1; } }
+.bubble { fill: #fff; opacity: .7; animation: rise 2.2s linear infinite; }
+.bubble:nth-child(2) { animation-delay: .7s; } .bubble:nth-child(3) { animation-delay: 1.4s; }
+@keyframes rise { from { transform: translateY(0); opacity: .7 } to { transform: translateY(-46px); opacity: 0 } }
+.drop { fill: var(--copper-soft); animation: drip 1.1s ease-in infinite; }
+@keyframes drip { from { transform: translateY(0); opacity: 1 } to { transform: translateY(26px); opacity: 0 } }
+.jar { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.jar.active { stroke: var(--copper); stroke-width: 2.5; }
+.jar-fill { fill: color-mix(in srgb, var(--copper-soft) 55%, transparent); }
+.rotor { transform-origin: 96px 400px; animation: spin 2.4s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.level-ok { fill: var(--ok); }
+
+/* Программа */
+.steps { display: flex; flex-direction: column; gap: 4px; }
+.step { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; color: var(--muted); }
+.step .n { font-size: 12px; font-weight: 600; opacity: .7; }
+.step .t { font-weight: 600; color: var(--text); }
+.step .d { font-size: 12px; }
+.step.done { opacity: .55; } .step.done .t { text-decoration: line-through; text-decoration-color: var(--line); }
+.step.now { background: color-mix(in srgb, var(--copper) 12%, transparent); outline: 1px solid color-mix(in srgb, var(--copper) 40%, transparent); color: var(--text); }
+.step.now .n { color: var(--copper); opacity: 1; }
+.step .bar { grid-column: 2 / -1; height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.step .bar i { display: block; height: 100%; width: 42%; background: var(--copper); }
+
+/* Текущая строка программы */
+.line-card { border-left: 3px solid var(--copper); padding-left: 12px; }
+.line-head { display: flex; align-items: baseline; gap: 10px; }
+.line-type { font-size: 22px; font-weight: 700; }
+.line-cap { color: var(--muted); }
+.next { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.next .k { color: var(--muted); margin-right: 6px; text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
+
+/* Регулятор */
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+.kv .k { font-size: 12px; color: var(--muted); }
+.kv .v { font-size: 22px; }
+.kv .v u { font-size: 12px; color: var(--muted); text-decoration: none; margin-left: 2px; }
+.field { display: flex; gap: 8px; margin-top: 10px; }
+.field input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.field input:focus { outline: 2px solid color-mix(in srgb, var(--copper) 45%, transparent); border-color: var(--copper); }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* Ключевые величины (мобильный) */
+.key { display: none; }
+.key-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.key-item .k { font-size: 12px; color: var(--muted); }
+.key-item .v { font-size: 22px; }
+.key-item .v u { font-size: 12px; color: var(--muted); text-decoration: none; margin-left: 2px; }
+
+/* Мобильная раскладка */
+.mobile-actions { display: none; }
+@media (max-width: 1000px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+  .col-center { grid-column: 1 / -1; order: -1; }
+}
+@media (max-width: 640px) {
+  .top { padding: 10px 14px; gap: 10px; }
+  .nav { display: none; }
+  .stage { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
+  .stage .meta { flex-wrap: wrap; gap: 10px 16px; }
+  .grid { grid-template-columns: 1fr; padding: 14px; gap: 14px; padding-bottom: 84px; }
+  .col { display: contents; }               /* секции становятся элементами сетки, порядок задаём явно */
+  #sec-scheme { order: 1; position: static; } #sec-key { order: 2; display: block; } #sec-control { order: 3; }
+  #sec-program { order: 4; } #sec-pressure { order: 5; }
+  #sec-sensors, #sec-detector { display: none; }   /* температуры уже на схеме, детектор — в «Ключевом» */
+  .scheme svg { max-height: 52vh; }
+  #sec-control .field { margin-top: 8px; }
+  .actions-desktop { display: none; }
+  .mobile-actions { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); z-index: 10; }
+  .mobile-actions .btn { padding: 10px 6px; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 108 108" aria-hidden="true"><path fill="#E08A3C" d="M43 40h22a5 5 0 0 1 5 5v17a5 5 0 0 1-5 5H43a5 5 0 0 1-5-5V45a5 5 0 0 1 5-5z"/><path fill="#8A4A16" d="M40 71h27l3 5H37zM48 66h12v6H48zM42 40h24l-4-4H46z"/><circle cx="76" cy="66" r="2.5" fill="#FF6B4A"/><path fill="none" stroke="#FF6B4A" stroke-width="2" stroke-linecap="round" d="M52 30c-3-3 3-6 0-9M57 30c3-3-3-6 0-9"/></svg>
+    Самовар
+  </div>
+  <nav class="nav">
+    <a href="#" aria-current="page">Ректификация</a><a href="#">Программа</a><a href="#">График</a><a href="#">Настройки</a><a href="#">Ещё</a><a href="#" class="legacy-link" title="Открыть прежний интерфейс">Старый интерфейс</a>
+  </nav>
+  <div class="spacer"></div>
+  <div class="status-chip"><span class="dot"></span> в сети · v7.00u10 · 14:32:10</div>
+  <button class="icon-btn" title="Сообщения">✉ <span class="badge">2</span></button>
+  <button class="icon-btn" title="Тема" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme==='dark'?'light':'dark'">◐</button>
+</header>
+
+<div class="stage">
+  <h1>Отбор тела <small>строка 7 из 16 · тело</small></h1>
+  <div><div class="progress"><i></i></div></div>
+  <div class="meta">
+    <span>Работа <b>02:15:40</b></span>
+    <span>Осталось <b>≈ 1:30</b></span>
+    <span>Отобрано <b>1240 мл</b></span>
+    <span>Скорость <b>610 мл/ч</b></span>
+  </div>
+</div>
+
+<main class="grid">
+
+  <!-- ===== Левая колонка: действия и датчики ===== -->
+  <div class="col col-left">
+    <section class="actions-desktop" id="sec-actions">
+      <h2>Действия</h2>
+      <div class="actions">
+        <button class="btn danger">Выключить нагрев</button>
+        <div class="btn-row"><button class="btn">Пауза</button><button class="btn primary">Следующая строка</button></div>
+        <button class="btn" style="color: var(--muted)">Сбросить процесс</button>
+      </div>
+    </section>
+
+    <section id="sec-key" class="key">
+      <h2>Ключевое</h2>
+      <div class="key-row">
+        <div class="key-item"><div class="k">Δ пар − царга</div><div class="v num">−0.31<u>°C</u></div></div>
+        <div class="key-item"><div class="k">Пар к уставке</div><div class="v num" style="color:var(--ok)">−0.04<u>°C</u></div></div>
+        <div class="key-item"><div class="k">Куб · стоп 98.5</div><div class="v num">91.85<u>°C</u></div></div>
+        <div class="key-item"><div class="k">Детектор</div><div class="v" style="color:var(--ok);font-size:16px">● стабильно</div></div>
+      </div>
+    </section>
+
+    <section id="sec-sensors">
+      <h2>Датчики</h2>
+      <div class="sensors">
+        <div class="sensor hero"><i style="background:var(--steam)"></i><span class="name">Пар <small>уставка 78.45 · допуск ±0.2</small></span><span class="val num">78.41<u>°C</u></span></div>
+        <div class="sensor hero"><i style="background:var(--pipe)"></i><span class="name">Царга <small>уставка 78.10</small></span><span class="val num">78.10<u>°C</u></span></div>
+        <div class="sensor"><i style="background:var(--tank)"></i><span class="name">Куб <small>стоп при 98.5</small></span><span class="val num">91.85<u>°C</u></span></div>
+        <div class="sensor"><i style="background:var(--water)"></i><span class="name">Вода <small>дефлегматор</small></span><span class="val num">31.2<u>°C</u></span></div>
+        <div class="sensor"><i style="background:var(--acp)"></i><span class="name">ТСА <small>тревога при 60</small></span><span class="val num">41.3<u>°C</u></span></div>
+        <div class="sensor"><i style="background:var(--line)"></i><span class="name">Δ пар − царга</span><span class="val num">−0.31<u>°C</u></span></div>
+      </div>
+    </section>
+
+    <section id="sec-detector">
+      <h2>Детектор примесей</h2>
+      <div class="kv">
+        <div><div class="k">Состояние</div><div class="v" style="font-size:16px;color:var(--ok)">● Стабильно</div></div>
+        <div><div class="k">Тренд</div><div class="v num">0.000<u>°C/мин</u></div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===== Центр: мнемосхема ===== -->
+  <div class="col col-center">
+    <section class="scheme" id="sec-scheme">
+      <svg viewBox="0 0 460 570" role="img" aria-label="Схема установки: куб, царга, дефлегматор, отбор">
+        <defs>
+          <linearGradient id="liq" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e5a35a" stop-opacity=".55"/><stop offset="1" stop-color="#b8641f" stop-opacity=".9"/></linearGradient>
+          <pattern id="pack" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="var(--line)" stroke-width="1.2"/></pattern>
+          <clipPath id="cubeClip"><rect x="152" y="388" width="180" height="150" rx="14"/></clipPath>
+        </defs>
+
+        <!-- Вода охлаждения: труба и анимированный поток -->
+        <path class="pipe" d="M258 120 H400 V440 H352"/>
+        <path class="pipe" d="M258 74 H420 V480 H352"/>
+        <path class="pipe-in" d="M352 440 H400 V120 H258"/>
+        <path class="pipe-in" d="M258 74 H420 V480 H352" style="animation-direction: reverse"/>
+        <text class="tag-lbl" x="410" y="300" transform="rotate(90 410 300)" text-anchor="middle">вода охлаждения</text>
+
+        <!-- ТСА -->
+        <path class="pipe" d="M228 40 V30 H300 V230"/>
+        <rect class="metal" x="292" y="150" width="16" height="60" rx="3"/>
+        <g transform="translate(312 196)"><rect class="tag-bg" x="0" y="-11" width="70" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">ТСА</text><text class="tag" x="8" y="14">41.3°</text></g>
+
+        <!-- Дефлегматор -->
+        <rect class="metal" x="182" y="62" width="76" height="66" rx="8"/>
+        <rect x="192" y="72" width="56" height="46" rx="4" fill="url(#pack)" opacity=".6"/>
+        <rect class="metal" x="212" y="40" width="16" height="22" rx="3"/>
+        <g transform="translate(104 34)"><rect class="tag-bg" x="0" y="-11" width="84" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Пар</text><text class="tag" x="8" y="14" fill="var(--steam)">78.41°</text></g>
+        <line x1="188" y1="46" x2="212" y2="46" stroke="var(--line)" stroke-width="1.5"/>
+        <!-- датчик уровня флегмы -->
+        <circle cx="258" cy="118" r="4" class="level-ok"/><text class="tag-lbl" x="248" y="140" text-anchor="middle">уровень ок</text>
+        <g transform="translate(104 140)"><rect class="tag-bg" x="0" y="-11" width="84" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Вода</text><text class="tag" x="8" y="14" fill="var(--water)">31.2°</text></g>
+
+        <!-- Царга -->
+        <rect class="metal" x="202" y="128" width="36" height="244" rx="4"/>
+        <rect x="206" y="132" width="28" height="236" fill="url(#pack)"/>
+        <g class="bubbles" transform="translate(0 0)">
+          <circle class="bubble" cx="214" cy="360" r="2"/><circle class="bubble" cx="224" cy="364" r="2.5"/><circle class="bubble" cx="219" cy="368" r="1.6"/>
+        </g>
+        <g transform="translate(118 236)"><rect class="tag-bg" x="0" y="-11" width="84" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Царга</text><text class="tag" x="8" y="14" fill="var(--pipe)">78.10°</text></g>
+        <line x1="202" y1="246" x2="188" y2="246" stroke="var(--line)" stroke-width="1.5"/>
+
+        <!-- Куб -->
+        <path class="metal" d="M140 372 H344 L332 388 H152 Z"/>
+        <rect class="metal" x="152" y="388" width="180" height="150" rx="14"/>
+        <g clip-path="url(#cubeClip)"><rect class="liquid" x="152" y="440" width="180" height="100"/></g>
+        <path class="heater" d="M176 496 c10 -12 20 12 30 0 s20 12 30 0 s20 12 30 0 s20 12 30 0"/>
+        <g transform="translate(200 396)"><rect class="tag-bg" x="0" y="0" width="84" height="30" rx="6"/><text class="tag-lbl" x="8" y="11">Куб</text><text class="tag" x="8" y="25" fill="var(--tank)">91.85°</text></g>
+        <text class="tag-lbl" x="242" y="462" text-anchor="middle">давление в кубе</text>
+        <text class="tag" x="242" y="478" text-anchor="middle" style="font-size:12px">1.5 мм рт.ст.</text>
+        <!-- Мощность -->
+        <text class="tag-lbl" x="242" y="512" text-anchor="middle">нагрев</text><text class="tag" x="242" y="528" text-anchor="middle" style="font-size:12px" fill="var(--danger)">168 В · 1320 Вт</text>
+
+        <!-- Отбор: труба к насосу и банкам -->
+        <path class="pipe" d="M182 122 H96 V372"/>
+        <circle class="metal" cx="96" cy="400" r="24"/>
+        <g class="rotor"><circle cx="96" cy="386" r="4" fill="var(--copper)"/><circle cx="108" cy="407" r="4" fill="var(--copper)"/><circle cx="84" cy="407" r="4" fill="var(--copper)"/></g>
+        <g transform="translate(14 388)"><rect class="tag-bg" x="0" y="-11" width="60" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Отбор</text><text class="tag" x="8" y="14">0.61 л/ч</text></g>
+        <path class="pipe" d="M96 424 V452"/>
+        <circle class="drop" cx="96" cy="458" r="3"/>
+
+        <!-- Банки сервопривода -->
+        <g transform="translate(40 486)">
+          <rect class="jar" x="0" y="0" width="34" height="46" rx="4"/><rect class="jar-fill" x="2" y="18" width="30" height="26" rx="3"/><text class="tag-lbl" x="17" y="58" text-anchor="middle">головы</text>
+        </g>
+        <g transform="translate(79 486)">
+          <rect class="jar active" x="0" y="0" width="34" height="46" rx="4"/><rect class="jar-fill" x="2" y="26" width="30" height="18" rx="3"/><text class="tag-lbl" x="17" y="58" text-anchor="middle" fill="var(--copper)">тело</text>
+        </g>
+        <g transform="translate(118 486)">
+          <rect class="jar" x="0" y="0" width="34" height="46" rx="4"/><text class="tag-lbl" x="17" y="58" text-anchor="middle">хвосты</text>
+        </g>
+      </svg>
+    </section>
+  </div>
+
+  <!-- ===== Правая колонка: программа и регулятор ===== -->
+  <div class="col col-right">
+    <section id="sec-program">
+      <h2>Текущая строка · 7 из 16</h2>
+      <div class="line-card">
+        <div class="line-head"><span class="line-type">Тело</span><span class="line-cap">ёмкость 4</span></div>
+        <div class="progress" style="margin:10px 0 6px"><i style="width:42%"></i></div>
+        <div class="hint" style="margin:0 0 10px">42 % · отобрано 162 из 385 мл · осталось ≈ 13 мин</div>
+        <div class="kv">
+          <div><div class="k">Скорость</div><div class="v num">0.61<u>л/ч</u></div></div>
+          <div><div class="k">Доля от АС</div><div class="v num">10<u>%</u></div></div>
+          <div><div class="k">Напряжение строки</div><div class="v num">140<u>В</u></div></div>
+          <div><div class="k">Время строки</div><div class="v num">23<u>мин</u></div></div>
+        </div>
+        <div class="next"><span class="k">Следующая</span> 08 · Тело · 0.9 л/ч · 40 % · 1 ч 42</div>
+      </div>
+    </section>
+
+    <section id="sec-control">
+      <h2>Управление</h2>
+      <div class="kv">
+        <div><div class="k">Напряжение · цель 170 В</div><div class="v num">168<u>В</u></div></div>
+        <div><div class="k">Мощность · стабилизация</div><div class="v num">1320<u>Вт</u></div></div>
+      </div>
+      <div class="field"><input inputmode="decimal" placeholder="Напряжение, В"><button class="btn">Установить</button></div>
+      <div class="field"><input inputmode="decimal" placeholder="Скорость отбора, л/ч"><button class="btn">Установить</button></div>
+      <div class="hint">Скорость действует только на текущую строку программы</div>
+      <div class="field"><button class="btn" style="flex:1">Зафиксировать Т тела</button></div>
+    </section>
+
+    <section id="sec-pressure">
+      <h2>Давление</h2>
+      <div class="kv">
+        <div><div class="k">Атмосферное</div><div class="v num">752.3<u>мм</u></div></div>
+        <div><div class="k">На старте</div><div class="v num">751.9<u>мм</u></div></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="mobile-actions">
+  <button class="btn danger">Нагрев</button><button class="btn">Пауза</button><button class="btn primary">Далее</button><button class="btn">Сброс</button>
+</div>
+</body>
+</html>

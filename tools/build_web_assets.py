@@ -27,6 +27,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "data_raw"
 TARGET = ROOT / "data"
 PARTIALS_DIR = SOURCE / "partials"
+# Замороженный старый интерфейс (страницы режимов + их style.css). Живёт в подкаталоге,
+# у него свои partials; на устройство уезжает в /legacy/ целиком сжатым - шаблонов там нет.
+LEGACY_SOURCE = SOURCE / "legacy"
+LEGACY_PARTIALS_DIR = LEGACY_SOURCE / "partials"
 
 # Файлы, которые уезжают на устройство только сжатыми. Шаблонов в них нет и быть
 # не должно - см. check_no_placeholders().
@@ -50,17 +54,21 @@ def check_no_placeholders(name: str, data: bytes) -> str | None:
     )
 
 
-def resolve_includes(name: str, data: bytes, seen: tuple[str, ...] = ()) -> bytes:
+def resolve_includes(
+    name: str, data: bytes, seen: tuple[str, ...] = (), partials_dir: Path = PARTIALS_DIR
+) -> bytes:
     """Разворачивает <!--#include partial.htm--> рекурсивно, до подстановки."""
 
     def repl(match: re.Match) -> bytes:
         partial_name = match.group(1).decode("ascii")
         if partial_name in seen:
             raise ValueError(f"{name}: циклический include {' -> '.join(seen)} -> {partial_name}")
-        partial_path = PARTIALS_DIR / partial_name
+        partial_path = partials_dir / partial_name
         if not partial_path.is_file():
-            raise ValueError(f"{name}: partial не найден: partials/{partial_name}")
-        return resolve_includes(partial_name, partial_path.read_bytes(), seen + (partial_name,))
+            raise ValueError(f"{name}: partial не найден: {partials_dir.name}/{partial_name}")
+        return resolve_includes(
+            partial_name, partial_path.read_bytes(), seen + (partial_name,), partials_dir
+        )
 
     return INCLUDE_RE.sub(repl, data)
 
@@ -98,6 +106,31 @@ def build(target: Path) -> list[str]:
     missing = sorted(set(COMPRESS) - {p.name for p in SOURCE.iterdir()})
     if missing:
         errors.append(f"в data_raw/ нет файлов из COMPRESS: {', '.join(missing)}")
+    errors.extend(build_legacy(target))
+    return errors
+
+
+def build_legacy(target: Path) -> list[str]:
+    """data_raw/legacy/ -> data/legacy/: всё сжатое, includes из legacy/partials."""
+    errors: list[str] = []
+    if not LEGACY_SOURCE.is_dir():
+        return errors
+    legacy_target = target / "legacy"
+    legacy_target.mkdir(parents=True, exist_ok=True)
+    for source in sorted(LEGACY_SOURCE.iterdir()):
+        if not source.is_file():
+            continue
+        name = f"legacy/{source.name}"
+        try:
+            data = resolve_includes(name, source.read_bytes(), partials_dir=LEGACY_PARTIALS_DIR)
+        except ValueError as exc:
+            errors.append(str(exc))
+            continue
+        error = check_no_unresolved_includes(name, data) or check_no_placeholders(name, data)
+        if error:
+            errors.append(error)
+            continue
+        (legacy_target / f"{source.name}.gz").write_bytes(canonical_gzip(data))
     return errors
 
 
@@ -121,7 +154,7 @@ def main() -> int:
     shutil.rmtree(TARGET, ignore_errors=True)
     staging.rename(TARGET)
 
-    files = sorted(p for p in TARGET.iterdir() if p.is_file())
+    files = sorted(p for p in TARGET.rglob("*") if p.is_file())
     total = sum(len(p.read_bytes()) for p in files)
     print(f"data/ собрана из data_raw/: {len(files)} файлов, {total} байт")
     return 0

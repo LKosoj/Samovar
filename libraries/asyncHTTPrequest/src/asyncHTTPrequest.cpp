@@ -35,7 +35,7 @@ asyncHTTPrequest::asyncHTTPrequest()
 asyncHTTPrequest::~asyncHTTPrequest(){
     // ЗАЩИТА: проверяем перед удалением
     if(_client) {
-        _client->close(true);
+    _client->close();
         delete _client;
         _client = nullptr;
     }

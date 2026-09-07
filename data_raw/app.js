@@ -1,6 +1,51 @@
 (function () {
   'use strict';
 
+  // ==================== Старый / новый интерфейс ====================
+  // Выбор живёт в браузере (localStorage.samovar_ui), прошивка о нём не знает.
+  // ?ui=legacy / ?ui=new в адресе - принудительно записать выбор и открыть нужную версию.
+  // Страницы старого интерфейса заморожены в /legacy/ и сами ставят флаг при загрузке.
+  const UI_FLAG_KEY = 'samovar_ui';
+  const MODE_PAGES = { 0: 'index', 1: 'distiller', 2: 'beer', 3: 'bk', 4: 'nbk', 7: 'cheese' };
+  const NEW_MODE_PATHS = ['/', '/index.htm', '/distiller.htm', '/beer.htm', '/bk.htm', '/nbk.htm', '/cheese.htm'];
+  let uiMode = null;
+
+  function readUiFlag() {
+    try { return localStorage.getItem(UI_FLAG_KEY); } catch (err) { return null; }
+  }
+
+  function writeUiFlag(value) {
+    try { localStorage.setItem(UI_FLAG_KEY, value); } catch (err) { /* приватный режим */ }
+  }
+
+  function legacyPagePath(mode) {
+    return '/legacy/' + (MODE_PAGES[mode] || 'index') + '.htm';
+  }
+
+  function applyUiSwitch() {
+    if (typeof location === 'undefined' || !location.pathname) return;
+    let requested = null;
+    try { requested = new URLSearchParams(location.search).get('ui'); } catch (err) { requested = null; }
+    if (requested === 'legacy' || requested === 'new') writeUiFlag(requested);
+    const onLegacy = location.pathname.indexOf('/legacy/') === 0;
+    if (onLegacy) {
+      if (requested === 'new') location.replace('/index.htm');
+      return;
+    }
+    if (NEW_MODE_PATHS.indexOf(location.pathname) === -1) return;
+    if (readUiFlag() === 'legacy') {
+      const name = location.pathname === '/' ? 'index' : location.pathname.slice(1, -4);
+      location.replace('/legacy/' + name + '.htm');
+    }
+  }
+
+  function openLegacyUi() {
+    writeUiFlag('legacy');
+    location.href = legacyPagePath(uiMode);
+  }
+
+  applyUiSwitch();
+
   const HISTORY_KEY = 'samovarHistoryV2';
   const HISTORY_LIMIT = 500;
   const COMMAND_TOKENS = {
@@ -643,7 +688,7 @@
     }
     const indicator = byId('connection_indicator');
     if (!indicator) return;
-    indicator.innerHTML = '<img src="' + fileName + '" style="margin: 0 !important; width: 20px">';
+    indicator.innerHTML = '<img src="/' + fileName + '" style="margin: 0 !important; width: 20px">';
   }
 
   function initConnection(options) {
@@ -867,7 +912,7 @@
 
   function ensureSound() {
     if (sound) return sound;
-    sound = new Audio('alarm.mp3');
+    sound = new Audio('/alarm.mp3');
     sound.loop = true;
     sound.preload = 'auto';
     sound.autoplay = false;
@@ -1139,6 +1184,7 @@
         const heaterTelemetry = validateHeaterTelemetry(data);
         activeSinks.connection(false);
         renderFn(data);
+        notifyTelemetryListeners(data);
         if (!messageCursorBootstrapped) {
           // Бутстрап (первая загрузка страницы/вкладки): не переигрываем бэклог
           // кольцевого буфера по одному сообщению раз в 2 секунды - сразу переходим
@@ -1235,6 +1281,7 @@
       showRequestError('Некорректные начальные данные.');
       return false;
     }
+    uiMode = data.mode;
     try {
       applyBootstrap(data);
     } catch (err) {
@@ -1759,6 +1806,185 @@
     sendCommand('luastr=' + encodeURIComponent(input.value));
   }
 
+
+  // ==================== Мнемосхема и карточки (новый интерфейс) ====================
+  // Разметка описывает привязки атрибутами, а не id: data-tele="Ключ" (текст, data-fmt -
+  // число знаков), data-on="Ключ" (класс is-on при истинном значении), data-show="Ключ"
+  // (класс is-hidden при ложном), data-width="Ключ" (ширина в процентах),
+  // data-jar="N" (банка N активна, когда ёмкость текущей строки = N).
+  // Ключи - поля /ajax плюс производные с подчёркиванием (см. deriveView).
+  const telemetryListeners = [];
+
+  function onTelemetry(fn) {
+    if (typeof fn === 'function') telemetryListeners.push(fn);
+  }
+
+  function notifyTelemetryListeners(data) {
+    telemetryListeners.forEach(function (fn) {
+      try { fn(data); } catch (err) { console.error('telemetry listener', err); }
+    });
+  }
+
+  const LINE_TYPE_NAMES = {
+    rect: { H: 'Головы', B: 'Тело', P: 'Пауза', T: 'Хвосты', C: 'Предзахлёб' },
+    dist: { T: 'По Т куба', S: 'Спирт в кубе, отн.', A: 'Спирт в кубе, абс.', P: 'Спирт в паре, абс.', R: 'Спирт в паре, отн.' },
+    bk: { T: 'По Т куба', S: 'Спирт в кубе, отн.', A: 'Спирт в кубе, абс.', P: 'Спирт в паре, абс.', R: 'Спирт в паре, отн.' },
+    nbk: { H: 'Прогрев', S: 'Настройка', O: 'Оптимизация', W: 'Работа' },
+    beer: { M: 'Засыпь солода', P: 'Пауза', B: 'Кипячение', C: 'Охлаждение', W: 'Ожидание', F: 'Брожение', L: 'Lua', A: 'Автотюнинг' },
+    cheese: { M: 'Нагрев', P: 'Выдержка', C: 'Охлаждение', W: 'Ожидание', L: 'Lua', A: 'Кислотность', D: 'Слив' }
+  };
+
+  function schemeKind() {
+    return (document.body && document.body.getAttribute('data-scheme')) || 'rect';
+  }
+
+  function programLines() {
+    const textarea = byId('WProgram');
+    if (!textarea) return [];
+    return String(textarea.value || '').split('\n')
+      .map(function (line) { return line.trim(); })
+      .filter(function (line) { return line !== ''; });
+  }
+
+  function num(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function hoursText(hours) {
+    if (!Number.isFinite(hours) || hours <= 0) return '—';
+    const total = Math.round(hours * 60);
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return h > 0 ? h + ' ч ' + (m < 10 ? '0' : '') + m + ' мин' : m + ' мин';
+  }
+
+  // Разбор строки программы по формату режима. Поля, которых в формате нет, остаются null.
+  function parseProgramLine(kind, line) {
+    const f = line.split(';').map(function (s) { return s.trim(); });
+    const names = LINE_TYPE_NAMES[kind] || {};
+    const row = { type: f[0] || '', name: names[f[0]] || f[0] || '—', volume: null, speed: null,
+      capacity: null, temp: null, power: null, value: null, time: null, steam: null, summary: '' };
+    if (kind === 'rect') {
+      row.volume = num(f[1]); row.speed = num(f[2]); row.capacity = num(f[3]);
+      row.temp = num(f[4]); row.power = num(f[5]);
+      if (row.type === 'P') row.time = row.volume !== null ? row.volume / 3600 : null;
+      else if (row.volume !== null && row.speed > 0) row.time = row.volume / (row.speed * 1000);
+      row.summary = row.type === 'P'
+        ? row.name + ' · ' + (row.volume !== null ? row.volume + ' с' : '')
+        : row.name + ' · ' + (row.volume !== null ? row.volume + ' мл' : '') +
+          (row.speed !== null ? ' · ' + row.speed + ' л/ч' : '') +
+          (row.capacity ? ' · ёмк. ' + row.capacity : '');
+    } else if (kind === 'dist' || kind === 'bk') {
+      row.value = num(f[1]); row.capacity = num(f[2]); row.power = num(f[3]); row.steam = num(f[4]);
+      row.summary = row.name + (row.value !== null ? ' · ' + row.value : '') +
+        (row.capacity ? ' · ёмк. ' + row.capacity : '');
+    } else if (kind === 'beer' || kind === 'cheese') {
+      row.temp = num(f[1]); row.time = num(f[2]) !== null ? num(f[2]) / 60 : null;
+      row.summary = row.name + (row.temp ? ' · ' + row.temp + ' °C' : '') +
+        (row.time ? ' · ' + hoursText(row.time) : '');
+    } else if (kind === 'nbk') {
+      row.value = num(f[1]); row.speed = num(f[2]);
+      row.summary = row.name + (row.value !== null ? ' · ' + row.value : '') +
+        (row.speed !== null ? ' · ' + row.speed : '');
+    } else {
+      row.summary = line;
+    }
+    return row;
+  }
+
+  function deriveView(data) {
+    const kind = schemeKind();
+    const v = Object.assign({}, data);
+    const steam = num(data.SteamTemp), pipe = num(data.PipeTemp);
+    v._delta = steam !== null && pipe !== null ? pipe - steam : null;
+    const bodySteam = num(data.BodyTemp_Steam), bodyPipe = num(data.BodyTemp_Pipe);
+    v._steamSet = bodySteam > 0 ? bodySteam : null;
+    v._pipeSet = bodyPipe > 0 ? bodyPipe : null;
+    v._steamDev = v._steamSet !== null && steam !== null ? steam - v._steamSet : null;
+    v._pipeDev = v._pipeSet !== null && pipe !== null ? pipe - v._pipeSet : null;
+    v._heaterOn = Number(data.PowerOn) === 1;
+    v._paused = Number(data.PauseOn) === 1 || Number(data.BeerManualPause) === 1;
+    v._running = v._heaterOn && !v._paused;
+    v._withdrawing = Number(data.WthdrwlStatus) > 0 && !v._paused;
+    const rate = num(data.ActualVolumePerHour);
+    v._pumpOn = kind === 'nbk' ? num(data.ISspd) > 0 && v._running
+      : kind === 'beer' || kind === 'cheese' ? !!data.mixer && v._running
+      : v._withdrawing && rate > 0;
+    v._mixerOn = !!data.mixer && v._running;
+    v._flowOn = v._heaterOn;
+    const unit = typeof window.pwr_unit === 'string' ? window.pwr_unit : 'V';
+    const volt = num(data.current_power_volt), watt = num(data.current_power_p);
+    v._powerUnit = unit === 'P' ? 'Вт' : 'В';
+    v._powerValue = unit === 'P' ? watt : volt;
+    v._heaterText = !v._heaterOn ? 'выключен'
+      : unit === 'P' ? (watt !== null ? watt + ' Вт' : '—')
+      : (volt !== null ? volt + ' В' : '—') + (watt !== null ? ' · ' + watt + ' Вт' : '');
+    v._cubePressure = num(data.prvl);
+    v._pressureLabel = v._cubePressure !== null ? 'В кубе' : 'На старте';
+    v._pressureAlt = v._cubePressure !== null ? v._cubePressure : num(data.start_pressure);
+    v._alcCube = num(data.alc);
+    v._alcSteam = num(data.stm_alc);
+
+    const lines = programLines();
+    const n = Number(data.ProgramNum) || 0;
+    v._lineTotal = lines.length;
+    v._lineNum = n > 0 && n <= lines.length ? n : null;
+    const row = v._lineNum ? parseProgramLine(kind, lines[n - 1]) : null;
+    const nextRow = v._lineNum && n < lines.length ? parseProgramLine(kind, lines[n]) : null;
+    v._lineType = row ? row.type : '';
+    v._lineName = row ? row.name : (lines.length ? 'ожидание' : 'нет программы');
+    v._lineCap = row && row.capacity ? row.capacity : null;
+    v._lineCapText = v._lineCap ? 'ёмкость ' + v._lineCap : '';
+    v._lineVolume = row ? row.volume : null;
+    v._lineSpeed = row ? row.speed : null;
+    v._linePower = row && row.power ? row.power : null;
+    v._lineTemp = row ? row.temp : null;
+    v._lineValue = row ? row.value : null;
+    v._lineSteam = row && row.steam ? row.steam : null;
+    v._lineTime = row ? hoursText(row.time) : '—';
+    v._lineOf = v._lineNum ? v._lineNum + ' из ' + lines.length : (lines.length ? '0 из ' + lines.length : '—');
+    v._next = nextRow ? (n + 1) + ' · ' + nextRow.summary : (row ? 'последняя строка' : '—');
+    const progress = num(data.WthdrwlProgress);
+    v._progress = progress !== null ? Math.max(0, Math.min(100, progress)) : 0;
+    return v;
+  }
+
+  function fmtValue(el, value) {
+    if (value === undefined || value === null || value === '') return '—';
+    if (typeof value === 'number') {
+      const digits = el.getAttribute('data-fmt');
+      const text = digits !== null ? value.toFixed(Number(digits)) : String(value);
+      return el.hasAttribute('data-sign') && value > 0 ? '+' + text : text;
+    }
+    if (typeof value === 'boolean') return value ? 'да' : 'нет';
+    return String(value);
+  }
+
+  function renderScheme(data) {
+    const v = deriveView(data);
+    const all = document.querySelectorAll('[data-tele],[data-on],[data-show],[data-width],[data-jar]');
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      const key = el.getAttribute('data-tele');
+      if (key !== null) el.textContent = fmtValue(el, v[key]);
+      const onKey = el.getAttribute('data-on');
+      if (onKey !== null) el.classList.toggle('is-on', !!v[onKey]);
+      const showKey = el.getAttribute('data-show');
+      if (showKey !== null) el.classList.toggle('is-hidden', !v[showKey]);
+      const widthKey = el.getAttribute('data-width');
+      if (widthKey !== null) {
+        const w = num(v[widthKey]);
+        el.style.width = (w === null ? 0 : Math.max(0, Math.min(100, w))) + '%';
+      }
+      const jar = el.getAttribute('data-jar');
+      if (jar !== null) el.classList.toggle('is-on', v._lineCap !== null && Number(jar) === v._lineCap);
+    }
+    return v;
+  }
+
+  onTelemetry(renderScheme);
+
   function init(options) {
     const initOptions = options || {};
     initConnection(initOptions);
@@ -1805,8 +2031,11 @@
     notify: notify,
     normalizeDeviceScheduleSeconds: normalizeDeviceScheduleSeconds,
     openDeviceScheduleModal: openDeviceScheduleModal,
+    openLegacyUi: openLegacyUi,
     openTab: openTab,
+    onTelemetry: onTelemetry,
     pollAjax: pollAjax,
+    renderScheme: renderScheme,
     postProgram: postProgram,
     readOperationAcceptance: readOperationAcceptance,
     renderI2cPumpStatus: renderI2cPumpStatus,
