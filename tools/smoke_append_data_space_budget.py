@@ -48,6 +48,11 @@ ROOT = Path(__file__).resolve().parents[1]
 APPEND_DATA_SIGNATURE = "String append_data() {"
 BUDGET_SIGNATURE = "static void enforce_data_log_free_space_budget() {"
 THRESHOLD_NAME = "DATA_LOG_CLEANUP_THRESHOLD_BYTES"
+# T2 (blynk-log-channel.md): append_data() теперь зовёт вынесенную format_log_base_fields()
+# вместо инлайновой сборки строки - харнесс обязан взять и её тело настоящим.
+BASE_FIELDS_SIGNATURE = (
+    "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum)"
+)
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
@@ -172,6 +177,8 @@ static void SendMsg(const String& text, MESSAGE_TYPE type) {
 static void enforce_data_log_free_space_budget() {
 @BUDGET_BODY@
 }
+
+@BASE_FIELDS_BODY@
 
 String append_data() {
 @APPEND_BODY@
@@ -305,6 +312,7 @@ def build_harness(fs_ino_path: Path) -> str:
     source = fs_ino_path.read_text(encoding="utf-8")
     append_body = extract_function_body(source, APPEND_DATA_SIGNATURE)
     budget_body = extract_function_body(source, BUDGET_SIGNATURE)
+    base_fields_body = extract_function_body(source, BASE_FIELDS_SIGNATURE)
     threshold_decl = extract_top_level_const(source, THRESHOLD_NAME)
 
     match = re.search(r"=\s*(\d+)", threshold_decl)
@@ -326,6 +334,9 @@ def build_harness(fs_ino_path: Path) -> str:
     harness = harness.replace("@THRESHOLD_DECL@", threshold_decl)
     harness = harness.replace("@BUDGET_BODY@", budget_body)
     harness = harness.replace("@APPEND_BODY@", append_body)
+    harness = harness.replace(
+        "@BASE_FIELDS_BODY@", f"{BASE_FIELDS_SIGNATURE}{{{base_fields_body}}}"
+    )
     return harness
 
 

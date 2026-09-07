@@ -115,7 +115,7 @@ if runtime_text:
         "copy_program_wait_type_text",
         "set_program_wait_type",
         "copy_session_description",
-        "copy_mqtt_session_description",
+        "copy_start_session_description",
         "copy_web_message_raw",
         "set_lua_status_value",
         "copy_ajax_runtime_snapshot",
@@ -125,19 +125,19 @@ if runtime_text:
         if fn not in runtime_text:
             errors.append(f"runtime_helpers.h missing shared-state helper: {fn}")
     try:
-        mqtt_body = extract_function_body(runtime_text, "inline bool copy_mqtt_session_description")
+        start_body = extract_function_body(runtime_text, "inline bool copy_start_session_description")
         require_ordered_tokens(
-            "copy_mqtt_session_description copies then sanitizes local description",
-            mqtt_body,
+            "copy_start_session_description copies then sanitizes local description",
+            start_body,
             [
                 "description = SessionDescription;",
                 "runtime_state_unlock(true);",
-                'description.replace(",", ";");',
+                r'description.replace("\r", "; ");',
             ],
             errors,
         )
-        if 'SessionDescription.replace' in mqtt_body:
-            errors.append("copy_mqtt_session_description mutates global SessionDescription")
+        if 'SessionDescription.replace' in start_body:
+            errors.append("copy_start_session_description mutates global SessionDescription")
     except ValueError as exc:
         errors.append(str(exc))
 

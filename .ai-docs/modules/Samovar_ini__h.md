@@ -156,10 +156,6 @@
 // Активирует возможность обновления прошивки по Wi-Fi (OTA).
 
 ---
-#define USE_TELEGRAM
-// Включает отправку уведомлений через Telegram-бота.
-
----
 #define NOT_USE_INTERFACE_UPDATE
 // Отключает обновление интерфейса в режиме реального времени (для экономии ресурсов).
 
@@ -261,16 +257,6 @@ init(const char* ssid, const char* password) — Инициализирует OT
 handle() — Обрабатывает входящие соединения для обновления
 Возвращает
 true при успешном обновлении, иначе false
-
----
-class TelegramNotifier
-// Отправляет уведомления пользователю через Telegram-бота
-Поля
-botToken — Токен Telegram-бота
-chatId — Идентификатор получателя
-Методы
-sendMessage(String message) — Отправляет текстовое сообщение в Telegram
-notifyAlert(String alert) — Отправляет аварийное уведомление
 
 ---
 class StepperMotor

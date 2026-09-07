@@ -15,7 +15,6 @@ FAILURE_CODES = (
     "notify_queue_push_failed",
     "notify_queue_pop_lock_busy",
     "notify_queue_pop_failed",
-    "notify_telegram_delivery_failed",
     "notify_blynk_disconnected",
 )
 
@@ -224,7 +223,6 @@ PRODUCTION_BLOCK_HARNESS = r'''
 
 #define F(value) value
 #define SAMOVAR_USE_BLYNK
-#define USE_TELEGRAM
 #define V26 26
 #define pdTRUE 1
 #define portTICK_RATE_MS 1
@@ -276,17 +274,13 @@ struct QueueProbe {
   }
 };
 
-int telegramCalls = 0;
 int blynkCheckCalls = 0;
 int blynkWriteCalls = 0;
 int blynkNotifyCalls = 0;
 bool blynkConnected = true;
-String telegramResponse("OK");
 std::vector<std::string> actions;
 
 struct SetupProbe {
-  char tg_token[2];
-  char tg_chat_id[2];
   char blynkauth[2];
 } SamSetup = {};
 
@@ -324,14 +318,6 @@ struct BlynkLockGuard {
   BlynkLockGuard& operator=(const BlynkLockGuard&) = delete;
   explicit operator bool() const { return acquired; }
 };
-
-String urlEncode(const String& value) { return value; }
-
-String http_sync_request_get(String) {
-  telegramCalls++;
-  actions.push_back("telegram");
-  return telegramResponse;
-}
 
 QueueProbe msg_q;
 void* xMsgSemaphore = nullptr;
@@ -375,22 +361,16 @@ void resetProbe() {
   giveCalls = 0;
   codes.clear();
   actions.clear();
-  telegramCalls = 0;
   blynkCheckCalls = 0;
   blynkWriteCalls = 0;
   blynkNotifyCalls = 0;
-  telegramResponse = "OK";
   blynkConnected = true;
   blynkLockAvailable = true;
   blynkLockTakes = 0;
-  SamSetup.tg_token[0] = '\0';
-  SamSetup.tg_chat_id[0] = '\0';
   SamSetup.blynkauth[0] = '\0';
 }
 
 void configureIntegrations() {
-  SamSetup.tg_token[0] = 't';
-  SamSetup.tg_chat_id[0] = 'c';
   SamSetup.blynkauth[0] = 'b';
 }
 
@@ -431,7 +411,7 @@ void checkConsumerReleasePaths() {
   runConsumerBlock();
   check(msg_q.emptyCalls == 1 && msg_q.popCalls == 0 && giveCalls == 1 &&
             codes.empty() && actions == std::vector<std::string>({"give"}) &&
-            telegramCalls == 0 && blynkCheckCalls == 0 && blynkWriteCalls == 0,
+            blynkCheckCalls == 0 && blynkWriteCalls == 0,
         "empty consumer path must give once without diagnostics");
 
   resetProbe();
@@ -449,7 +429,7 @@ void checkConsumerReleasePaths() {
             codes == std::vector<std::string>({"notify_queue_pop_failed"}) &&
             actions == std::vector<std::string>({
                 "give", "log:notify_queue_pop_failed"}) &&
-            telegramCalls == 0 && blynkCheckCalls == 0 && blynkWriteCalls == 0,
+            blynkCheckCalls == 0 && blynkWriteCalls == 0,
         "consumer pop failure must give before its only diagnostic");
 
   resetProbe();
@@ -460,7 +440,7 @@ void checkConsumerReleasePaths() {
             codes == std::vector<std::string>({"notify_queue_pop_lock_busy"}) &&
             actions == std::vector<std::string>({
                 "log:notify_queue_pop_lock_busy"}) &&
-            telegramCalls == 0 && blynkCheckCalls == 0 && blynkWriteCalls == 0,
+            blynkCheckCalls == 0 && blynkWriteCalls == 0,
         "consumer take failure must not give and must emit only lock_busy");
 }
 
@@ -468,53 +448,24 @@ void checkIntegrationPaths() {
   resetProbe();
   configureIntegrations();
   msg_q.empty = false;
-  telegramResponse = "<ERR>";
   runConsumerBlock();
   check(blynkNotifyCalls == blynkWriteCalls, "blynk_notify_follows_v26_write");
-  check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 1 &&
-            codes == std::vector<std::string>({
-                "notify_telegram_delivery_failed"}) &&
-            actions == std::vector<std::string>({
-                "give", "telegram", "blynk_lock", "blynk_check", "blynk_write",
-                "log:notify_telegram_delivery_failed"}),
-        "Telegram failure must not skip connected Blynk before its diagnostic");
+  check(blynkCheckCalls == 1 && blynkWriteCalls == 1 &&
+            codes.empty() && actions == std::vector<std::string>({
+                "give", "blynk_lock", "blynk_check", "blynk_write"}),
+        "successful Blynk delivery must not emit diagnostics");
 
   resetProbe();
   configureIntegrations();
   msg_q.empty = false;
   blynkConnected = false;
   runConsumerBlock();
-  check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 0 &&
+  check(blynkCheckCalls == 1 && blynkWriteCalls == 0 &&
             codes == std::vector<std::string>({"notify_blynk_disconnected"}) &&
             actions == std::vector<std::string>({
-                "give", "telegram", "blynk_lock", "blynk_check",
+                "give", "blynk_lock", "blynk_check",
                 "log:notify_blynk_disconnected"}),
-        "Blynk disconnect must be diagnosed after successful Telegram");
-
-  resetProbe();
-  configureIntegrations();
-  msg_q.empty = false;
-  telegramResponse = "<ERR>";
-  blynkConnected = false;
-  runConsumerBlock();
-  check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 0 &&
-            codes == std::vector<std::string>({
-                "notify_telegram_delivery_failed", "notify_blynk_disconnected"}) &&
-            actions == std::vector<std::string>({
-                "give", "telegram", "blynk_lock", "blynk_check",
-                "log:notify_telegram_delivery_failed",
-                "log:notify_blynk_disconnected"}),
-        "both diagnostics must follow both failed integration attempts");
-
-  resetProbe();
-  configureIntegrations();
-  msg_q.empty = false;
-  runConsumerBlock();
-  check(blynkNotifyCalls == blynkWriteCalls, "blynk_notify_follows_v26_write");
-  check(telegramCalls == 1 && blynkCheckCalls == 1 && blynkWriteCalls == 1 &&
-            codes.empty() && actions == std::vector<std::string>({
-                "give", "telegram", "blynk_lock", "blynk_check", "blynk_write"}),
-        "successful integrations must not emit diagnostics");
+        "Blynk disconnect must be diagnosed");
 
   // Замок Blynk держит loop(): доставка пропускается, но такт не блокируется и
   // пользователь узнаёт об этом из журнала (notify_blynk_lock_busy).
@@ -523,11 +474,11 @@ void checkIntegrationPaths() {
   msg_q.empty = false;
   blynkLockAvailable = false;
   runConsumerBlock();
-  check(telegramCalls == 1 && blynkLockTakes == 1 && blynkCheckCalls == 0 &&
+  check(blynkLockTakes == 1 && blynkCheckCalls == 0 &&
             blynkWriteCalls == 0 &&
             codes == std::vector<std::string>({"notify_blynk_lock_busy"}) &&
             actions == std::vector<std::string>({
-                "give", "telegram", "blynk_lock_busy",
+                "give", "blynk_lock_busy",
                 "log:notify_blynk_lock_busy"}),
         "busy Blynk lock must skip delivery and log it once");
 }
@@ -589,7 +540,7 @@ def check_source_contract() -> list[str]:
 
     require_order(
         send_body,
-        ("MqttSendMsg(", "xSemaphoreTake(", "msg_q.push(",
+        ("xSemaphoreTake(", "msg_q.push(",
          "xSemaphoreGive(", "WriteConsoleLog("),
         "SendMsg",
         errors,
@@ -597,7 +548,7 @@ def check_source_contract() -> list[str]:
     require_order(
         clock_body,
         ("xSemaphoreTake(", "msg_q.isEmpty()", "msg_q.pop(",
-         "xSemaphoreGive(", "String qMsg", "http_sync_request_get(",
+         "xSemaphoreGive(", "String qMsg",
          "Blynk.virtualWrite(", "WriteConsoleLog("),
         "triggerGetClock notification block",
         errors,
@@ -616,25 +567,19 @@ def check_source_contract() -> list[str]:
             require(forbidden not in critical,
                     f"{name}: {forbidden} remains under xMsgSemaphore", errors)
 
-    enqueue_guard = "#if defined(USE_TELEGRAM) || defined(SAMOVAR_USE_BLYNK)"
+    enqueue_guard = "#ifdef SAMOVAR_USE_BLYNK"
     require(enqueue_guard in send_body and
             send_body.find(enqueue_guard) < send_body.find("msg_q.push("),
-            "Telegram/Blynk enqueue guard changed", errors)
+            "Blynk enqueue guard changed", errors)
     require("String pushMsg = String(msgLevel == '0' ? \"Тревога! \"" in clock_body,
             "Blynk/V26 alarm prefix changed (apps detect alarms by it)", errors)
-    require("#ifdef USE_MQTT" in send_body and "MqttSendMsg(" in send_body,
-            "MQTT side effect/guard changed", errors)
+    require("#ifdef USE_MQTT" not in send_body and "MqttSendMsg(" not in send_body,
+            "MQTT удалён в T3, но в теле SendMsg() остался след MqttSendMsg/USE_MQTT", errors)
     require("#ifdef SAMOVAR_USE_BLYNK" in clock_body,
             "Blynk delivery guard changed", errors)
-    require('== "<ERR>"' in clock_body,
-            "Telegram <ERR> result is not checked", errors)
     require("Blynk.connected()" in clock_body and
             "SamSetup.blynkauth[0] != 0" in clock_body,
             "Blynk configured/disconnected check missing", errors)
-    require(clock_body.find("http_sync_request_get(") <
-            clock_body.find("Blynk.virtualWrite(") <
-            clock_body.find("notify_telegram_delivery_failed"),
-            "integration attempts must finish before delivery diagnostics", errors)
     require("msg_q.push(" not in clock_body and "msg_q.pop(" not in send_body,
             "queue retry/requeue path added", errors)
     require("SendMsg(" not in log_body and "msg_q." not in log_body and

@@ -51,7 +51,6 @@ FUNCTIONS = [
     "  int16_t activeStatus,\n"
     "  const char* createLogError,\n"
     "  const char* sessionBusyError,\n"
-    "  const String& mqttProgram,\n"
     "  const char* heatingMessage,\n"
     "  bool resetHeatLoss\n"
     ")",
@@ -133,6 +132,20 @@ void SendMsg(const String& msg, int type) {
   lastSendMsgType = type;
 }
 
+// T2/T3 (blynk-log-channel.md): mode_begin_heating_session теперь безусловно
+// зовёт copy_start_session_description(...) - тесту нужны заглушки pdMS_TO_TICKS
+// и самой функции; поведение флага modeHeatingStartRequested (предмет этого
+// теста) от результата copy_start_session_description не зависит.
+#define pdMS_TO_TICKS(ms) (ms)
+static bool copyStartSessionDescriptionReturn = true;
+static int copyStartSessionDescriptionCalls = 0;
+bool copy_start_session_description(String& out, int timeoutTicks) {
+  (void)out;
+  (void)timeoutTicks;
+  copyStartSessionDescriptionCalls++;
+  return copyStartSessionDescriptionReturn;
+}
+
 @FUNCTIONS@
 
 static int failures = 0;
@@ -162,6 +175,8 @@ static void reset_fixture() {
   sendMsgCalls = 0;
   lastSendMsgText.clear();
   lastSendMsgType = -1;
+  copyStartSessionDescriptionReturn = true;
+  copyStartSessionDescriptionCalls = 0;
 }
 
 int main() {
@@ -170,7 +185,7 @@ int main() {
   reset_fixture();
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", String("prog"), "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
     );
     check(result == MODE_HEATING_START_FAILED, "1: без взведённого флага должен быть отказ");
     check(createDataCalls == 0, "1: create_data не должен вызываться без взведённого флага");
@@ -192,7 +207,7 @@ int main() {
   mode_request_heating_start(TEST_ACTIVE_STATUS);
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", String("prog"), "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
     );
     check(result == MODE_HEATING_START_PENDING, "2: со взведённым флагом сессия должна успешно начаться (PENDING)");
     check(createDataCalls == 1, "2: create_data должен быть вызван - проверка флага пройдена");
@@ -215,7 +230,7 @@ int main() {
   reset_fixture();
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", String("prog"), "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
     );
     check(result == MODE_HEATING_START_FAILED, "4: без повторного взвода флага новая попытка должна снова быть отклонена");
     check(createDataCalls == 0, "4: create_data не должен вызываться без повторного взвода флага");
@@ -248,7 +263,7 @@ int main() {
   mode_request_heating_start(OTHER_ACTIVE_STATUS);
   {
     ModeHeatingStartResult result = mode_begin_heating_session(
-      TEST_ACTIVE_STATUS, "log error", "busy error", String("prog"), "started", true
+      TEST_ACTIVE_STATUS, "log error", "busy error", "started", true
     );
     check(result == MODE_HEATING_START_FAILED, "6: взвод для чужого статуса не должен запускать сессию текущего статуса");
     check(createDataCalls == 0, "6: create_data не должен вызываться при чужом взводе флага");

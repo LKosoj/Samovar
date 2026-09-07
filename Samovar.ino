@@ -108,10 +108,6 @@ class asyncHTTPrequest;
 WiFiUDP ntpUDP;
 NTPClient NTP(ntpUDP, "ru.pool.ntp.org");
 
-#ifdef USE_MQTT
-#include "SamovarMqtt.h"
-#endif
-
 #ifdef USE_BME680
 #include <Adafruit_BME680.h>
 #endif
@@ -155,13 +151,9 @@ static_assert(BLYNK_MSG_LIMIT == 0, "BLYNK_MSG_LIMIT из Samovar.h не под�
 
 #endif
 
-#if defined(SAMOVAR_USE_BLYNK) || defined(USE_TELEGRAM)
+#ifdef SAMOVAR_USE_BLYNK
 #include <simple_queue.h>
 SimpleStringQueue msg_q(5, 200);
-#endif
-
-#ifdef USE_TELEGRAM
-#include <UrlEncode.h>
 #endif
 
 #ifdef USE_WATER_PUMP
@@ -747,25 +739,62 @@ static void tick_update_clock_strings() {
   }
 }
 
+// Хвостовые 18 полей строки лога (14-24 из 25), общие для активного процесса
+// (tick_publish_log_line, ниже) и для простоя (build_idle_v34_line(), FS.ino, V34 раз в 5 с).
+// Не принимает параметров, не пишет CalculatedTargetFR - единственный писатель этой глобали
+// остаётся tick_publish_log_line() (SysTicker); в простое читается последнее посчитанное
+// значение как есть (пересчёт по формуле vaporSpeed/ActualVolumePerHour в простое не имеет
+// физического смысла - процесса нет).
+static String format_v34_tail_fields() {
+  String s;
+  s += ",";
+  s += format_float(ACPSensor.avgTemp, 3);
+  s += ",";
+  s += format_float(ActualVolumePerHour, 3);
+  s += ",";
+  // format_float(v, 2), а не (String)current_power_volt: тот же вывод для штатных значений,
+  // но с клампом от мусора датчика/регулятора, как у остальных полей этой функции.
+  s += format_float(current_power_volt, 2);
+  s += ",";
+  s += format_float(WFflowRate, 2);
+
+  s += ",";
+  s += format_float(get_alcohol(TankSensor.avgTemp), 2);
+  s += ",";
+  // Для ректификации используем температуру пара, для дистилляции - температуру куба
+  s += format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2);
+  s += ",";
+  s += format_float(pressure_value, 2);
+
+  s += ","; s += format_float(CalculatedTargetFR, 2); // 14: target_fr
+  s += ","; s += format_float(CalculatedTargetFR, 2); // 15: actual_fr (в данной системе они совпадают)
+  s += ","; s += format_float(impurityDetector.currentTrend, 3); // 16: temp_delta
+  s += ","; s += String(impurityDetector.detectorStatus); // 17: alarm_state
+  // event_code: 0=норм, 1=пауза
+  // event_code используется только для критических событий
+  uint8_t eventCode = program_Wait ? 1 : 0;
+  s += ","; s += String(eventCode); // 18: event_code
+  s += ","; s += String(SamSetup.PackDens); // 19: packing_density
+  s += ","; s += format_float(SamSetup.ColHeight, 2); // 20: col_height
+  s += ","; s += format_float(SamSetup.ColDiam, 1);   // 21: col_diameter
+  s += ","; s += format_float(CurrentHeatLoss, 0);    // 22: heat_loss
+
+  // Тип программы: H=головы, B=тело, C=предзахлеб, T=хвосты, P=пауза, пусто=нет программы
+  String programType = "";
+  ProgramType logProgramType = current_program_type();
+  if (!program_type_empty(logProgramType)) {
+    programType = program_type_to_string(logProgramType);
+  }
+  s += ","; s += programType; // 23: program_type
+
+  // Режим работы: 0=ректификация, 1=дистилляция, 2=пиво, 3=БК, 4=НБК, 5=сувид, 6=Lua
+  s += ","; s += String((int)Samovar_Mode); // 24: mode
+  return s;
+}
+
 static void tick_publish_log_line(const String &baseLine) {
   if (baseLine.length() > 0) {
     String s = baseLine;
-    s += ",";
-    s += format_float(ACPSensor.avgTemp, 3);
-    s += ",";
-    s += format_float(ActualVolumePerHour, 3);
-    s += ",";
-    s += (String)current_power_volt;
-    s += ",";
-    s += format_float(WFflowRate, 2);
-
-    s += ",";
-    s += format_float(get_alcohol(TankSensor.avgTemp), 2);
-    s += ",";
-    // Для ректификации используем температуру пара, для дистилляции - температуру куба
-    s += format_float(get_steam_alcohol(Samovar_Mode == SAMOVAR_RECTIFICATION_MODE ? SteamSensor.avgTemp : TankSensor.avgTemp), 2);
-    s += ",";
-    s += format_float(pressure_value, 2);
 
     // ПУНКТ 5: Расширенное логирование v.4
     // Расчет ФЧ (целевого)
@@ -774,7 +803,7 @@ static void tick_publish_log_line(const String &baseLine) {
     float netPower = (float)current_power_p - CurrentHeatLoss;
     if (netPower < 0) netPower = 0;
     // Скорость испарения мл/час (используем константу из column_math.h)
-    vaporSpeed = netPower * EVAPORATION_FACTOR; 
+    vaporSpeed = netPower * EVAPORATION_FACTOR;
 #endif
     if (ActualVolumePerHour > 0.001f) {
       CalculatedTargetFR = (vaporSpeed / (ActualVolumePerHour * 1000.0f)) - 1.0f;
@@ -783,32 +812,10 @@ static void tick_publish_log_line(const String &baseLine) {
     }
     if (CalculatedTargetFR < 0) CalculatedTargetFR = 0;
 
-    s += ","; s += format_float(CalculatedTargetFR, 2); // 14: target_fr
-    s += ","; s += format_float(CalculatedTargetFR, 2); // 15: actual_fr (в данной системе они совпадают)
-    s += ","; s += format_float(impurityDetector.currentTrend, 3); // 16: temp_delta
-    s += ","; s += String(impurityDetector.detectorStatus); // 17: alarm_state
-    // event_code: 0=норм, 1=пауза
-    // event_code используется только для критических событий
-    uint8_t eventCode = program_Wait ? 1 : 0;
-    s += ","; s += String(eventCode); // 18: event_code
-    s += ","; s += String(SamSetup.PackDens); // 19: packing_density
-    s += ","; s += format_float(SamSetup.ColHeight, 2); // 20: col_height
-    s += ","; s += format_float(SamSetup.ColDiam, 1);   // 21: col_diameter
-    s += ","; s += format_float(CurrentHeatLoss, 0);    // 22: heat_loss
-    
-    // Тип программы: H=головы, B=тело, C=предзахлеб, T=хвосты, P=пауза, пусто=нет программы
-    String programType = "";
-    ProgramType logProgramType = current_program_type();
-    if (!program_type_empty(logProgramType)) {
-      programType = program_type_to_string(logProgramType);
-    }
-    s += ","; s += programType; // 23: program_type
-    
-    // Режим работы: 0=ректификация, 1=дистилляция, 2=пиво, 3=БК, 4=НБК, 5=сувид, 6=Lua
-    s += ","; s += String((int)Samovar_Mode); // 24: mode
+    s += format_v34_tail_fields();
 
-#ifdef USE_MQTT
-    MqttSendMsg(s, "log", 4);
+#ifdef SAMOVAR_USE_BLYNK
+    blynk_stage_log_line("5," + String(currentSessionId) + "," + String((int)SamovarStatusInt) + "," + s);
 #endif
   }
 }
@@ -1599,13 +1606,6 @@ void triggerGetClock(void *parameter) {
         }
       }
 #endif
-
-      // Проверка и переподключение MQTT
-#ifdef USE_MQTT
-      if (!mqttConnected() && WiFi.status() == WL_CONNECTED) {
-        connectToMqtt();
-      }
-#endif
     } else {
       // Во время OTA увеличиваем задержку для освобождения ресурсов
       vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -1637,15 +1637,6 @@ void triggerGetClock(void *parameter) {
         // Blynk и V26: заголовок словами, по нему приложения отличают тревогу от остального.
         String pushMsg = String(msgLevel == '0' ? "Тревога! " : (msgLevel == '1' ? "Предупреждение! " : "")) + qMsg;
 
-#ifdef USE_TELEGRAM
-        bool telegramDeliveryFailed = false;
-        if (SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
-          String tgMsg = String(msgLevel == '0' ? "*Тревога!*\n" : (msgLevel == '1' ? "*Предупреждение!*\n" : "")) + " Самовар - " + qMsg;
-          telegramDeliveryFailed =
-              http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode(tgMsg)) == "<ERR>";
-        }
-#endif
-
 #ifdef SAMOVAR_USE_BLYNK
         bool blynkDisconnected = false;
         bool blynkLockBusy = false;
@@ -1668,21 +1659,12 @@ void triggerGetClock(void *parameter) {
         }
 #endif
 
-#ifdef USE_TELEGRAM
-        if (telegramDeliveryFailed) WriteConsoleLog(F("notify_telegram_delivery_failed"));
-#endif
 #ifdef SAMOVAR_USE_BLYNK
         if (blynkDisconnected) WriteConsoleLog(F("notify_blynk_disconnected"));
         if (blynkLockBusy) WriteConsoleLog(F("notify_blynk_lock_busy"));
 #endif
       }
     }
-#ifdef USE_TELEGRAM
-    else if (SamSetup.tg_chat_id[0] != 0 && WiFi.status() != WL_CONNECTED) {
-      Serial.println(F("Проблема с покдлючением к интернету."));
-    }
-    vTaskDelay(5 / portTICK_PERIOD_MS);
-#endif
     {
       vTaskDelay(500 / portTICK_PERIOD_MS);
       BME_getvalue(false);
@@ -1800,7 +1782,7 @@ void triggerSysTicker(void *parameter) {
 
       if (startval != SAMOVAR_STARTVAL_IDLE) {
         tcntST++;
-        if (tcntST >= SamSetup.LogPeriod) {
+        if (tcntST >= LOG_PERIOD_S) {
           tcntST = 0;
           String s = append_data();  //Записываем данные в память ESP32;
           tick_publish_log_line(s);
@@ -1837,7 +1819,7 @@ void triggerSysTicker(void *parameter) {
   }
 }
 
-// Fail-open: подсистема (профиль, ФС, очередь команд, веб-интерфейс, MQTT...) не
+// Fail-open: подсистема (профиль, ФС, очередь команд, веб-интерфейс...) не
 // поднялась штатно. НЕ останавливаем загрузку — владелец решил грузиться дальше в
 // degraded-режиме, но громко сообщить об этом. Serial пишем сразу, а лог/ленту сообщений
 // — одним пакетом в самом конце setup(): SendMsg/WriteConsoleLog трогают
@@ -2017,11 +1999,18 @@ static void session_checkpoint_tick() {
 static String pendingStateSnapshotNotice;
 
 // Результат setup_check_ap_button_hold(): нужен и в setup_connect_wifi_and_notify()
-// (решает, поднимать WiFiManager или сразу режим AP), и позже в setup() перед
-// initMqtt() (не подключаться к MQTT в режиме AP). Обе точки — функции без
-// параметров, поэтому значение живёт в файловой области, а не как локальная
-// переменная setup().
+// (решает, поднимать WiFiManager или сразу режим AP), и позже там же перед подключением
+// к Blynk (не подключаться в режиме AP). Обе точки — функции без параметров, поэтому
+// значение живёт в файловой области, а не как локальная переменная setup().
 static bool wifiAP = false;
+
+// Возможность резюме сессии (V35): выставляются в restore_state_snapshot() при загрузке,
+// но РЕШЕНИЕ (успеть ли в SESSION_RESUME_WINDOW_S) принимается позже, в session_begin() -
+// именно в момент реального старта процесса, а не в момент восстановления снимка, потому
+// что millis() при загрузке всегда около нуля независимо от того, сколько пользователь ждал
+// перед повторным стартом.
+static bool sessionResumeAvailable = false;
+static uint32_t sessionResumeId = 0;
 
 static void restore_state_snapshot() {
   StateSnapshot snapshot;
@@ -2047,6 +2036,14 @@ static void restore_state_snapshot() {
       Serial.println(programParseFailureReason);
     }
   }
+
+  // Сессия была прервана (нагрев был включён) и программа успешно восстановлена - при старте
+  // в пределах SESSION_RESUME_WINDOW_S (см. session_begin()) это будет резюме прежней сессии
+  // с тем же sessionId, а не новая. Флаг одноразовый - session_begin() его сбрасывает сам.
+  // sessionId == 0 - снимок от прошивки без поля SI: резюмировать нечего (сервер такие
+  // строки V34 не пишет), пусть стартует новая сессия.
+  sessionResumeAvailable = snapshot.powerOn && restored && snapshot.sessionId != 0;
+  sessionResumeId = snapshot.sessionId;
 
   // В снимке была программа, но восстановить её не удалось (например, старая программа
   // не проходит новую проверку формата) - об этом нужно предупредить НЕЗАВИСИМО от
@@ -2088,6 +2085,57 @@ static void state_snapshot_report_pending() {
   WriteConsoleLog(pendingStateSnapshotNotice);
   SendMsg(pendingStateSnapshotNotice, WARNING_MSG);
   pendingStateSnapshotNotice = "";
+}
+
+// Короткая причина перезагрузки для поля resetReason в V35 (session_begin(), ниже).
+// Независима от get_reset_reason_string() (crash_handler.ino): та функция целиком под
+// #ifdef USE_CRASH_HANDLER, который не определён ни в одном из окружений platformio.ini -
+// то есть на практике она всегда возвращает "". esp_reset_reason()/esp_reset_reason_t
+// доступны без дополнительного #include (транзитивно через <Arduino.h> -> esp32-hal.h ->
+// esp_system.h, тот же путь, что и у esp_random() в session_begin()).
+static String get_reset_reason_short() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:   return "poweron";
+    case ESP_RST_EXT:       return "ext";
+    case ESP_RST_SW:        return "sw";
+    case ESP_RST_PANIC:     return "panic";
+    case ESP_RST_INT_WDT:   return "int_wdt";
+    case ESP_RST_TASK_WDT:  return "task_wdt";
+    case ESP_RST_WDT:       return "wdt";
+    case ESP_RST_DEEPSLEEP: return "deepsleep";
+    case ESP_RST_BROWNOUT:  return "brownout";
+    case ESP_RST_SDIO:      return "sdio";
+    case ESP_RST_UNKNOWN:
+    default:                return "unknown";
+  }
+}
+
+// Начало сессии для V35. Вызывается из четырёх точек старта
+// процесса (Menu.ino::menu_samovar_start(), beer.h::beer_proc(), nbk.h, mode_common.h::
+// mode_begin_heating_session()) - в т.ч. СИНХРОННО из BLYNK_WRITE(V3), уже под BlynkLockGuard
+// (см. tick_blynk()), и из некоторых путей SysTicker (mode_dispatch_alarm() -> check_alarm(),
+// сейчас недостижимо: COLUMN_WETTING не определён ни в одном окружении, но структурно
+// существует). По ОБЕИМ причинам эта функция НЕ берёт BlynkLockGuard и не вызывает
+// Blynk.virtualWrite напрямую - только формирует строку и кладёт её в staging-буфер
+// (blynk_stage_session_start(), Blynk.ino), отправка - из blynk_push_pending_session_start()
+// на очередном тике blynk_push_tick().
+void session_begin(const String& sessionDescription) {
+  const bool resume = sessionResumeAvailable && (millis() / 1000UL < SESSION_RESUME_WINDOW_S);
+  sessionResumeAvailable = false;  // одноразово, как и modeHeatingStartRequested
+  if (resume) {
+    currentSessionId = sessionResumeId;
+  } else {
+    const uint32_t epoch = NTP.getEpochTime();
+    // NTP.getEpochTime() без синхронизации отдаёт малое неправдоподобное число - тогда
+    // берём аппаратный ГСЧ ESP32, чтобы sessionId был уникален и без времени.
+    currentSessionId = (epoch > NTP_PLAUSIBLE_MIN_EPOCH) ? epoch : esp_random();
+  }
+  const String line = String(currentSessionId) + "," + (resume ? "1" : "0") + "," +
+                       String(chipId) + "," + String(SamSetup.TimeZone) + "," +
+                       SAMOVAR_VERSION + "," +
+                       (resume ? get_reset_reason_short() : String("")) + "," +
+                       sessionDescription;
+  blynk_stage_session_start(line);
 }
 
 static void setup_check_gpio0_reset_button() {
@@ -2375,7 +2423,7 @@ static void setup_finalize_boot_display() {
 
 static void setup_report_degraded_boot() {
   // Публикуем итог degraded-загрузки одним пакетом: здесь уже подняты и семафоры для
-  // SendMsg/WriteConsoleLog, и все точки отказа (профиль, ФС, очередь команд, веб, MQTT)
+  // SendMsg/WriteConsoleLog, и все точки отказа (профиль, ФС, очередь команд, веб)
   // уже отработали, так что в сообщение попадают ВСЕ причины, а не только ранние.
   // bootDegradedReason сам называет отказавшую подсистему, поэтому текст общий.
   if (bootDegraded) {
@@ -2514,15 +2562,6 @@ static void setup_connect_wifi_and_notify() {
   }
 #endif
 
-#ifdef USE_TELEGRAM
-  if (WiFi.status() == WL_CONNECTED && SamSetup.tg_token[0] != 0 && SamSetup.tg_chat_id[0] != 0) {
-    vTaskDelay(5 / portTICK_PERIOD_MS);
-    http_sync_request_get(String("http://212.237.16.93/bot") + SamSetup.tg_token + "/sendMessage?chat_id=" + SamSetup.tg_chat_id + "&text=" + urlEncode("Самовар готов к работе; IP=http://" + StIP));
-  } else if (SamSetup.tg_chat_id[0] != 0) {
-    Serial.println(F("Проблема с покдлючением к интернету."));
-  }
-#endif
-
 #ifdef USE_UPDATE_OTA
   //Send OTA events to the browser
   ArduinoOTA.onStart([]() {
@@ -2554,9 +2593,6 @@ static void setup_connect_wifi_and_notify() {
         Blynk.disconnect();
       }
     }
-#endif
-#ifdef USE_MQTT
-    disconnectFromMqtt();
 #endif
   });
   ArduinoOTA.onEnd([]() {
@@ -2782,7 +2818,7 @@ void setup() {
   setup_connect_wifi_and_notify();
 
 #ifndef NOT_USE_INTERFACE_UPDATE
-  // Качаем UI сразу после Wi‑Fi, до датчиков, HTTP-сервера, MQTT, NTP, фоновых задач
+  // Качаем UI сразу после Wi‑Fi, до датчиков, HTTP-сервера, NTP, фоновых задач
   // и Lua: иначе async-сервер держит файлы LittleFS открытыми (rename падает), а
   // буферы HTTP/heap к lua_init() уже израсходованы.
   if (WiFi.status() == WL_CONNECTED) {
@@ -2829,22 +2865,6 @@ void setup() {
   setup_attach_water_flow_interrupt();
 
   setup_configure_head_level_sensor();
-
-#ifdef USE_MQTT
-  const bool mqttLockReady = init_mqtt_lock();
-  if (!mqttLockReady) {
-    // Fail-open: мьютекс MQTT не создался (xMqttSemaphore остаётся nullptr). mqtt_lock()
-    // в SamovarMqtt.h уже проверяет handle на nullptr и отказывает вызывающему, так что
-    // connectToMqtt/disconnectFromMqtt/mqttConnected/MqttSendMsg сами по себе безопасны —
-    // но initMqtt() всё равно НЕ вызываем ниже, чтобы не заводить клиент/коллбэки впустую.
-    report_degraded_boot("mqtt", "mutex init failed");
-    Serial.println(F("WARN: MQTT disabled: cloud status/log publishing will not run; local control, heating and safety logic are unaffected"));
-  }
-  if (mqttLockReady && !wifiAP) {
-    initMqtt();
-    vTaskDelay(500);
-  }
-#endif
 
   // UDP-сокет NTP должен существовать до triggerGetClock: задача тоже зовёт NTP.update().
   setup_start_ntp();
@@ -4195,7 +4215,6 @@ void apply_config_runtime() {
     sensorList[i]->SetTemp = SamSetup.*kSensorSetupFields[i].setTemp;
     sensorList[i]->Delay = SamSetup.*kSensorSetupFields[i].delay;
   }
-  if (SamSetup.LogPeriod == 0) SamSetup.LogPeriod = 3;
   if (SamSetup.autospeed >= 100) SamSetup.autospeed = 0;
   // [Б1.2] Насос отбора не откалиброван (0 шагов/мл в NVS) - validate_rect_program_startable()
   // блокирует СТАРТ программы, но не лечит уже загруженный профиль. Подтягиваем к
@@ -4328,17 +4347,6 @@ void apply_config_runtime() {
   SamSetup.UseHLS = true;
 #endif
 
-#ifdef USE_TELEGRAM
-  if ((uint8_t)SamSetup.tg_token[0] == 0xFF) {
-    SamSetup.tg_token[0] = '\0';
-  }
-  if ((uint8_t)SamSetup.tg_chat_id[0] == 0xFF) {
-    SamSetup.tg_chat_id[0] = '\0';
-  }
-#else
-  SamSetup.tg_token[0] = '\0';
-  SamSetup.tg_chat_id[0] = '\0';
-#endif
   //Инициализация детектора примесей
   init_impurity_detector();
 }
@@ -4367,14 +4375,9 @@ static void printRuntimeEventPublishFailure(
 void SendMsg(const String& m, MESSAGE_TYPE msg_type) {
   if (m.length() < 5) return;
   String MsgPl;
-#ifdef USE_MQTT
-  MsgPl = m;
-  MsgPl.replace(",", ";");
-  MqttSendMsg(MsgPl + "," + msg_type, "msg");
-#endif
-#if defined(USE_TELEGRAM) || defined(SAMOVAR_USE_BLYNK)
+#ifdef SAMOVAR_USE_BLYNK
   // Запись очереди: первый символ — тип ('0' тревога, '1' предупреждение, '2' уведомление),
-  // дальше сам текст. Заголовки для Telegram и Blynk добавляет потребитель в triggerGetClock().
+  // дальше сам текст. Заголовок для Blynk добавляет потребитель в triggerGetClock().
   MsgPl = String((char)('0' + (msg_type == NONE_MSG ? NOTIFY_MSG : msg_type))) + m;
   const BaseType_t queueTakeResult =
       xSemaphoreTake(xMsgSemaphore, (TickType_t)(50 / portTICK_RATE_MS));

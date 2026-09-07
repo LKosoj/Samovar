@@ -1479,15 +1479,13 @@ void run_nbk_program(uint8_t num, bool workConfirmed, bool optimumEntry) {
     if (!nbk_overflow_detection_available()) {
       SendMsg("Внимание: нет ни одного датчика захлёба (ДЗ выключен, ДД не отвечает). Защита от захлёба не работает.", WARNING_MSG);
     }
-    #ifdef USE_MQTT
     String sessionDescription;
-    if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
+    if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
       nbk_cancel_program_start("Описание сессии занято. Старт НБК отменён.");
       mode_warn_log_close_failed();
       return;
     }
-    MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_nbk_program() + "," + sessionDescription, "st");
-    #endif
+    session_begin(sessionDescription);
   } else {
     SendMsg("Переход к строке №" + (String)(num + 1) + ". Тип: " + program_type_to_string(program[num].WType), NOTIFY_MSG);
   }

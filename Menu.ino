@@ -6,10 +6,6 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 
-#ifdef USE_MQTT
-#include "SamovarMqtt.h"
-#endif
-
 const char str_BACK[] PROGMEM = "<BACK";
 const char str_Steam_T[] PROGMEM = "Steam T: ";
 const char str_Pipe_T[] PROGMEM = "Pipe T: ";
@@ -495,16 +491,13 @@ void menu_samovar_start() {
       mode_cancel_process_start("Ошибка создания файла лога. Старт ректификации отменён.");
       return;
     }
-#ifdef USE_MQTT
     String sessionDescription;
-    if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
+    if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
       mode_cancel_process_start("Описание сессии занято. Старт ректификации отменён.");
       mode_warn_log_close_failed();
       return;
     }
-    MqttSendMsg((String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_program(PROGRAM_END) + "," + sessionDescription, "st");
-    delay(200);
-#endif
+    session_begin(sessionDescription);
     run_program(0);
     if (rectProgramCommandFailed) return;
     SamovarStatusInt = SAMOVAR_STATUS_RECT_WITHDRAWAL;
@@ -579,7 +572,7 @@ void samovar_reset() {
   // Штатное завершение могло выйти раньше своего уведомления: у варки job Lua
   // подтверждает остановку лишь на следующем тике, и beer_finish() возвращается,
   // не дойдя до stop_process("Программа затирания завершена"). Тогда внешние
-  // интеграции (MQTT/Telegram/веб) не получили бы о завершении процесса НИЧЕГО.
+  // интеграции (веб) не получили бы о завершении процесса НИЧЕГО.
   // Признак "не дошёл" - процесс всё ещё числится активным: хвост любого finish
   // (у пива, дистилляции, БК - через stop_process(); у НБК - своими строками)
   // обязательно ставит SamovarStatusInt и startval в IDLE. Поэтому дубля с их

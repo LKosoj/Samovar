@@ -5,7 +5,6 @@
 #include "samovar_api.h"
 #include "runtime_helpers.h"
 #include "program_io.h"
-#include "SamovarMqtt.h"
 #include "pumppwm.h"
 
 #define TEMP_HISTORY_SIZE 7  // [Пиво B1] Размер децимированной истории температур (точек), было 10 точек по 1 Гц
@@ -378,7 +377,7 @@ void beer_proc() {
     if (!sensor_valid(*controlSensor) && process_sensor_failed("Пиво", controlSensorName)) return;
 
     // [PKG-B п.4] Пока не завершён OFF-переход нагрева, set_power(true) молча откажет,
-    // а create_data() каждый тик зря перезапишет SPIFFS-лог (+MQTT). Отменяем старт.
+    // а create_data() каждый тик зря перезапишет SPIFFS-лог. Отменяем старт.
     if (power_transition_active()) {
       mode_cancel_process_start("Выключение нагрева ещё не завершено. Старт затирания отменён.");
       return;
@@ -386,7 +385,7 @@ void beer_proc() {
 
     // [P2 п.4] Защёлка безопасности нагрева взведена - старт нагрева всё равно
     // молча провалится (see set_power/heater_safety_latched), но create_data()
-    // и MQTT-сессия уже успеют создаться. Отменяем старт раньше.
+    // и сессия уже успеют создаться. Отменяем старт раньше.
     if (heater_safety_latched()) {
       mode_cancel_process_start("Защёлка безопасности нагрева активна. Старт затирания отменён.");
       return;
@@ -398,15 +397,13 @@ void beer_proc() {
       mode_cancel_process_start("Ошибка создания файла лога. Старт затирания отменён.");
       return;
     }
-#ifdef USE_MQTT
     String sessionDescription;
-    if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
+    if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {
       mode_cancel_process_start("Описание сессии занято. Старт затирания отменён.");
       mode_warn_log_close_failed();
       return;
     }
-    MqttSendMsg(String(chipId) + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," + get_beer_program() + "," + sessionDescription, "st");
-#endif
+    session_begin(sessionDescription);
     set_power(true);
     if (!PowerOn) {
       mode_cancel_process_start("Не удалось включить питание нагрева. Старт затирания отменён.");

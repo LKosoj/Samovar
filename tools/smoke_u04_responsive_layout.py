@@ -23,7 +23,7 @@ def read_page(name: str) -> str:
     return resolve_includes(name, (DATA / name).read_bytes()).decode("utf-8")
 
 
-LONG_INPUTS = ("blynkauth", "tgtoken", "tgchatid", "videourl")
+LONG_INPUTS = ("blynkauth", "videourl")
 
 
 def rule_body(css: str, selector: str, start: int = 0) -> str | None:

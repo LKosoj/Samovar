@@ -1374,7 +1374,6 @@ static const GetU16Field kGetU16Fields[] = {
 
 static const GetU8Field kGetU8Fields[] = {
     {"TimeZone", &SetupEEPROM::TimeZone},
-    {"LogPeriod", &SetupEEPROM::LogPeriod},
     {"DistTimeF", &SetupEEPROM::DistTimeF},
     {"autospeed", &SetupEEPROM::autospeed},
     {"PackDens", &SetupEEPROM::PackDens},
@@ -1547,12 +1546,6 @@ String setupKeyProcessor(const String &var) {
     return s;
   } else if (var == "blynkauth") {
     s = html_escape(String(SamSetup.blynkauth));
-    return s;
-  } else if (var == "tgtoken") {
-    s = html_escape(String(SamSetup.tg_token));
-    return s;
-  } else if (var == "tgchatid") {
-    s = html_escape(String(SamSetup.tg_chat_id));
     return s;
   } else if (var == "ColDiam") {
     return String(SamSetup.ColDiam, 1);
@@ -1890,7 +1883,6 @@ static const SaveU8Field kSaveU8Fields[] = {
     {"DistTimeF", &SetupEEPROM::DistTimeF, 0, 255},
     {"autospeed", &SetupEEPROM::autospeed, 0, 99},
     {"TimeZone", &SetupEEPROM::TimeZone, 0, 23},
-    {"LogPeriod", &SetupEEPROM::LogPeriod, 1, 255},
     {"PackDens", &SetupEEPROM::PackDens, 0, 100},
     {"BeerBrewOrder", &SetupEEPROM::BeerBrewOrder, 0, 2},
     {"CheesePhSmoothPercent", &SetupEEPROM::CheesePhSmoothPercent, 0, 99},
@@ -1937,7 +1929,7 @@ static const SaveDsAddrField kSaveDsAddrFields[] = {
 // Строки разного размера (copyStringSafe шаблонный по N) и служебные параметры,
 // меняющие поток управления в handleSave, не табличятся по значению — но их имена
 // обязаны попадать в тот же источник истины для allowlist.
-static const char* const kSaveMiscStringNames[] = {"videourl", "blynkauth", "tgtoken", "tgchatid"};
+static const char* const kSaveMiscStringNames[] = {"videourl", "blynkauth"};
 static const char* const kSaveSpecialNames[] = {"fullsetup", "save", "clear", "mode", "WProgram", "stepperstepml"};
 
 static bool save_param_name_allowed(const String& name) {
@@ -2156,8 +2148,6 @@ void handleSave(AsyncWebServerRequest *request) {
 
   if (!apply_save_string_arg(request, "videourl", staged.videourl)) return;
   if (!apply_save_string_arg(request, "blynkauth", staged.blynkauth)) return;
-  if (!apply_save_string_arg(request, "tgtoken", staged.tg_token)) return;
-  if (!apply_save_string_arg(request, "tgchatid", staged.tg_chat_id)) return;
 
   for (const SaveColorField &f : kSaveColorFields) {
     if (!apply_save_string_arg(request, f.name, staged.*f.member)) return;

@@ -67,8 +67,6 @@ lib_deps = ...
 | Макрос | Назначение |
 |-------|-----------|
 | `USE_LUA` | Включение интерпретатора Lua |
-| `USE_MQTT` | Поддержка MQTT-клиента |
-| `USE_TELEGRAM` | Интеграция с Telegram |
 | `USE_WEB_SERIAL` | Включение WebSerial |
 | `SAMOVAR_USE_BLYNK` | Поддержка Blynk |
 | `USE_WATER_PUMP` | Управление водяным насосом |
@@ -89,7 +87,7 @@ lib_deps = ...
 5. **Запуск сервисов**:
    - mDNS (`samovar.local`).
    - AsyncWebServer.
-   - MQTT, Blynk, Telegram (если включено).
+   - Blynk (если включено).
    - Lua-интерпретатор (если `USE_LUA`).
    - NTP-синхронизация времени.
 
@@ -116,5 +114,5 @@ lib_deps = ...
 Поддерживается OTA-обновление:
 - Адрес: `http://samovar.local/update`.
 - Файл: `firmware.bin`.
-- Во время обновления отключаются Blynk, MQTT и Lua для снижения нагрузки.
+- Во время обновления отключаются Blynk и Lua для снижения нагрузки.
 - Таймаут: 30 секунд.

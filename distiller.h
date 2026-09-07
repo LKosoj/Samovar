@@ -7,10 +7,6 @@
 #include "mode_common.h"
 #include "program_io.h"
 
-#ifdef USE_MQTT
-#include "SamovarMqtt.h"
-#endif
-
 /**
  * @brief Структура для прогнозирования времени процесса дистилляции.
  */
@@ -145,7 +141,6 @@ void distiller_proc() {
           SAMOVAR_STATUS_DISTILLATION,
           "Ошибка создания файла лога. Старт дистилляции отменён.",
           "Описание сессии занято. Старт дистилляции отменён.",
-          get_dist_program(),
           "Включен нагрев дистиллятора",
           true) != MODE_HEATING_START_SUCCEEDED) return;
     run_dist_program(0);

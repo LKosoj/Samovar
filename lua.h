@@ -1974,11 +1974,6 @@ bool run_lua_script(String fn) {
 String run_lua_string(String lstr) {
   String sr = "";
   if (lstr.length() > 0) {
-#ifdef USE_MQTT
-    String MsgPl = lstr;
-    MsgPl.replace(",", ";");
-    MqttSendMsg(MsgPl + "," + NOTIFY_MSG, "msg");
-#endif
     if (!queue_lua_inline_job(lstr)) {
       sr = "Lua busy";
       WriteConsoleLog(sr);

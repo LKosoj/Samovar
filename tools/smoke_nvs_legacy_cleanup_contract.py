@@ -47,6 +47,15 @@ if nvs_source:
         errors.append(str(exc))
         reader_body = ""
 
+    # T1: LogPeriod/tg_token/tg_chat_id ушли из SetupEEPROM, поэтому
+    # load_legacy_profile_namespace() их больше не читает - но per-field ключи
+    # "LogPeriod"/"tg_tok"/"tg_id" могли остаться в NVS у уже мигрировавших
+    # устройств, и таблицу очистки трогать не просили (SAMOVAR_LEGACY_PROFILE_KEYS[]
+    # намеренно не меняется). Эти три ключа - единственное ожидаемое расхождение
+    # "стирается, но не читается"; для них и симметричная проверка ниже:
+    # они обязаны остаться в таблице стирания, а не исчезнуть вместе с чтением.
+    REMOVED_FIELD_LEGACY_KEYS = {"LogPeriod", "tg_tok", "tg_id"}
+
     read_keys = set(re.findall(r'nvs_read_\w+\(handle,\s*"([^"]+)"', reader_body))
     erased_keys = array_literals(nvs_source, "SAMOVAR_LEGACY_PROFILE_KEYS")
     if not read_keys:
@@ -58,11 +67,19 @@ if nvs_source:
                 "ключи читаются миграцией, но не стираются: "
                 + ", ".join(sorted(never_erased))
             )
-        stale = erased_keys - read_keys
+        stale = erased_keys - read_keys - REMOVED_FIELD_LEGACY_KEYS
         if stale:
             errors.append(
                 "ключи стираются, но миграция их больше не читает: "
                 + ", ".join(sorted(stale))
+            )
+        missing_removed = REMOVED_FIELD_LEGACY_KEYS - erased_keys
+        if missing_removed:
+            errors.append(
+                "поля LogPeriod/tg_token/tg_chat_id убраны из SetupEEPROM (T1), но их "
+                "legacy-ключи обязаны остаться в таблице очистки - иначе у устройств, "
+                "уже писавших их в NVS по старому формату, они там и останутся: "
+                + ", ".join(sorted(missing_removed))
             )
 
     # Неймспейсы: каждый по-режимный источник миграции обязан быть вычищен.

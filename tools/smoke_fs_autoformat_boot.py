@@ -399,7 +399,7 @@ require(
 require("get_web_interface();" not in web_init_body, "WebServerInit must not update open UI files")
 
 setup_body = body(samovar_text, "void setup()")
-# P8 owner note (2026-08-22): setup() now delegates the WiFi/Blynk/Telegram/OTA
+# P8 owner note (2026-08-22): setup() now delegates the WiFi/Blynk/OTA
 # connect sequence to setup_connect_wifi_and_notify() (Samovar.ino) instead of
 # inlining it. The token-order and side-effect-inventory checks below care about
 # the real boot sequence, not which function happens to contain each line, so we

@@ -191,7 +191,6 @@
       { name: 'TimeZone', integer: true, min: 0, max: 23 },
       { name: 'HeaterR', min: 2, max: 65 },
       { name: 'MainsVoltage', min: 0, max: 1000 },
-      { name: 'LogPeriod', integer: true, min: 1, max: 255 },
       { name: 'rele1', integer: true, min: 0, max: 1 },
       { name: 'rele2', integer: true, min: 0, max: 1 },
       { name: 'rele3', integer: true, min: 0, max: 1 },
@@ -600,8 +599,6 @@
     <div id="Other" class="tabcontent" aria-hidden="true">
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
         <h2><label for="blynkauth">Токен Blynk:</label> <input id="blynkauth" name='blynkauth' type='text' size="32" class="setup-long-input" style="width: 22em;" value='%blynkauth%'></h2>
-        <h2><label for="tgtoken">Токен Telegram:</label> <input id="tgtoken" name='tgtoken' type='text' size="50" class="setup-long-input" style="width: 22em;" value='%tgtoken%'></h2>
-        <h2><label for="tgchatid">Chat ID Telegram:</label> <input id="tgchatid" name='tgchatid' type='text' size="15" class="setup-long-input" style="width: 22em;" value='%tgchatid%'></h2>
         <h2><label for="videourl">URL видео камеры:</label> <input id="videourl" name='videourl' type='text' size="32" class="setup-long-input" style="width: 30em;" value='%videourl%'></h2>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em; justify-content: space-between;">
@@ -612,7 +609,6 @@
         </h2>
         <h2><label for="HeaterR">Сопротивление тэна для расчета мощности:</label> <input id="HeaterR" name='HeaterR' type='text' inputmode='decimal' value='%HeaterR%'> Ом</h2>
         <h2><label for="MainsVoltage">Напряжение сети:</label> <input id="MainsVoltage" name='MainsVoltage' type='text' inputmode='decimal' value='%MainsVoltage%'> V</h2>
-        <h2><label for="LogPeriod">Периодичность записи данных в лог:</label> <input id="LogPeriod" name='LogPeriod' type='text' inputmode='decimal' value='%LogPeriod%'> сек</h2>
         <h2>
           <input id='UseWS' type='checkbox' name='UseWS' value='UseWS' %UseWS%>
           <label for='UseWS' class="tooltip">Использовать контроль потока воды<span class="tooltiptext">При наличии подключенного датчика потока воды при отключенной опции можно не учитывать его показания</span></label>

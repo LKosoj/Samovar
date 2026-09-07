@@ -355,6 +355,128 @@ BLYNK_WRITE(V32) {
 
 static bool s_blynkPushResendAll = true;
 
+// Стейджинг-буферы V34 (строка лога) и V35 (начало сессии), см. T2 blynk-log-channel.md.
+// Обе строки формируются в SysTicker/из точек старта процесса (в т.ч. синхронно из
+// BLYNK_WRITE(V3), уже под BlynkLockGuard) и складываются здесь под portMUX_TYPE
+// (по образцу waterPulseMux, runtime_helpers.h) - короткая атомарная копия между задачами
+// разных ядер, без обращения к библиотеке Blynk из пишущей стороны. Реальная отправка -
+// только из blynk_push_pending_log_line()/blynk_push_pending_session_start(), вызываемых
+// из blynk_push_tick() (loop(), под BlynkLockGuard, взятым tick_blynk()).
+// Честный худший случай V34 (T2-review-1.md, [Blynk.ino:366] / [Samovar.ino:752-790]):
+// "5," (2) + sessionId uint32_t (10) + "," (1) + statusInt int16_t "-32768" (6) + "," (1)
+// = 20 байт префикса;
+// format_log_base_fields() (FS.ino): Crt "MM-DD HH:MM:SS" (14) + 4 датчика по
+// format_float(,3) "-99999.000" (","+10=11 каждый, 44) + давление format_float(,2)
+// "-99999.00" (","+9=10) + WRITE_PROGNUM_IN_LOG "," + (programNum+1) до 3 цифр (4) = 72;
+// format_v34_tail_fields() (Samovar.ino), 18 полей через format_float с клампом ±99999
+// (current_power_volt теперь тоже - см. фикс WARNING [Samovar.ino:759]): 9 float-полей на
+// 2-3 знака по 10-11 байт (ACPSensor.avgTemp 11, ActualVolumePerHour 11,
+// current_power_volt 10, WFflowRate 10, get_alcohol 10, get_steam_alcohol 10,
+// pressure_value 10, target_fr 10, actual_fr 10 = 92) + temp_delta format_float(,3) (11)
+// + detectorStatus/PackDens uint8_t до 3 цифр (","+3=4 каждый, 8) + event_code 0/1 (2)
+// + col_height format_float(,2) (10) + col_diameter format_float(,1) (","+8=9)
+// + heat_loss format_float(,0) (","+6=7) + program_type 0-1 символ (2)
+// + mode (int)Samovar_Mode 0-7 (","+1=2, с запасом до 2 цифр - 3) = 144.
+// Итого 20+72+144 = 236 байт. Буфер 288 - запас ~50 байт сверх расчётного максимума.
+static portMUX_TYPE s_blynkLogLineMux = portMUX_INITIALIZER_UNLOCKED;
+static char s_pendingV34Line[288];
+static volatile bool s_pendingV34Ready = false;
+
+// Честный худший случай V35 (T2-review-1.md, [Blynk.ino:370,400-424]): sessionId uint32_t
+// (10) + "," (1) + resume "0"/"1" (1) + "," (1) + chipId uint32_t (10) + "," (1)
+// + SamSetup.TimeZone uint8_t (3) + "," (1) + SAMOVAR_VERSION "7.00" (4) + "," (1)
+// + resetReason - худшее "deepsleep"/"brownout" (9) + "," (1) + description - лимит
+// WebServer.ino (250) = 293 байта. Буфер 320 - запас над расчётным максимумом (T2-review-1.md
+// рекомендовал минимум 320). Если после этого экранирования "%"->"&#37;"
+// (commit_profile_operation(), Samovar.ino) описание всё равно не влезло - строка
+// обрезается по границе UTF-8-символа в blynk_stage_session_start() ниже, с логированием.
+static portMUX_TYPE s_blynkSessionMux = portMUX_INITIALIZER_UNLOCKED;
+static char s_pendingV35Line[320];
+static volatile bool s_pendingV35Ready = false;
+
+// Вызывается из Samovar.ino (SysTicker, tick_publish_log_line) - некрупная, без
+// библиотечных вызовов Blynk и без BlynkLockGuard. Буфер посчитан на честный худший
+// случай (см. комментарий у s_pendingV34Line) - переполнение означает не рост
+// какого-то поля сверх ожидаемого, а мусор/рассинхронизацию формата, поэтому такую
+// строку не отправляем вовсе (сервер ждёт ровно 25 полей после sessionId,statusInt),
+// а не режем её на середине поля.
+void blynk_stage_log_line(const String& line) {
+  if ((size_t)line.length() > sizeof(s_pendingV34Line) - 1) {
+    WriteConsoleLog("V34: строка лога (" + String(line.length()) + " байт) не помещается в буфер (" +
+                     String(sizeof(s_pendingV34Line)) + "), не отправлена");
+    return;
+  }
+  portENTER_CRITICAL(&s_blynkLogLineMux);
+  strlcpy(s_pendingV34Line, line.c_str(), sizeof(s_pendingV34Line));
+  s_pendingV34Ready = true;
+  portEXIT_CRITICAL(&s_blynkLogLineMux);
+}
+
+// Вызывается только из blynk_push_tick() (loop(), уже под BlynkLockGuard из tick_blynk()).
+static void blynk_push_pending_log_line() {
+  bool ready;
+  char line[sizeof(s_pendingV34Line)];
+  portENTER_CRITICAL(&s_blynkLogLineMux);
+  ready = s_pendingV34Ready;
+  if (ready) {
+    strlcpy(line, s_pendingV34Line, sizeof(line));
+    s_pendingV34Ready = false;
+  }
+  portEXIT_CRITICAL(&s_blynkLogLineMux);
+  if (ready) Blynk.virtualWrite(V34, line);
+}
+
+// Вызывается из Samovar.ino (session_begin()) - НЕ берёт BlynkLockGuard: session_begin()
+// достижима синхронно из BLYNK_WRITE(V3) (уже под этим локом, мьютекс не рекурсивный) и,
+// структурно, из SysTicker (mode_dispatch_alarm -> ... -> menu_samovar_start, сейчас
+// недостижимо без COLUMN_WETTING).
+// Буфер посчитан на честный худший случай description (см. комментарий у s_pendingV35Line),
+// но экранирование "%"->"&#37;" может раздуть описание сверх этого расчёта - в отличие от
+// V34 (где переполнение означает мусор в служебных полях), здесь последнее поле - вся
+// строка сразу, поэтому режем её по границе UTF-8-символа (не разрывая многобайтовый
+// символ), а не отбрасываем целиком, и логируем сам факт обрезания одной строкой.
+void blynk_stage_session_start(const String& line) {
+  const size_t capacity = sizeof(s_pendingV35Line) - 1;
+  if ((size_t)line.length() <= capacity) {
+    portENTER_CRITICAL(&s_blynkSessionMux);
+    strlcpy(s_pendingV35Line, line.c_str(), sizeof(s_pendingV35Line));
+    s_pendingV35Ready = true;
+    portEXIT_CRITICAL(&s_blynkSessionMux);
+    return;
+  }
+  const char* src = line.c_str();
+  size_t cut = capacity;
+  // Продолжающий байт UTF-8 - 10xxxxxx (0x80-0xBF); откатываемся, пока не встанем на
+  // границу символа (ASCII-байт или начало новой многобайтовой последовательности).
+  while (cut > 0 && (static_cast<uint8_t>(src[cut]) & 0xC0) == 0x80) cut--;
+  WriteConsoleLog("V35: описание сессии обрезано с " + String(line.length()) + " до " +
+                   String(cut) + " байт (буфер " + String(sizeof(s_pendingV35Line)) + ")");
+  String truncated = line.substring(0, cut);
+  portENTER_CRITICAL(&s_blynkSessionMux);
+  strlcpy(s_pendingV35Line, truncated.c_str(), sizeof(s_pendingV35Line));
+  s_pendingV35Ready = true;
+  portEXIT_CRITICAL(&s_blynkSessionMux);
+}
+
+// Вызывается только из blynk_push_tick(). Перед самой отправкой V35 форсирует немедленный
+// полный resend медленных пинов (blynk_push_slow(true)) -V24 (программа) сервер должен
+// получить не позже V35, иначе новая сессия в БД временно останется без программы.
+static void blynk_push_pending_session_start() {
+  bool ready;
+  char line[sizeof(s_pendingV35Line)];
+  portENTER_CRITICAL(&s_blynkSessionMux);
+  ready = s_pendingV35Ready;
+  if (ready) {
+    strlcpy(line, s_pendingV35Line, sizeof(line));
+    s_pendingV35Ready = false;
+  }
+  portEXIT_CRITICAL(&s_blynkSessionMux);
+  if (ready) {
+    blynk_push_slow(true);
+    Blynk.virtualWrite(V35, line);
+  }
+}
+
 BLYNK_CONNECTED() {
   s_blynkPushResendAll = true;
 }
@@ -366,17 +488,14 @@ BLYNK_WRITE(V33) {
   s_blynkPushResendAll = true;
 }
 
-static void blynk_push_v0() { Blynk.virtualWrite(V0, SteamSensor.avgTemp); }
-static void blynk_push_v1() { Blynk.virtualWrite(V1, PipeSensor.avgTemp); }
+// V0/V1/V6/V7/V9/V25/V23 больше не отправляются отдельными пинами - сервер получает те же
+// значения (Steam/Pipe/Water/Tank/ActualVolumePerHour/ACPSensor/pressure_value) как часть
+// 25 полей V34 (см. blynk_stage_log_line ниже, PIN_SPEC.md §2). V2 (WthdrwlProgress) в V34
+// не входит - остаётся быстрым пином.
 static void blynk_push_v2() { Blynk.virtualWrite(V2, WthdrwlProgress); }
-static void blynk_push_v6() { Blynk.virtualWrite(V6, WaterSensor.avgTemp); }
-static void blynk_push_v7() { Blynk.virtualWrite(V7, TankSensor.avgTemp); }
 static void blynk_push_v8() { Blynk.virtualWrite(V8, get_liquid_volume()); }
-static void blynk_push_v9() { Blynk.virtualWrite(V9, ActualVolumePerHour); }
-static void blynk_push_v25() { Blynk.virtualWrite(V25, ACPSensor.avgTemp); }
-// V23 и V21 попадают в kBlynkFastPush только в сборках с датчиком давления/регулятором;
-// сами функции без #if, иначе автопрототип Arduino даёт «declared static but never defined».
-static void __attribute__((unused)) blynk_push_v23() { Blynk.virtualWrite(V23, pressure_value); }
+// V21 попадает в kBlynkFastPush только в сборках с регулятором мощности; сама функция
+// без #if, иначе автопрототип Arduino даёт «declared static but never defined».
 // Текущее напряжение меняется всё время регулирования, поэтому V21 - быстрый пин.
 static void __attribute__((unused)) blynk_push_v21() {
   Blynk.virtualWrite(V21, "Тек:" + (String)current_power_volt + " Цель:" + (String)target_power_volt);
@@ -401,11 +520,7 @@ static void blynk_push_strings() {
 
 typedef void (*BlynkPushFn)();
 static const BlynkPushFn kBlynkFastPush[] = {
-  blynk_push_v0, blynk_push_v1, blynk_push_v2, blynk_push_v6, blynk_push_v7,
-  blynk_push_v8, blynk_push_v9, blynk_push_v25,
-#if defined(USE_PRESSURE_XGZ) || defined(USE_PRESSURE_MPX) || defined(USE_PRESSURE_1WIRE)
-  blynk_push_v23,
-#endif
+  blynk_push_v2, blynk_push_v8,
 #ifdef SAMOVAR_USE_POWER
   blynk_push_v21,
 #endif
@@ -454,7 +569,6 @@ static void blynk_push_slow(bool force) {
   static int lastProcess = -1;
   static int lastPower = -1;
   static int lastPause = -1;
-  static float lastPressure = -1e9f;
   static String lastIp;
   static int lastMode = -1;
   static uint32_t lastProgramFingerprint = 0;
@@ -464,7 +578,7 @@ static void blynk_push_slow(bool force) {
   if (blynk_changed(lastProcess, process, force)) Blynk.virtualWrite(V3, process);
   if (blynk_changed(lastPower, (int)PowerOn, force)) Blynk.virtualWrite(V4, (int)PowerOn);
   if (blynk_changed(lastPause, (int)PauseOn, force)) Blynk.virtualWrite(V13, (int)PauseOn);
-  if (blynk_changed(lastPressure, (float)bme_pressure, force)) Blynk.virtualWrite(V5, bme_pressure);
+  // V5 (давление) убран - дублируется в V34 (25-е поле), см. blynk_stage_log_line ниже.
   if (blynk_changed(lastIp, String(ipst), force)) Blynk.virtualWrite(V15, ipst);
   if (blynk_changed(lastMode, (int)Samovar_Mode, force)) Blynk.virtualWrite(V20, Samovar_Mode);
   if (force) Blynk.virtualWrite(V19, SAMOVAR_VERSION);
@@ -480,6 +594,20 @@ static void blynk_push_slow(bool force) {
 }
 
 void blynk_push_tick() {
+  // V35 раньше V34: если оба накопились к одному тику, сервер должен узнать о сессии
+  // до первой строки её лога, иначе он отбросит строку как «сессия неизвестна».
+  blynk_push_pending_session_start();  // V35, см. session_begin() (Samovar.ino)
+  blynk_push_pending_log_line();       // V34, если накопилась активным процессом (SysTicker)
+
+  // V34 в простое - раз в 5 с, напрямую отсюда (уже loop(), уже под BlynkLockGuard):
+  // буферизация здесь не нужна, в отличие от активной ветки (SysTicker, другое ядро).
+  static unsigned long idleV34At = 0;
+  const unsigned long nowIdle = millis();
+  if (startval == SAMOVAR_STARTVAL_IDLE && nowIdle - idleV34At >= 5000UL) {
+    idleV34At = nowIdle;
+    Blynk.virtualWrite(V34, build_idle_v34_line());
+  }
+
   static unsigned long cycleStart = 0;
   static unsigned long slowSentAt = 0;
   static uint8_t next = 0xFF;  // 0xFF - цикл не идёт

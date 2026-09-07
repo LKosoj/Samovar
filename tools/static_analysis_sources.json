@@ -9,7 +9,6 @@
     "SPIFFSEditor.h",
     "Samovar.h",
     "Samovar.ino",
-    "SamovarMqtt.h",
     "Samovar_ini.h",
     "Samovar_pin.h",
     "WebServer.ino",

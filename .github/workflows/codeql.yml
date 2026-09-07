@@ -85,7 +85,7 @@ jobs:
           -e Samovar_no_power \
           -e Samovar_rmvk \
           -e Samovar_sem \
-          -e Samovar_lua_mqtt \
+          -e Samovar_lua \
           -e Samovar_alarm_button
 
     - name: Perform CodeQL Analysis

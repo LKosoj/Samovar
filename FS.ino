@@ -395,6 +395,7 @@ static String state_snapshot_header() {
   out += ";TC=" + format_float(TankSensor.avgTemp, 2);
   out += ";TS=" + format_float(SteamSensor.avgTemp, 2);
   out += ";SH=" + String(suvidHold.accumulatedMs / 1000UL);
+  out += ";SI=" + String(currentSessionId);
   // Время - последним полем: строку собирают вне этого файла, её содержимое не под
   // нашим контролем, и разделитель внутри неё не должен ломать разбор остальных полей.
   out += ";T=" + WthdrwTimeS;
@@ -512,6 +513,7 @@ bool read_state_snapshot(StateSnapshot& snapshot) {
   uint8_t power = 0;
   if (state_snapshot_uint8(header, "H", power)) snapshot.powerOn = power != 0;
   state_snapshot_uint32(header, "SH", snapshot.suvidHoldAccumulatedSec);
+  state_snapshot_uint32(header, "SI", snapshot.sessionId);
   snapshot.programText = programText;
   return true;
 }
@@ -563,6 +565,31 @@ static void enforce_data_log_free_space_budget() {
   }
 }
 
+// Базовые 7 полей строки лога (Crt + 4 температуры + давление [+ номер программы]).
+// Вынесено из append_data(), чтобы то же форматирование использовал build_idle_v34_line()
+// (V34 в простое, ниже) без записи в data.csv и без гейта на изменение. Массив передан без
+// компилируемого размера в скобках ([] вместо [DS_LOGGED_SENSOR_COUNT]): у объединённого
+// .ino-файла PlatformIO автоматически выносит прототипы функций к началу единицы трансляции
+// по одним лишь сигнатурам (см. tools/pioino.py), и DS_LOGGED_SENSOR_COUNT в списке
+// параметров туда не попал бы - там она ещё не объявлена.
+static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum) {
+  String str;
+  str = Crt;
+  for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
+    str += ",";
+    str += format_float(sensorTemp[i], 3);
+  }
+  str += ",";
+  str += format_float(pressure, 2);
+#ifdef WRITE_PROGNUM_IN_LOG
+  str += ",";
+  str += programNum + 1;
+#else
+  (void)programNum;
+#endif
+  return str;
+}
+
 String append_data() {
   if (!data_log_ready) return "";
 
@@ -600,19 +627,7 @@ String append_data() {
     // уборка/предупреждение о месте срабатывали на любой ветке раннего выхода ниже.
     enforce_data_log_free_space_budget();
 
-    String str;
-    str = Crt;
-    for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) {
-      str += ",";
-      str += format_float(sensorTemp[i], 3);
-    }
-    str += ",";
-    str += format_float(pressure, 2);
-
-#ifdef WRITE_PROGNUM_IN_LOG
-    str += ",";
-    str += programNum + 1;
-#endif
+    String str = format_log_base_fields(sensorTemp, pressure, programNum);
 
     bool locked = log_file_lock(pdMS_TO_TICKS(50));
     if (!locked) {
@@ -665,3 +680,16 @@ String append_data() {
   }
   return "";
 }
+
+#ifdef SAMOVAR_USE_BLYNK
+// Строка V34 для простоя (SAMOVAR_STARTVAL_IDLE), раз в 5 с из blynk_push_tick() (Blynk.ino).
+// sessionId=0 - по тексту мастер-плана: в простое сессии нет. format_v34_tail_fields()
+// определена в Samovar.ino - вызов через границу .ino-файлов работает благодаря
+// автопрототипам PlatformIO (см. AGENTS.md/T2), сама функция без параметров.
+static String build_idle_v34_line() {
+  const float sensorTemp[DS_LOGGED_SENSOR_COUNT] = {
+      SteamSensor.avgTemp, PipeSensor.avgTemp, WaterSensor.avgTemp, TankSensor.avgTemp};
+  String base = format_log_base_fields(sensorTemp, bme_pressure, ProgramNum);
+  return "5,0," + String((int)SamovarStatusInt) + "," + base + format_v34_tail_fields();
+}
+#endif

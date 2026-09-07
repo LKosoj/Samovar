@@ -60,10 +60,6 @@
 #define USE_LUA
 #endif
 
-#ifdef SAMOVAR_BUILD_MQTT
-#define USE_MQTT
-#endif
-
 #ifdef SAMOVAR_BUILD_NO_POWER
 #undef SAMOVAR_USE_POWER
 #endif
@@ -165,6 +161,15 @@
 #define BLYNK_MSG_LIMIT 0
 #endif
 #endif
+
+// Окно (сек от millis() на момент старта сессии), в течение которого сессия,
+// прерванная перезагрузкой и успешно восстановленная из /state.csv, считается
+// продолжением прежней (тот же sessionId), а не новой. См. session_begin().
+constexpr uint32_t SESSION_RESUME_WINDOW_S = 1800;
+// Нижняя граница «правдоподобного» unix-времени от NTP.getEpochTime(): если
+// NTP ни разу не синхронизировалось, библиотека отдаёт малое нереальное число -
+// в этом случае для sessionId используется esp_random() вместо эпохи.
+constexpr uint32_t NTP_PLAUSIBLE_MIN_EPOCH = 1700000000UL;
 
 #ifdef SAMOVAR_USE_SEM_AVR
 #ifndef SAMOVAR_USE_RMVK
@@ -371,6 +376,10 @@ TaskHandle_t GetClockTask1 = NULL;
 TaskHandle_t GetBMPTask = NULL;
 
 static constexpr uint32_t SYS_TICKER_STACK_BYTES = 4608;
+
+// Период записи строки лога (было настраиваемое поле LogPeriod, теперь фиксировано:
+// решение 2026-09-07, см. blynk-log-channel.md).
+static constexpr uint8_t LOG_PERIOD_S = 4;
 static constexpr uint32_t GET_CLOCK_STACK_BYTES = 5500;
 static constexpr uint32_t LUA_SCRIPT_STACK_BYTES = 8192;
 static constexpr uint32_t POWER_STATUS_STACK_BYTES = 3072;
@@ -520,7 +529,6 @@ struct SetupEEPROM {
   uint16_t TankDelay;                                          //Время задержки включения насоса в секундах при выходе температуры за значение уставки
   uint8_t TimeZone;                                            //Таймзона того места, где будет применяться устройство
   float HeaterResistant;                                       //Сопротивление тэна для расчета мощности
-  uint8_t LogPeriod;                                           //Периодичность записи данных о температуре в файл (раз в три секунды, оптимально с точки зрения объема файла). Если прогнозируемое время работы Самовара больше суток - лучше период установить раз в 5-10 секунд.
   char SteamColor[20];                                         //Цвета температур в интерфейсе
   char PipeColor[20];
   char WaterColor[20];
@@ -559,8 +567,6 @@ struct SetupEEPROM {
   uint8_t DistTimeF;                                           //Время в минутах для контроля завершения процесса дистилляции
   bool UseHLS;                                                 //Использовать датчик флегмы
   float MaxPressureValue;                                      //Максимальное давление, при котором сработает аварийный режим
-  char tg_token[50];                                           //Токен Телеграм-бота
-  char  tg_chat_id[14];                                        //Идентификатор чата Телеграм
   float NbkIn;                                                 //Инерция
   float NbkDelta;                                              //Дельта
   float NbkDM;                                                 //Шаг мощности
@@ -652,6 +658,7 @@ struct StateSnapshot {
   uint8_t programLen;   // всего строк в программе
   bool powerOn;         // был ли включён нагрев - только по нему решаем, предупреждать ли
   uint32_t suvidHoldAccumulatedSec;  // накопленная выдержка Сувида на момент снимка, сек
+  uint32_t sessionId;    // sessionId прерванной сессии (для возможного резюме, см. session_begin())
   String programText;   // текст программы в формате режима, пригодный для разбора
 };
 
@@ -713,7 +720,6 @@ unsigned long beerStageIdleSinceMs;    // Момент начала текуще
 unsigned long beerBoilActiveAccumMs;   // [П13] Накопленное АКТИВНОЕ время разгона до кипения на строке 'B' (пауза не тикает)
 volatile bool alarm_event;                                      // Признак срабатывания кнопки тревоги
 bool acceleration_heater;                                       // Признак включенного разгонного тэна
-bool send_mqtt;                                                 // Отправлять данные в облако
 volatile bool is_reboot = false;                                // Признак перезагрузки
 bool lcd_found = false;                                         // Признак наличия дисплея
 bool wetting_autostart = false;                                 // Автостарт голов после смачивания
@@ -829,6 +835,7 @@ volatile uint32_t bk_water_last_adjust_ms = 0;                  // [9b] millis()
 uint32_t chipId = 0;                                            // Идентификатор ESP32
 //String vr;                                                      // Причина перезагрузки ESP32
 String SessionDescription;                                      // Описание параметров работы в свободном формате для сохранения в облаке
+uint32_t currentSessionId = 0;                                  // Идентификатор текущей сессии для V34/V35 (см. session_begin())
 volatile float test_num_val;                                    // Тестовое численное значение
 float pressure_value;                                           // Давление от датчика давления
 float old_pressure_value ;                                      // старое давление для усреднения //TODO для усреднения давления

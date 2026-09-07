@@ -274,11 +274,11 @@ def run_structural_part() -> list[str]:
         expect_warn_log_close_failed=False,
     )
 
-    # E: описание MQTT-сессии занято - хвост через mode_warn_log_close_failed
+    # E: описание сессии занято - хвост через mode_warn_log_close_failed
     # (другой текст WARNING при занятости, чем у nbk_close_data_log).
     check_site(
         errors, run_body, "E",
-        "if (!copy_mqtt_session_description(sessionDescription, pdMS_TO_TICKS(50))) {",
+        "if (!copy_start_session_description(sessionDescription, pdMS_TO_TICKS(50))) {",
         "Описание сессии занято. Старт НБК отменён.",
         expect_close_log=False,
         expect_warn_log_close_failed=True,

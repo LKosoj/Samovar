@@ -9,8 +9,8 @@
 этого не годится - он экранирует под JSON/<script>-контекст, а не под HTML body/атрибут.
 
 Тест из двух частей, как и smoke_json_escape_canon.py:
-1. Архитектурная (без компиляции): все шесть точек подстановки пользовательских данных в
-   HTML (Descr x2, videourl, 4 цвета через kGetColorFields, blynkauth/tgtoken/tgchatid)
+1. Архитектурная (без компиляции): все точки подстановки пользовательских данных в
+   HTML (Descr x2, videourl, 4 цвета через kGetColorFields, blynkauth)
    обязаны звать html_escape(...), а не подставлять сырое значение.
 2. Поведенческая: g++-харнесс с РЕАЛЬНЫМ телом html_escape(), прогнанный на двух разных
    пейлоадах (правило AGENTS.md против теста на одном значении) - один рвёт <textarea>
@@ -35,8 +35,8 @@ HTML_ESCAPE_SIGNATURE = "static String html_escape(const String &s)"
 
 # A: рвёт <textarea>...</textarea> закрывающим тегом и открывает новый заголовок - ровно
 #    сценарий из описания дефекта (Descr в data_raw/*.htm сидит внутри <textarea>).
-# B: выходит из одинарной кавычки HTML-атрибута value='...' (videourl/blynkauth/tgtoken/
-#    tgchatid/цвета в setup.htm) и добавляет обработчик onmouseover - другой контекст,
+# B: выходит из одинарной кавычки HTML-атрибута value='...' (videourl/blynkauth/
+#    цвета в setup.htm) и добавляет обработчик onmouseover - другой контекст,
 #    другой опасный символ (одинарная кавычка, а не тег).
 VALUE_A = "</textarea><h1>pwned</h1>"
 VALUE_B = "x' onmouseover='alert(1)"
@@ -49,8 +49,6 @@ assert "'" in VALUE_B, "фикстура B обязана содержать о�
 DELEGATES = [
     ("setupKeyProcessor", 'html_escape(String(SamSetup.*f.member))'),
     ("setupKeyProcessor", 'html_escape(String(SamSetup.blynkauth))'),
-    ("setupKeyProcessor", 'html_escape(String(SamSetup.tg_token))'),
-    ("setupKeyProcessor", 'html_escape(String(SamSetup.tg_chat_id))'),
 ]
 
 

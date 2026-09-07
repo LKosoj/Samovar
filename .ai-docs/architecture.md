@@ -4,16 +4,12 @@
 graph TD
     subgraph "Веб-интерфейс"
         WebUI[Браузер] -->|HTTP/WS| WebServer
-        WebUI -->|MQTT| MQTTBroker
     end
 
     subgraph "ESP32"
         WebServer[AsyncWebServer] -->|GET/POST| Logic
         WebServer -->|SPIFFS| FS[Файловая система]
         WebServer -->|WebSocket| WebUI
-
-        MQTTBroker -->|MQTT| MQTTClient
-        MQTTClient --> Logic
 
         Logic[Логика управления] -->|Lua| LuaEngine[Интерпретатор Lua]
         Logic -->|PID| HeaterControl[Управление нагревом]
@@ -46,8 +42,7 @@ graph TD
     end
 
     subgraph "Внешние сервисы"
-        BlynkApp[Blynk] -->|MQTT| MQTTBroker
-        TelegramBot[Telegram] -->|HTTP| WebServer
+        BlynkApp[Blynk] -->|Binary/HTTP| Logic
     end
 
     Logic -->|NVS| EEPROM[NVS хранилище]

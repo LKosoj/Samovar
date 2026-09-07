@@ -103,6 +103,10 @@ void menu_calibrate();
 void menu_reset_wifi();
 void menu_switch_focus();
 void menu_samovar_start();
+// Начало сессии для V35 - см. Samovar.ino. Вызывается из
+// всех точек старта процесса (Menu.ino, beer.h, nbk.h, mode_common.h) после успешного
+// прохождения предусловий, синхронно, без обращения к Blynk-библиотеке напрямую.
+void session_begin(const String& sessionDescription);
 void samovar_reset();
 void set_menu_screen(uint8_t param);
 
@@ -406,10 +410,6 @@ String get_cheese_program();
 #define SAMOVAR_LUA_BUILD_AVAILABLE true
 #else
 #define SAMOVAR_LUA_BUILD_AVAILABLE false
-#endif
-
-#ifdef USE_MQTT
-void MqttSendMsg(const String &Str, const char *chart, int version = 3);
 #endif
 
 // [WP12] ПОЧЕМУ include здесь, в самом конце файла (порядок строк - часть

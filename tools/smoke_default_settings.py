@@ -65,7 +65,7 @@ current_defaults = {
 }
 
 missing = sorted(parser.fields - settings.keys())
-allowed_empty = {"blynkauth", "tgtoken", "tgchatid", "videourl"}
+allowed_empty = {"blynkauth", "videourl"}
 empty = sorted(
     name
     for name in parser.fields

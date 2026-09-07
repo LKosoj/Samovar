@@ -41,6 +41,10 @@ EXTRACTED = [
     ("Samovar.ino", "static void state_snapshot_report_pending()"),
 ]
 
+# T2 (blynk-log-channel.md): SI= в заголовке снимка и sessionResumeAvailable/
+# sessionResumeId, которые restore_state_snapshot() выставляет для последующего
+# session_begin() (не входит в этот тест - session_begin сам не тронут snapshot-кодом).
+
 ARDUINO_STUB = r'''
 #pragma once
 
@@ -355,6 +359,15 @@ static void WriteConsoleLog(const String&) { consoleLogCalls++; }
 // Отложенный текст предупреждения живёт в Samovar.ino рядом с restore_state_snapshot.
 static String pendingStateSnapshotNotice;
 
+// T2 (blynk-log-channel.md): currentSessionId (Samovar.h) читает
+// state_snapshot_header() (FS.ino), sessionResumeAvailable/sessionResumeId (Samovar.ino,
+// объявлены рядом с restore_state_snapshot(), но не входят в её extract'нутое тело) -
+// решение о резюме принимает session_begin() (не предмет этого теста), здесь важно только,
+// что restore_state_snapshot() их корректно выставляет.
+uint32_t currentSessionId = 0;
+static bool sessionResumeAvailable = false;
+static uint32_t sessionResumeId = 0;
+
 // ---- Реальный код под тестом ----
 @STATE_SNAPSHOT_CONSTANTS@
 
@@ -430,6 +443,9 @@ static void reset_world() {
   Samovar_Mode = SAMOVAR_RECTIFICATION_MODE;
   WthdrwTimeS = String("00:00:00");
   liquidVolumeFixture = 0;
+  currentSessionId = 0;
+  sessionResumeAvailable = false;
+  sessionResumeId = 0;
 }
 
 int main() {
@@ -475,6 +491,7 @@ int main() {
   startval = 1;
   SamovarStatusInt = 10;
   liquidVolumeFixture = 1250;
+  currentSessionId = 4242;  // T2: sessionId, который обязан вернуться в sessionResumeId
   check(write_state_snapshot(), "снимок обязан записаться");
   const std::string savedFile = SPIFFS.data;
 
@@ -488,6 +505,10 @@ int main() {
   check(nearly_equal(program[0].Temp, 78.5f), "температура строки должна совпасть");
   check(nearly_equal(program[1].Speed, 2.4f), "скорость строки должна совпасть");
   check(program[2].Volume == 1500, "объём строки должен совпасть");
+  // T2: нагрев был включён и программа восстановилась - резюме сессии должно стать
+  // доступным с тем же sessionId, который был записан в снимок.
+  check(sessionResumeAvailable, "нагрев был включён, программа восстановлена - резюме обязано быть доступно");
+  check(sessionResumeId == 4242, "sessionId резюме обязан совпасть с тем, что был в снимке");
   check(pendingStateSnapshotNotice.length() > 0, "о прерванной сессии нужно предупредить");
   check(sendMsgCalls == 0, "предупреждение уходит не из restore, а из отчёта в конце setup");
   state_snapshot_report_pending();
@@ -538,6 +559,7 @@ int main() {
   restore_state_snapshot();
   check(ProgramLen == 3, "программа возвращается независимо от нагрева");
   check(pendingStateSnapshotNotice.length() == 0, "выключились штатно - предупреждать не о чем");
+  check(!sessionResumeAvailable, "T2: нагрев был выключен - резюме сессии недоступно");
 
   // 8. Файл прежнего формата (без номера режима) читать нечем.
   reset_world();
@@ -670,6 +692,18 @@ int main() {
         "внутри сообщения о сессии должно быть видно, что программа не восстановилась");
   check(contains_text(pendingStateSnapshotNotice, "неверный формат строки"),
         "причина отказа разбора обязана попасть в уведомление и при включённом нагреве");
+  check(!sessionResumeAvailable,
+        "T2: нагрев был включён, но программа НЕ восстановилась - резюме недоступно");
+
+  // 16. [T2] Файл прежнего формата (без ключа SI=) обязан читаться успешно,
+  // а sessionId - молча остаться нулевым.
+  reset_world();
+  seed_rect_program();
+  SPIFFS.data = "M=0;P=1;L=1;H=1\nH;500;0.6;1;78.5;210\n";
+  SPIFFS.present = true;
+  StateSnapshot legacyNoSession;
+  check(read_state_snapshot(legacyNoSession), "снимок без SI= обязан читаться");
+  check(legacyNoSession.sessionId == 0, "T2: без ключа SI= sessionId обязан молча остаться 0");
 
   if (failures != 0) return 1;
   std::cout << "state snapshot restore behaviour checks passed\n";

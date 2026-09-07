@@ -35,7 +35,10 @@ AVAILABLE_MUTATION_ANCHOR = (
 )
 
 WARNING_START_ANCHOR = "manual_overflow = false; // [Ремонт-2026-09-02 П6] сброс латча Ручной настройки на новом старте сессии"
-WARNING_END_ANCHOR = "#ifdef USE_MQTT"
+# T2/T3 (blynk-log-channel): следом идёт формирование sessionDescription/session_begin() -
+# это вне зоны ответственности этого теста (детектор захлёба), поэтому граница сегмента
+# сдвинута раньше, до неё.
+WARNING_END_ANCHOR = "String sessionDescription;"
 WARNING_MUTATION_ANCHOR = "if (!nbk_overflow_detection_available()) {"
 
 P9_START_ANCHOR = "#ifndef USE_HEAD_LEVEL_SENSOR"

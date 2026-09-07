@@ -65,7 +65,6 @@ nav:
   - Samovar.ino: modules/Samovar__ino.md
   - Samovar_ini.h: modules/Samovar_ini__h.md
   - Samovar_pin.h: modules/Samovar_pin__h.md
-  - SamovarMqtt.h: modules/SamovarMqtt__h.md
   - sensorinit.h: modules/sensorinit__h.md
   - SPIFFSEditor.h: modules/SPIFFSEditor__h.md
   - WebServer.ino: modules/WebServer__ino.md

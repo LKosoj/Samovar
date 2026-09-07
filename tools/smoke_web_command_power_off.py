@@ -175,7 +175,7 @@ static void check(bool condition, const char* message) {
 }
 
 int main() {
-  // A: голый power ("" - так шлют Blynk/MQTT) при PowerOn=true ->
+  // A: голый power ("" - так шлёт Blynk) при PowerOn=true ->
   // старое поведение-переключатель SAMOVAR_POWER.
   PowerOn = true;
   run_power_action("");

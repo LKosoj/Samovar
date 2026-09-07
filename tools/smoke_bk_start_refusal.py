@@ -100,7 +100,7 @@ bool heater_safety_latched() { return heaterSafetyLatchedStub; }
 enum ModeHeatingStartResult { MODE_HEATING_START_FAILED = 0, MODE_HEATING_START_SUCCEEDED = 1 };
 static int runHeatingStartCalls = 0;
 static ModeHeatingStartResult mode_run_heating_start(
-    int activeStatus, const char*, const char*, const String&, const char*, bool) {
+    int activeStatus, const char*, const char*, const char*, bool) {
   runHeatingStartCalls++;
   // Моделирует реальный mode_begin_heating_session (mode_common.h, [PKG-B п.7]):
   // при взведённой защёлке штатный отказ идёт через mode_cancel_process_start с

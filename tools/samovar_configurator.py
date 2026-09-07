@@ -118,8 +118,6 @@ VALUE_SPECS = (
 
 BOOL_SPECS = (
     BoolSpec("SAMOVAR_USE_BLYNK", "Использовать Blynk", "Сеть"),
-    BoolSpec("USE_MQTT", "Сохранять логи через MQTT", "Сеть"),
-    BoolSpec("USE_TELEGRAM", "Отправлять уведомления в Telegram", "Сеть"),
     BoolSpec("NOT_USE_INTERFACE_UPDATE", "Не обновлять веб-интерфейс автоматически", "Сеть"),
     BoolSpec("USE_UPDATE_OTA", "Разрешить обновление по Wi-Fi", "Сеть"),
     BoolSpec("KVIC_USE_9600", "KVIC: скорость UART 9600", "Регулятор"),

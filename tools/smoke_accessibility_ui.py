@@ -40,8 +40,8 @@ SETUP_CONTROLS = (
     "DeltaTankTemp", "SetTankTemp", "TankDelay", "ACPAddr", "DeltaACPTemp",
     "SetACPTemp", "ACPDelay", "StepperStepMl", "StepperStepMlI2C", "Kp", "Ki",
     "Kd", "StbVoltage", "BVolt", "NbkIn", "NbkDelta", "NbkDM", "NbkDP",
-    "NbkSteamT", "NbkOwPress", "blynkauth", "tgtoken", "tgchatid", "videourl",
-    "TimeZone", "HeaterR", "LogPeriod", "rele1", "rele2", "rele3", "rele4",
+    "NbkSteamT", "NbkOwPress", "blynkauth", "videourl",
+    "TimeZone", "HeaterR", "rele1", "rele2", "rele3", "rele4",
 )
 PAGE_LABELS = {
     "index.htm": ("Voltage", "pumpspeed", "lua_str_i", "Descr", "WProgram"),

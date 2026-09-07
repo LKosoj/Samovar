@@ -10,10 +10,6 @@
 #include "pumppwm.h"
 #endif
 
-#ifdef USE_MQTT
-#include "SamovarMqtt.h"
-#endif
-
 // [A1 п.1] Регулятор при старте БК стартует в POWER_SPEED_MODE (разгон на
 // максимум). Переход на рабочую мощность SamSetup.BKPower должен произойти РОВНО
 // ОДИН РАЗ - по факту закипания. current_power_mode_is(POWER_SPEED_MODE) для этого
@@ -172,7 +168,6 @@ void bk_proc() {
           SAMOVAR_STATUS_BK,
           "Ошибка создания файла лога. Старт БК отменён.",
           "Описание сессии занято. Старт БК отменён.",
-          String("BK"),
           "Включен нагрев бражной колонны",
           false) != MODE_HEATING_START_SUCCEEDED) return;
     bk_work_power_pending = true;

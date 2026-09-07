@@ -86,7 +86,7 @@ bool heater_safety_latched() { return heaterSafetyLatchedStub; }
 enum ModeHeatingStartResult { MODE_HEATING_START_FAILED = 0, MODE_HEATING_START_SUCCEEDED = 1 };
 static int runHeatingStartCalls = 0;
 static ModeHeatingStartResult mode_run_heating_start(
-    int, const char*, const char*, const String&, const char*, bool) {
+    int, const char*, const char*, const char*, bool) {
   runHeatingStartCalls++;
   return MODE_HEATING_START_FAILED;
 }

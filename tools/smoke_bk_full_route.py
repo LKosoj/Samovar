@@ -74,7 +74,7 @@ static bool sensor_valid(const Sensor&) { return true; }
 static bool process_sensor_failed(const char*, const char*) { return false; }
 static bool mode_heating_start_pending(int) { return false; }
 static int mode_run_heating_start(
-    int, const char*, const char*, const String&, const char*, bool) {
+    int, const char*, const char*, const char*, bool) {
   PowerOn = true;
   return MODE_HEATING_START_SUCCEEDED;
 }

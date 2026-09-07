@@ -8,7 +8,7 @@ copyStringSafe МОЛЧА усекает значение длиннее буф�
 на деле был обрезан.
 
 Решение: цикл по kSaveColorFields теперь зовёт apply_save_string_arg() -
-тот же хелпер, которым уже применяются videourl/blynkauth/tgtoken/tgchatid -
+тот же хелпер, которым уже применяются videourl/blynkauth -
 он сам отвечает 400 через send_save_parse_error() при переполнении и
 возвращает false (handleSave делает return, черновик staged не публикуется).
 

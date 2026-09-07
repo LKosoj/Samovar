@@ -2,10 +2,10 @@
 """Поведенческая проверка П2 п.4: guard от "шторма" старта beer_proc().
 
 Раньше при взведённой защёлке безопасности нагрева (heater_safety_latched())
-beer_proc() всё равно доходил до resetBoilingDetector()/create_data() (и, при
-включённом USE_MQTT, до открытия MQTT-сессии) каждый тик, хотя set_power(true)
+beer_proc() всё равно доходил до resetBoilingDetector()/create_data() (и до
+открытия сессии Blynk) каждый тик, хотя set_power(true)
 ниже по коду всё равно молча откажет - t.е. процесс не мог стартовать, но лог
-и MQTT-сессия пересоздавались бы впустую на каждый вызов. Отдельно: если
+и сессия пересоздавались бы впустую на каждый вызов. Отдельно: если
 set_power(true) не поднял PowerOn, раньше старт тихо обрывался без сообщения
 пользователю. Тест вытаскивает РЕАЛЬНОЕ тело beer_proc() из beer.h через
 extract_function_body и проверяет поведение (счётчики вызовов), а не факт
@@ -124,6 +124,20 @@ void beer_finish() {
 
 #define portTICK_PERIOD_MS 1
 void vTaskDelay(int) {}
+
+// T2/T3 (blynk-log-channel.md): захват sessionDescription/session_begin() выполняется
+// безусловно между create_data() и set_power(true). Успех по умолчанию
+// (true), чтобы не менять уже проверяемые здесь счётчики вызовов ниже по коду.
+#define pdMS_TO_TICKS(ms) (ms)
+static bool copyStartSessionDescriptionResult = true;
+static int copyStartSessionDescriptionCalls = 0;
+bool copy_start_session_description(String& description, int) {
+  copyStartSessionDescriptionCalls++;
+  description = String("desc");
+  return copyStartSessionDescriptionResult;
+}
+static int sessionBeginCalls = 0;
+void session_begin(const String&) { sessionBeginCalls++; }
 
 @BEER_PROC_BODY@
 

@@ -280,7 +280,7 @@ BROWSER_TEST = r'''async page => {
         .filter(visible);
       controls.forEach(element => checkInside(element, panel, elementLabel(element)));
       if (panel.id === "Other") {
-        ["blynkauth", "tgtoken", "tgchatid", "videourl"].forEach(name => {
+        ["blynkauth", "videourl"].forEach(name => {
           const element = document.querySelector('input[name="' + name + '"]');
           checkInside(element, element.parentElement, 'input[name="' + name + '"]');
         });
@@ -300,7 +300,7 @@ BROWSER_TEST = r'''async page => {
       const contract = {
         form: [form.name, form.getAttribute("action"), form.method],
         actions: actions.map(element => [element.id, element.name, element.type, element.value]),
-        longInputs: ["blynkauth", "tgtoken", "tgchatid", "videourl"].map(name => {
+        longInputs: ["blynkauth", "videourl"].map(name => {
           const element = form.elements[name]; return [element.name, element.type];
         }),
         tabs: Array.from(document.querySelectorAll(".tabcontent")).map(element => element.id)
@@ -308,7 +308,7 @@ BROWSER_TEST = r'''async page => {
       const expected = {
         form: ["setupform", "/save", "post"],
         actions: [["save", "save", "submit", "Сохранить"], ["return", "return", "button", "На главную"], ["edit", "edit", "button", "Редактор"]],
-        longInputs: [["blynkauth", "text"], ["tgtoken", "text"], ["tgchatid", "text"], ["videourl", "text"]],
+        longInputs: [["blynkauth", "text"], ["videourl", "text"]],
         tabs: ["Main", "Temp", "Pump", "Beer", "Cheese", "NBK", "Other"]
       };
       if (JSON.stringify(contract) !== JSON.stringify(expected)) {
@@ -475,7 +475,7 @@ BROWSER_TEST = r'''async page => {
     } else if (state === "other-long-values" || state === "other-empty-values") {
       await openSetupTab("Other");
       const value = state === "other-long-values" ? "длинное значение ".repeat(12) : "";
-      await page.evaluate(text => ["blynkauth", "tgtoken", "tgchatid", "videourl"].forEach(name => {
+      await page.evaluate(text => ["blynkauth", "videourl"].forEach(name => {
         document.querySelector('input[name="' + name + '"]').value = text;
       }), value);
     } else if (state === "validation-error") {

@@ -14,11 +14,9 @@
 
 //#define USE_LUA
 //#define SAMOVAR_USE_POWER_START_TIME 1000
-//#define USE_MQTT
 //#define USE_BODY_TEMP_AUTOSET
 //#define USE_EXPANDER 0x20
 //#define USE_ANALOG_EXPANDER 0x48
-//#define USE_TELEGRAM
 //#define SAMOVAR_USE_BLYNK
 
 #endif  // _USER_CONFIG_OVERRIDE_H_

@@ -717,10 +717,9 @@ require(
         "[env:Samovar_no_power]",
         "[env:Samovar_rmvk]",
         "[env:Samovar_sem]",
-        "[env:Samovar_lua_mqtt]",
+        "[env:Samovar_lua]",
         "[env:Samovar_alarm_button]",
         "-DSAMOVAR_BUILD_LUA",
-        "-DSAMOVAR_BUILD_MQTT",
     ),
 )
 for environment in (
@@ -729,7 +728,7 @@ for environment in (
     "Samovar_no_power",
     "Samovar_rmvk",
     "Samovar_sem",
-    "Samovar_lua_mqtt",
+    "Samovar_lua",
     "Samovar_alarm_button",
 ):
     if environment not in ci:
@@ -752,7 +751,6 @@ require(
     samovar_header,
     (
         "SAMOVAR_BUILD_LUA",
-        "SAMOVAR_BUILD_MQTT",
     ),
 )
 require(

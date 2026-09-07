@@ -42,7 +42,7 @@ ENVIRONMENTS = (
     "Samovar_no_power",
     "Samovar_rmvk",
     "Samovar_sem",
-    "Samovar_lua_mqtt",
+    "Samovar_lua",
     "Samovar_alarm_button",
 )
 

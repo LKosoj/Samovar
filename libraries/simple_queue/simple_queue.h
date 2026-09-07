@@ -96,7 +96,7 @@ public:
     uint16_t getCapacity() const { return capacity; }
 };
 
-// Простая очередь для строк (для Telegram)
+// Простая очередь для строк (для отложенной отправки сообщений)
 class SimpleStringQueue {
 private:
     char** buffer;

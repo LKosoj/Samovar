@@ -16,7 +16,6 @@
 | `LiquidCrystal_I2C` | Управление LCD-дисплеем | `~1.1.4` |
 | `GyverEncoder` | Обработка энкодера для пользовательского интерфейса | `~3.1` |
 | `GyverButton` | Обработка кнопок | `~3.0` |
-| `AsyncMqttClient` | Поддержка MQTT-протокола | `~0.8.2` |
 | `ArduinoOTA` | Обновление прошивки по Wi-Fi | `~1.0.0` |
 
 ## Условные зависимости
@@ -25,7 +24,6 @@
 
 - **`USE_LUA`**: `Lua` (для выполнения пользовательских скриптов).
 - **`USE_BLYNK`**: `Blynk` (для интеграции с Blynk).
-- **`USE_TELEGRAM`**: `UniversalTelegramBot` (для уведомлений в Telegram).
 - **`USE_STEPPER_ACCELERATION`**: `AccelStepper` (для плавного разгона шагового двигателя).
 - **`SAMOVAR_USE_POWER`**: `ESP32AnalogWrite` (для управления мощностью нагрева).
 

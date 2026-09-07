@@ -244,10 +244,7 @@ struct ModeHeatingStartState {
   SafetyTransition transition;
   int16_t activeStatus;
   const char* heatingMessage;
-#ifdef USE_MQTT
-  String mqttProgram;
   String sessionDescription;
-#endif
 };
 
 static ModeHeatingStartState modeHeatingStart;
@@ -265,10 +262,7 @@ inline void mode_clear_heating_start() {
   safety_transition_cancel(modeHeatingStart.transition);
   modeHeatingStart.activeStatus = 0;
   modeHeatingStart.heatingMessage = nullptr;
-#ifdef USE_MQTT
-  modeHeatingStart.mqttProgram = String();
   modeHeatingStart.sessionDescription = String();
-#endif
 }
 
 inline ModeHeatingStartResult mode_fail_heating_start() {
@@ -314,14 +308,8 @@ inline ModeHeatingStartResult mode_tick_heating_session(int16_t activeStatus) {
   if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
   SteamSensor.Start_Pressure = bme_pressure;
   if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
-#ifdef USE_MQTT
-  MqttSendMsg(
-    (String)chipId + "," + SamSetup.TimeZone + "," + SAMOVAR_VERSION + "," +
-    modeHeatingStart.mqttProgram + "," + modeHeatingStart.sessionDescription,
-    "st"
-  );
+  session_begin(modeHeatingStart.sessionDescription);
   if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn) return mode_fail_heating_start();
-#endif
   SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);
   mode_clear_heating_start();
   return MODE_HEATING_START_SUCCEEDED;
@@ -331,7 +319,6 @@ inline ModeHeatingStartResult mode_begin_heating_session(
   int16_t activeStatus,
   const char* createLogError,
   const char* sessionBusyError,
-  const String& mqttProgram,
   const char* heatingMessage,
   bool resetHeatLoss
 ) {
@@ -373,23 +360,16 @@ inline ModeHeatingStartResult mode_begin_heating_session(
     return MODE_HEATING_START_FAILED;
   }
 
-#ifdef USE_MQTT
-  if (!copy_mqtt_session_description(modeHeatingStart.sessionDescription, pdMS_TO_TICKS(50))) {
+  if (!copy_start_session_description(modeHeatingStart.sessionDescription, pdMS_TO_TICKS(50))) {
     mode_cancel_process_start(sessionBusyError);
     mode_warn_log_close_failed();
     return MODE_HEATING_START_FAILED;
   }
-  modeHeatingStart.mqttProgram = mqttProgram;
   if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
     mode_warn_log_close_failed();
     modeHeatingStart.sessionDescription = String();
-    modeHeatingStart.mqttProgram = String();
     return MODE_HEATING_START_FAILED;
   }
-#else
-  (void)mqttProgram;
-  (void)sessionBusyError;
-#endif
 
   if (heater_safety_latched() || SamovarStatusInt != activeStatus) {
     mode_warn_log_close_failed();
@@ -415,7 +395,6 @@ inline ModeHeatingStartResult mode_run_heating_start(
   int16_t activeStatus,
   const char* createLogError,
   const char* sessionBusyError,
-  const String& mqttProgram,
   const char* heatingMessage,
   bool resetHeatLoss
 ) {
@@ -424,6 +403,6 @@ inline ModeHeatingStartResult mode_run_heating_start(
   }
   return mode_begin_heating_session(
     activeStatus, createLogError, sessionBusyError,
-    mqttProgram, heatingMessage, resetHeatLoss
+    heatingMessage, resetHeatLoss
   );
 }

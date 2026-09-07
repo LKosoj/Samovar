@@ -1101,8 +1101,9 @@ def run_source_contracts() -> None:
         errors.append("unchecked response write exists after event section starts")
 
     send_msg = extract_function_body(samovar, "void SendMsg(const String& m, MESSAGE_TYPE msg_type)")
+    if "MqttSendMsg(" in send_msg or "#ifdef USE_MQTT" in send_msg:
+        errors.append("SendMsg: MQTT удалён в T3, но в теле функции остался след MqttSendMsg/USE_MQTT")
     send_positions = [
-        send_msg.find("MqttSendMsg("),
         send_msg.find("msg_q.push("),
         send_msg.find("append_web_message("),
     ]

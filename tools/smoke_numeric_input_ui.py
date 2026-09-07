@@ -145,7 +145,7 @@ for field in [
     "PipeAddr", "WaterAddr", "TankAddr", "ACPAddr", "StepperStepMl",
     "StepperStepMlI2C", "Kp", "Ki", "Kd", "StbVoltage", "BVolt",
     "NbkIn", "NbkDelta", "NbkDM", "NbkDP", "NbkSteamT", "NbkOwPress",
-    "TimeZone", "HeaterR", "LogPeriod", "rele1", "rele2", "rele3", "rele4",
+    "TimeZone", "HeaterR", "rele1", "rele2", "rele3", "rele4",
 ]:
     if f"name: '{field}'" not in setup:
         errors.append(f"setup numeric schema missing {field}")

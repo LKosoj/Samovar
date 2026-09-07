@@ -31,6 +31,12 @@ from smoke_helpers import extract_function_body
 ROOT = Path(__file__).resolve().parents[1]
 
 FUNCTION_SIGNATURE = "String append_data() {"
+# T2 (blynk-log-channel.md): базовые 7 полей вынесены в отдельную функцию (переиспользуется
+# build_idle_v34_line() для V34 в простое) - append_data() теперь зовёт её, а не собирает
+# строку инлайн, поэтому харнесс обязан взять и её тело настоящим, а не заглушкой.
+BASE_FIELDS_SIGNATURE = (
+    "static String format_log_base_fields(const float sensorTemp[], float pressure, uint8_t programNum)"
+)
 
 HARNESS_TEMPLATE = r'''
 #include <cstdint>
@@ -122,6 +128,8 @@ static FileStub fileToAppend;
 // (smoke_append_data_space_budget.py); здесь достаточно заглушки, не наблюдающей за
 // SPIFFS/локом, чтобы не размывать фокус этого теста (порядок колонок CSV).
 static void enforce_data_log_free_space_budget() {}
+
+@BASE_FIELDS_BODY@
 
 String append_data() {
 @BODY@
@@ -223,7 +231,12 @@ int main() {
 def build_harness(fs_ino_path: Path) -> str:
     source = fs_ino_path.read_text(encoding="utf-8")
     body = extract_function_body(source, FUNCTION_SIGNATURE)
-    return HARNESS_TEMPLATE.replace("@BODY@", body)
+    base_fields_body = extract_function_body(source, BASE_FIELDS_SIGNATURE)
+    harness = HARNESS_TEMPLATE.replace("@BODY@", body)
+    harness = harness.replace(
+        "@BASE_FIELDS_BODY@", f"{BASE_FIELDS_SIGNATURE}{{{base_fields_body}}}"
+    )
+    return harness
 
 
 def compile_and_run(harness: str, label: str) -> int:

@@ -862,7 +862,7 @@ inline bool validate_rect_program_startable(String& errorMessage) {
   }
 #ifdef SAMOVAR_USE_POWER
   // [Б7.3] Программа могла попасть в program[] мимо валидатора program_io.h (файл на
-  // SPIFFS от старой прошивки, MQTT, редактирование program[0] через меню энкодера) -
+  // SPIFFS от старой прошивки, редактирование program[0] через меню энкодера) -
   // та же проверка, что в prepare_program_for_mode().
   if (!(program[0].Power > PROGRAM_POWER_ABS_THRESHOLD)) {
     errorMessage = "Ошибка программы: первая строка должна задавать абсолютную мощность/напряжение. Старт ректификации невозможен.";

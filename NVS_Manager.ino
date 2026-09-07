@@ -11,7 +11,7 @@
 
 static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
 static const char* const SAMOVAR_PROFILE_KEY = "profile";
-static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 4;
+static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 5;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
@@ -20,9 +20,11 @@ static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V3 = 532;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V3 = 532;
 static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V4 = 545;
 static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V4 = 545;
+static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V5 = 480;
+static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V5 = 480;
 
-static_assert(sizeof(SetupEEPROM) == 568,
-              "SetupEEPROM v4 ABI changed; bump the profile format version");
+static_assert(sizeof(SetupEEPROM) == 500,
+              "SetupEEPROM v5 ABI changed; bump the profile format version");
 static_assert(std::is_trivially_copyable<SetupEEPROM>::value,
               "SetupEEPROM must remain trivially copyable");
 static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
@@ -30,9 +32,12 @@ static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
 static_assert(sizeof(int) == 4, "profile v1 requires 32-bit int");
 
 using ProfileCodec = ProfileBlobCodec<
-    SAMOVAR_PROFILE_PAYLOAD_SIZE_V4,
+    SAMOVAR_PROFILE_PAYLOAD_SIZE_V5,
     SAMOVAR_PROFILE_FORMAT_VERSION>;
 using PreviousProfileCodec = ProfileBlobCodec<
+    SAMOVAR_PROFILE_PAYLOAD_SIZE_V4,
+    4>;
+using V3ProfileCodec = ProfileBlobCodec<
     SAMOVAR_PROFILE_PAYLOAD_SIZE_V3,
     3>;
 using V2ProfileCodec = ProfileBlobCodec<
@@ -51,7 +56,7 @@ enum ProfileValueResult : uint8_t {
 static bool encode_setup_payload(
     const SetupEEPROM& candidate,
     uint8_t* payload) {
-  CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V4> writer(payload);
+  CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V5> writer(payload);
 #define SAMOVAR_PUT_U8(name) writer.put_u8(candidate.name)
 #define SAMOVAR_PUT_BOOL(name) writer.put_bool(candidate.name)
 #define SAMOVAR_PUT_U16(name) writer.put_u16(candidate.name)
@@ -59,11 +64,21 @@ static bool encode_setup_payload(
 #define SAMOVAR_PUT_I32_MODE(name) writer.put_i32(int32_t(candidate.name))
 #define SAMOVAR_PUT_BYTES_U8(name) writer.put_bytes(candidate.name, sizeof(candidate.name))
 #define SAMOVAR_PUT_BYTES_CHAR(name) writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.name), sizeof(candidate.name))
-#define SAMOVAR_ENCODE_FIELD(kind, name, size, deflt, scope) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_ENCODE_TERM_ALL(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_ENCODE_TERM_V2ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_ENCODE_TERM_V3ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_ENCODE_TERM_V4ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_ENCODE_TERM_UPTO4(kind, name)
+#define SAMOVAR_ENCODE_FIELD(kind, name, size, deflt, scope) SAMOVAR_ENCODE_TERM_##scope(kind, name)
   const bool encoded =
       SAMOVAR_PROFILE_FIELDS(SAMOVAR_ENCODE_FIELD)
       true;
 #undef SAMOVAR_ENCODE_FIELD
+#undef SAMOVAR_ENCODE_TERM_UPTO4
+#undef SAMOVAR_ENCODE_TERM_V4ONLY
+#undef SAMOVAR_ENCODE_TERM_V3ONLY
+#undef SAMOVAR_ENCODE_TERM_V2ONLY
+#undef SAMOVAR_ENCODE_TERM_ALL
 #undef SAMOVAR_PUT_BYTES_CHAR
 #undef SAMOVAR_PUT_BYTES_U8
 #undef SAMOVAR_PUT_I32_MODE
@@ -71,7 +86,7 @@ static bool encode_setup_payload(
 #undef SAMOVAR_PUT_U16
 #undef SAMOVAR_PUT_BOOL
 #undef SAMOVAR_PUT_U8
-  return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V4 &&
+  return encoded && writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V5 &&
          writer.finish();
 }
 
@@ -81,13 +96,29 @@ static bool decode_setup_payload(
     const uint8_t* payload,
     SetupEEPROM& candidate) {
   SetupEEPROM decoded{};
+  CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V5> reader(payload);
+  if (!decode_setup_payload_fields<false>(reader, decoded) ||
+      !decode_setup_payload_v2only_fields(reader, decoded) ||
+      !decode_setup_payload_v3only_fields(reader, decoded) ||
+      !decode_setup_payload_v4only_fields(reader, decoded) ||
+      reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V5 ||
+      !reader.finish()) return false;
+  candidate = decoded;
+  return true;
+}
+
+static bool decode_setup_payload_v4(
+    const uint8_t* payload,
+    SetupEEPROM& candidate) {
+  SetupEEPROM decoded{};
   CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V4> reader(payload);
-  if (!decode_setup_payload_fields(reader, decoded) ||
+  if (!decode_setup_payload_fields<true>(reader, decoded) ||
       !decode_setup_payload_v2only_fields(reader, decoded) ||
       !decode_setup_payload_v3only_fields(reader, decoded) ||
       !decode_setup_payload_v4only_fields(reader, decoded) ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V4 ||
       !reader.finish()) return false;
+  set_profile_version_defaults(decoded, 4);
   candidate = decoded;
   return true;
 }
@@ -97,10 +128,12 @@ static void set_profile_version_defaults(SetupEEPROM& candidate, uint8_t version
 #define SAMOVAR_DEFAULT_TERM_V2ONLY(deflt) if (version < 2) { deflt; }
 #define SAMOVAR_DEFAULT_TERM_V3ONLY(deflt) if (version < 3) { deflt; }
 #define SAMOVAR_DEFAULT_TERM_V4ONLY(deflt) if (version < 4) { deflt; }
+#define SAMOVAR_DEFAULT_TERM_UPTO4(deflt)
 #define SAMOVAR_DEFAULT_VERSION_FIELD(kind, name, size, deflt, scope) \
     SAMOVAR_DEFAULT_TERM_##scope(deflt)
   SAMOVAR_PROFILE_FIELDS(SAMOVAR_DEFAULT_VERSION_FIELD)
 #undef SAMOVAR_DEFAULT_VERSION_FIELD
+#undef SAMOVAR_DEFAULT_TERM_UPTO4
 #undef SAMOVAR_DEFAULT_TERM_V4ONLY
 #undef SAMOVAR_DEFAULT_TERM_V3ONLY
 #undef SAMOVAR_DEFAULT_TERM_V2ONLY
@@ -112,7 +145,7 @@ static bool decode_setup_payload_v3(
     SetupEEPROM& candidate) {
   SetupEEPROM decoded{};
   CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V3> reader(payload);
-  if (!decode_setup_payload_fields(reader, decoded) ||
+  if (!decode_setup_payload_fields<true>(reader, decoded) ||
       !decode_setup_payload_v2only_fields(reader, decoded) ||
       !decode_setup_payload_v3only_fields(reader, decoded) ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V3 ||
@@ -127,7 +160,7 @@ static bool decode_setup_payload_v2(
     SetupEEPROM& candidate) {
   SetupEEPROM decoded{};
   CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V2> reader(payload);
-  if (!decode_setup_payload_fields(reader, decoded) ||
+  if (!decode_setup_payload_fields<true>(reader, decoded) ||
       !decode_setup_payload_v2only_fields(reader, decoded) ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V2 ||
       !reader.finish()) return false;
@@ -141,7 +174,7 @@ static bool decode_setup_payload_v1(
     SetupEEPROM& candidate) {
   SetupEEPROM decoded{};
   CanonicalProfileReader<SAMOVAR_PROFILE_PAYLOAD_SIZE_V1> reader(payload);
-  if (!decode_setup_payload_fields(reader, decoded) ||
+  if (!decode_setup_payload_fields<true>(reader, decoded) ||
       reader.size() != SAMOVAR_PROFILE_CANONICAL_BYTES_V1 ||
       !reader.finish()) return false;
   set_profile_version_defaults(decoded, 1);
@@ -364,9 +397,19 @@ void print_nvs_stats(const char* context) {
 void set_default_setup_profile(SetupEEPROM& candidate) {
   candidate = {};
 
-#define SAMOVAR_DEFAULT_FIELD(kind, name, size, deflt, scope) deflt;
+#define SAMOVAR_DEFAULT_INIT_ALL(deflt) deflt;
+#define SAMOVAR_DEFAULT_INIT_V2ONLY(deflt) deflt;
+#define SAMOVAR_DEFAULT_INIT_V3ONLY(deflt) deflt;
+#define SAMOVAR_DEFAULT_INIT_V4ONLY(deflt) deflt;
+#define SAMOVAR_DEFAULT_INIT_UPTO4(deflt)
+#define SAMOVAR_DEFAULT_FIELD(kind, name, size, deflt, scope) SAMOVAR_DEFAULT_INIT_##scope(deflt)
   SAMOVAR_PROFILE_FIELDS(SAMOVAR_DEFAULT_FIELD)
 #undef SAMOVAR_DEFAULT_FIELD
+#undef SAMOVAR_DEFAULT_INIT_UPTO4
+#undef SAMOVAR_DEFAULT_INIT_V4ONLY
+#undef SAMOVAR_DEFAULT_INIT_V3ONLY
+#undef SAMOVAR_DEFAULT_INIT_V2ONLY
+#undef SAMOVAR_DEFAULT_INIT_ALL
 }
 
 PersistResult save_profile_nvs(const SetupEEPROM& candidate) {
@@ -441,6 +484,7 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
   }
   if (storedSize != ProfileCodec::BLOB_SIZE &&
       storedSize != PreviousProfileCodec::BLOB_SIZE &&
+      storedSize != V3ProfileCodec::BLOB_SIZE &&
       storedSize != V2ProfileCodec::BLOB_SIZE &&
       storedSize != LegacyProfileCodec::BLOB_SIZE) {
     nvs_close(readHandle);
@@ -476,6 +520,26 @@ ProfileLoadResult load_profile_nvs(SetupEEPROM& candidate) {
     uint8_t payload[PreviousProfileCodec::PAYLOAD_SIZE] = {};
     const ProfileLoadResult validation = load_codec_result(PreviousProfileCodec::decode(
         encoded.bytes, PreviousProfileCodec::BLOB_SIZE, payload));
+    if (validation != PROFILE_LOAD_OK) return validation;
+    SetupEEPROM migrated{};
+    if (!decode_setup_payload_v4(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
+    if (save_profile_nvs(migrated) != PERSIST_OK) return PROFILE_LOAD_READ_FAILED;
+    candidate = migrated;
+    return PROFILE_LOAD_OK;
+  }
+
+  if (storedSize == V3ProfileCodec::BLOB_SIZE) {
+    V3ProfileCodec::Blob encoded{};
+    size_t readSize = V3ProfileCodec::BLOB_SIZE;
+    const uint8_t readResult = nvs_read_blob(
+        readHandle, SAMOVAR_PROFILE_KEY, encoded.bytes, readSize);
+    nvs_close(readHandle);
+    if (readResult != PROFILE_VALUE_FOUND) return PROFILE_LOAD_READ_FAILED;
+    if (readSize != V3ProfileCodec::BLOB_SIZE) return PROFILE_LOAD_SHORT_READ;
+
+    uint8_t payload[V3ProfileCodec::PAYLOAD_SIZE] = {};
+    const ProfileLoadResult validation = load_codec_result(V3ProfileCodec::decode(
+        encoded.bytes, V3ProfileCodec::BLOB_SIZE, payload));
     if (validation != PROFILE_LOAD_OK) return validation;
     SetupEEPROM migrated{};
     if (!decode_setup_payload_v3(payload, migrated)) return PROFILE_LOAD_PAYLOAD_ENCODING;
@@ -551,7 +615,6 @@ static ProfileLoadResult load_legacy_profile_namespace(
   const bool readable =
       nvs_read_u8(handle, "TimeZone", loaded.TimeZone) != PROFILE_VALUE_ERROR &&
       nvs_read_float(handle, "HeaterR", loaded.HeaterResistant) != PROFILE_VALUE_ERROR &&
-      nvs_read_u8(handle, "LogPeriod", loaded.LogPeriod) != PROFILE_VALUE_ERROR &&
       nvs_read_float(handle, "SetSteam", loaded.SetSteamTemp) != PROFILE_VALUE_ERROR &&
       nvs_read_float(handle, "SetPipe", loaded.SetPipeTemp) != PROFILE_VALUE_ERROR &&
       nvs_read_float(handle, "SetWater", loaded.SetWaterTemp) != PROFILE_VALUE_ERROR &&
@@ -597,8 +660,6 @@ static ProfileLoadResult load_legacy_profile_namespace(
       nvs_read_string(handle, "ACPCol", loaded.ACPColor, sizeof(loaded.ACPColor)) != PROFILE_VALUE_ERROR &&
       nvs_read_string(handle, "blynk", loaded.blynkauth, sizeof(loaded.blynkauth)) != PROFILE_VALUE_ERROR &&
       nvs_read_string(handle, "video", loaded.videourl, sizeof(loaded.videourl)) != PROFILE_VALUE_ERROR &&
-      nvs_read_string(handle, "tg_tok", loaded.tg_token, sizeof(loaded.tg_token)) != PROFILE_VALUE_ERROR &&
-      nvs_read_string(handle, "tg_id", loaded.tg_chat_id, sizeof(loaded.tg_chat_id)) != PROFILE_VALUE_ERROR &&
       nvs_read_bool(handle, "Preccure", loaded.UsePreccureCorrect) != PROFILE_VALUE_ERROR &&
       nvs_read_bool(handle, "PrgBuzz", loaded.ChangeProgramBuzzer) != PROFILE_VALUE_ERROR &&
       nvs_read_bool(handle, "UseBuzz", loaded.UseBuzzer) != PROFILE_VALUE_ERROR &&
@@ -638,6 +699,128 @@ static void read_legacy_last_mode(uint8_t& mode) {
   }
 }
 
+// Замороженная копия SetupEEPROM версии профиля 4 (568 байт), с которой прошивка старше
+// формата 5 писала EEPROM целиком через EEPROM.put(). migrate_from_eeprom() продолжает
+// читать по этой раскладке даже после того, как LogPeriod/tg_token/tg_chat_id ушли из
+// текущего SetupEEPROM - трогать порядок и типы полей здесь нельзя: это дамп старой памяти,
+// а не текущая модель данных.
+struct LegacyEepromLayout {
+  uint8_t flag;
+  float DeltaSteamTemp;
+  float DeltaPipeTemp;
+  float DeltaWaterTemp;
+  float DeltaTankTemp;
+  uint16_t StepperStepMl;
+  float SetSteamTemp;
+  float SetPipeTemp;
+  float SetWaterTemp;
+  float SetTankTemp;
+  bool UsePreccureCorrect;
+  uint16_t SteamDelay;
+  uint16_t PipeDelay;
+  uint16_t WaterDelay;
+  uint16_t TankDelay;
+  uint8_t TimeZone;
+  float HeaterResistant;
+  uint8_t LogPeriod;
+  char SteamColor[20];
+  char PipeColor[20];
+  char WaterColor[20];
+  char TankColor[20];
+  bool rele1;
+  bool rele2;
+  bool rele3;
+  bool rele4;
+  uint8_t SteamAdress[8];
+  uint8_t PipeAdress[8];
+  uint8_t WaterAdress[8];
+  uint8_t TankAdress[8];
+  bool useautospeed;
+  bool useDetector;
+  uint8_t autospeed;
+  char blynkauth[33];
+  char videourl[120];
+  float DistTemp;
+  int Mode;
+  uint8_t ACPAdress[8];
+  char ACPColor[20];
+  float DeltaACPTemp;
+  float SetACPTemp;
+  uint16_t ACPDelay;
+  float Kp;
+  float Ki;
+  float Kd;
+  float StbVoltage;
+  bool ChangeProgramBuzzer;
+  bool UseBuzzer;
+  bool CheckPower;
+  bool UseBBuzzer;
+  bool UseWS;
+  float BVolt;
+  bool UseST;
+  uint8_t DistTimeF;
+  bool UseHLS;
+  float MaxPressureValue;
+  char tg_token[50];
+  char tg_chat_id[14];
+  float NbkIn;
+  float NbkDelta;
+  float NbkDM;
+  float NbkDP;
+  float NbkSteamT;
+  float NbkOwPress;
+  float ColDiam;
+  float ColHeight;
+  uint8_t PackDens;
+  uint16_t StepperStepMlI2C;
+  float NbkTn;
+  float BKPower;
+  float MainsVoltage;
+  float SuvidTemp;
+  uint16_t SuvidHoldMinutes;
+  uint8_t BeerBrewOrder;
+  float MpxZeroAdc;
+  float MpxCountsPerMmHg;
+  float SecondI2CPumpRate;
+  bool UseSecondI2CPump;
+  bool NbkUseStreamServo;
+  float CheesePhSlope;
+  float CheesePhOffset;
+  uint8_t CheesePhSmoothPercent;
+  uint16_t CheeseDoserSpeed;
+  uint16_t CheeseDoserSteps;
+
+  // Конверсия в текущий SetupEEPROM: копирует все поля, которые остались (ALL/V2ONLY/
+  // V3ONLY/V4ONLY по X-макросу), LogPeriod/tg_token/tg_chat_id некуда девать - не копируются.
+  // Неявная (не explicit) специально: единственная точка использования -
+  // `candidate = legacyEeprom;` в migrate_from_eeprom(), синтаксис которой пинит
+  // tools/smoke_profile_store.py (ordered-проверка по тексту функции).
+  operator SetupEEPROM() const {
+    SetupEEPROM out{};
+    // memcpy, а не `out.name = name;`: часть полей - сырые массивы (SteamAdress
+    // и т.п., char-буферы цветов/строк), а массивы в C++ не присваиваются оператором
+    // `=`. memcpy работает единообразно и для массивов, и для скаляров, раз тип
+    // поля в LegacyEepromLayout и в SetupEEPROM совпадает.
+#define SAMOVAR_LEGACY_COPY_TERM_ALL(name) memcpy(&out.name, &name, sizeof(out.name));
+#define SAMOVAR_LEGACY_COPY_TERM_V2ONLY(name) memcpy(&out.name, &name, sizeof(out.name));
+#define SAMOVAR_LEGACY_COPY_TERM_V3ONLY(name) memcpy(&out.name, &name, sizeof(out.name));
+#define SAMOVAR_LEGACY_COPY_TERM_V4ONLY(name) memcpy(&out.name, &name, sizeof(out.name));
+#define SAMOVAR_LEGACY_COPY_TERM_UPTO4(name)
+#define SAMOVAR_LEGACY_COPY_FIELD(kind, name, size, deflt, scope) SAMOVAR_LEGACY_COPY_TERM_##scope(name)
+    SAMOVAR_PROFILE_FIELDS(SAMOVAR_LEGACY_COPY_FIELD)
+#undef SAMOVAR_LEGACY_COPY_FIELD
+#undef SAMOVAR_LEGACY_COPY_TERM_UPTO4
+#undef SAMOVAR_LEGACY_COPY_TERM_V4ONLY
+#undef SAMOVAR_LEGACY_COPY_TERM_V3ONLY
+#undef SAMOVAR_LEGACY_COPY_TERM_V2ONLY
+#undef SAMOVAR_LEGACY_COPY_TERM_ALL
+    return out;
+  }
+};
+static_assert(sizeof(LegacyEepromLayout) == 568, "old raw EEPROM layout changed");
+static_assert(std::is_trivially_copyable<LegacyEepromLayout>::value,
+              "LegacyEepromLayout must remain trivially copyable");
+
 ProfileLoadResult migrate_from_eeprom(SetupEEPROM& candidate) {
   uint8_t lastMode = uint8_t(SAMOVAR_RECTIFICATION_MODE);
   read_legacy_last_mode(lastMode);
@@ -671,10 +854,10 @@ ProfileLoadResult migrate_from_eeprom(SetupEEPROM& candidate) {
     if (firstError == PROFILE_LOAD_NOT_FOUND) firstError = result;
   }
 
-  if (!EEPROM.begin(sizeof(SetupEEPROM))) {
+  if (!EEPROM.begin(sizeof(LegacyEepromLayout))) {
     return PROFILE_LOAD_EEPROM_OPEN_FAILED;
   }
-  SetupEEPROM legacyEeprom{};
+  LegacyEepromLayout legacyEeprom{};
   EEPROM.get(0, legacyEeprom);
   EEPROM.end();
   // 255 в сыром EEPROM - байт стёртой страницы, то есть "сюда никогда не писали"
@@ -688,8 +871,12 @@ ProfileLoadResult migrate_from_eeprom(SetupEEPROM& candidate) {
       legacyEeprom.Mode > SAMOVAR_LUA_MODE) {
     legacyEeprom.Mode = SAMOVAR_RECTIFICATION_MODE;
   }
-  set_profile_version_defaults(legacyEeprom, 2);
+  // Порядок «сначала конвертировать, потом дефолтить» обязателен: legacyEeprom теперь
+  // типа LegacyEepromLayout (не SetupEEPROM), а set_profile_version_defaults() принимает
+  // именно SetupEEPROM& - раньше (когда типы совпадали) можно было дефолтить legacyEeprom
+  // напрямую до присваивания в candidate, теперь так не скомпилируется.
   candidate = legacyEeprom;
+  set_profile_version_defaults(candidate, 2);
   return PROFILE_LOAD_OK;
 }
 

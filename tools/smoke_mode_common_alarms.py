@@ -198,7 +198,7 @@ if mode_common:
                 "PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()",
                 "if (resetHeatLoss) reset_heat_loss_calculation();",
                 "create_data()",
-                "copy_mqtt_session_description",
+                "copy_start_session_description",
                 "MODE_HEATING_PHASE_WAIT_POWER",
                 "set_power(true);",
                 "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
@@ -213,7 +213,7 @@ if mode_common:
                 "safety_deadline_after(millis(), 1000)",
                 "safety_transition_due",
                 "SteamSensor.Start_Pressure = bme_pressure;",
-                "MqttSendMsg",
+                "session_begin(modeHeatingStart.sessionDescription);",
                 "SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);",
                 "MODE_HEATING_START_SUCCEEDED",
             ],
@@ -259,7 +259,7 @@ if mode_common:
             "PowerOn || SamovarStatusInt != activeStatus || heater_safety_latched()",
             "create_data()",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
-            "copy_mqtt_session_description",
+            "copy_start_session_description",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "set_power(true);",
@@ -286,7 +286,7 @@ if mode_common:
             "safety_transition_due",
             "SteamSensor.Start_Pressure = bme_pressure;",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
-            "MqttSendMsg",
+            "session_begin(modeHeatingStart.sessionDescription);",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
             "SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);",
             "mode_clear_heating_start();",
@@ -294,7 +294,7 @@ if mode_common:
         ],
         errors,
     )
-    for token in ["create_data()", "copy_mqtt_session_description", "set_power(true);"]:
+    for token in ["create_data()", "copy_start_session_description", "set_power(true);"]:
         forbid_token("mode start tick", body, token)
 
     for signature in [

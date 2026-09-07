@@ -18,8 +18,12 @@
 //             для перекрёстной проверки smoke-тестом.
 //   DEFAULT — самодостаточный C++-стейтмент (без завершающей ';'),
 //             устанавливающий дефолт поля в set_default_setup_profile().
-//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY или V4ONLY. Версионные
-//             поля образуют последовательные хвосты канонического формата.
+//   SCOPE   — ALL (поле есть во всех версиях), V2ONLY, V3ONLY, V4ONLY или UPTO4.
+//             V2ONLY/V3ONLY/V4ONLY образуют последовательные хвосты канонического
+//             формата (поле появляется начиная с этой версии и остаётся во всех
+//             следующих). UPTO4 — обратный случай: поле было в форматах 1-4,
+//             в 5-м и далее из канонического блоба физически убрано (но при
+//             чтении старых форматов позиция всё равно должна быть пройдена).
 //
 // BKPower — единственное поле с дефолтом, зависящим от компиляции
 // (SAMOVAR_USE_SEM_AVR меняет рабочую мощность БК). Вынесено в именованную
@@ -48,7 +52,7 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(U16, TankDelay, 2, candidate.TankDelay = 20, ALL) \
   X(U8, TimeZone, 1, candidate.TimeZone = 3, ALL) \
   X(FLOAT, HeaterResistant, 4, candidate.HeaterResistant = 15.2, ALL) \
-  X(U8, LogPeriod, 1, candidate.LogPeriod = 3, ALL) \
+  X(U8, LogPeriod, 1, candidate.LogPeriod = 3, UPTO4) \
   X(BYTES_CHAR, SteamColor, 20, copyStringSafe(candidate.SteamColor, "#ff0000"), ALL) \
   X(BYTES_CHAR, PipeColor, 20, copyStringSafe(candidate.PipeColor, "#0000ff"), ALL) \
   X(BYTES_CHAR, WaterColor, 20, copyStringSafe(candidate.WaterColor, "#00bfff"), ALL) \
@@ -87,8 +91,8 @@ static const float SAMOVAR_BK_POWER_DEFAULT = 200.0f;
   X(U8, DistTimeF, 1, candidate.DistTimeF = 60, ALL) \
   X(BOOL, UseHLS, 1, candidate.UseHLS = true, ALL) \
   X(FLOAT, MaxPressureValue, 4, candidate.MaxPressureValue = 0, ALL) \
-  X(BYTES_CHAR, tg_token, 50, candidate.tg_token[0] = '\0', ALL) \
-  X(BYTES_CHAR, tg_chat_id, 14, candidate.tg_chat_id[0] = '\0', ALL) \
+  X(BYTES_CHAR, tg_token, 50, candidate.tg_token[0] = '\0', UPTO4) \
+  X(BYTES_CHAR, tg_chat_id, 14, candidate.tg_chat_id[0] = '\0', UPTO4) \
   X(FLOAT, NbkIn, 4, candidate.NbkIn = NBK_COLUMN_INERTIA_DEFAULT, ALL) \
   X(FLOAT, NbkDelta, 4, candidate.NbkDelta = NBK_DT_DEFAULT, ALL) \
   X(FLOAT, NbkDM, 4, candidate.NbkDM = NBK_DM_DEFAULT, ALL) \

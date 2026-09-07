@@ -214,8 +214,7 @@ for name, text, proc_signature, expected_sensor in [
     )
     for token in [
         "create_data()",
-        "copy_mqtt_session_description",
-        "MqttSendMsg",
+        "copy_start_session_description",
         "set_power(true);",
         "delay(1000)",
         "set_power_mode(POWER_SPEED_MODE)",
@@ -235,7 +234,6 @@ for name, text, proc_signature, expected_sensor in [
                 "SAMOVAR_STATUS_DISTILLATION",
                 "Ошибка создания файла лога. Старт дистилляции отменён.",
                 "Описание сессии занято. Старт дистилляции отменён.",
-                "get_dist_program()",
                 "Включен нагрев дистиллятора",
                 "true",
                 "run_dist_program(0);",
@@ -254,7 +252,6 @@ for name, text, proc_signature, expected_sensor in [
                 "SAMOVAR_STATUS_BK",
                 "Ошибка создания файла лога. Старт БК отменён.",
                 "Описание сессии занято. Старт БК отменён.",
-                "String(\"BK\")",
                 "Включен нагрев бражной колонны",
                 "false",
             ],
@@ -275,7 +272,7 @@ if mode_common_text:
             "if (resetHeatLoss) reset_heat_loss_calculation();",
             "create_data()",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
-            "copy_mqtt_session_description",
+            "copy_start_session_description",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus)",
             "set_power(true);",
@@ -298,13 +295,13 @@ if mode_common_text:
             "safety_transition_due",
             "SteamSensor.Start_Pressure = bme_pressure;",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
-            "MqttSendMsg",
+            "session_begin(modeHeatingStart.sessionDescription);",
             "if (heater_safety_latched() || SamovarStatusInt != activeStatus || !PowerOn)",
             "SendMsg(modeHeatingStart.heatingMessage, NOTIFY_MSG);",
         ],
         errors,
     )
-    for token in ["create_data()", "copy_mqtt_session_description", "set_power(true);"]:
+    for token in ["create_data()", "copy_start_session_description", "set_power(true);"]:
         if token in tick_body:
             errors.append(f"shared start tick repeats start-only work: {token}")
 

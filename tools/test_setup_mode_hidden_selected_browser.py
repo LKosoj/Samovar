@@ -55,7 +55,7 @@ MODE_TOKENS = {
 REPLACEMENTS = {
     "HeaterR": "10.000000000", "StepperStepMl": "100", "StepperStepMlI2C": "100",
     "I2CPumpTab": "inline-block", "PackDens": "80",
-    "WProgram": "", "Descr": "", "blynkauth": "", "tgtoken": "", "tgchatid": "",
+    "WProgram": "", "Descr": "", "blynkauth": "",
     "videourl": "",
 }
 EMPTY_MARKERS = {

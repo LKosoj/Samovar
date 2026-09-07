@@ -102,6 +102,14 @@ def definition(source: str, token: str) -> str:
     return source[start : end + 2]
 
 
+def struct_definition_by_braces(source: str, token: str) -> str:
+    """Как definition(), но глубиной скобок (extract_function_body), а не
+    наивным поиском "};" - нужно для структур с телами методов внутри
+    (LegacyEepromLayout::operator SetupEEPROM(), где "SetupEEPROM out{};"
+    сам содержит "};" и обрывает definition() посреди структуры)."""
+    return token + " {\n" + extract_function_body(source, token) + "\n};\n"
+
+
 def wrapped_function(source: str, token: str, signature: str) -> str:
     offset = 0
     while True:
@@ -309,7 +317,7 @@ setup_fields = re.findall(
     setup_definition,
     re.MULTILINE,
 )
-require(len(setup_fields) == 84, "SetupEEPROM v4 field inventory changed")
+require(len(setup_fields) == 81, "SetupEEPROM v5 field inventory changed")
 padding_marks = "\n".join(
     "  mark_field(occupied, offsetof(SetupEEPROM, "
     f"{field}), sizeof(((SetupEEPROM*)0)->{field}));"
@@ -329,6 +337,7 @@ nvs_harness = (
         #include <algorithm>
         #include <limits>
         #include <string>
+        #include <type_traits>
         #include <vector>
 
         #include "profile_store.h"
@@ -349,17 +358,32 @@ nvs_harness = (
     + "\n"
     + setup_definition
     + "\n"
+    + struct_definition_by_braces(nvs_text, "struct LegacyEepromLayout")
+    + "\n"
     + textwrap.dedent(
         r'''
         // A-16/T3: SIZE-колонка в profile_setup_fields.h раньше была метаданными
         // без проверки (ей никто не пользовался). Здесь она статически, на этапе
         // компиляции, сверяется с реальной шириной поля в SetupEEPROM через тот
         // же X-macro список — без ручного дублирования имён полей.
-        #define SAMOVAR_FIELD_SIZE_CHECK(kind, name, size, deflt, scope) \
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size) \
             static_assert((size) == sizeof(((SetupEEPROM*)0)->name), \
                           "profile_setup_fields.h SIZE column wrong for " #name);
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V2ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V3ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_V4ONLY(kind, name, size) SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL(kind, name, size)
+        // UPTO4-поля (LogPeriod/tg_token/tg_chat_id) остались в X-macro списке для
+        // прохода курсора при чтении старых форматов, но физически ушли из
+        // SetupEEPROM (T1) - sizeof(((SetupEEPROM*)0)->name) для них не скомпилируется.
+        #define SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO4(kind, name, size)
+        #define SAMOVAR_FIELD_SIZE_CHECK(kind, name, size, deflt, scope) SAMOVAR_FIELD_SIZE_CHECK_TERM_##scope(kind, name, size)
         SAMOVAR_PROFILE_FIELDS(SAMOVAR_FIELD_SIZE_CHECK)
         #undef SAMOVAR_FIELD_SIZE_CHECK
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_UPTO4
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V4ONLY
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V3ONLY
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_V2ONLY
+        #undef SAMOVAR_FIELD_SIZE_CHECK_TERM_ALL
         '''
     )
     + "\n"
@@ -373,7 +397,7 @@ nvs_harness = (
         r'''
         static const char* const SAMOVAR_PROFILE_NAMESPACE = "sam_cfg";
         static const char* const SAMOVAR_PROFILE_KEY = "profile";
-        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 4;
+        static const uint16_t SAMOVAR_PROFILE_FORMAT_VERSION = 5;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V1 = 516;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V1 = 515;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V2 = 520;
@@ -382,11 +406,16 @@ nvs_harness = (
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V3 = 532;
         static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V4 = 545;
         static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V4 = 545;
+        static const size_t SAMOVAR_PROFILE_PAYLOAD_SIZE_V5 = 480;
+        static const size_t SAMOVAR_PROFILE_CANONICAL_BYTES_V5 = 480;
 
         using ProfileCodec = ProfileBlobCodec<
-            SAMOVAR_PROFILE_PAYLOAD_SIZE_V4,
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V5,
             SAMOVAR_PROFILE_FORMAT_VERSION>;
         using PreviousProfileCodec = ProfileBlobCodec<
+            SAMOVAR_PROFILE_PAYLOAD_SIZE_V4,
+            4>;
+        using V3ProfileCodec = ProfileBlobCodec<
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V3,
             3>;
         using V2ProfileCodec = ProfileBlobCodec<
@@ -396,9 +425,10 @@ nvs_harness = (
             SAMOVAR_PROFILE_PAYLOAD_SIZE_V1,
             1>;
 
-        static_assert(sizeof(SetupEEPROM) == 568, "host ABI drift");
-        static_assert(ProfileCodec::BLOB_SIZE == 559, "v4 blob size drift");
-        static_assert(PreviousProfileCodec::BLOB_SIZE == 546, "v3 blob size drift");
+        static_assert(sizeof(SetupEEPROM) == 500, "host ABI drift");
+        static_assert(ProfileCodec::BLOB_SIZE == 494, "v5 blob size drift");
+        static_assert(PreviousProfileCodec::BLOB_SIZE == 559, "v4 blob size drift");
+        static_assert(V3ProfileCodec::BLOB_SIZE == 546, "v3 blob size drift");
         static_assert(V2ProfileCodec::BLOB_SIZE == 534, "v2 blob size drift");
         static_assert(LegacyProfileCodec::BLOB_SIZE == 530, "v1 blob size drift");
 
@@ -473,7 +503,7 @@ nvs_harness = (
           int closes;
           int blobQueries;
           int blobReads;
-          SetupEEPROM eepromValue;
+          LegacyEepromLayout eepromValue;
           int eepromBegins;
           int eepromGets;
           int eepromEnds;
@@ -587,7 +617,7 @@ nvs_harness = (
           } else if (fake.mutation == MUTATE_INVALID_BOOL) {
             fake.blob[ProfileCodec::HEADER_SIZE + 35] = 2U;
           } else {
-            fake.blob[ProfileCodec::HEADER_SIZE + 530] = 2U;
+            fake.blob[ProfileCodec::HEADER_SIZE + 465] = 2U;
           }
           write_crc(fake.blob);
         }
@@ -615,12 +645,12 @@ nvs_harness = (
         class FakeEEPROM {
          public:
           bool begin(size_t size) {
-            assert(size == sizeof(SetupEEPROM));
+            assert(size == sizeof(LegacyEepromLayout));
             fake.eepromBegins++;
             return true;
           }
 
-          void get(int address, SetupEEPROM& value) {
+          void get(int address, LegacyEepromLayout& value) {
             assert(address == 0);
             fake.eepromGets++;
             value = fake.eepromValue;
@@ -794,7 +824,7 @@ for token, signature in [
     ),
     (
         "decode_setup_payload_fields(",
-        "template <size_t PayloadSize>\nstatic bool decode_setup_payload_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
+        "template <bool ReadUpTo4Fields, size_t PayloadSize>\nstatic bool decode_setup_payload_fields(CanonicalProfileReader<PayloadSize>& reader, SetupEEPROM& decoded)",
     ),
     (
         "decode_setup_payload_v2only_fields(",
@@ -815,6 +845,10 @@ for token, signature in [
     (
         "set_profile_version_defaults(",
         "static void set_profile_version_defaults(SetupEEPROM& candidate, uint8_t version)",
+    ),
+    (
+        "decode_setup_payload_v4(",
+        "static bool decode_setup_payload_v4(const uint8_t* payload, SetupEEPROM& candidate)",
     ),
     (
         "decode_setup_payload_v3(",
@@ -1012,7 +1046,6 @@ nvs_harness += (
           candidate.SteamDelay = 17;
           candidate.TimeZone = 3;
           candidate.HeaterResistant = 15.2f;
-          candidate.LogPeriod = 5;
           memcpy(candidate.SteamColor, "#123456", 8);
           candidate.rele2 = true;
           candidate.SteamAdress[0] = 0x28;
@@ -1032,7 +1065,6 @@ nvs_harness += (
           candidate.BVolt = 220.0f;
           candidate.UseST = true;
           candidate.UseHLS = true;
-          memcpy(candidate.tg_chat_id, "12345", 6);
           candidate.NbkDP = 4.5f;
           candidate.ColDiam = 2.0f;
           candidate.ColHeight = 0.5f;
@@ -1062,13 +1094,71 @@ nvs_harness += (
           return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
         }
 
+        // LogPeriod/tg_token/tg_chat_id (UPTO4) ушли из SetupEEPROM (T1), но форматы
+        // 1-4 их ещё писали - для миграционных тестов нужны какие-то байты на этом
+        // месте раскладки. Значения не проверяются (decode_setup_payload_fields<true>
+        // их только "проглатывает"), поэтому дефолты произвольные.
+        struct LegacyUpTo4Values {
+          uint8_t LogPeriod = 3;
+          char tg_token[50] = "";
+          char tg_chat_id[14] = "";
+        };
+
+        // Полная СТАРАЯ (до формата 5) каноническая раскладка V4 (545 байт,
+        // ALL+UPTO4 вперемешку + V2ONLY+V3ONLY+V4ONLY хвосты) - в отличие от
+        // текущего encode_setup_payload() пишет и LogPeriod/tg_token/tg_chat_id.
+        // encode_v1_blob/v2_blob/v3_blob берут от неё префикс байт (старые форматы
+        // - префиксы более новых), encode_v4_blob - используется целиком.
+        static std::vector<uint8_t> encode_full_legacy_payload(
+            const SetupEEPROM& candidate, const LegacyUpTo4Values& legacy) {
+          uint8_t payload[SAMOVAR_PROFILE_PAYLOAD_SIZE_V4] = {};
+          CanonicalProfileWriter<SAMOVAR_PROFILE_PAYLOAD_SIZE_V4> writer(payload);
+#define SAMOVAR_PUT_U8(name) writer.put_u8(candidate.name)
+#define SAMOVAR_PUT_BOOL(name) writer.put_bool(candidate.name)
+#define SAMOVAR_PUT_U16(name) writer.put_u16(candidate.name)
+#define SAMOVAR_PUT_FLOAT(name) writer.put_float(candidate.name)
+#define SAMOVAR_PUT_I32_MODE(name) writer.put_i32(int32_t(candidate.name))
+#define SAMOVAR_PUT_BYTES_U8(name) writer.put_bytes(candidate.name, sizeof(candidate.name))
+#define SAMOVAR_PUT_BYTES_CHAR(name) writer.put_bytes(reinterpret_cast<const uint8_t*>(candidate.name), sizeof(candidate.name))
+#define SAMOVAR_LEGACY_PUT_U8(name) writer.put_u8(legacy.name)
+#define SAMOVAR_LEGACY_PUT_BYTES_CHAR(name) writer.put_bytes(reinterpret_cast<const uint8_t*>(legacy.name), sizeof(legacy.name))
+#define SAMOVAR_LEGACY_ENCODE_TERM_ALL(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_LEGACY_ENCODE_TERM_V2ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_LEGACY_ENCODE_TERM_V3ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_LEGACY_ENCODE_TERM_V4ONLY(kind, name) SAMOVAR_PUT_##kind(name) &&
+#define SAMOVAR_LEGACY_ENCODE_TERM_UPTO4(kind, name) SAMOVAR_LEGACY_PUT_##kind(name) &&
+#define SAMOVAR_LEGACY_ENCODE_FIELD(kind, name, size, deflt, scope) SAMOVAR_LEGACY_ENCODE_TERM_##scope(kind, name)
+          const bool encoded =
+              SAMOVAR_PROFILE_FIELDS(SAMOVAR_LEGACY_ENCODE_FIELD)
+              true;
+#undef SAMOVAR_LEGACY_ENCODE_FIELD
+#undef SAMOVAR_LEGACY_ENCODE_TERM_UPTO4
+#undef SAMOVAR_LEGACY_ENCODE_TERM_V4ONLY
+#undef SAMOVAR_LEGACY_ENCODE_TERM_V3ONLY
+#undef SAMOVAR_LEGACY_ENCODE_TERM_V2ONLY
+#undef SAMOVAR_LEGACY_ENCODE_TERM_ALL
+#undef SAMOVAR_LEGACY_PUT_BYTES_CHAR
+#undef SAMOVAR_LEGACY_PUT_U8
+#undef SAMOVAR_PUT_BYTES_CHAR
+#undef SAMOVAR_PUT_BYTES_U8
+#undef SAMOVAR_PUT_I32_MODE
+#undef SAMOVAR_PUT_FLOAT
+#undef SAMOVAR_PUT_U16
+#undef SAMOVAR_PUT_BOOL
+#undef SAMOVAR_PUT_U8
+          assert(encoded);
+          assert(writer.size() == SAMOVAR_PROFILE_CANONICAL_BYTES_V4);
+          assert(writer.finish());
+          return std::vector<uint8_t>(payload, payload + sizeof(payload));
+        }
+
         static std::vector<uint8_t> encode_v1_blob(const SetupEEPROM& candidate) {
-          uint8_t v2Payload[ProfileCodec::PAYLOAD_SIZE] = {};
-          assert(encode_setup_payload(candidate, v2Payload));
+          LegacyUpTo4Values legacy;
+          std::vector<uint8_t> v4Payload = encode_full_legacy_payload(candidate, legacy);
           uint8_t v1Payload[LegacyProfileCodec::PAYLOAD_SIZE] = {};
           memcpy(
               v1Payload,
-              v2Payload,
+              v4Payload.data(),
               SAMOVAR_PROFILE_CANONICAL_BYTES_V1);
           LegacyProfileCodec::Blob blob{};
           LegacyProfileCodec::encode(v1Payload, blob);
@@ -1076,22 +1166,30 @@ nvs_harness += (
         }
 
         static std::vector<uint8_t> encode_v2_blob(const SetupEEPROM& candidate) {
-          uint8_t v4Payload[ProfileCodec::PAYLOAD_SIZE] = {};
-          assert(encode_setup_payload(candidate, v4Payload));
+          LegacyUpTo4Values legacy;
+          std::vector<uint8_t> v4Payload = encode_full_legacy_payload(candidate, legacy);
           uint8_t v2Payload[V2ProfileCodec::PAYLOAD_SIZE] = {};
-          memcpy(v2Payload, v4Payload, SAMOVAR_PROFILE_CANONICAL_BYTES_V2);
+          memcpy(v2Payload, v4Payload.data(), SAMOVAR_PROFILE_CANONICAL_BYTES_V2);
           V2ProfileCodec::Blob blob{};
           V2ProfileCodec::encode(v2Payload, blob);
           return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
         }
 
         static std::vector<uint8_t> encode_v3_blob(const SetupEEPROM& candidate) {
-          uint8_t v4Payload[ProfileCodec::PAYLOAD_SIZE] = {};
-          assert(encode_setup_payload(candidate, v4Payload));
-          uint8_t v3Payload[PreviousProfileCodec::PAYLOAD_SIZE] = {};
-          memcpy(v3Payload, v4Payload, SAMOVAR_PROFILE_CANONICAL_BYTES_V3);
+          LegacyUpTo4Values legacy;
+          std::vector<uint8_t> v4Payload = encode_full_legacy_payload(candidate, legacy);
+          uint8_t v3Payload[V3ProfileCodec::PAYLOAD_SIZE] = {};
+          memcpy(v3Payload, v4Payload.data(), SAMOVAR_PROFILE_CANONICAL_BYTES_V3);
+          V3ProfileCodec::Blob blob{};
+          V3ProfileCodec::encode(v3Payload, blob);
+          return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
+        }
+
+        static std::vector<uint8_t> encode_v4_blob(const SetupEEPROM& candidate) {
+          LegacyUpTo4Values legacy;
+          std::vector<uint8_t> v4Payload = encode_full_legacy_payload(candidate, legacy);
           PreviousProfileCodec::Blob blob{};
-          PreviousProfileCodec::encode(v3Payload, blob);
+          PreviousProfileCodec::encode(v4Payload.data(), blob);
           return std::vector<uint8_t>(blob.bytes, blob.bytes + sizeof(blob.bytes));
         }
 
@@ -1239,7 +1337,7 @@ nvs_harness += (
 
           reset_fake();
           seed_current_blob(expected);
-          fake.blob[ProfileCodec::HEADER_SIZE + 530] = 2U;
+          fake.blob[ProfileCodec::HEADER_SIZE + 465] = 2U;
           write_crc(fake.blob);
           expect_load_failure(PROFILE_LOAD_PAYLOAD_ENCODING);
 
@@ -1266,7 +1364,7 @@ nvs_harness += (
           assert(encode_blob(loaded) == fake.blob);
         }
 
-        static void test_v1_v2_and_v3_profiles_migrate_after_verified_v4_write() {
+        static void test_v1_v2_v3_v4_profiles_migrate_after_verified_v5_write() {
           SetupEEPROM legacy = sample_setup();
           legacy.Mode = SAMOVAR_LUA_MODE;
           legacy.SuvidHoldMinutes = 999;
@@ -1351,6 +1449,32 @@ nvs_harness += (
           fake.blob = encode_v3_blob(legacy);
           fake.writerBegin = false;
           memset(&destination, 0x3C, sizeof(destination));
+          memcpy(before, &destination, sizeof(before));
+          assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
+          assert(memcmp(before, &destination, sizeof(before)) == 0);
+
+          // v4 -> v5: формат 5 ничего не добавляет, только убирает LogPeriod/
+          // tg_token/tg_chat_id - в отличие от v1/v2/v3 здесь defaults-полей
+          // после миграции проверять не на чем, важен только сам факт успешной
+          // миграции и переписи блоба в канонический v5.
+          reset_fake();
+          fake.blob = encode_v4_blob(legacy);
+          loaded = {};
+          assert(load_profile_nvs(loaded) == PROFILE_LOAD_OK);
+          assert(loaded.Kp == legacy.Kp);
+          assert(loaded.SuvidTemp == legacy.SuvidTemp);
+          assert(loaded.MpxZeroAdc == legacy.MpxZeroAdc);
+          assert(loaded.NbkUseStreamServo == legacy.NbkUseStreamServo);
+          assert(loaded.CheesePhSlope == legacy.CheesePhSlope);
+          assert(loaded.CheeseDoserSteps == legacy.CheeseDoserSteps);
+          assert(fake.writes == 1);
+          assert(fake.blob.size() == ProfileCodec::BLOB_SIZE);
+          assert(encode_blob(loaded) == fake.blob);
+
+          reset_fake();
+          fake.blob = encode_v4_blob(legacy);
+          fake.writerBegin = false;
+          memset(&destination, 0xC3, sizeof(destination));
           memcpy(before, &destination, sizeof(before));
           assert(load_profile_nvs(destination) == PROFILE_LOAD_READ_FAILED);
           assert(memcmp(before, &destination, sizeof(before)) == 0);
@@ -1731,7 +1855,7 @@ nvs_harness += (
         // ---------------------------------------------------------------------
         // A-16/T3 golden-тест: независимый (посчитанный отдельным python-скриптом,
         // НЕ через encode_setup_payload/decode_setup_payload_fields) побайтовый
-        // эталон канонического V4-профиля (545 байт). Пин порядка/ширины полей —
+        // эталон канонического V5-профиля (480 байт). Пин порядка/ширины полей —
         // перестановка, смена put_u16->put_u8, потеря вызова в цепочке && или
         // смещение candidate = {} обязаны развалить один из ассертов ниже с
         // указанием ИМЕНИ поля и байтового смещения, а не абстрактным «не то».
@@ -1744,6 +1868,7 @@ nvs_harness += (
         };
 
         static const GoldenFieldSpec GOLDEN_FIELD_TABLE[] = {
+
           {"flag", 0, 1, offsetof(SetupEEPROM, flag), sizeof(((SetupEEPROM*)0)->flag)},
           {"DeltaSteamTemp", 1, 4, offsetof(SetupEEPROM, DeltaSteamTemp), sizeof(((SetupEEPROM*)0)->DeltaSteamTemp)},
           {"DeltaPipeTemp", 5, 4, offsetof(SetupEEPROM, DeltaPipeTemp), sizeof(((SetupEEPROM*)0)->DeltaPipeTemp)},
@@ -1761,76 +1886,73 @@ nvs_harness += (
           {"TankDelay", 42, 2, offsetof(SetupEEPROM, TankDelay), sizeof(((SetupEEPROM*)0)->TankDelay)},
           {"TimeZone", 44, 1, offsetof(SetupEEPROM, TimeZone), sizeof(((SetupEEPROM*)0)->TimeZone)},
           {"HeaterResistant", 45, 4, offsetof(SetupEEPROM, HeaterResistant), sizeof(((SetupEEPROM*)0)->HeaterResistant)},
-          {"LogPeriod", 49, 1, offsetof(SetupEEPROM, LogPeriod), sizeof(((SetupEEPROM*)0)->LogPeriod)},
-          {"SteamColor", 50, 20, offsetof(SetupEEPROM, SteamColor), sizeof(((SetupEEPROM*)0)->SteamColor)},
-          {"PipeColor", 70, 20, offsetof(SetupEEPROM, PipeColor), sizeof(((SetupEEPROM*)0)->PipeColor)},
-          {"WaterColor", 90, 20, offsetof(SetupEEPROM, WaterColor), sizeof(((SetupEEPROM*)0)->WaterColor)},
-          {"TankColor", 110, 20, offsetof(SetupEEPROM, TankColor), sizeof(((SetupEEPROM*)0)->TankColor)},
-          {"rele1", 130, 1, offsetof(SetupEEPROM, rele1), sizeof(((SetupEEPROM*)0)->rele1)},
-          {"rele2", 131, 1, offsetof(SetupEEPROM, rele2), sizeof(((SetupEEPROM*)0)->rele2)},
-          {"rele3", 132, 1, offsetof(SetupEEPROM, rele3), sizeof(((SetupEEPROM*)0)->rele3)},
-          {"rele4", 133, 1, offsetof(SetupEEPROM, rele4), sizeof(((SetupEEPROM*)0)->rele4)},
-          {"SteamAdress", 134, 8, offsetof(SetupEEPROM, SteamAdress), sizeof(((SetupEEPROM*)0)->SteamAdress)},
-          {"PipeAdress", 142, 8, offsetof(SetupEEPROM, PipeAdress), sizeof(((SetupEEPROM*)0)->PipeAdress)},
-          {"WaterAdress", 150, 8, offsetof(SetupEEPROM, WaterAdress), sizeof(((SetupEEPROM*)0)->WaterAdress)},
-          {"TankAdress", 158, 8, offsetof(SetupEEPROM, TankAdress), sizeof(((SetupEEPROM*)0)->TankAdress)},
-          {"useautospeed", 166, 1, offsetof(SetupEEPROM, useautospeed), sizeof(((SetupEEPROM*)0)->useautospeed)},
-          {"useDetector", 167, 1, offsetof(SetupEEPROM, useDetector), sizeof(((SetupEEPROM*)0)->useDetector)},
-          {"autospeed", 168, 1, offsetof(SetupEEPROM, autospeed), sizeof(((SetupEEPROM*)0)->autospeed)},
-          {"blynkauth", 169, 33, offsetof(SetupEEPROM, blynkauth), sizeof(((SetupEEPROM*)0)->blynkauth)},
-          {"videourl", 202, 120, offsetof(SetupEEPROM, videourl), sizeof(((SetupEEPROM*)0)->videourl)},
-          {"DistTemp", 322, 4, offsetof(SetupEEPROM, DistTemp), sizeof(((SetupEEPROM*)0)->DistTemp)},
-          {"Mode", 326, 4, offsetof(SetupEEPROM, Mode), sizeof(((SetupEEPROM*)0)->Mode)},
-          {"ACPAdress", 330, 8, offsetof(SetupEEPROM, ACPAdress), sizeof(((SetupEEPROM*)0)->ACPAdress)},
-          {"ACPColor", 338, 20, offsetof(SetupEEPROM, ACPColor), sizeof(((SetupEEPROM*)0)->ACPColor)},
-          {"DeltaACPTemp", 358, 4, offsetof(SetupEEPROM, DeltaACPTemp), sizeof(((SetupEEPROM*)0)->DeltaACPTemp)},
-          {"SetACPTemp", 362, 4, offsetof(SetupEEPROM, SetACPTemp), sizeof(((SetupEEPROM*)0)->SetACPTemp)},
-          {"ACPDelay", 366, 2, offsetof(SetupEEPROM, ACPDelay), sizeof(((SetupEEPROM*)0)->ACPDelay)},
-          {"Kp", 368, 4, offsetof(SetupEEPROM, Kp), sizeof(((SetupEEPROM*)0)->Kp)},
-          {"Ki", 372, 4, offsetof(SetupEEPROM, Ki), sizeof(((SetupEEPROM*)0)->Ki)},
-          {"Kd", 376, 4, offsetof(SetupEEPROM, Kd), sizeof(((SetupEEPROM*)0)->Kd)},
-          {"StbVoltage", 380, 4, offsetof(SetupEEPROM, StbVoltage), sizeof(((SetupEEPROM*)0)->StbVoltage)},
-          {"ChangeProgramBuzzer", 384, 1, offsetof(SetupEEPROM, ChangeProgramBuzzer), sizeof(((SetupEEPROM*)0)->ChangeProgramBuzzer)},
-          {"UseBuzzer", 385, 1, offsetof(SetupEEPROM, UseBuzzer), sizeof(((SetupEEPROM*)0)->UseBuzzer)},
-          {"CheckPower", 386, 1, offsetof(SetupEEPROM, CheckPower), sizeof(((SetupEEPROM*)0)->CheckPower)},
-          {"UseBBuzzer", 387, 1, offsetof(SetupEEPROM, UseBBuzzer), sizeof(((SetupEEPROM*)0)->UseBBuzzer)},
-          {"UseWS", 388, 1, offsetof(SetupEEPROM, UseWS), sizeof(((SetupEEPROM*)0)->UseWS)},
-          {"BVolt", 389, 4, offsetof(SetupEEPROM, BVolt), sizeof(((SetupEEPROM*)0)->BVolt)},
-          {"UseST", 393, 1, offsetof(SetupEEPROM, UseST), sizeof(((SetupEEPROM*)0)->UseST)},
-          {"DistTimeF", 394, 1, offsetof(SetupEEPROM, DistTimeF), sizeof(((SetupEEPROM*)0)->DistTimeF)},
-          {"UseHLS", 395, 1, offsetof(SetupEEPROM, UseHLS), sizeof(((SetupEEPROM*)0)->UseHLS)},
-          {"MaxPressureValue", 396, 4, offsetof(SetupEEPROM, MaxPressureValue), sizeof(((SetupEEPROM*)0)->MaxPressureValue)},
-          {"tg_token", 400, 50, offsetof(SetupEEPROM, tg_token), sizeof(((SetupEEPROM*)0)->tg_token)},
-          {"tg_chat_id", 450, 14, offsetof(SetupEEPROM, tg_chat_id), sizeof(((SetupEEPROM*)0)->tg_chat_id)},
-          {"NbkIn", 464, 4, offsetof(SetupEEPROM, NbkIn), sizeof(((SetupEEPROM*)0)->NbkIn)},
-          {"NbkDelta", 468, 4, offsetof(SetupEEPROM, NbkDelta), sizeof(((SetupEEPROM*)0)->NbkDelta)},
-          {"NbkDM", 472, 4, offsetof(SetupEEPROM, NbkDM), sizeof(((SetupEEPROM*)0)->NbkDM)},
-          {"NbkDP", 476, 4, offsetof(SetupEEPROM, NbkDP), sizeof(((SetupEEPROM*)0)->NbkDP)},
-          {"NbkSteamT", 480, 4, offsetof(SetupEEPROM, NbkSteamT), sizeof(((SetupEEPROM*)0)->NbkSteamT)},
-          {"NbkOwPress", 484, 4, offsetof(SetupEEPROM, NbkOwPress), sizeof(((SetupEEPROM*)0)->NbkOwPress)},
-          {"ColDiam", 488, 4, offsetof(SetupEEPROM, ColDiam), sizeof(((SetupEEPROM*)0)->ColDiam)},
-          {"ColHeight", 492, 4, offsetof(SetupEEPROM, ColHeight), sizeof(((SetupEEPROM*)0)->ColHeight)},
-          {"PackDens", 496, 1, offsetof(SetupEEPROM, PackDens), sizeof(((SetupEEPROM*)0)->PackDens)},
-          {"StepperStepMlI2C", 497, 2, offsetof(SetupEEPROM, StepperStepMlI2C), sizeof(((SetupEEPROM*)0)->StepperStepMlI2C)},
-          {"NbkTn", 499, 4, offsetof(SetupEEPROM, NbkTn), sizeof(((SetupEEPROM*)0)->NbkTn)},
-          {"BKPower", 503, 4, offsetof(SetupEEPROM, BKPower), sizeof(((SetupEEPROM*)0)->BKPower)},
-          {"MainsVoltage", 507, 4, offsetof(SetupEEPROM, MainsVoltage), sizeof(((SetupEEPROM*)0)->MainsVoltage)},
-          {"SuvidTemp", 511, 4, offsetof(SetupEEPROM, SuvidTemp), sizeof(((SetupEEPROM*)0)->SuvidTemp)},
-          {"SuvidHoldMinutes", 515, 2, offsetof(SetupEEPROM, SuvidHoldMinutes), sizeof(((SetupEEPROM*)0)->SuvidHoldMinutes)},
-          {"BeerBrewOrder", 517, 1, offsetof(SetupEEPROM, BeerBrewOrder), sizeof(((SetupEEPROM*)0)->BeerBrewOrder)},
-          {"MpxZeroAdc", 518, 4, offsetof(SetupEEPROM, MpxZeroAdc), sizeof(((SetupEEPROM*)0)->MpxZeroAdc)},
-          {"MpxCountsPerMmHg", 522, 4, offsetof(SetupEEPROM, MpxCountsPerMmHg), sizeof(((SetupEEPROM*)0)->MpxCountsPerMmHg)},
-          {"SecondI2CPumpRate", 526, 4, offsetof(SetupEEPROM, SecondI2CPumpRate), sizeof(((SetupEEPROM*)0)->SecondI2CPumpRate)},
-          {"UseSecondI2CPump", 530, 1, offsetof(SetupEEPROM, UseSecondI2CPump), sizeof(((SetupEEPROM*)0)->UseSecondI2CPump)},
-          {"NbkUseStreamServo", 531, 1, offsetof(SetupEEPROM, NbkUseStreamServo), sizeof(((SetupEEPROM*)0)->NbkUseStreamServo)},
-          {"CheesePhSlope", 532, 4, offsetof(SetupEEPROM, CheesePhSlope), sizeof(((SetupEEPROM*)0)->CheesePhSlope)},
-          {"CheesePhOffset", 536, 4, offsetof(SetupEEPROM, CheesePhOffset), sizeof(((SetupEEPROM*)0)->CheesePhOffset)},
-          {"CheesePhSmoothPercent", 540, 1, offsetof(SetupEEPROM, CheesePhSmoothPercent), sizeof(((SetupEEPROM*)0)->CheesePhSmoothPercent)},
-          {"CheeseDoserSpeed", 541, 2, offsetof(SetupEEPROM, CheeseDoserSpeed), sizeof(((SetupEEPROM*)0)->CheeseDoserSpeed)},
-          {"CheeseDoserSteps", 543, 2, offsetof(SetupEEPROM, CheeseDoserSteps), sizeof(((SetupEEPROM*)0)->CheeseDoserSteps)},
+          {"SteamColor", 49, 20, offsetof(SetupEEPROM, SteamColor), sizeof(((SetupEEPROM*)0)->SteamColor)},
+          {"PipeColor", 69, 20, offsetof(SetupEEPROM, PipeColor), sizeof(((SetupEEPROM*)0)->PipeColor)},
+          {"WaterColor", 89, 20, offsetof(SetupEEPROM, WaterColor), sizeof(((SetupEEPROM*)0)->WaterColor)},
+          {"TankColor", 109, 20, offsetof(SetupEEPROM, TankColor), sizeof(((SetupEEPROM*)0)->TankColor)},
+          {"rele1", 129, 1, offsetof(SetupEEPROM, rele1), sizeof(((SetupEEPROM*)0)->rele1)},
+          {"rele2", 130, 1, offsetof(SetupEEPROM, rele2), sizeof(((SetupEEPROM*)0)->rele2)},
+          {"rele3", 131, 1, offsetof(SetupEEPROM, rele3), sizeof(((SetupEEPROM*)0)->rele3)},
+          {"rele4", 132, 1, offsetof(SetupEEPROM, rele4), sizeof(((SetupEEPROM*)0)->rele4)},
+          {"SteamAdress", 133, 8, offsetof(SetupEEPROM, SteamAdress), sizeof(((SetupEEPROM*)0)->SteamAdress)},
+          {"PipeAdress", 141, 8, offsetof(SetupEEPROM, PipeAdress), sizeof(((SetupEEPROM*)0)->PipeAdress)},
+          {"WaterAdress", 149, 8, offsetof(SetupEEPROM, WaterAdress), sizeof(((SetupEEPROM*)0)->WaterAdress)},
+          {"TankAdress", 157, 8, offsetof(SetupEEPROM, TankAdress), sizeof(((SetupEEPROM*)0)->TankAdress)},
+          {"useautospeed", 165, 1, offsetof(SetupEEPROM, useautospeed), sizeof(((SetupEEPROM*)0)->useautospeed)},
+          {"useDetector", 166, 1, offsetof(SetupEEPROM, useDetector), sizeof(((SetupEEPROM*)0)->useDetector)},
+          {"autospeed", 167, 1, offsetof(SetupEEPROM, autospeed), sizeof(((SetupEEPROM*)0)->autospeed)},
+          {"blynkauth", 168, 33, offsetof(SetupEEPROM, blynkauth), sizeof(((SetupEEPROM*)0)->blynkauth)},
+          {"videourl", 201, 120, offsetof(SetupEEPROM, videourl), sizeof(((SetupEEPROM*)0)->videourl)},
+          {"DistTemp", 321, 4, offsetof(SetupEEPROM, DistTemp), sizeof(((SetupEEPROM*)0)->DistTemp)},
+          {"Mode", 325, 4, offsetof(SetupEEPROM, Mode), sizeof(((SetupEEPROM*)0)->Mode)},
+          {"ACPAdress", 329, 8, offsetof(SetupEEPROM, ACPAdress), sizeof(((SetupEEPROM*)0)->ACPAdress)},
+          {"ACPColor", 337, 20, offsetof(SetupEEPROM, ACPColor), sizeof(((SetupEEPROM*)0)->ACPColor)},
+          {"DeltaACPTemp", 357, 4, offsetof(SetupEEPROM, DeltaACPTemp), sizeof(((SetupEEPROM*)0)->DeltaACPTemp)},
+          {"SetACPTemp", 361, 4, offsetof(SetupEEPROM, SetACPTemp), sizeof(((SetupEEPROM*)0)->SetACPTemp)},
+          {"ACPDelay", 365, 2, offsetof(SetupEEPROM, ACPDelay), sizeof(((SetupEEPROM*)0)->ACPDelay)},
+          {"Kp", 367, 4, offsetof(SetupEEPROM, Kp), sizeof(((SetupEEPROM*)0)->Kp)},
+          {"Ki", 371, 4, offsetof(SetupEEPROM, Ki), sizeof(((SetupEEPROM*)0)->Ki)},
+          {"Kd", 375, 4, offsetof(SetupEEPROM, Kd), sizeof(((SetupEEPROM*)0)->Kd)},
+          {"StbVoltage", 379, 4, offsetof(SetupEEPROM, StbVoltage), sizeof(((SetupEEPROM*)0)->StbVoltage)},
+          {"ChangeProgramBuzzer", 383, 1, offsetof(SetupEEPROM, ChangeProgramBuzzer), sizeof(((SetupEEPROM*)0)->ChangeProgramBuzzer)},
+          {"UseBuzzer", 384, 1, offsetof(SetupEEPROM, UseBuzzer), sizeof(((SetupEEPROM*)0)->UseBuzzer)},
+          {"CheckPower", 385, 1, offsetof(SetupEEPROM, CheckPower), sizeof(((SetupEEPROM*)0)->CheckPower)},
+          {"UseBBuzzer", 386, 1, offsetof(SetupEEPROM, UseBBuzzer), sizeof(((SetupEEPROM*)0)->UseBBuzzer)},
+          {"UseWS", 387, 1, offsetof(SetupEEPROM, UseWS), sizeof(((SetupEEPROM*)0)->UseWS)},
+          {"BVolt", 388, 4, offsetof(SetupEEPROM, BVolt), sizeof(((SetupEEPROM*)0)->BVolt)},
+          {"UseST", 392, 1, offsetof(SetupEEPROM, UseST), sizeof(((SetupEEPROM*)0)->UseST)},
+          {"DistTimeF", 393, 1, offsetof(SetupEEPROM, DistTimeF), sizeof(((SetupEEPROM*)0)->DistTimeF)},
+          {"UseHLS", 394, 1, offsetof(SetupEEPROM, UseHLS), sizeof(((SetupEEPROM*)0)->UseHLS)},
+          {"MaxPressureValue", 395, 4, offsetof(SetupEEPROM, MaxPressureValue), sizeof(((SetupEEPROM*)0)->MaxPressureValue)},
+          {"NbkIn", 399, 4, offsetof(SetupEEPROM, NbkIn), sizeof(((SetupEEPROM*)0)->NbkIn)},
+          {"NbkDelta", 403, 4, offsetof(SetupEEPROM, NbkDelta), sizeof(((SetupEEPROM*)0)->NbkDelta)},
+          {"NbkDM", 407, 4, offsetof(SetupEEPROM, NbkDM), sizeof(((SetupEEPROM*)0)->NbkDM)},
+          {"NbkDP", 411, 4, offsetof(SetupEEPROM, NbkDP), sizeof(((SetupEEPROM*)0)->NbkDP)},
+          {"NbkSteamT", 415, 4, offsetof(SetupEEPROM, NbkSteamT), sizeof(((SetupEEPROM*)0)->NbkSteamT)},
+          {"NbkOwPress", 419, 4, offsetof(SetupEEPROM, NbkOwPress), sizeof(((SetupEEPROM*)0)->NbkOwPress)},
+          {"ColDiam", 423, 4, offsetof(SetupEEPROM, ColDiam), sizeof(((SetupEEPROM*)0)->ColDiam)},
+          {"ColHeight", 427, 4, offsetof(SetupEEPROM, ColHeight), sizeof(((SetupEEPROM*)0)->ColHeight)},
+          {"PackDens", 431, 1, offsetof(SetupEEPROM, PackDens), sizeof(((SetupEEPROM*)0)->PackDens)},
+          {"StepperStepMlI2C", 432, 2, offsetof(SetupEEPROM, StepperStepMlI2C), sizeof(((SetupEEPROM*)0)->StepperStepMlI2C)},
+          {"NbkTn", 434, 4, offsetof(SetupEEPROM, NbkTn), sizeof(((SetupEEPROM*)0)->NbkTn)},
+          {"BKPower", 438, 4, offsetof(SetupEEPROM, BKPower), sizeof(((SetupEEPROM*)0)->BKPower)},
+          {"MainsVoltage", 442, 4, offsetof(SetupEEPROM, MainsVoltage), sizeof(((SetupEEPROM*)0)->MainsVoltage)},
+          {"SuvidTemp", 446, 4, offsetof(SetupEEPROM, SuvidTemp), sizeof(((SetupEEPROM*)0)->SuvidTemp)},
+          {"SuvidHoldMinutes", 450, 2, offsetof(SetupEEPROM, SuvidHoldMinutes), sizeof(((SetupEEPROM*)0)->SuvidHoldMinutes)},
+          {"BeerBrewOrder", 452, 1, offsetof(SetupEEPROM, BeerBrewOrder), sizeof(((SetupEEPROM*)0)->BeerBrewOrder)},
+          {"MpxZeroAdc", 453, 4, offsetof(SetupEEPROM, MpxZeroAdc), sizeof(((SetupEEPROM*)0)->MpxZeroAdc)},
+          {"MpxCountsPerMmHg", 457, 4, offsetof(SetupEEPROM, MpxCountsPerMmHg), sizeof(((SetupEEPROM*)0)->MpxCountsPerMmHg)},
+          {"SecondI2CPumpRate", 461, 4, offsetof(SetupEEPROM, SecondI2CPumpRate), sizeof(((SetupEEPROM*)0)->SecondI2CPumpRate)},
+          {"UseSecondI2CPump", 465, 1, offsetof(SetupEEPROM, UseSecondI2CPump), sizeof(((SetupEEPROM*)0)->UseSecondI2CPump)},
+          {"NbkUseStreamServo", 466, 1, offsetof(SetupEEPROM, NbkUseStreamServo), sizeof(((SetupEEPROM*)0)->NbkUseStreamServo)},
+          {"CheesePhSlope", 467, 4, offsetof(SetupEEPROM, CheesePhSlope), sizeof(((SetupEEPROM*)0)->CheesePhSlope)},
+          {"CheesePhOffset", 471, 4, offsetof(SetupEEPROM, CheesePhOffset), sizeof(((SetupEEPROM*)0)->CheesePhOffset)},
+          {"CheesePhSmoothPercent", 475, 1, offsetof(SetupEEPROM, CheesePhSmoothPercent), sizeof(((SetupEEPROM*)0)->CheesePhSmoothPercent)},
+          {"CheeseDoserSpeed", 476, 2, offsetof(SetupEEPROM, CheeseDoserSpeed), sizeof(((SetupEEPROM*)0)->CheeseDoserSpeed)},
+          {"CheeseDoserSteps", 478, 2, offsetof(SetupEEPROM, CheeseDoserSteps), sizeof(((SetupEEPROM*)0)->CheeseDoserSteps)},
         };
 
-        static const uint8_t GOLDEN_A[545] = {
+        static const uint8_t GOLDEN_A[480] = {
           0x0B,  // [  0-  0] flag
           0x00, 0x00, 0x00, 0x00,  // [  1-  4] DeltaSteamTemp
           0x00, 0x00, 0x50, 0xC0,  // [  5-  8] DeltaPipeTemp
@@ -1848,76 +1970,73 @@ nvs_harness += (
           0x13, 0x06,  // [ 42- 43] TankDelay
           0x74,  // [ 44- 44] TimeZone
           0x00, 0x00, 0x8A, 0xC1,  // [ 45- 48] HeaterResistant
-          0x82,  // [ 49- 49] LogPeriod
-          0x53, 0x74, 0x65, 0x61, 0x6D, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 50- 69] SteamColor
-          0x50, 0x69, 0x70, 0x65, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 70- 89] PipeColor
-          0x57, 0x61, 0x74, 0x65, 0x72, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 90-109] WaterColor
-          0x54, 0x61, 0x6E, 0x6B, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [110-129] TankColor
-          0x00,  // [130-130] rele1
-          0x01,  // [131-131] rele2
-          0x00,  // [132-132] rele3
-          0x01,  // [133-133] rele4
-          0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,  // [134-141] SteamAdress
-          0x4C, 0x4F, 0x52, 0x55, 0x58, 0x5B, 0x5E, 0x61,  // [142-149] PipeAdress
-          0x5D, 0x60, 0x63, 0x66, 0x69, 0x6C, 0x6F, 0x72,  // [150-157] WaterAdress
-          0x6E, 0x71, 0x74, 0x77, 0x7A, 0x7D, 0x80, 0x83,  // [158-165] TankAdress
-          0x00,  // [166-166] useautospeed
-          0x01,  // [167-167] useDetector
-          0xEB,  // [168-168] autospeed
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [169-201] blynkauth
-          0x76, 0x69, 0x64, 0x65, 0x6F, 0x75, 0x72, 0x6C, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [202-321] videourl
-          0x00, 0x00, 0x11, 0xC2,  // [322-325] DistTemp
-          0xC0, 0x1D, 0xFE, 0xFF,  // [326-329] Mode
-          0x2E, 0x31, 0x34, 0x37, 0x3A, 0x3D, 0x40, 0x43,  // [330-337] ACPAdress
-          0x41, 0x43, 0x50, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [338-357] ACPColor
-          0x00, 0x00, 0x21, 0xC2,  // [358-361] DeltaACPTemp
-          0x00, 0x00, 0x25, 0xC2,  // [362-365] SetACPTemp
-          0xFA, 0x09,  // [366-367] ACPDelay
-          0x00, 0x00, 0x2D, 0xC2,  // [368-371] Kp
-          0x00, 0x00, 0x31, 0xC2,  // [372-375] Ki
-          0x00, 0x00, 0x35, 0xC2,  // [376-379] Kd
-          0x00, 0x00, 0x39, 0xC2,  // [380-383] StbVoltage
-          0x00,  // [384-384] ChangeProgramBuzzer
-          0x01,  // [385-385] UseBuzzer
-          0x00,  // [386-386] CheckPower
-          0x01,  // [387-387] UseBBuzzer
-          0x00,  // [388-388] UseWS
-          0x00, 0x00, 0x51, 0xC2,  // [389-392] BVolt
-          0x00,  // [393-393] UseST
-          0x84,  // [394-394] DistTimeF
-          0x00,  // [395-395] UseHLS
-          0x00, 0x00, 0x61, 0xC2,  // [396-399] MaxPressureValue
-          0x74, 0x67, 0x5F, 0x74, 0x6F, 0x6B, 0x65, 0x6E, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [400-449] tg_token
-          0x74, 0x67, 0x5F, 0x63, 0x68, 0x61, 0x74, 0x5F, 0x69, 0x64, 0x41, 0x00, 0x00, 0x00,  // [450-463] tg_chat_id
-          0x00, 0x00, 0x6D, 0xC2,  // [464-467] NbkIn
-          0x00, 0x00, 0x71, 0xC2,  // [468-471] NbkDelta
-          0x00, 0x00, 0x75, 0xC2,  // [472-475] NbkDM
-          0x00, 0x00, 0x79, 0xC2,  // [476-479] NbkDP
-          0x00, 0x00, 0x7D, 0xC2,  // [480-483] NbkSteamT
-          0x00, 0x80, 0x80, 0xC2,  // [484-487] NbkOwPress
-          0x00, 0x80, 0x82, 0xC2,  // [488-491] ColDiam
-          0x00, 0x80, 0x84, 0xC2,  // [492-495] ColHeight
-          0xDF,  // [496-496] PackDens
-          0xBC, 0x0D,  // [497-498] StepperStepMlI2C
-          0x00, 0x80, 0x8A, 0xC2,  // [499-502] NbkTn
-          0x00, 0x80, 0x8C, 0xC2,  // [503-506] BKPower
-          0x00, 0x80, 0x8E, 0xC2,  // [507-510] MainsVoltage
-          0x00, 0x80, 0x90, 0xC2,  // [511-514] SuvidTemp
-          0x75, 0x0E,  // [515-516] SuvidHoldMinutes
-          0x01,  // [517-517] BeerBrewOrder
-          0x00, 0x80, 0x92, 0xC2,  // [518-521] MpxZeroAdc
-          0x00, 0x80, 0x94, 0xC2,  // [522-525] MpxCountsPerMmHg
-          0x00, 0x80, 0x96, 0xC2,  // [526-529] SecondI2CPumpRate
-          0x00,  // [530-530] UseSecondI2CPump
-          0x01,  // [531-531] NbkUseStreamServo
-          0x00, 0x80, 0x98, 0xC2,  // [532-535] CheesePhSlope
-          0x00, 0x80, 0x9A, 0xC2,  // [536-539] CheesePhOffset
-          0x4D,  // [540-540] CheesePhSmoothPercent
-          0x76, 0x0E,  // [541-542] CheeseDoserSpeed
-          0x77, 0x0E,  // [543-544] CheeseDoserSteps
+          0x53, 0x74, 0x65, 0x61, 0x6D, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 49- 68] SteamColor
+          0x50, 0x69, 0x70, 0x65, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 69- 88] PipeColor
+          0x57, 0x61, 0x74, 0x65, 0x72, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 89-108] WaterColor
+          0x54, 0x61, 0x6E, 0x6B, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [109-128] TankColor
+          0x00,  // [129-129] rele1
+          0x01,  // [130-130] rele2
+          0x00,  // [131-131] rele3
+          0x01,  // [132-132] rele4
+          0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,  // [133-140] SteamAdress
+          0x4C, 0x4F, 0x52, 0x55, 0x58, 0x5B, 0x5E, 0x61,  // [141-148] PipeAdress
+          0x5D, 0x60, 0x63, 0x66, 0x69, 0x6C, 0x6F, 0x72,  // [149-156] WaterAdress
+          0x6E, 0x71, 0x74, 0x77, 0x7A, 0x7D, 0x80, 0x83,  // [157-164] TankAdress
+          0x00,  // [165-165] useautospeed
+          0x01,  // [166-166] useDetector
+          0xEB,  // [167-167] autospeed
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [168-200] blynkauth
+          0x76, 0x69, 0x64, 0x65, 0x6F, 0x75, 0x72, 0x6C, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [201-320] videourl
+          0x00, 0x00, 0x11, 0xC2,  // [321-324] DistTemp
+          0xC0, 0x1D, 0xFE, 0xFF,  // [325-328] Mode
+          0x2E, 0x31, 0x34, 0x37, 0x3A, 0x3D, 0x40, 0x43,  // [329-336] ACPAdress
+          0x41, 0x43, 0x50, 0x43, 0x6F, 0x6C, 0x6F, 0x72, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [337-356] ACPColor
+          0x00, 0x00, 0x21, 0xC2,  // [357-360] DeltaACPTemp
+          0x00, 0x00, 0x25, 0xC2,  // [361-364] SetACPTemp
+          0xFA, 0x09,  // [365-366] ACPDelay
+          0x00, 0x00, 0x2D, 0xC2,  // [367-370] Kp
+          0x00, 0x00, 0x31, 0xC2,  // [371-374] Ki
+          0x00, 0x00, 0x35, 0xC2,  // [375-378] Kd
+          0x00, 0x00, 0x39, 0xC2,  // [379-382] StbVoltage
+          0x00,  // [383-383] ChangeProgramBuzzer
+          0x01,  // [384-384] UseBuzzer
+          0x00,  // [385-385] CheckPower
+          0x01,  // [386-386] UseBBuzzer
+          0x00,  // [387-387] UseWS
+          0x00, 0x00, 0x51, 0xC2,  // [388-391] BVolt
+          0x00,  // [392-392] UseST
+          0x84,  // [393-393] DistTimeF
+          0x00,  // [394-394] UseHLS
+          0x00, 0x00, 0x61, 0xC2,  // [395-398] MaxPressureValue
+          0x00, 0x00, 0x6D, 0xC2,  // [399-402] NbkIn
+          0x00, 0x00, 0x71, 0xC2,  // [403-406] NbkDelta
+          0x00, 0x00, 0x75, 0xC2,  // [407-410] NbkDM
+          0x00, 0x00, 0x79, 0xC2,  // [411-414] NbkDP
+          0x00, 0x00, 0x7D, 0xC2,  // [415-418] NbkSteamT
+          0x00, 0x80, 0x80, 0xC2,  // [419-422] NbkOwPress
+          0x00, 0x80, 0x82, 0xC2,  // [423-426] ColDiam
+          0x00, 0x80, 0x84, 0xC2,  // [427-430] ColHeight
+          0xDF,  // [431-431] PackDens
+          0xBC, 0x0D,  // [432-433] StepperStepMlI2C
+          0x00, 0x80, 0x8A, 0xC2,  // [434-437] NbkTn
+          0x00, 0x80, 0x8C, 0xC2,  // [438-441] BKPower
+          0x00, 0x80, 0x8E, 0xC2,  // [442-445] MainsVoltage
+          0x00, 0x80, 0x90, 0xC2,  // [446-449] SuvidTemp
+          0x75, 0x0E,  // [450-451] SuvidHoldMinutes
+          0x01,  // [452-452] BeerBrewOrder
+          0x00, 0x80, 0x92, 0xC2,  // [453-456] MpxZeroAdc
+          0x00, 0x80, 0x94, 0xC2,  // [457-460] MpxCountsPerMmHg
+          0x00, 0x80, 0x96, 0xC2,  // [461-464] SecondI2CPumpRate
+          0x00,  // [465-465] UseSecondI2CPump
+          0x01,  // [466-466] NbkUseStreamServo
+          0x00, 0x80, 0x98, 0xC2,  // [467-470] CheesePhSlope
+          0x00, 0x80, 0x9A, 0xC2,  // [471-474] CheesePhOffset
+          0x4D,  // [475-475] CheesePhSmoothPercent
+          0x76, 0x0E,  // [476-477] CheeseDoserSpeed
+          0x77, 0x0E,  // [478-479] CheeseDoserSteps
         };
 
-        static const uint8_t GOLDEN_B[545] = {
+        static const uint8_t GOLDEN_B[480] = {
           0xEE,  // [  0-  0] flag
           0x00, 0xC0, 0x48, 0x43,  // [  1-  4] DeltaSteamTemp
           0x00, 0x60, 0x96, 0x43,  // [  5-  8] DeltaPipeTemp
@@ -1935,76 +2054,73 @@ nvs_harness += (
           0x3C, 0xFF,  // [ 42- 43] TankDelay
           0x49,  // [ 44- 44] TimeZone
           0x00, 0x98, 0xD4, 0x44,  // [ 45- 48] HeaterResistant
-          0x33,  // [ 49- 49] LogPeriod
-          0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x00,  // [ 50- 69] SteamColor
-          0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x00,  // [ 70- 89] PipeColor
-          0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x00,  // [ 90-109] WaterColor
-          0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x00,  // [110-129] TankColor
-          0x01,  // [130-130] rele1
-          0x00,  // [131-131] rele2
-          0x01,  // [132-132] rele3
-          0x00,  // [133-133] rele4
-          0x9F, 0xA2, 0xA5, 0xA8, 0xAB, 0xAE, 0xB1, 0xB4,  // [134-141] SteamAdress
-          0xB0, 0xB3, 0xB6, 0xB9, 0xBC, 0xBF, 0xC2, 0xC5,  // [142-149] PipeAdress
-          0xC1, 0xC4, 0xC7, 0xCA, 0xCD, 0xD0, 0xD3, 0xD6,  // [150-157] WaterAdress
-          0x0A, 0x0D, 0x10, 0x13, 0x16, 0x19, 0x1C, 0x1F,  // [158-165] TankAdress
-          0x01,  // [166-166] useautospeed
-          0x00,  // [167-167] useDetector
-          0x88,  // [168-168] autospeed
-          0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x00,  // [169-201] blynkauth
-          0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x00,  // [202-321] videourl
-          0x00, 0x0C, 0x61, 0x45,  // [322-325] DistTemp
-          0xDC, 0x26, 0x20, 0x78,  // [326-329] Mode
-          0x92, 0x95, 0x98, 0x9B, 0x9E, 0xA1, 0xA4, 0xA7,  // [330-337] ACPAdress
-          0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x00,  // [338-357] ACPColor
-          0x00, 0x0C, 0x7A, 0x45,  // [358-361] DeltaACPTemp
-          0x00, 0x26, 0x80, 0x45,  // [362-365] SetACPTemp
-          0xDD, 0xFD,  // [366-367] ACPDelay
-          0x00, 0x66, 0x86, 0x45,  // [368-371] Kp
-          0x00, 0x86, 0x89, 0x45,  // [372-375] Ki
-          0x00, 0xA6, 0x8C, 0x45,  // [376-379] Kd
-          0x00, 0xC6, 0x8F, 0x45,  // [380-383] StbVoltage
-          0x01,  // [384-384] ChangeProgramBuzzer
-          0x00,  // [385-385] UseBuzzer
-          0x01,  // [386-386] CheckPower
-          0x00,  // [387-387] UseBBuzzer
-          0x01,  // [388-388] UseWS
-          0x00, 0x86, 0xA2, 0x45,  // [389-392] BVolt
-          0x01,  // [393-393] UseST
-          0x9B,  // [394-394] DistTimeF
-          0x01,  // [395-395] UseHLS
-          0x00, 0x06, 0xAF, 0x45,  // [396-399] MaxPressureValue
-          0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x00,  // [400-449] tg_token
-          0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x67, 0x00,  // [450-463] tg_chat_id
-          0x00, 0x66, 0xB8, 0x45,  // [464-467] NbkIn
-          0x00, 0x86, 0xBB, 0x45,  // [468-471] NbkDelta
-          0x00, 0xA6, 0xBE, 0x45,  // [472-475] NbkDM
-          0x00, 0xC6, 0xC1, 0x45,  // [476-479] NbkDP
-          0x00, 0xE6, 0xC4, 0x45,  // [480-483] NbkSteamT
-          0x00, 0x06, 0xC8, 0x45,  // [484-487] NbkOwPress
-          0x00, 0x26, 0xCB, 0x45,  // [488-491] ColDiam
-          0x00, 0x46, 0xCE, 0x45,  // [492-495] ColHeight
-          0x0C,  // [496-496] PackDens
-          0x8B, 0xFC,  // [497-498] StepperStepMlI2C
-          0x00, 0xA6, 0xD7, 0x45,  // [499-502] NbkTn
-          0x00, 0xC6, 0xDA, 0x45,  // [503-506] BKPower
-          0x00, 0xE6, 0xDD, 0x45,  // [507-510] MainsVoltage
-          0x00, 0x06, 0xE1, 0x45,  // [511-514] SuvidTemp
-          0x4A, 0xFC,  // [515-516] SuvidHoldMinutes
-          0x02,  // [517-517] BeerBrewOrder
-          0x00, 0x26, 0xE4, 0x45,  // [518-521] MpxZeroAdc
-          0x00, 0x46, 0xE7, 0x45,  // [522-525] MpxCountsPerMmHg
-          0x00, 0x66, 0xEA, 0x45,  // [526-529] SecondI2CPumpRate
-          0x01,  // [530-530] UseSecondI2CPump
-          0x00,  // [531-531] NbkUseStreamServo
-          0x00, 0x86, 0xED, 0x45,  // [532-535] CheesePhSlope
-          0x00, 0xA6, 0xF0, 0x45,  // [536-539] CheesePhOffset
-          0x4E,  // [540-540] CheesePhSmoothPercent
-          0xF2, 0xFD,  // [541-542] CheeseDoserSpeed
-          0xF3, 0xFD,  // [543-544] CheeseDoserSteps
+          0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x74, 0x00,  // [ 49- 68] SteamColor
+          0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x75, 0x00,  // [ 69- 88] PipeColor
+          0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x76, 0x00,  // [ 89-108] WaterColor
+          0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x77, 0x00,  // [109-128] TankColor
+          0x01,  // [129-129] rele1
+          0x00,  // [130-130] rele2
+          0x01,  // [131-131] rele3
+          0x00,  // [132-132] rele4
+          0x9F, 0xA2, 0xA5, 0xA8, 0xAB, 0xAE, 0xB1, 0xB4,  // [133-140] SteamAdress
+          0xB0, 0xB3, 0xB6, 0xB9, 0xBC, 0xBF, 0xC2, 0xC5,  // [141-148] PipeAdress
+          0xC1, 0xC4, 0xC7, 0xCA, 0xCD, 0xD0, 0xD3, 0xD6,  // [149-156] WaterAdress
+          0x0A, 0x0D, 0x10, 0x13, 0x16, 0x19, 0x1C, 0x1F,  // [157-164] TankAdress
+          0x01,  // [165-165] useautospeed
+          0x00,  // [166-166] useDetector
+          0x88,  // [167-167] autospeed
+          0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x00,  // [168-200] blynkauth
+          0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x6A, 0x00,  // [201-320] videourl
+          0x00, 0x0C, 0x61, 0x45,  // [321-324] DistTemp
+          0xDC, 0x26, 0x20, 0x78,  // [325-328] Mode
+          0x92, 0x95, 0x98, 0x9B, 0x9E, 0xA1, 0xA4, 0xA7,  // [329-336] ACPAdress
+          0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x6E, 0x00,  // [337-356] ACPColor
+          0x00, 0x0C, 0x7A, 0x45,  // [357-360] DeltaACPTemp
+          0x00, 0x26, 0x80, 0x45,  // [361-364] SetACPTemp
+          0xDD, 0xFD,  // [365-366] ACPDelay
+          0x00, 0x66, 0x86, 0x45,  // [367-370] Kp
+          0x00, 0x86, 0x89, 0x45,  // [371-374] Ki
+          0x00, 0xA6, 0x8C, 0x45,  // [375-378] Kd
+          0x00, 0xC6, 0x8F, 0x45,  // [379-382] StbVoltage
+          0x01,  // [383-383] ChangeProgramBuzzer
+          0x00,  // [384-384] UseBuzzer
+          0x01,  // [385-385] CheckPower
+          0x00,  // [386-386] UseBBuzzer
+          0x01,  // [387-387] UseWS
+          0x00, 0x86, 0xA2, 0x45,  // [388-391] BVolt
+          0x01,  // [392-392] UseST
+          0x9B,  // [393-393] DistTimeF
+          0x01,  // [394-394] UseHLS
+          0x00, 0x06, 0xAF, 0x45,  // [395-398] MaxPressureValue
+          0x00, 0x66, 0xB8, 0x45,  // [399-402] NbkIn
+          0x00, 0x86, 0xBB, 0x45,  // [403-406] NbkDelta
+          0x00, 0xA6, 0xBE, 0x45,  // [407-410] NbkDM
+          0x00, 0xC6, 0xC1, 0x45,  // [411-414] NbkDP
+          0x00, 0xE6, 0xC4, 0x45,  // [415-418] NbkSteamT
+          0x00, 0x06, 0xC8, 0x45,  // [419-422] NbkOwPress
+          0x00, 0x26, 0xCB, 0x45,  // [423-426] ColDiam
+          0x00, 0x46, 0xCE, 0x45,  // [427-430] ColHeight
+          0x0C,  // [431-431] PackDens
+          0x8B, 0xFC,  // [432-433] StepperStepMlI2C
+          0x00, 0xA6, 0xD7, 0x45,  // [434-437] NbkTn
+          0x00, 0xC6, 0xDA, 0x45,  // [438-441] BKPower
+          0x00, 0xE6, 0xDD, 0x45,  // [442-445] MainsVoltage
+          0x00, 0x06, 0xE1, 0x45,  // [446-449] SuvidTemp
+          0x4A, 0xFC,  // [450-451] SuvidHoldMinutes
+          0x02,  // [452-452] BeerBrewOrder
+          0x00, 0x26, 0xE4, 0x45,  // [453-456] MpxZeroAdc
+          0x00, 0x46, 0xE7, 0x45,  // [457-460] MpxCountsPerMmHg
+          0x00, 0x66, 0xEA, 0x45,  // [461-464] SecondI2CPumpRate
+          0x01,  // [465-465] UseSecondI2CPump
+          0x00,  // [466-466] NbkUseStreamServo
+          0x00, 0x86, 0xED, 0x45,  // [467-470] CheesePhSlope
+          0x00, 0xA6, 0xF0, 0x45,  // [471-474] CheesePhOffset
+          0x4E,  // [475-475] CheesePhSmoothPercent
+          0xF2, 0xFD,  // [476-477] CheeseDoserSpeed
+          0xF3, 0xFD,  // [478-479] CheeseDoserSteps
         };
 
-        static const uint8_t GOLDEN_DEFAULT_NOSEM[545] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_NOSEM[480] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2022,76 +2138,73 @@ nvs_harness += (
           0x14, 0x00,  // [ 42- 43] TankDelay
           0x03,  // [ 44- 44] TimeZone
           0x33, 0x33, 0x73, 0x41,  // [ 45- 48] HeaterResistant
-          0x03,  // [ 49- 49] LogPeriod
-          0x23, 0x66, 0x66, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 50- 69] SteamColor
-          0x23, 0x30, 0x30, 0x30, 0x30, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 70- 89] PipeColor
-          0x23, 0x30, 0x30, 0x62, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 90-109] WaterColor
-          0x23, 0x30, 0x30, 0x38, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [110-129] TankColor
-          0x00,  // [130-130] rele1
-          0x00,  // [131-131] rele2
-          0x00,  // [132-132] rele3
-          0x00,  // [133-133] rele4
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [134-141] SteamAdress
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [142-149] PipeAdress
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [150-157] WaterAdress
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [158-165] TankAdress
-          0x00,  // [166-166] useautospeed
-          0x00,  // [167-167] useDetector
-          0x00,  // [168-168] autospeed
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [169-201] blynkauth
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [202-321] videourl
-          0x00, 0x00, 0xC4, 0x42,  // [322-325] DistTemp
-          0x00, 0x00, 0x00, 0x00,  // [326-329] Mode
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [330-337] ACPAdress
-          0x23, 0x38, 0x30, 0x30, 0x30, 0x38, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [338-357] ACPColor
-          0x00, 0x00, 0x00, 0x00,  // [358-361] DeltaACPTemp
-          0x00, 0x00, 0x00, 0x00,  // [362-365] SetACPTemp
-          0x14, 0x00,  // [366-367] ACPDelay
-          0x00, 0x00, 0x16, 0x43,  // [368-371] Kp
-          0x33, 0x33, 0xB3, 0x3F,  // [372-375] Ki
-          0x33, 0x33, 0xB3, 0x3F,  // [376-379] Kd
-          0x00, 0x00, 0xC8, 0x42,  // [380-383] StbVoltage
-          0x00,  // [384-384] ChangeProgramBuzzer
-          0x00,  // [385-385] UseBuzzer
-          0x00,  // [386-386] CheckPower
-          0x00,  // [387-387] UseBBuzzer
-          0x01,  // [388-388] UseWS
-          0x00, 0x00, 0x66, 0x43,  // [389-392] BVolt
-          0x01,  // [393-393] UseST
-          0x3C,  // [394-394] DistTimeF
-          0x01,  // [395-395] UseHLS
-          0x00, 0x00, 0x00, 0x00,  // [396-399] MaxPressureValue
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [400-449] tg_token
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [450-463] tg_chat_id
-          0x00, 0x00, 0x34, 0x43,  // [464-467] NbkIn
-          0x00, 0x00, 0x00, 0x3F,  // [468-471] NbkDelta
-          0x00, 0x00, 0xC8, 0x42,  // [472-475] NbkDM
-          0x00, 0x00, 0x00, 0x3F,  // [476-479] NbkDP
-          0x00, 0x00, 0xA2, 0x42,  // [480-483] NbkSteamT
-          0x00, 0x00, 0x20, 0x42,  // [484-487] NbkOwPress
-          0x00, 0x00, 0x00, 0x40,  // [488-491] ColDiam
-          0x00, 0x00, 0x00, 0x3F,  // [492-495] ColHeight
-          0x37,  // [496-496] PackDens
-          0xC8, 0x00,  // [497-498] StepperStepMlI2C
-          0x00, 0x00, 0xC5, 0x42,  // [499-502] NbkTn
-          0x00, 0x00, 0x34, 0x42,  // [503-506] BKPower
-          0x00, 0x00, 0x66, 0x43,  // [507-510] MainsVoltage
-          0x00, 0x00, 0x00, 0x00,  // [511-514] SuvidTemp
-          0x00, 0x00,  // [515-516] SuvidHoldMinutes
-          0x00,  // [517-517] BeerBrewOrder
-          0xCD, 0xCC, 0x12, 0x42,  // [518-521] MpxZeroAdc
-          0x00, 0x00, 0x40, 0x41,  // [522-525] MpxCountsPerMmHg
-          0x00, 0x00, 0x00, 0x00,  // [526-529] SecondI2CPumpRate
-          0x00,  // [530-530] UseSecondI2CPump
-          0x00,  // [531-531] NbkUseStreamServo
-          0x00, 0x00, 0x80, 0x3F,  // [532-535] CheesePhSlope
-          0x00, 0x00, 0x80, 0x3F,  // [536-539] CheesePhOffset
-          0x5A,  // [540-540] CheesePhSmoothPercent
-          0xC8, 0x00,  // [541-542] CheeseDoserSpeed
-          0xA0, 0x00,  // [543-544] CheeseDoserSteps
+          0x23, 0x66, 0x66, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 49- 68] SteamColor
+          0x23, 0x30, 0x30, 0x30, 0x30, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 69- 88] PipeColor
+          0x23, 0x30, 0x30, 0x62, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 89-108] WaterColor
+          0x23, 0x30, 0x30, 0x38, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [109-128] TankColor
+          0x00,  // [129-129] rele1
+          0x00,  // [130-130] rele2
+          0x00,  // [131-131] rele3
+          0x00,  // [132-132] rele4
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [133-140] SteamAdress
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [141-148] PipeAdress
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [149-156] WaterAdress
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [157-164] TankAdress
+          0x00,  // [165-165] useautospeed
+          0x00,  // [166-166] useDetector
+          0x00,  // [167-167] autospeed
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [168-200] blynkauth
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [201-320] videourl
+          0x00, 0x00, 0xC4, 0x42,  // [321-324] DistTemp
+          0x00, 0x00, 0x00, 0x00,  // [325-328] Mode
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [329-336] ACPAdress
+          0x23, 0x38, 0x30, 0x30, 0x30, 0x38, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [337-356] ACPColor
+          0x00, 0x00, 0x00, 0x00,  // [357-360] DeltaACPTemp
+          0x00, 0x00, 0x00, 0x00,  // [361-364] SetACPTemp
+          0x14, 0x00,  // [365-366] ACPDelay
+          0x00, 0x00, 0x16, 0x43,  // [367-370] Kp
+          0x33, 0x33, 0xB3, 0x3F,  // [371-374] Ki
+          0x33, 0x33, 0xB3, 0x3F,  // [375-378] Kd
+          0x00, 0x00, 0xC8, 0x42,  // [379-382] StbVoltage
+          0x00,  // [383-383] ChangeProgramBuzzer
+          0x00,  // [384-384] UseBuzzer
+          0x00,  // [385-385] CheckPower
+          0x00,  // [386-386] UseBBuzzer
+          0x01,  // [387-387] UseWS
+          0x00, 0x00, 0x66, 0x43,  // [388-391] BVolt
+          0x01,  // [392-392] UseST
+          0x3C,  // [393-393] DistTimeF
+          0x01,  // [394-394] UseHLS
+          0x00, 0x00, 0x00, 0x00,  // [395-398] MaxPressureValue
+          0x00, 0x00, 0x34, 0x43,  // [399-402] NbkIn
+          0x00, 0x00, 0x00, 0x3F,  // [403-406] NbkDelta
+          0x00, 0x00, 0xC8, 0x42,  // [407-410] NbkDM
+          0x00, 0x00, 0x00, 0x3F,  // [411-414] NbkDP
+          0x00, 0x00, 0xA2, 0x42,  // [415-418] NbkSteamT
+          0x00, 0x00, 0x20, 0x42,  // [419-422] NbkOwPress
+          0x00, 0x00, 0x00, 0x40,  // [423-426] ColDiam
+          0x00, 0x00, 0x00, 0x3F,  // [427-430] ColHeight
+          0x37,  // [431-431] PackDens
+          0xC8, 0x00,  // [432-433] StepperStepMlI2C
+          0x00, 0x00, 0xC5, 0x42,  // [434-437] NbkTn
+          0x00, 0x00, 0x34, 0x42,  // [438-441] BKPower
+          0x00, 0x00, 0x66, 0x43,  // [442-445] MainsVoltage
+          0x00, 0x00, 0x00, 0x00,  // [446-449] SuvidTemp
+          0x00, 0x00,  // [450-451] SuvidHoldMinutes
+          0x00,  // [452-452] BeerBrewOrder
+          0xCD, 0xCC, 0x12, 0x42,  // [453-456] MpxZeroAdc
+          0x00, 0x00, 0x40, 0x41,  // [457-460] MpxCountsPerMmHg
+          0x00, 0x00, 0x00, 0x00,  // [461-464] SecondI2CPumpRate
+          0x00,  // [465-465] UseSecondI2CPump
+          0x00,  // [466-466] NbkUseStreamServo
+          0x00, 0x00, 0x80, 0x3F,  // [467-470] CheesePhSlope
+          0x00, 0x00, 0x80, 0x3F,  // [471-474] CheesePhOffset
+          0x5A,  // [475-475] CheesePhSmoothPercent
+          0xC8, 0x00,  // [476-477] CheeseDoserSpeed
+          0xA0, 0x00,  // [478-479] CheeseDoserSteps
         };
 
-        static const uint8_t GOLDEN_DEFAULT_SEM[545] __attribute__((unused)) = {
+        static const uint8_t GOLDEN_DEFAULT_SEM[480] __attribute__((unused)) = {
           0x02,  // [  0-  0] flag
           0xCD, 0xCC, 0xCC, 0x3D,  // [  1-  4] DeltaSteamTemp
           0xCD, 0xCC, 0x4C, 0x3E,  // [  5-  8] DeltaPipeTemp
@@ -2109,73 +2222,70 @@ nvs_harness += (
           0x14, 0x00,  // [ 42- 43] TankDelay
           0x03,  // [ 44- 44] TimeZone
           0x33, 0x33, 0x73, 0x41,  // [ 45- 48] HeaterResistant
-          0x03,  // [ 49- 49] LogPeriod
-          0x23, 0x66, 0x66, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 50- 69] SteamColor
-          0x23, 0x30, 0x30, 0x30, 0x30, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 70- 89] PipeColor
-          0x23, 0x30, 0x30, 0x62, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 90-109] WaterColor
-          0x23, 0x30, 0x30, 0x38, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [110-129] TankColor
-          0x00,  // [130-130] rele1
-          0x00,  // [131-131] rele2
-          0x00,  // [132-132] rele3
-          0x00,  // [133-133] rele4
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [134-141] SteamAdress
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [142-149] PipeAdress
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [150-157] WaterAdress
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [158-165] TankAdress
-          0x00,  // [166-166] useautospeed
-          0x00,  // [167-167] useDetector
-          0x00,  // [168-168] autospeed
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [169-201] blynkauth
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [202-321] videourl
-          0x00, 0x00, 0xC4, 0x42,  // [322-325] DistTemp
-          0x00, 0x00, 0x00, 0x00,  // [326-329] Mode
-          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [330-337] ACPAdress
-          0x23, 0x38, 0x30, 0x30, 0x30, 0x38, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [338-357] ACPColor
-          0x00, 0x00, 0x00, 0x00,  // [358-361] DeltaACPTemp
-          0x00, 0x00, 0x00, 0x00,  // [362-365] SetACPTemp
-          0x14, 0x00,  // [366-367] ACPDelay
-          0x00, 0x00, 0x16, 0x43,  // [368-371] Kp
-          0x33, 0x33, 0xB3, 0x3F,  // [372-375] Ki
-          0x33, 0x33, 0xB3, 0x3F,  // [376-379] Kd
-          0x00, 0x00, 0xC8, 0x42,  // [380-383] StbVoltage
-          0x00,  // [384-384] ChangeProgramBuzzer
-          0x00,  // [385-385] UseBuzzer
-          0x00,  // [386-386] CheckPower
-          0x00,  // [387-387] UseBBuzzer
-          0x01,  // [388-388] UseWS
-          0x00, 0x00, 0x66, 0x43,  // [389-392] BVolt
-          0x01,  // [393-393] UseST
-          0x3C,  // [394-394] DistTimeF
-          0x01,  // [395-395] UseHLS
-          0x00, 0x00, 0x00, 0x00,  // [396-399] MaxPressureValue
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [400-449] tg_token
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [450-463] tg_chat_id
-          0x00, 0x00, 0x34, 0x43,  // [464-467] NbkIn
-          0x00, 0x00, 0x00, 0x3F,  // [468-471] NbkDelta
-          0x00, 0x00, 0xC8, 0x42,  // [472-475] NbkDM
-          0x00, 0x00, 0x00, 0x3F,  // [476-479] NbkDP
-          0x00, 0x00, 0xA2, 0x42,  // [480-483] NbkSteamT
-          0x00, 0x00, 0x20, 0x42,  // [484-487] NbkOwPress
-          0x00, 0x00, 0x00, 0x40,  // [488-491] ColDiam
-          0x00, 0x00, 0x00, 0x3F,  // [492-495] ColHeight
-          0x37,  // [496-496] PackDens
-          0xC8, 0x00,  // [497-498] StepperStepMlI2C
-          0x00, 0x00, 0xC5, 0x42,  // [499-502] NbkTn
-          0x00, 0x00, 0x48, 0x43,  // [503-506] BKPower
-          0x00, 0x00, 0x66, 0x43,  // [507-510] MainsVoltage
-          0x00, 0x00, 0x00, 0x00,  // [511-514] SuvidTemp
-          0x00, 0x00,  // [515-516] SuvidHoldMinutes
-          0x00,  // [517-517] BeerBrewOrder
-          0xCD, 0xCC, 0x12, 0x42,  // [518-521] MpxZeroAdc
-          0x00, 0x00, 0x40, 0x41,  // [522-525] MpxCountsPerMmHg
-          0x00, 0x00, 0x00, 0x00,  // [526-529] SecondI2CPumpRate
-          0x00,  // [530-530] UseSecondI2CPump
-          0x00,  // [531-531] NbkUseStreamServo
-          0x00, 0x00, 0x80, 0x3F,  // [532-535] CheesePhSlope
-          0x00, 0x00, 0x80, 0x3F,  // [536-539] CheesePhOffset
-          0x5A,  // [540-540] CheesePhSmoothPercent
-          0xC8, 0x00,  // [541-542] CheeseDoserSpeed
-          0xA0, 0x00,  // [543-544] CheeseDoserSteps
+          0x23, 0x66, 0x66, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 49- 68] SteamColor
+          0x23, 0x30, 0x30, 0x30, 0x30, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 69- 88] PipeColor
+          0x23, 0x30, 0x30, 0x62, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [ 89-108] WaterColor
+          0x23, 0x30, 0x30, 0x38, 0x30, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [109-128] TankColor
+          0x00,  // [129-129] rele1
+          0x00,  // [130-130] rele2
+          0x00,  // [131-131] rele3
+          0x00,  // [132-132] rele4
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [133-140] SteamAdress
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [141-148] PipeAdress
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [149-156] WaterAdress
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [157-164] TankAdress
+          0x00,  // [165-165] useautospeed
+          0x00,  // [166-166] useDetector
+          0x00,  // [167-167] autospeed
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [168-200] blynkauth
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [201-320] videourl
+          0x00, 0x00, 0xC4, 0x42,  // [321-324] DistTemp
+          0x00, 0x00, 0x00, 0x00,  // [325-328] Mode
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // [329-336] ACPAdress
+          0x23, 0x38, 0x30, 0x30, 0x30, 0x38, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // [337-356] ACPColor
+          0x00, 0x00, 0x00, 0x00,  // [357-360] DeltaACPTemp
+          0x00, 0x00, 0x00, 0x00,  // [361-364] SetACPTemp
+          0x14, 0x00,  // [365-366] ACPDelay
+          0x00, 0x00, 0x16, 0x43,  // [367-370] Kp
+          0x33, 0x33, 0xB3, 0x3F,  // [371-374] Ki
+          0x33, 0x33, 0xB3, 0x3F,  // [375-378] Kd
+          0x00, 0x00, 0xC8, 0x42,  // [379-382] StbVoltage
+          0x00,  // [383-383] ChangeProgramBuzzer
+          0x00,  // [384-384] UseBuzzer
+          0x00,  // [385-385] CheckPower
+          0x00,  // [386-386] UseBBuzzer
+          0x01,  // [387-387] UseWS
+          0x00, 0x00, 0x66, 0x43,  // [388-391] BVolt
+          0x01,  // [392-392] UseST
+          0x3C,  // [393-393] DistTimeF
+          0x01,  // [394-394] UseHLS
+          0x00, 0x00, 0x00, 0x00,  // [395-398] MaxPressureValue
+          0x00, 0x00, 0x34, 0x43,  // [399-402] NbkIn
+          0x00, 0x00, 0x00, 0x3F,  // [403-406] NbkDelta
+          0x00, 0x00, 0xC8, 0x42,  // [407-410] NbkDM
+          0x00, 0x00, 0x00, 0x3F,  // [411-414] NbkDP
+          0x00, 0x00, 0xA2, 0x42,  // [415-418] NbkSteamT
+          0x00, 0x00, 0x20, 0x42,  // [419-422] NbkOwPress
+          0x00, 0x00, 0x00, 0x40,  // [423-426] ColDiam
+          0x00, 0x00, 0x00, 0x3F,  // [427-430] ColHeight
+          0x37,  // [431-431] PackDens
+          0xC8, 0x00,  // [432-433] StepperStepMlI2C
+          0x00, 0x00, 0xC5, 0x42,  // [434-437] NbkTn
+          0x00, 0x00, 0x48, 0x43,  // [438-441] BKPower
+          0x00, 0x00, 0x66, 0x43,  // [442-445] MainsVoltage
+          0x00, 0x00, 0x00, 0x00,  // [446-449] SuvidTemp
+          0x00, 0x00,  // [450-451] SuvidHoldMinutes
+          0x00,  // [452-452] BeerBrewOrder
+          0xCD, 0xCC, 0x12, 0x42,  // [453-456] MpxZeroAdc
+          0x00, 0x00, 0x40, 0x41,  // [457-460] MpxCountsPerMmHg
+          0x00, 0x00, 0x00, 0x00,  // [461-464] SecondI2CPumpRate
+          0x00,  // [465-465] UseSecondI2CPump
+          0x00,  // [466-466] NbkUseStreamServo
+          0x00, 0x00, 0x80, 0x3F,  // [467-470] CheesePhSlope
+          0x00, 0x00, 0x80, 0x3F,  // [471-474] CheesePhOffset
+          0x5A,  // [475-475] CheesePhSmoothPercent
+          0xC8, 0x00,  // [476-477] CheeseDoserSpeed
+          0xA0, 0x00,  // [478-479] CheeseDoserSteps
         };
 
 
@@ -2230,7 +2340,6 @@ nvs_harness += (
         candidateA.TankDelay = 1555;
         candidateA.TimeZone = 116;
         candidateA.HeaterResistant = -17.25f;
-        candidateA.LogPeriod = 130;
         strcpy(candidateA.SteamColor, "SteamColorA");
         strcpy(candidateA.PipeColor, "PipeColorA");
         strcpy(candidateA.WaterColor, "WaterColorA");
@@ -2274,8 +2383,6 @@ nvs_harness += (
         candidateA.DistTimeF = 132;
         candidateA.UseHLS = false;
         candidateA.MaxPressureValue = -56.25f;
-        strcpy(candidateA.tg_token, "tg_tokenA");
-        strcpy(candidateA.tg_chat_id, "tg_chat_idA");
         candidateA.NbkIn = -59.25f;
         candidateA.NbkDelta = -60.25f;
         candidateA.NbkDM = -61.25f;
@@ -2303,7 +2410,7 @@ nvs_harness += (
         candidateA.CheeseDoserSpeed = 3702;
         candidateA.CheeseDoserSteps = 3703;
 
-          uint8_t payloadA[545] = {};
+          uint8_t payloadA[480] = {};
           assert(encode_setup_payload(candidateA, payloadA) &&
                  "encode_setup_payload must succeed for golden set A");
           golden_check_encode(payloadA, GOLDEN_A, "encode set A");
@@ -2326,7 +2433,6 @@ nvs_harness += (
         candidateB.TankDelay = 65340;
         candidateB.TimeZone = 73;
         candidateB.HeaterResistant = 1700.75f;
-        candidateB.LogPeriod = 51;
         strcpy(candidateB.SteamColor, "ttttttttttttttttttt");
         strcpy(candidateB.PipeColor, "uuuuuuuuuuuuuuuuuuu");
         strcpy(candidateB.WaterColor, "vvvvvvvvvvvvvvvvvvv");
@@ -2370,8 +2476,6 @@ nvs_harness += (
         candidateB.DistTimeF = 155;
         candidateB.UseHLS = true;
         candidateB.MaxPressureValue = 5600.75f;
-        strcpy(candidateB.tg_token, "fffffffffffffffffffffffffffffffffffffffffffffffff");
-        strcpy(candidateB.tg_chat_id, "ggggggggggggg");
         candidateB.NbkIn = 5900.75f;
         candidateB.NbkDelta = 6000.75f;
         candidateB.NbkDM = 6100.75f;
@@ -2399,7 +2503,7 @@ nvs_harness += (
         candidateB.CheeseDoserSpeed = 65010;
         candidateB.CheeseDoserSteps = 65011;
 
-          uint8_t payloadB[545] = {};
+          uint8_t payloadB[480] = {};
           assert(encode_setup_payload(candidateB, payloadB) &&
                  "encode_setup_payload must succeed for golden set B");
           golden_check_encode(payloadB, GOLDEN_B, "encode set B");
@@ -2424,7 +2528,7 @@ nvs_harness += (
           memset(&candidate, 0xAA, sizeof(candidate));
           set_default_setup_profile(candidate);
 
-          uint8_t payload[545] = {};
+          uint8_t payload[480] = {};
           assert(encode_setup_payload(candidate, payload) &&
                  "encode_setup_payload must succeed for defaults");
         #ifndef SAMOVAR_USE_SEM_AVR
@@ -2438,7 +2542,7 @@ nvs_harness += (
         int main() {
           test_save_fault_matrix();
           test_load_fault_matrix();
-          test_v1_v2_and_v3_profiles_migrate_after_verified_v4_write();
+          test_v1_v2_v3_v4_profiles_migrate_after_verified_v5_write();
           test_poisoned_padding_and_canonical_rejection();
           test_legacy_fault_matrix();
           test_migration_precedence_and_errors();
@@ -2770,18 +2874,21 @@ if load_body:
     require(
         len(re.findall(r"(?<![A-Za-z0-9])ProfileCodec::Blob", load_body)) == 1 and
         load_body.count("PreviousProfileCodec::Blob") == 1 and
+        load_body.count("V3ProfileCodec::Blob") == 1 and
         load_body.count("V2ProfileCodec::Blob") == 1 and
         load_body.count("LegacyProfileCodec::Blob") == 1 and
         load_body.count("uint8_t payload[ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[PreviousProfileCodec::PAYLOAD_SIZE]") == 1 and
+        load_body.count("uint8_t payload[V3ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[V2ProfileCodec::PAYLOAD_SIZE]") == 1 and
         load_body.count("uint8_t payload[LegacyProfileCodec::PAYLOAD_SIZE]") == 1 and
+        "decode_setup_payload_v4(payload, migrated)" in load_body and
         "decode_setup_payload_v3(payload, migrated)" in load_body and
         "decode_setup_payload_v2(payload, migrated)" in load_body and
         "decode_setup_payload_v1(payload, migrated)" in load_body and
-        load_body.count("save_profile_nvs(migrated)") == 3 and
+        load_body.count("save_profile_nvs(migrated)") == 4 and
         "SetupEEPROM decoded" not in load_body,
-        "profile load must decode V1/V2/V3 and confirm their V4 rewrite with fixed buffers",
+        "profile load must decode V1/V2/V3/V4 and confirm their V5 rewrite with fixed buffers",
     )
 
 if migrate_body:
@@ -2791,7 +2898,7 @@ if migrate_body:
             "load_legacy_profile_namespace(",
             "SAMOVAR_PROFILE_NAMESPACE",
             "legacy_profile_namespace_by_mode(lastMode)",
-            "EEPROM.begin(sizeof(SetupEEPROM))",
+            "EEPROM.begin(sizeof(LegacyEepromLayout))",
             "EEPROM.get(0, legacyEeprom)",
             "candidate = legacyEeprom",
         ],
@@ -2828,7 +2935,7 @@ decode_body = function_body(
 )
 decode_fields_body = function_body(
     nvs_text,
-    "template <size_t PayloadSize>\nstatic bool decode_setup_payload_fields(",
+    "template <bool ReadUpTo4Fields, size_t PayloadSize>\nstatic bool decode_setup_payload_fields(",
 )
 decode_v2only_body = function_body(
     nvs_text,
@@ -2859,17 +2966,17 @@ if not PROFILE_SETUP_FIELDS_HEADER.exists():
 else:
     profile_fields_text = PROFILE_SETUP_FIELDS_HEADER.read_text(encoding="utf-8")
     profile_field_rows = parse_profile_field_rows(profile_fields_text)
-    macro_field_names = [row[1] for row in profile_field_rows]
+    macro_field_names = [row[1] for row in profile_field_rows if row[4] != "UPTO4"]
     require(
         macro_field_names == setup_fields,
-        "profile_setup_fields.h field order is not an exact 1-to-1 match with "
-        f"SetupEEPROM declaration order: macro={macro_field_names!r} "
-        f"struct={setup_fields!r}",
+        "profile_setup_fields.h field order (без UPTO4-полей, ушедших из SetupEEPROM) "
+        "is not an exact 1-to-1 match with SetupEEPROM declaration order: "
+        f"macro={macro_field_names!r} struct={setup_fields!r}",
     )
-    total_size = sum(int(row[2]) for row in profile_field_rows)
+    total_size = sum(int(row[2]) for row in profile_field_rows if row[4] != "UPTO4")
     require(
-        total_size == 545,
-        f"profile_setup_fields.h SIZE column sums to {total_size} bytes, expected 545",
+        total_size == 480,
+        f"profile_setup_fields.h SIZE column (без UPTO4) sums to {total_size} bytes, expected 480",
     )
     # decode_setup_payload_fields() и decode_setup_payload_v2only_fields() читают
     # ОДИН И ТОТ ЖЕ курсор reader двумя последовательными проходами по одному и
@@ -2882,7 +2989,7 @@ else:
     # V2ONLY-хвост) - это нормально; интерливинг ALL/V2ONLY - нет.
     v2only_fields = [row[1] for row in profile_field_rows if row[4] == "V2ONLY"]
     scopes = [row[4] for row in profile_field_rows]
-    expected_scope_order = {"ALL": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3}
+    expected_scope_order = {"ALL": 0, "UPTO4": 0, "V2ONLY": 1, "V3ONLY": 2, "V4ONLY": 3}
     require(
         all(scope in expected_scope_order for scope in scopes) and
         all(expected_scope_order[left] <= expected_scope_order[right]
@@ -3020,16 +3127,19 @@ for forbidden in [
 require("void save_profile()" not in (ROOT / "FS.ino").read_text(encoding="utf-8"),
         "FS.ino void save_profile wrapper remains")
 require("void save_profile();" not in api_text, "void save_profile API remains")
-require('static_assert(sizeof(SetupEEPROM) == 568' in nvs_text,
-        "production SetupEEPROM v4 ABI assertion is missing")
+require('static_assert(sizeof(SetupEEPROM) == 500' in nvs_text,
+        "production SetupEEPROM v5 ABI assertion is missing")
 for token in [
-    "SAMOVAR_PROFILE_FORMAT_VERSION = 4",
+    "SAMOVAR_PROFILE_FORMAT_VERSION = 5",
+    "SAMOVAR_PROFILE_PAYLOAD_SIZE_V5 = 480",
+    "SAMOVAR_PROFILE_CANONICAL_BYTES_V5 = 480",
     "SAMOVAR_PROFILE_PAYLOAD_SIZE_V4 = 545",
     "SAMOVAR_PROFILE_CANONICAL_BYTES_V4 = 545",
     "using PreviousProfileCodec = ProfileBlobCodec<",
+    "using V3ProfileCodec = ProfileBlobCodec<",
     "using V2ProfileCodec = ProfileBlobCodec<",
 ]:
-    require(token in nvs_text, f"production profile v4 contract is missing {token}")
+    require(token in nvs_text, f"production profile v5 contract is missing {token}")
 
 setup_body = function_body(samovar_text, "void setup()")
 if setup_body:

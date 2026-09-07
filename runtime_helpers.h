@@ -20,7 +20,6 @@ extern portMUX_TYPE waterPulseMux;
 //   LOCK_ORDER: 18  BLYNK            xBlynkSemaphore              обращения к библиотеке Blynk (не потокобезопасна) - самый внешний из сетевых
 //   LOCK_ORDER: 20  HTTP_REQUEST     httpRequestLock              один исходящий HTTP-запрос за раз
 //   LOCK_ORDER: 30  LUA_STATE        xLuaSemaphore                состояние интерпретатора Lua
-//   LOCK_ORDER: 40  MQTT             xMqttSemaphore               публикация в MQTT
 //   LOCK_ORDER: 50  LOG_FILE         xLogFileSemaphore            файл журнала на ФС
 //   LOCK_ORDER: 60  PENDING_COMMAND  xPendingCommandSemaphore     очередь отложенных команд
 //   LOCK_ORDER: 70  CMD_QUEUE        samovar_command_queue_mutex  очередь команд самовара
@@ -220,12 +219,26 @@ inline bool copy_session_description(String& description, TickType_t timeout = p
   return assign_locked_runtime_field(description, SessionDescription, timeout);
 }
 
-inline bool copy_mqtt_session_description(String& description, TickType_t timeout = pdMS_TO_TICKS(500)) {
+inline bool copy_start_session_description(String& description, TickType_t timeout = pdMS_TO_TICKS(500)) {
   bool locked = runtime_state_lock(timeout);
   if (!locked) return false;
   description = SessionDescription;
   runtime_state_unlock(true);
-  description.replace(",", ";");
+  // Перенос строки внутри описания ломает построчный разбор V35 (одна запись сессии -
+  // одна строка) на стороне сервера - меняем на "; ". "\r\n" - отдельно и первым,
+  // иначе останется лишний "; ".
+  description.replace("\r\n", "; ");
+  description.replace("\n", "; ");
+  description.replace("\r", "; ");
+  // SessionDescription хранится с "%"->"&#37;" (экранирование для веб-интерфейса,
+  // см. commit_profile_operation() в Samovar.ino). В облако (V35 -> LOG.DESCRIPTION)
+  // должен уйти исходный текст - раскодируем обратно. Известное ограничение: текст
+  // "&#37;", введённый пользователем буквально, тоже станет "%" (осознанно принято,
+  // обратимое экранирование через "&" усложнило бы веб-отображение).
+  description.replace("&#37;", "%");
+  // Запятую не экранируем: единственный потребитель этой строки - V35, сервер
+  // (SamovarLogDao.parseSessionStart) разбирает payload как split(",", 7) - лимит
+  // в 7 полей оставляет любые запятые внутри description нетронутыми, в последнем поле.
   return true;
 }
 
