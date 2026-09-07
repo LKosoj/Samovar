@@ -196,6 +196,7 @@ SemaphoreHandle_t samovar_command_queue_mutex = NULL;
 StaticSemaphore_t samovar_command_queue_mutex_buffer;
 
 bool shouldSaveWiFiConfig = false;
+volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
 
 // Профиль загрузился в деградированном режиме (fail-open: грузимся на дефолтах/частично
 // восстановленных данных, но громко сообщаем об этом). Пишутся один раз в setup(),
@@ -1586,7 +1587,20 @@ void triggerGetClock(void *parameter) {
           // попытки переподключиться к WiFi раз в 20 секунд, если не сработала автоматическая попытка переподключиться
           // Но не во время OTA обновления
           if (!ota_running && millis() - wifiReconnectTimer >= 20000) {
-            WriteConsoleLog(F("WiFi.reconnect..."));
+            const uint8_t reason = lastWifiDisconnectReason;
+            char reconnectDiagnostic[192];
+            snprintf(
+              reconnectDiagnostic,
+              sizeof(reconnectDiagnostic),
+              "WiFi.reconnect status=%d reason=%u(%s) heap=%u max_alloc=%u min_heap=%u",
+              static_cast<int>(WiFi.status()),
+              static_cast<unsigned>(reason),
+              WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(reason)),
+              static_cast<unsigned>(ESP.getFreeHeap()),
+              static_cast<unsigned>(ESP.getMaxAllocHeap()),
+              static_cast<unsigned>(ESP.getMinFreeHeap())
+            );
+            WriteConsoleLog(reconnectDiagnostic);
             WiFi.reconnect();
             wifiReconnectTimer = millis();
           }
@@ -2219,6 +2233,10 @@ static void setup_create_semaphores_and_queue() {
 #endif
 }
 
+static void captureWifiDisconnectReason(arduino_event_t *event) {
+  lastWifiDisconnectReason = event->event_info.wifi_sta_disconnected.reason;
+}
+
 static void setup_wifi_stack_defaults() {
   // НЕ используем WiFi.disconnect(true) здесь, так как это может очистить сохраненные креденшалы
   // Вместо этого просто отключаемся без очистки сохраненных данных
@@ -2227,6 +2245,7 @@ static void setup_wifi_stack_defaults() {
   WiFi.setSleep(false);
   WiFi.setHostname(host);
   WiFi.setAutoReconnect(true);
+  WiFi.onEvent(captureWifiDisconnectReason, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
   Wire.begin(LCD_SDA, LCD_SCL);
   // Явно задаём скорость и таймаут шины: без этого используются значения по
