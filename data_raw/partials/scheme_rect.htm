@@ -1,0 +1,60 @@
+        <section class="scheme sec-scheme" id="sec-scheme">
+          <svg viewBox="0 0 460 580" role="img" aria-label="Схема установки: куб, царга, дефлегматор, узел отбора и банки">
+            <defs>
+              <linearGradient id="liq" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e5a35a" stop-opacity=".55"/><stop offset="1" stop-color="#b8641f" stop-opacity=".9"/></linearGradient>
+              <pattern id="pack" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="var(--border-dashed)" stroke-width="1.2"/></pattern>
+              <clipPath id="cubeClip"><rect x="152" y="388" width="180" height="150" rx="14"/></clipPath>
+            </defs>
+            <!-- Вода охлаждения: подача снизу к дефлегматору, слив через ТСА -->
+            <path class="pipe" d="M258 120 H400 V440 H352"/>
+            <path class="pipe" d="M258 74 H420 V480 H352"/>
+            <path class="flow" data-on="_flowOn" d="M352 440 H400 V120 H258"/>
+            <path class="flow reverse" data-on="_flowOn" d="M258 74 H420 V480 H352"/>
+            <text class="tag-lbl" x="410" y="300" transform="rotate(90 410 300)" text-anchor="middle">вода охлаждения</text>
+            <!-- ТСА -->
+            <path class="pipe" d="M228 40 V30 H300 V230"/>
+            <rect class="metal" x="292" y="150" width="16" height="60" rx="3"/>
+            <g transform="translate(312 196)"><rect class="tag-bg" x="0" y="-11" width="72" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">ТСА</text><text class="tag" x="8" y="14" fill="var(--acp)"><tspan data-tele="ACPTemp" data-fmt="1"></tspan>°</text></g>
+            <!-- Дефлегматор -->
+            <rect class="metal" x="182" y="62" width="76" height="66" rx="8"/>
+            <rect x="192" y="72" width="56" height="46" rx="4" fill="url(#pack)" opacity=".6"/>
+            <rect class="metal" x="212" y="40" width="16" height="22" rx="3"/>
+            <g transform="translate(96 34)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Пар</text><text class="tag" x="8" y="14" fill="var(--steam)"><tspan data-tele="SteamTemp" data-fmt="2"></tspan>°</text></g>
+            <line x1="186" y1="46" x2="212" y2="46" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(96 140)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Вода</text><text class="tag" x="8" y="14" fill="var(--water)"><tspan data-tele="WaterTemp" data-fmt="1"></tspan>°</text></g>
+            <!-- Царга -->
+            <rect class="metal" x="202" y="128" width="36" height="244" rx="4"/>
+            <rect x="206" y="132" width="28" height="236" fill="url(#pack)"/>
+            <g class="bubbles" data-on="_running">
+              <circle class="bubble" cx="214" cy="360" r="2"/><circle class="bubble" cx="224" cy="364" r="2.5"/><circle class="bubble" cx="219" cy="368" r="1.6"/>
+            </g>
+            <g transform="translate(110 236)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Царга</text><text class="tag" x="8" y="14" fill="var(--pipe)"><tspan data-tele="PipeTemp" data-fmt="2"></tspan>°</text></g>
+            <line x1="202" y1="246" x2="188" y2="246" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(250 300)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Δ пар − царга</text><text class="tag" x="8" y="14"><tspan data-tele="_delta" data-fmt="2" data-sign></tspan>°</text></g>
+            <!-- Куб -->
+            <path class="metal" d="M140 372 H344 L332 388 H152 Z"/>
+            <rect class="metal" x="152" y="388" width="180" height="150" rx="14"/>
+            <g clip-path="url(#cubeClip)"><rect class="liquid" x="152" y="440" width="180" height="100"/></g>
+            <path class="heater" data-on="_heaterOn" d="M176 496 c10 -12 20 12 30 0 s20 12 30 0 s20 12 30 0 s20 12 30 0"/>
+            <g transform="translate(200 396)"><rect class="tag-bg" x="0" y="0" width="84" height="30" rx="6"/><text class="tag-lbl" x="8" y="11">Куб</text><text class="tag" x="8" y="25" fill="var(--tank)"><tspan data-tele="TankTemp" data-fmt="2"></tspan>°</text></g>
+            <text class="tag-lbl" x="242" y="462" text-anchor="middle" data-tele="_pressureLabel"></text>
+            <text class="tag tag-sm" x="242" y="478" text-anchor="middle"><tspan data-tele="_pressureAlt" data-fmt="1"></tspan> мм рт.ст.</text>
+            <text class="tag-lbl" x="242" y="512" text-anchor="middle">нагрев</text>
+            <text class="tag tag-sm power-text" data-on="_heaterOn" x="242" y="528" text-anchor="middle" data-tele="_heaterText"></text>
+            <g class="pause-badge" data-on="_paused" transform="translate(206 548)"><rect x="0" y="0" width="72" height="18" rx="4"/><text x="36" y="13" text-anchor="middle">ПАУЗА</text></g>
+            <!-- Узел отбора: труба к насосу и банкам -->
+            <path class="pipe" d="M182 122 H96 V372"/>
+            <path class="feed" data-on="_withdrawing" d="M182 122 H96 V372"/>
+            <circle class="metal" cx="96" cy="400" r="24"/>
+            <g class="rotor" data-on="_pumpOn"><circle cx="96" cy="386" r="4"/><circle cx="108" cy="407" r="4"/><circle cx="84" cy="407" r="4"/></g>
+            <g transform="translate(10 388)"><rect class="tag-bg" x="0" y="-11" width="62" height="30" rx="6"/><text class="tag-lbl" x="6" y="0">Отбор</text><text class="tag tag-sm" x="6" y="14"><tspan data-tele="ActualVolumePerHour"></tspan> л/ч</text></g>
+            <path class="pipe" d="M96 424 V452"/>
+            <g class="drops" data-on="_pumpOn"><circle class="drop" cx="96" cy="458" r="3"/><circle class="drop" cx="96" cy="458" r="2.2"/></g>
+            <!-- Банки сервопривода: активная подсвечена медью -->
+            <g transform="translate(12 486)" data-jar="1"><rect class="jar" x="0" y="0" width="30" height="42" rx="4"/><rect class="jar-fill" x="2" y="16" width="26" height="24" rx="3"/><text class="tag-lbl jar-lbl" x="15" y="54" text-anchor="middle">1</text></g>
+            <g transform="translate(46 486)" data-jar="2"><rect class="jar" x="0" y="0" width="30" height="42" rx="4"/><rect class="jar-fill" x="2" y="16" width="26" height="24" rx="3"/><text class="tag-lbl jar-lbl" x="15" y="54" text-anchor="middle">2</text></g>
+            <g transform="translate(80 486)" data-jar="3"><rect class="jar" x="0" y="0" width="30" height="42" rx="4"/><rect class="jar-fill" x="2" y="16" width="26" height="24" rx="3"/><text class="tag-lbl jar-lbl" x="15" y="54" text-anchor="middle">3</text></g>
+            <g transform="translate(114 486)" data-jar="4"><rect class="jar" x="0" y="0" width="30" height="42" rx="4"/><rect class="jar-fill" x="2" y="16" width="26" height="24" rx="3"/><text class="tag-lbl jar-lbl" x="15" y="54" text-anchor="middle">4</text></g>
+            <text class="tag-lbl" x="78" y="566" text-anchor="middle">банки сервопривода</text>
+          </svg>
+        </section>

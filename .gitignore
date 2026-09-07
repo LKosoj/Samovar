@@ -39,3 +39,4 @@ __pycache__/
 # и лог консоли на каждый прогон tools/test_*_browser.py
 .playwright-cli/
 /.attachments/
+/Samovar.ino.cpp

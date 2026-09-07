@@ -1,0 +1,21 @@
+      <input type='button' class="tablinks" onclick="location.href='/chart.htm';" value="График">
+      <input type='button' class="tablinks" onclick="location.href='/setup.htm';" value="Настройки">
+      <input type='button' class="tablinks legacy-link" onclick="SamovarApp.openLegacyUi();" value="Старый интерфейс" title="Переключиться на прежний интерфейс">
+    </div>
+    <div class="spacer"></div>
+    <div class="status-chip">
+      <span id="connection_indicator" title="Связь с устройством"><img src="/Green.png" alt="" style="margin: 0 !important; width: 14px"></span>
+      <span id='crnt_tm'></span>
+      <span class="hide-sm">Работа <b id='stm'></b></span>
+    </div>
+    <button type="button" class="icon-btn history-trigger" onclick='SamovarApp.showHistory()' aria-controls="historyBox" aria-expanded="false" title="История сообщений">☰</button>
+    <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  </header>
+  <div class="history_box" style="display: none;" id="historyBox">
+    <button type="button" class="history-clear" onclick='SamovarApp.clearHistory()'>[x] очистить историю</button>
+    <div class="history_array" id="historyList"></div>
+  </div>
+  <div class="messages_box toasts" style="display: none;" id="messagesBox">
+    <button type="button" class="messages-clear" style="position: absolute; top: 0.3em; right: 0.5em; cursor: pointer" onclick='SamovarApp.clearMessages()' aria-controls="messages">[x] очистить</button>
+    <div class="messages_array" id="messages"></div>
+  </div>
