@@ -1,0 +1,46 @@
+        <section class="scheme sec-scheme" id="sec-scheme">
+          <svg viewBox="0 0 460 560" role="img" aria-label="Схема дистилляции: куб, паропровод, прямоточный холодильник, приёмная ёмкость">
+            <defs>
+              <linearGradient id="liq" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e5a35a" stop-opacity=".55"/><stop offset="1" stop-color="#b8641f" stop-opacity=".9"/></linearGradient>
+              <clipPath id="cubeClip"><rect x="60" y="330" width="200" height="160" rx="14"/></clipPath>
+            </defs>
+            <!-- Вода охлаждения: противоток - холодная снизу справа, тёплая уходит вверх -->
+            <path class="pipe" d="M440 540 V270 H324"/>
+            <path class="pipe" d="M324 130 H400 V40"/>
+            <path class="flow" data-on="_flowOn" d="M440 540 V270 H324"/>
+            <path class="flow" data-on="_flowOn" d="M324 130 H400 V40"/>
+            <text class="tag-lbl" x="452" y="400" transform="rotate(90 452 400)" text-anchor="middle">вода охлаждения</text>
+            <!-- Паропровод -->
+            <path class="pipe" d="M160 314 V80 H300"/>
+            <path class="feed" data-on="_running" d="M160 314 V80 H300"/>
+            <g transform="translate(60 150)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Пар</text><text class="tag" x="8" y="14" fill="var(--steam)"><tspan data-tele="SteamTemp" data-fmt="2"></tspan>°</text></g>
+            <line x1="150" y1="150" x2="160" y2="150" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(60 230)"><rect class="tag-bg" x="0" y="-11" width="90" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Паропровод</text><text class="tag" x="8" y="14" fill="var(--pipe)"><tspan data-tele="PipeTemp" data-fmt="2"></tspan>°</text></g>
+            <line x1="150" y1="230" x2="160" y2="230" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <!-- Прямоточный холодильник -->
+            <rect class="metal" x="280" y="100" width="44" height="200" rx="10"/>
+            <path class="pipe-thin" d="M302 100 c-14 12 14 24 0 36 s14 24 0 36 s14 24 0 36 s14 24 0 36 s14 24 0 36"/>
+            <g transform="translate(336 180)"><rect class="tag-bg" x="0" y="-11" width="82" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Вода</text><text class="tag" x="8" y="14" fill="var(--water)"><tspan data-tele="WaterTemp" data-fmt="1"></tspan>°</text></g>
+            <g transform="translate(336 236)"><rect class="tag-bg" x="0" y="-11" width="82" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">ТСА</text><text class="tag" x="8" y="14" fill="var(--acp)"><tspan data-tele="ACPTemp" data-fmt="1"></tspan>°</text></g>
+            <!-- Продукт -->
+            <path class="pipe" d="M302 300 V380"/>
+            <g class="drops" data-on="_withdrawing"><circle class="drop" cx="302" cy="386" r="3"/><circle class="drop" cx="302" cy="386" r="2.2"/></g>
+            <g transform="translate(236 420)" data-jar="0"><rect class="jar" x="0" y="0" width="32" height="44" rx="4"/><rect class="jar-fill" x="2" y="18" width="28" height="24" rx="3"/><text class="tag tag-sm jar-num" x="16" y="26" text-anchor="middle"></text><text class="tag-lbl jar-type" x="16" y="56" text-anchor="middle"></text></g>
+            <g transform="translate(292 420)" data-jar="1"><rect class="jar" x="0" y="0" width="32" height="44" rx="4"/><rect class="jar-fill" x="2" y="18" width="28" height="24" rx="3"/><text class="tag tag-sm jar-num" x="16" y="26" text-anchor="middle"></text><text class="tag-lbl jar-type" x="16" y="56" text-anchor="middle"></text></g>
+            <g transform="translate(348 420)" data-jar="2"><rect class="jar" x="0" y="0" width="32" height="44" rx="4"/><rect class="jar-fill" x="2" y="18" width="28" height="24" rx="3"/><text class="tag tag-sm jar-num" x="16" y="26" text-anchor="middle"></text><text class="tag-lbl jar-type" x="16" y="56" text-anchor="middle"></text></g>
+            <text class="tag-lbl" x="308" y="496" text-anchor="middle">приёмные ёмкости</text>
+            <g transform="translate(300 510)"><rect class="tag-bg" x="-40" y="-11" width="130" height="30" rx="6"/><text class="tag-lbl" x="-32" y="0">Спирт в отборе</text><text class="tag tag-sm" x="-32" y="14"><tspan data-tele="_alcSteam" data-fmt="1"></tspan>°</text></g>
+            <!-- Куб -->
+            <path class="metal" d="M48 314 H272 L260 330 H60 Z"/>
+            <rect class="metal" x="60" y="330" width="200" height="160" rx="14"/>
+            <g clip-path="url(#cubeClip)"><rect class="liquid" x="60" y="390" width="200" height="100"/></g>
+            <path class="heater" data-on="_heaterOn" d="M86 452 c10 -12 20 12 30 0 s20 12 30 0 s20 12 30 0 s20 12 30 0 s20 12 30 0"/>
+            <g transform="translate(76 340)"><rect class="tag-bg" x="0" y="0" width="84" height="30" rx="6"/><text class="tag-lbl" x="8" y="11">Куб</text><text class="tag" x="8" y="25" fill="var(--tank)"><tspan data-tele="TankTemp" data-fmt="2"></tspan>°</text></g>
+            <g transform="translate(168 340)"><rect class="tag-bg" x="0" y="0" width="84" height="30" rx="6"/><text class="tag-lbl" x="8" y="11">Спирт в кубе</text><text class="tag tag-sm" x="8" y="25"><tspan data-tele="_alcCube" data-fmt="1"></tspan>°</text></g>
+            <text class="tag-lbl" x="160" y="416" text-anchor="middle" data-tele="_pressureLabel"></text>
+            <text class="tag tag-sm" x="160" y="432" text-anchor="middle"><tspan data-tele="_pressureAlt" data-fmt="1"></tspan> мм рт.ст.</text>
+            <text class="tag-lbl" x="160" y="510" text-anchor="middle">нагрев</text>
+            <text class="tag tag-sm power-text" data-on="_heaterOn" x="160" y="526" text-anchor="middle" data-tele="_heaterText"></text>
+            <g class="pause-badge" data-on="_paused" transform="translate(124 536)"><rect x="0" y="0" width="72" height="18" rx="4"/><text x="36" y="13" text-anchor="middle">ПАУЗА</text></g>
+          </svg>
+        </section>

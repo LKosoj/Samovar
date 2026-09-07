@@ -1,50 +1,14 @@
 (function () {
   'use strict';
 
-  // ==================== Старый / новый интерфейс ====================
-  // Выбор живёт в браузере (localStorage.samovar_ui), прошивка о нём не знает.
-  // ?ui=legacy / ?ui=new в адресе - принудительно записать выбор и открыть нужную версию.
-  // Страницы старого интерфейса заморожены в /legacy/ и сами ставят флаг при загрузке.
-  const UI_FLAG_KEY = 'samovar_ui';
-  const MODE_PAGES = { 0: 'index', 1: 'distiller', 2: 'beer', 3: 'bk', 4: 'nbk', 7: 'cheese' };
-  const NEW_MODE_PATHS = ['/', '/index.htm', '/distiller.htm', '/beer.htm', '/bk.htm', '/nbk.htm', '/cheese.htm'];
-  let uiMode = null;
-
-  function readUiFlag() {
-    try { return localStorage.getItem(UI_FLAG_KEY); } catch (err) { return null; }
-  }
-
-  function writeUiFlag(value) {
-    try { localStorage.setItem(UI_FLAG_KEY, value); } catch (err) { /* приватный режим */ }
-  }
-
-  function legacyPagePath(mode) {
-    return '/legacy/' + (MODE_PAGES[mode] || 'index') + '.htm';
-  }
-
-  function applyUiSwitch() {
-    if (typeof location === 'undefined' || !location.pathname) return;
-    let requested = null;
-    try { requested = new URLSearchParams(location.search).get('ui'); } catch (err) { requested = null; }
-    if (requested === 'legacy' || requested === 'new') writeUiFlag(requested);
-    const onLegacy = location.pathname.indexOf('/legacy/') === 0;
-    if (onLegacy) {
-      if (requested === 'new') location.replace('/index.htm');
-      return;
+  // На телефоне полоса вкладок в шапке прокручивается по горизонтали; при
+  // переходе по Tab фокус не должен уезжать за край экрана.
+  document.addEventListener('focusin', function (event) {
+    const target = event.target;
+    if (target && target.closest && target.closest('.top .tab')) {
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
-    if (NEW_MODE_PATHS.indexOf(location.pathname) === -1) return;
-    if (readUiFlag() === 'legacy') {
-      const name = location.pathname === '/' ? 'index' : location.pathname.slice(1, -4);
-      location.replace('/legacy/' + name + '.htm');
-    }
-  }
-
-  function openLegacyUi() {
-    writeUiFlag('legacy');
-    location.href = legacyPagePath(uiMode);
-  }
-
-  applyUiSwitch();
+  });
 
   const HISTORY_KEY = 'samovarHistoryV2';
   const HISTORY_LIMIT = 500;
@@ -109,6 +73,12 @@
   let runtimeBusyCounter = 0;
   let messages = [];
   let historyShown = false;
+  // Картинки индикатора связи и сирена лежат рядом с app.js. На устройстве это корень,
+  // но страницы могут открываться и из подпапки (тесты) - путь берём от самого скрипта.
+  const assetBase = (function () {
+    const script = document.currentScript;
+    try { return script && script.src ? new URL('.', script.src).pathname : '/'; } catch (e) { return '/'; }
+  })();
   let soundEnabled = true;
   let soundPlaying = false;
   let audioBlockedNotified = false;
@@ -688,7 +658,7 @@
     }
     const indicator = byId('connection_indicator');
     if (!indicator) return;
-    indicator.innerHTML = '<img src="/' + fileName + '" style="margin: 0 !important; width: 20px">';
+    indicator.innerHTML = '<img src="' + assetBase + fileName + '" style="margin: 0 !important; width: 20px">';
   }
 
   function initConnection(options) {
@@ -912,7 +882,7 @@
 
   function ensureSound() {
     if (sound) return sound;
-    sound = new Audio('/alarm.mp3');
+    sound = new Audio(assetBase + 'alarm.mp3');
     sound.loop = true;
     sound.preload = 'auto';
     sound.autoplay = false;
@@ -1281,7 +1251,6 @@
       showRequestError('Некорректные начальные данные.');
       return false;
     }
-    uiMode = data.mode;
     try {
       applyBootstrap(data);
     } catch (err) {
@@ -1811,7 +1780,7 @@
   // Разметка описывает привязки атрибутами, а не id: data-tele="Ключ" (текст, data-fmt -
   // число знаков), data-on="Ключ" (класс is-on при истинном значении), data-show="Ключ"
   // (класс is-hidden при ложном), data-width="Ключ" (ширина в процентах),
-  // data-jar="N" (банка N активна, когда ёмкость текущей строки = N).
+  // data-jar="i" (i-я из трёх банок окна вокруг текущей ёмкости, см. jarWindow).
   // Ключи - поля /ajax плюс производные с подчёркиванием (см. deriveView).
   const telemetryListeners = [];
 
@@ -1893,6 +1862,34 @@
     return row;
   }
 
+  // Короткие имена типов строк для подписи под банками.
+  const JAR_TYPE_NAMES = {
+    rect: { H: 'головы', B: 'тело', P: 'пауза', T: 'хвосты', C: 'предзахлёб' },
+    dist: { T: 'по Т куба', S: 'куб, отн.', A: 'куб, абс.', P: 'пар, абс.', R: 'пар, отн.' },
+    bk: { T: 'по Т куба', S: 'куб, отн.', A: 'куб, абс.', P: 'пар, абс.', R: 'пар, отн.' }
+  };
+
+  // Окно из трёх банок вокруг ёмкости текущей строки: предыдущая, текущая, следующая.
+  // У края окно сдвигается, чтобы банок было три. Банки — разные ёмкости программы в порядке
+  // первого упоминания, подпись — тип первой строки с этой ёмкостью (у текущей — тип текущей строки).
+  // Без программы или без текущей ёмкости показываем банки 1–3 без подсветки.
+  function jarWindow(kind, lines, lineNum) {
+    const names = JAR_TYPE_NAMES[kind] || {};
+    const jars = [];
+    lines.forEach(function (line) {
+      const row = parseProgramLine(kind, line);
+      if (row.capacity > 0 && !jars.some(function (j) { return j.num === row.capacity; })) {
+        jars.push({ num: row.capacity, type: names[row.type] || row.type, active: false });
+      }
+    });
+    if (!jars.length) return [1, 2, 3].map(function (n) { return { num: n, type: '', active: false }; });
+    const row = lineNum ? parseProgramLine(kind, lines[lineNum - 1]) : null;
+    let idx = row && row.capacity > 0 ? jars.findIndex(function (j) { return j.num === row.capacity; }) : -1;
+    if (idx >= 0) { jars[idx].active = true; jars[idx].type = names[row.type] || row.type; }
+    const start = Math.max(0, Math.min(idx < 0 ? 0 : idx - 1, jars.length - 3));
+    return jars.slice(start, start + 3);
+  }
+
   function deriveView(data) {
     const kind = schemeKind();
     const v = Object.assign({}, data);
@@ -1924,6 +1921,10 @@
     v._pressureLabel = v._cubePressure !== null ? 'В кубе' : 'На старте';
     v._pressureAlt = v._cubePressure !== null ? v._cubePressure : num(data.start_pressure);
     v._alcCube = num(data.alc);
+    const ds = Number(data.DetectorStatus);
+    v._detectorText = !data.useautospeed ? 'выкл'
+      : data.PrgType === 'H' ? 'наблюдение'
+      : ds === 0 ? '● стабильно' : ds === 1 ? '▲ коррекция' : ds === 2 ? '■ проскок' : '—';
     v._alcSteam = num(data.stm_alc);
 
     const lines = programLines();
@@ -1935,6 +1936,7 @@
     v._lineType = row ? row.type : '';
     v._lineName = row ? row.name : (lines.length ? 'ожидание' : 'нет программы');
     v._lineCap = row && row.capacity ? row.capacity : null;
+    v._jars = jarWindow(kind, lines, v._lineNum);
     v._lineCapText = v._lineCap ? 'ёмкость ' + v._lineCap : '';
     v._lineVolume = row ? row.volume : null;
     v._lineSpeed = row ? row.speed : null;
@@ -1978,7 +1980,22 @@
         el.style.width = (w === null ? 0 : Math.max(0, Math.min(100, w))) + '%';
       }
       const jar = el.getAttribute('data-jar');
-      if (jar !== null) el.classList.toggle('is-on', v._lineCap !== null && Number(jar) === v._lineCap);
+      if (jar !== null) {
+        const j = v._jars[Number(jar)];
+        el.classList.toggle('is-hidden', !j);
+        el.classList.toggle('is-on', !!j && j.active);
+        const numEl = el.querySelector('.jar-num'), typeEl = el.querySelector('.jar-type');
+        if (numEl) numEl.textContent = j ? String(j.num) : '';
+        if (typeEl) typeEl.textContent = j ? j.type : '';
+        // Заливка текущей банки — процент отбора по строке (вся банка = 100 %).
+        const body = el.querySelector('.jar'), fill = el.querySelector('.jar-fill');
+        if (body && fill) {
+          const inner = Number(body.getAttribute('height')) - 4;
+          const fillH = j && j.active ? inner * v._progress / 100 : 0;
+          fill.setAttribute('height', String(fillH));
+          fill.setAttribute('y', String(2 + inner - fillH));
+        }
+      }
     }
     return v;
   }
@@ -2031,7 +2048,6 @@
     notify: notify,
     normalizeDeviceScheduleSeconds: normalizeDeviceScheduleSeconds,
     openDeviceScheduleModal: openDeviceScheduleModal,
-    openLegacyUi: openLegacyUi,
     openTab: openTab,
     onTelemetry: onTelemetry,
     pollAjax: pollAjax,

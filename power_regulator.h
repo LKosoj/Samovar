@@ -642,6 +642,7 @@ static constexpr uint32_t POWER_RESPONSE_ERROR_INTERVAL_MS = 5000;
 static inline void report_power_response_error(
     const char* responseName,
     NumericParseResult result) {
+  if (!SamSetup.CheckPower) return;
   // Раздельный rate-limit по типу ответа: ошибка одного типа (KVIC / +SS? / +VO? /
   // +VS?) не должна глушить репорт другого на POWER_RESPONSE_ERROR_INTERVAL_MS.
   static const char* names[4] = {nullptr, nullptr, nullptr, nullptr};

@@ -191,6 +191,9 @@ window.onload = async function() {
 </head>
 
 <body>
+<!--#include ui_page_header.htm-->
+    <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  </header>
 <form action='/save' method="post" name="setupform">
 <h1>Калибровка шагового двигателя</h1>
 <div class="tabcontent" style="display: block;border-top: solid;border-top-width: 1px;border-top-color: rgb(204, 204, 204);">

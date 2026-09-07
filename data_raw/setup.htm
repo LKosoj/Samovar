@@ -319,7 +319,9 @@
 </head>
 
 <body>
-  <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+<!--#include ui_page_header.htm-->
+    <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  </header>
   <form action='/save' method="post" name="setupform" id="setupform">
     <input type="hidden" name="fullsetup" value="1">
     <h1>Настройки</h1>
@@ -361,7 +363,7 @@
         </h2>
       </div>
       <div style="border: 1px dashed #bbb; margin-bottom: 1em; padding-left: 2em;">
-        <h2 style="color: #3498db;">⚙️ Параметры оборудования (колонны)</h2>
+        <h2 style="color: var(--accent-text);">⚙️ Параметры оборудования (колонны)</h2>
         <h2>
           <label for="ColDiam">Диаметр:</label>
           <select name="ColDiam" id="ColDiam">

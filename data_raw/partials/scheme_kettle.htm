@@ -1,0 +1,37 @@
+        <section class="scheme sec-scheme" id="sec-scheme">
+          <svg viewBox="0 0 460 520" role="img" aria-label="Схема котла: ёмкость с мешалкой, нагрев, датчики температуры">
+            <defs>
+              <linearGradient id="liq" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e5a35a" stop-opacity=".55"/><stop offset="1" stop-color="#b8641f" stop-opacity=".9"/></linearGradient>
+              <clipPath id="cubeClip"><rect x="110" y="150" width="240" height="270" rx="18"/></clipPath>
+            </defs>
+            <!-- Котёл -->
+            <path class="metal" d="M96 132 H364 L350 150 H110 Z"/>
+            <rect class="metal" x="110" y="150" width="240" height="270" rx="18"/>
+            <g clip-path="url(#cubeClip)"><rect class="liquid" x="110" y="210" width="240" height="210"/></g>
+            <g class="bubbles" data-on="_running" style="--rise:-190px;--rise-time:3.2s">
+              <circle class="bubble" cx="160" cy="400" r="2.5"/><circle class="bubble" cx="230" cy="405" r="3"/><circle class="bubble" cx="300" cy="398" r="2"/>
+            </g>
+            <!-- Мешалка -->
+            <rect class="metal" x="226" y="96" width="8" height="200" rx="2"/>
+            <rect class="metal" x="206" y="84" width="48" height="16" rx="4"/>
+            <g class="mixer" data-on="_mixerOn"><path d="M196 300 H264 M230 286 V314"/></g>
+            <text class="tag-lbl" x="230" y="76" text-anchor="middle">мешалка</text>
+            <!-- Нагрев -->
+            <path class="heater" data-on="_heaterOn" d="M140 380 c10 -12 20 12 30 0 s20 12 30 0 s20 12 30 0 s20 12 30 0 s20 12 30 0 s20 12 30 0"/>
+            <text class="tag-lbl" x="230" y="452" text-anchor="middle">нагрев</text>
+            <text class="tag tag-sm power-text" data-on="_heaterOn" x="230" y="468" text-anchor="middle" data-tele="_heaterText"></text>
+            <g class="pause-badge" data-on="_paused" transform="translate(194 484)"><rect x="0" y="0" width="72" height="18" rx="4"/><text x="36" y="13" text-anchor="middle">ПАУЗА</text></g>
+            <!-- Датчики -->
+            <line x1="110" y1="190" x2="92" y2="190" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(4 178)"><rect class="tag-bg" x="0" y="-11" width="88" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Датчик 1 (пар)</text><text class="tag" x="8" y="14" fill="var(--steam)"><tspan data-tele="SteamTemp" data-fmt="2"></tspan>°</text></g>
+            <line x1="110" y1="260" x2="92" y2="260" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(4 248)"><rect class="tag-bg" x="0" y="-11" width="88" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Датчик 2 (царга)</text><text class="tag" x="8" y="14" fill="var(--pipe)"><tspan data-tele="PipeTemp" data-fmt="2"></tspan>°</text></g>
+            <line x1="110" y1="330" x2="92" y2="330" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(4 318)"><rect class="tag-bg" x="0" y="-11" width="88" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Датчик 3 (куб)</text><text class="tag" x="8" y="14" fill="var(--tank)"><tspan data-tele="TankTemp" data-fmt="2"></tspan>°</text></g>
+            <line x1="350" y1="190" x2="368" y2="190" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(368 178)"><rect class="tag-bg" x="0" y="-11" width="88" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Датчик 4 (вода)</text><text class="tag" x="8" y="14" fill="var(--water)"><tspan data-tele="WaterTemp" data-fmt="1"></tspan>°</text></g>
+            <line x1="350" y1="260" x2="368" y2="260" stroke="var(--border-dashed)" stroke-width="1.5"/>
+            <g transform="translate(368 248)"><rect class="tag-bg" x="0" y="-11" width="88" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Датчик 5 (ТСА)</text><text class="tag" x="8" y="14" fill="var(--acp)"><tspan data-tele="ACPTemp" data-fmt="1"></tspan>°</text></g>
+            <g transform="translate(368 318)"><rect class="tag-bg" x="0" y="-11" width="88" height="30" rx="6"/><text class="tag-lbl" x="8" y="0">Давление</text><text class="tag tag-sm" x="8" y="14"><tspan data-tele="bme_pressure" data-fmt="1"></tspan> мм</text></g>
+          </svg>
+        </section>

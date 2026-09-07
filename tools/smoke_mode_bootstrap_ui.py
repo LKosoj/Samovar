@@ -54,7 +54,7 @@ for token in ("var pwr_unit = '';", "var powerInputMax = 0;"):
         errors.append(f"power_unit_runtime_vars.htm missing neutral bootstrap value {token}")
 if re.search(r"%[A-Za-z0-9_.]+%|%%", runtime_vars):
     errors.append("power_unit_runtime_vars.htm still contains a template placeholder")
-for name in ("temps_pipe_steam.htm", "temps_delta_water_tank_acp.htm", "temps_water_tank_acp.htm"):
+for name in ("ui_sensors_top.htm", "ui_sensors_rest.htm"):
     source = (partial / name).read_text(encoding="utf-8")
     if "text-decoration-color:" in source or re.search(r"%[A-Za-z0-9_.]+%|%%", source):
         errors.append(f"{name} still contains a template temperature color")

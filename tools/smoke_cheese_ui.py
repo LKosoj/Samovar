@@ -19,6 +19,10 @@ def read(name: str) -> str:
 
 
 cheese = read("cheese.htm")
+# Шапка (история, тема, сообщения) с 07.09.2026 живёт в partial'ах ui_header_*.htm;
+# для проверки контрактных токенов страница нужна в собранном виде.
+for _partial in ("ui_header_open.htm", "ui_header_close.htm"):
+    cheese += read("partials/" + _partial)
 calibrate = read("calibrate_ph.htm")
 cheese_lua = read("cheese.lua")
 button1 = read("btn_cheese_button1.lua")

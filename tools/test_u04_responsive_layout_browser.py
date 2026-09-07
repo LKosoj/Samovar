@@ -37,16 +37,16 @@ BROWSER_TEST = r'''async page => {
   ];
   const expectedColors = {
     light: {
-      "--accent": "#3498db", "--bg-page": "#3498db", "--bg-form": "#fafafa",
-      "--bg-input": "#fafafa", "--text-main": "#777", "--text-strong": "#000",
-      "--text-on-accent": "#fff", "--border-input": "#a9a9a9",
-      "--border-soft": "#ccc", "--state-danger-bg": "#b00020"
+      "--accent": "#a3561a", "--bg-page": "#f3efe9", "--bg-form": "#fbf9f6",
+      "--bg-input": "#fffdfa", "--text-main": "#4a433c", "--text-strong": "#1d1a17",
+      "--text-on-accent": "#fff", "--border-input": "#7d7369",
+      "--border-soft": "#7d7369", "--state-danger-bg": "#b3261e"
     },
     dark: {
-      "--accent": "#3498db", "--bg-page": "#1a2733", "--bg-form": "#21303d",
-      "--bg-input": "#1a2733", "--text-main": "#cfd8e3", "--text-strong": "#f3f6f9",
-      "--text-on-accent": "#fff", "--border-input": "#8da1b5",
-      "--border-soft": "#8da1b5", "--state-danger-bg": "#b00020"
+      "--accent": "#a3561a", "--bg-page": "#16130f", "--bg-form": "#1f1b16",
+      "--bg-input": "#16130f", "--text-main": "#d9d0c5", "--text-strong": "#f1ebe3",
+      "--text-on-accent": "#fff", "--border-input": "#9b9084",
+      "--border-soft": "#9b9084", "--state-danger-bg": "#b3261e"
     }
   };
   const DESKTOP_GEOMETRY_TOLERANCE = 0.5;
@@ -55,30 +55,34 @@ BROWSER_TEST = r'''async page => {
   // 02.09.2026: у поля DistTemp (вкладка Main) появилась подсказка (П11) - вкладка Main
   // и все сценарии на её основе стали выше на 18.42 px; остальные вкладки не менялись.
   // 04.09.2026: с Temp убраны два поля су-вида; в Beer добавлен BeerBrewOrder.
+  // 07.09.2026: новый интерфейс - общая шапка (+60 px сверху), тёплая палитра, другие
+  //   отступы формы и кнопок; базовая геометрия снята заново по всем 22 сценариям.
   const DESKTOP_GEOMETRY_BASELINE = {
-    "setup/Main": { form: {x:265,y:25,width:910,height:1528.81}, panel: {x:295,y:163,width:850,height:1316.81}, actions: {x:386,y:1479.81,width:668,height:44}, save: {x:396,y:1489.81,width:200,height:34}, return: {x:620,y:1489.81,width:200,height:34}, edit: {x:844,y:1489.81,width:200,height:34} },
-    "setup/Temp": { form: {x:265,y:25,width:910,height:1578.55}, panel: {x:295,y:163,width:850,height:1366.55}, actions: {x:386,y:1529.55,width:668,height:44}, save: {x:396,y:1539.55,width:200,height:34}, return: {x:620,y:1539.55,width:200,height:34}, edit: {x:844,y:1539.55,width:200,height:34} },
-    "setup/Pump": { form: {x:265,y:25,width:910,height:517.53}, panel: {x:295,y:163,width:850,height:305.53}, actions: {x:386,y:468.53,width:668,height:44}, save: {x:396,y:478.53,width:200,height:34}, return: {x:620,y:478.53,width:200,height:34}, edit: {x:844,y:478.53,width:200,height:34} },
-    "setup/Beer": { form: {x:265,y:25,width:910,height:717.22}, panel: {x:295,y:163,width:850,height:505.22}, actions: {x:386,y:668.22,width:668,height:44}, save: {x:396,y:678.22,width:200,height:34}, return: {x:620,y:678.22,width:200,height:34}, edit: {x:844,y:678.22,width:200,height:34} },
-    "setup/Cheese": { form: {x:265,y:25,width:910,height:565.53}, panel: {x:295,y:163,width:850,height:353.53}, actions: {x:386,y:516.53,width:668,height:44}, save: {x:396,y:526.53,width:200,height:34}, return: {x:620,y:526.53,width:200,height:34}, edit: {x:844,y:526.53,width:200,height:34} },
-    "setup/NBK": { form: {x:265,y:25,width:910,height:727.22}, panel: {x:295,y:163,width:850,height:515.22}, actions: {x:386,y:678.22,width:668,height:44}, save: {x:396,y:688.22,width:200,height:34}, return: {x:620,y:688.22,width:200,height:34}, edit: {x:844,y:688.22,width:200,height:34} },
-    "setup/Other": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
-    "setup/main-longest-mode": { form: {x:265,y:25,width:910,height:1528.81}, panel: {x:295,y:163,width:850,height:1316.81}, actions: {x:386,y:1479.81,width:668,height:44}, save: {x:396,y:1489.81,width:200,height:34}, return: {x:620,y:1489.81,width:200,height:34}, edit: {x:844,y:1489.81,width:200,height:34} },
-    "setup/other-long-values": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
-    "setup/other-empty-values": { form: {x:265,y:25,width:910,height:1405.75}, panel: {x:295,y:163,width:850,height:1193.75}, actions: {x:386,y:1356.75,width:668,height:44}, save: {x:396,y:1366.75,width:200,height:34}, return: {x:620,y:1366.75,width:200,height:34}, edit: {x:844,y:1366.75,width:200,height:34} },
-    "setup/validation-error": { form: {x:265,y:25,width:910,height:1612.56}, panel: {x:295,y:246.75,width:850,height:1316.81}, actions: {x:386,y:1563.56,width:668,height:44}, save: {x:396,y:1573.56,width:200,height:34}, return: {x:620,y:1573.56,width:200,height:34}, edit: {x:844,y:1573.56,width:200,height:34} },
-    "setup/request-error": { form: {x:265,y:25,width:910,height:1612.56}, panel: {x:295,y:246.75,width:850,height:1316.81}, actions: {x:386,y:1563.56,width:668,height:44}, save: {x:396,y:1573.56,width:200,height:34}, return: {x:620,y:1573.56,width:200,height:34}, edit: {x:844,y:1573.56,width:200,height:34} },
-    "setup/visible-tooltip": { form: {x:265,y:25,width:910,height:1528.81}, panel: {x:295,y:163,width:850,height:1316.81}, actions: {x:386,y:1479.81,width:668,height:44}, save: {x:396,y:1489.81,width:200,height:34}, return: {x:620,y:1489.81,width:200,height:34}, edit: {x:844,y:1489.81,width:200,height:34} },
-    "chart/messages-hidden": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
-    "chart/messages-short": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:47.34}, messages: {x:208,y:22,width:600,height:47.34} },
-    "chart/messages-long": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:276.83}, messages: {x:208,y:22,width:600,height:276.83} },
-    "chart/messages-multiline": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:113}, messages: {x:208,y:22,width:600,height:113} },
-    "chart/chart-empty": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
-    "chart/chart-data": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
-    "chart/chart-error": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
-    "chart/legend": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
-    "chart/refresh": { chartdiv: {x:8,y:8,width:1424,height:613.03}, panel: {x:8,y:8,width:1424,height:613.03}, canvas: {x:17.39,y:17.39,width:1405.22,height:500}, form: {x:265,y:646.03,width:910,height:675.42}, host: {x:208,y:22,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
+    "setup/Main": { form: {x:270,y:85,width:900,height:1264}, panel: {x:299,y:190.8,width:842,height:1089.2}, actions: {x:386,y:1280,width:668,height:44}, save: {x:386,y:1280,width:160,height:44}, return: {x:640,y:1280,width:160,height:44}, edit: {x:894,y:1280,width:160,height:44} },
+    "setup/Temp": { form: {x:270,y:85,width:900,height:1374.8}, panel: {x:299,y:190.8,width:842,height:1200}, actions: {x:386,y:1390.8,width:668,height:44}, save: {x:386,y:1390.8,width:160,height:44}, return: {x:640,y:1390.8,width:160,height:44}, edit: {x:894,y:1390.8,width:160,height:44} },
+    "setup/Pump": { form: {x:270,y:85,width:900,height:431.84}, panel: {x:299,y:190.8,width:842,height:257.05}, actions: {x:386,y:447.84,width:668,height:44}, save: {x:386,y:447.84,width:160,height:44}, return: {x:640,y:447.84,width:160,height:44}, edit: {x:894,y:447.84,width:160,height:44} },
+    "setup/Beer": { form: {x:270,y:85,width:900,height:599.89}, panel: {x:299,y:190.8,width:842,height:425.09}, actions: {x:386,y:615.89,width:668,height:44}, save: {x:386,y:615.89,width:160,height:44}, return: {x:640,y:615.89,width:160,height:44}, edit: {x:894,y:615.89,width:160,height:44} },
+    "setup/Cheese": { form: {x:270,y:85,width:900,height:495.84}, panel: {x:299,y:190.8,width:842,height:321.05}, actions: {x:386,y:511.84,width:668,height:44}, save: {x:386,y:511.84,width:160,height:44}, return: {x:640,y:511.84,width:160,height:44}, edit: {x:894,y:511.84,width:160,height:44} },
+    "setup/NBK": { form: {x:270,y:85,width:900,height:603.89}, panel: {x:299,y:190.8,width:842,height:429.09}, actions: {x:386,y:619.89,width:668,height:44}, save: {x:386,y:619.89,width:160,height:44}, return: {x:640,y:619.89,width:160,height:44}, edit: {x:894,y:619.89,width:160,height:44} },
+    "setup/Other": { form: {x:270,y:85,width:900,height:1275.22}, panel: {x:299,y:190.8,width:842,height:1100.42}, actions: {x:386,y:1291.22,width:668,height:44}, save: {x:386,y:1291.22,width:160,height:44}, return: {x:640,y:1291.22,width:160,height:44}, edit: {x:894,y:1291.22,width:160,height:44} },
+    "setup/main-longest-mode": { form: {x:270,y:85,width:900,height:1264}, panel: {x:299,y:190.8,width:842,height:1089.2}, actions: {x:386,y:1280,width:668,height:44}, save: {x:386,y:1280,width:160,height:44}, return: {x:640,y:1280,width:160,height:44}, edit: {x:894,y:1280,width:160,height:44} },
+    "setup/other-long-values": { form: {x:270,y:85,width:900,height:1275.22}, panel: {x:299,y:190.8,width:842,height:1100.42}, actions: {x:386,y:1291.22,width:668,height:44}, save: {x:386,y:1291.22,width:160,height:44}, return: {x:640,y:1291.22,width:160,height:44}, edit: {x:894,y:1291.22,width:160,height:44} },
+    "setup/other-empty-values": { form: {x:270,y:85,width:900,height:1275.22}, panel: {x:299,y:190.8,width:842,height:1100.42}, actions: {x:386,y:1291.22,width:668,height:44}, save: {x:386,y:1291.22,width:160,height:44}, return: {x:640,y:1291.22,width:160,height:44}, edit: {x:894,y:1291.22,width:160,height:44} },
+    "setup/validation-error": { form: {x:270,y:85,width:900,height:1335.3}, panel: {x:299,y:262.09,width:842,height:1089.2}, actions: {x:386,y:1351.3,width:668,height:44}, save: {x:386,y:1351.3,width:160,height:44}, return: {x:640,y:1351.3,width:160,height:44}, edit: {x:894,y:1351.3,width:160,height:44} },
+    "setup/request-error": { form: {x:270,y:85,width:900,height:1335.3}, panel: {x:299,y:262.09,width:842,height:1089.2}, actions: {x:386,y:1351.3,width:668,height:44}, save: {x:386,y:1351.3,width:160,height:44}, return: {x:640,y:1351.3,width:160,height:44}, edit: {x:894,y:1351.3,width:160,height:44} },
+    "setup/visible-tooltip": { form: {x:270,y:85,width:900,height:1264}, panel: {x:299,y:190.8,width:842,height:1089.2}, actions: {x:386,y:1280,width:668,height:44}, save: {x:386,y:1280,width:160,height:44}, return: {x:640,y:1280,width:160,height:44}, edit: {x:894,y:1280,width:160,height:44} },
+    "chart/messages-hidden": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
+    "chart/messages-short": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:63.34}, messages: {x:200,y:64,width:600,height:63.34} },
+    "chart/messages-long": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:261.77}, messages: {x:200,y:64,width:600,height:261.77} },
+    "chart/messages-multiline": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:156.03}, messages: {x:200,y:64,width:600,height:156.03} },
+    "chart/chart-empty": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
+    "chart/chart-data": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
+    "chart/chart-error": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
+    "chart/legend": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
+    "chart/refresh": { chartdiv: {x:0,y:61,width:1440,height:607.81}, panel: {x:0,y:61,width:1440,height:607.81}, canvas: {x:11,y:72,width:1418,height:480}, form: {x:270,y:692.81,width:900,height:599.67}, host: {x:200,y:64,width:600,height:0}, messages: {x:0,y:0,width:0,height:0} },
   };
+
+
   const report = {
     expectedCells: 176, cells: [], failures: [], consoleProblems: [],
     expectedConsoleEvents: [], pageErrors: [], lifecycleProblems: [],

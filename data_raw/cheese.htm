@@ -273,42 +273,85 @@
     };
   </script>
 </head>
-<body>
-  <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
-  <button type="button" class="history-trigger" style="position: absolute; top: 0.3em; left: 0.5em; font-size: 1em; font-weight: bold; color: var(--text-history-link); text-decoration: underline; cursor: pointer" onclick="SamovarApp.showHistory()" aria-controls="historyBox" aria-expanded="false">История</button>
-  <div class="history_box" style="display: none;" id="historyBox">
-    <button type="button" class="history-clear" style="position: absolute; right: 0.5em; top: 0.4em; z-index: 80000; font-style: italic; color: var(--text-history-action); cursor: pointer" onclick="SamovarApp.clearHistory()">[x] очистить историю</button>
-    <div class="history_array" id="historyList"></div>
-  </div>
-  <div id="overlay"></div>
-  <form action="none" onsubmit="return false" name="mainform" id="mainform">
-    <div id="request_error" class="message_0" role="alert" aria-live="assertive" style="display:none"></div>
-    <div class="tab">
+<body data-scheme="cheese">
+
+<!--#include ui_header_open.htm-->
       <input type="button" class="tablinks active" onclick="SamovarApp.openTab(event,'Main')" value="Процесс" aria-pressed="true">
       <input type="button" class="tablinks" onclick="SamovarApp.openTab(event,'Prog')" value="Программа" aria-pressed="false">
       <input type="button" class="tablinks" onclick="SamovarApp.openTab(event,'Other')" value="Дополнительно" aria-pressed="false">
-    </div>
-<!--#include main_status_header.htm-->
-<!--#include temps_pipe_steam.htm-->
+<!--#include ui_header_close.htm-->
+
+  <div id="overlay"></div>
+  <form action="none" onsubmit="return false" name="mainform" id="mainform" class="mode-form">
+    <div id="request_error" class="message_0" role="alert" aria-live="assertive" style="display:none"></div>
+    <div id="Main" class="tabcontent" style="display: block;" aria-hidden="false">
+      <div class="stage">
+        <h1><span id="Status"></span> <small>этап <span data-tele="_lineOf"></span></small></h1>
+        <div><div class="progress"><i data-width="_progress"></i></div></div>
+        <div class="meta">
+          <span>Этап <b id="stageType">—</b></span>
+          <span>pH <b id="cheesePh">нет данных</b></span>
+          <span>Прогресс <b id="stageProgress">0&#37;</b></span>
         </div>
-<!--#include temps_water_tank_acp.htm-->
-      <div class="container_row" style="margin-top: 1em; background-color: var(--bg-status); padding: 0.5em 1em;">
-        <span style="font-size: 1.5em; font-weight: bold; color: var(--text-status)">Статус: <span id="Status"></span></span>
       </div>
-      <div class="container_column" style="border: 1px dashed #bbb; margin: 1em 0; padding: 0.5em 1em;">
-        <div class="text">Этап: <strong id="stageType">—</strong></div>
-        <div class="text">pH: <strong id="cheesePh">нет данных</strong></div>
-        <div class="text">Прогресс: <strong id="stageProgress">0&#37;</strong></div>
+
+      <div class="grid">
+        <div class="col col-left">
+          <section class="card sec-actions">
+            <h2>Действия</h2>
+            <div class="actions">
+              <input type="button" id="power" class="button" value="Начать сыроварение" onclick="if(HeaterPowerOn &amp;&amp; !confirm('Остановить сыроварение?')) return false; SamovarApp.sendCommand('power=' + (HeaterPowerOn ? '0' : '1'))">
+              <input type="button" id="start" class="button primary" value="Следующий этап" onclick="if(confirm('Перейти к следующему этапу?')) SamovarApp.sendCommand('start=1')">
+              <div class="btn-row">
+                <input type="button" id="chart" class="button secondary" value="График" onclick="location.href='/chart.htm'">
+              </div>
+            </div>
+          </section>
+
+          <section class="card sec-key key">
+            <h2>Ключевое</h2>
+            <div class="key-row">
+              <div class="key-item"><div class="k">Котёл</div><div class="v"><span data-tele="TankTemp" data-fmt="2"></span><u>°C</u></div></div>
+              <div class="key-item"><div class="k">Уставка этапа</div><div class="v"><span data-tele="_lineTemp"></span><u>°C</u></div></div>
+              <div class="key-item"><div class="k">Время этапа</div><div class="v"><span data-tele="_lineTime"></span></div></div>
+              <div class="key-item"><div class="k">Мешалка</div><div class="v text" data-tele="_mixerOn"></div></div>
+            </div>
+          </section>
+
+          <section class="card sec-sensors">
+            <h2>Датчики</h2>
+            <div class="sensors">
+<!--#include ui_sensors_top.htm-->
+<!--#include ui_sensors_rest.htm-->
+            </div>
+          </section>
+        </div>
+
+        <div class="col col-center">
+<!--#include scheme_kettle.htm-->
+        </div>
+
+        <div class="col col-right">
+          <section class="card sec-program">
+            <h2>Текущий этап · <span data-tele="_lineOf"></span></h2>
+            <div class="line-card">
+              <div class="line-head"><span class="line-type" data-tele="_lineName"></span></div>
+              <div class="progress"><i data-width="_progress"></i></div>
+              <div class="kv" style="margin-top: 8px;">
+                <div><div class="k">Температура</div><div class="v"><span data-tele="_lineTemp"></span><u>°C</u></div></div>
+                <div><div class="k">Время</div><div class="v"><span data-tele="_lineTime"></span></div></div>
+              </div>
+              <div class="next"><span class="k">Следующий</span><span data-tele="_next"></span></div>
+            </div>
+          </section>
+
+<!--#include ui_sys_line.htm-->
+        </div>
       </div>
-      <div>
-        <input type="button" id="power" class="button" value="Начать сыроварение" onclick="if(HeaterPowerOn &amp;&amp; !confirm('Остановить сыроварение?')) return false; SamovarApp.sendCommand('power=' + (HeaterPowerOn ? '0' : '1'))">
-        <input type="button" class="button" value="Следующий этап" onclick="if(confirm('Перейти к следующему этапу?')) SamovarApp.sendCommand('start=1')">
-        <input type="button" class="button" value="График" onclick="location.href='/chart.htm'">
-        <input type="button" class="button" value="Настройки" onclick="location.href='/setup.htm'">
-      </div>
+
     </div>
 
-    <div id="Prog" class="tabcontent" aria-hidden="true">
+    <div id="Prog" class="tabcontent panel" aria-hidden="true">
       <details class="spoiler"><summary>Описание сырной программы</summary><div class="spoiler-content cheese-help">
         Поле «Устройство» открывает редактор мешалки и насоса. Для набора кислотности задайте целевой pH и обязательный срок.
       </div></details>
@@ -341,8 +384,8 @@
 <!--#include device_schedule_modal.htm-->
     </div>
 
-    <div id="Other" class="tabcontent" aria-hidden="true">
-      <div class="container_column" style="border: 1px dashed #bbb; margin-bottom: 1em; padding: 1em;">
+    <div id="Other" class="tabcontent panel" aria-hidden="true">
+      <div class="container_column" style="border: 1px dashed var(--border-dashed); border-radius: 8px; margin-bottom: 1em; padding: 1em;">
         <input type="button" class="button" value="Калибровка pH" onclick="location.href='/calibrate_ph.htm'">
         <div class="cheese-help">
         PH-4502C подключается к LUA_PIN только через схему, безопасную для входа 3,3 В.

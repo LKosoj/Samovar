@@ -136,7 +136,9 @@ var IsCalmingPause = false; //признак паузы при отборе (ч�
 <!-- ===================================================================================================================== -->
 
 <body>
-  <button type="button" id="themeToggle" class="theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+<!--#include ui_page_header.htm-->
+    <button type="button" id="themeToggle" class="icon-btn theme-toggle" onclick="SamovarApp.toggleTheme()" title="Переключить тему">☾</button>
+  </header>
   <div class="chart-messages-host">
     <div class="messages_box" style="display: none;" id="messagesBox">
       <button type="button" class="messages-clear" style="position: absolute; top: 0; right: calc(44px + 1em); cursor: pointer" onclick='SamovarApp.clearMessages()' aria-controls="messages">

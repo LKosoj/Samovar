@@ -7,10 +7,11 @@
    Имена старых токенов (--bg-form, --accent, --state-*, --detector-*) сохранены:
    на них завязаны инлайн-стили страниц и SamovarApp.cssVar() в app.js. */
 :root {
-  --accent: #b8641f;
-  --accent-hover: #9a5118;
+  --accent: #a3561a;
+  --accent-hover: #8a4814;
   --copper: #b8641f;
   --copper-soft: #e08a3c;
+  --accent-text: #a3561a;
   --bg-page: #f3efe9;
   --bg-form: #fbf9f6;
   --bg-tab: #ece6dd;
@@ -66,6 +67,7 @@
   :root:not([data-theme="light"]) {
     --copper: #e08a3c;
     --copper-soft: #f4b36a;
+    --accent-text: #e08a3c;
     --bg-page: #16130f;
     --bg-form: #1f1b16;
     --bg-tab: #2a241d;
@@ -110,6 +112,7 @@
 :root[data-theme="dark"] {
   --copper: #e08a3c;
   --copper-soft: #f4b36a;
+  --accent-text: #e08a3c;
   --bg-page: #16130f;
   --bg-form: #1f1b16;
   --bg-tab: #2a241d;
@@ -188,10 +191,12 @@ a { color: var(--accent); }
 
 .num { font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -0.01em; }
 .is-hidden { display: none !important; }
+[hidden] { display: none !important; }   /* атрибут hidden должен перебивать display: flex у .container_row */
 
 /* ==================== Шапка ==================== */
 .top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   min-height: var(--top-h);
@@ -228,8 +233,8 @@ a { color: var(--accent); }
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   border: 1px solid var(--border-input);
   background: transparent;
   border-radius: var(--radius-md);
@@ -240,11 +245,13 @@ a { color: var(--accent); }
   padding: 0;
 }
 .icon-btn:hover { background: var(--bg-tab); }
-.theme-toggle { position: static; min-width: 36px; min-height: 36px; }
+.theme-toggle { position: static; min-width: 44px; min-height: 44px; }
 
 /* Навигация: те же input.tablinks, что и раньше (SamovarApp.openTab), но в шапке. */
 .tab {
   display: flex;
+  flex: 1 1 200px;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px;
@@ -255,7 +262,8 @@ a { color: var(--accent); }
   border: 0;
   background: transparent;
 }
-.tab input, .tab .nav-link {
+.page-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-left: 6px; }
+.tab input, .tab .nav-link, .page-nav .nav-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -277,9 +285,8 @@ a { color: var(--accent); }
   white-space: nowrap;
 }
 .tab input[hidden] { display: none; }
-.tab input:hover, .tab .nav-link:hover { color: var(--text-strong); background: var(--bg-tab); box-shadow: none; top: auto; }
+.tab input:hover, .tab .nav-link:hover, .page-nav .nav-link:hover { color: var(--text-strong); background: var(--bg-tab); box-shadow: none; top: auto; }
 .tab input.active { background: var(--bg-tab); color: var(--text-strong); border: 0; top: auto; }
-.tab .nav-link.legacy-link { font-size: 12px; }
 
 /* ==================== Полоса этапа ==================== */
 .stage {
@@ -301,7 +308,6 @@ a { color: var(--accent); }
   width: 0;
   background: linear-gradient(90deg, var(--copper), var(--copper-soft));
   border-radius: 3px;
-  transition: width 0.6s ease;
 }
 .stage .meta { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--text-muted); font-size: 13px; }
 .stage .meta b { color: var(--text-strong); font-weight: 600; font-size: 14px; }
@@ -342,7 +348,9 @@ a { color: var(--accent); }
 
 /* Действия */
 .actions { display: grid; gap: 8px; }
+.actions .button, .btn-row .button { width: 100%; min-width: 0; margin: 0; box-sizing: border-box; }
 .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-row.stack { grid-template-columns: 1fr; }   /* длинные подписи («Поставить на паузу») не влезают в две колонки */
 
 /* Датчики */
 .sensors { display: flex; flex-direction: column; }
@@ -358,17 +366,22 @@ a { color: var(--accent); }
 .sensor i { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
 .sensor .name { color: var(--text-muted); font-size: 14px; }
 .sensor .name small { display: block; font-size: 11px; color: var(--text-muted); }
-.sensor .val { font-size: 20px; font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.sensor .val { font-size: 20px; font-weight: 600; color: var(--text-strong); white-space: nowrap; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }   /* подчёркивание в цвете датчика, как на графике */
 .sensor .val u, .kv .v u, .key-item .v u { font-size: 12px; font-weight: 500; text-decoration: none; color: var(--text-muted); margin-left: 3px; }
 .sensor.hero .val { font-size: 26px; }
+
+#pump-speed-label { font-size: 12px; color: var(--text-muted); width: 100%; }
+#Set_speed { width: 100%; text-align: center; }
+#detector_block { flex-direction: column; }
 
 /* Пары ключ/значение */
 .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
 .kv .k { font-size: 12px; color: var(--text-muted); }
 .kv .v { font-size: 22px; font-weight: 600; color: var(--text-strong); white-space: nowrap; }
-.kv .v.text { font-size: 15px; }
+.kv .v.v-text { font-size: 15px; }
 .kv.wide, .kv .wide { grid-column: 1 / -1; }
-.field { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.field { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+.field input[type="text"] { flex: 1 1 90px; }
 .field label { flex: 0 0 auto; font-size: 13px; color: var(--text-muted); }
 .field input[type="text"], .field input:not([type]) { flex: 1; min-width: 0; width: auto; }
 .field .button { flex: 0 0 auto; margin: 0; }
@@ -384,6 +397,7 @@ a { color: var(--accent); }
 .key-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
 .key-item .k { font-size: 12px; color: var(--text-muted); }
 .key-item .v { font-size: 22px; font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.key-item .v.v-text { font-size: 16px; }
 
 /* Текущая строка программы */
 .line-card { border-left: 3px solid var(--copper); padding-left: 12px; }
@@ -402,7 +416,6 @@ a { color: var(--accent); }
 .sys .dvcs { padding: 0; margin: 0; }
 
 /* Мобильная панель действий */
-.mobile-actions { display: none; }
 .badge {
   display: inline-grid;
   place-items: center;
@@ -453,10 +466,12 @@ a { color: var(--accent); }
 @keyframes glow { from { opacity: 0.6; } to { opacity: 1; } }
 .scheme .bubbles { display: none; }
 .scheme .bubbles.is-on { display: block; }
-.scheme .bubble { fill: var(--bg-form); opacity: 0.8; animation: rise 2.2s linear infinite; }
-.scheme .bubble:nth-child(2) { animation-delay: 0.7s; }
-.scheme .bubble:nth-child(3) { animation-delay: 1.4s; }
-@keyframes rise { from { transform: translateY(0); opacity: 0.8; } to { transform: translateY(-46px); opacity: 0; } }
+/* Высота подъёма и время задаются на группе .bubbles (--rise, --rise-time): пузырьки идут на всю колонну. */
+.scheme .bubbles { --rise: -46px; --rise-time: 2.2s; }
+.scheme .bubble { fill: var(--bg-form); opacity: 0.8; animation: rise var(--rise-time) linear infinite; }
+.scheme .bubble:nth-child(2) { animation-delay: calc(var(--rise-time) / 3); }
+.scheme .bubble:nth-child(3) { animation-delay: calc(var(--rise-time) * 2 / 3); }
+@keyframes rise { from { transform: translateY(0); opacity: 0.8; } to { transform: translateY(var(--rise)); opacity: 0; } }
 .scheme .drops { display: none; }
 .scheme .drops.is-on { display: block; }
 .scheme .drop { fill: var(--copper-soft); animation: drip 1.1s ease-in infinite; }
@@ -464,10 +479,11 @@ a { color: var(--accent); }
 @keyframes drip { from { transform: translateY(0); opacity: 1; } to { transform: translateY(26px); opacity: 0; } }
 .scheme .jar { fill: var(--bg-form); stroke: var(--border-dashed); stroke-width: 1.5; }
 .scheme .jar-fill { fill: var(--copper-soft); opacity: 0; }
-.scheme .jar-lbl { fill: var(--text-muted); }
+.scheme .jar-lbl, .scheme .jar-num { fill: var(--text-muted); }
+.scheme .jar-type { fill: var(--text-muted); font-size: 8.5px; letter-spacing: 0; text-transform: none; }
 .scheme g.is-on .jar { stroke: var(--copper); stroke-width: 2.5; }
 .scheme g.is-on .jar-fill { opacity: 0.55; }
-.scheme g.is-on .jar-lbl { fill: var(--copper); font-weight: 700; }
+.scheme g.is-on .jar-num, .scheme g.is-on .jar-type { fill: var(--copper); font-weight: 700; }
 .scheme .rotor { transform-box: fill-box; transform-origin: center; }
 .scheme .rotor.is-on { animation: spin 2.4s linear infinite; }
 .scheme .rotor circle { fill: var(--border-dashed); }
@@ -533,6 +549,7 @@ input[type="file"]::file-selector-button {
 }
 .file-upload-control { position: relative; }
 .btn-cell { width: 200px; }
+.field > .btn-cell { width: auto; display: inline-flex; }   /* обёртка не шире кнопки - иначе клик по центру обёртки мимо кнопки */
 .program-actions { width: 450px; max-width: 100%; margin: 0 auto; box-sizing: border-box; }
 .nowrap { white-space: nowrap; }
 
@@ -751,9 +768,10 @@ form.mode-form {
 
 #Main select[name="mode"] { max-width: 100%; box-sizing: border-box; }
 
-.setup-actions { display: flex; flex-wrap: wrap; justify-content: space-between; max-width: 668px; margin: 0 auto; box-sizing: border-box; gap: 8px; }
+.setup-actions { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; max-width: 668px; margin: 0 auto; box-sizing: border-box; gap: 8px; }
+.setup-actions .button, .setup-actions input[type="submit"], .setup-actions input[type="button"] { min-height: 44px; margin: 0; width: auto; min-width: 160px; }
 
-.chart-messages-host { position: absolute; top: 1em; left: 200px; width: 600px; max-width: 600px; box-sizing: border-box; z-index: 50000; }
+.chart-messages-host { position: absolute; top: calc(var(--top-h) + 8px); left: 200px; width: 600px; max-width: 600px; box-sizing: border-box; z-index: 50000; }
 
 .chart-status-form .container_column { min-width: 0; box-sizing: border-box; }
 
@@ -801,7 +819,7 @@ form.mode-form {
 }
 .button.secondary:hover { background: var(--bg-tab); color: var(--text-strong); }
 /* Кнопка нагрева: фон ставит JS (--state-danger-bg / --state-active-bg). */
-.button.primary { background: var(--copper); }
+.button.primary { background: var(--accent-hover); border-color: var(--copper); }
 .button.danger { background: var(--bg-form); color: var(--state-danger-bg); border-color: var(--state-danger-bg); }
 .button.danger:hover { background: var(--detector-alarm-bg); color: var(--state-danger-bg); }
 
@@ -829,6 +847,10 @@ input[type="checkbox"]:focus-visible + label,
   outline: 2px solid var(--copper);
   outline-offset: 2px;
 }
+/* Фокус цветной кнопки: внутреннее кольцо цвета страницы контрастирует с любой заливкой
+   (зелёная/красная/медная), внешнее медное кольцо видно на фоне страницы.
+   Стоит после общего правила выше и с селектором input.button - иначе его перебивает. */
+.button:focus-visible, input.button:focus-visible { outline: 2px solid var(--bg-page); outline-offset: 0; box-shadow: 0 0 0 4px var(--copper); }
 
 /* ==================== Контент табов ==================== */
 .tabcontent {
@@ -1474,6 +1496,7 @@ form h2 { font-weight: 600; margin: 10px 0; }
 
 @media (max-width: 900px) {
   #setupform { min-width: 0; box-sizing: border-box; }
+  .tab input { min-height: 1.8em; }
   form {
     margin: 0;
     padding: 14px;
@@ -1508,12 +1531,13 @@ form h2 { font-weight: 600; margin: 10px 0; }
 @media (max-width: 640px) {
   .top { padding: 8px 12px; gap: 8px; }
   .top .tab { margin: 0; width: 100%; order: 10; gap: 2px; }
-  .top .tab input, .top .tab .nav-link { padding: 6px 9px; font-size: 13px; min-height: 32px; }
+  .top .tab input, .top .tab .nav-link, .page-nav .nav-link { padding: 6px 9px; font-size: 13px; min-height: 32px; }
+  .top .page-nav { margin: 0; width: 100%; order: 10; }
   .top .status-chip .hide-sm { display: none; }
   .brand small { display: none; }
   .stage { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
   .stage .meta { gap: 6px 14px; }
-  .grid { grid-template-columns: 1fr; padding: 12px; gap: 12px; padding-bottom: 88px; }
+  .grid { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 12px; padding-bottom: 88px; }
   .col { display: contents; }               /* карточки становятся элементами сетки, порядок задаём явно */
   .sec-scheme { order: 1; }
   .sec-key { order: 2; display: block; }
@@ -1522,22 +1546,32 @@ form h2 { font-weight: 600; margin: 10px 0; }
   .sec-pressure { order: 5; }
   .sec-extra { order: 6; }
   .sec-sys { order: 7; }
-  .sec-sensors, .sec-detector, .sec-actions { display: none; }   /* температуры на схеме, детектор - в «Ключевом» */
+  .sec-sensors { display: none; }                 /* температуры видны на схеме */
+  .sec-detector { display: none !important; }      /* детектор - в «Ключевом»; !important перебивает inline display из скрипта */
+  .top .tab { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .top .tab::-webkit-scrollbar { display: none; }
+  .top .tab input, .top .tab .nav-link { flex: 0 0 auto; white-space: nowrap; }
   .scheme svg { max-height: 52vh; }
-  .mobile-actions {
+  /* Карточка действий закрепляется внизу экрана; вложенные обёртки раскрываются в общую сетку */
+  .sec-actions {
     display: grid;
-    grid-template-columns: repeat(var(--cols, 4), 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
     gap: 8px;
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-    background: var(--bg-form);
+    border: 0;
     border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--bg-form);
     z-index: 10;
   }
-  .mobile-actions .button { margin: 0; padding: 10px 6px; font-size: 13px; width: 100%; }
+  .sec-actions h2, .sec-actions #chart, .sec-actions #setup { display: none; }
+  .sec-actions .actions, .sec-actions .btn-row { display: contents; }
+  .sec-actions .button { margin: 0; padding: 8px 4px; font-size: 13px; line-height: 1.15; width: 100%; min-height: 44px; white-space: normal; }
   .toasts { left: 12px; right: 12px; width: auto; }
 }
 
@@ -1545,9 +1579,6 @@ form h2 { font-weight: 600; margin: 10px 0; }
   body { font-size: 14px; }
   form { padding: 8px; }
   form.mode-form { padding: 0; }
-  /* Переключатель темы (36x36) на второстепенных страницах лежит абсолютом поверх
-     формы в правом верхнем углу; вкладки настроек отодвигаем вниз на его высоту. */
-  .history-trigger ~ form > .tab { padding-top: 44px; box-sizing: border-box; }
   form:not(.mode-form) > .tab { width: 100%; margin: 0 0 12px; }
   form:not(.mode-form) > .tab input { flex: 1 1 auto; }
   .modalline { grid-template-columns: 1fr; }
@@ -1583,12 +1614,14 @@ form h2 { font-weight: 600; margin: 10px 0; }
     margin-right: 0 !important;
     min-height: 2.4em;
   }
-  .tab input, .icon-btn, .field .button, .btn-row .button, .mobile-actions .button, .history-clear, .messages-clear {
+  .icon-btn, .field .button, .btn-row .button, .sec-actions .button, .history-clear, .messages-clear {
     width: auto;
     min-height: 0;
     margin: 0;
   }
-  .btn-row .button, .mobile-actions .button { width: 100%; min-height: 2.4em; }
+  .tab input { width: auto; min-height: 2.2em; margin: 0; }
+  .icon-btn { min-height: 44px; }
+  .btn-row .button, .sec-actions .button { width: 100%; min-height: 2.4em; }
   .field .button { min-height: 36px; }
   /* Кнопку часто заворачивают в отдельный div внутри строки. Строка на телефоне
      разворачивается в колонку, но разметка местами задаёт ей align-items: center

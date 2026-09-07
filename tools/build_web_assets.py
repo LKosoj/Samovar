@@ -27,10 +27,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "data_raw"
 TARGET = ROOT / "data"
 PARTIALS_DIR = SOURCE / "partials"
-# Замороженный старый интерфейс (страницы режимов + их style.css). Живёт в подкаталоге,
-# у него свои partials; на устройство уезжает в /legacy/ целиком сжатым - шаблонов там нет.
-LEGACY_SOURCE = SOURCE / "legacy"
-LEGACY_PARTIALS_DIR = LEGACY_SOURCE / "partials"
 
 # Файлы, которые уезжают на устройство только сжатыми. Шаблонов в них нет и быть
 # не должно - см. check_no_placeholders().
@@ -106,31 +102,6 @@ def build(target: Path) -> list[str]:
     missing = sorted(set(COMPRESS) - {p.name for p in SOURCE.iterdir()})
     if missing:
         errors.append(f"в data_raw/ нет файлов из COMPRESS: {', '.join(missing)}")
-    errors.extend(build_legacy(target))
-    return errors
-
-
-def build_legacy(target: Path) -> list[str]:
-    """data_raw/legacy/ -> data/legacy/: всё сжатое, includes из legacy/partials."""
-    errors: list[str] = []
-    if not LEGACY_SOURCE.is_dir():
-        return errors
-    legacy_target = target / "legacy"
-    legacy_target.mkdir(parents=True, exist_ok=True)
-    for source in sorted(LEGACY_SOURCE.iterdir()):
-        if not source.is_file():
-            continue
-        name = f"legacy/{source.name}"
-        try:
-            data = resolve_includes(name, source.read_bytes(), partials_dir=LEGACY_PARTIALS_DIR)
-        except ValueError as exc:
-            errors.append(str(exc))
-            continue
-        error = check_no_unresolved_includes(name, data) or check_no_placeholders(name, data)
-        if error:
-            errors.append(error)
-            continue
-        (legacy_target / f"{source.name}.gz").write_bytes(canonical_gzip(data))
     return errors
 
 

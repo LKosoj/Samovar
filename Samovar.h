@@ -373,7 +373,7 @@ TaskHandle_t GetBMPTask = NULL;
 static constexpr uint32_t SYS_TICKER_STACK_BYTES = 4608;
 static constexpr uint32_t GET_CLOCK_STACK_BYTES = 5500;
 static constexpr uint32_t LUA_SCRIPT_STACK_BYTES = 8192;
-static constexpr uint32_t POWER_STATUS_STACK_BYTES = 2560;
+static constexpr uint32_t POWER_STATUS_STACK_BYTES = 3072;
 
 // Переменные для управления пищалкой в основном цикле
 volatile bool buzzer_active = false;     // Флаг активности пищалки

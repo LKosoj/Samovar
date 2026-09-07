@@ -110,17 +110,13 @@ def contrast_ratio(first: str, second: str) -> float:
 
 
 def verify_button_contrast() -> None:
-    """Цвета кнопок как в 6.27: --accent #3498db, hover #3498db97.
+    """Цвета кнопок нового интерфейса (решение 07.09.2026): --accent - медь #a3561a,
+    hover - тёмная медь #8a4814, текст на кнопках белый.
 
-    WCAG 4.5 для этой палитры не выполняется (белый на #3498db - 3.15), это
-    исходный вид интерфейса, и решением владельца от 01.09.2026 вид имеет
-    приоритет над контрастом: более тёмный --accent сюда не подставляем.
-    Замеренная цена решения зафиксирована списком ACCEPTED_CONTRAST в
-    tools/test_u03_contrast_browser.py - там же ловится любое УХУДШЕНИЕ этих пар.
-
-    Важно, что текст на наведении при этой палитре тёмный (--text-strong):
-    фон #3498db97 полупрозрачный, его итоговый цвет зависит от подложки, и
-    белый текст на нём давал 1.96 - хуже, чем что-либо в самой палитре 6.27."""
+    Белый на #a3561a даёт 5.4:1, на #8a4814 - 7.0:1, поэтому в отличие от палитры
+    6.27 (#3498db, 3.15:1; исключение зафиксировано 01.09.2026 в ACCEPTED_CONTRAST
+    tools/test_u03_contrast_browser.py) текст на наведении остаётся белым
+    (--text-on-accent): фон непрозрачный и от подложки не зависит."""
     style = read_page("style.css")
     values = {}
     for token in ("accent", "accent-hover", "text-on-accent"):
@@ -128,22 +124,22 @@ def verify_button_contrast() -> None:
         if len(found) != 1:
             raise AssertionError(f"data/style.css: --{token} declaration cardinality={len(found)}")
         values[token] = found[0].strip()
-    if values["accent"].lower() != "#3498db":
-        raise AssertionError(f"data/style.css: --accent must stay 6.27 #3498db, got {values['accent']}")
-    if values["accent-hover"].lower() != "#3498db97":
+    if values["accent"].lower() != "#a3561a":
+        raise AssertionError(f"data/style.css: --accent must stay copper #a3561a, got {values['accent']}")
+    if values["accent-hover"].lower() != "#8a4814":
         raise AssertionError(
-            f"data/style.css: --accent-hover must stay 6.27 #3498db97, got {values['accent-hover']}"
+            f"data/style.css: --accent-hover must stay dark copper #8a4814, got {values['accent-hover']}"
         )
     if values["text-on-accent"].lower() not in ("#fff", "#ffffff"):
         raise AssertionError(
             f"data/style.css: --text-on-accent must stay white, got {values['text-on-accent']}"
         )
-    # Текст на наведении обязан быть тёмным: фон полупрозрачный, белый на нём - 1.96.
+    # Текст на наведении остаётся белым: фон непрозрачный, контраст 7.0:1.
     hover_rules = re.findall(r"\.button:(?:hover|active)[^{}]*\{([^{}]*)\}", style)
     if len(hover_rules) != 2 or any(
-        "var(--text-strong)" not in body for body in hover_rules
+        "var(--text-on-accent)" not in body for body in hover_rules
     ):
-        raise AssertionError("data/style.css: .button hover/active text must stay --text-strong")
+        raise AssertionError("data/style.css: .button hover/active text must stay --text-on-accent")
 
 
 def verify_chart_palette() -> None:
