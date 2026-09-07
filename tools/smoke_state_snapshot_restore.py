@@ -358,6 +358,7 @@ static void WriteConsoleLog(const String&) { consoleLogCalls++; }
 
 // Отложенный текст предупреждения живёт в Samovar.ino рядом с restore_state_snapshot.
 static String pendingStateSnapshotNotice;
+static bool pendingStateSnapshotAlarm = false;
 
 // T2 (blynk-log-channel.md): currentSessionId (Samovar.h) читает
 // state_snapshot_header() (FS.ino), sessionResumeAvailable/sessionResumeId (Samovar.ino,
@@ -434,6 +435,7 @@ static void reset_world() {
   formatUptimeCalls = 0;
   lastMsgText = String();
   pendingStateSnapshotNotice = String();
+  pendingStateSnapshotAlarm = false;
   state_snapshot_program_hash = 0;
   STcnt = 0;
   startval = SAMOVAR_STARTVAL_IDLE;
@@ -513,7 +515,7 @@ int main() {
   check(sendMsgCalls == 0, "предупреждение уходит не из restore, а из отчёта в конце setup");
   state_snapshot_report_pending();
   check(sendMsgCalls == 1, "отчёт обязан отправить предупреждение");
-  check(lastMsgType == WARNING_MSG, "предупреждение о прерванной сессии - не тревога");
+  check(lastMsgType == ALARM_MSG, "перезагрузка при включённом нагреве - тревога, а не предупреждение");
   check(consoleLogCalls == 1, "предупреждение должно попасть и в журнал");
   state_snapshot_report_pending();
   check(sendMsgCalls == 1, "повторный отчёт не должен дублировать предупреждение");

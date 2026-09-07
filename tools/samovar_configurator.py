@@ -79,6 +79,13 @@ class OptionalSpec:
     kind: str = "number"
 
 
+@dataclass(frozen=True)
+class DeviceConfigField:
+    name: str
+    kind: str
+    since: int = 1
+
+
 VALUE_SPECS = (
     ValueSpec("SAMOVAR_HOST", "Имя устройства в сети", "Основные", "text"),
     ValueSpec("ALARM_WATER_TEMP", "Предупреждение по температуре воды, °C", "Температуры"),
@@ -150,6 +157,62 @@ CHOICE_VALUE_SPECS = (
     ValueSpec("USE_PRESSURE_XGZ", "Коэффициент датчика XGZP6897D", "Датчики", "number"),
     ValueSpec("USE_PRESSURE_1WIRE", "Адрес датчика давления 1-Wire", "Датчики", "onewire"),
 )
+
+
+DEVICE_CONFIG_SCHEMA_VERSION = 1
+FIRMWARE_BOARD_TOKENS = {
+    "DEVKIT": "ESP32 DevKit",
+    "LILYGO": "LILYGO",
+    "ESP32S3": "ESP32-S3",
+}
+FIRMWARE_CHOICE_TOKENS = {
+    "regulator": {
+        "none": "Не использовать",
+        "kvic": "KVIC",
+        "rmvk": "РМВ-К",
+        "sem_avr": "SEM_AVR",
+    },
+    "atmospheric_sensor": {
+        "none": "Не использовать",
+        "bmp180": "BMP180/BMP085",
+        "bmp280": "BMP280",
+        "bmp280_alt": "BMP280, альтернативный адрес",
+        "bme280": "BME280",
+        "bme680": "BME680",
+    },
+    "column_pressure_sensor": {
+        "none": "Не использовать",
+        "xgz": "XGZP6897D",
+        "onewire": "1-Wire",
+        "mpx": "MPX5010D",
+    },
+}
+
+
+def _device_config_fields() -> Tuple[DeviceConfigField, ...]:
+    fields = [
+        DeviceConfigField("board", "board"),
+        DeviceConfigField("servoDelta", "servo"),
+    ]
+    fields.extend(DeviceConfigField(spec.macro, "value") for spec in VALUE_SPECS)
+    fields.extend(DeviceConfigField(spec.macro, "bool") for spec in BOOL_SPECS)
+    fields.extend(DeviceConfigField(spec.macro, "optional") for spec in OPTIONAL_SPECS)
+    fields.extend(DeviceConfigField(spec.macro, "choice_value") for spec in CHOICE_VALUE_SPECS)
+    fields.extend(DeviceConfigField(name, "choice") for name in FIRMWARE_CHOICE_TOKENS)
+    fields.extend((
+        DeviceConfigField("wifi_ssid", "wifi"),
+        DeviceConfigField("wifi_password", "wifi"),
+    ))
+    return tuple(fields)
+
+
+DEVICE_CONFIG_FIELDS = _device_config_fields()
+
+
+@dataclass(frozen=True)
+class DeviceConfig:
+    firmware_version: str
+    settings: Dict[str, object]
 
 SECTIONS = (
     "Основные", "Температуры", "Регулятор", "БК", "НБК", "Датчики",
@@ -349,6 +412,9 @@ class SamovarConfig:
 
         for spec in VALUE_SPECS:
             line = self._required_line(ini, spec.macro)
+            if spec.macro == "BLYNK_SAMOVAR_TOOL" and not line.enabled:
+                state[spec.macro] = ""
+                continue
             state[spec.macro] = (
                 cpp_string_decode(line.value)
                 if spec.kind == "text"
@@ -434,6 +500,8 @@ class SamovarConfig:
             self._set_board_line(ini, line, macro_value == selected_board)
 
         for spec in VALUE_SPECS:
+            if spec.macro == "BLYNK_SAMOVAR_TOOL":
+                continue
             value = str(state[spec.macro]).strip()
             validate_value(value, spec.kind, spec.label)
             current = self._required_line(ini, spec.macro)
@@ -447,6 +515,17 @@ class SamovarConfig:
         for spec in BOOL_SPECS:
             current = self._required_line(ini, spec.macro)
             ini.set_macro(spec.macro, bool(state[spec.macro]), current.value)
+
+        blynk_server = str(state["BLYNK_SAMOVAR_TOOL"]).strip()
+        current_blynk_server = self._required_line(ini, "BLYNK_SAMOVAR_TOOL")
+        use_custom_blynk_server = bool(state["SAMOVAR_USE_BLYNK"]) and bool(blynk_server)
+        if use_custom_blynk_server:
+            validate_value(blynk_server, "text", "Сервер Blynk")
+        ini.set_macro(
+            "BLYNK_SAMOVAR_TOOL",
+            use_custom_blynk_server,
+            cpp_string_encode(blynk_server) if use_custom_blynk_server else current_blynk_server.value,
+        )
         for spec in OPTIONAL_SPECS:
             value = str(state[spec.macro]).strip()
             validate_value(value, spec.kind, spec.label)
@@ -478,9 +557,8 @@ class SamovarConfig:
             "Датчик давления в колонне",
         )
 
+        validate_servo_delta(str(state["servoDelta"]))
         servo_values = [part.strip() for part in str(state["servoDelta"]).split(",")]
-        if len(servo_values) != 11 or any(not re.fullmatch(r"[+-]?\d+", item) for item in servo_values):
-            raise ConfigError("Для servoDelta требуется ровно 11 целых чисел через запятую")
         ini_text = re.sub(
             r"(^\s*int8_t\s+servoDelta\s*\[11\]\s*=\s*)\{[^}]*\}(\s*;)",
             r"\g<1>{" + ", ".join(servo_values) + r"}\g<2>",
@@ -566,6 +644,12 @@ class SamovarConfig:
             raise ConfigError("Пароль Wi-Fi должен содержать от 8 до 64 байт или быть пустым")
         if not ssid and password:
             raise ConfigError("Нельзя указать пароль Wi-Fi без SSID")
+
+
+def validate_servo_delta(value: str) -> None:
+    values = [part.strip() for part in value.split(",")]
+    if len(values) != 11 or any(not re.fullmatch(r"[+-]?\d+", item) for item in values):
+        raise ConfigError("Для servoDelta требуется ровно 11 целых чисел через запятую")
 
 
 def is_unc_path(path: Path) -> bool:
@@ -736,6 +820,156 @@ def extract_samovar_ip(text: str) -> Optional[str]:
         if address.version == 4 and not address.is_unspecified:
             return str(address)
     return None
+
+
+def extract_samovar_config(line: str) -> Optional[str]:
+    payload = line.strip()
+    if not payload.startswith("{") or not re.search(
+        r'"type"\s*:\s*"samovar_firmware_config"', payload
+    ):
+        return None
+    return payload
+
+
+def _device_config_fields_by_name() -> Dict[str, DeviceConfigField]:
+    fields = {field.name: field for field in DEVICE_CONFIG_FIELDS}
+    if len(fields) != len(DEVICE_CONFIG_FIELDS):
+        raise ConfigError("В схеме настроек устройства повторяется имя поля")
+    return fields
+
+
+def _device_config_error_keys(label: str, keys) -> ConfigError:
+    return ConfigError("{}: {}".format(label, ", ".join(sorted(keys))))
+
+
+def parse_device_config(payload: str) -> DeviceConfig:
+    try:
+        response = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise ConfigError("Устройство вернуло некорректный JSON настроек") from error
+    if not isinstance(response, dict):
+        raise ConfigError("Ответ настроек должен быть JSON-объектом")
+
+    expected_response_keys = {"type", "schema", "firmwareVersion", "settings"}
+    actual_response_keys = set(response)
+    if actual_response_keys != expected_response_keys:
+        if actual_response_keys - expected_response_keys:
+            raise _device_config_error_keys(
+                "Неизвестные ключи ответа настроек", actual_response_keys - expected_response_keys
+            )
+        raise _device_config_error_keys(
+            "В ответе настроек отсутствуют ключи", expected_response_keys - actual_response_keys
+        )
+    if response["type"] != "samovar_firmware_config":
+        raise ConfigError("Неизвестный тип ответа настроек")
+    schema = response["schema"]
+    if type(schema) is not int or schema < 1:
+        raise ConfigError("Некорректная версия схемы настроек")
+    if schema > DEVICE_CONFIG_SCHEMA_VERSION:
+        raise ConfigError("Версия схемы настроек устройства новее конфигуратора")
+    firmware_version = response["firmwareVersion"]
+    if not isinstance(firmware_version, str) or not firmware_version.strip():
+        raise ConfigError("Устройство не сообщило версию прошивки")
+    settings = response["settings"]
+    if not isinstance(settings, dict):
+        raise ConfigError("Поле settings должно быть JSON-объектом")
+
+    fields = _device_config_fields_by_name()
+    required = {name for name, field in fields.items() if field.since <= schema}
+    actual = set(settings)
+    if actual - required:
+        raise _device_config_error_keys(
+            "Неизвестные или несовместимые ключи настроек", actual - required
+        )
+    if required - actual:
+        raise _device_config_error_keys("В ответе настроек отсутствуют обязательные поля", required - actual)
+
+    value_specs = {spec.macro: spec for spec in VALUE_SPECS}
+    optional_specs = {spec.macro: spec for spec in OPTIONAL_SPECS}
+    choice_value_specs = {spec.macro: spec for spec in CHOICE_VALUE_SPECS}
+    mapped = {}
+    for name in required:
+        value = settings[name]
+        kind = fields[name].kind
+        if kind == "bool":
+            if type(value) is not bool:
+                raise ConfigError("Поле {} должно быть логическим".format(name))
+            mapped[name] = value
+        elif kind == "board":
+            if not isinstance(value, str):
+                raise ConfigError("Поле {} должно быть строкой".format(name))
+            if value not in FIRMWARE_BOARD_TOKENS:
+                raise ConfigError("Неизвестная плата устройства: {}".format(value))
+            mapped[name] = FIRMWARE_BOARD_TOKENS[value]
+        elif kind == "choice":
+            if not isinstance(value, str):
+                raise ConfigError("Поле {} должно быть строкой".format(name))
+            choices = FIRMWARE_CHOICE_TOKENS[name]
+            if value not in choices:
+                raise ConfigError("Неизвестное значение {}: {}".format(name, value))
+            mapped[name] = choices[value]
+        elif kind == "servo":
+            if not isinstance(value, list) or len(value) != 11 or any(type(item) is not int for item in value):
+                raise ConfigError("Поле servoDelta должно быть массивом из 11 целых чисел")
+            mapped[name] = ", ".join(str(item) for item in value)
+            validate_servo_delta(mapped[name])
+        elif kind == "value":
+            spec = value_specs[name]
+            if value is None and name == "BLYNK_SAMOVAR_TOOL":
+                mapped[name] = ""
+                continue
+            if spec.kind == "text":
+                if not isinstance(value, str):
+                    raise ConfigError("Поле {} должно быть строкой".format(name))
+                mapped[name] = value
+            else:
+                if type(value) not in (int, float):
+                    raise ConfigError("Поле {} должно быть числом".format(name))
+                mapped[name] = str(value)
+            validate_value(mapped[name], spec.kind, spec.label)
+        elif kind == "optional":
+            spec = optional_specs[name]
+            if value is None:
+                mapped[name + ".enabled"] = False
+            else:
+                if not isinstance(value, str):
+                    raise ConfigError("Поле {} должно быть строкой или null".format(name))
+                validate_value(value, spec.kind, spec.label)
+                mapped[name] = value
+                mapped[name + ".enabled"] = True
+        elif kind == "choice_value":
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise ConfigError("Поле {} должно быть строкой или null".format(name))
+            spec = choice_value_specs[name]
+            validate_value(value, spec.kind, spec.label)
+            mapped[name] = value
+        elif kind == "wifi":
+            if value is None:
+                mapped[name] = ""
+            elif isinstance(value, str):
+                mapped[name] = value
+            else:
+                raise ConfigError("Поле {} должно быть строкой или null".format(name))
+
+    SamovarConfig._validate_wifi(mapped["wifi_ssid"], mapped["wifi_password"])
+    return DeviceConfig(firmware_version, mapped)
+
+
+def fetch_device_config(address: str) -> str:
+    address = _required_address(address)
+    request = urllib.request.Request("http://{}/firmware-config".format(address), method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.read().decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ConfigError("Устройство вернуло настройки не в UTF-8") from error
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace").strip()
+        raise ConfigError("Samovar ответил с ошибкой {}: {}".format(error.code, detail)) from error
+    except urllib.error.URLError as error:
+        raise ConfigError("Не удалось подключиться к Samovar: {}".format(error.reason)) from error
 
 
 def keep_control_lines_after_close(fd: int) -> None:
@@ -1901,8 +2135,10 @@ class ConfiguratorWindow:
         self.monitor_log = None
         self.monitor_stop_button = None
         self.monitor_ip_button = None
+        self.monitor_config_button = None
         self.monitor_input = None
         self.device_ip = None
+        self.device_config_request_id = 0
         self.active_port_network = False
         self.value_vars = {}
         self.bool_vars = {}
@@ -2123,6 +2359,8 @@ class ConfiguratorWindow:
         self.tooltips.append(Tooltip(self.monitor_button, "Показывает вывод устройства (только по USB). Кнопка «Получить IP» в мониторе запрашивает адрес устройства для работы по Wi-Fi."))
         self.tooltips.append(Tooltip(self.editor_button, "Файлы на устройстве через веб-интерфейс. Нужен адрес устройства в сети: выберите его в списке выше или получите через монитор порта."))
         self.port_var.trace_add("write", lambda *_: self._port_changed())
+        self.port_combo.bind("<<ComboboxSelected>>", self._network_device_selected)
+        self.port_combo.bind("<Return>", self._network_address_entered)
 
         # --- журнал
         log_box = ttk.Labelframe(right, text="Журнал", padding=(8, 4, 8, 8))
@@ -2375,6 +2613,79 @@ class ConfiguratorWindow:
         self.editor_button.configure(state=state)
         self.browser_button.configure(state="normal" if has_address else "disabled")
 
+    def _network_device_selected(self, _event=None) -> None:
+        self._request_network_device_config()
+
+    def _network_address_entered(self, _event=None):
+        self._request_network_device_config()
+        return "break"
+
+    def _request_network_device_config(self) -> None:
+        if self.busy or not is_network_port(self.port_var.get()):
+            return
+        address = port_value(self.port_var.get())
+        self.device_config_request_id += 1
+        request_id = self.device_config_request_id
+        self.status_var.set("Получение настроек устройства…")
+
+        def fetch() -> None:
+            try:
+                payload = fetch_device_config(address)
+            except (OSError, ConfigError) as error:
+                self.output_queue.put(("device_config_error", (request_id, address, str(error))))
+                return
+            self.output_queue.put(("device_config", (request_id, address, payload)))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _network_device_config_done(self, request_id: int, address: str, payload: Optional[str], error: str = "") -> None:
+        if request_id != self.device_config_request_id or port_value(self.port_var.get()) != address:
+            return
+        if error:
+            self._report_device_config_error("Wi-Fi", error)
+            return
+        assert payload is not None
+        self._receive_device_config(payload, "Wi-Fi")
+
+    def _report_device_config_error(self, source: str, error: str) -> None:
+        self._append_log("Не удалось получить настройки через {}: {}\n".format(source, error), "error")
+        self.status_var.set("Настройки устройства не получены")
+
+    def _receive_device_config(self, payload: str, source: str) -> None:
+        try:
+            config = parse_device_config(payload)
+        except ConfigError as error:
+            self._report_device_config_error(source, str(error))
+            return
+        if not self.messagebox.askyesno(
+            "Получить настройки",
+            "Получены настройки прошивки {} через {}. Заменить поля формы?".format(
+                config.firmware_version, source
+            ),
+        ):
+            self.status_var.set("Получение настроек отменено")
+            return
+        self._apply_device_config(config.settings)
+        self._append_log("Настройки устройства {} получены через {}.\n".format(config.firmware_version, source), "ok")
+        self.status_var.set("Настройки устройства получены")
+
+    def _apply_device_config(self, received: Dict[str, object]) -> None:
+        state = self._state()
+        state.update(received)
+        self.board_var.set(str(state["board"]))
+        self.servo_var.set(str(state["servoDelta"]))
+        for macro, variable in self.value_vars.items():
+            variable.set(str(state[macro]))
+        for macro, variable in self.bool_vars.items():
+            variable.set(bool(state[macro]))
+        for macro, variable in self.optional_enabled_vars.items():
+            variable.set(bool(state[macro + ".enabled"]))
+        for key, variable in self.choice_vars.items():
+            variable.set(str(state[key]))
+        self.ssid_var.set(str(state["wifi_ssid"]))
+        self.password_var.set(str(state["wifi_password"]))
+        self._refresh_dirty()
+
     def _device_ip_found(self, address: str) -> None:
         if address != self.device_ip:
             self._append_log("Устройство сообщило адрес {}: можно выбрать его в списке портов.\n".format(address), "ok")
@@ -2446,6 +2757,10 @@ class ConfiguratorWindow:
             controls, text="Получить IP", command=self.request_monitor_ip
         )
         self.monitor_ip_button.pack(side="left", padx=(0, 8))
+        self.monitor_config_button = self.ttk.Button(
+            controls, text="Получить настройки", command=self.request_monitor_config
+        )
+        self.monitor_config_button.pack(side="left", padx=(0, 8))
         self.ttk.Button(controls, text="Очистить", command=self.clear_monitor).pack(side="left", padx=(0, 8))
         self.monitor_autoscroll = self.tk.BooleanVar(value=True)
         self.ttk.Checkbutton(
@@ -2489,6 +2804,9 @@ class ConfiguratorWindow:
     def request_monitor_ip(self) -> None:
         self._write_monitor_command("SAMOVAR:IP?\n", "Не удалось получить IP")
 
+    def request_monitor_config(self) -> None:
+        self._write_monitor_command("SAMOVAR:CONFIG?\n", "Не удалось получить настройки")
+
     def send_monitor_command(self) -> None:
         if self.monitor_input is None:
             return
@@ -2517,6 +2835,7 @@ class ConfiguratorWindow:
         self.monitor_log = None
         self.monitor_stop_button = None
         self.monitor_ip_button = None
+        self.monitor_config_button = None
         self.monitor_input = None
 
     def start_action(self, action: str) -> None:
@@ -2585,6 +2904,7 @@ class ConfiguratorWindow:
         except OSError as error:
             self.messagebox.showerror("Не удалось запустить PlatformIO", str(error))
             return
+        self.device_config_request_id += 1
         self.stop_requested = False
         self.busy = True
         self.active_action = action
@@ -2635,6 +2955,9 @@ class ConfiguratorWindow:
         address = extract_samovar_ip(line)
         if address:
             self._device_ip_found(address)
+        payload = extract_samovar_config(line)
+        if payload is not None:
+            self._receive_device_config(payload, "USB")
         if "Manager: Installing" in line and not self.install_hint_shown:
             self.install_hint_shown = True
             self._append_log(PACKAGE_INSTALL_HINT, "warning")
@@ -2661,6 +2984,10 @@ class ConfiguratorWindow:
                     self._network_search_done(value)
                 elif kind == "network_error":
                     self._network_search_done(None, value)
+                elif kind == "device_config":
+                    self._network_device_config_done(value[0], value[1], value[2])
+                elif kind == "device_config_error":
+                    self._network_device_config_done(value[0], value[1], None, value[2])
                 else:
                     self._finish_action(value)
         except queue.Empty:
@@ -2746,6 +3073,10 @@ class ConfiguratorWindow:
             )
         if self.monitor_ip_button is not None:
             self.monitor_ip_button.configure(
+                state="normal" if busy and action == "monitor" else "disabled"
+            )
+        if getattr(self, "monitor_config_button", None) is not None:
+            self.monitor_config_button.configure(
                 state="normal" if busy and action == "monitor" else "disabled"
             )
 

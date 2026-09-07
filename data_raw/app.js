@@ -1835,7 +1835,8 @@
     const row = { type: f[0] || '', name: names[f[0]] || f[0] || '—', volume: null, speed: null,
       capacity: null, temp: null, power: null, value: null, time: null, steam: null, summary: '' };
     if (kind === 'rect') {
-      row.volume = num(f[1]); row.speed = num(f[2]); row.capacity = num(f[3]);
+      // Ёмкости нумеруются с 0, поэтому 0 — настоящая ёмкость; у паузы поле — заполнитель, ёмкости нет.
+      row.volume = num(f[1]); row.speed = num(f[2]); row.capacity = row.type === 'P' ? null : num(f[3]);
       row.temp = num(f[4]); row.power = num(f[5]);
       if (row.type === 'P') row.time = row.volume !== null ? row.volume / 3600 : null;
       else if (row.volume !== null && row.speed > 0) row.time = row.volume / (row.speed * 1000);
@@ -1843,11 +1844,11 @@
         ? row.name + ' · ' + (row.volume !== null ? row.volume + ' с' : '')
         : row.name + ' · ' + (row.volume !== null ? row.volume + ' мл' : '') +
           (row.speed !== null ? ' · ' + row.speed + ' л/ч' : '') +
-          (row.capacity ? ' · ёмк. ' + row.capacity : '');
+          (row.capacity !== null ? ' · ёмк. ' + row.capacity : '');
     } else if (kind === 'dist' || kind === 'bk') {
       row.value = num(f[1]); row.capacity = num(f[2]); row.power = num(f[3]); row.steam = num(f[4]);
       row.summary = row.name + (row.value !== null ? ' · ' + row.value : '') +
-        (row.capacity ? ' · ёмк. ' + row.capacity : '');
+        (row.capacity !== null ? ' · ёмк. ' + row.capacity : '');
     } else if (kind === 'beer' || kind === 'cheese') {
       row.temp = num(f[1]); row.time = num(f[2]) !== null ? num(f[2]) / 60 : null;
       row.summary = row.name + (row.temp ? ' · ' + row.temp + ' °C' : '') +
@@ -1872,19 +1873,19 @@
   // Окно из трёх банок вокруг ёмкости текущей строки: предыдущая, текущая, следующая.
   // У края окно сдвигается, чтобы банок было три. Банки — разные ёмкости программы в порядке
   // первого упоминания, подпись — тип первой строки с этой ёмкостью (у текущей — тип текущей строки).
-  // Без программы или без текущей ёмкости показываем банки 1–3 без подсветки.
+  // Без программы или без текущей ёмкости показываем банки 0–2 без подсветки (ёмкости нумеруются с 0).
   function jarWindow(kind, lines, lineNum) {
     const names = JAR_TYPE_NAMES[kind] || {};
     const jars = [];
     lines.forEach(function (line) {
       const row = parseProgramLine(kind, line);
-      if (row.capacity > 0 && !jars.some(function (j) { return j.num === row.capacity; })) {
+      if (row.capacity !== null && !jars.some(function (j) { return j.num === row.capacity; })) {
         jars.push({ num: row.capacity, type: names[row.type] || row.type, active: false });
       }
     });
-    if (!jars.length) return [1, 2, 3].map(function (n) { return { num: n, type: '', active: false }; });
+    if (!jars.length) return [0, 1, 2].map(function (n) { return { num: n, type: '', active: false }; });
     const row = lineNum ? parseProgramLine(kind, lines[lineNum - 1]) : null;
-    let idx = row && row.capacity > 0 ? jars.findIndex(function (j) { return j.num === row.capacity; }) : -1;
+    let idx = row && row.capacity !== null ? jars.findIndex(function (j) { return j.num === row.capacity; }) : -1;
     if (idx >= 0) { jars[idx].active = true; jars[idx].type = names[row.type] || row.type; }
     const start = Math.max(0, Math.min(idx < 0 ? 0 : idx - 1, jars.length - 3));
     return jars.slice(start, start + 3);
@@ -1935,9 +1936,9 @@
     const nextRow = v._lineNum && n < lines.length ? parseProgramLine(kind, lines[n]) : null;
     v._lineType = row ? row.type : '';
     v._lineName = row ? row.name : (lines.length ? 'ожидание' : 'нет программы');
-    v._lineCap = row && row.capacity ? row.capacity : null;
+    v._lineCap = row && row.capacity !== null ? row.capacity : null;
     v._jars = jarWindow(kind, lines, v._lineNum);
-    v._lineCapText = v._lineCap ? 'ёмкость ' + v._lineCap : '';
+    v._lineCapText = v._lineCap !== null ? 'ёмкость ' + v._lineCap : '';
     v._lineVolume = row ? row.volume : null;
     v._lineSpeed = row ? row.speed : null;
     v._linePower = row && row.power ? row.power : null;

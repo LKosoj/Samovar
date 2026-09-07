@@ -11,6 +11,7 @@
 #include "string_utils.h"
 #include "program_io.h"
 #include "runtime_helpers.h"
+#include "firmware_config_report.h"
 
 const AsyncWebParameter* get_request_param(AsyncWebServerRequest *request, const char *name);
 static uint8_t request_param_count(AsyncWebServerRequest *request, const char *name);
@@ -1026,6 +1027,20 @@ void WebServerInit(void) {
     AsyncResponseStream *response = request->beginResponseStream("application/json");
     response->addHeader("Cache-Control", "no-store");
     if (!write_ui_bootstrap_json(*response, snapshot)) {
+      delete response;
+      send_no_store_response(request, 503, "text/plain", "BUSY");
+      return;
+    }
+    request->send(response);
+  });
+  server.on("/firmware-config", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (request->params() != 0) {
+      send_no_store_response(request, 400, "text/plain", "BAD_REQUEST");
+      return;
+    }
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    response->addHeader("Cache-Control", "no-store");
+    if (!write_firmware_config_json(*response)) {
       delete response;
       send_no_store_response(request, 503, "text/plain", "BUSY");
       return;

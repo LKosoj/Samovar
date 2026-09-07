@@ -23,7 +23,7 @@
   писали мы сами (checkpointOwned) - "чужой" чекпоинт (например, оставшийся от
   предыдущей загрузки) переживает цикл включения в режиме, который его не пишет
   (Ректификация).
-- report_pending(): шлёт SendMsg (WARNING_MSG) с текстом, называющим режим и
+- report_pending(): шлёт SendMsg (ALARM_MSG: перезагрузка при нагреве - авария) с текстом, называющим режим и
   программу, ТОЛЬКО когда pendingCheckpoint != 0; не включает PowerOn (нет
   автозапуска).
 """
@@ -377,7 +377,7 @@ int main() {
   PowerOn = false;
   session_checkpoint_report_pending();
   check(sendMsgCalls == 1, "report_pending() did not send a message for a pending checkpoint");
-  check(lastSendMsgType == WARNING_MSG, "report_pending() must use WARNING_MSG severity");
+  check(lastSendMsgType == ALARM_MSG, "report_pending() must use ALARM_MSG severity (reboot during heating)");
   check(lastSendMsgText.find("незавершённая сессия") != std::string::npos,
         "report_pending() message does not mention the unfinished session");
   check(PowerOn == false, "report_pending() must never turn PowerOn on (no auto-start)");

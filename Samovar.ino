@@ -82,6 +82,7 @@ class asyncHTTPrequest;
 #include <iarduino_I2C_connect.h>
 
 #include "Samovar.h"
+#include "firmware_config_report.h"
 #include "samovar_api.h"
 #include "operation_store.h"
 #include "profile_store.h"
@@ -1950,7 +1951,8 @@ static void session_checkpoint_report_pending() {
                          F(", программа №") + String(prog) +
                          F("; нагрев НЕ возобновлён автоматически.");
   WriteConsoleLog(notice);
-  SendMsg(notice, WARNING_MSG);
+  // Чекпоинт пишется только при включённом нагреве, значит перезагрузка застала процесс - авария.
+  SendMsg(notice, ALARM_MSG);
   // [P8 fix#2] Без этого одно и то же предупреждение повторялось бы на каждой
   // перезагрузке (OTA, отладка), пока пользователь не пройдёт полный цикл
   // BEER/SUVID. pendingCheckpoint != 0 гарантирует, что неймспейс существует
@@ -1995,8 +1997,10 @@ static void session_checkpoint_tick() {
 // Снимок /state.csv: после незапланированной перезагрузки возвращаем в рабочий буфер
 // программу, которая шла до сбоя, но нагрев НЕ возобновляем - решает владелец.
 // Текст предупреждения копится здесь и уходит в конце setup(), когда уже подняты
-// семафоры SendMsg/WriteConsoleLog.
+// семафоры SendMsg/WriteConsoleLog. Перезагрузка при включённом нагреве - авария:
+// такое уведомление уходит как ALARM_MSG (push с сиреной в приложениях), остальное - WARNING_MSG.
 static String pendingStateSnapshotNotice;
+static bool pendingStateSnapshotAlarm = false;
 
 // Результат setup_check_ap_button_hold(): нужен и в setup_connect_wifi_and_notify()
 // (решает, поднимать WiFiManager или сразу режим AP), и позже там же перед подключением
@@ -2055,7 +2059,7 @@ static void restore_state_snapshot() {
 
   String notice;
   if (snapshot.powerOn) {
-    notice = F("Сессия прервана: строка ");
+    notice = F("Сессия прервана перезагрузкой: строка ");
     notice += String(snapshot.programRow);
     notice += "/";
     notice += String(snapshot.programLen);
@@ -2078,13 +2082,15 @@ static void restore_state_snapshot() {
     notice += F(".");
   }
   pendingStateSnapshotNotice = notice;
+  pendingStateSnapshotAlarm = snapshot.powerOn;
 }
 
 static void state_snapshot_report_pending() {
   if (pendingStateSnapshotNotice.length() == 0) return;
   WriteConsoleLog(pendingStateSnapshotNotice);
-  SendMsg(pendingStateSnapshotNotice, WARNING_MSG);
+  SendMsg(pendingStateSnapshotNotice, pendingStateSnapshotAlarm ? ALARM_MSG : WARNING_MSG);
   pendingStateSnapshotNotice = "";
+  pendingStateSnapshotAlarm = false;
 }
 
 // Короткая причина перезагрузки для поля resetReason в V35 (session_begin(), ниже).
@@ -3362,6 +3368,14 @@ inline void tick_usb_serial_command() {
         if (strcmp(command, "SAMOVAR:IP?") == 0) {
           Serial.print(F("SAMOVAR:IP="));
           Serial.println(ipst);
+        } else if (strcmp(command, "SAMOVAR:CONFIG?") == 0) {
+          String configJson;
+          JsonStringPrint configSink(configJson);
+          if (write_firmware_config_json(configSink) &&
+              firmware_config_write_char(configSink, '\n')) {
+            Serial.write(
+                reinterpret_cast<const uint8_t*>(configJson.c_str()), configJson.length());
+          }
         }
       }
       length = 0;

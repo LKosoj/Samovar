@@ -44,6 +44,53 @@ class ConfiguratorModelTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def device_config_payload(self, schema=1, settings=None):
+        state = configurator.SamovarConfig(self.make_project()).load()
+        state.update({"wifi_ssid": "Домашняя сеть", "wifi_password": "correct-pass"})
+        board = next(
+            token for token, label in configurator.FIRMWARE_BOARD_TOKENS.items()
+            if label == state["board"]
+        )
+        choices = {}
+        for name, tokens in configurator.FIRMWARE_CHOICE_TOKENS.items():
+            choices[name] = next(token for token, label in tokens.items() if label == state[name])
+        firmware_settings = {
+            "board": board,
+            "servoDelta": [int(value.strip()) for value in state["servoDelta"].split(",")],
+            **choices,
+            "wifi_ssid": state["wifi_ssid"],
+            "wifi_password": state["wifi_password"],
+        }
+        for spec in configurator.VALUE_SPECS:
+            value = state[spec.macro]
+            firmware_settings[spec.macro] = (
+                value if spec.kind == "text" else float(value)
+            )
+        for spec in configurator.BOOL_SPECS:
+            firmware_settings[spec.macro] = state[spec.macro]
+        for spec in configurator.OPTIONAL_SPECS:
+            firmware_settings[spec.macro] = (
+                state[spec.macro] if state[spec.macro + ".enabled"] else None
+            )
+        choice_value_tokens = {
+            "USE_PRESSURE_XGZ": "xgz",
+            "USE_PRESSURE_1WIRE": "onewire",
+        }
+        for spec in configurator.CHOICE_VALUE_SPECS:
+            firmware_settings[spec.macro] = (
+                state[spec.macro]
+                if choices["column_pressure_sensor"] == choice_value_tokens[spec.macro]
+                else None
+            )
+        if settings is not None:
+            firmware_settings = settings
+        return json.dumps({
+            "type": "samovar_firmware_config",
+            "schema": schema,
+            "firmwareVersion": "7.01",
+            "settings": firmware_settings,
+        }, ensure_ascii=False)
+
     def test_round_trip_preserves_unknown_text_and_selects_exclusive_values(self) -> None:
         root = self.make_project()
         ini_path = root / "Samovar_ini.h"
@@ -135,6 +182,364 @@ class ConfiguratorModelTests(unittest.TestCase):
             model.save(state)
         self.assertEqual(model.ini_path.read_bytes(), before_ini)
         self.assertEqual(model.override_path.read_bytes(), before_override)
+
+    def test_device_config_schema_accepts_v1_and_rejects_invalid_responses(self) -> None:
+        payload = self.device_config_payload()
+        parsed = configurator.parse_device_config(payload)
+        self.assertEqual(parsed.firmware_version, "7.01")
+        self.assertEqual(parsed.settings["board"], "ESP32 DevKit")
+        self.assertEqual(parsed.settings["regulator"], "KVIC")
+        self.assertEqual(parsed.settings["MAX_STEAM_TEMP"], "98.8")
+        self.assertEqual(parsed.settings["servoDelta"], "0, -2, -3, -4, -3, -2, 0, 0, 0, 0, -2")
+        self.assertEqual(parsed.settings["wifi_ssid"], "Домашняя сеть")
+        self.assertEqual(parsed.settings["wifi_password"], "correct-pass")
+
+        response = json.loads(payload)
+        del response["settings"]["MAX_WATER_TEMP"]
+        with self.assertRaisesRegex(configurator.ConfigError, "MAX_WATER_TEMP"):
+            configurator.parse_device_config(json.dumps(response))
+
+        response = json.loads(payload)
+        response["settings"]["unexpected"] = "value"
+        with self.assertRaisesRegex(configurator.ConfigError, "несовместимые"):
+            configurator.parse_device_config(json.dumps(response))
+
+        response = json.loads(payload)
+        response["schema"] = 2
+        with self.assertRaisesRegex(configurator.ConfigError, "новее"):
+            configurator.parse_device_config(json.dumps(response))
+        response = json.loads(payload)
+        response["settings"]["USE_WATER_PUMP"] = 1
+        with self.assertRaisesRegex(configurator.ConfigError, "логическим"):
+            configurator.parse_device_config(json.dumps(response))
+        with self.assertRaisesRegex(configurator.ConfigError, "некорректный JSON"):
+            configurator.parse_device_config("{")
+
+    def test_device_config_v1_preserves_future_field_and_v2_requires_it(self) -> None:
+        fields = list(configurator.DEVICE_CONFIG_FIELDS)
+        for index, field in enumerate(fields):
+            if field.name == "MAX_WATER_TEMP":
+                fields[index] = configurator.DeviceConfigField(field.name, field.kind, since=2)
+                break
+        payload = json.loads(self.device_config_payload())
+        del payload["settings"]["MAX_WATER_TEMP"]
+        with mock.patch.object(configurator, "DEVICE_CONFIG_SCHEMA_VERSION", 2), \
+                mock.patch.object(configurator, "DEVICE_CONFIG_FIELDS", tuple(fields)):
+            parsed = configurator.parse_device_config(json.dumps(payload))
+            self.assertNotIn("MAX_WATER_TEMP", parsed.settings)
+            payload["schema"] = 2
+            with self.assertRaisesRegex(configurator.ConfigError, "MAX_WATER_TEMP"):
+                configurator.parse_device_config(json.dumps(payload))
+
+    def make_device_window(self):
+        class Variable:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+            def set(self, value):
+                self.value = value
+
+        state = configurator.SamovarConfig(self.make_project()).load()
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        window.board_var = Variable(state["board"])
+        window.servo_var = Variable(state["servoDelta"])
+        window.value_vars = {
+            spec.macro: Variable(state[spec.macro])
+            for spec in (
+                *configurator.VALUE_SPECS,
+                *configurator.OPTIONAL_SPECS,
+                *configurator.CHOICE_VALUE_SPECS,
+            )
+        }
+        window.bool_vars = {spec.macro: Variable(state[spec.macro]) for spec in configurator.BOOL_SPECS}
+        window.optional_enabled_vars = {
+            spec.macro: Variable(state[spec.macro + ".enabled"])
+            for spec in configurator.OPTIONAL_SPECS
+        }
+        window.choice_vars = {
+            name: Variable(state[name]) for name in configurator.FIRMWARE_CHOICE_TOKENS
+        }
+        window.ssid_var = Variable(state["wifi_ssid"])
+        window.password_var = Variable(state["wifi_password"])
+        window.saved_state = dict(state)
+        window._refresh_dirty = mock.Mock()
+        return window, state
+
+    def test_device_config_apply_merges_without_save_or_partial_mutation(self) -> None:
+        window, before = self.make_device_window()
+        payload = self.device_config_payload()
+        parsed = configurator.parse_device_config(payload)
+        window._apply_device_config(parsed.settings)
+        self.assertEqual(window.board_var.get(), "ESP32 DevKit")
+        self.assertEqual(window.ssid_var.get(), "Домашняя сеть")
+        self.assertEqual(window.password_var.get(), "correct-pass")
+        self.assertEqual(window.saved_state, before)
+        window._refresh_dirty.assert_called_once_with()
+
+        errors, prompts = [], []
+        window.messagebox = type(
+            "Messages", (), {"askyesno": lambda _, *args: prompts.append(args) or True}
+        )()
+        window.status_var = type("Status", (), {"set": lambda _, value: None})()
+        window._append_log = lambda text, tag=None: errors.append((text, tag))
+        response = json.loads(payload)
+        response["settings"]["MAX_WATER_TEMP"] = 73.5
+        window._receive_device_config(json.dumps(response), "USB")
+        self.assertEqual(window.value_vars["MAX_WATER_TEMP"].get(), "73.5")
+        self.assertEqual(len(prompts), 1)
+
+        snapshot = window._state()
+        window._receive_device_config("{", "USB")
+        self.assertEqual(window._state(), snapshot)
+        self.assertEqual(len(prompts), 1)
+        self.assertEqual(errors[-1][1], "error")
+
+    def test_device_config_wire_nulls_preserve_values_and_update_form_flags(self) -> None:
+        window, _ = self.make_device_window()
+        response = json.loads(self.device_config_payload())
+        response["settings"].update({
+            "MAX_WATER_TEMP": 73.5,
+            "column_pressure_sensor": "xgz",
+            "USE_PRESSURE_XGZ": "64",
+            "USE_PRESSURE_1WIRE": None,
+            "USE_EXPANDER": None,
+            "BLYNK_SAMOVAR_TOOL": None,
+            "wifi_ssid": None,
+            "wifi_password": None,
+        })
+        parsed = configurator.parse_device_config(json.dumps(response))
+        self.assertEqual(parsed.settings["MAX_WATER_TEMP"], "73.5")
+        self.assertEqual(parsed.settings["column_pressure_sensor"], "XGZP6897D")
+        self.assertEqual(parsed.settings["USE_PRESSURE_XGZ"], "64")
+        self.assertNotIn("USE_PRESSURE_1WIRE", parsed.settings)
+        self.assertFalse(parsed.settings["USE_EXPANDER.enabled"])
+        self.assertNotIn("USE_EXPANDER", parsed.settings)
+        self.assertEqual(parsed.settings["BLYNK_SAMOVAR_TOOL"], "")
+        self.assertEqual(parsed.settings["wifi_ssid"], "")
+        self.assertEqual(parsed.settings["wifi_password"], "")
+
+        window.value_vars["USE_EXPANDER"].set("0x20")
+        window.value_vars["USE_PRESSURE_1WIRE"].set("{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}")
+        window._apply_device_config(parsed.settings)
+        self.assertEqual(window.value_vars["USE_EXPANDER"].get(), "0x20")
+        self.assertFalse(window.optional_enabled_vars["USE_EXPANDER"].get())
+        self.assertEqual(
+            window.value_vars["USE_PRESSURE_1WIRE"].get(),
+            "{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}",
+        )
+        self.assertEqual(window.value_vars["BLYNK_SAMOVAR_TOOL"].get(), "")
+        self.assertEqual(window.ssid_var.get(), "")
+        self.assertEqual(window.password_var.get(), "")
+
+    def test_blynk_server_empty_value_controls_only_custom_server_macro(self) -> None:
+        def assert_blynk_lines(root: Path, use_blynk: bool) -> None:
+            document = configurator.HeaderDocument((root / "Samovar_ini.h").read_text(encoding="utf-8"))
+            self.assertEqual(document.find("SAMOVAR_USE_BLYNK").enabled, use_blynk)
+            server = document.find("BLYNK_SAMOVAR_TOOL")
+            self.assertFalse(server.enabled)
+            self.assertEqual(server.value, '"samovar-tool.ru"')
+
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        state.update({"SAMOVAR_USE_BLYNK": False, "BLYNK_SAMOVAR_TOOL": ""})
+        model.save(state)
+        assert_blynk_lines(root, False)
+        loaded = model.load()
+        self.assertFalse(loaded["SAMOVAR_USE_BLYNK"])
+        self.assertEqual(loaded["BLYNK_SAMOVAR_TOOL"], "")
+
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        state.update({"SAMOVAR_USE_BLYNK": True, "BLYNK_SAMOVAR_TOOL": ""})
+        model.save(state)
+        assert_blynk_lines(root, True)
+        self.assertEqual(model.load()["BLYNK_SAMOVAR_TOOL"], "")
+
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        state.update({"SAMOVAR_USE_BLYNK": False, "BLYNK_SAMOVAR_TOOL": "custom.example"})
+        model.save(state)
+        assert_blynk_lines(root, False)
+        self.assertEqual(model.load()["BLYNK_SAMOVAR_TOOL"], "")
+
+        root = self.make_project()
+        model = configurator.SamovarConfig(root)
+        state = model.load()
+        state.update({"SAMOVAR_USE_BLYNK": True, "BLYNK_SAMOVAR_TOOL": "custom.example"})
+        model.save(state)
+        document = configurator.HeaderDocument((root / "Samovar_ini.h").read_text(encoding="utf-8"))
+        self.assertTrue(document.find("SAMOVAR_USE_BLYNK").enabled)
+        server = document.find("BLYNK_SAMOVAR_TOOL")
+        self.assertTrue(server.enabled)
+        self.assertEqual(server.value, '"custom.example"')
+        loaded = model.load()
+        self.assertTrue(loaded["SAMOVAR_USE_BLYNK"])
+        self.assertEqual(loaded["BLYNK_SAMOVAR_TOOL"], "custom.example")
+
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        old = 'use_custom_blynk_server = bool(state["SAMOVAR_USE_BLYNK"]) and bool(blynk_server)'
+        mutant_source = source.replace(old, "use_custom_blynk_server = False", 1)
+        self.assertNotEqual(mutant_source, source)
+        mutant_path = Path(self.temporary.name) / "mutant_configurator.py"
+        mutant_path.write_text(mutant_source, encoding="utf-8")
+        mutant_spec = importlib.util.spec_from_file_location("mutant_configurator", mutant_path)
+        mutant = importlib.util.module_from_spec(mutant_spec)
+        sys.modules[mutant_spec.name] = mutant
+        try:
+            mutant_spec.loader.exec_module(mutant)
+            mutant_model = mutant.SamovarConfig(root)
+            mutant_state = mutant_model.load()
+            mutant_state.update({"SAMOVAR_USE_BLYNK": True, "BLYNK_SAMOVAR_TOOL": "custom.example"})
+            mutant_model.save(mutant_state)
+            mutated_document = mutant.HeaderDocument((root / "Samovar_ini.h").read_text(encoding="utf-8"))
+            self.assertFalse(mutated_document.find("BLYNK_SAMOVAR_TOOL").enabled)
+        finally:
+            del sys.modules[mutant_spec.name]
+
+    def test_device_config_apply_keeps_field_added_in_schema_v2(self) -> None:
+        window, before = self.make_device_window()
+        fields = list(configurator.DEVICE_CONFIG_FIELDS)
+        for index, field in enumerate(fields):
+            if field.name == "MAX_WATER_TEMP":
+                fields[index] = configurator.DeviceConfigField(field.name, field.kind, since=2)
+                break
+        response = json.loads(self.device_config_payload())
+        del response["settings"]["MAX_WATER_TEMP"]
+        with mock.patch.object(configurator, "DEVICE_CONFIG_SCHEMA_VERSION", 2), \
+                mock.patch.object(configurator, "DEVICE_CONFIG_FIELDS", tuple(fields)):
+            parsed = configurator.parse_device_config(json.dumps(response))
+            window._apply_device_config(parsed.settings)
+        self.assertEqual(window.value_vars["MAX_WATER_TEMP"].get(), before["MAX_WATER_TEMP"])
+
+    def test_device_config_usb_stream_and_network_requests_are_single_path(self) -> None:
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        received, logged = [], []
+        window._receive_device_config = lambda payload, source: received.append((payload, source))
+        window._append_log = lambda text, tag=None: logged.append((text, tag))
+        window.recent_lines, window.action_lines, window.partial_line = [], [], ""
+        window.install_hint_shown = False
+        window._note_output("{\"type\":\"samovar_")
+        self.assertEqual(received, [])
+        window._note_output("firmware_config\"}\n")
+        self.assertEqual(received, [("{\"type\":\"samovar_firmware_config\"}", "USB")])
+
+        class Variable:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+            def set(self, value):
+                self.value = value
+
+        class Thread:
+            started = []
+
+            def __init__(self, target, daemon):
+                self.target = target
+                Thread.started.append(self)
+
+            def start(self):
+                pass
+
+        window.busy = False
+        window.port_var = Variable("192.168.1.37 — samovar (Wi-Fi)")
+        window.device_config_request_id = 0
+        window.status_var = Variable("")
+        window.output_queue = configurator.queue.Queue()
+        with mock.patch.object(configurator.threading, "Thread", Thread), \
+                mock.patch.object(configurator, "fetch_device_config", return_value="payload") as fetch:
+            window._network_device_selected()
+            self.assertEqual(fetch.call_count, 0)
+            Thread.started.pop().target()
+        kind, value = window.output_queue.get_nowait()
+        self.assertEqual((kind, value), ("device_config", (1, "192.168.1.37", "payload")))
+        window._network_device_config_done(*value)
+        self.assertEqual(received[-1], ("payload", "Wi-Fi"))
+
+        window.port_var.set("COM7")
+        window._network_device_selected()
+        self.assertTrue(window.output_queue.empty())
+        window.port_var.set("samovar.local")
+        with mock.patch.object(configurator.threading, "Thread", Thread), \
+                mock.patch.object(configurator, "fetch_device_config", return_value="manual"):
+            self.assertEqual(window._network_address_entered(), "break")
+            Thread.started.pop().target()
+        self.assertEqual(window.output_queue.get_nowait(), ("device_config", (2, "samovar.local", "manual")))
+
+    def test_device_config_network_race_and_auto_error_do_not_fallback(self) -> None:
+        class Variable:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+            def set(self, value):
+                self.value = value
+
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        received, logged = [], []
+        window.port_var = Variable("192.168.1.38")
+        window.device_config_request_id = 2
+        window._receive_device_config = lambda payload, source: received.append((payload, source))
+        window._append_log = lambda text, tag=None: logged.append((text, tag))
+        window.status_var = Variable("")
+        window._network_device_config_done(1, "192.168.1.37", "old")
+        self.assertEqual(received, [])
+        window._network_device_config_done(2, "192.168.1.38", None, "connection refused")
+        self.assertEqual(received, [])
+        self.assertIn("connection refused", logged[-1][0])
+        self.assertEqual(window.status_var.get(), "Настройки устройства не получены")
+
+    def test_start_process_invalidates_pending_network_config(self) -> None:
+        class Variable:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class Thread:
+            def __init__(self, target, args, daemon):
+                self.target = target
+
+            def start(self):
+                pass
+
+        window = configurator.ConfiguratorWindow.__new__(configurator.ConfiguratorWindow)
+        received = []
+        window.busy = False
+        window.config = types.SimpleNamespace(project_root=Path(self.temporary.name))
+        window.messagebox = type("Messages", (), {"showerror": lambda *_: None})()
+        window.device_config_request_id = 4
+        window.stop_requested = False
+        window.active_action = ""
+        window.recent_lines = []
+        window.action_lines = []
+        window.partial_line = ""
+        window.install_hint_shown = False
+        window._set_busy = lambda busy, action: None
+        window._append_log = lambda text, tag=None: None
+        window._tick_status = lambda: None
+        window.port_var = Variable("192.168.1.38")
+        window._receive_device_config = lambda payload, source: received.append((payload, source))
+
+        with mock.patch.object(configurator.subprocess, "Popen", return_value=object()), \
+                mock.patch.object(configurator.threading, "Thread", Thread):
+            window._start_process(["pio", "run"], "upload")
+
+        self.assertTrue(window.busy)
+        self.assertEqual(window.device_config_request_id, 5)
+        window._network_device_config_done(4, "192.168.1.38", "late")
+        self.assertEqual(received, [])
 
     def test_numeric_suffixes_are_hidden_and_preserved(self) -> None:
         root = self.make_project()
@@ -368,6 +773,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         window.monitor_log = None
         window.monitor_stop_button = None
         window.monitor_ip_button = None
+        window.monitor_config_button = None
         window.monitor_input = None
         window.log_autoscroll = FakeVar(True)
         window.start_action = lambda action: setattr(window, "active_action", action)
@@ -380,6 +786,7 @@ class ConfiguratorModelTests(unittest.TestCase):
         self.assertTrue(modal.grabbed)
         self.assertEqual(modal.protocols["WM_DELETE_WINDOW"], window.close_monitor)
         self.assertEqual(window.monitor_ip_button.options["text"], "Получить IP")
+        self.assertEqual(window.monitor_config_button.options["text"], "Получить настройки")
         window._append_log("serial\n")
         self.assertEqual(window.monitor_log.entries, [("end", "serial\n")])
         self.assertEqual(window.log.entries, [])
@@ -407,9 +814,11 @@ class ConfiguratorModelTests(unittest.TestCase):
         window.request_monitor_ip()
         self.assertEqual(process.stdin.text, "SAMOVAR:IP?\n")
         self.assertTrue(process.stdin.flushed)
+        window.request_monitor_config()
+        self.assertEqual(process.stdin.text, "SAMOVAR:IP?\nSAMOVAR:CONFIG?\n")
         window.monitor_input.options["value"] = "  SAMOVAR:STATUS?  "
         window.send_monitor_command()
-        self.assertEqual(process.stdin.text, "SAMOVAR:IP?\nSAMOVAR:STATUS?\n")
+        self.assertEqual(process.stdin.text, "SAMOVAR:IP?\nSAMOVAR:CONFIG?\nSAMOVAR:STATUS?\n")
         with mock.patch.object(
             configurator, "terminate_process_tree", lambda process: process.terminate()
         ):
@@ -1007,8 +1416,10 @@ class ConfiguratorModelTests(unittest.TestCase):
         # Редактор файлов недоступен, пока нет адреса устройства (см. _port_changed)
         self.assertIn("self._port_changed()", inspect.getsource(configurator.ConfiguratorWindow._load))
         self.assertNotIn('text="Получить IP"', source)
+        self.assertNotIn('text="Получить настройки"', source)
         monitor_source = inspect.getsource(configurator.ConfiguratorWindow.open_monitor)
         self.assertIn('text="Получить IP"', monitor_source)
+        self.assertIn('text="Получить настройки"', monitor_source)
         for label in ("Перезагрузить ESP", "Редактор файлов"):
             self.assertNotIn(label, monitor_source)
 
