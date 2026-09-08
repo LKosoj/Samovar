@@ -177,6 +177,12 @@ bool BlynkProtocol<Transp>::run(bool avail)
 
     if (state == CONNECTED) {
         if (!tconn) {
+#if defined(ESP32)
+            // Диагностика обрывов (Самовар): сокет закрыт не нами
+            Serial.printf("Blynk socket closed at_ms=%lu in=%lu out=%lu hb=%lu\n",
+                (unsigned long)t, (unsigned long)lastActivityIn,
+                (unsigned long)lastActivityOut, (unsigned long)lastHeartbeat);
+#endif
             lastHeartbeat = t;
             internalReconnect();
             return false;
@@ -187,6 +193,12 @@ bool BlynkProtocol<Transp>::run(bool avail)
             BLYNK_LOG6(BLYNK_F("Heartbeat timeout: "), t, BLYNK_F(", "), lastActivityIn, BLYNK_F(", "), lastHeartbeat);
 #else
             BLYNK_LOG1(BLYNK_F("Heartbeat timeout"));
+#endif
+#if defined(ESP32)
+            // Диагностика обрывов (Самовар): сколько молчал вход/выход и есть ли непрочитанное в сокете
+            Serial.printf("Blynk heartbeat timeout at_ms=%lu in=%lu out=%lu hb=%lu avail=%d\n",
+                (unsigned long)t, (unsigned long)lastActivityIn,
+                (unsigned long)lastActivityOut, (unsigned long)lastHeartbeat, conn.available());
 #endif
             internalReconnect();
             return false;

@@ -14,7 +14,7 @@ process_impurity_detector() (условие + тело, без переписа�
 Часть (б): статически фиксирует место вставки (после сбора истории, до грейс-периода),
 отсутствие управляющих вызовов внутри ветки, удаление осиротевшего кода
 (множитель 0.9 для голов в get_adaptive_threshold, спецграйс 60 с в
-detector_on_program_start) и подпись "только наблюдение" в веб-интерфейсе.
+detector_on_program_start) и подпись "Головы: наблюдение" в веб-интерфейсе.
 """
 import subprocess
 import sys
@@ -215,7 +215,7 @@ def check_web_interface() -> list[str]:
             path.read_text(encoding="utf-8"),
             [
                 "myObj.PrgType === 'H'",
-                "только наблюдение",
+                "Головы: наблюдение",
                 "myObj.DetectorStatus == 0",
             ],
             errors,

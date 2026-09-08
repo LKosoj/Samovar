@@ -24,6 +24,7 @@
     "distiller.h",
     "firmware_config_report.h",
     "font.h",
+    "i2c_stepper_params.h",
     "impurity_detector.h",
     "json_field_raw.h",
     "logic.h",

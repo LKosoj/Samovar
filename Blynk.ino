@@ -208,6 +208,30 @@ static void blynk_push_v27() {
 }
 
 // ---------------------------------------------------------------------------
+// V36: состояние плат I2CStepper (PIN_SPEC.md §13). Ключ "mixer"/"pump" есть только у
+// платы, которая хоть раз ответила после старта: без плат пин не шлётся вовсе, а пропавшая
+// плата приходит с present=0. Объект платы - тот же, что отдаёт /i2cstepper?cmd=status.
+// ---------------------------------------------------------------------------
+static void blynk_push_v36() {
+  if (!i2cStepperMixer.everPresent && !i2cStepperPump.everPresent) return;
+  String json;
+  json.reserve(640);
+  JsonStringPrint sink(json);
+  sink.print("{\"cal\":");
+  sink.print(I2CPumpCalibrating ? 1 : 0);
+  if (i2cStepperMixer.everPresent) {
+    sink.print(",\"mixer\":");
+    write_i2c_stepper_json(sink, i2cStepperMixer);
+  }
+  if (i2cStepperPump.everPresent) {
+    sink.print(",\"pump\":");
+    write_i2c_stepper_json(sink, i2cStepperPump);
+  }
+  sink.print('}');
+  Blynk.virtualWrite(V36, json);
+}
+
+// ---------------------------------------------------------------------------
 // V28..V32: команды веб-форм режимов, которых не было в Blynk. Разбор значений и
 // проверки те же, что в web_command() (WebServer.ino); отказы уходят предупреждением
 // в V26 через SendMsg, т.к. HTTP-кода ответа у Blynk нет.
@@ -511,7 +535,85 @@ BLYNK_CONNECTED() {
 }
 
 BLYNK_DISCONNECTED() {
-  Serial.printf("Blynk disconnected at_ms=%lu\n", static_cast<unsigned long>(millis()));
+  // Счётчики из tick_blynk() (Samovar.ino): пропуски тактов по локу и максимальный разрыв
+  // между Blynk.run() за это соединение; после вывода обнуляются.
+  Serial.printf("Blynk disconnected at_ms=%lu rssi=%d heap=%u lock_skips=%lu run_max_gap_ms=%lu\n",
+                static_cast<unsigned long>(millis()), WiFi.RSSI(), ESP.getFreeHeap(),
+                static_cast<unsigned long>(blynkTickLockSkips),
+                static_cast<unsigned long>(blynkRunMaxGapMs));
+  blynkTickLockSkips = 0;
+  blynkRunMaxGapMs = 0;
+  blynkRunLastMs = 0;
+}
+
+// I2CStepper (мешалка/насос): команда строкой в формате параметров /i2cstepper,
+// например device=pump&cmd=start&mode=2&pumpMlHour=1200&stepsPerMl=200 (PIN_SPEC.md §13).
+// Проверка та же, что у веб-обработчика (parse_i2c_stepper_patch); cmd=status здесь
+// не нужен - состояние обеих плат прошивка сама шлёт в V36. Отказ - предупреждение в V26
+// с кодом и именем поля, результат виден по V36.
+BLYNK_WRITE(V37) {
+  if (mode_switch_in_progress()) return;
+  I2CStepperParams params;
+  const char* errorField = "request";
+  NumericParseResult result = numeric_parse_result(NUMERIC_PARSE_OK);
+  if (!params.parseQuery(param.asStr())) {
+    result = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+  }
+  for (size_t index = 0; result.ok() && index < params.params(); index++) {
+    const I2CStepperParam* item = params.getParam(index);
+    if (!i2c_stepper_known_param(item->name()) ||
+        request_param_count(&params, item->name().c_str()) != 1) {
+      errorField = item->name().c_str();
+      result = numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
+    }
+  }
+  const I2CStepperParam* deviceParam = get_request_param(&params, "device");
+  const I2CStepperParam* commandParam = get_request_param(&params, "cmd");
+  String command = commandParam ? commandParam->value() : String();
+  command.toLowerCase();
+  I2CStepperDevice* dev = nullptr;
+  if (deviceParam && deviceParam->value() == "mixer") dev = &i2cStepperMixer;
+  else if (deviceParam && deviceParam->value() == "pump") dev = &i2cStepperPump;
+  if (result.ok() && !dev) {
+    errorField = "device";
+    result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+  }
+  if (result.ok() && command != "apply" && command != "save" && command != "start" &&
+      command != "stop" && command != "calstart" && command != "calfinish" &&
+      command != "relay") {
+    errorField = "cmd";
+    result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+  }
+  if (result.ok() && !dev->present) {
+    report_blynk_refusal(37, "NO_I2C_DEVICE");
+    return;
+  }
+  I2CStepperDevice staged = {};
+  if (result.ok()) {
+    staged = *dev;
+    result = parse_i2c_stepper_patch(&params, command, *dev, staged, errorField);
+  }
+  if (result.ok() && !i2c_stepper_command_supported(staged, command)) {
+    errorField = "cmd";
+    result = numeric_parse_result(NUMERIC_PARSE_NOT_ALLOWED);
+  }
+  if (!result.ok()) {
+    String reason = numeric_parse_error_code(result.error);
+    reason += ' ';
+    reason += errorField;
+    report_blynk_refusal(37, reason.c_str());
+    return;
+  }
+  PendingI2CStepperCmd pendingCmd = {};
+  pendingCmd.staged = staged;
+  pendingCmd.device_sel = dev == &i2cStepperMixer ? 0 : 1;
+  strncpy(pendingCmd.cmd, command.c_str(), sizeof(pendingCmd.cmd) - 1);
+  OperationId operationId = 0;
+  const OperationError queueError = queue_pending_i2cstepper(pendingCmd, operationId);
+  if (queueError != OPERATION_ERROR_NONE) {
+    report_blynk_refusal(37, queueError == OPERATION_ERROR_LOCK_BUSY
+        ? "BUSY" : operation_error_code(queueError));
+  }
 }
 
 // V33: «отправь все пины заново». Приложение шлёт при запуске и сразу после синхронизации
@@ -557,7 +659,7 @@ static const BlynkPushFn kBlynkFastPush[] = {
 #ifdef SAMOVAR_USE_POWER
   blynk_push_v21,
 #endif
-  blynk_push_strings, blynk_push_v27,
+  blynk_push_strings, blynk_push_v27, blynk_push_v36,
 };
 static const uint8_t kBlynkFastPushCount = sizeof(kBlynkFastPush) / sizeof(kBlynkFastPush[0]);
 

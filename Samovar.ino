@@ -134,6 +134,7 @@ XGZP6897D pressure_sensor(USE_PRESSURE_XGZ);
 #include "mod_rmvk.h"
 
 #include "I2CStepper.h"
+#include "i2c_stepper_params.h"
 #include "logic.h"
 
 #ifdef USE_UPDATE_OTA
@@ -3253,6 +3254,13 @@ static void tick_ota() {
 #ifdef SAMOVAR_USE_BLYNK
 void blynk_push_tick();  // Blynk.ino
 #endif
+#ifdef SAMOVAR_USE_BLYNK
+// Диагностика обрывов Blynk: сколько тактов пропущено из-за занятого лока и максимальный
+// разрыв между вызовами Blynk.run(). Печатаются и сбрасываются в BLYNK_DISCONNECTED() (Blynk.ino).
+uint32_t blynkTickLockSkips = 0;
+uint32_t blynkRunMaxGapMs = 0;
+uint32_t blynkRunLastMs = 0;
+#endif
 static void tick_blynk() {
 #ifdef SAMOVAR_USE_BLYNK
   // Отключаем Blynk во время OTA для освобождения ресурсов. Лок короткий: не взяли -
@@ -3260,7 +3268,13 @@ static void tick_blynk() {
   // блокируем весь loop() ради Blynk. BLYNK_WRITE/BLYNK_READ в Blynk.ino выполняются
   // изнутри Blynk.run(), т.е. уже под этим локом.
   BlynkLockGuard blynkLock(pdMS_TO_TICKS(20));
+  if (!blynkLock) blynkTickLockSkips++;
   if (blynkLock && !ota_running && Blynk.connected()) {
+    const uint32_t now = millis();
+    if (blynkRunLastMs != 0 && now - blynkRunLastMs > blynkRunMaxGapMs) {
+      blynkRunMaxGapMs = now - blynkRunLastMs;
+    }
+    blynkRunLastMs = now;
     Blynk.run();
     // Push пинов вместо серверного опроса (Blynk.ino), под тем же локом.
     blynk_push_tick();

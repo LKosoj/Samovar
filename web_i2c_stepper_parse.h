@@ -4,7 +4,7 @@
 // `template <typename T>`, и компилятор сообщает, что T не объявлен.
 template <typename T>
 static NumericParseResult parse_i2c_stepper_bounded(
-    AsyncWebServerRequest *request,
+    const I2CStepperParams *request,
     const char *name,
     T minValue,
     T maxValue,
@@ -17,9 +17,9 @@ static NumericParseResult parse_i2c_stepper_bounded(
     errorField = name;
     return numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
   }
-  const AsyncWebParameter *param = get_request_param(request, name);
+  const I2CStepperParam *param = get_request_param(request, name);
   T parsed = 0;
-  NumericParseResult result = param && !param->isFile()
+  NumericParseResult result = param
       ? parser(param->value().c_str(), minValue, maxValue, parsed)
       : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
   if (!result.ok()) {

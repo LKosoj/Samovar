@@ -367,7 +367,7 @@ static bool i2c_stepper_known_param(const String& name) {
 }
 
 static NumericParseResult parse_i2c_stepper_patch(
-    AsyncWebServerRequest *request,
+    const I2CStepperParams *request,
     const String& command,
     const I2CStepperDevice& current,
     I2CStepperDevice& candidate,
@@ -410,8 +410,8 @@ static NumericParseResult parse_i2c_stepper_patch(
   if (hasRelay) {
     uint8_t relay = 0;
     bool state = false;
-    const AsyncWebParameter *relayParam = get_request_param(request, "relay");
-    const AsyncWebParameter *stateParam = get_request_param(request, "state");
+    const I2CStepperParam *relayParam = get_request_param(request, "relay");
+    const I2CStepperParam *stateParam = get_request_param(request, "state");
     result = relayParam
         ? parse_bounded_uint8(relayParam->value().c_str(), 1, 4, relay)
         : numeric_parse_result(NUMERIC_PARSE_INVALID_ARGUMENT);
@@ -432,7 +432,7 @@ static NumericParseResult parse_i2c_stepper_patch(
 
   bool hasConfig = false;
   for (size_t index = 0; index < request->params(); index++) {
-    const AsyncWebParameter *param = request->getParam(index);
+    const I2CStepperParam *param = request->getParam(index);
     if (param && i2c_stepper_config_param(param->name())) hasConfig = true;
   }
   if ((command == "status" || command == "stop" || command == "calfinish") &&
@@ -543,31 +543,37 @@ bool i2c_stepper_command_supported(const I2CStepperDevice& dev, const String& cm
   return false;
 }
 
+// Состояние платы I2CStepper одним JSON-объектом: ответ /i2cstepper?cmd=status и
+// значение каждого устройства в Blynk V36 (Blynk.ino, PIN_SPEC.md §13).
+void write_i2c_stepper_json(Print& out, const I2CStepperDevice& dev) {
+  out.print('{');
+  out.print("\"present\":"); out.print(dev.present ? 1 : 0);
+  out.print(",\"address\":"); out.print(dev.address);
+  out.print(",\"role\":"); out.print(dev.role);
+  out.print(",\"mode\":"); out.print(dev.mode);
+  out.print(",\"caps\":"); out.print(dev.caps);
+  out.print(",\"status\":"); out.print(dev.status);
+  out.print(",\"error\":"); out.print(dev.error);
+  out.print(",\"relayMask\":"); out.print(dev.relayMask);
+  out.print(",\"sensorFlags\":"); out.print(dev.sensorFlags);
+  out.print(",\"optionFlags\":"); out.print(dev.optionFlags);
+  out.print(",\"mixerRpm\":"); out.print(dev.mixerRpm);
+  out.print(",\"mixerRunSec\":"); out.print(dev.mixerRunSec);
+  out.print(",\"mixerPauseSec\":"); out.print(dev.mixerPauseSec);
+  out.print(",\"pumpMlHour\":"); out.print(dev.pumpMlHour);
+  out.print(",\"pumpPauseSec\":"); out.print(dev.pumpPauseSec);
+  out.print(",\"fillingMl\":"); out.print(dev.fillingMl);
+  out.print(",\"fillingMlHour\":"); out.print(dev.fillingMlHour);
+  out.print(",\"stepsPerMl\":"); out.print(dev.stepsPerMl);
+  out.print(",\"remaining\":"); out.print(dev.remaining);
+  out.print(",\"currentSpeed\":"); out.print(dev.currentSpeed);
+  out.print('}');
+}
+
 void send_i2c_stepper_json(AsyncWebServerRequest *request, I2CStepperDevice& dev) {
   AsyncResponseStream *response = request->beginResponseStream("application/json");
   response->addHeader("Cache-Control", "no-store");
-  response->print('{');
-  response->print("\"present\":"); response->print(dev.present ? 1 : 0);
-  response->print(",\"address\":"); response->print(dev.address);
-  response->print(",\"role\":"); response->print(dev.role);
-  response->print(",\"mode\":"); response->print(dev.mode);
-  response->print(",\"caps\":"); response->print(dev.caps);
-  response->print(",\"status\":"); response->print(dev.status);
-  response->print(",\"error\":"); response->print(dev.error);
-  response->print(",\"relayMask\":"); response->print(dev.relayMask);
-  response->print(",\"sensorFlags\":"); response->print(dev.sensorFlags);
-  response->print(",\"optionFlags\":"); response->print(dev.optionFlags);
-  response->print(",\"mixerRpm\":"); response->print(dev.mixerRpm);
-  response->print(",\"mixerRunSec\":"); response->print(dev.mixerRunSec);
-  response->print(",\"mixerPauseSec\":"); response->print(dev.mixerPauseSec);
-  response->print(",\"pumpMlHour\":"); response->print(dev.pumpMlHour);
-  response->print(",\"pumpPauseSec\":"); response->print(dev.pumpPauseSec);
-  response->print(",\"fillingMl\":"); response->print(dev.fillingMl);
-  response->print(",\"fillingMlHour\":"); response->print(dev.fillingMlHour);
-  response->print(",\"stepsPerMl\":"); response->print(dev.stepsPerMl);
-  response->print(",\"remaining\":"); response->print(dev.remaining);
-  response->print(",\"currentSpeed\":"); response->print(dev.currentSpeed);
-  response->print('}');
+  write_i2c_stepper_json(*response, dev);
   request->send(response);
 }
 
@@ -644,10 +650,16 @@ static void handle_i2c_stepper_request(AsyncWebServerRequest *request) {
     return;
   }
 
+  // Параметры уже проверены на имя/дубли/тип выше: копия без файлов и POST-полей.
+  I2CStepperParams params;
+  for (size_t index = 0; index < request->params(); index++) {
+    const AsyncWebParameter *param = request->getParam(index);
+    params.add(param->name(), param->value());
+  }
   I2CStepperDevice staged = *dev;
   const char *errorField = "request";
   NumericParseResult result = parse_i2c_stepper_patch(
-      request, command, *dev, staged, errorField);
+      &params, command, *dev, staged, errorField);
   if (!result.ok()) {
     send_i2c_numeric_error(request, errorField, result.error);
     return;
