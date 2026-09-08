@@ -21,7 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from smoke_helpers import extract_function_body, strip_cpp_comments
+from smoke_helpers import extract_function_body, require_ordered_tokens, strip_cpp_comments
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -591,7 +591,22 @@ int main() {
   logFileLockAvailable = true;
   check(logFileLockDepth == 0, "лок обязан отпускаться на всех путях");
 
-  // 11. Заголовок снимка несёт режим, статус, строку, признак нагрева и (T24.2)
+  // 11. Неудачная периодическая запись повторяется на следующем секундном такте,
+  // а не только через новый полный 30-секундный период.
+  reset_world();
+  seed_rect_program();
+  startval = 1;
+  logFileLockAvailable = false;
+  tick_snapshot(STATE_SNAPSHOT_PERIOD_S);
+  check(writeSnapshotCalls == 1, "занятый файл должен дать одну неудачную попытку записи");
+  check(STcnt == STATE_SNAPSHOT_PERIOD_S - 1,
+        "после file busy повтор снимка должен быть назначен на следующий секундный такт");
+  logFileLockAvailable = true;
+  tick_snapshot(1);
+  check(writeSnapshotCalls == 2, "после освобождения файла снимок должен повториться через секунду");
+  check(SPIFFS.present, "повторная попытка должна записать state.csv");
+
+  // 12. Заголовок снимка несёт режим, статус, строку, признак нагрева и (T24.2)
   // накопленную выдержку Сувида.
   reset_world();
   seed_rect_program();
@@ -789,6 +804,17 @@ def static_checks() -> list[str]:
     for token in ("get_beer_program()", "get_dist_program()", "get_nbk_program()"):
         if token in create_body:
             errors.append(f"create_data снова перечисляет режимы вручную: {token}")
+    require_ordered_tokens(
+        "create_data назначает немедленный снимок после освобождения файлового замка",
+        create_body,
+        [
+            "data_log_ready = true;",
+            "log_file_unlock(true);",
+            "STcnt = STATE_SNAPSHOT_PERIOD_S;",
+            "return true;",
+        ],
+        errors,
+    )
 
     # Снимок пишется из SysTicker и не спрятан под гейт активного отбора.
     ticker_body = extract_function_body(samovar_ino, "void triggerSysTicker(void *parameter)")

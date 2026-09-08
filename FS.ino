@@ -315,10 +315,6 @@ bool create_data() {
   for (uint8_t i = 0; i < DS_LOGGED_SENSOR_COUNT; i++) sensorList[i]->LogPrevTemp = 0;
   bme_prev_pressure = 0;
   prev_ProgramNum = PROGRAM_END;
-  // Не обнуляем, а взводим: снимок новой сессии нужен сразу, иначе перезагрузка в
-  // первые полминуты оставит на диске состояние с выключенным нагревом.
-  STcnt = STATE_SNAPSHOT_PERIOD_S;
-
   fileToAppend = SPIFFS.open("/data.csv", FILE_APPEND);
   if (!fileToAppend) {
     log_file_unlock(true);
@@ -343,6 +339,10 @@ bool create_data() {
   }
   data_log_ready = true;
   log_file_unlock(true);
+  // Не обнуляем, а взводим: снимок новой сессии нужен сразу, иначе перезагрузка в
+  // первые полминуты оставит на диске состояние с выключенным нагревом. Делаем это
+  // после освобождения файлового замка, чтобы SysTicker не столкнулся с create_data().
+  STcnt = STATE_SNAPSHOT_PERIOD_S;
   return true;
 }
 
@@ -442,7 +442,13 @@ void process_state_snapshot() {
   // PowerOn ловит режимы, которые греют без отбора (Пиво/Сувид на выдержке).
   const bool sessionActive = startval != SAMOVAR_STARTVAL_IDLE || PowerOn;
   if (!sessionActive && signature == state_snapshot_program_hash) return;
-  if (write_state_snapshot()) state_snapshot_program_hash = signature;
+  if (write_state_snapshot()) {
+    state_snapshot_program_hash = signature;
+  } else {
+    // Файл занят другой штатной операцией: повторяем на следующем секундном такте,
+    // а не теряем весь 30-секундный период снимка.
+    STcnt = STATE_SNAPSHOT_PERIOD_S - 1;
+  }
 }
 
 // Запомнить программу как уже сохранённую: вызывается после восстановления снимка,
