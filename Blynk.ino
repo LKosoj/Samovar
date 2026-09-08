@@ -506,7 +506,12 @@ static bool blynk_push_pending_session_start() {
 }
 
 BLYNK_CONNECTED() {
+  Serial.printf("Blynk connected at_ms=%lu\n", static_cast<unsigned long>(millis()));
   s_blynkPushResendAll = true;
+}
+
+BLYNK_DISCONNECTED() {
+  Serial.printf("Blynk disconnected at_ms=%lu\n", static_cast<unsigned long>(millis()));
 }
 
 // V33: «отправь все пины заново». Приложение шлёт при запуске и сразу после синхронизации

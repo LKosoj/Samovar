@@ -18,6 +18,9 @@ DISCONNECT_REGISTRATION = (
 GOT_IP_SIGNATURE = "static void captureWifiGotIp(arduino_event_t *event)"
 DISCONNECT_SIGNATURE = "static void captureWifiDisconnectReason(arduino_event_t *event)"
 RECONNECT_SIGNATURE = "static void tick_wifi_reconnect()"
+STORE_DISCONNECT_SIGNATURE = "static void store_wifi_disconnect_event(uint8_t reason)"
+TAKE_DISCONNECT_SIGNATURE = "static bool take_wifi_disconnect_event(WifiDisconnectEvent& event)"
+TICK_DISCONNECT_DIAGNOSTICS_SIGNATURE = "static void tick_wifi_disconnect_diagnostics()"
 IPST_SET_SIGNATURE = "inline void ipst_set(const String& value)"
 IPST_COPY_SIGNATURE = "inline void ipst_copy(char (&copy)[sizeof(ipst)])"
 RECONNECT_CONSTANTS = (
@@ -35,10 +38,15 @@ def policy_errors(source: str) -> list[str]:
     samovar_header = (ROOT / "Samovar.h").read_text(encoding="utf-8")
     setup_body = extract_function_body(source, "static void setup_wifi_stack_defaults()")
     trigger_body = extract_function_body(source, "void triggerGetClock(void *parameter)")
+    if "struct WifiDisconnectEvent;" not in source[:source.find("#include <Arduino.h>")]:
+        errors.append("WifiDisconnectEvent forward declaration must precede Arduino prototypes")
     try:
         got_ip_body = extract_function_body(source, GOT_IP_SIGNATURE)
         disconnect_body = extract_function_body(source, DISCONNECT_SIGNATURE)
         reconnect_body = extract_function_body(source, RECONNECT_SIGNATURE)
+        store_disconnect_body = extract_function_body(source, STORE_DISCONNECT_SIGNATURE)
+        take_disconnect_body = extract_function_body(source, TAKE_DISCONNECT_SIGNATURE)
+        diagnostics_body = extract_function_body(source, TICK_DISCONNECT_DIAGNOSTICS_SIGNATURE)
         ipst_set_body = extract_function_body(helpers, IPST_SET_SIGNATURE)
         ipst_copy_body = extract_function_body(helpers, IPST_COPY_SIGNATURE)
         blynk_slow_body = extract_function_body(blynk, "static void blynk_push_slow(bool force)")
@@ -54,19 +62,32 @@ def policy_errors(source: str) -> list[str]:
             errors.append(f"WiFi reconnect timing changed or missing: {constant}")
     if trigger_body.count("tick_wifi_reconnect();") != 3:
         errors.append("GetClockTicker must check WiFi during OTA, after sensors and each one-second wait")
+    if trigger_body.count("tick_wifi_disconnect_diagnostics();") != 1:
+        errors.append("GetClockTicker must print queued WiFi disconnect diagnostics")
     if setup_body.count(GOT_IP_REGISTRATION) != 1:
         errors.append("GOT_IP callback must be registered exactly once")
     if setup_body.count(DISCONNECT_REGISTRATION) != 1:
         errors.append("disconnect callback must be registered exactly once")
     if "ipst_set(WiFi.localIP().toString());" not in got_ip_body:
         errors.append("GOT_IP callback does not update ipst from WiFi.localIP")
-    for forbidden in ("Blynk", "WriteConsoleLog", "WiFi.reconnect"):
+    for forbidden in ("Blynk", "Serial", "WriteConsoleLog", "WiFi.reconnect"):
         if forbidden in got_ip_body:
             errors.append(f"GOT_IP callback performs forbidden work: {forbidden}")
         if forbidden in disconnect_body:
             errors.append(f"disconnect callback performs forbidden work: {forbidden}")
-    if "lastWifiDisconnectReason = event->event_info.wifi_sta_disconnected.reason;" not in disconnect_body:
+    if "lastWifiDisconnectReason = reason;" not in disconnect_body:
         errors.append("disconnect callback does not retain the reason")
+    if "store_wifi_disconnect_event(reason);" not in disconnect_body:
+        errors.append("disconnect callback does not queue every system event")
+    for token in ("millis()", "portENTER_CRITICAL", "wifiDisconnectEvents", "portEXIT_CRITICAL"):
+        if token not in store_disconnect_body:
+            errors.append(f"WiFi disconnect event storage misses {token}")
+    for token in ("portENTER_CRITICAL", "wifiDisconnectEvents", "portEXIT_CRITICAL"):
+        if token not in take_disconnect_body:
+            errors.append(f"WiFi disconnect event extraction misses {token}")
+    for token in ("take_wifi_disconnect_event(event)", "Serial.printf", "event.atMillis", "event.reason"):
+        if token not in diagnostics_body:
+            errors.append(f"safe WiFi disconnect diagnostic misses {token}")
     for token in (
         "WiFi.status()",
         "WIFI_STATUS_CHECK_INTERVAL_MS",
@@ -109,8 +130,15 @@ def policy_errors(source: str) -> list[str]:
     return errors
 
 
-def build_reconnect_harness(reconnect_body: str, disconnect_body: str) -> str:
-    return f'''#include <cstdint>
+def build_reconnect_harness(
+    reconnect_body: str,
+    disconnect_body: str,
+    store_disconnect_body: str,
+    take_disconnect_body: str,
+    diagnostics_body: str,
+) -> str:
+    return f'''#include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -158,15 +186,56 @@ struct arduino_event_t {{ ArduinoEventInfo event_info; }};
 static constexpr uint32_t WIFI_STATUS_CHECK_INTERVAL_MS = 1000UL;
 static constexpr uint32_t WIFI_DISCONNECT_CONFIRM_MS = 5000UL;
 static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000UL;
+static constexpr uint8_t WIFI_DISCONNECT_EVENT_CAPACITY = 8;
 volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
 bool ota_running = false;
 bool wifiAP = false;
 uint32_t currentMillis = 0;
 std::vector<std::string> logs;
+std::vector<std::string> serialLines;
 int failures = 0;
+
+struct WifiDisconnectEvent {{
+  uint32_t atMillis;
+  uint8_t reason;
+}};
+
+struct portMUX_TYPE {{}};
+#define portMUX_INITIALIZER_UNLOCKED {{}}
+static portMUX_TYPE wifiDisconnectEventMux = portMUX_INITIALIZER_UNLOCKED;
+static WifiDisconnectEvent wifiDisconnectEvents[WIFI_DISCONNECT_EVENT_CAPACITY] = {{}};
+static volatile uint8_t wifiDisconnectEventRead = 0;
+static volatile uint8_t wifiDisconnectEventCount = 0;
+static volatile uint32_t wifiDisconnectEventsDropped = 0;
+
+void portENTER_CRITICAL(portMUX_TYPE*) {{}}
+void portEXIT_CRITICAL(portMUX_TYPE*) {{}}
+
+struct SerialProbe {{
+  void printf(const char* format, ...) {{
+    char line[192];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    serialLines.emplace_back(line);
+  }}
+}} Serial;
 
 uint32_t millis() {{ return currentMillis; }}
 void WriteConsoleLog(String message) {{ logs.emplace_back(message.c_str()); }}
+
+static void store_wifi_disconnect_event(uint8_t reason) {{
+{store_disconnect_body}
+}}
+
+static bool take_wifi_disconnect_event(WifiDisconnectEvent& event) {{
+{take_disconnect_body}
+}}
+
+static void tick_wifi_disconnect_diagnostics() {{
+{diagnostics_body}
+}}
 
 static void captureWifiDisconnectReason(arduino_event_t *event) {{
 {disconnect_body}
@@ -195,6 +264,13 @@ bool hasLog(const char* part) {{
   return false;
 }}
 
+bool hasSerial(const char* part) {{
+  for (const std::string& entry : serialLines) {{
+    if (entry.find(part) != std::string::npos) return true;
+  }}
+  return false;
+}}
+
 int countLogs(const char* part) {{
   int count = 0;
   for (const std::string& entry : logs) {{
@@ -204,9 +280,20 @@ int countLogs(const char* part) {{
 }}
 
 int main() {{
+  arduino_event_t unspecified{{{{WIFI_REASON_UNSPECIFIED}}}};
+  arduino_event_t authExpire{{{{WIFI_REASON_AUTH_EXPIRE}}}};
+  currentMillis = 100;
+  captureWifiDisconnectReason(&unspecified);
+  currentMillis = 200;
+  captureWifiDisconnectReason(&authExpire);
+  tick_wifi_disconnect_diagnostics();
+  check(hasSerial("WiFi disconnected at_ms=100 reason=1(UNSPECIFIED)"),
+        "first immediate system disconnect diagnostic is missing");
+  check(hasSerial("WiFi disconnected at_ms=200 reason=2(AUTH_EXPIRE)"),
+        "second immediate system disconnect diagnostic is missing");
+
   tickAt(1000);
-  arduino_event_t event{{{{WIFI_REASON_AUTH_EXPIRE}}}};
-  captureWifiDisconnectReason(&event);
+  captureWifiDisconnectReason(&authExpire);
   WiFi.state = WL_IDLE_STATUS;
   for (uint32_t at = 2000; at <= 6000; at += 1000) tickAt(at);
   check(WiFi.reconnectCalls == 0, "short or unconfirmed outage triggered reconnect");
@@ -378,6 +465,9 @@ def main() -> int:
     callback_body = extract_function_body(source, GOT_IP_SIGNATURE)
     disconnect_body = extract_function_body(source, DISCONNECT_SIGNATURE)
     reconnect_body = extract_function_body(source, RECONNECT_SIGNATURE)
+    store_disconnect_body = extract_function_body(source, STORE_DISCONNECT_SIGNATURE)
+    take_disconnect_body = extract_function_body(source, TAKE_DISCONNECT_SIGNATURE)
+    diagnostics_body = extract_function_body(source, TICK_DISCONNECT_DIAGNOSTICS_SIGNATURE)
     returncode, _ = compile_and_run(
         build_harness(ipst_set_body, ipst_copy_body, callback_body), True
     )
@@ -385,7 +475,14 @@ def main() -> int:
         return 1
 
     returncode, _ = compile_and_run(
-        build_reconnect_harness(reconnect_body, disconnect_body), True
+        build_reconnect_harness(
+            reconnect_body,
+            disconnect_body,
+            store_disconnect_body,
+            take_disconnect_body,
+            diagnostics_body,
+        ),
+        True,
     )
     if returncode != 0:
         return 1
@@ -413,10 +510,48 @@ def main() -> int:
     )
     for mutant in reconnect_mutants:
         returncode, output = compile_and_run(
-            build_reconnect_harness(mutant, disconnect_body), False
+            build_reconnect_harness(
+                mutant,
+                disconnect_body,
+                store_disconnect_body,
+                take_disconnect_body,
+                diagnostics_body,
+            ),
+            False,
         )
         if returncode == 0 or "FAIL:" not in output:
             print("FAIL: WiFi reconnect behavior mutation survived", file=sys.stderr)
+            return 1
+
+    timestamp_mutant = store_disconnect_body.replace(
+        "const WifiDisconnectEvent event = {millis(), reason};",
+        "const WifiDisconnectEvent event = {0, reason};",
+        1,
+    )
+    reason_mutant = store_disconnect_body.replace(
+        "const WifiDisconnectEvent event = {millis(), reason};",
+        "const WifiDisconnectEvent event = {millis(), static_cast<uint8_t>(reason + 1)};",
+        1,
+    )
+    if timestamp_mutant == store_disconnect_body or reason_mutant == store_disconnect_body:
+        print("FAIL: could not create WiFi disconnect diagnostic mutations", file=sys.stderr)
+        return 1
+    for mutant, expected_failure in (
+        (timestamp_mutant, "first immediate system disconnect diagnostic is missing"),
+        (reason_mutant, "second immediate system disconnect diagnostic is missing"),
+    ):
+        returncode, output = compile_and_run(
+            build_reconnect_harness(
+                reconnect_body,
+                disconnect_body,
+                mutant,
+                take_disconnect_body,
+                diagnostics_body,
+            ),
+            False,
+        )
+        if returncode == 0 or expected_failure not in output:
+            print("FAIL: WiFi disconnect diagnostic mutation survived or failed for the wrong reason", file=sys.stderr)
             return 1
 
     broken_callback = callback_body.replace(

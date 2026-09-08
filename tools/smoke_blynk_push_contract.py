@@ -365,6 +365,11 @@ if blynk:
     connected_body = body(blynk, "BLYNK_CONNECTED()")
     if connected_body and "s_blynkPushResendAll = true;" not in connected_body:
         errors.append("BLYNK_CONNECTED must request full resend (s_blynkPushResendAll = true)")
+    if connected_body and "Blynk connected at_ms=%lu" not in connected_body:
+        errors.append("BLYNK_CONNECTED must print its timestamp to Serial")
+    disconnected_body = body(blynk, "BLYNK_DISCONNECTED()")
+    if disconnected_body and "Blynk disconnected at_ms=%lu" not in disconnected_body:
+        errors.append("BLYNK_DISCONNECTED must print its timestamp to Serial")
 
     # V34 (строка лога, T2): staging-буфер под критической секцией, приём - из
     # blynk_push_tick() выше. Пишущая сторона (SysTicker, Samovar.ino) не должна звать

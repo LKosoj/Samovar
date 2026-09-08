@@ -91,23 +91,46 @@ def compile_and_run(harness: str, label: str, show_output: bool = True) -> tuple
 def build_blynk_adapter_harness(timeout_body: str, write_body: str) -> str:
     return f'''\
 #include <cassert>
+#include <cerrno>
+#include <cstdarg>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <string>
+#include <vector>
 
 #define BLYNK_TIMEOUT_MS 3000UL
 #define MSG_DONTWAIT 0x40
 
-static int nextSendResult = 0;
+static std::vector<int> sendResults;
+static std::vector<int> sendErrors;
+static size_t sendIndex = 0;
 static int sendCalls = 0;
 static int sentSocket = -1;
 static int sentFlags = 0;
+static std::string serialOutput;
 
 static int send(int socket, const uint8_t*, size_t, int flags) {{
   ++sendCalls;
   sentSocket = socket;
   sentFlags = flags;
-  return nextSendResult;
+  assert(sendIndex < sendResults.size());
+  errno = sendErrors[sendIndex];
+  return sendResults[sendIndex++];
 }}
+
+static unsigned long millis() {{ return 1234UL; }}
+
+struct SerialProbe {{
+  void printf(const char* format, ...) {{
+    char line[192];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    serialOutput += line;
+  }}
+}} Serial;
 
 class WiFiClient {{
  public:
@@ -136,16 +159,35 @@ int main() {{
   assert(sendCalls == 0);
 
   client.socket = 17;
-  nextSendResult = 2;
+  sendResults = {{2}};
+  sendErrors = {{0}};
   assert(blynk_client_write(&client, payload, sizeof(payload)) == 2);
   assert(sendCalls == 1);
   assert(sentSocket == 17);
   assert(sentFlags == MSG_DONTWAIT);
 
-  nextSendResult = 0;
+  sendResults = {{-1}};
+  sendErrors = {{EAGAIN}};
+  sendIndex = 0;
+  sendCalls = 0;
+  serialOutput.clear();
   assert(blynk_client_write(&client, payload, sizeof(payload)) == 0);
-  nextSendResult = -1;
+  assert(sendCalls == 1);
+  assert(serialOutput.find("errno=" + std::to_string(EAGAIN)) != std::string::npos);
+
+  sendResults = {{-1}};
+  sendErrors = {{ECONNRESET}};
+  sendIndex = 0;
+  sendCalls = 0;
   assert(blynk_client_write(&client, payload, sizeof(payload)) == 0);
+  assert(sendCalls == 1);
+
+  sendResults = {{0}};
+  sendErrors = {{0}};
+  sendIndex = 0;
+  sendCalls = 0;
+  assert(blynk_client_write(&client, payload, sizeof(payload)) == 0);
+  assert(sendCalls == 1);
 }}
 '''
 
@@ -169,8 +211,9 @@ def verify_blynk_adapter() -> str | None:
 
     timeout_mutant = timeout_body.replace("BLYNK_TIMEOUT_MS / 1000UL", "BLYNK_TIMEOUT_MS", 1)
     write_mutant = write_body.replace("MSG_DONTWAIT", "0", 1)
-    if timeout_mutant == timeout_body or write_mutant == write_body:
-        return "не удалось создать мутацию единиц или MSG_DONTWAIT для Blynk adapter"
+    diagnostic_mutant = write_body.replace("Serial.printf(", "if (false) Serial.printf(", 1)
+    if timeout_mutant == timeout_body or write_mutant == write_body or diagnostic_mutant == write_body:
+        return "не удалось создать мутацию единиц, MSG_DONTWAIT или диагностики Blynk adapter"
     code, _ = compile_and_run(
         build_blynk_adapter_harness(timeout_mutant, write_body), "Blynk timeout mutant", show_output=False)
     if code == 0:
@@ -179,6 +222,13 @@ def verify_blynk_adapter() -> str | None:
         build_blynk_adapter_harness(timeout_body, write_mutant), "Blynk blocking-send mutant", show_output=False)
     if code == 0:
         return "мутация MSG_DONTWAIT не убита содержательным assert"
+    code, output = compile_and_run(
+        build_blynk_adapter_harness(timeout_body, diagnostic_mutant),
+        "Blynk errno diagnostic mutant",
+        show_output=False,
+    )
+    if code == 0 or "Assertion" not in output:
+        return "мутация Serial-диагностики errno не убита содержательным assert"
 
     protocol = BLYNK_PROTOCOL.read_text(encoding="utf-8", errors="ignore")
     try:

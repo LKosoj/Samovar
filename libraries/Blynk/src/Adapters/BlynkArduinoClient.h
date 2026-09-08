@@ -16,6 +16,7 @@
 #include <Client.h>
 
 #if defined(ESP32)
+#include <errno.h>
 #include <WiFi.h>
 #include <lwip/sockets.h>
 #endif
@@ -44,7 +45,14 @@ static inline void blynk_client_set_timeout(WiFiClient* client) {
 static inline size_t blynk_client_write(WiFiClient* client, const uint8_t* buffer, size_t length) {
     const int socket = client->fd();
     if (socket < 0) return 0;
+    errno = 0;
     const int written = send(socket, buffer, length, MSG_DONTWAIT);
+    if (written <= 0) {
+        const int sendError = errno;
+        Serial.printf(
+            "Blynk send failed at_ms=%lu socket=%d result=%d errno=%d\n",
+            static_cast<unsigned long>(millis()), socket, written, sendError);
+    }
     return written > 0 ? static_cast<size_t>(written) : 0;
 }
 #endif

@@ -19,6 +19,7 @@
 // он доходит до отдельного TU библиотеки Async_TCP. Локальный #define здесь был мёртвым.
 
 struct AjaxTelemetrySnapshot;
+struct WifiDisconnectEvent;
 // Arduino вставляет автопрототипы сразу после Arduino.h. WebServer.ino объявляет
 // http_sync_complete_get(asyncHTTPrequest&...) — без USE_LUA тип не подтягивается
 // из lua.h, прототип ломает разбор (bool http_sync_complete_get как переменная).
@@ -1626,11 +1627,71 @@ bool initEmergencyButtonTask() {
 static constexpr uint32_t WIFI_STATUS_CHECK_INTERVAL_MS = 1000UL;
 static constexpr uint32_t WIFI_DISCONNECT_CONFIRM_MS = 5000UL;
 static constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000UL;
+static constexpr uint8_t WIFI_DISCONNECT_EVENT_CAPACITY = 8;
 static volatile uint8_t lastWifiDisconnectReason = WIFI_REASON_UNSPECIFIED;
+
+struct WifiDisconnectEvent {
+  uint32_t atMillis;
+  uint8_t reason;
+};
+
+static portMUX_TYPE wifiDisconnectEventMux = portMUX_INITIALIZER_UNLOCKED;
+static WifiDisconnectEvent wifiDisconnectEvents[WIFI_DISCONNECT_EVENT_CAPACITY] = {};
+static volatile uint8_t wifiDisconnectEventRead = 0;
+static volatile uint8_t wifiDisconnectEventCount = 0;
+static volatile uint32_t wifiDisconnectEventsDropped = 0;
+
+static void store_wifi_disconnect_event(uint8_t reason) {
+  const WifiDisconnectEvent event = {millis(), reason};
+  portENTER_CRITICAL(&wifiDisconnectEventMux);
+  if (wifiDisconnectEventCount < WIFI_DISCONNECT_EVENT_CAPACITY) {
+    const uint8_t writeIndex =
+        (wifiDisconnectEventRead + wifiDisconnectEventCount) % WIFI_DISCONNECT_EVENT_CAPACITY;
+    wifiDisconnectEvents[writeIndex] = event;
+    wifiDisconnectEventCount++;
+  } else {
+    wifiDisconnectEventsDropped++;
+  }
+  portEXIT_CRITICAL(&wifiDisconnectEventMux);
+}
+
+static bool take_wifi_disconnect_event(WifiDisconnectEvent& event) {
+  bool ready = false;
+  portENTER_CRITICAL(&wifiDisconnectEventMux);
+  if (wifiDisconnectEventCount > 0) {
+    event = wifiDisconnectEvents[wifiDisconnectEventRead];
+    wifiDisconnectEventRead =
+        (wifiDisconnectEventRead + 1) % WIFI_DISCONNECT_EVENT_CAPACITY;
+    wifiDisconnectEventCount--;
+    ready = true;
+  }
+  portEXIT_CRITICAL(&wifiDisconnectEventMux);
+  return ready;
+}
+
+static void tick_wifi_disconnect_diagnostics() {
+  WifiDisconnectEvent event{};
+  while (take_wifi_disconnect_event(event)) {
+    Serial.printf(
+        "WiFi disconnected at_ms=%lu reason=%u(%s)\n",
+        static_cast<unsigned long>(event.atMillis), static_cast<unsigned>(event.reason),
+        WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(event.reason)));
+  }
+
+  uint32_t dropped = 0;
+  portENTER_CRITICAL(&wifiDisconnectEventMux);
+  dropped = wifiDisconnectEventsDropped;
+  wifiDisconnectEventsDropped = 0;
+  portEXIT_CRITICAL(&wifiDisconnectEventMux);
+  if (dropped > 0) {
+    Serial.printf("WiFi disconnect diagnostics dropped=%lu\n", static_cast<unsigned long>(dropped));
+  }
+}
 
 void triggerGetClock(void *parameter) {
   int counter = 30;
   while (true) {
+    tick_wifi_disconnect_diagnostics();
     // Пропускаем все активности во время OTA обновления (кроме проверки WiFi)
     if (ota_running) {
       tick_wifi_reconnect();
@@ -2377,7 +2438,9 @@ static void captureWifiGotIp(arduino_event_t *event) {
 }
 
 static void captureWifiDisconnectReason(arduino_event_t *event) {
-  lastWifiDisconnectReason = event->event_info.wifi_sta_disconnected.reason;
+  const uint8_t reason = event->event_info.wifi_sta_disconnected.reason;
+  lastWifiDisconnectReason = reason;
+  store_wifi_disconnect_event(reason);
 }
 
 static void setup_wifi_stack_defaults() {

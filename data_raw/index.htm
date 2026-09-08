@@ -217,7 +217,7 @@
             // но скоростью не управляет (см. impurity_detector.h). Отдельная подпись
             // нужна, чтобы "Стабильно" не читалось как "детектор следит за проскоком".
             if (myObj.PrgType === 'H') {
-              detStatus.innerHTML = '👁 Головы: только наблюдение';
+              detStatus.innerHTML = '👁 Головы: наблюдение';
               detStatus.style.color = SamovarApp.cssVar('--detector-ok-text');
               detBlock.style.backgroundColor = SamovarApp.cssVar('--detector-ok-bg');
             } else if (myObj.DetectorStatus == 0) {
